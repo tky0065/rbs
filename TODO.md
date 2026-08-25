@@ -69,7 +69,7 @@ dès que `C` est terminé.
       Structure partagée portant le pool et la configuration, clonable à coût nul.
       ✓ Un handler d'exemple extrait `State<AppState>` et compile.
 
-- [ ] **B3** · Middleware `request_id`
+- [x] **B3** · Middleware `request_id` — vérifié 2026-08-25 · `cargo test -p rbs-core request_id` → 8 passed, dont `deux_requetes_recoivent_deux_identifiants_distincts` et `un_en_tete_entrant_est_conserve_tel_quel_dans_la_reponse` lancés seuls → 1 passed chacun
       ULID généré, ou repris de l'en-tête `x-request-id` entrant. Injecté dans le span
       `tracing`, renvoyé dans la réponse.
       ✓ Test : deux requêtes → deux identifiants distincts.

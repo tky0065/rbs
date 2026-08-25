@@ -18,6 +18,7 @@ thiserror.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["fmt", "ansi", "chrono", "env-filter"] }
+ulid.workspace = true
 validator.workspace = true
 
 [dev-dependencies]
