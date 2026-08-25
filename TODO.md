@@ -26,7 +26,12 @@ dès que `C` est terminé.
       ✓ `cargo build --workspace` passe sur un workspace vide de logique.
       ✓ Plus aucun `src/` ni `[package]` à la racine du dépôt.
 
-- [ ] **A2** · CI minimale
+- [ ] **A2** · CI minimale — PARTIEL 2026-08-25 : workflow écrit et validé
+      (`actionlint .github/workflows/ci.yml` → 0), garde-fous prouvés (warning clippy
+      injecté → `cargo clippy --workspace --all-targets -- -D warnings` code 101 ;
+      fichier mal formaté → `cargo fmt --all --check` code 1). La moitié « le PR est
+      *bloqué* » du critère exige un dépôt distant et un check requis par une
+      protection de branche : à faire côté dépôt, cf. `F13`.
       GitHub Actions : `cargo fmt --check`, `cargo clippy -- -D warnings`, `cargo test`.
       Linux uniquement à ce stade.
       ✓ Un PR avec un warning clippy est bloqué.
