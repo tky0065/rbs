@@ -171,55 +171,17 @@ impl Visit for ChampsEvenement {
 
 #[cfg(test)]
 mod tests {
+    use super::super::aide::capture;
     use super::*;
-    use std::io;
-    use std::sync::{Arc, Mutex};
-    use tracing_subscriber::fmt::MakeWriter;
 
-    #[derive(Clone, Default)]
-    struct Tampon(Arc<Mutex<Vec<u8>>>);
-
-    impl Tampon {
-        fn contenu(&self) -> String {
-            String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
-        }
-    }
-
-    impl io::Write for Tampon {
-        fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-            self.0.lock().unwrap().extend_from_slice(buf);
-            Ok(buf.len())
-        }
-
-        fn flush(&mut self) -> io::Result<()> {
-            Ok(())
-        }
-    }
-
-    impl<'a> MakeWriter<'a> for Tampon {
-        type Writer = Tampon;
-
-        fn make_writer(&'a self) -> Self::Writer {
-            self.clone()
-        }
-    }
-
-    fn capture(format: PrettyFormat, emettre: impl FnOnce()) -> String {
-        let tampon = Tampon::default();
+    fn rendre(format: PrettyFormat, emettre: impl FnOnce()) -> String {
         let champs = PrettyFormat::with_ansi(format.ansi);
-        let abonne = tracing_subscriber::fmt()
-            .fmt_fields(champs)
-            .event_format(format)
-            .with_writer(tampon.clone())
-            .with_max_level(tracing::Level::TRACE)
-            .finish();
-        tracing::subscriber::with_default(abonne, emettre);
-        tampon.contenu()
+        capture(format, champs, emettre)
     }
 
     #[test]
     fn aucune_couleur_quand_la_sortie_n_est_pas_un_tty() {
-        let sortie = capture(PrettyFormat::new(), || {
+        let sortie = rendre(PrettyFormat::new(), || {
             let span = tracing::info_span!("requete", request_id = "01JQ3F8K2P");
             let _entree = span.enter();
             tracing::info!(status = 200, "bonjour");
@@ -233,7 +195,7 @@ mod tests {
 
     #[test]
     fn les_couleurs_sont_presentes_quand_elles_sont_forcees() {
-        let sortie = capture(PrettyFormat::with_ansi(true), || tracing::info!("bonjour"));
+        let sortie = rendre(PrettyFormat::with_ansi(true), || tracing::info!("bonjour"));
 
         assert!(
             sortie.contains('\u{1b}'),
@@ -243,7 +205,7 @@ mod tests {
 
     #[test]
     fn la_ligne_porte_le_niveau_la_cible_le_message_puis_les_champs() {
-        let sortie = capture(PrettyFormat::with_ansi(false), || {
+        let sortie = rendre(PrettyFormat::with_ansi(false), || {
             tracing::warn!(actives = 18, max = 20, "pool proche de la saturation")
         });
 
@@ -265,7 +227,7 @@ mod tests {
 
     #[test]
     fn les_champs_d_un_span_parent_sont_repris_apres_ceux_de_l_evenement() {
-        let sortie = capture(PrettyFormat::with_ansi(false), || {
+        let sortie = rendre(PrettyFormat::with_ansi(false), || {
             let span = tracing::info_span!("requete", request_id = "01JQ3F8K2P");
             let _entree = span.enter();
             tracing::error!(status = 422, "requête refusée");
@@ -285,7 +247,7 @@ mod tests {
 
     #[test]
     fn les_cinq_niveaux_sont_rendus_avec_leur_libelle() {
-        let sortie = capture(PrettyFormat::with_ansi(false), || {
+        let sortie = rendre(PrettyFormat::with_ansi(false), || {
             tracing::trace!("t");
             tracing::debug!("d");
             tracing::info!("i");
