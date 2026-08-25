@@ -8,6 +8,7 @@
 use axum::extract::{FromRequestParts, Query};
 use axum::http::request::Parts;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 use crate::Error;
 
@@ -90,14 +91,14 @@ where
 }
 
 /// Une page de résultats et de quoi situer la suivante.
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct Page<T> {
     data: Vec<T>,
     meta: Meta,
 }
 
 /// Description de la page rendue.
-#[derive(Debug, Clone, Copy, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, ToSchema)]
 struct Meta {
     page: u64,
     per_page: u64,

@@ -90,7 +90,7 @@ dès que `C` est terminé.
       paginée.
       ✓ Test : `per_page` au-delà du maximum → plafonné, pas d'erreur.
 
-- [ ] **B7** · Helpers OpenAPI
+- [x] **B7** · Helpers OpenAPI — vérifié 2026-08-25 · `cargo test -p rbs-core openapi` → 4 passed, dont `le_document_decrit_422_et_500_sans_annotation_par_handler` lancé seul → 1 passed
       Réponses d'erreur communes déclarées une fois, réutilisables par les features.
       ✓ Le document généré décrit 422 et 500 sans annotation par handler.
 
