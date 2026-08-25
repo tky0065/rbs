@@ -9,6 +9,8 @@
 pub mod config;
 /// Erreurs du runtime et alias `Result` associé.
 pub mod error;
+/// Formateurs de logs du runtime.
+pub mod logs;
 /// Identifiant de corrélation de la requête courante.
 pub mod request_id;
 

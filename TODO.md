@@ -49,7 +49,7 @@ dès que `C` est terminé.
       ✓ Test : variable requise manquante → échec au boot, message nommant le champ.
       ✓ Test : une variable d'environnement écrase la valeur du fichier TOML.
 
-- [ ] **A6** · Formateur de logs `pretty`
+- [ ] **A6** · Formateur de logs `pretty` — PARTIEL 2026-08-25 : `cargo test -p rbs-core logs` → 5 passed (dont couleurs absentes hors TTY) · rendu des cinq niveaux validé de visu sur `cargo run -p rbs-core --example logs_pretty`. Reste la capture dans les docs, qui attend le site (F1).
       `FormatEvent` maison : horodatage court, niveau coloré, cible, champs alignés.
       Le formateur par défaut de `tracing-subscriber` est trop verbeux.
       ✓ Inspection visuelle sur les cinq niveaux + capture dans les docs.
