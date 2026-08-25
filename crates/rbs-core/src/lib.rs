@@ -15,6 +15,8 @@ pub mod error;
 pub mod extract;
 /// Formateurs de logs du runtime.
 pub mod logs;
+/// Déclaration unique des réponses d'erreur du document OpenAPI.
+pub mod openapi;
 /// Pagination des listes.
 pub mod pagination;
 /// Identifiant de corrélation de la requête courante.
@@ -27,5 +29,6 @@ pub mod trace;
 pub use config::Config;
 pub use error::{Error, Result};
 pub use extract::ValidatedJson;
+pub use openapi::{ProblemDetails, ReponsesCommunes};
 pub use pagination::{Page, Pagination};
 pub use state::{CoreState, HasCoreState};
