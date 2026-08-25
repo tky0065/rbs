@@ -4,3 +4,8 @@
 //! qu'un développeur voudra lire ou modifier est généré dans son projet par `rbs-cli`.
 
 #![warn(missing_docs)]
+
+/// Démonstration jetable : cette fonction porte un warning clippy volontaire.
+pub fn warning_volontaire() {
+    let inutilise = 1;
+}
