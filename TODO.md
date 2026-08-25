@@ -43,7 +43,7 @@ dès que `C` est terminé.
       ✓ Test : `Validation` → 422 avec le détail des champs.
       ✓ Test : `Database` → 500 générique, **sans** le message de la source.
 
-- [ ] **A5** · Chargement de configuration
+- [x] **A5** · Chargement de configuration — vérifié 2026-08-25 · `cargo test -p rbs-core config` → 6 passed, dont `un_champ_requis_manquant_fait_echouer_le_chargement_en_nommant_le_champ` et `une_variable_d_environnement_ecrase_la_valeur_du_fichier_toml` lancés seuls → 1 passed chacun
       `figment` fusionnant défauts → `config/default.toml` → `config/{RBS_ENV}.toml` →
       `.env` → variables d'environnement, désérialisé dans une struct typée.
       ✓ Test : variable requise manquante → échec au boot, message nommant le champ.
