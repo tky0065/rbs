@@ -149,7 +149,9 @@ dès que `C` est terminé.
       ✓ Tests : chaque type et modificateur, plus les messages d'erreur de syntaxe.
 
 - [ ] **D2** · Génération de l'entité SeaORM
+      Clé primaire `id` de type `Uuid`, implicite — jamais déclarée dans `--fields`.
       ✓ L'entité compile et ses types correspondent aux champs demandés.
+      ✓ `id` est un `Uuid` sans auto-incrément.
 
 - [ ] **D3** · Génération des DTO
       `Create` / `Update` / `Response`, avec `validator` et `ToSchema`.
@@ -170,6 +172,8 @@ dès que `C` est terminé.
 - [ ] **D7** · Génération de la migration
       Migration SeaORM correspondant aux champs, horodatée.
       ✓ `rbs migrate up` puis `down` laisse la base dans son état initial.
+      ✓ La colonne `id` porte `DEFAULT uuidv7()` ; un `INSERT` sans `id` reçoit un
+        UUIDv7 valide, dont l'horodatage de tête est celui de l'insertion.
 
 - [ ] **D8** · Génération des tests
       Tests d'intégration HTTP du CRUD complet contre l'application montée en mémoire.
@@ -189,13 +193,13 @@ dès que `C` est terminé.
       ✓ `status` distingue visuellement appliqué / en attente.
 
 - [ ] **D12** · `rbs doctor`
-      Vérifie : ancres présentes, `.env` complet, base joignable, versions de rbs-core et
-      du CLI cohérentes.
+      Vérifie : ancres présentes, `.env` complet, base joignable, PostgreSQL ≥ 18,
+      versions de rbs-core et du CLI cohérentes.
       ✓ Test : une ancre supprimée est signalée avec le bloc à recoller.
 
 - [ ] **D13** · Test d'intégration CRUD
       Extension de C8 : génération d'un CRUD, migration, exécution des tests générés,
-      contre PostgreSQL via `testcontainers`.
+      contre PostgreSQL 18 via `testcontainers`.
       ✓ Rouge si l'une des trois étapes échoue.
 
 ### Lot E — `rbs add`
@@ -228,7 +232,7 @@ dès que `C` est terminé.
       ✓ Test : échec injecté sur la quatrième action → les trois premières sont annulées.
 
 - [ ] **E7** · `rbs add docker`
-      `Dockerfile` multi-étapes, `docker-compose.yml` avec PostgreSQL, `.dockerignore`.
+      `Dockerfile` multi-étapes, `docker-compose.yml` avec PostgreSQL 18, `.dockerignore`.
       ✓ `docker compose up` démarre l'API et sa base.
 
 - [ ] **E8** · `rbs add ci`

@@ -29,10 +29,13 @@ pas rouvertes par l'implémentation.
 | D4 | Périmètre v0.1 | Socle nu, boucle complète, sans feature optionnelle Rust | Socle + auth · CLI complet d'un bloc |
 | D5 | Ambition | Open source public, publication crates.io | Outil personnel · Public léger |
 | D6 | Documentation | Docusaurus, i18n intégré, FR + EN | mdBook deux livres · Markdown brut |
+| D7 | Clés primaires des entités générées | UUIDv7 en colonne `uuid` native, produit par `DEFAULT uuidv7()` | ULID en `char(26)` · UUIDv4 · entier auto-incrémenté |
 
 **Conséquence assumée de D6** : Docusaurus n'exécute pas les extraits de code. Les
 exemples de la documentation sont extraits de projets réels du dossier `examples/`,
 compilés en CI. Aucun extrait de code n'est écrit à la main dans le Markdown.
+
+**Conséquence assumée de D7** : `uuidv7()` n'est une fonction native de PostgreSQL qu'à partir de la **version 18**. C'est donc la version minimale de tout projet généré par rbs. Elle est inscrite dans le `docker-compose` généré, dans l'image `testcontainers` des tests, et vérifiée par `rbs doctor`.
 
 ## 3. Architecture
 
@@ -116,6 +119,25 @@ C'est l'inverse du flux `sea-orm-cli generate entity`, qui lit une base existant
 Le flux « CLI d'abord » évite d'exiger une base démarrée pour scaffolder. Le cas
 « base legacy existante » n'est pas couvert en v0.1 ; il sera traité ultérieurement
 par un passe-plat vers `sea-orm-cli`.
+
+### 3.6 Clés primaires
+
+Toute entité générée porte une clé primaire `id` de type `Uuid`, en colonne PostgreSQL
+`uuid` native. La valeur est un **UUIDv7** (RFC 9562) : ses 48 bits de tête encodent
+l'horodatage milliseconde, ce qui rend les clés croissantes dans le temps et garde les
+insertions groupées en fin d'index, là où un UUIDv4 aléatoire fragmente le B-tree.
+
+La valeur est produite par la base, la migration posant `DEFAULT uuidv7()` sur la
+colonne. Une insertion faite hors de l'application — un script, un import, `psql` —
+obtient donc un identifiant valide sans dupliquer la logique de génération.
+
+`id` n'est jamais déclaré dans `--fields` : il est implicite, comme `created_at` et
+`updated_at`.
+
+**Version minimale : PostgreSQL 18.** `uuidv7()` n'y est native qu'à partir de cette
+version ; `gen_random_uuid()`, disponible depuis la 13, produit un v4. Le choix est
+assumé plutôt que contourné par une fonction PL/pgSQL maison : le SQL d'un projet
+généré reste lisible et ne porte pas de compatibilité que rbs devrait maintenir.
 
 ## 4. Le CLI `rbs`
 
@@ -374,5 +396,7 @@ anyhow.
 La vérification du working tree se fait par un appel à `git status --porcelain` en
 sous-processus, et non via `git2` : une dépendance à libgit2 est disproportionnée pour
 un unique appel, et `git` est nécessairement présent chez un utilisateur de rbs.
+
+**Projet généré** : `uuid` (features `v7`, `serde`) et `sea-orm` avec `with-uuid`, pour la clé primaire décrite en §3.6.
 
 **Tests** : assert_cmd, tempfile, testcontainers.

@@ -5,7 +5,7 @@
 `rbs` donne aux développeurs backend Rust un socle et un outillage pour démarrer une API
 HTTP de production sans réécrire la même plomberie à chaque projet.
 
-**Stack** : Rust · Axum · SeaORM · utoipa/Swagger · PostgreSQL
+**Stack** : Rust · Axum · SeaORM · utoipa/Swagger · PostgreSQL 18+
 
 Le projet livre deux choses indissociables : un runtime (`rbs-core`) qui porte le
 boilerplate invisible, et un CLI (`rbs`) qui génère le code que tu vas lire et modifier.
@@ -45,7 +45,7 @@ La chaîne complète, prouvée de bout en bout sur un seul cas avant d'être mul
 
 - `rbs new`, `rbs generate crud`, `rbs generate feature`
 - `rbs add docker | ci`, `rbs migrate`, `rbs doctor`
-- PostgreSQL, migrations SeaORM
+- PostgreSQL 18+ (clés primaires UUIDv7), migrations SeaORM
 - Erreurs typées (RFC 9457), logs colorés en dev / JSON en prod, configuration validée au boot
 - OpenAPI et Swagger UI générés avec le code
 - Documentation FR/EN, dépôt public, CI
