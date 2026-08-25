@@ -7,5 +7,7 @@
 
 /// Erreurs du runtime et alias `Result` associé.
 pub mod error;
+/// Identifiant de corrélation de la requête courante.
+pub mod request_id;
 
 pub use error::{Error, Result};
