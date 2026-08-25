@@ -94,7 +94,7 @@ dès que `C` est terminé.
       Réponses d'erreur communes déclarées une fois, réutilisables par les features.
       ✓ Le document généré décrit 422 et 500 sans annotation par handler.
 
-- [ ] **B8** · Route `/health`
+- [x] **B8** · Route `/health` — vérifié 2026-08-25 · `cargo test -p rbs-core health` → 4 passed, dont `une_base_indisponible_repond_503_pas_200` lancé seul → 1 passed
       Statut applicatif et vérification de la base.
       ✓ Test : base indisponible → 503, pas 200.
 

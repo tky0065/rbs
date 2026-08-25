@@ -13,6 +13,8 @@ pub mod db;
 pub mod error;
 /// Extracteurs de requête du runtime.
 pub mod extract;
+/// Route de santé de l'application.
+pub mod health;
 /// Formateurs de logs du runtime.
 pub mod logs;
 /// Déclaration unique des réponses d'erreur du document OpenAPI.
