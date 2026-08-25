@@ -33,7 +33,7 @@ dès que `C` est terminé.
       Linux uniquement à ce stade.
       ✓ Un PR avec un warning clippy est bloqué.
 
-- [ ] **A3** · Type `Error` et alias `Result`
+- [x] **A3** · Type `Error` et alias `Result` — vérifié 2026-08-25 · `cargo test -p rbs-core error` → 5 passed (les 3 conversions `From` + `Domain` + l'alias)
       Variantes `NotFound`, `Validation`, `Unauthorized`, `Forbidden`, `Conflict`,
       `Domain`, `Database`, `Internal`. Construit avec `thiserror`.
       ✓ Tests unitaires sur chaque conversion `From`.
