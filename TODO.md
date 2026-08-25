@@ -19,7 +19,7 @@ dès que `C` est terminé.
 
 ### Lot A — Fondations
 
-- [ ] **A1** · Workspace Cargo
+- [x] **A1** · Workspace Cargo — vérifié 2026-08-25 · `cargo metadata --no-deps` → membres `rbs-core`, `rbs-cli`, aucun paquet racine · `cargo build --workspace` → Finished
       Conversion du paquet `rs` existant à la racine en workspace.
       Deux crates `crates/rbs-core` et `crates/rbs-cli`, dépendances partagées dans
       `[workspace.dependencies]`, édition 2024.

@@ -1,0 +1,12 @@
+[package]
+name = "rbs-cli"
+description = "Le binaire `rbs` : génération et maintenance de projets Axum + SeaORM."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "rbs"
+path = "src/main.rs"
+
+[dependencies]
