@@ -23,3 +23,4 @@ validator.workspace = true
 [dev-dependencies]
 figment = { workspace = true, features = ["test"] }
 tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+tower = { workspace = true, features = ["util"] }
