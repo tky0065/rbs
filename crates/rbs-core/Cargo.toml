@@ -17,7 +17,7 @@ serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 tracing.workspace = true
-tracing-subscriber = { workspace = true, features = ["fmt", "ansi", "chrono"] }
+tracing-subscriber = { workspace = true, features = ["fmt", "ansi", "chrono", "env-filter"] }
 validator.workspace = true
 
 [dev-dependencies]
