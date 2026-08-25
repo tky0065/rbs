@@ -5,9 +5,12 @@
 
 #![warn(missing_docs)]
 
+/// Chargement et validation de la configuration de l'application.
+pub mod config;
 /// Erreurs du runtime et alias `Result` associé.
 pub mod error;
 /// Identifiant de corrélation de la requête courante.
 pub mod request_id;
 
+pub use config::Config;
 pub use error::{Error, Result};
