@@ -106,8 +106,21 @@ et le formateur de logs `pretty` est un `FormatEvent` maison — celui de
 
 ## Commits
 
-- **Jamais de ligne `Co-Authored-By`**, ni aucune mention d'un assistant IA. Les messages
-  ne contiennent que le résumé et le corps technique du changement.
-- Travailler sur une branche dédiée, jamais directement sur `main`.
-- Le détail des preuves de validation appartient au message de commit, pas à `TODO.md`,
-  qui n'en garde qu'une ligne.
+**Conventional Commits, et rien d'autre.** `type(portée): sujet` — sujet en français, à
+l'impératif, sans majuscule initiale ni point final. Types employés : `feat`, `fix`,
+`docs`, `test`, `refactor`, `perf`, `ci`, `build`, `chore`.
+
+Un message décrit **ce qui est fait dans le dépôt**, jamais le processus qui y a mené :
+
+- **Aucun identifiant de tâche** (`A1`, `B3`, `D9`…) ni dans le sujet ni dans le corps.
+  Le message dit « convertit la racine en workspace Cargo », pas « (A1) ».
+- **Aucun renvoi à un fichier de suivi** : pas de ligne `Plan : docs/superpowers/plans/…`,
+  pas de mention de `TODO.md`, `ROADMAP.md`, d'un lot, d'un jalon ou d'un backlog.
+- **Jamais de ligne `Co-Authored-By`, `Claude-Session`**, ni aucune mention d'un assistant
+  IA, d'une session ou d'un outil de génération.
+
+Le corps porte le *pourquoi* technique du changement et, sous un intertitre
+`Vérifications :`, les commandes lancées avec leur résultat réel. C'est là que vit le
+détail des preuves — `TODO.md` n'en garde qu'une ligne.
+
+Travailler sur une branche dédiée, jamais directement sur `main`.
