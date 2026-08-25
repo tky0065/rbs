@@ -38,7 +38,7 @@ dès que `C` est terminé.
       `Domain`, `Database`, `Internal`. Construit avec `thiserror`.
       ✓ Tests unitaires sur chaque conversion `From`.
 
-- [ ] **A4** · `IntoResponse` conforme RFC 9457
+- [x] **A4** · `IntoResponse` conforme RFC 9457 — vérifié 2026-08-25 · `cargo test -p rbs-core` → 16 passed, dont `validation_repond_422_avec_le_detail_des_champs` et `database_repond_500_generique_sans_le_message_de_la_source` lancés seuls → 1 passed chacun
       Réponse `application/problem+json` incluant le `request_id`.
       ✓ Test : `Validation` → 422 avec le détail des champs.
       ✓ Test : `Database` → 500 générique, **sans** le message de la source.
