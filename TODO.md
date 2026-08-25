@@ -75,7 +75,7 @@ dès que `C` est terminé.
       ✓ Test : deux requêtes → deux identifiants distincts.
       ✓ Test : en-tête entrant fourni → conservé tel quel dans la réponse.
 
-- [ ] **B4** · Middleware de trace
+- [x] **B4** · Middleware de trace — vérifié 2026-08-25 · `cargo test -p rbs-core trace` → 3 passed, dont `un_log_emis_dans_un_handler_porte_le_request_id_de_sa_requete` lancé seul → 1 passed
       Un span par requête : méthode, chemin, statut, latence. Le `request_id` est porté
       par tous les logs émis pendant la requête.
       ✓ Test : un log émis dans un handler contient le `request_id` de sa requête.

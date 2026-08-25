@@ -1,7 +1,7 @@
 //! Journalisation du runtime : deux formateurs et la bascule qui les choisit.
 
 #[cfg(test)]
-mod aide;
+pub(crate) mod aide;
 mod json;
 mod pretty;
 
