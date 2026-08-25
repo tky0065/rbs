@@ -7,6 +7,8 @@
 
 /// Chargement et validation de la configuration de l'application.
 pub mod config;
+/// Ouverture du pool de connexions à la base.
+pub mod db;
 /// Erreurs du runtime et alias `Result` associé.
 pub mod error;
 /// Formateurs de logs du runtime.

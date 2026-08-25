@@ -61,7 +61,7 @@ dès que `C` est terminé.
 
 ### Lot B — Noyau HTTP
 
-- [ ] **B1** · Connexion base
+- [x] **B1** · Connexion base — vérifié 2026-08-25 · `cargo test -p rbs-core db` → 6 passed, dont `une_url_invalide_echoue_avec_un_message_nommant_le_champ` lancé seul → 1 passed
       Initialisation du pool SeaORM depuis la configuration, avec timeouts explicites.
       ✓ Test : URL invalide → erreur au boot, message actionnable.
 

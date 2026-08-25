@@ -43,11 +43,26 @@ pub struct ServerConfig {
 }
 
 /// Accès à la base de données.
+///
+/// Seule `url` est requise. Les réglages du pool portent des défauts tenables en
+/// production, qu'un projet sous charge ajuste sans forker le runtime.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct DatabaseConfig {
     /// URL de connexion PostgreSQL. Aucune valeur par défaut : son absence fait échouer
     /// le démarrage.
     pub url: String,
+    /// Nombre maximum de connexions ouvertes simultanément.
+    pub max_connections: u32,
+    /// Nombre de connexions maintenues ouvertes au repos.
+    pub min_connections: u32,
+    /// Délai d'établissement d'une connexion, en secondes.
+    pub connect_timeout_secs: u64,
+    /// Délai d'obtention d'une connexion du pool, en secondes.
+    pub acquire_timeout_secs: u64,
+    /// Durée d'inactivité au terme de laquelle une connexion est fermée, en secondes.
+    pub idle_timeout_secs: u64,
+    /// Durée de vie maximale d'une connexion, en secondes.
+    pub max_lifetime_secs: u64,
 }
 
 /// Échec du chargement de la configuration.
@@ -95,6 +110,12 @@ fn figment() -> Result<Figment, ConfigError> {
         .merge(Serialized::default("env", PROFIL_PAR_DEFAUT))
         .merge(Serialized::default("server.host", "127.0.0.1"))
         .merge(Serialized::default("server.port", 8080))
+        .merge(Serialized::default("database.max_connections", 10))
+        .merge(Serialized::default("database.min_connections", 0))
+        .merge(Serialized::default("database.connect_timeout_secs", 5))
+        .merge(Serialized::default("database.acquire_timeout_secs", 5))
+        .merge(Serialized::default("database.idle_timeout_secs", 600))
+        .merge(Serialized::default("database.max_lifetime_secs", 1800))
         .merge(Toml::file("config/default.toml"));
 
     let profil: String = surcharges(base.clone())?
@@ -234,6 +255,40 @@ mod tests {
             let config = Config::load().expect("la configuration doit se charger");
 
             assert_eq!(config.server.port, 81);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn les_reglages_du_pool_ont_des_defauts_sans_configuration() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("RBS_DATABASE__URL", "postgres://localhost/app");
+
+            let database = Config::load()
+                .expect("la configuration doit se charger")
+                .database;
+
+            assert_eq!(database.max_connections, 10);
+            assert_eq!(database.min_connections, 0);
+            assert_eq!(database.connect_timeout_secs, 5);
+            assert_eq!(database.acquire_timeout_secs, 5);
+            assert_eq!(database.idle_timeout_secs, 600);
+            assert_eq!(database.max_lifetime_secs, 1800);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn un_reglage_du_pool_se_surcharge_par_l_environnement() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.set_env("RBS_DATABASE__URL", "postgres://localhost/app");
+            jail.set_env("RBS_DATABASE__MAX_CONNECTIONS", "42");
+
+            let config = Config::load().expect("la configuration doit se charger");
+
+            assert_eq!(config.database.max_connections, 42);
             Ok(())
         });
     }
