@@ -98,7 +98,7 @@ dès que `C` est terminé.
       Statut applicatif et vérification de la base.
       ✓ Test : base indisponible → 503, pas 200.
 
-- [ ] **B9** · Feature flags Cargo
+- [x] **B9** · Feature flags Cargo — vérifié 2026-08-25 · `cargo build --all-features` et `cargo build --no-default-features` → Finished, et `--features inexistant` rejeté (preuve que les flags sont déclarés)
       Déclaration des flags `auth`, `redis`, `mail`, `storage` — sans implémentation.
       Prépare la v0.2 sans anticiper son code.
       ✓ `cargo build --all-features` et `cargo build --no-default-features` passent.
