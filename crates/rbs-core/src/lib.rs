@@ -15,6 +15,9 @@ pub mod error;
 pub mod logs;
 /// Identifiant de corrélation de la requête courante.
 pub mod request_id;
+/// État partagé du runtime.
+pub mod state;
 
 pub use config::Config;
 pub use error::{Error, Result};
+pub use state::{CoreState, HasCoreState};

@@ -65,7 +65,7 @@ dès que `C` est terminé.
       Initialisation du pool SeaORM depuis la configuration, avec timeouts explicites.
       ✓ Test : URL invalide → erreur au boot, message actionnable.
 
-- [ ] **B2** · `AppState`
+- [x] **B2** · `AppState` — vérifié 2026-08-25 · `cargo test -p rbs-core state` → 3 passed, dont `un_handler_extrait_l_etat_du_projet_et_repond` (routeur monté, requête réelle)
       Structure partagée portant le pool et la configuration, clonable à coût nul.
       ✓ Un handler d'exemple extrait `State<AppState>` et compile.
 
