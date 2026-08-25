@@ -85,7 +85,7 @@ dès que `C` est terminé.
       ✓ Test : corps invalide → 422 avec le détail par champ.
       ✓ Test : JSON malformé → 400, pas 500.
 
-- [ ] **B6** · Pagination
+- [x] **B6** · Pagination — vérifié 2026-08-25 · `cargo test -p rbs-core pagination` → 7 passed, dont `per_page_au_dela_du_maximum_est_plafonne_sans_erreur` lancé seul → 1 passed
       Paramètres de requête `page` / `per_page` avec bornes, et enveloppe de réponse
       paginée.
       ✓ Test : `per_page` au-delà du maximum → plafonné, pas d'erreur.

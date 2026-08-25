@@ -15,6 +15,8 @@ pub mod error;
 pub mod extract;
 /// Formateurs de logs du runtime.
 pub mod logs;
+/// Pagination des listes.
+pub mod pagination;
 /// Identifiant de corrélation de la requête courante.
 pub mod request_id;
 /// État partagé du runtime.
@@ -25,4 +27,5 @@ pub mod trace;
 pub use config::Config;
 pub use error::{Error, Result};
 pub use extract::ValidatedJson;
+pub use pagination::{Page, Pagination};
 pub use state::{CoreState, HasCoreState};
