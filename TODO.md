@@ -80,7 +80,7 @@ dès que `C` est terminé.
       par tous les logs émis pendant la requête.
       ✓ Test : un log émis dans un handler contient le `request_id` de sa requête.
 
-- [ ] **B5** · Extracteur JSON validé
+- [x] **B5** · Extracteur JSON validé — vérifié 2026-08-25 · `cargo test -p rbs-core extract` → 4 passed, dont `un_corps_invalide_repond_422_avec_le_detail_par_champ` et `un_json_malforme_repond_400_pas_500` lancés seuls → 1 passed chacun
       Wrapper autour de `Json` appliquant `validator`, produisant `Error::Validation`.
       ✓ Test : corps invalide → 422 avec le détail par champ.
       ✓ Test : JSON malformé → 400, pas 500.

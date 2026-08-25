@@ -24,6 +24,13 @@ pub enum Error {
     #[error("{0} introuvable")]
     NotFound(&'static str),
 
+    /// Requête mal formée, indépendamment de toute règle métier.
+    ///
+    /// Le corps n'a pas pu être lu : syntaxe invalide, type incompatible, en-tête
+    /// manquant. Une entrée lisible mais non conforme relève de [`Error::Validation`].
+    #[error("requête invalide : {0}")]
+    BadRequest(String),
+
     /// Échec de validation d'une entrée, détaillé champ par champ.
     #[error("validation échouée")]
     Validation(#[from] ValidationErrors),
@@ -109,6 +116,12 @@ impl IntoResponse for Error {
                 StatusCode::NOT_FOUND,
                 "Not Found",
                 Some(format!("{ressource} introuvable")),
+                None,
+            ),
+            Error::BadRequest(message) => (
+                StatusCode::BAD_REQUEST,
+                "Bad Request",
+                Some(message.clone()),
                 None,
             ),
             Error::Validation(source) => (
@@ -312,6 +325,16 @@ mod tests {
 
         assert_eq!(status, StatusCode::CONFLICT);
         assert_eq!(corps["detail"], "cet email est déjà pris");
+    }
+
+    #[tokio::test]
+    async fn bad_request_repond_400_avec_sa_cause() {
+        let (status, _, corps) =
+            reponse(Error::BadRequest("EOF while parsing an object".into())).await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(corps["title"], "Bad Request");
+        assert_eq!(corps["detail"], "EOF while parsing an object");
     }
 
     #[tokio::test]

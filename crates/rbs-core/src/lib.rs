@@ -11,6 +11,8 @@ pub mod config;
 pub mod db;
 /// Erreurs du runtime et alias `Result` associé.
 pub mod error;
+/// Extracteurs de requête du runtime.
+pub mod extract;
 /// Formateurs de logs du runtime.
 pub mod logs;
 /// Identifiant de corrélation de la requête courante.
@@ -22,4 +24,5 @@ pub mod trace;
 
 pub use config::Config;
 pub use error::{Error, Result};
+pub use extract::ValidatedJson;
 pub use state::{CoreState, HasCoreState};
