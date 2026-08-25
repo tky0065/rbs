@@ -1,4 +1,4 @@
-//! Montage partagé par les tests des deux formateurs.
+//! Montage partagé par les tests qui ont besoin de lire ce qui a été journalisé.
 
 use std::io;
 use std::sync::{Arc, Mutex};
@@ -7,7 +7,7 @@ use tracing_subscriber::Registry;
 use tracing_subscriber::fmt::{FormatEvent, FormatFields, MakeWriter};
 
 #[derive(Clone, Default)]
-pub(super) struct Tampon(Arc<Mutex<Vec<u8>>>);
+pub(crate) struct Tampon(Arc<Mutex<Vec<u8>>>);
 
 impl Tampon {
     fn contenu(&self) -> String {
@@ -35,7 +35,7 @@ impl<'a> MakeWriter<'a> for Tampon {
 }
 
 /// Émet des événements dans un abonné jetable et rend ce qui a été écrit.
-pub(super) fn capture<E, F>(evenement: E, champs: F, emettre: impl FnOnce()) -> String
+pub(crate) fn capture<E, F>(evenement: E, champs: F, emettre: impl FnOnce()) -> String
 where
     E: FormatEvent<Registry, F> + Send + Sync + 'static,
     F: for<'a> FormatFields<'a> + Send + Sync + 'static,

@@ -17,6 +17,8 @@ pub mod logs;
 pub mod request_id;
 /// État partagé du runtime.
 pub mod state;
+/// Trace d'une requête HTTP.
+pub mod trace;
 
 pub use config::Config;
 pub use error::{Error, Result};
