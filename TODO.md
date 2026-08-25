@@ -55,7 +55,7 @@ dès que `C` est terminé.
       ✓ Inspection visuelle sur les cinq niveaux + capture dans les docs.
       ✓ Test : couleurs absentes quand la sortie n'est pas un TTY.
 
-- [ ] **A7** · Formateur de logs `json` et bascule
+- [x] **A7** · Formateur de logs `json` et bascule — vérifié 2026-08-25 · `cargo test -p rbs-core logs` → 10 passed, dont `chaque_ligne_est_un_json_valide_portant_ts_level_et_msg` lancé seul → 1 passed · `RBS_LOG_FORMAT=json cargo run -p rbs-core --example logs_format` → 3 objets JSON, `RUST_LOG=warn` filtre bien l'événement `info`
       `RBS_LOG_FORMAT=pretty|json`, `RUST_LOG` respecté pour le filtrage.
       ✓ Test : chaque ligne de sortie est un JSON valide contenant `ts`, `level`, `msg`.
 
