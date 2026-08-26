@@ -1,5 +1,9 @@
 [workspace]
 members = ["crates/rbs-core", "crates/rbs-cli"]
+
+# Les projets d'`examples/` déclarent leur propre `[workspace]` : Cargo interdit
+# l'imbrication. La CI les compile par une étape dédiée.
+exclude = ["examples"]
 resolver = "3"
 
 [workspace.package]

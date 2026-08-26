@@ -21,6 +21,18 @@ modifié.
 La version 0.1 est en construction. **Aucune promesse semver avant la 1.0** : l'API
 publique de `rbs-core` peut changer d'une version mineure à l'autre.
 
+## À quoi ressemble le code généré
+
+Voici le handler `POST /articles`, tel que `rbs generate crud` l'écrit. Il est lu dans
+[`examples/hello-crud`](https://github.com/tky0065/rbs/tree/main/examples/hello-crud), un
+projet que la CI compile : aucun bloc de code de cette documentation n'est écrit à la main.
+
+```rust file=examples/hello-crud/src/articles/controller.rs region=create
+```
+
+Le contrôleur ne fait rien de plus : il passe la requête au service et traduit le résultat
+en code de statut. Le service, lui, ne voit jamais de `DatabaseConnection`.
+
 ## Par où continuer
 
 Cette documentation s'écrit en même temps que le code. Les pages ci-dessous se remplissent
