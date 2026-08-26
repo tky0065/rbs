@@ -207,9 +207,10 @@ dès que `C` est terminé.
       sans effet et le signale — la vérification du working tree est E4.
       ✓ Le projet compile après génération d'une feature vide.
 
-- [ ] **D11** · `rbs migrate`
-      `up`, `down`, `status`, `new` — enveloppe la crate `migration` du projet avec une
-      sortie lisible. Le moteur de SeaORM n'est pas réimplémenté.
+- [x] **D11** · `rbs migrate` — vérifié 2026-08-26 · `cargo test -p rbs-cli migrate` → 22 passed · `rbs migrate status` sur un projet neuf contre PostgreSQL 18 : « ✓ … appliquée » / « · … en attente », validé de visu · `cargo test --workspace -- --include-ignored` → 262 + 1 + 72 passed, 0 ignored
+      `up`, `down`, `status`, `new` — enveloppe la crate `migration` du projet, qui gagne
+      un binaire : elle n'était qu'une lib. Le moteur de SeaORM n'est pas réimplémenté ;
+      `new` ne délègue rien.
       ✓ `status` distingue visuellement appliqué / en attente.
 
 - [ ] **D12** · `rbs doctor`

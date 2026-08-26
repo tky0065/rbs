@@ -321,6 +321,7 @@ mod tests {
             "config/development.toml",
             "migration/Cargo.toml",
             "migration/src/lib.rs",
+            "migration/src/main.rs",
             "src/health/controller.rs",
             "src/health/mod.rs",
             "src/main.rs",
@@ -333,6 +334,23 @@ mod tests {
                 "{relatif} absent du projet créé"
             );
         }
+    }
+
+    #[test]
+    fn la_crate_migration_expose_un_binaire_pilotable_par_rbs_migrate() {
+        let parent = parent();
+
+        let projet = creer(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+
+        let manifeste = lire(&projet.racine.join("migration/Cargo.toml"));
+        assert!(
+            manifeste.contains("[[bin]]"),
+            "la crate migration n'expose aucun binaire à envelopper"
+        );
+        assert!(
+            manifeste.contains("tokio"),
+            "le binaire de migration n'a pas de runtime asynchrone"
+        );
     }
 
     #[test]

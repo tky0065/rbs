@@ -8,9 +8,20 @@
 #![allow(dead_code)]
 
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use toml_edit::{DocumentMut, Item};
+
+/// Remonte de `depart` jusqu'au projet rbs qui le contient.
+///
+/// Le manifeste seul ne suffit pas à trancher : la crate `migration` en porte un, et une
+/// commande lancée depuis `migration/src` viserait sinon la mauvaise racine.
+pub fn racine_du_projet(depart: &Path) -> Option<PathBuf> {
+    depart
+        .ancestors()
+        .find(|candidat| lire(&candidat.join("Cargo.toml")).is_ok())
+        .map(Path::to_path_buf)
+}
 
 /// Métadonnées rbs d'un projet, telles que portées par son `Cargo.toml`.
 #[derive(Debug, Clone, PartialEq, Eq)]

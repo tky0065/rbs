@@ -20,3 +20,13 @@ pub fn success(message: &str) {
 pub fn info(message: &str) {
     println!("{}", style(message).dim());
 }
+
+/// Colore un fragment en vert, pour ce qui est acquis.
+pub fn vert(texte: &str) -> String {
+    style(texte).green().to_string()
+}
+
+/// Atténue un fragment, pour ce qui reste à faire.
+pub fn attenue(texte: &str) -> String {
+    style(texte).dim().to_string()
+}
