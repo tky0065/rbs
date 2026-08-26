@@ -2,3 +2,8 @@
 
 # Worktrees des agents : du travail en cours, jamais du contenu du dépôt.
 /.claude/worktrees
+
+# Site de documentation : la toolchain Node est isolée sous `docs/`.
+/docs/node_modules
+/docs/build
+/docs/.docusaurus
