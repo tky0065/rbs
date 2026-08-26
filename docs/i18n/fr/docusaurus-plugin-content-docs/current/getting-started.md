@@ -54,16 +54,6 @@ gagne sur votre `PATH` — appelez `~/.cargo/bin/rbs` explicitement, ou placez
 
 :::
 
-:::caution
-
-La 0.1 est encore en cours d'assemblage, et `main` ne porte pas toujours toutes les
-commandes. Cette page utilise `new`, `generate`, `migrate` et `doctor` ;
-`rbs generate --help` vous dit si le clone depuis lequel vous avez construit les a. Si
-ce n'est pas le cas, construisez depuis l'arbre de développement de la 0.1 plutôt que
-depuis `main`.
-
-:::
-
 ## Démarrer une base
 
 rbs ne gère pas votre base : il attend une URL qui répond. Le plus court chemin pour en

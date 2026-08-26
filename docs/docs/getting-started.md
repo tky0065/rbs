@@ -53,15 +53,6 @@ something like `rbs 3.10.0`, another binary is winning on your `PATH` — call
 
 :::
 
-:::caution
-
-0.1 is still being assembled, and `main` does not always carry every command yet. This
-page uses `new`, `generate`, `migrate` and `doctor`; `rbs generate --help` tells you
-whether the clone you built from has them. If it does not, build from the 0.1
-development tree rather than from `main`.
-
-:::
-
 ## Starting a database
 
 rbs does not manage your database; it expects a URL that answers. The shortest way to
