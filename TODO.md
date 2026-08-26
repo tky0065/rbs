@@ -120,25 +120,25 @@ dès que `C` est terminé.
       tous deux `{{ }}`.
       ✓ Test : une template contenant `format!("{{}}")` se rend sans échappement manuel.
 
-- [ ] **C3** · Templates embarquées — PARTIEL 2026-08-26 : `cargo test -p rbs-cli` → 17 passed, dont les 4 de `templates::` · les templates sont embarquées et lues sans le dépôt (binaire de test lancé hors dépôt, `templates/` écartée → 2 passed). Le critère « génère un projet » exige `rbs new`, donc C7.
+- [x] **C3** · Templates embarquées — vérifié 2026-08-26 · binaire copié hors du dépôt et `templates/` écartée du disque → `rbs new sans-templates --yes` → 15 fichiers, code 0 · `cargo test -p rbs-cli templates::` → 8 passed
       `include_dir` pour un binaire autonome, plus un flag `--template-dir` de surcharge.
       ✓ Le binaire génère un projet depuis un répertoire vide de tout template.
 
-- [x] **C4** · Squelette de projet — vérifié 2026-08-26 · `cargo test -p rbs-cli` → 13 passed, dont `chaque_ancre_est_ouverte_puis_refermee_dans_son_fichier` et `chaque_template_se_rend_avec_les_trois_variables` · revue de lecture du `main.rs` généré (25 lignes) validée par le user
+- [x] **C4** · Squelette de projet — vérifié 2026-08-26 · `cargo test -p rbs-cli` → 13 passed, dont `chaque_ancre_est_ouverte_puis_refermee_dans_son_fichier` et `chaque_template_se_rend_avec_les_cinq_variables` · revue de lecture du `main.rs` généré (25 lignes) validée par le user
       `Cargo.toml`, `main.rs`, `router.rs`, `state.rs`, `features/mod.rs`, `features/health/`,
       `migration/`, `config/`, `.env.example`, `.gitignore`, avec toutes les ancres.
       ✓ Revue de lecture : `main.rs` tient en ~25 lignes compréhensibles sans documentation.
 
-- [ ] **C5** · Métadonnées projet — PARTIEL 2026-08-26 : `cargo test -p rbs-cli` → 21 passed, dont les 4 de `metadata::` · relecture prouvée sur le manifeste rendu depuis la template et écrit dans un répertoire temporaire, pas sur un projet déroulé par `rbs new`, qui attend C7.
+- [x] **C5** · Métadonnées projet — vérifié 2026-08-26 · `cargo test -p rbs-cli -- --exact new::tests::les_metadonnees_du_projet_cree_se_relisent` → 1 passed : version et features relues sur un projet déroulé par `rbs new`, la version venant du CLI et non plus d'une constante figée dans la template
       Écriture de `[package.metadata.rbs]` (version, features installées).
       ✓ Test : relire les métadonnées d'un projet fraîchement généré.
 
-- [ ] **C6** · Prompts interactifs — PARTIEL 2026-08-26 : `cargo test -p rbs-cli` → 29 passed, dont les 8 de `prompts::` · « n'ouvre aucun prompt » prouvé (`--yes` court-circuite avant tout appel à inquire, plus `rbs new x --yes < /dev/null` qui ne bloque pas). La moitié « réussit » exige `rbs new`, donc C7.
+- [x] **C6** · Prompts interactifs — vérifié 2026-08-26 · `rbs new sans-templates --yes < /dev/null` sans TTY → projet créé, code 0, aucun prompt ouvert · `cargo test -p rbs-cli prompts::` → 8 passed
       `inquire` : nom, base, multi-sélection des features. Chaque question a son flag
       équivalent ; `--yes` prend les défauts.
       ✓ Test : `rbs new x --yes` n'ouvre aucun prompt et réussit sans TTY.
 
-- [ ] **C7** · Commande `rbs new` complète
+- [x] **C7** · Commande `rbs new` complète — vérifié 2026-08-26 · projet généré puis lancé contre PostgreSQL 18.4 en conteneur : `curl -i /health` → `200 OK`, `{"status":"ok","checks":{"database":"ok"}}` · `cargo test -p rbs-cli new::` → 13 passed
       Assemblage de C2 → C6, plus `git init` sur le projet créé.
       ✓ Le projet généré démarre et répond 200 sur `/health`.
 

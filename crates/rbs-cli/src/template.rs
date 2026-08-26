@@ -1,6 +1,3 @@
-// Le moteur précède ses appelants : aucune commande du CLI n'est encore implémentée.
-#![allow(dead_code)]
-
 use minijinja::syntax::SyntaxConfig;
 use minijinja::{AutoEscape, Environment, Error, UndefinedBehavior};
 use serde::Serialize;
@@ -31,6 +28,9 @@ impl Renderer {
         environnement.set_undefined_behavior(UndefinedBehavior::Strict);
         // On produit du Rust et du TOML, où `&` et `<` sont des caractères ordinaires.
         environnement.set_auto_escape_callback(|_| AutoEscape::None);
+        // minijinja retire le retour à la ligne final, utile pour un gabarit HTML,
+        // fâcheux pour un fichier source : rustfmt et Git le réclament tous les deux.
+        environnement.set_keep_trailing_newline(true);
 
         Self { environnement }
     }
@@ -61,6 +61,15 @@ mod tests {
             .expect("le rendu doit réussir");
 
         assert_eq!(rendu, source);
+    }
+
+    #[test]
+    fn le_retour_a_la_ligne_final_est_preserve() {
+        let rendu = Renderer::new()
+            .rendre("fn main() {}\n", context! {})
+            .expect("le rendu doit réussir");
+
+        assert_eq!(rendu, "fn main() {}\n");
     }
 
     #[test]

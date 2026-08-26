@@ -1,6 +1,3 @@
-// La résolution précède son appelant : `rbs new` n'est pas encore implémentée.
-#![allow(dead_code)]
-
 use std::fmt;
 
 use inquire::{InquireError, MultiSelect, Text};

@@ -4,10 +4,6 @@
 //! n'ait besoin d'aucun fichier externe ; `--template-dir` lui substitue un répertoire du
 //! disque, ce dont le développement de rbs a besoin à chaque retouche d'une template.
 
-// Les templates précèdent leurs appelants : aucune commande du CLI n'est encore
-// implémentée.
-#![allow(dead_code)]
-
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -167,7 +163,8 @@ mod tests {
     ];
 
     /// Les chemins de sortie attendus du squelette, tels que `rbs new` les écrira.
-    const DESTINATIONS: [&str; 14] = [
+    const DESTINATIONS: [&str; 15] = [
+        ".env",
         ".env.example",
         ".gitignore",
         "Cargo.toml",
@@ -184,12 +181,14 @@ mod tests {
         "src/state.rs",
     ];
 
-    /// Contexte de rendu minimal : les trois variables que `rbs new` fournira.
+    /// Contexte de rendu minimal : les cinq variables que `rbs new` fournira.
     fn contexte() -> Value {
         context! {
             nom_projet => "mon-api",
             nom_crate => "mon_api",
             rbs_core_dep => "\"0.1\"",
+            rbs_version => "0.1.0",
+            database_url => "postgres://postgres:postgres@localhost:5432/mon_api",
         }
     }
 
@@ -266,7 +265,7 @@ mod tests {
     }
 
     #[test]
-    fn chaque_template_se_rend_avec_les_trois_variables() {
+    fn chaque_template_se_rend_avec_les_cinq_variables() {
         let renderer = Renderer::new();
 
         for chemin in templates() {

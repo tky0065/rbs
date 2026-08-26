@@ -36,6 +36,10 @@ pub enum Commands {
         /// Features à installer sans passer par les questions, séparées par des virgules.
         #[arg(long, value_name = "FEATURES", value_delimiter = ',')]
         with: Vec<String>,
+
+        /// Crate `rbs-core` locale à utiliser au lieu de la version publiée.
+        #[arg(long, value_name = "CHEMIN")]
+        core_path: Option<PathBuf>,
     },
 
     /// Ajoute une feature à un projet existant : docker, ci.

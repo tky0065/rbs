@@ -4,7 +4,7 @@
 //! généré le projet, features installées. Un fichier de plus, non versionné par
 //! réflexe, se serait désynchronisé du dépôt.
 
-// L'état précède ses appelants : aucune commande du CLI n'est encore implémentée.
+// `ajouter_feature` précède son appelant : `rbs add` n'est pas encore implémentée.
 #![allow(dead_code)]
 
 use std::fs;
@@ -194,6 +194,7 @@ mod tests {
                     nom_projet => "mon-api",
                     nom_crate => "mon_api",
                     rbs_core_dep => "\"0.1\"",
+                    rbs_version => "0.1.0",
                 },
             )
             .expect("le manifeste doit se rendre");
