@@ -30,18 +30,20 @@ project CI compiles — no code block in this documentation is typed by hand:
 ```
 
 The controller does no more than that: it hands the request to the service and maps the
-result to a status code. The service, in turn, never sees a `DatabaseConnection`.
+result to a status code. The service receives the `DatabaseConnection` and hands it on
+without ever querying through it: of the six files in a feature, `repository.rs` is the
+only one that names an `Entity`.
 
 ## Where to go next
 
-This documentation is being written alongside the code. The pages below fill in as the
-0.1 milestone closes:
-
-- **Getting started** — from installation to a CRUD API that answers.
-- **Architecture** — the core/generated boundary, the anatomy of a feature, the
-  dependency rule.
-- **CLI reference** — every command and flag, with real output.
-- **Guides** — configuration, logging, errors, OpenAPI, migrations, testing.
+- **[Getting started](./getting-started.md)** — from installation to a CRUD API that
+  answers.
+- **[Architecture](./architecture.md)** — the core/generated boundary, the anatomy of a
+  feature, the dependency rule.
+- **[CLI reference](./cli/new.md)** — every command and flag, with real output.
+- **Guides** — [configuration](./guides/configuration.md), [logging](./guides/logs.md),
+  [errors](./guides/errors.md), [OpenAPI](./guides/openapi.md),
+  [migrations](./guides/migrations.md), [testing](./guides/testing.md).
 
 The [roadmap](https://github.com/tky0065/rbs/blob/main/ROADMAP.md) lists what is in scope
 for 0.1 and what is deliberately left out.
