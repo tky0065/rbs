@@ -273,7 +273,7 @@ dès que `C` est terminé.
 Démarre dès que le lot C est terminé, en parallèle de D et E. Documenter pendant la
 construction, pas après, quand tout paraît évident.
 
-- [ ] **F1** · Docusaurus + i18n
+- [x] **F1** · Docusaurus + i18n — vérifié 2026-08-26 · `npm run build` → `en` et `fr`, deux `[SUCCESS]` · `<html lang=en>` contre `<html lang=fr>`, dropdown `href=/rbs/fr/ …>Français` et retour `href=/rbs/ …>English` · `grep -rl superpowers build/ | wc -l` → 0 · `grep -c 'npm\|node\|yarn' ci.yml` → 0, la preuve de F9 tient · bascule validée de visu par le user sur `npm run serve`
       Initialisation dans `docs/`, locales `fr` et `en`, sélecteur de langue.
       ✓ Le site se construit et bascule entre les deux langues.
 

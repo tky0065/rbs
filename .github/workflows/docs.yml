@@ -1,0 +1,51 @@
+name: Docs
+
+# La toolchain Node vit sous `docs/` et n'entre pas dans `ci.yml` : CONTRIBUTING garantit
+# qu'on peut contribuer au code sans installer Node, et cette garantie se vérifie en
+# comptant les occurrences de Node dans le workflow Rust.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - '!docs/superpowers/**'
+      - '.github/workflows/docs.yml'
+  pull_request:
+    paths:
+      - 'docs/**'
+      - '!docs/superpowers/**'
+      - '.github/workflows/docs.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docs-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    working-directory: docs
+
+jobs:
+  build:
+    name: build du site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - run: npm ci
+
+      - name: typecheck
+        run: npm run typecheck
+
+      # Le build échoue sur un lien mort (`onBrokenLinks: 'throw'`) et construit les deux
+      # locales : c'est lui qui tient la parité FR/EN, qu'aucun test ne couvre.
+      - name: build
+        run: npm run build
