@@ -4,6 +4,8 @@ description = "Runtime partagé des projets générés par rbs : erreurs, config
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
 
 [features]
 default = []
