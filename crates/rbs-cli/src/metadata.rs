@@ -716,6 +716,78 @@ tokio = { version = "1", features = ["macros"] }
             .map(str::to_owned)
     }
 
+    /// La ligne du manifeste rendu qui déclare `dependance`.
+    fn ligne_de(texte: &str, dependance: &str) -> String {
+        texte
+            .lines()
+            .find(|ligne| ligne.starts_with(dependance))
+            .unwrap_or_else(|| panic!("`{dependance}` n'est plus déclarée :\n{texte}"))
+            .to_string()
+    }
+
+    #[test]
+    fn une_feature_s_ajoute_a_une_dependance_deja_en_table_inline() {
+        let rendu =
+            ajouter_feature_a_dependance(MANIFESTE_DEPS, "tokio", "rt-multi-thread", "Cargo.toml")
+                .expect("le manifeste est valide")
+                .expect("la feature manque");
+
+        assert_eq!(
+            ligne_de(&rendu, "tokio"),
+            r#"tokio = { version = "1", features = ["macros", "rt-multi-thread"] }"#
+        );
+    }
+
+    #[test]
+    fn une_dependance_en_chaine_devient_une_table_inline_en_gardant_son_commentaire() {
+        let rendu = ajouter_feature_a_dependance(MANIFESTE_DEPS, "axum", "macros", "Cargo.toml")
+            .expect("le manifeste est valide")
+            .expect("la feature manque");
+
+        let ligne = ligne_de(&rendu, "axum");
+        assert!(
+            ligne.contains(r#"axum = { version = "0.9", features = ["macros"] }"#),
+            "la déclaration n'est pas devenue une table inline : {ligne}"
+        );
+        assert!(
+            ligne.contains("# le serveur"),
+            "le commentaire de fin de ligne a été perdu : {ligne}"
+        );
+    }
+
+    #[test]
+    fn une_feature_deja_active_ne_produit_aucun_texte() {
+        let rendu = ajouter_feature_a_dependance(MANIFESTE_DEPS, "tokio", "macros", "Cargo.toml")
+            .expect("le manifeste est valide");
+
+        assert_eq!(rendu, None);
+    }
+
+    #[test]
+    fn une_dependance_absente_est_refusee() {
+        let erreur =
+            ajouter_feature_a_dependance(MANIFESTE_DEPS, "redis", "tokio-comp", "Cargo.toml")
+                .expect_err("la dépendance manque");
+
+        assert!(
+            matches!(erreur, Erreur::DependanceAbsente { .. }),
+            "{erreur}"
+        );
+        assert!(erreur.to_string().contains("redis"), "{erreur}");
+    }
+
+    #[test]
+    fn une_feature_sur_un_manifeste_sans_dependances_est_refusee() {
+        let erreur =
+            ajouter_feature_a_dependance(MANIFESTE_MINIMAL, "axum", "macros", "Cargo.toml")
+                .expect_err("il n'y a pas de table `[dependencies]`");
+
+        assert!(
+            matches!(erreur, Erreur::DependanceAbsente { .. }),
+            "{erreur}"
+        );
+    }
+
     #[test]
     fn un_manifeste_sans_section_rbs_est_refuse() {
         let erreur = inscrire_feature("[package]\nname = \"demo\"\n", "docker", "Cargo.toml")
