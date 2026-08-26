@@ -1,1 +1,4 @@
 /target
+
+# Worktrees des agents : du travail en cours, jamais du contenu du dépôt.
+/.claude/worktrees
