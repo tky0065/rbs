@@ -13,6 +13,8 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::ancres::Ancre;
+
 pub(crate) use action::{Action, Effet, Statut};
 // `rbs add` est la seule commande qui patchera un `Cargo.toml` ; en son absence, ce
 // réexport n'a encore aucun lecteur.
@@ -66,6 +68,9 @@ pub(crate) enum Erreur {
         /// Cause système.
         source: io::Error,
     },
+    /// Une ancre attendue a disparu du projet.
+    #[error("{0}")]
+    Ancre(#[source] crate::ancres::Absente),
 }
 
 /// Accumule les actions d'un plan en calculant, pour chaque fichier, son contenu final.
@@ -100,6 +105,37 @@ impl Constructeur {
             chemin: chemin.to_string(),
             effet: Effet::Creer {
                 contenu: contenu.to_string(),
+            },
+            statut,
+        });
+
+        Ok(())
+    }
+
+    /// Planifie l'ajout de `lignes` dans `ancre`, juste avant sa balise fermante.
+    ///
+    /// Le fichier visé est celui que l'ancre désigne : une ancre ne se déplace pas.
+    pub fn inserer(&mut self, ancre: Ancre, lignes: &[String]) -> Result<(), Erreur> {
+        let chemin = ancre.fichier;
+
+        let avant = self
+            .etat_courant(chemin)?
+            .ok_or(Erreur::Ancre(crate::ancres::Absente { ancre }))?;
+
+        let apres = crate::ancres::inserer(&avant, ancre, lignes).map_err(Erreur::Ancre)?;
+
+        let statut = if apres == avant {
+            Statut::DejaFait
+        } else {
+            Statut::AFaire
+        };
+
+        self.projeter(chemin, Some(avant), apres);
+        self.actions.push(Action {
+            chemin: chemin.to_string(),
+            effet: Effet::Inserer {
+                ancre,
+                lignes: lignes.to_vec(),
             },
             statut,
         });
@@ -156,11 +192,19 @@ impl Constructeur {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ancres;
     use std::fs;
     use tempfile::TempDir;
 
     fn projet() -> TempDir {
         TempDir::new().expect("le répertoire temporaire se crée")
+    }
+
+    const ROUTER: &str = "pub fn router() -> Router {\n    Router::new()\n        // <rbs:routes>\n        // </rbs:routes>\n}\n";
+
+    fn avec_router(projet: &TempDir, source: &str) {
+        fs::create_dir_all(projet.path().join("src")).expect("le répertoire se crée");
+        fs::write(projet.path().join("src/router.rs"), source).expect("l'écriture aboutit");
     }
 
     #[test]
@@ -220,5 +264,111 @@ mod tests {
         constructeur.finir();
 
         assert!(!projet.path().join("Dockerfile").exists());
+    }
+
+    #[test]
+    fn inserer_dans_une_ancre_vide_est_a_faire() {
+        let projet = projet();
+        avec_router(&projet, ROUTER);
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        constructeur
+            .inserer(
+                ancres::ROUTES,
+                &[".merge(crate::users::routes())".to_string()],
+            )
+            .expect("l'ancre est présente");
+        let plan = constructeur.finir();
+
+        assert_eq!(plan.actions()[0].statut, Statut::AFaire);
+        assert_eq!(plan.actions()[0].chemin, "src/router.rs");
+        assert!(
+            plan.fichiers()[0]
+                .apres
+                .contains(".merge(crate::users::routes())")
+        );
+    }
+
+    #[test]
+    fn inserer_une_ligne_deja_presente_est_deja_fait() {
+        let projet = projet();
+        avec_router(
+            &projet,
+            &ROUTER.replace(
+                "        // </rbs:routes>",
+                "        .merge(crate::users::routes())\n        // </rbs:routes>",
+            ),
+        );
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        constructeur
+            .inserer(
+                ancres::ROUTES,
+                &[".merge(crate::users::routes())".to_string()],
+            )
+            .expect("l'ancre est présente");
+        let plan = constructeur.finir();
+
+        assert_eq!(plan.actions()[0].statut, Statut::DejaFait);
+        assert_eq!(
+            plan.fichiers()[0].avant.as_deref(),
+            Some(plan.fichiers()[0].apres.as_str())
+        );
+    }
+
+    #[test]
+    fn deux_insertions_dans_un_meme_fichier_se_chainent_sur_un_seul_fichier() {
+        let projet = projet();
+        let lib = "// <rbs:migration_modules>\n// </rbs:migration_modules>\nvec![\n    // <rbs:migrations>\n    // </rbs:migrations>\n]\n";
+        fs::create_dir_all(projet.path().join("migration/src")).expect("le répertoire se crée");
+        fs::write(projet.path().join("migration/src/lib.rs"), lib).expect("l'écriture aboutit");
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        constructeur
+            .inserer(
+                ancres::MIGRATION_MODULES,
+                &["mod m20260826_creer_users;".to_string()],
+            )
+            .expect("l'ancre est présente");
+        constructeur
+            .inserer(
+                ancres::MIGRATIONS,
+                &["Box::new(m20260826_creer_users::Migration),".to_string()],
+            )
+            .expect("l'ancre est présente");
+        let plan = constructeur.finir();
+
+        assert_eq!(plan.actions().len(), 2);
+        assert_eq!(plan.fichiers().len(), 1);
+        assert!(
+            plan.fichiers()[0]
+                .apres
+                .contains("mod m20260826_creer_users;")
+        );
+        assert!(
+            plan.fichiers()[0]
+                .apres
+                .contains("Box::new(m20260826_creer_users::Migration),")
+        );
+        assert_eq!(plan.fichiers()[0].avant.as_deref(), Some(lib));
+    }
+
+    #[test]
+    fn une_ancre_absente_interrompt_la_planification() {
+        let projet = projet();
+        avec_router(
+            &projet,
+            "pub fn router() -> Router {\n    Router::new()\n}\n",
+        );
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        let erreur = constructeur
+            .inserer(
+                ancres::ROUTES,
+                &[".merge(crate::users::routes())".to_string()],
+            )
+            .expect_err("l'ancre manque");
+
+        assert!(matches!(erreur, Erreur::Ancre(_)));
     }
 }
