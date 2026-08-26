@@ -1,4 +1,4 @@
-//! Rendu de `features/<nom>/service.rs` : les décisions métier de la feature.
+//! Rendu de `<nom>/service.rs` : les décisions métier de la feature.
 
 use crate::template::Renderer;
 
