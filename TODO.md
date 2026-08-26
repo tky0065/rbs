@@ -142,7 +142,7 @@ dès que `C` est terminé.
       Assemblage de C2 → C6, plus `git init` sur le projet créé.
       ✓ Le projet généré démarre et répond 200 sur `/health`.
 
-- [ ] **C8** · Test d'intégration du CLI
+- [x] **C8** · Test d'intégration du CLI — vérifié 2026-08-26 · PR #5, étape « cargo test (intégration) » → 1 passed en 76,56 s ; template cassée → FAILED sur `cargo build` (E0308, code 101)
       `assert_cmd` + `tempfile` : `rbs new`, puis `cargo build` et `cargo test` du projet
       généré.
       ✓ Le test tourne en CI et échoue si le projet généré ne compile pas.
