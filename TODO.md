@@ -311,7 +311,7 @@ construction, pas après, quand tout paraît évident.
 
 - [x] **F11** · Modèles d'issues et de PR — vérifié 2026-08-26 · quatre fichiers (bug, évolution, `config.yml` sans issue vierge, modèle de PR) · front-matter validé par `yaml.safe_load` sur les trois · les commandes demandées existent (`rbs --version` → `rbs 0.1.0`, `rbs doctor` → « Diagnostique le projet : ancres, .env, base joignable, versions ») et les liens relatifs `../../ROADMAP.md` et `../CONTRIBUTING.md` résolvent
 
-- [ ] **F12** · Publication du site
+- [ ] **F12** · Publication du site — PARTIEL 2026-08-26 : job `deploy` écrit dans `docs.yml` (`needs: build`, conditionné à un push sur `main`, `environment: github-pages`, `upload-pages-artifact@v5` sur `docs/build` puis `deploy-pages@v5`) · permissions `pages`/`id-token` portées par le seul job qui en a besoin, concurrence `pages` en `cancel-in-progress: false` pour ne pas interrompre un déploiement en vol · `examples/**` ajouté aux filtres `paths:` : le site tire ses extraits de `examples/` et se serait publié périmé sans cela · `npm run clear && npm run build` → deux `[SUCCESS]`, 30 pages HTML, `docs/build/index.html` et `docs/build/fr/index.html` présents, `baseUrl` rendu en `/rbs/` · déploiement **non prouvé** : `gh api repos/tky0065/rbs/pages` → 404, la source Pages n'est pas activée et l'activer est une écriture sur GitHub, exclue par la contrainte « local seulement ». Reste à activer Pages (source « GitHub Actions ») puis constater un déploiement.
       GitHub Pages, déploiement automatique.
 
 - [ ] **F13** · Ouverture du dépôt
