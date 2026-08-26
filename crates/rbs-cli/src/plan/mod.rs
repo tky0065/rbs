@@ -85,6 +85,16 @@ pub(crate) enum Erreur {
     /// Une ancre attendue a disparu du projet.
     #[error("{0}")]
     Ancre(#[source] crate::ancres::Absente),
+    /// Le fichier qui porte l'ancre visée n'existe pas.
+    ///
+    /// Distincte d'`Ancre`, qui suppose au contraire un fichier présent mais dépourvu de
+    /// ses balises : ici c'est le fichier entier qui manque, et chercher une balise
+    /// dedans n'aurait aucun sens.
+    #[error("{chemin} est introuvable")]
+    FichierAbsent {
+        /// Chemin du fichier porteur, relatif à la racine.
+        chemin: String,
+    },
     /// Le manifeste du projet n'a pas pu être patché.
     #[error("{0}")]
     Metadonnees(#[source] crate::metadata::Erreur),
@@ -154,9 +164,9 @@ impl Constructeur {
         let chemin = ancre.fichier;
 
         let etats = self.etats(chemin)?;
-        let courant = etats
-            .courant
-            .ok_or(Erreur::Ancre(crate::ancres::Absente { ancre }))?;
+        let courant = etats.courant.ok_or_else(|| Erreur::FichierAbsent {
+            chemin: chemin.to_string(),
+        })?;
 
         let apres = crate::ancres::inserer(&courant, ancre, lignes).map_err(Erreur::Ancre)?;
         let statut = statut_compose(etats.origine.as_deref(), &apres);
@@ -469,6 +479,61 @@ mod tests {
         assert!(matches!(erreur, Erreur::Ancre(_)));
     }
 
+    #[test]
+    fn inserer_dans_un_fichier_absent_nomme_le_fichier_et_non_l_ancre() {
+        let projet = projet();
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        let erreur = constructeur
+            .inserer(
+                ancres::ROUTES,
+                &[".merge(crate::users::routes())".to_string()],
+            )
+            .expect_err("le fichier n'existe pas");
+
+        assert!(matches!(erreur, Erreur::FichierAbsent { .. }), "{erreur:?}");
+        let message = erreur.to_string();
+        assert!(message.contains("src/router.rs"), "{message}");
+        assert!(
+            !message.contains("<rbs:routes>"),
+            "le message parle d'une balise alors que le fichier entier manque : {message}"
+        );
+    }
+
+    /// Un fichier illisible n'est pas un fichier absent : seul `NotFound` vaut absence.
+    #[test]
+    fn inserer_dans_un_fichier_illisible_reste_une_erreur_d_acces() {
+        let projet = projet();
+        fs::create_dir_all(projet.path().join("src/router.rs")).expect("le répertoire se crée");
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        let erreur = constructeur
+            .inserer(ancres::ROUTES, &["peu importe".to_string()])
+            .expect_err("le fichier ne se lit pas");
+
+        assert!(matches!(erreur, Erreur::Acces { .. }), "{erreur:?}");
+    }
+
+    #[test]
+    fn inserer_dans_un_fichier_present_mais_sans_ancre_reste_une_erreur_d_ancre() {
+        let projet = projet();
+        avec_router(
+            &projet,
+            "pub fn router() -> Router {\n    Router::new()\n}\n",
+        );
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        let erreur = constructeur
+            .inserer(
+                ancres::ROUTES,
+                &[".merge(crate::users::routes())".to_string()],
+            )
+            .expect_err("l'ancre manque");
+
+        assert!(matches!(erreur, Erreur::Ancre(_)), "{erreur:?}");
+        assert!(erreur.to_string().contains("<rbs:routes>"), "{erreur}");
+    }
+
     const CARGO: &str = "[package]\nname = \"demo\"\n\n[package.metadata.rbs]\nversion = \"0.1.0\"\nfeatures = [\"health\"]\n";
 
     #[test]
@@ -740,6 +805,77 @@ mod tests {
 
         vus.sort();
         vus
+    }
+
+    /// Le critère du lot : ancre absente, rien d'écrit, et le bloc à recoller sous la main.
+    #[test]
+    fn une_ancre_absente_laisse_le_projet_intact_et_donne_le_bloc_a_recoller() {
+        let projet = projet();
+        avec_router(
+            &projet,
+            &ROUTER
+                .replace("        // <rbs:routes>\n", "")
+                .replace("        // </rbs:routes>\n", ""),
+        );
+        let avant = empreinte(projet.path());
+
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+        let erreur = constructeur
+            .inserer(
+                ancres::ROUTES,
+                &[".merge(crate::users::routes())".to_string()],
+            )
+            .expect_err("l'ancre manque");
+        let plan = constructeur.finir();
+
+        let Erreur::Ancre(absente) = erreur else {
+            panic!("le fichier est là, seule l'ancre manque : {erreur:?}");
+        };
+
+        assert_eq!(
+            empreinte(projet.path()),
+            avant,
+            "l'échec de planification a touché au disque"
+        );
+        assert!(plan.fichiers().is_empty(), "un fichier a été projeté");
+
+        let bloc = absente.ancre.bloc();
+        assert!(bloc.contains("// <rbs:routes>"), "{bloc}");
+        assert!(bloc.contains("// </rbs:routes>"), "{bloc}");
+    }
+
+    /// Le critère du lot : une ligne déjà montée ne se réécrit pas au plan suivant.
+    #[test]
+    fn inserer_deux_fois_la_meme_ligne_ne_change_rien_la_seconde_fois() {
+        let projet = projet();
+        avec_router(&projet, ROUTER);
+        let lignes = [".merge(crate::users::routes())".to_string()];
+
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+        constructeur
+            .inserer(ancres::ROUTES, &lignes)
+            .expect("l'ancre est présente");
+        let premier = constructeur.finir();
+        assert_eq!(premier.fichiers()[0].statut, Statut::AFaire);
+
+        fs::write(
+            projet.path().join("src/router.rs"),
+            &premier.fichiers()[0].apres,
+        )
+        .expect("l'écriture aboutit");
+
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+        constructeur
+            .inserer(ancres::ROUTES, &lignes)
+            .expect("l'ancre est présente");
+        let second = constructeur.finir();
+
+        assert_eq!(second.fichiers()[0].statut, Statut::DejaFait);
+        assert_eq!(
+            second.fichiers()[0].avant.as_deref(),
+            Some(second.fichiers()[0].apres.as_str()),
+            "la seconde planification réécrirait le fichier"
+        );
     }
 
     #[test]

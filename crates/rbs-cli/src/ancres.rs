@@ -24,6 +24,11 @@ impl Ancre {
     pub(crate) fn fermeture(&self) -> String {
         format!("// </rbs:{}>", self.nom)
     }
+
+    /// Le bloc à recoller quand l'ancre a disparu, prêt à être collé tel quel.
+    pub(crate) fn bloc(&self) -> String {
+        format!("{}\n{}", self.ouverture(), self.fermeture())
+    }
 }
 
 /// Déclaration des modules de feature, en tête de `main.rs`.
@@ -293,6 +298,11 @@ pub fn router(state: AppState) -> Router {
         let erreur = inserer(cite, ROUTES, &lignes(&["peu importe"])).expect_err("aucune ancre");
 
         assert_eq!(erreur.ancre, ROUTES);
+    }
+
+    #[test]
+    fn le_bloc_a_recoller_porte_les_deux_balises_de_l_ancre() {
+        assert_eq!(ROUTES.bloc(), "// <rbs:routes>\n// </rbs:routes>");
     }
 
     #[test]

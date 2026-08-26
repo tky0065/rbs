@@ -31,7 +31,7 @@ pub(crate) fn controler(racine: &Path) -> Controle {
 
     let remede = absentes
         .iter()
-        .map(|a| format!("dans {} :\n{}", a.fichier, bloc(a)))
+        .map(|a| format!("dans {} :\n{}", a.fichier, a.bloc()))
         .collect::<Vec<_>>()
         .join("\n\n");
 
@@ -46,11 +46,6 @@ fn presente(racine: &Path, ancre: &Ancre) -> bool {
     fs::read_to_string(racine.join(ancre.fichier)).is_ok_and(|source| {
         source.contains(&ancre.ouverture()) && source.contains(&ancre.fermeture())
     })
-}
-
-/// Le bloc à recoller pour une ancre absente, prêt à être collé tel quel.
-fn bloc(ancre: &Ancre) -> String {
-    format!("{}\n{}", ancre.ouverture(), ancre.fermeture())
 }
 
 #[cfg(test)]
