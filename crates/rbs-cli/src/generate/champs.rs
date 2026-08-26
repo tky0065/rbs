@@ -1,7 +1,5 @@
 mod erreur;
 
-// Aucun appelant avant l'analyse de la chaîne --fields, tâche suivante, qui les consomme tous les deux.
-#[allow(unused_imports)]
 pub(crate) use erreur::{ErreurChamp, ErreurChamps, NatureErreur};
 
 /// Un des sept types de la grammaire `--fields`.
@@ -98,6 +96,81 @@ impl Champ {
     }
 }
 
+/// Analyse la chaîne `--fields`. Les fautes de tous les champs sont collectées en une
+/// passe : l'utilisateur corrige sa ligne d'un coup plutôt qu'une faute par exécution.
+pub(crate) fn analyser(entree: &str) -> Result<Vec<Champ>, ErreurChamps> {
+    if entree.trim().is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let mut champs = Vec::new();
+    let mut erreurs = Vec::new();
+
+    for (rang, portion) in entree.split(',').enumerate() {
+        match analyser_champ(rang + 1, portion.trim()) {
+            Ok(champ) => champs.push(champ),
+            Err(erreur) => erreurs.push(erreur),
+        }
+    }
+
+    if erreurs.is_empty() {
+        Ok(champs)
+    } else {
+        Err(ErreurChamps { erreurs })
+    }
+}
+
+fn analyser_champ(rang: usize, portion: &str) -> Result<Champ, ErreurChamp> {
+    let erreur = |libelle: &str, nature| ErreurChamp {
+        rang,
+        libelle: libelle.to_string(),
+        nature,
+    };
+
+    let mut parties = portion.split(':').map(str::trim);
+    let nom = parties.next().unwrap_or_default();
+    let type_brut = parties.next().unwrap_or_default();
+
+    if nom.is_empty() || type_brut.is_empty() {
+        return Err(erreur(portion, NatureErreur::FormeInvalide));
+    }
+
+    let Some(type_) = TypeChamp::analyser(type_brut) else {
+        return Err(erreur(
+            nom,
+            NatureErreur::TypeInconnu {
+                nom: type_brut.to_string(),
+            },
+        ));
+    };
+
+    let mut champ = Champ {
+        nom: nom.to_string(),
+        type_,
+        unique: false,
+        optionnel: false,
+        index: false,
+    };
+
+    for modificateur in parties {
+        match modificateur {
+            "unique" => champ.unique = true,
+            "optional" => champ.optionnel = true,
+            "index" => champ.index = true,
+            inconnu => {
+                return Err(erreur(
+                    nom,
+                    NatureErreur::ModificateurInconnu {
+                        nom: inconnu.to_string(),
+                    },
+                ));
+            }
+        }
+    }
+
+    Ok(champ)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,5 +260,90 @@ mod tests {
 
         assert_eq!(obligatoire.type_rust(), "String");
         assert_eq!(optionnel.type_rust(), "Option<String>");
+    }
+
+    fn champs(entree: &str) -> Vec<Champ> {
+        analyser(entree).expect("la chaîne doit être valide")
+    }
+
+    #[test]
+    fn une_chaine_vide_ne_declare_aucun_champ() {
+        assert_eq!(analyser(""), Ok(Vec::new()));
+        assert_eq!(analyser("   "), Ok(Vec::new()));
+    }
+
+    #[test]
+    fn un_champ_sans_modificateur_a_ses_trois_drapeaux_baisses() {
+        let champs = champs("titre:string");
+
+        assert_eq!(champs.len(), 1);
+        assert_eq!(champs[0].nom, "titre");
+        assert_eq!(champs[0].type_, TypeChamp::String);
+        assert!(!champs[0].unique);
+        assert!(!champs[0].optionnel);
+        assert!(!champs[0].index);
+    }
+
+    #[test]
+    fn chaque_modificateur_leve_son_drapeau() {
+        assert!(champs("email:string:unique")[0].unique);
+        assert!(champs("bio:text:optional")[0].optionnel);
+        assert!(champs("slug:string:index")[0].index);
+    }
+
+    #[test]
+    fn l_ordre_des_modificateurs_est_libre() {
+        assert_eq!(
+            champs("email:string:unique:optional"),
+            champs("email:string:optional:unique")
+        );
+    }
+
+    #[test]
+    fn les_espaces_autour_des_separateurs_sont_ignores() {
+        assert_eq!(
+            champs(" titre : string , email : string : unique "),
+            champs("titre:string,email:string:unique")
+        );
+    }
+
+    #[test]
+    fn les_champs_gardent_leur_ordre_de_declaration() {
+        let champs = champs("un:string,deux:int,trois:bool");
+        let noms: Vec<&str> = champs.iter().map(|champ| champ.nom.as_str()).collect();
+
+        assert_eq!(noms, ["un", "deux", "trois"]);
+    }
+
+    #[test]
+    fn un_champ_sans_type_est_une_forme_invalide() {
+        let erreur = analyser("titre").expect_err("un champ sans type est refusé");
+
+        assert_eq!(erreur.erreurs.len(), 1);
+        assert_eq!(erreur.erreurs[0].rang, 1);
+        assert_eq!(erreur.erreurs[0].libelle, "titre");
+        assert_eq!(erreur.erreurs[0].nature, NatureErreur::FormeInvalide);
+    }
+
+    #[test]
+    fn une_virgule_finale_est_une_forme_invalide() {
+        let erreur = analyser("titre:string,").expect_err("la virgule finale est refusée");
+
+        assert_eq!(erreur.erreurs.len(), 1);
+        assert_eq!(erreur.erreurs[0].rang, 2);
+        assert_eq!(erreur.erreurs[0].nature, NatureErreur::FormeInvalide);
+    }
+
+    #[test]
+    fn un_type_hors_grammaire_est_signale_sur_son_champ() {
+        let erreur = analyser("prix:decimal").expect_err("decimal n'est pas dans la grammaire");
+
+        assert_eq!(erreur.erreurs[0].libelle, "prix");
+        assert_eq!(
+            erreur.erreurs[0].nature,
+            NatureErreur::TypeInconnu {
+                nom: "decimal".to_string()
+            }
+        );
     }
 }
