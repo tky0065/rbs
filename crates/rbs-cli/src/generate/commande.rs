@@ -10,6 +10,7 @@ use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::ancres;
+use crate::git;
 use crate::metadata;
 
 use super::feature::Feature;
@@ -27,6 +28,8 @@ pub(crate) struct Options {
     pub complete: bool,
     /// Répertoire d'où la commande est lancée.
     pub repertoire: PathBuf,
+    /// Génère même si le projet porte des modifications non commitées.
+    pub force: bool,
 }
 
 /// Un fichier à écrire : son chemin, relatif à la racine du projet, et son contenu.
@@ -87,6 +90,14 @@ pub(crate) enum Erreur {
         source: io::Error,
     },
 
+    /// Le projet porte des modifications non commitées, qu'une génération rendrait
+    /// indiscernables des siennes.
+    #[error("le working tree n'est pas propre : {fichiers} — commitez, ou relancez avec --force")]
+    WorkingTreeSale {
+        /// Fichiers suivis modifiés, énumérés.
+        fichiers: String,
+    },
+
     /// Les métadonnées du projet n'ont pu être mises à jour.
     #[error("{0}")]
     Metadonnees(#[source] metadata::Erreur),
@@ -99,6 +110,15 @@ pub(crate) fn executer(options: &Options) -> Result<Generee, Erreur> {
         .canonicalize()
         .map_err(|source| acces(&options.repertoire, source))?;
     let racine = metadata::racine_du_projet(&depart).ok_or(Erreur::PasUnProjet)?;
+
+    if !options.force {
+        let modifies = git::fichiers_modifies(&racine);
+        if !modifies.is_empty() {
+            return Err(Erreur::WorkingTreeSale {
+                fichiers: enumerer(&modifies),
+            });
+        }
+    }
 
     nom::valider(&options.nom).map_err(Erreur::Nom)?;
     let champs =
@@ -127,6 +147,23 @@ pub(crate) fn executer(options: &Options) -> Result<Generee, Erreur> {
         fichiers: fichiers.into_iter().map(|(chemin, _)| chemin).collect(),
         migration,
     })
+}
+
+/// Énumère les fichiers en cause, sans dérouler une liste illisible.
+fn enumerer(fichiers: &[String]) -> String {
+    const NOMMES: usize = 5;
+
+    let debut = fichiers
+        .iter()
+        .take(NOMMES)
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    match fichiers.len().saturating_sub(NOMMES) {
+        0 => debut,
+        reste => format!("{debut} … et {reste} autres"),
+    }
 }
 
 /// Rend les fichiers de la feature, et sa migration si elle est complète.
@@ -260,7 +297,39 @@ mod tests {
             fields: fields.map(str::to_string),
             complete,
             repertoire: racine.to_path_buf(),
+            force: false,
         }
+    }
+
+    /// Fait du projet un dépôt dont tout est commité.
+    fn commiter(racine: &Path) {
+        for arguments in [
+            vec!["config", "user.email", "rbs@example.test"],
+            vec!["config", "user.name", "rbs"],
+            vec!["add", "-A"],
+            vec!["commit", "--quiet", "-m", "projet neuf"],
+        ] {
+            let sortie = std::process::Command::new("git")
+                .args(&arguments)
+                .current_dir(racine)
+                .output()
+                .expect("git doit être lançable");
+
+            assert!(
+                sortie.status.success(),
+                "git {arguments:?} a échoué :\n{}",
+                String::from_utf8_lossy(&sortie.stderr)
+            );
+        }
+    }
+
+    /// Modifie un fichier suivi du projet, sans abîmer ce dont la génération a besoin.
+    fn salir(racine: &Path) {
+        let main = racine.join("src/main.rs");
+        let source = lire(&main);
+
+        fs::write(&main, format!("{source}\n// une modification en cours\n"))
+            .expect("main.rs réécrivable");
     }
 
     fn lire(chemin: &Path) -> String {
@@ -463,6 +532,54 @@ mod tests {
             "des fichiers ont été écrits malgré l'ancre absente"
         );
         assert!(!lire(&racine.join("src/main.rs")).contains("mod articles;"));
+    }
+
+    /// Ce que rbs écrit doit rester défaisable par un `git checkout` : il ne peut donc pas
+    /// mêler ses fichiers à des modifications que le développeur n'a pas commitées.
+    #[test]
+    fn un_projet_sale_refuse_la_generation_et_n_ecrit_rien() {
+        let (_parent, racine) = projet();
+        commiter(&racine);
+        salir(&racine);
+
+        let erreur = executer(&options(&racine, "notes", None, false))
+            .expect_err("le working tree n'est pas propre");
+
+        assert!(matches!(erreur, Erreur::WorkingTreeSale { .. }), "{erreur}");
+        assert!(
+            erreur.to_string().contains("src/main.rs"),
+            "le fichier en cause doit être nommé : {erreur}"
+        );
+        assert!(
+            !racine.join("src/notes").is_dir(),
+            "des fichiers ont été écrits malgré le working tree sale"
+        );
+    }
+
+    #[test]
+    fn un_projet_sale_accepte_la_generation_avec_force() {
+        let (_parent, racine) = projet();
+        commiter(&racine);
+        salir(&racine);
+
+        executer(&Options {
+            force: true,
+            ..options(&racine, "notes", None, false)
+        })
+        .expect("`--force` passe outre");
+
+        assert!(racine.join("src/notes/controller.rs").exists());
+    }
+
+    #[test]
+    fn un_projet_hors_depot_git_genere_sans_force() {
+        let (_parent, racine) = projet();
+        fs::remove_dir_all(racine.join(".git")).expect("dépôt supprimable");
+
+        executer(&options(&racine, "notes", None, false))
+            .expect("hors dépôt, il n'y a rien à protéger");
+
+        assert!(racine.join("src/notes/controller.rs").exists());
     }
 
     /// Le critère du lot : le projet compile après génération d'une feature vide.
