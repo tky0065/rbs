@@ -231,17 +231,17 @@ dès que `C` est terminé.
 
 - [x] **E1** · Modèle de plan — vérifié 2026-08-26 · `cargo test -p rbs-cli --bins plan::` → 20 passed (dont `planifier_ne_modifie_pas_le_repertoire_du_projet`, empreinte du répertoire inchangée)
 
-- [ ] **E2** · Moteur d'ancres
+- [x] **E2** · Moteur d'ancres — vérifié 2026-08-26 · `cargo test -p rbs-cli plan::` → 25 passed (ancre absente : répertoire intact et `fichiers()` vide ; réinsertion : statut `DejaFait`) · bout en bout : `<rbs:routes>` retirée → bloc à recoller affiché, code de sortie 1, rien d'écrit
       Lecture, insertion avant la balise fermante, idempotence.
       ✓ Test : ancre absente → aucune écriture, code de sortie non nul, bloc affiché.
       ✓ Test : insertion déjà présente → aucune modification.
 
-- [ ] **E3** · Patch de `Cargo.toml`
+- [x] **E3** · Patch de `Cargo.toml` — vérifié 2026-08-26 · `cargo test -p rbs-cli ne_modifie_que` → 3 passed (manifeste témoin comparé ligne à ligne après chacun des trois patchs), `metadata::` → 21 passed
       `toml_edit` : ajout de dépendance, ajout d'une feature à une dépendance existante,
       mise à jour de `metadata.rbs`.
       ✓ Test : commentaires et formatage du fichier préservés à l'octet près hors zone modifiée.
 
-- [ ] **E4** · Vérification du working tree
+- [x] **E4** · Vérification du working tree — vérifié 2026-08-26 · `cargo test -p rbs-cli projet_sale` → 2 passed, `git::` → 5 passed · bout en bout : projet sale → refus code 1, aucun `src/notes` ; avec `--force` → 6 fichiers générés
       Working tree Git sale → avertissement, contournable par `--force`. Vaut aussi pour
       `rbs generate`, dont le `--force` est déclaré depuis D10 mais sans effet.
       ✓ Test : dépôt sale → refus ; avec `--force` → exécution.
