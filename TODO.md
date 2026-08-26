@@ -181,7 +181,7 @@ dès que `C` est terminé.
       ✓ La colonne `id` porte `DEFAULT uuidv7()` ; un `INSERT` sans `id` reçoit un
         UUIDv7 valide, dont l'horodatage de tête est celui de l'insertion.
 
-- [ ] **D7b** · Aplatissement des features — PARTIEL 2026-08-26 : `cargo test --workspace -- --include-ignored` → 185 + 1 + 72 passed, 0 ignored · `cargo clippy --workspace --all-targets -- -D warnings` et `cargo fmt --all --check` propres · `cargo test -p rbs-cli generate::nom` → 5 passed. Le troisième ✓ exige que `rbs g crud` appelle la validation : la commande n'est pas encore câblée (D10) et sort « pas encore implémentée », code 2.
+- [x] **D7b** · Aplatissement des features — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::nom` → 5 passed · `cargo test -p rbs-cli -- --exact generate::commande::tests::la_commande_refuse_un_nom_en_conflit_en_le_nommant` → 1 passed, et à la main `rbs g crud state` → « ✗ « state » est un module du squelette du projet », `rbs g crud match` → « ✗ « match » est un mot-clé Rust », code 1 dans les deux cas · `cargo test --workspace -- --include-ignored` → 231 + 1 + 72 passed, 0 ignored
       Une feature vit en `src/<nom>/`, non plus en `src/features/<nom>/` : l'ancre
       `<rbs:features>` descend dans `src/main.rs` et les insertions passent au chemin
       absolu. En contrepartie, le nom d'une feature est validé — il entre désormais en
@@ -201,8 +201,10 @@ dès que `C` est terminé.
       déclaration du fichier de migration ne peut donc pas tenir dans le `vec!`.
       ✓ Test : le contenu existant dans l'ancre n'est ni réordonné ni reformaté.
 
-- [ ] **D10** · `rbs generate feature`
-      Squelette à six fichiers, sans champ, pour une feature écrite à la main.
+- [x] **D10** · `rbs generate feature` — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::commande` → 12 passed · `cargo test -p rbs-cli -- --exact generate::commande::tests::le_projet_compile_apres_generation_d_une_feature_vide --include-ignored` → 1 passed : `rbs g feature notes` puis `rbs g crud carnets` sur un projet neuf, `cargo build --workspace` vert · `cargo test --workspace -- --include-ignored` → 231 + 1 + 72 passed, 0 ignored
+      Squelette à six fichiers, sans champ, pour une feature écrite à la main. `crud` est
+      câblée avec elle : sept fichiers, la migration et les cinq ancres. `--force` reste
+      sans effet et le signale — la vérification du working tree est E4.
       ✓ Le projet compile après génération d'une feature vide.
 
 - [ ] **D11** · `rbs migrate`
@@ -239,7 +241,8 @@ dès que `C` est terminé.
       ✓ Test : commentaires et formatage du fichier préservés à l'octet près hors zone modifiée.
 
 - [ ] **E4** · Vérification du working tree
-      Working tree Git sale → avertissement, contournable par `--force`.
+      Working tree Git sale → avertissement, contournable par `--force`. Vaut aussi pour
+      `rbs generate`, dont le `--force` est déclaré depuis D10 mais sans effet.
       ✓ Test : dépôt sale → refus ; avec `--force` → exécution.
 
 - [ ] **E5** · Affichage du plan et `--dry-run`

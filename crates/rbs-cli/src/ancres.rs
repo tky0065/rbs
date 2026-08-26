@@ -60,6 +60,10 @@ pub(crate) const MIGRATIONS: Ancre = Ancre {
 };
 
 /// Les cinq points d'insertion du squelette.
+///
+/// La génération vise chaque ancre nommément ; cette liste est celle que `rbs doctor`
+/// parcourra pour vérifier qu'un projet les porte toutes.
+#[allow(dead_code)]
 pub(crate) const ANCRES: [Ancre; 5] = [FEATURES, ROUTES, OPENAPI, MIGRATION_MODULES, MIGRATIONS];
 
 /// Une ancre attendue que le fichier ne porte pas.
