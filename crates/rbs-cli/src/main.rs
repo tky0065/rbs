@@ -1,4 +1,5 @@
 mod cli;
+mod metadata;
 mod template;
 // Les templates du squelette ne sont pas encore embarquées dans le binaire : seule leur
 // validation existe, et elle n'a rien à faire dans la version distribuée.

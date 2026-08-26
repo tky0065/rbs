@@ -14,3 +14,8 @@ clap.workspace = true
 console.workspace = true
 minijinja.workspace = true
 serde.workspace = true
+thiserror.workspace = true
+toml_edit.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
