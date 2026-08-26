@@ -1,0 +1,6 @@
+# Les templates embarquées par `include_dir!` finissent dans le binaire telles qu'elles
+# sont extraites. Sous Windows, `core.autocrlf=true` — le défaut de Git for Windows, et
+# celui des runners GitHub — les extrairait en CRLF : le binaire générerait alors des
+# fichiers en CRLF, et les tests qui comparent cette sortie à des littéraux `\n`
+# échoueraient pour un motif étranger à rbs.
+* text=auto eol=lf

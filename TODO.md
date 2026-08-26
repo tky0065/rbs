@@ -305,7 +305,7 @@ construction, pas après, quand tout paraît évident.
 
 - [x] **F9** · CONTRIBUTING et code de conduite — vérifié 2026-08-26 · section « Contributing without Node » / « Contribuer sans installer Node » en tête des deux versions, appuyée sur un fait vérifié : `grep -c 'npm\|node\|yarn' .github/workflows/ci.yml` → 0 · chaque commande citée lancée avant d'être écrite (`cargo test -p rbs-core error::tests` → 15 passed, `-- --exact` → 1 passed, `rbs --help` → sortie réelle) · Contributor Covenant 2.1, texte officiel · parité EN/FR : 7 sections de part et d'autre
 
-- [ ] **F10** · CI complète
+- [ ] **F10** · CI complète — PARTIEL 2026-08-26 : matrice à deux jobs écrite (`linux` inchangé — 9 étapes byte-identiques au run vert `33018207357` ; `portabilite` sur `[macos-latest, windows-latest]`, `fail-fast: false`) · macOS prouvé nativement sur Darwin arm64 : `cargo clippy --workspace --all-targets -- -D warnings` → 0 warning, `cargo test --workspace` → 456 passed / 0 failed / 17 ignored, `fmt`, clippy des exemples et les deux `publish --dry-run` → exit 0 · `.gitattributes` `eol=lf` ajouté, `git add --renormalize .` ne touche aucun fichier · les tests `--ignored` restent sur Linux : les runners macOS n'exposent aucun démon Docker et `windows-latest` ne fait tourner que des conteneurs Windows · Windows **non prouvé** — ni runner ni émulation ici, le lot étant tenu en « local seulement ». Reste un run réel sur `windows-latest`.
       Linux, macOS, Windows. Tests d'intégration du CLI inclus.
       ✓ Les trois plateformes passent au vert.
 

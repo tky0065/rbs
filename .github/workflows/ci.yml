@@ -16,8 +16,11 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  ci:
-    name: fmt · clippy · test
+  # Les contrôles de dépôt — format, exemples, dry-run de publication — ne dépendent pas
+  # de la plateforme. Les tripler coûterait des minutes de runner sans rien démontrer de
+  # plus, et c'est ici que vivent les seules étapes qui exigent Docker.
+  linux:
+    name: fmt · clippy · test · intégration
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -56,3 +59,33 @@ jobs:
         run: |
           cargo publish --dry-run -p rbs-core
           cargo publish --dry-run -p rbs-cli
+
+  # Ce que ces deux plateformes prouvent, c'est que rbs manipule les chemins sans
+  # supposer `/` — la faute que ce projet commettrait, puisqu'il écrit des arborescences.
+  #
+  # `--ignored` reste sur Linux : ces tests démarrent PostgreSQL via testcontainers, or
+  # les runners macOS n'exposent aucun démon Docker et `windows-latest` ne fait tourner
+  # que des conteneurs Windows. Les y lancer prouverait l'absence de Docker, pas un bug.
+  portabilite:
+    name: ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      # Un échec sous Windows ne doit pas annuler macOS : les deux plateformes échouent
+      # pour des raisons différentes, et masquer l'une oblige à deux allers-retours.
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: cargo test
+        run: cargo test --workspace
