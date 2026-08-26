@@ -54,6 +54,10 @@ impl Plan {
 }
 
 /// Ce qui peut empêcher de planifier.
+///
+/// Chaque variante nomme son fichier relativement à la racine, comme `Action::chemin` :
+/// l'emplacement complet du projet est porté une seule fois, par l'en-tête de l'affichage
+/// du plan.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Erreur {
     /// Un fichier du projet n'a pas pu être lu.
@@ -74,9 +78,9 @@ pub(crate) enum Erreur {
     ///
     /// Distincte de `Metadonnees(PasUnProjet)`, qui suppose au contraire un fichier
     /// présent mais dépourvu de la section `[package.metadata.rbs]`.
-    #[error("{chemin} est introuvable : ce répertoire ne contient pas de Cargo.toml")]
+    #[error("{chemin} est introuvable")]
     ManifesteAbsent {
-        /// Chemin complet où le manifeste a été cherché.
+        /// Chemin du manifeste, relatif à la racine.
         chemin: String,
     },
 }
@@ -158,7 +162,7 @@ impl Constructeur {
         let avant = self
             .etat_courant(chemin)?
             .ok_or_else(|| Erreur::ManifesteAbsent {
-                chemin: self.racine.join(chemin).display().to_string(),
+                chemin: chemin.to_string(),
             })?;
 
         let PatchToml::InscrireFeature(feature) = &patch;
@@ -454,8 +458,12 @@ mod tests {
         assert!(matches!(erreur, Erreur::ManifesteAbsent { .. }));
         let message = erreur.to_string();
         assert!(
-            message.contains(&projet.path().join("Cargo.toml").display().to_string()),
-            "le message ne nomme pas l'emplacement cherché : {message}"
+            message.starts_with("Cargo.toml"),
+            "le message ne nomme pas le manifeste comme `Action::chemin` : {message}"
+        );
+        assert!(
+            !message.contains(&projet.path().display().to_string()),
+            "le message porte un chemin absolu : {message}"
         );
         assert!(
             message.contains("introuvable"),
