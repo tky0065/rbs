@@ -103,6 +103,12 @@ dès que `C` est terminé.
       Prépare la v0.2 sans anticiper son code.
       ✓ `cargo build --all-features` et `cargo build --no-default-features` passent.
 
+- [ ] **B10** · Exposition OpenAPI configurable
+      Section `[docs]` dans `Config` : `swagger_ui` et `openapi_json`, à `true` par défaut.
+      §5.4 les veut désactivables en production ; aucun champ ne le permettait.
+      ✓ Test : `docs.swagger_ui = false` dans le TOML est désérialisé à `false`.
+      ✓ Test : sans section `[docs]`, les deux valent `true`.
+
 ### Lot C — `rbs new`
 
 - [x] **C1** · Squelette du CLI — vérifié 2026-08-26 · `cargo test -p rbs-cli` → 4 passed, dont `le_help_liste_les_commandes_prevues_avec_une_description` · `cargo run -p rbs-cli -- --help` → les cinq commandes avec leur description, validé par le user
