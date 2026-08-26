@@ -13,7 +13,9 @@ use sea_orm_migration::sea_orm::{ConnectionTrait, Database, Statement};
 
 #[tokio::main]
 async fn main() -> ExitCode {
-    let commande = std::env::args().nth(1).unwrap_or_else(|| "status".to_string());
+    let commande = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "status".to_string());
 
     match executer(&commande).await {
         Ok(()) => ExitCode::SUCCESS,
@@ -44,7 +46,8 @@ async fn executer(commande: &str) -> Result<(), Box<dyn Error>> {
             }
         }
         "version" => {
-            let requete = Statement::from_string(db.get_database_backend(), "SHOW server_version_num");
+            let requete =
+                Statement::from_string(db.get_database_backend(), "SHOW server_version_num");
             let reponse = db
                 .query_one_raw(requete)
                 .await?

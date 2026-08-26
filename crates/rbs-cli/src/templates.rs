@@ -378,6 +378,69 @@ mod tests {
     }
 
     #[test]
+    fn chaque_template_rust_du_squelette_est_conforme_a_rustfmt() {
+        // Le workflow d'`rbs add ci` lance `cargo fmt --check` sur le projet généré : un
+        // squelette non conforme le fait échouer au premier pas, sur du code que le
+        // développeur n'a pas écrit.
+        //
+        // Le squelette est déroulé en entier plutôt que fichier par fichier : rustfmt suit
+        // les déclarations de modules, et un `main.rs` seul ne résout pas ses `mod`.
+        let renderer = Renderer::new();
+        let temporaire = tempfile::tempdir().expect("répertoire temporaire créable");
+        let racine = temporaire.path();
+
+        let fichiers = Source::nouvelle(None)
+            .fichiers()
+            .expect("les templates embarquées doivent se lire");
+
+        let mut sources = Vec::new();
+        for fichier in &fichiers {
+            let destination = racine.join(&fichier.destination);
+            if let Some(parent) = destination.parent() {
+                fs::create_dir_all(parent).expect("le répertoire est créable");
+            }
+
+            let rendu = renderer
+                .rendre(&fichier.source, contexte())
+                .unwrap_or_else(|erreur| {
+                    panic!(
+                        "{} ne se rend pas : {erreur}",
+                        fichier.destination.display()
+                    )
+                });
+            fs::write(&destination, rendu).expect("le rendu est écrivable");
+
+            if destination
+                .extension()
+                .is_some_and(|suffixe| suffixe == "rs")
+            {
+                sources.push((fichier.destination.clone(), destination));
+            }
+        }
+
+        assert!(
+            !sources.is_empty(),
+            "le squelette ne porte aucun fichier Rust"
+        );
+
+        for (relatif, chemin) in sources {
+            let sortie = std::process::Command::new("rustfmt")
+                .args(["--edition", "2024", "--check"])
+                .arg(&chemin)
+                .output()
+                .expect("rustfmt doit être lançable");
+
+            assert!(
+                sortie.status.success(),
+                "{} n'est pas conforme à rustfmt :\n{}{}",
+                relatif.display(),
+                String::from_utf8_lossy(&sortie.stdout),
+                String::from_utf8_lossy(&sortie.stderr)
+            );
+        }
+    }
+
+    #[test]
     fn le_manifeste_rendu_porte_le_nom_du_projet_et_la_dependance_au_noyau() {
         let source = lire(&Path::new(RACINE).join("Cargo.toml.jinja"));
 
