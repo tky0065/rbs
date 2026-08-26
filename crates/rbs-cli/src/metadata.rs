@@ -130,6 +130,24 @@ pub fn lire(cargo_toml: &Path) -> Result<Metadonnees, Erreur> {
     })
 }
 
+/// Lit le nom du paquet que le manifeste déclare.
+///
+/// C'est le nom du binaire du projet, et la racine de celui de sa base : les fragments de
+/// feature en ont besoin là où `rbs new` disposait encore du nom saisi.
+pub fn nom_du_paquet(cargo_toml: &Path) -> Result<String, Erreur> {
+    let document = charger(cargo_toml)?;
+
+    document
+        .get("package")
+        .and_then(|package| package.get("name"))
+        .and_then(Item::as_str)
+        .map(str::to_owned)
+        .ok_or_else(|| Erreur::Champ {
+            chemin: nommer(cargo_toml),
+            cle: "name",
+        })
+}
+
 /// Rend le manifeste avec `feature` inscrite, ou `None` si elle y est déjà.
 ///
 /// `nom` ne désigne le fichier que dans les messages d'erreur : rien n'est lu ni écrit ici.

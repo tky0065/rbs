@@ -40,6 +40,26 @@ fn chemin(ligne: &str) -> Option<String> {
     (!chemin.is_empty()).then(|| chemin.to_string())
 }
 
+/// Énumère des chemins en cause, sans dérouler une liste illisible.
+///
+/// Un working tree sale peut compter des centaines de fichiers : les nommer tous noie le
+/// message dans ce qu'il est censé rendre lisible.
+pub(crate) fn enumerer(fichiers: &[String]) -> String {
+    const NOMMES: usize = 5;
+
+    let debut = fichiers
+        .iter()
+        .take(NOMMES)
+        .map(String::as_str)
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    match fichiers.len().saturating_sub(NOMMES) {
+        0 => debut,
+        reste => format!("{debut} … et {reste} autres"),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;

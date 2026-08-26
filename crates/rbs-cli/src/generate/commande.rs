@@ -133,7 +133,7 @@ pub(crate) fn planifier(options: &Options) -> Result<Planifiee, Erreur> {
         let modifies = git::fichiers_modifies(&racine);
         if !modifies.is_empty() {
             return Err(Erreur::WorkingTreeSale {
-                fichiers: enumerer(&modifies),
+                fichiers: git::enumerer(&modifies),
             });
         }
     }
@@ -174,23 +174,6 @@ pub(crate) fn planifier(options: &Options) -> Result<Planifiee, Erreur> {
         fichiers: fichiers.into_iter().map(|(chemin, _)| chemin).collect(),
         migration,
     })
-}
-
-/// Énumère les fichiers en cause, sans dérouler une liste illisible.
-fn enumerer(fichiers: &[String]) -> String {
-    const NOMMES: usize = 5;
-
-    let debut = fichiers
-        .iter()
-        .take(NOMMES)
-        .map(String::as_str)
-        .collect::<Vec<_>>()
-        .join(", ");
-
-    match fichiers.len().saturating_sub(NOMMES) {
-        0 => debut,
-        reste => format!("{debut} … et {reste} autres"),
-    }
 }
 
 /// Rend les fichiers de la feature, et sa migration si elle est complète.

@@ -1,8 +1,10 @@
-//! Provenance et lecture des templates du squelette de projet.
+//! Provenance et lecture des templates : le squelette de projet, et les fragments de
+//! feature qu'`rbs add` y dépose.
 //!
-//! Le binaire porte l'arborescence en lui, pour qu'une installation depuis crates.io
-//! n'ait besoin d'aucun fichier externe ; `--template-dir` lui substitue un répertoire du
-//! disque, ce dont le développement de rbs a besoin à chaque retouche d'une template.
+//! Le binaire porte les deux arborescences en lui, pour qu'une installation depuis
+//! crates.io n'ait besoin d'aucun fichier externe ; `--template-dir` leur substitue un
+//! répertoire du disque, ce dont le développement de rbs a besoin à chaque retouche d'une
+//! template.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -13,14 +15,28 @@ use include_dir::{Dir, include_dir};
 const SUFFIXE: &str = "jinja";
 
 /// Le squelette de projet, embarqué au moment de la compilation du binaire.
-static EMBARQUEES: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../templates/project");
+static PROJET: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../templates/project");
 
-/// Provenance des templates du squelette.
+/// Les fragments de feature, un sous-répertoire par feature installable.
+static FEATURES: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../templates/features");
+
+/// Provenance des templates.
+#[derive(Debug)]
 pub enum Source {
-    /// L'arborescence embarquée dans le binaire.
-    Embarquees,
+    /// Une arborescence embarquée dans le binaire.
+    Embarquees(&'static Dir<'static>),
     /// Un répertoire du disque, donné par `--template-dir`.
     Repertoire(PathBuf),
+}
+
+/// Une feature dont aucun fragment n'existe, ni embarqué ni sur le disque.
+#[derive(Debug, thiserror::Error)]
+#[error("`{feature}` n'est pas une feature installable : {connues}")]
+pub struct Inconnue {
+    /// Nom demandé.
+    pub feature: String,
+    /// Les features que la source propose, énumérées.
+    pub connues: String,
 }
 
 /// Une template et le chemin auquel son rendu sera écrit.
@@ -37,7 +53,35 @@ impl Source {
     pub fn nouvelle(repertoire: Option<&Path>) -> Self {
         match repertoire {
             Some(chemin) => Self::Repertoire(chemin.to_path_buf()),
-            None => Self::Embarquees,
+            None => Self::Embarquees(&PROJET),
+        }
+    }
+
+    /// S'ouvre sur le fragment d'une feature, sous le répertoire donné ou dans l'embarqué.
+    ///
+    /// Une feature sans fragment est refusée ici plutôt qu'au rendu : un catalogue vide
+    /// produirait un plan vide, donc une commande qui réussit sans rien faire.
+    pub fn feature(repertoire: Option<&Path>, feature: &str) -> Result<Self, Inconnue> {
+        match repertoire {
+            Some(chemin) => {
+                let fragment = chemin.join(feature);
+
+                if fragment.is_dir() {
+                    Ok(Self::Repertoire(fragment))
+                } else {
+                    Err(Inconnue {
+                        feature: feature.to_owned(),
+                        connues: enumerer(noms_du_disque(chemin)),
+                    })
+                }
+            }
+            None => FEATURES
+                .get_dir(feature)
+                .map(Self::Embarquees)
+                .ok_or_else(|| Inconnue {
+                    feature: feature.to_owned(),
+                    connues: enumerer(noms_embarques()),
+                }),
         }
     }
 
@@ -49,7 +93,7 @@ impl Source {
         let mut fichiers = Vec::new();
 
         match self {
-            Self::Embarquees => lire_embarquees(&EMBARQUEES, &mut fichiers)?,
+            Self::Embarquees(racine) => lire_embarquees(racine, racine.path(), &mut fichiers)?,
             Self::Repertoire(racine) => lire_repertoire(racine, racine, &mut fichiers)?,
         }
 
@@ -59,9 +103,50 @@ impl Source {
     }
 }
 
-fn lire_embarquees(repertoire: &Dir<'static>, fichiers: &mut Vec<Fichier>) -> io::Result<()> {
+/// Les features dont le binaire porte un fragment, triées.
+fn noms_embarques() -> Vec<String> {
+    let mut noms: Vec<String> = FEATURES
+        .dirs()
+        .filter_map(|dir| dir.path().file_name())
+        .map(|nom| nom.to_string_lossy().into_owned())
+        .collect();
+
+    noms.sort();
+    noms
+}
+
+/// Les features qu'un `--template-dir` propose, triées, ou rien s'il est illisible.
+fn noms_du_disque(repertoire: &Path) -> Vec<String> {
+    let Ok(entrees) = std::fs::read_dir(repertoire) else {
+        return Vec::new();
+    };
+
+    let mut noms: Vec<String> = entrees
+        .flatten()
+        .filter(|entree| entree.path().is_dir())
+        .map(|entree| entree.file_name().to_string_lossy().into_owned())
+        .collect();
+
+    noms.sort();
+    noms
+}
+
+/// Rend une liste de features lisible dans un message d'erreur.
+fn enumerer(noms: Vec<String>) -> String {
+    if noms.is_empty() {
+        "aucune n'est disponible".to_string()
+    } else {
+        noms.join(", ")
+    }
+}
+
+fn lire_embarquees(
+    repertoire: &Dir<'static>,
+    base: &Path,
+    fichiers: &mut Vec<Fichier>,
+) -> io::Result<()> {
     for sous_repertoire in repertoire.dirs() {
-        lire_embarquees(sous_repertoire, fichiers)?;
+        lire_embarquees(sous_repertoire, base, fichiers)?;
     }
 
     for fichier in repertoire.files() {
@@ -74,8 +159,12 @@ fn lire_embarquees(repertoire: &Dir<'static>, fichiers: &mut Vec<Fichier>) -> io
             )
         })?;
 
+        // Le chemin d'un fichier embarqué est relatif à la racine de l'`include_dir!`, et
+        // non au fragment ouvert : sans ce retrait, `add docker` viserait `docker/Dockerfile`.
+        let relatif = fichier.path().strip_prefix(base).unwrap_or(fichier.path());
+
         fichiers.push(Fichier {
-            destination: destination(fichier.path()),
+            destination: destination(relatif),
             source: source.to_owned(),
         });
     }
@@ -383,6 +472,129 @@ mod tests {
         assert!(
             erreur.to_string().contains("/introuvable/templates/rbs"),
             "le message ne nomme pas le chemin : {erreur}"
+        );
+    }
+
+    /// Racine des fragments de feature, résolue comme celle du squelette.
+    const RACINE_FEATURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/features");
+
+    /// Les chemins de sortie attendus de `docker`, tels que `rbs add docker` les écrira.
+    const DESTINATIONS_DOCKER: [&str; 3] = [".dockerignore", "Dockerfile", "docker-compose.yml"];
+
+    /// Contexte de rendu d'un fragment : les deux variables qu'un projet existant fournit.
+    fn contexte_feature() -> Value {
+        context! {
+            nom_projet => "mon-api",
+            nom_crate => "mon_api",
+        }
+    }
+
+    /// Toutes les templates de tous les fragments de feature.
+    fn templates_de_features() -> Vec<PathBuf> {
+        let mut trouvees = Vec::new();
+        parcourir(Path::new(RACINE_FEATURES), &mut trouvees);
+
+        assert!(
+            !trouvees.is_empty(),
+            "aucun fragment trouvé sous {RACINE_FEATURES}"
+        );
+
+        trouvees
+    }
+
+    #[test]
+    fn la_source_d_une_feature_restitue_ses_fichiers_embarques() {
+        let fichiers = Source::feature(None, "docker")
+            .expect("`docker` doit être une feature connue")
+            .fichiers()
+            .expect("les templates embarquées doivent se lire");
+
+        let destinations: Vec<String> = fichiers
+            .iter()
+            .map(|fichier| fichier.destination.to_string_lossy().into_owned())
+            .collect();
+
+        assert_eq!(destinations, DESTINATIONS_DOCKER);
+
+        for fichier in &fichiers {
+            assert!(
+                !fichier.source.is_empty(),
+                "{} est embarquée vide",
+                fichier.destination.display()
+            );
+        }
+    }
+
+    #[test]
+    fn une_feature_inconnue_est_signalee_par_son_nom() {
+        let erreur = Source::feature(None, "auth")
+            .expect_err("`auth` n'existe pas encore : la source ne doit pas être vide");
+
+        assert!(
+            erreur.to_string().contains("auth"),
+            "le message ne nomme pas la feature : {erreur}"
+        );
+    }
+
+    #[test]
+    fn un_repertoire_de_templates_prend_le_pas_pour_une_feature() {
+        let repertoire = tempfile::tempdir().expect("répertoire temporaire créable");
+        fs::create_dir(repertoire.path().join("docker")).expect("sous-répertoire créable");
+        fs::write(
+            repertoire.path().join("docker/Dockerfile.jinja"),
+            "FROM surcharge",
+        )
+        .expect("template écrivable");
+
+        let fichiers = Source::feature(Some(repertoire.path()), "docker")
+            .expect("le répertoire doit fournir la feature")
+            .fichiers()
+            .expect("le répertoire doit se lire");
+
+        let destinations: Vec<String> = fichiers
+            .iter()
+            .map(|fichier| fichier.destination.to_string_lossy().into_owned())
+            .collect();
+
+        assert_eq!(destinations, ["Dockerfile"]);
+        assert_eq!(fichiers[0].source, "FROM surcharge");
+    }
+
+    #[test]
+    fn chaque_template_de_feature_porte_le_suffixe_jinja() {
+        for chemin in templates_de_features() {
+            assert_eq!(
+                chemin.extension().and_then(|suffixe| suffixe.to_str()),
+                Some("jinja"),
+                "{} ne porte pas le suffixe `.jinja`",
+                chemin.display()
+            );
+        }
+    }
+
+    #[test]
+    fn chaque_template_de_feature_se_rend_avec_son_contexte() {
+        let renderer = Renderer::new();
+
+        for chemin in templates_de_features() {
+            let source = lire(&chemin);
+            renderer
+                .rendre(&source, contexte_feature())
+                .unwrap_or_else(|erreur| {
+                    panic!("{} ne se rend pas : {erreur}", chemin.display());
+                });
+        }
+    }
+
+    #[test]
+    fn le_compose_de_docker_vise_postgres_18() {
+        // `uuidv7()` n'est natif qu'à partir de PostgreSQL 18, et toute entité générée en
+        // dépend : une image plus ancienne casse le projet sans casser la compilation.
+        let source = lire(&Path::new(RACINE_FEATURES).join("docker/docker-compose.yml.jinja"));
+
+        assert!(
+            source.contains("postgres:18"),
+            "le compose ne vise pas PostgreSQL 18 :\n{source}"
         );
     }
 }

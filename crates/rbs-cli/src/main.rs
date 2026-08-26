@@ -1,3 +1,4 @@
+mod add;
 mod ancres;
 mod cli;
 mod doctor;
@@ -20,9 +21,6 @@ use clap::Parser;
 
 use cli::{Cli, Commands, GenerateCommands, MigrateCommands};
 
-/// Distinct de 1 pour qu'un script sache différencier « pas encore là » d'un échec réel.
-const EXIT_NON_IMPLEMENTE: i32 = 2;
-
 fn main() {
     let cli = Cli::parse();
 
@@ -43,6 +41,13 @@ fn main() {
             );
 
             if let Err(erreur) = resultat {
+                ui::error(&erreur.to_string());
+                std::process::exit(1);
+            }
+        }
+
+        Commands::Add { feature, force } => {
+            if let Err(erreur) = ajouter(feature, force, cli.template_dir) {
                 ui::error(&erreur.to_string());
                 std::process::exit(1);
             }
@@ -96,14 +101,6 @@ fn main() {
                 std::process::exit(1);
             }
         },
-
-        commande => {
-            ui::error(&format!(
-                "`rbs {}` n'est pas encore implémentée.",
-                nommer(&commande)
-            ));
-            std::process::exit(EXIT_NON_IMPLEMENTE);
-        }
     }
 }
 
@@ -145,6 +142,43 @@ fn creer_projet(
     ));
 
     Ok(())
+}
+
+/// Installe une feature dans le projet courant, plan affiché avant écriture.
+fn ajouter(feature: String, force: bool, template_dir: Option<PathBuf>) -> Result<(), add::Erreur> {
+    let repertoire = std::env::current_dir().map_err(|source| add::Erreur::Acces {
+        chemin: ".".to_string(),
+        source,
+    })?;
+    let planifiee = add::planifier(&add::Options {
+        feature: feature.clone(),
+        repertoire,
+        force,
+        template_dir,
+    })?;
+
+    println!("{}", plan::rendu::plan(&planifiee.plan));
+
+    plan::application::appliquer(&planifiee.plan, force)?;
+
+    ui::success(&format!(
+        "{feature} installée — {} fichiers",
+        planifiee.fichiers.len()
+    ));
+
+    if let Some(suite) = suite(&feature) {
+        ui::info(&format!("\n  {suite}"));
+    }
+
+    Ok(())
+}
+
+/// Ce qu'il reste à faire de la main du développeur, une fois la feature posée.
+fn suite(feature: &str) -> Option<&'static str> {
+    match feature {
+        "docker" => Some("docker compose up --build"),
+        _ => None,
+    }
 }
 
 fn generer(
@@ -220,18 +254,4 @@ fn diagnostiquer() -> Result<bool, Box<dyn Error>> {
     }
 
     Ok(rapport.reussi())
-}
-
-fn nommer(commande: &Commands) -> &'static str {
-    match commande {
-        Commands::New { .. } => "new",
-        Commands::Add { .. } => "add",
-        Commands::Generate { command } => match command {
-            GenerateCommands::Crud { .. } => "generate crud",
-            GenerateCommands::Feature { .. } => "generate feature",
-        },
-        // `new`, `generate`, `migrate` et `doctor` ont leur propre bras : seules les
-        // commandes encore absentes passent par ici.
-        _ => "commande",
-    }
 }

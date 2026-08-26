@@ -1,0 +1,53 @@
+name: {@ nom_projet @}
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: {@ nom_crate @}
+    ports:
+      - "5432:5432"
+    # PostgreSQL 18 place ses données sous /var/lib/postgresql/18/docker : c'est le
+    # répertoire parent qui se monte, et non le /var/lib/postgresql/data des versions
+    # précédentes, qui ne persisterait rien.
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d {@ nom_crate @}"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Les migrations tournent une fois, à part : l'API ne démarre pas sur un schéma absent,
+  # et n'a pas à porter cette responsabilité au démarrage.
+  migrate:
+    build: .
+    command: ["migration", "up"]
+    environment:
+      RBS_DATABASE__URL: postgres://postgres:postgres@db:5432/{@ nom_crate @}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  api:
+    build: .
+    environment:
+      # config/default.toml écoute sur 127.0.0.1, ce qui rend le conteneur injoignable
+      # depuis l'hôte. L'environnement l'emporte sur le TOML.
+      RBS_SERVER__HOST: 0.0.0.0
+      RBS_DATABASE__URL: postgres://postgres:postgres@db:5432/{@ nom_crate @}
+      RBS_LOG_FORMAT: json
+      RUST_LOG: info
+    ports:
+      - "8080:8080"
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+volumes:
+  pgdata:
