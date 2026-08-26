@@ -30,3 +30,8 @@ pub fn vert(texte: &str) -> String {
 pub fn attenue(texte: &str) -> String {
     style(texte).dim().to_string()
 }
+
+/// Colore un fragment en rouge, pour ce qui est en défaut.
+pub fn rouge(texte: &str) -> String {
+    style(texte).red().to_string()
+}
