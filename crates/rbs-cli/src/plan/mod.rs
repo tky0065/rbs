@@ -70,6 +70,15 @@ pub(crate) enum Erreur {
     /// Le manifeste du projet n'a pas pu être patché.
     #[error("{0}")]
     Metadonnees(#[source] crate::metadata::Erreur),
+    /// Le `Cargo.toml` visé par un patch n'existe pas à l'emplacement attendu.
+    ///
+    /// Distincte de `Metadonnees(PasUnProjet)`, qui suppose au contraire un fichier
+    /// présent mais dépourvu de la section `[package.metadata.rbs]`.
+    #[error("{chemin} est introuvable : ce répertoire ne contient pas de Cargo.toml")]
+    ManifesteAbsent {
+        /// Chemin complet où le manifeste a été cherché.
+        chemin: String,
+    },
 }
 
 /// Accumule les actions d'un plan en calculant, pour chaque fichier, son contenu final.
@@ -146,11 +155,11 @@ impl Constructeur {
     pub fn patcher(&mut self, patch: PatchToml) -> Result<(), Erreur> {
         let chemin = "Cargo.toml";
 
-        let avant = self.etat_courant(chemin)?.ok_or_else(|| {
-            Erreur::Metadonnees(crate::metadata::Erreur::PasUnProjet {
-                chemin: chemin.to_string(),
-            })
-        })?;
+        let avant = self
+            .etat_courant(chemin)?
+            .ok_or_else(|| Erreur::ManifesteAbsent {
+                chemin: self.racine.join(chemin).display().to_string(),
+            })?;
 
         let PatchToml::InscrireFeature(feature) = &patch;
         let rendu = crate::metadata::inscrire_feature(&avant, feature, chemin)
@@ -442,6 +451,15 @@ mod tests {
             .patcher(PatchToml::InscrireFeature("docker".to_string()))
             .expect_err("le manifeste manque");
 
-        assert!(matches!(erreur, Erreur::Metadonnees(_)));
+        assert!(matches!(erreur, Erreur::ManifesteAbsent { .. }));
+        let message = erreur.to_string();
+        assert!(
+            message.contains(&projet.path().join("Cargo.toml").display().to_string()),
+            "le message ne nomme pas l'emplacement cherché : {message}"
+        );
+        assert!(
+            message.contains("introuvable"),
+            "le message ne dit pas que le fichier manque : {message}"
+        );
     }
 }
