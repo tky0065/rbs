@@ -597,6 +597,10 @@ mod tests {
             erreur.to_string().contains("auth"),
             "le message ne nomme pas la feature : {erreur}"
         );
+        assert!(
+            erreur.to_string().contains("ci, docker"),
+            "le message n'énumère pas les features installables : {erreur}"
+        );
     }
 
     #[test]
@@ -663,6 +667,46 @@ mod tests {
             .collect();
 
         assert_eq!(publies, ["- \"8080:8080\""], "ports publiés :\n{source}");
+    }
+
+    #[test]
+    fn la_source_de_ci_restitue_son_workflow() {
+        let fichiers = Source::feature(None, "ci")
+            .expect("`ci` doit être une feature connue")
+            .fichiers()
+            .expect("les templates embarquées doivent se lire");
+
+        let destinations: Vec<String> = fichiers
+            .iter()
+            .map(|fichier| fichier.destination.to_string_lossy().into_owned())
+            .collect();
+
+        assert_eq!(destinations, [".github/workflows/ci.yml"]);
+    }
+
+    #[test]
+    fn le_workflow_de_ci_amene_une_base_migree_avant_les_tests() {
+        // Les tests d'une feature générée montent l'application sur une vraie base et
+        // supposent les migrations appliquées : sans elles, la CI échoue sur un schéma
+        // absent, loin de sa cause.
+        let source = lire(&Path::new(RACINE_FEATURES).join("ci/.github/workflows/ci.yml.jinja"));
+
+        assert!(
+            source.contains("postgres:18"),
+            "le workflow n'amène pas PostgreSQL 18 :\n{source}"
+        );
+
+        let migrations = source
+            .find("-p migration")
+            .expect("le workflow doit appliquer les migrations");
+        let tests = source
+            .find("cargo test")
+            .expect("le workflow doit lancer les tests");
+
+        assert!(
+            migrations < tests,
+            "les migrations doivent précéder les tests :\n{source}"
+        );
     }
 
     #[test]

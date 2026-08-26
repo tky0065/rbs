@@ -177,6 +177,7 @@ fn ajouter(feature: String, force: bool, template_dir: Option<PathBuf>) -> Resul
 fn suite(feature: &str) -> Option<&'static str> {
     match feature {
         "docker" => Some("docker compose up --build"),
+        "ci" => Some("git push : le workflow s'exécute à la prochaine poussée"),
         _ => None,
     }
 }

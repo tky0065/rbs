@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Les tests montent l'application sur une vraie base, et `.env` n'est pas versionné :
+  # l'URL vient d'ici, comme elle viendrait de l'environnement en production.
+  RBS_DATABASE__URL: postgres://postgres:postgres@localhost:5432/{@ nom_crate @}
+
+jobs:
+  ci:
+    name: fmt · clippy · test
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: {@ nom_crate @}
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 2s
+          --health-timeout 3s
+          --health-retries 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo fmt
+        run: cargo fmt --all --check
+
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      # Les tests d'une feature générée supposent le schéma en place : sans cette étape,
+      # ils échouent sur une table absente, loin de la cause.
+      - name: migrations
+        run: cargo run -p migration -- up
+
+      - name: cargo test
+        run: cargo test --workspace
