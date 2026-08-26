@@ -229,10 +229,7 @@ dès que `C` est terminé.
 
 ### Lot E — `rbs add`
 
-- [ ] **E1** · Modèle de plan
-      Représentation en mémoire des actions : créer un fichier, insérer dans une ancre,
-      patcher un TOML. Aucune écriture pendant la planification.
-      ✓ Tests unitaires : construction d'un plan sans effet de bord sur le disque.
+- [x] **E1** · Modèle de plan — vérifié 2026-08-26 · `cargo test -p rbs-cli --bins plan::` → 20 passed (dont `planifier_ne_modifie_pas_le_repertoire_du_projet`, empreinte du répertoire inchangée)
 
 - [ ] **E2** · Moteur d'ancres
       Lecture, insertion avant la balise fermante, idempotence.

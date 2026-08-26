@@ -6,6 +6,7 @@ mod generate;
 mod metadata;
 mod migrate;
 mod new;
+mod plan;
 mod prompts;
 mod template;
 mod templates;
