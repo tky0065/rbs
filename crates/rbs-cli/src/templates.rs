@@ -156,14 +156,14 @@ mod tests {
 
     /// Les quatre points d'insertion, chacun avec le fichier qui le porte.
     const ANCRES: [(&str, &str); 4] = [
-        ("features", "src/features/mod.rs.jinja"),
+        ("features", "src/main.rs.jinja"),
         ("routes", "src/router.rs.jinja"),
         ("openapi", "src/openapi.rs.jinja"),
         ("migrations", "migration/src/lib.rs.jinja"),
     ];
 
     /// Les chemins de sortie attendus du squelette, tels que `rbs new` les écrira.
-    const DESTINATIONS: [&str; 15] = [
+    const DESTINATIONS: [&str; 14] = [
         ".env",
         ".env.example",
         ".gitignore",
@@ -172,9 +172,8 @@ mod tests {
         "config/development.toml",
         "migration/Cargo.toml",
         "migration/src/lib.rs",
-        "src/features/health/controller.rs",
-        "src/features/health/mod.rs",
-        "src/features/mod.rs",
+        "src/health/controller.rs",
+        "src/health/mod.rs",
         "src/main.rs",
         "src/openapi.rs",
         "src/router.rs",
@@ -236,6 +235,23 @@ mod tests {
                 chemin.display()
             );
         }
+    }
+
+    #[test]
+    fn l_ancre_des_features_suit_les_modules_du_squelette_dans_main() {
+        let source = lire(&Path::new(RACINE).join("src/main.rs.jinja"));
+
+        let modules = source
+            .find("mod state;")
+            .expect("les modules du squelette doivent être déclarés");
+        let ancre = source
+            .find("// <rbs:features>")
+            .expect("main.rs doit porter l'ancre des features");
+
+        assert!(
+            modules < ancre,
+            "l'ancre doit suivre les modules du squelette :\n{source}"
+        );
     }
 
     #[test]
