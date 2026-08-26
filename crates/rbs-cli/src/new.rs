@@ -446,14 +446,22 @@ mod tests {
 
         let projet = creer(&options, parent.path()).expect("le projet doit se créer");
 
-        let manifeste = lire(&projet.racine.join("Cargo.toml"));
+        let brut = lire(&projet.racine.join("Cargo.toml"));
+        let manifeste: toml_edit::DocumentMut = brut
+            .parse()
+            .unwrap_or_else(|erreur| panic!("manifeste illisible comme TOML : {erreur}\n{brut}"));
         let absolu = noyau.canonicalize().expect("le noyau existe");
+
+        // Le chemin se compare après analyse, jamais sur le texte du manifeste : un
+        // chemin Windows y est inscrit avec ses antislashs échappés, et une comparaison
+        // textuelle parlerait de l'échappement au lieu de parler du chemin.
+        //
         // Cargo résout un chemin relatif depuis le manifeste du projet créé, pas depuis
-        // le répertoire où la commande a été lancée.
-        assert!(
-            manifeste.contains(&format!("rbs-core = {{ path = \"{}\" }}", absolu.display())),
-            "chemin du noyau absent ou relatif :\n{manifeste}"
-        );
+        // le répertoire où la commande a été lancée : d'où l'absolu.
+        let inscrit = manifeste["dependencies"]["rbs-core"]["path"]
+            .as_str()
+            .unwrap_or_else(|| panic!("la dépendance au noyau doit porter un `path` :\n{brut}"));
+        assert_eq!(Path::new(inscrit), absolu);
     }
 
     #[test]
