@@ -100,16 +100,7 @@ impl Champ {
 
     /// Nom en PascalCase, forme qu'exige l'enum `DeriveIden` de la migration.
     pub(crate) fn nom_pascal(&self) -> String {
-        self.nom
-            .split('_')
-            .map(|mot| {
-                let mut caracteres = mot.chars();
-                match caracteres.next() {
-                    Some(premier) => premier.to_uppercase().chain(caracteres).collect(),
-                    None => String::new(),
-                }
-            })
-            .collect()
+        en_pascal_case(&self.nom)
     }
 }
 
@@ -131,6 +122,19 @@ impl Serialize for Champ {
         etat.serialize_field("attribut_column_type", &self.type_.attribut_column_type())?;
         etat.end()
     }
+}
+
+/// Recasse un identifiant snake_case en PascalCase.
+pub(crate) fn en_pascal_case(nom: &str) -> String {
+    nom.split('_')
+        .map(|mot| {
+            let mut caracteres = mot.chars();
+            match caracteres.next() {
+                Some(premier) => premier.to_uppercase().chain(caracteres).collect(),
+                None => String::new(),
+            }
+        })
+        .collect()
 }
 
 /// Analyse la chaîne `--fields`. Les fautes de tous les champs sont collectées en une

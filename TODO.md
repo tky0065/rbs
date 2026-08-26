@@ -154,7 +154,7 @@ dès que `C` est terminé.
       `uuid`, `datetime`, `text` ; modificateurs `unique`, `optional`, `index`.
       ✓ Tests : chaque type et modificateur, plus les messages d'erreur de syntaxe.
 
-- [ ] **D2** · Génération de l'entité SeaORM
+- [x] **D2** · Génération de l'entité SeaORM — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::entite -- --include-ignored` → 13 passed, dont la compilation d'un projet neuf portant l'entité
       Clé primaire `id` de type `Uuid`, implicite — jamais déclarée dans `--fields`.
       ✓ L'entité compile et ses types correspondent aux champs demandés.
       ✓ `id` est un `Uuid` sans auto-incrément.
