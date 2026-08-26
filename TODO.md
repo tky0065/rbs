@@ -309,7 +309,7 @@ construction, pas après, quand tout paraît évident.
       Linux, macOS, Windows. Tests d'intégration du CLI inclus.
       ✓ Les trois plateformes passent au vert.
 
-- [ ] **F11** · Modèles d'issues et de PR
+- [x] **F11** · Modèles d'issues et de PR — vérifié 2026-08-26 · quatre fichiers (bug, évolution, `config.yml` sans issue vierge, modèle de PR) · front-matter validé par `yaml.safe_load` sur les trois · les commandes demandées existent (`rbs --version` → `rbs 0.1.0`, `rbs doctor` → « Diagnostique le projet : ancres, .env, base joignable, versions ») et les liens relatifs `../../ROADMAP.md` et `../CONTRIBUTING.md` résolvent
 
 - [ ] **F12** · Publication du site
       GitHub Pages, déploiement automatique.
