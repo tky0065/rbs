@@ -324,7 +324,7 @@ construction, pas après, quand tout paraît évident.
       **sans poser de question**. Chaque question posée devient une tâche de
       documentation avant que la v0.1 ne soit déclarée close.
 
-- [ ] **V2** · Revue de parité FR/EN
+- [x] **V2** · Revue de parité FR/EN — vérifié 2026-08-26 · parité mesurée, pas appréciée : sur les 14 paires de pages du site, **0 écart structurel** (titres, blocs de code, encarts, liens) et **14/14 avec le même dernier commit** — la règle « les deux langues dans le même commit » a tenu sans exception · 89 entrées de traduction JSON, **0 vide** ; `docusaurus write-translations` ne produit qu'une dérive de champs `description`, aucune traduction manquante · une seule brèche trouvée et comblée : aucune version française du code de conduite, et `CONTRIBUTING.fr.md:106` renvoyait vers le texte anglais — `CODE_OF_CONDUCT.fr.md` ajouté depuis la **traduction officielle** du Contributor Covenant 2.1 (front-matter TOML retiré, adresse de signalement reprise de la version anglaise), 12 titres de part et d'autre, et le renvoi corrigé · 62 liens `.md` relatifs vérifiés, **0 mort** · `npm run clear && npm run build` → deux `[SUCCESS]`
       Toute page présente dans une langue existe et est à jour dans l'autre.
 
 - [ ] **V3** · Passe sur les conventions de code

@@ -103,5 +103,5 @@ En contribuant, vous acceptez que votre travail soit publié sous les deux licen
 
 ## Code de conduite
 
-Ce projet suit le [Contributor Covenant](CODE_OF_CONDUCT.md). Signalez tout comportement
+Ce projet suit le [Contributor Covenant](CODE_OF_CONDUCT.fr.md). Signalez tout comportement
 inacceptable à tky0065@gmail.com.
