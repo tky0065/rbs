@@ -515,12 +515,21 @@ mod tests {
             .fichiers()
             .expect("le répertoire doit se lire");
 
-        let destinations: Vec<String> = fichiers
+        let destinations: Vec<&Path> = fichiers
             .iter()
-            .map(|fichier| fichier.destination.to_string_lossy().into_owned())
+            .map(|fichier| fichier.destination.as_path())
             .collect();
 
-        assert_eq!(destinations, ["Cargo.toml", "config/default.toml"]);
+        // Comparer des `Path` et non leur rendu : sous Windows, `config/default.toml`
+        // s'affiche `config\default.toml`, et l'assertion parlerait du séparateur au
+        // lieu de parler de l'ordre des fichiers.
+        assert_eq!(
+            destinations,
+            [
+                Path::new("Cargo.toml"),
+                &Path::new("config").join("default.toml")
+            ]
+        );
         assert_eq!(fichiers[0].source, "name = \"surcharge\"");
     }
 
