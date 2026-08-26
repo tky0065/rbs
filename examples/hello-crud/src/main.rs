@@ -8,6 +8,7 @@ mod articles;
 
 use anyhow::Context;
 
+// region: demarrage
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     rbs_core::logs::init()?;
@@ -27,3 +28,4 @@ async fn main() -> anyhow::Result<()> {
 
     Ok(())
 }
+// endregion: demarrage
