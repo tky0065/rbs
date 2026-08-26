@@ -155,7 +155,7 @@ mod tests {
     const RACINE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/project");
 
     /// Les chemins de sortie attendus du squelette, tels que `rbs new` les écrira.
-    const DESTINATIONS: [&str; 14] = [
+    const DESTINATIONS: [&str; 15] = [
         ".env",
         ".env.example",
         ".gitignore",
@@ -164,6 +164,7 @@ mod tests {
         "config/development.toml",
         "migration/Cargo.toml",
         "migration/src/lib.rs",
+        "migration/src/main.rs",
         "src/health/controller.rs",
         "src/health/mod.rs",
         "src/main.rs",

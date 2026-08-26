@@ -1,0 +1,18 @@
+use sea_orm_migration::prelude::*;
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        // Se supprime dès que `manager` sert : sans elle, `todo!` laisse un avertissement.
+        let _ = manager;
+        todo!("décrivez le changement de schéma, puis relancez `rbs migrate up`")
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        let _ = manager;
+        todo!("annulez ici ce que `up` a fait")
+    }
+}

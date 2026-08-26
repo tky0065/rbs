@@ -1,7 +1,9 @@
 mod ancres;
 mod cli;
+mod dotenv;
 mod generate;
 mod metadata;
+mod migrate;
 mod new;
 mod prompts;
 mod template;
@@ -57,6 +59,20 @@ fn main() {
             }
 
             if let Err(erreur) = generer(nom, fields, complete) {
+                ui::error(&erreur.to_string());
+                std::process::exit(1);
+            }
+        }
+
+        Commands::Migrate { command } => {
+            let action = match command {
+                MigrateCommands::Up => migrate::Action::Up,
+                MigrateCommands::Down => migrate::Action::Down,
+                MigrateCommands::Status => migrate::Action::Status,
+                MigrateCommands::New { nom } => migrate::Action::Nouvelle(nom),
+            };
+
+            if let Err(erreur) = migrer(action) {
                 ui::error(&erreur.to_string());
                 std::process::exit(1);
             }
@@ -135,6 +151,20 @@ fn generer(nom: String, fields: Option<String>, complete: bool) -> Result<(), Bo
     Ok(())
 }
 
+fn migrer(action: migrate::Action) -> Result<(), Box<dyn Error>> {
+    match migrate::executer(action, &std::env::current_dir()?)? {
+        migrate::Sortie::Appliquees => ui::success("migrations appliquées"),
+        migrate::Sortie::Annulee => ui::success("dernière migration annulée"),
+        migrate::Sortie::Inventaire(inventaire) => println!("{inventaire}"),
+        migrate::Sortie::Creee(nouvelle) => {
+            ui::success(&format!("{} créée", nouvelle.fichier));
+            ui::info("\n  décrivez le changement de schéma, puis `rbs migrate up`");
+        }
+    }
+
+    Ok(())
+}
+
 fn nommer(commande: &Commands) -> &'static str {
     match commande {
         Commands::New { .. } => "new",
@@ -143,12 +173,9 @@ fn nommer(commande: &Commands) -> &'static str {
             GenerateCommands::Crud { .. } => "generate crud",
             GenerateCommands::Feature { .. } => "generate feature",
         },
-        Commands::Migrate { command } => match command {
-            MigrateCommands::Up => "migrate up",
-            MigrateCommands::Down => "migrate down",
-            MigrateCommands::Status => "migrate status",
-            MigrateCommands::New { .. } => "migrate new",
-        },
         Commands::Doctor => "doctor",
+        // `new`, `generate` et `migrate` ont leur propre bras : seules les commandes
+        // encore absentes passent par ici.
+        _ => "commande",
     }
 }

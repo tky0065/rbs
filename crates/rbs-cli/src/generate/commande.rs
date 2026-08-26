@@ -98,7 +98,7 @@ pub(crate) fn executer(options: &Options) -> Result<Generee, Erreur> {
         .repertoire
         .canonicalize()
         .map_err(|source| acces(&options.repertoire, source))?;
-    let racine = racine_du_projet(&depart).ok_or(Erreur::PasUnProjet)?;
+    let racine = metadata::racine_du_projet(&depart).ok_or(Erreur::PasUnProjet)?;
 
     nom::valider(&options.nom).map_err(Erreur::Nom)?;
     let champs =
@@ -127,17 +127,6 @@ pub(crate) fn executer(options: &Options) -> Result<Generee, Erreur> {
         fichiers: fichiers.into_iter().map(|(chemin, _)| chemin).collect(),
         migration,
     })
-}
-
-/// Remonte de `depart` jusqu'au projet rbs qui le contient.
-///
-/// Le manifeste seul ne suffit pas à trancher : la crate `migration` en porte un, et une
-/// commande lancée depuis `migration/src` viserait sinon la mauvaise racine.
-fn racine_du_projet(depart: &Path) -> Option<PathBuf> {
-    depart
-        .ancestors()
-        .find(|candidat| metadata::lire(&candidat.join("Cargo.toml")).is_ok())
-        .map(Path::to_path_buf)
 }
 
 /// Rend les fichiers de la feature, et sa migration si elle est complète.
