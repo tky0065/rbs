@@ -171,7 +171,7 @@ dès que `C` est terminé.
       Logique métier, conversions DTO. Ne connaît que `repository.rs` et `dto.rs`.
       ✓ Revue : aucun import de `sea_orm::EntityTrait` dans le fichier.
 
-- [ ] **D6** · Génération du controller
+- [x] **D6** · Génération du controller — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::controller -- --include-ignored` → 12 passed, dont les cinq chemins et leurs schémas dans le document OpenAPI du projet compilé ; rendu de Swagger UI validé de visu par le porteur du projet sur `target/atelier`
       Handlers Axum, annotations `#[utoipa::path]`, `routes()`. Ne connaît que `service.rs`.
       ✓ Les cinq routes apparaissent dans Swagger UI avec leurs schémas.
 
