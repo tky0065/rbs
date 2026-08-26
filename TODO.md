@@ -120,7 +120,7 @@ dès que `C` est terminé.
       tous deux `{{ }}`.
       ✓ Test : une template contenant `format!("{{}}")` se rend sans échappement manuel.
 
-- [ ] **C3** · Templates embarquées
+- [ ] **C3** · Templates embarquées — PARTIEL 2026-08-26 : `cargo test -p rbs-cli` → 17 passed, dont les 4 de `templates::` · les templates sont embarquées et lues sans le dépôt (binaire de test lancé hors dépôt, `templates/` écartée → 2 passed). Le critère « génère un projet » exige `rbs new`, donc C7.
       `include_dir` pour un binaire autonome, plus un flag `--template-dir` de surcharge.
       ✓ Le binaire génère un projet depuis un répertoire vide de tout template.
 
