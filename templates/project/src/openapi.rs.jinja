@@ -1,0 +1,35 @@
+use axum::{Json, Router};
+use axum::routing::get;
+use utoipa::OpenApi;
+use utoipa_swagger_ui::SwaggerUi;
+
+use crate::state::AppState;
+
+#[derive(OpenApi)]
+#[openapi(
+    modifiers(&rbs_core::ReponsesCommunes),
+    paths(
+        crate::features::health::sante,
+        // <rbs:openapi>
+        // </rbs:openapi>
+    )
+)]
+pub struct ApiDoc;
+
+pub fn routes(config: &rbs_core::Config) -> Router<AppState> {
+    let mut router = Router::new();
+
+    if config.docs.openapi_json {
+        router = router.route("/api-docs/openapi.json", get(document));
+    }
+    if config.docs.swagger_ui {
+        router = router
+            .merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", ApiDoc::openapi()));
+    }
+
+    router
+}
+
+async fn document() -> Json<utoipa::openapi::OpenApi> {
+    Json(ApiDoc::openapi())
+}
