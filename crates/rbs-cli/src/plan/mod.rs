@@ -193,9 +193,21 @@ impl Constructeur {
             chemin: chemin.to_string(),
         })?;
 
-        let PatchToml::InscrireFeature(feature) = &patch;
-        let rendu = crate::metadata::inscrire_feature(&courant, feature, chemin)
-            .map_err(Erreur::Metadonnees)?;
+        let rendu = match &patch {
+            PatchToml::InscrireFeature(feature) => {
+                crate::metadata::inscrire_feature(&courant, feature, chemin)
+            }
+            PatchToml::AjouterDependance(dependance) => {
+                crate::metadata::ajouter_dependance(&courant, dependance, chemin)
+            }
+            PatchToml::AjouterFeatureADependance {
+                dependance,
+                feature,
+            } => {
+                crate::metadata::ajouter_feature_a_dependance(&courant, dependance, feature, chemin)
+            }
+        }
+        .map_err(Erreur::Metadonnees)?;
 
         let apres = rendu.unwrap_or(courant);
         let statut = statut_compose(etats.origine.as_deref(), &apres);
@@ -590,6 +602,111 @@ mod tests {
             message.contains("introuvable"),
             "le message ne dit pas que le fichier manque : {message}"
         );
+    }
+
+    const CARGO_DEPS: &str = "[package]\nname = \"demo\"\n\n[dependencies]\naxum = \"0.9\"       # le serveur\n\n[package.metadata.rbs]\nversion = \"0.1.0\"\nfeatures = [\"health\"]\n";
+
+    fn redis() -> PatchToml {
+        PatchToml::AjouterDependance(crate::metadata::Dependance {
+            nom: "redis".to_string(),
+            version: "0.32".to_string(),
+            features: vec!["tokio-comp".to_string()],
+        })
+    }
+
+    /// Écrit `manifeste`, applique `patch`, et rend le plan obtenu.
+    fn plan_patche(projet: &TempDir, manifeste: &str, patch: PatchToml) -> Plan {
+        fs::write(projet.path().join("Cargo.toml"), manifeste).expect("l'écriture aboutit");
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        constructeur
+            .patcher(patch)
+            .expect("le manifeste est valide");
+
+        constructeur.finir()
+    }
+
+    #[test]
+    fn patcher_une_dependance_absente_est_a_faire() {
+        let projet = projet();
+
+        let plan = plan_patche(&projet, CARGO_DEPS, redis());
+
+        assert_eq!(plan.actions()[0].statut, Statut::AFaire);
+        assert_eq!(plan.actions()[0].chemin, "Cargo.toml");
+        assert!(
+            plan.fichiers()[0]
+                .apres
+                .contains(r#"redis = { version = "0.32", features = ["tokio-comp"] }"#),
+            "{}",
+            plan.fichiers()[0].apres
+        );
+    }
+
+    #[test]
+    fn patcher_une_dependance_deja_declaree_est_deja_fait() {
+        let projet = projet();
+        let apres = plan_patche(&projet, CARGO_DEPS, redis()).fichiers()[0]
+            .apres
+            .clone();
+
+        let plan = plan_patche(&projet, &apres, redis());
+
+        assert_eq!(plan.actions()[0].statut, Statut::DejaFait);
+        assert_eq!(plan.fichiers()[0].apres, apres);
+    }
+
+    #[test]
+    fn patcher_une_feature_de_dependance_absente_est_a_faire() {
+        let projet = projet();
+        let patch = PatchToml::AjouterFeatureADependance {
+            dependance: "axum".to_string(),
+            feature: "macros".to_string(),
+        };
+
+        let plan = plan_patche(&projet, CARGO_DEPS, patch);
+
+        assert_eq!(plan.actions()[0].statut, Statut::AFaire);
+        assert!(
+            plan.fichiers()[0].apres.contains(
+                r#"axum = { version = "0.9", features = ["macros"] }       # le serveur"#
+            ),
+            "{}",
+            plan.fichiers()[0].apres
+        );
+    }
+
+    #[test]
+    fn patcher_une_feature_de_dependance_deja_active_est_deja_fait() {
+        let projet = projet();
+        let patch = || PatchToml::AjouterFeatureADependance {
+            dependance: "axum".to_string(),
+            feature: "macros".to_string(),
+        };
+        let apres = plan_patche(&projet, CARGO_DEPS, patch()).fichiers()[0]
+            .apres
+            .clone();
+
+        let plan = plan_patche(&projet, &apres, patch());
+
+        assert_eq!(plan.actions()[0].statut, Statut::DejaFait);
+        assert_eq!(plan.fichiers()[0].apres, apres);
+    }
+
+    #[test]
+    fn patcher_une_feature_sur_une_dependance_absente_est_signale() {
+        let projet = projet();
+        fs::write(projet.path().join("Cargo.toml"), CARGO_DEPS).expect("l'écriture aboutit");
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        let erreur = constructeur
+            .patcher(PatchToml::AjouterFeatureADependance {
+                dependance: "sea-orm".to_string(),
+                feature: "with-uuid".to_string(),
+            })
+            .expect_err("la dépendance manque");
+
+        assert!(matches!(erreur, Erreur::Metadonnees(_)), "{erreur}");
     }
 
     #[test]

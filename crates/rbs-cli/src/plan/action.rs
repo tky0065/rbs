@@ -4,6 +4,7 @@
 //! constructeur.
 
 use crate::ancres::Ancre;
+use crate::metadata::Dependance;
 
 /// Une action du plan : le fichier qu'elle vise, ce qu'elle y fait, et ce qu'elle
 /// produira.
@@ -31,6 +32,15 @@ pub(crate) enum Effet {
 pub(crate) enum PatchToml {
     /// Inscrit une feature dans `[package.metadata.rbs]`.
     InscrireFeature(String),
+    /// Déclare une dépendance dans `[dependencies]`.
+    AjouterDependance(Dependance),
+    /// Active une feature sur une dépendance que le manifeste déclare déjà.
+    AjouterFeatureADependance {
+        /// Nom de la dépendance visée.
+        dependance: String,
+        /// Feature à y activer.
+        feature: String,
+    },
 }
 
 /// Ce que l'action produira, connu dès la planification.
