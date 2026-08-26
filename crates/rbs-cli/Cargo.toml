@@ -12,3 +12,5 @@ path = "src/main.rs"
 [dependencies]
 clap.workspace = true
 console.workspace = true
+minijinja.workspace = true
+serde.workspace = true
