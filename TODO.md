@@ -133,7 +133,7 @@ dès que `C` est terminé.
       Écriture de `[package.metadata.rbs]` (version, features installées).
       ✓ Test : relire les métadonnées d'un projet fraîchement généré.
 
-- [ ] **C6** · Prompts interactifs
+- [ ] **C6** · Prompts interactifs — PARTIEL 2026-08-26 : `cargo test -p rbs-cli` → 29 passed, dont les 8 de `prompts::` · « n'ouvre aucun prompt » prouvé (`--yes` court-circuite avant tout appel à inquire, plus `rbs new x --yes < /dev/null` qui ne bloque pas). La moitié « réussit » exige `rbs new`, donc C7.
       `inquire` : nom, base, multi-sélection des features. Chaque question a son flag
       équivalent ; `--yes` prend les défauts.
       ✓ Test : `rbs new x --yes` n'ouvre aucun prompt et réussit sans TTY.
