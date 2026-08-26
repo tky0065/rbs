@@ -181,6 +181,16 @@ dès que `C` est terminé.
       ✓ La colonne `id` porte `DEFAULT uuidv7()` ; un `INSERT` sans `id` reçoit un
         UUIDv7 valide, dont l'horodatage de tête est celui de l'insertion.
 
+- [ ] **D7b** · Aplatissement des features
+      Une feature vit en `src/<nom>/`, non plus en `src/features/<nom>/` : l'ancre
+      `<rbs:features>` descend dans `src/main.rs` et les insertions passent au chemin
+      absolu. En contrepartie, le nom d'une feature est validé — il entre désormais en
+      concurrence avec les modules du squelette.
+      ✓ `cargo test --workspace` vert, tests de générateurs compris.
+      ✓ Un projet créé par `rbs new` puis portant une feature compile, `src/` sans
+        `features/`.
+      ✓ `rbs g crud state` et `rbs g crud match` échouent en nommant le conflit.
+
 - [ ] **D8** · Génération des tests
       Tests d'intégration HTTP du CRUD complet contre l'application montée en mémoire.
       ✓ Les tests générés passent immédiatement, sans retouche.

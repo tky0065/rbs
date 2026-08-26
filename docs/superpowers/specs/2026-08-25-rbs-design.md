@@ -81,19 +81,24 @@ mon-api/
 │   ├── default.toml
 │   └── development.toml
 ├── src/
-│   ├── main.rs             # ~25 lignes : config → logs → db → router → serve
+│   ├── main.rs             # config → logs → db → router → serve · ancre <rbs:features>
 │   ├── router.rs           # montage des features · ancre <rbs:routes>
+│   ├── openapi.rs          # document utoipa · ancre <rbs:openapi>
 │   ├── state.rs            # AppState du projet
-│   └── features/
-│       ├── mod.rs          # ancre <rbs:features>
-│       └── health/
+│   └── health/             # une feature, au même niveau que celles qui seront générées
 └── migration/              # crate SeaORM migration · ancre <rbs:migrations>
 ```
+
+Une feature est un répertoire directement sous `src/` : `src/users/`, et non
+`src/features/users/`. Le niveau intermédiaire ne portait aucune information — le seul
+contenu de `src/` est le démarrage, le routage, l'état, et des features. En contrepartie,
+un nom de feature entre en concurrence avec les modules du squelette : le CLI refuse
+`main`, `router`, `openapi`, `state` et `health`, comme il refuse déjà un mot-clé Rust.
 
 ### 3.4 Anatomie d'une feature
 
 ```
-features/users/
+src/users/
 ├── mod.rs          pub fn routes() -> Router<AppState>
 ├── model.rs        entité SeaORM
 ├── dto.rs          CreateUser / UpdateUser / UserResponse (+ validator, + ToSchema)
@@ -210,17 +215,24 @@ feature à une dépendance déjà présente.
 ### 4.5 Format des ancres
 
 ```rust
-// src/features/mod.rs
-pub mod health;
+// src/main.rs
+mod health;
+mod openapi;
+mod router;
+mod state;
 // <rbs:features>
-pub mod users;
+mod users;
 // </rbs:features>
 
 // src/router.rs
 // <rbs:routes>
-.merge(features::users::routes())
+.merge(crate::users::routes())
 // </rbs:routes>
 ```
+
+Le contenu inséré désigne la feature par un chemin absolu — `crate::users::routes()`,
+`crate::users::controller::list`. Une insertion se suffit ainsi à elle-même : aucune
+seconde écriture dans un bloc `use` n'accompagne celle de l'ancre.
 
 L'insertion se fait juste avant la balise fermante. Le contenu existant à l'intérieur
 de l'ancre n'est jamais réordonné ni reformaté.
