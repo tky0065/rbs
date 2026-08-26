@@ -191,7 +191,7 @@ développeur dès la génération, et éditable.
 `mod.rs` :
 
 ```rust
-mod controller;
+pub mod controller;
 
 use axum::Router;
 use axum::routing::get;
@@ -201,9 +201,27 @@ use crate::state::AppState;
 pub fn routes() -> Router<AppState> {
     Router::new().route("/health", get(controller::sante))
 }
-
-pub use controller::sante;
 ```
+
+**`controller` est un module public, et l'ancre `<rbs:openapi>` reçoit le chemin complet
+du handler** — `crate::features::health::controller::sante`, jamais un ré-export. C'est
+une contrainte d'utoipa, pas un choix de style : `#[utoipa::path]` génère à côté du
+handler une struct `__path_sante`, et `paths(...)` la résout dans le module du dernier
+segment du chemin donné. Un `pub use controller::sante;` laisserait cette struct
+inaccessible et le projet généré ne compilerait pas :
+
+```
+error[E0433]: cannot find `__path_sante` in `health`
+note: struct `crate::features::health::controller::__path_sante` exists but is inaccessible
+```
+
+L'autre correctif possible, `pub use controller::{__path_sante, sante};`, exposerait un
+identifiant magique dans un fichier que l'utilisateur est censé lire et modifier. Le
+chemin complet ne coûte rien et n'apprend rien de faux à qui lit le code.
+
+**Le lot D suit la même convention** : chaque feature générée expose `pub mod controller;`
+et l'insertion dans `<rbs:openapi>` prend la forme
+`crate::features::<nom>::controller::<handler>`.
 
 `controller.rs` :
 
