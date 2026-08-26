@@ -129,7 +129,7 @@ dès que `C` est terminé.
       `migration/`, `config/`, `.env.example`, `.gitignore`, avec toutes les ancres.
       ✓ Revue de lecture : `main.rs` tient en ~25 lignes compréhensibles sans documentation.
 
-- [ ] **C5** · Métadonnées projet
+- [ ] **C5** · Métadonnées projet — PARTIEL 2026-08-26 : `cargo test -p rbs-cli` → 21 passed, dont les 4 de `metadata::` · relecture prouvée sur le manifeste rendu depuis la template et écrit dans un répertoire temporaire, pas sur un projet déroulé par `rbs new`, qui attend C7.
       Écriture de `[package.metadata.rbs]` (version, features installées).
       ✓ Test : relire les métadonnées d'un projet fraîchement généré.
 
