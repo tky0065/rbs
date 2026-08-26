@@ -49,7 +49,7 @@ dès que `C` est terminé.
       ✓ Test : variable requise manquante → échec au boot, message nommant le champ.
       ✓ Test : une variable d'environnement écrase la valeur du fichier TOML.
 
-- [ ] **A6** · Formateur de logs `pretty` — PARTIEL 2026-08-25 : `cargo test -p rbs-core logs` → 5 passed (dont couleurs absentes hors TTY) · rendu des cinq niveaux validé de visu sur `cargo run -p rbs-core --example logs_pretty`. Reste la capture dans les docs, qui attend le site (F1).
+- [x] **A6** · Formateur de logs `pretty` — vérifié 2026-08-26 · `cargo test -p rbs-core logs` → 10 passed (dont couleurs absentes hors TTY) · capture régénérée depuis la sortie réelle sous pty par `docs/scripts/capture_logs_pretty.py`, publiée dans la page « Logs » FR + EN, cinq niveaux validés de visu par le user · `npm run build` à froid → deux `[SUCCESS]`, image 1664×270 et régions résolues dans les deux locales · garde-fou de F2 éprouvé sur cette page : région retirée → build sort **1** en la nommant, mais seulement après purge de `node_modules/.cache`, qu'un build incrémental masque.
       `FormatEvent` maison : horodatage court, niveau coloré, cible, champs alignés.
       Le formateur par défaut de `tracing-subscriber` est trop verbeux.
       ✓ Inspection visuelle sur les cinq niveaux + capture dans les docs.
