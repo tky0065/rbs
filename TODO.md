@@ -103,7 +103,7 @@ dès que `C` est terminé.
       Prépare la v0.2 sans anticiper son code.
       ✓ `cargo build --all-features` et `cargo build --no-default-features` passent.
 
-- [ ] **B10** · Exposition OpenAPI configurable
+- [x] **B10** · Exposition OpenAPI configurable — vérifié 2026-08-26 · `cargo test -p rbs-core config` → 12 passed, dont `couper_swagger_laisse_le_document_json_expose` et `sans_section_docs_swagger_et_le_document_json_sont_exposes` lancés seuls → 1 passed chacun
       Section `[docs]` dans `Config` : `swagger_ui` et `openapi_json`, à `true` par défaut.
       §5.4 les veut désactivables en production ; aucun champ ne le permettait.
       ✓ Test : `docs.swagger_ui = false` dans le TOML est désérialisé à `false`.

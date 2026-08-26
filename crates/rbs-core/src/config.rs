@@ -31,6 +31,21 @@ pub struct Config {
     pub server: ServerConfig,
     /// Accès à la base de données.
     pub database: DatabaseConfig,
+    /// Exposition de la documentation OpenAPI.
+    pub docs: DocsConfig,
+}
+
+/// Exposition de la documentation OpenAPI.
+///
+/// Les deux réglages sont séparés parce que les deux besoins ne sont pas symétriques :
+/// couper l'interface tout en gardant le document sert à générer des clients ou à
+/// vérifier un contrat d'API, alors que l'inverse n'a pas d'usage.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct DocsConfig {
+    /// Montage de Swagger UI sur `/docs`.
+    pub swagger_ui: bool,
+    /// Exposition du document sur `/api-docs/openapi.json`.
+    pub openapi_json: bool,
 }
 
 /// Adresse d'écoute du serveur HTTP.
@@ -116,6 +131,10 @@ fn figment() -> Result<Figment, ConfigError> {
         .merge(Serialized::default("database.acquire_timeout_secs", 5))
         .merge(Serialized::default("database.idle_timeout_secs", 600))
         .merge(Serialized::default("database.max_lifetime_secs", 1800))
+        // Exposées par défaut : la documentation doit exister dès la génération du
+        // projet. La couper est un geste de mise en production, pas l'état initial.
+        .merge(Serialized::default("docs.swagger_ui", true))
+        .merge(Serialized::default("docs.openapi_json", true))
         .merge(Toml::file("config/default.toml"));
 
     let profil: String = surcharges(base.clone())?
@@ -304,6 +323,57 @@ mod tests {
             assert_eq!(config.env, "development");
             assert_eq!(config.server.host, "127.0.0.1");
             assert_eq!(config.server.port, 8080);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn sans_section_docs_swagger_et_le_document_json_sont_exposes() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.create_dir("config")?;
+            jail.create_file("config/default.toml", DEFAULT_TOML)?;
+
+            let config = Config::load().expect("la configuration doit se charger");
+
+            assert!(config.docs.swagger_ui);
+            assert!(config.docs.openapi_json);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn couper_swagger_laisse_le_document_json_expose() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.create_dir("config")?;
+            jail.create_file(
+                "config/default.toml",
+                &format!("{DEFAULT_TOML}\n[docs]\nswagger_ui = false\n"),
+            )?;
+
+            let config = Config::load().expect("la configuration doit se charger");
+
+            assert!(!config.docs.swagger_ui);
+            assert!(
+                config.docs.openapi_json,
+                "les deux réglages doivent rester indépendants"
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn une_variable_d_environnement_coupe_swagger() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.create_dir("config")?;
+            jail.create_file("config/default.toml", DEFAULT_TOML)?;
+            jail.set_env("RBS_DOCS__SWAGGER_UI", "false");
+
+            let config = Config::load().expect("la configuration doit se charger");
+
+            assert!(!config.docs.swagger_ui);
             Ok(())
         });
     }
