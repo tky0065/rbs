@@ -33,9 +33,13 @@ construit depuis le dépôt :
 git clone https://github.com/tky0065/rbs
 cd rbs
 cargo install --path crates/rbs-cli
+cd ..
 ```
 
-Un exécutable `rbs` atterrit dans `~/.cargo/bin`. Vérifiez qu'il répond :
+Un exécutable `rbs` atterrit dans `~/.cargo/bin`. Le dernier `cd` vous fait ressortir du
+clone : la suite de cette page travaille depuis le répertoire qui le *contient*, si bien
+que le projet que vous allez créer atterrit à côté du clone et non dedans. Vérifiez que
+le binaire répond :
 
 ```bash
 rbs --version
@@ -51,16 +55,6 @@ L'écosystème Ruby distribue un outil sans rapport, lui aussi nommé `rbs`. Si
 `rbs --version` affiche quelque chose comme `rbs 3.10.0`, c'est un autre binaire qui
 gagne sur votre `PATH` — appelez `~/.cargo/bin/rbs` explicitement, ou placez
 `~/.cargo/bin` devant.
-
-:::
-
-:::caution
-
-La 0.1 est encore en cours d'assemblage, et `main` ne porte pas toujours toutes les
-commandes. Cette page utilise `new`, `generate`, `migrate` et `doctor` ;
-`rbs generate --help` vous dit si le clone depuis lequel vous avez construit les a. Si
-ce n'est pas le cas, construisez depuis l'arbre de développement de la 0.1 plutôt que
-depuis `main`.
 
 :::
 
@@ -83,7 +77,7 @@ fois que vous avez fini — le conteneur a été lancé avec `--rm`, rien ne sub
 ```bash
 rbs new demo --yes \
   --database-url postgres://rbs:rbs@localhost:5432/demo \
-  --core-path ../rbs/crates/rbs-core
+  --core-path rbs/crates/rbs-core
 ```
 
 ```text

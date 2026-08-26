@@ -33,9 +33,13 @@ built from the repository:
 git clone https://github.com/tky0065/rbs
 cd rbs
 cargo install --path crates/rbs-cli
+cd ..
 ```
 
-That drops an `rbs` executable in `~/.cargo/bin`. Check it answers:
+That drops an `rbs` executable in `~/.cargo/bin`. The last `cd` steps back out of the
+clone: the rest of this page works from the directory that *contains* it, so the project
+you are about to create lands next to the clone rather than inside it. Check the binary
+answers:
 
 ```bash
 rbs --version
@@ -50,15 +54,6 @@ rbs 0.1.0
 The Ruby ecosystem ships an unrelated tool also called `rbs`. If `rbs --version` prints
 something like `rbs 3.10.0`, another binary is winning on your `PATH` — call
 `~/.cargo/bin/rbs` explicitly, or move `~/.cargo/bin` ahead of it.
-
-:::
-
-:::caution
-
-0.1 is still being assembled, and `main` does not always carry every command yet. This
-page uses `new`, `generate`, `migrate` and `doctor`; `rbs generate --help` tells you
-whether the clone you built from has them. If it does not, build from the 0.1
-development tree rather than from `main`.
 
 :::
 
@@ -81,7 +76,7 @@ are done — the container was started with `--rm`, so nothing is left behind.
 ```bash
 rbs new demo --yes \
   --database-url postgres://rbs:rbs@localhost:5432/demo \
-  --core-path ../rbs/crates/rbs-core
+  --core-path rbs/crates/rbs-core
 ```
 
 ```text
