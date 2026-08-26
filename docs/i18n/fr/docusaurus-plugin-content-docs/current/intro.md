@@ -31,18 +31,21 @@ projet que la CI compile : aucun bloc de code de cette documentation n'est écri
 ```
 
 Le contrôleur ne fait rien de plus : il passe la requête au service et traduit le résultat
-en code de statut. Le service, lui, ne voit jamais de `DatabaseConnection`.
+en code de statut. Le service reçoit la `DatabaseConnection` et la transmet sans jamais
+l'interroger : des six fichiers d'une feature, `repository.rs` est le seul à nommer une
+`Entity`.
 
 ## Par où continuer
 
-Cette documentation s'écrit en même temps que le code. Les pages ci-dessous se remplissent
-à mesure que le jalon 0.1 se referme :
-
-- **Démarrage rapide** — de l'installation à une API CRUD qui répond.
-- **Architecture** — la frontière noyau/généré, l'anatomie d'une feature, la règle de
-  dépendance.
-- **Référence du CLI** — chaque commande, chaque option, avec une sortie réelle.
-- **Guides** — configuration, logs, erreurs, OpenAPI, migrations, tests.
+- **[Démarrage rapide](./getting-started.md)** — de l'installation à une API CRUD qui
+  répond.
+- **[Architecture](./architecture.md)** — la frontière noyau/généré, l'anatomie d'une
+  feature, la règle de dépendance.
+- **[Référence du CLI](./cli/new.md)** — chaque commande, chaque option, avec une sortie
+  réelle.
+- **Guides** — [configuration](./guides/configuration.md), [logs](./guides/logs.md),
+  [erreurs](./guides/errors.md), [OpenAPI](./guides/openapi.md),
+  [migrations](./guides/migrations.md), [tests](./guides/testing.md).
 
 La [feuille de route](https://github.com/tky0065/rbs/blob/main/ROADMAP.md) liste ce qui
 entre dans le périmètre de la 0.1 et ce qui en est délibérément exclu.

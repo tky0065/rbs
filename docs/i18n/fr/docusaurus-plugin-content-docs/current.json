@@ -2,5 +2,13 @@
   "version.label": {
     "message": "Actuelle",
     "description": "The label for version current"
+  },
+  "sidebar.docsSidebar.category.CLI reference": {
+    "message": "Référence du CLI",
+    "description": "The label for category CLI reference in sidebar docsSidebar"
+  },
+  "sidebar.docsSidebar.category.Guides": {
+    "message": "Guides",
+    "description": "The label for category Guides in sidebar docsSidebar"
   }
 }
