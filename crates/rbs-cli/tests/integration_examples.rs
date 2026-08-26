@@ -247,3 +247,44 @@ fn une_difference_de_contenu_est_signalee() {
     assert_eq!(ecarts.len(), 1, "{ecarts:?}");
     assert!(ecarts[0].contains("src/main.rs"), "{ecarts:?}");
 }
+
+/// Un clone neuf reproduit-il l'exemple tel quel ?
+///
+/// Le test de non-dérive compare l'exemple versionné à une génération fraîche. Encore
+/// faut-il que « versionné » soit vrai de chaque fichier : le `.gitignore` que `rbs new`
+/// écrit dans le projet ignore `.env`, que le CLI produit pourtant. Sur une machine de
+/// développement le fichier traîne depuis la génération et la comparaison passe ; sur un
+/// checkout de CI il n'existe pas et elle échoue. Rien, dans la comparaison elle-même, ne
+/// distingue les deux situations.
+///
+/// Ce test ne relève que les fichiers **présents et non suivis** : sur un checkout où le
+/// fichier manque déjà, il n'a rien à voir et c'est la comparaison qui tombe. C'est voulu.
+/// Il garde la machine qui engendre l'exemple, seul endroit où l'oubli s'introduit.
+#[test]
+fn chaque_fichier_de_l_exemple_est_suivi_par_git() {
+    let racine = common::depot().join("examples").join(NOM);
+
+    let non_suivis: Vec<String> = common::empreinte(&racine)
+        .keys()
+        .filter(|relatif| !est_suivi(&racine.join(relatif)))
+        .map(|relatif| format!("  - {}", relatif.display()))
+        .collect();
+
+    assert!(
+        non_suivis.is_empty(),
+        "ces fichiers manqueraient à un clone neuf, où la comparaison échouerait :\n{}\n\n\
+         les suivre par `git add -f`, le `.gitignore` du projet généré ne devant pas bouger",
+        non_suivis.join("\n")
+    );
+}
+
+fn est_suivi(chemin: &Path) -> bool {
+    std::process::Command::new("git")
+        .args(["ls-files", "--error-unmatch"])
+        .arg(chemin)
+        .current_dir(common::depot())
+        .output()
+        .expect("git doit être lançable")
+        .status
+        .success()
+}

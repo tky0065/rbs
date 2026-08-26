@@ -33,6 +33,13 @@ Three edits follow, none of which the CLI produces:
   machine;
 - restore the `// region:` markers the documentation quotes.
 
+One file is tracked against its own `.gitignore`. `rbs new` writes a `.env`, and the
+`.gitignore` it writes alongside ignores it — correct for a real project, fatal for a
+fixture. Left untracked, `.env` sits on the machine that generated the example and is
+absent from every clone, so the comparison passes locally and fails in CI. It is therefore
+force-added (`git add -f`). The `.gitignore` itself is left alone: it is byte-identical to
+the template, and editing it would register as the very drift this compares for.
+
 `cargo test -p rbs-cli --test integration_examples` regenerates the project and compares
 it to the version committed here, ignoring exactly those three differences. It fails when
 a template changes without the example following — which is the point: a stale example
