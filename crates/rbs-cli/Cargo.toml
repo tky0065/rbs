@@ -13,6 +13,7 @@ path = "src/main.rs"
 clap.workspace = true
 console.workspace = true
 include_dir.workspace = true
+inquire.workspace = true
 minijinja.workspace = true
 serde.workspace = true
 thiserror.workspace = true

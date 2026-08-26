@@ -1,5 +1,6 @@
 mod cli;
 mod metadata;
+mod prompts;
 mod template;
 mod templates;
 mod ui;
