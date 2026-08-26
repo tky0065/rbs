@@ -321,7 +321,7 @@ mod tests {
                 ("tests.rs", &rendre(&feature).expect("tests rendus")),
             ],
         );
-        projet.monter_feature("billets", &["list", "create", "find", "update", "delete"]);
+        projet.monter_feature("billets");
 
         let migration = migration::rendre(&feature, HORODATAGE).expect("migration rendue");
         projet.poser_migration(&migration.module, &migration.contenu);

@@ -328,7 +328,7 @@ fn chaque_route_annonce_le_schema_qu_elle_rend() {
                 ),
             ],
         );
-        projet.monter_feature("articles", &["list", "create", "find", "update", "delete"]);
+        projet.monter_feature("articles");
         projet.poser_test_unitaire("verification_openapi", VERIFICATION);
         projet.tester();
     }
@@ -369,7 +369,7 @@ fn chaque_route_annonce_le_schema_qu_elle_rend() {
                 ),
             ],
         );
-        projet.monter_feature("articles", &["list", "create", "find", "update", "delete"]);
+        projet.monter_feature("articles");
 
         println!("{}", projet.conserver().display());
     }

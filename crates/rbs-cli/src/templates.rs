@@ -140,7 +140,7 @@ mod tests {
     //! Ces templates sont une interface : les commandes de génération écrivent dans leurs
     //! ancres, et un projet déjà déroulé ne bénéficie d'aucune correction faite après
     //! coup. On vérifie donc en permanence ce qui ne dépend pas d'un rendu complet — la
-    //! convention de nommage, les quatre ancres, et l'absence de variable non déclarée.
+    //! convention de nommage, les ancres, et l'absence de variable non déclarée.
 
     use std::fs;
     use std::path::{Path, PathBuf};
@@ -153,14 +153,6 @@ mod tests {
     /// Racine des templates du squelette, résolue depuis la crate plutôt que depuis le
     /// répertoire courant, que `cargo test` ne garantit pas.
     const RACINE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/project");
-
-    /// Les quatre points d'insertion, chacun avec le fichier qui le porte.
-    const ANCRES: [(&str, &str); 4] = [
-        ("features", "src/main.rs.jinja"),
-        ("routes", "src/router.rs.jinja"),
-        ("openapi", "src/openapi.rs.jinja"),
-        ("migrations", "migration/src/lib.rs.jinja"),
-    ];
 
     /// Les chemins de sortie attendus du squelette, tels que `rbs new` les écrira.
     const DESTINATIONS: [&str; 14] = [
@@ -256,12 +248,12 @@ mod tests {
 
     #[test]
     fn chaque_ancre_est_ouverte_puis_refermee_dans_son_fichier() {
-        for (nom, relatif) in ANCRES {
-            let chemin = Path::new(RACINE).join(relatif);
-            let source = lire(&chemin);
+        for ancre in crate::ancres::ANCRES {
+            let relatif = format!("{}.jinja", ancre.fichier);
+            let source = lire(&Path::new(RACINE).join(&relatif));
 
-            let ouverture = format!("// <rbs:{nom}>");
-            let fermeture = format!("// </rbs:{nom}>");
+            let ouverture = ancre.ouverture();
+            let fermeture = ancre.fermeture();
 
             assert_eq!(
                 source.matches(&ouverture).count(),
@@ -275,7 +267,8 @@ mod tests {
             );
             assert!(
                 source.find(&ouverture) < source.find(&fermeture),
-                "{relatif} referme `{nom}` avant de l'ouvrir"
+                "{relatif} referme `{}` avant de l'ouvrir",
+                ancre.nom
             );
         }
     }

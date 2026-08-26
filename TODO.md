@@ -195,8 +195,10 @@ dès que `C` est terminé.
       Tests d'intégration HTTP du CRUD complet contre l'application montée en mémoire.
       ✓ Les tests générés passent immédiatement, sans retouche.
 
-- [ ] **D9** · Insertion dans les ancres
-      `<rbs:features>`, `<rbs:routes>`, `<rbs:openapi>`, `<rbs:migrations>`.
+- [x] **D9** · Insertion dans les ancres — vérifié 2026-08-26 · `cargo test -p rbs-cli ancres` → 10 passed, dont `le_contenu_existant_n_est_ni_reordonne_ni_reformate` · `cargo test -p rbs-cli generate::montage` → 6 passed · `cargo test --workspace -- --include-ignored` → 218 + 1 + 72 passed, 0 ignored : les tests lourds passent désormais par le moteur et leurs projets compilent
+      `<rbs:features>`, `<rbs:routes>`, `<rbs:openapi>`, `<rbs:migrations>`, plus
+      `<rbs:migration_modules>` : Rust interdit un `mod` non-inline dans un bloc, la
+      déclaration du fichier de migration ne peut donc pas tenir dans le `vec!`.
       ✓ Test : le contenu existant dans l'ancre n'est ni réordonné ni reformaté.
 
 - [ ] **D10** · `rbs generate feature`
@@ -210,7 +212,8 @@ dès que `C` est terminé.
 
 - [ ] **D12** · `rbs doctor`
       Vérifie : ancres présentes, `.env` complet, base joignable, PostgreSQL ≥ 18,
-      versions de rbs-core et du CLI cohérentes.
+      versions de rbs-core et du CLI cohérentes. Cinq ancres depuis D9, et non quatre :
+      la liste fait foi dans `ancres::ANCRES`.
       ✓ Test : une ancre supprimée est signalée avec le bloc à recoller.
 
 - [ ] **D13** · Test d'intégration CRUD
