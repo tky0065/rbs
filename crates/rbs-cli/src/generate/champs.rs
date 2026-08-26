@@ -126,10 +126,25 @@ pub(crate) fn analyser(entree: &str) -> Result<Vec<Champ>, ErreurChamps> {
 
     let mut champs = Vec::new();
     let mut erreurs = Vec::new();
+    let mut rangs_par_nom: Vec<(String, usize)> = Vec::new();
 
     for (rang, portion) in entree.split(',').enumerate() {
-        match analyser_champ(rang + 1, portion.trim()) {
-            Ok(champ) => champs.push(champ),
+        let rang = rang + 1;
+
+        // L'homonymie se contrôle après la validation du champ lui-même : un champ
+        // fautif par ailleurs signale sa propre faute, pas le doublon.
+        match analyser_champ(rang, portion.trim()) {
+            Ok(champ) => match rangs_par_nom.iter().find(|(nom, _)| *nom == champ.nom) {
+                Some(&(_, rang_precedent)) => erreurs.push(ErreurChamp {
+                    rang,
+                    libelle: champ.nom,
+                    nature: NatureErreur::NomEnDouble { rang_precedent },
+                }),
+                None => {
+                    rangs_par_nom.push((champ.nom.clone(), rang));
+                    champs.push(champ);
+                }
+            },
             Err(erreur) => erreurs.push(erreur),
         }
     }
@@ -178,6 +193,12 @@ fn analyser_champ(rang: usize, portion: &str) -> Result<Champ, ErreurChamp> {
         return Err(erreur(nom, NatureErreur::NomReserve));
     }
 
+    // La migration écrit `enum Users { Table, Id, … }` : un champ `table` y ajouterait
+    // une seconde variante `Table`.
+    if nom == NOM_DE_LA_TABLE_EN_MIGRATION {
+        return Err(erreur(nom, NatureErreur::NomCollisionMigration));
+    }
+
     let Some(type_) = TypeChamp::analyser(type_brut) else {
         return Err(erreur(
             nom,
@@ -196,6 +217,12 @@ fn analyser_champ(rang: usize, portion: &str) -> Result<Champ, ErreurChamp> {
     };
 
     for modificateur in parties {
+        // Un séparateur surnuméraire — `email:string:` — est une faute de forme, pas un
+        // modificateur dont le nom serait vide.
+        if modificateur.is_empty() {
+            return Err(erreur(nom, NatureErreur::FormeInvalide));
+        }
+
         let drapeau = match modificateur {
             "unique" => &mut champ.unique,
             "optional" => &mut champ.optionnel,
@@ -231,16 +258,19 @@ fn analyser_champ(rang: usize, portion: &str) -> Result<Champ, ErreurChamp> {
 
 /// Mots-clés stricts et réservés des éditions 2015 à 2024. Un champ ainsi nommé
 /// produirait une entité que rustc refuse, quarante secondes plus tard.
-const MOTS_CLES_RUST: [&str; 49] = [
-    "as", "async", "await", "become", "box", "break", "const", "continue", "crate", "do", "dyn",
-    "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl", "in", "let",
-    "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref", "return",
-    "self", "static", "struct", "super", "trait", "true", "try", "type", "typeof", "unsafe",
-    "unsized", "use", "virtual", "where", "while",
+const MOTS_CLES_RUST: [&str; 51] = [
+    "abstract", "as", "async", "await", "become", "box", "break", "const", "continue", "crate",
+    "do", "dyn", "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl",
+    "in", "let", "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref",
+    "return", "self", "static", "struct", "super", "trait", "true", "try", "type", "typeof",
+    "unsafe", "unsized", "use", "virtual", "where", "while", "yield",
 ];
 
 /// Posées par rbs sur toute entité : les redéclarer donnerait deux fois la colonne.
 const NOMS_POSES_PAR_RBS: [&str; 3] = ["id", "created_at", "updated_at"];
+
+/// Variante que `#[derive(DeriveIden)]` réserve au nom de la table dans la migration.
+const NOM_DE_LA_TABLE_EN_MIGRATION: &str = "table";
 
 fn est_en_snake_case(nom: &str) -> bool {
     let Some(premier) = nom.chars().next() else {
@@ -423,6 +453,16 @@ mod tests {
     }
 
     #[test]
+    fn un_separateur_en_trop_est_une_forme_invalide() {
+        let erreur = analyser("email:string:").expect_err("le séparateur final est refusé");
+
+        assert_eq!(erreur.erreurs.len(), 1);
+        assert_eq!(erreur.erreurs[0].libelle, "email");
+        assert_eq!(erreur.erreurs[0].nature, NatureErreur::FormeInvalide);
+        assert_eq!(nature("email:string::unique"), NatureErreur::FormeInvalide);
+    }
+
+    #[test]
     fn un_type_hors_grammaire_est_signale_sur_son_champ() {
         let erreur = analyser("prix:decimal").expect_err("decimal n'est pas dans la grammaire");
 
@@ -503,6 +543,10 @@ mod tests {
             nature("box:string"),
             NatureErreur::MotCleRust { .. }
         ));
+        assert!(matches!(
+            nature("yield:string"),
+            NatureErreur::MotCleRust { .. }
+        ));
     }
 
     #[test]
@@ -514,6 +558,53 @@ mod tests {
                 "nom « {nom} »"
             );
         }
+    }
+
+    #[test]
+    fn un_champ_nomme_table_est_refuse_pour_la_migration() {
+        assert_eq!(nature("table:string"), NatureErreur::NomCollisionMigration);
+    }
+
+    #[test]
+    fn deux_champs_homonymes_sont_refuses() {
+        let erreur = analyser("email:string,email:int").expect_err("l'homonyme est refusé");
+
+        assert_eq!(erreur.erreurs.len(), 1);
+        assert_eq!(erreur.erreurs[0].rang, 2);
+        assert_eq!(erreur.erreurs[0].libelle, "email");
+        assert_eq!(
+            erreur.erreurs[0].nature,
+            NatureErreur::NomEnDouble { rang_precedent: 1 }
+        );
+    }
+
+    #[test]
+    fn seul_le_second_homonyme_est_signale() {
+        let erreur =
+            analyser("email:string,name:string,email:string").expect_err("l'homonyme est refusé");
+
+        assert_eq!(erreur.erreurs.len(), 1);
+        assert_eq!(erreur.erreurs[0].rang, 3);
+        assert_eq!(
+            erreur.erreurs[0].nature,
+            NatureErreur::NomEnDouble { rang_precedent: 1 }
+        );
+    }
+
+    #[test]
+    fn un_champ_fautif_ne_masque_pas_le_rang_du_premier_homonyme() {
+        let erreur = analyser("Title:string,email:string,email:string")
+            .expect_err("deux fautes sont attendues");
+
+        assert_eq!(erreur.erreurs.len(), 2);
+        assert!(matches!(
+            erreur.erreurs[0].nature,
+            NatureErreur::PasEnSnakeCase { .. }
+        ));
+        assert_eq!(
+            erreur.erreurs[1].nature,
+            NatureErreur::NomEnDouble { rang_precedent: 2 }
+        );
     }
 
     #[test]

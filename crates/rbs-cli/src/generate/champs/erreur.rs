@@ -23,6 +23,8 @@ pub(crate) enum NatureErreur {
     PasEnSnakeCase { suggestion: Option<String> },
     MotCleRust { suggestions: Vec<String> },
     NomReserve,
+    NomCollisionMigration,
+    NomEnDouble { rang_precedent: usize },
     TypeInconnu { nom: String },
     ModificateurInconnu { nom: String },
     ModificateurEnDouble { nom: String },
@@ -39,6 +41,12 @@ impl NatureErreur {
             }
             Self::MotCleRust { .. } => format!("« {libelle} » est un mot-clé Rust"),
             Self::NomReserve => format!("« {libelle} » ne se déclare pas"),
+            Self::NomCollisionMigration => format!(
+                "« {libelle} » entrerait en collision avec l'identifiant de la table dans la migration"
+            ),
+            Self::NomEnDouble { rang_precedent } => {
+                format!("« {libelle} » est déjà déclaré au champ {rang_precedent}")
+            }
             Self::TypeInconnu { nom } => format!("type inconnu « {nom} »"),
             Self::ModificateurInconnu { nom } => format!("modificateur inconnu « {nom} »"),
             Self::ModificateurEnDouble { nom } => {
@@ -50,7 +58,7 @@ impl NatureErreur {
         }
     }
 
-    fn indice(&self) -> Option<String> {
+    fn indice(&self, libelle: &str) -> Option<String> {
         match self {
             Self::FormeInvalide => Some("exemple : « email:string:unique »".to_string()),
             Self::PasEnSnakeCase { suggestion } => suggestion
@@ -62,6 +70,10 @@ impl NatureErreur {
             }
             Self::NomReserve => {
                 Some("id, created_at et updated_at sont posés sur toute entité".to_string())
+            }
+            Self::NomCollisionMigration => Some(format!("essayez « {libelle}_ »")),
+            Self::NomEnDouble { .. } => {
+                Some("un nom de champ ne peut apparaître qu'une fois".to_string())
             }
             Self::TypeInconnu { .. } => Some(TypeChamp::NOMS.join(", ")),
             Self::ModificateurInconnu { .. } => Some("unique, optional, index".to_string()),
@@ -92,7 +104,7 @@ impl fmt::Display for ErreurChamps {
                 )?;
             }
 
-            if let Some(indice) = erreur.nature.indice() {
+            if let Some(indice) = erreur.nature.indice(&erreur.libelle) {
                 write!(f, "\n        → {indice}")?;
             }
         }
@@ -221,6 +233,31 @@ mod tests {
         assert!(texte.contains("« id » ne se déclare pas"), "{texte}");
         assert!(
             texte.contains("id, created_at et updated_at sont posés sur toute entité"),
+            "{texte}"
+        );
+    }
+
+    #[test]
+    fn un_nom_de_table_annonce_la_collision_dans_la_migration() {
+        let texte = rendu(NatureErreur::NomCollisionMigration, "table");
+        assert!(
+            texte.contains(
+                "« table » entrerait en collision avec l'identifiant de la table dans la migration"
+            ),
+            "{texte}"
+        );
+        assert!(texte.contains("→ essayez « table_ »"), "{texte}");
+    }
+
+    #[test]
+    fn un_nom_en_double_renvoie_au_champ_precedent() {
+        let texte = rendu(NatureErreur::NomEnDouble { rang_precedent: 1 }, "email");
+        assert!(
+            texte.contains("« email » est déjà déclaré au champ 1"),
+            "{texte}"
+        );
+        assert!(
+            texte.contains("→ un nom de champ ne peut apparaître qu'une fois"),
             "{texte}"
         );
     }
