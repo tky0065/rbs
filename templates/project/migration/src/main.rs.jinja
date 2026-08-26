@@ -9,7 +9,7 @@ use std::process::ExitCode;
 
 use migration::{Migrator, MigratorTrait};
 use sea_orm_migration::MigrationStatus;
-use sea_orm_migration::sea_orm::Database;
+use sea_orm_migration::sea_orm::{ConnectionTrait, Database, Statement};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -42,6 +42,15 @@ async fn executer(commande: &str) -> Result<(), Box<dyn Error>> {
                 };
                 println!("{etat}\t{}", migration.name());
             }
+        }
+        "version" => {
+            let requete = Statement::from_string(db.get_database_backend(), "SHOW server_version_num");
+            let reponse = db
+                .query_one_raw(requete)
+                .await?
+                .ok_or("PostgreSQL n'a pas rendu sa version")?;
+
+            println!("version\t{}", reponse.try_get_by_index::<String>(0)?);
         }
         _ => return Err(format!("commande inconnue : {commande}").into()),
     }

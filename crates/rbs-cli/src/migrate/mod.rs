@@ -19,7 +19,7 @@ use crate::{dotenv, metadata};
 ///
 /// C'est celle de la configuration du noyau — `RBS_DATABASE__URL` alimente
 /// `database.url` — et non un `DATABASE_URL` que rbs serait seul à connaître.
-const URL: &str = "RBS_DATABASE__URL";
+pub(crate) const URL: &str = "RBS_DATABASE__URL";
 
 /// Ce que `rbs migrate` peut faire.
 #[derive(Debug)]
@@ -96,8 +96,7 @@ pub(crate) fn executer(action: Action, repertoire: &Path) -> Result<Sortie, Erre
         )?));
     }
 
-    let paires = dotenv::lire(&racine.join(".env"))?;
-    let variables = preparer(paires, |cle| std::env::var_os(cle).is_some())?;
+    let variables = variables_du_projet(&racine)?;
 
     match action {
         Action::Up => {
@@ -114,6 +113,12 @@ pub(crate) fn executer(action: Action, repertoire: &Path) -> Result<Sortie, Erre
         }
         Action::Nouvelle(_) => unreachable!("traitée avant la lecture du .env"),
     }
+}
+
+/// Lit le `.env` du projet et en tire ce qu'il faut transmettre au sous-processus.
+pub(crate) fn variables_du_projet(racine: &Path) -> Result<Vec<(String, String)>, Erreur> {
+    let paires = dotenv::lire(&racine.join(".env"))?;
+    preparer(paires, |cle| std::env::var_os(cle).is_some())
 }
 
 /// Retient du `.env` ce que le sous-processus n'a pas déjà, et exige de savoir quelle
@@ -146,7 +151,7 @@ fn variables(
 ///
 /// `stderr` reste hérité : la progression de cargo, qui compile la crate au premier
 /// appel, doit rester visible pendant que la sortie utile est capturée.
-fn lancer(
+pub(crate) fn lancer(
     racine: &Path,
     commande: &str,
     variables: &[(String, String)],

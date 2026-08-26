@@ -213,10 +213,11 @@ dès que `C` est terminé.
       `new` ne délègue rien.
       ✓ `status` distingue visuellement appliqué / en attente.
 
-- [ ] **D12** · `rbs doctor`
+- [x] **D12** · `rbs doctor` — vérifié 2026-08-26 · `cargo test -p rbs-cli doctor` → 33 passed, dont `une_ancre_supprimee_est_signalee_avec_le_bloc_a_recoller` · bout en bout : ancre retirée de `router.rs` et variable retirée du `.env` → blocs à recoller affichés, code de sortie 1 ; projet sain → « PostgreSQL 18.6 répond », code 0 · `cargo test --workspace -- --include-ignored` → 295 + 1 + 72 passed, 0 ignored
       Vérifie : ancres présentes, `.env` complet, base joignable, PostgreSQL ≥ 18,
       versions de rbs-core et du CLI cohérentes. Cinq ancres depuis D9, et non quatre :
-      la liste fait foi dans `ancres::ANCRES`.
+      la liste fait foi dans `ancres::ANCRES`. La version du serveur vient du binaire de
+      la crate `migration`, qui gagne une commande `version` : rbs ne parle pas SQL.
       ✓ Test : une ancre supprimée est signalée avec le bloc à recoller.
 
 - [ ] **D13** · Test d'intégration CRUD

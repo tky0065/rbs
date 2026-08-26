@@ -1,5 +1,6 @@
 mod ancres;
 mod cli;
+mod doctor;
 mod dotenv;
 mod generate;
 mod metadata;
@@ -77,6 +78,17 @@ fn main() {
                 std::process::exit(1);
             }
         }
+
+        Commands::Doctor => match diagnostiquer() {
+            Ok(true) => {}
+            // Un diagnostic qui trouve quelque chose n'est pas un échec de la commande,
+            // mais un script doit pouvoir le distinguer d'un projet sain.
+            Ok(false) => std::process::exit(1),
+            Err(erreur) => {
+                ui::error(&erreur.to_string());
+                std::process::exit(1);
+            }
+        },
 
         commande => {
             ui::error(&format!(
@@ -165,6 +177,21 @@ fn migrer(action: migrate::Action) -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+/// Rend le rapport et dit si le projet est sain.
+fn diagnostiquer() -> Result<bool, Box<dyn Error>> {
+    let rapport = doctor::executer(&std::env::current_dir()?)?;
+
+    println!("{}", doctor::rendu::rapport(&rapport));
+
+    if rapport.reussi() {
+        ui::success("le projet est sain");
+    } else {
+        ui::warn("le projet demande votre attention");
+    }
+
+    Ok(rapport.reussi())
+}
+
 fn nommer(commande: &Commands) -> &'static str {
     match commande {
         Commands::New { .. } => "new",
@@ -173,9 +200,8 @@ fn nommer(commande: &Commands) -> &'static str {
             GenerateCommands::Crud { .. } => "generate crud",
             GenerateCommands::Feature { .. } => "generate feature",
         },
-        Commands::Doctor => "doctor",
-        // `new`, `generate` et `migrate` ont leur propre bras : seules les commandes
-        // encore absentes passent par ici.
+        // `new`, `generate`, `migrate` et `doctor` ont leur propre bras : seules les
+        // commandes encore absentes passent par ici.
         _ => "commande",
     }
 }
