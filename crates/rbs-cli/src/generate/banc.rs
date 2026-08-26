@@ -16,6 +16,10 @@ use testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers::runners::SyncRunner;
 use testcontainers::{Container, ImageExt};
 
+use crate::ancres::{self, Ancre};
+
+use super::montage::{self, Montage};
+
 /// PostgreSQL 18 en conteneur, et l'URL de connexion qui y mène.
 ///
 /// La version n'est pas négociable : `uuidv7()` n'est native qu'à partir de la 18, et la
@@ -124,9 +128,6 @@ impl Projet {
     }
 
     /// Écrit `src/<module>/` avec les fichiers donnés, et déclare le module.
-    ///
-    /// L'insertion dans l'ancre est faite à la main : le moteur d'ancres est une tâche
-    /// distincte, dont ce banc ne doit pas dépendre.
     pub(crate) fn poser_feature(&self, module: &str, fichiers: &[(&str, &str)]) {
         let repertoire = self.racine.join("src").join(module);
         fs::create_dir_all(&repertoire).expect("répertoire de feature créable");
@@ -155,48 +156,30 @@ impl Projet {
             fs::write(repertoire.join(nom), contenu).expect("fichier de feature écrivable");
         }
 
-        let main = self.racine.join("src/main.rs");
-        let source = fs::read_to_string(&main).expect("main.rs lisible");
-
-        fs::write(
-            &main,
-            source.replace(
-                "// <rbs:features>",
-                &format!("// <rbs:features>\nmod {module};"),
-            ),
-        )
-        .expect("main.rs écrivable");
+        self.monter(&montage::pour(module), &[ancres::FEATURES]);
     }
 
-    /// Monte les routes de `module` et déclare ses `handlers` dans le document OpenAPI.
+    /// Monte les routes de `module` et ses handlers dans le document OpenAPI.
+    pub(crate) fn monter_feature(&self, module: &str) {
+        self.monter(&montage::pour(module), &[ancres::ROUTES, ancres::OPENAPI]);
+    }
+
+    /// Écrit dans les ancres `visees` par le moteur du CLI, et non à la main.
     ///
-    /// Le remplissage des ancres est fait à la main, comme celui de `<rbs:features>` :
-    /// le moteur d'ancres est une tâche distincte, dont ce banc ne doit pas dépendre.
-    pub(crate) fn monter_feature(&self, module: &str, handlers: &[&str]) {
-        let routeur = self.racine.join("src/router.rs");
-        let source = fs::read_to_string(&routeur).expect("routeur lisible");
+    /// Ce que le banc simulerait ici est précisément ce qu'il doit éprouver : la seule
+    /// preuve que le moteur d'ancres produit du Rust valide est un projet qui compile.
+    fn monter(&self, montages: &[Montage], visees: &[Ancre]) {
+        for montage in montages.iter().filter(|m| visees.contains(&m.ancre)) {
+            let chemin = self.racine.join(montage.ancre.fichier);
+            let source = fs::read_to_string(&chemin)
+                .unwrap_or_else(|erreur| panic!("{} illisible : {erreur}", chemin.display()));
 
-        fs::write(
-            &routeur,
-            source.replace(
-                "// <rbs:routes>",
-                &format!("// <rbs:routes>\n        .merge(crate::{module}::routes())"),
-            ),
-        )
-        .expect("routeur écrivable");
+            let rendu = ancres::inserer(&source, montage.ancre, &montage.lignes)
+                .unwrap_or_else(|erreur| panic!("{erreur}"));
 
-        let document = self.racine.join("src/openapi.rs");
-        let source = fs::read_to_string(&document).expect("document lisible");
-        let chemins: String = handlers
-            .iter()
-            .map(|handler| format!("\n        crate::{module}::controller::{handler},"))
-            .collect();
-
-        fs::write(
-            &document,
-            source.replace("// <rbs:openapi>", &format!("// <rbs:openapi>{chemins}")),
-        )
-        .expect("document écrivable");
+            fs::write(&chemin, rendu)
+                .unwrap_or_else(|erreur| panic!("{} non écrit : {erreur}", chemin.display()));
+        }
     }
 
     /// Ajoute un module de test au binaire du projet.
@@ -294,22 +277,15 @@ async fn appliquer() {
         );
     }
 
-    /// Ajoute une migration au projet et l'inscrit dans l'ancre du `Migrator`.
+    /// Ajoute une migration au projet, la déclare et l'inscrit dans le `Migrator`.
     pub(crate) fn poser_migration(&self, module: &str, contenu: &str) {
         let sources = self.racine.join("migration/src");
         fs::write(sources.join(format!("{module}.rs")), contenu).expect("migration écrivable");
 
-        let lib = sources.join("lib.rs");
-        let source = fs::read_to_string(&lib).expect("lib.rs de migration lisible");
-
-        fs::write(
-            &lib,
-            format!("mod {module};\n\n{}", source).replace(
-                "// <rbs:migrations>",
-                &format!("// <rbs:migrations>\n            Box::new({module}::Migration),"),
-            ),
-        )
-        .expect("lib.rs de migration écrivable");
+        self.monter(
+            &montage::pour_migration(module),
+            &[ancres::MIGRATION_MODULES, ancres::MIGRATIONS],
+        );
     }
 
     /// Ajoute un test d'intégration à la crate `migration` du projet.
