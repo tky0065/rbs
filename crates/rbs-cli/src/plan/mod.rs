@@ -15,11 +15,7 @@ use std::path::{Path, PathBuf};
 
 use crate::ancres::Ancre;
 
-pub(crate) use action::{Action, Effet, Statut};
-// `rbs add` est la seule commande qui patchera un `Cargo.toml` ; en son absence, ce
-// réexport n'a encore aucun lecteur.
-#[allow(unused_imports)]
-pub(crate) use action::PatchToml;
+pub(crate) use action::{Action, Effet, PatchToml, Statut};
 
 /// Un fichier que le plan touche, avec ses deux états.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,6 +67,9 @@ pub(crate) enum Erreur {
     /// Une ancre attendue a disparu du projet.
     #[error("{0}")]
     Ancre(#[source] crate::ancres::Absente),
+    /// Le manifeste du projet n'a pas pu être patché.
+    #[error("{0}")]
+    Metadonnees(#[source] crate::metadata::Erreur),
 }
 
 /// Accumule les actions d'un plan en calculant, pour chaque fichier, son contenu final.
@@ -137,6 +136,35 @@ impl Constructeur {
                 ancre,
                 lignes: lignes.to_vec(),
             },
+            statut,
+        });
+
+        Ok(())
+    }
+
+    /// Planifie une modification du `Cargo.toml` de la racine.
+    pub fn patcher(&mut self, patch: PatchToml) -> Result<(), Erreur> {
+        let chemin = "Cargo.toml";
+
+        let avant = self.etat_courant(chemin)?.ok_or_else(|| {
+            Erreur::Metadonnees(crate::metadata::Erreur::PasUnProjet {
+                chemin: chemin.to_string(),
+            })
+        })?;
+
+        let PatchToml::InscrireFeature(feature) = &patch;
+        let rendu = crate::metadata::inscrire_feature(&avant, feature, chemin)
+            .map_err(Erreur::Metadonnees)?;
+
+        let (apres, statut) = match rendu {
+            Some(apres) => (apres, Statut::AFaire),
+            None => (avant.clone(), Statut::DejaFait),
+        };
+
+        self.projeter(chemin, Some(avant), apres);
+        self.actions.push(Action {
+            chemin: chemin.to_string(),
+            effet: Effet::PatcherToml { patch },
             statut,
         });
 
@@ -370,5 +398,50 @@ mod tests {
             .expect_err("l'ancre manque");
 
         assert!(matches!(erreur, Erreur::Ancre(_)));
+    }
+
+    const CARGO: &str = "[package]\nname = \"demo\"\n\n[package.metadata.rbs]\nversion = \"0.1.0\"\nfeatures = [\"health\"]\n";
+
+    #[test]
+    fn patcher_une_feature_absente_est_a_faire() {
+        let projet = projet();
+        fs::write(projet.path().join("Cargo.toml"), CARGO).expect("l'écriture aboutit");
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        constructeur
+            .patcher(PatchToml::InscrireFeature("docker".to_string()))
+            .expect("le manifeste est valide");
+        let plan = constructeur.finir();
+
+        assert_eq!(plan.actions()[0].statut, Statut::AFaire);
+        assert_eq!(plan.actions()[0].chemin, "Cargo.toml");
+        assert!(plan.fichiers()[0].apres.contains("\"docker\""));
+    }
+
+    #[test]
+    fn patcher_une_feature_deja_inscrite_est_deja_fait() {
+        let projet = projet();
+        fs::write(projet.path().join("Cargo.toml"), CARGO).expect("l'écriture aboutit");
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        constructeur
+            .patcher(PatchToml::InscrireFeature("health".to_string()))
+            .expect("le manifeste est valide");
+        let plan = constructeur.finir();
+
+        assert_eq!(plan.actions()[0].statut, Statut::DejaFait);
+        assert_eq!(plan.fichiers()[0].apres, CARGO);
+    }
+
+    #[test]
+    fn patcher_un_manifeste_absent_est_signale() {
+        let projet = projet();
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        let erreur = constructeur
+            .patcher(PatchToml::InscrireFeature("docker".to_string()))
+            .expect_err("le manifeste manque");
+
+        assert!(matches!(erreur, Erreur::Metadonnees(_)));
     }
 }
