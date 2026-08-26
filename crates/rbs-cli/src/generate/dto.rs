@@ -6,7 +6,7 @@ use super::feature::Feature;
 
 const TEMPLATE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../templates/feature/dto.rs.jinja"
+    "/templates/feature/dto.rs.jinja"
 ));
 
 /// Rend les DTO de `feature`.

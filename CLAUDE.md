@@ -55,12 +55,19 @@ lance un PostgreSQL). C'est le seul test qui prouve réellement que rbs fonction
 Deux crates publiables, plus des templates embarquées dans le binaire :
 
 ```
-crates/rbs-core/   runtime : Error/Result, config, logs, AppState, middlewares, helpers OpenAPI
-crates/rbs-cli/    binaire `rbs` : new, add, generate, migrate, doctor
-templates/         squelette de projet et fragments de features (include_dir)
-examples/          projets réels compilés en CI, source des extraits de documentation
-docs/              site Docusaurus (toolchain Node isolée ici)
+crates/rbs-core/            runtime : Error/Result, config, logs, AppState, middlewares, helpers OpenAPI
+crates/rbs-cli/             binaire `rbs` : new, add, generate, migrate, doctor
+crates/rbs-cli/templates/   squelette de projet et fragments de features (include_dir)
+examples/                   projets réels compilés en CI, source des extraits de documentation
+docs/                       site Docusaurus (toolchain Node isolée ici)
 ```
+
+Les templates vivent **dans** la crate qui les embarque, et non à la racine : `cargo
+package` n'emporte aucun fichier extérieur au paquet, et `include = [...]` ne lève pas
+cette règle. À la racine, `rbs-cli` compilait en local et échouait à se publier.
+
+Les deux crates sont indépendantes — `rbs-cli` ne dépend pas de `rbs-core`, qu'il ne fait
+qu'inscrire dans les manifestes qu'il génère. Elles se publient séparément.
 
 **La frontière noyau / généré est la décision structurante du projet** : `rbs-core` porte
 ce qui n'a aucune raison de varier d'un projet à l'autre ; le CLI génère dans le projet de

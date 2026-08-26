@@ -6,7 +6,7 @@ use super::feature::Feature;
 
 const TEMPLATE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../templates/feature/service.rs.jinja"
+    "/templates/feature/service.rs.jinja"
 ));
 
 /// Rend le service de `feature`.

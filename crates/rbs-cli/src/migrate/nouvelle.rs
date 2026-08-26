@@ -14,7 +14,7 @@ use crate::template::Renderer;
 
 const TEMPLATE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../templates/migration/vide.rs.jinja"
+    "/templates/migration/vide.rs.jinja"
 ));
 
 /// Une migration créée.

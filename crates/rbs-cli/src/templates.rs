@@ -15,10 +15,10 @@ use include_dir::{Dir, include_dir};
 const SUFFIXE: &str = "jinja";
 
 /// Le squelette de projet, embarqué au moment de la compilation du binaire.
-static PROJET: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../templates/project");
+static PROJET: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/templates/project");
 
 /// Les fragments de feature, un sous-répertoire par feature installable.
-static FEATURES: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/../../templates/features");
+static FEATURES: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/templates/features");
 
 /// Provenance des templates.
 #[derive(Debug)]
@@ -241,7 +241,7 @@ mod tests {
 
     /// Racine des templates du squelette, résolue depuis la crate plutôt que depuis le
     /// répertoire courant, que `cargo test` ne garantit pas.
-    const RACINE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/project");
+    const RACINE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/project");
 
     /// Les chemins de sortie attendus du squelette, tels que `rbs new` les écrira.
     const DESTINATIONS: [&str; 15] = [
@@ -539,7 +539,7 @@ mod tests {
     }
 
     /// Racine des fragments de feature, résolue comme celle du squelette.
-    const RACINE_FEATURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/features");
+    const RACINE_FEATURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/features");
 
     /// Les chemins de sortie attendus de `docker`, tels que `rbs add docker` les écrira.
     const DESTINATIONS_DOCKER: [&str; 3] = [".dockerignore", "Dockerfile", "docker-compose.yml"];

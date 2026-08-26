@@ -8,12 +8,12 @@ use super::feature::Feature;
 
 const CONTROLLER: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../templates/feature/controller.rs.jinja"
+    "/templates/feature/controller.rs.jinja"
 ));
 
 const MODULE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../templates/feature/mod.rs.jinja"
+    "/templates/feature/mod.rs.jinja"
 ));
 
 /// Rend les handlers de `feature` et leurs annotations OpenAPI.

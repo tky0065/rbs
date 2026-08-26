@@ -13,7 +13,7 @@ use super::feature::Feature;
 
 const TESTS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../templates/feature/tests.rs.jinja"
+    "/templates/feature/tests.rs.jinja"
 ));
 
 /// Rend les tests d'intégration HTTP de `feature`.

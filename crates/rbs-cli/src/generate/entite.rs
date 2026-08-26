@@ -6,7 +6,7 @@ use super::feature::Feature;
 
 const TEMPLATE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../templates/feature/model.rs.jinja"
+    "/templates/feature/model.rs.jinja"
 ));
 
 /// Rend l'entité SeaORM de `feature`.
