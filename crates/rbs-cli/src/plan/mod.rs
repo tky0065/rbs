@@ -8,6 +8,7 @@
 #![allow(dead_code)]
 
 mod action;
+mod application;
 mod rendu;
 
 use std::fs;
