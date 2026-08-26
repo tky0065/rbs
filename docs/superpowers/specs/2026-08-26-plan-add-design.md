@@ -233,3 +233,16 @@ S'y ajoutent les statuts, qui sont la partie du modèle dont E2, E5 et E6 dépen
 
 L'en-tête d'affichage revient à E5, et c'est lui qui justifie que les chemins du module
 soient relatifs de bout en bout : le plan nomme les fichiers, la racine se dit une fois.
+
+Deux points relevés à la revue de ce module, qui engagent les tâches suivantes :
+
+- **E2 hérite d'une variante d'erreur trop large, pas d'un texte à reformuler.** `inserer`
+  sur un fichier qui n'existe pas rend aujourd'hui « ancre introuvable dans
+  `migration/src/lib.rs` », pour un fichier absent. C'est le même défaut que celui corrigé
+  ici entre un manifeste absent et une section manquante : il se répare en ajoutant une
+  variante, non en récrivant une chaîne.
+- **`AFaire` dit « cette cible diffère de son point de départ », pas « cette action changera
+  quelque chose ».** Juger chaque action contre l'origine a ce corollaire : deux insertions
+  de la même ligne sont toutes deux `AFaire`, alors que la seconde ne produira rien une fois
+  composée. L'affichage d'E5 montrera donc deux lignes pour un seul changement, et devra
+  décider s'il agrège par fichier ou nomme chaque action.
