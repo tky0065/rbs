@@ -37,14 +37,19 @@ sept types et trois modificateurs.
 ## 3. Emplacement
 
 ```
-crates/rbs-cli/src/generate/mod.rs      module du lot D
-crates/rbs-cli/src/generate/fields.rs   le parseur, son modèle et ses erreurs
+crates/rbs-cli/src/generate/mod.rs            module de la commande `rbs generate`
+crates/rbs-cli/src/generate/champs.rs         modèle des champs et analyse
+crates/rbs-cli/src/generate/champs/erreur.rs  erreurs, messages et suggestions
 ```
 
 Rien de tout cela n'entre dans `rbs-core` : la grammaire sert au CLI au moment du
 scaffolding et n'a aucune existence dans le runtime d'un projet généré.
 
-Aucune commande n'appelle encore `parse_fields` — le premier appelant est le générateur
+Le nommage suit celui du CLI, qui est en français — `rbs-cli` est un binaire, non une
+API publique. Seul `rbs-core`, publié sur crates.io et consommé par du code généré,
+est en anglais.
+
+Aucune commande n'appelle encore `analyser` — le premier appelant est le générateur
 d'entité, tâche suivante. Le module porte donc un `#![allow(dead_code)]` que cette
 tâche-là supprime. L'alternative, brancher une commande `generate crud` qui se
 contenterait d'afficher les champs reconnus, ferait exister une commande qui ne génère
@@ -53,41 +58,44 @@ rien : une dette plus coûteuse que l'attribut.
 ## 4. Modèle de données
 
 ```rust
-pub(crate) fn parse_fields(input: &str) -> Result<Vec<Field>, FieldsError>
+pub(crate) fn analyser(entree: &str) -> Result<Vec<Champ>, ErreurChamps>
 
-pub(crate) struct Field {
-    pub name: String,
-    pub ty: FieldType,
+pub(crate) struct Champ {
+    pub nom: String,
+    pub type_: TypeChamp,
     pub unique: bool,
-    pub optional: bool,
+    pub optionnel: bool,
     pub index: bool,
 }
 
-pub(crate) enum FieldType { String, Int, Float, Bool, Uuid, Datetime, Text }
+pub(crate) enum TypeChamp { String, Int, Float, Bool, Uuid, Datetime, Text }
 ```
 
-Les modificateurs sont trois booléens plutôt qu'un `Vec<Modifier>`. L'ensemble est
-fermé, et les consommateurs veulent écrire `field.unique`, pas parcourir un vecteur.
+Les variantes de `TypeChamp` gardent les mots de la grammaire, qui sont invariants.
+
+Les modificateurs sont trois booléens plutôt qu'un `Vec<Modificateur>`. L'ensemble est
+fermé, et les consommateurs veulent écrire `champ.unique`, pas parcourir un vecteur.
 Un modificateur paramétré, s'il arrive un jour, cassera cette forme — c'est assumé :
 il cassera aussi la grammaire, donc ce design.
 
 ## 5. Projections de types
 
-La connaissance des types vit ici, sur `FieldType`, et nulle part ailleurs. Les
-générateurs D2 et D7 consomment des chaînes déjà résolues ; leurs templates ne
-contiennent aucun `{% if type == ... %}`. Ajouter un type en v0.2 est une variante
-d'énumération et trois bras de `match`, dans un seul fichier.
+La connaissance des types vit ici, sur `TypeChamp`, et nulle part ailleurs. Les
+générateurs de l'entité et de la migration consomment des chaînes déjà résolues ; leurs
+templates ne contiennent aucun test sur le type. Ajouter un type en v0.2 est une
+variante d'énumération et trois bras de `match`, dans un seul fichier.
 
-| Méthode | Porteur | Consommateur | Rôle |
-|---|---|---|---|
-| `FieldType::rust_type()` | type nu | D2, D3 | type Rust de la colonne |
-| `Field::rust_type()` | champ complet | D2, D3 | idem, enveloppé dans `Option<…>` si `optional` |
-| `FieldType::migration_method()` | type nu | D7 | méthode du `ColumnDef` SeaORM |
-| `FieldType::column_type_attr()` | type nu | D2 | `Option<&str>` — seulement si le type diffère du défaut SeaORM |
+| Méthode | Porteur | Rôle |
+|---|---|---|
+| `TypeChamp::nom()` | type nu | le mot de la grammaire, `"uuid"` |
+| `TypeChamp::type_rust()` | type nu | type Rust de la colonne |
+| `Champ::type_rust()` | champ complet | idem, enveloppé dans `Option<…>` si `optionnel` |
+| `TypeChamp::methode_migration()` | type nu | méthode du `ColumnDef` SeaORM |
+| `TypeChamp::attribut_column_type()` | type nu | `Option<&str>` — seulement si le type diffère du défaut SeaORM |
 
 Table de correspondance :
 
-| Type | `rust_type()` | `migration_method()` | `column_type_attr()` |
+| Type | `type_rust()` | `methode_migration()` | `attribut_column_type()` |
 |---|---|---|---|
 | `string` | `String` | `string()` | — |
 | `text` | `String` | `text()` | `Some("Text")` |
@@ -97,12 +105,15 @@ Table de correspondance :
 | `uuid` | `Uuid` | `uuid()` | — |
 | `datetime` | `DateTimeWithTimeZone` | `timestamp_with_time_zone()` | — |
 
-`Field` implémente `serde::Serialize` à la main : la forme sérialisée expose ses cinq
-champs **et** les trois projections, si bien qu'une template écrit `{{ f.rust_type }}`
-comme elle écrit `{{ f.name }}`. Une méthode Rust n'est pas visible depuis minijinja ;
+`Champ` implémente `serde::Serialize` à la main : la forme sérialisée expose ses cinq
+champs **et** les trois projections, si bien qu'une template écrit `{@ champ.type_rust @}`
+comme elle écrit `{@ champ.nom @}`. Une méthode Rust n'est pas visible depuis minijinja ;
 sans cette sérialisation, chaque générateur devrait reconstruire une structure de vue.
+Les clés sérialisées sont `nom`, `type`, `unique`, `optionnel`, `index`, `type_rust`,
+`methode_migration` et `attribut_column_type` — `type` plutôt que `type_`, le
+soulignement n'existant que pour contourner le mot-clé Rust.
 
-Il n'y a pas de `sql_type()` : les migrations générées par D7 sont écrites avec le
+Il n'y a pas de projection vers du SQL : les migrations générées sont écrites avec le
 constructeur SeaORM, pas en SQL brut. Une projection sans appelant est une projection
 à ne pas écrire.
 
@@ -130,27 +141,27 @@ faux).
 ## 7. Erreurs
 
 ```rust
-pub(crate) struct FieldsError { errors: Vec<FieldError> }
+pub(crate) struct ErreurChamps { erreurs: Vec<ErreurChamp> }
 
-pub(crate) struct FieldError {
-    index: usize,        // rang du champ dans la chaîne, à partir de 1
-    raw: String,         // la portion telle que l'utilisateur l'a écrite
-    kind: FieldErrorKind,
+pub(crate) struct ErreurChamp {
+    rang: usize,        // rang du champ dans la chaîne, à partir de 1
+    libelle: String,    // le nom du champ, ou la portion brute si le nom est illisible
+    nature: NatureErreur,
 }
 
-pub(crate) enum FieldErrorKind {
-    MalformedSpec,
-    NotSnakeCase { suggestion: String },
-    RustKeyword { suggestion: String },
-    ReservedName,
-    UnknownType { name: String },
-    UnknownModifier { name: String },
-    DuplicateModifier { name: String },
-    RedundantIndex,
+pub(crate) enum NatureErreur {
+    FormeInvalide,
+    PasEnSnakeCase { suggestion: String },
+    MotCleRust { suggestions: Vec<String> },
+    NomReserve,
+    TypeInconnu { nom: String },
+    ModificateurInconnu { nom: String },
+    ModificateurEnDouble { nom: String },
+    IndexRedondant,
 }
 ```
 
-Le `Display` de `FieldsError` rend une ligne de diagnostic par erreur, suivie d'une
+Le `Display` de `ErreurChamps` rend une ligne de diagnostic par erreur, suivie d'une
 ligne `→` de suggestion :
 
 ```
@@ -172,18 +183,19 @@ Le critère de la tâche — « chaque type et modificateur, plus les messages d
 syntaxe » — se décompose ainsi. Ces tests sont écrits avant le code.
 
 **Analyse nominale**
-- un cas par type, vérifiant `ty`, `rust_type()`, `migration_method()` et `column_type_attr()`
+- un cas par type, vérifiant `type_`, `type_rust()`, `methode_migration()` et
+  `attribut_column_type()`
 - un cas par modificateur, vérifiant le booléen correspondant
 - `optional` enveloppe le type Rust dans `Option<…>`
 - ordre des modificateurs libre : `email:string:unique:optional` ≡ `email:string:optional:unique`
 - espaces tolérés autour de `,` et `:`
 - chaîne vide → `Ok(vec![])`
 - plusieurs champs conservent leur ordre de déclaration
-- la forme sérialisée d'un `Field` porte bien `rust_type`, `migration_method` et
-  `column_type_attr` en plus des cinq champs
+- la forme sérialisée d'un `Champ` porte bien `type_rust`, `methode_migration` et
+  `attribut_column_type` en plus des cinq champs
 
 **Erreurs**
-- une assertion sur le message rendu pour chacune des huit variantes de `FieldErrorKind`
+- une assertion sur le message rendu pour chacune des huit variantes de `NatureErreur`
 - une chaîne portant trois fautes distinctes remonte trois erreurs, dans l'ordre des champs
 - un champ portant deux fautes ne remonte que la première
 
