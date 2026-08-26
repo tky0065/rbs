@@ -36,3 +36,6 @@ jobs:
 
       - name: cargo test
         run: cargo test --workspace
+
+      - name: cargo test (intégration)
+        run: cargo test --workspace -- --ignored
