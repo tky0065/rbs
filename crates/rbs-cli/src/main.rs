@@ -1,4 +1,5 @@
 mod cli;
+mod generate;
 mod metadata;
 mod new;
 mod prompts;
