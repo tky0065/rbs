@@ -730,10 +730,10 @@ Ajouter dans le `mod tests` de `crates/rbs-cli/src/generate/champs.rs` :
 
     #[test]
     fn les_champs_gardent_leur_ordre_de_declaration() {
-        let noms: Vec<&str> = champs("un:string,deux:int,trois:bool")
-            .iter()
-            .map(|champ| champ.nom.as_str())
-            .collect();
+        // La liaison est nécessaire : `.iter()` sur le Vec temporaire rendu par le
+        // helper emprunte une valeur détruite en fin d'instruction (E0716).
+        let champs = champs("un:string,deux:int,trois:bool");
+        let noms: Vec<&str> = champs.iter().map(|champ| champ.nom.as_str()).collect();
 
         assert_eq!(noms, ["un", "deux", "trois"]);
     }
@@ -1196,8 +1196,8 @@ Ajouter `serde_json.workspace = true` sous `[dev-dependencies]` de `crates/rbs-c
 ```rust
     #[test]
     fn un_champ_se_serialise_avec_ses_projections() {
-        let champ = &champs("bio:text:optional")[0];
-        let json = serde_json::to_value(champ).expect("Champ est sérialisable");
+        let champs = champs("bio:text:optional");
+        let json = serde_json::to_value(&champs[0]).expect("Champ est sérialisable");
 
         assert_eq!(json["nom"], "bio");
         assert_eq!(json["type"], "text");
@@ -1211,8 +1211,8 @@ Ajouter `serde_json.workspace = true` sous `[dev-dependencies]` de `crates/rbs-c
 
     #[test]
     fn un_type_sans_attribut_de_colonne_serialise_null() {
-        let champ = &champs("titre:string")[0];
-        let json = serde_json::to_value(champ).expect("Champ est sérialisable");
+        let champs = champs("titre:string");
+        let json = serde_json::to_value(&champs[0]).expect("Champ est sérialisable");
 
         assert_eq!(json["type_rust"], "String");
         assert!(json["attribut_column_type"].is_null());
