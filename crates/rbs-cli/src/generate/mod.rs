@@ -4,6 +4,7 @@ pub(crate) mod champs;
 pub(crate) mod controller;
 pub(crate) mod dto;
 pub(crate) mod entite;
+pub(crate) mod essais;
 pub(crate) mod feature;
 pub(crate) mod migration;
 pub(crate) mod nom;

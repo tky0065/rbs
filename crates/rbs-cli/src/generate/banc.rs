@@ -6,6 +6,8 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::process::Output;
+use std::sync::{Mutex, PoisonError};
 
 use assert_cmd::Command;
 use tempfile::TempDir;
@@ -53,6 +55,19 @@ impl BaseDeTest {
     }
 }
 
+/// Sérialise les invocations de cargo sur les projets d'essai.
+///
+/// Ils partagent `target/rbs-integration` pour ne pas recompiler Axum et SeaORM à chaque
+/// test. Or cargo y dépose l'artefact final du paquet visé — `debug/demo-api`,
+/// `debug/libmigration.rlib` — sous un nom qui ne distingue pas un projet d'un autre :
+/// deux invocations concurrentes se relisent mutuellement leurs binaires.
+///
+/// Ce verrou ne suffit pas à les isoler complètement : deux projets qui compilent un même
+/// module de migration — même nom de fichier, même crate `migration` — se sont montrés
+/// capables d'échanger leur code compilé d'un projet à l'autre. Deux tests lourds ne
+/// doivent donc jamais poser une feature ni une migration de même nom.
+static CARGO: Mutex<()> = Mutex::new(());
+
 /// Racine du dépôt, d'où se déduisent le noyau local et la cible de compilation.
 pub(crate) fn depot() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -69,6 +84,15 @@ pub(crate) struct Projet {
 
 impl Projet {
     pub(crate) fn neuf() -> Self {
+        Self::neuf_sur("postgres://rbs:rbs@localhost:5432/demo_api")
+    }
+
+    /// Un projet neuf dont le `.env` vise `url`.
+    ///
+    /// Ce que le projet lit de sa base passe par sa configuration : un test qui exerce
+    /// l'application montée doit donc pointer le `.env` sur le conteneur, et non fournir
+    /// l'URL à l'exécution.
+    pub(crate) fn neuf_sur(url: &str) -> Self {
         let parent = TempDir::new().expect("répertoire temporaire créable");
         let noyau = depot().join("crates/rbs-core");
 
@@ -79,7 +103,7 @@ impl Projet {
                 "new",
                 "demo-api",
                 "--database-url",
-                "postgres://rbs:rbs@localhost:5432/demo_api",
+                url,
                 "--core-path",
                 noyau.to_str().expect("chemin du noyau représentable"),
                 "--yes",
@@ -215,20 +239,58 @@ impl Projet {
         destination
     }
 
-    /// Lance les tests du projet, et rapporte leur sortie.
-    pub(crate) fn tester(&self) {
-        let sortie = std::process::Command::new("cargo")
+    /// Applique les migrations du projet contre `url`, puis retire de quoi les appliquer.
+    ///
+    /// La crate `migration` n'a pas de binaire et `rbs migrate` n'existe pas encore : la
+    /// montée passe par un test jetable, effacé aussitôt pour que `tester()` ne trouve
+    /// dans le projet que du code généré.
+    pub(crate) fn migrer(&self, url: &str) {
+        const MONTEE: &str = r#"use migration::{Migrator, MigratorTrait};
+use sea_orm_migration::sea_orm::Database;
+
+#[tokio::test]
+async fn appliquer() {
+    let url = std::env::var("DATABASE_URL").expect("DATABASE_URL doit être fournie");
+    let db = Database::connect(&url).await.expect("connexion à la base");
+
+    Migrator::up(&db, None).await.expect("montée des migrations");
+}
+"#;
+
+        self.poser_test_de_migration("montee", MONTEE);
+        self.tester_migration(url);
+        fs::remove_file(self.racine.join("migration/tests/montee.rs"))
+            .expect("test jetable effacé");
+    }
+
+    /// Lance cargo sur le projet, un seul appel à la fois.
+    fn cargo(&self, arguments: &[&str], variables: &[(&str, &str)]) -> Output {
+        let _exclusivite = CARGO.lock().unwrap_or_else(PoisonError::into_inner);
+
+        std::process::Command::new("cargo")
             .current_dir(&self.racine)
             .env("CARGO_TARGET_DIR", depot().join("target/rbs-integration"))
-            .args(["test"])
+            .envs(variables.iter().copied())
+            .args(arguments)
             .output()
-            .expect("cargo doit être lançable");
+            .expect("cargo doit être lançable")
+    }
+
+    /// Lance les tests du projet, et rapporte leur sortie.
+    pub(crate) fn tester(&self) {
+        let sortie = self.cargo(&["test"], &[]);
+        let journal = String::from_utf8_lossy(&sortie.stdout);
 
         assert!(
             sortie.status.success(),
-            "les tests du projet échouent :\n{}\n{}",
-            String::from_utf8_lossy(&sortie.stdout),
+            "les tests du projet échouent :\n{journal}\n{}",
             String::from_utf8_lossy(&sortie.stderr)
+        );
+        // Un `cargo test` qui ne trouve aucun test sort vert : sans ce garde-fou, une
+        // feature dont les tests ne seraient pas compilés passerait pour vérifiée.
+        assert!(
+            tests_executes(&journal) > 0,
+            "aucun test n'a été exécuté :\n{journal}"
         );
     }
 
@@ -274,13 +336,10 @@ impl Projet {
 
     /// Lance les tests de la crate `migration` contre `url`, et rapporte leur sortie.
     pub(crate) fn tester_migration(&self, url: &str) {
-        let sortie = std::process::Command::new("cargo")
-            .current_dir(&self.racine)
-            .env("CARGO_TARGET_DIR", depot().join("target/rbs-integration"))
-            .env("DATABASE_URL", url)
-            .args(["test", "-p", "migration", "--", "--nocapture"])
-            .output()
-            .expect("cargo doit être lançable");
+        let sortie = self.cargo(
+            &["test", "-p", "migration", "--", "--nocapture"],
+            &[("DATABASE_URL", url)],
+        );
 
         assert!(
             sortie.status.success(),
@@ -292,12 +351,7 @@ impl Projet {
 
     /// Compile le projet, et échoue en rapportant la sortie de `cargo` telle quelle.
     pub(crate) fn compiler(&self) {
-        let sortie = std::process::Command::new("cargo")
-            .current_dir(&self.racine)
-            .env("CARGO_TARGET_DIR", depot().join("target/rbs-integration"))
-            .args(["build", "--workspace"])
-            .output()
-            .expect("cargo doit être lançable");
+        let sortie = self.cargo(&["build", "--workspace"], &[]);
 
         assert!(
             sortie.status.success(),
@@ -305,6 +359,16 @@ impl Projet {
             String::from_utf8_lossy(&sortie.stderr)
         );
     }
+}
+
+/// Nombre de tests passés, tous les binaires de test du projet confondus.
+fn tests_executes(journal: &str) -> u32 {
+    journal
+        .lines()
+        .filter_map(|ligne| ligne.strip_prefix("test result: ok. "))
+        .filter_map(|reste| reste.split_whitespace().next())
+        .filter_map(|nombre| nombre.parse::<u32>().ok())
+        .sum()
 }
 
 /// Passe `source` à rustfmt et rend le résultat.

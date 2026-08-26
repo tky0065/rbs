@@ -191,7 +191,7 @@ dès que `C` est terminé.
         `features/`.
       ✓ `rbs g crud state` et `rbs g crud match` échouent en nommant le conflit.
 
-- [ ] **D8** · Génération des tests
+- [x] **D8** · Génération des tests — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::essais` → 13 passed · `cargo test -p rbs-cli -- --exact generate::essais::tests::les_tests_generes_passent_sans_retouche --include-ignored` → 1 passed, dont « 3 passed » dans le projet généré · `cargo test --workspace -- --include-ignored` → 202 + 1 + 72 passed, 0 ignored
       Tests d'intégration HTTP du CRUD complet contre l'application montée en mémoire.
       ✓ Les tests générés passent immédiatement, sans retouche.
 

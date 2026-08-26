@@ -3,7 +3,10 @@ pub mod dto;
 pub mod model;
 pub mod repository;
 pub mod service;
-
+{% if avec_tests %}
+#[cfg(test)]
+mod tests;
+{% endif %}
 use axum::Router;
 use axum::routing::get;
 

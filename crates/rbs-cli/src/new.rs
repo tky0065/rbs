@@ -383,6 +383,28 @@ mod tests {
         assert_eq!(metadonnees.features, vec!["health".to_string()]);
     }
 
+    /// Les tests que `rbs generate crud` pose traversent le routeur sans réseau et
+    /// relisent du JSON : sans ces deux crates, le projet généré ne compilerait pas ses
+    /// propres tests.
+    #[test]
+    fn le_manifeste_porte_les_dependances_de_developpement_des_tests_generes() {
+        let parent = parent();
+
+        let projet = creer(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+
+        let manifeste = lire(&projet.racine.join("Cargo.toml"));
+        assert!(
+            manifeste.contains("[dev-dependencies]"),
+            "section absente :\n{manifeste}"
+        );
+        for dependance in ["tower = ", "serde_json = ", "uuid = "] {
+            assert!(
+                manifeste.contains(dependance),
+                "`{dependance}` absente :\n{manifeste}"
+            );
+        }
+    }
+
     #[test]
     fn sans_core_path_le_manifeste_depend_de_la_version_publiee_du_noyau() {
         let parent = parent();
