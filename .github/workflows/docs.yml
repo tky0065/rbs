@@ -9,11 +9,13 @@ on:
     paths:
       - 'docs/**'
       - '!docs/superpowers/**'
+      - 'examples/**'
       - '.github/workflows/docs.yml'
   pull_request:
     paths:
       - 'docs/**'
       - '!docs/superpowers/**'
+      - 'examples/**'
       - '.github/workflows/docs.yml'
 
 permissions:
@@ -60,3 +62,37 @@ jobs:
         run: |
           npm run clear
           npm run build
+
+      # `working-directory` ne vaut que pour les étapes `run` : le chemin d'une action se
+      # résout depuis la racine du dépôt, d'où `docs/build` et non `build`.
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: docs/build
+
+  deploy:
+    name: déploiement sur Pages
+    needs: build
+    # Une pull request construit le site pour le vérifier ; elle ne publie pas.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    # Les permissions vivent ici, pas au niveau du workflow : le job de build n'a aucun
+    # besoin d'écrire sur Pages, et les lui accorder n'élargirait que la surface d'attaque.
+    permissions:
+      pages: write
+      id-token: write
+
+    # Groupe distinct de celui du build. Celui-ci annule les runs en cours, ce qui convient
+    # à une compilation et laisse un déploiement Pages interrompu en vol dans un état que
+    # GitHub ne reprend pas.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deploiement.outputs.page_url }}
+
+    steps:
+      - id: deploiement
+        uses: actions/deploy-pages@v5
