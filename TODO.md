@@ -167,7 +167,7 @@ dès que `C` est terminé.
       CRUD complet et liste paginée. Ne connaît que `model.rs`.
       ✓ Revue : aucun import d'Axum dans le fichier.
 
-- [ ] **D5** · Génération du service
+- [x] **D5** · Génération du service — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::service -- --include-ignored` → 12 passed, dont la compilation de model + dto + repository + service dans un projet neuf
       Logique métier, conversions DTO. Ne connaît que `repository.rs` et `dto.rs`.
       ✓ Revue : aucun import de `sea_orm::EntityTrait` dans le fichier.
 
