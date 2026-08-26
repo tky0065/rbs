@@ -181,7 +181,7 @@ dès que `C` est terminé.
       ✓ La colonne `id` porte `DEFAULT uuidv7()` ; un `INSERT` sans `id` reçoit un
         UUIDv7 valide, dont l'horodatage de tête est celui de l'insertion.
 
-- [ ] **D7b** · Aplatissement des features
+- [ ] **D7b** · Aplatissement des features — PARTIEL 2026-08-26 : `cargo test --workspace -- --include-ignored` → 185 + 1 + 72 passed, 0 ignored · `cargo clippy --workspace --all-targets -- -D warnings` et `cargo fmt --all --check` propres · `cargo test -p rbs-cli generate::nom` → 5 passed. Le troisième ✓ exige que `rbs g crud` appelle la validation : la commande n'est pas encore câblée (D10) et sort « pas encore implémentée », code 2.
       Une feature vit en `src/<nom>/`, non plus en `src/features/<nom>/` : l'ancre
       `<rbs:features>` descend dans `src/main.rs` et les insertions passent au chemin
       absolu. En contrepartie, le nom d'une feature est validé — il entre désormais en

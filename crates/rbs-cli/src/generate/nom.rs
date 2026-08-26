@@ -25,7 +25,8 @@ enum Nature {
 }
 
 /// Modules que `rbs new` pose à la racine de `src/` : une feature qui en porte le nom
-/// écraserait le fichier.
+/// écraserait le module existant. `health` est un répertoire, les quatre autres des
+/// fichiers — la collision est la même.
 const MODULES_DU_SQUELETTE: [&str; 5] = ["main", "router", "openapi", "state", "health"];
 
 /// Vérifie qu'une feature peut porter ce nom sans casser le projet.
