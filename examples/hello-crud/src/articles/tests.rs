@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::router::router;
 use crate::state::AppState;
 
+// region: harnais
 /// Monte l'application sur la base décrite par `.env`, sans écouter sur le réseau.
 ///
 /// Les migrations sont supposées appliquées : elles précèdent `cargo test`.
@@ -19,6 +20,7 @@ async fn application() -> Router {
 
     router(AppState::new(db, config))
 }
+// endregion: harnais
 
 /// Fait traverser le routeur à `requete`, et rend son statut avec son corps.
 async fn appeler(api: &Router, requete: Request<Body>) -> (StatusCode, Value) {
@@ -84,6 +86,7 @@ fn modification() -> Value {
     })
 }
 
+// region: cycle_de_vie
 #[tokio::test]
 async fn le_cycle_de_vie_complet_passe_par_l_api() {
     let api = application().await;
@@ -128,7 +131,9 @@ async fn le_cycle_de_vie_complet_passe_par_l_api() {
     let (statut, _) = appeler(&api, sans_corps("GET", &ressource)).await;
     assert_eq!(statut, StatusCode::NOT_FOUND, "elle répond encore");
 }
+// endregion: cycle_de_vie
 
+// region: erreur_404
 #[tokio::test]
 async fn un_identifiant_inconnu_rend_404() {
     let api = application().await;
@@ -140,7 +145,9 @@ async fn un_identifiant_inconnu_rend_404() {
     assert_eq!(statut, StatusCode::NOT_FOUND);
     assert_eq!(corps["status"], 404, "{corps}");
 }
+// endregion: erreur_404
 
+// region: corps_illisible
 #[tokio::test]
 async fn un_corps_illisible_rend_400() {
     let api = application().await;
@@ -156,3 +163,4 @@ async fn un_corps_illisible_rend_400() {
     assert_eq!(statut, StatusCode::BAD_REQUEST);
     assert_eq!(corps["status"], 400, "{corps}");
 }
+// endregion: corps_illisible

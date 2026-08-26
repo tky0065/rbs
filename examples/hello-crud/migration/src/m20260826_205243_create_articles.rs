@@ -5,6 +5,7 @@ pub struct Migration;
 
 #[async_trait::async_trait]
 impl MigrationTrait for Migration {
+    // region: up
     async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
             .create_table(
@@ -39,6 +40,7 @@ impl MigrationTrait for Migration {
 
         Ok(())
     }
+    // endregion: up
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
@@ -47,6 +49,7 @@ impl MigrationTrait for Migration {
     }
 }
 
+// region: colonnes
 #[derive(DeriveIden)]
 enum Articles {
     Table,
@@ -57,3 +60,4 @@ enum Articles {
     CreatedAt,
     UpdatedAt,
 }
+// endregion: colonnes

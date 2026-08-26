@@ -6,6 +6,7 @@ use crate::health;
 use crate::openapi;
 use crate::state::AppState;
 
+// region: montage
 pub fn router(state: AppState) -> Router {
     let docs = openapi::routes(state.core().config());
 
@@ -19,3 +20,4 @@ pub fn router(state: AppState) -> Router {
         .layer(from_fn(rbs_core::request_id::middleware))
         .with_state(state)
 }
+// endregion: montage
