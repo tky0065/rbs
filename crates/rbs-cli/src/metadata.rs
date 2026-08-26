@@ -4,9 +4,6 @@
 //! généré le projet, features installées. Un fichier de plus, non versionné par
 //! réflexe, se serait désynchronisé du dépôt.
 
-// `ajouter_feature` précède son appelant : `rbs add` n'est pas encore implémentée.
-#![allow(dead_code)]
-
 use std::fs;
 use std::path::{Path, PathBuf};
 
