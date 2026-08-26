@@ -35,3 +35,30 @@ pub fn attenue(texte: &str) -> String {
 pub fn rouge(texte: &str) -> String {
     style(texte).red().to_string()
 }
+
+/// Accorde un décompte de fichiers : « 1 fichier », « 3 fichiers ».
+pub fn fichiers(compte: usize) -> String {
+    let pluriel = if compte > 1 { "s" } else { "" };
+    format!("{compte} fichier{pluriel}")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn un_seul_fichier_reste_au_singulier() {
+        assert_eq!(fichiers(1), "1 fichier");
+    }
+
+    #[test]
+    fn plusieurs_fichiers_prennent_la_marque_du_pluriel() {
+        assert_eq!(fichiers(3), "3 fichiers");
+    }
+
+    /// Zéro s'écrit au singulier en français, contrairement à l'anglais.
+    #[test]
+    fn zero_fichier_reste_au_singulier() {
+        assert_eq!(fichiers(0), "0 fichier");
+    }
+}

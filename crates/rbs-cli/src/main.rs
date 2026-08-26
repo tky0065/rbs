@@ -133,7 +133,7 @@ fn creer_projet(
         .unwrap_or(projet.racine.as_os_str())
         .to_string_lossy();
 
-    ui::success(&format!("{nom} créé — {} fichiers", projet.fichiers));
+    ui::success(&format!("{nom} créé — {}", ui::fichiers(projet.fichiers)));
     if !projet.depot_git {
         ui::warn("`git init` n'a pas abouti : le projet est complet, mais sans dépôt");
     }
@@ -162,8 +162,8 @@ fn ajouter(feature: String, force: bool, template_dir: Option<PathBuf>) -> Resul
     plan::application::appliquer(&planifiee.plan, force)?;
 
     ui::success(&format!(
-        "{feature} installée — {} fichiers",
-        planifiee.fichiers.len()
+        "{feature} installée — {}",
+        ui::fichiers(planifiee.fichiers.len())
     ));
 
     if let Some(suite) = suite(&feature) {
@@ -215,8 +215,8 @@ fn generer(
     plan::application::appliquer(&planifiee.plan, force)?;
 
     ui::success(&format!(
-        "{feature} générée — {} fichiers",
-        planifiee.fichiers.len()
+        "{feature} générée — {}",
+        ui::fichiers(planifiee.fichiers.len())
     ));
 
     if let Some(migration) = &planifiee.migration {

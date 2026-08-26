@@ -62,8 +62,7 @@ fn pied(fichiers: &[Fichier]) -> String {
 
     let mut segments = Vec::new();
     if a_ecrire > 0 {
-        let pluriel = if a_ecrire > 1 { "s" } else { "" };
-        segments.push(format!("{a_ecrire} fichier{pluriel} à écrire"));
+        segments.push(format!("{} à écrire", crate::ui::fichiers(a_ecrire)));
     }
     if inchanges > 0 {
         let pluriel = if inchanges > 1 { "s" } else { "" };
