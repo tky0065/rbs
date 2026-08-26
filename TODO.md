@@ -149,7 +149,7 @@ dès que `C` est terminé.
 
 ### Lot D — `rbs generate crud`
 
-- [ ] **D1** · Parseur de champs
+- [x] **D1** · Parseur de champs — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::champs` → 49 passed
       Grammaire `nom:type[:modificateurs]` — types `string`, `int`, `float`, `bool`,
       `uuid`, `datetime`, `text` ; modificateurs `unique`, `optional`, `index`.
       ✓ Tests : chaque type et modificateur, plus les messages d'erreur de syntaxe.
