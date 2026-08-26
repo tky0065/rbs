@@ -1,3 +1,7 @@
+mod erreur;
+
+pub(crate) use erreur::{ErreurChamp, ErreurChamps, NatureErreur};
+
 /// Un des sept types de la grammaire `--fields`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum TypeChamp {
