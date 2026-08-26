@@ -163,15 +163,15 @@ dès que `C` est terminé.
       `Create` / `Update` / `Response`, avec `validator` et `ToSchema`.
       ✓ Un champ `email:string` produit une contrainte de validation d'email.
 
-- [ ] **D4** · Génération du repository
+- [x] **D4** · Génération du repository — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::repository -- --include-ignored` → 11 passed, dont la compilation du repository dans un projet neuf et sa stabilité sous rustfmt
       CRUD complet et liste paginée. Ne connaît que `model.rs`.
       ✓ Revue : aucun import d'Axum dans le fichier.
 
-- [ ] **D5** · Génération du service
+- [x] **D5** · Génération du service — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::service -- --include-ignored` → 12 passed, dont la compilation de model + dto + repository + service dans un projet neuf
       Logique métier, conversions DTO. Ne connaît que `repository.rs` et `dto.rs`.
       ✓ Revue : aucun import de `sea_orm::EntityTrait` dans le fichier.
 
-- [ ] **D6** · Génération du controller
+- [x] **D6** · Génération du controller — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::controller -- --include-ignored` → 12 passed, dont les cinq chemins et leurs schémas dans le document OpenAPI du projet compilé ; rendu de Swagger UI validé de visu par le porteur du projet sur `target/atelier`
       Handlers Axum, annotations `#[utoipa::path]`, `routes()`. Ne connaît que `service.rs`.
       ✓ Les cinq routes apparaissent dans Swagger UI avec leurs schémas.
 

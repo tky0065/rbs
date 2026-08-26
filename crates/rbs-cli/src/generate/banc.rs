@@ -107,17 +107,27 @@ impl Projet {
         let repertoire = self.racine.join("src/features").join(module);
         fs::create_dir_all(&repertoire).expect("répertoire de feature créable");
 
-        let declarations: String = fichiers
+        // Un `mod.rs` fourni l'emporte : dès que la feature porte son propre `routes()`,
+        // la liste de déclarations déduite des noms de fichiers ne suffit plus.
+        let declarations = fichiers
             .iter()
-            .map(|(nom, _)| {
-                let module = nom.trim_end_matches(".rs");
-                format!("pub mod {module};\n")
-            })
-            .collect();
+            .find(|(nom, _)| *nom == "mod.rs")
+            .map_or_else(
+                || {
+                    fichiers
+                        .iter()
+                        .map(|(nom, _)| {
+                            let module = nom.trim_end_matches(".rs");
+                            format!("pub mod {module};\n")
+                        })
+                        .collect()
+                },
+                |(_, contenu)| (*contenu).to_string(),
+            );
 
         fs::write(repertoire.join("mod.rs"), declarations).expect("mod.rs écrivable");
 
-        for (nom, contenu) in fichiers {
+        for (nom, contenu) in fichiers.iter().filter(|(nom, _)| *nom != "mod.rs") {
             fs::write(repertoire.join(nom), contenu).expect("fichier de feature écrivable");
         }
 
@@ -132,6 +142,94 @@ impl Projet {
             ),
         )
         .expect("index des features écrivable");
+    }
+
+    /// Monte les routes de `module` et déclare ses `handlers` dans le document OpenAPI.
+    ///
+    /// Le remplissage des ancres est fait à la main, comme celui de `<rbs:features>` :
+    /// le moteur d'ancres est une tâche distincte, dont ce banc ne doit pas dépendre.
+    pub(crate) fn monter_feature(&self, module: &str, handlers: &[&str]) {
+        let routeur = self.racine.join("src/router.rs");
+        let source = fs::read_to_string(&routeur).expect("routeur lisible");
+
+        fs::write(
+            &routeur,
+            source.replace(
+                "// <rbs:routes>",
+                &format!("// <rbs:routes>\n        .merge(features::{module}::routes())"),
+            ),
+        )
+        .expect("routeur écrivable");
+
+        let document = self.racine.join("src/openapi.rs");
+        let source = fs::read_to_string(&document).expect("document lisible");
+        let chemins: String = handlers
+            .iter()
+            .map(|handler| format!("\n        crate::features::{module}::controller::{handler},"))
+            .collect();
+
+        fs::write(
+            &document,
+            source.replace("// <rbs:openapi>", &format!("// <rbs:openapi>{chemins}")),
+        )
+        .expect("document écrivable");
+    }
+
+    /// Ajoute un module de test au binaire du projet.
+    ///
+    /// Le projet généré est un binaire : un test d'intégration ne peut pas atteindre ses
+    /// modules. Ce qui doit inspecter le projet de l'intérieur passe donc par ici.
+    pub(crate) fn poser_test_unitaire(&self, nom: &str, contenu: &str) {
+        let sources = self.racine.join("src");
+        fs::write(sources.join(format!("{nom}.rs")), contenu).expect("module de test écrivable");
+
+        let main = sources.join("main.rs");
+        let source = fs::read_to_string(&main).expect("main.rs lisible");
+
+        fs::write(&main, format!("#[cfg(test)]\nmod {nom};\n{source}")).expect("main.rs écrivable");
+    }
+
+    /// Recopie le projet sous `target/atelier/` et rend son chemin.
+    ///
+    /// Le répertoire temporaire disparaît avec le test ; les critères qui demandent une
+    /// revue à l'œil — Swagger UI, la mise en page des logs — ont besoin d'un projet qui
+    /// survit, qu'on démarre et qu'on regarde.
+    pub(crate) fn conserver(&self) -> PathBuf {
+        let destination = depot().join("target/atelier");
+        let _ = fs::remove_dir_all(&destination);
+        fs::create_dir_all(&destination).expect("répertoire d'atelier créable");
+
+        let sortie = std::process::Command::new("cp")
+            .arg("-R")
+            .arg(self.racine.join("."))
+            .arg(&destination)
+            .output()
+            .expect("copie lançable");
+
+        assert!(
+            sortie.status.success(),
+            "copie du projet impossible :\n{}",
+            String::from_utf8_lossy(&sortie.stderr)
+        );
+
+        destination
+    }
+
+    /// Lance les tests du projet, et rapporte leur sortie.
+    pub(crate) fn tester(&self) {
+        let sortie = std::process::Command::new("cargo")
+            .current_dir(&self.racine)
+            .env("CARGO_TARGET_DIR", depot().join("target/rbs-integration"))
+            .args(["test"])
+            .output()
+            .expect("cargo doit être lançable");
+
+        assert!(
+            sortie.status.success(),
+            "les tests du projet échouent :\n{}\n{}",
+            String::from_utf8_lossy(&sortie.stdout),
+            String::from_utf8_lossy(&sortie.stderr)
+        );
     }
 
     /// Ajoute une migration au projet et l'inscrit dans l'ancre du `Migrator`.
@@ -207,4 +305,41 @@ impl Projet {
             String::from_utf8_lossy(&sortie.stderr)
         );
     }
+}
+
+/// Passe `source` à rustfmt et rend le résultat.
+///
+/// Le code généré est écrit à la main dans des templates, sans que rien ne garantisse
+/// qu'il porte déjà la mise en forme de rustfmt. Sans cette vérification, le premier
+/// `cargo fmt` de l'utilisateur produirait un diff sur des fichiers qu'il n'a pas touchés.
+pub(crate) fn formate(source: &str) -> String {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let mut rustfmt = std::process::Command::new("rustfmt")
+        .args(["--edition", "2024", "--emit", "stdout", "--quiet"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("rustfmt doit être installé");
+
+    rustfmt
+        .stdin
+        .take()
+        .expect("entrée de rustfmt disponible")
+        .write_all(source.as_bytes())
+        .expect("source transmissible à rustfmt");
+
+    let sortie = rustfmt
+        .wait_with_output()
+        .expect("rustfmt doit rendre la main");
+
+    assert!(
+        sortie.status.success(),
+        "rustfmt refuse le rendu :\n{}",
+        String::from_utf8_lossy(&sortie.stderr)
+    );
+
+    String::from_utf8(sortie.stdout).expect("rustfmt rend de l'UTF-8")
 }
