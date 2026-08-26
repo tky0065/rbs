@@ -277,7 +277,7 @@ construction, pas après, quand tout paraît évident.
       Initialisation dans `docs/`, locales `fr` et `en`, sélecteur de langue.
       ✓ Le site se construit et bascule entre les deux langues.
 
-- [ ] **F2** · Extraits de code depuis `examples/`
+- [x] **F2** · Extraits de code depuis `examples/` — vérifié 2026-08-26 · les trois garde-fous éprouvés en cassant l'exemple pour de bon : code illégal → `cargo clippy` de l'étape CI sort **101** (`error[E0308]`) ; dérive d'une template → `integration_examples` sort **101** en nommant la ligne ; région ou fichier cité disparu → `npm run build` sort **1** avec le message du plugin · réparé à chaque fois, retour au vert constaté · 16 tests du plugin, 5 de non-dérive, 454 du dépôt, site construit à froid sur 2 locales, extrait rendu en FR et EN · `grep -c 'npm\|node\|yarn' ci.yml` → 0 · le run GitHub lui-même n'est pas rejoué (github.com injoignable ici, cf. E8) : c'est le périmètre de F10
       Les extraits de la documentation sont tirés de projets compilés en CI. Docusaurus
       n'exécute pas le code : c'est la compensation.
       ✓ Un exemple cassé fait échouer la CI.

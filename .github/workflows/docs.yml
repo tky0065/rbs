@@ -45,7 +45,18 @@ jobs:
       - name: typecheck
         run: npm run typecheck
 
+      - name: tests du plugin d'extraits
+        run: npm test
+
       # Le build échoue sur un lien mort (`onBrokenLinks: 'throw'`) et construit les deux
       # locales : c'est lui qui tient la parité FR/EN, qu'aucun test ne couvre.
+      #
+      # `clear` d'abord : le cache de Docusaurus est indexé sur les fichiers Markdown, et
+      # un extrait dont la source a bougé dans `examples/` reste servi depuis le cache.
+      # Un checkout de CI est neuf, donc la question ne se pose pas ici — mais faire
+      # dépendre le garde-fou de cette circonstance le rendrait faux le jour où le cache
+      # serait restauré entre deux runs.
       - name: build
-        run: npm run build
+        run: |
+          npm run clear
+          npm run build

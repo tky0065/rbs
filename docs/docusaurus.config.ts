@@ -2,6 +2,8 @@ import type * as Preset from '@docusaurus/preset-classic';
 import type {Config} from '@docusaurus/types';
 import {themes as prismThemes} from 'prism-react-renderer';
 
+import codeFromFile from './plugins/remark-code-from-file';
+
 const config: Config = {
   title: 'rbs',
   tagline: 'Un cadre de travail Rust pour les API web',
@@ -44,6 +46,10 @@ const config: Config = {
           path: 'docs',
           routeBasePath: '/',
           sidebarPath: './sidebars.ts',
+          // Aucun extrait de code n'est écrit à la main dans le Markdown : ils sont lus
+          // dans `examples/`, un projet que la CI compile. `beforeDefaultRemarkPlugins`
+          // remplit les blocs avant que Docusaurus ne les colore.
+          beforeDefaultRemarkPlugins: [codeFromFile],
           editUrl: 'https://github.com/tky0065/rbs/tree/main/docs/',
         },
         blog: false,
