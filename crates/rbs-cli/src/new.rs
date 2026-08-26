@@ -283,7 +283,7 @@ mod tests {
 
     /// Les templates du dépôt, pour que les tests portent sur le squelette réel plutôt
     /// que sur une copie embarquée au moment de leur compilation.
-    const SQUELETTE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/../../templates/project");
+    const SQUELETTE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/project");
 
     fn options(nom: &str) -> Options {
         Options {

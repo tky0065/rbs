@@ -8,7 +8,7 @@ use super::feature::Feature;
 
 const TEMPLATE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/../../templates/feature/migration.rs.jinja"
+    "/templates/feature/migration.rs.jinja"
 ));
 
 /// Une migration rendue, et le module sous lequel elle doit être écrite.

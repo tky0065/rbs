@@ -47,12 +47,17 @@ rbs/
 ├── crates/
 │   ├── rbs-core/              # runtime, publié sur crates.io
 │   └── rbs-cli/               # binaire `rbs`, publié sur crates.io
-├── templates/
-│   ├── project/               # squelette de `rbs new`
-│   └── features/              # fragments de `rbs add` / `rbs generate`
+│       └── templates/
+│           ├── project/       # squelette de `rbs new`
+│           └── features/      # fragments de `rbs add` / `rbs generate`
 ├── examples/                  # projets réels, compilés en CI, source des extraits de docs
 └── docs/                      # Docusaurus (toolchain Node isolée ici)
 ```
+
+Les templates sont sous la crate qui les embarque, et non à la racine du dépôt : `cargo
+package` n'emporte aucun fichier extérieur au paquet, et `include = [...]` ne lève pas
+cette règle. Placées à la racine, elles laissaient `rbs-cli` compiler en local et échouer
+à se publier.
 
 Pas de crate `rbs-macros` : aucune macro procédurale n'est nécessaire, les ancres
 remplacent la magie qu'elle porterait.

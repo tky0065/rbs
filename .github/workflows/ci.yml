@@ -39,3 +39,12 @@ jobs:
 
       - name: cargo test (intégration)
         run: cargo test --workspace -- --ignored
+
+      # Les templates que le binaire embarque vivent sous `crates/rbs-cli` : `cargo
+      # package` n'emporte aucun fichier extérieur au paquet. Rien dans une compilation
+      # locale ne le rappelle — seul le dry-run le constate, et la régression passerait
+      # inaperçue jusqu'au jour de la publication.
+      - name: cargo publish (dry-run)
+        run: |
+          cargo publish --dry-run -p rbs-core
+          cargo publish --dry-run -p rbs-cli

@@ -408,7 +408,7 @@ mod tests {
     /// courant, que `cargo test` ne garantit pas.
     const MANIFESTE: &str = concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../templates/project/Cargo.toml.jinja"
+        "/templates/project/Cargo.toml.jinja"
     );
 
     /// Déroule le manifeste du squelette dans un répertoire temporaire. C'est le plus

@@ -298,7 +298,7 @@ construction, pas après, quand tout paraît évident.
 - [ ] **F7** · README FR + EN
       ✓ Mentionne explicitement l'absence de promesse semver avant la v1.0.
 
-- [x] **F8** · LICENSE — vérifié 2026-08-26 · `cargo publish --dry-run -p rbs-core` → packagé et vérifié, aucun avertissement ; le contrôle mord (champ retiré → `manifest has no license or license-file`). Le dry-run de `rbs-cli` échoue en aval, sur `include_dir!` : les templates vivent hors de la crate et `cargo package` ne les emporte pas — motif étranger à la licence, à traiter avant toute publication.
+- [x] **F8** · LICENSE — vérifié 2026-08-26 · `cargo publish --dry-run -p rbs-core` → packagé et vérifié, aucun avertissement ; le contrôle mord (champ retiré → `manifest has no license or license-file`). `cargo publish --dry-run -p rbs-cli` échouait alors sur `include_dir!`, motif étranger à la licence ; les templates ont depuis rejoint la crate et les deux dry-runs passent.
       Double licence `MIT OR Apache-2.0` : `LICENSE-MIT`, `LICENSE-APACHE`, et le champ
       `license` renseigné dans les deux crates.
       ✓ `cargo publish --dry-run` ne signale aucun problème de licence.
