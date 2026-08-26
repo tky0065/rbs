@@ -64,7 +64,7 @@ impl HasCoreState for CoreState {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{Config, DatabaseConfig, ServerConfig};
+    use crate::config::{Config, DatabaseConfig, DocsConfig, ServerConfig};
     use axum::Router;
     use axum::body::{Body, to_bytes};
     use axum::extract::State;
@@ -102,6 +102,10 @@ mod tests {
                 acquire_timeout_secs: 5,
                 idle_timeout_secs: 600,
                 max_lifetime_secs: 1800,
+            },
+            docs: DocsConfig {
+                swagger_ui: true,
+                openapi_json: true,
             },
         }
     }
