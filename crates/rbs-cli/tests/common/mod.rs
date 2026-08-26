@@ -4,6 +4,10 @@
 //! détail de confort : sans elle, chaque test recompile toute l'arborescence de
 //! dépendances pour son compte.
 
+// Chaque test d'intégration compile ce module pour son propre compte, et aucun n'en
+// appelle la totalité : ce qui sert à l'un est mort pour l'autre.
+#![allow(dead_code)]
+
 use std::path::{Path, PathBuf};
 
 /// Racine du dépôt, d'où se déduisent le noyau local et la cible de compilation.

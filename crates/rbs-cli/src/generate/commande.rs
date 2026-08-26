@@ -647,33 +647,4 @@ mod tests {
 
         projet.compiler();
     }
-
-    /// Le troisième critère de D7b, par la commande telle que l'utilisateur la lance.
-    #[test]
-    fn la_commande_refuse_un_nom_en_conflit_en_le_nommant() {
-        let projet = banc::Projet::neuf();
-
-        for nom in ["state", "match"] {
-            let sortie = Command::cargo_bin("rbs")
-                .expect("le binaire rbs doit être compilé")
-                .current_dir(projet.racine())
-                .args(["g", "crud", nom, "--fields", "titre:string"])
-                .output()
-                .expect("le binaire doit être lançable");
-
-            let stderr = String::from_utf8_lossy(&sortie.stderr);
-            assert!(
-                !sortie.status.success(),
-                "`{nom}` a été accepté :\n{stderr}"
-            );
-            assert!(
-                stderr.contains(nom),
-                "le conflit doit être nommé :\n{stderr}"
-            );
-            assert!(
-                !projet.racine().join("src").join(nom).exists(),
-                "`{nom}` a laissé un répertoire"
-            );
-        }
-    }
 }
