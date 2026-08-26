@@ -256,7 +256,7 @@ dès que `C` est terminé.
 
 - [x] **E7** · `rbs add docker` — vérifié 2026-08-26 · `cargo test -p rbs-cli --bins templates::` → 17 passed, `add::` → 7 passed · bout en bout : `docker compose up` sur un projet neuf → db healthy, migrate exited(0), api Up ; `curl localhost:8080/health` → 200 `{"status":"ok","checks":{"database":"ok"}}`
 
-- [ ] **E8** · `rbs add ci` — PARTIEL 2026-08-26 : `cargo test -p rbs-cli --bins templates::` → 20 passed · sous `act`, sur un projet neuf : service PostgreSQL 18 sain, `actions/checkout`, toolchain et cache verts, `cargo fmt` **passé** ; `cargo clippy` interrompu par la résolution DNS de la machine (`curl exit status 6`), migrations et tests non atteints. Le critère demande un run complet : à rejouer sur un réseau stable, ou sur un vrai runner.
+- [ ] **E8** · `rbs add ci` — PARTIEL 2026-08-26 : `cargo test -p rbs-cli --bins templates::` → 20 passed · sous `act`, sur un projet neuf : `cargo fmt` **passé**, `cargo clippy` **passé**, migrations **appliquées** contre le service PostgreSQL 18 du workflow ; `cargo test` échoue au build de `utoipa-swagger-ui`, qui télécharge son archive et bute sur la résolution DNS de la machine (`curl exit status 6`, `github.com` irrésolu jusque dans le conteneur). Trois étapes sur quatre : le critère demande le run entier, à rejouer sur un réseau stable ou sur un vrai runner.
       Workflow GitHub Actions pour le projet généré : fmt, clippy, test.
       ✓ Le workflow généré passe sur un projet fraîchement créé.
 
