@@ -1,4 +1,4 @@
-//! Rendu de `features/<nom>/controller.rs` et du `mod.rs` qui monte ses routes.
+//! Rendu de `<nom>/controller.rs` et du `mod.rs` qui monte ses routes.
 
 use crate::template::Renderer;
 

@@ -1,4 +1,4 @@
-//! Rendu de `features/<nom>/model.rs` : l'entité SeaORM d'une feature.
+//! Rendu de `<nom>/model.rs` : l'entité SeaORM d'une feature.
 
 use crate::template::Renderer;
 

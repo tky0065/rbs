@@ -1,4 +1,4 @@
-//! Rendu de `features/<nom>/repository.rs` : le seul fichier qui parle à la base.
+//! Rendu de `<nom>/repository.rs` : le seul fichier qui parle à la base.
 
 use crate::template::Renderer;
 

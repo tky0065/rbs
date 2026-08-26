@@ -33,11 +33,9 @@ templates/project/
 │   ├── router.rs.jinja
 │   ├── state.rs.jinja
 │   ├── openapi.rs.jinja
-│   └── features/
+│   └── health/
 │       ├── mod.rs.jinja
-│       └── health/
-│           ├── mod.rs.jinja
-│           └── controller.rs.jinja
+│       └── controller.rs.jinja
 └── migration/
     ├── Cargo.toml.jinja
     └── src/
@@ -64,8 +62,8 @@ sans que les templates changent.
 
 | Ancre | Fichier | Contenu inséré |
 |---|---|---|
-| `<rbs:features>` | `src/features/mod.rs` | `pub mod users;` |
-| `<rbs:routes>` | `src/router.rs` | `.merge(features::users::routes())` |
+| `<rbs:features>` | `src/main.rs` | `mod users;` |
+| `<rbs:routes>` | `src/router.rs` | `.merge(crate::users::routes())` |
 | `<rbs:openapi>` | `src/openapi.rs` | les `paths(...)` utoipa d'une feature |
 | `<rbs:migrations>` | `migration/src/lib.rs` | `Box::new(m20260826_000001_create_users::Migration)` |
 
@@ -84,10 +82,12 @@ Le critère de la tâche porte sur ce fichier : il doit tenir en une vingtaine d
 lisibles sans documentation.
 
 ```rust
-mod features;
+mod health;
 mod openapi;
 mod router;
 mod state;
+// <rbs:features>
+// </rbs:features>
 
 use anyhow::Context;
 
@@ -153,13 +153,13 @@ champ : y greffer un client Redis ou un compteur ne demandera pas de restructure
 use axum::Router;
 use axum::middleware::from_fn;
 
-use crate::features;
+use crate::health;
 use crate::openapi;
 use crate::state::AppState;
 
 pub fn router(state: AppState) -> Router {
     Router::new()
-        .merge(features::health::routes())
+        .merge(health::routes())
         // <rbs:routes>
         // </rbs:routes>
         .merge(openapi::routes())
@@ -172,15 +172,7 @@ pub fn router(state: AppState) -> Router {
 L'ordre des deux `layer` n'est pas indifférent : `request_id` est ajouté en dernier, donc
 s'exécute le plus à l'extérieur, et le span ouvert par `trace` porte déjà l'identifiant.
 
-### `src/features/mod.rs`
-
-```rust
-pub mod health;
-// <rbs:features>
-// </rbs:features>
-```
-
-### `src/features/health/`
+### `src/health/`
 
 Feature vitrine mince : deux fichiers. `rbs-core` fournit déjà le handler et sa
 vérification de base ; la dupliquer serait du code que le noyau devrait maintenir deux
@@ -204,7 +196,7 @@ pub fn routes() -> Router<AppState> {
 ```
 
 **`controller` est un module public, et l'ancre `<rbs:openapi>` reçoit le chemin complet
-du handler** — `crate::features::health::controller::sante`, jamais un ré-export. C'est
+du handler** — `crate::health::controller::sante`, jamais un ré-export. C'est
 une contrainte d'utoipa, pas un choix de style : `#[utoipa::path]` génère à côté du
 handler une struct `__path_sante`, et `paths(...)` la résout dans le module du dernier
 segment du chemin donné. Un `pub use controller::sante;` laisserait cette struct
@@ -212,7 +204,7 @@ inaccessible et le projet généré ne compilerait pas :
 
 ```
 error[E0433]: cannot find `__path_sante` in `health`
-note: struct `crate::features::health::controller::__path_sante` exists but is inaccessible
+note: struct `crate::health::controller::__path_sante` exists but is inaccessible
 ```
 
 L'autre correctif possible, `pub use controller::{__path_sante, sante};`, exposerait un
@@ -221,7 +213,7 @@ chemin complet ne coûte rien et n'apprend rien de faux à qui lit le code.
 
 **Le lot D suit la même convention** : chaque feature générée expose `pub mod controller;`
 et l'insertion dans `<rbs:openapi>` prend la forme
-`crate::features::<nom>::controller::<handler>`.
+`crate::<nom>::controller::<handler>`.
 
 `controller.rs` :
 
@@ -257,7 +249,7 @@ use utoipa_swagger_ui::SwaggerUi;
 #[openapi(
     modifiers(&rbs_core::ReponsesCommunes),
     paths(
-        crate::features::health::sante,
+        crate::health::controller::sante,
         // <rbs:openapi>
         // </rbs:openapi>
     )

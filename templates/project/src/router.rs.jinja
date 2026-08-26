@@ -2,7 +2,7 @@ use axum::Router;
 use axum::middleware::from_fn;
 use rbs_core::HasCoreState;
 
-use crate::features;
+use crate::health;
 use crate::openapi;
 use crate::state::AppState;
 
@@ -10,7 +10,7 @@ pub fn router(state: AppState) -> Router {
     let docs = openapi::routes(state.core().config());
 
     Router::new()
-        .merge(features::health::routes())
+        .merge(health::routes())
         // <rbs:routes>
         // </rbs:routes>
         .merge(docs)

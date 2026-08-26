@@ -1,4 +1,4 @@
-//! Rendu de `features/<nom>/dto.rs` : les trois formes que la feature expose en HTTP.
+//! Rendu de `<nom>/dto.rs` : les trois formes que la feature expose en HTTP.
 
 use crate::template::Renderer;
 

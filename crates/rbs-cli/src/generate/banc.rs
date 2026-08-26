@@ -99,12 +99,12 @@ impl Projet {
         &self.racine
     }
 
-    /// Écrit `src/features/<module>/` avec les fichiers donnés, et déclare le module.
+    /// Écrit `src/<module>/` avec les fichiers donnés, et déclare le module.
     ///
     /// L'insertion dans l'ancre est faite à la main : le moteur d'ancres est une tâche
     /// distincte, dont ce banc ne doit pas dépendre.
     pub(crate) fn poser_feature(&self, module: &str, fichiers: &[(&str, &str)]) {
-        let repertoire = self.racine.join("src/features").join(module);
+        let repertoire = self.racine.join("src").join(module);
         fs::create_dir_all(&repertoire).expect("répertoire de feature créable");
 
         // Un `mod.rs` fourni l'emporte : dès que la feature porte son propre `routes()`,
@@ -131,17 +131,17 @@ impl Projet {
             fs::write(repertoire.join(nom), contenu).expect("fichier de feature écrivable");
         }
 
-        let index = self.racine.join("src/features/mod.rs");
-        let source = fs::read_to_string(&index).expect("index des features lisible");
+        let main = self.racine.join("src/main.rs");
+        let source = fs::read_to_string(&main).expect("main.rs lisible");
 
         fs::write(
-            &index,
+            &main,
             source.replace(
                 "// <rbs:features>",
-                &format!("// <rbs:features>\npub mod {module};"),
+                &format!("// <rbs:features>\nmod {module};"),
             ),
         )
-        .expect("index des features écrivable");
+        .expect("main.rs écrivable");
     }
 
     /// Monte les routes de `module` et déclare ses `handlers` dans le document OpenAPI.
@@ -156,7 +156,7 @@ impl Projet {
             &routeur,
             source.replace(
                 "// <rbs:routes>",
-                &format!("// <rbs:routes>\n        .merge(features::{module}::routes())"),
+                &format!("// <rbs:routes>\n        .merge(crate::{module}::routes())"),
             ),
         )
         .expect("routeur écrivable");
@@ -165,7 +165,7 @@ impl Projet {
         let source = fs::read_to_string(&document).expect("document lisible");
         let chemins: String = handlers
             .iter()
-            .map(|handler| format!("\n        crate::features::{module}::controller::{handler},"))
+            .map(|handler| format!("\n        crate::{module}::controller::{handler},"))
             .collect();
 
         fs::write(
