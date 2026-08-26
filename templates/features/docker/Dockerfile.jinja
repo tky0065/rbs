@@ -1,5 +1,12 @@
 FROM rust:1-slim-trixie AS builder
 
+# `utoipa-swagger-ui` télécharge son archive pendant la compilation, avec `curl`, que
+# l'image `rust:slim` ne porte pas. Sans lui, le build échoue à la toute fin, une fois
+# tout le reste compilé.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends curl \
+ && rm -rf /var/lib/apt/lists/*
+
 WORKDIR /build
 COPY . .
 # `--bins` construit l'API et le binaire de migration : le service `migrate` du compose

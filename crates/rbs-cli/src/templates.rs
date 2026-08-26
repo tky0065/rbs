@@ -587,6 +587,39 @@ mod tests {
     }
 
     #[test]
+    fn le_compose_de_docker_ne_publie_que_le_port_de_l_api() {
+        // Publier 5432 fait échouer `docker compose up` sur toute machine portant déjà un
+        // PostgreSQL, et la base n'a pas à être jointe depuis l'hôte : l'API l'atteint par
+        // le réseau du compose, et `docker compose exec db psql` reste ouvert.
+        let source = lire(&Path::new(RACINE_FEATURES).join("docker/docker-compose.yml.jinja"));
+
+        let publies: Vec<&str> = source
+            .lines()
+            .map(str::trim)
+            .filter(|ligne| ligne.starts_with("- \""))
+            .collect();
+
+        assert_eq!(publies, ["- \"8080:8080\""], "ports publiés :\n{source}");
+    }
+
+    #[test]
+    fn le_builder_de_docker_installe_ce_dont_le_build_a_besoin() {
+        // `utoipa-swagger-ui` télécharge son archive pendant la compilation, avec `curl`,
+        // que l'image `rust:slim` ne porte pas : sans lui le build casse à la toute fin,
+        // après plusieurs minutes de compilation.
+        let source = lire(&Path::new(RACINE_FEATURES).join("docker/Dockerfile.jinja"));
+        let builder = source
+            .split("AS runtime")
+            .next()
+            .expect("le Dockerfile doit avoir une étape de build");
+
+        assert!(
+            builder.contains("curl"),
+            "l'étape de build n'installe pas curl :\n{builder}"
+        );
+    }
+
+    #[test]
     fn le_compose_de_docker_vise_postgres_18() {
         // `uuidv7()` n'est natif qu'à partir de PostgreSQL 18, et toute entité générée en
         // dépend : une image plus ancienne casse le projet sans casser la compilation.

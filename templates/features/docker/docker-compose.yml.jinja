@@ -7,8 +7,10 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: {@ nom_crate @}
-    ports:
-      - "5432:5432"
+    # Le port de la base n'est pas publié : il entrerait en conflit avec le PostgreSQL
+    # que la machine héberge souvent déjà, et l'API l'atteint par le réseau du compose.
+    # Pour l'ouvrir sur l'hôte, ajouter `ports: ["5432:5432"]` ici.
+    #
     # PostgreSQL 18 place ses données sous /var/lib/postgresql/18/docker : c'est le
     # répertoire parent qui se monte, et non le /var/lib/postgresql/data des versions
     # précédentes, qui ne persisterait rien.

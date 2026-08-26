@@ -254,9 +254,7 @@ dès que `C` est terminé.
       Échec en cours d'application → restauration des fichiers déjà écrits.
       ✓ Test : échec injecté sur la quatrième action → les trois premières sont annulées.
 
-- [ ] **E7** · `rbs add docker`
-      `Dockerfile` multi-étapes, `docker-compose.yml` avec PostgreSQL 18, `.dockerignore`.
-      ✓ `docker compose up` démarre l'API et sa base.
+- [x] **E7** · `rbs add docker` — vérifié 2026-08-26 · `cargo test -p rbs-cli --bins templates::` → 17 passed, `add::` → 7 passed · bout en bout : `docker compose up` sur un projet neuf → db healthy, migrate exited(0), api Up ; `curl localhost:8080/health` → 200 `{"status":"ok","checks":{"database":"ok"}}`
 
 - [ ] **E8** · `rbs add ci`
       Workflow GitHub Actions pour le projet généré : fmt, clippy, test.
