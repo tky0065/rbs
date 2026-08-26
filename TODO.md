@@ -124,7 +124,7 @@ dès que `C` est terminé.
       `include_dir` pour un binaire autonome, plus un flag `--template-dir` de surcharge.
       ✓ Le binaire génère un projet depuis un répertoire vide de tout template.
 
-- [ ] **C4** · Squelette de projet
+- [x] **C4** · Squelette de projet — vérifié 2026-08-26 · `cargo test -p rbs-cli` → 13 passed, dont `chaque_ancre_est_ouverte_puis_refermee_dans_son_fichier` et `chaque_template_se_rend_avec_les_trois_variables` · revue de lecture du `main.rs` généré (25 lignes) validée par le user
       `Cargo.toml`, `main.rs`, `router.rs`, `state.rs`, `features/mod.rs`, `features/health/`,
       `migration/`, `config/`, `.env.example`, `.gitignore`, avec toutes les ancres.
       ✓ Revue de lecture : `main.rs` tient en ~25 lignes compréhensibles sans documentation.
