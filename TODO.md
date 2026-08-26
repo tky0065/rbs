@@ -220,9 +220,11 @@ dès que `C` est terminé.
       la crate `migration`, qui gagne une commande `version` : rbs ne parle pas SQL.
       ✓ Test : une ancre supprimée est signalée avec le bloc à recoller.
 
-- [ ] **D13** · Test d'intégration CRUD
+- [x] **D13** · Test d'intégration CRUD — vérifié 2026-08-26 · `cargo test -p rbs-cli --test integration_crud -- --ignored` → 1 passed · rouge prouvé sur deux étapes : `--fields "titre:type_inexistant"` → échec à la génération, `migrate up` retirée → `articles::tests::le_cycle_de_vie_complet_passe_par_l_api` échoue dans le projet généré · `cargo test --workspace -- --include-ignored` → 295 + 1 + 1 + 72 passed, 0 ignored
       Extension de C8 : génération d'un CRUD, migration, exécution des tests générés,
-      contre PostgreSQL 18 via `testcontainers`.
+      contre PostgreSQL 18 via `testcontainers`. L'attente porte sur la **seconde**
+      annonce de disponibilité : la première a lieu pendant l'initialisation, où le
+      serveur n'écoute que sur son socket local.
       ✓ Rouge si l'une des trois étapes échoue.
 
 ### Lot E — `rbs add`
