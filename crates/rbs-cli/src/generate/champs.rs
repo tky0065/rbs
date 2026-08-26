@@ -2,6 +2,8 @@ mod erreur;
 
 pub(crate) use erreur::{ErreurChamp, ErreurChamps, NatureErreur};
 use erreur::{en_snake_case, suggestions_mot_cle};
+use serde::Serialize;
+use serde::ser::{SerializeStruct, Serializer};
 
 /// Un des sept types de la grammaire `--fields`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -94,6 +96,24 @@ impl Champ {
         } else {
             self.type_.type_rust().to_string()
         }
+    }
+}
+
+/// Sérialisé à la main : minijinja ne voit pas les méthodes Rust, or les templates
+/// doivent lire `type_rust` comme elles lisent `nom`. Sans cela, chaque générateur
+/// reconstruirait sa propre structure de vue.
+impl Serialize for Champ {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        let mut etat = serializer.serialize_struct("Champ", 8)?;
+        etat.serialize_field("nom", &self.nom)?;
+        etat.serialize_field("type", self.type_.nom())?;
+        etat.serialize_field("unique", &self.unique)?;
+        etat.serialize_field("optionnel", &self.optionnel)?;
+        etat.serialize_field("index", &self.index)?;
+        etat.serialize_field("type_rust", &self.type_rust())?;
+        etat.serialize_field("methode_migration", self.type_.methode_migration())?;
+        etat.serialize_field("attribut_column_type", &self.type_.attribut_column_type())?;
+        etat.end()
     }
 }
 
@@ -551,5 +571,29 @@ mod tests {
             erreur.erreurs[0].nature,
             NatureErreur::PasEnSnakeCase { .. }
         ));
+    }
+
+    #[test]
+    fn un_champ_se_serialise_avec_ses_projections() {
+        let champs = champs("bio:text:optional");
+        let json = serde_json::to_value(&champs[0]).expect("Champ est sérialisable");
+
+        assert_eq!(json["nom"], "bio");
+        assert_eq!(json["type"], "text");
+        assert_eq!(json["unique"], false);
+        assert_eq!(json["optionnel"], true);
+        assert_eq!(json["index"], false);
+        assert_eq!(json["type_rust"], "Option<String>");
+        assert_eq!(json["methode_migration"], "text()");
+        assert_eq!(json["attribut_column_type"], "Text");
+    }
+
+    #[test]
+    fn un_type_sans_attribut_de_colonne_serialise_null() {
+        let champs = champs("titre:string");
+        let json = serde_json::to_value(&champs[0]).expect("Champ est sérialisable");
+
+        assert_eq!(json["type_rust"], "String");
+        assert!(json["attribut_column_type"].is_null());
     }
 }
