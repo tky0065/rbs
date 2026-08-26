@@ -208,3 +208,40 @@ impl Projet {
         );
     }
 }
+
+/// Passe `source` à rustfmt et rend le résultat.
+///
+/// Le code généré est écrit à la main dans des templates, sans que rien ne garantisse
+/// qu'il porte déjà la mise en forme de rustfmt. Sans cette vérification, le premier
+/// `cargo fmt` de l'utilisateur produirait un diff sur des fichiers qu'il n'a pas touchés.
+pub(crate) fn formate(source: &str) -> String {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let mut rustfmt = std::process::Command::new("rustfmt")
+        .args(["--edition", "2024", "--emit", "stdout", "--quiet"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("rustfmt doit être installé");
+
+    rustfmt
+        .stdin
+        .take()
+        .expect("entrée de rustfmt disponible")
+        .write_all(source.as_bytes())
+        .expect("source transmissible à rustfmt");
+
+    let sortie = rustfmt
+        .wait_with_output()
+        .expect("rustfmt doit rendre la main");
+
+    assert!(
+        sortie.status.success(),
+        "rustfmt refuse le rendu :\n{}",
+        String::from_utf8_lossy(&sortie.stderr)
+    );
+
+    String::from_utf8(sortie.stdout).expect("rustfmt rend de l'UTF-8")
+}

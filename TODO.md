@@ -163,7 +163,7 @@ dès que `C` est terminé.
       `Create` / `Update` / `Response`, avec `validator` et `ToSchema`.
       ✓ Un champ `email:string` produit une contrainte de validation d'email.
 
-- [ ] **D4** · Génération du repository
+- [x] **D4** · Génération du repository — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::repository -- --include-ignored` → 11 passed, dont la compilation du repository dans un projet neuf et sa stabilité sous rustfmt
       CRUD complet et liste paginée. Ne connaît que `model.rs`.
       ✓ Revue : aucun import d'Axum dans le fichier.
 
