@@ -303,8 +303,7 @@ construction, pas après, quand tout paraît évident.
       `license` renseigné dans les deux crates.
       ✓ `cargo publish --dry-run` ne signale aucun problème de licence.
 
-- [ ] **F9** · CONTRIBUTING et code de conduite
-      ✓ CONTRIBUTING indique comment contribuer au code **sans installer Node**.
+- [x] **F9** · CONTRIBUTING et code de conduite — vérifié 2026-08-26 · section « Contributing without Node » / « Contribuer sans installer Node » en tête des deux versions, appuyée sur un fait vérifié : `grep -c 'npm\|node\|yarn' .github/workflows/ci.yml` → 0 · chaque commande citée lancée avant d'être écrite (`cargo test -p rbs-core error::tests` → 15 passed, `-- --exact` → 1 passed, `rbs --help` → sortie réelle) · Contributor Covenant 2.1, texte officiel · parité EN/FR : 7 sections de part et d'autre
 
 - [ ] **F10** · CI complète
       Linux, macOS, Windows. Tests d'intégration du CLI inclus.
