@@ -1,5 +1,7 @@
 mod erreur;
 
+// Aucun appelant avant l'analyse de la chaîne --fields, tâche suivante, qui les consomme tous les deux.
+#[allow(unused_imports)]
 pub(crate) use erreur::{ErreurChamp, ErreurChamps, NatureErreur};
 
 /// Un des sept types de la grammaire `--fields`.
