@@ -223,7 +223,7 @@ async fn scalaire(db: &DatabaseConnection, sql: &str) -> String {
 }
 
 async fn millisecondes(db: &DatabaseConnection) -> i64 {
-    scalaire(db, "SELECT (EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint::text")
+    scalaire(db, "SELECT floor(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint::text")
         .await
         .parse()
         .expect("horloge de la base")
@@ -291,6 +291,29 @@ async fn la_migration_monte_insere_et_redescend() {
 
         let base = banc::BaseDeTest::demarrer();
         projet.tester_migration(base.url());
+    }
+
+    /// `uuidv7()` tronque l'horodatage qu'il inscrit ; un cast direct en `bigint`, lui,
+    /// arrondit au plus proche. Dès que la partie décimale de la borne dépasse la demie,
+    /// la borne basse passe une milliseconde au-dessus de ce que l'UUID portera, et le
+    /// test posé échoue — 222 fois sur 500 mesurées contre PostgreSQL 18.
+    ///
+    /// Encore faut-il que l'insertion tombe dans la même milliseconde que la lecture :
+    /// vert sur une machine lente, rouge sur un runner. Cette garde ne dépend d'aucune
+    /// horloge, et c'est tout son intérêt — elle tient là où le test qu'elle protège
+    /// n'échoue qu'une fois sur deux.
+    #[test]
+    fn les_bornes_du_test_d_inversibilite_tronquent_comme_uuidv7() {
+        let borne = REVERSIBILITE
+            .lines()
+            .find(|ligne| ligne.contains("EXTRACT(EPOCH"))
+            .expect("le test posé doit lire l'horloge de la base");
+
+        assert!(
+            borne.contains("floor("),
+            "la borne arrondit au lieu de tronquer : elle passera au-dessus de \
+             l'horodatage de uuidv7 une fois sur deux :\n{borne}"
+        );
     }
 
     /// Rendu complet imprimé pour la revue de lecture qu'exige le lot.
