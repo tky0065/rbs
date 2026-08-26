@@ -1,6 +1,7 @@
 mod erreur;
 
 pub(crate) use erreur::{ErreurChamp, ErreurChamps, NatureErreur};
+use erreur::{en_snake_case, suggestions_mot_cle};
 
 /// Un des sept types de la grammaire `--fields`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -135,6 +136,28 @@ fn analyser_champ(rang: usize, portion: &str) -> Result<Champ, ErreurChamp> {
         return Err(erreur(portion, NatureErreur::FormeInvalide));
     }
 
+    if !est_en_snake_case(nom) {
+        // Une recasse qui rendrait le nom inchangé, ou toujours invalide — un nom
+        // accentué, par exemple — vaut mieux ne pas être proposée du tout.
+        let recasse = en_snake_case(nom);
+        let suggestion = (recasse != nom && est_en_snake_case(&recasse)).then_some(recasse);
+
+        return Err(erreur(nom, NatureErreur::PasEnSnakeCase { suggestion }));
+    }
+
+    if MOTS_CLES_RUST.contains(&nom) {
+        return Err(erreur(
+            nom,
+            NatureErreur::MotCleRust {
+                suggestions: suggestions_mot_cle(nom),
+            },
+        ));
+    }
+
+    if NOMS_POSES_PAR_RBS.contains(&nom) {
+        return Err(erreur(nom, NatureErreur::NomReserve));
+    }
+
     let Some(type_) = TypeChamp::analyser(type_brut) else {
         return Err(erreur(
             nom,
@@ -153,10 +176,10 @@ fn analyser_champ(rang: usize, portion: &str) -> Result<Champ, ErreurChamp> {
     };
 
     for modificateur in parties {
-        match modificateur {
-            "unique" => champ.unique = true,
-            "optional" => champ.optionnel = true,
-            "index" => champ.index = true,
+        let drapeau = match modificateur {
+            "unique" => &mut champ.unique,
+            "optional" => &mut champ.optionnel,
+            "index" => &mut champ.index,
             inconnu => {
                 return Err(erreur(
                     nom,
@@ -165,10 +188,50 @@ fn analyser_champ(rang: usize, portion: &str) -> Result<Champ, ErreurChamp> {
                     },
                 ));
             }
+        };
+
+        if *drapeau {
+            return Err(erreur(
+                nom,
+                NatureErreur::ModificateurEnDouble {
+                    nom: modificateur.to_string(),
+                },
+            ));
         }
+
+        *drapeau = true;
+    }
+
+    if champ.unique && champ.index {
+        return Err(erreur(nom, NatureErreur::IndexRedondant));
     }
 
     Ok(champ)
+}
+
+/// Mots-clés stricts et réservés des éditions 2015 à 2024. Un champ ainsi nommé
+/// produirait une entité que rustc refuse, quarante secondes plus tard.
+const MOTS_CLES_RUST: [&str; 49] = [
+    "as", "async", "await", "become", "box", "break", "const", "continue", "crate", "do", "dyn",
+    "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl", "in", "let",
+    "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref", "return",
+    "self", "static", "struct", "super", "trait", "true", "try", "type", "typeof", "unsafe",
+    "unsized", "use", "virtual", "where", "while",
+];
+
+/// Posées par rbs sur toute entité : les redéclarer donnerait deux fois la colonne.
+const NOMS_POSES_PAR_RBS: [&str; 3] = ["id", "created_at", "updated_at"];
+
+fn est_en_snake_case(nom: &str) -> bool {
+    let Some(premier) = nom.chars().next() else {
+        return false;
+    };
+
+    premier.is_ascii_lowercase()
+        && !nom.ends_with('_')
+        && nom
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '_')
 }
 
 #[cfg(test)]
@@ -345,5 +408,148 @@ mod tests {
                 nom: "decimal".to_string()
             }
         );
+    }
+
+    fn nature(entree: &str) -> NatureErreur {
+        let mut erreur = analyser(entree).expect_err("la chaîne doit être refusée");
+        assert_eq!(erreur.erreurs.len(), 1, "une seule faute attendue");
+        erreur.erreurs.remove(0).nature
+    }
+
+    #[test]
+    fn un_nom_hors_snake_case_est_refuse_avec_sa_recasse() {
+        assert_eq!(
+            nature("Title:string"),
+            NatureErreur::PasEnSnakeCase {
+                suggestion: Some("title".to_string())
+            }
+        );
+        assert_eq!(
+            nature("firstName:string"),
+            NatureErreur::PasEnSnakeCase {
+                suggestion: Some("first_name".to_string())
+            }
+        );
+    }
+
+    #[test]
+    fn un_nom_accentue_est_refuse_sans_suggestion_trompeuse() {
+        assert_eq!(
+            nature("prénom:string"),
+            NatureErreur::PasEnSnakeCase { suggestion: None }
+        );
+    }
+
+    #[test]
+    fn un_nom_a_souligne_final_ou_a_chiffre_initial_est_refuse() {
+        assert!(matches!(
+            nature("titre_:string"),
+            NatureErreur::PasEnSnakeCase { .. }
+        ));
+        assert!(matches!(
+            nature("1titre:string"),
+            NatureErreur::PasEnSnakeCase { .. }
+        ));
+    }
+
+    #[test]
+    fn un_nom_a_chiffre_ou_souligne_interne_est_accepte() {
+        let champs = champs("adresse_ligne_2:string");
+        assert_eq!(champs[0].nom, "adresse_ligne_2");
+    }
+
+    #[test]
+    fn un_mot_cle_rust_est_refuse_avant_la_compilation() {
+        assert_eq!(
+            nature("type:string"),
+            NatureErreur::MotCleRust {
+                suggestions: vec!["kind".to_string(), "type_".to_string()]
+            }
+        );
+        assert!(matches!(
+            nature("match:string"),
+            NatureErreur::MotCleRust { .. }
+        ));
+        assert!(matches!(
+            nature("async:bool"),
+            NatureErreur::MotCleRust { .. }
+        ));
+        assert!(matches!(
+            nature("box:string"),
+            NatureErreur::MotCleRust { .. }
+        ));
+    }
+
+    #[test]
+    fn les_trois_colonnes_posees_par_rbs_sont_refusees() {
+        for nom in ["id", "created_at", "updated_at"] {
+            assert_eq!(
+                nature(&format!("{nom}:string")),
+                NatureErreur::NomReserve,
+                "nom « {nom} »"
+            );
+        }
+    }
+
+    #[test]
+    fn un_modificateur_en_double_est_refuse() {
+        assert_eq!(
+            nature("email:string:unique:unique"),
+            NatureErreur::ModificateurEnDouble {
+                nom: "unique".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn unique_avec_index_est_refuse_comme_redondant() {
+        assert_eq!(
+            nature("slug:string:unique:index"),
+            NatureErreur::IndexRedondant
+        );
+        assert_eq!(
+            nature("slug:string:index:unique"),
+            NatureErreur::IndexRedondant
+        );
+    }
+
+    #[test]
+    fn un_unique_sur_du_texte_passe_sans_commentaire() {
+        assert!(champs("bio:text:unique")[0].unique);
+        assert!(champs("actif:bool:index")[0].index);
+    }
+
+    #[test]
+    fn toutes_les_fautes_de_la_chaine_remontent_dans_l_ordre() {
+        let erreur =
+            analyser("Title:string,type:text,prix:decimal").expect_err("trois fautes attendues");
+
+        assert_eq!(erreur.erreurs.len(), 3);
+        assert_eq!(erreur.erreurs[0].rang, 1);
+        assert!(matches!(
+            erreur.erreurs[0].nature,
+            NatureErreur::PasEnSnakeCase { .. }
+        ));
+        assert_eq!(erreur.erreurs[1].rang, 2);
+        assert!(matches!(
+            erreur.erreurs[1].nature,
+            NatureErreur::MotCleRust { .. }
+        ));
+        assert_eq!(erreur.erreurs[2].rang, 3);
+        assert!(matches!(
+            erreur.erreurs[2].nature,
+            NatureErreur::TypeInconnu { .. }
+        ));
+    }
+
+    #[test]
+    fn un_champ_portant_deux_fautes_ne_remonte_que_la_premiere() {
+        let erreur = analyser("Type:decimal").expect_err("deux fautes, une seule remontée");
+
+        assert_eq!(erreur.erreurs.len(), 1);
+        assert!(matches!(
+            erreur.erreurs[0].nature,
+            NatureErreur::PasEnSnakeCase { .. }
+        ));
     }
 }
