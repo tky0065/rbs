@@ -4,13 +4,13 @@
 //! [`Result<T>`]. La conversion en réponse HTTP est portée par l'implémentation
 //! `IntoResponse` de [`Error`].
 
+use crate::openapi::ProblemDetails;
 use crate::request_id;
 use axum::Json;
 use axum::http::StatusCode;
 use axum::http::header::{CONTENT_TYPE, HeaderValue};
 use axum::response::{IntoResponse, Response};
 use sea_orm::DbErr;
-use serde::Serialize;
 use std::collections::BTreeMap;
 use validator::ValidationErrors;
 
@@ -23,6 +23,13 @@ pub enum Error {
     /// Ressource absente. Porte le nom de la ressource, pas un message rédigé.
     #[error("{0} introuvable")]
     NotFound(&'static str),
+
+    /// Requête mal formée, indépendamment de toute règle métier.
+    ///
+    /// Le corps n'a pas pu être lu : syntaxe invalide, type incompatible, en-tête
+    /// manquant. Une entrée lisible mais non conforme relève de [`Error::Validation`].
+    #[error("requête invalide : {0}")]
+    BadRequest(String),
 
     /// Échec de validation d'une entrée, détaillé champ par champ.
     #[error("validation échouée")]
@@ -66,20 +73,6 @@ pub enum Error {
 /// Alias de `Result` pointant sur [`Error`].
 pub type Result<T> = std::result::Result<T, Error>;
 
-/// Corps de réponse RFC 9457. Les champs absents ne sont pas sérialisés.
-#[derive(Serialize)]
-struct Problem {
-    r#type: &'static str,
-    title: String,
-    status: u16,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    detail: Option<String>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    errors: Option<BTreeMap<String, Vec<String>>>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    request_id: Option<String>,
-}
-
 fn champs(errors: &ValidationErrors) -> BTreeMap<String, Vec<String>> {
     errors
         .field_errors()
@@ -109,6 +102,12 @@ impl IntoResponse for Error {
                 StatusCode::NOT_FOUND,
                 "Not Found",
                 Some(format!("{ressource} introuvable")),
+                None,
+            ),
+            Error::BadRequest(message) => (
+                StatusCode::BAD_REQUEST,
+                "Bad Request",
+                Some(message.clone()),
                 None,
             ),
             Error::Validation(source) => (
@@ -147,7 +146,7 @@ impl IntoResponse for Error {
             }
         };
 
-        let corps = Problem {
+        let corps = ProblemDetails {
             r#type: "about:blank",
             title: title.to_string(),
             status: status.as_u16(),
@@ -312,6 +311,16 @@ mod tests {
 
         assert_eq!(status, StatusCode::CONFLICT);
         assert_eq!(corps["detail"], "cet email est déjà pris");
+    }
+
+    #[tokio::test]
+    async fn bad_request_repond_400_avec_sa_cause() {
+        let (status, _, corps) =
+            reponse(Error::BadRequest("EOF while parsing an object".into())).await;
+
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(corps["title"], "Bad Request");
+        assert_eq!(corps["detail"], "EOF while parsing an object");
     }
 
     #[tokio::test]

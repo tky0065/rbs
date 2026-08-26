@@ -80,59 +80,65 @@ dès que `C` est terminé.
       par tous les logs émis pendant la requête.
       ✓ Test : un log émis dans un handler contient le `request_id` de sa requête.
 
-- [ ] **B5** · Extracteur JSON validé
+- [x] **B5** · Extracteur JSON validé — vérifié 2026-08-25 · `cargo test -p rbs-core extract` → 4 passed, dont `un_corps_invalide_repond_422_avec_le_detail_par_champ` et `un_json_malforme_repond_400_pas_500` lancés seuls → 1 passed chacun
       Wrapper autour de `Json` appliquant `validator`, produisant `Error::Validation`.
       ✓ Test : corps invalide → 422 avec le détail par champ.
       ✓ Test : JSON malformé → 400, pas 500.
 
-- [ ] **B6** · Pagination
+- [x] **B6** · Pagination — vérifié 2026-08-25 · `cargo test -p rbs-core pagination` → 7 passed, dont `per_page_au_dela_du_maximum_est_plafonne_sans_erreur` lancé seul → 1 passed
       Paramètres de requête `page` / `per_page` avec bornes, et enveloppe de réponse
       paginée.
       ✓ Test : `per_page` au-delà du maximum → plafonné, pas d'erreur.
 
-- [ ] **B7** · Helpers OpenAPI
+- [x] **B7** · Helpers OpenAPI — vérifié 2026-08-25 · `cargo test -p rbs-core openapi` → 4 passed, dont `le_document_decrit_422_et_500_sans_annotation_par_handler` lancé seul → 1 passed
       Réponses d'erreur communes déclarées une fois, réutilisables par les features.
       ✓ Le document généré décrit 422 et 500 sans annotation par handler.
 
-- [ ] **B8** · Route `/health`
+- [x] **B8** · Route `/health` — vérifié 2026-08-25 · `cargo test -p rbs-core health` → 4 passed, dont `une_base_indisponible_repond_503_pas_200` lancé seul → 1 passed
       Statut applicatif et vérification de la base.
       ✓ Test : base indisponible → 503, pas 200.
 
-- [ ] **B9** · Feature flags Cargo
+- [x] **B9** · Feature flags Cargo — vérifié 2026-08-25 · `cargo build --all-features` et `cargo build --no-default-features` → Finished, et `--features inexistant` rejeté (preuve que les flags sont déclarés)
       Déclaration des flags `auth`, `redis`, `mail`, `storage` — sans implémentation.
       Prépare la v0.2 sans anticiper son code.
       ✓ `cargo build --all-features` et `cargo build --no-default-features` passent.
 
+- [x] **B10** · Exposition OpenAPI configurable — vérifié 2026-08-26 · `cargo test -p rbs-core config` → 12 passed, dont `couper_swagger_laisse_le_document_json_expose` et `sans_section_docs_swagger_et_le_document_json_sont_exposes` lancés seuls → 1 passed chacun
+      Section `[docs]` dans `Config` : `swagger_ui` et `openapi_json`, à `true` par défaut.
+      §5.4 les veut désactivables en production ; aucun champ ne le permettait.
+      ✓ Test : `docs.swagger_ui = false` dans le TOML est désérialisé à `false`.
+      ✓ Test : sans section `[docs]`, les deux valent `true`.
+
 ### Lot C — `rbs new`
 
-- [ ] **C1** · Squelette du CLI
+- [x] **C1** · Squelette du CLI — vérifié 2026-08-26 · `cargo test -p rbs-cli` → 4 passed, dont `le_help_liste_les_commandes_prevues_avec_une_description` · `cargo run -p rbs-cli -- --help` → les cinq commandes avec leur description, validé par le user
       `clap` derive, sous-commandes, `--help` rédigé, sortie colorée via `console`.
       ✓ `rbs --help` liste les commandes prévues avec des descriptions utiles.
 
-- [ ] **C2** · Moteur de rendu
+- [x] **C2** · Moteur de rendu — vérifié 2026-08-26 · `cargo test -p rbs-cli` → 9 passed, dont `une_template_contenant_un_format_rust_se_rend_intacte` lancé seul → 1 passed · délimiteurs `{@ @}` retenus, seuls à ne collisionner ni avec Rust, ni TOML, YAML, shell ou GitHub Actions
       `minijinja` avec **délimiteurs alternatifs** — Jinja et `format!` Rust utilisent
       tous deux `{{ }}`.
       ✓ Test : une template contenant `format!("{{}}")` se rend sans échappement manuel.
 
-- [ ] **C3** · Templates embarquées
+- [x] **C3** · Templates embarquées — vérifié 2026-08-26 · binaire copié hors du dépôt et `templates/` écartée du disque → `rbs new sans-templates --yes` → 15 fichiers, code 0 · `cargo test -p rbs-cli templates::` → 8 passed
       `include_dir` pour un binaire autonome, plus un flag `--template-dir` de surcharge.
       ✓ Le binaire génère un projet depuis un répertoire vide de tout template.
 
-- [ ] **C4** · Squelette de projet
+- [x] **C4** · Squelette de projet — vérifié 2026-08-26 · `cargo test -p rbs-cli` → 13 passed, dont `chaque_ancre_est_ouverte_puis_refermee_dans_son_fichier` et `chaque_template_se_rend_avec_les_cinq_variables` · revue de lecture du `main.rs` généré (25 lignes) validée par le user
       `Cargo.toml`, `main.rs`, `router.rs`, `state.rs`, `features/mod.rs`, `features/health/`,
       `migration/`, `config/`, `.env.example`, `.gitignore`, avec toutes les ancres.
       ✓ Revue de lecture : `main.rs` tient en ~25 lignes compréhensibles sans documentation.
 
-- [ ] **C5** · Métadonnées projet
+- [x] **C5** · Métadonnées projet — vérifié 2026-08-26 · `cargo test -p rbs-cli -- --exact new::tests::les_metadonnees_du_projet_cree_se_relisent` → 1 passed : version et features relues sur un projet déroulé par `rbs new`, la version venant du CLI et non plus d'une constante figée dans la template
       Écriture de `[package.metadata.rbs]` (version, features installées).
       ✓ Test : relire les métadonnées d'un projet fraîchement généré.
 
-- [ ] **C6** · Prompts interactifs
+- [x] **C6** · Prompts interactifs — vérifié 2026-08-26 · `rbs new sans-templates --yes < /dev/null` sans TTY → projet créé, code 0, aucun prompt ouvert · `cargo test -p rbs-cli prompts::` → 8 passed
       `inquire` : nom, base, multi-sélection des features. Chaque question a son flag
       équivalent ; `--yes` prend les défauts.
       ✓ Test : `rbs new x --yes` n'ouvre aucun prompt et réussit sans TTY.
 
-- [ ] **C7** · Commande `rbs new` complète
+- [x] **C7** · Commande `rbs new` complète — vérifié 2026-08-26 · projet généré puis lancé contre PostgreSQL 18.4 en conteneur : `curl -i /health` → `200 OK`, `{"status":"ok","checks":{"database":"ok"}}` · `cargo test -p rbs-cli new::` → 13 passed
       Assemblage de C2 → C6, plus `git init` sur le projet créé.
       ✓ Le projet généré démarre et répond 200 sur `/health`.
 
