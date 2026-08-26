@@ -29,6 +29,10 @@ pub enum Commands {
         /// Nom du projet, qui est aussi celui du répertoire créé.
         nom: String,
 
+        /// URL de la base PostgreSQL, à défaut de quoi la question est posée.
+        #[arg(long, value_name = "URL")]
+        database_url: Option<String>,
+
         /// Features à installer sans passer par les questions, séparées par des virgules.
         #[arg(long, value_name = "FEATURES", value_delimiter = ',')]
         with: Vec<String>,
