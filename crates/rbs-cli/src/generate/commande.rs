@@ -103,6 +103,23 @@ pub(crate) enum Erreur {
     Metadonnees(#[source] metadata::Erreur),
 }
 
+impl Erreur {
+    /// Ce que le développeur peut coller pour réparer, quand la panne se répare ainsi.
+    ///
+    /// Seule une ancre disparue a un remède tenant en un bloc de texte : les autres pannes
+    /// se règlent par une décision — commiter, choisir un autre nom, corriger un champ.
+    pub(crate) fn remede(&self) -> Option<String> {
+        match self {
+            Erreur::Ancre(absente) => Some(format!(
+                "dans {} :\n{}",
+                absente.ancre.fichier,
+                absente.ancre.bloc()
+            )),
+            _ => None,
+        }
+    }
+}
+
 /// Génère la feature décrite par `options` dans le projet qui contient son répertoire.
 pub(crate) fn executer(options: &Options) -> Result<Generee, Erreur> {
     let depart = options
@@ -486,6 +503,24 @@ mod tests {
             metadonnees.features.contains(&"articles".to_string()),
             "{metadonnees:?}"
         );
+    }
+
+    #[test]
+    fn une_ancre_disparue_donne_le_bloc_a_recoller() {
+        let erreur = Erreur::Ancre(ancres::Absente {
+            ancre: ancres::ROUTES,
+        });
+
+        let remede = erreur.remede().expect("une ancre disparue se recolle");
+
+        assert!(remede.contains("src/router.rs"), "{remede}");
+        assert!(remede.contains("// <rbs:routes>"), "{remede}");
+        assert!(remede.contains("// </rbs:routes>"), "{remede}");
+    }
+
+    #[test]
+    fn une_erreur_sans_remede_connu_n_en_invente_pas() {
+        assert_eq!(Erreur::PasUnProjet.remede(), None);
     }
 
     #[test]

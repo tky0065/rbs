@@ -56,6 +56,9 @@ fn main() {
 
             if let Err(erreur) = generer(nom, fields, complete, force) {
                 ui::error(&erreur.to_string());
+                if let Some(remede) = erreur.remede() {
+                    ui::info(&format!("\n{remede}"));
+                }
                 std::process::exit(1);
             }
         }
@@ -140,13 +143,18 @@ fn generer(
     fields: Option<String>,
     complete: bool,
     force: bool,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), generate::commande::Erreur> {
     let feature = nom.clone();
+    let repertoire =
+        std::env::current_dir().map_err(|source| generate::commande::Erreur::Acces {
+            chemin: ".".to_string(),
+            source,
+        })?;
     let generee = generate::commande::executer(&generate::commande::Options {
         nom,
         fields,
         complete,
-        repertoire: std::env::current_dir()?,
+        repertoire,
         force,
     })?;
 
