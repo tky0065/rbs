@@ -282,20 +282,20 @@ construction, pas après, quand tout paraît évident.
       n'exécute pas le code : c'est la compensation.
       ✓ Un exemple cassé fait échouer la CI.
 
-- [ ] **F3** · Démarrage rapide (FR + EN)
+- [ ] **F3** · Démarrage rapide (FR + EN) — PARTIEL 2026-08-26 : page livrée FR + EN, parcours rejoué en entier dans un répertoire vierge sur un PostgreSQL 18 neuf (`rbs new` 15 fichiers → `migrate up` → `generate crud` 8 fichiers → `migrate up` → `cargo run` → `/health` 200, `POST /articles` 201, `GET /articles` 200 paginé, `doctor` quatre contrôles verts) · mais l'étape d'installation ne tient pas depuis un clone public : `origin/main` est 108 commits en arrière et ne porte que `rbs new`. Le critère « sans intervention extérieure » exige que le dépôt soit à jour — dépend de F13.
       De l'installation à une API CRUD qui répond.
       ✓ Suivi à la lettre sur une machine vierge, sans intervention extérieure.
 
-- [ ] **F4** · Architecture (FR + EN)
+- [x] **F4** · Architecture (FR + EN) — vérifié 2026-08-26 · `npx docusaurus clear && npm run build` → deux `[SUCCESS]`, garde-fou éprouvé en renommant la région `entite` → build interrompu en nommant le fichier · `cargo test -p rbs-cli --test integration_examples` → 5 passed · 9 directives d'extrait et 13 titres identiques FR/EN · règle de dépendance établie sur les imports réels : `grep -l 'Entity::'` ne remonte que `repository.rs`
       Frontière noyau/généré, anatomie d'une feature, règle de dépendance.
 
-- [ ] **F5** · Référence du CLI (FR + EN)
+- [x] **F5** · Référence du CLI (FR + EN) — vérifié 2026-08-26 · 10 flags relevés sur la surface rendue par clap = 10 documentés en FR et en EN, aucun manquant · les 5 commandes, leurs sous-commandes et les cas d'échec cités capturés en exécution réelle contre un PostgreSQL 18 en conteneur · `npm run build` → deux `[SUCCESS]` · trois écarts au comportement déclaré consignés dans les pages : `--with docker` refusé par la 0.1.0, `--template-dir` ignoré par `generate`, `--yes` lu par `new` seul
       Chaque commande, chaque flag, avec un exemple de sortie réelle.
 
-- [ ] **F6** · Guides transverses (FR + EN)
+- [x] **F6** · Guides transverses (FR + EN) — vérifié 2026-08-26 · six guides livrés FR + EN · `npm run clear && npm run build` → deux `[SUCCESS]`, garde-fou éprouvé en renommant la région `montage` → build interrompu · `cargo test -p rbs-cli --test integration_examples` → 5 passed · deux erreurs de la conception corrigées sur le code : `Error` compte 9 variantes (`Domain` incluse) et l'ancre `<rbs:openapi>` vit dans `paths(...)`, elle liste des handlers et non des schémas
       Configuration, logs, erreurs, OpenAPI, migrations, tests.
 
-- [ ] **F7** · README FR + EN
+- [x] **F7** · README FR + EN — vérifié 2026-08-26 · `grep -in semver README.md README.fr.md` → `README.md:14` et `README.fr.md:14`, section « Status » placée avant l'installation · 14 liens relatifs résolus par `test -f`, 0 mort · 8 titres de part et d'autre · l'unique extrait de code `diff`é identique à `examples/hello-crud/src/articles/controller.rs:29-46`
       ✓ Mentionne explicitement l'absence de promesse semver avant la v1.0.
 
 - [x] **F8** · LICENSE — vérifié 2026-08-26 · `cargo publish --dry-run -p rbs-core` → packagé et vérifié, aucun avertissement ; le contrôle mord (champ retiré → `manifest has no license or license-file`). `cargo publish --dry-run -p rbs-cli` échouait alors sur `include_dir!`, motif étranger à la licence ; les templates ont depuis rejoint la crate et les deux dry-runs passent.
