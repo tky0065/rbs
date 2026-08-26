@@ -259,6 +259,31 @@ mod tests {
     use super::*;
     use crate::generate::banc;
 
+    /// Empreinte récursive d'un répertoire : chemin relatif -> contenu.
+    fn empreinte(racine: &Path) -> std::collections::BTreeMap<PathBuf, String> {
+        let mut vue = std::collections::BTreeMap::new();
+        let mut a_visiter = vec![racine.to_path_buf()];
+
+        while let Some(repertoire) = a_visiter.pop() {
+            for entree in fs::read_dir(&repertoire).expect("le répertoire se lit") {
+                let chemin = entree.expect("l'entrée se lit").path();
+                let relatif = chemin
+                    .strip_prefix(racine)
+                    .expect("le chemin est sous la racine")
+                    .to_path_buf();
+
+                if chemin.is_dir() {
+                    vue.insert(relatif, String::new());
+                    a_visiter.push(chemin);
+                } else {
+                    vue.insert(relatif, fs::read_to_string(&chemin).unwrap_or_default());
+                }
+            }
+        }
+
+        vue
+    }
+
     /// Planifie puis applique, comme la commande le fait.
     ///
     /// Les tests portent sur ce que la génération laisse sur le disque : les deux temps
@@ -501,6 +526,46 @@ mod tests {
     #[test]
     fn une_erreur_sans_remede_connu_n_en_invente_pas() {
         assert_eq!(Erreur::PasUnProjet.remede(), None);
+    }
+
+    /// Le plan montré est celui qui sera exécuté : c'est ce qui rend `--dry-run` digne de
+    /// foi. Un affichage qui décrirait une intention plutôt qu'un résultat mentirait dès
+    /// que le projet s'écarterait de ce que la commande suppose.
+    ///
+    /// Le plan est planifié une seule fois, et non deux : le nom d'une migration porte
+    /// l'heure à la seconde, et deux planifications successives peuvent légitimement
+    /// différer. C'est le même plan qui doit être affiché puis appliqué, non deux plans
+    /// que l'on comparerait.
+    #[test]
+    fn le_plan_affiche_est_celui_que_l_execution_realise() {
+        let (_parent, racine) = projet();
+        let options = options(&racine, "articles", Some("titre:string"), true);
+
+        let avant = empreinte(&racine);
+        let planifiee = planifier(&options).expect("la planification aboutit");
+        let annonce = crate::plan::rendu::plan(&planifiee.plan);
+
+        assert_eq!(
+            empreinte(&racine),
+            avant,
+            "planifier et afficher ne doivent rien écrire"
+        );
+
+        crate::plan::application::appliquer(&planifiee.plan, false).expect("l'écriture aboutit");
+
+        for fichier in planifiee.plan.fichiers() {
+            assert_eq!(
+                lire(&racine.join(&fichier.chemin)),
+                fichier.apres,
+                "`{}` ne porte pas le contenu que le plan annonçait",
+                fichier.chemin
+            );
+        }
+        assert_eq!(
+            crate::plan::rendu::plan(&planifiee.plan),
+            annonce,
+            "le plan a changé entre son affichage et son application"
+        );
     }
 
     #[test]
