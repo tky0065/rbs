@@ -788,6 +788,127 @@ tokio = { version = "1", features = ["macros"] }
         );
     }
 
+    /// Manifeste témoin : commentaires de tête et de fin de ligne, lignes vides,
+    /// alignements irréguliers, tables voisines que le patch doit ignorer.
+    const TEMOIN: &str = r#"# Manifeste écrit à la main.
+[package]
+name    = "demo"           # aligné exprès
+version = "0.1.0"
+edition = "2024"
+
+# les dépendances du projet
+[dependencies]
+axum       = "0.9"     # le serveur
+sea-orm    = { version = "1.1", features = ["runtime-tokio-rustls"] }
+tokio      = { version = "1", features = ["macros"] }
+
+[dev-dependencies]
+tempfile = "3"   # rien à voir avec le patch
+
+# l'état de rbs dans ce projet
+[package.metadata.rbs]
+version = "0.1.0"
+features = ["health"]
+"#;
+
+    /// Les lignes que le rendu a perdues, puis celles qu'il a gagnées.
+    ///
+    /// Diff naïf par appariement : il suffit ici, où l'on veut seulement établir que rien
+    /// d'autre que la zone patchée n'a bougé.
+    fn lignes_modifiees(avant: &str, apres: &str) -> (Vec<String>, Vec<String>) {
+        let mut restantes: Vec<&str> = apres.lines().collect();
+        let mut perdues = Vec::new();
+
+        for ligne in avant.lines() {
+            match restantes.iter().position(|candidate| *candidate == ligne) {
+                Some(index) => {
+                    restantes.remove(index);
+                }
+                None => perdues.push(ligne.to_string()),
+            }
+        }
+
+        (perdues, restantes.into_iter().map(str::to_owned).collect())
+    }
+
+    /// Les lignes du texte, privées de celles qu'un patch était censé toucher.
+    fn hors_zone(texte: &str, touchees: &[String]) -> Vec<String> {
+        texte
+            .lines()
+            .filter(|ligne| !touchees.iter().any(|touchee| touchee == ligne))
+            .map(str::to_owned)
+            .collect()
+    }
+
+    /// Établit qu'entre `TEMOIN` et `rendu`, seules les lignes annoncées ont changé — et
+    /// que le reste est resté dans le même ordre.
+    fn seules_ces_lignes_ont_change(rendu: &str, perdues: &[&str], gagnees: &[&str]) {
+        let attendu = (
+            perdues.iter().map(|l| l.to_string()).collect::<Vec<_>>(),
+            gagnees.iter().map(|l| l.to_string()).collect::<Vec<_>>(),
+        );
+
+        assert_eq!(
+            lignes_modifiees(TEMOIN, rendu),
+            attendu,
+            "le patch a débordé de sa ligne :\n{rendu}"
+        );
+        assert_eq!(
+            hors_zone(TEMOIN, &attendu.0),
+            hors_zone(rendu, &attendu.1),
+            "le patch a réordonné le manifeste :\n{rendu}"
+        );
+    }
+
+    #[test]
+    fn un_ajout_de_dependance_ne_modifie_que_sa_propre_ligne() {
+        let rendu = ajouter_dependance(
+            TEMOIN,
+            &Dependance {
+                nom: "redis".into(),
+                version: "0.32".into(),
+                features: vec!["tokio-comp".into()],
+            },
+            "Cargo.toml",
+        )
+        .expect("le manifeste est valide")
+        .expect("la dépendance est absente");
+
+        seules_ces_lignes_ont_change(
+            &rendu,
+            &[],
+            &[r#"redis = { version = "0.32", features = ["tokio-comp"] }"#],
+        );
+    }
+
+    #[test]
+    fn un_ajout_de_feature_a_une_dependance_ne_modifie_que_sa_propre_ligne() {
+        let rendu = ajouter_feature_a_dependance(TEMOIN, "sea-orm", "with-uuid", "Cargo.toml")
+            .expect("le manifeste est valide")
+            .expect("la feature manque");
+
+        seules_ces_lignes_ont_change(
+            &rendu,
+            &[r#"sea-orm    = { version = "1.1", features = ["runtime-tokio-rustls"] }"#],
+            &[
+                r#"sea-orm    = { version = "1.1", features = ["runtime-tokio-rustls", "with-uuid"] }"#,
+            ],
+        );
+    }
+
+    #[test]
+    fn une_inscription_de_feature_rbs_ne_modifie_que_sa_propre_ligne() {
+        let rendu = inscrire_feature(TEMOIN, "docker", "Cargo.toml")
+            .expect("le manifeste est valide")
+            .expect("la feature est absente");
+
+        seules_ces_lignes_ont_change(
+            &rendu,
+            &[r#"features = ["health"]"#],
+            &[r#"features = ["health", "docker"]"#],
+        );
+    }
+
     #[test]
     fn un_manifeste_sans_section_rbs_est_refuse() {
         let erreur = inscrire_feature("[package]\nname = \"demo\"\n", "docker", "Cargo.toml")
