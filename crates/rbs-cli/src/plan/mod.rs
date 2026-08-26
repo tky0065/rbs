@@ -4,9 +4,8 @@
 //! avant et son contenu après. Planifier, c'est calculer les « après » sans rien écrire —
 //! d'où l'affichage préalable, la restauration en cas d'échec et l'idempotence.
 
-// Le module précède ses appelants : `rbs add` n'est pas encore implémentée. `PatchToml`
-// n'est réexportée que pour cette future commande, d'où l'import inutilisé aujourd'hui.
-#![allow(dead_code, unused_imports)]
+// Le module précède ses appelants : `rbs add` n'est pas encore implémentée.
+#![allow(dead_code)]
 
 mod action;
 
@@ -14,7 +13,11 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-pub(crate) use action::{Action, Effet, PatchToml, Statut};
+pub(crate) use action::{Action, Effet, Statut};
+// `rbs add` est la seule commande qui patchera un `Cargo.toml` ; en son absence, ce
+// réexport n'a encore aucun lecteur.
+#[allow(unused_imports)]
+pub(crate) use action::PatchToml;
 
 /// Un fichier que le plan touche, avec ses deux états.
 #[derive(Debug, Clone, PartialEq, Eq)]
