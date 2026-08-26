@@ -3,6 +3,7 @@ mod cli;
 mod doctor;
 mod dotenv;
 mod generate;
+mod git;
 mod metadata;
 mod migrate;
 mod new;
@@ -53,14 +54,7 @@ fn main() {
                 GenerateCommands::Feature { nom, force } => (nom, None, false, force),
             };
 
-            if force {
-                ui::warn(
-                    "`--force` est sans effet : la vérification du working tree n'est pas \
-                     encore livrée",
-                );
-            }
-
-            if let Err(erreur) = generer(nom, fields, complete) {
+            if let Err(erreur) = generer(nom, fields, complete, force) {
                 ui::error(&erreur.to_string());
                 std::process::exit(1);
             }
@@ -141,13 +135,19 @@ fn creer_projet(
     Ok(())
 }
 
-fn generer(nom: String, fields: Option<String>, complete: bool) -> Result<(), Box<dyn Error>> {
+fn generer(
+    nom: String,
+    fields: Option<String>,
+    complete: bool,
+    force: bool,
+) -> Result<(), Box<dyn Error>> {
     let feature = nom.clone();
     let generee = generate::commande::executer(&generate::commande::Options {
         nom,
         fields,
         complete,
         repertoire: std::env::current_dir()?,
+        force,
     })?;
 
     ui::success(&format!(
