@@ -807,6 +807,77 @@ mod tests {
         vus
     }
 
+    /// Le critère du lot : ancre absente, rien d'écrit, et le bloc à recoller sous la main.
+    #[test]
+    fn une_ancre_absente_laisse_le_projet_intact_et_donne_le_bloc_a_recoller() {
+        let projet = projet();
+        avec_router(
+            &projet,
+            &ROUTER
+                .replace("        // <rbs:routes>\n", "")
+                .replace("        // </rbs:routes>\n", ""),
+        );
+        let avant = empreinte(projet.path());
+
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+        let erreur = constructeur
+            .inserer(
+                ancres::ROUTES,
+                &[".merge(crate::users::routes())".to_string()],
+            )
+            .expect_err("l'ancre manque");
+        let plan = constructeur.finir();
+
+        let Erreur::Ancre(absente) = erreur else {
+            panic!("le fichier est là, seule l'ancre manque : {erreur:?}");
+        };
+
+        assert_eq!(
+            empreinte(projet.path()),
+            avant,
+            "l'échec de planification a touché au disque"
+        );
+        assert!(plan.fichiers().is_empty(), "un fichier a été projeté");
+
+        let bloc = absente.ancre.bloc();
+        assert!(bloc.contains("// <rbs:routes>"), "{bloc}");
+        assert!(bloc.contains("// </rbs:routes>"), "{bloc}");
+    }
+
+    /// Le critère du lot : une ligne déjà montée ne se réécrit pas au plan suivant.
+    #[test]
+    fn inserer_deux_fois_la_meme_ligne_ne_change_rien_la_seconde_fois() {
+        let projet = projet();
+        avec_router(&projet, ROUTER);
+        let lignes = [".merge(crate::users::routes())".to_string()];
+
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+        constructeur
+            .inserer(ancres::ROUTES, &lignes)
+            .expect("l'ancre est présente");
+        let premier = constructeur.finir();
+        assert_eq!(premier.fichiers()[0].statut, Statut::AFaire);
+
+        fs::write(
+            projet.path().join("src/router.rs"),
+            &premier.fichiers()[0].apres,
+        )
+        .expect("l'écriture aboutit");
+
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+        constructeur
+            .inserer(ancres::ROUTES, &lignes)
+            .expect("l'ancre est présente");
+        let second = constructeur.finir();
+
+        assert_eq!(second.fichiers()[0].statut, Statut::DejaFait);
+        assert_eq!(
+            second.fichiers()[0].avant.as_deref(),
+            Some(second.fichiers()[0].apres.as_str()),
+            "la seconde planification réécrirait le fichier"
+        );
+    }
+
     #[test]
     fn planifier_ne_modifie_pas_le_repertoire_du_projet() {
         let projet = projet();
