@@ -109,7 +109,7 @@ dès que `C` est terminé.
       `clap` derive, sous-commandes, `--help` rédigé, sortie colorée via `console`.
       ✓ `rbs --help` liste les commandes prévues avec des descriptions utiles.
 
-- [ ] **C2** · Moteur de rendu
+- [x] **C2** · Moteur de rendu — vérifié 2026-08-26 · `cargo test -p rbs-cli` → 9 passed, dont `une_template_contenant_un_format_rust_se_rend_intacte` lancé seul → 1 passed · délimiteurs `{@ @}` retenus, seuls à ne collisionner ni avec Rust, ni TOML, YAML, shell ou GitHub Actions
       `minijinja` avec **délimiteurs alternatifs** — Jinja et `format!` Rust utilisent
       tous deux `{{ }}`.
       ✓ Test : une template contenant `format!("{{}}")` se rend sans échappement manuel.
