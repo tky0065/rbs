@@ -17,7 +17,7 @@ use crate::ancres::Ancre;
 
 pub(crate) use action::{Action, Effet, PatchToml, Statut};
 
-/// Un fichier que le plan touche, avec ses deux états.
+/// Un fichier que le plan touche, avec ses deux états et ce qu'il en coûtera d'y écrire.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Fichier {
     /// Chemin relatif à la racine du projet.
@@ -26,6 +26,11 @@ pub(crate) struct Fichier {
     pub avant: Option<String>,
     /// Contenu que l'application écrira.
     pub apres: String,
+    /// Statut agrégé des actions qui visent ce fichier.
+    ///
+    /// Sans lui, un appelant qui écrit `fichiers()` tel quel écraserait un fichier en
+    /// conflit sans jamais voir le conflit, resté dans `actions()`.
+    pub statut: Statut,
 }
 
 /// Ce qu'une commande fera au projet, entièrement calculé et rien d'écrit.
@@ -68,6 +73,15 @@ pub(crate) enum Erreur {
         /// Cause système.
         source: io::Error,
     },
+    /// Deux actions du plan prétendent écrire le même fichier de bout en bout.
+    ///
+    /// Erreur de programmation de l'appelant : deux contenus complets ne se composent
+    /// pas, et le second effacerait silencieusement ce que le premier a projeté.
+    #[error("{chemin} est déjà projeté par une action précédente du plan")]
+    DejaProjete {
+        /// Chemin fautif, relatif à la racine.
+        chemin: String,
+    },
     /// Une ancre attendue a disparu du projet.
     #[error("{0}")]
     Ancre(#[source] crate::ancres::Absente),
@@ -103,16 +117,25 @@ impl Constructeur {
     }
 
     /// Planifie l'écriture de `chemin` avec `contenu`.
+    ///
+    /// Refuse un chemin qu'une action précédente a déjà projeté : voir
+    /// [`Erreur::DejaProjete`].
     pub fn creer(&mut self, chemin: &str, contenu: &str) -> Result<(), Erreur> {
-        let avant = self.etat_courant(chemin)?;
+        if self.projete(chemin) {
+            return Err(Erreur::DejaProjete {
+                chemin: chemin.to_string(),
+            });
+        }
 
-        let statut = match avant.as_deref() {
+        let origine = self.lire(chemin)?;
+
+        let statut = match origine.as_deref() {
             None => Statut::AFaire,
             Some(actuel) if actuel == contenu => Statut::DejaFait,
             Some(_) => Statut::Conflit,
         };
 
-        self.projeter(chemin, avant, contenu.to_string());
+        self.projeter(chemin, origine, contenu.to_string(), statut);
         self.actions.push(Action {
             chemin: chemin.to_string(),
             effet: Effet::Creer {
@@ -130,19 +153,15 @@ impl Constructeur {
     pub fn inserer(&mut self, ancre: Ancre, lignes: &[String]) -> Result<(), Erreur> {
         let chemin = ancre.fichier;
 
-        let avant = self
-            .etat_courant(chemin)?
+        let etats = self.etats(chemin)?;
+        let courant = etats
+            .courant
             .ok_or(Erreur::Ancre(crate::ancres::Absente { ancre }))?;
 
-        let apres = crate::ancres::inserer(&avant, ancre, lignes).map_err(Erreur::Ancre)?;
+        let apres = crate::ancres::inserer(&courant, ancre, lignes).map_err(Erreur::Ancre)?;
+        let statut = statut_compose(etats.origine.as_deref(), &apres);
 
-        let statut = if apres == avant {
-            Statut::DejaFait
-        } else {
-            Statut::AFaire
-        };
-
-        self.projeter(chemin, Some(avant), apres);
+        self.projeter(chemin, etats.origine, apres, statut);
         self.actions.push(Action {
             chemin: chemin.to_string(),
             effet: Effet::Inserer {
@@ -159,22 +178,19 @@ impl Constructeur {
     pub fn patcher(&mut self, patch: PatchToml) -> Result<(), Erreur> {
         let chemin = "Cargo.toml";
 
-        let avant = self
-            .etat_courant(chemin)?
-            .ok_or_else(|| Erreur::ManifesteAbsent {
-                chemin: chemin.to_string(),
-            })?;
+        let etats = self.etats(chemin)?;
+        let courant = etats.courant.ok_or_else(|| Erreur::ManifesteAbsent {
+            chemin: chemin.to_string(),
+        })?;
 
         let PatchToml::InscrireFeature(feature) = &patch;
-        let rendu = crate::metadata::inscrire_feature(&avant, feature, chemin)
+        let rendu = crate::metadata::inscrire_feature(&courant, feature, chemin)
             .map_err(Erreur::Metadonnees)?;
 
-        let (apres, statut) = match rendu {
-            Some(apres) => (apres, Statut::AFaire),
-            None => (avant.clone(), Statut::DejaFait),
-        };
+        let apres = rendu.unwrap_or(courant);
+        let statut = statut_compose(etats.origine.as_deref(), &apres);
 
-        self.projeter(chemin, Some(avant), apres);
+        self.projeter(chemin, etats.origine, apres, statut);
         self.actions.push(Action {
             chemin: chemin.to_string(),
             effet: Effet::PatcherToml { patch },
@@ -193,16 +209,30 @@ impl Constructeur {
         }
     }
 
-    /// Contenu du fichier tel que les actions déjà planifiées le laisseront.
+    /// Une action précédente a-t-elle déjà calculé le contenu final de ce fichier ?
+    fn projete(&self, chemin: &str) -> bool {
+        self.fichiers.iter().any(|fichier| fichier.chemin == chemin)
+    }
+
+    /// Ce qu'une action trouve du fichier qu'elle vise.
     ///
-    /// Une action qui suit une autre sur le même fichier part de ce que la première
-    /// produit, et non de ce que le disque contient encore.
-    fn etat_courant(&self, chemin: &str) -> Result<Option<String>, Erreur> {
+    /// Les deux états ne se confondent qu'au premier passage sur un fichier : ensuite,
+    /// l'action compose avec ce que la précédente a produit, mais son statut se décide
+    /// toujours contre l'origine.
+    fn etats(&self, chemin: &str) -> Result<Etats, Erreur> {
         if let Some(fichier) = self.fichiers.iter().find(|f| f.chemin == chemin) {
-            return Ok(Some(fichier.apres.clone()));
+            return Ok(Etats {
+                origine: fichier.avant.clone(),
+                courant: Some(fichier.apres.clone()),
+            });
         }
 
-        self.lire(chemin)
+        let disque = self.lire(chemin)?;
+
+        Ok(Etats {
+            origine: disque.clone(),
+            courant: disque,
+        })
     }
 
     /// Contenu du fichier sur le disque, ou `None` s'il n'existe pas.
@@ -217,16 +247,42 @@ impl Constructeur {
         }
     }
 
-    /// Enregistre le contenu final du fichier, en conservant son état d'origine.
-    fn projeter(&mut self, chemin: &str, avant: Option<String>, apres: String) {
+    /// Enregistre le contenu final du fichier, en conservant son état d'origine et en
+    /// agrégeant le statut des actions qui le visent.
+    fn projeter(&mut self, chemin: &str, avant: Option<String>, apres: String, statut: Statut) {
         match self.fichiers.iter_mut().find(|f| f.chemin == chemin) {
-            Some(fichier) => fichier.apres = apres,
+            Some(fichier) => {
+                fichier.apres = apres;
+                fichier.statut = fichier.statut.agrege(statut);
+            }
             None => self.fichiers.push(Fichier {
                 chemin: chemin.to_string(),
                 avant,
                 apres,
+                statut,
             }),
         }
+    }
+}
+
+/// Les deux lectures dont une action a besoin pour se planifier.
+struct Etats {
+    /// Contenu du fichier tel que la planification a trouvé le projet, `None` s'il n'y
+    /// existait pas.
+    origine: Option<String>,
+    /// Contenu du fichier tel que les actions déjà planifiées le laisseront.
+    courant: Option<String>,
+}
+
+/// Statut d'une action qui compose avec ce qu'elle trouve — une insertion, un patch.
+///
+/// Elle n'est sans effet que si le projet d'origine porte déjà ce qu'elle produit ; elle
+/// n'entre jamais en conflit, puisqu'elle ne remplace pas un fichier entier.
+fn statut_compose(origine: Option<&str>, apres: &str) -> Statut {
+    if origine == Some(apres) {
+        Statut::DejaFait
+    } else {
+        Statut::AFaire
     }
 }
 
@@ -469,6 +525,195 @@ mod tests {
             message.contains("introuvable"),
             "le message ne dit pas que le fichier manque : {message}"
         );
+    }
+
+    #[test]
+    fn un_second_patch_de_la_meme_feature_reste_a_faire() {
+        let projet = projet();
+        fs::write(projet.path().join("Cargo.toml"), CARGO).expect("l'écriture aboutit");
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        constructeur
+            .patcher(PatchToml::InscrireFeature("docker".to_string()))
+            .expect("le manifeste est valide");
+        constructeur
+            .patcher(PatchToml::InscrireFeature("docker".to_string()))
+            .expect("le manifeste est valide");
+        let plan = constructeur.finir();
+
+        assert_eq!(
+            plan.actions()[1].statut,
+            Statut::AFaire,
+            "le manifeste trouvé ne porte pas `docker` : l'action a bien un effet"
+        );
+    }
+
+    #[test]
+    fn une_seconde_insertion_de_la_meme_ligne_reste_a_faire() {
+        let projet = projet();
+        avec_router(&projet, ROUTER);
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+        let lignes = [".merge(crate::users::routes())".to_string()];
+
+        constructeur
+            .inserer(ancres::ROUTES, &lignes)
+            .expect("l'ancre est présente");
+        constructeur
+            .inserer(ancres::ROUTES, &lignes)
+            .expect("l'ancre est présente");
+        let plan = constructeur.finir();
+
+        assert_eq!(
+            plan.actions()[1].statut,
+            Statut::AFaire,
+            "le routeur trouvé ne porte pas la ligne : l'action a bien un effet"
+        );
+        assert_eq!(
+            plan.fichiers()[0].apres.matches("users::routes").count(),
+            1,
+            "la ligne a été insérée deux fois"
+        );
+    }
+
+    #[test]
+    fn creer_sur_un_chemin_deja_projete_est_refuse() {
+        let projet = projet();
+        avec_router(&projet, ROUTER);
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        constructeur
+            .inserer(
+                ancres::ROUTES,
+                &[".merge(crate::users::routes())".to_string()],
+            )
+            .expect("l'ancre est présente");
+        let erreur = constructeur
+            .creer("src/router.rs", ROUTER)
+            .expect_err("une action a déjà projeté ce fichier");
+        let plan = constructeur.finir();
+
+        assert!(matches!(erreur, Erreur::DejaProjete { .. }));
+
+        assert_eq!(plan.actions().len(), 1);
+        assert!(
+            plan.fichiers()[0].apres.contains("users::routes"),
+            "la projection de l'insertion a été écrasée : {}",
+            plan.fichiers()[0].apres
+        );
+    }
+
+    #[test]
+    fn creer_deux_fois_le_meme_fichier_est_refuse() {
+        let projet = projet();
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        constructeur
+            .creer("Dockerfile", "FROM rust\n")
+            .expect("le fichier est absent");
+        let erreur = constructeur
+            .creer("Dockerfile", "FROM alpine\n")
+            .expect_err("le fichier est déjà projeté");
+        let plan = constructeur.finir();
+
+        assert!(matches!(erreur, Erreur::DejaProjete { .. }));
+        assert_eq!(plan.actions().len(), 1);
+        assert_eq!(plan.fichiers()[0].apres, "FROM rust\n");
+    }
+
+    #[test]
+    fn un_fichier_en_conflit_le_dit_sans_qu_il_faille_lire_ses_actions() {
+        let projet = projet();
+        fs::write(projet.path().join("Dockerfile"), "FROM alpine\n").expect("l'écriture aboutit");
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        constructeur
+            .creer("Dockerfile", "FROM rust\n")
+            .expect("le fichier se lit");
+        let plan = constructeur.finir();
+
+        assert_eq!(plan.fichiers()[0].statut, Statut::Conflit);
+    }
+
+    #[test]
+    fn un_fichier_dont_toutes_les_actions_sont_sans_effet_est_sans_effet() {
+        let projet = projet();
+        let peuple = ROUTER.replace(
+            "        // </rbs:routes>",
+            "        .merge(crate::users::routes())\n        // </rbs:routes>",
+        );
+        avec_router(&projet, &peuple);
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        constructeur
+            .creer("src/router.rs", &peuple)
+            .expect("le fichier se lit");
+        constructeur
+            .inserer(
+                ancres::ROUTES,
+                &[".merge(crate::users::routes())".to_string()],
+            )
+            .expect("l'ancre est présente");
+        let plan = constructeur.finir();
+
+        assert_eq!(plan.actions()[0].statut, Statut::DejaFait);
+        assert_eq!(plan.actions()[1].statut, Statut::DejaFait);
+        assert_eq!(plan.fichiers()[0].statut, Statut::DejaFait);
+    }
+
+    #[test]
+    fn un_fichier_melant_une_action_sans_effet_et_une_a_faire_est_a_faire() {
+        let projet = projet();
+        avec_router(&projet, ROUTER);
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        constructeur
+            .creer("src/router.rs", ROUTER)
+            .expect("le fichier se lit");
+        constructeur
+            .inserer(
+                ancres::ROUTES,
+                &[".merge(crate::users::routes())".to_string()],
+            )
+            .expect("l'ancre est présente");
+        let plan = constructeur.finir();
+
+        assert_eq!(plan.actions()[0].statut, Statut::DejaFait);
+        assert_eq!(plan.actions()[1].statut, Statut::AFaire);
+        assert_eq!(plan.fichiers()[0].statut, Statut::AFaire);
+    }
+
+    #[test]
+    fn une_action_en_echec_ne_laisse_ni_action_ni_fichier_au_plan() {
+        let projet = projet();
+        avec_router(
+            &projet,
+            "pub fn router() -> Router {\n    Router::new()\n}\n",
+        );
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+
+        constructeur
+            .creer("Dockerfile", "FROM rust\n")
+            .expect("le fichier est absent");
+
+        constructeur
+            .inserer(ancres::ROUTES, &["peu importe".to_string()])
+            .expect_err("l'ancre manque");
+        constructeur
+            .patcher(PatchToml::InscrireFeature("docker".to_string()))
+            .expect_err("le manifeste manque");
+        constructeur
+            .creer("Dockerfile", "FROM alpine\n")
+            .expect_err("le fichier est déjà projeté");
+
+        let plan = constructeur.finir();
+
+        assert_eq!(plan.actions().len(), 1, "une action en échec a été retenue");
+        assert_eq!(
+            plan.fichiers().len(),
+            1,
+            "un fichier en échec a été projeté"
+        );
+        assert_eq!(plan.fichiers()[0].apres, "FROM rust\n");
     }
 
     /// Chemin et contenu de chaque fichier du répertoire, trié : deux empreintes égales

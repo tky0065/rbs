@@ -34,13 +34,32 @@ pub(crate) enum PatchToml {
 }
 
 /// Ce que l'action produira, connu dès la planification.
+///
+/// Le statut décrit la relation de l'action au projet **tel qu'il a été trouvé**, jamais
+/// à ce que les actions précédentes du plan ont projeté : sans cela, un plan pourrait
+/// réclamer un forçage sur un fichier que lui seul a écrit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Statut {
-    /// Le contenu final diffère de l'actuel : l'action aura un effet.
+    /// Le contenu final diffère de celui d'origine : l'action aura un effet.
     AFaire,
-    /// Le contenu final égale l'actuel : l'action est sans effet.
+    /// Le contenu final égale celui d'origine : l'action est sans effet.
     DejaFait,
-    /// Le fichier existe, avec un contenu que l'action n'a pas produit. Seule une
+    /// Le fichier existait déjà, avec un contenu que l'action n'a pas produit. Seule une
     /// exécution forcée l'écrasera.
     Conflit,
+}
+
+impl Statut {
+    /// Statut d'un fichier que plusieurs actions visent.
+    ///
+    /// Un conflit prime : il ne se dissout pas parce qu'une autre action du plan touche
+    /// le même fichier. À l'inverse, un fichier n'est sans effet que si aucune de ses
+    /// actions n'en a.
+    pub fn agrege(self, autre: Statut) -> Statut {
+        match (self, autre) {
+            (Statut::Conflit, _) | (_, Statut::Conflit) => Statut::Conflit,
+            (Statut::AFaire, _) | (_, Statut::AFaire) => Statut::AFaire,
+            (Statut::DejaFait, Statut::DejaFait) => Statut::DejaFait,
+        }
+    }
 }
