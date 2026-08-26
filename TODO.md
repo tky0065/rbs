@@ -260,7 +260,7 @@ dès que `C` est terminé.
       Workflow GitHub Actions pour le projet généré : fmt, clippy, test.
       ✓ Le workflow généré passe sur un projet fraîchement créé.
 
-- [ ] **E9** · Tests du mécanisme `add`
+- [x] **E9** · Tests du mécanisme `add` — vérifié 2026-08-26 · `cargo test -p rbs-cli --test integration_add` → 4 passed, chacun mis au rouge par une mutation du code de production (déduplication des features, ancre absente ignorée, garde du working tree, rollback retiré) · l'ancre absente est éprouvée sur `generate crud`, `add` n'écrivant dans aucune ancre
       Idempotence, ancre manquante, dépôt sale, rollback.
       ✓ Les quatre scénarios sont couverts en CI.
 
