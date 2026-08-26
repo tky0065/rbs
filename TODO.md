@@ -246,11 +246,11 @@ dès que `C` est terminé.
       `rbs generate`, dont le `--force` est déclaré depuis D10 mais sans effet.
       ✓ Test : dépôt sale → refus ; avec `--force` → exécution.
 
-- [ ] **E5** · Affichage du plan et `--dry-run`
+- [x] **E5** · Affichage du plan et `--dry-run` — vérifié 2026-08-26 · `cargo test -p rbs-cli --bins rendu::tests` → 18 passed, `le_plan_affiche` → 1 passed (mutation de l'application → FAILED, le test mord) · bout en bout : `generate crud --dry-run` puis sans → plans identiques au diff, rien d'écrit par le premier
       Le plan complet est montré avant toute écriture, fichier par fichier.
       ✓ `--dry-run` ne modifie rien et affiche le même plan que l'exécution réelle.
 
-- [ ] **E6** · Application atomique
+- [x] **E6** · Application atomique — vérifié 2026-08-26 · `cargo test -p rbs-cli --bins application::` → 6 passed, dont l'échec injecté sur la quatrième action : empreinte du répertoire identique à l'origine · `generate` migrée vers le plan, `allow(dead_code)` de `plan/mod.rs` retiré
       Échec en cours d'application → restauration des fichiers déjà écrits.
       ✓ Test : échec injecté sur la quatrième action → les trois premières sont annulées.
 
