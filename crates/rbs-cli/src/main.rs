@@ -1,9 +1,5 @@
-// Moteur d'ancres et générateurs écrits avant la commande qui les appellera : le câblage
-// de `rbs generate` est la dernière tâche du lot.
-#[allow(dead_code)]
 mod ancres;
 mod cli;
-#[allow(dead_code)]
 mod generate;
 mod metadata;
 mod new;
@@ -42,6 +38,25 @@ fn main() {
             );
 
             if let Err(erreur) = resultat {
+                ui::error(&erreur.to_string());
+                std::process::exit(1);
+            }
+        }
+
+        Commands::Generate { command } => {
+            let (nom, fields, complete, force) = match command {
+                GenerateCommands::Crud { nom, fields, force } => (nom, fields, true, force),
+                GenerateCommands::Feature { nom, force } => (nom, None, false, force),
+            };
+
+            if force {
+                ui::warn(
+                    "`--force` est sans effet : la vérification du working tree n'est pas \
+                     encore livrée",
+                );
+            }
+
+            if let Err(erreur) = generer(nom, fields, complete) {
                 ui::error(&erreur.to_string());
                 std::process::exit(1);
             }
@@ -93,6 +108,29 @@ fn creer_projet(
     ui::info(&format!(
         "\n  cd {nom}\n  cargo run          # la base visée est dans .env"
     ));
+
+    Ok(())
+}
+
+fn generer(nom: String, fields: Option<String>, complete: bool) -> Result<(), Box<dyn Error>> {
+    let feature = nom.clone();
+    let generee = generate::commande::executer(&generate::commande::Options {
+        nom,
+        fields,
+        complete,
+        repertoire: std::env::current_dir()?,
+    })?;
+
+    ui::success(&format!(
+        "{feature} générée — {} fichiers",
+        generee.fichiers.len()
+    ));
+
+    if let Some(migration) = &generee.migration {
+        ui::info(&format!(
+            "\n  la migration {migration} reste à appliquer avant de lancer le projet"
+        ));
+    }
 
     Ok(())
 }
