@@ -47,6 +47,7 @@ change.
 pub(crate) struct Plan {
     racine: PathBuf,
     actions: Vec<Action>,
+    fichiers: Vec<Fichier>,
 }
 
 pub(crate) struct Action {
@@ -68,14 +69,14 @@ pub(crate) enum PatchToml {
 }
 
 pub(crate) enum Statut {
-    /// L'« après » diffère de l'« avant » : l'action produira un effet.
+    /// L'« après » diffère de l'origine : l'action produira un effet.
     AFaire,
-    /// L'« après » égale l'« avant » : fichier identique, lignes déjà dans l'ancre,
+    /// L'« après » égale l'origine : fichier identique, lignes déjà dans l'ancre,
     /// feature déjà inscrite. L'action est sans effet.
     DejaFait,
-    /// Le fichier existe avec un contenu que l'action n'a pas produit. Seul `--force`
-    /// (E4) l'écrasera. Ne concerne que `Creer` : une insertion s'ajoute à ce qu'elle
-    /// trouve, et un patch TOML ne remplace jamais un fichier entier.
+    /// Le fichier existait déjà avec un contenu que l'action n'a pas produit. Seul
+    /// `--force` (E4) l'écrasera. Ne concerne que `Creer` : une insertion s'ajoute à ce
+    /// qu'elle trouve, et un patch TOML ne remplace jamais un fichier entier.
     Conflit,
 }
 ```
@@ -83,6 +84,20 @@ pub(crate) enum Statut {
 `PatchToml` ne porte qu'une variante : E3 y ajoutera l'ajout de dépendance et l'ajout
 d'une feature à une dépendance existante. La surface de `Effet` reste stable pendant ce
 temps — c'est la raison de l'enum imbriqué plutôt que de trois variantes à plat.
+
+### La règle du statut
+
+> Le statut décrit la relation de l'action au projet **tel qu'il a été trouvé**.
+
+Il ne se décide jamais contre l'aperçu que les actions précédentes du plan ont projeté.
+Deux conditions seraient sinon confondues : un conflit **utilisateur**, où le disque porte
+du contenu étranger qu'un `--force` doit pouvoir arbitrer, et un conflit **interne au
+plan**, où deux actions de la même commande se contredisent — que rien ne devrait franchir.
+Sans la règle, `--force` finirait réclamé pour un fichier que le plan est seul à avoir
+écrit.
+
+La projection, elle, continue de partir de l'aperçu : une action **compose** avec ce que la
+précédente produit, mais se **juge** contre l'origine.
 
 ### Deux vues du même plan
 
@@ -92,9 +107,12 @@ impl Plan {
     /// planifiées.
     pub fn actions(&self) -> &[Action];
 
-    /// Ce que E6 écrit : un fichier par chemin touché, avec son contenu d'origine et son
-    /// contenu final.
-    pub fn fichiers(&self) -> Vec<Fichier>;
+    /// Ce que E6 écrit : un fichier par chemin touché, avec son contenu d'origine, son
+    /// contenu final et le statut agrégé des actions qui le visent.
+    pub fn fichiers(&self) -> &[Fichier];
+
+    /// Racine du projet, à laquelle les chemins des fichiers sont relatifs.
+    pub fn racine(&self) -> &Path;
 }
 
 pub(crate) struct Fichier {
@@ -102,13 +120,41 @@ pub(crate) struct Fichier {
     /// `None` si le fichier n'existe pas encore.
     pub avant: Option<String>,
     pub apres: String,
+    /// Un fichier dont une seule action est en conflit est en conflit ; un fichier dont
+    /// toutes les actions sont sans effet est sans effet.
+    pub statut: Statut,
 }
 ```
 
-`fichiers()` est l'agrégat de `actions()`. La distinction règle le cas de
-`migration/src/lib.rs`, que deux ancres visent : deux actions, un seul fichier, et la
-seconde insertion se calcule contre l'aperçu produit par la première — jamais contre ce
-que le disque contient encore.
+`fichiers()` est l'agrégat de `actions()`, calculé au fil de la construction plutôt que
+recalculé à la demande. La distinction règle le cas de `migration/src/lib.rs`, que deux
+ancres visent : deux actions, un seul fichier, et la seconde insertion se calcule contre
+l'aperçu produit par la première — jamais contre ce que le disque contient encore.
+
+Le statut porté par `Fichier` est ce qui rend `fichiers()` sûr à consommer seul : sans lui,
+E6 écrirait un fichier en conflit sans jamais voir le conflit, resté dans `actions()`.
+
+### Ce que la construction refuse
+
+```rust
+pub(crate) enum Erreur {
+    Acces { chemin: String, source: io::Error },
+    DejaProjete { chemin: String },
+    Ancre(ancres::Absente),
+    Metadonnees(metadata::Erreur),
+    ManifesteAbsent { chemin: String },
+}
+```
+
+`DejaProjete` ferme la seule composition qui n'a pas de sens : `creer` sur un chemin qu'une
+action précédente a déjà projeté. Un contenu complet ne compose pas avec un aperçu — il
+l'effacerait, et le plan affirmerait deux choses inconciliables sur un même fichier. C'est
+une erreur de programmation de l'appelant, pas une situation à absorber.
+
+Chaque variante nomme son fichier **relativement à la racine**, comme `Action::chemin` :
+l'emplacement complet du projet est porté une seule fois, par l'en-tête de l'affichage du
+plan (E5). Une même commande imprimerait sinon un chemin absolu sur un échec et un nom nu
+sur le suivant.
 
 ## 4. La construction
 
@@ -121,8 +167,12 @@ let plan = constructeur.finir();
 ```
 
 Chaque méthode **lit** le fichier visé — ou reprend l'aperçu déjà projeté s'il a été
-touché par une action précédente —, calcule l'« après » et en déduit le statut. Aucune
-n'écrit. La lecture n'est pas une écriture : le critère « aucun effet de bord sur le
+touché par une action précédente —, calcule l'« après » à partir de cet aperçu, puis en
+déduit le statut contre l'origine. Aucune n'écrit.
+
+Chacune lit et calcule *avant* de muter le constructeur : sur un chemin d'erreur, ni les
+actions ni les fichiers n'ont bougé, et un plan abandonné en cours de route est sain
+plutôt que tronqué. La lecture n'est pas une écriture : le critère « aucun effet de bord sur le
 disque » porte sur l'état du répertoire, qui reste inchangé.
 
 Une ancre absente fait échouer `inserer` : le plan ne se construit pas, et rien n'a été
@@ -131,19 +181,28 @@ de sortie.
 
 ## 5. La seule retouche à du code existant
 
-`metadata::ajouter_feature` (`crates/rbs-cli/src/metadata.rs:97`) lit, modifie et écrit
-en une fois. `PatchToml::InscrireFeature` a besoin de la partie « modifie » seule. La
-fonction se scinde :
+`metadata::ajouter_feature` lit, modifie et écrit en une fois. `PatchToml::InscrireFeature`
+a besoin de la partie « modifie » seule. La fonction se scinde :
 
 ```rust
-/// Rend le texte du `Cargo.toml` avec `feature` inscrite. Ne lit ni n'écrit rien.
-pub(crate) fn inscrire_feature(texte: &str, feature: &str) -> Result<String, Erreur>;
+/// Rend le manifeste avec `feature` inscrite, ou `None` si elle y est déjà.
+/// `nom` ne désigne le fichier que dans les messages d'erreur : rien n'est lu ni écrit ici.
+pub fn inscrire_feature(texte: &str, feature: &str, nom: &str) -> Result<Option<String>, Erreur>;
 
 /// Inchangée pour ses appelants : lit, appelle `inscrire_feature`, écrit.
-pub(crate) fn ajouter_feature(cargo_toml: &Path, feature: &str) -> Result<(), Erreur>;
+pub fn ajouter_feature(cargo_toml: &Path, feature: &str) -> Result<(), Erreur>;
 ```
 
-`generate` n'est pas touché et son comportement ne change pas.
+Deux points que la première rédaction n'avait pas vus :
+
+- `inscrire_feature` ne lisant plus le fichier, elle ne sait plus le nommer dans ses
+  erreurs : d'où le paramètre `nom`, que le plan renseigne avec le chemin relatif.
+- Le `None` du retour porte l'idempotence : « la feature est déjà là, aucun texte à
+  écrire ». Rendre le texte inchangé aurait obligé chaque appelant à le comparer pour
+  décider s'il doit écrire.
+
+`generate` n'est pas touché et son comportement ne change pas. La scission rend au passage
+inutile le `#![allow(dead_code)]` que portait `metadata.rs`.
 
 ## 6. Tests
 
@@ -168,6 +227,9 @@ S'y ajoutent les statuts, qui sont la partie du modèle dont E2, E5 et E6 dépen
 |---|---|
 | Message d'erreur et code de sortie sur ancre absente | E2 |
 | Ajout de dépendance, feature d'une dépendance | E3 |
-| Vérification du working tree Git, `--force` | E4 |
-| Affichage du plan, `--dry-run` | E5 |
+| Vérification du working tree Git, arbitrage d'un `Conflit` par `--force` | E4 |
+| Affichage du plan, en-tête portant la racine du projet, `--dry-run` | E5 |
 | Écriture, rollback, migration de `generate` vers le plan | E6 |
+
+L'en-tête d'affichage revient à E5, et c'est lui qui justifie que les chemins du module
+soient relatifs de bout en bout : le plan nomme les fichiers, la racine se dit une fois.
