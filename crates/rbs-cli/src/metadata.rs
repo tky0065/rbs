@@ -90,26 +90,42 @@ pub fn lire(cargo_toml: &Path) -> Result<Metadonnees, Erreur> {
     })
 }
 
-/// Inscrit `feature` dans les features installées, sans effet si elle y est déjà.
+/// Rend le manifeste avec `feature` inscrite, ou `None` si elle y est déjà.
 ///
-/// Ne réécrit pas le manifeste dans ce cas : une commande relancée ne doit pas salir le
-/// working tree.
-pub fn ajouter_feature(cargo_toml: &Path, feature: &str) -> Result<(), Erreur> {
-    let mut document = charger(cargo_toml)?;
+/// `nom` ne désigne le fichier que dans les messages d'erreur : rien n'est lu ni écrit ici.
+pub fn inscrire_feature(texte: &str, feature: &str, nom: &str) -> Result<Option<String>, Erreur> {
+    let mut document = texte
+        .parse::<DocumentMut>()
+        .map_err(|source| Erreur::Syntaxe {
+            chemin: nom.to_string(),
+            source,
+        })?;
+
+    // `get_mut` sur une clé absente la crée à `Item::None` pour permettre l'écriture :
+    // vérifier l'existence de la section avant de la traverser en mutable évite qu'une
+    // absence s'y déguise en `Item::None` au lieu de déclencher `PasUnProjet`.
+    if document
+        .get("package")
+        .and_then(|package| package.get("metadata"))
+        .and_then(|metadata| metadata.get("rbs"))
+        .is_none()
+    {
+        return Err(Erreur::PasUnProjet {
+            chemin: nom.to_string(),
+        });
+    }
 
     let rbs = document
         .get_mut("package")
         .and_then(|package| package.get_mut("metadata"))
         .and_then(|metadata| metadata.get_mut("rbs"))
-        .ok_or_else(|| Erreur::PasUnProjet {
-            chemin: nommer(cargo_toml),
-        })?;
+        .expect("la section a été vérifiée juste au-dessus");
 
     let installees = rbs
         .get_mut("features")
         .and_then(Item::as_array_mut)
         .ok_or_else(|| Erreur::Champ {
-            chemin: nommer(cargo_toml),
+            chemin: nom.to_string(),
             cle: "features",
         })?;
 
@@ -117,13 +133,32 @@ pub fn ajouter_feature(cargo_toml: &Path, feature: &str) -> Result<(), Erreur> {
         .iter()
         .any(|valeur| valeur.as_str() == Some(feature))
     {
-        return Ok(());
+        return Ok(None);
     }
 
     installees.push(feature);
 
-    fs::write(cargo_toml, document.to_string()).map_err(|source| Erreur::Acces {
-        chemin: nommer(cargo_toml),
+    Ok(Some(document.to_string()))
+}
+
+/// Inscrit `feature` dans les features installées, sans effet si elle y est déjà.
+///
+/// Ne réécrit pas le manifeste dans ce cas : une commande relancée ne doit pas salir le
+/// working tree.
+pub fn ajouter_feature(cargo_toml: &Path, feature: &str) -> Result<(), Erreur> {
+    let nom = nommer(cargo_toml);
+
+    let texte = fs::read_to_string(cargo_toml).map_err(|source| Erreur::Acces {
+        chemin: nom.clone(),
+        source,
+    })?;
+
+    let Some(rendu) = inscrire_feature(&texte, feature, &nom)? else {
+        return Ok(());
+    };
+
+    fs::write(cargo_toml, rendu).map_err(|source| Erreur::Acces {
+        chemin: nom,
         source,
     })
 }
@@ -316,5 +351,41 @@ anyhow = "1.0"  # gardé tel quel
             vec!["[package]", "[package.metadata.rbs]", "[dependencies]"],
             "ordre des sections modifié :\n{apres}"
         );
+    }
+
+    const MANIFESTE_MINIMAL: &str = r#"[package]
+name = "demo"
+
+# les features installées
+[package.metadata.rbs]
+version = "0.1.0"
+features = ["health"]
+"#;
+
+    #[test]
+    fn une_feature_absente_est_inscrite_sans_toucher_au_reste_du_manifeste() {
+        let rendu = inscrire_feature(MANIFESTE_MINIMAL, "docker", "Cargo.toml")
+            .expect("le manifeste est valide")
+            .expect("la feature est absente, le texte change");
+
+        assert!(rendu.contains(r#"features = ["health", "docker"]"#));
+        assert!(rendu.contains("# les features installées"));
+        assert!(rendu.starts_with("[package]\nname = \"demo\"\n"));
+    }
+
+    #[test]
+    fn une_feature_deja_inscrite_ne_produit_aucun_texte() {
+        let rendu = inscrire_feature(MANIFESTE_MINIMAL, "health", "Cargo.toml")
+            .expect("le manifeste est valide");
+
+        assert_eq!(rendu, None);
+    }
+
+    #[test]
+    fn un_manifeste_sans_section_rbs_est_refuse() {
+        let erreur = inscrire_feature("[package]\nname = \"demo\"\n", "docker", "Cargo.toml")
+            .expect_err("la section manque");
+
+        assert!(matches!(erreur, Erreur::PasUnProjet { .. }));
     }
 }
