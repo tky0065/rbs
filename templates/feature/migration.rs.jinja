@@ -1,0 +1,70 @@
+use sea_orm_migration::prelude::*;
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table({@ iden @}::Table)
+                    .if_not_exists()
+                    .col(
+                        ColumnDef::new({@ iden @}::Id)
+                            .uuid()
+                            .not_null()
+                            .default(Expr::cust("uuidv7()"))
+                            .primary_key(),
+                    )
+{%- for champ in champs %}
+                    .col(ColumnDef::new({@ iden @}::{@ champ.nom_pascal @}).{@ champ.methode_migration @}.{@ "null()" if champ.optionnel else "not_null()" @}{@ ".unique_key()" if champ.unique else "" @})
+{%- endfor %}
+                    .col(
+                        ColumnDef::new({@ iden @}::CreatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null()
+                            .default(Expr::current_timestamp()),
+                    )
+                    .col(
+                        ColumnDef::new({@ iden @}::UpdatedAt)
+                            .timestamp_with_time_zone()
+                            .not_null()
+                            .default(Expr::current_timestamp()),
+                    )
+                    .to_owned(),
+            )
+            .await?;
+{% for champ in champs if champ.index %}
+        manager
+            .create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_{@ table @}_{@ champ.nom @}")
+                    .table({@ iden @}::Table)
+                    .col({@ iden @}::{@ champ.nom_pascal @})
+                    .to_owned(),
+            )
+            .await?;
+{% endfor %}
+        Ok(())
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table({@ iden @}::Table).to_owned())
+            .await
+    }
+}
+
+#[derive(DeriveIden)]
+enum {@ iden @} {
+    Table,
+    Id,
+{%- for champ in champs %}
+    {@ champ.nom_pascal @},
+{%- endfor %}
+    CreatedAt,
+    UpdatedAt,
+}

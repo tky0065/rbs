@@ -9,6 +9,49 @@ use std::path::{Path, PathBuf};
 
 use assert_cmd::Command;
 use tempfile::TempDir;
+use testcontainers::GenericImage;
+use testcontainers::core::{IntoContainerPort, WaitFor};
+use testcontainers::runners::SyncRunner;
+use testcontainers::{Container, ImageExt};
+
+/// PostgreSQL 18 en conteneur, et l'URL de connexion qui y mène.
+///
+/// La version n'est pas négociable : `uuidv7()` n'est native qu'à partir de la 18, et la
+/// spec assume ce plancher plutôt qu'une fonction PL/pgSQL de compatibilité.
+pub(crate) struct BaseDeTest {
+    _conteneur: Container<GenericImage>,
+    url: String,
+}
+
+impl BaseDeTest {
+    pub(crate) fn demarrer() -> Self {
+        // Le message d'ouverture paraît deux fois : le serveur temporaire de l'initdb
+        // l'écrit avant que la base définitive n'existe. S'y connecter à la première
+        // occurrence donne un refus, ou pire, une base qui disparaît sous le test.
+        let ouverture = || WaitFor::message_on_stderr("ready to accept connections");
+
+        let conteneur = GenericImage::new("postgres", "18")
+            .with_wait_for(ouverture())
+            .with_wait_for(ouverture())
+            .with_env_var("POSTGRES_USER", "rbs")
+            .with_env_var("POSTGRES_PASSWORD", "rbs")
+            .with_env_var("POSTGRES_DB", "demo_api")
+            .start()
+            .expect("PostgreSQL 18 doit démarrer — Docker requis");
+        let port = conteneur
+            .get_host_port_ipv4(5432.tcp())
+            .expect("port de la base exposé");
+
+        Self {
+            url: format!("postgres://rbs:rbs@127.0.0.1:{port}/demo_api"),
+            _conteneur: conteneur,
+        }
+    }
+
+    pub(crate) fn url(&self) -> &str {
+        &self.url
+    }
+}
 
 /// Racine du dépôt, d'où se déduisent le noyau local et la cible de compilation.
 pub(crate) fn depot() -> PathBuf {
@@ -107,6 +150,46 @@ impl Projet {
             ),
         )
         .expect("lib.rs de migration écrivable");
+    }
+
+    /// Ajoute un test d'intégration à la crate `migration` du projet.
+    ///
+    /// `tokio` s'ajoute avec lui : une migration n'a pas besoin d'exécuteur, seul le test
+    /// qui l'applique en réclame un.
+    pub(crate) fn poser_test_de_migration(&self, nom: &str, contenu: &str) {
+        let tests = self.racine.join("migration/tests");
+        fs::create_dir_all(&tests).expect("répertoire de tests créable");
+        fs::write(tests.join(format!("{nom}.rs")), contenu).expect("test écrivable");
+
+        let manifeste = self.racine.join("migration/Cargo.toml");
+        let source = fs::read_to_string(&manifeste).expect("manifeste de migration lisible");
+
+        fs::write(
+            &manifeste,
+            format!(
+                "{source}\n[dev-dependencies]\n\
+                 tokio = {{ version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }}\n"
+            ),
+        )
+        .expect("manifeste de migration écrivable");
+    }
+
+    /// Lance les tests de la crate `migration` contre `url`, et rapporte leur sortie.
+    pub(crate) fn tester_migration(&self, url: &str) {
+        let sortie = std::process::Command::new("cargo")
+            .current_dir(&self.racine)
+            .env("CARGO_TARGET_DIR", depot().join("target/rbs-integration"))
+            .env("DATABASE_URL", url)
+            .args(["test", "-p", "migration", "--", "--nocapture"])
+            .output()
+            .expect("cargo doit être lançable");
+
+        assert!(
+            sortie.status.success(),
+            "les tests de migration échouent :\n{}\n{}",
+            String::from_utf8_lossy(&sortie.stdout),
+            String::from_utf8_lossy(&sortie.stderr)
+        );
     }
 
     /// Compile le projet, et échoue en rapportant la sortie de `cargo` telle quelle.

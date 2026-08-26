@@ -36,6 +36,14 @@ impl Feature {
         en_pascal_case(&self.singulier())
     }
 
+    /// Nom de l'enum `DeriveIden` de la migration : `blog_posts` donne `BlogPosts`.
+    ///
+    /// SeaORM tire le nom de la table de celui de l'enum, pas de sa variante `Table` :
+    /// l'enum se nomme donc au pluriel, contrairement à l'entité.
+    pub(crate) fn iden(&self) -> String {
+        en_pascal_case(&self.nom)
+    }
+
     /// Nom singulier en snake_case : `blog_posts` donne `blog_post`.
     pub(crate) fn singulier(&self) -> String {
         au_singulier(&self.nom)
@@ -46,10 +54,11 @@ impl Feature {
 /// templates lisent `entite` comme elles lisent `module`.
 impl Serialize for Feature {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut etat = serializer.serialize_struct("Feature", 5)?;
+        let mut etat = serializer.serialize_struct("Feature", 6)?;
         etat.serialize_field("module", self.module())?;
         etat.serialize_field("table", self.module())?;
         etat.serialize_field("entite", &self.entite())?;
+        etat.serialize_field("iden", &self.iden())?;
         etat.serialize_field("singulier", &self.singulier())?;
         etat.serialize_field("champs", &self.champs)?;
         etat.end()
@@ -151,6 +160,7 @@ mod tests {
         assert_eq!(vue["module"], "users");
         assert_eq!(vue["table"], "users");
         assert_eq!(vue["entite"], "User");
+        assert_eq!(vue["iden"], "Users");
         assert_eq!(vue["singulier"], "user");
         assert!(vue["champs"].is_array(), "les champs doivent être exposés");
     }

@@ -11,6 +11,7 @@ repository = "https://github.com/tky0065/rbs"
 [workspace.dependencies]
 anyhow = "1.0.104"
 axum = "0.8.9"
+chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 clap = { version = "4.6.6", features = ["derive"] }
 console = "0.16.4"
 dotenvy = "0.15.7"
@@ -36,4 +37,4 @@ validator = { version = "0.21.0", features = ["derive"] }
 
 assert_cmd = "2.2.2"
 tempfile = "3.27.0"
-testcontainers = "0.28.0"
+testcontainers = { version = "0.28.0", features = ["blocking"] }

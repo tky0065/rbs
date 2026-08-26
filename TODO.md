@@ -175,7 +175,7 @@ dès que `C` est terminé.
       Handlers Axum, annotations `#[utoipa::path]`, `routes()`. Ne connaît que `service.rs`.
       ✓ Les cinq routes apparaissent dans Swagger UI avec leurs schémas.
 
-- [ ] **D7** · Génération de la migration
+- [x] **D7** · Génération de la migration — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::migration -- --include-ignored` → 14 passed, dont montée/insertion/descente contre PostgreSQL 18 en conteneur. Le ✓ de réversibilité est prouvé par `Migrator::up`/`down` du projet généré, `rbs migrate` (D11) n'existant pas encore — substitution validée par le porteur du projet
       Migration SeaORM correspondant aux champs, horodatée.
       ✓ `rbs migrate up` puis `down` laisse la base dans son état initial.
       ✓ La colonne `id` porte `DEFAULT uuidv7()` ; un `INSERT` sans `id` reçoit un
