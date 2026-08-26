@@ -462,4 +462,66 @@ mod tests {
             "le message ne dit pas que le fichier manque : {message}"
         );
     }
+
+    /// Chemin et contenu de chaque fichier du répertoire, trié : deux empreintes égales
+    /// valent répertoires identiques.
+    fn empreinte(racine: &Path) -> Vec<(String, Vec<u8>)> {
+        let mut vus = Vec::new();
+        let mut a_parcourir = vec![racine.to_path_buf()];
+
+        while let Some(repertoire) = a_parcourir.pop() {
+            for entree in fs::read_dir(&repertoire).expect("le répertoire se lit") {
+                let chemin = entree.expect("l'entrée se lit").path();
+                if chemin.is_dir() {
+                    a_parcourir.push(chemin);
+                } else {
+                    let relatif = chemin
+                        .strip_prefix(racine)
+                        .expect("le chemin est sous la racine")
+                        .display()
+                        .to_string();
+                    vus.push((relatif, fs::read(&chemin).expect("le fichier se lit")));
+                }
+            }
+        }
+
+        vus.sort();
+        vus
+    }
+
+    #[test]
+    fn planifier_ne_modifie_pas_le_repertoire_du_projet() {
+        let projet = projet();
+        fs::write(projet.path().join("Cargo.toml"), CARGO).expect("l'écriture aboutit");
+        avec_router(&projet, ROUTER);
+        fs::write(projet.path().join("Dockerfile"), "FROM alpine\n").expect("l'écriture aboutit");
+
+        let avant = empreinte(projet.path());
+
+        let mut constructeur = Constructeur::nouveau(projet.path().to_path_buf());
+        constructeur
+            .creer("Dockerfile", "FROM rust\n")
+            .expect("le fichier se lit");
+        constructeur
+            .creer("docker-compose.yml", "services:\n")
+            .expect("le fichier est absent");
+        constructeur
+            .inserer(
+                ancres::ROUTES,
+                &[".merge(crate::users::routes())".to_string()],
+            )
+            .expect("l'ancre est présente");
+        constructeur
+            .patcher(PatchToml::InscrireFeature("docker".to_string()))
+            .expect("le manifeste est valide");
+        let plan = constructeur.finir();
+
+        assert_eq!(
+            empreinte(projet.path()),
+            avant,
+            "la planification a touché au disque"
+        );
+        assert_eq!(plan.actions().len(), 4);
+        assert_eq!(plan.fichiers().len(), 4);
+    }
 }
