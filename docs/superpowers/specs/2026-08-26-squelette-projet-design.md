@@ -247,13 +247,28 @@ use utoipa_swagger_ui::SwaggerUi;
 pub struct ApiDoc;
 ```
 
-`routes()` monte Swagger UI sur `/docs` et le document sur `/api-docs/openapi.json`.
+`routes()` monte Swagger UI sur `/docs` et le document sur `/api-docs/openapi.json`, et
+consulte la configuration avant chacun des deux :
 
-**Écart assumé avec §5.4** : la conception d'ensemble veut ces deux routes désactivables
-par configuration en production. `rbs_core::Config` ne porte aujourd'hui que `env`,
-`server` et `database` — aucun champ ne permet de les couper. Ajouter ce champ modifierait
-`rbs-core`, hors du périmètre de C4. Les routes sont donc montées inconditionnellement, et
-le manque est à traiter dans une tâche portant sur `rbs-core`.
+```rust
+pub fn routes(config: &rbs_core::Config) -> Router<AppState> {
+    let mut router = Router::new();
+
+    if config.docs.openapi_json {
+        router = router.route("/api-docs/openapi.json", get(document));
+    }
+    if config.docs.swagger_ui {
+        router = router.merge(SwaggerUi::new("/docs").url("/api-docs/openapi.json", ApiDoc::openapi()));
+    }
+
+    router
+}
+```
+
+`config.docs` n'existe pas encore dans `rbs_core::Config` : il est ajouté par la tâche
+`B10`, avec les deux champs `swagger_ui` et `openapi_json`, tous deux à `true` par défaut.
+Sans elle, §5.4 — « les deux sont désactivables par configuration en production » — resterait
+lettre morte.
 
 ### `Cargo.toml`
 
