@@ -97,6 +97,20 @@ impl Champ {
             self.type_.type_rust().to_string()
         }
     }
+
+    /// Nom en PascalCase, forme qu'exige l'enum `DeriveIden` de la migration.
+    pub(crate) fn nom_pascal(&self) -> String {
+        self.nom
+            .split('_')
+            .map(|mot| {
+                let mut caracteres = mot.chars();
+                match caracteres.next() {
+                    Some(premier) => premier.to_uppercase().chain(caracteres).collect(),
+                    None => String::new(),
+                }
+            })
+            .collect()
+    }
 }
 
 /// Sérialisé à la main : minijinja ne voit pas les méthodes Rust, or les templates
@@ -104,13 +118,15 @@ impl Champ {
 /// reconstruirait sa propre structure de vue.
 impl Serialize for Champ {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut etat = serializer.serialize_struct("Champ", 8)?;
+        let mut etat = serializer.serialize_struct("Champ", 10)?;
         etat.serialize_field("nom", &self.nom)?;
+        etat.serialize_field("nom_pascal", &self.nom_pascal())?;
         etat.serialize_field("type", self.type_.nom())?;
         etat.serialize_field("unique", &self.unique)?;
         etat.serialize_field("optionnel", &self.optionnel)?;
         etat.serialize_field("index", &self.index)?;
         etat.serialize_field("type_rust", &self.type_rust())?;
+        etat.serialize_field("type_rust_nu", self.type_.type_rust())?;
         etat.serialize_field("methode_migration", self.type_.methode_migration())?;
         etat.serialize_field("attribut_column_type", &self.type_.attribut_column_type())?;
         etat.end()
@@ -675,13 +691,28 @@ mod tests {
         let json = serde_json::to_value(&champs[0]).expect("Champ est sérialisable");
 
         assert_eq!(json["nom"], "bio");
+        assert_eq!(json["nom_pascal"], "Bio");
         assert_eq!(json["type"], "text");
         assert_eq!(json["unique"], false);
         assert_eq!(json["optionnel"], true);
         assert_eq!(json["index"], false);
         assert_eq!(json["type_rust"], "Option<String>");
+        assert_eq!(json["type_rust_nu"], "String");
         assert_eq!(json["methode_migration"], "text()");
         assert_eq!(json["attribut_column_type"], "Text");
+    }
+
+    #[test]
+    fn le_nom_se_projette_en_pascal_case() {
+        assert_eq!(champs("titre:string")[0].nom_pascal(), "Titre");
+        assert_eq!(
+            champs("adresse_ligne_2:string")[0].nom_pascal(),
+            "AdresseLigne2"
+        );
+        assert_eq!(
+            champs("date_de_naissance:datetime")[0].nom_pascal(),
+            "DateDeNaissance"
+        );
     }
 
     #[test]
