@@ -61,7 +61,10 @@ mod tests {
             "pub publie_le: DateTimeWithTimeZone,",
             "pub corps: String,",
         ] {
-            assert!(rendu.contains(attendu), "« {attendu} » absent de :\n{rendu}");
+            assert!(
+                rendu.contains(attendu),
+                "« {attendu} » absent de :\n{rendu}"
+            );
         }
     }
 
@@ -119,8 +122,14 @@ mod tests {
     fn les_horodatages_sont_poses_sans_avoir_ete_declares() {
         let rendu = entite("users", "name:string");
 
-        assert!(rendu.contains("pub created_at: DateTimeWithTimeZone,"), "{rendu}");
-        assert!(rendu.contains("pub updated_at: DateTimeWithTimeZone,"), "{rendu}");
+        assert!(
+            rendu.contains("pub created_at: DateTimeWithTimeZone,"),
+            "{rendu}"
+        );
+        assert!(
+            rendu.contains("pub updated_at: DateTimeWithTimeZone,"),
+            "{rendu}"
+        );
     }
 
     #[test]
@@ -129,7 +138,10 @@ mod tests {
 
         assert!(rendu.contains("pub struct Model {"), "{rendu}");
         assert!(rendu.contains("pub enum Relation {}"), "{rendu}");
-        assert!(rendu.contains("impl ActiveModelBehavior for ActiveModel {}"), "{rendu}");
+        assert!(
+            rendu.contains("impl ActiveModelBehavior for ActiveModel {}"),
+            "{rendu}"
+        );
     }
 
     #[test]
@@ -163,7 +175,10 @@ mod tests {
     fn le_rendu_se_termine_par_un_retour_a_la_ligne_unique() {
         let rendu = entite("users", "name:string");
 
-        assert!(rendu.ends_with("}\n"), "fin de fichier inattendue :\n{rendu}");
+        assert!(
+            rendu.ends_with("}\n"),
+            "fin de fichier inattendue :\n{rendu}"
+        );
         assert!(!rendu.ends_with("\n\n"), "ligne vide finale :\n{rendu}");
     }
 }

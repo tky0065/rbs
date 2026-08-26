@@ -98,6 +98,17 @@ impl Champ {
         }
     }
 
+    /// Le champ mérite-t-il une contrainte d'email dans les DTO ?
+    ///
+    /// La grammaire de `--fields` n'a pas de type `email` et n'en aura pas : sept types
+    /// suffisent à décrire une colonne, et un format de chaîne n'est pas un type de
+    /// colonne. La contrainte se déduit donc du nom, seule information dont on dispose.
+    pub(crate) fn valide_email(&self) -> bool {
+        let textuel = matches!(self.type_, TypeChamp::String | TypeChamp::Text);
+
+        textuel && (self.nom == "email" || self.nom.ends_with("_email"))
+    }
+
     /// Nom en PascalCase, forme qu'exige l'enum `DeriveIden` de la migration.
     pub(crate) fn nom_pascal(&self) -> String {
         en_pascal_case(&self.nom)
@@ -109,7 +120,7 @@ impl Champ {
 /// reconstruirait sa propre structure de vue.
 impl Serialize for Champ {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut etat = serializer.serialize_struct("Champ", 10)?;
+        let mut etat = serializer.serialize_struct("Champ", 11)?;
         etat.serialize_field("nom", &self.nom)?;
         etat.serialize_field("nom_pascal", &self.nom_pascal())?;
         etat.serialize_field("type", self.type_.nom())?;
@@ -120,6 +131,7 @@ impl Serialize for Champ {
         etat.serialize_field("type_rust_nu", self.type_.type_rust())?;
         etat.serialize_field("methode_migration", self.type_.methode_migration())?;
         etat.serialize_field("attribut_column_type", &self.type_.attribut_column_type())?;
+        etat.serialize_field("valide_email", &self.valide_email())?;
         etat.end()
     }
 }
@@ -323,6 +335,20 @@ mod tests {
         for (mot, attendu) in cas {
             assert_eq!(TypeChamp::analyser(mot), Some(attendu), "type « {mot} »");
         }
+    }
+
+    #[test]
+    fn un_champ_nomme_email_appelle_une_contrainte_de_validation() {
+        let champs = analyser("email:string,contact_email:text,nom:string,email_verifie:bool")
+            .expect("champs valides");
+
+        let valident: Vec<_> = champs
+            .iter()
+            .filter(|champ| champ.valide_email())
+            .map(|champ| champ.nom.as_str())
+            .collect();
+
+        assert_eq!(valident, ["email", "contact_email"]);
     }
 
     #[test]

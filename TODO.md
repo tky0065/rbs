@@ -159,7 +159,7 @@ dès que `C` est terminé.
       ✓ L'entité compile et ses types correspondent aux champs demandés.
       ✓ `id` est un `Uuid` sans auto-incrément.
 
-- [ ] **D3** · Génération des DTO
+- [x] **D3** · Génération des DTO — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::dto -- --include-ignored` → 13 passed, dont la compilation des trois DTO dans un projet neuf
       `Create` / `Update` / `Response`, avec `validator` et `ToSchema`.
       ✓ Un champ `email:string` produit une contrainte de validation d'email.
 

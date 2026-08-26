@@ -1,0 +1,62 @@
+{#
+  `DateTimeWithTimeZone` est un alias : utoipa reconnaît les types chrono par leur nom
+  écrit — `DateTime`, `NaiveDateTime` — et bute donc sur celui-ci. Le format se déclare
+  à la main plutôt que par un import renommé, qui casserait sans bruit à la première
+  retouche de l'utilisateur.
+-#}
+{% macro schema_datetime(champ, optionnel) -%}
+{% if champ.type == "datetime" %}
+    #[schema(value_type = {@ "Option<String>" if optionnel else "String" @}, format = DateTime)]
+{%- endif %}
+{%- endmacro -%}
+{% macro corps(champs, tout_optionnel) -%}
+{% if champs %} {
+{%- for champ in champs %}
+{@- schema_datetime(champ, tout_optionnel or champ.optionnel) @}
+{%- if champ.valide_email %}
+    #[validate(email)]
+{%- endif %}
+    pub {@ champ.nom @}: {@ "Option<" ~ champ.type_rust_nu ~ ">" if tout_optionnel else champ.type_rust @},
+{%- endfor %}
+}
+{%- else %} {}
+{%- endif %}
+{%- endmacro -%}
+use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+use validator::Validate;
+
+use super::model::Model;
+
+#[derive(Debug, Deserialize, ToSchema, Validate)]
+pub struct Create{@ entite @}{@ corps(champs, false) @}
+
+#[derive(Debug, Deserialize, ToSchema, Validate)]
+pub struct Update{@ entite @}{@ corps(champs, true) @}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct {@ entite @}Response {
+    pub id: Uuid,
+{%- for champ in champs %}
+{@- schema_datetime(champ, champ.optionnel) @}
+    pub {@ champ.nom @}: {@ champ.type_rust @},
+{%- endfor %}
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: DateTimeWithTimeZone,
+    #[schema(value_type = String, format = DateTime)]
+    pub updated_at: DateTimeWithTimeZone,
+}
+
+impl From<Model> for {@ entite @}Response {
+    fn from(model: Model) -> Self {
+        Self {
+            id: model.id,
+{%- for champ in champs %}
+            {@ champ.nom @}: model.{@ champ.nom @},
+{%- endfor %}
+            created_at: model.created_at,
+            updated_at: model.updated_at,
+        }
+    }
+}
