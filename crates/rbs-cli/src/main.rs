@@ -49,12 +49,21 @@ fn main() {
         }
 
         Commands::Generate { command } => {
-            let (nom, fields, complete, force) = match command {
-                GenerateCommands::Crud { nom, fields, force } => (nom, fields, true, force),
-                GenerateCommands::Feature { nom, force } => (nom, None, false, force),
+            let (nom, fields, complete, force, dry_run) = match command {
+                GenerateCommands::Crud {
+                    nom,
+                    fields,
+                    force,
+                    dry_run,
+                } => (nom, fields, true, force, dry_run),
+                GenerateCommands::Feature {
+                    nom,
+                    force,
+                    dry_run,
+                } => (nom, None, false, force, dry_run),
             };
 
-            if let Err(erreur) = generer(nom, fields, complete, force) {
+            if let Err(erreur) = generer(nom, fields, complete, force, dry_run) {
                 ui::error(&erreur.to_string());
                 if let Some(remede) = erreur.remede() {
                     ui::info(&format!("\n{remede}"));
@@ -143,6 +152,7 @@ fn generer(
     fields: Option<String>,
     complete: bool,
     force: bool,
+    dry_run: bool,
 ) -> Result<(), generate::commande::Erreur> {
     let feature = nom.clone();
     let repertoire =
@@ -150,7 +160,7 @@ fn generer(
             chemin: ".".to_string(),
             source,
         })?;
-    let generee = generate::commande::executer(&generate::commande::Options {
+    let planifiee = generate::commande::planifier(&generate::commande::Options {
         nom,
         fields,
         complete,
@@ -158,12 +168,23 @@ fn generer(
         force,
     })?;
 
+    // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande
+    // s'apprête à faire ne doit pas se découvrir après coup.
+    println!("{}", plan::rendu::plan(&planifiee.plan));
+
+    if dry_run {
+        ui::info("\n  rien n'a été écrit (--dry-run)");
+        return Ok(());
+    }
+
+    plan::application::appliquer(&planifiee.plan, force)?;
+
     ui::success(&format!(
         "{feature} générée — {} fichiers",
-        generee.fichiers.len()
+        planifiee.fichiers.len()
     ));
 
-    if let Some(migration) = &generee.migration {
+    if let Some(migration) = &planifiee.migration {
         ui::info(&format!(
             "\n  la migration {migration} reste à appliquer avant de lancer le projet"
         ));

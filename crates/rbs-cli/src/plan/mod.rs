@@ -4,12 +4,9 @@
 //! avant et son contenu après. Planifier, c'est calculer les « après » sans rien écrire —
 //! d'où l'affichage préalable, la restauration en cas d'échec et l'idempotence.
 
-// Le module précède ses appelants : `rbs add` n'est pas encore implémentée.
-#![allow(dead_code)]
-
 mod action;
-mod application;
-mod rendu;
+pub(crate) mod application;
+pub(crate) mod rendu;
 
 use std::fs;
 use std::io;
@@ -45,6 +42,11 @@ pub(crate) struct Plan {
 
 impl Plan {
     /// Les actions dans l'ordre où elles ont été planifiées.
+    ///
+    /// Trace du calcul des statuts, action par action, que les tests du modèle vérifient.
+    /// L'affichage et l'application travaillent par fichier : un fichier peut recevoir
+    /// plusieurs actions, et seul son statut agrégé décide de ce qui lui arrivera.
+    #[allow(dead_code)]
     pub fn actions(&self) -> &[Action] {
         &self.actions
     }

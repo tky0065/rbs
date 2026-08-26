@@ -264,28 +264,6 @@ pub fn ajouter_feature_a_dependance(
     Ok(modifie.then(|| document.to_string()))
 }
 
-/// Inscrit `feature` dans les features installées, sans effet si elle y est déjà.
-///
-/// Ne réécrit pas le manifeste dans ce cas : une commande relancée ne doit pas salir le
-/// working tree.
-pub fn ajouter_feature(cargo_toml: &Path, feature: &str) -> Result<(), Erreur> {
-    let nom = nommer(cargo_toml);
-
-    let texte = fs::read_to_string(cargo_toml).map_err(|source| Erreur::Acces {
-        chemin: nom.clone(),
-        source,
-    })?;
-
-    let Some(rendu) = inscrire_feature(&texte, feature, &nom)? else {
-        return Ok(());
-    };
-
-    fs::write(cargo_toml, rendu).map_err(|source| Erreur::Acces {
-        chemin: nom,
-        source,
-    })
-}
-
 /// La déclaration à écrire pour une dépendance encore absente.
 fn declaration(dep: &Dependance) -> Item {
     if dep.features.is_empty() {
@@ -400,7 +378,7 @@ fn nommer(cargo_toml: &Path) -> String {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::{Path, PathBuf};
+    use std::path::PathBuf;
 
     use minijinja::context;
     use tempfile::TempDir;
@@ -443,10 +421,6 @@ mod tests {
         (repertoire, chemin)
     }
 
-    fn lu(chemin: &Path) -> String {
-        fs::read_to_string(chemin).expect("manifeste relisible")
-    }
-
     #[test]
     fn les_metadonnees_d_un_projet_genere_se_relisent() {
         let (_repertoire, chemin) = projet_genere();
@@ -455,25 +429,6 @@ mod tests {
 
         assert_eq!(metadonnees.version, "0.1.0");
         assert_eq!(metadonnees.features, vec!["health".to_string()]);
-    }
-
-    #[test]
-    fn ajouter_deux_fois_la_meme_feature_ne_produit_qu_une_entree() {
-        let (_repertoire, chemin) = projet_genere();
-
-        ajouter_feature(&chemin, "auth").expect("premier ajout");
-        let apres_le_premier = lu(&chemin);
-        ajouter_feature(&chemin, "auth").expect("second ajout");
-
-        assert_eq!(
-            lu(&chemin),
-            apres_le_premier,
-            "le second ajout a réécrit le manifeste"
-        );
-        assert_eq!(
-            lire(&chemin).expect("relecture").features,
-            vec!["health".to_string(), "auth".to_string()]
-        );
     }
 
     #[test]
@@ -490,53 +445,6 @@ mod tests {
         assert!(
             message.contains("projet rbs"),
             "le message ne dit pas ce qui manque : {message}"
-        );
-    }
-
-    #[test]
-    fn l_ecriture_preserve_les_commentaires_et_l_ordre_des_sections() {
-        let original = r#"# Manifeste écrit à la main.
-[package]
-name    = "mon-api"          # aligné exprès
-version = "0.1.0"
-
-[package.metadata.rbs]
-version = "0.1.0"
-features = ["health"]
-
-[dependencies]
-anyhow = "1.0"  # gardé tel quel
-"#;
-        let (_repertoire, chemin) = ecrire(original);
-
-        ajouter_feature(&chemin, "redis").expect("ajout");
-
-        let apres = lu(&chemin);
-        assert!(
-            apres.contains("# Manifeste écrit à la main."),
-            "commentaire de tête perdu :\n{apres}"
-        );
-        assert!(
-            apres.contains("name    = \"mon-api\"          # aligné exprès"),
-            "formatage et commentaire de `name` perdus :\n{apres}"
-        );
-        assert!(
-            apres.contains("anyhow = \"1.0\"  # gardé tel quel"),
-            "commentaire de dépendance perdu :\n{apres}"
-        );
-        assert!(
-            apres.contains("features = [\"health\", \"redis\"]"),
-            "feature ajoutée hors du tableau ou mal formatée :\n{apres}"
-        );
-
-        let sections: Vec<&str> = apres
-            .lines()
-            .filter(|ligne| ligne.starts_with('['))
-            .collect();
-        assert_eq!(
-            sections,
-            vec!["[package]", "[package.metadata.rbs]", "[dependencies]"],
-            "ordre des sections modifié :\n{apres}"
         );
     }
 

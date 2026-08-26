@@ -5,13 +5,12 @@
 //! entièrement, et le premier fichier n'est écrit qu'ensuite. Un nom refusé, une ancre
 //! disparue ou une feature déjà présente laissent le disque tel qu'ils l'ont trouvé.
 
-use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::ancres;
 use crate::git;
 use crate::metadata;
+use crate::plan;
 
 use super::feature::Feature;
 use super::{
@@ -35,10 +34,12 @@ pub(crate) struct Options {
 /// Un fichier à écrire : son chemin, relatif à la racine du projet, et son contenu.
 type Fichier = (String, String);
 
-/// Ce qu'une génération rapporte à son appelant.
+/// Ce qu'une génération fera au projet, entièrement calculé et rien d'écrit.
 #[derive(Debug)]
-pub(crate) struct Generee {
-    /// Chemins écrits, relatifs à la racine du projet.
+pub(crate) struct Planifiee {
+    /// Le plan, à afficher puis à appliquer.
+    pub plan: plan::Plan,
+    /// Chemins des fichiers de la feature, relatifs à la racine du projet.
     pub fichiers: Vec<String>,
     /// Module de la migration générée, s'il y en a une.
     pub migration: Option<String>,
@@ -68,10 +69,6 @@ pub(crate) enum Erreur {
         feature: String,
     },
 
-    /// Une ancre attendue a disparu du projet.
-    #[error("{0}")]
-    Ancre(#[source] ancres::Absente),
-
     /// Une template ne s'est pas rendue.
     #[error("{fichier} ne se rend pas : {source}")]
     Rendu {
@@ -98,9 +95,13 @@ pub(crate) enum Erreur {
         fichiers: String,
     },
 
-    /// Les métadonnées du projet n'ont pu être mises à jour.
+    /// Le plan de la génération n'a pu être calculé.
     #[error("{0}")]
-    Metadonnees(#[source] metadata::Erreur),
+    Plan(#[from] plan::Erreur),
+
+    /// Le plan n'a pu être appliqué au projet.
+    #[error("{0}")]
+    Application(#[from] plan::application::Erreur),
 }
 
 impl Erreur {
@@ -110,7 +111,7 @@ impl Erreur {
     /// se règlent par une décision — commiter, choisir un autre nom, corriger un champ.
     pub(crate) fn remede(&self) -> Option<String> {
         match self {
-            Erreur::Ancre(absente) => Some(format!(
+            Erreur::Plan(plan::Erreur::Ancre(absente)) => Some(format!(
                 "dans {} :\n{}",
                 absente.ancre.fichier,
                 absente.ancre.bloc()
@@ -120,8 +121,8 @@ impl Erreur {
     }
 }
 
-/// Génère la feature décrite par `options` dans le projet qui contient son répertoire.
-pub(crate) fn executer(options: &Options) -> Result<Generee, Erreur> {
+/// Calcule ce que la génération de `options` ferait au projet, sans rien écrire.
+pub(crate) fn planifier(options: &Options) -> Result<Planifiee, Erreur> {
     let depart = options
         .repertoire
         .canonicalize()
@@ -152,15 +153,24 @@ pub(crate) fn executer(options: &Options) -> Result<Generee, Erreur> {
     }
 
     let (fichiers, migration) = rendre(&feature, options.complete)?;
-    let modifies = monter(&racine, &module, migration.as_deref())?;
 
-    for (chemin, contenu) in fichiers.iter().chain(modifies.iter()) {
-        ecrire(&racine.join(chemin), contenu)?;
+    let mut constructeur = plan::Constructeur::nouveau(racine);
+    for (chemin, contenu) in &fichiers {
+        constructeur.creer(chemin, contenu)?;
     }
 
-    metadata::ajouter_feature(&racine.join("Cargo.toml"), &module).map_err(Erreur::Metadonnees)?;
+    let mut montages = montage::pour(&module);
+    if let Some(migration) = &migration {
+        montages.extend(montage::pour_migration(migration));
+    }
+    for montage in montages {
+        constructeur.inserer(montage.ancre, &montage.lignes)?;
+    }
 
-    Ok(Generee {
+    constructeur.patcher(plan::PatchToml::InscrireFeature(module))?;
+
+    Ok(Planifiee {
+        plan: constructeur.finir(),
         fichiers: fichiers.into_iter().map(|(chemin, _)| chemin).collect(),
         migration,
     })
@@ -232,49 +242,6 @@ fn rendre(feature: &Feature, complete: bool) -> Result<(Vec<Fichier>, Option<Str
     Ok((rendus, Some(rendue.module)))
 }
 
-/// Applique les montages de la feature aux ancres du projet, en mémoire.
-///
-/// Deux montages visent le même fichier — la crate `migration` en porte deux : le second
-/// part donc du résultat du premier, et non de ce que le disque contient encore.
-fn monter(racine: &Path, module: &str, migration: Option<&str>) -> Result<Vec<Fichier>, Erreur> {
-    let mut montages = montage::pour(module);
-    if let Some(migration) = migration {
-        montages.extend(montage::pour_migration(migration));
-    }
-
-    let mut modifies: Vec<Fichier> = Vec::new();
-
-    for montage in montages {
-        let chemin = montage.ancre.fichier;
-        let source = match modifies.iter().find(|(vise, _)| vise == chemin) {
-            Some((_, contenu)) => contenu.clone(),
-            None => lire(&racine.join(chemin))?,
-        };
-
-        let rendu =
-            ancres::inserer(&source, montage.ancre, &montage.lignes).map_err(Erreur::Ancre)?;
-
-        match modifies.iter_mut().find(|(vise, _)| vise == chemin) {
-            Some((_, contenu)) => *contenu = rendu,
-            None => modifies.push((chemin.to_string(), rendu)),
-        }
-    }
-
-    Ok(modifies)
-}
-
-fn lire(chemin: &Path) -> Result<String, Erreur> {
-    fs::read_to_string(chemin).map_err(|source| acces(chemin, source))
-}
-
-fn ecrire(chemin: &Path, contenu: &str) -> Result<(), Erreur> {
-    if let Some(parent) = chemin.parent() {
-        fs::create_dir_all(parent).map_err(|source| acces(parent, source))?;
-    }
-
-    fs::write(chemin, contenu).map_err(|source| acces(chemin, source))
-}
-
 fn acces(chemin: &Path, source: io::Error) -> Erreur {
     Erreur::Acces {
         chemin: chemin.display().to_string(),
@@ -284,11 +251,24 @@ fn acces(chemin: &Path, source: io::Error) -> Erreur {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
     use assert_cmd::Command;
     use tempfile::TempDir;
 
     use super::*;
     use crate::generate::banc;
+
+    /// Planifie puis applique, comme la commande le fait.
+    ///
+    /// Les tests portent sur ce que la génération laisse sur le disque : les deux temps
+    /// n'ont d'intérêt qu'à l'affichage, qui appartient à l'appelant.
+    fn executer(options: &Options) -> Result<Planifiee, Erreur> {
+        let planifiee = planifier(options)?;
+        crate::plan::application::appliquer(&planifiee.plan, options.force)?;
+
+        Ok(planifiee)
+    }
 
     /// Un projet déroulé par `rbs new`, sans passer par le binaire ni par cargo.
     fn projet() -> (TempDir, PathBuf) {
@@ -507,9 +487,9 @@ mod tests {
 
     #[test]
     fn une_ancre_disparue_donne_le_bloc_a_recoller() {
-        let erreur = Erreur::Ancre(ancres::Absente {
-            ancre: ancres::ROUTES,
-        });
+        let erreur = Erreur::Plan(crate::plan::Erreur::Ancre(crate::ancres::Absente {
+            ancre: crate::ancres::ROUTES,
+        }));
 
         let remede = erreur.remede().expect("une ancre disparue se recolle");
 
@@ -561,7 +541,10 @@ mod tests {
         let erreur = executer(&options(&racine, "articles", Some("titre:string"), true))
             .expect_err("l'ancre des routes a disparu");
 
-        assert!(matches!(erreur, Erreur::Ancre(_)), "{erreur}");
+        assert!(
+            matches!(erreur, Erreur::Plan(crate::plan::Erreur::Ancre(_))),
+            "{erreur}"
+        );
         assert!(
             !racine.join("src/articles").is_dir(),
             "des fichiers ont été écrits malgré l'ancre absente"

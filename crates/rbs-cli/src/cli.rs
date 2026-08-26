@@ -83,6 +83,10 @@ pub enum GenerateCommands {
         /// Écrit même si le working tree Git est sale.
         #[arg(long)]
         force: bool,
+
+        /// Affiche le plan sans rien écrire.
+        #[arg(long)]
+        dry_run: bool,
     },
 
     /// Génère une feature vide : six fichiers, aucun champ.
@@ -93,6 +97,10 @@ pub enum GenerateCommands {
         /// Écrit même si le working tree Git est sale.
         #[arg(long)]
         force: bool,
+
+        /// Affiche le plan sans rien écrire.
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
