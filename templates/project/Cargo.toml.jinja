@@ -23,3 +23,10 @@ tracing = "0.1"
 utoipa = { version = "5.5", features = ["axum_extras", "chrono", "uuid"] }
 utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
 validator = { version = "0.21", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1.0"
+tower = { version = "0.5", features = ["util"] }
+# sea-orm expose bien `Uuid`, mais sans son générateur : `new_v4` demande la feature `v4`,
+# dont le noyau n'a pas l'usage.
+uuid = { version = "1.25", features = ["v4"] }

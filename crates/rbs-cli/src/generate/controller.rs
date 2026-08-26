@@ -1,5 +1,7 @@
 //! Rendu de `<nom>/controller.rs` et du `mod.rs` qui monte ses routes.
 
+use minijinja::{Value, context};
+
 use crate::template::Renderer;
 
 use super::feature::Feature;
@@ -19,9 +21,15 @@ pub(crate) fn rendre(feature: &Feature) -> Result<String, minijinja::Error> {
     Renderer::new().rendre(CONTROLLER, feature)
 }
 
-/// Rend le `mod.rs` de `feature` : ses six fichiers et son `routes()`.
-pub(crate) fn rendre_mod(feature: &Feature) -> Result<String, minijinja::Error> {
-    Renderer::new().rendre(MODULE, feature)
+/// Rend le `mod.rs` de `feature` : ses fichiers et son `routes()`.
+///
+/// `avec_tests` déclare le module `tests` : une feature écrite à la main n'en porte pas,
+/// et le déclarer empêcherait la compilation.
+pub(crate) fn rendre_mod(feature: &Feature, avec_tests: bool) -> Result<String, minijinja::Error> {
+    Renderer::new().rendre(
+        MODULE,
+        context! { avec_tests, ..Value::from_serialize(feature) },
+    )
 }
 
 #[cfg(test)]
@@ -37,7 +45,12 @@ mod tests {
 
     fn module(nom: &str) -> String {
         let champs = champs::analyser("titre:string").expect("champs valides");
-        rendre_mod(&Feature::nouvelle(nom, champs)).expect("le mod.rs doit se rendre")
+        rendre_mod(&Feature::nouvelle(nom, champs), false).expect("le mod.rs doit se rendre")
+    }
+
+    fn module_avec_tests(nom: &str) -> String {
+        let champs = champs::analyser("titre:string").expect("champs valides");
+        rendre_mod(&Feature::nouvelle(nom, champs), true).expect("le mod.rs doit se rendre")
     }
 
     #[test]
@@ -198,9 +211,29 @@ mod tests {
     }
 
     #[test]
+    fn le_module_declare_les_tests_lorsqu_ils_sont_generes() {
+        let avec = module_avec_tests("articles");
+
+        assert!(
+            avec.contains("#[cfg(test)]\nmod tests;"),
+            "le module de tests doit être déclaré :\n{avec}"
+        );
+    }
+
+    /// Une feature écrite à la main n'a pas de `tests.rs` : le déclarer empêcherait la
+    /// compilation du projet.
+    #[test]
+    fn le_module_ne_declare_pas_de_tests_lorsqu_il_n_y_en_a_pas() {
+        let sans = module("articles");
+
+        assert!(!sans.contains("mod tests;"), "{sans}");
+    }
+
+    #[test]
     fn les_rendus_traversent_rustfmt_sans_diff() {
         let controller = controller("articles");
         let module = module("articles");
+        let avec_tests = module_avec_tests("articles");
 
         assert_eq!(
             banc::formate(&controller),
@@ -208,6 +241,7 @@ mod tests {
             "controller reformaté"
         );
         assert_eq!(banc::formate(&module), module, "mod.rs reformaté");
+        assert_eq!(banc::formate(&avec_tests), avec_tests, "mod.rs reformaté");
     }
 
     /// Ce que le projet généré vérifie de son propre document OpenAPI.
@@ -271,7 +305,10 @@ fn chaque_route_annonce_le_schema_qu_elle_rend() {
         projet.poser_feature(
             "articles",
             &[
-                ("mod.rs", &rendre_mod(&feature).expect("mod.rs rendu")),
+                (
+                    "mod.rs",
+                    &rendre_mod(&feature, false).expect("mod.rs rendu"),
+                ),
                 (
                     "model.rs",
                     &entite::rendre(&feature).expect("entité rendue"),
@@ -309,7 +346,10 @@ fn chaque_route_annonce_le_schema_qu_elle_rend() {
         projet.poser_feature(
             "articles",
             &[
-                ("mod.rs", &rendre_mod(&feature).expect("mod.rs rendu")),
+                (
+                    "mod.rs",
+                    &rendre_mod(&feature, false).expect("mod.rs rendu"),
+                ),
                 (
                     "model.rs",
                     &entite::rendre(&feature).expect("entité rendue"),
