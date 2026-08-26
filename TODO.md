@@ -105,7 +105,7 @@ dès que `C` est terminé.
 
 ### Lot C — `rbs new`
 
-- [ ] **C1** · Squelette du CLI
+- [x] **C1** · Squelette du CLI — vérifié 2026-08-26 · `cargo test -p rbs-cli` → 4 passed, dont `le_help_liste_les_commandes_prevues_avec_une_description` · `cargo run -p rbs-cli -- --help` → les cinq commandes avec leur description, validé par le user
       `clap` derive, sous-commandes, `--help` rédigé, sortie colorée via `console`.
       ✓ `rbs --help` liste les commandes prévues avec des descriptions utiles.
 
