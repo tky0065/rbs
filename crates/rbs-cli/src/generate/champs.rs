@@ -1,4 +1,4 @@
-mod erreur;
+pub(crate) mod erreur;
 
 pub(crate) use erreur::{ErreurChamp, ErreurChamps, NatureErreur};
 use erreur::{en_snake_case, suggestions_mot_cle};
@@ -290,7 +290,7 @@ fn analyser_champ(rang: usize, portion: &str) -> Result<Champ, ErreurChamp> {
 
 /// Mots-clés stricts et réservés des éditions 2015 à 2024. Un champ ainsi nommé
 /// produirait une entité que rustc refuse, quarante secondes plus tard.
-const MOTS_CLES_RUST: [&str; 51] = [
+pub(crate) const MOTS_CLES_RUST: [&str; 51] = [
     "abstract", "as", "async", "await", "become", "box", "break", "const", "continue", "crate",
     "do", "dyn", "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl",
     "in", "let", "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref",
@@ -304,7 +304,7 @@ const NOMS_POSES_PAR_RBS: [&str; 3] = ["id", "created_at", "updated_at"];
 /// Variante que `#[derive(DeriveIden)]` réserve au nom de la table dans la migration.
 const NOM_DE_LA_TABLE_EN_MIGRATION: &str = "table";
 
-fn est_en_snake_case(nom: &str) -> bool {
+pub(crate) fn est_en_snake_case(nom: &str) -> bool {
     let Some(premier) = nom.chars().next() else {
         return false;
     };
