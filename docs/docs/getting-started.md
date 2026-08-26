@@ -33,9 +33,13 @@ built from the repository:
 git clone https://github.com/tky0065/rbs
 cd rbs
 cargo install --path crates/rbs-cli
+cd ..
 ```
 
-That drops an `rbs` executable in `~/.cargo/bin`. Check it answers:
+That drops an `rbs` executable in `~/.cargo/bin`. The last `cd` steps back out of the
+clone: the rest of this page works from the directory that *contains* it, so the project
+you are about to create lands next to the clone rather than inside it. Check the binary
+answers:
 
 ```bash
 rbs --version
@@ -72,7 +76,7 @@ are done — the container was started with `--rm`, so nothing is left behind.
 ```bash
 rbs new demo --yes \
   --database-url postgres://rbs:rbs@localhost:5432/demo \
-  --core-path ../rbs/crates/rbs-core
+  --core-path rbs/crates/rbs-core
 ```
 
 ```text

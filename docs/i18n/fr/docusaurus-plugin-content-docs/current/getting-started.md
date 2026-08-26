@@ -33,9 +33,13 @@ construit depuis le dépôt :
 git clone https://github.com/tky0065/rbs
 cd rbs
 cargo install --path crates/rbs-cli
+cd ..
 ```
 
-Un exécutable `rbs` atterrit dans `~/.cargo/bin`. Vérifiez qu'il répond :
+Un exécutable `rbs` atterrit dans `~/.cargo/bin`. Le dernier `cd` vous fait ressortir du
+clone : la suite de cette page travaille depuis le répertoire qui le *contient*, si bien
+que le projet que vous allez créer atterrit à côté du clone et non dedans. Vérifiez que
+le binaire répond :
 
 ```bash
 rbs --version
@@ -73,7 +77,7 @@ fois que vous avez fini — le conteneur a été lancé avec `--rm`, rien ne sub
 ```bash
 rbs new demo --yes \
   --database-url postgres://rbs:rbs@localhost:5432/demo \
-  --core-path ../rbs/crates/rbs-core
+  --core-path rbs/crates/rbs-core
 ```
 
 ```text
