@@ -10,3 +10,5 @@ name = "rbs"
 path = "src/main.rs"
 
 [dependencies]
+clap.workspace = true
+console.workspace = true
