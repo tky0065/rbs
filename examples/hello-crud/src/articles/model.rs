@@ -1,5 +1,6 @@
 use sea_orm::entity::prelude::*;
 
+// region: entite
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "articles")]
 pub struct Model {
@@ -12,6 +13,7 @@ pub struct Model {
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }
+// endregion: entite
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {}

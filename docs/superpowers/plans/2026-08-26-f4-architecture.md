@@ -50,60 +50,72 @@ code réel plutôt qu'en les affirmant.
 
 ### Task 1: Poser les régions sur l'exemple
 
-- [ ] **Step 1:** Lire les six fichiers de `examples/hello-crud/src/articles/` en entier
+- [x] **Step 1:** Lire les six fichiers de `examples/hello-crud/src/articles/` en entier
       avant d'écrire quoi que ce soit. La page décrit ce code-là, pas le code attendu.
-- [ ] **Step 2:** Poser les marqueurs sur les fragments que la page citera. Au minimum :
+- [x] **Step 2:** Poser les marqueurs sur les fragments que la page citera. Au minimum :
       `model` sur la déclaration de l'entité SeaORM, `dto` sur une paire requête/réponse,
       `repository` sur une méthode qui construit une requête SeaORM, `service` sur une
       méthode qui applique une règle métier, `controller` sur un handler. La région
       `create` de `controller.rs` existe déjà — ne pas la redéfinir.
-- [ ] **Step 3:** `cargo test -p rbs-cli --test integration_examples` → doit rester au
+- [ ] **Step 3:** PARTIEL — voir Step 14 : l'échec est préexistant et sans rapport avec
+      les marqueurs. `git diff` ne montre que des lignes `// region:` ajoutées.
+- [ ] **Step 3 (énoncé d'origine):** `cargo test -p rbs-cli --test integration_examples` → doit rester au
       vert. Le test filtre les lignes `// region:` de sa comparaison ; s'il échoue, c'est
       qu'une ligne de code a bougé, ce que cette tâche interdit.
 
 ### Task 2: Écrire la page anglaise
 
-- [ ] **Step 4:** Frontmatter (`sidebar_position: 3`, `title: Architecture`), puis la
+- [x] **Step 4:** Frontmatter (`sidebar_position: 3`, `title: Architecture`), puis la
       section « The core / generated boundary ». Établir le critère de tri avant de lister
       les modules, sinon la liste n'apprend rien.
-- [ ] **Step 5:** Tableau des 11 modules publics de `rbs-core` — `config`, `db`, `error`,
+- [x] **Step 5:** Tableau des 11 modules publics de `rbs-core` — `config`, `db`, `error`,
       `extract`, `health`, `logs`, `openapi`, `pagination`, `request_id`, `state`,
       `trace` — une ligne de justification chacun. Vérifier la liste contre
       `crates/rbs-core/src/lib.rs` au moment d'écrire, pas de mémoire.
-- [ ] **Step 6:** Mentionner que les quatre feature flags `auth`, `redis`, `mail`,
+- [x] **Step 6:** Mentionner que les quatre feature flags `auth`, `redis`, `mail`,
       `storage` sont **déclarés mais vides** en v0.1 : les activer ne change rien, ils
       réservent seulement leur nom pour la v0.2.
-- [ ] **Step 7:** Section « Anatomy of a feature » : les six fichiers, chacun introduit
+- [x] **Step 7:** Section « Anatomy of a feature » : les six fichiers, chacun introduit
       par ce qu'il fait, puis son extrait `file=`/`region=`.
-- [ ] **Step 8:** Section « The dependency rule » : la chaîne
+- [x] **Step 8:** *(nuancé — `grep -l sea_orm` rend cinq fichiers sur six ; la page cite
+      le résultat effectif et la sonde étroite `grep -l 'Entity::'`, qui rend
+      `repository.rs` seul.)*
+- [x] **Step 8 (énoncé d'origine):** Section « The dependency rule » : la chaîne
       `controller → service → repository → model`, et ce qu'elle interdit. Appuyer sur les
       imports réels — `repository.rs` est le seul fichier de la feature à importer
       `sea_orm` ; le vérifier par `grep -l sea_orm examples/hello-crud/src/articles/*.rs`
       et citer le résultat.
-- [ ] **Step 9:** Clore sur le seuil des ~200 lignes : un fichier de feature au-delà
+- [x] **Step 9:** Clore sur le seuil des ~200 lignes : un fichier de feature au-delà
       signale une feature à scinder.
 
 ### Task 3: Écrire la page française
 
-- [ ] **Step 10:** Traduire dans
+- [x] **Step 10:** Traduire dans
       `docs/i18n/fr/docusaurus-plugin-content-docs/current/architecture.md`. Même
       frontmatter, mêmes directives `file=`/`region=` — les extraits sont partagés, ils
       ne se traduisent pas.
-- [ ] **Step 11:** Parité : même nombre de titres, même ordre de sections.
+- [x] **Step 11:** Parité : même nombre de titres, même ordre de sections.
 
 ### Task 4: Prouver
 
-- [ ] **Step 12:** `cd docs && npm run build` → deux `[SUCCESS]`. Une région citée mais
+- [x] **Step 12:** `cd docs && npm run build` → deux `[SUCCESS]`. Une région citée mais
       absente fait sortir le plugin en erreur : ce build prouve que chaque extrait existe.
-- [ ] **Step 13:** Éprouver le garde-fou : renommer temporairement une région citée,
+- [x] **Step 13:** *(le garde-fou ne mord qu'après `npx docusaurus clear` : un build
+      incrémental réutilise le MDX en cache et passe sur un extrait périmé.)* Éprouver le garde-fou : renommer temporairement une région citée,
       relancer le build, constater l'échec **et lire le message**, puis restaurer.
       Un contrôle qui ne mord pas n'est pas une preuve.
-- [ ] **Step 14:** `cargo test -p rbs-cli --test integration_examples` → au vert.
-- [ ] **Step 15:** Commit : `docs: décrit l'architecture du cadre en anglais et en
+- [ ] **Step 14:** PARTIEL — `cargo test -p rbs-cli --test integration_examples` échoue,
+      mais à l'identique avant et après cette tâche : `+ .env est produit mais absent de
+      l'exemple`. Dérive préexistante (`examples/hello-crud/.gitignore` ignore `.env`, que
+      `rbs new` produit), sans rapport avec les marqueurs de région. Vérifié par
+      `git stash` puis relance sur `ddd846c` : message identique.
+- [x] **Step 15:** Commit : `docs: décrit l'architecture du cadre en anglais et en
       français`.
 
 ### Task 5: Cocher
 
-- [ ] **Step 16:** F4 n'a pas de ligne `✓` explicite dans `TODO.md` : la preuve est le
+- [ ] **Step 16:** NON FAIT — `TODO.md` est hors du périmètre d'écriture de cette tâche.
+      La ligne de preuve est remontée à l'appelant, qui coche.
+- [ ] **Step 16 (énoncé d'origine):** F4 n'a pas de ligne `✓` explicite dans `TODO.md` : la preuve est le
       build bilingue plus le test de non-dérive. Cocher `- [x] **F4**` avec les deux
       résultats sur une seule ligne.

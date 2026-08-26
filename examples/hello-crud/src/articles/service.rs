@@ -1,3 +1,4 @@
+// region: imports
 use rbs_core::{Error, Page, Pagination, Result};
 use sea_orm::ActiveValue::Set;
 use sea_orm::DatabaseConnection;
@@ -5,6 +6,7 @@ use sea_orm::prelude::Uuid;
 
 use super::dto::{ArticleResponse, CreateArticle, UpdateArticle};
 use super::repository::{self, ActiveModel};
+// endregion: imports
 
 pub async fn list(
     db: &DatabaseConnection,
