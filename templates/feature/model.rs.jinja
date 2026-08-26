@@ -1,0 +1,26 @@
+use sea_orm::entity::prelude::*;
+
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
+#[sea_orm(table_name = "{@ table @}")]
+pub struct Model {
+    #[sea_orm(primary_key, auto_increment = false)]
+    pub id: Uuid,
+{%- for champ in champs %}
+{%- set attributs = [
+        'column_type = "' ~ champ.attribut_column_type ~ '"' if champ.attribut_column_type else none,
+        "unique" if champ.unique else none,
+        "indexed" if champ.index else none,
+    ] | select | join(", ") %}
+{%- if attributs %}
+    #[sea_orm({@ attributs @})]
+{%- endif %}
+    pub {@ champ.nom @}: {@ champ.type_rust @},
+{%- endfor %}
+    pub created_at: DateTimeWithTimeZone,
+    pub updated_at: DateTimeWithTimeZone,
+}
+
+#[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+pub enum Relation {}
+
+impl ActiveModelBehavior for ActiveModel {}

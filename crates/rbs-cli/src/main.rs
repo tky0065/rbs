@@ -1,4 +1,7 @@
 mod cli;
+// Générateurs écrits avant la commande qui les appellera : le câblage de
+// `rbs generate` est la dernière tâche du lot.
+#[allow(dead_code)]
 mod generate;
 mod metadata;
 mod new;

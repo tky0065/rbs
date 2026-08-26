@@ -154,12 +154,12 @@ dès que `C` est terminé.
       `uuid`, `datetime`, `text` ; modificateurs `unique`, `optional`, `index`.
       ✓ Tests : chaque type et modificateur, plus les messages d'erreur de syntaxe.
 
-- [ ] **D2** · Génération de l'entité SeaORM
+- [x] **D2** · Génération de l'entité SeaORM — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::entite -- --include-ignored` → 13 passed, dont la compilation d'un projet neuf portant l'entité
       Clé primaire `id` de type `Uuid`, implicite — jamais déclarée dans `--fields`.
       ✓ L'entité compile et ses types correspondent aux champs demandés.
       ✓ `id` est un `Uuid` sans auto-incrément.
 
-- [ ] **D3** · Génération des DTO
+- [x] **D3** · Génération des DTO — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::dto -- --include-ignored` → 13 passed, dont la compilation des trois DTO dans un projet neuf
       `Create` / `Update` / `Response`, avec `validator` et `ToSchema`.
       ✓ Un champ `email:string` produit une contrainte de validation d'email.
 
@@ -175,7 +175,7 @@ dès que `C` est terminé.
       Handlers Axum, annotations `#[utoipa::path]`, `routes()`. Ne connaît que `service.rs`.
       ✓ Les cinq routes apparaissent dans Swagger UI avec leurs schémas.
 
-- [ ] **D7** · Génération de la migration
+- [x] **D7** · Génération de la migration — vérifié 2026-08-26 · `cargo test -p rbs-cli generate::migration -- --include-ignored` → 14 passed, dont montée/insertion/descente contre PostgreSQL 18 en conteneur. Le ✓ de réversibilité est prouvé par `Migrator::up`/`down` du projet généré, `rbs migrate` (D11) n'existant pas encore — substitution validée par le porteur du projet
       Migration SeaORM correspondant aux champs, horodatée.
       ✓ `rbs migrate up` puis `down` laisse la base dans son état initial.
       ✓ La colonne `id` porte `DEFAULT uuidv7()` ; un `INSERT` sans `id` reçoit un

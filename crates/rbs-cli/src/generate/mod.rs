@@ -1,2 +1,7 @@
-#[allow(dead_code)] // Le premier appelant est le générateur d'entité, tâche suivante.
+#[cfg(test)]
+pub(crate) mod banc;
 pub(crate) mod champs;
+pub(crate) mod dto;
+pub(crate) mod entite;
+pub(crate) mod feature;
+pub(crate) mod migration;

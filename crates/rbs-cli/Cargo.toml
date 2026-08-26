@@ -10,6 +10,7 @@ name = "rbs"
 path = "src/main.rs"
 
 [dependencies]
+chrono.workspace = true
 clap.workspace = true
 console.workspace = true
 include_dir.workspace = true
@@ -23,3 +24,4 @@ toml_edit.workspace = true
 assert_cmd.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
+testcontainers.workspace = true
