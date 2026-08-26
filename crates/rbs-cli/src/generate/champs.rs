@@ -415,6 +415,11 @@ mod tests {
         assert_eq!(erreur.erreurs.len(), 1);
         assert_eq!(erreur.erreurs[0].rang, 2);
         assert_eq!(erreur.erreurs[0].nature, NatureErreur::FormeInvalide);
+        assert_eq!(
+            erreur.to_string(),
+            "erreur : champ 2 — forme attendue : « nom:type[:modificateur…] »\n\
+             \x20       → exemple : « email:string:unique »"
+        );
     }
 
     #[test]

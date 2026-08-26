@@ -80,13 +80,17 @@ impl fmt::Display for ErreurChamps {
             }
             premier = false;
 
-            write!(
-                f,
-                "erreur : champ {} « {} » — {}",
-                erreur.rang,
-                erreur.libelle,
-                erreur.nature.message(&erreur.libelle)
-            )?;
+            let message = erreur.nature.message(&erreur.libelle);
+            // Une portion vide n'a pas de libellé à citer : « champ 2 «  » » se lit mal.
+            if erreur.libelle.is_empty() {
+                write!(f, "erreur : champ {} — {message}", erreur.rang)?;
+            } else {
+                write!(
+                    f,
+                    "erreur : champ {} « {} » — {message}",
+                    erreur.rang, erreur.libelle
+                )?;
+            }
 
             if let Some(indice) = erreur.nature.indice() {
                 write!(f, "\n        → {indice}")?;
@@ -98,21 +102,33 @@ impl fmt::Display for ErreurChamps {
 
 impl std::error::Error for ErreurChamps {}
 
-/// Recasse un nom en snake_case sans chercher à interpréter les acronymes : la sortie
-/// est une suggestion soumise à l'utilisateur, pas une correction appliquée d'office.
+/// Recasse un nom en snake_case, en repliant une suite de capitales sur un seul mot :
+/// `HTTPStatus` donne `http_status` et `EMAIL` donne `email`. Découper à chaque capitale
+/// produirait `h_t_t_p_status`, une suggestion que personne n'accepterait.
 pub(crate) fn en_snake_case(nom: &str) -> String {
+    let caracteres: Vec<char> = nom.chars().collect();
     let mut sortie = String::with_capacity(nom.len() + 4);
 
-    for (rang, caractere) in nom.chars().enumerate() {
-        if caractere.is_uppercase() {
-            if rang > 0 && !sortie.ends_with('_') {
-                sortie.push('_');
-            }
-            sortie.extend(caractere.to_lowercase());
-        } else if caractere == '-' || caractere == ' ' {
+    for (rang, &caractere) in caracteres.iter().enumerate() {
+        if caractere == '-' || caractere == ' ' {
             if !sortie.is_empty() && !sortie.ends_with('_') {
                 sortie.push('_');
             }
+            continue;
+        }
+
+        if caractere.is_uppercase() {
+            // Une capitale ouvre un mot quand elle suit une minuscule (`firstName`) ou
+            // quand elle termine un acronyme accolé au mot suivant (`HTTPStatus`).
+            let suit_une_minuscule = rang > 0 && !caracteres[rang - 1].is_uppercase();
+            let precede_une_minuscule = caracteres
+                .get(rang + 1)
+                .is_some_and(|suivant| suivant.is_lowercase());
+
+            if rang > 0 && (suit_une_minuscule || precede_une_minuscule) && !sortie.ends_with('_') {
+                sortie.push('_');
+            }
+            sortie.extend(caractere.to_lowercase());
         } else {
             sortie.push(caractere);
         }
@@ -297,7 +313,8 @@ mod tests {
     fn en_snake_case_recasse_les_formes_usuelles() {
         assert_eq!(en_snake_case("Title"), "title");
         assert_eq!(en_snake_case("firstName"), "first_name");
-        assert_eq!(en_snake_case("HTTPStatus"), "h_t_t_p_status");
+        assert_eq!(en_snake_case("HTTPStatus"), "http_status");
+        assert_eq!(en_snake_case("EMAIL"), "email");
         assert_eq!(en_snake_case("mon-champ"), "mon_champ");
         assert_eq!(en_snake_case("déjà_ok"), "déjà_ok");
     }
