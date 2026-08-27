@@ -48,7 +48,7 @@ fn controler_avec(racine: &Path, env: impl Fn(&str) -> Option<String>) -> Contro
                 "{SECRET} n'est renseignée ni dans le {FICHIER} ni dans l'environnement"
             ));
             remedes.push(format!(
-                "ajoutez au {FICHIER} une valeur tirée au hasard :\n      {SECRET}=$(openssl rand -hex 32)"
+                "ajoutez au {FICHIER} une valeur tirée au hasard :\n{SECRET}=$(openssl rand -hex 32)"
             ));
         }
         Some(valeur) => {
@@ -58,7 +58,7 @@ fn controler_avec(racine: &Path, env: impl Fn(&str) -> Option<String>) -> Contro
                     valeur.len()
                 ));
                 remedes.push(format!(
-                    "allongez {SECRET} :\n      {SECRET}=$(openssl rand -hex 32)"
+                    "allongez {SECRET} :\n{SECRET}=$(openssl rand -hex 32)"
                 ));
             }
 
@@ -70,7 +70,7 @@ fn controler_avec(racine: &Path, env: impl Fn(&str) -> Option<String>) -> Contro
                     "{SECRET} est resté à la valeur d'exemple, publiée dans Git"
                 ));
                 remedes.push(format!(
-                    "remplacez-la par une valeur tirée au hasard :\n      {SECRET}=$(openssl rand -hex 32)"
+                    "remplacez-la par une valeur tirée au hasard :\n{SECRET}=$(openssl rand -hex 32)"
                 ));
             }
         }
@@ -79,7 +79,7 @@ fn controler_avec(racine: &Path, env: impl Fn(&str) -> Option<String>) -> Contro
     if !section_auth(racine) {
         defauts.push(format!("{CONFIG} ne porte pas de section `[auth]`"));
         remedes.push(format!(
-            "ajoutez à {CONFIG} :\n      [auth]\n      access_ttl_secs = 900\n      refresh_ttl_secs = 2592000"
+            "ajoutez à {CONFIG} :\n[auth]\naccess_ttl_secs = 900\nrefresh_ttl_secs = 2592000"
         ));
     }
 
@@ -87,7 +87,7 @@ fn controler_avec(racine: &Path, env: impl Fn(&str) -> Option<String>) -> Contro
         return Controle::bon(TITRE, "le secret et la configuration sont en place");
     }
 
-    Controle::echec(TITRE, defauts.join(" ; "), remedes.join("\n    "))
+    Controle::echec(TITRE, defauts.join(" ; "), remedes.join("\n"))
 }
 
 /// Vrai si `config/default.toml` porte une section `[auth]`.
