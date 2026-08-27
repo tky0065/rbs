@@ -91,6 +91,7 @@ pub async fn logout(
     get,
     path = "/auth/me",
     tag = "auth",
+    security(("bearer" = [])),
     responses(
         (status = 200, description = "profil de l'appelant", body = UserResponse),
         (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json")

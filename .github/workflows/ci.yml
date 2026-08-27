@@ -35,13 +35,13 @@ jobs:
         run: cargo fmt --all --check
 
       - name: cargo clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-features --all-targets -- -D warnings
 
       - name: cargo test
-        run: cargo test --workspace
+        run: cargo test --workspace --all-features
 
       - name: cargo test (intégration)
-        run: cargo test --workspace -- --ignored
+        run: cargo test --workspace --all-features -- --ignored
 
       # La documentation ne contient aucun bloc de code écrit à la main : ses extraits
       # sont lus dans `examples/`. Un exemple qui ne compile plus fait donc mentir des
@@ -85,7 +85,7 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       - name: cargo clippy
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: cargo clippy --workspace --all-features --all-targets -- -D warnings
 
       - name: cargo test
-        run: cargo test --workspace
+        run: cargo test --workspace --all-features

@@ -491,7 +491,7 @@ insertions d'ancres. Dépend de `G` et de `H`.
       ✓ Test : un `admin` sur la même route → 200.
       ✓ Test : sans jeton → **401 et non 403**.
 
-- [ ] **I7** · Enregistrement OpenAPI
+- [x] **I7** · Enregistrement OpenAPI — vérifié 2026-08-27 · `cargo test -p rbs-cli --test integration_auth -- --ignored` → 4 passed, dont les 21 tests d'auth du projet généré, et `cargo test --workspace --all-features` → 514 passed · morsure : schéma retiré de `ReponsesCommunes` → `le_schema_de_securite_bearer_est_declare` FAILED dans le noyau **et** `le_schema_bearer_est_declare_et_me_le_porte` dans le projet généré · le premier critère était déjà tenu par l'ancre `openapi` d'I1 : le test le prouve désormais au lieu de le supposer · **écart assumé** : le critère nomme `/openapi.json`, le document vit sur `/api-docs/openapi.json` depuis C4 — c'est l'URL que Swagger UI charge, le test le lit là où il est · seul `me` porte `security` : `refresh` et `logout` s'authentifient par leur corps, et un test interdit qu'on leur appose le schéma · **corrigé hors périmètre** : la CI ne compilait `rbs-core` avec aucune feature — tout le lot G n'était vérifié par aucune exécution automatique, et le schéma ajouté ici serait tombé dans le même angle mort ; `--all-features` posé sur les étapes clippy et test des deux jobs du workspace, mesuré propre avant d'être écrit, 72 → 90 tests couverts dans le noyau (l'étape `examples/`, qui porte sur un projet généré, est laissée telle quelle)
       ✓ Les cinq chemins d'auth figurent dans `/openapi.json`.
       ✓ Le schéma de sécurité `bearer` est déclaré et les routes protégées le portent.
 

@@ -550,3 +550,77 @@ async fn me_rend_le_profil_de_l_appelant() {
     assert_eq!(profil["email"], email, "{profil}");
     assert_eq!(profil["role"], "user", "{profil}");
 }
+
+/// Le document tel que le serveur le publie.
+async fn document_openapi(api: &Router) -> Value {
+    let (statut, document) = appeler(api, sans_corps("GET", "/api-docs/openapi.json")).await;
+
+    assert_eq!(statut, StatusCode::OK, "le document doit être exposé");
+
+    document
+}
+
+#[tokio::test]
+async fn le_document_openapi_porte_les_cinq_chemins_d_auth() {
+    let api = application().await;
+
+    let document = document_openapi(&api).await;
+
+    for chemin in [
+        "/auth/register",
+        "/auth/login",
+        "/auth/refresh",
+        "/auth/logout",
+        "/auth/me",
+    ] {
+        assert!(
+            document["paths"][chemin].is_object(),
+            "`{chemin}` ne figure pas dans le document"
+        );
+    }
+}
+
+/// Un client généré depuis ce document doit savoir comment s'authentifier, et sur quelles
+/// routes le faire.
+#[tokio::test]
+async fn le_schema_bearer_est_declare_et_me_le_porte() {
+    let api = application().await;
+
+    let document = document_openapi(&api).await;
+
+    let schema = &document["components"]["securitySchemes"]["bearer"];
+    assert_eq!(schema["type"], "http", "{schema}");
+    assert_eq!(schema["scheme"], "bearer", "{schema}");
+    assert_eq!(schema["bearerFormat"], "JWT", "{schema}");
+
+    let securite = &document["paths"]["/auth/me"]["get"]["security"];
+    assert!(
+        securite.is_array() && !securite.as_array().expect("tableau").is_empty(),
+        "`/auth/me` ne déclare pas exiger de jeton : {securite}"
+    );
+    assert!(
+        securite[0]["bearer"].is_array(),
+        "`/auth/me` n'exige pas le schéma `bearer` : {securite}"
+    );
+}
+
+/// `refresh` et `logout` s'authentifient par leur corps : leur apposer le schéma
+/// décrirait une exigence que le serveur ne pose pas.
+#[tokio::test]
+async fn les_routes_sans_en_tete_ne_declarent_pas_le_schema() {
+    let api = application().await;
+
+    let document = document_openapi(&api).await;
+
+    for chemin in [
+        "/auth/register",
+        "/auth/login",
+        "/auth/refresh",
+        "/auth/logout",
+    ] {
+        assert!(
+            document["paths"][chemin]["post"]["security"].is_null(),
+            "`{chemin}` déclare exiger un jeton alors qu'il n'en lit aucun"
+        );
+    }
+}
