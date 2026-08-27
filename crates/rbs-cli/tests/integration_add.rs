@@ -352,3 +352,53 @@ fn un_echec_a_mi_parcours_restaure_les_fichiers_deja_ecrits() {
     );
     common::assert_intact(&avant, &racine, "l'échec a laissé le projet modifié");
 }
+
+/// Une ancre que le projet ne porte plus arrête l'installation avant toute écriture.
+///
+/// Le développeur a pu réécrire son routeur, et le CLI ne sait qu'insérer dans une ancre :
+/// faute de la trouver, il rend le bloc à coller et n'écrit rien. Un fragment à demi
+/// installé coûterait plus cher à défaire qu'à installer.
+#[test]
+fn une_ancre_absente_arrete_l_installation_sans_rien_ecrire() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = projet_commite(&parent);
+    let fragments = fragment_a_code();
+
+    let routeur = racine.join("src/router.rs");
+    let source = fs::read_to_string(&routeur).expect("le routeur est lisible");
+    let ampute = source
+        .lines()
+        .filter(|ligne| !ligne.contains("rbs:routes"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_ne!(
+        source, ampute,
+        "l'ancre visée doit exister avant d'être retirée, sans quoi le test ne prouve rien"
+    );
+    fs::write(&routeur, format!("{ampute}\n")).expect("le routeur s'écrit");
+    common::commiter(&racine, "routeur sans son ancre");
+
+    let avant = common::empreinte(&racine);
+    let sortie = ajouter_essai(&racine, &fragments, &[]);
+
+    assert!(
+        !sortie.succes,
+        "l'installation doit sortir en erreur :\n{}",
+        sortie.stdout
+    );
+    assert!(
+        sortie.stderr.contains("<rbs:routes>") && sortie.stderr.contains("src/router.rs"),
+        "l'erreur doit nommer l'ancre et son fichier :\n{}",
+        sortie.stderr
+    );
+    assert!(
+        sortie.stdout.contains("// <rbs:routes>") && sortie.stdout.contains("// </rbs:routes>"),
+        "le bloc à coller doit être affiché :\n{}",
+        sortie.stdout
+    );
+    common::assert_intact(
+        &avant,
+        &racine,
+        "l'ancre absente n'a pas empêché l'écriture",
+    );
+}
