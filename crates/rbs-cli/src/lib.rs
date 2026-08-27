@@ -5,6 +5,7 @@ mod doctor;
 mod dotenv;
 mod generate;
 mod git;
+mod manifeste;
 mod metadata;
 mod migrate;
 mod new;
@@ -50,6 +51,9 @@ pub fn executer() {
         Commands::Add { feature, force } => {
             if let Err(erreur) = ajouter(feature, force, cli.template_dir) {
                 ui::error(&erreur.to_string());
+                if let Some(remede) = erreur.remede() {
+                    ui::info(&format!("\n{remede}"));
+                }
                 std::process::exit(1);
             }
         }
@@ -158,6 +162,12 @@ fn ajouter(feature: String, force: bool, template_dir: Option<PathBuf>) -> Resul
         template_dir,
     })?;
 
+    if planifiee.deja_installee {
+        ui::success(&format!("{feature} est déjà installée — rien à faire"));
+        return Ok(());
+    }
+
+    ui::info(&format!("{feature} : {}\n", planifiee.description));
     println!("{}", plan::rendu::plan(&planifiee.plan));
 
     plan::application::appliquer(&planifiee.plan, force)?;

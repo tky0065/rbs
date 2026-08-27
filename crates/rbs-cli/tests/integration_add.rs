@@ -208,3 +208,197 @@ fn un_echec_en_cours_d_application_restaure_les_fichiers_deja_ecrits() {
     );
     common::assert_intact(&avant, &racine, "l'échec a laissé le projet modifié");
 }
+
+/// Un fragment qui apporte du code Rust, fabriqué pour le test.
+///
+/// Aucune feature livrée n'en apporte encore : le moule ne s'éprouve que sur un fragment
+/// qui exerce les six sections du manifeste — fichiers, ancres, migration, feature Cargo,
+/// section de configuration, variable d'environnement.
+fn fragment_a_code() -> TempDir {
+    let repertoire = TempDir::new().expect("répertoire temporaire créable");
+    let essai = repertoire.path().join("essai");
+    fs::create_dir(&essai).expect("le fragment se crée");
+
+    fs::write(
+        essai.join("feature.toml"),
+        "[feature]\ndescription = \"un fragment de test\"\n\n\
+         [[fichiers]]\nsource = \"mod.rs.jinja\"\ncible = \"src/essai/mod.rs\"\n\n\
+         [[fichiers]]\nsource = \"service.rs.jinja\"\ncible = \"src/essai/service.rs\"\n\n\
+         [[ancres]]\nancre = \"features\"\ncontenu = \"mod essai;\"\n\n\
+         [[ancres]]\nancre = \"routes\"\ncontenu = \".merge(crate::essai::routes())\"\n\n\
+         [migration]\nsource = \"table.rs.jinja\"\nnom = \"create_essais\"\n\n\
+         [cargo.rbs-core]\nfeatures = [\"auth\"]\n\n\
+         [[config]]\nfichier = \"config/default.toml\"\nsection = \"essai\"\n\
+         contenu = \"\"\"\nttl_secs = 900\n\"\"\"\n\n\
+         [[env]]\ncle = \"RBS_ESSAI__SECRET\"\nvaleur = \"changez-moi\"\n\
+         commentaire = \"au moins 32 octets\"\n",
+    )
+    .expect("le manifeste s'écrit");
+
+    for (nom, contenu) in [
+        ("mod.rs.jinja", "// {@ nom_crate @}\npub mod service;\n"),
+        ("service.rs.jinja", "pub fn rien() {}\n"),
+        ("table.rs.jinja", "// la table des essais\n"),
+    ] {
+        fs::write(essai.join(nom), contenu).expect("la template s'écrit");
+    }
+
+    repertoire
+}
+
+/// `rbs add essai`, servi par le fragment de test.
+fn ajouter_essai(racine: &Path, fragments: &TempDir, arguments: &[&str]) -> Sortie {
+    let mut commande = rbs(racine);
+    commande
+        .arg("--template-dir")
+        .arg(fragments.path())
+        .args(["add", "essai"])
+        .args(arguments);
+
+    Sortie::de(&mut commande)
+}
+
+/// L'installation d'un fragment à code Rust ne se rejoue pas.
+///
+/// La vérification porte sur `[package.metadata.rbs]` et non sur la présence des
+/// fichiers : la migration du fragment est horodatée, et une seconde installation qui se
+/// fierait aux fichiers en déposerait une seconde, à un instant différent.
+#[test]
+fn deux_installations_successives_n_ecrivent_rien_la_seconde() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = projet_commite(&parent);
+    let fragments = fragment_a_code();
+
+    let premiere = ajouter_essai(&racine, &fragments, &[]);
+    assert!(
+        premiere.succes,
+        "la première installation doit aboutir :\n{}",
+        premiere.stderr
+    );
+    common::commiter(&racine, "essai");
+
+    let avant = common::empreinte(&racine);
+    let seconde = ajouter_essai(&racine, &fragments, &[]);
+
+    assert!(
+        seconde.succes,
+        "la seconde installation doit aboutir sans rien faire :\n{}",
+        seconde.stderr
+    );
+    common::assert_intact(
+        &avant,
+        &racine,
+        "la seconde installation a modifié le projet",
+    );
+}
+
+/// Un fichier installé puis supprimé par le développeur ne fait pas réinstaller la
+/// feature à moitié : elle reste inscrite, et rien n'est réécrit.
+#[test]
+fn un_fichier_supprime_ne_fait_pas_reinstaller_la_feature() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = projet_commite(&parent);
+    let fragments = fragment_a_code();
+
+    assert!(ajouter_essai(&racine, &fragments, &[]).succes);
+    fs::remove_file(racine.join("src/essai/service.rs")).expect("le fichier se supprime");
+    common::commiter(&racine, "essai, sans son service");
+
+    let avant = common::empreinte(&racine);
+    let seconde = ajouter_essai(&racine, &fragments, &[]);
+
+    assert!(
+        seconde.succes,
+        "la commande doit aboutir sans rien faire :\n{}",
+        seconde.stderr
+    );
+    common::assert_intact(&avant, &racine, "la feature s'est réinstallée à moitié");
+}
+
+/// Un échec au milieu de l'installation d'un fragment à code ne laisse rien derrière.
+///
+/// Le piège est le même qu'à l'installation de `docker` : le second fichier du plan est
+/// posé en lecture seule, et l'écriture y échoue pour de vrai.
+#[test]
+fn un_echec_a_mi_parcours_restaure_les_fichiers_deja_ecrits() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = projet_commite(&parent);
+    let fragments = fragment_a_code();
+
+    let piege = racine.join("src/essai/service.rs");
+    fs::create_dir_all(piege.parent().expect("le parent existe")).expect("répertoire créable");
+    fs::write(&piege, "// posé par le test, en lecture seule\n").expect("piège inscriptible");
+    let mut permissions = fs::metadata(&piege).expect("piège lisible").permissions();
+    permissions.set_readonly(true);
+    fs::set_permissions(&piege, permissions).expect("permissions modifiables");
+
+    assert!(
+        fs::write(&piege, "vérification").is_err(),
+        "le piège n'a pas pris : ce test ne prouverait rien. Sous un compte privilégié, la \
+         lecture seule est sans effet."
+    );
+
+    common::commiter(&racine, "piège");
+    let avant = common::empreinte(&racine);
+
+    // `--force` dépasse la garde du conflit, que le piège déclenche : ce qui est éprouvé
+    // ici est l'échec d'écriture qui vient après, pas la garde qui l'aurait devancé.
+    let sortie = ajouter_essai(&racine, &fragments, &["--force"]);
+
+    assert!(
+        !sortie.succes,
+        "l'installation a abouti malgré un fichier non inscriptible :\n{}",
+        sortie.stdout
+    );
+    common::assert_intact(&avant, &racine, "l'échec a laissé le projet modifié");
+}
+
+/// Une ancre que le projet ne porte plus arrête l'installation avant toute écriture.
+///
+/// Le développeur a pu réécrire son routeur, et le CLI ne sait qu'insérer dans une ancre :
+/// faute de la trouver, il rend le bloc à coller et n'écrit rien. Un fragment à demi
+/// installé coûterait plus cher à défaire qu'à installer.
+#[test]
+fn une_ancre_absente_arrete_l_installation_sans_rien_ecrire() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = projet_commite(&parent);
+    let fragments = fragment_a_code();
+
+    let routeur = racine.join("src/router.rs");
+    let source = fs::read_to_string(&routeur).expect("le routeur est lisible");
+    let ampute = source
+        .lines()
+        .filter(|ligne| !ligne.contains("rbs:routes"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert_ne!(
+        source, ampute,
+        "l'ancre visée doit exister avant d'être retirée, sans quoi le test ne prouve rien"
+    );
+    fs::write(&routeur, format!("{ampute}\n")).expect("le routeur s'écrit");
+    common::commiter(&racine, "routeur sans son ancre");
+
+    let avant = common::empreinte(&racine);
+    let sortie = ajouter_essai(&racine, &fragments, &[]);
+
+    assert!(
+        !sortie.succes,
+        "l'installation doit sortir en erreur :\n{}",
+        sortie.stdout
+    );
+    assert!(
+        sortie.stderr.contains("<rbs:routes>") && sortie.stderr.contains("src/router.rs"),
+        "l'erreur doit nommer l'ancre et son fichier :\n{}",
+        sortie.stderr
+    );
+    assert!(
+        sortie.stdout.contains("// <rbs:routes>") && sortie.stdout.contains("// </rbs:routes>"),
+        "le bloc à coller doit être affiché :\n{}",
+        sortie.stdout
+    );
+    common::assert_intact(
+        &avant,
+        &racine,
+        "l'ancre absente n'a pas empêché l'écriture",
+    );
+}

@@ -1,0 +1,2 @@
+[feature]
+description = "Dockerfile multi-étapes, .dockerignore et compose de développement"

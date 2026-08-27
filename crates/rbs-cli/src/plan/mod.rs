@@ -7,6 +7,7 @@
 mod action;
 pub(crate) mod application;
 pub(crate) mod rendu;
+mod texte;
 
 use std::fs;
 use std::io;
@@ -102,6 +103,17 @@ pub(crate) enum Erreur {
     /// Le manifeste du projet n'a pas pu être patché.
     #[error("{0}")]
     Metadonnees(#[source] crate::metadata::Erreur),
+    /// Un document TOML du projet ne s'analyse pas.
+    ///
+    /// Distincte de `Metadonnees` : celle-ci vise les documents de configuration, dont
+    /// rien ne dit qu'ils portent une section `[package]`.
+    #[error("{chemin} n'est pas un TOML valide : {source}")]
+    Toml {
+        /// Chemin fautif, relatif à la racine.
+        chemin: String,
+        /// Cause de l'analyse.
+        source: toml_edit::TomlError,
+    },
     /// Le `Cargo.toml` visé par un patch n'existe pas à l'emplacement attendu.
     ///
     /// Distincte de `Metadonnees(PasUnProjet)`, qui suppose au contraire un fichier
@@ -220,6 +232,70 @@ impl Constructeur {
         self.actions.push(Action {
             chemin: chemin.to_string(),
             effet: Effet::PatcherToml { patch },
+            statut,
+        });
+
+        Ok(())
+    }
+
+    /// Planifie l'ajout de la section `section` au document TOML `chemin`.
+    pub fn ajouter_section(
+        &mut self,
+        chemin: &str,
+        section: &str,
+        contenu: &str,
+    ) -> Result<(), Erreur> {
+        let etats = self.etats(chemin)?;
+        let courant = etats.courant.ok_or_else(|| Erreur::FichierAbsent {
+            chemin: chemin.to_string(),
+        })?;
+
+        let rendu =
+            texte::ajouter_section(&courant, section, contenu).map_err(|source| Erreur::Toml {
+                chemin: chemin.to_string(),
+                source,
+            })?;
+
+        let apres = rendu.unwrap_or(courant);
+        let statut = statut_compose(etats.origine.as_deref(), &apres);
+
+        self.projeter(chemin, etats.origine, apres, statut);
+        self.actions.push(Action {
+            chemin: chemin.to_string(),
+            effet: Effet::AjouterSection {
+                section: section.to_string(),
+                contenu: contenu.to_string(),
+            },
+            statut,
+        });
+
+        Ok(())
+    }
+
+    /// Planifie l'ajout de la variable `cle` au fichier d'environnement `chemin`.
+    pub fn ajouter_variable(
+        &mut self,
+        chemin: &str,
+        cle: &str,
+        valeur: &str,
+        commentaire: Option<&str>,
+    ) -> Result<(), Erreur> {
+        let etats = self.etats(chemin)?;
+        let courant = etats.courant.ok_or_else(|| Erreur::FichierAbsent {
+            chemin: chemin.to_string(),
+        })?;
+
+        let apres = texte::ajouter_variable(&courant, cle, valeur, commentaire).unwrap_or(courant);
+        let statut = statut_compose(etats.origine.as_deref(), &apres);
+
+        self.projeter(chemin, etats.origine, apres, statut);
+        self.actions.push(Action {
+            chemin: chemin.to_string(),
+            effet: Effet::AjouterVariable {
+                cle: cle.to_string(),
+                valeur: valeur.to_string(),
+                commentaire: commentaire.map(str::to_string),
+            },
             statut,
         });
 

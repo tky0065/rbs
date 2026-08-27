@@ -25,6 +25,22 @@ pub(crate) enum Effet {
     Inserer { ancre: Ancre, lignes: Vec<String> },
     /// Modifie un manifeste TOML en préservant sa mise en forme.
     PatcherToml { patch: PatchToml },
+    /// Ajoute une section à un document TOML qui n'est pas un manifeste Cargo.
+    AjouterSection {
+        /// Nom de la section, tel qu'il paraît entre crochets.
+        section: String,
+        /// Corps de la section, tel que le manifeste du fragment le déclare.
+        contenu: String,
+    },
+    /// Ajoute une variable à un fichier d'environnement.
+    AjouterVariable {
+        /// Nom de la variable.
+        cle: String,
+        /// Valeur d'exemple.
+        valeur: String,
+        /// Ce que la variable attend, en commentaire au-dessus d'elle.
+        commentaire: Option<String>,
+    },
 }
 
 /// Les modifications qu'un plan sait faire à un `Cargo.toml`.

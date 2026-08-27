@@ -1,0 +1,2 @@
+[feature]
+description = "workflow GitHub Actions : fmt, clippy et tests sur PostgreSQL"
