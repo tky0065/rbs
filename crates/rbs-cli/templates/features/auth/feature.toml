@@ -26,6 +26,10 @@ source = "controller.rs.jinja"
 cible  = "src/auth/controller.rs"
 
 [[fichiers]]
+source = "guard.rs.jinja"
+cible  = "src/auth/guard.rs"
+
+[[fichiers]]
 source = "tests.rs.jinja"
 cible  = "src/auth/tests.rs"
 

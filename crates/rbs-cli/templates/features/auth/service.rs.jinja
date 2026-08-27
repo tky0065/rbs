@@ -1,6 +1,5 @@
 use std::sync::LazyLock;
 
-use axum::http::StatusCode;
 use chrono::{Duration, Utc};
 use rbs_core::config::AuthConfig;
 use rbs_core::jwt::Claims;
@@ -108,8 +107,13 @@ pub async fn logout(db: &DatabaseConnection, entree: RefreshRequest) -> Result<(
     Ok(())
 }
 
-pub async fn me(_db: &DatabaseConnection, _id: Uuid) -> Result<UserResponse> {
-    Err(a_ecrire("me"))
+pub async fn me(db: &DatabaseConnection, id: Uuid) -> Result<UserResponse> {
+    // Un jeton valide dont le compte a disparu ne vaut pas mieux qu'un jeton invalide :
+    // `NotFound` laisserait entendre que la session, elle, tient encore.
+    repository::find(db, id)
+        .await?
+        .map(profil)
+        .ok_or(Error::Unauthorized)
 }
 
 /// Signe un jeton d'accès et ouvre la session de rafraîchissement qui l'accompagne.
@@ -159,15 +163,5 @@ fn profil(utilisateur: Model) -> UserResponse {
         email: utilisateur.email,
         role: utilisateur.role.to_value(),
         created_at: utilisateur.created_at,
-    }
-}
-
-/// Le corps de `me` vous revient. Le reste de la feature — routes, DTO,
-/// document OpenAPI, migration — est déjà en place et n'attend qu'elles.
-fn a_ecrire(route: &str) -> Error {
-    Error::Domain {
-        status: StatusCode::NOT_IMPLEMENTED,
-        code: "not_implemented",
-        message: format!("`{route}` reste à écrire dans src/auth/service.rs"),
     }
 }
