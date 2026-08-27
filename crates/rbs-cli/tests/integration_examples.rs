@@ -203,20 +203,37 @@ fn est_marqueur(ligne: &str) -> bool {
 /// installe `rbs-core` avec les siennes, cette ligne porte davantage que le chemin, et
 /// tout en effacer laisserait passer un `add` qui cesserait d'ajouter sa feature.
 fn masquer_chemin_du_noyau(ligne: &str) -> String {
-    const CHEMIN: &str = "path = \"";
+    const CLE: &str = "path = ";
 
     if !ligne.trim_start().starts_with("rbs-core") {
         return ligne.to_string();
     }
 
-    let Some(ouverture) = ligne.find(CHEMIN).map(|debut| debut + CHEMIN.len()) else {
-        return ligne.to_string();
-    };
-    let Some(fermeture) = ligne[ouverture..].find('"').map(|fin| ouverture + fin) else {
+    let Some(apres_cle) = ligne.find(CLE).map(|debut| debut + CLE.len()) else {
         return ligne.to_string();
     };
 
-    format!("{}<NOYAU>{}", &ligne[..ouverture], &ligne[fermeture..])
+    // Windows canonicalise `--core-path` en chemin UNC (`\\?\D:\…`), que `toml_edit`
+    // écrit en chaîne littérale — guillemets simples — pour n'avoir pas à échapper ses
+    // antislashs. Les deux délimiteurs mènent donc au même `<NOYAU>`, sans quoi la
+    // comparaison passe sur trois plateformes et tombe sur la quatrième.
+    let Some(delimiteur) = ligne[apres_cle..]
+        .chars()
+        .next()
+        .filter(|marque| *marque == '"' || *marque == '\'')
+    else {
+        return ligne.to_string();
+    };
+
+    let ouverture = apres_cle + delimiteur.len_utf8();
+    let Some(fermeture) = ligne[ouverture..]
+        .find(delimiteur)
+        .map(|fin| ouverture + fin + delimiteur.len_utf8())
+    else {
+        return ligne.to_string();
+    };
+
+    format!("{}\"<NOYAU>\"{}", &ligne[..apres_cle], &ligne[fermeture..])
 }
 
 /// Remplace `m20260826_205243` par `m<STAMP>` : le nom d'une migration porte la date et
@@ -331,6 +348,32 @@ fn le_chemin_du_noyau_est_neutralise() {
     let relatif = "rbs-core = { path = \"../../crates/rbs-core\" }";
 
     assert_eq!(normaliser(absolu), normaliser(relatif));
+}
+
+/// Les deux façons dont un chemin s'écrit en TOML mènent au même masque.
+///
+/// La ligne citée est celle qu'un runner `windows-latest` a réellement produite : le
+/// chemin y est canonicalisé en UNC, et `toml_edit` l'écrit en chaîne littérale plutôt
+/// que d'échapper chacun de ses antislashs. Un masquage qui ne connaissait que les
+/// guillemets doubles rendait la comparaison verte sur Linux et macOS, rouge sur Windows.
+#[test]
+fn le_chemin_du_noyau_est_neutralise_quels_que_soient_ses_guillemets() {
+    let unc = r"rbs-core = { path = '\\?\D:\a\rbs\rbs\crates\rbs-core' }";
+    let relatif = "rbs-core = { path = \"../../crates/rbs-core\" }";
+
+    assert_eq!(normaliser(unc), normaliser(relatif));
+    assert!(!normaliser(unc).contains("D:"), "{}", normaliser(unc));
+}
+
+/// Le masque ne mange pas ce qui suit le chemin, quel que soit son délimiteur.
+#[test]
+fn les_features_survivent_a_un_chemin_entre_guillemets_simples() {
+    let unc = r#"rbs-core = { path = '\\?\D:\a\rbs\crates\rbs-core' , features = ["auth"] }"#;
+
+    assert_eq!(
+        normaliser(unc),
+        "rbs-core = { path = \"<NOYAU>\" , features = [\"auth\"] }"
+    );
 }
 
 /// Le masquage s'arrête au chemin : une feature perdue reste une dérive visible.
