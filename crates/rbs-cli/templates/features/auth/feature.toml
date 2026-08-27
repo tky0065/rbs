@@ -49,7 +49,7 @@ crate::auth::controller::me,
 
 [migration]
 source = "migration.rs.jinja"
-nom    = "create_users"
+nom    = "create_auth_tables"
 
 [cargo.rbs-core]
 features = ["auth"]
