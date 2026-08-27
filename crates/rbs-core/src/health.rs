@@ -136,6 +136,12 @@ mod tests {
                 swagger_ui: true,
                 openapi_json: true,
             },
+            #[cfg(feature = "auth")]
+            auth: crate::config::AuthConfig {
+                secret: "un secret de test qui porte au moins trente-deux octets".to_owned(),
+                access_ttl_secs: 900,
+                refresh_ttl_secs: 2_592_000,
+            },
         }
     }
 
