@@ -48,7 +48,11 @@ pub mod trace;
 
 pub use config::Config;
 pub use error::{Error, Result};
+#[cfg(feature = "auth")]
+pub use extract::Identity;
 pub use extract::ValidatedJson;
 pub use openapi::{ProblemDetails, ReponsesCommunes};
 pub use pagination::{Page, Pagination};
+#[cfg(feature = "auth")]
+pub use state::HasAuth;
 pub use state::{CoreState, HasCoreState};

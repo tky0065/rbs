@@ -61,6 +61,23 @@ impl HasCoreState for CoreState {
     }
 }
 
+/// État applicatif donnant accès à la configuration d'authentification.
+///
+/// La méthode a un corps par défaut, mais le trait n'est **pas** implémenté pour tout
+/// [`HasCoreState`] : une implémentation générale interdirait à un projet de tirer son
+/// secret d'ailleurs, d'un gestionnaire de secrets par exemple. Le projet généré écrit
+/// `impl HasAuth for AppState {}`, une ligne.
+#[cfg(feature = "auth")]
+pub trait HasAuth: HasCoreState {
+    /// Configuration d'authentification portée par cet état.
+    fn auth(&self) -> &crate::config::AuthConfig {
+        &self.core().config().auth
+    }
+}
+
+#[cfg(feature = "auth")]
+impl HasAuth for CoreState {}
+
 #[cfg(test)]
 mod tests {
     use super::*;
