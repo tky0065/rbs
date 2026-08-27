@@ -42,7 +42,7 @@ pub enum Commands {
         core_path: Option<PathBuf>,
     },
 
-    /// Ajoute une feature à un projet existant : docker, ci.
+    /// Ajoute une feature à un projet existant : auth, ci, docker.
     Add {
         /// Feature à installer.
         feature: String,
@@ -150,6 +150,29 @@ mod tests {
             assert!(
                 help.contains(attendue),
                 "`{attendue}` absente du help :\n{help}"
+            );
+        }
+    }
+
+    #[test]
+    fn le_help_d_add_nomme_toutes_les_features_installables() {
+        // La description est écrite à la main quand la liste, elle, vient des fragments
+        // embarqués : `auth` a été livrée sans que cette phrase la mentionne.
+        let installables = crate::templates::Source::feature(None, "_aucune_feature_de_ce_nom_")
+            .expect_err("ce nom ne doit désigner aucun fragment")
+            .connues;
+
+        let description = Cli::command()
+            .find_subcommand_mut("add")
+            .expect("`add` absente du CLI")
+            .get_about()
+            .expect("`add` n'a pas de description")
+            .to_string();
+
+        for feature in installables.split(", ") {
+            assert!(
+                description.contains(feature),
+                "`{feature}` s'installe mais n'est pas nommée par l'aide : {description}"
             );
         }
     }
