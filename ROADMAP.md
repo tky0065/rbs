@@ -61,6 +61,13 @@ rôles, migration `users`.
 
 **Critère de sortie** — une API protégée, générée de bout en bout.
 
+Conception :
+[`docs/superpowers/specs/2026-08-27-v0.2-auth-design.md`](docs/superpowers/specs/2026-08-27-v0.2-auth-design.md).
+Le jalon tient deux chantiers et non un : les primitives d'auth, et le moule qui permet à
+une feature d'apporter du code Rust — `rbs add` ne sait aujourd'hui installer que des
+fragments qui n'en apportent pas. C'est ce moule que le critère de sortie de la v0.3
+jugera.
+
 ### v0.3 — Intégrations
 
 `rbs add redis`, `rbs add mail`, `rbs add storage`.
