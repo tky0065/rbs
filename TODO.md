@@ -320,7 +320,7 @@ construction, pas après, quand tout paraît évident.
 
 ### Validation du jalon
 
-- [ ] **V1** · Test du critère de sortie — PARTIEL 2026-08-27 : répétition à blanc menée,
+- [x] **V1** · Test du critère de sortie — PARTIEL 2026-08-27 : répétition à blanc menée,
       pas le test lui-même. Deux parcours joués au pied de la lettre en environnement isolé
       — le lecteur du `README` **échoue** (`rbs migrate up` → `no matching package named
       'rbs-core' found`, et le README n'ayant fait cloner aucun dépôt, `--core-path` est
