@@ -1,0 +1,167 @@
+use std::sync::LazyLock;
+
+use chrono::{Duration, Utc};
+use rbs_core::config::AuthConfig;
+use rbs_core::jwt::Claims;
+use rbs_core::{Error, Result, hash, jwt, token};
+use sea_orm::ActiveEnum;
+use sea_orm::DatabaseConnection;
+use sea_orm::prelude::Uuid;
+
+use super::dto::{LoginRequest, RefreshRequest, RegisterRequest, TokenPair, UserResponse};
+use super::repository::{self, Model};
+
+/// Le hash vérifié quand l'adresse est inconnue.
+///
+/// Sans lui, la connexion d'une adresse jamais inscrite répond en une fraction de
+/// milliseconde là où Argon2 en coûte des dizaines : ce seul écart énumère les comptes.
+/// Le mot de passe qu'il couvre n'ouvre rien — seule sa vérification compte, pas son
+/// résultat.
+static HASH_DE_COMPARAISON: LazyLock<String> = LazyLock::new(|| {
+    hash::hacher("aucun compte ne porte ce mot de passe").expect("hachage du hash témoin")
+});
+
+pub async fn register(db: &DatabaseConnection, entree: RegisterRequest) -> Result<UserResponse> {
+    if repository::find_by_email(db, &entree.email)
+        .await?
+        .is_some()
+    {
+        return Err(Error::Conflict(format!(
+            "l'adresse {} est déjà inscrite",
+            entree.email
+        )));
+    }
+
+    let hash = hash::hacher(&entree.password)?;
+    let cree = repository::create(db, &entree.email, &hash).await?;
+
+    Ok(profil(cree))
+}
+
+pub async fn login(
+    db: &DatabaseConnection,
+    auth: &AuthConfig,
+    entree: LoginRequest,
+) -> Result<TokenPair> {
+    let utilisateur = repository::find_by_email(db, &entree.email).await?;
+
+    // Le mot de passe est vérifié même lorsqu'aucun compte ne répond : sortir plus tôt
+    // ici distinguerait une adresse inscrite d'une autre par le seul temps de réponse.
+    let hash = utilisateur
+        .as_ref()
+        .map_or(HASH_DE_COMPARAISON.as_str(), |trouve| {
+            trouve.password_hash.as_str()
+        });
+
+    let correspond = hash::verifier(&entree.password, hash)?;
+
+    match utilisateur {
+        Some(utilisateur) if correspond => emettre(db, auth, &utilisateur).await,
+        // Mot de passe faux et adresse inconnue rendent la même erreur : les distinguer
+        // dirait à un attaquant quelles adresses sont inscrites.
+        _ => Err(Error::Unauthorized),
+    }
+}
+
+pub async fn refresh(
+    db: &DatabaseConnection,
+    auth: &AuthConfig,
+    entree: RefreshRequest,
+) -> Result<TokenPair> {
+    let empreinte = token::empreinte(&entree.refresh_token);
+    let maintenant = Utc::now().fixed_offset();
+
+    // Jeton inconnu, déjà tourné ou périmé : la même erreur pour les trois. Les
+    // distinguer renseignerait sur l'état des sessions.
+    let session = repository::find_refresh_token(db, &empreinte)
+        .await?
+        .filter(|session| session.expires_at > maintenant)
+        .ok_or(Error::Unauthorized)?;
+
+    // Rien ici ne relit `revoked_at` : c'est `consommer` qui porte la condition, et elle
+    // seule peut la porter sans laisser passer deux rafraîchissements concurrents.
+    if !repository::consommer(db, session.id).await? {
+        return Err(Error::Unauthorized);
+    }
+
+    let utilisateur = repository::find(db, session.user_id)
+        .await?
+        .ok_or(Error::Unauthorized)?;
+
+    emettre(db, auth, &utilisateur).await
+}
+
+pub async fn logout(db: &DatabaseConnection, entree: RefreshRequest) -> Result<()> {
+    let empreinte = token::empreinte(&entree.refresh_token);
+
+    let session = repository::find_refresh_token(db, &empreinte)
+        .await?
+        .ok_or(Error::Unauthorized)?;
+
+    // La session ferme la ligne présentée, et elle seule : les autres appareils du même
+    // compte gardent la leur. Un jeton déjà fermé ne l'est pas deux fois.
+    if !repository::consommer(db, session.id).await? {
+        return Err(Error::Unauthorized);
+    }
+
+    Ok(())
+}
+
+pub async fn me(db: &DatabaseConnection, id: Uuid) -> Result<UserResponse> {
+    // Un jeton valide dont le compte a disparu ne vaut pas mieux qu'un jeton invalide :
+    // `NotFound` laisserait entendre que la session, elle, tient encore.
+    repository::find(db, id)
+        .await?
+        .map(profil)
+        .ok_or(Error::Unauthorized)
+}
+
+/// Signe un jeton d'accès et ouvre la session de rafraîchissement qui l'accompagne.
+async fn emettre(
+    db: &DatabaseConnection,
+    auth: &AuthConfig,
+    utilisateur: &Model,
+) -> Result<TokenPair> {
+    let maintenant = Utc::now();
+
+    let claims = Claims {
+        sub: utilisateur.id.to_string(),
+        role: utilisateur.role.clone().to_value(),
+        exp: (maintenant + Duration::seconds(auth.access_ttl_secs as i64)).timestamp(),
+        iat: maintenant.timestamp(),
+        // Un jeton opaque fait un identifiant de jeton aussi bon qu'un UUID, sans réclamer
+        // au projet le générateur qu'il n'embarque pas.
+        jti: token::aleatoire(),
+    };
+
+    let access_token = jwt::signer(&claims, &auth.secret)?;
+
+    let refresh_token = token::aleatoire();
+    repository::create_refresh_token(
+        db,
+        utilisateur.id,
+        token::empreinte(&refresh_token),
+        (maintenant + Duration::seconds(auth.refresh_ttl_secs as i64)).fixed_offset(),
+    )
+    .await?;
+
+    Ok(TokenPair {
+        access_token,
+        refresh_token,
+        token_type: "Bearer".to_owned(),
+        expires_in: auth.access_ttl_secs,
+    })
+}
+
+/// La vue publique d'un utilisateur.
+///
+/// Le hash n'a aucun chemin vers le client : `UserResponse` ne porte pas le champ, et
+/// cette fonction est le seul passage du modèle vers la réponse.
+fn profil(utilisateur: Model) -> UserResponse {
+    UserResponse {
+        id: utilisateur.id,
+        email: utilisateur.email,
+        role: utilisateur.role.to_value(),
+        created_at: utilisateur.created_at,
+    }
+}

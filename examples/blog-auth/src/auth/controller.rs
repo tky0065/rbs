@@ -1,0 +1,106 @@
+use axum::Json;
+use axum::extract::State;
+use axum::http::StatusCode;
+use rbs_core::{HasAuth, HasCoreState, Identity, ProblemDetails, Result, ValidatedJson};
+use sea_orm::prelude::Uuid;
+
+use super::dto::{LoginRequest, RefreshRequest, RegisterRequest, TokenPair, UserResponse};
+use super::service;
+use crate::state::AppState;
+
+#[utoipa::path(
+    post,
+    path = "/auth/register",
+    tag = "auth",
+    request_body = RegisterRequest,
+    responses(
+        (status = 201, description = "compte créé", body = UserResponse),
+        (status = 409, description = "email déjà pris", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, description = "entrée invalide", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn register(
+    State(state): State<AppState>,
+    ValidatedJson(entree): ValidatedJson<RegisterRequest>,
+) -> Result<(StatusCode, Json<UserResponse>)> {
+    let cree = service::register(state.core().db(), entree).await?;
+
+    Ok((StatusCode::CREATED, Json(cree)))
+}
+
+// Un mot de passe erroné et un email inconnu rendent la même réponse : distinguer les
+// deux dirait à un attaquant quels emails sont inscrits.
+#[utoipa::path(
+    post,
+    path = "/auth/login",
+    tag = "auth",
+    request_body = LoginRequest,
+    responses(
+        (status = 200, description = "paire de jetons", body = TokenPair),
+        (status = 401, description = "identifiants refusés", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn login(
+    State(state): State<AppState>,
+    ValidatedJson(entree): ValidatedJson<LoginRequest>,
+) -> Result<Json<TokenPair>> {
+    Ok(Json(
+        service::login(state.core().db(), state.auth(), entree).await?,
+    ))
+}
+
+#[utoipa::path(
+    post,
+    path = "/auth/refresh",
+    tag = "auth",
+    request_body = RefreshRequest,
+    responses(
+        (status = 200, description = "nouvelle paire de jetons", body = TokenPair),
+        (status = 401, description = "jeton absent, expiré ou déjà consommé", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn refresh(
+    State(state): State<AppState>,
+    ValidatedJson(entree): ValidatedJson<RefreshRequest>,
+) -> Result<Json<TokenPair>> {
+    Ok(Json(
+        service::refresh(state.core().db(), state.auth(), entree).await?,
+    ))
+}
+
+#[utoipa::path(
+    post,
+    path = "/auth/logout",
+    tag = "auth",
+    request_body = RefreshRequest,
+    responses(
+        (status = 204, description = "session révoquée"),
+        (status = 401, description = "jeton inconnu", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn logout(
+    State(state): State<AppState>,
+    ValidatedJson(entree): ValidatedJson<RefreshRequest>,
+) -> Result<StatusCode> {
+    service::logout(state.core().db(), entree).await?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    get,
+    path = "/auth/me",
+    tag = "auth",
+    security(("bearer" = [])),
+    responses(
+        (status = 200, description = "profil de l'appelant", body = UserResponse),
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn me(State(state): State<AppState>, identite: Identity) -> Result<Json<UserResponse>> {
+    // `sub` porte l'identifiant sous forme de chaîne : le jeton est signé, mais rien ne
+    // garantit que celui-ci a été émis par une version du service qui y mettait un UUID.
+    let id = Uuid::parse_str(&identite.user_id).map_err(|_| rbs_core::Error::Unauthorized)?;
+
+    Ok(Json(service::me(state.core().db(), id).await?))
+}

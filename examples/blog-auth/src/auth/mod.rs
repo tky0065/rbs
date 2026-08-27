@@ -1,0 +1,30 @@
+pub mod controller;
+pub mod dto;
+pub mod guard;
+pub mod model;
+pub mod repository;
+pub mod service;
+
+#[cfg(test)]
+mod tests;
+
+use axum::Router;
+use axum::routing::{get, post};
+use rbs_core::HasAuth;
+
+use crate::state::AppState;
+
+// `HasAuth` a un corps par défaut, mais n'est pas implémenté pour tout état : c'est ce
+// qui laisse un projet tirer son secret d'ailleurs qu'un fichier de configuration.
+// L'implémentation vit ici plutôt que dans `state.rs` — elle arrive avec la feature, et
+// repart avec elle.
+impl HasAuth for AppState {}
+
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route("/auth/register", post(controller::register))
+        .route("/auth/login", post(controller::login))
+        .route("/auth/refresh", post(controller::refresh))
+        .route("/auth/logout", post(controller::logout))
+        .route("/auth/me", get(controller::me))
+}

@@ -47,9 +47,16 @@ jobs:
       # sont lus dans `examples/`. Un exemple qui ne compile plus fait donc mentir des
       # pages entières, et le workspace racine l'exclut — un projet généré déclare son
       # propre `[workspace]`, que Cargo refuse d'imbriquer.
+      #
+      # La boucle plutôt qu'un step par exemple : le jour où l'on en ajoute un, l'oublier
+      # ici ne se verrait pas — la page qu'il alimente mentirait sans que rien n'échoue.
       - name: cargo clippy (examples)
-        working-directory: examples/hello-crud
-        run: cargo clippy --workspace --all-targets -- -D warnings
+        run: |
+          for exemple in examples/*/; do
+            echo "::group::$exemple"
+            (cd "$exemple" && cargo clippy --workspace --all-targets -- -D warnings)
+            echo "::endgroup::"
+          done
 
       # Les templates que le binaire embarque vivent sous `crates/rbs-cli` : `cargo
       # package` n'emporte aucun fichier extérieur au paquet. Rien dans une compilation
