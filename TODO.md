@@ -334,7 +334,8 @@ construction, pas après, quand tout paraît évident.
       déclaré depuis crates.io tant que rbs n'y est pas publié · `cargo test -p rbs-cli
       doctor::versions` → 9 passed · `integration_crud -- --ignored` → 1 passed, le
       parcours `--core-path` restant `✓`. Reste à faire : faire jouer le parcours par un
-      tiers — seul geste qui coche cette case.
+      tiers — seul geste qui coche cette case. Protocole d'observation et consigne
+      bilingue prêts : `docs/superpowers/plans/2026-08-27-v1-protocole-test-tiers.md`.
       Une personne extérieure au projet clone, installe, génère une API CRUD qui tourne,
       **sans poser de question**. Chaque question posée devient une tâche de
       documentation avant que la v0.1 ne soit déclarée close.
