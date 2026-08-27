@@ -26,8 +26,9 @@ generated code are the same in every locale.
 
 ## Installing the CLI
 
-Once 0.1 is published, this will be `cargo install rbs`. Until then the `rbs` binary is
-built from the repository:
+Once 0.1 is published, this will be `cargo install rbs-cli`: the package is `rbs-cli`,
+the binary it installs is `rbs`, and the name `rbs` on crates.io belongs to an unrelated
+project. Until then that binary is built from the repository:
 
 ```bash
 git clone https://github.com/tky0065/rbs

@@ -26,8 +26,9 @@ langue.
 
 ## Installer le CLI
 
-Une fois la 0.1 publiée, ce sera `cargo install rbs`. En attendant, le binaire `rbs` se
-construit depuis le dépôt :
+Une fois la 0.1 publiée, ce sera `cargo install rbs-cli` : le paquet s'appelle `rbs-cli`,
+le binaire qu'il installe `rbs`, et le nom `rbs` sur crates.io appartient à un projet
+sans rapport. En attendant, ce binaire se construit depuis le dépôt :
 
 ```bash
 git clone https://github.com/tky0065/rbs
