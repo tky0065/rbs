@@ -121,6 +121,9 @@ pub enum ConfigError {
     /// Fichier `.env` présent mais illisible.
     #[error("fichier `.env` illisible : {0}")]
     Dotenv(#[from] dotenvy::Error),
+    /// Section demandée absente de toutes les couches de la cascade.
+    #[error("configuration invalide : la section `{0}` est absente")]
+    SectionAbsente(String),
     /// Secret de signature trop court pour HS256.
     #[cfg(feature = "auth")]
     #[error("configuration invalide : `auth.secret` doit porter au moins 32 octets, {0} fournis")]
@@ -152,6 +155,27 @@ impl Config {
 
         Ok(config)
     }
+}
+
+/// Charge une section que le noyau ne connaît pas, par la cascade de [`Config::load`].
+///
+/// Le noyau n'oppose aucun défaut à `T` : les valeurs par défaut sont celles que la
+/// struct appelante porte par `#[serde(default)]`, là où son auteur les lit et les change.
+///
+/// # Erreurs
+///
+/// Échoue si la section est absente de toutes les couches, si un champ requis manque, ou
+/// si une valeur est mal typée.
+pub fn section<T: serde::de::DeserializeOwned>(nom: &str) -> Result<T, ConfigError> {
+    let figment = figment()?;
+
+    // Une section absente se distingue d'une section mal remplie : le message qui nomme la
+    // table manquante mène à `config/default.toml`, celui de figment à un champ isolé.
+    if !figment.contains(nom) {
+        return Err(ConfigError::SectionAbsente(nom.to_owned()));
+    }
+
+    Ok(figment.extract_inner(nom)?)
 }
 
 /// Assemble les cinq couches.
@@ -509,6 +533,90 @@ mod tests {
 
             assert_eq!(auth.access_ttl_secs, 900);
             assert_eq!(auth.refresh_ttl_secs, 2_592_000);
+            Ok(())
+        });
+    }
+
+    /// Section dont le noyau ignore tout : ni champ dans [`Config`], ni défaut opposé.
+    #[derive(Debug, Deserialize)]
+    struct SectionEtrangere {
+        url: String,
+        #[serde(default = "ttl_par_defaut")]
+        ttl_secs: u64,
+    }
+
+    /// Défaut porté par l'appelant, et par lui seul.
+    fn ttl_par_defaut() -> u64 {
+        300
+    }
+
+    #[test]
+    fn une_section_absente_rend_une_erreur_nommant_la_section() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.create_dir("config")?;
+            jail.create_file("config/default.toml", DEFAULT_TOML)?;
+
+            let erreur = section::<SectionEtrangere>("externe")
+                .expect_err("aucune section `externe` n'est déclarée");
+
+            let message = erreur.to_string();
+            assert!(
+                message.contains("externe"),
+                "le message doit nommer la section demandée, obtenu : {message}"
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn pour_une_section_etrangere_le_profil_puis_l_environnement_l_emportent() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.create_dir("config")?;
+            jail.create_file(
+                "config/default.toml",
+                &format!("{DEFAULT_TOML}\n[externe]\nurl = \"depuis-default\"\nttl_secs = 1\n"),
+            )?;
+            jail.create_file(
+                "config/production.toml",
+                "[externe]\nurl = \"depuis-le-profil\"\nttl_secs = 2\n",
+            )?;
+            jail.set_env("RBS_ENV", "production");
+            jail.set_env("RBS_EXTERNE__TTL_SECS", "3");
+
+            let externe =
+                section::<SectionEtrangere>("externe").expect("la section doit se charger");
+
+            assert_eq!(
+                externe.url, "depuis-le-profil",
+                "le fichier du profil doit écraser le fichier par défaut"
+            );
+            assert_eq!(
+                externe.ttl_secs, 3,
+                "la variable d'environnement doit écraser les deux fichiers"
+            );
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn les_defauts_serde_de_l_appelant_sont_respectes() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.create_dir("config")?;
+            jail.create_file(
+                "config/default.toml",
+                &format!("{DEFAULT_TOML}\n[externe]\nurl = \"depuis-default\"\n"),
+            )?;
+
+            let externe =
+                section::<SectionEtrangere>("externe").expect("la section doit se charger");
+
+            assert_eq!(
+                externe.ttl_secs, 300,
+                "le noyau n'oppose aucun défaut : celui de l'appelant doit s'appliquer"
+            );
             Ok(())
         });
     }
