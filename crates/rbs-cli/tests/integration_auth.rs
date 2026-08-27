@@ -13,6 +13,7 @@ use std::process::Stdio;
 use std::time::{Duration, Instant};
 
 use assert_cmd::Command;
+use serde_json::Value;
 use tempfile::TempDir;
 use testcontainers::core::wait::LogWaitStrategy;
 use testcontainers::core::{ExecCommand, IntoContainerPort, WaitFor};
@@ -328,10 +329,14 @@ fn le_hash_n_apparait_pas_dans_les_logs_du_serveur() {
 
     attendre_ecoute(port);
 
-    let reponse = poster_json(
+    let (statut, corps) = requete(
         port,
+        "POST",
         "/auth/register",
-        &format!(r#"{{"email":"journal@exemple.test","password":"{MOT_DE_PASSE_EN_CLAIR}"}}"#),
+        None,
+        Some(&format!(
+            r#"{{"email":"journal@exemple.test","password":"{MOT_DE_PASSE_EN_CLAIR}"}}"#
+        )),
     );
 
     serveur.kill().expect("le serveur doit pouvoir être arrêté");
@@ -344,9 +349,9 @@ fn le_hash_n_apparait_pas_dans_les_logs_du_serveur() {
         String::from_utf8_lossy(&sortie.stderr)
     );
 
-    assert!(
-        reponse.starts_with("HTTP/1.1 201"),
-        "l'inscription doit aboutir, sans quoi aucun hash n'a été calculé :\n{reponse}\n{journal}"
+    assert_eq!(
+        statut, 201,
+        "l'inscription doit aboutir, sans quoi aucun hash n'a été calculé :\n{corps}\n{journal}"
     );
     // Sans cette ligne, un journal vide — serveur muet, capture manquée — ferait passer
     // les deux recherches qui suivent sans rien prouver.
@@ -465,27 +470,68 @@ fn attendre_ecoute(port: u16) {
     panic!("le serveur n'écoute toujours pas sur {port} après 60 s");
 }
 
-/// Poste `corps` en JSON sur `chemin` et rend la réponse HTTP brute.
+/// Joue une requête sur le serveur local et rend son statut avec son corps décodé.
 ///
-/// La requête est écrite à la main plutôt que par un client HTTP : ce test n'a besoin que
-/// d'une ligne de statut, et la dépendance se paierait sur toute la CI.
-fn poster_json(port: u16, chemin: &str, corps: &str) -> String {
+/// La requête est écrite à la main plutôt que par un client HTTP : ces tests n'ont besoin
+/// que d'un statut et de deux champs de JSON, et la dépendance se paierait sur toute la CI.
+fn requete(
+    port: u16,
+    methode: &str,
+    chemin: &str,
+    jeton: Option<&str>,
+    corps: Option<&str>,
+) -> (u16, Value) {
     let mut flux = TcpStream::connect(("127.0.0.1", port)).expect("le serveur doit répondre");
 
-    let requete = format!(
-        "POST {chemin} HTTP/1.1\r\nHost: 127.0.0.1\r\nContent-Type: application/json\r\n\
-         Content-Length: {}\r\nConnection: close\r\n\r\n{corps}",
-        corps.len()
-    );
+    let corps = corps.unwrap_or_default();
+    let mut entete =
+        format!("{methode} {chemin} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n");
 
-    flux.write_all(requete.as_bytes())
+    if let Some(jeton) = jeton {
+        entete.push_str(&format!("Authorization: Bearer {jeton}\r\n"));
+    }
+
+    if !corps.is_empty() {
+        entete.push_str(&format!(
+            "Content-Type: application/json\r\nContent-Length: {}\r\n",
+            corps.len()
+        ));
+    }
+
+    entete.push_str("\r\n");
+    entete.push_str(corps);
+
+    flux.write_all(entete.as_bytes())
         .expect("la requête doit partir");
 
     let mut reponse = String::new();
     flux.read_to_string(&mut reponse)
         .expect("la réponse doit être lisible");
 
-    reponse
+    decoder(&reponse)
+}
+
+/// Sépare le statut du corps d'une réponse HTTP brute.
+fn decoder(reponse: &str) -> (u16, Value) {
+    let statut = reponse
+        .split_whitespace()
+        .nth(1)
+        .and_then(|code| code.parse().ok())
+        .unwrap_or_else(|| panic!("réponse sans ligne de statut lisible :\n{reponse}"));
+
+    let corps = reponse
+        .split_once("\r\n\r\n")
+        .map(|(_, corps)| corps)
+        .unwrap_or_default()
+        .trim();
+
+    // Le 204 du logout n'a pas de corps, et le message d'un serveur qui refuse la requête
+    // avant de le router n'est pas du JSON : rendre le texte brut plutôt que d'échouer ici
+    // laisse l'assertion appelante afficher ce que le serveur a réellement dit.
+    let corps =
+        serde_json::from_str(corps).unwrap_or_else(|_| Value::String(corps.to_string()));
+
+    (statut, corps)
 }
 
 /// Les tables du schéma public, triées.
