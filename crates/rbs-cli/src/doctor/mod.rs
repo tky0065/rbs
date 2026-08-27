@@ -5,6 +5,7 @@
 //! y a de problèmes.
 
 pub mod ancres;
+pub mod auth;
 pub mod base;
 pub mod env;
 pub mod rendu;
@@ -90,14 +91,26 @@ pub(crate) enum Erreur {
 pub(crate) fn executer(repertoire: &Path) -> Result<Rapport, Erreur> {
     let racine = metadata::racine_du_projet(repertoire).ok_or(Erreur::PasUnProjet)?;
 
-    let controles = vec![
+    let mut controles = vec![
         ancres::controler(&racine),
         env::controler(&racine),
         versions::controler(&racine),
         base::controler(&racine),
     ];
 
+    // Un projet qui n'a pas installé `auth` n'a pas à lire une ligne à son sujet : le
+    // rapport ne porte que des contrôles dont le verdict le concerne.
+    if feature_installee(&racine, "auth") {
+        controles.push(auth::controler(&racine));
+    }
+
     Ok(Rapport { controles })
+}
+
+/// Vrai si `nom` figure dans `[package.metadata.rbs].features`.
+fn feature_installee(racine: &Path, nom: &str) -> bool {
+    metadata::lire(&racine.join("Cargo.toml"))
+        .is_ok_and(|metadonnees| metadonnees.features.iter().any(|feature| feature == nom))
 }
 
 #[cfg(test)]
@@ -122,6 +135,70 @@ mod tests {
         };
 
         assert!(rapport.reussi());
+    }
+
+    /// Un projet neuf, dont les features sont celles passées.
+    fn projet(features: &[&str]) -> (TempDir, std::path::PathBuf) {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let projet = crate::new::creer(
+            &crate::new::Options {
+                nom: "demo-api".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        let manifeste = projet.racine.join("Cargo.toml");
+        let source = std::fs::read_to_string(&manifeste).expect("manifeste lisible");
+        let declarees = features
+            .iter()
+            .map(|feature| format!("\"{feature}\""))
+            .collect::<Vec<_>>()
+            .join(", ");
+        std::fs::write(
+            &manifeste,
+            source.replace(
+                "features = [\"health\"]",
+                &format!("features = [{declarees}]"),
+            ),
+        )
+        .expect("manifeste inscriptible");
+
+        (parent, projet.racine)
+    }
+
+    fn titres(rapport: &Rapport) -> Vec<&'static str> {
+        rapport.controles.iter().map(|c| c.titre).collect()
+    }
+
+    #[test]
+    fn un_projet_sans_auth_n_a_pas_de_controle_auth() {
+        let (_parent, racine) = projet(&["health"]);
+
+        let rapport = executer(&racine).expect("c'est un projet rbs");
+
+        assert!(
+            !titres(&rapport).contains(&"auth"),
+            "un projet sans auth n'a pas à lire une ligne à son sujet : {:?}",
+            titres(&rapport)
+        );
+    }
+
+    #[test]
+    fn un_projet_portant_auth_recoit_son_controle() {
+        let (_parent, racine) = projet(&["health", "auth"]);
+
+        let rapport = executer(&racine).expect("c'est un projet rbs");
+
+        assert!(
+            titres(&rapport).contains(&"auth"),
+            "la feature est déclarée, son contrôle doit figurer : {:?}",
+            titres(&rapport)
+        );
     }
 
     #[test]
