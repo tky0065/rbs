@@ -11,6 +11,7 @@ use minijinja::Value;
 use crate::ancres::{self, Ancre};
 use crate::generate::montage;
 use crate::manifeste::Manifeste;
+use crate::metadata;
 use crate::plan;
 use crate::template::Renderer;
 use crate::templates;
@@ -112,6 +113,17 @@ pub(crate) fn actions(
     for insertion in &fragment.manifeste.ancres {
         let ancre = ancre(fragment, &insertion.ancre)?;
         constructeur.inserer(ancre, &lignes(&insertion.contenu))?;
+    }
+
+    // Avant les features de `[cargo.<crate>]` : activer une feature suppose la dépendance
+    // déclarée, et un fragment peut fort bien viser une crate qu'il apporte lui-même.
+    for declaree in &fragment.manifeste.dependances {
+        constructeur.patcher(plan::PatchToml::AjouterDependance(metadata::Dependance {
+            nom: declaree.nom.clone(),
+            version: declaree.version.clone(),
+            features: declaree.features.clone(),
+            default_features: declaree.default_features,
+        }))?;
     }
 
     for (crate_, patch) in &fragment.manifeste.cargo {
@@ -479,6 +491,79 @@ axum = \"0.8\"
                 fichier.apres
             );
         }
+    }
+
+    /// Un fragment qui n'apporte que des crates tierces, versions figées comme le veut le
+    /// moule. `axum` est déjà déclarée par le projet, `lettre` non.
+    const DEPENDANCES: &str = "[feature]\ndescription = \"mail\"\n\n\
+         [[dependances]]\nnom = \"lettre\"\nversion = \"0.11\"\n\
+         default_features = false\nfeatures = [\"smtp-transport\", \"builder\"]\n\n\
+         [[dependances]]\nnom = \"axum\"\nversion = \"0.8\"\n";
+
+    /// Le manifeste que l'installation de `DEPENDANCES` projette sur `CARGO`.
+    fn cargo_apres_dependances(projet: &TempDir) -> String {
+        avec(projet.path(), &[("Cargo.toml", CARGO)]);
+
+        let (_, plan) =
+            planifier(projet.path(), DEPENDANCES, &[]).expect("le plan doit se calculer");
+
+        projete(&plan, "Cargo.toml").to_string()
+    }
+
+    /// Le critère de la tâche : la version, les features et le `default-features` du
+    /// fragment arrivent tels quels dans `[dependencies]`.
+    #[test]
+    fn la_dependance_declaree_arrive_avec_sa_version_ses_features_et_son_default_features() {
+        let projet = TempDir::new().expect("répertoire temporaire créable");
+
+        let apres = cargo_apres_dependances(&projet);
+
+        assert!(
+            apres.contains(
+                "lettre = { version = \"0.11\", default-features = false, \
+                 features = [\"smtp-transport\", \"builder\"] }"
+            ),
+            "{apres}"
+        );
+    }
+
+    /// Le critère de la tâche : ce que le développeur a écrit et annoté lui appartient.
+    #[test]
+    fn les_commentaires_et_la_mise_en_forme_survivent_a_l_ajout_d_une_dependance() {
+        let projet = TempDir::new().expect("répertoire temporaire créable");
+
+        let apres = cargo_apres_dependances(&projet);
+
+        for ligne in CARGO.lines() {
+            assert!(
+                apres.lines().any(|rendue| rendue == ligne),
+                "la ligne « {ligne} » a été reformatée :\n{apres}"
+            );
+        }
+        assert_eq!(
+            apres.lines().count(),
+            CARGO.lines().count() + 1,
+            "le patch a débordé de la ligne qu'il ajoute :\n{apres}"
+        );
+    }
+
+    /// Le critère de la tâche : une crate que le projet déclare déjà reste déclarée une
+    /// fois. Sans quoi cargo refuserait le manifeste que le fragment vient d'écrire.
+    #[test]
+    fn une_dependance_deja_declaree_dans_le_projet_n_est_pas_dupliquee() {
+        let projet = TempDir::new().expect("répertoire temporaire créable");
+
+        let apres = cargo_apres_dependances(&projet);
+
+        assert_eq!(
+            apres
+                .lines()
+                .filter(|ligne| ligne.starts_with("axum"))
+                .count(),
+            1,
+            "{apres}"
+        );
+        assert!(apres.contains("axum = \"0.8\"\n"), "{apres}");
     }
 
     /// Une template déclarée mais absente est une faute du manifeste, pas un silence.

@@ -19,6 +19,9 @@ pub(crate) struct Manifeste {
     #[serde(default)]
     pub ancres: Vec<InsertionDeclaree>,
     pub migration: Option<MigrationDeclaree>,
+    /// Les crates tierces que le fragment déclare, dans l'ordre où elles seront patchées.
+    #[serde(default)]
+    pub dependances: Vec<DependanceDeclaree>,
     /// Une entrée par crate à patcher. `BTreeMap` et non `HashMap` : l'ordre des patchs
     /// se retrouve dans l'affichage du plan, qui ne doit pas varier d'une exécution à
     /// l'autre.
@@ -55,6 +58,30 @@ pub(crate) struct InsertionDeclaree {
 pub(crate) struct MigrationDeclaree {
     pub source: String,
     pub nom: String,
+}
+
+/// Une crate tierce que le fragment apporte au projet.
+///
+/// La version est figée par le fragment et jamais déduite : un projet généré doit compiler
+/// dans six mois avec les versions que le fragment a validées.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct DependanceDeclaree {
+    pub nom: String,
+    pub version: String,
+    #[serde(default)]
+    pub features: Vec<String>,
+    /// Les défauts de la crate, laissés actifs sauf mention contraire.
+    ///
+    /// Ce n'est pas une symétrie avec `cargo add` : `lettre` active `native-tls` par
+    /// défaut, qui réclamerait OpenSSL sur les trois plateformes d'une CI générée.
+    #[serde(default = "vrai")]
+    pub default_features: bool,
+}
+
+/// Le défaut de `default_features`, serde n'acceptant qu'une fonction.
+fn vrai() -> bool {
+    true
 }
 
 #[derive(Debug, Deserialize)]
@@ -120,6 +147,16 @@ contenu = "mod auth;"
 source = "users.rs.jinja"
 nom    = "create_users"
 
+[[dependances]]
+nom              = "lettre"
+version          = "0.11"
+default_features = false
+features         = ["smtp-transport", "builder"]
+
+[[dependances]]
+nom     = "minijinja"
+version = "2.24"
+
 [cargo.rbs-core]
 features = ["auth"]
 
@@ -155,6 +192,20 @@ commentaire = "Secret de signature HS256, au moins 32 octets"
         let migration = manifeste.migration.expect("la migration est déclarée");
         assert_eq!(migration.source, "users.rs.jinja");
         assert_eq!(migration.nom, "create_users");
+
+        assert_eq!(manifeste.dependances.len(), 2);
+        assert_eq!(manifeste.dependances[0].nom, "lettre");
+        assert_eq!(manifeste.dependances[0].version, "0.11");
+        assert!(!manifeste.dependances[0].default_features);
+        assert_eq!(
+            manifeste.dependances[0].features,
+            ["smtp-transport", "builder"]
+        );
+
+        // Ce qu'un fragment silencieux obtient : les défauts de la crate, et aucune
+        // feature de plus.
+        assert!(manifeste.dependances[1].default_features);
+        assert!(manifeste.dependances[1].features.is_empty());
 
         assert_eq!(manifeste.cargo.len(), 1);
         assert_eq!(manifeste.cargo["rbs-core"].features, ["auth"]);
@@ -201,6 +252,7 @@ commentaire = "Secret de signature HS256, au moins 32 octets"
         assert!(manifeste.fichiers.is_empty());
         assert!(manifeste.ancres.is_empty());
         assert!(manifeste.migration.is_none());
+        assert!(manifeste.dependances.is_empty());
         assert!(manifeste.cargo.is_empty());
         assert!(manifeste.config.is_empty());
         assert!(manifeste.env.is_empty());

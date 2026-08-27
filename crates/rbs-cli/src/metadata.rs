@@ -38,6 +38,8 @@ pub struct Dependance {
     pub version: String,
     /// Features à activer sur ce paquet.
     pub features: Vec<String>,
+    /// Les défauts du paquet, laissés actifs sauf mention contraire.
+    pub default_features: bool,
 }
 
 /// Ce qui peut empêcher de lire ou de mettre à jour les métadonnées d'un projet.
@@ -232,12 +234,17 @@ pub fn ajouter_dependance(
         });
     }
 
+    let mal_formee = || Erreur::Declaration {
+        chemin: nom.to_string(),
+        cle: dep.nom.clone(),
+    };
+
     let mut modifie = false;
+    if !dep.default_features {
+        modifie |= couper_defauts(declaree).ok_or_else(mal_formee)?;
+    }
     for feature in &dep.features {
-        modifie |= activer_feature(declaree, feature).ok_or_else(|| Erreur::Declaration {
-            chemin: nom.to_string(),
-            cle: dep.nom.clone(),
-        })?;
+        modifie |= activer_feature(declaree, feature).ok_or_else(mal_formee)?;
     }
 
     Ok(modifie.then(|| document.to_string()))
@@ -283,17 +290,25 @@ pub fn ajouter_feature_a_dependance(
 }
 
 /// La déclaration à écrire pour une dépendance encore absente.
+///
+/// Une version nue tant qu'il n'y a rien d'autre à dire : c'est la forme qu'un développeur
+/// aurait écrite, et le manifeste n'a pas à s'alourdir d'une table pour une seule clé.
 fn declaration(dep: &Dependance) -> Item {
-    if dep.features.is_empty() {
+    if dep.features.is_empty() && dep.default_features {
         return Item::Value(Value::from(dep.version.as_str()));
     }
 
     let mut table = InlineTable::new();
     table.insert("version", Value::from(dep.version.as_str()));
-    table.insert(
-        "features",
-        Value::Array(dep.features.iter().map(String::as_str).collect::<Array>()),
-    );
+    if !dep.default_features {
+        table.insert("default-features", Value::from(false));
+    }
+    if !dep.features.is_empty() {
+        table.insert(
+            "features",
+            Value::Array(dep.features.iter().map(String::as_str).collect::<Array>()),
+        );
+    }
 
     Item::Value(Value::InlineTable(table))
 }
@@ -306,22 +321,25 @@ fn version_declaree(declaree: &Item) -> Option<&str> {
         .or_else(|| declaree.get("version").and_then(Item::as_str))
 }
 
+/// Coupe les défauts d'une déclaration, en rendant `false` s'ils l'étaient déjà et `None`
+/// si la déclaration n'a pas une forme manipulable.
+fn couper_defauts(declaree: &mut Item) -> Option<bool> {
+    etaler(declaree)?;
+
+    let table = declaree.as_table_like_mut()?;
+    if table.get("default-features").and_then(Item::as_bool) == Some(false) {
+        return Some(false);
+    }
+
+    table.insert("default-features", Item::Value(Value::from(false)));
+
+    Some(true)
+}
+
 /// Active `feature` sur une déclaration, en rendant `false` si elle y était déjà et `None`
 /// si la déclaration n'a pas une forme manipulable.
-///
-/// Une déclaration en chaîne devient une table inline : son décor, qui porte l'espacement
-/// et le commentaire de fin de ligne, est reporté sur la table.
 fn activer_feature(declaree: &mut Item, feature: &str) -> Option<bool> {
-    if let Some(version) = declaree.as_str().map(str::to_owned) {
-        let decor = declaree.as_value()?.decor().clone();
-
-        let mut table = InlineTable::new();
-        table.insert("version", Value::from(version));
-
-        let mut valeur = Value::InlineTable(table);
-        *valeur.decor_mut() = decor;
-        *declaree = Item::Value(valeur);
-    }
+    etaler(declaree)?;
 
     let table = declaree.as_table_like_mut()?;
     let features = table
@@ -339,6 +357,28 @@ fn activer_feature(declaree: &mut Item, feature: &str) -> Option<bool> {
     features.push(feature);
 
     Some(true)
+}
+
+/// Donne à une déclaration la forme d'une table inline, seule à pouvoir porter plus que
+/// la version.
+///
+/// Le décor d'une déclaration en chaîne, qui porte l'espacement et le commentaire de fin
+/// de ligne, est reporté sur la table.
+fn etaler(declaree: &mut Item) -> Option<()> {
+    let Some(version) = declaree.as_str().map(str::to_owned) else {
+        return Some(());
+    };
+
+    let decor = declaree.as_value()?.decor().clone();
+
+    let mut table = InlineTable::new();
+    table.insert("version", Value::from(version));
+
+    let mut valeur = Value::InlineTable(table);
+    *valeur.decor_mut() = decor;
+    *declaree = Item::Value(valeur);
+
+    Some(())
 }
 
 /// Analyse un manifeste en préservant sa mise en forme et ses commentaires.
@@ -512,6 +552,7 @@ tokio = { version = "1", features = ["macros"] }
                 nom: "redis".into(),
                 version: "0.32".into(),
                 features: vec![],
+                default_features: true,
             },
             "Cargo.toml",
         )
@@ -534,6 +575,7 @@ tokio = { version = "1", features = ["macros"] }
                 nom: "axum".into(),
                 version: "0.9".into(),
                 features: vec![],
+                default_features: true,
             },
             "Cargo.toml",
         )
@@ -550,6 +592,7 @@ tokio = { version = "1", features = ["macros"] }
                 nom: "axum".into(),
                 version: "0.8".into(),
                 features: vec![],
+                default_features: true,
             },
             "Cargo.toml",
         )
@@ -575,6 +618,7 @@ tokio = { version = "1", features = ["macros"] }
                 nom: "tokio".into(),
                 version: "1".into(),
                 features: vec!["rt-multi-thread".into()],
+                default_features: true,
             },
             "Cargo.toml",
         )
@@ -588,6 +632,62 @@ tokio = { version = "1", features = ["macros"] }
         );
     }
 
+    /// Une crate que le projet porte déjà avec ses défauts, et qu'un fragment réclame sans
+    /// eux : c'est le seul chemin par lequel `default-features` arrive sur une déclaration
+    /// existante, et le commentaire du développeur doit y survivre comme ailleurs.
+    #[test]
+    fn une_dependance_deja_declaree_recoit_la_coupure_de_ses_defauts() {
+        let rendu = ajouter_dependance(
+            MANIFESTE_DEPS,
+            &Dependance {
+                nom: "axum".into(),
+                version: "0.9".into(),
+                features: vec![],
+                default_features: false,
+            },
+            "Cargo.toml",
+        )
+        .expect("le manifeste est valide")
+        .expect("les défauts sont encore actifs");
+
+        let ligne = ligne_de(&rendu, "axum");
+        assert!(
+            ligne.contains(r#"axum = { version = "0.9", default-features = false }"#),
+            "{ligne}"
+        );
+        assert!(ligne.contains("# le serveur"), "{ligne}");
+    }
+
+    #[test]
+    fn une_coupure_de_defauts_deja_ecrite_ne_produit_aucun_texte() {
+        let coupee = ajouter_dependance(
+            MANIFESTE_DEPS,
+            &Dependance {
+                nom: "axum".into(),
+                version: "0.9".into(),
+                features: vec![],
+                default_features: false,
+            },
+            "Cargo.toml",
+        )
+        .expect("le manifeste est valide")
+        .expect("les défauts sont encore actifs");
+
+        let rendu = ajouter_dependance(
+            &coupee,
+            &Dependance {
+                nom: "axum".into(),
+                version: "0.9".into(),
+                features: vec![],
+                default_features: false,
+            },
+            "Cargo.toml",
+        )
+        .expect("le manifeste est valide");
+
+        assert_eq!(rendu, None);
+    }
+
     #[test]
     fn une_dependance_avec_features_se_declare_en_table_inline() {
         let rendu = ajouter_dependance(
@@ -596,6 +696,7 @@ tokio = { version = "1", features = ["macros"] }
                 nom: "redis".into(),
                 version: "0.32".into(),
                 features: vec!["tokio-comp".into()],
+                default_features: true,
             },
             "Cargo.toml",
         )
@@ -616,6 +717,7 @@ tokio = { version = "1", features = ["macros"] }
                 nom: "redis".into(),
                 version: "0.32".into(),
                 features: vec![],
+                default_features: true,
             },
             "Cargo.toml",
         )
@@ -794,6 +896,7 @@ features = ["health"]
                 nom: "redis".into(),
                 version: "0.32".into(),
                 features: vec!["tokio-comp".into()],
+                default_features: true,
             },
             "Cargo.toml",
         )
