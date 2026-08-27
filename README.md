@@ -36,7 +36,8 @@ sequence, along with the database the commands expect; follow it rather than the
 below, which leaves both out.
 
 > The Ruby ecosystem ships an unrelated tool also called `rbs`. If `rbs --version` prints
-> something like `rbs 3.10.0`, another binary is winning on your `PATH`.
+> something like `rbs 3.10.0`, that one is winning on your `PATH` — use `rbs-cli`, which
+> the same install put there under a name nobody else claims.
 
 ## Quick look
 

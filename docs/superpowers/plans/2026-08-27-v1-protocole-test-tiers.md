@@ -61,6 +61,12 @@ traiter comme telle et non comme un enseignement du test :
 | D2 | Le `README` ne faisait jamais démarrer de base de données | 2026-08-27 |
 | D3 | Le conflit de nom avec le `rbs` de Ruby n'était signalé que sur le site | 2026-08-27 |
 | D4 | `rbs doctor` déclarait saine une dépendance introuvable | 2026-08-27 |
+| D5 | Le `rbs` de Ruby capturait la commande, sans qu'aucun code puisse le signaler | 2026-08-27 |
+
+D5 est la seule des cinq qui n'ait pas été trouvée par la répétition à blanc : elle
+n'apparaît que sur une machine où Homebrew Ruby précède `~/.cargo/bin`. Le binaire est
+désormais installé sous les deux noms, et un testeur bloqué là n'a plus qu'à taper
+`rbs-cli`.
 
 ### Ce qui invalide une session
 

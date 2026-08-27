@@ -29,8 +29,8 @@ langue.
 ## Installer le CLI
 
 Une fois la 0.1 publiée, ce sera `cargo install rbs-cli` : le paquet s'appelle `rbs-cli`,
-le binaire qu'il installe `rbs`, et le nom `rbs` sur crates.io appartient à un projet
-sans rapport. En attendant, ce binaire se construit depuis le dépôt :
+la commande qu'il installe `rbs`, et le nom `rbs` sur crates.io appartient à un projet
+sans rapport. En attendant, elle se construit depuis le dépôt :
 
 ```bash
 git clone https://github.com/tky0065/rbs
@@ -39,7 +39,8 @@ cargo install --path crates/rbs-cli
 cd ..
 ```
 
-Un exécutable `rbs` atterrit dans `~/.cargo/bin`. Le dernier `cd` vous fait ressortir du
+Un exécutable `rbs` atterrit dans `~/.cargo/bin`, accompagné d'une seconde copie nommée
+`rbs-cli`, pour le cas que décrit l'encart plus bas. Le dernier `cd` vous fait ressortir du
 clone : la suite de cette page travaille depuis le répertoire qui le *contient*, si bien
 que le projet que vous allez créer atterrit à côté du clone et non dedans. Vérifiez que
 le binaire répond :
@@ -55,9 +56,17 @@ rbs 0.1.0
 :::note
 
 L'écosystème Ruby distribue un outil sans rapport, lui aussi nommé `rbs`. Si
-`rbs --version` affiche quelque chose comme `rbs 3.10.0`, c'est un autre binaire qui
-gagne sur votre `PATH` — appelez `~/.cargo/bin/rbs` explicitement, ou placez
-`~/.cargo/bin` devant.
+`rbs --version` affiche quelque chose comme `rbs 3.10.0`, c'est celui-là qui gagne sur
+votre `PATH`. Rien à réorganiser : l'installation a déposé le même programme une seconde
+fois, sous un nom que personne d'autre ne revendique.
+
+```bash
+rbs-cli --version
+```
+
+Utilisez `rbs-cli` partout où cette page écrit `rbs`. C'est le même binaire, et il
+s'annonce sous le nom par lequel vous l'appelez — son `--help` reste donc fidèle à ce que
+vous tapez.
 
 :::
 

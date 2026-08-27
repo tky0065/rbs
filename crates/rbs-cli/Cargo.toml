@@ -7,9 +7,9 @@ rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 
-[[bin]]
-name = "rbs"
-path = "src/main.rs"
+# Les deux binaires et la bibliothèque sont découverts par cargo depuis `src/` : une
+# cible déclarée ici les redéclarerait sans rien ajouter. `src/bin/rbs-cli.rs` porte la
+# raison d'être du second nom.
 
 [dependencies]
 chrono.workspace = true

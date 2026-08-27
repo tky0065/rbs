@@ -37,8 +37,9 @@ séquence, ainsi que la base de données que les commandes attendent ; suivez-le
 l'esquisse ci-dessous, qui laisse les deux de côté.
 
 > L'écosystème Ruby publie un outil sans rapport, lui aussi nommé `rbs`. Si
-> `rbs --version` affiche quelque chose comme `rbs 3.10.0`, c'est qu'un autre binaire
-> l'emporte sur votre `PATH`.
+> `rbs --version` affiche quelque chose comme `rbs 3.10.0`, c'est celui-là qui l'emporte
+> sur votre `PATH` — utilisez `rbs-cli`, que la même installation a déposé sous un nom que
+> personne d'autre ne revendique.
 
 ## Aperçu
 
