@@ -1,11 +1,17 @@
+use std::time::Instant;
+
 use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
-use serde_json::Value;
+use serde_json::{Value, json};
 use tower::ServiceExt;
+use uuid::Uuid;
 
 use crate::router::router;
 use crate::state::AppState;
+
+/// Un mot de passe qui satisfait la validation du DTO, partagé par les tests.
+const MOT_DE_PASSE: &str = "un mot de passe assez long";
 
 /// Monte l'application sur la base décrite par `.env`, sans écouter sur le réseau.
 ///
@@ -45,6 +51,44 @@ fn sans_corps(methode: &str, chemin: &str) -> Request<Body> {
         .expect("requête bien formée")
 }
 
+fn poster(chemin: &str, corps: Value) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(chemin)
+        .header("content-type", "application/json")
+        .body(Body::from(corps.to_string()))
+        .expect("requête bien formée")
+}
+
+/// Une adresse jamais inscrite : les tests partagent une base qu'ils ne vident pas.
+fn email_neuf() -> String {
+    format!("{}@exemple.test", Uuid::new_v4())
+}
+
+/// Inscrit `email` et rend le corps de la réponse.
+async fn inscrire(api: &Router, email: &str) -> (StatusCode, Value) {
+    appeler(
+        api,
+        poster(
+            "/auth/register",
+            json!({ "email": email, "password": MOT_DE_PASSE }),
+        ),
+    )
+    .await
+}
+
+/// Tente une connexion et rend statut et corps.
+async fn connecter(api: &Router, email: &str, mot_de_passe: &str) -> (StatusCode, Value) {
+    appeler(
+        api,
+        poster(
+            "/auth/login",
+            json!({ "email": email, "password": mot_de_passe }),
+        ),
+    )
+    .await
+}
+
 /// La garde tient avant même que le service existe : `Identity` refuse la requête sans
 /// jamais atteindre le controller.
 #[tokio::test]
@@ -72,4 +116,114 @@ async fn me_avec_un_jeton_illisible_rend_401() {
 
     assert_eq!(statut, StatusCode::UNAUTHORIZED);
     assert_eq!(corps["status"], 401, "{corps}");
+}
+
+#[tokio::test]
+async fn inscription_rend_201_et_le_profil_cree() {
+    let api = application().await;
+    let email = email_neuf();
+
+    let (statut, corps) = inscrire(&api, &email).await;
+
+    assert_eq!(statut, StatusCode::CREATED, "{corps}");
+    assert_eq!(corps["email"], email, "{corps}");
+    assert_eq!(corps["role"], "user", "{corps}");
+    assert!(corps["id"].is_string(), "{corps}");
+}
+
+/// Ni le hash ni le mot de passe reçu ne repartent vers le client.
+#[tokio::test]
+async fn le_hash_n_apparait_pas_dans_la_reponse() {
+    let api = application().await;
+
+    let (_, corps) = inscrire(&api, &email_neuf()).await;
+
+    let texte = corps.to_string();
+    assert!(
+        !texte.contains("$argon2"),
+        "hash dans la réponse :\n{texte}"
+    );
+    assert!(
+        !texte.contains(MOT_DE_PASSE),
+        "mot de passe dans la réponse :\n{texte}"
+    );
+    assert!(
+        !texte.contains("password"),
+        "champ de mot de passe dans la réponse :\n{texte}"
+    );
+}
+
+#[tokio::test]
+async fn un_email_deja_pris_rend_409() {
+    let api = application().await;
+    let email = email_neuf();
+
+    let (premier, corps) = inscrire(&api, &email).await;
+    assert_eq!(premier, StatusCode::CREATED, "{corps}");
+
+    let (second, corps) = inscrire(&api, &email).await;
+
+    assert_eq!(second, StatusCode::CONFLICT, "{corps}");
+}
+
+/// Les deux échecs sont indiscernables : un corps qui différerait dirait à un attaquant
+/// quelles adresses sont inscrites.
+///
+/// `request_id` est retiré avant la comparaison — il change à chaque requête par
+/// construction, et corréler une réponse à une ligne de journal ne renseigne personne sur
+/// l'existence d'un compte.
+#[tokio::test]
+async fn mot_de_passe_errone_et_email_inconnu_rendent_la_meme_401() {
+    let api = application().await;
+    let inscrit = email_neuf();
+    inscrire(&api, &inscrit).await;
+
+    let (statut_faux, mut corps_faux) =
+        connecter(&api, &inscrit, "un tout autre mot de passe").await;
+    let (statut_inconnu, mut corps_inconnu) = connecter(&api, &email_neuf(), MOT_DE_PASSE).await;
+
+    assert_eq!(statut_faux, StatusCode::UNAUTHORIZED, "{corps_faux}");
+    assert_eq!(statut_inconnu, StatusCode::UNAUTHORIZED, "{corps_inconnu}");
+
+    for corps in [&mut corps_faux, &mut corps_inconnu] {
+        if let Some(objet) = corps.as_object_mut() {
+            objet.remove("request_id");
+        }
+    }
+
+    assert_eq!(
+        corps_faux, corps_inconnu,
+        "les deux échecs doivent être indiscernables"
+    );
+}
+
+/// Le temps de réponse ne renseigne pas davantage que le corps.
+///
+/// Sans vérification sur le chemin « adresse inconnue », la réponse tombe en une fraction
+/// de milliseconde là où Argon2 en coûte plusieurs dizaines : cet écart seul énumère les
+/// comptes. Le rapport toléré est large — il sépare l'absence de vérification, d'un ordre
+/// de grandeur, d'un hachage à vide, qui coûte le même temps.
+#[tokio::test]
+async fn un_email_inconnu_coute_le_meme_temps_qu_un_mot_de_passe_faux() {
+    let api = application().await;
+    let inscrit = email_neuf();
+    inscrire(&api, &inscrit).await;
+
+    // Un tour à vide : le hash de comparaison se calcule au premier passage, et son coût
+    // ne doit pas être imputé à la mesure.
+    connecter(&api, &email_neuf(), MOT_DE_PASSE).await;
+
+    let depart = Instant::now();
+    connecter(&api, &inscrit, "un tout autre mot de passe").await;
+    let mot_de_passe_faux = depart.elapsed();
+
+    let depart = Instant::now();
+    connecter(&api, &email_neuf(), MOT_DE_PASSE).await;
+    let email_inconnu = depart.elapsed();
+
+    assert!(
+        email_inconnu * 5 >= mot_de_passe_faux,
+        "une adresse inconnue répond en {email_inconnu:?} contre {mot_de_passe_faux:?} \
+         pour un mot de passe faux : l'écart énumère les comptes"
+    );
 }

@@ -1,7 +1,7 @@
 use axum::Json;
 use axum::extract::State;
 use axum::http::StatusCode;
-use rbs_core::{HasCoreState, Identity, ProblemDetails, Result, ValidatedJson};
+use rbs_core::{HasAuth, HasCoreState, Identity, ProblemDetails, Result, ValidatedJson};
 use sea_orm::prelude::Uuid;
 
 use super::dto::{LoginRequest, RefreshRequest, RegisterRequest, TokenPair, UserResponse};
@@ -44,7 +44,9 @@ pub async fn login(
     State(state): State<AppState>,
     ValidatedJson(entree): ValidatedJson<LoginRequest>,
 ) -> Result<Json<TokenPair>> {
-    Ok(Json(service::login(state.core().db(), entree).await?))
+    Ok(Json(
+        service::login(state.core().db(), state.auth(), entree).await?,
+    ))
 }
 
 #[utoipa::path(

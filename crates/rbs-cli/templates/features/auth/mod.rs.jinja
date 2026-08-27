@@ -1,6 +1,6 @@
-// Tant que les corps de `service.rs` restent à écrire, personne n'appelle le repository
-// ni ne lit les champs des DTO d'entrée. Retirez cette ligne quand ce sera fait : elle
-// masquerait alors du code réellement mort.
+// `refresh`, `logout` et `me` restent à écrire : personne ne lit encore les champs de
+// `RefreshRequest` ni n'appelle `repository::find`. Retirez cette ligne quand ce sera
+// fait — elle masquerait alors du code réellement mort.
 #![allow(dead_code)]
 
 pub mod controller;
