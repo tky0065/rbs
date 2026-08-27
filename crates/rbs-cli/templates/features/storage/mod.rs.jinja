@@ -1,4 +1,5 @@
 pub mod fichiers;
+pub mod s3;
 
 #[cfg(test)]
 mod tests;
@@ -53,6 +54,30 @@ pub struct StorageConfig {
     /// Racine du backend `fs`, créée au premier dépôt.
     #[serde(default = "racine_par_defaut")]
     pub racine: PathBuf,
+
+    /// Bucket du backend `s3`.
+    #[serde(default)]
+    pub bucket: String,
+
+    /// Région du backend `s3`.
+    #[serde(default = "region_par_defaut")]
+    pub region: String,
+
+    /// URL du service, à renseigner pour toute API compatible S3 autre qu'AWS.
+    #[serde(default)]
+    pub endpoint: Option<String>,
+
+    /// Identifiant d'accès du backend `s3`.
+    #[serde(default)]
+    pub access_key_id: String,
+
+    /// Clé secrète du backend `s3`.
+    #[serde(default)]
+    pub secret_access_key: String,
+
+    /// Bucket dans le chemin plutôt que dans le sous-domaine, ce qu'exige MinIO.
+    #[serde(default)]
+    pub force_path_style: bool,
 }
 
 fn backend_par_defaut() -> String {
@@ -61,6 +86,10 @@ fn backend_par_defaut() -> String {
 
 fn racine_par_defaut() -> PathBuf {
     PathBuf::from("./stockage")
+}
+
+fn region_par_defaut() -> String {
+    "us-east-1".to_owned()
 }
 
 /// Le stockage que décrit la section `[storage]`.
@@ -72,9 +101,10 @@ pub fn depuis_config() -> anyhow::Result<Arc<dyn Storage>> {
 fn construire(config: StorageConfig) -> anyhow::Result<Arc<dyn Storage>> {
     match config.backend.as_str() {
         "fs" => Ok(Arc::new(fichiers::StockageFichiers::nouveau(config.racine))),
-        inconnu => {
-            anyhow::bail!("storage.backend = \"{inconnu}\" : la seule valeur admise est \"fs\"")
-        }
+        "s3" => Ok(Arc::new(s3::StockageS3::nouveau(&config))),
+        inconnu => anyhow::bail!(
+            "storage.backend = \"{inconnu}\" : les valeurs admises sont \"fs\" et \"s3\""
+        ),
     }
 }
 

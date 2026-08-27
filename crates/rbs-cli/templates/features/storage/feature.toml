@@ -1,5 +1,5 @@
 [feature]
-description = "stockage d'objets : un trait à quatre méthodes, et un backend fichiers"
+description = "stockage d'objets : un trait à quatre méthodes, deux backends — fichiers et S3"
 
 [[fichiers]]
 source = "mod.rs.jinja"
@@ -8,6 +8,10 @@ cible  = "src/storage/mod.rs"
 [[fichiers]]
 source = "fichiers.rs.jinja"
 cible  = "src/storage/fichiers.rs"
+
+[[fichiers]]
+source = "s3.rs.jinja"
+cible  = "src/storage/s3.rs"
 
 [[fichiers]]
 source = "tests.rs.jinja"
@@ -36,6 +40,10 @@ version = "0.1"
 nom     = "thiserror"
 version = "2.0"
 
+[[dependances]]
+nom     = "aws-sdk-s3"
+version = "1.144"
+
 [cargo.tokio]
 features = ["fs"]
 
@@ -46,3 +54,16 @@ contenu = """
 backend = "fs"
 racine = "./stockage"
 """
+
+[[env]]
+cle         = "RBS_STORAGE__BUCKET"
+valeur      = "demo"
+commentaire = "Backend `s3` : sans effet tant que storage.backend vaut \"fs\"."
+
+[[env]]
+cle    = "RBS_STORAGE__ACCESS_KEY_ID"
+valeur = "changez-moi"
+
+[[env]]
+cle    = "RBS_STORAGE__SECRET_ACCESS_KEY"
+valeur = "changez-moi"

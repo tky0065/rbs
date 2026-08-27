@@ -1,8 +1,9 @@
 use std::fs;
 use std::path::PathBuf;
+use std::time::{Duration, Instant};
 
 use super::fichiers::StockageFichiers;
-use super::{Storage, StorageError};
+use super::{Storage, StorageConfig, StorageError, construire};
 
 /// Un répertoire vide, propre à un test, sous la racine temporaire du système.
 fn racine(nom: &str) -> PathBuf {
@@ -106,4 +107,67 @@ async fn une_cle_remontant_hors_de_la_racine_est_refusee() {
     );
 
     fs::remove_dir_all(&racine).expect("le répertoire du test doit se nettoyer");
+}
+
+/// Une configuration S3 dont rien n'est joignable : port fermé et identifiants faux.
+fn config_s3() -> StorageConfig {
+    StorageConfig {
+        backend: "s3".to_owned(),
+        racine: PathBuf::from("./stockage"),
+        bucket: "demo".to_owned(),
+        region: "eu-west-3".to_owned(),
+        endpoint: Some("http://127.0.0.1:1".to_owned()),
+        access_key_id: "aucune".to_owned(),
+        secret_access_key: "aucune".to_owned(),
+        force_path_style: true,
+    }
+}
+
+/// `AppState::new` est synchrone : le client doit se dériver d'une configuration résolue.
+#[test]
+fn le_backend_s3_se_construit_sans_joindre_le_reseau() {
+    // Aucune boucle Tokio n'est installée sous un `#[test]` : le SDK ne pourrait attendre
+    // aucune réponse. L'endpoint pointe de surcroît sur un port fermé, dont une tentative
+    // de connexion rendrait une erreur au lieu du client attendu.
+    assert!(
+        tokio::runtime::Handle::try_current().is_err(),
+        "ce test ne prouve rien s'il tourne sous une boucle Tokio"
+    );
+
+    // La première construction du processus paie l'initialisation du client HTTPS du SDK
+    // — fournisseur de chiffrement et magasin de certificats du système, une centaine de
+    // millisecondes de disque et de calcul. La mesure porte sur la suivante.
+    let stockage =
+        construire(config_s3()).expect("le client S3 doit se dériver de la configuration");
+
+    let depart = Instant::now();
+    construire(config_s3()).expect("le client S3 doit se dériver de la configuration");
+    let duree = depart.elapsed();
+
+    assert!(
+        format!("{stockage:?}").contains("StockageS3"),
+        "`backend = \"s3\"` doit construire le backend S3 : {stockage:?}"
+    );
+    // Une erreur de connexion avalée en silence resterait invisible aux `expect`
+    // ci-dessus : le budget la rattrape, aucun aller-retour réseau n'y tenant.
+    assert!(
+        duree < Duration::from_millis(20),
+        "la construction a duré {duree:?} : quelque chose a été attendu du réseau"
+    );
+}
+
+#[test]
+fn un_backend_inconnu_echoue_en_nommant_les_valeurs_admises() {
+    let mut config = config_s3();
+    config.backend = "chimere".to_owned();
+
+    let erreur = construire(config)
+        .expect_err("`chimere` n'est pas un backend")
+        .to_string();
+
+    assert!(erreur.contains("chimere"), "{erreur}");
+    assert!(
+        erreur.contains("\"fs\"") && erreur.contains("\"s3\""),
+        "le message ne nomme pas les valeurs admises : {erreur}"
+    );
 }
