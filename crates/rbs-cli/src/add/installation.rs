@@ -15,6 +15,12 @@ use crate::plan;
 use crate::template::Renderer;
 use crate::templates;
 
+/// Où les variables d'environnement d'un fragment sont déclarées.
+///
+/// C'est `.env.example` et non `.env` : le second porte les secrets réels du développeur,
+/// que rbs n'a pas à toucher.
+const FICHIER_ENV: &str = ".env.example";
+
 /// Le fragment tel que l'installation le voit.
 pub(crate) struct Fragment<'a> {
     /// Nom de la feature, pour les messages d'erreur.
@@ -106,6 +112,28 @@ pub(crate) fn actions(
     for insertion in &fragment.manifeste.ancres {
         let ancre = ancre(fragment, &insertion.ancre)?;
         constructeur.inserer(ancre, &lignes(&insertion.contenu))?;
+    }
+
+    for (crate_, patch) in &fragment.manifeste.cargo {
+        for feature in &patch.features {
+            constructeur.patcher(plan::PatchToml::AjouterFeatureADependance {
+                dependance: crate_.clone(),
+                feature: feature.clone(),
+            })?;
+        }
+    }
+
+    for section in &fragment.manifeste.config {
+        constructeur.ajouter_section(&section.fichier, &section.section, &section.contenu)?;
+    }
+
+    for variable in &fragment.manifeste.env {
+        constructeur.ajouter_variable(
+            FICHIER_ENV,
+            &variable.cle,
+            &variable.valeur,
+            variable.commentaire.as_deref(),
+        )?;
     }
 
     Ok(deposes)
@@ -292,6 +320,165 @@ mod tests {
         assert_eq!(deposes, ["src/auth/model.rs"]);
         assert_eq!(plan.fichiers()[0].chemin, "src/auth/model.rs");
         assert_eq!(plan.fichiers()[0].apres, "// demo_api\npub struct User;\n");
+    }
+
+    /// Un manifeste de projet réaliste : une dépendance nue, une commentée en fin de
+    /// ligne, et un commentaire de bloc.
+    const CARGO: &str = "\
+[package]
+name = \"demo-api\"
+
+[dependencies]
+# le noyau, épinglé par `rbs new`
+rbs-core = \"0.1.0\"   # ne pas remonter sans relire le CHANGELOG
+axum = \"0.8\"
+";
+
+    /// Un fragment qui n'exerce que les patchs : manifeste, configuration, environnement.
+    const PATCHS: &str = "[feature]\ndescription = \"auth\"\n\n\
+         [cargo.rbs-core]\nfeatures = [\"auth\"]\n\n\
+         [[config]]\nfichier = \"config/default.toml\"\nsection = \"auth\"\n\
+         contenu = \"\"\"\naccess_ttl_secs = 900\nrefresh_ttl_secs = 2592000\n\"\"\"\n\n\
+         [[env]]\ncle = \"RBS_AUTH__SECRET\"\nvaleur = \"changez-moi\"\n\
+         commentaire = \"Secret de signature HS256, au moins 32 octets\"\n";
+
+    /// Pose les fichiers du projet que les patchs viseront.
+    fn avec(racine: &Path, fichiers: &[(&str, &str)]) {
+        for (chemin, contenu) in fichiers {
+            let cible = racine.join(chemin);
+            if let Some(parent) = cible.parent() {
+                std::fs::create_dir_all(parent).expect("le répertoire se crée");
+            }
+            std::fs::write(cible, contenu).expect("le fichier s'écrit");
+        }
+    }
+
+    /// Le contenu que le plan projette pour `chemin`.
+    fn projete<'plan>(plan: &'plan plan::Plan, chemin: &str) -> &'plan str {
+        &plan
+            .fichiers()
+            .iter()
+            .find(|fichier| fichier.chemin == chemin)
+            .unwrap_or_else(|| panic!("{chemin} absent du plan"))
+            .apres
+    }
+
+    /// Le critère de la tâche : le patch touche une ligne et laisse les autres intactes.
+    #[test]
+    fn rbs_core_gagne_la_feature_sans_que_le_reste_soit_reformate() {
+        let projet = TempDir::new().expect("répertoire temporaire créable");
+        avec(
+            projet.path(),
+            &[
+                ("Cargo.toml", CARGO),
+                ("config/default.toml", "[server]\nport = 8080\n"),
+                (".env.example", "RBS_DATABASE__URL=postgres://\n"),
+            ],
+        );
+
+        let (_, plan) = planifier(projet.path(), PATCHS, &[]).expect("le plan doit se calculer");
+        let apres = projete(&plan, "Cargo.toml");
+
+        let attendues = CARGO.lines().count();
+        assert_eq!(apres.lines().count(), attendues, "{apres}");
+
+        for (rang, (avant, apres)) in CARGO.lines().zip(apres.lines()).enumerate() {
+            if avant.starts_with("rbs-core") {
+                continue;
+            }
+            assert_eq!(avant, apres, "la ligne {} a été reformatée", rang + 1);
+        }
+    }
+
+    /// Le critère de la tâche : ce que le développeur a annoté lui appartient.
+    #[test]
+    fn les_commentaires_du_developpeur_survivent_au_patch() {
+        let projet = TempDir::new().expect("répertoire temporaire créable");
+        avec(
+            projet.path(),
+            &[
+                ("Cargo.toml", CARGO),
+                ("config/default.toml", "[server]\nport = 8080\n"),
+                (".env.example", "RBS_DATABASE__URL=postgres://\n"),
+            ],
+        );
+
+        let (_, plan) = planifier(projet.path(), PATCHS, &[]).expect("le plan doit se calculer");
+        let apres = projete(&plan, "Cargo.toml");
+
+        assert!(
+            apres.contains("# le noyau, épinglé par `rbs new`"),
+            "le commentaire de bloc a disparu :\n{apres}"
+        );
+        assert!(
+            apres.contains(
+                "rbs-core = { version = \"0.1.0\", features = [\"auth\"] }   \
+                 # ne pas remonter sans relire le CHANGELOG"
+            ),
+            "le commentaire de fin de ligne a disparu :\n{apres}"
+        );
+    }
+
+    /// Le critère de la tâche : la configuration et l'environnement du fragment arrivent.
+    #[test]
+    fn la_section_de_configuration_et_la_variable_d_environnement_sont_ajoutees() {
+        let projet = TempDir::new().expect("répertoire temporaire créable");
+        avec(
+            projet.path(),
+            &[
+                ("Cargo.toml", CARGO),
+                ("config/default.toml", "[server]\nport = 8080\n"),
+                (".env.example", "RBS_DATABASE__URL=postgres://\n"),
+            ],
+        );
+
+        let (_, plan) = planifier(projet.path(), PATCHS, &[]).expect("le plan doit se calculer");
+
+        let config = projete(&plan, "config/default.toml");
+        assert!(config.starts_with("[server]\nport = 8080\n"), "{config}");
+        assert!(config.contains("[auth]"), "{config}");
+        assert!(config.contains("access_ttl_secs = 900"), "{config}");
+        assert!(config.contains("refresh_ttl_secs = 2592000"), "{config}");
+
+        let env = projete(&plan, ".env.example");
+        assert!(env.starts_with("RBS_DATABASE__URL=postgres://\n"), "{env}");
+        assert!(
+            env.contains(
+                "# Secret de signature HS256, au moins 32 octets\nRBS_AUTH__SECRET=changez-moi"
+            ),
+            "{env}"
+        );
+    }
+
+    /// Le critère de la tâche : un patch déjà posé ne se repose pas.
+    #[test]
+    fn les_trois_patchs_sont_sans_effet_la_seconde_fois() {
+        let projet = TempDir::new().expect("répertoire temporaire créable");
+        avec(
+            projet.path(),
+            &[
+                ("Cargo.toml", CARGO),
+                ("config/default.toml", "[server]\nport = 8080\n"),
+                (".env.example", "RBS_DATABASE__URL=postgres://\n"),
+            ],
+        );
+
+        let (_, premier) = planifier(projet.path(), PATCHS, &[]).expect("le plan doit se calculer");
+        for fichier in premier.fichiers() {
+            avec(projet.path(), &[(&fichier.chemin, &fichier.apres)]);
+        }
+
+        let (_, second) = planifier(projet.path(), PATCHS, &[]).expect("le plan se recalcule");
+
+        for fichier in second.fichiers() {
+            assert_eq!(
+                fichier.statut,
+                plan::Statut::DejaFait,
+                "{} n'est pas sans effet :\n{}",
+                fichier.chemin,
+                fichier.apres
+            );
+        }
     }
 
     /// Une template déclarée mais absente est une faute du manifeste, pas un silence.
