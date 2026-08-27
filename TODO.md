@@ -330,8 +330,11 @@ construction, pas après, quand tout paraît évident.
       nomme **une personne extérieure au projet** : une répétition par qui connaît les
       réponses ne trouve que les frictions mécaniques, jamais les cognitives. D1, D2 et D3
       corrigés depuis — le README renvoie au guide, qui porte seul le parcours exécutable.
-      Reste à faire : arbitrer D4 (`doctor` ✓ sur une dépendance introuvable), puis faire
-      jouer le parcours par un tiers — seul geste qui coche cette case.
+      D4 arbitrée et corrigée le 2026-08-27 : `doctor` rend `✗ versions` sur un noyau
+      déclaré depuis crates.io tant que rbs n'y est pas publié · `cargo test -p rbs-cli
+      doctor::versions` → 9 passed · `integration_crud -- --ignored` → 1 passed, le
+      parcours `--core-path` restant `✓`. Reste à faire : faire jouer le parcours par un
+      tiers — seul geste qui coche cette case.
       Une personne extérieure au projet clone, installe, génère une API CRUD qui tourne,
       **sans poser de question**. Chaque question posée devient une tâche de
       documentation avant que la v0.1 ne soit déclarée close.

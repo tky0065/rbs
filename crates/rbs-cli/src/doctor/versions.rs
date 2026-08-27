@@ -3,6 +3,10 @@
 //! Un projet généré par une version de rbs et manipulé par une autre n'est pas fautif en
 //! soi — mais c'est la première chose à savoir quand une génération se comporte
 //! autrement qu'attendu.
+//!
+//! Deux choses s'y jouent : d'où le projet tire `rbs-core`, et si les trois numéros
+//! concordent. La première prime — des numéros alignés sur une dépendance que `cargo` ne
+//! résout pas n'apprennent rien à qui est bloqué.
 
 use std::fs;
 use std::path::Path;
@@ -14,8 +18,19 @@ const TITRE: &str = "versions";
 /// Version du CLI en train de diagnostiquer.
 const CLI: &str = env!("CARGO_PKG_VERSION");
 
+/// Faux tant que `rbs-core` n'est pas sur crates.io : un projet qui l'y déclare ne résout
+/// pas, et `doctor` est le seul endroit où le lecteur bloqué peut l'apprendre. Le CLI ne
+/// peut pas le vérifier sans requête réseau, dans un diagnostic qui doit rester local.
+const NOYAU_PUBLIE: bool = false;
+
 /// Compare la version qui a généré le projet, celle de son noyau et celle du CLI.
 pub(crate) fn controler(racine: &Path) -> Controle {
+    controler_avec(racine, NOYAU_PUBLIE)
+}
+
+/// Le verdict, la publication du noyau étant donnée en paramètre : les deux chemins
+/// restent exerçables par les tests de part et d'autre de la bascule de `NOYAU_PUBLIE`.
+fn controler_avec(racine: &Path, noyau_publie: bool) -> Controle {
     let manifeste = racine.join("Cargo.toml");
 
     let metadonnees = match crate::metadata::lire(&manifeste) {
@@ -51,6 +66,16 @@ pub(crate) fn controler(racine: &Path) -> Controle {
 
     let noyau = match noyau {
         Noyau::Local => "rbs-core pris d'un chemin local".to_string(),
+        Noyau::Version(version) if !noyau_publie => {
+            return Controle::echec(
+                TITRE,
+                format!(
+                    "rbs-core {version} déclaré depuis crates.io, où rbs n'est pas encore publié"
+                ),
+                "clonez https://github.com/tky0065/rbs, puis dans Cargo.toml :\n\
+                 rbs-core = { path = \"<clone>/crates/rbs-core\" }",
+            );
+        }
         Noyau::Version(version) if version == CLI => format!("rbs-core {version}"),
         Noyau::Version(version) => {
             ecarts.push(format!("rbs-core {version}, CLI {CLI}"));
@@ -141,34 +166,40 @@ mod tests {
         fs::write(&chemin, source.replace(avant, apres)).expect("le manifeste est réécrivable");
     }
 
-    #[test]
-    fn un_projet_neuf_est_coherent_avec_le_cli_qui_l_a_genere() {
-        let (_parent, racine) = projet();
-
-        let controle = controler(&racine);
-
-        assert_eq!(controle.etat, Etat::Bon, "{}", controle.detail);
-        assert!(controle.detail.contains(CLI));
-    }
-
-    #[test]
-    fn un_projet_genere_par_une_autre_version_est_signale_avec_les_deux_numeros() {
-        let (_parent, racine) = projet();
+    /// Bascule le noyau du projet sur un chemin local, pour isoler ce qui ne dépend pas
+    /// de la publication.
+    fn noyau_local(racine: &Path) {
         reecrire(
-            &racine,
-            &format!("version = \"{CLI}\"\nfeatures"),
-            "version = \"0.0.1\"\nfeatures",
+            racine,
+            &format!("rbs-core = \"{CLI}\""),
+            "rbs-core = { path = \"../../crates/rbs-core\" }",
         );
-
-        let controle = controler(&racine);
-
-        assert_eq!(controle.etat, Etat::Echec);
-        assert!(controle.detail.contains("0.0.1"));
-        assert!(controle.detail.contains(CLI));
     }
 
     #[test]
-    fn un_noyau_d_une_autre_version_que_le_cli_est_signale() {
+    fn un_noyau_de_registre_est_signale_tant_que_rbs_n_est_pas_publie() {
+        let (_parent, racine) = projet();
+
+        let controle = controler_avec(&racine, false);
+
+        assert_eq!(controle.etat, Etat::Echec, "{}", controle.detail);
+        assert!(controle.detail.contains("crates.io"), "{}", controle.detail);
+        assert!(controle.detail.contains(CLI), "{}", controle.detail);
+    }
+
+    #[test]
+    fn le_remede_donne_le_chemin_local_a_declarer() {
+        let (_parent, racine) = projet();
+
+        let controle = controler_avec(&racine, false);
+        let remede = controle.remede.expect("un échec porte son remède");
+
+        assert!(remede.contains("path"), "{remede}");
+        assert!(remede.contains("crates/rbs-core"), "{remede}");
+    }
+
+    #[test]
+    fn la_non_publication_prime_sur_l_ecart_de_numeros() {
         let (_parent, racine) = projet();
         reecrire(
             &racine,
@@ -176,7 +207,40 @@ mod tests {
             "rbs-core = \"0.0.1\"",
         );
 
-        let controle = controler(&racine);
+        let controle = controler_avec(&racine, false);
+
+        assert_eq!(controle.etat, Etat::Echec);
+        assert!(controle.detail.contains("crates.io"), "{}", controle.detail);
+        assert!(controle.detail.contains("0.0.1"), "{}", controle.detail);
+    }
+
+    #[test]
+    fn controler_tranche_selon_la_constante_de_publication() {
+        let (_parent, racine) = projet();
+
+        assert_eq!(controler(&racine), controler_avec(&racine, NOYAU_PUBLIE));
+    }
+
+    #[test]
+    fn une_fois_le_noyau_publie_un_projet_neuf_est_coherent() {
+        let (_parent, racine) = projet();
+
+        let controle = controler_avec(&racine, true);
+
+        assert_eq!(controle.etat, Etat::Bon, "{}", controle.detail);
+        assert!(controle.detail.contains(CLI));
+    }
+
+    #[test]
+    fn une_fois_le_noyau_publie_un_ecart_de_numeros_reste_signale() {
+        let (_parent, racine) = projet();
+        reecrire(
+            &racine,
+            &format!("rbs-core = \"{CLI}\""),
+            "rbs-core = \"0.0.1\"",
+        );
+
+        let controle = controler_avec(&racine, true);
 
         assert_eq!(controle.etat, Etat::Echec);
         assert!(controle.detail.contains("rbs-core"));
@@ -184,15 +248,28 @@ mod tests {
     }
 
     #[test]
-    fn un_noyau_pris_d_un_chemin_local_est_dit_sans_etre_tenu_pour_fautif() {
+    fn un_projet_genere_par_une_autre_version_est_signale_avec_les_deux_numeros() {
         let (_parent, racine) = projet();
+        noyau_local(&racine);
         reecrire(
             &racine,
-            &format!("rbs-core = \"{CLI}\""),
-            "rbs-core = { path = \"../../crates/rbs-core\" }",
+            &format!("version = \"{CLI}\"\nfeatures"),
+            "version = \"0.0.1\"\nfeatures",
         );
 
-        let controle = controler(&racine);
+        let controle = controler_avec(&racine, false);
+
+        assert_eq!(controle.etat, Etat::Echec);
+        assert!(controle.detail.contains("0.0.1"));
+        assert!(controle.detail.contains(CLI));
+    }
+
+    #[test]
+    fn un_noyau_pris_d_un_chemin_local_est_dit_sans_etre_tenu_pour_fautif() {
+        let (_parent, racine) = projet();
+        noyau_local(&racine);
+
+        let controle = controler_avec(&racine, false);
 
         assert_eq!(controle.etat, Etat::Bon, "{}", controle.detail);
         assert!(
@@ -207,7 +284,7 @@ mod tests {
         let (_parent, racine) = projet();
         reecrire(&racine, &format!("rbs-core = \"{CLI}\"\n"), "");
 
-        let controle = controler(&racine);
+        let controle = controler_avec(&racine, false);
 
         assert_eq!(controle.etat, Etat::Echec);
         assert!(controle.detail.contains("rbs-core"));
