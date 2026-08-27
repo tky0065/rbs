@@ -64,11 +64,34 @@ pub(crate) const MIGRATIONS: Ancre = Ancre {
     fichier: "migration/src/lib.rs",
 };
 
-/// Les cinq points d'insertion du squelette.
+/// Déclaration d'un champ partagé dans la struct `AppState`.
+pub(crate) const STATE_CHAMPS: Ancre = Ancre {
+    nom: "state_champs",
+    fichier: "src/state.rs",
+};
+
+/// Initialisation de ce champ dans `AppState::new`.
+///
+/// Distincte de [`STATE_CHAMPS`] : un champ se déclare à un endroit et se construit à un
+/// autre, et une ancre unique ne pourrait pas viser les deux.
+pub(crate) const STATE_INIT: Ancre = Ancre {
+    nom: "state_init",
+    fichier: "src/state.rs",
+};
+
+/// Les points d'insertion du squelette.
 ///
 /// La génération vise chaque ancre nommément ; `rbs doctor` parcourt cette liste pour
 /// vérifier qu'un projet les porte toutes.
-pub(crate) const ANCRES: [Ancre; 5] = [FEATURES, ROUTES, OPENAPI, MIGRATION_MODULES, MIGRATIONS];
+pub(crate) const ANCRES: [Ancre; 7] = [
+    FEATURES,
+    ROUTES,
+    OPENAPI,
+    MIGRATION_MODULES,
+    MIGRATIONS,
+    STATE_CHAMPS,
+    STATE_INIT,
+];
 
 /// Une ancre attendue que le fichier ne porte pas.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -306,7 +329,7 @@ pub fn router(state: AppState) -> Router {
     }
 
     #[test]
-    fn les_cinq_ancres_portent_des_noms_distincts() {
+    fn les_ancres_portent_des_noms_distincts() {
         for (rang, ancre) in ANCRES.iter().enumerate() {
             assert!(
                 !ANCRES[..rang].iter().any(|autre| autre.nom == ancre.nom),

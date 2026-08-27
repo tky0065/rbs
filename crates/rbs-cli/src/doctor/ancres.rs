@@ -1,4 +1,4 @@
-//! Contrôle des cinq points d'insertion du projet.
+//! Contrôle des points d'insertion du projet.
 //!
 //! Une ancre disparue ne casse rien tant qu'aucune génération n'a lieu : c'est
 //! précisément pourquoi `doctor` la cherche avant que `rbs generate` ne bute dessus.
@@ -12,7 +12,7 @@ use super::Controle;
 
 const TITRE: &str = "ancres";
 
-/// Vérifie que le projet porte les cinq ancres, et dit comment recoller les absentes.
+/// Vérifie que le projet porte toutes ses ancres, et dit comment recoller les absentes.
 pub(crate) fn controler(racine: &Path) -> Controle {
     let absentes: Vec<&Ancre> = ANCRES.iter().filter(|a| !presente(racine, a)).collect();
 
@@ -83,13 +83,17 @@ mod tests {
     }
 
     #[test]
-    fn un_projet_neuf_porte_ses_cinq_ancres() {
+    fn un_projet_neuf_porte_toutes_ses_ancres() {
         let (_parent, racine) = projet();
 
         let controle = controler(&racine);
 
         assert_eq!(controle.etat, Etat::Bon);
-        assert!(controle.detail.contains('5'));
+        assert!(
+            controle.detail.contains(&ANCRES.len().to_string()),
+            "{}",
+            controle.detail
+        );
         assert!(controle.remede.is_none());
     }
 

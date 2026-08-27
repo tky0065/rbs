@@ -17,7 +17,7 @@ async fn main() -> anyhow::Result<()> {
     let adresse = format!("{}:{}", config.server.host, config.server.port);
     let db = rbs_core::db::connect(&config.database).await?;
 
-    let app = router::router(state::AppState::new(db, config));
+    let app = router::router(state::AppState::new(db, config)?);
 
     let listener = tokio::net::TcpListener::bind(&adresse)
         .await

@@ -226,6 +226,8 @@ fn fragment_a_code() -> TempDir {
          [[fichiers]]\nsource = \"service.rs.jinja\"\ncible = \"src/essai/service.rs\"\n\n\
          [[ancres]]\nancre = \"features\"\ncontenu = \"mod essai;\"\n\n\
          [[ancres]]\nancre = \"routes\"\ncontenu = \".merge(crate::essai::routes())\"\n\n\
+         [[ancres]]\nancre = \"state_champs\"\ncontenu = \"essai: crate::essai::Client,\"\n\n\
+         [[ancres]]\nancre = \"state_init\"\ncontenu = \"essai: crate::essai::client()?,\"\n\n\
          [migration]\nsource = \"table.rs.jinja\"\nnom = \"create_essais\"\n\n\
          [[dependances]]\nnom = \"lettre\"\nversion = \"0.11\"\n\
          default_features = false\nfeatures = [\"smtp-transport\", \"builder\"]\n\n\
@@ -294,6 +296,94 @@ fn les_dependances_du_fragment_arrivent_dans_le_manifeste_du_projet() {
             .count(),
         1,
         "`axum`, que le squelette déclare déjà, a été redéclarée :\n{manifeste}"
+    );
+}
+
+/// Le critère de la tâche : deux ancres et non une, un champ se déclarant dans la struct
+/// et s'initialisant dans `new`.
+#[test]
+fn les_deux_ancres_d_etat_recoivent_le_contenu_declare() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = projet_commite(&parent);
+    let fragments = fragment_a_code();
+
+    let sortie = ajouter_essai(&racine, &fragments, &[]);
+    assert!(
+        sortie.succes,
+        "l'installation doit aboutir :\n{}",
+        sortie.stderr
+    );
+
+    let etat = fs::read_to_string(racine.join("src/state.rs")).expect("state.rs est lisible");
+
+    for (ancre, ligne) in [
+        ("state_champs", "essai: crate::essai::Client,"),
+        ("state_init", "essai: crate::essai::client()?,"),
+    ] {
+        let ouverture = format!("// <rbs:{ancre}>");
+        let fermeture = format!("// </rbs:{ancre}>");
+        let debut = etat
+            .find(&ouverture)
+            .unwrap_or_else(|| panic!("state.rs ne porte pas `{ouverture}` :\n{etat}"))
+            + ouverture.len();
+        let fin = etat
+            .find(&fermeture)
+            .unwrap_or_else(|| panic!("state.rs ne porte pas `{fermeture}` :\n{etat}"));
+
+        assert!(
+            etat[debut..fin].contains(ligne),
+            "l'ancre `{ancre}` ne porte pas `{ligne}` :\n{etat}"
+        );
+    }
+}
+
+/// Le critère de la tâche : un projet créé avant ce lot n'est pas cassé en silence.
+///
+/// Le développeur a pu réécrire son `state.rs`, et le CLI ne sait qu'insérer dans une
+/// ancre : faute de la trouver, il rend le bloc à coller et n'écrit rien.
+#[test]
+fn une_ancre_d_etat_absente_arrete_l_installation_sans_rien_ecrire() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = projet_commite(&parent);
+    let fragments = fragment_a_code();
+
+    let etat = racine.join("src/state.rs");
+    let source = fs::read_to_string(&etat).expect("state.rs est lisible");
+    assert!(
+        source.contains("rbs:state_champs"),
+        "l'ancre visée doit exister avant d'être retirée, sans quoi le test ne prouve rien"
+    );
+    let ampute = source
+        .lines()
+        .filter(|ligne| !ligne.contains("rbs:state_champs"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    fs::write(&etat, format!("{ampute}\n")).expect("state.rs s'écrit");
+    common::commiter(&racine, "état sans son ancre");
+
+    let avant = common::empreinte(&racine);
+    let sortie = ajouter_essai(&racine, &fragments, &[]);
+
+    assert!(
+        !sortie.succes,
+        "l'installation doit sortir en erreur :\n{}",
+        sortie.stdout
+    );
+    assert!(
+        sortie.stderr.contains("<rbs:state_champs>") && sortie.stderr.contains("src/state.rs"),
+        "l'erreur doit nommer l'ancre et son fichier :\n{}",
+        sortie.stderr
+    );
+    assert!(
+        sortie.stdout.contains("// <rbs:state_champs>")
+            && sortie.stdout.contains("// </rbs:state_champs>"),
+        "le bloc à coller doit être affiché :\n{}",
+        sortie.stdout
+    );
+    common::assert_intact(
+        &avant,
+        &racine,
+        "l'ancre absente n'a pas empêché l'écriture",
     );
 }
 

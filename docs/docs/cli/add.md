@@ -227,11 +227,12 @@ otherwise produce an empty plan, and a command that succeeds without doing anyth
 ## Anchors
 
 `rbs add` writes whole files and edits the manifest; it is [`rbs
-generate`](./generate.md#anchors) that inserts into the project's five comment anchors —
-`// <rbs:features>`, `// <rbs:routes>`, `// <rbs:openapi>`, `// <rbs:migration_modules>`
-and `// <rbs:migrations>`. The rule is the same for both commands: no AST is ever
-rewritten, and a missing anchor makes the command write nothing and print the block to
-paste back. [`rbs doctor`](./doctor.md) checks all five.
+generate`](./generate.md#anchors) that inserts into the project's seven comment anchors —
+`// <rbs:features>`, `// <rbs:routes>`, `// <rbs:openapi>`, `// <rbs:migration_modules>`,
+`// <rbs:migrations>`, `// <rbs:state_champs>` and `// <rbs:state_init>`. The rule is the
+same for both commands: no AST is ever rewritten, and a missing anchor makes the command
+write nothing and print the block to paste back. [`rbs doctor`](./doctor.md) checks all
+seven.
 
 ## Failures
 

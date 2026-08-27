@@ -38,4 +38,31 @@ fn le_projet_genere_compile_et_passe_ses_tests() {
             .assert()
             .success();
     }
+
+    // Le niveau qu'exige la CI que `rbs add ci` pose dans le projet : un squelette qui
+    // laisse un warning derrière lui rendrait rouge, dès le premier push, du code que
+    // l'utilisateur n'a pas écrit.
+    Command::new("cargo")
+        .current_dir(&projet)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .args([
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+        ])
+        .assert()
+        .success();
+
+    // `rustfmt` sur les racines de modules et non `cargo fmt` : lancé sous `cargo test`,
+    // celui-ci retrouve le workspace de rbs lui-même et signalerait ses fichiers.
+    for racine_de_modules in ["src/main.rs", "migration/src/lib.rs"] {
+        Command::new("rustfmt")
+            .args(["--edition", "2024", "--check"])
+            .arg(projet.join(racine_de_modules))
+            .assert()
+            .success();
+    }
 }
