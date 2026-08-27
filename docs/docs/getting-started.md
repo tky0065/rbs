@@ -29,8 +29,8 @@ generated code are the same in every locale.
 ## Installing the CLI
 
 Once 0.1 is published, this will be `cargo install rbs-cli`: the package is `rbs-cli`,
-the binary it installs is `rbs`, and the name `rbs` on crates.io belongs to an unrelated
-project. Until then that binary is built from the repository:
+the command it installs is `rbs`, and the name `rbs` on crates.io belongs to an unrelated
+project. Until then it is built from the repository:
 
 ```bash
 git clone https://github.com/tky0065/rbs
@@ -39,7 +39,8 @@ cargo install --path crates/rbs-cli
 cd ..
 ```
 
-That drops an `rbs` executable in `~/.cargo/bin`. The last `cd` steps back out of the
+That drops an `rbs` executable in `~/.cargo/bin`, and a second copy of it named
+`rbs-cli`, for the case the note below describes. The last `cd` steps back out of the
 clone: the rest of this page works from the directory that *contains* it, so the project
 you are about to create lands next to the clone rather than inside it. Check the binary
 answers:
@@ -55,8 +56,16 @@ rbs 0.1.0
 :::note
 
 The Ruby ecosystem ships an unrelated tool also called `rbs`. If `rbs --version` prints
-something like `rbs 3.10.0`, another binary is winning on your `PATH` — call
-`~/.cargo/bin/rbs` explicitly, or move `~/.cargo/bin` ahead of it.
+something like `rbs 3.10.0`, that one is winning on your `PATH`. There is nothing to
+reorganise: the install put the same program there a second time, under a name nobody
+else claims.
+
+```bash
+rbs-cli --version
+```
+
+Use `rbs-cli` wherever this page writes `rbs`. It is the same binary, and it names itself
+after the way you called it, so its `--help` stays true to what you type.
 
 :::
 

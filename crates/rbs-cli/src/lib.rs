@@ -21,7 +21,8 @@ use clap::Parser;
 
 use cli::{Cli, Commands, GenerateCommands, MigrateCommands};
 
-fn main() {
+/// Le corps de la commande, appelé à l'identique par les deux binaires livrés.
+pub fn executer() {
     let cli = Cli::parse();
 
     match cli.command {
