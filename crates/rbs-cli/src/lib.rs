@@ -5,6 +5,7 @@ mod doctor;
 mod dotenv;
 mod generate;
 mod git;
+mod manifeste;
 mod metadata;
 mod migrate;
 mod new;
