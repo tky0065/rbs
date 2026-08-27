@@ -1,5 +1,5 @@
 [feature]
-description = "envoi de courriels par SMTP : transport partagé, expéditeur configuré"
+description = "envoi de courriels par SMTP : transport partagé, gabarits minijinja"
 
 [[fichiers]]
 source = "mod.rs.jinja"
@@ -10,12 +10,22 @@ source = "config.rs.jinja"
 cible  = "src/mail/config.rs"
 
 [[fichiers]]
+source = "gabarit.rs.jinja"
+cible  = "src/mail/gabarit.rs"
+
+[[fichiers]]
 source = "service.rs.jinja"
 cible  = "src/mail/service.rs"
 
 [[fichiers]]
 source = "tests.rs.jinja"
 cible  = "src/mail/tests.rs"
+
+# Le gabarit est déposé dans le projet, non embarqué dans un binaire : c'est un texte que
+# son auteur relit et récrit.
+[[fichiers]]
+source = "bienvenue.html.jinja"
+cible  = "templates/mail/bienvenue.html"
 
 [[ancres]]
 ancre   = "features"
@@ -50,6 +60,12 @@ features         = [
     "webpki-roots",
 ]
 
+# `loader` ne fait pas partie des défauts de la crate, et `path_loader` en dépend.
+[[dependances]]
+nom      = "minijinja"
+version  = "2.24"
+features = ["loader"]
+
 [[config]]
 fichier = "config/default.toml"
 section = "mail"
@@ -63,6 +79,7 @@ smtp_user = ""
 tls = "none"
 from = "no-reply@localhost"
 timeout_secs = 10
+gabarits = "templates/mail"
 """
 
 [[env]]
