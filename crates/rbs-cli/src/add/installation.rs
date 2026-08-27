@@ -9,6 +9,7 @@ use std::path::Path;
 use minijinja::Value;
 
 use crate::ancres::{self, Ancre};
+use crate::generate::montage;
 use crate::manifeste::Manifeste;
 use crate::plan;
 use crate::template::Renderer;
@@ -24,6 +25,10 @@ pub(crate) struct Fragment<'a> {
     pub templates: &'a [templates::Fichier],
     /// Contexte de rendu, déduit du projet visé.
     pub contexte: Value,
+    /// Horodatage que portera la migration du fragment.
+    ///
+    /// Il est reçu et non lu de l'horloge : une planification doit être reproductible.
+    pub horodatage: &'a str,
 }
 
 /// Ce qui peut empêcher d'interpréter un manifeste.
@@ -72,15 +77,30 @@ pub(crate) fn actions(
     let mut deposes = Vec::new();
 
     for (destination, source) in a_deposer(fragment)? {
-        let contenu = renderer
-            .rendre(source, fragment.contexte.clone())
-            .map_err(|source| Erreur::Rendu {
-                fichier: destination.clone(),
-                source,
-            })?;
+        let contenu = rendre(&renderer, fragment, source, &destination)?;
 
         constructeur.creer(&destination, &contenu)?;
         deposes.push(destination);
+    }
+
+    if let Some(declaree) = &fragment.manifeste.migration {
+        // Le format est celui de `generate crud` et de `migrate new` : deux formats
+        // d'horodatage dans un même projet, ce sont deux ordres de migration possibles.
+        let module = format!("m{}_{}", fragment.horodatage, declaree.nom);
+        let chemin = format!("migration/src/{module}.rs");
+        let contenu = rendre(
+            &renderer,
+            fragment,
+            template(fragment, &declaree.source)?,
+            &chemin,
+        )?;
+
+        constructeur.creer(&chemin, &contenu)?;
+        deposes.push(chemin);
+
+        for montage in montage::pour_migration(&module) {
+            constructeur.inserer(montage.ancre, &montage.lignes)?;
+        }
     }
 
     for insertion in &fragment.manifeste.ancres {
@@ -120,6 +140,21 @@ fn lignes(contenu: &str) -> Vec<String> {
         .filter(|ligne| !ligne.trim().is_empty())
         .map(|ligne| ligne.trim_end().to_string())
         .collect()
+}
+
+/// Rend `source` dans le contexte du fragment, en nommant `destination` si elle échoue.
+fn rendre(
+    renderer: &Renderer,
+    fragment: &Fragment,
+    source: &str,
+    destination: &str,
+) -> Result<String, Erreur> {
+    renderer
+        .rendre(source, fragment.contexte.clone())
+        .map_err(|source| Erreur::Rendu {
+            fichier: destination.to_string(),
+            source,
+        })
 }
 
 /// Les templates à déposer, avec leur chemin dans le projet.
@@ -210,6 +245,7 @@ mod tests {
                 manifeste: &manifeste,
                 templates,
                 contexte: context! { nom_projet => "demo-api", nom_crate => "demo_api" },
+                horodatage: "20260827_120000",
             },
             &mut constructeur,
         )?;

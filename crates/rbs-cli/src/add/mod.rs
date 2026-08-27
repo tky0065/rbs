@@ -166,6 +166,7 @@ pub(crate) fn planifier(options: &Options) -> Result<Planifiee, Erreur> {
             manifeste: &manifeste,
             templates: &templates,
             contexte,
+            horodatage: &crate::generate::migration::horodatage_courant(),
         },
         &mut constructeur,
     )?;
@@ -496,6 +497,82 @@ mod tests {
             empreinte(&racine),
             avant,
             "l'ancre absente n'a pas empêché l'écriture"
+        );
+    }
+
+    /// Le fragment de test qui apporte une migration, et son manifeste.
+    fn fragment_a_migration() -> TempDir {
+        fragment(
+            "[feature]\ndescription = \"essai\"\n\n\
+             [migration]\nsource = \"users.rs.jinja\"\nnom = \"create_users\"\n",
+            &[("users.rs.jinja", "// la migration de {@ nom_crate @}\n")],
+        )
+    }
+
+    /// Le nom du seul fichier de migration que le fragment a déposé.
+    fn migration_deposee(racine: &Path) -> String {
+        let deposees: Vec<String> = fs::read_dir(racine.join("migration/src"))
+            .expect("la crate migration existe")
+            .map(|entree| {
+                entree
+                    .expect("l'entrée se lit")
+                    .file_name()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .filter(|nom| nom.starts_with('m') && nom != "main.rs")
+            .collect();
+
+        assert_eq!(deposees.len(), 1, "{deposees:?}");
+        deposees.into_iter().next().expect("un fichier déposé")
+    }
+
+    /// Le critère de la tâche : le fichier porte l'horodatage qu'attend SeaORM.
+    #[test]
+    fn la_migration_du_fragment_est_deposee_au_format_horodate() {
+        let (_parent, racine) = projet();
+        let fragments = fragment_a_migration();
+
+        executer(&options_du_fragment(&racine, &fragments)).expect("l'installation doit aboutir");
+
+        let depose = migration_deposee(&racine);
+        let horodatage = depose
+            .strip_prefix('m')
+            .and_then(|reste| reste.strip_suffix("_create_users.rs"))
+            .unwrap_or_else(|| panic!("« {depose} » n'a pas la forme attendue"));
+
+        assert_eq!(horodatage.len(), 15, "« {depose} »");
+        assert_eq!(&horodatage[8..9], "_", "« {depose} »");
+        assert!(
+            horodatage
+                .chars()
+                .enumerate()
+                .all(|(rang, c)| rang == 8 || c.is_ascii_digit()),
+            "« {depose} »"
+        );
+        assert_eq!(
+            fs::read_to_string(racine.join("migration/src").join(&depose))
+                .expect("la migration se lit"),
+            "// la migration de demo_api\n"
+        );
+    }
+
+    /// Le critère de la tâche : une migration déposée est une migration montée.
+    #[test]
+    fn l_ancre_migrations_est_completee_par_l_appel_correspondant() {
+        let (_parent, racine) = projet();
+        let fragments = fragment_a_migration();
+
+        executer(&options_du_fragment(&racine, &fragments)).expect("l'installation doit aboutir");
+
+        let module = migration_deposee(&racine).replace(".rs", "");
+        assert_eq!(
+            derniere_ligne_de(&racine, crate::ancres::MIGRATION_MODULES),
+            format!("mod {module};")
+        );
+        assert_eq!(
+            derniere_ligne_de(&racine, crate::ancres::MIGRATIONS),
+            format!("Box::new({module}::Migration),")
         );
     }
 
