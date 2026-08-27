@@ -656,17 +656,21 @@ mod tests {
 
     #[test]
     fn une_feature_inconnue_est_signalee_par_son_nom() {
-        let erreur = Source::feature(None, "redis")
-            .expect_err("`redis` n'existe pas encore : la source ne doit pas être vide");
+        let erreur = Source::feature(None, "_aucune_feature_de_ce_nom_")
+            .expect_err("aucun fragment ne porte ce nom : la source ne doit pas être vide");
 
         assert!(
-            erreur.to_string().contains("redis"),
+            erreur.to_string().contains("_aucune_feature_de_ce_nom_"),
             "le message ne nomme pas la feature : {erreur}"
         );
-        assert!(
-            erreur.to_string().contains("auth, ci, docker"),
-            "le message n'énumère pas les features installables : {erreur}"
-        );
+        // Énumérées une à une plutôt qu'en un bloc : la liste s'allonge à chaque fragment
+        // livré, et l'ordre alphabétique intercale les nouveaux venus.
+        for installable in ["auth", "ci", "docker", "redis"] {
+            assert!(
+                erreur.to_string().contains(installable),
+                "le message n'énumère pas `{installable}` : {erreur}"
+            );
+        }
     }
 
     #[test]

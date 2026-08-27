@@ -194,6 +194,11 @@ fn suite(feature: &str) -> Option<&'static str> {
         "auth" => {
             Some("recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up")
         }
+        // Le pool est paresseux : le projet démarre sans Redis, et ne le joint qu'au
+        // premier appel au cache.
+        "redis" => {
+            Some("un Redis doit écouter à l'URL de la section [cache] de config/default.toml")
+        }
         _ => None,
     }
 }

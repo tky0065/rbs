@@ -406,8 +406,8 @@ mod tests {
     fn une_feature_inconnue_est_refusee_en_nommant_celles_qui_existent() {
         let (_parent, racine) = projet();
 
-        let erreur = planifier(&options(&racine, "redis"))
-            .expect_err("`redis` n'est pas installable en v0.1");
+        let erreur = planifier(&options(&racine, "_aucune_feature_de_ce_nom_"))
+            .expect_err("aucun fragment ne porte ce nom");
 
         assert!(matches!(erreur, Erreur::Inconnue(_)), "{erreur}");
         assert!(

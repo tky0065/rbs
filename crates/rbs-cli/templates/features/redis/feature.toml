@@ -1,0 +1,47 @@
+[feature]
+description = "cache Redis : pool paresseux partagé par l'état, valeurs typées par serde"
+
+[[fichiers]]
+source = "mod.rs.jinja"
+cible  = "src/cache/mod.rs"
+
+[[fichiers]]
+source = "config.rs.jinja"
+cible  = "src/cache/config.rs"
+
+[[fichiers]]
+source = "tests.rs.jinja"
+cible  = "src/cache/tests.rs"
+
+[[ancres]]
+ancre   = "features"
+contenu = "mod cache;"
+
+[[ancres]]
+ancre   = "state_champs"
+contenu = "pub cache: crate::cache::Cache,"
+
+[[ancres]]
+ancre   = "state_init"
+contenu = "cache: crate::cache::Cache::depuis_config()?,"
+
+[[dependances]]
+nom      = "redis"
+version  = "1.6"
+features = ["tokio-comp"]
+
+[[dependances]]
+nom     = "deadpool-redis"
+version = "0.23"
+
+[[dependances]]
+nom     = "serde_json"
+version = "1.0"
+
+[[config]]
+fichier = "config/default.toml"
+section = "cache"
+contenu = """
+url = "redis://127.0.0.1:6379"
+ttl_secs = 300
+"""
