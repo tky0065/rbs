@@ -421,35 +421,35 @@ un projet sans auth ne les compile pas.
 `rbs add` ne sait installer que des fragments sans code Rust. Ce lot lui apprend à en
 installer qui en apportent, sans que le CLI connaisse aucune feature par son nom.
 
-- [ ] **H1** · Format `feature.toml` et son parseur
+- [x] **H1** · Format `feature.toml` et son parseur · vérifié 2026-08-27 · `cargo test -p rbs-cli --lib manifeste::` → 3 passed, `deny_unknown_fields` retiré → `un_champ_inconnu_nomme_le_champ_et_le_fichier` FAILED (`unwrap_err() on an Ok value`) · écart au plan : la désérialisation passe par `toml_edit::de`, déjà présent, plutôt que par la crate `toml` — une dépendance de moins, et le message nomme toujours le champ et le fichier · trois points que la conception ne montrait pas sont comblés : nom de la migration, contenu d'une section de configuration, variable d'environnement
       Un manifeste par répertoire de `templates/features` : fichiers, insertions d'ancres,
       migration, features Cargo, sections de configuration.
       ✓ Test : un manifeste valide se désérialise dans la structure attendue.
       ✓ Test : un champ inconnu → erreur nommant le champ et le fichier fautif.
 
-- [ ] **H2** · `add` interprète le manifeste ; `docker` et `ci` migrés
+- [x] **H2** · `add` interprète le manifeste ; `docker` et `ci` migrés · vérifié 2026-08-27 · `git diff crates/rbs-cli/tests/integration_add.rs` → **0 suppression**, un seul hunk en fin de fichier (vide au moment du commit ; les 144 lignes sont les ajouts ultérieurs) : les quatre cas d'origine sont intacts · `cargo test -p rbs-cli --test integration_add` → 4 passed · le piège s'est bien manifesté — créer les deux `feature.toml` a fait tomber 3 tests, le manifeste étant copié chez l'utilisateur ; exclusion posée dans `Source::fichiers()`, son retrait fait tomber `le_manifeste_du_fragment_n_est_pas_copie_dans_le_projet` · un fragment sans manifeste rend `Erreur::SansManifeste`, pas un panic
       Migration à comportement constant : les deux fragments existants reçoivent un
       manifeste trivial et s'installent exactement comme avant.
       ✓ Les tests actuels de `add` passent **sans être modifiés**.
 
-- [ ] **H3** · Insertions dans les ancres déclarées
+- [x] **H3** · Insertions dans les ancres déclarées · vérifié 2026-08-27 · `cargo test -p rbs-cli --lib add::` → 20 passed et `--test integration_add` → 8 passed, le cas de l'ancre absente étant désormais éprouvé **sur la commande elle-même** et non plus seulement par `generate` : insertion rendue silencieuse dans l'interprète → `une_ancre_absente_arrete_l_installation_sans_rien_ecrire` FAILED, l'installation aboutissant et déposant ses fichiers · code de sortie 1, ancre et fichier nommés sur stderr, bloc sur stdout, répertoire intact · **limite relevée, préexistante** : le bloc affiché porte l'ancre à recréer, vide, et non le contenu que le fragment voulait y insérer — le développeur doit le deviner ; `generate` a le même défaut, il n'est pas né ici
       Réutilise `ancres.rs`. Insertion juste avant la balise fermante, sans réordonner
       l'existant.
       ✓ Test : le contenu déclaré est inséré dans chacune des quatre ancres.
       ✓ Test : ancre absente → **rien n'est écrit**, le bloc à coller est affiché, sortie en erreur.
 
-- [ ] **H4** · Migration horodatée déposée par un fragment
+- [x] **H4** · Migration horodatée déposée par un fragment · vérifié 2026-08-27 · `cargo test -p rbs-cli --lib -- add::tests::la_migration add::tests::l_ancre_migrations` → 2 passed, horodatage retiré du nom → `la_migration_du_fragment_est_deposee_au_format_horodate` FAILED · réutilise `generate::migration::horodatage_courant()` et `generate::montage::pour_migration()` : aucun second format d'horodatage, donc aucun second ordre de migration possible · les deux ancres distinctes sont complétées, le `mod` et l'entrée du `Migrator`
       Réutilise la génération de migration de `generate crud`.
       ✓ Test : le fichier est créé au format horodaté attendu.
       ✓ Test : l'ancre `migrations` est complétée par l'appel correspondant.
 
-- [ ] **H5** · Patchs de `Cargo.toml`, `config/default.toml` et `.env.example`
+- [x] **H5** · Patchs de `Cargo.toml`, `config/default.toml` et `.env.example` · vérifié 2026-08-27 · `cargo test -p rbs-cli --lib add::installation` → 7 passed et `plan::texte` → 7 passed · re-sérialisation du manifeste patché → `les_commentaires_du_developpeur_survivent_au_patch` FAILED **sans que le test de non-reformatage s'en aperçoive** : c'est bien le test des commentaires qui tient cette garantie · `PatchToml::AjouterFeatureADependance`, écrit sans appelant depuis le lot E, a enfin le sien ; aucun second chemin de patch · les deux nouvelles actions n'écrivent qu'en fin de fichier, le texte d'origine traverse octet pour octet
       `toml_edit` pour activer une feature sur une dépendance déjà présente.
       ✓ Test : `rbs-core` gagne `features = ["auth"]` sans que le reste du manifeste soit reformaté.
       ✓ Test : les commentaires du développeur survivent au patch.
       ✓ Test : la section de configuration et la variable d'environnement sont ajoutées.
 
-- [ ] **H6** · Idempotence et tout-ou-rien sur un fragment à code Rust
+- [x] **H6** · Idempotence et tout-ou-rien sur un fragment à code Rust · vérifié 2026-08-27 · `cargo test -p rbs-cli --test integration_add` → 8 passed, sur un fragment de test exerçant les six sections du manifeste · `journal.defaire()` supprimé → 2 tests de restauration FAILED ; idempotence portée sur la présence d'un fichier au lieu de `[package.metadata.rbs]` → `un_fichier_supprime_ne_fait_pas_reinstaller_la_feature` FAILED (`+ src/essai/service.rs est apparu`) · **à connaître** : avant cette tâche le test des deux installations passait par chance, les deux exécutions tombant dans la même seconde et la migration horodatée portant le même nom — c'est la garde sur les métadonnées qui le rend solide
       La vérification porte sur `[package.metadata.rbs]`, pas sur la présence des fichiers.
       ✓ Test : deux installations successives — la seconde n'écrit rien.
       ✓ Test : échec à mi-parcours → les fichiers déjà écrits sont restaurés.
