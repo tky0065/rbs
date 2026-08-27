@@ -467,7 +467,7 @@ insertions d'ancres. Dépend de `G` et de `H`.
       ✓ `rbs migrate up` puis `down` → schéma créé puis rendu à son état initial.
       ✓ Contrainte d'unicité sur `email`, index sur `token_hash`.
 
-- [ ] **I3** · Register et login
+- [x] **I3** · Register et login — vérifié 2026-08-27 · `cargo test -p rbs-cli --test integration_auth -- --ignored` → 4 passed, dont les 7 tests d'auth joués dans le projet généré contre un PostgreSQL 18 réel · deux morsures : un `tracing::debug!` du hash ajouté dans `register` → `le hash est journalisé` FAILED ; le hash de comparaison retiré de `login` → `une adresse inconnue répond en 2.012458ms contre 240.162834ms` FAILED, **les quatre autres tests passant malgré la faille** — c'est le test de durée seul qui la tient · **écart assumé** : la moitié « logs » du deuxième critère se prouve côté rbs, sur la sortie réelle du binaire à `RUST_LOG=debug`, le projet généré n'ayant pas `tracing-subscriber` et le moule des fragments ne sachant pas ajouter de dev-dependency — preuve plus large, du reste : elle couvre aussi les middlewares du noyau · **à connaître pour J4** : `add auth` n'écrit `RBS_AUTH__SECRET` que dans `.env.example`, jamais dans `.env` — un projet fraîchement doté d'auth ne démarre pas tant que l'utilisateur ne l'a pas recopié · `#![allow(dead_code)]` **conservé**, contrairement à ce qu'annonçait I1 : `RefreshRequest` et `repository::find` n'auront de lecteur qu'avec I4 et I5, son commentaire les nomme désormais
       ✓ Test : inscription → 201.
       ✓ Test : le hash n'apparaît ni dans la réponse ni dans les logs.
       ✓ Test : email déjà pris → 409.
