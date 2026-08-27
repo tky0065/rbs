@@ -565,20 +565,9 @@ Dépose `src/cache/` et non `src/redis/` : le squelette insère `mod redis;` en 
 `main.rs`, où `use redis::Client` deviendrait ambigu avec la crate du même nom (E0659).
 Le module porte ce qu'il fait, non la techno qui le sert.
 
-- [ ] **L1** · Manifeste, section `[cache]`, pool dans l'état
-      `redis 1.6` en `tokio-comp` et `deadpool-redis 0.23`, dont le pool est paresseux :
-      aucune connexion n'est ouverte au démarrage. Premier fragment à exercer d'un coup les
-      trois pièces du lot `K`.
-      ✓ `rbs new` puis `rbs add redis` → clippy et fmt du projet généré passent.
-      ✓ Les deux ancres d'état sont complétées, les deux dépendances ajoutées au manifeste,
-      la section `[cache]` écrite dans `config/default.toml`.
-      ✓ Test : deux `rbs add redis` successifs — le second n'écrit rien.
+- [x] **L1** · Manifeste, section `[cache]`, pool dans l'état — vérifié 2026-08-27 · `rbs new` puis `rbs add redis` → clippy `--workspace --all-targets -- -D warnings` Finished et `rustfmt --check` propre · relu sur le projet réel : `src/state.rs` porte `pub cache: crate::cache::Cache,` dans `<rbs:state_champs>` et `cache: crate::cache::Cache::depuis_config()?,` dans `<rbs:state_init>`, `Cargo.toml` porte `redis = { version = "1.6", features = ["tokio-comp"] }` et `deadpool-redis = "0.23"`, `config/default.toml` se termine par `[cache]` · `cargo test -p rbs-cli --test integration_add` → 13 passed, dont `installer_redis_deux_fois_n_ecrit_rien_la_seconde` ; à la main, le second `add` rend `✓ redis est déjà installée — rien à faire`, code 0, `git status` vide · morsure de l'orchestrateur : section `[[config]]` retirée du manifeste de fragment → `le_fragment_redis_ecrit_les_ancres_d_etat_les_dependances_et_la_section_cache` FAILED · **morsure la plus instructive de l'agent** : le court-circuit `[package.metadata.rbs]` neutralisé **seul** laisse le test vert, et la déduplication d'`inserer` neutralisée seule aussi — il faut les deux pour le faire tomber : l'inertie du second `add` ne tient pas au court-circuit mais à l'idempotence propre de chaque patch · **troisième dépendance hors backlog** : `serde_json 1.0`, « sérialisation par serde » exigeant un format que `redis 1.6` n'offre pas (son `json` vise RedisJSON, module serveur) ; elle paraît en `[dependencies]` et en `[dev-dependencies]` du projet, ce que cargo accepte, la redondance se levant en `O` · **écart d'outillage** : `cargo add --dry-run` lancé depuis le dépôt rabat sur `redis 1.2.2` pour tenir la `rust-version 1.85` de `rbs-cli` ; sans effet, ces crates n'étant jamais ses dépendances et le projet généré ne déclarant pas de MSRV
 
-- [ ] **L2** · Le cache typé
-      `get`, `set`, `set_ttl`, `invalider`, `invalider_prefixe`, sérialisation par serde.
-      ✓ Test : `set` puis `get` restitue la valeur désérialisée.
-      ✓ Test : clé absente → `None`, et non une erreur.
-      ✓ Test : `invalider_prefixe` n'emporte que les clés du préfixe visé.
+- [ ] **L2** · Le cache typé — PARTIEL 2026-08-27 : les trois critères sont prouvés sur les fonctions pures du module (`encoder`/`decoder`, `motif`, `a_supprimer`) — `cargo test` du projet généré → 4 passed — mais **aucun ne traverse `Cache::set`, `Cache::get` ni `Cache::invalider_prefixe`**, faute de serveur. L'agent en donnait un pour rempli et deux pour partiels ; les trois sont dans le même état, celui de « clé absente » exerçant `decoder(None)` exactement comme les autres. `L3` les prouvera contre un Redis réel, et c'est là que cette case se cochera. Morsures posées et concluantes sur ce qui est couvert : `decoder` rendant toujours `Ok(None)` → l'aller-retour FAILED ; `decoder(None)` rendant `Err` → la clé absente FAILED ; `a_supprimer` sans son `retain` → le préfixe FAILED ; `motif` sans son échappement → FAILED — chacune ne faisant tomber que son test. Le refiltrage client d'`a_supprimer` a été ajouté délibérément : sans lui ce critère n'avait aucun test honnête hors serveur, et une suppression ne se défait pas.
 
 - [ ] **L3** · `integration_redis` sous conteneur
       `GenericImage`, comme `integration_crud` — le dépôt n'ajoute aucune dépendance de
@@ -589,20 +578,9 @@ Le module porte ce qu'il fait, non la techno qui le sert.
 
 ### Lot M — `rbs add mail`
 
-- [ ] **M1** · Manifeste, section `[mail]`, transport dans l'état
-      `lettre 0.11` en `default-features = false`, puis `smtp-transport`, `builder`, `pool`
-      et `tokio1-rustls` : ses défauts activent `native-tls`, qui réclamerait OpenSSL sur
-      les trois plateformes de la CI.
-      ✓ `rbs new` puis `rbs add mail` → clippy et fmt du projet généré passent.
-      ✓ `RBS_MAIL__SMTP_PASSWORD` est écrite dans `.env.example` et **jamais** dans une
-      section de configuration — un secret ne se versionne pas.
+- [x] **M1** · Manifeste, section `[mail]`, transport dans l'état — vérifié 2026-08-27 · `rbs new` puis `rbs add mail` → clippy `--workspace --all-targets -- -D warnings` Finished et `rustfmt --check` propre · secret relu sur le projet réel : `.env.example` porte `RBS_MAIL__SMTP_PASSWORD=` et `grep -rn` sur `config/` ne rend **aucune** clé de configuration le portant · `cargo test -p rbs-cli --lib` → 420 passed, dont `le_mot_de_passe_smtp_est_dans_l_environnement_et_dans_aucune_configuration`, qui planifie un vrai `add mail` et lit les fichiers **projetés**, non le manifeste de fragment · morsures : `smtp_password` ajouté à la section `[mail]` du fragment → FAILED « config/default.toml porte le secret en clé de configuration » ; bloc `[[env]]` retiré → FAILED « .env.example absent du plan » · le test ignore les lignes de commentaire, celui de `[mail]` renvoyant exprès vers la variable — sans quoi il tombait sur son propre commentaire · **écart au backlog** : la liste de features de `lettre` qu'il fige **ne compile pas** — `rustls` réclame en plus un fournisseur de chiffrement et une source de certificats ; `ring` et `webpki-roots` ajoutés, seuls choix ne demandant rien au système, donc les seuls fidèles au motif du design (éviter OpenSSL sur les trois plateformes)
 
-- [ ] **M2** · Gabarits et rendu
-      `minijinja 2.24`, la crate de gabarits déjà employée par le CLI. Les gabarits sont
-      déposés dans le projet, donc lisibles et modifiables par son auteur.
-      ✓ Test : le gabarit rendu porte les variables qui lui sont passées.
-      ✓ Test : un gabarit introuvable rend une erreur nommant le fichier, sans panique.
-      ✓ Test : `envoyer_detache` rend la main sans attendre la fin de l'envoi.
+- [x] **M2** · Gabarits et rendu — vérifié 2026-08-27 · `cargo test` du projet généré → 6 passed, dont `le_gabarit_rendu_porte_les_variables_qui_lui_sont_passees`, `un_gabarit_introuvable_nomme_le_fichier_sans_paniquer` et `envoyer_detache_rend_la_main_sans_attendre_l_envoi` · **faux vert évité, et c'est le point du lot** : le message natif de minijinja est `template "absent.html" does not exist` — il nomme le *gabarit*, jamais le *fichier* ; le test assert sur `templates/mail/absent.html`, chaîne que seul le code du fragment produit · morsure relancée par l'orchestrateur : `tokio::spawn` remplacé par un `block_on` → `envoyer_detache a attendu 1.003189417s`, FAILED, les 5 autres verts · la preuve d'`envoyer_detache` tient sur un `TcpListener` de boucle locale qui accepte et ne répond **jamais** : l'appel doit rendre la main sous 200 ms, **puis** un `mpsc` atteste que la connexion est arrivée quand même — un corps vide échoue à la seconde assertion, une attente à la première · `minijinja 2.24` avec la feature `loader`, absente des défauts, dont `path_loader` dépend
 
 - [ ] **M3** · `integration_mail` sous Mailpit
       Son API HTTP permet de relire le message reçu — ce qu'un transport en mémoire ne
@@ -616,18 +594,9 @@ Un trait `Storage` d'une quinzaine de lignes, deux implémentations. `object_sto
 fournirait tout fait ; il est écarté parce que ce trait a vocation à être lu et remplacé
 par l'auteur du projet, et qu'une crate tierce le lui retirerait.
 
-- [ ] **N1** · Trait `Storage` et backend fichiers
-      `deposer`, `lire`, `supprimer`, `existe`. Implémentation `tokio::fs`.
-      ✓ `rbs new` puis `rbs add storage` → clippy et fmt du projet généré passent.
-      ✓ Test : dépôt, lecture, existence puis suppression sur un répertoire temporaire.
-      ✓ Test : une clé remontant hors de la racine configurée est refusée — un nom d'objet
-      vient souvent de l'utilisateur.
+- [x] **N1** · Trait `Storage` et backend fichiers — vérifié 2026-08-27 · `rbs new` puis `rbs add storage` → `cargo clippy --workspace --all-targets -- -D warnings` Finished et `rustfmt --edition 2024 --check` propre sur `src/main.rs` et `migration/src/lib.rs` · `cargo test` du projet généré → `le_backend_fichiers_depose_lit_atteste_puis_supprime` et `une_cle_remontant_hors_de_la_racine_est_refusee` ok · le test de traversée éprouve quatre clés (`../vole.txt`, `../../vole.txt`, `sous/../../../vole.txt`, un chemin absolu), assertion sur la variante `CleRefusee` **et** sur l'absence des fichiers témoins hors racine, et vérifie que `sous/../recu.txt` reste acceptée — le refus porte sur l'évasion, non sur la présence d'un `..` · morsure de sécurité relancée par l'orchestrateur : `self.racine.join(normaliser(cle)?)` ramené à `self.racine.join(cle)` → le test de traversée FAILED et **lui seul** (3 passed / 1 failed) · le trait est dyn-compatible via `async-trait`, `AppState` portant `Arc<dyn Storage>` : le rendre générique aurait contaminé toute signature de handler · `normaliser` sert aux **deux** backends et `supprimer` est idempotent des deux côtés, deux conditions de la substituabilité qu'exigera `N3` · **deux dépendances hors backlog** : `async-trait 0.1` (sans quoi le trait n'est pas dyn-compatible) et `thiserror 2.0`, plus `[cargo.tokio] features = ["fs"]`
 
-- [ ] **N2** · Backend S3
-      `aws-sdk-s3 1.144`. Le prix en compilation est payé par ceux qui installent la
-      feature, jamais par les autres.
-      ✓ Test : `backend = "s3"` construit le client sans joindre le réseau.
-      ✓ Test : un `backend` inconnu échoue au démarrage en nommant les valeurs admises.
+- [x] **N2** · Backend S3 — vérifié 2026-08-27 · `cargo test` du projet généré → `le_backend_s3_se_construit_sans_joindre_le_reseau` et `un_backend_inconnu_echoue_en_nommant_les_valeurs_admises` ok (4 passed) · **preuve d'absence de réseau à trois couches** : le test est un `#[test]` sans boucle Tokio (`Handle::try_current().is_err()` asserté, donc le SDK ne peut attendre aucune réponse), l'endpoint est `http://127.0.0.1:1` avec des identifiants faux, et la construction doit tenir en 20 ms — mesurée `118,9 ms` à la première puis `0,78 / 0,63 / 0,63`, les 119 ms étant l'initialisation paresseuse du client HTTPS et non du réseau, ce qui a fait porter la mesure sur la seconde · morsures : un `head_bucket().send()` bloquant ajouté au constructeur → le test tombe et la suite passe de 0,11 s à 2,06 s ; le bras d'erreur remplacé par un repli silencieux sur `fs` → le second test tombe · le message des valeurs admises est **écrit à la main** et non délégué à une énumération serde, dont le message nommerait déjà les variantes et ne prouverait rien du fragment · **`aws-config` n'a pas été nécessaire** : `Credentials`, `Region` et `BehaviorVersion` sont réexportés par `aws_sdk_s3::config`, et le fournisseur explicite dispense de la chaîne par défaut — c'est ce qui garde la construction synchrone, `aws-config` imposant un `await` donc un `AppState::new` async, contre §2.4
 
 - [ ] **N3** · `integration_storage` sous MinIO
       ✓ Test `#[ignore]` : **le même jeu de tests joué contre les deux implémentations** —
