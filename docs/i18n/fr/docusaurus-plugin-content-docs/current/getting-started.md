@@ -18,8 +18,10 @@ langue.
 ## Ce qu'il vous faut
 
 - **Rust stable**, édition 2024. L'exécution ci-dessous a utilisé `rustc 1.96.0`.
-- **PostgreSQL 14 ou plus.** La ligne Docker ci-dessous suffit ; un serveur existant fait
-  tout aussi bien l'affaire, du moment que vous pouvez pointer une URL dessus.
+- **PostgreSQL 18 ou plus.** La ligne Docker ci-dessous suffit ; un serveur existant fait
+  tout aussi bien l'affaire, du moment que vous pouvez pointer une URL dessus — et que
+  c'est bien une 18. Les migrations générées posent `uuidv7()` en défaut de clé primaire,
+  fonction absente des versions antérieures.
 - **curl**, ou n'importe quel client HTTP, pour la dernière section.
 - **Un clone du dépôt rbs.** La 0.1 n'est pas encore sur crates.io, ce qui a deux
   conséquences que vous rencontrerez plus bas.
