@@ -29,10 +29,21 @@ cargo install --git https://github.com/tky0065/rbs rbs-cli
 
 Le paquet s'appelle `rbs-cli` ; le binaire installé s'appelle `rbs`.
 
+Cette commande vous donne le binaire, et rien d'autre. Tant que `rbs-core` n'est pas sur
+crates.io, un projet généré a besoin d'une copie locale contre laquelle compiler — ce qui
+suppose de cloner le dépôt plutôt que d'installer depuis lui. Le
+**[guide de démarrage](https://tky0065.github.io/rbs/fr/getting-started)** porte cette
+séquence, ainsi que la base de données que les commandes attendent ; suivez-le plutôt que
+l'esquisse ci-dessous, qui laisse les deux de côté.
+
+> L'écosystème Ruby publie un outil sans rapport, lui aussi nommé `rbs`. Si
+> `rbs --version` affiche quelque chose comme `rbs 3.10.0`, c'est qu'un autre binaire
+> l'emporte sur votre `PATH`.
+
 ## Aperçu
 
-D'un répertoire vide à une API CRUD, avec son entité, sa migration, son document OpenAPI et
-ses tests d'intégration :
+Ce que fait rbs, en quatre commandes — d'un répertoire vide à une API CRUD, avec son
+entité, sa migration, son document OpenAPI et ses tests d'intégration :
 
 ```bash
 rbs new blog-api
@@ -41,8 +52,10 @@ rbs generate crud articles --fields 'title:string,body:text,published:bool'
 rbs migrate up
 ```
 
-Le [guide de démarrage](https://tky0065.github.io/rbs/fr/) détaille ce que chaque commande
-écrit et ce que vous obtenez.
+C'est la silhouette de la chose, pas une transcription à coller : la 0.1 réclame deux
+arguments de plus que ceux montrés ici, et une base de données qui répond. Le
+[guide de démarrage](https://tky0065.github.io/rbs/fr/getting-started) en donne la version
+exécutable, avec la sortie de chaque commande.
 
 ## Ce que rbs apporte
 
