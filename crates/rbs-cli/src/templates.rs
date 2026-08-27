@@ -656,15 +656,15 @@ mod tests {
 
     #[test]
     fn une_feature_inconnue_est_signalee_par_son_nom() {
-        let erreur = Source::feature(None, "auth")
-            .expect_err("`auth` n'existe pas encore : la source ne doit pas être vide");
+        let erreur = Source::feature(None, "redis")
+            .expect_err("`redis` n'existe pas encore : la source ne doit pas être vide");
 
         assert!(
-            erreur.to_string().contains("auth"),
+            erreur.to_string().contains("redis"),
             "le message ne nomme pas la feature : {erreur}"
         );
         assert!(
-            erreur.to_string().contains("ci, docker"),
+            erreur.to_string().contains("auth, ci, docker"),
             "le message n'énumère pas les features installables : {erreur}"
         );
     }

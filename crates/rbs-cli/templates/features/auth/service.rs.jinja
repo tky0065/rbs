@@ -1,0 +1,36 @@
+use axum::http::StatusCode;
+use rbs_core::{Error, Result};
+use sea_orm::DatabaseConnection;
+use sea_orm::prelude::Uuid;
+
+use super::dto::{LoginRequest, RefreshRequest, RegisterRequest, TokenPair, UserResponse};
+
+pub async fn register(_db: &DatabaseConnection, _entree: RegisterRequest) -> Result<UserResponse> {
+    Err(a_ecrire("register"))
+}
+
+pub async fn login(_db: &DatabaseConnection, _entree: LoginRequest) -> Result<TokenPair> {
+    Err(a_ecrire("login"))
+}
+
+pub async fn refresh(_db: &DatabaseConnection, _entree: RefreshRequest) -> Result<TokenPair> {
+    Err(a_ecrire("refresh"))
+}
+
+pub async fn logout(_db: &DatabaseConnection, _entree: RefreshRequest) -> Result<()> {
+    Err(a_ecrire("logout"))
+}
+
+pub async fn me(_db: &DatabaseConnection, _id: Uuid) -> Result<UserResponse> {
+    Err(a_ecrire("me"))
+}
+
+/// Le corps de ces cinq fonctions vous revient. Le reste de la feature — routes, DTO,
+/// document OpenAPI, migration — est déjà en place et n'attend qu'eux.
+fn a_ecrire(route: &str) -> Error {
+    Error::Domain {
+        status: StatusCode::NOT_IMPLEMENTED,
+        code: "not_implemented",
+        message: format!("`{route}` reste à écrire dans src/auth/service.rs"),
+    }
+}
