@@ -16,8 +16,11 @@ use minijinja::context;
 use crate::template::Renderer;
 use crate::templates::Source;
 
-/// Features que les questions de création proposent, et que le lot `add` installera.
-const FEATURES_CONNUES: &[&str] = &["docker", "ci"];
+/// Features que les questions de création proposent, et que `rbs add` installe.
+///
+/// Elle double la liste que `add` tire des fragments embarqués : une feature absente
+/// d'ici est refusée à la création comme si rbs ne la connaissait pas.
+const FEATURES_CONNUES: &[&str] = &["docker", "ci", "auth"];
 
 /// Ce qu'il faut savoir avant de créer un projet, questions et flags confondus.
 pub struct Options {
@@ -57,10 +60,10 @@ pub enum Erreur {
         nom: String,
     },
 
-    /// La feature existe mais son installation n'est pas encore livrée.
+    /// La feature existe, mais `--with` ne l'installe pas à la création.
     #[error(
-        "`{feature}` s'installe avec `rbs add {feature}`, que cette version n'expose pas \
-         encore : créez le projet sans `--with`, la feature s'ajoutera ensuite"
+        "`{feature}` ne s'installe pas à la création : créez le projet sans `--with`, \
+         puis `rbs add {feature}`"
     )]
     FeatureAVenir {
         /// Feature demandée.
@@ -167,7 +170,7 @@ fn valider_nom(nom: &str) -> Result<(), Erreur> {
     }
 }
 
-/// Aucune feature n'est installable tant que le mécanisme `add` n'est pas livré.
+/// `--with` n'installe rien : il nomme des features que seul `rbs add` pose.
 ///
 /// Les inscrire dans `[package.metadata.rbs]` sans rien poser rendrait leur installation
 /// ultérieure impossible : l'idempotence du §4.2 porte sur ces métadonnées, pas sur la
@@ -499,6 +502,46 @@ mod tests {
         assert!(
             !parent.path().join("mon-api").exists(),
             "un projet a été créé malgré l'échec"
+        );
+    }
+
+    #[test]
+    fn toute_feature_qu_add_installe_est_connue_a_la_creation() {
+        // Les deux listes se sont désynchronisées une fois : `auth` livrée par `add`,
+        // et refusée ici comme si elle n'existait pas.
+        for feature in ["docker", "ci", "auth"] {
+            let parent = parent();
+            let mut options = options("mon-api");
+            options.features = vec![feature.to_owned()];
+
+            let erreur = creer(&options, parent.path())
+                .expect_err("`--with` n'installe aucune feature à la création");
+            let message = erreur.to_string();
+
+            assert!(
+                message.contains(&format!("rbs add {feature}")),
+                "le message ne renvoie pas vers `rbs add {feature}` : {message}"
+            );
+            assert!(
+                !message.contains("n'est pas une feature rbs"),
+                "`{feature}` est traitée comme inconnue : {message}"
+            );
+        }
+    }
+
+    #[test]
+    fn le_renvoi_vers_add_ne_pretend_pas_que_la_commande_manque() {
+        let parent = parent();
+        let mut options = options("mon-api");
+        options.features = vec!["auth".to_owned()];
+
+        let erreur = creer(&options, parent.path()).expect_err("`--with` n'installe rien");
+
+        // `add` expose les trois features depuis le lot I. Le message qui annonçait le
+        // contraire envoyait le lecteur attendre une commande déjà livrée.
+        assert!(
+            !erreur.to_string().contains("n'expose pas"),
+            "le message dit encore qu'`add` n'expose pas la feature : {erreur}"
         );
     }
 

@@ -320,7 +320,7 @@ construction, pas après, quand tout paraît évident.
 
 ### Validation du jalon
 
-- [x] **V1** · Test du critère de sortie — PARTIEL 2026-08-27 : répétition à blanc menée,
+- [ ] **V1** · Test du critère de sortie — PARTIEL 2026-08-27 : répétition à blanc menée,
       pas le test lui-même. Deux parcours joués au pied de la lettre en environnement isolé
       — le lecteur du `README` **échoue** (`rbs migrate up` → `no matching package named
       'rbs-core' found`, et le README n'ayant fait cloner aucun dépôt, `--core-path` est
@@ -507,7 +507,7 @@ insertions d'ancres. Dépend de `G` et de `H`.
       ✓ Le parcours entier joué contre un PostgreSQL réel : register → login → 401 sans
       jeton → 403 en `user` → refresh → ancien refresh 401 → logout → refresh 401.
 
-- [ ] **J3** · Page de documentation FR et EN
+- [x] **J3** · Page de documentation FR et EN — vérifié 2026-08-27 · parité mesurée page par page comme en `V2` (titres et niveaux, blocs de code avec leur langue et leur méta `file=`/`region=`, encarts, liens relatifs) → **15 paires, 0 écart structurel**, et **15/15 au même dernier commit** · `npm run clear && npm run build` → deux `[SUCCESS]` · l'instrument de mesure éprouvé avant de servir de preuve : un titre retiré du FR, une ligne changée dans une sortie de terminal, une page FR absente → un écart signalé à chaque fois · deux morsures sur le build, qui est ce qui tient le second critère : `region=require_rolle` → « La région « require_rolle » est introuvable dans examples/blog-auth/src/auth/guard.rs », et `config/defaut.toml` → « introuvable. Le fichier a-t-il été déplacé ou l'exemple régénéré ? » · **inventaire des blocs** : 9 par page, dont **7 de code portant tous `file=examples/blog-auth/…`** — zéro extrait écrit à la main ; les 2 restants sont une sortie de `rbs add auth` et une invocation de `rbs doctor`, non du code du projet · **aucune ligne de `examples/blog-auth` modifiée** : `integration_examples.rs:53` n'autorise que trois fichiers retouchés à la main, et le plugin acceptant `file=` sans `region=`, `.env.example` et `config/default.toml` sont cités entiers plutôt que d'y poser des régions neuves · `npm run write-translations --locale fr` → 0 entrée vide, aucune traduction manquante, seule reparaît la dérive de champs `description` que `V2` avait déjà constatée · **quatre défauts du CLI corrigés en passant**, tous la même désynchronisation entre une liste écrite à la main et le catalogue tiré des fragments : `FEATURES_CONNUES` ignorait `auth`, le message des features connues annonçait une commande `add` « pas encore exposée », l'aide de `rbs add` listait « docker, ci », et `suite()` ne disait rien après `add auth` — la feature dont l'étape suivante compte le plus était la seule muette ; deux tests comparent désormais ces listes au catalogue · **cinquième défaut, de documentation** : la section d'idempotence de `cli/add.md` montrait un plan « inchangé » que la commande ne rend plus depuis qu'elle court-circuite sur `[package.metadata.rbs]`, et les sorties de `add docker`/`add ci` avaient perdu la ligne de description que chaque installation affiche — recapturées sur le binaire · **réserve maintenue** : la page se révise après `V1`, dont les frictions cognitives la toucheront
       **À réviser après `V1`** : le test par un tiers n'ayant pas été joué, les frictions
       cognitives qu'il révélera toucheront cette page.
       ✓ Parité stricte FR/EN mesurée comme en `V2`.
@@ -520,7 +520,12 @@ insertions d'ancres. Dépend de `G` et de `H`.
       ✓ Secret trop court → `✗`.
       ✓ Feature `auth` déclarée sans section `[auth]` dans la configuration → `✗`.
 
-- [ ] **J5** · Critère de sortie du jalon
+- [ ] **J5** · Critère de sortie du jalon — PARTIEL 2026-08-27 : son unique critère est
+      tenu — `J2` joue le parcours complet contre un PostgreSQL réel, et `J1` compile
+      l'exemple en CI. Ce qui retient la case est la réserve inscrite en tête de ce jalon :
+      « `J5` ne se coche pas avant que `V1` ne soit coché », et `V1` attend une personne
+      extérieure au projet, que rien dans le dépôt ne peut produire. Protocole prêt :
+      `docs/superpowers/plans/2026-08-27-v1-protocole-test-tiers.md`.
       ✓ Une API protégée, générée de bout en bout, prouvée par `J2`.
 
 ---

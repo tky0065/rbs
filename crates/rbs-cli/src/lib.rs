@@ -189,6 +189,11 @@ fn suite(feature: &str) -> Option<&'static str> {
     match feature {
         "docker" => Some("docker compose up --build"),
         "ci" => Some("git push : le workflow s'exécute à la prochaine poussée"),
+        // Le secret n'est écrit que dans `.env.example` : le `.env` du projet, lui, est
+        // hors du fragment, et sans la variable le serveur refuse de démarrer.
+        "auth" => {
+            Some("recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up")
+        }
         _ => None,
     }
 }
@@ -266,4 +271,37 @@ fn diagnostiquer() -> Result<bool, Box<dyn Error>> {
     }
 
     Ok(rapport.reussi())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn toute_feature_installable_dit_ce_qu_il_reste_a_faire() {
+        // `auth` est celle dont l'étape suivante compte le plus — sans le secret, le
+        // projet ne démarre pas — et fut la seule à n'en afficher aucune.
+        let installables = templates::Source::feature(None, "_aucune_feature_de_ce_nom_")
+            .expect_err("ce nom ne doit désigner aucun fragment")
+            .connues;
+
+        for feature in installables.split(", ") {
+            assert!(
+                suite(feature).is_some(),
+                "`{feature}` s'installe sans dire ce qu'il reste à faire"
+            );
+        }
+    }
+
+    #[test]
+    fn la_suite_d_auth_nomme_le_secret_qui_manque_au_demarrage() {
+        let suite = suite("auth").expect("`auth` doit dire ce qu'il reste à faire");
+
+        // `add auth` n'écrit la variable que dans `.env.example` : le lecteur qui ne la
+        // recopie pas obtient un serveur qui refuse de démarrer.
+        assert!(
+            suite.contains("RBS_AUTH__SECRET") && suite.contains(".env"),
+            "la suite ne dit pas où recopier le secret : {suite}"
+        );
+    }
 }

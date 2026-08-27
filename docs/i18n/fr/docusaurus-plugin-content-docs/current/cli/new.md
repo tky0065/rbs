@@ -142,21 +142,21 @@ MAISON=1
 
 ## `--with` dans cette version
 
-`--with` nomme les features à installer à la création. rbs en connaît deux, `docker` et
-`ci`, et 0.1.0 les refuse toutes les deux ici : elle les installe par
+`--with` nomme les features à installer à la création. rbs en connaît trois — `auth`,
+`ci` et `docker` — et les refuse toutes ici : elle les installe par
 [`rbs add`](./add.md), et le dit plutôt que d'inscrire dans `[package.metadata.rbs]` une
 feature qu'elle n'aurait pas posée.
 
 ```text
-$ rbs new site --with docker --yes
-erreur : `docker` s'installe avec `rbs add docker`, que cette version n'expose pas encore : créez le projet sans `--with`, la feature s'ajoutera ensuite
+$ rbs new site --with auth --yes
+erreur : `auth` ne s'installe pas à la création : créez le projet sans `--with`, puis `rbs add auth`
 ```
 
 Un nom qui n'est pas une feature du tout est refusé avec la liste de celles qui en sont :
 
 ```text
 $ rbs new site --with graphql --yes
-erreur : `graphql` n'est pas une feature rbs — disponibles : docker, ci
+erreur : `graphql` n'est pas une feature rbs — disponibles : docker, ci, auth
 ```
 
 ## Les échecs

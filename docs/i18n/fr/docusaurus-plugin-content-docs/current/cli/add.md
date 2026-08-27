@@ -5,7 +5,7 @@ title: rbs add
 
 # `rbs add`
 
-Installe une feature dans un projet existant. La 0.1.0 en livre deux : `docker` et `ci`.
+Installe une feature dans un projet existant. Elle en livre trois : `auth`, `ci` et `docker`.
 
 :::note
 Les blocs de terminal de cette page sont des sorties réelles, capturées en lançant la
@@ -17,7 +17,7 @@ sortie de terminal ne se traduit pas.
 
 ```text
 $ rbs add --help
-Ajoute une feature à un projet existant : docker, ci
+Ajoute une feature à un projet existant : auth, ci, docker
 
 Usage: rbs add [OPTIONS] <FEATURE>
 
@@ -38,15 +38,18 @@ Options:
 | `--template-dir <CHEMIN>` | Lit les fragments dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire. |
 | `-y`, `--yes` | Global, et sans effet ici : `rbs add` ne demande rien. |
 
-## Les deux features
+## Les trois features
 
 | Feature | Fichiers | Suite |
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, `docker-compose.yml` | `docker compose up --build` |
 | `ci` | `.github/workflows/ci.yml` | `git push` |
+| `auth` | huit fichiers sous `src/auth/`, une migration, et quatre fichiers du projet modifiés | recopier le secret, puis `rbs migrate up` |
 
 ```text
 $ rbs add docker
+docker : Dockerfile multi-étapes, .dockerignore et compose de développement
+
 plan pour /private/tmp/rbs-demo/blog
 
   + .dockerignore        créé
@@ -62,6 +65,8 @@ plan pour /private/tmp/rbs-demo/blog
 
 ```text
 $ rbs add ci
+ci : workflow GitHub Actions : fmt, clippy et tests sur PostgreSQL
+
 plan pour /private/tmp/rbs-demo/blog
 
   + .github/workflows/ci.yml   créé
@@ -73,38 +78,82 @@ plan pour /private/tmp/rbs-demo/blog
   git push : le workflow s'exécute à la prochaine poussée
 ```
 
-La ligne `Cargo.toml` est le quatrième fichier du plan, respectivement le deuxième : le
-manifeste est l'endroit où l'installation s'inscrit.
+```text
+$ rbs add auth
+auth : authentification JWT : Argon2, jetons d'accès et de rafraîchissement, rôles
+
+plan pour /private/tmp/rbs-demo/blog
+
+  + src/auth/mod.rs                                        créé
+  + src/auth/model.rs                                      créé
+  + src/auth/dto.rs                                        créé
+  + src/auth/repository.rs                                 créé
+  + src/auth/service.rs                                    créé
+  + src/auth/controller.rs                                 créé
+  + src/auth/guard.rs                                      créé
+  + src/auth/tests.rs                                      créé
+  + migration/src/m20260827_152039_create_auth_tables.rs   créé
+  ~ migration/src/lib.rs                                   modifié
+  ~ src/main.rs                                            modifié
+  ~ src/router.rs                                          modifié
+  ~ src/openapi.rs                                         modifié
+  ~ Cargo.toml                                             modifié
+  ~ config/default.toml                                    modifié
+  ~ .env.example                                           modifié
+
+  16 fichiers à écrire
+✓ auth installée — 9 fichiers
+
+  recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up
+```
+
+`auth` est la seule feature dont l'étape suivante n'est pas facultative : le fragment
+n'écrit `RBS_AUTH__SECRET` que dans `.env.example`, et un projet dont le `.env` ne la
+porte pas refuse de démarrer. Le [guide de l'authentification](../guides/auth.md) prend
+la suite.
+
+Dans chaque plan, la ligne `Cargo.toml` est l'endroit où l'installation s'inscrit :
 
 ```text
 [package.metadata.rbs]
 version = "0.1.0"
-features = ["health", "articles", "comments", "docker", "ci"]
+features = ["health", "docker", "ci", "auth"]
 ```
 
 Tout autre nom est refusé avec la liste de ce qui est installable :
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : ci, docker
+erreur : `graphql` n'est pas une feature installable : auth, ci, docker
 ```
 
 ## L'idempotence
 
-Relancée, la commande annonce chaque fichier inchangé au lieu de le réécrire. Elle réussit
-tout de même — installer ce qui est déjà installé n'est pas un échec — et dit que rien n'a
-été touché :
+Installer ce qui est déjà installé n'est pas un échec. Ce que la commande lit, c'est le
+manifeste : une feature inscrite dans `[package.metadata.rbs]` court-circuite avant même
+qu'un plan soit dressé.
 
 ```text
 $ rbs add docker
+✓ docker est déjà installée — rien à faire
+```
+
+L'idempotence tient à ces métadonnées, non à la présence des fichiers. Retirez la feature
+du manifeste et les fichiers sont toujours là — le plan les signale inchangés, et n'écrit
+que la ligne de manifeste qui manquait :
+
+```text
+$ rbs add docker
+docker : Dockerfile multi-étapes, .dockerignore et compose de développement
+
 plan pour /private/tmp/rbs-demo/blog
 
   · .dockerignore        inchangé
   · Dockerfile           inchangé
   · docker-compose.yml   inchangé
-  · Cargo.toml           inchangé
+  ~ Cargo.toml           modifié
 
-  4 inchangés
+  1 fichier à écrire, 3 inchangés
 ✓ docker installée — 3 fichiers
 
   docker compose up --build
