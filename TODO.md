@@ -1,8 +1,9 @@
 # TODO — rbs
 
-Tâches actionnables. **Seul le jalon en cours est détaillé** ; les suivants figurent en
-grosses mailles et seront détaillés à leur ouverture, avec ce que le jalon précédent
-aura appris.
+Tâches actionnables. La **v0.1** et la **v0.2** sont détaillées ; les jalons plus
+lointains figurent en grosses mailles et seront détaillés à leur tour, avec ce que les
+précédents auront appris. Détailler un jalon ne l'ouvre pas : l'ordre des lots reste
+contraignant.
 
 Design de référence : [`docs/superpowers/specs/2026-08-25-rbs-design.md`](docs/superpowers/specs/2026-08-25-rbs-design.md)
 Vision et jalons : [`ROADMAP.md`](ROADMAP.md)
@@ -349,16 +350,178 @@ construction, pas après, quand tout paraît évident.
 
 ---
 
+## 📐 v0.2 — Auth
+
+**Détaillé le 2026-08-27. L'ouverture du jalon reste conditionnée à la clôture de `V1`** —
+détailler n'est pas commencer. Conception et décisions :
+[`docs/superpowers/specs/2026-08-27-v0.2-auth-design.md`](docs/superpowers/specs/2026-08-27-v0.2-auth-design.md).
+
+Ordre : `G ∥ H → I → J`. `G` ne touche que `rbs-core`, `H` que `rbs-cli` : aucun fichier
+partagé, les deux lots se mènent en parallèle sur deux branches. `I` consomme les deux.
+
+Frontière retenue : le noyau porte des primitives sans logique applicative ; le flux de
+connexion, l'entité `User`, l'enum `Role` et les guards sont générés dans le projet, donc
+lisibles et modifiables par son auteur.
+
+### Lot G — Primitives d'auth dans le noyau
+
+Sous le flag `auth` de `rbs-core`, déjà réservé et vide. Les cinq dépendances — `argon2`,
+`jsonwebtoken`, `rand`, `sha2`, `base64` — sont **optionnelles** et tirées par le flag :
+un projet sans auth ne les compile pas.
+
+- [ ] **G1** · Hachage Argon2 — `hash::{hacher, verifier}`
+      `argon2 0.5.3`, paramètres par défaut de la crate, sel tiré par appel.
+      ✓ Test : deux hachages du même mot de passe diffèrent.
+      ✓ Test : `verifier` accepte le mot de passe correct et rejette un autre.
+      ✓ Test : un hash malformé renvoie `Err`, sans panique.
+
+- [ ] **G2** · Jetons — `jwt::{Claims, signer, verifier}`
+      `jsonwebtoken 10.3.0`. `Claims { sub, role, exp, iat, jti }`, HS256.
+      ✓ Test : aller-retour `signer` puis `verifier` restitue les claims.
+      ✓ Test : un jeton expiré renvoie une erreur typée distincte de la signature invalide.
+      ✓ Test : une signature invalide est rejetée.
+      ✓ Test : un jeton portant `alg: none` est rejeté.
+
+- [ ] **G3** · `AuthConfig` branchée sur figment
+      Champ `auth` de `Config`, compilé sous `#[cfg(feature = "auth")]` : secret et durées
+      de vie de l'accès et du rafraîchissement. Le chargement en cascade de `A5` est
+      réutilisé tel quel, et non doublé par une lecture directe de l'environnement.
+      ✓ Test : secret absent → échec au boot, message nommant le champ.
+      ✓ Test : secret de moins de 32 octets → refus au chargement.
+      ✓ Test : `cargo build -p rbs-core` sans le flag `auth` ne compile pas le champ.
+
+- [ ] **G4** · Extracteur `Identity` et trait `HasAuth`
+      Lit l'en-tête `Authorization: Bearer`, vérifie le jeton, expose
+      `Identity { user_id, role: String }`. Le rôle reste une chaîne : l'enum `Role` est
+      généré, donc hors de portée du noyau.
+      ✓ Test : en-tête absent → 401 en `application/problem+json`.
+      ✓ Test : jeton invalide ou expiré → 401.
+      ✓ Test : jeton valide → identité peuplée depuis les claims.
+
+- [ ] **G5** · Jetons opaques — `token::{aleatoire, empreinte}`
+      Tirage de 32 octets par `OsRng` encodés en base64url, et empreinte SHA-256 de ce
+      jeton pour le stockage. Volontairement **pas** d'Argon2 ici : un jeton de 256 bits
+      tirés au hasard n'est pas devinable par force brute, et un KDF lent se paierait à
+      chaque rafraîchissement sans rien acheter. La primitive vit dans le noyau pour que
+      le projet généré n'ait pas à choisir lui-même entre un générateur cryptographique
+      et un générateur ordinaire.
+      ✓ Test : deux tirages successifs diffèrent.
+      ✓ Test : le jeton décodé porte au moins 32 octets.
+      ✓ Test : `empreinte` est déterministe et ne permet pas de retrouver le jeton.
+
+### Lot H — Le moule des fragments
+
+`rbs add` ne sait installer que des fragments sans code Rust. Ce lot lui apprend à en
+installer qui en apportent, sans que le CLI connaisse aucune feature par son nom.
+
+- [ ] **H1** · Format `feature.toml` et son parseur
+      Un manifeste par répertoire de `templates/features` : fichiers, insertions d'ancres,
+      migration, features Cargo, sections de configuration.
+      ✓ Test : un manifeste valide se désérialise dans la structure attendue.
+      ✓ Test : un champ inconnu → erreur nommant le champ et le fichier fautif.
+
+- [ ] **H2** · `add` interprète le manifeste ; `docker` et `ci` migrés
+      Migration à comportement constant : les deux fragments existants reçoivent un
+      manifeste trivial et s'installent exactement comme avant.
+      ✓ Les tests actuels de `add` passent **sans être modifiés**.
+
+- [ ] **H3** · Insertions dans les ancres déclarées
+      Réutilise `ancres.rs`. Insertion juste avant la balise fermante, sans réordonner
+      l'existant.
+      ✓ Test : le contenu déclaré est inséré dans chacune des quatre ancres.
+      ✓ Test : ancre absente → **rien n'est écrit**, le bloc à coller est affiché, sortie en erreur.
+
+- [ ] **H4** · Migration horodatée déposée par un fragment
+      Réutilise la génération de migration de `generate crud`.
+      ✓ Test : le fichier est créé au format horodaté attendu.
+      ✓ Test : l'ancre `migrations` est complétée par l'appel correspondant.
+
+- [ ] **H5** · Patchs de `Cargo.toml`, `config/default.toml` et `.env.example`
+      `toml_edit` pour activer une feature sur une dépendance déjà présente.
+      ✓ Test : `rbs-core` gagne `features = ["auth"]` sans que le reste du manifeste soit reformaté.
+      ✓ Test : les commentaires du développeur survivent au patch.
+      ✓ Test : la section de configuration et la variable d'environnement sont ajoutées.
+
+- [ ] **H6** · Idempotence et tout-ou-rien sur un fragment à code Rust
+      La vérification porte sur `[package.metadata.rbs]`, pas sur la présence des fichiers.
+      ✓ Test : deux installations successives — la seconde n'écrit rien.
+      ✓ Test : échec à mi-parcours → les fichiers déjà écrits sont restaurés.
+
+### Lot I — La feature auth générée
+
+`src/features/auth/{mod,model,dto,repository,service,controller,tests}.rs`, deux
+migrations, quatre insertions d'ancres. Dépend de `G` et de `H`.
+
+- [ ] **I1** · Manifeste d'auth et squelette des templates
+      ✓ `rbs new` puis `rbs add auth` → `cargo check` du projet généré passe.
+      ✓ Les quatre ancres sont complétées.
+
+- [ ] **I2** · Entités et migrations `users`, `refresh_tokens`, enum `Role`
+      ✓ `rbs migrate up` puis `down` → schéma créé puis rendu à son état initial.
+      ✓ Contrainte d'unicité sur `email`, index sur `token_hash`.
+
+- [ ] **I3** · Register et login
+      ✓ Test : inscription → 201.
+      ✓ Test : le hash n'apparaît ni dans la réponse ni dans les logs.
+      ✓ Test : email déjà pris → 409.
+      ✓ Test : mot de passe erroné et email inconnu renvoient **la même** 401, sans oracle d'énumération.
+
+- [ ] **I4** · Refresh avec rotation
+      ✓ Test : un refresh valide rend une nouvelle paire de jetons.
+      ✓ Test : l'ancien refresh est ensuite refusé (401).
+      ✓ Test : un refresh expiré → 401.
+      ✓ Test : requête sur la table — la colonne stockée porte l'empreinte `token::empreinte`
+      et jamais le jeton remis au client.
+
+- [ ] **I5** · Logout et révocation
+      ✓ Test : logout → 204.
+      ✓ Test : le refresh révoqué → 401.
+      ✓ Test : les autres sessions du même utilisateur restent valides.
+
+- [ ] **I6** · Guard `require_role`
+      Généré dans le projet, à partir de l'enum `Role` qu'il y trouve.
+      ✓ Test : un `user` sur une route admin → 403.
+      ✓ Test : un `admin` sur la même route → 200.
+      ✓ Test : sans jeton → **401 et non 403**.
+
+- [ ] **I7** · Enregistrement OpenAPI
+      ✓ Les cinq chemins d'auth figurent dans `/openapi.json`.
+      ✓ Le schéma de sécurité `bearer` est déclaré et les routes protégées le portent.
+
+### Lot J — Documentation et sortie du jalon
+
+- [ ] **J1** · `examples/blog-auth`, compilé en CI
+      Articles protégés par `require_role(Role::Admin)`. Le site tirant ses extraits de
+      `examples/`, cet exemple est la source de la page de documentation.
+      ✓ Le job d'exemples passe au vert.
+
+- [ ] **J2** · `integration_auth` sous testcontainers
+      `#[ignore]` par défaut, comme `integration_crud`.
+      ✓ Le parcours entier joué contre un PostgreSQL réel : register → login → 401 sans
+      jeton → 403 en `user` → refresh → ancien refresh 401 → logout → refresh 401.
+
+- [ ] **J3** · Page de documentation FR et EN
+      **À réviser après `V1`** : le test par un tiers n'ayant pas été joué, les frictions
+      cognitives qu'il révélera toucheront cette page.
+      ✓ Parité stricte FR/EN mesurée comme en `V2`.
+      ✓ Aucun extrait de code non issu de `examples/blog-auth`.
+
+- [ ] **J4** · `doctor` diagnostique l'auth
+      Leçon directe de la friction `D4` : un utilisateur bloqué lance `doctor`, la
+      commande doit lui apprendre ce qui le bloque.
+      ✓ Secret absent → `✗` nommant la variable d'environnement.
+      ✓ Secret trop court → `✗`.
+      ✓ Feature `auth` déclarée sans section `[auth]` dans la configuration → `✗`.
+
+- [ ] **J5** · Critère de sortie du jalon
+      ✓ Une API protégée, générée de bout en bout, prouvée par `J2`.
+
+---
+
 ## ⏳ Jalons suivants
 
 Volontairement en grosses mailles. Détailler ces tâches aujourd'hui serait de la
-fiction : elles seront réécrites avec ce que la v0.1 aura appris.
-
-### v0.2 — Auth
-- [ ] Primitives dans `rbs-core` derrière le flag `auth` : Argon2, JWT, extracteur d'identité
-- [ ] `rbs add auth` : DTO, service, controller, migration `users`, guards de rôles
-- [ ] Refresh tokens et révocation
-- [ ] Documentation FR/EN et exemple compilé
+fiction : elles seront réécrites avec ce que les jalons précédents auront appris.
 
 ### v0.3 — Intégrations
 - [ ] `rbs add redis` — pool, cache, sessions
