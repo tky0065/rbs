@@ -15,7 +15,8 @@ laquelle un tiers atterrit.
 **D1 et D2 corrigés le 2026-08-27**, par la voie retenue : le « Quick look » cesse de se
 présenter comme une transcription exécutable et renvoie au guide, qui porte seul la
 séquence complète. D3 est traité dans le même mouvement — l'encart sur le `rbs` de Ruby
-rejoint la section d'installation, là où le piège se referme. **D4 reste ouverte.**
+rejoint la section d'installation, là où le piège se referme. **D4 corrigée le
+2026-08-27** — les quatre frictions sont closes.
 
 **D1 · Le « Quick look » du README génère un projet qui ne compile pas.**
 `rbs new blog-api` écrit `rbs-core = "0.1.0"` dans le manifeste ; la crate n'est pas
@@ -44,9 +45,13 @@ Sur le projet bloqué du parcours A : `✓ versions   projet et rbs-core 0.1.0 a
 CLI 0.1.0`, quand `cargo` ne résout pas cette crate. Le seul `✗` porte sur la base. Un
 tiers bloqué lance `doctor` — la commande que le guide recommande justement quand
 « something looks wrong » — et n'apprend rien de ce qui le bloque.
-Correctif à arbitrer : le contrôle `versions` ne peut pas savoir si une version de
-crates.io est résoluble sans requête réseau ; il peut en revanche signaler qu'une
-dépendance de registre est déclarée alors que rbs n'est pas publié.
+Correctif retenu et appliqué le 2026-08-27 : le contrôle `versions` ne peut pas savoir
+si une version de crates.io est résoluble sans requête réseau ; il sait en revanche, à la
+compilation du CLI, si son noyau est publié. Une dépendance de registre déclarée dans cet
+intervalle rend désormais `✗ versions   rbs-core 0.1.0 déclaré depuis crates.io, où rbs
+n'est pas encore publié`, avec la ligne de manifeste à remplacer — le constat primant sur
+l'écart de numéros, qui n'apprend rien quand la résolution échoue. Un noyau pris d'un
+chemin local reste `✓` : le parcours B n'est pas touché.
 
 ## Corrigé pendant la répétition
 
