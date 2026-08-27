@@ -43,6 +43,9 @@ pub mod pagination;
 pub mod request_id;
 /// État partagé du runtime.
 pub mod state;
+/// Tirage et empreinte des jetons opaques.
+#[cfg(feature = "auth")]
+pub mod token;
 /// Trace d'une requête HTTP.
 pub mod trace;
 
