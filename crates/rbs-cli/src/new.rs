@@ -20,7 +20,7 @@ use crate::templates::Source;
 ///
 /// Elle double la liste que `add` tire des fragments embarqués : une feature absente
 /// d'ici est refusée à la création comme si rbs ne la connaissait pas.
-const FEATURES_CONNUES: &[&str] = &["docker", "ci", "auth", "redis", "storage"];
+const FEATURES_CONNUES: &[&str] = &["docker", "ci", "auth", "redis", "storage", "mail"];
 
 /// Ce qu'il faut savoir avant de créer un projet, questions et flags confondus.
 pub struct Options {

@@ -199,6 +199,9 @@ fn suite(feature: &str) -> Option<&'static str> {
         "redis" => {
             Some("un Redis doit écouter à l'URL de la section [cache] de config/default.toml")
         }
+        // Le défaut vise un Mailpit local : sans ce rappel, le premier envoi en
+        // production partirait vers `localhost:1025`.
+        "mail" => Some("réglez [mail] dans config/default.toml — un SMTP local par défaut"),
         // Le backend par défaut écrit sous une racine du dépôt, que rien n'ignore encore.
         "storage" => Some(
             "les objets vont sous ./stockage : ajoutez-le à .gitignore, ou passez \
