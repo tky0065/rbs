@@ -10,9 +10,10 @@ repository.workspace = true
 [features]
 default = []
 
+auth = ["dep:argon2"]
+
 # Vides et sans dépendances : les nommer réserve le nom sans figer, un an à l'avance,
 # les crates que leur implémentation utilisera.
-auth = []
 redis = []
 mail = []
 storage = []
@@ -22,6 +23,7 @@ all-features = true
 
 [dependencies]
 anyhow.workspace = true
+argon2 = { workspace = true, optional = true }
 axum.workspace = true
 dotenvy.workspace = true
 figment.workspace = true

@@ -5,12 +5,12 @@
 
 //! # Feature flags
 //!
-//! Quatre extensions sont prévues pour la v0.2. Leurs flags sont **déclarés mais vides** :
-//! les activer ne change rien en v0.1, et sert seulement à réserver leur nom.
+//! Quatre extensions sont prévues. Seul `auth` porte du code ; les trois autres sont
+//! **déclarés mais vides**, et servent seulement à réserver leur nom.
 //!
-//! | Flag | Ce qu'il activera |
+//! | Flag | Ce qu'il active |
 //! |---|---|
-//! | `auth` | hachage Argon2, JWT, extracteur d'identité |
+//! | `auth` | hachage Argon2, JWT, jetons opaques, extracteur d'identité |
 //! | `redis` | client Redis partagé par l'état applicatif |
 //! | `mail` | envoi de courriels et rendu de gabarits |
 //! | `storage` | stockage de fichiers, local ou compatible S3 |
@@ -25,6 +25,9 @@ pub mod db;
 pub mod error;
 /// Extracteurs de requête du runtime.
 pub mod extract;
+/// Hachage et vérification des mots de passe.
+#[cfg(feature = "auth")]
+pub mod hash;
 /// Route de santé de l'application.
 pub mod health;
 /// Formateurs de logs du runtime.
