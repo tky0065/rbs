@@ -2,10 +2,6 @@
 //!
 //! Le schéma est décrit ici en entier ; son interprétation appartient à `add`.
 
-// Le schéma est posé d'un bloc, alors que son interprète le consomme section par
-// section : cette permission se retire dès que la dernière section a un lecteur.
-#![allow(dead_code)]
-
 use std::collections::BTreeMap;
 
 use serde::Deserialize;

@@ -162,6 +162,12 @@ fn ajouter(feature: String, force: bool, template_dir: Option<PathBuf>) -> Resul
         template_dir,
     })?;
 
+    if planifiee.deja_installee {
+        ui::success(&format!("{feature} est déjà installée — rien à faire"));
+        return Ok(());
+    }
+
+    ui::info(&format!("{feature} : {}\n", planifiee.description));
     println!("{}", plan::rendu::plan(&planifiee.plan));
 
     plan::application::appliquer(&planifiee.plan, force)?;

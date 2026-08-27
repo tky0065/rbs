@@ -40,6 +40,10 @@ pub(crate) struct Planifiee {
     pub plan: plan::Plan,
     /// Chemins des fichiers de la feature, relatifs à la racine du projet.
     pub fichiers: Vec<String>,
+    /// Ce que le fragment annonce installer, tel que son manifeste le décrit.
+    pub description: String,
+    /// Le projet inscrit déjà cette feature : le plan est vide et rien ne sera écrit.
+    pub deja_installee: bool,
 }
 
 /// Ce qui peut empêcher d'installer une feature.
@@ -137,6 +141,23 @@ pub(crate) fn planifier(options: &Options) -> Result<Planifiee, Erreur> {
         .map_err(|source| acces(&options.repertoire, source))?;
     let racine = metadata::racine_du_projet(&depart).ok_or(Erreur::PasUnProjet)?;
 
+    // L'idempotence se juge sur `[package.metadata.rbs]`, et non sur la présence des
+    // fichiers installés : la migration d'un fragment est horodatée, et un projet dont
+    // le développeur a supprimé un fichier en recevrait une seconde, datée d'un autre
+    // instant. Ce que `rbs add` a posé lui appartient ensuite.
+    if metadata::lire(&racine.join("Cargo.toml"))?
+        .features
+        .iter()
+        .any(|installee| installee == &options.feature)
+    {
+        return Ok(Planifiee {
+            plan: plan::Constructeur::nouveau(racine).finir(),
+            fichiers: Vec::new(),
+            description: String::new(),
+            deja_installee: true,
+        });
+    }
+
     if !options.force {
         let modifies = git::fichiers_modifies(&racine);
         if !modifies.is_empty() {
@@ -176,6 +197,8 @@ pub(crate) fn planifier(options: &Options) -> Result<Planifiee, Erreur> {
     Ok(Planifiee {
         plan: constructeur.finir(),
         fichiers,
+        description: manifeste.feature.description,
+        deja_installee: false,
     })
 }
 
@@ -340,6 +363,10 @@ mod tests {
 
         let planifiee = planifier(&options(&racine, "docker")).expect("le plan doit se recalculer");
 
+        assert!(
+            planifiee.deja_installee,
+            "le manifeste inscrit la feature : la relance n'a rien à planifier"
+        );
         for fichier in planifiee.plan.fichiers() {
             assert_eq!(
                 fichier.statut,
