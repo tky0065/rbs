@@ -376,20 +376,20 @@ Sous le flag `auth` de `rbs-core`, déjà réservé et vide. Les cinq dépendanc
 `jsonwebtoken`, `rand`, `sha2`, `base64` — sont **optionnelles** et tirées par le flag :
 un projet sans auth ne les compile pas.
 
-- [ ] **G1** · Hachage Argon2 — `hash::{hacher, verifier}`
+- [x] **G1** · Hachage Argon2 — `hash::{hacher, verifier}` · vérifié 2026-08-27 · `cargo test -p rbs-core --features auth hash::` → 3 passed, sel figé en constante → `deux_hachages_du_meme_mot_de_passe_different` FAILED · `verifier` rend `Ok(false)` sur mot de passe faux et `Err` sur hash illisible, jamais l'inverse · `argon2` a exigé sa feature `std` : `password-hash` n'active `rand_core/getrandom` que par elle
       `argon2 0.5.3`, paramètres par défaut de la crate, sel tiré par appel.
       ✓ Test : deux hachages du même mot de passe diffèrent.
       ✓ Test : `verifier` accepte le mot de passe correct et rejette un autre.
       ✓ Test : un hash malformé renvoie `Err`, sans panique.
 
-- [ ] **G2** · Jetons — `jwt::{Claims, signer, verifier}`
+- [x] **G2** · Jetons — `jwt::{Claims, signer, verifier}` · vérifié 2026-08-27 · `cargo test -p rbs-core --features auth jwt::` → 5 passed, validation élargie à HS384/HS512 → `un_jeton_signe_avec_un_autre_algorithme_est_rejete` FAILED · **réserve sur le `✓` `alg: none`** : le test passe, mais aucune mutation de notre code ne le fait tomber — `jsonwebtoken 10.3` n'a pas de variante `Algorithm::None`, l'en-tête échoue à la désérialisation avant toute validation ; la preuve de morsure est portée par le test de confusion d'algorithme, ajouté pour cela · backend `rust_crypto` et non `aws-lc-rs`, qui imposerait cmake et un compilateur C à tout projet généré
       `jsonwebtoken 10.3.0`. `Claims { sub, role, exp, iat, jti }`, HS256.
       ✓ Test : aller-retour `signer` puis `verifier` restitue les claims.
       ✓ Test : un jeton expiré renvoie une erreur typée distincte de la signature invalide.
       ✓ Test : une signature invalide est rejetée.
       ✓ Test : un jeton portant `alg: none` est rejeté.
 
-- [ ] **G3** · `AuthConfig` branchée sur figment
+- [x] **G3** · `AuthConfig` branchée sur figment · vérifié 2026-08-27 · `cargo test -p rbs-core --features auth config::` → 14 passed, seuil abaissé de 32 à 0 → `un_secret_de_moins_de_32_octets_est_refuse_au_chargement` FAILED · `cargo build -p rbs-core` sans le flag → Finished, le champ n'est pas compilé et aucune section `auth` n'est requise · message réel du secret absent : ``missing field `secret` for key "default.auth"`` — il nomme le champ, sans la forme littérale `auth.secret` · les onze cas préexistants reçoivent le secret par l'environnement, le compte sans flag reste celui de `main` (72 = 72)
       Champ `auth` de `Config`, compilé sous `#[cfg(feature = "auth")]` : secret et durées
       de vie de l'accès et du rafraîchissement. Le chargement en cascade de `A5` est
       réutilisé tel quel, et non doublé par une lecture directe de l'environnement.
@@ -397,7 +397,7 @@ un projet sans auth ne les compile pas.
       ✓ Test : secret de moins de 32 octets → refus au chargement.
       ✓ Test : `cargo build -p rbs-core` sans le flag `auth` ne compile pas le champ.
 
-- [ ] **G4** · Extracteur `Identity` et trait `HasAuth`
+- [x] **G4** · Extracteur `Identity` et trait `HasAuth` · vérifié 2026-08-27 · `cargo test -p rbs-core --features auth extract::` → 8 passed, préfixe `Bearer` rendu facultatif → `un_en_tete_sans_le_schema_bearer_est_refuse` FAILED (200 et corps `u1 admin` au lieu de 401) · 401 rendu en `application/problem+json`, et les trois échecs — expiré, signé ailleurs, malformé — rendent 401 · un en-tête absent donne 401 quel que soit le traitement du préfixe : c'est le test du schéma qui éprouve la garde, pas celui de l'en-tête manquant
       Lit l'en-tête `Authorization: Bearer`, vérifie le jeton, expose
       `Identity { user_id, role: String }`. Le rôle reste une chaîne : l'enum `Role` est
       généré, donc hors de portée du noyau.
@@ -405,7 +405,7 @@ un projet sans auth ne les compile pas.
       ✓ Test : jeton invalide ou expiré → 401.
       ✓ Test : jeton valide → identité peuplée depuis les claims.
 
-- [ ] **G5** · Jetons opaques — `token::{aleatoire, empreinte}`
+- [x] **G5** · Jetons opaques — `token::{aleatoire, empreinte}` · vérifié 2026-08-27 · `cargo test -p rbs-core --features auth token::` → 3 passed, tirage figé en `[7u8; 32]` → `deux_tirages_successifs_different` et `l_empreinte_est_deterministe_et_ne_rend_pas_le_jeton` FAILED · dans `rand 0.10` `OsRng` n'existe plus : c'est `SysRng`, dont `try_fill_bytes` rend un `Result` — l'échec du générateur système est un `expect`, aucun appelant ne saurait le traiter
       Tirage de 32 octets par `OsRng` encodés en base64url, et empreinte SHA-256 de ce
       jeton pour le stockage. Volontairement **pas** d'Argon2 ici : un jeton de 256 bits
       tirés au hasard n'est pas devinable par force brute, et un KDF lent se paierait à
