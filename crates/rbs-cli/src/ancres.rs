@@ -128,9 +128,10 @@ pub(crate) fn inserer(source: &str, ancre: Ancre, lignes: &[String]) -> Result<S
     }
 
     let dedans = &source[ouverture..fermeture];
-    let ajouts: String = lignes
-        .iter()
-        .filter(|ligne| !contient(dedans, ligne))
+    let ajouts: String = groupes(lignes)
+        .into_iter()
+        .filter(|groupe| !groupe.iter().all(|ligne| contient(dedans, ligne)))
+        .flatten()
         .map(|ligne| format!("{indentation}{ligne}\n"))
         .collect();
 
@@ -139,6 +140,34 @@ pub(crate) fn inserer(source: &str, ancre: Ancre, lignes: &[String]) -> Result<S
         &source[..fermeture],
         &source[fermeture..]
     ))
+}
+
+/// Découpe les lignes à insérer en groupes indivisibles.
+///
+/// Une ligne d'attribut ou de commentaire ne vaut pas pour elle-même : elle qualifie la
+/// ligne qui la suit. Dédupliquer sans elle amputait un champ de son `#[allow(…)]` dès
+/// qu'un autre fragment en avait posé un, et laissait le champ orphelin.
+///
+/// Les lignes autonomes — les chemins OpenAPI d'une feature — forment chacune leur
+/// groupe, et restent donc dédupliquées une à une.
+fn groupes(lignes: &[String]) -> Vec<Vec<&String>> {
+    let mut groupes = Vec::new();
+    let mut courant = Vec::new();
+
+    for ligne in lignes {
+        let qualifie = matches!(ligne.trim_start().get(..2), Some("#[") | Some("//"));
+        courant.push(ligne);
+
+        if !qualifie {
+            groupes.push(std::mem::take(&mut courant));
+        }
+    }
+
+    if !courant.is_empty() {
+        groupes.push(courant);
+    }
+
+    groupes
 }
 
 /// Début de la ligne ne portant que `balise`, et l'indentation de cette ligne.
@@ -337,5 +366,40 @@ pub fn router(state: AppState) -> Router {
                 ancre.nom
             );
         }
+    }
+
+    /// Deux fragments peuvent déclarer une même ligne — un attribut, le plus souvent —
+    /// sans que le bloc de l'un rende celui de l'autre superflu. Dédupliquer ligne à
+    /// ligne amputait le second de sa ligne commune et laissait le reste orphelin.
+    #[test]
+    fn le_bloc_est_pose_entier_quand_une_seule_de_ses_lignes_est_deja_la() {
+        let source = "\
+struct AppState {
+    // <rbs:state_champs>
+    #[allow(dead_code)]
+    pub mail: Mailer,
+    // </rbs:state_champs>
+}
+";
+
+        let apres = inserer(
+            source,
+            STATE_CHAMPS,
+            &[
+                "#[allow(dead_code)]".to_string(),
+                "pub storage: Arc<dyn Storage>,".to_string(),
+            ],
+        )
+        .expect("l'ancre est présente");
+
+        assert_eq!(
+            apres.matches("#[allow(dead_code)]").count(),
+            2,
+            "chaque champ porte le sien : {apres}"
+        );
+        assert!(
+            apres.contains("pub storage: Arc<dyn Storage>,"),
+            "le champ ne doit pas être laissé de côté : {apres}"
+        );
     }
 }
