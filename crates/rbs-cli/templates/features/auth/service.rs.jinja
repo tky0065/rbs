@@ -92,8 +92,20 @@ pub async fn refresh(
     emettre(db, auth, &utilisateur).await
 }
 
-pub async fn logout(_db: &DatabaseConnection, _entree: RefreshRequest) -> Result<()> {
-    Err(a_ecrire("logout"))
+pub async fn logout(db: &DatabaseConnection, entree: RefreshRequest) -> Result<()> {
+    let empreinte = token::empreinte(&entree.refresh_token);
+
+    let session = repository::find_refresh_token(db, &empreinte)
+        .await?
+        .ok_or(Error::Unauthorized)?;
+
+    // La session ferme la ligne présentée, et elle seule : les autres appareils du même
+    // compte gardent la leur. Un jeton déjà fermé ne l'est pas deux fois.
+    if !repository::consommer(db, session.id).await? {
+        return Err(Error::Unauthorized);
+    }
+
+    Ok(())
 }
 
 pub async fn me(_db: &DatabaseConnection, _id: Uuid) -> Result<UserResponse> {
@@ -150,7 +162,7 @@ fn profil(utilisateur: Model) -> UserResponse {
     }
 }
 
-/// Le corps de ces deux fonctions vous revient. Le reste de la feature — routes, DTO,
+/// Le corps de `me` vous revient. Le reste de la feature — routes, DTO,
 /// document OpenAPI, migration — est déjà en place et n'attend qu'elles.
 fn a_ecrire(route: &str) -> Error {
     Error::Domain {
