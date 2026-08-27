@@ -480,7 +480,7 @@ insertions d'ancres. Dépend de `G` et de `H`.
       ✓ Test : requête sur la table — la colonne stockée porte l'empreinte `token::empreinte`
       et jamais le jeton remis au client.
 
-- [ ] **I5** · Logout et révocation
+- [x] **I5** · Logout et révocation — vérifié 2026-08-27 · `cargo test -p rbs-cli --test integration_auth -- --ignored` → 4 passed, dont les 14 tests d'auth du projet généré · morsure : `consommer` élargie du `id` au `user_id` par sous-requête → `les_autres_sessions_du_meme_compte_restent_valides` FAILED, **et aussi** `l_ancien_refresh_est_ensuite_refuse`, la révocation par compte emportant la ligne que `refresh` venait de créer · **aucune ligne nouvelle dans `repository.rs`** : `logout` n'est que la moitié de `refresh` — même empreinte, même `consommer`, sans réémission, ce qui confirme la granularité choisie en I4 · le contrat 204 / 401-jeton-inconnu est celui que le controller d'I1 publie déjà dans le document OpenAPI, un logout idempotent l'aurait contredit · **trou repéré dans le backlog** : le corps de `me` n'est écrit par aucune tâche d'I3 à I7, alors que la route est montée et sera enregistrée dans OpenAPI par I7 — à trancher au design d'I6
       ✓ Test : logout → 204.
       ✓ Test : le refresh révoqué → 401.
       ✓ Test : les autres sessions du même utilisateur restent valides.

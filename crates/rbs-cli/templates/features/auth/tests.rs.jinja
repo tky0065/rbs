@@ -367,3 +367,61 @@ async fn la_table_porte_l_empreinte_et_jamais_le_jeton() {
         "une ligne porte le jeton remis au client"
     );
 }
+
+async fn deconnecter(api: &Router, jeton: &str) -> (StatusCode, Value) {
+    appeler(
+        api,
+        poster("/auth/logout", json!({ "refresh_token": jeton })),
+    )
+    .await
+}
+
+#[tokio::test]
+async fn logout_rend_204() {
+    let api = application().await;
+    let (_, paire) = ouvrir_session(&api).await;
+
+    let (statut, corps) = deconnecter(&api, &refresh_de(&paire)).await;
+
+    assert_eq!(statut, StatusCode::NO_CONTENT, "{corps}");
+    assert_eq!(corps, Value::Null, "un 204 ne porte pas de corps");
+}
+
+#[tokio::test]
+async fn le_refresh_revoque_rend_401() {
+    let api = application().await;
+    let (_, paire) = ouvrir_session(&api).await;
+    let jeton = refresh_de(&paire);
+
+    let (statut, corps) = deconnecter(&api, &jeton).await;
+    assert_eq!(statut, StatusCode::NO_CONTENT, "{corps}");
+
+    let (statut, corps) = rafraichir(&api, &jeton).await;
+
+    assert_eq!(statut, StatusCode::UNAUTHORIZED, "{corps}");
+}
+
+/// Se déconnecter d'un appareil ne déconnecte pas les autres.
+///
+/// C'est la garantie que ce lot ajoute : la révocation porte sur la ligne présentée, et
+/// non sur le compte qui la détient.
+#[tokio::test]
+async fn les_autres_sessions_du_meme_compte_restent_valides() {
+    let api = application().await;
+    let email = email_neuf();
+    inscrire(&api, &email).await;
+
+    let (_, premiere) = connecter(&api, &email, MOT_DE_PASSE).await;
+    let (_, seconde) = connecter(&api, &email, MOT_DE_PASSE).await;
+
+    let (statut, corps) = deconnecter(&api, &refresh_de(&premiere)).await;
+    assert_eq!(statut, StatusCode::NO_CONTENT, "{corps}");
+
+    let (statut, corps) = rafraichir(&api, &refresh_de(&seconde)).await;
+
+    assert_eq!(
+        statut,
+        StatusCode::OK,
+        "la seconde session a été fermée avec la première : {corps}"
+    );
+}
