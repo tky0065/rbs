@@ -664,7 +664,7 @@ mod tests {
             "le message ne nomme pas la feature : {erreur}"
         );
         assert!(
-            erreur.to_string().contains("auth, ci, docker"),
+            erreur.to_string().contains("auth, ci, docker, mail"),
             "le message n'énumère pas les features installables : {erreur}"
         );
     }

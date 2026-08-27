@@ -346,6 +346,57 @@ mod tests {
         );
     }
 
+    /// Le critère de la tâche : le mot de passe SMTP n'entre dans le projet que par
+    /// l'environnement.
+    ///
+    /// `config/default.toml` est versionné et `.env.example` ne porte que des valeurs
+    /// d'exemple : un secret qui atterrirait dans le premier serait commité par le
+    /// développeur sans qu'il l'ait décidé.
+    #[test]
+    fn le_mot_de_passe_smtp_est_dans_l_environnement_et_dans_aucune_configuration() {
+        let (_parent, racine) = projet();
+
+        let planifiee = planifier(&options(&racine, "mail")).expect("le plan doit se calculer");
+
+        let env = projete(&planifiee, ".env.example");
+        assert!(
+            env.contains("RBS_MAIL__SMTP_PASSWORD="),
+            "le secret n'est pas déclaré dans .env.example :\n{env}"
+        );
+
+        let configurations: Vec<&crate::plan::Fichier> = planifiee
+            .plan
+            .fichiers()
+            .iter()
+            .filter(|fichier| fichier.chemin.starts_with("config/"))
+            .collect();
+
+        assert!(
+            !configurations.is_empty(),
+            "le fragment n'écrit aucune configuration : le test ne prouverait rien"
+        );
+
+        for fichier in configurations {
+            // Les commentaires sont exclus : ce que figment lit, ce sont les clés, et
+            // renvoyer le lecteur vers la variable d'environnement est précisément le
+            // rôle d'un commentaire de `config/default.toml`.
+            let cles: String = fichier
+                .apres
+                .lines()
+                .filter(|ligne| !ligne.trim_start().starts_with('#'))
+                .collect::<Vec<_>>()
+                .join("\n")
+                .to_lowercase();
+
+            assert!(
+                !cles.contains("password"),
+                "{} porte le secret en clé de configuration :\n{}",
+                fichier.chemin,
+                fichier.apres
+            );
+        }
+    }
+
     #[test]
     fn planifier_ne_modifie_pas_le_repertoire_du_projet() {
         let (_parent, racine) = projet();

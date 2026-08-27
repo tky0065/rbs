@@ -194,6 +194,9 @@ fn suite(feature: &str) -> Option<&'static str> {
         "auth" => {
             Some("recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up")
         }
+        // Le défaut vise un Mailpit local : sans ce rappel, le premier envoi en
+        // production partirait vers `localhost:1025`.
+        "mail" => Some("réglez [mail] dans config/default.toml — un SMTP local par défaut"),
         _ => None,
     }
 }

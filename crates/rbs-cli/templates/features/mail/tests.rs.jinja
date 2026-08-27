@@ -1,0 +1,59 @@
+use super::config::{MailConfig, Tls};
+use super::service::Mailer;
+
+/// Une configuration de test : le serveur local en clair, sans identifiants.
+///
+/// Les tests sont `async` bien que rien n'y soit attendu : le pool de `lettre` inscrit sa
+/// tâche d'entretien au runtime dès la construction du transport, et panique sans lui.
+fn config() -> MailConfig {
+    MailConfig {
+        from: "Facteur <no-reply@example.test>".to_string(),
+        ..MailConfig::default()
+    }
+}
+
+#[tokio::test]
+async fn les_trois_modes_de_chiffrement_batissent_un_transport() {
+    for tls in [Tls::Aucun, Tls::Starttls, Tls::Wrapper] {
+        Mailer::nouveau(&MailConfig { tls, ..config() })
+            .unwrap_or_else(|erreur| panic!("le transport {tls:?} doit se bâtir : {erreur}"));
+    }
+}
+
+/// L'expéditeur est analysé au démarrage, pas au premier message : une faute de frappe
+/// dans `config/default.toml` doit arrêter le serveur, non une requête au hasard.
+#[tokio::test]
+async fn un_expediteur_invalide_arrete_la_construction_en_le_nommant() {
+    let erreur = Mailer::nouveau(&MailConfig {
+        from: "pas une adresse".to_string(),
+        ..config()
+    })
+    .expect_err("« pas une adresse » n'est pas un expéditeur");
+
+    assert!(
+        format!("{erreur:#}").contains("pas une adresse"),
+        "l'erreur ne nomme pas l'expéditeur fautif : {erreur:#}"
+    );
+}
+
+#[tokio::test]
+async fn le_message_porte_l_expediteur_configure_et_son_destinataire() {
+    let mailer = Mailer::nouveau(&config()).expect("le transport doit se bâtir");
+
+    let message = mailer
+        .message(
+            "client@example.test",
+            "Bienvenue",
+            "<p>Bonjour</p>".to_string(),
+        )
+        .expect("le message doit se construire");
+
+    let rendu = String::from_utf8(message.formatted()).expect("un message est de l'UTF-8");
+
+    assert!(
+        rendu.contains("From: Facteur <no-reply@example.test>"),
+        "{rendu}"
+    );
+    assert!(rendu.contains("To: client@example.test"), "{rendu}");
+    assert!(rendu.contains("Subject: Bienvenue"), "{rendu}");
+}

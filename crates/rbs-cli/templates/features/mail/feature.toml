@@ -1,0 +1,71 @@
+[feature]
+description = "envoi de courriels par SMTP : transport partagé, expéditeur configuré"
+
+[[fichiers]]
+source = "mod.rs.jinja"
+cible  = "src/mail/mod.rs"
+
+[[fichiers]]
+source = "config.rs.jinja"
+cible  = "src/mail/config.rs"
+
+[[fichiers]]
+source = "service.rs.jinja"
+cible  = "src/mail/service.rs"
+
+[[fichiers]]
+source = "tests.rs.jinja"
+cible  = "src/mail/tests.rs"
+
+[[ancres]]
+ancre   = "features"
+contenu = "mod mail;"
+
+[[ancres]]
+ancre   = "state_champs"
+contenu = """
+// Le transport n'a pas encore de lecteur : ce sont les handlers du projet qui en seront.
+#[allow(dead_code)]
+pub mail: crate::mail::Mailer,
+"""
+
+[[ancres]]
+ancre   = "state_init"
+contenu = "mail: crate::mail::Mailer::depuis_config()?,"
+
+# `default_features = false` : les défauts de `lettre` activent `native-tls`, qui réclame
+# OpenSSL sur les trois plateformes de la CI. `ring` et `webpki-roots` ne sont pas
+# facultatives — `rustls` refuse de compiler sans un fournisseur cryptographique ni un
+# magasin de racines, et ces deux-là sont les seuls à ne rien demander au système.
+[[dependances]]
+nom              = "lettre"
+version          = "0.11"
+default_features = false
+features         = [
+    "smtp-transport",
+    "builder",
+    "pool",
+    "tokio1-rustls",
+    "ring",
+    "webpki-roots",
+]
+
+[[config]]
+fichier = "config/default.toml"
+section = "mail"
+contenu = """
+# Mailpit et MailHog écoutent sur 1025, en clair : c'est le serveur de développement.
+# En production, `tls = "starttls"` et un `smtp_user` — dont le mot de passe vient de
+# RBS_MAIL__SMTP_PASSWORD, et jamais de ce fichier, qui est versionné.
+smtp_host = "localhost"
+smtp_port = 1025
+smtp_user = ""
+tls = "none"
+from = "no-reply@localhost"
+timeout_secs = 10
+"""
+
+[[env]]
+cle         = "RBS_MAIL__SMTP_PASSWORD"
+valeur      = ""
+commentaire = "Mot de passe du compte SMTP. Reste vide tant que `smtp_user` l'est."
