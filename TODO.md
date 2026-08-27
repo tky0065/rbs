@@ -352,9 +352,16 @@ construction, pas après, quand tout paraît évident.
 
 ## 📐 v0.2 — Auth
 
-**Détaillé le 2026-08-27. L'ouverture du jalon reste conditionnée à la clôture de `V1`** —
-détailler n'est pas commencer. Conception et décisions :
+**Détaillé le 2026-08-27. Conception et décisions :**
 [`docs/superpowers/specs/2026-08-27-v0.2-auth-design.md`](docs/superpowers/specs/2026-08-27-v0.2-auth-design.md).
+
+> **Ouvert le 2026-08-27 alors que `V1` n'est pas clos**, sur décision explicite du
+> mainteneur. Le jalon devait attendre la clôture de la v0.1 ; `V1` exige une personne
+> extérieure au projet, que rien dans le dépôt ne peut produire, et l'attente aurait
+> bloqué les lots `G` et `H` sans rien leur apprendre — la conception l'avait prévu
+> (§5 : « la contradiction est assumée pour les lots G, H et I »). **La réserve porte
+> toujours sur le lot `J`** : sa documentation se révise après le retour du tiers, et
+> `J5` ne se coche pas avant que `V1` ne soit coché.
 
 Ordre : `G ∥ H → I → J`. `G` ne touche que `rbs-core`, `H` que `rbs-cli` : aucun fichier
 partagé, les deux lots se mènent en parallèle sur deux branches. `I` consomme les deux.
