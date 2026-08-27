@@ -136,7 +136,7 @@ mod tests {
         let rendu = essais("articles", CHAMPS);
 
         assert!(
-            rendu.contains("router(AppState::new(db, config))"),
+            rendu.contains("router(AppState::new(db, config)"),
             "l'application doit être construite comme au démarrage :\n{rendu}"
         );
         assert!(

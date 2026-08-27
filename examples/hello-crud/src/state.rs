@@ -5,13 +5,17 @@ use sea_orm::DatabaseConnection;
 #[derive(Debug, Clone)]
 pub struct AppState {
     core: CoreState,
+    // <rbs:state_champs>
+    // </rbs:state_champs>
 }
 
 impl AppState {
-    pub fn new(db: DatabaseConnection, config: Config) -> Self {
-        Self {
+    pub fn new(db: DatabaseConnection, config: Config) -> anyhow::Result<Self> {
+        Ok(Self {
             core: CoreState::new(db, config),
-        }
+            // <rbs:state_init>
+            // </rbs:state_init>
+        })
     }
 }
 

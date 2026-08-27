@@ -229,12 +229,12 @@ sinon un plan vide, donc une commande qui réussit sans rien faire.
 ## Les ancres
 
 `rbs add` écrit des fichiers entiers et modifie le manifeste ; c'est
-[`rbs generate`](./generate.md#les-ancres) qui insère dans les cinq ancres en commentaires
+[`rbs generate`](./generate.md#les-ancres) qui insère dans les sept ancres en commentaires
 du projet — `// <rbs:features>`, `// <rbs:routes>`, `// <rbs:openapi>`,
-`// <rbs:migration_modules>` et `// <rbs:migrations>`. La règle est la même pour les deux
-commandes : aucun AST n'est jamais réécrit, et une ancre absente fait que la commande
-n'écrit rien et affiche le bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes
-les cinq.
+`// <rbs:migration_modules>`, `// <rbs:migrations>`, `// <rbs:state_champs>` et
+`// <rbs:state_init>`. La règle est la même pour les deux commandes : aucun AST n'est
+jamais réécrit, et une ancre absente fait que la commande n'écrit rien et affiche le bloc
+à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les sept.
 
 ## Les échecs
 

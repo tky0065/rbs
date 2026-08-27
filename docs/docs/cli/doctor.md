@@ -36,7 +36,7 @@ neither does anything here.
 
 | Check | What it looks at |
 |---|---|
-| `ancres` | The five insertion points: `// <rbs:features>` in `src/main.rs`, `// <rbs:routes>` in `src/router.rs`, `// <rbs:openapi>` in `src/openapi.rs`, `// <rbs:migration_modules>` and `// <rbs:migrations>` in `migration/src/lib.rs`. |
+| `ancres` | The seven insertion points: `// <rbs:features>` in `src/main.rs`, `// <rbs:routes>` in `src/router.rs`, `// <rbs:openapi>` in `src/openapi.rs`, `// <rbs:migration_modules>` and `// <rbs:migrations>` in `migration/src/lib.rs`, `// <rbs:state_champs>` and `// <rbs:state_init>` in `src/state.rs`. |
 | `.env` | Every variable declared by `.env.example` is set in `.env`. `.env.example` is the reference because it is versioned and generated alongside the skeleton — a list kept inside the CLI would have been a second truth to keep in sync. |
 | `versions` | The rbs recorded in `[package.metadata.rbs]`, the `rbs-core` dependency, and the CLI running the diagnosis. |
 | `base` | A TCP connection within three seconds, then the server version — asked of the `migration` crate's binary, since rbs embeds no SQL client. PostgreSQL 18 is the minimum: `uuidv7()`, which generated migrations use for the default primary key, does not exist before it. |
@@ -48,7 +48,7 @@ looks for it before [`rbs generate`](./generate.md) trips over it.
 
 ```text
 $ rbs doctor
-  ✓ ancres     les 5 points d'insertion sont en place
+  ✓ ancres     les 7 points d'insertion sont en place
   ✓ .env       les 4 variables de .env.example sont renseignées
   ✓ versions   projet et rbs-core pris d'un chemin local alignés sur le CLI 0.1.0
   ✓ base       PostgreSQL 18.6 répond sur localhost:55432
@@ -90,7 +90,7 @@ names the command to run by hand:
 
 ```text
 $ rbs doctor
-  ✓ ancres     les 5 points d'insertion sont en place
+  ✓ ancres     les 7 points d'insertion sont en place
   ✓ .env       les 4 variables de .env.example sont renseignées
   ✓ versions   projet et rbs-core pris d'un chemin local alignés sur le CLI 0.1.0
   ✗ base       localhost:5432 répond, mais sa version reste inconnue : la crate migration a échoué (code 1)

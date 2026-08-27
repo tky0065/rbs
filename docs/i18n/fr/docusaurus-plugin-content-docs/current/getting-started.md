@@ -336,7 +336,7 @@ rbs doctor
 ```text
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
      Running `target/debug/migration version`
-  ✓ ancres     les 5 points d'insertion sont en place
+  ✓ ancres     les 7 points d'insertion sont en place
   ✓ .env       les 4 variables de .env.example sont renseignées
   ✓ versions   projet et rbs-core pris d'un chemin local alignés sur le CLI 0.1.0
   ✓ base       PostgreSQL 18.6 répond sur localhost:5432

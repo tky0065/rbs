@@ -20,7 +20,7 @@ async fn application() -> Router {
         .await
         .expect("base joignable — les migrations doivent avoir été appliquées");
 
-    router(AppState::new(db, config))
+    router(AppState::new(db, config).expect("état partagé constructible"))
 }
 // endregion: harnais
 

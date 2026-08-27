@@ -28,7 +28,7 @@ async fn application() -> Router {
         .await
         .expect("base joignable — les migrations doivent avoir été appliquées");
 
-    router(AppState::new(db, config))
+    router(AppState::new(db, config).expect("état partagé constructible"))
 }
 
 /// Ouvre une connexion à la même base que l'application.
@@ -447,7 +447,7 @@ async fn route_reservee_aux_admins() -> Router {
 
     Router::new()
         .route("/reserve", get(reservee))
-        .with_state(AppState::new(db, config))
+        .with_state(AppState::new(db, config).expect("état partagé constructible"))
 }
 
 fn avec_jeton(methode: &str, chemin: &str, jeton: &str) -> Request<Body> {
