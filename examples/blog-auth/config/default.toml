@@ -1,0 +1,19 @@
+[server]
+host = "127.0.0.1"
+port = 8080
+
+[database]
+max_connections = 10
+min_connections = 0
+connect_timeout_secs = 5
+acquire_timeout_secs = 5
+idle_timeout_secs = 600
+max_lifetime_secs = 1800
+
+[docs]
+swagger_ui = true
+openapi_json = true
+
+[auth]
+access_ttl_secs = 900
+refresh_ttl_secs = 2592000

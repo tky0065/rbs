@@ -1,0 +1,32 @@
+[workspace]
+members = ["migration"]
+resolver = "3"
+
+[package]
+name = "blog-auth"
+version = "0.1.0"
+edition = "2024"
+
+[package.metadata.rbs]
+version = "0.1.0"
+features = ["health", "auth", "posts"]
+
+[dependencies]
+rbs-core = { path = "../../crates/rbs-core" , features = ["auth"] }
+anyhow = "1.0"
+axum = "0.8"
+chrono = "0.4"
+sea-orm = { version = "2.0", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
+serde = { version = "1.0", features = ["derive"] }
+tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
+tracing = "0.1"
+utoipa = { version = "5.5", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
+validator = { version = "0.21", features = ["derive"] }
+
+[dev-dependencies]
+serde_json = "1.0"
+tower = { version = "0.5", features = ["util"] }
+# sea-orm expose bien `Uuid`, mais sans son générateur : `new_v4` demande la feature `v4`,
+# dont le noyau n'a pas l'usage.
+uuid = { version = "1.25", features = ["v4"] }
