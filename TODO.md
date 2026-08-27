@@ -485,7 +485,7 @@ insertions d'ancres. Dépend de `G` et de `H`.
       ✓ Test : le refresh révoqué → 401.
       ✓ Test : les autres sessions du même utilisateur restent valides.
 
-- [ ] **I6** · Guard `require_role`
+- [x] **I6** · Guard `require_role` — vérifié 2026-08-27 · `cargo test -p rbs-cli --test integration_auth -- --ignored` → 4 passed, dont les 18 tests d'auth du projet généré · deux morsures : comparaison du rôle neutralisée → `un_user_sur_une_route_admin_rend_403` FAILED ; route rendant 403 sans regarder le jeton → `sans_jeton_la_route_admin_rend_401` FAILED, ce qui prouve que le test distingue bien les deux statuts · **trait d'extension sur `Identity` et non layer** : `from_fn_with_state` n'accepte pas de paramètre supplémentaire, il faudrait une closure au type de retour imprononçable ou une fonction par rôle — ce qui figerait l'enum que I2 a rendu extensible sans migration · **à connaître** : le projet généré est un binaire, donc n'exporte rien — un point d'extension que l'utilisateur n'appelle pas encore est du code mort pour `clippy -D warnings`, d'où un `#[allow(dead_code)]` ciblé sur le trait, commenté comme tel · **écart assumé** : le corps de `me` est écrit ici, aucune tâche d'I3 à I7 ne le prévoyant alors que I7 s'apprête à publier un contrat annonçant 200 sur une route qui rendait 501 ; `a_ecrire` perd son dernier appelant et disparaît — le fragment ne livre plus aucune route non implémentée
       Généré dans le projet, à partir de l'enum `Role` qu'il y trouve.
       ✓ Test : un `user` sur une route admin → 403.
       ✓ Test : un `admin` sur la même route → 200.

@@ -3,13 +3,16 @@ use std::time::Instant;
 use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
+use axum::routing::get;
 use chrono::Utc;
+use rbs_core::Identity;
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 use uuid::Uuid;
 
-use crate::auth::model::refresh_token;
+use crate::auth::guard::RequireRole;
+use crate::auth::model::{Role, refresh_token};
 use crate::router::router;
 use crate::state::AppState;
 
@@ -424,4 +427,126 @@ async fn les_autres_sessions_du_meme_compte_restent_valides() {
         StatusCode::OK,
         "la seconde session a été fermée avec la première : {corps}"
     );
+}
+
+/// Une route protégée, montée pour les tests seuls.
+///
+/// Le fragment n'en livre aucune : c'est à vous d'en poser sur vos propres routes, et
+/// voici comment. Le handler se contente d'exiger le rôle avant de répondre.
+async fn route_reservee_aux_admins() -> Router {
+    async fn reservee(identite: Identity) -> rbs_core::Result<StatusCode> {
+        identite.require_role(Role::Admin)?;
+
+        Ok(StatusCode::OK)
+    }
+
+    let config = rbs_core::Config::load().expect("configuration lisible");
+    let db = rbs_core::db::connect(&config.database)
+        .await
+        .expect("base joignable");
+
+    Router::new()
+        .route("/reserve", get(reservee))
+        .with_state(AppState::new(db, config))
+}
+
+fn avec_jeton(methode: &str, chemin: &str, jeton: &str) -> Request<Body> {
+    Request::builder()
+        .method(methode)
+        .uri(chemin)
+        .header("authorization", format!("Bearer {jeton}"))
+        .body(Body::empty())
+        .expect("requête bien formée")
+}
+
+/// Le jeton d'accès d'une paire.
+fn acces_de(paire: &Value) -> String {
+    paire["access_token"]
+        .as_str()
+        .expect("la paire doit porter un jeton d'accès")
+        .to_owned()
+}
+
+/// Inscrit un compte, le promeut administrateur, et ouvre une session à ce titre.
+///
+/// La promotion passe par la base : l'inscription rend toujours un `user`, par défaut de
+/// la table, et le rôle ne voyage que dans un jeton émis après coup.
+async fn ouvrir_session_admin(api: &Router, db: &DatabaseConnection) -> Value {
+    let email = email_neuf();
+    let (_, profil) = inscrire(api, &email).await;
+    let id = Uuid::parse_str(
+        profil["id"]
+            .as_str()
+            .expect("le profil porte un identifiant"),
+    )
+    .expect("identifiant lisible");
+
+    let compte = crate::auth::model::user::Entity::find_by_id(id)
+        .one(db)
+        .await
+        .expect("la table doit être interrogeable")
+        .expect("le compte inscrit doit exister");
+
+    let mut promu: crate::auth::model::user::ActiveModel = compte.into();
+    promu.role = Set(Role::Admin);
+    promu.update(db).await.expect("compte promu");
+
+    let (statut, paire) = connecter(api, &email, MOT_DE_PASSE).await;
+    assert_eq!(statut, StatusCode::OK, "{paire}");
+
+    paire
+}
+
+/// Sans jeton, la réponse dit « identifie-toi », et non « tu n'as pas le droit ».
+///
+/// Les deux se confondent aisément : ici c'est l'extractor `Identity` qui tranche, avant
+/// que le corps du handler — et donc la garde — s'exécute.
+#[tokio::test]
+async fn sans_jeton_la_route_admin_rend_401() {
+    let api = route_reservee_aux_admins().await;
+
+    let (statut, corps) = appeler(&api, sans_corps("GET", "/reserve")).await;
+
+    assert_eq!(statut, StatusCode::UNAUTHORIZED, "{corps}");
+    assert_ne!(statut, StatusCode::FORBIDDEN, "{corps}");
+}
+
+#[tokio::test]
+async fn un_user_sur_une_route_admin_rend_403() {
+    let api = application().await;
+    let reservee = route_reservee_aux_admins().await;
+    let (_, paire) = ouvrir_session(&api).await;
+
+    let (statut, corps) =
+        appeler(&reservee, avec_jeton("GET", "/reserve", &acces_de(&paire))).await;
+
+    assert_eq!(statut, StatusCode::FORBIDDEN, "{corps}");
+}
+
+#[tokio::test]
+async fn un_admin_sur_la_meme_route_rend_200() {
+    let api = application().await;
+    let db = connexion().await;
+    let reservee = route_reservee_aux_admins().await;
+    let paire = ouvrir_session_admin(&api, &db).await;
+
+    let (statut, corps) =
+        appeler(&reservee, avec_jeton("GET", "/reserve", &acces_de(&paire))).await;
+
+    assert_eq!(statut, StatusCode::OK, "{corps}");
+}
+
+#[tokio::test]
+async fn me_rend_le_profil_de_l_appelant() {
+    let api = application().await;
+    let email = email_neuf();
+    let (_, inscrit) = inscrire(&api, &email).await;
+    let (_, paire) = connecter(&api, &email, MOT_DE_PASSE).await;
+
+    let (statut, profil) = appeler(&api, avec_jeton("GET", "/auth/me", &acces_de(&paire))).await;
+
+    assert_eq!(statut, StatusCode::OK, "{profil}");
+    assert_eq!(profil["id"], inscrit["id"], "{profil}");
+    assert_eq!(profil["email"], email, "{profil}");
+    assert_eq!(profil["role"], "user", "{profil}");
 }
