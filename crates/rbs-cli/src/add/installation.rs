@@ -8,6 +8,7 @@ use std::path::Path;
 
 use minijinja::Value;
 
+use crate::ancres::{self, Ancre};
 use crate::manifeste::Manifeste;
 use crate::plan;
 use crate::template::Renderer;
@@ -35,6 +36,17 @@ pub(crate) enum Erreur {
         feature: String,
         /// Template introuvable, telle que le manifeste la nomme.
         template: String,
+    },
+
+    /// Le manifeste vise une ancre que le squelette ne porte pas.
+    #[error("{feature}/feature.toml vise l'ancre `{ancre}`, qui n'existe pas : {connues}")]
+    AncreInconnue {
+        /// Feature en cours d'installation.
+        feature: String,
+        /// Nom d'ancre refusé.
+        ancre: String,
+        /// Les ancres du squelette, énumérées.
+        connues: String,
     },
 
     /// Une template ne s'est pas rendue.
@@ -71,7 +83,43 @@ pub(crate) fn actions(
         deposes.push(destination);
     }
 
+    for insertion in &fragment.manifeste.ancres {
+        let ancre = ancre(fragment, &insertion.ancre)?;
+        constructeur.inserer(ancre, &lignes(&insertion.contenu))?;
+    }
+
     Ok(deposes)
+}
+
+/// L'ancre du squelette que le manifeste désigne par `nom`.
+///
+/// Un nom inconnu est une faute du manifeste : l'ignorer installerait une feature dont
+/// le montage manquerait, ce que seule la compilation du projet révélerait.
+fn ancre(fragment: &Fragment, nom: &str) -> Result<Ancre, Erreur> {
+    ancres::ANCRES
+        .into_iter()
+        .find(|ancre| ancre.nom == nom)
+        .ok_or_else(|| Erreur::AncreInconnue {
+            feature: fragment.nom.to_string(),
+            ancre: nom.to_string(),
+            connues: ancres::ANCRES
+                .iter()
+                .map(|ancre| ancre.nom)
+                .collect::<Vec<_>>()
+                .join(", "),
+        })
+}
+
+/// Découpe le contenu déclaré en lignes à insérer.
+///
+/// Une ancre en reçoit souvent plusieurs — les cinq chemins OpenAPI d'une feature — et
+/// une chaîne TOML multiligne est la façon naturelle de les écrire.
+fn lignes(contenu: &str) -> Vec<String> {
+    contenu
+        .lines()
+        .filter(|ligne| !ligne.trim().is_empty())
+        .map(|ligne| ligne.trim_end().to_string())
+        .collect()
 }
 
 /// Les templates à déposer, avec leur chemin dans le projet.

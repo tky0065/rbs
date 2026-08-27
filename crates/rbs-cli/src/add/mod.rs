@@ -101,6 +101,34 @@ pub(crate) enum Erreur {
     Application(#[from] plan::application::Erreur),
 }
 
+impl Erreur {
+    /// Ce que le développeur peut coller pour réparer, quand la panne se répare ainsi.
+    ///
+    /// Seule une ancre disparue a un remède tenant en un bloc de texte : les autres pannes
+    /// se règlent par une décision — commiter, corriger le manifeste du fragment.
+    pub(crate) fn remede(&self) -> Option<String> {
+        let plan::Erreur::Ancre(absente) = self.plan()? else {
+            return None;
+        };
+
+        Some(format!(
+            "dans {} :\n{}",
+            absente.ancre.fichier,
+            absente.ancre.bloc()
+        ))
+    }
+
+    /// L'erreur de planification que celle-ci porte, directement ou par l'installation.
+    fn plan(&self) -> Option<&plan::Erreur> {
+        match self {
+            Erreur::Plan(erreur) | Erreur::Installation(installation::Erreur::Plan(erreur)) => {
+                Some(erreur)
+            }
+            _ => None,
+        }
+    }
+}
+
 /// Calcule ce que l'installation de `options` ferait au projet, sans rien écrire.
 pub(crate) fn planifier(options: &Options) -> Result<Planifiee, Erreur> {
     let depart = options
@@ -357,6 +385,137 @@ mod tests {
         assert!(
             erreur.to_string().contains("docker"),
             "le message n'oriente pas vers ce qui existe : {erreur}"
+        );
+    }
+
+    /// Un fragment de test, posé sur le disque et prêt pour `--template-dir`.
+    ///
+    /// Le lot n'a pas de fragment à code Rust — `auth` est le lot suivant — et le moule
+    /// ne s'éprouve que sur un fragment qui l'exerce.
+    fn fragment(manifeste: &str, templates: &[(&str, &str)]) -> TempDir {
+        let repertoire = TempDir::new().expect("répertoire temporaire créable");
+        let essai = repertoire.path().join("essai");
+        fs::create_dir(&essai).expect("le fragment se crée");
+        fs::write(essai.join("feature.toml"), manifeste).expect("le manifeste s'écrit");
+
+        for (chemin, contenu) in templates {
+            let cible = essai.join(chemin);
+            if let Some(parent) = cible.parent() {
+                fs::create_dir_all(parent).expect("le répertoire se crée");
+            }
+            fs::write(cible, contenu).expect("la template s'écrit");
+        }
+
+        repertoire
+    }
+
+    /// Les options d'installation du fragment de test posé dans `fragments`.
+    fn options_du_fragment(racine: &Path, fragments: &TempDir) -> Options {
+        let mut options = options(racine, "essai");
+        options.template_dir = Some(fragments.path().to_path_buf());
+        options
+    }
+
+    /// La ligne qui précède immédiatement la balise fermante de `ancre`.
+    fn derniere_ligne_de(racine: &Path, ancre: crate::ancres::Ancre) -> String {
+        let source =
+            fs::read_to_string(racine.join(ancre.fichier)).expect("le fichier de l'ancre se lit");
+        let fermeture = ancre.fermeture();
+
+        source
+            .lines()
+            .take_while(|ligne| ligne.trim() != fermeture)
+            .last()
+            .unwrap_or_else(|| panic!("{} ne referme pas {}", ancre.fichier, ancre.nom))
+            .trim()
+            .to_string()
+    }
+
+    /// Le critère de la tâche : ce qu'un fragment déclare arrive dans l'ancre nommée.
+    #[test]
+    fn le_contenu_declare_est_insere_dans_chacune_des_quatre_ancres() {
+        let (_parent, racine) = projet();
+        let fragments = fragment(
+            "[feature]\ndescription = \"essai\"\n\n\
+             [[ancres]]\nancre = \"features\"\ncontenu = \"mod essai;\"\n\n\
+             [[ancres]]\nancre = \"routes\"\ncontenu = \".merge(crate::essai::routes())\"\n\n\
+             [[ancres]]\nancre = \"openapi\"\ncontenu = \"crate::essai::controller::list,\"\n\n\
+             [[ancres]]\nancre = \"migrations\"\ncontenu = \"Box::new(m0_essai::Migration),\"\n",
+            &[],
+        );
+
+        executer(&options_du_fragment(&racine, &fragments)).expect("l'installation doit aboutir");
+
+        for (ancre, attendu) in [
+            (crate::ancres::FEATURES, "mod essai;"),
+            (crate::ancres::ROUTES, ".merge(crate::essai::routes())"),
+            (crate::ancres::OPENAPI, "crate::essai::controller::list,"),
+            (crate::ancres::MIGRATIONS, "Box::new(m0_essai::Migration),"),
+        ] {
+            assert_eq!(
+                derniere_ligne_de(&racine, ancre),
+                attendu,
+                "l'ancre `{}` ne porte pas la ligne déclarée",
+                ancre.nom
+            );
+        }
+    }
+
+    /// Le critère de la tâche : ancre absente, rien d'écrit, et le bloc sous la main.
+    #[test]
+    fn une_ancre_absente_n_ecrit_rien_et_affiche_le_bloc() {
+        let (_parent, racine) = projet();
+        let router = racine.join("src/router.rs");
+        let ampute: String = fs::read_to_string(&router)
+            .expect("router.rs lisible")
+            .lines()
+            .filter(|ligne| !ligne.contains("// <rbs:routes>"))
+            .map(|ligne| format!("{ligne}\n"))
+            .collect();
+        fs::write(&router, ampute).expect("router.rs inscriptible");
+
+        let fragments = fragment(
+            "[feature]\ndescription = \"essai\"\n\n\
+             [[fichiers]]\nsource = \"note.md.jinja\"\ncible = \"NOTE.md\"\n\n\
+             [[ancres]]\nancre = \"routes\"\ncontenu = \".merge(crate::essai::routes())\"\n",
+            &[("note.md.jinja", "une note\n")],
+        );
+        let avant = empreinte(&racine);
+
+        let erreur = executer(&options_du_fragment(&racine, &fragments))
+            .expect_err("l'ancre manque : l'installation doit refuser");
+
+        let remede = erreur
+            .remede()
+            .unwrap_or_else(|| panic!("aucun bloc à coller pour : {erreur}"));
+        assert!(remede.contains("// <rbs:routes>"), "{remede}");
+        assert!(remede.contains("// </rbs:routes>"), "{remede}");
+        assert!(remede.contains("src/router.rs"), "{remede}");
+
+        assert_eq!(
+            empreinte(&racine),
+            avant,
+            "l'ancre absente n'a pas empêché l'écriture"
+        );
+    }
+
+    /// Une ancre que le squelette ne porte pas est une faute du manifeste.
+    #[test]
+    fn une_ancre_inconnue_est_refusee_en_nommant_celles_qui_existent() {
+        let (_parent, racine) = projet();
+        let fragments = fragment(
+            "[feature]\ndescription = \"essai\"\n\n\
+             [[ancres]]\nancre = \"middlewares\"\ncontenu = \"peu importe\"\n",
+            &[],
+        );
+
+        let erreur = planifier(&options_du_fragment(&racine, &fragments))
+            .expect_err("`middlewares` n'est pas une ancre du squelette");
+
+        assert!(erreur.to_string().contains("middlewares"), "{erreur}");
+        assert!(
+            erreur.to_string().contains("routes"),
+            "le message n'oriente pas vers les ancres qui existent : {erreur}"
         );
     }
 

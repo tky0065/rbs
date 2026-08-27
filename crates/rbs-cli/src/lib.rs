@@ -51,6 +51,9 @@ pub fn executer() {
         Commands::Add { feature, force } => {
             if let Err(erreur) = ajouter(feature, force, cli.template_dir) {
                 ui::error(&erreur.to_string());
+                if let Some(remede) = erreur.remede() {
+                    ui::info(&format!("\n{remede}"));
+                }
                 std::process::exit(1);
             }
         }
