@@ -12,6 +12,11 @@ laquelle un tiers atterrit.
 
 ## Bloquantes — le parcours du README ne peut pas aboutir
 
+**D1 et D2 corrigés le 2026-08-27**, par la voie retenue : le « Quick look » cesse de se
+présenter comme une transcription exécutable et renvoie au guide, qui porte seul la
+séquence complète. D3 est traité dans le même mouvement — l'encart sur le `rbs` de Ruby
+rejoint la section d'installation, là où le piège se referme. **D4 reste ouverte.**
+
 **D1 · Le « Quick look » du README génère un projet qui ne compile pas.**
 `rbs new blog-api` écrit `rbs-core = "0.1.0"` dans le manifeste ; la crate n'est pas
 publiée, et `rbs migrate up` meurt sur `no matching package named 'rbs-core' found`.

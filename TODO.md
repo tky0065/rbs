@@ -328,8 +328,10 @@ construction, pas après, quand tout paraît évident.
       `docs/superpowers/plans/2026-08-27-v1-frictions.md`, une contradiction corrigée au
       passage (le guide annonçait PostgreSQL 14 quand `uuidv7()` en exige 18). Le critère
       nomme **une personne extérieure au projet** : une répétition par qui connaît les
-      réponses ne trouve que les frictions mécaniques, jamais les cognitives. Reste à faire :
-      corriger D1 et D2, puis faire jouer le parcours par un tiers.
+      réponses ne trouve que les frictions mécaniques, jamais les cognitives. D1, D2 et D3
+      corrigés depuis — le README renvoie au guide, qui porte seul le parcours exécutable.
+      Reste à faire : arbitrer D4 (`doctor` ✓ sur une dépendance introuvable), puis faire
+      jouer le parcours par un tiers — seul geste qui coche cette case.
       Une personne extérieure au projet clone, installe, génère une API CRUD qui tourne,
       **sans poser de question**. Chaque question posée devient une tâche de
       documentation avant que la v0.1 ne soit déclarée close.
