@@ -40,6 +40,12 @@ const BASE: &str = "demo";
 /// refuse la ligne entière.
 const SECRET: &str = "un-secret-de-test-de-plus-de-trente-deux-octets";
 
+/// Le mot de passe des comptes ouverts par les parcours.
+///
+/// Huit caractères au moins : le DTO d'inscription le valide, et un mot de passe
+/// trop court ferait rendre 422 là où le parcours attend 201.
+const MOT_DE_PASSE_DU_COMPTE: &str = "un mot de passe assez long";
+
 /// Un projet neuf, commité, prêt à recevoir une feature.
 ///
 /// `add` refuse d'écrire dans un working tree sale : sans ce commit, la commande
@@ -310,24 +316,10 @@ fn le_hash_n_apparait_pas_dans_les_logs_du_serveur() {
 
     migrer(&racine);
 
-    Command::new("cargo")
-        .current_dir(&racine)
-        .env("CARGO_TARGET_DIR", common::cible())
-        .arg("build")
-        .assert()
-        .success();
+    compiler(&racine);
 
-    let port = port_libre();
-    let mut serveur = std::process::Command::new(common::cible().join("debug/demo-api"))
-        .current_dir(&racine)
-        .env("RBS_SERVER__PORT", port.to_string())
-        .env("RUST_LOG", "debug")
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("le binaire du projet doit être lançable");
-
-    attendre_ecoute(port);
+    let serveur = Serveur::lancer(&racine, "demo-api", "debug");
+    let port = serveur.port();
 
     let (statut, corps) = requete(
         port,
@@ -339,15 +331,7 @@ fn le_hash_n_apparait_pas_dans_les_logs_du_serveur() {
         )),
     );
 
-    serveur.kill().expect("le serveur doit pouvoir être arrêté");
-    let sortie = serveur
-        .wait_with_output()
-        .expect("la sortie du serveur doit être lisible");
-    let journal = format!(
-        "{}{}",
-        String::from_utf8_lossy(&sortie.stdout),
-        String::from_utf8_lossy(&sortie.stderr)
-    );
+    let journal = serveur.journal();
 
     assert_eq!(
         statut, 201,
@@ -367,6 +351,255 @@ fn le_hash_n_apparait_pas_dans_les_logs_du_serveur() {
         !journal.contains(MOT_DE_PASSE_EN_CLAIR),
         "le mot de passe est journalisé :\n{journal}"
     );
+}
+
+/// Le critère du lot : les huit étapes du parcours, un seul compte, contre le binaire
+/// réellement lancé.
+///
+/// Les tests d'auth que le projet reçoit montent le `Router` en mémoire et éprouvent
+/// chaque garantie isolément. Ce qu'ils ne peuvent pas montrer, c'est que les états
+/// s'enchaînent : que le jeton émis par `login` est celui que la garde accepte, que la
+/// paire rendue par `refresh` est utilisable, que le `logout` porte sur la ligne que
+/// `refresh` venait d'ouvrir.
+#[test]
+#[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn le_parcours_d_auth_se_joue_de_bout_en_bout() {
+    const EMAIL: &str = "parcours@exemple.test";
+
+    let postgres = demarrer_postgres();
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = projet_avec_auth_sur(&url_de(&postgres), &parent);
+
+    migrer(&racine);
+    compiler(&racine);
+
+    let serveur = Serveur::lancer(&racine, "demo-api", "info");
+    let port = serveur.port();
+
+    let (statut, corps) = requete(
+        port,
+        "POST",
+        "/auth/register",
+        None,
+        Some(&identifiants(EMAIL)),
+    );
+    assert_eq!(statut, 201, "l'inscription doit aboutir : {corps}");
+
+    let (statut, premiere) = requete(
+        port,
+        "POST",
+        "/auth/login",
+        None,
+        Some(&identifiants(EMAIL)),
+    );
+    assert_eq!(
+        statut, 200,
+        "la connexion doit rendre une paire : {premiere}"
+    );
+
+    let (statut, corps) = requete(port, "GET", "/auth/me", None, None);
+    assert_eq!(
+        statut, 401,
+        "une route protégée doit refuser une requête sans jeton : {corps}"
+    );
+
+    let (statut, corps) = requete(port, "GET", "/auth/me", Some(&acces(&premiere)), None);
+    assert_eq!(
+        statut, 200,
+        "le jeton émis par `login` doit être celui que la garde accepte : {corps}"
+    );
+
+    let (statut, seconde) = requete(
+        port,
+        "POST",
+        "/auth/refresh",
+        None,
+        Some(&renouvellement(&premiere)),
+    );
+    assert_eq!(
+        statut, 200,
+        "le rafraîchissement doit rendre une paire : {seconde}"
+    );
+
+    let (statut, corps) = requete(port, "GET", "/auth/me", Some(&acces(&seconde)), None);
+    assert_eq!(
+        statut, 200,
+        "la paire rendue par `refresh` doit être utilisable : {corps}"
+    );
+
+    let (statut, corps) = requete(
+        port,
+        "POST",
+        "/auth/refresh",
+        None,
+        Some(&renouvellement(&premiere)),
+    );
+    assert_eq!(
+        statut, 401,
+        "le refresh déjà consommé doit être refusé : {corps}"
+    );
+
+    let (statut, corps) = requete(
+        port,
+        "POST",
+        "/auth/logout",
+        None,
+        Some(&renouvellement(&seconde)),
+    );
+    assert_eq!(statut, 204, "la déconnexion doit aboutir : {corps}");
+
+    let (statut, corps) = requete(
+        port,
+        "POST",
+        "/auth/refresh",
+        None,
+        Some(&renouvellement(&seconde)),
+    );
+    assert_eq!(statut, 401, "le refresh révoqué doit être refusé : {corps}");
+}
+
+/// Le corps d'inscription et de connexion d'un compte.
+fn identifiants(email: &str) -> String {
+    format!(r#"{{"email":"{email}","password":"{MOT_DE_PASSE_DU_COMPTE}"}}"#)
+}
+
+/// Le corps qu'attendent `refresh` et `logout`.
+fn renouvellement(paire: &Value) -> String {
+    format!(r#"{{"refresh_token":"{}"}}"#, champ(paire, "refresh_token"))
+}
+
+/// Le jeton d'accès d'une paire.
+fn acces(paire: &Value) -> String {
+    champ(paire, "access_token")
+}
+
+fn champ(paire: &Value, nom: &str) -> String {
+    paire[nom]
+        .as_str()
+        .unwrap_or_else(|| panic!("la paire doit porter `{nom}` : {paire}"))
+        .to_owned()
+}
+
+/// L'étape du parcours que le projet généré ne permet pas de jouer : `require_role`
+/// devant un binaire réel.
+///
+/// `add auth` livre la garde mais aucune route qui la porte — la seule du projet généré
+/// est montée dans son module de tests, et ne répond donc jamais sur le réseau.
+/// `examples/blog-auth` en porte une dans son binaire, dont c'est ici la première
+/// exécution : la CI n'en prouve que la compilation.
+#[test]
+#[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn une_route_gardee_refuse_un_user_authentifie() {
+    const EMAIL: &str = "sans-droits@exemple.test";
+    const ARTICLE: &str = r#"{"title":"Un titre","body":"Un corps.","published":true}"#;
+
+    let postgres = demarrer_postgres();
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = blog_auth_sur(&url_de(&postgres), &parent);
+
+    migrer(&racine);
+    compiler(&racine);
+
+    let serveur = Serveur::lancer(&racine, "blog-auth", "info");
+    let port = serveur.port();
+
+    let (statut, corps) = requete(
+        port,
+        "POST",
+        "/auth/register",
+        None,
+        Some(&identifiants(EMAIL)),
+    );
+    assert_eq!(statut, 201, "l'inscription doit aboutir : {corps}");
+
+    let (statut, paire) = requete(
+        port,
+        "POST",
+        "/auth/login",
+        None,
+        Some(&identifiants(EMAIL)),
+    );
+    assert_eq!(statut, 200, "la connexion doit rendre une paire : {paire}");
+
+    let (statut, corps) = requete(port, "POST", "/posts", None, Some(ARTICLE));
+    assert_eq!(
+        statut, 401,
+        "sans jeton, la route gardée doit dire « identifie-toi » et non « tu n'as pas le droit » : {corps}"
+    );
+
+    let (statut, corps) = requete(port, "POST", "/posts", Some(&acces(&paire)), Some(ARTICLE));
+    assert_eq!(
+        statut, 403,
+        "un `user` authentifié doit être refusé sur une route réservée aux admins : {corps}"
+    );
+
+    // Sans cette ligne, un 403 rendu par une route cassée passerait pour une garde qui
+    // fonctionne.
+    let (statut, corps) = requete(port, "GET", "/posts", Some(&acces(&paire)), None);
+    assert_eq!(
+        statut, 200,
+        "la ressource doit rester servie au même compte en lecture : {corps}"
+    );
+}
+
+/// `examples/blog-auth`, copié hors du dépôt et repointé sur `url`.
+///
+/// La copie est ce qui permet de le lancer sans écrire dans le dépôt — au prix du chemin
+/// relatif vers le noyau, qu'il faut refaire.
+fn blog_auth_sur(url: &str, parent: &TempDir) -> PathBuf {
+    let racine = parent.path().join("blog-auth");
+    copier(&common::depot().join("examples/blog-auth"), &racine);
+
+    let manifeste = racine.join("Cargo.toml");
+    let source = fs::read_to_string(&manifeste).expect("le manifeste de l'exemple est lisible");
+
+    // Séparateurs normalisés : un `\` de Windows est un échappement dans une chaîne TOML
+    // basique, et le chemin y arriverait mutilé.
+    let noyau = common::noyau().display().to_string().replace('\\', "/");
+    const RELATIF: &str = r#"path = "../../crates/rbs-core""#;
+
+    assert!(
+        source.contains(RELATIF),
+        "l'exemple ne pointe plus le noyau par `{RELATIF}` : la copie compilerait contre autre chose :\n{source}"
+    );
+
+    fs::write(
+        &manifeste,
+        source.replace(RELATIF, &format!(r#"path = "{noyau}""#)),
+    )
+    .expect("le manifeste de la copie est inscriptible");
+
+    // `add auth` n'écrit `RBS_AUTH__SECRET` que dans `.env.example` : sans cette ligne, le
+    // binaire s'arrête au démarrage plutôt que de répondre 500.
+    fs::write(
+        racine.join(".env"),
+        format!("RBS_ENV=development\nRBS_DATABASE__URL={url}\nRBS_AUTH__SECRET={SECRET}\n"),
+    )
+    .expect("le `.env` de la copie est inscriptible");
+
+    racine
+}
+
+/// Copie `source` dans `destination`, `target` et `.git` exclus.
+fn copier(source: &Path, destination: &Path) {
+    fs::create_dir_all(destination).expect("répertoire de destination créable");
+
+    for entree in fs::read_dir(source).expect("répertoire source lisible") {
+        let chemin = entree.expect("entrée lisible").path();
+        let nom = chemin.file_name().expect("entrée nommée").to_owned();
+
+        if nom == "target" || nom == ".git" {
+            continue;
+        }
+
+        let cible = destination.join(&nom);
+
+        if chemin.is_dir() {
+            copier(&chemin, &cible);
+        } else {
+            fs::copy(&chemin, &cible).expect("fichier copiable");
+        }
+    }
 }
 
 /// Un PostgreSQL neuf, prêt à recevoir le schéma d'un projet généré.
@@ -446,6 +679,16 @@ fn migrer(racine: &Path) {
         .success();
 }
 
+/// Compile le projet, binaire compris.
+fn compiler(racine: &Path) {
+    Command::new("cargo")
+        .current_dir(racine)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .arg("build")
+        .assert()
+        .success();
+}
+
 /// Un port que personne n'écoute au moment de l'appel.
 fn port_libre() -> u16 {
     TcpListener::bind("127.0.0.1:0")
@@ -468,6 +711,76 @@ fn attendre_ecoute(port: u16) {
     }
 
     panic!("le serveur n'écoute toujours pas sur {port} après 60 s");
+}
+
+/// Le binaire d'un projet, lancé sur un port libre, arrêté quand ce garde tombe.
+///
+/// `Drop` plutôt qu'un `kill` en fin de test : une assertion qui échoue au milieu d'un
+/// parcours déroule la pile sans jamais l'atteindre, et laisse derrière elle un serveur
+/// qui écoute et un conteneur qu'il tient ouvert.
+///
+/// `journal` est la valeur de `RUST_LOG` : `debug` pour qui inspecte la sortie, `info`
+/// pour les autres — le flux part dans un tuyau que personne ne vide tant que le serveur
+/// tourne.
+struct Serveur {
+    processus: Option<std::process::Child>,
+    port: u16,
+}
+
+impl Serveur {
+    fn lancer(racine: &Path, binaire: &str, journal: &str) -> Self {
+        let port = port_libre();
+
+        let processus = std::process::Command::new(common::cible().join("debug").join(binaire))
+            .current_dir(racine)
+            .env("RBS_SERVER__PORT", port.to_string())
+            .env("RUST_LOG", journal)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("le binaire du projet doit être lançable");
+
+        attendre_ecoute(port);
+
+        Self {
+            processus: Some(processus),
+            port,
+        }
+    }
+
+    fn port(&self) -> u16 {
+        self.port
+    }
+
+    /// Arrête le serveur et rend ce qu'il a écrit sur ses deux flux.
+    fn journal(mut self) -> String {
+        // `wait_with_output` consomme le `Child` : le retirer du garde laisse `Drop` sans
+        // rien à moissonner, plutôt qu'avec un processus déjà attendu.
+        let mut processus = self.processus.take().expect("le serveur tourne encore");
+
+        processus
+            .kill()
+            .expect("le serveur doit pouvoir être arrêté");
+
+        let sortie = processus
+            .wait_with_output()
+            .expect("la sortie du serveur doit être lisible");
+
+        format!(
+            "{}{}",
+            String::from_utf8_lossy(&sortie.stdout),
+            String::from_utf8_lossy(&sortie.stderr)
+        )
+    }
+}
+
+impl Drop for Serveur {
+    fn drop(&mut self) {
+        if let Some(processus) = self.processus.as_mut() {
+            let _ = processus.kill();
+            let _ = processus.wait();
+        }
+    }
 }
 
 /// Joue une requête sur le serveur local et rend son statut avec son corps décodé.
@@ -528,8 +841,7 @@ fn decoder(reponse: &str) -> (u16, Value) {
     // Le 204 du logout n'a pas de corps, et le message d'un serveur qui refuse la requête
     // avant de le router n'est pas du JSON : rendre le texte brut plutôt que d'échouer ici
     // laisse l'assertion appelante afficher ce que le serveur a réellement dit.
-    let corps =
-        serde_json::from_str(corps).unwrap_or_else(|_| Value::String(corps.to_string()));
+    let corps = serde_json::from_str(corps).unwrap_or_else(|_| Value::String(corps.to_string()));
 
     (statut, corps)
 }
