@@ -63,7 +63,9 @@ pub async fn refresh(
     State(state): State<AppState>,
     ValidatedJson(entree): ValidatedJson<RefreshRequest>,
 ) -> Result<Json<TokenPair>> {
-    Ok(Json(service::refresh(state.core().db(), entree).await?))
+    Ok(Json(
+        service::refresh(state.core().db(), state.auth(), entree).await?,
+    ))
 }
 
 #[utoipa::path(

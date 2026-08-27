@@ -473,7 +473,7 @@ insertions d'ancres. Dépend de `G` et de `H`.
       ✓ Test : email déjà pris → 409.
       ✓ Test : mot de passe erroné et email inconnu renvoient **la même** 401, sans oracle d'énumération.
 
-- [ ] **I4** · Refresh avec rotation
+- [x] **I4** · Refresh avec rotation — vérifié 2026-08-27 · `cargo test -p rbs-cli --test integration_auth -- --ignored` → 4 passed, dont les 11 tests d'auth du projet généré contre PostgreSQL 18 · trois morsures : garde `revoked_at IS NULL` retirée de `consommer` → le rejeu rend une paire valide, `l_ancien_refresh_est_ensuite_refuse` FAILED ; filtre d'expiration retiré → `un_refresh_expire_rend_401` FAILED ; `token_hash` empli d'autre chose que l'empreinte → `la colonne ne porte pas l'empreinte du jeton` FAILED · **la rotation tient à un seul `UPDATE` conditionnel** — le `WHERE revoked_at IS NULL` de `consommer`, qui rend le nombre de lignes touchées : la relecture de `revoked_at` écrite d'abord s'est révélée redondante et non tenue par un test, donc retirée ; elle laisserait de toute façon passer deux rafraîchissements concurrents · le test de l'empreinte cherche sa ligne par `user_id` et non par l'empreinte — chercher par ce qu'on vérifie faisait échouer le test à la lecture, sans jamais atteindre l'assertion · `#![allow(dead_code)]` **retiré** de `mod.rs` : ce qu'I1 attendait d'I3, et que I4 permet enfin
       ✓ Test : un refresh valide rend une nouvelle paire de jetons.
       ✓ Test : l'ancien refresh est ensuite refusé (401).
       ✓ Test : un refresh expiré → 401.
