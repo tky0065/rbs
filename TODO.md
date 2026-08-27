@@ -553,17 +553,7 @@ conteneur par test. Les `--ignored` se passent en fin de parcours, une par une.
 
 Ne livre aucune feature. Lève les trois verrous que la conception a relevés.
 
-- [ ] **K1** · `config::section::<T>` — le noyau ouvre sa cascade
-      Expose la cascade de `A5` pour une section que le noyau ne connaît pas : défauts
-      portés par la struct appelante, `config/default.toml`, `config/{env}.toml`, variables
-      `RBS_*`. Compilée sans flag — elle n'appartient à aucune feature, et aucune des trois
-      features du jalon n'apparaît par son nom dans `rbs-core`.
-      ✓ Test : une section absente rend une erreur nommant la section.
-      ✓ Test : `config/{env}.toml` l'emporte sur `default.toml`, et `RBS_*` sur les deux —
-      la même cascade que `Config`, éprouvée sur une struct étrangère au noyau.
-      ✓ Test : les valeurs par défaut portées par `#[serde(default)]` de l'appelant sont
-      respectées, le noyau n'ayant aucun `Serialized::default` à leur opposer.
-      ✓ `cargo build -p rbs-core` sans aucune feature compile la fonction.
+- [x] **K1** · `config::section::<T>` — le noyau ouvre sa cascade — vérifié 2026-08-27 · `cargo test -p rbs-core --lib -- config::tests` → les trois tests neufs passent, et `cargo test -p rbs-core` → 75 passed, 0 failed · `cargo build -p rbs-core --no-default-features` → Finished, la fonction ne portant aucun `#[cfg]` et `default = []` rendant les deux builds identiques · trois morsures, une par critère : garde `figment.contains` retirée → `SectionAbsente` FAILED ; couche `Env::prefixed` retirée de `surcharges` → la cascade FAILED (`left: "depuis-default"`) ; `Serialized::default("externe.ttl_secs", 999)` opposé par le noyau → les défauts de l'appelant FAILED (`left: 999, right: 300`) · **faux vert corrigé** : le premier test ne lisait que le message, or figment nomme lui aussi la section absente (`missing field \`externe\``) — la morsure passait alors, le test ne prouvant ni la garde ni la variante ; l'assertion porte désormais sur `ConfigError::SectionAbsente` · `clippy --all-features --all-targets -D warnings` et `fmt --all --check` propres · la section de test s'appelle `externe` : aucun nom de feature du jalon n'entre dans le code ajouté · **réserve pour `O4`** : `redis`, `mail` et `storage` sont déjà nommées dans `rbs-core` avant ce lot — features vides réservées dans `Cargo.toml`, documentées dans `lib.rs` — le critère de sortie se mesure donc sur le diff, non sur l'absence des noms
 
 - [ ] **K2** · `[[dependances]]` au manifeste de fragment
       Branche `PatchToml::AjouterDependance`, écrite au lot `E` et restée sans appelant —
