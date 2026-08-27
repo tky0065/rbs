@@ -14,6 +14,9 @@ use include_dir::{Dir, include_dir};
 /// Suffixe que porte toute template, et que ne porte aucune destination.
 const SUFFIXE: &str = "jinja";
 
+/// Nom du manifeste d'un fragment, à la racine de son répertoire.
+const MANIFESTE: &str = "feature.toml";
+
 /// Le squelette de projet, embarqué au moment de la compilation du binaire.
 static PROJET: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/templates/project");
 
@@ -44,6 +47,11 @@ pub struct Inconnue {
 pub struct Fichier {
     /// Chemin de sortie relatif à la racine du projet, suffixe `.jinja` retiré.
     pub destination: PathBuf,
+    /// Chemin de la template dans sa source, suffixe compris.
+    ///
+    /// C'est par lui qu'un manifeste de fragment désigne une template : la destination,
+    /// elle, y est déclarée séparément.
+    pub origine: PathBuf,
     /// Source de la template, telle quelle : le rendu est l'affaire de l'appelant.
     pub source: String,
 }
@@ -89,7 +97,28 @@ impl Source {
     ///
     /// Le tri n'est pas cosmétique : `include_dir` et `fs::read_dir` ne rendent pas leurs
     /// entrées dans le même ordre, et le second n'en garantit aucun.
+    ///
+    /// Le manifeste d'un fragment est écarté : il déclare ce que l'installation fait au
+    /// projet, il n'est pas un des fichiers qu'elle y dépose.
     pub fn fichiers(&self) -> io::Result<Vec<Fichier>> {
+        let mut fichiers = self.tout()?;
+
+        fichiers.retain(|fichier| fichier.destination != Path::new(MANIFESTE));
+
+        Ok(fichiers)
+    }
+
+    /// Source du manifeste du fragment, ou `None` s'il n'en porte pas.
+    pub fn manifeste(&self) -> io::Result<Option<String>> {
+        Ok(self
+            .tout()?
+            .into_iter()
+            .find(|fichier| fichier.destination == Path::new(MANIFESTE))
+            .map(|fichier| fichier.source))
+    }
+
+    /// Toutes les entrées du répertoire, manifeste compris.
+    fn tout(&self) -> io::Result<Vec<Fichier>> {
         let mut fichiers = Vec::new();
 
         match self {
@@ -165,6 +194,7 @@ fn lire_embarquees(
 
         fichiers.push(Fichier {
             destination: destination(relatif),
+            origine: relatif.to_path_buf(),
             source: source.to_owned(),
         });
     }
@@ -192,6 +222,7 @@ fn lire_repertoire(
 
         fichiers.push(Fichier {
             destination: destination(relatif),
+            origine: relatif.to_path_buf(),
             source,
         });
     }
@@ -562,9 +593,13 @@ mod tests {
     }
 
     /// Toutes les templates de tous les fragments de feature.
+    ///
+    /// Le manifeste d'un fragment n'en est pas une : il décrit l'installation, il n'y
+    /// est pas déposé.
     fn templates_de_features() -> Vec<PathBuf> {
         let mut trouvees = Vec::new();
         parcourir(Path::new(RACINE_FEATURES), &mut trouvees);
+        trouvees.retain(|chemin| chemin.file_name() != Some(MANIFESTE.as_ref()));
 
         assert!(
             !trouvees.is_empty(),
@@ -572,6 +607,28 @@ mod tests {
         );
 
         trouvees
+    }
+
+    /// Le manifeste décrit l'installation ; il n'a rien à faire dans le projet installé.
+    #[test]
+    fn le_manifeste_du_fragment_n_est_pas_copie_dans_le_projet() {
+        for feature in ["docker", "ci"] {
+            let fichiers = Source::feature(None, feature)
+                .expect("le fragment doit exister")
+                .fichiers()
+                .expect("les templates embarquées doivent se lire");
+
+            assert!(
+                !fichiers
+                    .iter()
+                    .any(|fichier| fichier.destination == Path::new(MANIFESTE)),
+                "`{MANIFESTE}` serait déposé par `add {feature}` : {:?}",
+                fichiers
+                    .iter()
+                    .map(|fichier| fichier.destination.display().to_string())
+                    .collect::<Vec<_>>()
+            );
+        }
     }
 
     #[test]

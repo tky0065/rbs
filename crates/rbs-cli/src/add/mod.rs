@@ -8,15 +8,17 @@
 //! même raison : ce qui modifie un projet existant se montre avant de s'écrire, et
 //! s'écrit en entier ou pas du tout.
 
+mod installation;
+
 use std::io;
 use std::path::{Path, PathBuf};
 
 use minijinja::context;
 
 use crate::git;
+use crate::manifeste;
 use crate::metadata;
 use crate::plan;
-use crate::template::Renderer;
 use crate::templates::{self, Source};
 
 /// Ce qu'il faut savoir pour installer une feature.
@@ -60,14 +62,23 @@ pub(crate) enum Erreur {
         source: io::Error,
     },
 
-    /// Une template ne s'est pas rendue.
-    #[error("{fichier} ne se rend pas : {source}")]
-    Rendu {
-        /// Fichier fautif.
-        fichier: String,
-        /// Cause du moteur de rendu.
-        source: minijinja::Error,
+    /// Le fragment ne porte pas de manifeste.
+    ///
+    /// Un fragment sans manifeste ne déclare rien, et s'installerait donc sans rien
+    /// faire : mieux vaut le dire que réussir à vide.
+    #[error("{feature}/feature.toml est absent : le fragment ne déclare pas son installation")]
+    SansManifeste {
+        /// Feature demandée.
+        feature: String,
     },
+
+    /// Le manifeste du fragment ne se lit pas.
+    #[error("{0}")]
+    Manifeste(#[from] manifeste::Erreur),
+
+    /// Ce que le manifeste déclare n'a pas pu être planifié.
+    #[error("{0}")]
+    Installation(#[from] installation::Erreur),
 
     /// Le projet porte des modifications non commitées, qu'une installation rendrait
     /// indiscernables des siennes.
@@ -108,31 +119,28 @@ pub(crate) fn planifier(options: &Options) -> Result<Planifiee, Erreur> {
     }
 
     let source = Source::feature(options.template_dir.as_deref(), &options.feature)?;
+    let manifeste = lire_manifeste(&source, &options.feature)?;
+    let templates = source.fichiers().map_err(|source| Erreur::Acces {
+        chemin: options.feature.clone(),
+        source,
+    })?;
+
     let nom_projet = metadata::nom_du_paquet(&racine.join("Cargo.toml"))?;
     let contexte = context! {
         nom_projet => nom_projet.clone(),
         nom_crate => nom_projet.replace('-', "_"),
     };
 
-    let renderer = Renderer::new();
     let mut constructeur = plan::Constructeur::nouveau(racine);
-    let mut fichiers = Vec::new();
-
-    for fichier in source.fichiers().map_err(|source| Erreur::Acces {
-        chemin: options.feature.clone(),
-        source,
-    })? {
-        let chemin = fichier.destination.to_string_lossy().into_owned();
-        let contenu = renderer
-            .rendre(&fichier.source, contexte.clone())
-            .map_err(|source| Erreur::Rendu {
-                fichier: chemin.clone(),
-                source,
-            })?;
-
-        constructeur.creer(&chemin, &contenu)?;
-        fichiers.push(chemin);
-    }
+    let fichiers = installation::actions(
+        &installation::Fragment {
+            nom: &options.feature,
+            manifeste: &manifeste,
+            templates: &templates,
+            contexte,
+        },
+        &mut constructeur,
+    )?;
 
     constructeur.patcher(plan::PatchToml::InscrireFeature(options.feature.clone()))?;
 
@@ -140,6 +148,21 @@ pub(crate) fn planifier(options: &Options) -> Result<Planifiee, Erreur> {
         plan: constructeur.finir(),
         fichiers,
     })
+}
+
+/// Lit le manifeste du fragment, qui dit ce que son installation fait au projet.
+fn lire_manifeste(source: &Source, feature: &str) -> Result<manifeste::Manifeste, Erreur> {
+    let texte = source
+        .manifeste()
+        .map_err(|source| Erreur::Acces {
+            chemin: feature.to_string(),
+            source,
+        })?
+        .ok_or_else(|| Erreur::SansManifeste {
+            feature: feature.to_string(),
+        })?;
+
+    Ok(manifeste::lire(&texte, &format!("{feature}/feature.toml"))?)
 }
 
 fn acces(chemin: &Path, source: io::Error) -> Erreur {
@@ -334,6 +357,30 @@ mod tests {
         assert!(
             erreur.to_string().contains("docker"),
             "le message n'oriente pas vers ce qui existe : {erreur}"
+        );
+    }
+
+    /// Un fragment muet ne s'installe pas à vide : il le dit.
+    #[test]
+    fn un_fragment_sans_manifeste_est_refuse_en_nommant_le_fichier_attendu() {
+        let (_parent, racine) = projet();
+        let fragments = TempDir::new().expect("répertoire temporaire créable");
+        fs::create_dir(fragments.path().join("muette")).expect("le fragment se crée");
+        fs::write(
+            fragments.path().join("muette/Note.md.jinja"),
+            "rien de déclaré\n",
+        )
+        .expect("la template s'écrit");
+
+        let mut options = options(&racine, "muette");
+        options.template_dir = Some(fragments.path().to_path_buf());
+
+        let erreur = planifier(&options).expect_err("le fragment ne déclare rien");
+
+        assert!(matches!(erreur, Erreur::SansManifeste { .. }), "{erreur}");
+        assert!(
+            erreur.to_string().contains("muette/feature.toml"),
+            "le message ne nomme pas le manifeste attendu : {erreur}"
         );
     }
 
