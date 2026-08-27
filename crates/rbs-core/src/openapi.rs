@@ -7,6 +7,8 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 use utoipa::openapi::path::Operation;
+#[cfg(feature = "auth")]
+use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::openapi::{Content, RefOr, Response, ResponseBuilder, Schema};
 use utoipa::{Modify, PartialSchema, ToSchema};
 
@@ -53,6 +55,10 @@ const NOMMEES: [(&str, &str); 5] = [
     ("Conflict", "conflit avec l'état courant de la ressource"),
 ];
 
+/// Nom du schéma de sécurité, tel que les handlers le référencent dans `security(...)`.
+#[cfg(feature = "auth")]
+pub const NOM_DU_SCHEMA: &str = "bearer";
+
 /// Réponses ajoutées d'office à chaque opération.
 const UNIVERSELLES: [(&str, &str); 2] = [
     ("422", "échec de validation, détaillé par champ"),
@@ -72,6 +78,20 @@ impl Modify for ReponsesCommunes {
                 .entry(nom.to_owned())
                 .or_insert_with(|| probleme(description).into());
         }
+
+        // Le schéma accompagne les réponses 401 et 403 déclarées juste au-dessus : un
+        // document qui les annonce sans dire comment s'authentifier laisse le client
+        // deviner. Il ne s'ajoute que si l'authentification est compilée.
+        #[cfg(feature = "auth")]
+        composants.add_security_scheme(
+            NOM_DU_SCHEMA,
+            SecurityScheme::Http(
+                HttpBuilder::new()
+                    .scheme(HttpAuthScheme::Bearer)
+                    .bearer_format("JWT")
+                    .build(),
+            ),
+        );
 
         for chemin in openapi.paths.paths.values_mut() {
             // `PathItem` expose une option par verbe plutôt qu'une table : les parcourir
@@ -178,6 +198,32 @@ mod tests {
             "le handler qui documente son 422 doit garder le sien : {reponses}"
         );
         assert!(reponses.get("500").is_some(), "500 attendu : {reponses}");
+    }
+
+    /// Le document annonce 401 et 403 : sans ce schéma, il ne dit nulle part comment s'y
+    /// conformer, et un client généré depuis lui n'a aucun moyen de le deviner.
+    #[cfg(feature = "auth")]
+    #[test]
+    fn le_schema_de_securite_bearer_est_declare() {
+        let doc = document();
+
+        let schema = &doc["components"]["securitySchemes"][NOM_DU_SCHEMA];
+        assert_eq!(schema["type"], "http", "{schema}");
+        assert_eq!(schema["scheme"], "bearer", "{schema}");
+        assert_eq!(schema["bearerFormat"], "JWT", "{schema}");
+    }
+
+    /// Le schéma se déclare, il ne s'impose pas : une opération qui ne l'a pas demandé ne
+    /// doit pas se retrouver à exiger un jeton.
+    #[cfg(feature = "auth")]
+    #[test]
+    fn le_schema_declare_n_est_impose_a_aucune_operation() {
+        let doc = document();
+
+        assert!(
+            doc["paths"]["/things"]["get"]["security"].is_null(),
+            "une opération sans `security` s'est vu imposer le schéma"
+        );
     }
 
     #[test]
