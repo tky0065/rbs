@@ -199,6 +199,11 @@ fn suite(feature: &str) -> Option<&'static str> {
         "redis" => {
             Some("un Redis doit écouter à l'URL de la section [cache] de config/default.toml")
         }
+        // Le backend par défaut écrit sous une racine du dépôt, que rien n'ignore encore.
+        "storage" => Some(
+            "les objets vont sous ./stockage : ajoutez-le à .gitignore, ou passez \
+             storage.backend à \"s3\" et recopiez les RBS_STORAGE__* de .env.example",
+        ),
         _ => None,
     }
 }
