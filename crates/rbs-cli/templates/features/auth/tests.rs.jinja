@@ -3,10 +3,13 @@ use std::time::Instant;
 use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
+use chrono::Utc;
+use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 use uuid::Uuid;
 
+use crate::auth::model::refresh_token;
 use crate::router::router;
 use crate::state::AppState;
 
@@ -23,6 +26,18 @@ async fn application() -> Router {
         .expect("base joignable — les migrations doivent avoir été appliquées");
 
     router(AppState::new(db, config))
+}
+
+/// Ouvre une connexion à la même base que l'application.
+///
+/// Deux garanties de la rotation ne s'observent que dans la table : l'empreinte qui y est
+/// stockée, et le refus d'un jeton dont la date est passée — qu'il faut y fabriquer.
+async fn connexion() -> DatabaseConnection {
+    let config = rbs_core::Config::load().expect("configuration lisible");
+
+    rbs_core::db::connect(&config.database)
+        .await
+        .expect("base joignable")
 }
 
 /// Fait traverser le routeur à `requete`, et rend son statut avec son corps.
@@ -225,5 +240,130 @@ async fn un_email_inconnu_coute_le_meme_temps_qu_un_mot_de_passe_faux() {
         email_inconnu * 5 >= mot_de_passe_faux,
         "une adresse inconnue répond en {email_inconnu:?} contre {mot_de_passe_faux:?} \
          pour un mot de passe faux : l'écart énumère les comptes"
+    );
+}
+
+/// Inscrit une adresse neuve et ouvre une session : l'identifiant du compte et sa paire.
+async fn ouvrir_session(api: &Router) -> (Uuid, Value) {
+    let email = email_neuf();
+    let (_, profil) = inscrire(api, &email).await;
+    let id = Uuid::parse_str(
+        profil["id"]
+            .as_str()
+            .expect("le profil porte un identifiant"),
+    )
+    .expect("identifiant lisible");
+
+    let (statut, paire) = connecter(api, &email, MOT_DE_PASSE).await;
+    assert_eq!(statut, StatusCode::OK, "{paire}");
+
+    (id, paire)
+}
+
+/// Le jeton de rafraîchissement d'une paire.
+fn refresh_de(paire: &Value) -> String {
+    paire["refresh_token"]
+        .as_str()
+        .expect("la paire doit porter un jeton de rafraîchissement")
+        .to_owned()
+}
+
+async fn rafraichir(api: &Router, jeton: &str) -> (StatusCode, Value) {
+    appeler(
+        api,
+        poster("/auth/refresh", json!({ "refresh_token": jeton })),
+    )
+    .await
+}
+
+/// L'unique ligne de `refresh_tokens` ouverte pour `user_id`.
+///
+/// La recherche porte sur le compte et non sur l'empreinte : chercher par ce qu'on veut
+/// vérifier ferait échouer le test à la lecture, sans jamais atteindre l'assertion.
+async fn ligne_de_session(db: &DatabaseConnection, user_id: Uuid) -> refresh_token::Model {
+    refresh_token::Entity::find()
+        .filter(refresh_token::Column::UserId.eq(user_id))
+        .one(db)
+        .await
+        .expect("la table doit être interrogeable")
+        .expect("la session ouverte doit avoir sa ligne")
+}
+
+#[tokio::test]
+async fn un_refresh_valide_rend_une_nouvelle_paire() {
+    let api = application().await;
+    let (_, paire) = ouvrir_session(&api).await;
+
+    let (statut, nouvelle) = rafraichir(&api, &refresh_de(&paire)).await;
+
+    assert_eq!(statut, StatusCode::OK, "{nouvelle}");
+    assert_eq!(nouvelle["token_type"], "Bearer", "{nouvelle}");
+    assert_ne!(
+        nouvelle["refresh_token"], paire["refresh_token"],
+        "le jeton de rafraîchissement doit tourner"
+    );
+    assert_ne!(
+        nouvelle["access_token"], paire["access_token"],
+        "le jeton d'accès doit être réémis"
+    );
+}
+
+#[tokio::test]
+async fn l_ancien_refresh_est_ensuite_refuse() {
+    let api = application().await;
+    let ancien = refresh_de(&ouvrir_session(&api).await.1);
+
+    let (statut, corps) = rafraichir(&api, &ancien).await;
+    assert_eq!(statut, StatusCode::OK, "{corps}");
+
+    let (rejeu, corps) = rafraichir(&api, &ancien).await;
+
+    assert_eq!(rejeu, StatusCode::UNAUTHORIZED, "{corps}");
+}
+
+/// La ligne est reculée dans le passé plutôt que forgée : elle garde ainsi tout ce que
+/// `login` y a mis, et seule son expiration la disqualifie.
+#[tokio::test]
+async fn un_refresh_expire_rend_401() {
+    let api = application().await;
+    let db = connexion().await;
+    let (compte, paire) = ouvrir_session(&api).await;
+    let jeton = refresh_de(&paire);
+
+    let mut ligne: refresh_token::ActiveModel = ligne_de_session(&db, compte).await.into();
+    ligne.expires_at = Set((Utc::now() - chrono::Duration::seconds(1)).fixed_offset());
+    ligne.update(&db).await.expect("expiration reculée");
+
+    let (statut, corps) = rafraichir(&api, &jeton).await;
+
+    assert_eq!(statut, StatusCode::UNAUTHORIZED, "{corps}");
+}
+
+/// Une base lue par un tiers ne lui donne aucune session utilisable.
+#[tokio::test]
+async fn la_table_porte_l_empreinte_et_jamais_le_jeton() {
+    let api = application().await;
+    let db = connexion().await;
+    let (compte, paire) = ouvrir_session(&api).await;
+    let jeton = refresh_de(&paire);
+
+    let ligne = ligne_de_session(&db, compte).await;
+
+    assert_eq!(
+        ligne.token_hash,
+        rbs_core::token::empreinte(&jeton),
+        "la colonne ne porte pas l'empreinte du jeton"
+    );
+    assert_ne!(ligne.token_hash, jeton, "le jeton lui-même est stocké");
+
+    let en_clair = refresh_token::Entity::find()
+        .filter(refresh_token::Column::TokenHash.eq(jeton.clone()))
+        .one(&db)
+        .await
+        .expect("la table doit être interrogeable");
+
+    assert!(
+        en_clair.is_none(),
+        "une ligne porte le jeton remis au client"
     );
 }

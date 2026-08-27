@@ -64,8 +64,32 @@ pub async fn login(
     }
 }
 
-pub async fn refresh(_db: &DatabaseConnection, _entree: RefreshRequest) -> Result<TokenPair> {
-    Err(a_ecrire("refresh"))
+pub async fn refresh(
+    db: &DatabaseConnection,
+    auth: &AuthConfig,
+    entree: RefreshRequest,
+) -> Result<TokenPair> {
+    let empreinte = token::empreinte(&entree.refresh_token);
+    let maintenant = Utc::now().fixed_offset();
+
+    // Jeton inconnu, déjà tourné ou périmé : la même erreur pour les trois. Les
+    // distinguer renseignerait sur l'état des sessions.
+    let session = repository::find_refresh_token(db, &empreinte)
+        .await?
+        .filter(|session| session.expires_at > maintenant)
+        .ok_or(Error::Unauthorized)?;
+
+    // Rien ici ne relit `revoked_at` : c'est `consommer` qui porte la condition, et elle
+    // seule peut la porter sans laisser passer deux rafraîchissements concurrents.
+    if !repository::consommer(db, session.id).await? {
+        return Err(Error::Unauthorized);
+    }
+
+    let utilisateur = repository::find(db, session.user_id)
+        .await?
+        .ok_or(Error::Unauthorized)?;
+
+    emettre(db, auth, &utilisateur).await
 }
 
 pub async fn logout(_db: &DatabaseConnection, _entree: RefreshRequest) -> Result<()> {
@@ -126,7 +150,7 @@ fn profil(utilisateur: Model) -> UserResponse {
     }
 }
 
-/// Le corps de ces trois fonctions vous revient. Le reste de la feature — routes, DTO,
+/// Le corps de ces deux fonctions vous revient. Le reste de la feature — routes, DTO,
 /// document OpenAPI, migration — est déjà en place et n'attend qu'elles.
 fn a_ecrire(route: &str) -> Error {
     Error::Domain {
