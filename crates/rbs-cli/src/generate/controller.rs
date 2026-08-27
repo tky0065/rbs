@@ -229,21 +229,6 @@ mod tests {
         assert!(!sans.contains("mod tests;"), "{sans}");
     }
 
-    #[test]
-    fn les_rendus_traversent_rustfmt_sans_diff() {
-        let controller = controller("articles");
-        let module = module("articles");
-        let avec_tests = module_avec_tests("articles");
-
-        assert_eq!(
-            banc::formate(&controller),
-            controller,
-            "controller reformaté"
-        );
-        assert_eq!(banc::formate(&module), module, "mod.rs reformaté");
-        assert_eq!(banc::formate(&avec_tests), avec_tests, "mod.rs reformaté");
-    }
-
     /// Ce que le projet généré vérifie de son propre document OpenAPI.
     ///
     /// Le projet est un binaire : un test d'intégration ne pourrait pas atteindre son

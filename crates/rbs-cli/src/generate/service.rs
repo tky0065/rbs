@@ -163,17 +163,6 @@ mod tests {
     }
 
     #[test]
-    fn le_rendu_traverse_rustfmt_sans_diff() {
-        let rendu = service("articles", "titre:string,resume:text:optional,vues:int");
-
-        assert_eq!(
-            banc::formate(&rendu),
-            rendu,
-            "un `cargo fmt` chez l'utilisateur reformaterait le fichier généré"
-        );
-    }
-
-    #[test]
     #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
     fn le_service_genere_compile_dans_un_projet_neuf() {
         let fields = "titre:string,email:string:unique,resume:text:optional,vues:int,\

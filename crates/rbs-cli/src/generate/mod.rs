@@ -7,6 +7,7 @@ pub(crate) mod dto;
 pub(crate) mod entite;
 pub(crate) mod essais;
 pub(crate) mod feature;
+pub(crate) mod format;
 pub(crate) mod migration;
 pub(crate) mod montage;
 pub(crate) mod nom;

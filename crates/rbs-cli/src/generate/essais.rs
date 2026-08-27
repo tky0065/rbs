@@ -329,28 +329,4 @@ mod tests {
 
         projet.tester();
     }
-
-    #[test]
-    fn le_rendu_traverse_rustfmt_sans_diff() {
-        let rendu = essais("articles", CHAMPS);
-
-        assert_eq!(banc::formate(&rendu), rendu, "tests.rs reformaté");
-    }
-
-    /// Le rendu ne doit pas dépendre de la longueur du nom : au-delà d'une centaine de
-    /// colonnes, rustfmt replie les lignes et le premier `cargo fmt` de l'utilisateur
-    /// produirait un diff sur un fichier qu'il n'a pas touché.
-    #[test]
-    fn le_rendu_d_un_nom_long_traverse_rustfmt_sans_diff() {
-        let rendu = essais("administrative_documents", CHAMPS);
-
-        assert_eq!(banc::formate(&rendu), rendu, "tests.rs reformaté");
-    }
-
-    #[test]
-    fn le_rendu_d_une_feature_sans_champ_traverse_rustfmt_sans_diff() {
-        let rendu = essais("articles", "");
-
-        assert_eq!(banc::formate(&rendu), rendu, "tests.rs reformaté");
-    }
 }

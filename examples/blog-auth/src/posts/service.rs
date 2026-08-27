@@ -6,10 +6,7 @@ use sea_orm::prelude::Uuid;
 use super::dto::{CreatePost, PostResponse, UpdatePost};
 use super::repository::{self, ActiveModel};
 
-pub async fn list(
-    db: &DatabaseConnection,
-    pagination: &Pagination,
-) -> Result<Page<PostResponse>> {
+pub async fn list(db: &DatabaseConnection, pagination: &Pagination) -> Result<Page<PostResponse>> {
     let (posts, total) = repository::list(db, pagination).await?;
 
     Ok(Page::new(
@@ -38,11 +35,7 @@ pub async fn create(db: &DatabaseConnection, entree: CreatePost) -> Result<PostR
     Ok(repository::create(db, post).await?.into())
 }
 
-pub async fn update(
-    db: &DatabaseConnection,
-    id: Uuid,
-    entree: UpdatePost,
-) -> Result<PostResponse> {
+pub async fn update(db: &DatabaseConnection, id: Uuid, entree: UpdatePost) -> Result<PostResponse> {
     let mut post: ActiveModel = repository::find(db, id)
         .await?
         .ok_or(Error::NotFound("post"))?

@@ -14,7 +14,7 @@ use crate::plan;
 
 use super::feature::Feature;
 use super::{
-    champs, controller, dto, entite, essais, migration, montage, nom, repository, service,
+    champs, controller, dto, entite, essais, format, migration, montage, nom, repository, service,
 };
 
 /// Ce qu'il faut savoir pour générer une feature.
@@ -43,6 +43,8 @@ pub(crate) struct Planifiee {
     pub fichiers: Vec<String>,
     /// Module de la migration générée, s'il y en a une.
     pub migration: Option<String>,
+    /// Ce que rustfmt n'a pas pu faire sur le rendu, s'il y a lieu.
+    pub avertissement: Option<format::Avertissement>,
 }
 
 /// Ce qui peut empêcher de générer une feature.
@@ -152,7 +154,11 @@ pub(crate) fn planifier(options: &Options) -> Result<Planifiee, Erreur> {
         });
     }
 
-    let (fichiers, migration) = rendre(&feature, options.complete)?;
+    let (mut fichiers, migration) = rendre(&feature, options.complete)?;
+
+    // Après le rendu et avant le plan : le plan porte le contenu exact qui sera écrit,
+    // et c'est lui que `--dry-run` montre.
+    let avertissement = format::formate_lot(fichiers.iter_mut().map(|(_, contenu)| contenu));
 
     let mut constructeur = plan::Constructeur::nouveau(racine);
     for (chemin, contenu) in &fichiers {
@@ -173,6 +179,7 @@ pub(crate) fn planifier(options: &Options) -> Result<Planifiee, Erreur> {
         plan: constructeur.finir(),
         fichiers: fichiers.into_iter().map(|(chemin, _)| chemin).collect(),
         migration,
+        avertissement,
     })
 }
 
@@ -372,6 +379,86 @@ mod tests {
                 .exists(),
             "migration {module} manquante"
         );
+    }
+
+    /// Les premières lignes qui séparent le rendu de ce que rustfmt en ferait.
+    ///
+    /// Un `assert_eq!` sur deux fichiers entiers noie la divergence dans deux pavés
+    /// échappés ; ce qui se lit, c'est la ligne fautive et son numéro.
+    fn divergence(rendu: &str, formate: &str) -> String {
+        rendu
+            .lines()
+            .zip(formate.lines())
+            .enumerate()
+            .filter(|(_, (avant, apres))| avant != apres)
+            .take(3)
+            .map(|(rang, (avant, apres))| {
+                format!(
+                    "  ligne {} :\n    rendu   : {avant}\n    rustfmt : {apres}",
+                    rang + 1
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// La longueur d'un nom de feature est un continuum, et rustfmt bascule à 100
+    /// colonnes : une forme écrite en dur dans un template n'est juste que pour les noms
+    /// qui la font tomber du bon côté. L'éventail balaye les deux bascules — `tag` tient
+    /// sur une ligne là où `articles` déborde, `administrative_documents` déborde là où
+    /// `articles` tient — et la feature sans champ, dont le rendu perd des blocs entiers.
+    #[test]
+    fn le_rendu_traverse_rustfmt_sans_diff_quelle_que_soit_la_longueur_du_nom() {
+        let cas: &[(&str, Option<&str>, bool)] = &[
+            ("tag", Some("titre:string,vues:int"), true),
+            ("post", Some("titre:string,vues:int"), true),
+            ("billet", Some("titre:string,vues:int"), true),
+            (
+                "articles",
+                Some("titre:string,resume:text:optional,vues:int"),
+                true,
+            ),
+            (
+                "administrative_documents",
+                Some("titre:string,vues:int"),
+                true,
+            ),
+            ("notes", None, false),
+        ];
+
+        for (nom, champs, complete) in cas {
+            let (_parent, racine) = projet();
+
+            let generee = executer(&options(&racine, nom, *champs, *complete))
+                .expect("la génération doit aboutir");
+
+            let mut ecrits: Vec<PathBuf> = generee
+                .fichiers
+                .iter()
+                .map(|relatif| racine.join(relatif))
+                .collect();
+            if let Some(module) = &generee.migration {
+                ecrits.push(racine.join("migration/src").join(format!("{module}.rs")));
+            }
+
+            assert!(!ecrits.is_empty(), "{nom} n'a rien écrit");
+
+            for chemin in ecrits {
+                let ecrit = lire(&chemin);
+                let formate = banc::formate(&ecrit);
+                let fichier = chemin
+                    .file_name()
+                    .expect("le chemin nomme un fichier")
+                    .to_string_lossy();
+
+                assert!(
+                    formate == ecrit,
+                    "un `cargo fmt` chez l'utilisateur reformaterait {nom}/{fichier}, \
+                     qu'il n'a pas touché :\n{}",
+                    divergence(&ecrit, &formate)
+                );
+            }
+        }
     }
 
     #[test]

@@ -223,6 +223,11 @@ fn generer(
     // s'apprête à faire ne doit pas se découvrir après coup.
     println!("{}", plan::rendu::plan(&planifiee.plan));
 
+    // Avant le plan, l'avertissement se perdrait au-dessus de sept lignes de fichiers.
+    if let Some(avertissement) = &planifiee.avertissement {
+        ui::warn(avertissement);
+    }
+
     if dry_run {
         ui::info("\n  rien n'a été écrit (--dry-run)");
         return Ok(());

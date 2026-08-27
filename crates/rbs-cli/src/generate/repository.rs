@@ -136,17 +136,6 @@ mod tests {
     }
 
     #[test]
-    fn le_rendu_traverse_rustfmt_sans_diff() {
-        let rendu = repository("articles", "titre:string");
-
-        assert_eq!(
-            banc::formate(&rendu),
-            rendu,
-            "un `cargo fmt` chez l'utilisateur reformaterait le fichier généré"
-        );
-    }
-
-    #[test]
     #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
     fn le_repository_genere_compile_dans_un_projet_neuf() {
         let champs =

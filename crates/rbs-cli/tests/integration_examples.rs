@@ -493,3 +493,29 @@ fn est_suivi(chemin: &Path) -> bool {
         .status
         .success()
 }
+
+/// Un exemple que `cargo fmt` reformate est un exemple qui ment.
+///
+/// `rbs add ci` pose un `cargo fmt --check` dans le projet de l'utilisateur : le code que
+/// le CLI vient d'écrire doit y passer. La CI du dépôt ne le voyait pas — son `cargo fmt
+/// --all --check` ne couvre que les membres du workspace, dont les exemples ne font pas
+/// partie.
+#[test]
+fn chaque_exemple_traverse_cargo_fmt() {
+    for exemple in EXEMPLES {
+        let racine = common::depot().join("examples").join(exemple.nom);
+
+        let sortie = std::process::Command::new("cargo")
+            .args(["fmt", "--check"])
+            .current_dir(&racine)
+            .output()
+            .expect("cargo fmt doit être lançable");
+
+        assert!(
+            sortie.status.success(),
+            "`cargo fmt --check` reformate `examples/{}` :\n{}\n\n{REGENERER}",
+            exemple.nom,
+            String::from_utf8_lossy(&sortie.stdout)
+        );
+    }
+}
