@@ -531,3 +531,93 @@ fn une_ancre_absente_arrete_l_installation_sans_rien_ecrire() {
         "l'ancre absente n'a pas empêché l'écriture",
     );
 }
+
+/// Le critère de la tâche, sur le fragment livré et non sur un fragment de test : ce que
+/// `rbs add redis` écrit dans le projet.
+///
+/// Les trois pièces du moule y passent d'un coup — les deux ancres d'état, les deux
+/// crates tierces, la section de configuration —, ce qu'aucune feature livrée n'avait
+/// encore exercé.
+#[test]
+fn le_fragment_redis_ecrit_les_ancres_d_etat_les_dependances_et_la_section_cache() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = projet_commite(&parent);
+
+    let sortie = Sortie::de(rbs(&racine).args(["add", "redis"]));
+    assert!(
+        sortie.succes,
+        "l'installation doit aboutir :\n{}",
+        sortie.stderr
+    );
+
+    let etat = fs::read_to_string(racine.join("src/state.rs")).expect("state.rs est lisible");
+    for (ancre, ligne) in [
+        ("state_champs", "pub cache: crate::cache::Cache,"),
+        (
+            "state_init",
+            "cache: crate::cache::Cache::depuis_config()?,",
+        ),
+    ] {
+        let ouverture = format!("// <rbs:{ancre}>");
+        let fermeture = format!("// </rbs:{ancre}>");
+        let debut = etat
+            .find(&ouverture)
+            .unwrap_or_else(|| panic!("state.rs ne porte pas `{ouverture}` :\n{etat}"))
+            + ouverture.len();
+        let fin = etat
+            .find(&fermeture)
+            .unwrap_or_else(|| panic!("state.rs ne porte pas `{fermeture}` :\n{etat}"));
+
+        assert!(
+            etat[debut..fin].contains(ligne),
+            "l'ancre `{ancre}` ne porte pas `{ligne}` :\n{etat}"
+        );
+    }
+
+    let manifeste =
+        fs::read_to_string(racine.join("Cargo.toml")).expect("le manifeste est lisible");
+    assert!(
+        manifeste.contains("redis = { version = \"1.6\", features = [\"tokio-comp\"] }"),
+        "la crate `redis` manque au manifeste :\n{manifeste}"
+    );
+    assert!(
+        manifeste.contains("deadpool-redis = \"0.23\""),
+        "la crate `deadpool-redis` manque au manifeste :\n{manifeste}"
+    );
+
+    let config =
+        fs::read_to_string(racine.join("config/default.toml")).expect("la config est lisible");
+    assert!(config.contains("[cache]"), "section absente :\n{config}");
+    assert!(
+        config.contains("url = \"redis://127.0.0.1:6379\"") && config.contains("ttl_secs = 300"),
+        "la section `[cache]` est incomplète :\n{config}"
+    );
+}
+
+/// Le critère de la tâche : le second `rbs add redis` n'écrit rien.
+///
+/// Distinct de `deux_installations_successives_n_ecrivent_rien_la_seconde`, qui l'éprouve
+/// sur un fragment fabriqué : celui-ci porte sur le fragment livré, avec les lignes qu'il
+/// insère réellement dans quatre fichiers du projet.
+#[test]
+fn installer_redis_deux_fois_n_ecrit_rien_la_seconde() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = projet_commite(&parent);
+
+    rbs(&racine).args(["add", "redis"]).assert().success();
+    common::commiter(&racine, "redis");
+
+    let avant = common::empreinte(&racine);
+    let seconde = Sortie::de(rbs(&racine).args(["add", "redis"]));
+
+    assert!(
+        seconde.succes,
+        "la seconde installation doit aboutir sans rien faire :\n{}",
+        seconde.stderr
+    );
+    common::assert_intact(
+        &avant,
+        &racine,
+        "la seconde installation a modifié le projet",
+    );
+}

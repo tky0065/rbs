@@ -1,0 +1,52 @@
+// Le fragment livre une brique, pas une route : tant qu'aucun handler n'appelle le cache,
+// le compilateur le tient pour mort. La ligne se retire au premier appel.
+#![allow(dead_code)]
+
+pub mod config;
+
+use std::time::Duration;
+
+use anyhow::Context;
+use deadpool_redis::{Pool, Runtime};
+
+pub use config::Config;
+
+use crate::state::AppState;
+
+/// Le cache du projet, partagé par tous les handlers.
+#[derive(Debug, Clone)]
+pub struct Cache {
+    pool: Pool,
+    ttl: Duration,
+}
+
+impl Cache {
+    /// Construit le cache depuis la section `[cache]` de la configuration.
+    pub fn depuis_config() -> anyhow::Result<Self> {
+        Self::nouveau(&Config::charger()?)
+    }
+
+    /// Construit le cache sur une configuration déjà chargée.
+    ///
+    /// Aucune connexion n'est ouverte ici : le pool est paresseux, et joint le serveur au
+    /// premier appel. C'est ce qui permet à `AppState::new` de rester synchrone.
+    pub fn nouveau(config: &Config) -> anyhow::Result<Self> {
+        let pool = deadpool_redis::Config::from_url(&config.url)
+            .create_pool(Some(Runtime::Tokio1))
+            .with_context(|| format!("pool Redis inconstructible pour `{}`", config.url))?;
+
+        Ok(Self {
+            pool,
+            ttl: Duration::from_secs(config.ttl_secs),
+        })
+    }
+}
+
+// L'accesseur vit ici et non dans `state.rs` : il arrive avec la feature, et repart
+// avec elle.
+impl AppState {
+    /// Le cache partagé, tel qu'un handler le lit depuis l'état.
+    pub fn cache(&self) -> &Cache {
+        &self.cache
+    }
+}
