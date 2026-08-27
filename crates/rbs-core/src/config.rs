@@ -560,10 +560,13 @@ mod tests {
             let erreur = section::<SectionEtrangere>("externe")
                 .expect_err("aucune section `externe` n'est déclarée");
 
-            let message = erreur.to_string();
+            // L'assertion porte sur la variante et non sur le seul message : figment nomme
+            // lui aussi la section absente, par un `missing field` qui pointe un champ isolé
+            // là où la table entière est à créer. Un test qui ne lirait que le message
+            // passerait sans la garde, et ne prouverait donc rien d'elle.
             assert!(
-                message.contains("externe"),
-                "le message doit nommer la section demandée, obtenu : {message}"
+                matches!(&erreur, ConfigError::SectionAbsente(section) if section == "externe"),
+                "attendu SectionAbsente(\"externe\"), obtenu : {erreur:?}"
             );
             Ok(())
         });
