@@ -456,10 +456,10 @@ installer qui en apportent, sans que le CLI connaisse aucune feature par son nom
 
 ### Lot I — La feature auth générée
 
-`src/features/auth/{mod,model,dto,repository,service,controller,tests}.rs`, deux
-migrations, quatre insertions d'ancres. Dépend de `G` et de `H`.
+`src/auth/{mod,model,dto,repository,service,controller,tests}.rs`, deux migrations,
+quatre insertions d'ancres. Dépend de `G` et de `H`.
 
-- [ ] **I1** · Manifeste d'auth et squelette des templates
+- [x] **I1** · Manifeste d'auth et squelette des templates — vérifié 2026-08-27 · `cargo test -p rbs-cli --test integration_auth` → 3 passed, `-- --ignored` → 1 passed · le critère est pris au niveau qu'exige la CI d'`add ci` — `clippy -D warnings` et `fmt --check` du projet généré, non `cargo check` seul · ancre `openapi` retirée du manifeste → `les_quatre_ancres_du_projet_sont_completees` FAILED ; `#![allow(dead_code)]` retiré de `mod.rs` → 5 erreurs dead_code, ce qui est la raison d'être de cette ligne, que I3 retirera · **écart assumé** : dépose dans `src/auth/` et non `src/features/auth/` — l'ancre `features` insère `mod auth;` en tête de `main.rs`, et un `src/features/mod.rs` partagé entre fragments se heurterait à l'idempotence de H6 · à connaître pour I2 : `Manifeste.migration` est un `Option`, donc **une seule** migration par fragment
       ✓ `rbs new` puis `rbs add auth` → `cargo check` du projet généré passe.
       ✓ Les quatre ancres sont complétées.
 

@@ -1,0 +1,13 @@
+use rbs_core::Result;
+use sea_orm::prelude::Uuid;
+use sea_orm::{DatabaseConnection, EntityTrait};
+
+use super::model::Entity;
+
+// Le service passe par cette porte plutôt que par `model.rs` : la couche qui parle à la
+// base reste la seule à connaître l'entité.
+pub use super::model::Model;
+
+pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>> {
+    Ok(Entity::find_by_id(id).one(db).await?)
+}

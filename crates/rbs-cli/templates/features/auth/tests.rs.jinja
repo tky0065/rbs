@@ -1,0 +1,75 @@
+use axum::Router;
+use axum::body::{Body, to_bytes};
+use axum::http::{Request, StatusCode};
+use serde_json::Value;
+use tower::ServiceExt;
+
+use crate::router::router;
+use crate::state::AppState;
+
+/// Monte l'application sur la base décrite par `.env`, sans écouter sur le réseau.
+///
+/// Les migrations sont supposées appliquées : elles précèdent `cargo test`.
+async fn application() -> Router {
+    let config = rbs_core::Config::load().expect("configuration lisible");
+    let db = rbs_core::db::connect(&config.database)
+        .await
+        .expect("base joignable — les migrations doivent avoir été appliquées");
+
+    router(AppState::new(db, config))
+}
+
+/// Fait traverser le routeur à `requete`, et rend son statut avec son corps.
+async fn appeler(api: &Router, requete: Request<Body>) -> (StatusCode, Value) {
+    let reponse = api
+        .clone()
+        .oneshot(requete)
+        .await
+        .expect("l'application doit répondre");
+    let statut = reponse.status();
+    let octets = to_bytes(reponse.into_body(), usize::MAX)
+        .await
+        .expect("corps de réponse lisible");
+
+    // Une réponse sans corps se lit `null` plutôt que d'arrêter le test.
+    let corps = serde_json::from_slice(&octets).unwrap_or(Value::Null);
+
+    (statut, corps)
+}
+
+fn sans_corps(methode: &str, chemin: &str) -> Request<Body> {
+    Request::builder()
+        .method(methode)
+        .uri(chemin)
+        .body(Body::empty())
+        .expect("requête bien formée")
+}
+
+/// La garde tient avant même que le service existe : `Identity` refuse la requête sans
+/// jamais atteindre le controller.
+#[tokio::test]
+async fn me_sans_jeton_rend_401() {
+    let api = application().await;
+
+    let (statut, corps) = appeler(&api, sans_corps("GET", "/auth/me")).await;
+
+    assert_eq!(statut, StatusCode::UNAUTHORIZED);
+    assert_eq!(corps["status"], 401, "{corps}");
+}
+
+/// Un jeton que le service n'a pas signé ne vaut pas mieux qu'aucun jeton.
+#[tokio::test]
+async fn me_avec_un_jeton_illisible_rend_401() {
+    let api = application().await;
+    let requete = Request::builder()
+        .method("GET")
+        .uri("/auth/me")
+        .header("authorization", "Bearer pas-un-jeton")
+        .body(Body::empty())
+        .expect("requête bien formée");
+
+    let (statut, corps) = appeler(&api, requete).await;
+
+    assert_eq!(statut, StatusCode::UNAUTHORIZED);
+    assert_eq!(corps["status"], 401, "{corps}");
+}
