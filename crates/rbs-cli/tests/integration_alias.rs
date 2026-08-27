@@ -45,8 +45,24 @@ fn les_deux_noms_exposent_les_memes_commandes() {
     assert_eq!(aide_sans_usage("rbs-cli"), aide_sans_usage("rbs"));
 }
 
+/// Le nom que la ligne `Usage:` donne à la commande, extension de plateforme comprise.
+fn nom_dans_l_usage(binaire: &str) -> String {
+    sortie(binaire, &["--help"])
+        .lines()
+        .find_map(|ligne| ligne.strip_prefix("Usage: "))
+        .expect("l'aide porte une ligne Usage")
+        .split_whitespace()
+        .next()
+        .expect("la ligne Usage nomme la commande")
+        .to_string()
+}
+
 #[test]
 fn chaque_nom_s_annonce_sous_celui_qu_on_a_tape() {
-    assert!(sortie("rbs-cli", &["--help"]).contains("Usage: rbs-cli "));
-    assert!(sortie("rbs", &["--help"]).contains("Usage: rbs "));
+    // Windows livre `rbs-cli.exe`, dont `argv[0]` porte l'extension : comparer au nom nu
+    // ferait échouer là où le comportement est pourtant le bon.
+    let attendu = |nom: &str| format!("{nom}{}", std::env::consts::EXE_SUFFIX);
+
+    assert_eq!(nom_dans_l_usage("rbs-cli"), attendu("rbs-cli"));
+    assert_eq!(nom_dans_l_usage("rbs"), attendu("rbs"));
 }
