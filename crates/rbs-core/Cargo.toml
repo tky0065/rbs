@@ -10,7 +10,7 @@ repository.workspace = true
 [features]
 default = []
 
-auth = ["dep:argon2"]
+auth = ["dep:argon2", "dep:jsonwebtoken"]
 
 # Vides et sans dépendances : les nommer réserve le nom sans figer, un an à l'avance,
 # les crates que leur implémentation utilisera.
@@ -27,6 +27,7 @@ argon2 = { workspace = true, optional = true }
 axum.workspace = true
 dotenvy.workspace = true
 figment.workspace = true
+jsonwebtoken = { workspace = true, optional = true }
 nu-ansi-term.workspace = true
 sea-orm.workspace = true
 serde = { workspace = true, features = ["derive"] }

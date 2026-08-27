@@ -30,6 +30,9 @@ pub mod extract;
 pub mod hash;
 /// Route de santé de l'application.
 pub mod health;
+/// Signature et vérification des jetons d'accès.
+#[cfg(feature = "auth")]
+pub mod jwt;
 /// Formateurs de logs du runtime.
 pub mod logs;
 /// Déclaration unique des réponses d'erreur du document OpenAPI.
