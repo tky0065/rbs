@@ -691,6 +691,7 @@ mod tests {
             nom: "redis".to_string(),
             version: "0.32".to_string(),
             features: vec!["tokio-comp".to_string()],
+            default_features: true,
         })
     }
 

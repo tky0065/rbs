@@ -212,8 +212,8 @@ fn un_echec_en_cours_d_application_restaure_les_fichiers_deja_ecrits() {
 /// Un fragment qui apporte du code Rust, fabriqué pour le test.
 ///
 /// Aucune feature livrée n'en apporte encore : le moule ne s'éprouve que sur un fragment
-/// qui exerce les six sections du manifeste — fichiers, ancres, migration, feature Cargo,
-/// section de configuration, variable d'environnement.
+/// qui exerce les sept sections du manifeste — fichiers, ancres, migration, dépendances
+/// tierces, feature Cargo, section de configuration, variable d'environnement.
 fn fragment_a_code() -> TempDir {
     let repertoire = TempDir::new().expect("répertoire temporaire créable");
     let essai = repertoire.path().join("essai");
@@ -227,6 +227,9 @@ fn fragment_a_code() -> TempDir {
          [[ancres]]\nancre = \"features\"\ncontenu = \"mod essai;\"\n\n\
          [[ancres]]\nancre = \"routes\"\ncontenu = \".merge(crate::essai::routes())\"\n\n\
          [migration]\nsource = \"table.rs.jinja\"\nnom = \"create_essais\"\n\n\
+         [[dependances]]\nnom = \"lettre\"\nversion = \"0.11\"\n\
+         default_features = false\nfeatures = [\"smtp-transport\", \"builder\"]\n\n\
+         [[dependances]]\nnom = \"axum\"\nversion = \"0.8\"\n\n\
          [cargo.rbs-core]\nfeatures = [\"auth\"]\n\n\
          [[config]]\nfichier = \"config/default.toml\"\nsection = \"essai\"\n\
          contenu = \"\"\"\nttl_secs = 900\n\"\"\"\n\n\
@@ -256,6 +259,42 @@ fn ajouter_essai(racine: &Path, fragments: &TempDir, arguments: &[&str]) -> Sort
         .args(arguments);
 
     Sortie::de(&mut commande)
+}
+
+/// Le critère de la tâche, éprouvé par la commande telle que l'utilisateur la lance :
+/// la crate que le fragment déclare arrive dans le `Cargo.toml` du projet, et celle que
+/// le projet portait déjà n'y arrive pas deux fois.
+#[test]
+fn les_dependances_du_fragment_arrivent_dans_le_manifeste_du_projet() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = projet_commite(&parent);
+    let fragments = fragment_a_code();
+
+    let sortie = ajouter_essai(&racine, &fragments, &[]);
+    assert!(
+        sortie.succes,
+        "l'installation doit aboutir :\n{}",
+        sortie.stderr
+    );
+
+    let manifeste =
+        fs::read_to_string(racine.join("Cargo.toml")).expect("le manifeste est lisible");
+
+    assert!(
+        manifeste.contains(
+            "lettre = { version = \"0.11\", default-features = false, \
+             features = [\"smtp-transport\", \"builder\"] }"
+        ),
+        "{manifeste}"
+    );
+    assert_eq!(
+        manifeste
+            .lines()
+            .filter(|ligne| ligne.starts_with("axum"))
+            .count(),
+        1,
+        "`axum`, que le squelette déclare déjà, a été redéclarée :\n{manifeste}"
+    );
 }
 
 /// L'installation d'un fragment à code Rust ne se rejoue pas.

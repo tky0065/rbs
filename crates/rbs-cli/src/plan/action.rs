@@ -44,10 +44,6 @@ pub(crate) enum Effet {
 }
 
 /// Les modifications qu'un plan sait faire à un `Cargo.toml`.
-///
-/// Les deux patchs de dépendance n'ont pas encore d'appelant : `add docker` et `add ci`
-/// n'apportent aucune crate. Le premier à s'en servir sera `add auth`, en v0.2.
-#[allow(dead_code)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum PatchToml {
     /// Inscrit une feature dans `[package.metadata.rbs]`.
