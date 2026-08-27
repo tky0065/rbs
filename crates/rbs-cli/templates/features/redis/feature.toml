@@ -9,6 +9,10 @@ cible  = "src/cache/mod.rs"
 source = "config.rs.jinja"
 cible  = "src/cache/config.rs"
 
+[[fichiers]]
+source = "tests.rs.jinja"
+cible  = "src/cache/tests.rs"
+
 [[ancres]]
 ancre   = "features"
 contenu = "mod cache;"
@@ -29,6 +33,10 @@ features = ["tokio-comp"]
 [[dependances]]
 nom     = "deadpool-redis"
 version = "0.23"
+
+[[dependances]]
+nom     = "serde_json"
+version = "1.0"
 
 [[config]]
 fichier = "config/default.toml"

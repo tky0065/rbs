@@ -1,0 +1,49 @@
+use serde::{Deserialize, Serialize};
+
+use super::{a_supprimer, decoder, encoder, motif};
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+struct Profil {
+    nom: String,
+    age: u8,
+}
+
+#[test]
+fn une_valeur_mise_en_cache_se_relit_deserialisee() {
+    let profil = Profil {
+        nom: "ada".to_string(),
+        age: 36,
+    };
+
+    let encode = encoder(&profil).expect("la valeur est sérialisable");
+    let relu: Option<Profil> = decoder(Some(encode)).expect("la valeur est désérialisable");
+
+    assert_eq!(relu, Some(profil));
+}
+
+/// Une clé absente est le cas courant d'un cache, pas une panne : elle rend `None`, et
+/// l'appelant enchaîne sur la source de vérité.
+#[test]
+fn une_cle_absente_rend_none_et_non_une_erreur() {
+    let relu: Option<Profil> = decoder(None).expect("l'absence d'une clé n'est pas une erreur");
+
+    assert_eq!(relu, None);
+}
+
+#[test]
+fn invalider_prefixe_n_emporte_que_les_cles_du_prefixe_vise() {
+    let rendues = ["session:1", "session:2", "sessions:1", "user:1"]
+        .map(str::to_string)
+        .to_vec();
+
+    assert_eq!(a_supprimer("session:", rendues), ["session:1", "session:2"]);
+}
+
+/// Le motif de `SCAN` est un glob que le serveur interprète : sans échappement,
+/// `invalider_prefixe("a*")` emporterait `abc`, que le préfixe ne désigne pas.
+#[test]
+fn un_prefixe_portant_un_metacaractere_de_glob_est_echappe() {
+    assert_eq!(motif("session:"), "session:*");
+    assert_eq!(motif("a*b"), r"a\*b*");
+    assert_eq!(motif("user:[1]"), r"user:\[1\]*");
+}
