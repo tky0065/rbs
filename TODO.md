@@ -530,16 +530,175 @@ insertions d'ancres. Dépend de `G` et de `H`.
 
 ---
 
+## 🔌 v0.3 — Intégrations
+
+**Détaillé le 2026-08-27. Conception et décisions :**
+[`docs/superpowers/specs/2026-08-27-v0.3-integrations-design.md`](docs/superpowers/specs/2026-08-27-v0.3-integrations-design.md).
+
+> Le critère de sortie annoncé — trois features ajoutées **sans toucher au noyau** — n'était
+> pas atteignable en l'état : la configuration d'une feature n'a pas de place hors de
+> `Config`, le manifeste de fragment ne sait pas ajouter de dépendance, et aucune ancre
+> n'atteint `state.rs`. C'est ce que le `ROADMAP` prévoyait — « si l'une d'elles oblige à
+> modifier `rbs-core`, c'est le moule qui est à revoir ». Le lot `K` le revoit, **et il est
+> le seul lot du jalon autorisé à modifier le noyau**. C'est ce bornage qui rend le critère
+> mesurable, par le diff que vérifie `O4`.
+
+Ordre : `K1 ∥ K2 → K3 → (L ∥ M ∥ N) → O`. `K1` ne touche que `rbs-core`, `K2` que `rbs-cli`.
+`L`, `M` et `N` sont disjointes à l'écriture — un répertoire de fragment et un test
+d'intégration chacune, `FEATURES_CONNUES` (`new.rs:23`) pour seul fichier commun — mais
+**leur vérification ne l'est pas** : cible de compilation partagée, verrou de cargo, un
+conteneur par test. Les `--ignored` se passent en fin de parcours, une par une.
+
+### Lot K — Le moule, deuxième tour
+
+Ne livre aucune feature. Lève les trois verrous que la conception a relevés.
+
+- [ ] **K1** · `config::section::<T>` — le noyau ouvre sa cascade
+      Expose la cascade de `A5` pour une section que le noyau ne connaît pas : défauts
+      portés par la struct appelante, `config/default.toml`, `config/{env}.toml`, variables
+      `RBS_*`. Compilée sans flag — elle n'appartient à aucune feature, et aucune des trois
+      features du jalon n'apparaît par son nom dans `rbs-core`.
+      ✓ Test : une section absente rend une erreur nommant la section.
+      ✓ Test : `config/{env}.toml` l'emporte sur `default.toml`, et `RBS_*` sur les deux —
+      la même cascade que `Config`, éprouvée sur une struct étrangère au noyau.
+      ✓ Test : les valeurs par défaut portées par `#[serde(default)]` de l'appelant sont
+      respectées, le noyau n'ayant aucun `Serialized::default` à leur opposer.
+      ✓ `cargo build -p rbs-core` sans aucune feature compile la fonction.
+
+- [ ] **K2** · `[[dependances]]` au manifeste de fragment
+      Branche `PatchToml::AjouterDependance`, écrite au lot `E` et restée sans appelant —
+      la situation d'`AjouterFeatureADependance` avant `H5`. Champs `nom`, `version`,
+      `features`, `default_features`. Ce dernier n'est pas une symétrie avec `cargo add` :
+      `lettre` active `native-tls` par défaut, et `mail` serait indéclarable sans lui.
+      Les versions sont figées dans le fragment, jamais déduites.
+      ✓ Test : la dépendance déclarée arrive dans `[dependencies]` avec sa version, ses
+      features et son `default-features`.
+      ✓ Test : les commentaires et la mise en forme du `Cargo.toml` survivent au patch.
+      ✓ Test : une dépendance déjà déclarée dans le projet n'est pas dupliquée.
+
+- [ ] **K3** · Ancres `state_champs` et `state_init`
+      Deux ancres et non une : un champ se déclare dans la struct et s'initialise dans
+      `new`. `AppState::new` devient faillible et **ne devient pas `async`** — les trois
+      clients du jalon se construisent sans E/S, et un `async` posé par précaution
+      contaminerait la signature de tout projet généré.
+      **À connaître** : le squelette et les deux exemples sont régénérés ici, et
+      `integration_examples` compare les exemples à une génération fraîche — il tombera
+      tant que ce n'est pas fait.
+      ✓ Test : le contenu déclaré est inséré dans chacune des deux ancres.
+      ✓ Test : ancre absente → rien n'est écrit, le bloc à coller est affiché, sortie en erreur.
+      ✓ `rbs new` puis `clippy -D warnings` et `rustfmt --check` du projet généré passent,
+      au niveau exigé depuis `I1`.
+      ✓ `cargo test -p rbs-cli --test integration_examples` vert après régénération.
+
+### Lot L — `rbs add redis`
+
+Dépose `src/cache/` et non `src/redis/` : le squelette insère `mod redis;` en tête de
+`main.rs`, où `use redis::Client` deviendrait ambigu avec la crate du même nom (E0659).
+Le module porte ce qu'il fait, non la techno qui le sert.
+
+- [ ] **L1** · Manifeste, section `[cache]`, pool dans l'état
+      `redis 1.6` en `tokio-comp` et `deadpool-redis 0.23`, dont le pool est paresseux :
+      aucune connexion n'est ouverte au démarrage. Premier fragment à exercer d'un coup les
+      trois pièces du lot `K`.
+      ✓ `rbs new` puis `rbs add redis` → clippy et fmt du projet généré passent.
+      ✓ Les deux ancres d'état sont complétées, les deux dépendances ajoutées au manifeste,
+      la section `[cache]` écrite dans `config/default.toml`.
+      ✓ Test : deux `rbs add redis` successifs — le second n'écrit rien.
+
+- [ ] **L2** · Le cache typé
+      `get`, `set`, `set_ttl`, `invalider`, `invalider_prefixe`, sérialisation par serde.
+      ✓ Test : `set` puis `get` restitue la valeur désérialisée.
+      ✓ Test : clé absente → `None`, et non une erreur.
+      ✓ Test : `invalider_prefixe` n'emporte que les clés du préfixe visé.
+
+- [ ] **L3** · `integration_redis` sous conteneur
+      `GenericImage`, comme `integration_crud` — le dépôt n'ajoute aucune dépendance de
+      développement.
+      ✓ Test `#[ignore]` : le parcours joué contre un Redis réel.
+      ✓ Test : une valeur écrite avec un TTL d'une seconde a disparu après l'attente —
+      l'expiration prouvée par le serveur, jamais par une horloge simulée.
+
+### Lot M — `rbs add mail`
+
+- [ ] **M1** · Manifeste, section `[mail]`, transport dans l'état
+      `lettre 0.11` en `default-features = false`, puis `smtp-transport`, `builder`, `pool`
+      et `tokio1-rustls` : ses défauts activent `native-tls`, qui réclamerait OpenSSL sur
+      les trois plateformes de la CI.
+      ✓ `rbs new` puis `rbs add mail` → clippy et fmt du projet généré passent.
+      ✓ `RBS_MAIL__SMTP_PASSWORD` est écrite dans `.env.example` et **jamais** dans une
+      section de configuration — un secret ne se versionne pas.
+
+- [ ] **M2** · Gabarits et rendu
+      `minijinja 2.24`, la crate de gabarits déjà employée par le CLI. Les gabarits sont
+      déposés dans le projet, donc lisibles et modifiables par son auteur.
+      ✓ Test : le gabarit rendu porte les variables qui lui sont passées.
+      ✓ Test : un gabarit introuvable rend une erreur nommant le fichier, sans panique.
+      ✓ Test : `envoyer_detache` rend la main sans attendre la fin de l'envoi.
+
+- [ ] **M3** · `integration_mail` sous Mailpit
+      Son API HTTP permet de relire le message reçu — ce qu'un transport en mémoire ne
+      prouverait pas.
+      ✓ Test `#[ignore]` : le message relu par l'API porte le destinataire, le sujet et le
+      corps **rendu par le gabarit**.
+
+### Lot N — `rbs add storage`
+
+Un trait `Storage` d'une quinzaine de lignes, deux implémentations. `object_store` le
+fournirait tout fait ; il est écarté parce que ce trait a vocation à être lu et remplacé
+par l'auteur du projet, et qu'une crate tierce le lui retirerait.
+
+- [ ] **N1** · Trait `Storage` et backend fichiers
+      `deposer`, `lire`, `supprimer`, `existe`. Implémentation `tokio::fs`.
+      ✓ `rbs new` puis `rbs add storage` → clippy et fmt du projet généré passent.
+      ✓ Test : dépôt, lecture, existence puis suppression sur un répertoire temporaire.
+      ✓ Test : une clé remontant hors de la racine configurée est refusée — un nom d'objet
+      vient souvent de l'utilisateur.
+
+- [ ] **N2** · Backend S3
+      `aws-sdk-s3 1.144`. Le prix en compilation est payé par ceux qui installent la
+      feature, jamais par les autres.
+      ✓ Test : `backend = "s3"` construit le client sans joindre le réseau.
+      ✓ Test : un `backend` inconnu échoue au démarrage en nommant les valeurs admises.
+
+- [ ] **N3** · `integration_storage` sous MinIO
+      ✓ Test `#[ignore]` : **le même jeu de tests joué contre les deux implémentations** —
+      ce qui prouve que le trait abstrait, et non seulement qu'il compile.
+      ✓ Test : un objet déposé par le backend S3 est relu hors du trait, par le client
+      MinIO directement.
+
+### Lot O — Documentation et sortie du jalon
+
+- [ ] **O1** · Exemple compilé en CI
+      Un exemple portant les trois features. S'il s'avère illisible, il se scinde :
+      l'installation isolée est de toute façon prouvée par `L3`, `M3` et `N3`.
+      ✓ Compilé par le step `examples/` de la CI, sur les trois plateformes.
+      ✓ `integration_examples` le compare à une génération fraîche.
+
+- [ ] **O2** · Pages de documentation FR et EN
+      ✓ Parité stricte FR/EN mesurée comme en `V2` et `J3`.
+      ✓ Aucun extrait de code non issu de l'exemple d'`O1`.
+
+- [ ] **O3** · `doctor` diagnostique les trois features
+      Leçon de `J4` : un utilisateur bloqué lance `doctor`, la commande doit lui apprendre
+      ce qui le bloque. Le contrôle n'entre au rapport que si la feature est déclarée dans
+      `[package.metadata.rbs]`.
+      ✓ `cache` déclarée sans section `[cache]` → `✗`.
+      ✓ `mail` déclarée et `RBS_MAIL__SMTP_PASSWORD` absente → `✗` nommant la variable.
+      ✓ `storage` en `backend = "s3"` sans bucket → `✗`.
+
+- [ ] **O4** · Critère de sortie du jalon
+      `K` étant le seul lot autorisé à toucher le noyau, le critère du `ROADMAP` devient une
+      commande au lieu d'une relecture.
+      ✓ `git diff --stat <sha de fin de K>..HEAD -- crates/rbs-core/` → 0 ligne.
+      ✓ Les trois features installées sur un même projet cohabitent : clippy, fmt et
+      `cargo test` du projet généré passent.
+
+---
+
 ## ⏳ Jalons suivants
 
 Volontairement en grosses mailles. Détailler ces tâches aujourd'hui serait de la
 fiction : elles seront réécrites avec ce que les jalons précédents auront appris.
-
-### v0.3 — Intégrations
-- [ ] `rbs add redis` — pool, cache, sessions
-- [ ] `rbs add mail` — SMTP, templates, envoi asynchrone
-- [ ] `rbs add storage` — système de fichiers et S3
-- [ ] Vérification : aucune de ces trois features n'a nécessité de modifier `rbs-core`
 
 ### v0.4 — Confort
 - [ ] Seeds et données de démonstration
