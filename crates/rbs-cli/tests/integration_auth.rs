@@ -10,6 +10,7 @@ use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use assert_cmd::Command;
@@ -158,6 +159,33 @@ fn la_configuration_et_l_environnement_recoivent_ce_qu_auth_exige() {
     );
 }
 
+/// Sérialise les tests qui compilent puis exécutent un binaire du projet.
+///
+/// Tous partagent `CARGO_TARGET_DIR` : la crate `migration` de chaque projet s'écrit au
+/// même `debug/migration`, quand bien même leurs contenus diffèrent, et deux projets de
+/// même nom partagent aussi leur binaire. Or `cargo run` relâche son verrou avant
+/// d'exécuter — un test lance donc un fichier qu'un autre est en train de remplacer.
+///
+/// Perdre cette course se voit : cargo répond `No such file or directory`. La gagner ne
+/// se voit pas — le test exécute alors les migrations d'un autre projet et passe quand
+/// même. C'est ce second cas qui justifie le verrou.
+///
+/// Une cible propre à chaque test coûterait plus cher : la cible partagée existe pour ne
+/// pas recompiler six fois l'arborescence de dépendances.
+static CIBLE_PARTAGEE: Mutex<()> = Mutex::new(());
+
+/// Prend la cible de compilation pour soi, jusqu'à la fin du test.
+///
+/// Le verrou se prend après le conteneur : les PostgreSQL n'ont rien à partager et
+/// démarrent en parallèle.
+fn cible_a_soi() -> MutexGuard<'static, ()> {
+    // Un test qui panique empoisonne le verrou. Sans cette reprise, les suivants
+    // échoueraient tous sur un message qui ne dit rien de leur propre défaut.
+    CIBLE_PARTAGEE
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+}
+
 /// Le critère exécutable du lot, pris au niveau qu'exige la CI générée.
 ///
 /// `--all-targets` et non `check` seul : sans lui, `src/auth/tests.rs` n'est jamais
@@ -168,6 +196,8 @@ fn la_configuration_et_l_environnement_recoivent_ce_qu_auth_exige() {
 #[test]
 #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
 fn le_projet_portant_auth_compile_sans_warning_et_est_formate() {
+    let _cible = cible_a_soi();
+
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = projet_avec_auth(&parent);
 
@@ -209,6 +239,7 @@ fn le_projet_portant_auth_compile_sans_warning_et_est_formate() {
 #[ignore = "démarre PostgreSQL et compile la crate de migration : plusieurs minutes"]
 fn la_migration_d_auth_cree_le_schema_puis_le_rend_a_son_etat_initial() {
     let postgres = demarrer_postgres();
+    let _cible = cible_a_soi();
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = projet_avec_auth_sur(&url_de(&postgres), &parent);
 
@@ -286,6 +317,7 @@ fn la_migration_d_auth_cree_le_schema_puis_le_rend_a_son_etat_initial() {
 #[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
 fn les_tests_d_auth_du_projet_genere_passent() {
     let postgres = demarrer_postgres();
+    let _cible = cible_a_soi();
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = projet_avec_auth_sur(&url_de(&postgres), &parent);
 
@@ -311,6 +343,7 @@ fn le_hash_n_apparait_pas_dans_les_logs_du_serveur() {
     const MOT_DE_PASSE_EN_CLAIR: &str = "un mot de passe assez long";
 
     let postgres = demarrer_postgres();
+    let _cible = cible_a_soi();
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = projet_avec_auth_sur(&url_de(&postgres), &parent);
 
@@ -367,6 +400,7 @@ fn le_parcours_d_auth_se_joue_de_bout_en_bout() {
     const EMAIL: &str = "parcours@exemple.test";
 
     let postgres = demarrer_postgres();
+    let _cible = cible_a_soi();
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = projet_avec_auth_sur(&url_de(&postgres), &parent);
 
@@ -494,6 +528,7 @@ fn une_route_gardee_refuse_un_user_authentifie() {
     const ARTICLE: &str = r#"{"title":"Un titre","body":"Un corps.","published":true}"#;
 
     let postgres = demarrer_postgres();
+    let _cible = cible_a_soi();
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = blog_auth_sur(&url_de(&postgres), &parent);
 
