@@ -319,7 +319,17 @@ construction, pas après, quand tout paraît évident.
 
 ### Validation du jalon
 
-- [ ] **V1** · Test du critère de sortie
+- [ ] **V1** · Test du critère de sortie — PARTIEL 2026-08-27 : répétition à blanc menée,
+      pas le test lui-même. Deux parcours joués au pied de la lettre en environnement isolé
+      — le lecteur du `README` **échoue** (`rbs migrate up` → `no matching package named
+      'rbs-core' found`, et le README n'ayant fait cloner aucun dépôt, `--core-path` est
+      hors d'atteinte), le lecteur du `getting-started` **aboutit** (`POST /articles` → 201,
+      `GET /articles` → 200, OpenAPI à trois chemins). Quatre frictions consignées dans
+      `docs/superpowers/plans/2026-08-27-v1-frictions.md`, une contradiction corrigée au
+      passage (le guide annonçait PostgreSQL 14 quand `uuidv7()` en exige 18). Le critère
+      nomme **une personne extérieure au projet** : une répétition par qui connaît les
+      réponses ne trouve que les frictions mécaniques, jamais les cognitives. Reste à faire :
+      corriger D1 et D2, puis faire jouer le parcours par un tiers.
       Une personne extérieure au projet clone, installe, génère une API CRUD qui tourne,
       **sans poser de question**. Chaque question posée devient une tâche de
       documentation avant que la v0.1 ne soit déclarée close.
