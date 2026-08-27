@@ -5,12 +5,12 @@
 
 //! # Feature flags
 //!
-//! Quatre extensions sont prévues pour la v0.2. Leurs flags sont **déclarés mais vides** :
-//! les activer ne change rien en v0.1, et sert seulement à réserver leur nom.
+//! Quatre extensions sont prévues. Seul `auth` porte du code ; les trois autres sont
+//! **déclarés mais vides**, et servent seulement à réserver leur nom.
 //!
-//! | Flag | Ce qu'il activera |
+//! | Flag | Ce qu'il active |
 //! |---|---|
-//! | `auth` | hachage Argon2, JWT, extracteur d'identité |
+//! | `auth` | hachage Argon2, JWT, jetons opaques, extracteur d'identité |
 //! | `redis` | client Redis partagé par l'état applicatif |
 //! | `mail` | envoi de courriels et rendu de gabarits |
 //! | `storage` | stockage de fichiers, local ou compatible S3 |
@@ -25,8 +25,14 @@ pub mod db;
 pub mod error;
 /// Extracteurs de requête du runtime.
 pub mod extract;
+/// Hachage et vérification des mots de passe.
+#[cfg(feature = "auth")]
+pub mod hash;
 /// Route de santé de l'application.
 pub mod health;
+/// Signature et vérification des jetons d'accès.
+#[cfg(feature = "auth")]
+pub mod jwt;
 /// Formateurs de logs du runtime.
 pub mod logs;
 /// Déclaration unique des réponses d'erreur du document OpenAPI.
@@ -37,12 +43,19 @@ pub mod pagination;
 pub mod request_id;
 /// État partagé du runtime.
 pub mod state;
+/// Tirage et empreinte des jetons opaques.
+#[cfg(feature = "auth")]
+pub mod token;
 /// Trace d'une requête HTTP.
 pub mod trace;
 
 pub use config::Config;
 pub use error::{Error, Result};
+#[cfg(feature = "auth")]
+pub use extract::Identity;
 pub use extract::ValidatedJson;
 pub use openapi::{ProblemDetails, ReponsesCommunes};
 pub use pagination::{Page, Pagination};
+#[cfg(feature = "auth")]
+pub use state::HasAuth;
 pub use state::{CoreState, HasCoreState};

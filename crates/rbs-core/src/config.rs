@@ -33,6 +33,9 @@ pub struct Config {
     pub database: DatabaseConfig,
     /// Exposition de la documentation OpenAPI.
     pub docs: DocsConfig,
+    /// Signature des jetons et durées de vie des sessions.
+    #[cfg(feature = "auth")]
+    pub auth: AuthConfig,
 }
 
 /// Exposition de la documentation OpenAPI.
@@ -80,6 +83,29 @@ pub struct DatabaseConfig {
     pub max_lifetime_secs: u64,
 }
 
+/// Secret de signature et durées de vie des jetons.
+///
+/// Les deux durées suivent la dissymétrie habituelle : l'accès est court parce qu'il
+/// n'est pas révocable, le rafraîchissement long parce qu'il l'est, ligne par ligne.
+#[cfg(feature = "auth")]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct AuthConfig {
+    /// Secret de signature HS256. Aucune valeur par défaut : son absence fait échouer
+    /// le démarrage.
+    pub secret: String,
+    /// Durée de vie du jeton d'accès, en secondes.
+    pub access_ttl_secs: u64,
+    /// Durée de vie du jeton de rafraîchissement, en secondes.
+    pub refresh_ttl_secs: u64,
+}
+
+/// Longueur minimale du secret de signature, en octets.
+///
+/// HS256 travaille sur une clé de 256 bits : un secret plus court n'ajoute rien à ce
+/// que la force brute doit parcourir.
+#[cfg(feature = "auth")]
+const SECRET_MINIMUM: usize = 32;
+
 /// Échec du chargement de la configuration.
 ///
 /// Distincte d'[`Error`](crate::Error) : une erreur survenue au démarrage ne devient
@@ -95,6 +121,10 @@ pub enum ConfigError {
     /// Fichier `.env` présent mais illisible.
     #[error("fichier `.env` illisible : {0}")]
     Dotenv(#[from] dotenvy::Error),
+    /// Secret de signature trop court pour HS256.
+    #[cfg(feature = "auth")]
+    #[error("configuration invalide : `auth.secret` doit porter au moins 32 octets, {0} fournis")]
+    SecretTropCourt(usize),
 }
 
 impl From<figment::Error> for ConfigError {
@@ -111,7 +141,16 @@ impl Config {
     /// Échoue si un champ requis manque, si une valeur est mal typée, ou si un fichier
     /// lu est illisible. Le message nomme le champ fautif.
     pub fn load() -> Result<Self, ConfigError> {
-        Ok(figment()?.extract()?)
+        let config: Self = figment()?.extract()?;
+
+        // Un secret court n'est pas rattrapable au runtime : il se refuse au boot, où le
+        // développeur le lit, et non à la première requête protégée.
+        #[cfg(feature = "auth")]
+        if config.auth.secret.len() < SECRET_MINIMUM {
+            return Err(ConfigError::SecretTropCourt(config.auth.secret.len()));
+        }
+
+        Ok(config)
     }
 }
 
@@ -134,8 +173,16 @@ fn figment() -> Result<Figment, ConfigError> {
         // Exposées par défaut : la documentation doit exister dès la génération du
         // projet. La couper est un geste de mise en production, pas l'état initial.
         .merge(Serialized::default("docs.swagger_ui", true))
-        .merge(Serialized::default("docs.openapi_json", true))
-        .merge(Toml::file("config/default.toml"));
+        .merge(Serialized::default("docs.openapi_json", true));
+
+    // Quinze minutes et trente jours. Aucun défaut pour le secret : poser la table
+    // `auth` sans lui fait nommer `secret` par le message d'erreur du chargement.
+    #[cfg(feature = "auth")]
+    let base = base
+        .merge(Serialized::default("auth.access_ttl_secs", 900))
+        .merge(Serialized::default("auth.refresh_ttl_secs", 2_592_000));
+
+    let base = base.merge(Toml::file("config/default.toml"));
 
     let profil: String = surcharges(base.clone())?
         .extract_inner("env")
@@ -184,6 +231,20 @@ mod tests {
     use super::*;
     use figment::Jail;
 
+    /// Secret satisfaisant la longueur minimale, pour les cas qui ne portent pas sur lui.
+    #[cfg(feature = "auth")]
+    const SECRET_DE_TEST: &str = "un secret de test qui porte au moins trente-deux octets";
+
+    /// Le flag `auth` rend `auth.secret` requis. Les cas qui portent sur autre chose le
+    /// fournissent par l'environnement plutôt que d'alourdir chaque fixture TOML.
+    #[cfg(feature = "auth")]
+    fn secret_de_test(jail: &mut Jail) {
+        jail.set_env("RBS_AUTH__SECRET", SECRET_DE_TEST);
+    }
+
+    #[cfg(not(feature = "auth"))]
+    fn secret_de_test(_jail: &mut Jail) {}
+
     const DEFAULT_TOML: &str = r#"
         [server]
         port = 8080
@@ -196,6 +257,7 @@ mod tests {
     fn un_champ_requis_manquant_fait_echouer_le_chargement_en_nommant_le_champ() {
         Jail::expect_with(|jail| {
             jail.clear_env();
+            secret_de_test(jail);
             jail.create_dir("config")?;
             jail.create_file(
                 "config/default.toml",
@@ -217,6 +279,7 @@ mod tests {
     fn une_variable_d_environnement_ecrase_la_valeur_du_fichier_toml() {
         Jail::expect_with(|jail| {
             jail.clear_env();
+            secret_de_test(jail);
             jail.create_dir("config")?;
             jail.create_file("config/default.toml", DEFAULT_TOML)?;
             jail.set_env("RBS_SERVER__PORT", "9999");
@@ -232,6 +295,7 @@ mod tests {
     fn le_fichier_dotenv_est_lu_mais_cede_devant_l_environnement() {
         Jail::expect_with(|jail| {
             jail.clear_env();
+            secret_de_test(jail);
             jail.create_dir("config")?;
             jail.create_file("config/default.toml", DEFAULT_TOML)?;
             jail.create_file(".env", "RBS_SERVER__PORT=7777\nRBS_SERVER__HOST=0.0.0.0\n")?;
@@ -249,6 +313,7 @@ mod tests {
     fn le_fichier_du_profil_ecrase_le_fichier_par_defaut() {
         Jail::expect_with(|jail| {
             jail.clear_env();
+            secret_de_test(jail);
             jail.create_dir("config")?;
             jail.create_file("config/default.toml", DEFAULT_TOML)?;
             jail.create_file("config/production.toml", "[server]\nport = 80\n")?;
@@ -266,6 +331,7 @@ mod tests {
     fn le_profil_se_lit_aussi_depuis_le_fichier_dotenv() {
         Jail::expect_with(|jail| {
             jail.clear_env();
+            secret_de_test(jail);
             jail.create_dir("config")?;
             jail.create_file("config/default.toml", DEFAULT_TOML)?;
             jail.create_file("config/staging.toml", "[server]\nport = 81\n")?;
@@ -282,6 +348,7 @@ mod tests {
     fn les_reglages_du_pool_ont_des_defauts_sans_configuration() {
         Jail::expect_with(|jail| {
             jail.clear_env();
+            secret_de_test(jail);
             jail.set_env("RBS_DATABASE__URL", "postgres://localhost/app");
 
             let database = Config::load()
@@ -302,6 +369,7 @@ mod tests {
     fn un_reglage_du_pool_se_surcharge_par_l_environnement() {
         Jail::expect_with(|jail| {
             jail.clear_env();
+            secret_de_test(jail);
             jail.set_env("RBS_DATABASE__URL", "postgres://localhost/app");
             jail.set_env("RBS_DATABASE__MAX_CONNECTIONS", "42");
 
@@ -316,6 +384,7 @@ mod tests {
     fn les_valeurs_par_defaut_s_appliquent_sans_aucun_fichier() {
         Jail::expect_with(|jail| {
             jail.clear_env();
+            secret_de_test(jail);
             jail.set_env("RBS_DATABASE__URL", "postgres://localhost/app");
 
             let config = Config::load().expect("la configuration doit se charger");
@@ -331,6 +400,7 @@ mod tests {
     fn sans_section_docs_swagger_et_le_document_json_sont_exposes() {
         Jail::expect_with(|jail| {
             jail.clear_env();
+            secret_de_test(jail);
             jail.create_dir("config")?;
             jail.create_file("config/default.toml", DEFAULT_TOML)?;
 
@@ -346,6 +416,7 @@ mod tests {
     fn couper_swagger_laisse_le_document_json_expose() {
         Jail::expect_with(|jail| {
             jail.clear_env();
+            secret_de_test(jail);
             jail.create_dir("config")?;
             jail.create_file(
                 "config/default.toml",
@@ -367,6 +438,7 @@ mod tests {
     fn une_variable_d_environnement_coupe_swagger() {
         Jail::expect_with(|jail| {
             jail.clear_env();
+            secret_de_test(jail);
             jail.create_dir("config")?;
             jail.create_file("config/default.toml", DEFAULT_TOML)?;
             jail.set_env("RBS_DOCS__SWAGGER_UI", "false");
@@ -374,6 +446,69 @@ mod tests {
             let config = Config::load().expect("la configuration doit se charger");
 
             assert!(!config.docs.swagger_ui);
+            Ok(())
+        });
+    }
+
+    #[cfg(feature = "auth")]
+    #[test]
+    fn un_secret_absent_fait_echouer_le_chargement_en_nommant_le_champ() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.create_dir("config")?;
+            jail.create_file("config/default.toml", DEFAULT_TOML)?;
+
+            let erreur = Config::load().expect_err("`auth.secret` n'a pas de défaut");
+
+            let message = erreur.to_string();
+            assert!(
+                message.contains("`secret`") && message.contains("auth"),
+                "le message doit nommer le champ fautif, obtenu : {message}"
+            );
+            Ok(())
+        });
+    }
+
+    #[cfg(feature = "auth")]
+    #[test]
+    fn un_secret_de_moins_de_32_octets_est_refuse_au_chargement() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.create_dir("config")?;
+            jail.create_file(
+                "config/default.toml",
+                &format!("{DEFAULT_TOML}\n[auth]\nsecret = \"trop court\"\n"),
+            )?;
+
+            let erreur = Config::load().expect_err("un secret de 10 octets doit être refusé");
+
+            assert!(
+                matches!(erreur, ConfigError::SecretTropCourt(10)),
+                "obtenu : {erreur:?}"
+            );
+            Ok(())
+        });
+    }
+
+    #[cfg(feature = "auth")]
+    #[test]
+    fn sans_duree_de_vie_configuree_l_acces_dure_quinze_minutes_et_le_refresh_trente_jours() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            jail.create_dir("config")?;
+            jail.create_file(
+                "config/default.toml",
+                &format!(
+                    "{DEFAULT_TOML}\n[auth]\nsecret = \"un secret de test qui porte trente-deux octets\"\n"
+                ),
+            )?;
+
+            let auth = Config::load()
+                .expect("la configuration doit se charger")
+                .auth;
+
+            assert_eq!(auth.access_ttl_secs, 900);
+            assert_eq!(auth.refresh_ttl_secs, 2_592_000);
             Ok(())
         });
     }

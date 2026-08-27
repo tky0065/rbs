@@ -10,9 +10,10 @@ repository.workspace = true
 [features]
 default = []
 
+auth = ["dep:argon2", "dep:base64", "dep:jsonwebtoken", "dep:rand", "dep:sha2"]
+
 # Vides et sans dépendances : les nommer réserve le nom sans figer, un an à l'avance,
 # les crates que leur implémentation utilisera.
-auth = []
 redis = []
 mail = []
 storage = []
@@ -22,13 +23,18 @@ all-features = true
 
 [dependencies]
 anyhow.workspace = true
+argon2 = { workspace = true, optional = true }
 axum.workspace = true
+base64 = { workspace = true, optional = true }
 dotenvy.workspace = true
 figment.workspace = true
+jsonwebtoken = { workspace = true, optional = true }
 nu-ansi-term.workspace = true
+rand = { workspace = true, optional = true }
 sea-orm.workspace = true
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
+sha2 = { workspace = true, optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt"] }
 tracing.workspace = true
