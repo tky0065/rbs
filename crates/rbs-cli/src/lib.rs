@@ -194,6 +194,8 @@ fn suite(feature: &str) -> Option<&'static str> {
         "auth" => {
             Some("recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up")
         }
+        // Le backend par défaut écrit sous une racine du dépôt, que rien n'ignore encore.
+        "storage" => Some("les objets sont déposés sous ./stockage : ajoutez-le à .gitignore"),
         _ => None,
     }
 }

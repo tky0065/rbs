@@ -1,0 +1,48 @@
+[feature]
+description = "stockage d'objets : un trait à quatre méthodes, et un backend fichiers"
+
+[[fichiers]]
+source = "mod.rs.jinja"
+cible  = "src/storage/mod.rs"
+
+[[fichiers]]
+source = "fichiers.rs.jinja"
+cible  = "src/storage/fichiers.rs"
+
+[[fichiers]]
+source = "tests.rs.jinja"
+cible  = "src/storage/tests.rs"
+
+[[ancres]]
+ancre   = "features"
+contenu = "mod storage;"
+
+[[ancres]]
+ancre   = "state_champs"
+contenu = """
+#[allow(dead_code)]
+pub storage: std::sync::Arc<dyn crate::storage::Storage>,
+"""
+
+[[ancres]]
+ancre   = "state_init"
+contenu = "storage: crate::storage::depuis_config()?,"
+
+[[dependances]]
+nom     = "async-trait"
+version = "0.1"
+
+[[dependances]]
+nom     = "thiserror"
+version = "2.0"
+
+[cargo.tokio]
+features = ["fs"]
+
+[[config]]
+fichier = "config/default.toml"
+section = "storage"
+contenu = """
+backend = "fs"
+racine = "./stockage"
+"""

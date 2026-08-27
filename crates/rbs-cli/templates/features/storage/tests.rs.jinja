@@ -1,0 +1,109 @@
+use std::fs;
+use std::path::PathBuf;
+
+use super::fichiers::StockageFichiers;
+use super::{Storage, StorageError};
+
+/// Un répertoire vide, propre à un test, sous la racine temporaire du système.
+fn racine(nom: &str) -> PathBuf {
+    let chemin = std::env::temp_dir().join(format!("storage-{}-{nom}", std::process::id()));
+    let _ = fs::remove_dir_all(&chemin);
+    fs::create_dir_all(&chemin).expect("le répertoire du test doit se créer");
+
+    chemin
+}
+
+/// Ce que le trait promet, sans rien connaître du backend qui l'honore.
+///
+/// Écrite contre `&dyn Storage` pour être rejouable telle quelle contre S3 : deux
+/// backends qui ne passeraient pas la même ronde n'abstrairaient rien.
+async fn ronde(stockage: &dyn Storage) {
+    let cle = "factures/2026/janvier.pdf";
+
+    assert!(!stockage.existe(cle).await.expect("l'existence se consulte"));
+
+    stockage
+        .deposer(cle, b"%PDF-1.7".to_vec())
+        .await
+        .expect("le dépôt doit aboutir");
+
+    assert!(stockage.existe(cle).await.expect("l'existence se consulte"));
+    assert_eq!(
+        stockage.lire(cle).await.expect("la lecture doit aboutir"),
+        b"%PDF-1.7"
+    );
+
+    stockage
+        .supprimer(cle)
+        .await
+        .expect("la suppression doit aboutir");
+
+    assert!(!stockage.existe(cle).await.expect("l'existence se consulte"));
+    assert!(
+        matches!(stockage.lire(cle).await, Err(StorageError::Introuvable(_))),
+        "lire un objet supprimé doit rendre `Introuvable`"
+    );
+}
+
+#[tokio::test]
+async fn le_backend_fichiers_depose_lit_atteste_puis_supprime() {
+    let racine = racine("ronde");
+
+    ronde(&StockageFichiers::nouveau(racine.join("objets"))).await;
+
+    fs::remove_dir_all(&racine).expect("le répertoire du test doit se nettoyer");
+}
+
+/// Un nom d'objet vient souvent de l'utilisateur : `../` y remonterait hors de la racine.
+#[tokio::test]
+async fn une_cle_remontant_hors_de_la_racine_est_refusee() {
+    let racine = racine("traversee");
+    let stockage = StockageFichiers::nouveau(racine.join("depot/objets"));
+
+    let temoins = [racine.join("depot/vole.txt"), racine.join("vole.txt")];
+    let absolue = temoins[0]
+        .to_str()
+        .expect("chemin représentable")
+        .to_owned();
+
+    for cle in [
+        "../vole.txt",
+        "../../vole.txt",
+        "sous/../../../vole.txt",
+        &absolue,
+    ] {
+        let erreur = stockage
+            .deposer(cle, b"charge utile".to_vec())
+            .await
+            .expect_err("une clé sortant de la racine doit être refusée");
+
+        assert!(
+            matches!(erreur, StorageError::CleRefusee(_)),
+            "`{cle}` doit être refusée comme clé, et non échouer à l'écriture : {erreur}"
+        );
+    }
+
+    for temoin in &temoins {
+        assert!(
+            !temoin.exists(),
+            "{} a été écrit hors de la racine",
+            temoin.display()
+        );
+    }
+
+    // Le refus porte sur l'évasion, pas sur la présence d'un `..` : une clé qui redescend
+    // sans sortir reste valide, sans quoi la normalisation serait une simple sous-chaîne.
+    stockage
+        .deposer("sous/../recu.txt", b"charge utile".to_vec())
+        .await
+        .expect("`sous/../recu.txt` reste sous la racine");
+    assert_eq!(
+        stockage
+            .lire("recu.txt")
+            .await
+            .expect("la clé normalisée doit se relire"),
+        b"charge utile"
+    );
+
+    fs::remove_dir_all(&racine).expect("le répertoire du test doit se nettoyer");
+}
