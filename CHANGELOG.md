@@ -10,9 +10,9 @@ between minor versions with no deprecation cycle.
 
 *[Version française](CHANGELOG.fr.md).*
 
-## [Unreleased]
+## [0.4.0] — 2026-08-28
 
-Nothing has been published yet, so this first entry only adds. It gathers the four
+This first entry is the first published version, so it only adds. It gathers the four
 milestones the repository has delivered — the foundation, authentication, integrations and
 comfort — into what a single install now gives you.
 
@@ -88,4 +88,4 @@ architecture, CLI reference and guides, in English and French.
 Rust 1.85 or later, Rust edition 2024. A generated project runs on PostgreSQL 14 or later,
 MySQL 8.0 or later, or SQLite 3.35 or later — `rbs doctor` refuses anything below those.
 
-[Unreleased]: https://github.com/tky0065/rbs/commits/main
+[0.4.0]: https://github.com/tky0065/rbs/releases/tag/v0.4.0

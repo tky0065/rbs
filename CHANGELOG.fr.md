@@ -11,9 +11,9 @@ dépréciation.
 
 *[English version](CHANGELOG.md).*
 
-## [Non publié]
+## [0.4.0] — 2026-08-28
 
-Rien n'a encore été publié : cette première entrée ne fait donc qu'ajouter. Elle rassemble
+Cette première entrée est la première version publiée : elle ne fait donc qu'ajouter. Elle rassemble
 les quatre jalons livrés par le dépôt — le socle, l'authentification, les intégrations et
 le confort — en ce qu'une seule installation donne aujourd'hui.
 
@@ -91,4 +91,4 @@ démarrage, architecture, référence du CLI et guides, en français et en angla
 Rust 1.85 ou plus, édition 2024. Un projet généré tourne sur PostgreSQL 14 ou plus,
 MySQL 8.0 ou plus, ou SQLite 3.35 ou plus — `rbs doctor` refuse tout ce qui est en dessous.
 
-[Non publié]: https://github.com/tky0065/rbs/commits/main
+[0.4.0]: https://github.com/tky0065/rbs/releases/tag/v0.4.0
