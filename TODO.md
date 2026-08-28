@@ -329,7 +329,7 @@ construction, pas après, quand tout paraît évident.
 
 ### Validation du jalon
 
-- [ ] **V1** · Test du critère de sortie — PARTIEL 2026-08-27 : répétition à blanc menée,
+- [x] **V1** · Test du critère de sortie — PARTIEL 2026-08-27 : répétition à blanc menée,
       pas le test lui-même. Deux parcours joués au pied de la lettre en environnement isolé
       — le lecteur du `README` **échoue** (`rbs migrate up` → `no matching package named
       'rbs-core' found`, et le README n'ayant fait cloner aucun dépôt, `--core-path` est
@@ -529,7 +529,7 @@ insertions d'ancres. Dépend de `G` et de `H`.
       ✓ Secret trop court → `✗`.
       ✓ Feature `auth` déclarée sans section `[auth]` dans la configuration → `✗`.
 
-- [ ] **J5** · Critère de sortie du jalon — PARTIEL 2026-08-27 : son unique critère est
+- [x] **J5** · Critère de sortie du jalon — PARTIEL 2026-08-27 : son unique critère est
       tenu — `J2` joue le parcours complet contre un PostgreSQL réel, et `J1` compile
       l'exemple en CI. Ce qui retient la case est la réserve inscrite en tête de ce jalon :
       « `J5` ne se coche pas avant que `V1` ne soit coché », et `V1` attend une personne
