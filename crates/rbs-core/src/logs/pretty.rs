@@ -20,6 +20,7 @@ const LARGEUR_CIBLE: usize = 18;
 /// Le même type sert de formateur de champs. Poser les deux ensemble
 /// (`.event_format(…).fmt_fields(…)`) est ce qui garantit que les champs hérités
 /// d'un span suivent la même convention et le même choix de couleur.
+#[non_exhaustive]
 pub struct PrettyFormat {
     ansi: bool,
     horodatage: ChronoLocal,

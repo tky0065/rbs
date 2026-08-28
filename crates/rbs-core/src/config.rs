@@ -24,6 +24,7 @@ const PROFIL_PAR_DEFAUT: &str = "development";
 
 /// Configuration de l'application, validée au démarrage.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[non_exhaustive]
 pub struct Config {
     /// Profil actif, qui désigne le fichier `config/{env}.toml` chargé.
     pub env: String,
@@ -44,6 +45,7 @@ pub struct Config {
 /// couper l'interface tout en gardant le document sert à générer des clients ou à
 /// vérifier un contrat d'API, alors que l'inverse n'a pas d'usage.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[non_exhaustive]
 pub struct DocsConfig {
     /// Montage de Swagger UI sur `/docs`.
     pub swagger_ui: bool,
@@ -53,6 +55,7 @@ pub struct DocsConfig {
 
 /// Adresse d'écoute du serveur HTTP.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[non_exhaustive]
 pub struct ServerConfig {
     /// Interface d'écoute.
     pub host: String,
@@ -65,6 +68,7 @@ pub struct ServerConfig {
 /// Seule `url` est requise. Les réglages du pool portent des défauts tenables en
 /// production, qu'un projet sous charge ajuste sans forker le runtime.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[non_exhaustive]
 pub struct DatabaseConfig {
     /// URL de connexion, dont le schéma désigne le moteur. Aucune valeur par défaut :
     /// son absence fait échouer le démarrage.
@@ -89,6 +93,7 @@ pub struct DatabaseConfig {
 /// n'est pas révocable, le rafraîchissement long parce qu'il l'est, ligne par ligne.
 #[cfg(feature = "auth")]
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[non_exhaustive]
 pub struct AuthConfig {
     /// Secret de signature HS256. Aucune valeur par défaut : son absence fait échouer
     /// le démarrage.
@@ -111,6 +116,7 @@ const SECRET_MINIMUM: usize = 32;
 /// Distincte d'[`Error`](crate::Error) : une erreur survenue au démarrage ne devient
 /// jamais une réponse HTTP.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum ConfigError {
     /// Valeur manquante, mal formée, ou fichier TOML illisible.
     ///

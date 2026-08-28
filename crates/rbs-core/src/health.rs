@@ -18,6 +18,7 @@ use crate::state::HasCoreState;
 
 /// Santé de l'application et de ses dépendances.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[non_exhaustive]
 pub struct Health {
     /// Verdict d'ensemble.
     pub status: Status,
@@ -28,6 +29,7 @@ pub struct Health {
 /// Verdict d'ensemble d'un contrôle de santé.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum Status {
     /// Toutes les dépendances répondent.
     Ok,
@@ -40,6 +42,7 @@ pub enum Status {
 /// Les contrôles sont imbriqués plutôt qu'à plat pour qu'une dépendance ajoutée plus
 /// tard — cache, file, stockage — n'oblige pas à toucher la racine du corps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[non_exhaustive]
 pub struct Checks {
     /// État de la base de données.
     pub database: Check,
@@ -48,6 +51,7 @@ pub struct Checks {
 /// Résultat d'un contrôle de dépendance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
+#[non_exhaustive]
 pub enum Check {
     /// La dépendance répond.
     Ok,

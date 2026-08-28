@@ -29,6 +29,7 @@ pub struct Claims {
 /// Le serveur répond 401 dans les trois cas ; le distinguo sert au client, à qui
 /// « ton jeton a expiré, rafraîchis-le » indique quoi faire.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum JwtError {
     /// La date d'expiration du jeton est passée.
     #[error("token expiré")]

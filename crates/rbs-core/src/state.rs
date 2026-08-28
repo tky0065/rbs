@@ -16,6 +16,7 @@ use crate::config::Config;
 /// Clonable à coût nul : `DatabaseConnection` clone un `Arc` interne, et la
 /// configuration n'est jamais recopiée.
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct CoreState {
     // Champs privés : le noyau doit pouvoir en gagner un sans casser les projets qui
     // l'ont composé. Un accès direct figerait sa disposition interne.

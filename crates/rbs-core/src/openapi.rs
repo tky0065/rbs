@@ -20,6 +20,7 @@ const PROBLEM_JSON: &str = "application/problem+json";
 /// Ce type décrit le corps d'erreur *et* le produit : les deux ne peuvent donc pas
 /// diverger, ce qui arriverait avec un schéma OpenAPI rédigé à côté du code.
 #[derive(Debug, Serialize, ToSchema)]
+#[non_exhaustive]
 pub struct ProblemDetails {
     /// URI identifiant le type de problème.
     pub r#type: &'static str,

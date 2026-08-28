@@ -23,6 +23,7 @@ pub const PAR_PAGE_MAX: u64 = 100;
 
 /// Fenêtre de pagination demandée par le client, déjà bornée.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Pagination {
     page: u64,
     per_page: u64,
@@ -92,6 +93,7 @@ where
 
 /// Une page de résultats et de quoi situer la suivante.
 #[derive(Debug, Clone, Serialize, ToSchema)]
+#[non_exhaustive]
 pub struct Page<T> {
     data: Vec<T>,
     meta: Meta,
