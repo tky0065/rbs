@@ -4,6 +4,8 @@
 //! ce qui va être lancé se lit sur une `Vec<Step>`, sans qu'aucun processus ait démarré.
 //! C'est aussi ce qui rend l'orchestration vérifiable sans Docker ni base.
 
+pub(crate) mod watch;
+
 use std::io;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -89,9 +91,9 @@ pub(crate) enum Error {
     #[error("le répertoire courant est illisible : {0}")]
     Cwd(#[source] io::Error),
 
-    /// `cargo` n'a pas pu être lancé.
-    #[error("cargo n'a pas pu être lancé : {0}")]
-    Cargo(#[source] io::Error),
+    /// Le watch n'a pas pu être installé, ou s'est interrompu.
+    #[error("le watch s'est interrompu : {0}")]
+    Watch(String),
 }
 
 impl Error {
@@ -190,21 +192,9 @@ fn start(root: &Path, steps: &[Step], attente: Duration) -> Result<(), Error> {
             Step::Migrations => {
                 migrate::launch(root, "up", &variables, false)?;
             }
-            Step::Server => serve(root, &variables)?,
+            Step::Server => watch::run(root, &variables)?,
         }
     }
-
-    Ok(())
-}
-
-/// Lance le serveur du projet et rend la main quand il s'arrête.
-fn serve(root: &Path, variables: &[(String, String)]) -> Result<(), Error> {
-    Command::new("cargo")
-        .current_dir(root)
-        .arg("run")
-        .envs(variables.iter().map(|(key, value)| (key, value)))
-        .status()
-        .map_err(Error::Cargo)?;
 
     Ok(())
 }
