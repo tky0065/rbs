@@ -661,7 +661,7 @@ lui qui rend le critère de sortie mesurable, par les deux diffs de `T4`.
 
 ### Lot P — Seeds
 
-- [ ] **P1** · Commande `rbs seed`
+- [x] **P1** · Commande `rbs seed` — vérifié 2026-08-28 · `cargo test -p rbs-cli --lib seed::` → 20 passed et `cargo test -p rbs-cli --test integration_seed` → 3 passed, dont `under_production_the_command_refuses_without_launching_the_project_binary` — code non nul, stderr nommant `--force` et `production`, et **`projet/target` absent** : cargo n'a pas tourné · `a_project_without_seeds_says_how_to_create_one` nomme `src/seeds/main.rs` et donne le bloc `[[bin]]`, là où cargo aurait rendu une erreur de manifeste · **le garde-fou vit dans la commande** et non dans le seed, qui est fait pour être modifié · morsure `if false && !force && production(…)` → les 3 tests de production tombent, eux seuls ; morsure `ensure_binary` rendant toujours `Ok` → l'intégration passe de 0,7 s à **7,3 s**, cargo ayant enfin tourné : c'est la durée qui atteste que le binaire du projet n'est pas lancé
       Enveloppe un binaire du projet, sur le motif de `rbs migrate` (`migrate/mod.rs:163`) :
       le CLI ne parle jamais à la base et ne gagne aucun client SQL. Le garde-fou de
       production vit dans la commande et non dans le code généré — un seed est fait pour
@@ -670,7 +670,7 @@ lui qui rend le critère de sortie mesurable, par les deux diffs de `T4`.
       du projet n'est **pas** lancé.
       ✓ Projet sans `src/seeds/` → message disant comment en créer un, non une erreur de cargo.
 
-- [ ] **P2** · `src/seeds/` et son binaire au squelette
+- [x] **P2** · `src/seeds/` et son binaire au squelette — vérifié 2026-08-28 · `integration_seed::on_a_fresh_project_the_command_says_there_is_nothing_to_insert` → exit 0, message « rien à insérer », pas de `target/` ; `cargo test -p rbs-cli --test integration_new -- --ignored` → 1 passed en **62,84 s**, qui joue `build`, `test`, `clippy --workspace --all-targets -- -D warnings` et `rustfmt --check` sur `src/main.rs`, **`src/seeds/main.rs`** et `migration/src/lib.rs` · **le binaire des seeds est une seconde racine de crate** (`[[bin]]` plus `default-run`, deux binaires rendant `cargo run` ambigu) et non un module : donner une lib au projet aurait déplacé l'ancre `<rbs:features>` hors de `src/main.rs`, et avec elle tout le squelette, les trois exemples et la documentation · **une seule ancre grâce à `macro_rules!`** — un `mod` non inline ne s'écrit pas dans un bloc, ce qui vaut deux ancres à `migration` · morsure `fn jamais_appelee() {}` déposée dans le seed d'un projet généré → `clippy -D warnings` échoue, prouvant que clippy inspecte bien `src/seeds/<feature>.rs` ; morsure `SEEDS` retirée d'`ANCRES` → seul `the_seeds_anchor_is_one_of_those_counted`, test ajouté pour cela — sans lui rien ne tombait · **neuvième point d'insertion et non huitième** : `R` a posé `startup` dans le même jalon, `ANCRES` passe de 7 à 9 — conflit d'intégration résolu en gardant les deux, et la documentation des deux langues portée à neuf
       Un module et son binaire, derrière une ancre `<rbs:seeds>` — huitième point
       d'insertion, que `doctor` compte.
       ✓ `rbs new` puis `rbs seed` sur un projet vierge → exit 0, message disant qu'il n'y a
@@ -678,7 +678,7 @@ lui qui rend le critère de sortie mesurable, par les deux diffs de `T4`.
       ✓ `clippy --workspace --all-targets -- -D warnings` et `rustfmt --check` propres sur
       le projet généré.
 
-- [ ] **P3** · `rbs generate crud` dépose le seed de son entité
+- [x] **P3** · `rbs generate crud` dépose le seed de son entité — vérifié 2026-08-28 · `cargo test -p rbs-cli --lib generate::command` → 20 passed, dont `a_crud_drops_its_seed_and_declares_it_in_the_anchor` (`src/seeds/articles.rs` présent, corps d'ancre `== "articles,"`) et `two_generations_leave_two_seeds_and_an_orderly_anchor` ; `generate::seed::tests::the_seeded_rows_come_back_from_the_api -- --ignored` → 1 passed en **29,30 s** contre PostgreSQL 18 : `generate crud` → `migrate up` → `seed`, puis `GET /semis` rend les deux lignes · **« une ancre toujours triée » lu comme « ordonnée, une entrée par ligne », sur arbitrage demandé** : le cas discriminant — générer `notes` *puis* `articles` — rend `notes, articles,`, donc l'ordre de génération, qui est aussi celui des migrations et le seul sûr le jour où un seed dépendra d'un autre ; **aucune ancre du CLI n'a jamais été triée**, `anchors::insert` apposant avant la balise fermante, et son commentaire pose que le contenu appartient au développeur · morsures `mount::for_seed` non appelé, puis fichier seed non écrit → les deux tests d'ancre tombent chaque fois
       Du Rust typé passant par l'entité générée : un champ renommé casse à la compilation,
       et non en silence à l'exécution. C'est ce qui met ce lot hors d'atteinte de `S`.
       ✓ Le fichier existe et l'ancre `<rbs:seeds>` porte son appel.
@@ -687,14 +687,25 @@ lui qui rend le critère de sortie mesurable, par les deux diffs de `T4`.
 
 ### Lot Q — `rbs dev`
 
-- [ ] **Q1** · Orchestration du démarrage
+- [x] **Q1** · Orchestration du démarrage — vérifié 2026-08-28 · `cargo test -p rbs-cli --lib dev::tests::without_the_docker_feature_no_compose_is_looked_for` → 1 passed, la sonde d'existence de fichier étant **injectée et jamais appelée** : le test constate l'absence d'appel, non un plan vide, et vérifie que `Step::Server` est là quand même ; `cargo test -p rbs-cli --test integration_dev` → 2 passed, la base injoignable rendant code 1, un message nommant `127.0.0.1` et le port, et l'assertion explicite `!sortie.contains("panicked")` · la feature `docker` du test est posée par le vrai chemin `add::plan_for` puis `apply`, donc le nom du compose vient du fragment et non d'une constante recopiée · **patience à deux vitesses, non dictée par le backlog** : 30 s quand `rbs dev` vient de remonter le compose, 3 s quand la base était censée déjà tourner — trente secondes de silence pour apprendre qu'on a oublié PostgreSQL sont trente secondes perdues · morsure conditions inversées → seul le test du compose tombe ; morsure message amputé de `{host}:{port}` → seul celui de l'injoignabilité
       Compose remonté si `docker` est déclarée dans `[package.metadata.rbs]`, attente de la
       base, `migrate up`, puis le serveur. C'est le démarrage en une commande, qui est la
       moitié de la valeur de `rbs dev`.
       ✓ Projet sans la feature `docker` → aucun compose cherché, démarrage quand même.
       ✓ Base injoignable → message nommant ce qui manque, non une trace de panique.
 
-- [ ] **Q2** · Le watch, `watchexec 8.4`
+- [ ] **Q2** · Le watch, `watchexec 8.4` — PARTIEL 2026-08-28 : premier critère prouvé,
+      `cargo test -p rbs-cli --lib dev::watch` → 5 passed, dont `target_is_not_even_watched`
+      qui écarte `target/` **à la source** par `Filterer::check_dir` et non au tri des
+      événements, et le cas `target/debug/build/…/out/genere.rs` qui est celui qui boucle.
+      La coupure du groupe est prouvée **sur macOS seul** :
+      `the_child_server_dies_with_its_group_and_frees_the_port` → ok, morsure
+      `SpawnOptions { grouped: false }` → « le petit-fils a survécu à la coupure : 60674
+      n'est pas libre ». Le test est normal, sans `#[ignore]`, sans Docker et **sans aucun
+      `#[cfg]` de plateforme** — il tournera donc tel quel dans les jobs `linux` et
+      `portabilite`. Mais le critère exige les trois plateformes de la CI, **la branche n'a
+      pas été poussée, sur arbitrage**, et aucun runner ne l'a joué. Reste à faire : ouvrir
+      la PR et lire le verdict des trois jobs.
       Le point dur n'est ni le debounce ni le filtrage, tous deux faciles, mais la coupure
       du serveur enfant : un `cargo run` tué sans son enfant laisse le port occupé, et le
       geste diffère sur les trois plateformes.
@@ -708,19 +719,19 @@ Une table, et non Redis : le manifeste de fragment n'a aucun champ pour exiger u
 feature, et un job poussé dans Redis survivrait au rollback de la transaction qui le
 motivait. `jobs` est un fragment, `rbs add jobs`, comme `redis`, `mail` et `storage`.
 
-- [ ] **R1** · Manifeste du fragment, table et section `[jobs]`
+- [x] **R1** · Manifeste du fragment, table et section `[jobs]` — vérifié 2026-08-28 · `rbs new` puis `rbs add jobs` (8 fichiers) → `cargo fmt --all --check` exit 0 et `cargo clippy --workspace --all-targets -- -D warnings` Finished **sur le projet engendré** ; `rbs migrate up` puis `\d jobs` contre PostgreSQL 18 → `status`, `attempts`, `available_at`, `payload`, plus `last_error`, `created_at`, `updated_at`, et l'index `idx_jobs_status_available_at (status, available_at)` ; second `rbs add jobs` → « ✓ jobs est déjà installée — rien à faire », **empreinte du projet identique** (`d5b5044d64231292` avant et après) · **colonnes en anglais là où le critère écrivait `disponible_a`** : le glossaire du dépôt et les tables `users`/`refresh_tokens` de la même base l'imposent, comme `O3` avait tranché `redis` contre `cache` · une table plutôt que Redis, le manifeste de fragment n'ayant aucun champ pour exiger une autre feature
       `serde_json` monte de `[dev-dependencies]` en dépendance de production pour le payload.
       ✓ `rbs new` puis `rbs add jobs` → clippy et fmt propres sur le projet généré.
       ✓ `rbs migrate up` crée la table avec statut, tentatives, `disponible_a` et payload.
       ✓ `rbs add jobs` deux fois → rien écrit la seconde fois.
 
-- [ ] **R2** · Enfilage typé et atomicité avec le métier
+- [x] **R2** · Enfilage typé et atomicité avec le métier — vérifié 2026-08-28 · les deux tests vivent **dans le projet engendré** et sont joués par `cargo test -p rbs-cli --test integration_jobs -- --ignored` → 2 passed en 38,07 s · ce test **exige nommément** que `jobs::tests::a_job_enqueued_in_a_rolled_back_transaction_does_not_exist` et `…_in_a_committed_transaction_is_visible_to_the_worker` paraissent en `... ok` : sans ces quatre lignes, un fragment cessant de livrer ses tests le laisserait au vert, `cargo test -- --ignored` sortant en 0 **même quand il ne filtre aucun test** · morsure enfiler sur `db` au lieu de `&transaction` → seul le test de rollback tombe, les trois autres `ok` — c'est ce qui distingue la table d'une file Redis, qui survivrait au rollback qui la motivait
       Le seul critère qui justifie d'avoir choisi la base contre Redis. S'il ne passe pas,
       le support n'a pas d'intérêt sur une file en mémoire.
       ✓ Un job enfilé dans une transaction **annulée** n'existe pas après le rollback.
       ✓ Un job enfilé dans une transaction committée est visible du worker.
 
-- [ ] **R3** · Le worker : réservation, réessai, échec définitif
+- [x] **R3** · Le worker : réservation, réessai, échec définitif — vérifié 2026-08-28 · mêmes deux tests exigés nommément par `integration_jobs` en `... ok` : `two_concurrent_workers_never_reserve_the_same_job` (200 jobs, 8 workers) et `a_failing_job_is_retried_then_marked_failed_after_the_last_attempt` · `grep -rn "FOR UPDATE SKIP LOCKED" crates/rbs-cli/templates/features/jobs/` → **un seul fichier**, `queue.rs.jinja`, où `reserver_prochain_job` est défini une fois, ses six autres occurrences étant des appels ; `templates::tests::the_dequeue_appears_in_a_single_place_of_the_jobs_fragment` fige cette unicité, dont dépend `S3` · morsure clause `SKIP LOCKED` retirée → « 214 job(s) réservé(s) deux fois » ; morsure `UPDATE … RETURNING` remplacé par un `SELECT` puis un `UPDATE` → « 856 » · **découverte : à 40 jobs et 4 workers, la morsure passait** — le test ne mordait pas ; le test livré porte 200/8
       Le dépilage est isolé dans `reserver_prochain_job` **dès maintenant**, pour que `S3`
       n'ait qu'un corps de fonction à trois branches à écrire au lieu d'une chasse à la
       requête. Le nombre de tentatives et l'attente entre deux viennent de `[jobs]`.
@@ -728,7 +739,7 @@ motivait. `jobs` est un fragment, `rbs add jobs`, comme `redis`, `mail` et `stor
       ✓ Un job qui échoue est réessayé, puis marqué en échec après N tentatives.
       ✓ Le dépilage n'apparaît qu'à un seul endroit du fragment, mesuré au `grep`.
 
-- [ ] **R4** · `integration_jobs` sous conteneur — la survie au redémarrage
+- [x] **R4** · `integration_jobs` sous conteneur — la survie au redémarrage — vérifié 2026-08-28 · `cargo test -p rbs-cli --test integration_jobs -- --ignored --test-threads=1` → **2 passed en 38,07 s**, dont `a_job_enqueued_before_the_process_is_killed_runs_after_the_restart` · **l'intervalle de scrutation sert de pince** : 3600 s pour le premier processus, qui ne verra donc jamais le job de son vivant, 1 s pour le second, qui le dépile — sans elle le premier l'exécuterait aussitôt et le test ne prouverait rien de sa survie ; le statut est constaté `pending` avant et après la mise à mort · morsure file passée en mémoire du processus (`Mutex<Vec<Model>>`) → « le job n'a pas survécu au redémarrage — statut "pending" », ce qui sépare ce jalon du `tokio::spawn` détaché de `M2`
       C'est ce qui distingue ce jalon du `tokio::spawn` détaché de `M2`, et cela se prouve
       plutôt que cela ne s'affirme.
       ✓ Processus tué entre l'enfilage et l'exécution, puis relancé → le job s'exécute.
