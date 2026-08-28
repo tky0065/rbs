@@ -9,7 +9,7 @@ use std::process::ExitCode;
 
 use migration::{Migrator, MigratorTrait};
 use sea_orm_migration::MigrationStatus;
-use sea_orm_migration::sea_orm::{ConnectionTrait, Database, Statement};
+use sea_orm_migration::sea_orm::{ConnectionTrait, Database, DatabaseBackend, Statement};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -45,13 +45,22 @@ async fn run(commande: &str) -> Result<(), Box<dyn Error>> {
                 println!("{etat}\t{}", migration.name());
             }
         }
+        // Chaque moteur dit sa version à sa façon, et aucun ne comprend la requête des
+        // autres. `rbs doctor` lit cette ligne : il sait quel moteur il interroge, et
+        // l'interprète en conséquence.
         "version" => {
-            let request =
-                Statement::from_string(db.get_database_backend(), "SHOW server_version_num");
+            let backend = db.get_database_backend();
+            let requete = match backend {
+                DatabaseBackend::Postgres => "SHOW server_version_num",
+                DatabaseBackend::MySql => "SELECT VERSION()",
+                DatabaseBackend::Sqlite => "SELECT sqlite_version()",
+                autre => return Err(format!("moteur inconnu : {autre:?}").into()),
+            };
+
             let response = db
-                .query_one_raw(request)
+                .query_one_raw(Statement::from_string(backend, requete))
                 .await?
-                .ok_or("PostgreSQL n'a pas rendu sa version")?;
+                .ok_or("la base n'a pas rendu sa version")?;
 
             println!("version\t{}", response.try_get_by_index::<String>(0)?);
         }
