@@ -1,4 +1,3 @@
-use sea_orm::ActiveValue::Set;
 use sea_orm::entity::prelude::*;
 
 /// Rôle applicatif, stocké en texte.
@@ -15,6 +14,7 @@ pub enum Role {
 }
 
 pub mod user {
+    use sea_orm::ActiveValue::Set;
     use sea_orm::entity::prelude::*;
 
     use super::Role;
@@ -52,6 +52,7 @@ pub mod user {
 }
 
 pub mod refresh_token {
+    use sea_orm::ActiveValue::Set;
     use sea_orm::entity::prelude::*;
 
     #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
