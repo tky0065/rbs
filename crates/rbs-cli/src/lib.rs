@@ -18,6 +18,7 @@ mod seed;
 mod template;
 mod templates;
 mod ui;
+mod upgrade;
 
 use std::error::Error;
 use std::path::PathBuf;
@@ -123,6 +124,13 @@ pub fn run() {
                 if let Some(remedy) = error.remedy() {
                     ui::info(&format!("\n{remedy}"));
                 }
+                std::process::exit(1);
+            }
+        }
+
+        Commands::Upgrade { force } => {
+            if let Err(error) = upgrade(force) {
+                ui::error(&error.to_string());
                 std::process::exit(1);
             }
         }
@@ -293,6 +301,36 @@ fn generate(
             "\n  la migration {migration} reste à appliquer avant de lancer le projet"
         ));
     }
+
+    Ok(())
+}
+
+/// Aligne le manifeste du projet courant sur la version du CLI, plan affiché avant
+/// écriture.
+fn upgrade(force: bool) -> Result<(), upgrade::Error> {
+    let directory = std::env::current_dir().map_err(|source| upgrade::Error::Acces {
+        path: ".".to_string(),
+        source,
+    })?;
+    let planned = upgrade::plan_for(&upgrade::Options { directory, force })?;
+
+    if planned.deja_a_jour {
+        ui::success(&format!(
+            "le projet est déjà en rbs {} — rien à faire",
+            planned.vers
+        ));
+        return Ok(());
+    }
+
+    ui::info(&format!("rbs {} → {}\n", planned.depuis, planned.vers));
+    println!("{}", plan::render::plan(&planned.plan));
+
+    plan::application::apply(&planned.plan, force)?;
+
+    ui::success(&format!("manifeste aligné sur rbs {}", planned.vers));
+    // Le manifeste ne fait qu'énoncer la version voulue : tant que le lock n'a pas suivi,
+    // le projet compile encore contre l'ancien noyau.
+    ui::info("\n  cargo update -p rbs-core, puis cargo test");
 
     Ok(())
 }

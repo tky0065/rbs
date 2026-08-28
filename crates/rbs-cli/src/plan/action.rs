@@ -57,6 +57,17 @@ pub(crate) enum PatchToml {
         /// Feature à y activer.
         feature: String,
     },
+    /// Aligne le projet sur une version de rbs : celle du noyau en `[dependencies]` et
+    /// celle que `[package.metadata.rbs]` garde de la génération.
+    ///
+    /// Les deux ne se dissocient pas : un manifeste qui n'en changerait qu'une décrit un
+    /// projet que `rbs doctor` tient pour incohérent.
+    AlignerSurVersion {
+        /// Nom de la dépendance au noyau, telle que le manifeste la déclare.
+        dependency: String,
+        /// Version à écrire des deux côtés.
+        version: String,
+    },
 }
 
 /// Ce que l'action produira, connu dès la planification.

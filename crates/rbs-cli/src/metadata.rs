@@ -304,6 +304,124 @@ pub fn add_feature_to_dependency(
     Ok(modifie.then(|| document.to_string()))
 }
 
+/// Rend le manifeste aligné sur `version` — celle de la dépendance `dep` et celle que
+/// `[package.metadata.rbs]` garde de la génération — ou `None` s'il l'est déjà.
+///
+/// Un noyau déclaré par un chemin n'a pas de version à changer : le mode de développement
+/// de rbs lui-même reste en place, et seule la métadonnée suit.
+pub fn align_version(
+    text: &str,
+    dep: &str,
+    version: &str,
+    name: &str,
+) -> Result<Option<String>, Error> {
+    let mut document = parse(text, name)?;
+
+    if document
+        .get("package")
+        .and_then(|package| package.get("metadata"))
+        .and_then(|metadata| metadata.get("rbs"))
+        .is_none()
+    {
+        return Err(Error::PasUnProjet {
+            path: name.to_string(),
+        });
+    }
+
+    let rbs = document
+        .get_mut("package")
+        .and_then(|package| package.get_mut("metadata"))
+        .and_then(|metadata| metadata.get_mut("rbs"))
+        .expect("la section a été vérifiée juste au-dessus")
+        .as_table_like_mut()
+        .ok_or_else(|| Error::Declaration {
+            path: name.to_string(),
+            key: "package.metadata.rbs".to_string(),
+        })?;
+
+    if rbs.get("version").and_then(Item::as_str).is_none() {
+        return Err(Error::Field {
+            path: name.to_string(),
+            key: "version",
+        });
+    }
+
+    let mut modifie = replace_version(rbs, version);
+
+    let absente = || Error::DependanceAbsente {
+        path: name.to_string(),
+        dependency: dep.to_string(),
+    };
+
+    let declared = document
+        .get_mut("dependencies")
+        .ok_or_else(absente)?
+        .as_table_like_mut()
+        .ok_or_else(|| Error::Declaration {
+            path: name.to_string(),
+            key: "dependencies".to_string(),
+        })?
+        .get_mut(dep)
+        .ok_or_else(absente)?;
+
+    modifie |= set_version(declared, version).ok_or_else(|| Error::Declaration {
+        path: name.to_string(),
+        key: dep.to_string(),
+    })?;
+
+    Ok(modifie.then(|| document.to_string()))
+}
+
+/// Donne à `version` la version d'une déclaration de dépendance, en rendant `false` si
+/// elle la portait déjà ou n'en portait aucune — cas d'un `path` ou d'un `git` — et `None`
+/// si la déclaration n'a pas une forme manipulable.
+fn set_version(declared: &mut Item, version: &str) -> Option<bool> {
+    if let Some(present) = declared.as_str() {
+        if present == version {
+            return Some(false);
+        }
+
+        let decor = declared.as_value()?.decor().clone();
+        let mut value = Value::from(version);
+        *value.decor_mut() = decor;
+        *declared = Item::Value(value);
+
+        return Some(true);
+    }
+
+    let table = declared.as_table_like_mut()?;
+
+    if table.get("version").and_then(Item::as_str).is_none() {
+        return Some(false);
+    }
+
+    Some(replace_version(table, version))
+}
+
+/// Écrit `version` dans la clé `version` d'une table, en rendant `false` si elle y était
+/// déjà.
+///
+/// Le décor de l'ancienne valeur est repris : sans lui, une table inline perdrait les
+/// espaces qui l'entourent, et le manifeste changerait plus que son numéro.
+fn replace_version(table: &mut dyn toml_edit::TableLike, version: &str) -> bool {
+    if table.get("version").and_then(Item::as_str) == Some(version) {
+        return false;
+    }
+
+    let decor = table
+        .get("version")
+        .and_then(Item::as_value)
+        .map(|present| present.decor().clone());
+
+    let mut value = Value::from(version);
+    if let Some(decor) = decor {
+        *value.decor_mut() = decor;
+    }
+    table.insert("version", Item::Value(value));
+
+    true
+}
+
 /// La déclaration à écrire pour une dépendance encore absente.
 ///
 /// Une version nue tant qu'il n'y a rien d'autre à dire : c'est la forme qu'un développeur
@@ -511,6 +629,66 @@ mod tests {
         fs::write(&path, content).expect("manifeste écrit");
 
         (directory, path)
+    }
+
+    /// Un manifeste minimal, dont on veut voir survivre la mise en forme.
+    const ALIGNABLE: &str = "[package]\nname = \"demo\"\n\n\
+        [package.metadata.rbs]\n\
+        version = \"0.1.0\"\n\
+        features = []\n\n\
+        [dependencies]\n\
+        # le noyau, et rien d'autre\n\
+        rbs-core = { version = \"0.1.0\", default-features = false }\n\
+        anyhow = \"1.0\"\n";
+
+    #[test]
+    fn aligning_moves_both_numbers_and_leaves_the_rest_alone() {
+        let rendu = align_version(ALIGNABLE, "rbs-core", "1.0.0", "Cargo.toml")
+            .expect("l'alignement doit aboutir")
+            .expect("un manifeste en retard change");
+
+        assert_eq!(rendu, ALIGNABLE.replace("0.1.0", "1.0.0"));
+    }
+
+    #[test]
+    fn aligning_an_already_aligned_manifest_changes_nothing() {
+        let aligne = ALIGNABLE.replace("0.1.0", "1.0.0");
+
+        assert_eq!(
+            align_version(&aligne, "rbs-core", "1.0.0", "Cargo.toml")
+                .expect("l'alignement doit aboutir"),
+            None
+        );
+    }
+
+    /// Le noyau pris d'un chemin n'a pas de version à changer, et le mode de
+    /// développement de rbs ne doit pas se faire écraser par une mise à niveau.
+    #[test]
+    fn a_core_declared_by_a_path_keeps_it_while_the_metadata_follows() {
+        let source = ALIGNABLE.replace(
+            "rbs-core = { version = \"0.1.0\", default-features = false }",
+            "rbs-core = { path = \"../rbs-core\", default-features = false }",
+        );
+
+        let rendu = align_version(&source, "rbs-core", "1.0.0", "Cargo.toml")
+            .expect("l'alignement doit aboutir")
+            .expect("la métadonnée, elle, change");
+
+        assert!(rendu.contains("path = \"../rbs-core\""), "{rendu}");
+        assert!(rendu.contains("version = \"1.0.0\""), "{rendu}");
+    }
+
+    #[test]
+    fn aligning_a_manifest_without_the_core_names_the_missing_dependency() {
+        let source = ALIGNABLE.replace(
+            "rbs-core = { version = \"0.1.0\", default-features = false }\n",
+            "",
+        );
+
+        let error = align_version(&source, "rbs-core", "1.0.0", "Cargo.toml")
+            .expect_err("une dépendance absente est une erreur");
+
+        assert!(error.to_string().contains("rbs-core"), "{error}");
     }
 
     #[test]

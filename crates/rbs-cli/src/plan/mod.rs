@@ -220,6 +220,10 @@ impl Builder {
                 dependency,
                 feature,
             } => crate::metadata::add_feature_to_dependency(&courant, dependency, feature, path),
+            PatchToml::AlignerSurVersion {
+                dependency,
+                version,
+            } => crate::metadata::align_version(&courant, dependency, version, path),
         }
         .map_err(Error::Metadata)?;
 
