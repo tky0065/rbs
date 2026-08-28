@@ -34,6 +34,8 @@ de rbs lit sans avoir choisi de contribuer au dépôt.
 | `StorageError::CleRefusee` | `StorageError::RejectedKey` |
 | `StorageError::Indisponible` | `StorageError::Unavailable` |
 | `backend_par_defaut` | `default_backend` |
+| `src/storage/fichiers.rs` | `src/storage/files.rs` |
+| clé `[storage].racine` | `[storage].root`, et son répertoire `./stockage` devient `./storage` |
 
 `get` plutôt que `read` pour faire pendant à `put`, et parce que le trait est un magasin
 d'objets, non un système de fichiers.
@@ -47,11 +49,9 @@ d'objets, non un système de fichiers.
 | `envoyer_detache` | `send_detached` |
 | `message` | `message` (inchangé) |
 | `Gabarits` | `Templates` |
-| `src/mail/gabarit.rs` | `src/mail/template.rs` |
-| `src/storage/fichiers.rs` | `src/storage/files.rs` |
-| clé `[mail].gabarits` | `[mail].templates` |
-| clé `[storage].racine` | `[storage].root` (répertoire `./storage`) |
 | `gabarits` (champ) | `templates` |
+| `src/mail/gabarit.rs` | `src/mail/template.rs` |
+| clé `[mail].gabarits` | `[mail].templates` |
 | `rendre` | `render` |
 | `nouveau` / `nouveaux` | `new` |
 | `interne` (conversion d'erreur) | `internal` |
