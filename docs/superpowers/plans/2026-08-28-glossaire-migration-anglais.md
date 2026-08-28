@@ -47,6 +47,10 @@ d'objets, non un système de fichiers.
 | `envoyer_detache` | `send_detached` |
 | `message` | `message` (inchangé) |
 | `Gabarits` | `Templates` |
+| `src/mail/gabarit.rs` | `src/mail/template.rs` |
+| `src/storage/fichiers.rs` | `src/storage/files.rs` |
+| clé `[mail].gabarits` | `[mail].templates` |
+| clé `[storage].racine` | `[storage].root` (répertoire `./storage`) |
 | `gabarits` (champ) | `templates` |
 | `rendre` | `render` |
 | `nouveau` / `nouveaux` | `new` |
@@ -75,8 +79,9 @@ d'objets, non un système de fichiers.
 | `consommer` | `consume` |
 | `emettre` | `issue` |
 | `encoder` / `decoder` | `encode` / `decode` |
-| `hacher` | `hash` |
-| `verifier` (mot de passe, JWT) | `verify` |
+| `hacher` | `hash_password` |
+| `verifier` (mot de passe) | `verify_password` |
+| `verifier` (JWT) | `verify` |
 | `signer` | `sign` |
 | `empreinte` | `fingerprint` |
 | `aleatoire` | `random` |
@@ -176,3 +181,33 @@ du code juste :
 `cache`, `mail`, `storage`, `router`, `routes`, `handler`, `middleware`, `init`,
 `load`, `new`, `from`, `get`, `set`, `list`, `find`, `create`, `update`, `delete`,
 `up`, `down`, `main`, `scope`, `offset`, `per_page`, `current`.
+
+---
+
+## 5. Ce que la migration a appris
+
+Consigné après coup, parce que rien de tout cela ne se voyait avant de le rencontrer.
+
+- **Trois régimes de remplacement, pas un.** Le code se traduit intégralement ; un
+  commentaire seulement entre backticks ; une chaîne littérale seulement dans ses
+  interpolations `{…}`. Sans cette distinction, « le nom n'est pas rendu » devient « le
+  nom n'est pas rendered ». Le premier outil ne faisait pas la troisième distinction : la
+  couche des templates a dû être rejouée depuis un dépôt propre.
+- **Un traitement ligne à ligne rate les chaînes multi-lignes.** Les messages écrits sur
+  plusieurs lignes avec `\` échappent au régime « chaîne » et repassent en régime
+  « code ». Ils se retrouvent à la relecture, par un grep cherchant un mot anglais entouré
+  de français.
+- **serde nomme des fonctions par des chaînes.** `#[serde(default = "url_par_defaut")]`
+  est un identifiant malgré ses guillemets. Le protéger comme une chaîne casse la
+  compilation des projets générés — et seule une génération réelle le montre.
+- **Les variables de rendu vivent des deux côtés.** Ce que `Feature` et `Field`
+  sérialisent à la main pour minijinja, et ce que les templates lisent. Renommer un seul
+  des deux rend la variable indéfinie, ce que ni `cargo build` ni `cargo test --lib` ne
+  révèlent.
+- **Les clés d'un `feature.toml` ne sont pas du code.** Les renommer avec les
+  identifiants Rust casse le parsing ; elles ne suivent que lorsque leurs structures
+  serde bougent, et alors les six fragments doivent suivre ensemble.
+- **`integration_examples` ne protège pas les marqueurs `// region:`** : il les filtre
+  par construction. Un exemple aligné par copie depuis un projet généré les perd sans que
+  rien n'échoue — jusqu'à ce que le site de documentation ne trouve plus ses extraits.
+  C'est le seul dégât que la suite de tests n'a pas signalé.

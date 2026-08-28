@@ -11,6 +11,15 @@ Vision et jalons : [`ROADMAP.md`](ROADMAP.md)
 Chaque tâche porte son critère de validation (`✓`). Une case ne se coche jamais sur une
 impression.
 
+> **Les identifiants du dépôt sont passés à l'anglais le 2026-08-28.** Les lignes de
+> preuve antérieures citent les noms qui étaient les leurs le jour où la commande a été
+> lancée — `le_backend_fichiers_depose_lit_atteste_puis_supprime` est devenu
+> `the_file_backend_puts_gets_attests_then_deletes`, et ainsi de trente-six lignes. Elles
+> ne sont pas réécrites : une preuve est un compte rendu daté, et lui donner après coup un
+> nom qui n'existait pas ce jour-là la rendrait fausse. Pour rejouer l'une d'elles,
+> `docs/superpowers/plans/2026-08-28-glossaire-migration-anglais.md` donne la
+> correspondance.
+
 ---
 
 ## 🚧 v0.1 — Socle
