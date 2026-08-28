@@ -1,8 +1,8 @@
 # TODO — rbs
 
-Tâches actionnables. De la **v0.1** à la **v0.4** les jalons sont détaillés ; la **v1.0**
-figure en grosses mailles et sera détaillée à son tour, avec ce que les précédents auront
-appris. Détailler un jalon ne l'ouvre pas : l'ordre des lots reste contraignant.
+Tâches actionnables. Les cinq jalons, de la **v0.1** à la **v1.0**, sont détaillés — le
+dernier l'a été le 2026-08-28, avec ce que les quatre précédents avaient appris. Détailler
+un jalon ne l'ouvre pas : l'ordre des lots reste contraignant.
 
 Design de référence : [`docs/superpowers/specs/2026-08-25-rbs-design.md`](docs/superpowers/specs/2026-08-25-rbs-design.md)
 Vision et jalons : [`ROADMAP.md`](ROADMAP.md)
@@ -795,13 +795,140 @@ motivait. `jobs` est un fragment, `rbs add jobs`, comme `redis`, `mail` et `stor
 
 ---
 
-## ⏳ Jalons suivants
+## 🔒 v1.0 — Stabilité
 
-Volontairement en grosses mailles. Détailler ces tâches aujourd'hui serait de la
-fiction : elles seront réécrites avec ce que les jalons précédents auront appris.
+**Détaillé le 2026-08-28. Conception et décisions :**
+[`docs/superpowers/specs/2026-08-28-v1.0-stabilite-design.md`](docs/superpowers/specs/2026-08-28-v1.0-stabilite-design.md).
 
-### v1.0 — Stabilité
-- [ ] Gel de l'API publique de `rbs-core`
-- [ ] Publication sur crates.io
-- [ ] CHANGELOG et engagement semver
-- [ ] `rbs upgrade` — migration d'un projet d'une version de rbs à la suivante
+> **Ce jalon publie, et une publication ne se retire pas.** C'est le premier dont le
+> livrable est un engagement et non du code. Il publie donc **deux fois** : une 0.4.0 qui
+> n'engage rien — la conception principale §7 pose « pas de promesse de semver avant la
+> v1.0 » — puis la 1.0.0 qui engage tout. Le tour de chauffe est délibéré.
+
+Ordre : `U → (W ∥ X) → Y`. `U` est premier pour trois raisons qui se cumulent et dont
+aucune seule ne suffirait : il lève la friction sur laquelle `V1` a échoué, il fait tourner
+la mécanique de publication sur une version sans enjeu, et il crée la version antérieure
+sans laquelle ni `semver-checks` ni la preuve de `Y3` n'ont d'objet.
+
+`W` et `X` sont disjoints par les fichiers — `W` dans `rbs-core` et la CI, `X` dans
+`rbs-cli` — mais **le goulot est entier à la vérification**, comme en v0.3 et v0.4 : cible
+de compilation partagée, verrou de cargo, et les `--ignored` de `X` compilent un projet
+engendré. Deux branches valent pour l'écriture, à condition de passer les `--ignored` en
+fin de parcours, une par une.
+
+Les lots sautent `V` : `V1`, `V2` et `V3` ne désignent pas un lot mais la validation du
+jalon v0.1, et deux `V1` dans ce fichier rendraient ambiguë chaque référence croisée.
+
+### Lot U — Publication
+
+- [ ] **U1** · Workflow de publication sur tag
+      `release.yml`, déclenché par un tag `v*`, publie `rbs-core` puis `rbs-cli` en
+      `--locked`. Le point dur n'est pas la publication mais la **garde** : un tag `v0.4.0`
+      posé sur un workspace resté à `0.1.0` publierait une version qui ne dit pas son nom,
+      et crates.io ne reprend rien. Le secret `CARGO_REGISTRY_TOKEN` est une action hors
+      dépôt, connue d'avance (conception §2.8) : la case attend le run réel de `U3`.
+      ✓ Tag ne correspondant pas à `workspace.package.version` → échec **avant** toute
+      publication, nommant les deux versions.
+      ✓ `cargo publish --dry-run --locked` des deux crates joué par le workflow.
+
+- [ ] **U2** · `CHANGELOG.md`, et le README remis à jour
+      Keep a Changelog, en français, écrit à la main : les sujets de commit sont écrits
+      pour le dépôt, un CHANGELOG l'est pour qui installe. `README.md:12` annonce encore
+      « Version 0.1 is under construction » quand quatre jalons sont livrés ; `README.fr.md`
+      change dans le même commit.
+      ✓ Parité FR/EN des fichiers racine, mesurée comme en `V2`.
+      ✓ Aucune entrée pour une version non publiée.
+
+- [ ] **U3** · Publication réelle de 0.4.0
+      Workspace à `0.4.0`, tag, run réel du workflow. C'est ce qui lève la friction sur
+      laquelle `V1` a échoué : `new.rs:238` engendre `rbs-core = { version = "…" }` dès que
+      `--core-path` est absent, et le parcours du `README` cesse d'exiger le contournement.
+      ✓ `cargo install rbs-cli` depuis crates.io, **sans** `--git` → binaire `rbs` exercé.
+      ✓ `rbs new` sans `--core-path`, puis `cargo build` → vert, `rbs-core` résolu depuis
+      le registre.
+      ✓ `NOYAU_PUBLIE` passe à `true` (`doctor/versions.rs:24`) : un projet déclarant
+      `rbs-core` depuis crates.io cesse d'être diagnostiqué en échec. La constante est là
+      pour ce jour, et ses deux chemins sont déjà couverts par les tests.
+
+### Lot W — Le gel
+
+- [ ] **W1** · `cargo-semver-checks` en CI
+      Un gel annoncé dans une page de documentation est une intention ; l'outil en fait une
+      contrainte, en répondant à « ce changement est-il une rupture ? » là où un instantané
+      textuel de l'API ne répond qu'à « l'API a-t-elle changé ? ». Il lui faut une version
+      publiée à laquelle se comparer, d'où l'ordre `U → W`.
+      ✓ Une variante retirée d'`Error` → la CI échoue **en nommant l'item**.
+      ✓ `main` tel quel → verdict vert.
+
+- [ ] **W2** · `#[non_exhaustive]` sur ce qui grossira
+      Zéro occurrence aujourd'hui, pour 5 enums publics (`Error`, `ConfigError`, `JwtError`,
+      `Status`, `Check`) et 16 structs. L'attribut impose un bras `_ =>` au filtrage
+      exhaustif et interdit la construction littérale hors de la crate : c'est une rupture,
+      et c'est pourquoi elle se paie ici — après 1.0.0 elle vaudrait 2.0.0.
+      ✓ Catalogue justifié item par item, sur les deux questions de la conception §2.3.
+      ✓ Les quatre projets d'`examples/` compilent sans une ligne de modification.
+      ✓ Une variante ajoutée à `Error` **après** la pose → `semver-checks` ne la signale
+      plus comme rupture. C'est le seul énoncé qui atteste que l'attribut sert.
+
+- [ ] **W3** · La politique semver, README et docs FR/EN
+      Le tableau de la conception §2.4 en donne les cinq périmètres. Le point non évident
+      est que **le format des ancres et de `[package.metadata.rbs]` est couvert** : un
+      projet engendré en 0.4.0 doit rester lisible par `rbs add` en 1.x, sans quoi il meurt
+      à la première mise à jour du CLI. Le code engendré, lui, ne l'est pas — il appartient
+      à l'utilisateur dès qu'il est écrit.
+      ✓ `README.md:14` et son homologue français annoncent la promesse au lieu de son
+      absence.
+      ✓ Une page dans les deux langues énonce les cinq périmètres, parité mesurée par
+      `docs/scripts/parite.mjs`.
+
+### Lot X — `rbs upgrade`
+
+- [ ] **X1** · La commande
+      Séquence obligatoire du projet — lire → planifier → vérifier → afficher → appliquer
+      (conception principale §4.4), working tree Git propre exigé. Elle n'écrit que dans
+      `Cargo.toml` : le code engendré est fait pour être modifié, et une commande qui le
+      réécrirait détruirait le travail de l'utilisateur sans qu'il l'ait demandé.
+      ✓ Projet en 0.4.0 lu par un binaire 1.0.0 → plan affiché, puis `rbs-core` et
+      `[package.metadata.rbs].version` à 1.0.0.
+      ✓ Relancée → « rien à faire », aucun octet écrit.
+      ✓ Projet dont la version est postérieure à celle du binaire → refus nommant les deux.
+      ✓ `git diff` du projet après coup → aucun fichier touché hors `Cargo.toml`.
+
+- [ ] **X2** · Les notes de migration embarquées
+      Un fichier par saut de version, embarqué par `include_dir` comme les templates. Leur
+      longueur mesure la qualité du gel : des notes longues disent que l'API a mal été figée.
+      ✓ Le saut 0.4.0 → 1.0.0 affiche la rupture réelle du gel — le bras `_ =>` que `W2`
+      impose au filtrage exhaustif.
+      ✓ Un saut sans note → message neutre, code de sortie 0, non une erreur.
+      ✓ Un test échoue s'il **manque** une note pour le saut depuis la dernière version
+      publiée : sans lui le catalogue pourrit en silence.
+
+- [ ] **X3** · `doctor` renvoie vers `rbs upgrade`
+      Pas un contrôle de plus : le contrôle `versions` sait déjà dire « projet généré par
+      rbs 0.4.0, CLI 1.0.0 » (`doctor/versions.rs:47`). Ce qu'il ne sait pas, c'est nommer
+      le geste — son conseil est « alignez le projet sur rbs 1.0.0, ou relancez la commande
+      avec le CLI qui l'a généré » (`:90`), écrit quand le geste n'existait pas. Un écart
+      qui ne nomme pas sa commande est un utilisateur qui ne lancera jamais `upgrade`.
+      ✓ Projet engendré par 0.4.0, binaire en 1.0.0 → le conseil nomme `rbs upgrade`.
+      ✓ Projet aligné → ligne `✓` inchangée.
+
+### Lot Y — Sortie du jalon
+
+- [ ] **Y1** · Page `cli/upgrade`, FR et EN
+      ✓ Parité stricte mesurée comme en `T2`.
+      ✓ Aucun extrait écrit à la main : les sorties sont capturées sur le binaire.
+
+- [ ] **Y2** · Publication de 1.0.0
+      Workspace à `1.0.0`, entrée de CHANGELOG, tag, run réel.
+      ✓ `cargo install rbs-cli` depuis crates.io → 1.0.0.
+      ✓ `rbs new` sans `--core-path` → `cargo build` vert sur `rbs-core 1.0.0`.
+
+- [ ] **Y3** · Critère de sortie du jalon
+      Le `ROADMAP` énonce « l'API publique de `rbs-core` est figée ». La preuve vient
+      **après** la publication de `Y2` et non avant : `upgrade` ne peut être joué sur un
+      saut réel qu'une fois les deux versions publiées. L'inversion est bornée — la commande
+      n'écrit que dans un manifeste, et un manifeste faux se corrige par une 1.0.1.
+      ✓ Un projet engendré par la 0.4.0 **installée depuis crates.io**, passé à 1.0.0 par
+      `rbs upgrade`, dont `cargo test` est vert après.
+      ✓ `cargo semver-checks` de 1.0.0 contre 0.4.0 → verdict cohérent avec le numéro publié.
+      ✓ Le `README` annonce la promesse de compatibilité, et non plus son absence.
