@@ -25,6 +25,7 @@ pub use queue::enqueue_at;
 
 use crate::state::AppState;
 
+// region: trait
 /// Un travail que le worker exécute hors du cycle d'une requête.
 ///
 /// `KIND` est écrit dans la ligne et sert de clé au registre : le renommer sans migration
@@ -37,6 +38,7 @@ pub trait Job: Serialize + DeserializeOwned + Send + Sync + 'static {
     /// Ce que le job fait. Toute erreur rendue ici vaut réessai.
     async fn run(&self, state: &AppState) -> anyhow::Result<()>;
 }
+// endregion: trait
 
 /// Un job dont le type a été oublié, tel que le registre le garde.
 type Handler = Box<

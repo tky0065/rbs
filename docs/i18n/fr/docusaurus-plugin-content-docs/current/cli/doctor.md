@@ -41,19 +41,53 @@ aucune n'a d'effet ici.
 | `ancres` | Les neuf points d'insertion : `// <rbs:features>` dans `src/main.rs`, `// <rbs:routes>` dans `src/router.rs`, `// <rbs:openapi>` dans `src/openapi.rs`, `// <rbs:migration_modules>` et `// <rbs:migrations>` dans `migration/src/lib.rs`, `// <rbs:state_champs>` et `// <rbs:state_init>` dans `src/state.rs`, `// <rbs:startup>` dans `src/main.rs`, `// <rbs:seeds>` dans `src/seeds/main.rs`. |
 | `.env` | Toute variable déclarée par `.env.example` est renseignée dans `.env`. `.env.example` sert de référence parce qu'il est versionné et généré avec le squelette — une liste tenue dans le CLI aurait fait deux vérités à synchroniser. |
 | `versions` | Le rbs inscrit dans `[package.metadata.rbs]`, la dépendance `rbs-core`, et le CLI qui diagnostique. |
-| `base` | Une connexion TCP en moins de trois secondes, puis la version du serveur — demandée au binaire de la crate `migration`, rbs n'embarquant aucun client SQL. PostgreSQL 18 est le minimum : `uuidv7()`, que les migrations générées posent en défaut de clé primaire, n'existe pas avant. |
+| `base` | Le pilote compilé au manifeste face au schéma de l'URL, puis une connexion TCP en moins de trois secondes, puis la version du serveur — demandée au binaire de la crate `migration`, rbs n'embarquant aucun client SQL. Chaque moteur a son plancher, et chaque plancher sa raison : PostgreSQL 14, le plus ancien encore maintenu ; MySQL 8.0, pour `FOR UPDATE SKIP LOCKED` ; SQLite 3.35, pour `UPDATE … RETURNING`. |
 
 Une ancre disparue ne casse rien tant qu'aucune génération n'a lieu : c'est précisément
 pourquoi `doctor` la cherche avant que [`rbs generate`](./generate.md) ne bute dessus.
+
+Le pilote passe avant la connexion, et c'est délibéré. Un serveur qui répond ne prouve rien
+quand le pilote compilé dans votre binaire ne sait pas parler son protocole, et sonder le
+port d'abord ferait payer trois secondes à un diagnostic qui tient dans deux lectures de
+fichier :
+
+```text
+  ✗ base       le manifeste compile `sqlx-postgres` et RBS_DATABASE__URL est une URL `mysql://`
+      alignez les deux : la feature `sqlx-mysql` de sea-orm au manifeste, ou une URL `postgres://` dans le .env
+```
+
+C'est la contradiction que [`rbs new`](./new.md) refuse d'emblée, rencontrée ici après coup
+— sur un projet dont le `.env` a été édité plus tard.
+
+## Les features installées
+
+Chaque feature qui porte de la configuration ajoute une ligne à elle, et cette ligne
+n'existe que sur un projet qui a déclaré la feature. `jobs` est celle que ce jalon a
+ajoutée :
+
+```text
+  ✗ jobs       config/default.toml ne porte pas de section `[jobs]`
+      ajoutez à config/default.toml :
+      [jobs]
+      max_attempts = 5
+      retry_delay_secs = 30
+      poll_interval_secs = 1
+```
+
+Une feature déclarée dans `[package.metadata.rbs]` dont la section a disparu de la
+configuration est un projet qui compile et échoue au démarrage — ce que `doctor` sait dire
+à froid, avant que vous ne le lanciez. Une section mise en commentaire ne compte pas pour
+une section.
 
 ## Un projet sain
 
 ```text
 $ rbs doctor
-  ✓ ancres     les 7 points d'insertion sont en place
+  ✓ ancres     les 9 points d'insertion sont en place
   ✓ .env       les 4 variables de .env.example sont renseignées
   ✓ versions   projet et rbs-core pris d'un chemin local alignés sur le CLI 0.1.0
-  ✓ base       PostgreSQL 18.6 répond sur localhost:55432
+  ✓ base       postgres 17.10 répond sur localhost:55446
+  ✓ jobs       la configuration de la file est en place
 ✓ le projet est sain
 ```
 
@@ -74,8 +108,10 @@ $ rbs doctor
       ajoutez au .env :
       RBS_LOG_FORMAT=pretty
   ✓ versions   projet et rbs-core pris d'un chemin local alignés sur le CLI 0.1.0
-  ✗ base       rien ne répond sur localhost:55432
-      démarrez PostgreSQL, ou corrigez l'URL du .env
+  ✗ base       rien ne répond sur localhost:55446
+      démarrez postgres, ou corrigez l'URL du .env
+  ✓ jobs       la configuration de la file est en place
+attention : le projet demande votre attention
 ```
 
 Trois échecs, un contrôle encore au vert, et chaque ligne en défaut porte le geste qui la
@@ -92,11 +128,13 @@ commande à lancer à la main :
 
 ```text
 $ rbs doctor
-  ✓ ancres     les 7 points d'insertion sont en place
+  ✓ ancres     les 9 points d'insertion sont en place
   ✓ .env       les 4 variables de .env.example sont renseignées
   ✓ versions   projet et rbs-core pris d'un chemin local alignés sur le CLI 0.1.0
-  ✗ base       localhost:5432 répond, mais sa version reste inconnue : la crate migration a échoué (code 1)
+  ✗ base       localhost:55446 répond, mais sa version reste inconnue : la crate migration a échoué (code 1)
       vérifiez que `cargo run -p migration -- version` aboutit
+  ✓ jobs       la configuration de la file est en place
+attention : le projet demande votre attention
 ```
 
 ## Hors d'un projet

@@ -21,6 +21,7 @@ pub struct Mailer {
 
 impl Mailer {
     /// Bâtit le transport depuis la section `[mail]`.
+    // region: construction
     pub fn from_config() -> anyhow::Result<Self> {
         let config = rbs_core::config::section::<MailConfig>("mail")
             .context("section [mail] de la configuration")?;
@@ -62,6 +63,7 @@ impl Mailer {
             templates: Templates::new(&config.templates),
         })
     }
+    // endregion: construction
 
     /// Prépare un message HTML de l'expéditeur configuré vers `recipient`.
     pub fn message(&self, recipient: &str, subject: &str, body: String) -> Result<Message> {
@@ -83,6 +85,7 @@ impl Mailer {
     }
 
     /// Rend `template` avec `context`, et envoie le résultat.
+    // region: send_template
     pub async fn send_template<S: Serialize>(
         &self,
         recipient: &str,
@@ -94,6 +97,7 @@ impl Mailer {
 
         self.send(self.message(recipient, subject, body)?).await
     }
+    // endregion: send_template
 
     // region: send_detached
     /// Lance l'envoi et rend la main sans l'attendre.

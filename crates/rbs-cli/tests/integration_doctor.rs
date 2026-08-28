@@ -83,8 +83,9 @@ fn retirer_la_section(projet: &Path, section: &str) {
 
 /// Le rapport rendu par le binaire livré.
 ///
-/// `rbs doctor` sort en 0 même quand un contrôle échoue : c'est la ligne rendue qui
-/// tranche, jamais le code de sortie.
+/// L'assertion porte sur la ligne rendue et non sur le code de sortie : celui-ci vaut 1
+/// dès qu'un contrôle échoue, quel qu'il soit, et ne dirait donc pas lequel. C'est la
+/// ligne qui distingue le constat visé d'un autre échec du même rapport.
 fn diagnostic(projet: &Path) -> String {
     let sortie = rbs(projet).arg("doctor").assert().get_output().clone();
 
