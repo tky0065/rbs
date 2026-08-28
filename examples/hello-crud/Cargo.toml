@@ -12,6 +12,7 @@ default-run = "hello-crud"
 [package.metadata.rbs]
 version = "0.1.0"
 features = ["health", "articles"]
+database = "postgres"
 
 [[bin]]
 name = "hello-crud"

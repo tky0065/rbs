@@ -30,6 +30,15 @@ pub fn cible() -> PathBuf {
     depot().join("target/rbs-integration")
 }
 
+/// Le même, propre au moteur demandé.
+///
+/// Les trois moteurs activent des features `sea-orm` différentes : les faire partager une
+/// cible ferait recompiler `sea-orm` et `sqlx` à chaque bascule, y compris pour les tests
+/// qui n'ont rien demandé. Un arbre par moteur reste chaud d'un run à l'autre.
+pub fn cible_pour(moteur: &str) -> PathBuf {
+    depot().join(format!("target/rbs-integration-{moteur}"))
+}
+
 /// Un projet neuf, créé par le binaire livré, dans `parent`.
 pub fn projet(parent: &Path) -> PathBuf {
     let noyau = noyau();
