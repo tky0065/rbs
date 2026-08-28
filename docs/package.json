@@ -13,6 +13,7 @@
     "write-translations": "docusaurus write-translations",
     "write-heading-ids": "docusaurus write-heading-ids",
     "typecheck": "tsc",
+    "parite": "node scripts/parite.mjs",
     "test": "node --test \"plugins/**/*.test.js\""
   },
   "dependencies": {

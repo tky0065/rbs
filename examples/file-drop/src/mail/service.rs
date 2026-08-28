@@ -20,6 +20,7 @@ pub struct Mailer {
 }
 
 impl Mailer {
+    // region: construction
     /// Bâtit le transport depuis la section `[mail]`.
     pub fn from_config() -> anyhow::Result<Self> {
         let config = rbs_core::config::section::<MailConfig>("mail")
@@ -62,6 +63,7 @@ impl Mailer {
             templates: Templates::new(&config.templates),
         })
     }
+    // endregion: construction
 
     /// Prépare un message HTML de l'expéditeur configuré vers `recipient`.
     pub fn message(&self, recipient: &str, subject: &str, body: String) -> Result<Message> {
@@ -82,6 +84,7 @@ impl Mailer {
         Ok(())
     }
 
+    // region: send_template
     /// Rend `template` avec `context`, et envoie le résultat.
     pub async fn send_template<S: Serialize>(
         &self,
@@ -94,7 +97,9 @@ impl Mailer {
 
         self.send(self.message(recipient, subject, body)?).await
     }
+    // endregion: send_template
 
+    // region: send_detached
     /// Lance l'envoi et rend la main sans l'attendre.
     ///
     /// Ni file ni réessai : un message perdu l'est pour de bon, et seul le journal en
@@ -111,6 +116,7 @@ impl Mailer {
             }
         });
     }
+    // endregion: send_detached
 }
 
 /// Une panne du transport n'apprend rien au client : elle reste au journal du serveur.

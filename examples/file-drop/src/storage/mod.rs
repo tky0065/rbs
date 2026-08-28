@@ -10,6 +10,7 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::Deserialize;
 
+// region: erreurs
 /// Ce qu'un stockage refuse, ne trouve pas, ou ne peut pas faire.
 #[derive(Debug, thiserror::Error)]
 pub enum StorageError {
@@ -25,7 +26,9 @@ pub enum StorageError {
     #[error("stockage indisponible : {0}")]
     Unavailable(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
+// endregion: erreurs
 
+// region: trait
 #[async_trait]
 pub trait Storage: std::fmt::Debug + Send + Sync {
     /// Dépose `content` sous `key`, en écrasant l'objet qui s'y trouvait.
@@ -40,6 +43,7 @@ pub trait Storage: std::fmt::Debug + Send + Sync {
     /// Un objet est-il déposé sous `key` ?
     async fn exists(&self, key: &str) -> Result<bool, StorageError>;
 }
+// endregion: trait
 
 /// Section `[storage]` de la configuration.
 #[derive(Debug, Clone, Deserialize)]
@@ -94,6 +98,7 @@ pub fn from_config() -> anyhow::Result<Arc<dyn Storage>> {
     build(rbs_core::config::section::<StorageConfig>("storage")?)
 }
 
+// region: build
 /// Le stockage décrit par `config`, sans toucher ni à la configuration ni au réseau.
 fn build(config: StorageConfig) -> anyhow::Result<Arc<dyn Storage>> {
     match config.backend.as_str() {
@@ -104,7 +109,9 @@ fn build(config: StorageConfig) -> anyhow::Result<Arc<dyn Storage>> {
         ),
     }
 }
+// endregion: build
 
+// region: normalize
 /// Résout `key` en un chemin relatif sûr, ou la refuse.
 ///
 /// Un nom d'objet vient souvent de l'utilisateur. La clé est donc parcourue composant par
@@ -131,3 +138,4 @@ pub fn normalize(key: &str) -> Result<String, StorageError> {
 
     Ok(segments.join("/"))
 }
+// endregion: normalize

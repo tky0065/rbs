@@ -88,7 +88,9 @@ pub async fn create(
 
     Ok(upload)
 }
+// endregion: create
 
+// region: notify
 /// Prévient le déposant, sans retenir la réponse HTTP.
 ///
 /// L'envoi part dans sa propre tâche : un SMTP lent ferait autrement attendre le client
@@ -120,7 +122,7 @@ fn notify(mailer: &Mailer, recipient: &str, upload: &UploadResponse) {
         }
     });
 }
-// endregion: create
+// endregion: notify
 
 pub async fn update(
     db: &DatabaseConnection,

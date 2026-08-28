@@ -24,6 +24,7 @@ pub struct Cache {
 }
 
 impl Cache {
+    // region: construction
     /// Construit le cache depuis la section `[cache]` de la configuration.
     pub fn from_config() -> anyhow::Result<Self> {
         Self::new(&Config::load()?)
@@ -43,7 +44,9 @@ impl Cache {
             ttl: Duration::from_secs(config.ttl_secs),
         })
     }
+    // endregion: construction
 
+    // region: lecture
     /// Lit une valeur. Une clé absente ou expirée rend `None`.
     pub async fn get<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
         let mut connection = self.connection().await?;
@@ -59,6 +62,7 @@ impl Cache {
     pub async fn set<T: Serialize + ?Sized>(&self, key: &str, value: &T) -> Result<()> {
         self.set_ttl(key, value, self.ttl).await
     }
+    // endregion: lecture
 
     /// Écrit une valeur pour une durée de vie donnée. Une durée nulle : aucune expiration.
     pub async fn set_ttl<T: Serialize + ?Sized>(
@@ -99,6 +103,7 @@ impl Cache {
         Ok(())
     }
 
+    // region: invalidate_prefix
     /// Retire toutes les clés d'un préfixe, et rend leur nombre.
     ///
     /// `SCAN` plutôt que `KEYS` : le second bloque le serveur le temps de parcourir tout
@@ -131,6 +136,7 @@ impl Cache {
 
         Ok(keys.len())
     }
+    // endregion: invalidate_prefix
 
     async fn connection(&self) -> Result<Connection> {
         Ok(self
@@ -171,6 +177,7 @@ fn pattern(prefix: &str) -> String {
     pattern
 }
 
+// region: to_delete
 /// Parmi les clés que le serveur a rendues, celles que le préfixe emporte réellement.
 ///
 /// Le motif est un glob interprété à l'autre bout, et une suppression ne se défait pas :
@@ -179,6 +186,7 @@ fn to_delete(prefix: &str, mut keys: Vec<String>) -> Vec<String> {
     keys.retain(|key| key.starts_with(prefix));
     keys
 }
+// endregion: to_delete
 
 // L'accesseur vit ici et non dans `state.rs` : il arrive avec la feature, et repart
 // avec elle.

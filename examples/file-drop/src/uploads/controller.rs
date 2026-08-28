@@ -104,7 +104,7 @@ pub async fn delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> Resu
     Ok(StatusCode::NO_CONTENT)
 }
 
-// region: contenu
+// region: put_content
 // Le contenu voyage hors du DTO : un corps binaire n'a pas sa place dans un JSON, et le
 // faire passer en base64 obligerait à charger deux fois le fichier en mémoire.
 #[utoipa::path(
@@ -133,6 +133,7 @@ pub async fn put_content(
 
     Ok(StatusCode::NO_CONTENT)
 }
+// endregion: put_content
 
 #[utoipa::path(
     get,
@@ -153,6 +154,7 @@ pub async fn get_content(
     Ok(([("content-type", "application/octet-stream")], content))
 }
 
+// region: head_content
 #[utoipa::path(
     head,
     path = "/uploads/{id}/content",
@@ -173,4 +175,4 @@ pub async fn head_content(
         Err(rbs_core::Error::NotFound("contenu"))
     }
 }
-// endregion: contenu
+// endregion: head_content
