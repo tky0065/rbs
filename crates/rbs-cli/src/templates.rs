@@ -841,9 +841,10 @@ mod tests {
     }
 
     #[test]
-    fn the_docker_compose_targets_postgres_18() {
-        // `uuidv7()` n'est natif qu'à partir de PostgreSQL 18, et toute entité générée en
-        // dépend : une image plus ancienne casse le projet sans casser la compilation.
+    fn the_docker_compose_targets_the_latest_stable_postgres() {
+        // Le code généré ne réclame plus la 18 depuis que le modèle pose lui-même son
+        // identifiant : c'est un choix de défaut pour un projet neuf, non une exigence.
+        // Le test l'épingle pour que l'image ne vieillisse pas en silence.
         let source = read(&Path::new(RACINE_FEATURES).join("docker/docker-compose.yml.jinja"));
 
         assert!(

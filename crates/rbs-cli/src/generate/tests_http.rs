@@ -111,14 +111,19 @@ mod tests {
     }
 
     #[test]
-    fn the_three_scenarios_are_declared() {
+    fn the_four_scenarios_are_declared() {
         let rendered = trials("articles", CHAMPS);
 
-        for signature in [
+        let scenarios = [
             "async fn the_full_lifecycle_goes_through_the_api()",
+            // L'identifiant est posé par le modèle depuis que `uuidv7()` a quitté la
+            // migration : la croissance des identifiants se prouve dans le projet.
+            "async fn two_creations_in_a_row_carry_increasing_ids()",
             "async fn an_unknown_id_returns_404()",
             "async fn an_unreadable_body_returns_400()",
-        ] {
+        ];
+
+        for signature in scenarios {
             assert!(
                 rendered.contains(signature),
                 "« {signature} » absent :\n{rendered}"
@@ -126,7 +131,7 @@ mod tests {
         }
         assert_eq!(
             rendered.matches("#[tokio::test]").count(),
-            3,
+            scenarios.len(),
             "chaque scénario est un test asynchrone :\n{rendered}"
         );
     }
@@ -158,7 +163,7 @@ mod tests {
             r#"request("POST", collection, sent.clone())"#,
             r#"let resource = format!("{collection}/{id}");"#,
             r#"without_body("GET", &resource)"#,
-            r#"let premiere = format!("{collection}?per_page=1");"#,
+            r#"let premiere = format!("{collection}?per_page=50");"#,
             r#"request("PUT", &resource, sent.clone())"#,
             r#"without_body("DELETE", &resource)"#,
         ] {

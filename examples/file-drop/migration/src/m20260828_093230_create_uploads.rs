@@ -11,13 +11,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Uploads::Table)
                     .if_not_exists()
-                    .col(
-                        ColumnDef::new(Uploads::Id)
-                            .uuid()
-                            .not_null()
-                            .default(Expr::cust("uuidv7()"))
-                            .primary_key(),
-                    )
+                    .col(ColumnDef::new(Uploads::Id).uuid().not_null().primary_key())
                     .col(ColumnDef::new(Uploads::Title).string().not_null())
                     .col(ColumnDef::new(Uploads::OwnerEmail).string().not_null())
                     .col(ColumnDef::new(Uploads::ContentType).string().not_null())

@@ -11,13 +11,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Users::Table)
                     .if_not_exists()
-                    .col(
-                        ColumnDef::new(Users::Id)
-                            .uuid()
-                            .not_null()
-                            .default(Expr::cust("uuidv7()"))
-                            .primary_key(),
-                    )
+                    .col(ColumnDef::new(Users::Id).uuid().not_null().primary_key())
                     .col(
                         ColumnDef::new(Users::Email)
                             .string()
@@ -56,7 +50,6 @@ impl MigrationTrait for Migration {
                         ColumnDef::new(RefreshTokens::Id)
                             .uuid()
                             .not_null()
-                            .default(Expr::cust("uuidv7()"))
                             .primary_key(),
                     )
                     .col(ColumnDef::new(RefreshTokens::UserId).uuid().not_null())

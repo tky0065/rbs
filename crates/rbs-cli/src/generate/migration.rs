@@ -73,15 +73,18 @@ mod tests {
         );
     }
 
+    // Le défaut est parti dans le modèle : `uuidv7()` n'a d'équivalent à écrire ni en
+    // MySQL ni en SQLite, et la migration doit se rendre pour les trois moteurs.
     #[test]
-    fn the_primary_key_carries_the_uuidv7_default() {
+    fn the_primary_key_leaves_its_default_to_the_application() {
         let rendered = migration("users", "nom:string").content;
 
         assert!(
-            rendered.contains(r#".default(Expr::cust("uuidv7()"))"#),
-            "défaut uuidv7 absent :\n{rendered}"
+            !rendered.contains("uuidv7"),
+            "la migration pose encore un défaut de base :\n{rendered}"
         );
         assert!(rendered.contains(".primary_key()"), "{rendered}");
+        assert!(rendered.contains(".uuid()"), "{rendered}");
     }
 
     #[test]
@@ -222,13 +225,6 @@ async fn scalar(db: &DatabaseConnection, sql: &str) -> String {
         .expect("colonne textuelle")
 }
 
-async fn milliseconds(db: &DatabaseConnection) -> i64 {
-    scalar(db, "SELECT floor(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint::text")
-        .await
-        .parse()
-        .expect("horloge de la base")
-}
-
 #[tokio::test]
 async fn la_migration_monte_insere_et_redescend() {
     let url = std::env::var("DATABASE_URL").expect("DATABASE_URL doit être fournie");
@@ -236,29 +232,27 @@ async fn la_migration_monte_insere_et_redescend() {
 
     Migrator::up(&db, None).await.expect("montée de la migration");
 
-    let defaut = scalar(
+    // La colonne ne porte aucun défaut : l'identifiant vient du modèle, qui le pose pour
+    // les trois moteurs. Un défaut qui reparaîtrait ici rendrait la migration injouable
+    // partout ailleurs que sur PostgreSQL.
+    let defauts = scalar(
         &db,
-        "SELECT column_default FROM information_schema.columns \
-         WHERE table_name = 'articles' AND column_name = 'id'",
+        "SELECT count(*)::text FROM information_schema.columns \
+         WHERE table_name = 'articles' AND column_name = 'id' \
+         AND column_default IS NOT NULL",
     )
     .await;
-    assert!(defaut.contains("uuidv7()"), "défaut de la colonne id : {defaut}");
+    assert_eq!(defauts, "0", "la colonne id porte encore un défaut de base");
 
-    let before = milliseconds(&db).await;
-    db.execute_unprepared("INSERT INTO articles (title, slug) VALUES ('essai', 'essai')")
-        .await
-        .expect("insertion sans identifiant");
-    let after = milliseconds(&db).await;
+    db.execute_unprepared(
+        "INSERT INTO articles (id, title, slug) \
+         VALUES ('0199c0de-0000-7000-8000-000000000001', 'essai', 'essai')",
+    )
+    .await
+    .expect("insertion avec l'identifiant que le modèle poserait");
 
     let id = scalar(&db, "SELECT id::text FROM articles").await;
     assert_eq!(id.chars().nth(14), Some('7'), "version de l'UUID : {id}");
-
-    let tete: String = id.chars().filter(|c| *c != '-').take(12).collect();
-    let timestamp = i64::from_str_radix(&tete, 16).expect("tête hexadécimale de l'UUID");
-    assert!(
-        (before..=after).contains(&timestamp),
-        "horodatage {timestamp} hors de l'intervalle d'insertion [{before}, {after}]"
-    );
 
     Migrator::down(&db, None).await.expect("descente de la migration");
 
@@ -278,8 +272,8 @@ async fn la_migration_monte_insere_et_redescend() {
 "#;
 
     #[test]
-    #[ignore = "démarre PostgreSQL 18 en conteneur et compile la crate migration"]
-    fn the_generated_migration_is_reversible_and_sets_a_uuidv7() {
+    #[ignore = "démarre PostgreSQL en conteneur et compile la crate migration"]
+    fn the_generated_migration_is_reversible_without_a_column_default() {
         let fields = fields::parse("title:string,slug:string:unique,summary:text:optional")
             .expect("champs valides");
         let rendue = render(&Feature::fresh("articles", fields), HORODATAGE)
@@ -293,26 +287,19 @@ async fn la_migration_monte_insere_et_redescend() {
         project.test_migration(base.url());
     }
 
-    /// `uuidv7()` tronque l'horodatage qu'il inscrit ; un cast direct en `bigint`, lui,
-    /// arrondit au plus proche. Dès que la partie décimale de la borne dépasse la demie,
-    /// la borne basse passe une milliseconde au-dessus de ce que l'UUID portera, et le
-    /// test posé échoue — 222 fois sur 500 mesurées contre PostgreSQL 18.
+    /// Le défaut de colonne parti, la migration doit se rendre pour les trois moteurs.
     ///
-    /// Encore faut-il que l'insertion tombe dans la même milliseconde que la lecture :
-    /// vert sur une machine lente, rouge sur un runner. Cette garde ne dépend d'aucune
-    /// horloge, et c'est tout son intérêt — elle tient là où le test qu'elle protège
-    /// n'échoue qu'une fois sur deux.
+    /// La garde est ici plutôt que dans le seul test sous conteneur : celui-ci ne tourne
+    /// que contre PostgreSQL, où un `uuidv7()` réintroduit passerait au vert.
     #[test]
-    fn the_bounds_of_the_reversibility_test_truncate_like_uuidv7() {
-        let borne = REVERSIBILITE
-            .lines()
-            .find(|line| line.contains("EXTRACT(EPOCH"))
-            .expect("le test posé doit lire l'horloge de la base");
-
+    fn the_posted_reversibility_test_expects_no_column_default() {
         assert!(
-            borne.contains("floor("),
-            "la borne arrondit au lieu de tronquer : elle passera au-dessus de \
-             l'timestamp de uuidv7 une fois sur deux :\n{borne}"
+            !REVERSIBILITE.contains("uuidv7"),
+            "le test posé attend encore un défaut de base :\n{REVERSIBILITE}"
+        );
+        assert!(
+            REVERSIBILITE.contains("column_default IS NOT NULL"),
+            "le test posé ne vérifie plus l'absence de défaut :\n{REVERSIBILITE}"
         );
     }
 

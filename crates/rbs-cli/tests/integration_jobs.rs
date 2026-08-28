@@ -22,9 +22,9 @@ use testcontainers::{Container, GenericImage, ImageExt};
 
 mod common;
 
-/// `uuidv7()`, que la migration du fragment pose en défaut de clé primaire, n'existe qu'à
-/// partir de PostgreSQL 18.
-const IMAGE: (&str, &str) = ("postgres", "18");
+/// PostgreSQL **17** et non 18 : c'est ce qui prouve que l'exigence de la 18 est tombée
+/// avec le défaut `uuidv7()`, désormais posé par le modèle.
+const IMAGE: (&str, &str) = ("postgres", "17");
 
 const UTILISATEUR: &str = "rbs";
 const MOT_DE_PASSE: &str = "rbs";
@@ -217,12 +217,18 @@ fn cargo_test(racine: &Path, arguments: &[&str]) -> String {
 /// L'`INSERT` est écrit ici plutôt que joué par un binaire du projet pour que rien de ce
 /// qui enfile ne survive à l'enfilage : le seul processus rbs de ce test est le serveur,
 /// et il est tué avant que le job ne s'exécute.
+/// Enfile en SQL brut, identifiant compris.
+///
+/// La colonne ne porte plus de défaut : c'est le modèle qui pose l'identifiant, et un
+/// insert qui contourne le modèle doit donc le fournir. La valeur est fixe et de forme
+/// v7 — un seul job traverse ce test.
 fn enqueue(postgres: &Container<GenericImage>) {
     psql(
         postgres,
         &format!(
-            "INSERT INTO jobs (kind, payload) \
-             VALUES ('log', '{{\"message\":\"{MESSAGE}\"}}'::json)"
+            "INSERT INTO jobs (id, kind, payload) \
+             VALUES ('0199c0de-0000-7000-8000-000000000001', 'log', \
+             '{{\"message\":\"{MESSAGE}\"}}'::json)"
         ),
     );
 }
