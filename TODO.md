@@ -694,18 +694,7 @@ lui qui rend le critère de sortie mesurable, par les deux diffs de `T4`.
       ✓ Projet sans la feature `docker` → aucun compose cherché, démarrage quand même.
       ✓ Base injoignable → message nommant ce qui manque, non une trace de panique.
 
-- [ ] **Q2** · Le watch, `watchexec 8.4` — PARTIEL 2026-08-28 : premier critère prouvé,
-      `cargo test -p rbs-cli --lib dev::watch` → 5 passed, dont `target_is_not_even_watched`
-      qui écarte `target/` **à la source** par `Filterer::check_dir` et non au tri des
-      événements, et le cas `target/debug/build/…/out/genere.rs` qui est celui qui boucle.
-      La coupure du groupe est prouvée **sur macOS seul** :
-      `the_child_server_dies_with_its_group_and_frees_the_port` → ok, morsure
-      `SpawnOptions { grouped: false }` → « le petit-fils a survécu à la coupure : 60674
-      n'est pas libre ». Le test est normal, sans `#[ignore]`, sans Docker et **sans aucun
-      `#[cfg]` de plateforme** — il tournera donc tel quel dans les jobs `linux` et
-      `portabilite`. Mais le critère exige les trois plateformes de la CI, **la branche n'a
-      pas été poussée, sur arbitrage**, et aucun runner ne l'a joué. Reste à faire : ouvrir
-      la PR et lire le verdict des trois jobs.
+- [x] **Q2** · Le watch, `watchexec 8.4` — vérifié 2026-08-28 · `cargo test -p rbs-cli --lib dev::watch` → 5 passed, dont `target_is_not_even_watched` qui écarte `target/` **à la source** par `Filterer::check_dir` et non au tri des événements, et le cas `target/debug/build/…/out/genere.rs` qui est celui qui boucle ; morsure `SpawnOptions { grouped: false }` → « le petit-fils a survécu à la coupure : 60674 n'est pas libre » · **les trois plateformes tranchées par le run CI 33188943379**, où `the_child_server_dies_with_its_group_and_frees_the_port ... ok` paraît dans les trois jobs — `fmt · clippy · test · intégration` (ubuntu), `windows-latest` et `macos-latest` : le test est normal, sans `#[ignore]`, sans Docker et sans `#[cfg]` de plateforme, donc joué tel quel partout · **le push a révélé une régression étrangère au lot** : `generate::format::a_badly_formatted_source_is_straightened` tombait sur `windows-latest` seul, `newline_style` valant « Auto » dans rustfmt — corrigé à part, la morsure `newline_style=Windows` reproduisant l'échec du runner à la ligne près
       Le point dur n'est ni le debounce ni le filtrage, tous deux faciles, mais la coupure
       du serveur enfant : un `cargo run` tué sans son enfant laisse le port occupé, et le
       geste diffère sur les trois plateformes.
