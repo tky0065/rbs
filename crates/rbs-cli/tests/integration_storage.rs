@@ -27,7 +27,7 @@ const TESTS: [&str; 2] = [
 
 #[test]
 #[ignore = "démarre MinIO et compile un projet Axum + SeaORM complet : plusieurs minutes"]
-fn les_deux_backends_passent_la_meme_ronde_et_l_objet_se_relit_hors_du_trait() {
+fn both_backends_pass_the_same_round_and_the_object_reads_back_outside_the_trait() {
     // Le bucket est créé par le conteneur et non par un test livré à l'utilisateur : un
     // répertoire de premier niveau de `/data` *est* un bucket pour MinIO. Le fragment se
     // contente alors de déposer et de lire, comme face à un bucket de production.
@@ -52,7 +52,7 @@ fn les_deux_backends_passent_la_meme_ronde_et_l_objet_se_relit_hors_du_trait() {
 
     rbs(&projet).args(["add", "storage"]).assert().success();
 
-    let sortie = Command::new("cargo")
+    let output = Command::new("cargo")
         .current_dir(&projet)
         .env("CARGO_TARGET_DIR", common::cible())
         .env("RBS_STORAGE__BACKEND", "s3")
@@ -68,12 +68,12 @@ fn les_deux_backends_passent_la_meme_ronde_et_l_objet_se_relit_hors_du_trait() {
 
     let journal = format!(
         "{}{}",
-        String::from_utf8_lossy(&sortie.stdout),
-        String::from_utf8_lossy(&sortie.stderr)
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
 
     assert!(
-        sortie.status.success(),
+        output.status.success(),
         "les tests du stockage ont échoué :\n{journal}"
     );
 

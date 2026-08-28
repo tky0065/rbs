@@ -21,4 +21,12 @@ pub fn routes() -> Router<AppState> {
                 .put(controller::update)
                 .delete(controller::delete),
         )
+        // region: route_contenu
+        .route(
+            "/uploads/{id}/content",
+            get(controller::get_content)
+                .put(controller::put_content)
+                .head(controller::head_content),
+        )
+    // endregion: route_contenu
 }

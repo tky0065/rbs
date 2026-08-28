@@ -26,10 +26,7 @@ pub enum StorageError {
     Unavailable(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
-// Aucun handler du squelette n'appelle encore ces méthodes : la permission tombe avec la
-// première route qui dépose ou sert un fichier.
 #[async_trait]
-#[allow(dead_code)]
 pub trait Storage: std::fmt::Debug + Send + Sync {
     /// Dépose `content` sous `key`, en écrasant l'objet qui s'y trouvait.
     async fn put(&self, key: &str, content: Vec<u8>) -> Result<(), StorageError>;

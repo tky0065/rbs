@@ -63,16 +63,16 @@ pub fn commiter(racine: &Path, message: &str) {
         vec!["add", "-A"],
         vec!["commit", "--quiet", "-m", message],
     ] {
-        let sortie = std::process::Command::new("git")
+        let output = std::process::Command::new("git")
             .args(&arguments)
             .current_dir(racine)
             .output()
             .expect("git doit être lançable");
 
         assert!(
-            sortie.status.success(),
+            output.status.success(),
             "git {arguments:?} a échoué :\n{}",
-            String::from_utf8_lossy(&sortie.stderr)
+            String::from_utf8_lossy(&output.stderr)
         );
     }
 }
@@ -83,7 +83,7 @@ pub type Empreinte = BTreeMap<PathBuf, String>;
 /// Relève l'empreinte de `racine`.
 pub fn empreinte(racine: &Path) -> Empreinte {
     let mut fichiers = Empreinte::new();
-    relever(racine, racine, &mut fichiers);
+    collect(racine, racine, &mut fichiers);
     fichiers
 }
 
@@ -114,7 +114,7 @@ pub fn assert_intact(avant: &Empreinte, racine: &Path, contexte: &str) {
     assert!(ecarts.is_empty(), "{contexte} :\n{}", ecarts.join("\n"));
 }
 
-fn relever(racine: &Path, repertoire: &Path, fichiers: &mut Empreinte) {
+fn collect(racine: &Path, repertoire: &Path, fichiers: &mut Empreinte) {
     let entrees = fs::read_dir(repertoire).expect("répertoire lisible");
 
     for entree in entrees {
@@ -126,7 +126,7 @@ fn relever(racine: &Path, repertoire: &Path, fichiers: &mut Empreinte) {
         }
 
         if chemin.is_dir() {
-            relever(racine, &chemin, fichiers);
+            collect(racine, &chemin, fichiers);
         } else {
             let relatif = chemin.strip_prefix(racine).expect("sous la racine");
             let contenu = fs::read_to_string(&chemin).unwrap_or_default();

@@ -99,6 +99,9 @@ impl Mailer {
     ///
     /// Ni file ni réessai : un message perdu l'est pour de bon, et seul le journal en
     /// garde trace. C'est le prix d'un envoi qui ne retient pas la réponse HTTP.
+    // Ce projet envoie un gabarit dans sa propre tâche ; l'envoi détaché d'un message
+    // déjà construit reste offert à qui en aura besoin.
+    #[allow(dead_code)]
     pub fn send_detached(&self, message: Message) {
         let transport = self.transport.clone();
 

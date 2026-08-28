@@ -18,7 +18,7 @@ const IMAGE: (&str, &str) = ("redis", "8-alpine");
 
 #[test]
 #[ignore = "démarre Redis et compile un projet Axum + SeaORM complet : plusieurs minutes"]
-fn le_cache_d_un_projet_genere_se_joue_contre_un_redis_reel() {
+fn the_cache_of_a_generated_project_plays_against_a_real_redis() {
     let redis = GenericImage::new(IMAGE.0, IMAGE.1)
         .with_wait_for(WaitFor::log(LogWaitStrategy::stdout_or_stderr(
             "Ready to accept connections",
@@ -40,7 +40,7 @@ fn le_cache_d_un_projet_genere_se_joue_contre_un_redis_reel() {
     //
     // `-- --ignored` ne lance que les tests serveur du fragment : le squelette n'en porte
     // aucun autre, et ses tests de santé exigeraient une base de données.
-    let sortie = Command::new("cargo")
+    let output = Command::new("cargo")
         .current_dir(&projet)
         .env("CARGO_TARGET_DIR", common::cible())
         .env("RBS_CACHE__URL", format!("redis://127.0.0.1:{port}"))
@@ -50,12 +50,12 @@ fn le_cache_d_un_projet_genere_se_joue_contre_un_redis_reel() {
 
     let journal = format!(
         "{}{}",
-        String::from_utf8_lossy(&sortie.stdout),
-        String::from_utf8_lossy(&sortie.stderr)
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
 
     assert!(
-        sortie.status.success(),
+        output.status.success(),
         "les tests du cache ont échoué :\n{journal}"
     );
 

@@ -12,16 +12,21 @@ pub use super::model::{ActiveModel, Model};
 
 pub async fn list(db: &DatabaseConnection, pagination: &Pagination) -> Result<(Vec<Model>, u64)> {
     let total = Entity::find().count(db).await?;
+
+    Ok((page(db, pagination).await?, total))
+}
+
+// La page sans son total : l'appelant qui tient déjà le compte — du cache, par exemple —
+// n'a pas à refaire le `COUNT(*)` pour l'obtenir.
+pub async fn page(db: &DatabaseConnection, pagination: &Pagination) -> Result<Vec<Model>> {
     // L'`id` est un UUIDv7 : son ordre est celui des insertions. Trier dessus donne une
     // liste du plus récent au plus ancien, et une pagination stable, sans colonne de plus.
-    let uploads = Entity::find()
+    Ok(Entity::find()
         .order_by_desc(Column::Id)
         .offset(pagination.offset())
         .limit(pagination.per_page())
         .all(db)
-        .await?;
-
-    Ok((uploads, total))
+        .await?)
 }
 
 pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>> {

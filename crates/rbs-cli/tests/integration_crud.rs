@@ -24,7 +24,7 @@ const BASE: &str = "demo";
 
 #[test]
 #[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
-fn un_crud_genere_se_migre_et_passe_ses_tests_contre_postgresql() {
+fn a_generated_crud_migrates_and_passes_its_tests_against_postgresql() {
     // Le conteneur d'abord : son port détermine l'URL que le projet portera dans son
     // `.env`. Créer le projet avant obligerait à réécrire ce fichier après coup.
     let postgres = GenericImage::new(IMAGE.0, IMAGE.1)

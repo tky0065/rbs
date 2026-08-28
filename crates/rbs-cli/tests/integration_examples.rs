@@ -24,7 +24,7 @@ struct Exemple {
     ///
     /// Ils sortent de la comparaison, faute de quoi elle signalerait l'édition
     /// elle-même. Ce qu'ils portent est vérifié à part — voir
-    /// `les_editions_a_la_main_de_blog_auth_sont_en_place`, sans lequel cette liste
+    /// `the_hand_edits_of_blog_auth_are_in_place`, sans lequel cette liste
     /// serait une porte ouverte à la dérive qu'elle sert à déclarer.
     edite_a_la_main: &'static [&'static str],
 }
@@ -65,56 +65,69 @@ const EXEMPLES: &[Exemple] = &[
         // `owner_email` finit par `_email` : le DTO généré gagne sa contrainte d'email
         // sans qu'on l'écrive, et le courriel a un destinataire qui vient du modèle.
         champs: "title:string,owner_email:string,content_type:string,size:int",
-        edite_a_la_main: &[],
+        // Les trois briques câblées, et les trois fragments dont la permission
+        // `dead_code` tombe parce qu'un handler les appelle enfin. C'est le point de cet
+        // exemple, et `the_hand_edits_of_file_drop_are_in_place` en répond.
+        edite_a_la_main: &[
+            "src/uploads/service.rs",
+            "src/uploads/controller.rs",
+            "src/uploads/repository.rs",
+            "src/uploads/mod.rs",
+            "src/cache/mod.rs",
+            "src/mail/mod.rs",
+            "src/mail/service.rs",
+            "src/storage/mod.rs",
+            "templates/mail/depot.html",
+        ],
     },
 ];
 
 const REGENERER: &str = "examples/README.md donne la commande de régénération";
 
-fn exemple(nom: &str) -> &'static Exemple {
+fn example(nom: &str) -> &'static Exemple {
     EXEMPLES
         .iter()
-        .find(|exemple| exemple.nom == nom)
+        .find(|example| example.nom == nom)
         .unwrap_or_else(|| panic!("`{nom}` doit figurer dans `EXEMPLES`"))
 }
 
 #[test]
-fn hello_crud_est_celui_que_le_cli_produit_aujourd_hui() {
-    verifier_non_derive(exemple("hello-crud"));
+fn hello_crud_is_what_the_cli_produces_today() {
+    assert_no_drift(example("hello-crud"));
 }
 
 #[test]
-fn blog_auth_est_celui_que_le_cli_produit_aujourd_hui() {
-    verifier_non_derive(exemple("blog-auth"));
+fn blog_auth_is_what_the_cli_produces_today() {
+    assert_no_drift(example("blog-auth"));
 }
 
 #[test]
-fn file_drop_est_celui_que_le_cli_produit_aujourd_hui() {
-    verifier_non_derive(exemple("file-drop"));
+fn file_drop_is_what_the_cli_produces_today() {
+    assert_no_drift(example("file-drop"));
 }
 
-fn verifier_non_derive(exemple: &Exemple) {
+fn assert_no_drift(example: &Exemple) {
     let parent = tempfile::TempDir::new().expect("répertoire temporaire créable");
-    let frais = engendrer(parent.path(), exemple);
+    let frais = generate(parent.path(), example);
 
-    let attendu = normaliser_empreinte(
-        &common::empreinte(&common::depot().join("examples").join(exemple.nom)),
-        exemple,
+    let attendu = normalize_fingerprint(
+        &common::empreinte(&common::depot().join("examples").join(example.nom)),
+        example,
     );
-    let obtenu = normaliser_empreinte(&common::empreinte(&frais), exemple);
+    let obtenu = normalize_fingerprint(&common::empreinte(&frais), example);
 
-    let ecarts = comparer(&attendu, &obtenu);
+    let ecarts = compare(&attendu, &obtenu);
 
     assert!(
         ecarts.is_empty(),
         "`examples/{}` a dérivé de ce que le CLI produit :\n{}\n\n{REGENERER}",
-        exemple.nom,
+        example.nom,
         ecarts.join("\n")
     );
 }
 
 /// Rejoue les commandes qui ont produit l'exemple.
-fn engendrer(parent: &Path, exemple: &Exemple) -> PathBuf {
+fn generate(parent: &Path, example: &Exemple) -> PathBuf {
     let noyau = common::noyau();
 
     assert_cmd::Command::cargo_bin("rbs")
@@ -122,9 +135,9 @@ fn engendrer(parent: &Path, exemple: &Exemple) -> PathBuf {
         .current_dir(parent)
         .args([
             "new",
-            exemple.nom,
+            example.nom,
             "--database-url",
-            exemple.database_url,
+            example.database_url,
             "--core-path",
             noyau.to_str().expect("chemin du noyau représentable"),
             "--yes",
@@ -132,9 +145,9 @@ fn engendrer(parent: &Path, exemple: &Exemple) -> PathBuf {
         .assert()
         .success();
 
-    let racine = parent.join(exemple.nom);
+    let racine = parent.join(example.nom);
 
-    for feature in exemple.features {
+    for feature in example.features {
         // `add` refuse d'écrire dans un working tree sale. `rbs new` initialise le dépôt
         // sans rien commiter, et chaque feature laisse à son tour de quoi arrêter la
         // suivante : le commit se prend avant chacune, non une fois pour toutes.
@@ -154,9 +167,9 @@ fn engendrer(parent: &Path, exemple: &Exemple) -> PathBuf {
         .args([
             "generate",
             "crud",
-            exemple.crud,
+            example.crud,
             "--fields",
-            exemple.champs,
+            example.champs,
             "--yes",
             "--force",
         ])
@@ -166,9 +179,9 @@ fn engendrer(parent: &Path, exemple: &Exemple) -> PathBuf {
     racine
 }
 
-fn normaliser_empreinte(
+fn normalize_fingerprint(
     empreinte: &common::Empreinte,
-    exemple: &Exemple,
+    example: &Exemple,
 ) -> BTreeMap<PathBuf, String> {
     empreinte
         .iter()
@@ -177,15 +190,15 @@ fn normaliser_empreinte(
         // CI compile l'exemple à dépendances figées, et reste hors de la comparaison.
         .filter(|(chemin, _)| chemin.file_name().is_none_or(|nom| nom != "Cargo.lock"))
         .filter(|(chemin, _)| {
-            !exemple
+            !example
                 .edite_a_la_main
                 .iter()
                 .any(|edite| chemin.as_path() == Path::new(edite))
         })
         .map(|(chemin, contenu)| {
             (
-                PathBuf::from(masquer_horodatage(&chemin.to_string_lossy())),
-                normaliser(contenu),
+                PathBuf::from(mask_timestamp(&chemin.to_string_lossy())),
+                normalize(contenu),
             )
         })
         .collect()
@@ -193,18 +206,18 @@ fn normaliser_empreinte(
 
 /// Trois différences sont attendues entre l'exemple du dépôt et une génération fraîche,
 /// et aucune ne trahit une dérive des templates.
-fn normaliser(contenu: &str) -> String {
+fn normalize(contenu: &str) -> String {
     contenu
         .lines()
         // L'exemple porte les marqueurs que la documentation cite ; ils n'ont rien à
         // faire dans les templates, donc rien à faire dans la comparaison.
-        .filter(|ligne| !est_marqueur(ligne))
-        .map(|ligne| masquer_horodatage(&masquer_chemin_du_noyau(ligne)))
+        .filter(|ligne| !is_marker(ligne))
+        .map(|ligne| mask_timestamp(&mask_core_path(ligne)))
         .collect::<Vec<_>>()
         .join("\n")
 }
 
-fn est_marqueur(ligne: &str) -> bool {
+fn is_marker(ligne: &str) -> bool {
     let nu = ligne.trim_start();
     let Some(reste) = nu.strip_prefix("//") else {
         return false;
@@ -219,7 +232,7 @@ fn est_marqueur(ligne: &str) -> bool {
 /// Seule la valeur de `path` est masquée, et non la ligne entière : depuis qu'une feature
 /// installe `rbs-core` avec les siennes, cette ligne porte davantage que le chemin, et
 /// tout en effacer laisserait passer un `add` qui cesserait d'ajouter sa feature.
-fn masquer_chemin_du_noyau(ligne: &str) -> String {
+fn mask_core_path(ligne: &str) -> String {
     const CLE: &str = "path = ";
 
     if !ligne.trim_start().starts_with("rbs-core") {
@@ -255,9 +268,9 @@ fn masquer_chemin_du_noyau(ligne: &str) -> String {
 
 /// Remplace `m20260826_205243` par `m<STAMP>` : le nom d'une migration porte la date et
 /// l'heure de sa création, qui diffèrent nécessairement d'une génération à l'autre.
-fn masquer_horodatage(texte: &str) -> String {
+fn mask_timestamp(texte: &str) -> String {
     let lettres: Vec<char> = texte.chars().collect();
-    let mut sortie = String::with_capacity(texte.len());
+    let mut output = String::with_capacity(texte.len());
     let mut i = 0;
 
     // `m` + AAAAMMJJ + `_` + HHMMSS, soit seize caractères.
@@ -275,22 +288,19 @@ fn masquer_horodatage(texte: &str) -> String {
 
     while i < lettres.len() {
         if horodatage_en(i) {
-            sortie.push_str("m<STAMP>");
+            output.push_str("m<STAMP>");
             i += 16;
         } else {
-            sortie.push(lettres[i]);
+            output.push(lettres[i]);
             i += 1;
         }
     }
 
-    sortie
+    output
 }
 
 /// Ne montre que ce qui diffère : déverser deux projets entiers noierait l'écart.
-fn comparer(
-    attendu: &BTreeMap<PathBuf, String>,
-    obtenu: &BTreeMap<PathBuf, String>,
-) -> Vec<String> {
+fn compare(attendu: &BTreeMap<PathBuf, String>, obtenu: &BTreeMap<PathBuf, String>) -> Vec<String> {
     let mut ecarts = Vec::new();
 
     for (chemin, contenu) in attendu {
@@ -300,7 +310,7 @@ fn comparer(
                 ecarts.push(format!(
                     "  ~ {} : {}",
                     chemin.display(),
-                    premiere_difference(contenu, frais)
+                    first_difference(contenu, frais)
                 ));
             }
             Some(_) => {}
@@ -319,7 +329,7 @@ fn comparer(
     ecarts
 }
 
-fn premiere_difference(attendu: &str, obtenu: &str) -> String {
+fn first_difference(attendu: &str, obtenu: &str) -> String {
     for (rang, (a, o)) in attendu.lines().zip(obtenu.lines()).enumerate() {
         if a != o {
             return format!(
@@ -338,33 +348,33 @@ fn premiere_difference(attendu: &str, obtenu: &str) -> String {
     )
 }
 
-/// Sans ce garde-fou, `masquer_horodatage` pourrait ne rien masquer sans que le test de
+/// Sans ce garde-fou, `mask_timestamp` pourrait ne rien masquer sans que le test de
 /// non-dérive n'en souffre : il comparerait deux textes également non masqués, et
 /// laisserait passer une dérive le jour où les horodatages coïncideraient.
 #[test]
-fn l_horodatage_d_une_migration_est_bien_masque() {
+fn a_migration_timestamp_is_properly_masked() {
     assert_eq!(
-        masquer_horodatage("m20260826_205243_create_articles.rs"),
+        mask_timestamp("m20260826_205243_create_articles.rs"),
         "m<STAMP>_create_articles.rs"
     );
-    assert_eq!(masquer_horodatage("marge_20260826"), "marge_20260826");
-    assert_eq!(masquer_horodatage("m2026_court"), "m2026_court");
+    assert_eq!(mask_timestamp("marge_20260826"), "marge_20260826");
+    assert_eq!(mask_timestamp("m2026_court"), "m2026_court");
 }
 
 #[test]
-fn les_marqueurs_de_region_sont_ignores() {
-    assert!(est_marqueur("// region: routeur"));
-    assert!(est_marqueur("    // endregion: routeur"));
-    assert!(!est_marqueur("// la région parisienne"));
-    assert!(!est_marqueur("let region = 1;"));
+fn the_region_markers_are_ignored() {
+    assert!(is_marker("// region: routeur"));
+    assert!(is_marker("    // endregion: routeur"));
+    assert!(!is_marker("// la région parisienne"));
+    assert!(!is_marker("let region = 1;"));
 }
 
 #[test]
-fn le_chemin_du_noyau_est_neutralise() {
+fn the_core_path_is_neutralised() {
     let absolu = "rbs-core = { path = \"/Users/x/rs/crates/rbs-core\" }";
     let relatif = "rbs-core = { path = \"../../crates/rbs-core\" }";
 
-    assert_eq!(normaliser(absolu), normaliser(relatif));
+    assert_eq!(normalize(absolu), normalize(relatif));
 }
 
 /// Les deux façons dont un chemin s'écrit en TOML mènent au même masque.
@@ -374,21 +384,21 @@ fn le_chemin_du_noyau_est_neutralise() {
 /// que d'échapper chacun de ses antislashs. Un masquage qui ne connaissait que les
 /// guillemets doubles rendait la comparaison verte sur Linux et macOS, rouge sur Windows.
 #[test]
-fn le_chemin_du_noyau_est_neutralise_quels_que_soient_ses_guillemets() {
+fn the_core_path_is_neutralised_whatever_its_quotes() {
     let unc = r"rbs-core = { path = '\\?\D:\a\rbs\rbs\crates\rbs-core' }";
     let relatif = "rbs-core = { path = \"../../crates/rbs-core\" }";
 
-    assert_eq!(normaliser(unc), normaliser(relatif));
-    assert!(!normaliser(unc).contains("D:"), "{}", normaliser(unc));
+    assert_eq!(normalize(unc), normalize(relatif));
+    assert!(!normalize(unc).contains("D:"), "{}", normalize(unc));
 }
 
 /// Le masque ne mange pas ce qui suit le chemin, quel que soit son délimiteur.
 #[test]
-fn les_features_survivent_a_un_chemin_entre_guillemets_simples() {
+fn the_features_survive_a_path_in_single_quotes() {
     let unc = r#"rbs-core = { path = '\\?\D:\a\rbs\crates\rbs-core' , features = ["auth"] }"#;
 
     assert_eq!(
-        normaliser(unc),
+        normalize(unc),
         "rbs-core = { path = \"<NOYAU>\" , features = [\"auth\"] }"
     );
 }
@@ -400,26 +410,26 @@ fn les_features_survivent_a_un_chemin_entre_guillemets_simples() {
 /// effacer avec le chemin rendrait le test aveugle à un `add auth` qui ne les
 /// installerait plus.
 #[test]
-fn les_features_du_noyau_restent_comparees() {
+fn the_core_features_stay_compared() {
     let avec = "rbs-core = { path = \"/Users/x/rs/crates/rbs-core\" , features = [\"auth\"] }";
     let sans = "rbs-core = { path = \"../../crates/rbs-core\" }";
 
-    assert_ne!(normaliser(avec), normaliser(sans));
-    assert!(normaliser(avec).contains("features = [\"auth\"]"));
-    assert!(!normaliser(avec).contains("/Users/x"));
+    assert_ne!(normalize(avec), normalize(sans));
+    assert!(normalize(avec).contains("features = [\"auth\"]"));
+    assert!(!normalize(avec).contains("/Users/x"));
 }
 
 /// Vérifie que la comparaison voit une dérive de contenu, et pas seulement de nom de
 /// fichier : un test de non-dérive qui ne détecte rien est pire qu'aucun test.
 #[test]
-fn une_difference_de_contenu_est_signalee() {
+fn a_content_difference_is_reported() {
     let mut attendu = BTreeMap::new();
     attendu.insert(PathBuf::from("src/main.rs"), "fn main() {}".to_string());
 
     let mut obtenu = BTreeMap::new();
     obtenu.insert(PathBuf::from("src/main.rs"), "fn main() { () }".to_string());
 
-    let ecarts = comparer(&attendu, &obtenu);
+    let ecarts = compare(&attendu, &obtenu);
 
     assert_eq!(ecarts.len(), 1, "{ecarts:?}");
     assert!(ecarts[0].contains("src/main.rs"), "{ecarts:?}");
@@ -438,17 +448,17 @@ fn une_difference_de_contenu_est_signalee() {
 /// fichier manque déjà, il n'a rien à voir et c'est la comparaison qui tombe. C'est voulu.
 /// Il garde la machine qui engendre l'exemple, seul endroit où l'oubli s'introduit.
 #[test]
-fn chaque_fichier_des_exemples_est_suivi_par_git() {
+fn each_example_file_is_tracked_by_git() {
     let mut non_suivis = Vec::new();
 
-    for exemple in EXEMPLES {
-        let racine = common::depot().join("examples").join(exemple.nom);
+    for example in EXEMPLES {
+        let racine = common::depot().join("examples").join(example.nom);
 
         non_suivis.extend(
             common::empreinte(&racine)
                 .keys()
-                .filter(|relatif| !est_suivi(&racine.join(relatif)))
-                .map(|relatif| format!("  - {}/{}", exemple.nom, relatif.display())),
+                .filter(|relatif| !is_tracked(&racine.join(relatif)))
+                .map(|relatif| format!("  - {}/{}", example.nom, relatif.display())),
         );
     }
 
@@ -467,7 +477,7 @@ fn chaque_fichier_des_exemples_est_suivi_par_git() {
 /// et rien, alors, ne verrait un `require_role` disparu au fil d'une régénération.
 /// C'est exactement le mensonge que le fichier voisin sert à empêcher.
 #[test]
-fn les_editions_a_la_main_de_blog_auth_sont_en_place() {
+fn the_hand_edits_of_blog_auth_are_in_place() {
     let racine = common::depot().join("examples").join("blog-auth");
     let lire = |relatif: &str| {
         std::fs::read_to_string(racine.join(relatif))
@@ -500,7 +510,7 @@ fn les_editions_a_la_main_de_blog_auth_sont_en_place() {
     }
 }
 
-fn est_suivi(chemin: &Path) -> bool {
+fn is_tracked(chemin: &Path) -> bool {
     std::process::Command::new("git")
         .args(["ls-files", "--error-unmatch"])
         .arg(chemin)
@@ -518,21 +528,93 @@ fn est_suivi(chemin: &Path) -> bool {
 /// --all --check` ne couvre que les membres du workspace, dont les exemples ne font pas
 /// partie.
 #[test]
-fn chaque_exemple_traverse_cargo_fmt() {
-    for exemple in EXEMPLES {
-        let racine = common::depot().join("examples").join(exemple.nom);
+fn each_example_passes_cargo_fmt() {
+    for example in EXEMPLES {
+        let racine = common::depot().join("examples").join(example.nom);
 
-        let sortie = std::process::Command::new("cargo")
+        let output = std::process::Command::new("cargo")
             .args(["fmt", "--check"])
             .current_dir(&racine)
             .output()
             .expect("cargo fmt doit être lançable");
 
         assert!(
-            sortie.status.success(),
+            output.status.success(),
             "`cargo fmt --check` reformate `examples/{}` :\n{}\n\n{REGENERER}",
-            exemple.nom,
-            String::from_utf8_lossy(&sortie.stdout)
+            example.nom,
+            String::from_utf8_lossy(&output.stdout)
         );
     }
+}
+
+/// Ce que `file-drop` ajoute à ce que le CLI produit, et que la comparaison exclut.
+///
+/// Sans ce test, `edite_a_la_main` serait une liste de neuf chemins hors de toute
+/// surveillance : le câblage pourrait disparaître sans que rien ne le dise, et c'est
+/// pourtant lui qui distingue cet exemple des deux autres.
+#[test]
+fn the_hand_edits_of_file_drop_are_in_place() {
+    let racine = common::depot().join("examples").join("file-drop");
+    let lire = |relatif: &str| {
+        std::fs::read_to_string(racine.join(relatif))
+            .unwrap_or_else(|erreur| panic!("{relatif} illisible : {erreur}"))
+    };
+
+    // Les trois fragments portent chacun une permission `dead_code` que leur commentaire
+    // dit de retirer au premier appel. C'est ce retrait, et non le câblage lui-même, qui
+    // fait de `clippy -D warnings` la preuve que les briques sont appelées : une seule
+    // d'entre elles remise ferait passer un câblage disparu.
+    for module in ["cache", "mail", "storage"] {
+        let source = lire(&format!("src/{module}/mod.rs"));
+        assert!(
+            !source.contains("#![allow(dead_code)]"),
+            "src/{module}/mod.rs : la permission de module tombe avec le premier appel, \
+             et c'est ce que cet exemple montre"
+        );
+    }
+
+    let service = lire("src/uploads/service.rs");
+    // Les appels sont cherchés sans leur récepteur : rustfmt coupe une chaîne de méthodes
+    // dès qu'elle dépasse, et `storage.put(` se retrouve sur deux lignes.
+    for (brique, appel) in [
+        ("le cache", ".invalidate_prefix(CACHE)"),
+        ("le stockage", ".put(&content_key(id), content)"),
+        ("le courriel", ".send_template("),
+    ] {
+        assert!(
+            service.contains(appel),
+            "src/uploads/service.rs n'appelle plus {brique} : « {appel} » absent"
+        );
+    }
+
+    // La lecture du cache autant que son invalidation : un service qui n'écrirait que
+    // dans le cache sans jamais le relire passerait les assertions ci-dessus.
+    assert!(
+        service.contains("cache.get::<u64>(&key)") && service.contains("cache.set(&key, &total)"),
+        "le total doit être lu du cache et y être écrit :\n{service}"
+    );
+
+    // Les trois écritures invalident, et non une seule : chercher la simple présence de
+    // l'appel laisserait passer deux routes sur trois servant un total périmé.
+    assert_eq!(
+        service.matches(".invalidate_prefix(CACHE)").count(),
+        3,
+        "la création, la mise à jour et la suppression doivent toutes trois invalider :\n{service}"
+    );
+
+    let controller = lire("src/uploads/controller.rs");
+    for handler in ["put_content", "get_content", "head_content"] {
+        assert!(
+            controller.contains(&format!("pub async fn {handler}(")),
+            "src/uploads/controller.rs : le handler `{handler}` a disparu"
+        );
+    }
+
+    // Le gabarit ajouté à la main, et le lien dans son attribut : c'est là qu'une
+    // variable mal nommée rend un lien vide sans que le corps le montre.
+    let gabarit = lire("templates/mail/depot.html");
+    assert!(
+        gabarit.contains(r#"<a href="{{ link }}">"#),
+        "templates/mail/depot.html : le href doit porter la variable du contexte"
+    );
 }

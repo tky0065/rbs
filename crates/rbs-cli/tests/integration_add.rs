@@ -29,7 +29,7 @@ fn rbs(racine: &Path) -> Command {
 }
 
 /// Un projet neuf dont le working tree est propre.
-fn projet_commite(parent: &TempDir) -> PathBuf {
+fn committed_project(parent: &TempDir) -> PathBuf {
     let racine = common::projet(parent.path());
     common::commiter(&racine, "projet neuf");
     racine
@@ -44,12 +44,12 @@ struct Sortie {
 
 impl Sortie {
     fn de(commande: &mut Command) -> Self {
-        let sortie = commande.output().expect("le binaire doit être lançable");
+        let output = commande.output().expect("le binaire doit être lançable");
 
         Self {
-            succes: sortie.status.success(),
-            stdout: String::from_utf8_lossy(&sortie.stdout).into_owned(),
-            stderr: String::from_utf8_lossy(&sortie.stderr).into_owned(),
+            succes: output.status.success(),
+            stdout: String::from_utf8_lossy(&output.stdout).into_owned(),
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
         }
     }
 }
@@ -57,9 +57,9 @@ impl Sortie {
 /// Installer deux fois la même feature laisse le projet exactement là où la première
 /// installation l'avait laissé.
 #[test]
-fn installer_deux_fois_la_meme_feature_ne_produit_rien_la_seconde() {
+fn installing_the_same_feature_twice_produces_nothing_the_second_time() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_commite(&parent);
+    let racine = committed_project(&parent);
 
     rbs(&racine).args(["add", "docker"]).assert().success();
     common::commiter(&racine, "docker");
@@ -82,9 +82,9 @@ fn installer_deux_fois_la_meme_feature_ne_produit_rien_la_seconde() {
 /// Une ancre retirée par le développeur arrête la commande avant toute écriture, et le
 /// bloc à recoller est affiché plutôt que deviné.
 #[test]
-fn une_ancre_supprimee_refuse_l_ecriture_et_affiche_le_bloc_a_coller() {
+fn a_deleted_anchor_refuses_the_write_and_prints_the_block_to_paste() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_commite(&parent);
+    let racine = committed_project(&parent);
 
     let router = racine.join("src").join("router.rs");
     let ampute: Vec<String> = fs::read_to_string(&router)
@@ -96,7 +96,7 @@ fn une_ancre_supprimee_refuse_l_ecriture_et_affiche_le_bloc_a_coller() {
     fs::write(&router, ampute.join("\n")).expect("router.rs inscriptible");
 
     let avant = common::empreinte(&racine);
-    let sortie = Sortie::de(rbs(&racine).args([
+    let output = Sortie::de(rbs(&racine).args([
         "g",
         "crud",
         "notes",
@@ -106,19 +106,19 @@ fn une_ancre_supprimee_refuse_l_ecriture_et_affiche_le_bloc_a_coller() {
     ]));
 
     assert!(
-        !sortie.succes,
+        !output.succes,
         "la génération a abouti malgré l'ancre absente :\n{}",
-        sortie.stdout
+        output.stdout
     );
     assert!(
-        sortie.stderr.contains("<rbs:routes>") && sortie.stderr.contains("src/router.rs"),
+        output.stderr.contains("<rbs:routes>") && output.stderr.contains("src/router.rs"),
         "l'erreur doit nommer l'ancre et son fichier :\n{}",
-        sortie.stderr
+        output.stderr
     );
     assert!(
-        sortie.stdout.contains("// <rbs:routes>") && sortie.stdout.contains("// </rbs:routes>"),
+        output.stdout.contains("// <rbs:routes>") && output.stdout.contains("// </rbs:routes>"),
         "le bloc à recoller doit porter les deux balises :\n{}",
-        sortie.stdout
+        output.stdout
     );
     common::assert_intact(
         &avant,
@@ -132,7 +132,7 @@ fn une_ancre_supprimee_refuse_l_ecriture_et_affiche_le_bloc_a_coller() {
 #[test]
 fn a_dirty_working_tree_refuses_without_force_and_passes_with_it() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_commite(&parent);
+    let racine = committed_project(&parent);
 
     let main = racine.join("src").join("main.rs");
     let salissure = format!(
@@ -174,9 +174,9 @@ fn a_dirty_working_tree_refuses_without_force_and_passes_with_it() {
 /// appliqué dans l'ordre alphabétique — `Cargo.toml` puis `Dockerfile` sont bel et bien
 /// écrits avant que `docker-compose.yml` ne fasse échouer l'ensemble.
 #[test]
-fn un_echec_en_cours_d_application_restaure_les_fichiers_deja_ecrits() {
+fn a_failure_during_application_restores_the_files_already_written() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_commite(&parent);
+    let racine = committed_project(&parent);
 
     let piege = racine.join("docker-compose.yml");
     fs::write(&piege, "# posé par le test, en lecture seule\n").expect("piège inscriptible");
@@ -195,12 +195,12 @@ fn un_echec_en_cours_d_application_restaure_les_fichiers_deja_ecrits() {
 
     // `--force` dépasse la garde du conflit, que le piège déclenche : ce qui est éprouvé
     // ici est l'échec d'écriture qui vient après, pas la garde qui l'aurait devancé.
-    let sortie = Sortie::de(rbs(&racine).args(["add", "docker", "--force"]));
+    let output = Sortie::de(rbs(&racine).args(["add", "docker", "--force"]));
 
     assert!(
-        !sortie.succes,
+        !output.succes,
         "l'installation a abouti malgré un fichier non inscriptible :\n{}",
-        sortie.stdout
+        output.stdout
     );
     assert!(
         !racine.join("Dockerfile").exists(),
@@ -214,7 +214,7 @@ fn un_echec_en_cours_d_application_restaure_les_fichiers_deja_ecrits() {
 /// Aucune feature livrée n'en apporte encore : le moule ne s'éprouve que sur un fragment
 /// qui exerce les sept sections du manifeste — fichiers, ancres, migration, dépendances
 /// tierces, feature Cargo, section de configuration, variable d'environnement.
-fn fragment_a_code() -> TempDir {
+fn fragment_has_code() -> TempDir {
     let repertoire = TempDir::new().expect("répertoire temporaire créable");
     let essai = repertoire.path().join("essai");
     fs::create_dir(&essai).expect("le fragment se crée");
@@ -252,7 +252,7 @@ fn fragment_a_code() -> TempDir {
 }
 
 /// `rbs add essai`, servi par le fragment de test.
-fn ajouter_essai(racine: &Path, fragments: &TempDir, arguments: &[&str]) -> Sortie {
+fn add_trial(racine: &Path, fragments: &TempDir, arguments: &[&str]) -> Sortie {
     let mut commande = rbs(racine);
     commande
         .arg("--template-dir")
@@ -267,16 +267,16 @@ fn ajouter_essai(racine: &Path, fragments: &TempDir, arguments: &[&str]) -> Sort
 /// la crate que le fragment déclare arrive dans le `Cargo.toml` du projet, et celle que
 /// le projet portait déjà n'y arrive pas deux fois.
 #[test]
-fn les_dependances_du_fragment_arrivent_dans_le_manifeste_du_projet() {
+fn the_fragment_dependencies_reach_the_project_manifest() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_commite(&parent);
-    let fragments = fragment_a_code();
+    let racine = committed_project(&parent);
+    let fragments = fragment_has_code();
 
-    let sortie = ajouter_essai(&racine, &fragments, &[]);
+    let output = add_trial(&racine, &fragments, &[]);
     assert!(
-        sortie.succes,
+        output.succes,
         "l'installation doit aboutir :\n{}",
-        sortie.stderr
+        output.stderr
     );
 
     let manifeste =
@@ -302,16 +302,16 @@ fn les_dependances_du_fragment_arrivent_dans_le_manifeste_du_projet() {
 /// Le critère de la tâche : deux ancres et non une, un champ se déclarant dans la struct
 /// et s'initialisant dans `new`.
 #[test]
-fn les_deux_ancres_d_etat_recoivent_le_contenu_declare() {
+fn both_state_anchors_receive_the_declared_content() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_commite(&parent);
-    let fragments = fragment_a_code();
+    let racine = committed_project(&parent);
+    let fragments = fragment_has_code();
 
-    let sortie = ajouter_essai(&racine, &fragments, &[]);
+    let output = add_trial(&racine, &fragments, &[]);
     assert!(
-        sortie.succes,
+        output.succes,
         "l'installation doit aboutir :\n{}",
-        sortie.stderr
+        output.stderr
     );
 
     let state = fs::read_to_string(racine.join("src/state.rs")).expect("state.rs est lisible");
@@ -342,10 +342,10 @@ fn les_deux_ancres_d_etat_recoivent_le_contenu_declare() {
 /// Le développeur a pu réécrire son `state.rs`, et le CLI ne sait qu'insérer dans une
 /// ancre : faute de la trouver, il rend le bloc à coller et n'écrit rien.
 #[test]
-fn une_ancre_d_etat_absente_arrete_l_installation_sans_rien_ecrire() {
+fn a_missing_state_anchor_stops_the_install_without_writing_anything() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_commite(&parent);
-    let fragments = fragment_a_code();
+    let racine = committed_project(&parent);
+    let fragments = fragment_has_code();
 
     let state = racine.join("src/state.rs");
     let source = fs::read_to_string(&state).expect("state.rs est lisible");
@@ -362,23 +362,23 @@ fn une_ancre_d_etat_absente_arrete_l_installation_sans_rien_ecrire() {
     common::commiter(&racine, "état sans son ancre");
 
     let avant = common::empreinte(&racine);
-    let sortie = ajouter_essai(&racine, &fragments, &[]);
+    let output = add_trial(&racine, &fragments, &[]);
 
     assert!(
-        !sortie.succes,
+        !output.succes,
         "l'installation doit sortir en erreur :\n{}",
-        sortie.stdout
+        output.stdout
     );
     assert!(
-        sortie.stderr.contains("<rbs:state_champs>") && sortie.stderr.contains("src/state.rs"),
+        output.stderr.contains("<rbs:state_champs>") && output.stderr.contains("src/state.rs"),
         "l'erreur doit nommer l'ancre et son fichier :\n{}",
-        sortie.stderr
+        output.stderr
     );
     assert!(
-        sortie.stdout.contains("// <rbs:state_champs>")
-            && sortie.stdout.contains("// </rbs:state_champs>"),
+        output.stdout.contains("// <rbs:state_champs>")
+            && output.stdout.contains("// </rbs:state_champs>"),
         "le bloc à coller doit être affiché :\n{}",
-        sortie.stdout
+        output.stdout
     );
     common::assert_intact(
         &avant,
@@ -393,12 +393,12 @@ fn une_ancre_d_etat_absente_arrete_l_installation_sans_rien_ecrire() {
 /// fichiers : la migration du fragment est horodatée, et une seconde installation qui se
 /// fierait aux fichiers en déposerait une seconde, à un instant différent.
 #[test]
-fn deux_installations_successives_n_ecrivent_rien_la_seconde() {
+fn two_successive_installs_write_nothing_the_second_time() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_commite(&parent);
-    let fragments = fragment_a_code();
+    let racine = committed_project(&parent);
+    let fragments = fragment_has_code();
 
-    let premiere = ajouter_essai(&racine, &fragments, &[]);
+    let premiere = add_trial(&racine, &fragments, &[]);
     assert!(
         premiere.succes,
         "la première installation doit aboutir :\n{}",
@@ -407,7 +407,7 @@ fn deux_installations_successives_n_ecrivent_rien_la_seconde() {
     common::commiter(&racine, "essai");
 
     let avant = common::empreinte(&racine);
-    let seconde = ajouter_essai(&racine, &fragments, &[]);
+    let seconde = add_trial(&racine, &fragments, &[]);
 
     assert!(
         seconde.succes,
@@ -424,17 +424,17 @@ fn deux_installations_successives_n_ecrivent_rien_la_seconde() {
 /// Un fichier installé puis supprimé par le développeur ne fait pas réinstaller la
 /// feature à moitié : elle reste inscrite, et rien n'est réécrit.
 #[test]
-fn un_fichier_supprime_ne_fait_pas_reinstaller_la_feature() {
+fn a_deleted_file_does_not_make_the_feature_reinstall() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_commite(&parent);
-    let fragments = fragment_a_code();
+    let racine = committed_project(&parent);
+    let fragments = fragment_has_code();
 
-    assert!(ajouter_essai(&racine, &fragments, &[]).succes);
+    assert!(add_trial(&racine, &fragments, &[]).succes);
     fs::remove_file(racine.join("src/essai/service.rs")).expect("le fichier se supprime");
     common::commiter(&racine, "essai, sans son service");
 
     let avant = common::empreinte(&racine);
-    let seconde = ajouter_essai(&racine, &fragments, &[]);
+    let seconde = add_trial(&racine, &fragments, &[]);
 
     assert!(
         seconde.succes,
@@ -449,10 +449,10 @@ fn un_fichier_supprime_ne_fait_pas_reinstaller_la_feature() {
 /// Le piège est le même qu'à l'installation de `docker` : le second fichier du plan est
 /// posé en lecture seule, et l'écriture y échoue pour de vrai.
 #[test]
-fn un_echec_a_mi_parcours_restaure_les_fichiers_deja_ecrits() {
+fn a_failure_midway_restores_the_files_already_written() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_commite(&parent);
-    let fragments = fragment_a_code();
+    let racine = committed_project(&parent);
+    let fragments = fragment_has_code();
 
     let piege = racine.join("src/essai/service.rs");
     fs::create_dir_all(piege.parent().expect("le parent existe")).expect("répertoire créable");
@@ -472,12 +472,12 @@ fn un_echec_a_mi_parcours_restaure_les_fichiers_deja_ecrits() {
 
     // `--force` dépasse la garde du conflit, que le piège déclenche : ce qui est éprouvé
     // ici est l'échec d'écriture qui vient après, pas la garde qui l'aurait devancé.
-    let sortie = ajouter_essai(&racine, &fragments, &["--force"]);
+    let output = add_trial(&racine, &fragments, &["--force"]);
 
     assert!(
-        !sortie.succes,
+        !output.succes,
         "l'installation a abouti malgré un fichier non inscriptible :\n{}",
-        sortie.stdout
+        output.stdout
     );
     common::assert_intact(&avant, &racine, "l'échec a laissé le projet modifié");
 }
@@ -488,10 +488,10 @@ fn un_echec_a_mi_parcours_restaure_les_fichiers_deja_ecrits() {
 /// faute de la trouver, il rend le bloc à coller et n'écrit rien. Un fragment à demi
 /// installé coûterait plus cher à défaire qu'à installer.
 #[test]
-fn une_ancre_absente_arrete_l_installation_sans_rien_ecrire() {
+fn a_missing_anchor_stops_the_install_without_writing_anything() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_commite(&parent);
-    let fragments = fragment_a_code();
+    let racine = committed_project(&parent);
+    let fragments = fragment_has_code();
 
     let router = racine.join("src/router.rs");
     let source = fs::read_to_string(&router).expect("le routeur est lisible");
@@ -508,22 +508,22 @@ fn une_ancre_absente_arrete_l_installation_sans_rien_ecrire() {
     common::commiter(&racine, "routeur sans son ancre");
 
     let avant = common::empreinte(&racine);
-    let sortie = ajouter_essai(&racine, &fragments, &[]);
+    let output = add_trial(&racine, &fragments, &[]);
 
     assert!(
-        !sortie.succes,
+        !output.succes,
         "l'installation doit sortir en erreur :\n{}",
-        sortie.stdout
+        output.stdout
     );
     assert!(
-        sortie.stderr.contains("<rbs:routes>") && sortie.stderr.contains("src/router.rs"),
+        output.stderr.contains("<rbs:routes>") && output.stderr.contains("src/router.rs"),
         "l'erreur doit nommer l'ancre et son fichier :\n{}",
-        sortie.stderr
+        output.stderr
     );
     assert!(
-        sortie.stdout.contains("// <rbs:routes>") && sortie.stdout.contains("// </rbs:routes>"),
+        output.stdout.contains("// <rbs:routes>") && output.stdout.contains("// </rbs:routes>"),
         "le bloc à coller doit être affiché :\n{}",
-        sortie.stdout
+        output.stdout
     );
     common::assert_intact(
         &avant,
@@ -539,15 +539,15 @@ fn une_ancre_absente_arrete_l_installation_sans_rien_ecrire() {
 /// crates tierces, la section de configuration —, ce qu'aucune feature livrée n'avait
 /// encore exercé.
 #[test]
-fn le_fragment_redis_ecrit_les_ancres_d_etat_les_dependances_et_la_section_cache() {
+fn the_redis_fragment_writes_the_state_anchors_the_dependencies_and_the_cache_section() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_commite(&parent);
+    let racine = committed_project(&parent);
 
-    let sortie = Sortie::de(rbs(&racine).args(["add", "redis"]));
+    let output = Sortie::de(rbs(&racine).args(["add", "redis"]));
     assert!(
-        sortie.succes,
+        output.succes,
         "l'installation doit aboutir :\n{}",
-        sortie.stderr
+        output.stderr
     );
 
     let state = fs::read_to_string(racine.join("src/state.rs")).expect("state.rs est lisible");
@@ -593,13 +593,13 @@ fn le_fragment_redis_ecrit_les_ancres_d_etat_les_dependances_et_la_section_cache
 
 /// Le critère de la tâche : le second `rbs add redis` n'écrit rien.
 ///
-/// Distinct de `deux_installations_successives_n_ecrivent_rien_la_seconde`, qui l'éprouve
+/// Distinct de `two_successive_installs_write_nothing_the_second_time`, qui l'éprouve
 /// sur un fragment fabriqué : celui-ci porte sur le fragment livré, avec les lignes qu'il
 /// insère réellement dans quatre fichiers du projet.
 #[test]
-fn installer_redis_deux_fois_n_ecrit_rien_la_seconde() {
+fn installing_redis_twice_writes_nothing_the_second_time() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_commite(&parent);
+    let racine = committed_project(&parent);
 
     rbs(&racine).args(["add", "redis"]).assert().success();
     common::commiter(&racine, "redis");

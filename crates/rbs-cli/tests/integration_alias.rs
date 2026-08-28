@@ -13,7 +13,7 @@
 use assert_cmd::Command;
 
 /// La sortie standard d'un binaire livré, en exigeant qu'il réussisse.
-fn sortie(binaire: &str, args: &[&str]) -> String {
+fn output(binaire: &str, args: &[&str]) -> String {
     let rendu = Command::cargo_bin(binaire)
         .unwrap_or_else(|_| panic!("le binaire {binaire} doit être compilé"))
         .args(args)
@@ -24,8 +24,8 @@ fn sortie(binaire: &str, args: &[&str]) -> String {
 }
 
 /// L'aide amputée de sa ligne `Usage:`, seule à porter le nom de l'invocation.
-fn aide_sans_usage(binaire: &str) -> String {
-    sortie(binaire, &["--help"])
+fn help_without_usage(binaire: &str) -> String {
+    output(binaire, &["--help"])
         .lines()
         .filter(|ligne| !ligne.starts_with("Usage:"))
         .collect::<Vec<_>>()
@@ -33,21 +33,21 @@ fn aide_sans_usage(binaire: &str) -> String {
 }
 
 #[test]
-fn les_deux_noms_rendent_la_meme_version() {
+fn both_names_return_the_same_version() {
     assert_eq!(
-        sortie("rbs-cli", &["--version"]),
-        sortie("rbs", &["--version"])
+        output("rbs-cli", &["--version"]),
+        output("rbs", &["--version"])
     );
 }
 
 #[test]
-fn les_deux_noms_exposent_les_memes_commandes() {
-    assert_eq!(aide_sans_usage("rbs-cli"), aide_sans_usage("rbs"));
+fn both_names_expose_the_same_commands() {
+    assert_eq!(help_without_usage("rbs-cli"), help_without_usage("rbs"));
 }
 
 /// Le nom que la ligne `Usage:` donne à la commande, extension de plateforme comprise.
-fn nom_dans_l_usage(binaire: &str) -> String {
-    sortie(binaire, &["--help"])
+fn name_in_usage(binaire: &str) -> String {
+    output(binaire, &["--help"])
         .lines()
         .find_map(|ligne| ligne.strip_prefix("Usage: "))
         .expect("l'aide porte une ligne Usage")
@@ -58,11 +58,11 @@ fn nom_dans_l_usage(binaire: &str) -> String {
 }
 
 #[test]
-fn chaque_nom_s_annonce_sous_celui_qu_on_a_tape() {
+fn each_name_announces_itself_under_the_one_typed() {
     // Windows livre `rbs-cli.exe`, dont `argv[0]` porte l'extension : comparer au nom nu
     // ferait échouer là où le comportement est pourtant le bon.
     let attendu = |nom: &str| format!("{nom}{}", std::env::consts::EXE_SUFFIX);
 
-    assert_eq!(nom_dans_l_usage("rbs-cli"), attendu("rbs-cli"));
-    assert_eq!(nom_dans_l_usage("rbs"), attendu("rbs"));
+    assert_eq!(name_in_usage("rbs-cli"), attendu("rbs-cli"));
+    assert_eq!(name_in_usage("rbs"), attendu("rbs"));
 }

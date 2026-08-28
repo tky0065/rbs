@@ -5,11 +5,6 @@
 //!
 //! Aucune route n'est montée ici. Le module est la brique ; l'usage appartient au projet.
 
-// Rien dans le projet n'appelle encore ces fonctions : leurs appelants sont les handlers
-// à écrire. Sans cette permission, `clippy -D warnings` refuserait un module dont tout
-// est un point d'extension.
-#![allow(dead_code)]
-
 pub mod config;
 mod service;
 pub mod template;

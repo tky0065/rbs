@@ -1,6 +1,8 @@
 use axum::Json;
+use axum::body::Bytes;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+use axum::response::IntoResponse;
 use rbs_core::{HasCoreState, Page, Pagination, ProblemDetails, Result, ValidatedJson};
 use sea_orm::prelude::Uuid;
 
@@ -22,7 +24,9 @@ pub async fn list(
     State(state): State<AppState>,
     pagination: Pagination,
 ) -> Result<Json<Page<UploadResponse>>> {
-    Ok(Json(service::list(state.core().db(), &pagination).await?))
+    Ok(Json(
+        service::list(state.core().db(), state.cache(), &pagination).await?,
+    ))
 }
 
 #[utoipa::path(
@@ -39,7 +43,7 @@ pub async fn create(
     State(state): State<AppState>,
     ValidatedJson(input): ValidatedJson<CreateUpload>,
 ) -> Result<(StatusCode, Json<UploadResponse>)> {
-    let upload = service::create(state.core().db(), input).await?;
+    let upload = service::create(state.core().db(), state.cache(), &state.mail, input).await?;
 
     Ok((StatusCode::CREATED, Json(upload)))
 }
@@ -79,7 +83,9 @@ pub async fn update(
     Path(id): Path<Uuid>,
     ValidatedJson(input): ValidatedJson<UpdateUpload>,
 ) -> Result<Json<UploadResponse>> {
-    Ok(Json(service::update(state.core().db(), id, input).await?))
+    Ok(Json(
+        service::update(state.core().db(), state.cache(), id, input).await?,
+    ))
 }
 
 #[utoipa::path(
@@ -93,7 +99,78 @@ pub async fn update(
     )
 )]
 pub async fn delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<StatusCode> {
-    service::delete(state.core().db(), id).await?;
+    service::delete(state.core().db(), state.cache(), state.storage.as_ref(), id).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
+
+// region: contenu
+// Le contenu voyage hors du DTO : un corps binaire n'a pas sa place dans un JSON, et le
+// faire passer en base64 obligerait à charger deux fois le fichier en mémoire.
+#[utoipa::path(
+    put,
+    path = "/uploads/{id}/content",
+    tag = "uploads",
+    params(("id" = Uuid, Path, description = "identifiant de upload")),
+    request_body(content = String, content_type = "application/octet-stream"),
+    responses(
+        (status = 204, description = "contenu déposé"),
+        (status = 404, description = "upload introuvable", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn put_content(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+    content: Bytes,
+) -> Result<StatusCode> {
+    service::put_content(
+        state.core().db(),
+        state.storage.as_ref(),
+        id,
+        content.to_vec(),
+    )
+    .await?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    get,
+    path = "/uploads/{id}/content",
+    tag = "uploads",
+    params(("id" = Uuid, Path, description = "identifiant de upload")),
+    responses(
+        (status = 200, description = "contenu du upload", content_type = "application/octet-stream"),
+        (status = 404, description = "contenu introuvable", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn get_content(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse> {
+    let content = service::get_content(state.storage.as_ref(), id).await?;
+
+    Ok(([("content-type", "application/octet-stream")], content))
+}
+
+#[utoipa::path(
+    head,
+    path = "/uploads/{id}/content",
+    tag = "uploads",
+    params(("id" = Uuid, Path, description = "identifiant de upload")),
+    responses(
+        (status = 204, description = "un contenu est déposé"),
+        (status = 404, description = "aucun contenu", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn head_content(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode> {
+    if service::has_content(state.storage.as_ref(), id).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(rbs_core::Error::NotFound("contenu"))
+    }
+}
+// endregion: contenu

@@ -51,7 +51,7 @@ const MOT_DE_PASSE_DU_COMPTE: &str = "un mot de passe assez long";
 ///
 /// `add` refuse d'écrire dans un working tree sale : sans ce commit, la commande
 /// s'arrête avant d'avoir rien fait.
-fn projet_avec_auth(parent: &TempDir) -> PathBuf {
+fn project_with_auth(parent: &TempDir) -> PathBuf {
     let racine = common::projet(parent.path());
     common::commiter(&racine, "projet neuf");
 
@@ -66,7 +66,7 @@ fn projet_avec_auth(parent: &TempDir) -> PathBuf {
 }
 
 /// Le contenu d'une ancre, balises exclues.
-fn dans_l_ancre(racine: &Path, fichier: &str, anchor: &str) -> String {
+fn in_the_anchor(racine: &Path, fichier: &str, anchor: &str) -> String {
     let source = fs::read_to_string(racine.join(fichier))
         .unwrap_or_else(|erreur| panic!("{fichier} illisible : {erreur}"));
 
@@ -86,9 +86,9 @@ fn dans_l_ancre(racine: &Path, fichier: &str, anchor: &str) -> String {
 
 /// Le critère du lot : l'installation complète les quatre ancres, et non deux.
 #[test]
-fn les_quatre_ancres_du_projet_sont_completees() {
+fn the_four_project_anchors_are_completed() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_avec_auth(&parent);
+    let racine = project_with_auth(&parent);
 
     let attendu = [
         ("src/main.rs", "features", "mod auth;"),
@@ -102,7 +102,7 @@ fn les_quatre_ancres_du_projet_sont_completees() {
     ];
 
     for (fichier, anchor, ligne) in attendu {
-        let contenu = dans_l_ancre(&racine, fichier, anchor);
+        let contenu = in_the_anchor(&racine, fichier, anchor);
 
         assert!(
             contenu.contains(ligne),
@@ -114,9 +114,9 @@ fn les_quatre_ancres_du_projet_sont_completees() {
 /// Les cinq chemins sont montés dès l'installation : I7 les enregistrera dans le
 /// document OpenAPI, J2 les jouera contre une vraie base.
 #[test]
-fn les_cinq_chemins_d_auth_sont_montes() {
+fn the_five_auth_paths_are_mounted() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_avec_auth(&parent);
+    let racine = project_with_auth(&parent);
 
     let module =
         fs::read_to_string(racine.join("src/auth/mod.rs")).expect("src/auth/mod.rs lisible");
@@ -138,9 +138,9 @@ fn les_cinq_chemins_d_auth_sont_montes() {
 /// Le secret et les durées de vie arrivent avec la feature, sous les noms qu'`AuthConfig`
 /// attend : un projet qui les nomme autrement échoue au démarrage, pas à la compilation.
 #[test]
-fn la_configuration_et_l_environnement_recoivent_ce_qu_auth_exige() {
+fn the_configuration_and_the_environment_receive_what_auth_requires() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_avec_auth(&parent);
+    let racine = project_with_auth(&parent);
 
     let config = fs::read_to_string(racine.join("config/default.toml")).expect("config lisible");
     assert!(config.contains("[auth]"), "section absente :\n{config}");
@@ -178,7 +178,7 @@ static CIBLE_PARTAGEE: Mutex<()> = Mutex::new(());
 ///
 /// Le verrou se prend après le conteneur : les PostgreSQL n'ont rien à partager et
 /// démarrent en parallèle.
-fn cible_a_soi() -> MutexGuard<'static, ()> {
+fn own_target() -> MutexGuard<'static, ()> {
     // Un test qui panique empoisonne le verrou. Sans cette reprise, les suivants
     // échoueraient tous sur un message qui ne dit rien de leur propre défaut.
     CIBLE_PARTAGEE
@@ -195,11 +195,11 @@ fn cible_a_soi() -> MutexGuard<'static, ()> {
 /// écrit.
 #[test]
 #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
-fn le_projet_portant_auth_compile_sans_warning_et_est_formate() {
-    let _cible = cible_a_soi();
+fn the_project_carrying_auth_compiles_without_a_warning_and_is_formatted() {
+    let _cible = own_target();
 
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_avec_auth(&parent);
+    let racine = project_with_auth(&parent);
 
     Command::new("cargo")
         .current_dir(&racine)
@@ -237,11 +237,11 @@ fn le_projet_portant_auth_compile_sans_warning_et_est_formate() {
 /// fichier de migration.
 #[test]
 #[ignore = "démarre PostgreSQL et compile la crate de migration : plusieurs minutes"]
-fn la_migration_d_auth_cree_le_schema_puis_le_rend_a_son_etat_initial() {
-    let postgres = demarrer_postgres();
-    let _cible = cible_a_soi();
+fn the_auth_migration_creates_the_schema_then_returns_it_to_its_initial_state() {
+    let postgres = start_postgres();
+    let _cible = own_target();
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_avec_auth_sur(&url_de(&postgres), &parent);
+    let racine = project_with_auth_on(&url_of(&postgres), &parent);
 
     let avant = tables(&postgres);
 
@@ -315,13 +315,13 @@ fn la_migration_d_auth_cree_le_schema_puis_le_rend_a_son_etat_initial() {
 /// qu'il reçoit.
 #[test]
 #[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
-fn les_tests_d_auth_du_projet_genere_passent() {
-    let postgres = demarrer_postgres();
-    let _cible = cible_a_soi();
+fn the_auth_tests_of_the_generated_project_pass() {
+    let postgres = start_postgres();
+    let _cible = own_target();
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_avec_auth_sur(&url_de(&postgres), &parent);
+    let racine = project_with_auth_on(&url_of(&postgres), &parent);
 
-    migrer(&racine);
+    migrate(&racine);
 
     Command::new("cargo")
         .current_dir(&racine)
@@ -339,28 +339,28 @@ fn les_tests_d_auth_du_projet_genere_passent() {
 /// couvre aussi les middlewares du noyau, qu'une capture posée dans le projet manquerait.
 #[test]
 #[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
-fn le_hash_n_apparait_pas_dans_les_logs_du_serveur() {
+fn the_hash_does_not_appear_in_the_server_logs() {
     const MOT_DE_PASSE_EN_CLAIR: &str = "un mot de passe assez long";
 
-    let postgres = demarrer_postgres();
-    let _cible = cible_a_soi();
+    let postgres = start_postgres();
+    let _cible = own_target();
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_avec_auth_sur(&url_de(&postgres), &parent);
+    let racine = project_with_auth_on(&url_of(&postgres), &parent);
 
-    migrer(&racine);
+    migrate(&racine);
 
-    compiler(&racine);
+    compile(&racine);
 
     let serveur = Serveur::lancer(&racine, "demo-api", "debug");
     let port = serveur.port();
 
-    let (statut, corps) = requete(
+    let (statut, corps) = request(
         port,
         "POST",
         "/auth/register",
         None,
         Some(&format!(
-            r#"{{"email":"journal@exemple.test","password":"{MOT_DE_PASSE_EN_CLAIR}"}}"#
+            r#"{{"email":"journal@example.test","password":"{MOT_DE_PASSE_EN_CLAIR}"}}"#
         )),
     );
 
@@ -396,118 +396,106 @@ fn le_hash_n_apparait_pas_dans_les_logs_du_serveur() {
 /// `refresh` venait d'ouvrir.
 #[test]
 #[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
-fn le_parcours_d_auth_se_joue_de_bout_en_bout() {
+fn the_auth_journey_plays_end_to_end() {
     const EMAIL: &str = "parcours@exemple.test";
 
-    let postgres = demarrer_postgres();
-    let _cible = cible_a_soi();
+    let postgres = start_postgres();
+    let _cible = own_target();
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = projet_avec_auth_sur(&url_de(&postgres), &parent);
+    let racine = project_with_auth_on(&url_of(&postgres), &parent);
 
-    migrer(&racine);
-    compiler(&racine);
+    migrate(&racine);
+    compile(&racine);
 
     let serveur = Serveur::lancer(&racine, "demo-api", "info");
     let port = serveur.port();
 
-    let (statut, corps) = requete(
+    let (statut, corps) = request(
         port,
         "POST",
         "/auth/register",
         None,
-        Some(&identifiants(EMAIL)),
+        Some(&credentials(EMAIL)),
     );
     assert_eq!(statut, 201, "l'inscription doit aboutir : {corps}");
 
-    let (statut, premiere) = requete(
-        port,
-        "POST",
-        "/auth/login",
-        None,
-        Some(&identifiants(EMAIL)),
-    );
+    let (statut, premiere) = request(port, "POST", "/auth/login", None, Some(&credentials(EMAIL)));
     assert_eq!(
         statut, 200,
         "la connexion doit rendre une paire : {premiere}"
     );
 
-    let (statut, corps) = requete(port, "GET", "/auth/me", None, None);
+    let (statut, corps) = request(port, "GET", "/auth/me", None, None);
     assert_eq!(
         statut, 401,
         "une route protégée doit refuser une requête sans jeton : {corps}"
     );
 
-    let (statut, corps) = requete(port, "GET", "/auth/me", Some(&acces(&premiere)), None);
+    let (statut, corps) = request(port, "GET", "/auth/me", Some(&access(&premiere)), None);
     assert_eq!(
         statut, 200,
         "le jeton émis par `login` doit être celui que la garde accepte : {corps}"
     );
 
-    let (statut, seconde) = requete(
+    let (statut, seconde) = request(
         port,
         "POST",
         "/auth/refresh",
         None,
-        Some(&renouvellement(&premiere)),
+        Some(&renewal(&premiere)),
     );
     assert_eq!(
         statut, 200,
         "le rafraîchissement doit rendre une paire : {seconde}"
     );
 
-    let (statut, corps) = requete(port, "GET", "/auth/me", Some(&acces(&seconde)), None);
+    let (statut, corps) = request(port, "GET", "/auth/me", Some(&access(&seconde)), None);
     assert_eq!(
         statut, 200,
         "la paire rendue par `refresh` doit être utilisable : {corps}"
     );
 
-    let (statut, corps) = requete(
+    let (statut, corps) = request(
         port,
         "POST",
         "/auth/refresh",
         None,
-        Some(&renouvellement(&premiere)),
+        Some(&renewal(&premiere)),
     );
     assert_eq!(
         statut, 401,
         "le refresh déjà consommé doit être refusé : {corps}"
     );
 
-    let (statut, corps) = requete(
-        port,
-        "POST",
-        "/auth/logout",
-        None,
-        Some(&renouvellement(&seconde)),
-    );
+    let (statut, corps) = request(port, "POST", "/auth/logout", None, Some(&renewal(&seconde)));
     assert_eq!(statut, 204, "la déconnexion doit aboutir : {corps}");
 
-    let (statut, corps) = requete(
+    let (statut, corps) = request(
         port,
         "POST",
         "/auth/refresh",
         None,
-        Some(&renouvellement(&seconde)),
+        Some(&renewal(&seconde)),
     );
     assert_eq!(statut, 401, "le refresh révoqué doit être refusé : {corps}");
 }
 
 /// Le corps d'inscription et de connexion d'un compte.
-fn identifiants(email: &str) -> String {
+fn credentials(email: &str) -> String {
     format!(r#"{{"email":"{email}","password":"{MOT_DE_PASSE_DU_COMPTE}"}}"#)
 }
 
 /// Le corps qu'attendent `refresh` et `logout`.
-fn renouvellement(paire: &Value) -> String {
-    format!(r#"{{"refresh_token":"{}"}}"#, champ(paire, "refresh_token"))
+fn renewal(paire: &Value) -> String {
+    format!(r#"{{"refresh_token":"{}"}}"#, field(paire, "refresh_token"))
 }
 
 /// Le jeton d'accès d'une paire.
-fn acces(paire: &Value) -> String {
-    champ(paire, "access_token")
+fn access(paire: &Value) -> String {
+    field(paire, "access_token")
 }
 
-fn champ(paire: &Value, name: &str) -> String {
+fn field(paire: &Value, name: &str) -> String {
     paire[name]
         .as_str()
         .unwrap_or_else(|| panic!("la paire doit porter `{name}` : {paire}"))
@@ -523,46 +511,40 @@ fn champ(paire: &Value, name: &str) -> String {
 /// exécution : la CI n'en prouve que la compilation.
 #[test]
 #[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
-fn une_route_gardee_refuse_un_user_authentifie() {
+fn a_guarded_route_rejects_an_authenticated_user() {
     const EMAIL: &str = "sans-droits@exemple.test";
     const ARTICLE: &str = r#"{"title":"Un title","body":"Un corps.","published":true}"#;
 
-    let postgres = demarrer_postgres();
-    let _cible = cible_a_soi();
+    let postgres = start_postgres();
+    let _cible = own_target();
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = blog_auth_sur(&url_de(&postgres), &parent);
+    let racine = blog_auth_on(&url_of(&postgres), &parent);
 
-    migrer(&racine);
-    compiler(&racine);
+    migrate(&racine);
+    compile(&racine);
 
     let serveur = Serveur::lancer(&racine, "blog-auth", "info");
     let port = serveur.port();
 
-    let (statut, corps) = requete(
+    let (statut, corps) = request(
         port,
         "POST",
         "/auth/register",
         None,
-        Some(&identifiants(EMAIL)),
+        Some(&credentials(EMAIL)),
     );
     assert_eq!(statut, 201, "l'inscription doit aboutir : {corps}");
 
-    let (statut, paire) = requete(
-        port,
-        "POST",
-        "/auth/login",
-        None,
-        Some(&identifiants(EMAIL)),
-    );
+    let (statut, paire) = request(port, "POST", "/auth/login", None, Some(&credentials(EMAIL)));
     assert_eq!(statut, 200, "la connexion doit rendre une paire : {paire}");
 
-    let (statut, corps) = requete(port, "POST", "/posts", None, Some(ARTICLE));
+    let (statut, corps) = request(port, "POST", "/posts", None, Some(ARTICLE));
     assert_eq!(
         statut, 401,
         "sans jeton, la route gardée doit dire « identifie-toi » et non « tu n'as pas le droit » : {corps}"
     );
 
-    let (statut, corps) = requete(port, "POST", "/posts", Some(&acces(&paire)), Some(ARTICLE));
+    let (statut, corps) = request(port, "POST", "/posts", Some(&access(&paire)), Some(ARTICLE));
     assert_eq!(
         statut, 403,
         "un `user` authentifié doit être refusé sur une route réservée aux admins : {corps}"
@@ -570,7 +552,7 @@ fn une_route_gardee_refuse_un_user_authentifie() {
 
     // Sans cette ligne, un 403 rendu par une route cassée passerait pour une garde qui
     // fonctionne.
-    let (statut, corps) = requete(port, "GET", "/posts", Some(&acces(&paire)), None);
+    let (statut, corps) = request(port, "GET", "/posts", Some(&access(&paire)), None);
     assert_eq!(
         statut, 200,
         "la ressource doit rester servie au même compte en lecture : {corps}"
@@ -581,9 +563,9 @@ fn une_route_gardee_refuse_un_user_authentifie() {
 ///
 /// La copie est ce qui permet de le lancer sans écrire dans le dépôt — au prix du chemin
 /// relatif vers le noyau, qu'il faut refaire.
-fn blog_auth_sur(url: &str, parent: &TempDir) -> PathBuf {
+fn blog_auth_on(url: &str, parent: &TempDir) -> PathBuf {
     let racine = parent.path().join("blog-auth");
-    copier(&common::depot().join("examples/blog-auth"), &racine);
+    copy(&common::depot().join("examples/blog-auth"), &racine);
 
     let manifeste = racine.join("Cargo.toml");
     let source = fs::read_to_string(&manifeste).expect("le manifeste de l'exemple est lisible");
@@ -616,7 +598,7 @@ fn blog_auth_sur(url: &str, parent: &TempDir) -> PathBuf {
 }
 
 /// Copie `source` dans `destination`, `target` et `.git` exclus.
-fn copier(source: &Path, destination: &Path) {
+fn copy(source: &Path, destination: &Path) {
     fs::create_dir_all(destination).expect("répertoire de destination créable");
 
     for entree in fs::read_dir(source).expect("répertoire source lisible") {
@@ -630,7 +612,7 @@ fn copier(source: &Path, destination: &Path) {
         let cible = destination.join(&nom);
 
         if chemin.is_dir() {
-            copier(&chemin, &cible);
+            copy(&chemin, &cible);
         } else {
             fs::copy(&chemin, &cible).expect("fichier copiable");
         }
@@ -638,7 +620,7 @@ fn copier(source: &Path, destination: &Path) {
 }
 
 /// Un PostgreSQL neuf, prêt à recevoir le schéma d'un projet généré.
-fn demarrer_postgres() -> Container<GenericImage> {
+fn start_postgres() -> Container<GenericImage> {
     GenericImage::new(IMAGE.0, IMAGE.1)
         .with_wait_for(WaitFor::log(
             // PostgreSQL annonce une première fois qu'il accepte les connexions pendant
@@ -655,7 +637,7 @@ fn demarrer_postgres() -> Container<GenericImage> {
 }
 
 /// L'URL de connexion à `postgres`, vue depuis l'hôte.
-fn url_de(postgres: &Container<GenericImage>) -> String {
+fn url_of(postgres: &Container<GenericImage>) -> String {
     let port = postgres
         .get_host_port_ipv4(5432.tcp())
         .expect("le port de PostgreSQL doit être publié");
@@ -666,7 +648,7 @@ fn url_de(postgres: &Container<GenericImage>) -> String {
 /// Un projet neuf portant `auth`, sa base pointée sur `url` et son secret posé.
 ///
 /// Les migrations ne sont pas appliquées : le test du schéma a besoin de l'état d'avant.
-fn projet_avec_auth_sur(url: &str, parent: &TempDir) -> PathBuf {
+fn project_with_auth_on(url: &str, parent: &TempDir) -> PathBuf {
     let racine = parent.path().join("demo-api");
 
     Command::cargo_bin("rbs")
@@ -704,7 +686,7 @@ fn projet_avec_auth_sur(url: &str, parent: &TempDir) -> PathBuf {
 }
 
 /// Applique les migrations du projet.
-fn migrer(racine: &Path) {
+fn migrate(racine: &Path) {
     Command::cargo_bin("rbs")
         .expect("le binaire rbs doit être compilé")
         .current_dir(racine)
@@ -715,7 +697,7 @@ fn migrer(racine: &Path) {
 }
 
 /// Compile le projet, binaire compris.
-fn compiler(racine: &Path) {
+fn compile(racine: &Path) {
     Command::new("cargo")
         .current_dir(racine)
         .env("CARGO_TARGET_DIR", common::cible())
@@ -725,7 +707,7 @@ fn compiler(racine: &Path) {
 }
 
 /// Un port que personne n'écoute au moment de l'appel.
-fn port_libre() -> u16 {
+fn free_port() -> u16 {
     TcpListener::bind("127.0.0.1:0")
         .expect("l'hôte doit pouvoir prêter un port")
         .local_addr()
@@ -734,7 +716,7 @@ fn port_libre() -> u16 {
 }
 
 /// Attend que le serveur accepte les connexions sur `port`.
-fn attendre_ecoute(port: u16) {
+fn wait_for_listening(port: u16) {
     let limite = Instant::now() + Duration::from_secs(60);
 
     while Instant::now() < limite {
@@ -764,7 +746,7 @@ struct Serveur {
 
 impl Serveur {
     fn lancer(racine: &Path, binaire: &str, journal: &str) -> Self {
-        let port = port_libre();
+        let port = free_port();
 
         let processus = std::process::Command::new(common::cible().join("debug").join(binaire))
             .current_dir(racine)
@@ -775,7 +757,7 @@ impl Serveur {
             .spawn()
             .expect("le binaire du projet doit être lançable");
 
-        attendre_ecoute(port);
+        wait_for_listening(port);
 
         Self {
             processus: Some(processus),
@@ -797,14 +779,14 @@ impl Serveur {
             .kill()
             .expect("le serveur doit pouvoir être arrêté");
 
-        let sortie = processus
+        let output = processus
             .wait_with_output()
             .expect("la sortie du serveur doit être lisible");
 
         format!(
             "{}{}",
-            String::from_utf8_lossy(&sortie.stdout),
-            String::from_utf8_lossy(&sortie.stderr)
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
         )
     }
 }
@@ -822,7 +804,7 @@ impl Drop for Serveur {
 ///
 /// La requête est écrite à la main plutôt que par un client HTTP : ces tests n'ont besoin
 /// que d'un statut et de deux champs de JSON, et la dépendance se paierait sur toute la CI.
-fn requete(
+fn request(
     port: u16,
     methode: &str,
     chemin: &str,
@@ -856,11 +838,11 @@ fn requete(
     flux.read_to_string(&mut reponse)
         .expect("la réponse doit être lisible");
 
-    decoder(&reponse)
+    decode(&reponse)
 }
 
 /// Sépare le statut du corps d'une réponse HTTP brute.
-fn decoder(reponse: &str) -> (u16, Value) {
+fn decode(reponse: &str) -> (u16, Value) {
     let statut = reponse
         .split_whitespace()
         .nth(1)
@@ -893,8 +875,8 @@ fn tables(postgres: &testcontainers::Container<GenericImage>) -> Vec<String> {
     .collect()
 }
 
-/// Joue `requete` dans le conteneur et rend sa sortie, sans en-tête ni alignement.
-fn psql(postgres: &testcontainers::Container<GenericImage>, requete: &str) -> String {
+/// Joue `request` dans le conteneur et rend sa sortie, sans en-tête ni alignement.
+fn psql(postgres: &testcontainers::Container<GenericImage>, request: &str) -> String {
     let mut resultat = postgres
         .exec(ExecCommand::new([
             "psql",
@@ -903,11 +885,11 @@ fn psql(postgres: &testcontainers::Container<GenericImage>, requete: &str) -> St
             "-d",
             BASE,
             "-tAc",
-            requete,
+            request,
         ]))
         .expect("psql doit être lançable dans le conteneur");
 
-    let sortie = resultat.stdout_to_vec().expect("sortie de psql lisible");
+    let output = resultat.stdout_to_vec().expect("sortie de psql lisible");
 
-    String::from_utf8_lossy(&sortie).trim().to_string()
+    String::from_utf8_lossy(&output).trim().to_string()
 }

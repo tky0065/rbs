@@ -25,7 +25,7 @@ const ENVOI: &str = "a_templated_message_goes_out_to_the_smtp_server";
 
 #[test]
 #[ignore = "démarre Mailpit et compile un projet Axum + SeaORM complet : plusieurs minutes"]
-fn un_courriel_a_gabarit_arrive_a_destination_et_se_relit_par_l_api() {
+fn a_templated_email_reaches_its_destination_and_reads_back_through_the_api() {
     let mailpit = GenericImage::new(IMAGE.0, IMAGE.1)
         .with_wait_for(WaitFor::log(LogWaitStrategy::stdout_or_stderr(
             "accessible via http",
@@ -47,7 +47,7 @@ fn un_courriel_a_gabarit_arrive_a_destination_et_se_relit_par_l_api() {
 
     // Le conteneur reçoit ses ports au démarrage : `config/default.toml` ne peut pas les
     // connaître, et c'est la surcharge par l'environnement qui les lui apprend.
-    let sortie = Command::new("cargo")
+    let output = Command::new("cargo")
         .current_dir(&projet)
         .env("CARGO_TARGET_DIR", common::cible())
         .env("RBS_MAIL__SMTP_HOST", "127.0.0.1")
@@ -58,12 +58,12 @@ fn un_courriel_a_gabarit_arrive_a_destination_et_se_relit_par_l_api() {
 
     let journal = format!(
         "{}{}",
-        String::from_utf8_lossy(&sortie.stdout),
-        String::from_utf8_lossy(&sortie.stderr)
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
     );
 
     assert!(
-        sortie.status.success(),
+        output.status.success(),
         "l'envoi depuis le projet a échoué :\n{journal}"
     );
 

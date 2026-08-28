@@ -1,7 +1,3 @@
-// Le fragment livre une brique, pas une route : tant qu'aucun handler n'appelle le cache,
-// le compilateur le tient pour mort. La ligne se retire au premier appel.
-#![allow(dead_code)]
-
 pub mod config;
 
 #[cfg(test)]
@@ -91,6 +87,8 @@ impl Cache {
     }
 
     /// Retire une clé. Une clé absente n'est pas une erreur.
+    // Ce projet invalide par préfixe ; la clé unique reste offerte à qui en aura besoin.
+    #[allow(dead_code)]
     pub async fn invalidate(&self, key: &str) -> Result<()> {
         let mut connection = self.connection().await?;
         connection

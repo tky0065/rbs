@@ -8,7 +8,7 @@ mod common;
 
 #[test]
 #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
-fn le_projet_genere_compile_et_passe_ses_tests() {
+fn the_generated_project_compiles_and_passes_its_tests() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let noyau = common::noyau();
 
