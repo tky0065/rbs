@@ -38,9 +38,21 @@ pub(crate) fn format_batch<'a>(
 }
 
 /// Rend `source` telle que rustfmt l'écrirait.
+///
+/// `newline_style` est forcé : son défaut, « Auto », déduit le style des retours à la
+/// ligne de l'entrée et retombe sur celui de la plateforme quand l'entrée n'en porte
+/// aucun. Le code que `rbs generate` écrit dépendrait alors de la machine qui l'a lancé.
 fn formatted(source: &str) -> Result<String, Avertissement> {
     let mut rustfmt = Command::new("rustfmt")
-        .args(["--edition", "2024", "--emit", "stdout", "--quiet"])
+        .args([
+            "--edition",
+            "2024",
+            "--emit",
+            "stdout",
+            "--quiet",
+            "--config",
+            "newline_style=Unix",
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -97,6 +109,23 @@ mod tests {
 
         assert_eq!(format_batch(sources.iter_mut()), None);
         assert_eq!(sources[0], "fn main() {\n    println!(\"bonjour\");\n}\n");
+    }
+
+    /// Le code que `rbs generate` écrit ne doit pas dépendre de la machine qui l'a
+    /// lancé. `newline_style` vaut « Auto » par défaut : rustfmt déduit le style des
+    /// retours à la ligne de son entrée, et retombe sur celui de la plateforme quand
+    /// l'entrée n'en porte aucun — un rendu d'une seule ligne sort donc en CRLF sous
+    /// Windows, et en LF ailleurs.
+    #[test]
+    fn the_output_is_in_unix_style_whatever_the_input_carried() {
+        let mut sources = ["fn  main( ) {\r\nprintln!(\"bonjour\") ;\r\n}".to_string()];
+
+        assert_eq!(format_batch(sources.iter_mut()), None);
+        assert!(
+            !sources[0].contains('\r'),
+            "le rendu porte des CRLF : {:?}",
+            sources[0]
+        );
     }
 
     /// Ce que rustfmt refuse est écrit tel quel : l'erreur du compilateur situera le
