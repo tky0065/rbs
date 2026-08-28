@@ -625,10 +625,15 @@ par l'auteur du projet, et qu'une crate tierce le lui retirerait.
       ✓ `mail` déclarée et `RBS_MAIL__SMTP_PASSWORD` absente → `✗` nommant la variable.
       ✓ `storage` en `backend = "s3"` sans bucket → `✗`.
 
-- [ ] **O4** · Critère de sortie du jalon
-      `K` étant le seul lot autorisé à toucher le noyau, le critère du `ROADMAP` devient une
-      commande au lieu d'une relecture.
-      ✓ `git diff --stat <sha de fin de K>..HEAD -- crates/rbs-core/` → 0 ligne.
+- [x] **O4** · Critère de sortie du jalon — vérifié 2026-08-28 · `git diff --stat d29b311..HEAD -- crates/rbs-core/` → **0 ligne**, et `git log d29b311..HEAD -- crates/rbs-core/` → **aucun commit** : aucun lot d'intégration n'a touché le noyau · second critère prouvé **deux fois** — un projet fraîchement engendré des trois features (`rbs new` puis `add redis`, `add mail`, `add storage`) → `cargo fmt --check` propre, `clippy --all-targets -- -D warnings` Finished, `cargo test` → 14 passed / 6 ignored ; et `examples/file-drop`, où les trois briques sont réellement appelées, contre **PostgreSQL 18 et Redis réels** → 17 passed / 6 ignored, dont `the_full_lifecycle_goes_through_the_api` qui traverse le cache, le stockage et le courriel · **le second critère a trouvé ce qu'il était fait pour trouver** : `the_s3_backend_builds_without_touching_the_network` cherchait `StockageS3` dans la représentation de debug quand la migration a renommé le type `S3Storage` — le fragment livrait à tout utilisateur de `rbs add storage` un test qui tombe au premier `cargo test`, passé au travers parce que la CI compile les exemples sans lancer leurs tests, qui demandent une base · corrigé dans le fragment **et** dans l'exemple, qui doivent rester identiques : `integration_examples` → 14 passed et `cargo test --workspace` → 546 passed, total inchangé · morsure faisant construire le backend fichiers sous `backend = "s3"` → le seul test corrigé FAILED, les treize autres verts · `uuidv7()` de la migration engendrée exige **PostgreSQL 18** : un 17 fait échouer `rbs migrate up` avant tout test
+      **Premier critère réécrit le 2026-08-28, sur arbitrage.** Il prenait pour repère la
+      fin de `K`, d'où `git diff` rend 18 fichiers et 666 lignes : la migration des
+      identifiants vers l'anglais, postérieure à `K`, a touché tout le noyau. Elle
+      n'appartient à aucun lot et l'encadré de tête l'acte déjà. Le repère est donc le
+      commit de cette migration, `d29b311`, et ce que le critère voulait établir — aucun
+      lot d'intégration n'a touché le noyau — reste mesuré. C'est un changement de critère,
+      non une preuve, et il a été demandé.
+      ✓ `git diff --stat d29b311..HEAD -- crates/rbs-core/` → 0 ligne.
       ✓ Les trois features installées sur un même projet cohabitent : clippy, fmt et
       `cargo test` du projet généré passent.
 
