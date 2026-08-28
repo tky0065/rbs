@@ -80,6 +80,36 @@ const EXEMPLES: &[Exemple] = &[
             "templates/mail/depot.html",
         ],
     },
+    Exemple {
+        nom: "newsletter-queue",
+        database_url: "postgres://rbs:rbs@localhost:5432/newsletter_queue",
+        // L'ancre `features` empile les `mod` dans l'ordre d'installation et doit rester
+        // triée : `jobs` puis `mail`, et une ressource qui les suit — ce qui écarte
+        // `newsletter` comme nom de ressource.
+        features: &["jobs", "mail"],
+        crud: "subscribers",
+        // `email` seul suffit à la contrainte de validation du DTO : la règle porte sur
+        // le nom exact autant que sur le suffixe `_email`.
+        champs: "email:string:unique,name:string,confirmed:bool",
+        // Ce que montre cet exemple et qu'aucun autre ne montre : un job enfilé dans la
+        // transaction qui l'a motivé. `the_hand_edits_of_newsletter_queue_are_in_place`
+        // en répond.
+        edite_a_la_main: &[
+            "src/jobs/mod.rs",
+            "src/jobs/demo.rs",
+            "src/jobs/newsletter.rs",
+            "src/mail/mod.rs",
+            "src/mail/service.rs",
+            "src/openapi.rs",
+            "src/subscribers/dto.rs",
+            "src/subscribers/repository.rs",
+            "src/subscribers/service.rs",
+            "src/subscribers/controller.rs",
+            "src/subscribers/mod.rs",
+            "src/seeds/subscribers.rs",
+            "templates/mail/newsletter.html",
+        ],
+    },
 ];
 
 const REGENERER: &str = "examples/README.md donne la commande de régénération";
@@ -104,6 +134,11 @@ fn blog_auth_is_what_the_cli_produces_today() {
 #[test]
 fn file_drop_is_what_the_cli_produces_today() {
     assert_no_drift(example("file-drop"));
+}
+
+#[test]
+fn newsletter_queue_is_what_the_cli_produces_today() {
+    assert_no_drift(example("newsletter-queue"));
 }
 
 fn assert_no_drift(example: &Exemple) {
@@ -616,5 +651,139 @@ fn the_hand_edits_of_file_drop_are_in_place() {
     assert!(
         gabarit.contains(r#"<a href="{{ link }}">"#),
         "templates/mail/depot.html : le href doit porter la variable du contexte"
+    );
+}
+
+/// Ce que `newsletter-queue` porte et qu'aucune commande n'écrit.
+///
+/// Onze de ses fichiers sortent de la comparaison octet à octet, qui signalerait l'édition
+/// elle-même. Sans ce test, ces onze chemins ne seraient sous aucune surveillance et le
+/// câblage pourrait disparaître en silence.
+#[test]
+fn the_hand_edits_of_newsletter_queue_are_in_place() {
+    let racine = common::depot().join("examples").join("newsletter-queue");
+    let lire = |relatif: &str| {
+        std::fs::read_to_string(racine.join(relatif))
+            .unwrap_or_else(|erreur| panic!("{relatif} illisible : {erreur}"))
+    };
+
+    // Les deux fragments livrent une brique et aucune route, et chacun porte une
+    // permission `dead_code` que son commentaire dit de retirer au premier appel. C'est
+    // ce retrait qui fait de `clippy -D warnings` la preuve du câblage.
+    for module in ["jobs", "mail"] {
+        let source = lire(&format!("src/{module}/mod.rs"));
+        assert!(
+            !source.contains("#![allow(dead_code)]"),
+            "src/{module}/mod.rs : la permission de module tombe avec le premier appel, \
+             et c'est ce que cet exemple montre"
+        );
+    }
+
+    // Le job de démonstration part avec son inscription : le laisser inscrit ferait passer
+    // un exemple dont le registre ne porterait aucun job à lui.
+    assert!(
+        !racine.join("src/jobs/demo.rs").exists(),
+        "src/jobs/demo.rs : le job d'exemple s'efface devant celui du projet"
+    );
+    let jobs = lire("src/jobs/mod.rs");
+    assert!(
+        jobs.contains("register::<newsletter::SendNewsletter>()") && !jobs.contains("demo::Log"),
+        "src/jobs/mod.rs : le registre doit porter `SendNewsletter` et lui seul :\n{jobs}"
+    );
+
+    // Le job attend l'envoi au lieu de le détacher : c'est ce que le réessai exige, et
+    // toute la différence que cet exemple sert à montrer.
+    let newsletter = lire("src/jobs/newsletter.rs");
+    assert!(
+        newsletter.contains("impl Job for SendNewsletter")
+            && newsletter.contains(".send_template(")
+            && !newsletter.contains(".send_detached("),
+        "src/jobs/newsletter.rs : le job rend l'échec au worker, il ne détache pas l'envoi :\n\
+         {newsletter}"
+    );
+
+    // `send_detached` reste offert, et n'a plus que sa propre permission : la permission
+    // de module retirée ci-dessus la rendait invisible.
+    let mailer = lire("src/mail/service.rs");
+    assert!(
+        mailer.contains("#[allow(dead_code)]\n    pub fn send_detached"),
+        "src/mail/service.rs : la fonction est conservée, sous une permission qui ne vaut \
+         que pour elle"
+    );
+
+    // Le cœur de l'exemple. `jobs::enqueue` reçoit la transaction et non `db` : sur `db`,
+    // les lettres survivraient au rollback qui les annule, et l'exemple montrerait
+    // exactement ce que la file en base sert à éviter.
+    let service = lire("src/subscribers/service.rs");
+    for (raison, extrait) in [
+        ("la transaction n'est pas ouverte", "db.begin().await?"),
+        (
+            "la lecture ne partage pas la transaction",
+            "repository::confirmed(&transaction)",
+        ),
+        (
+            "l'enfilage ne la partage pas",
+            "jobs::enqueue(\n            &transaction,",
+        ),
+        ("rien ne la commite", "transaction.commit().await?"),
+    ] {
+        assert!(
+            service.contains(extrait),
+            "src/subscribers/service.rs : {raison} — « {extrait} » absent :\n{service}"
+        );
+    }
+
+    // La lecture est générique sur la connexion : c'est ce qui lui permet de recevoir une
+    // transaction, qui n'est pas un `DatabaseConnection`.
+    let repository = lire("src/subscribers/repository.rs");
+    assert!(
+        repository.contains("pub async fn confirmed<C: ConnectionTrait>(db: &C)")
+            && repository.contains("Column::Confirmed.eq(true)"),
+        "src/subscribers/repository.rs : la porte des confirmés doit accepter une \
+         transaction et filtrer :\n{repository}"
+    );
+
+    // `202` et non `200`, et la route déclarée à OpenAPI : une route montée mais absente
+    // du document est une route que personne ne trouve.
+    let controller = lire("src/subscribers/controller.rs");
+    assert!(
+        controller.contains("pub async fn broadcast(")
+            && controller.contains("StatusCode::ACCEPTED"),
+        "src/subscribers/controller.rs : la diffusion accuse réception, elle ne rend pas 200"
+    );
+    assert!(
+        lire("src/openapi.rs").contains("crate::subscribers::controller::broadcast,"),
+        "src/openapi.rs : la route de diffusion doit figurer au document"
+    );
+
+    // Avant `/subscribers/{id}`, faute de quoi `broadcast` serait lu comme un identifiant.
+    let monte = lire("src/subscribers/mod.rs");
+    let (Some(diffusion), Some(par_id)) = (
+        monte.find("\"/subscribers/broadcast\""),
+        monte.find("\"/subscribers/{id}\""),
+    ) else {
+        panic!("src/subscribers/mod.rs : les deux routes doivent être montées :\n{monte}");
+    };
+    assert!(
+        diffusion < par_id,
+        "src/subscribers/mod.rs : `/subscribers/broadcast` se monte avant `/subscribers/{{id}}`"
+    );
+
+    // Un abonné non confirmé, sans quoi le filtre de `confirmed` ne se verrait pas : quatre
+    // lignes insérées, trois lettres enfilées.
+    let seed = lire("src/seeds/subscribers.rs");
+    assert_eq!(
+        seed.matches("true").count(),
+        3,
+        "src/seeds/subscribers.rs : trois abonnés confirmés sur quatre, pour que le filtre \
+         se voie :\n{seed}"
+    );
+
+    // Le gabarit ajouté à la main : celui que le fragment livre annonce un compte ouvert,
+    // ce qu'aucune lettre ne peut réemployer.
+    let gabarit = lire("templates/mail/newsletter.html");
+    assert!(
+        gabarit.contains("{{ name }}") && gabarit.contains("{{ body }}"),
+        "templates/mail/newsletter.html : les deux variables du contexte doivent y être"
     );
 }
