@@ -79,8 +79,8 @@ jobs:
       # inaperçue jusqu'au jour de la publication.
       - name: cargo publish (dry-run)
         run: |
-          cargo publish --dry-run -p rbs-core
-          cargo publish --dry-run -p rbs-cli
+          cargo publish --dry-run --locked -p rbs-core
+          cargo publish --dry-run --locked -p rbs-cli
 
   # Ce que ces deux plateformes prouvent, c'est que rbs manipule les chemins sans
   # supposer `/` — la faute que ce projet commettrait, puisqu'il écrit des arborescences.
