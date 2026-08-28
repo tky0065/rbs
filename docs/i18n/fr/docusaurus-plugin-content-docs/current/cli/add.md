@@ -5,7 +5,8 @@ title: rbs add
 
 # `rbs add`
 
-Installe une feature dans un projet existant. Elle en livre trois : `auth`, `ci` et `docker`.
+Installe une feature dans un projet existant. Elle en livre six : `auth`, `ci`,
+`docker`, `mail`, `redis` et `storage`.
 
 :::note
 Les blocs de terminal de cette page sont des sorties réelles, capturées en lançant la
@@ -17,7 +18,7 @@ sortie de terminal ne se traduit pas.
 
 ```text
 $ rbs add --help
-Ajoute une feature à un projet existant : auth, ci, docker
+Ajoute une feature à un projet existant : auth, ci, docker, mail, redis, storage
 
 Usage: rbs add [OPTIONS] <FEATURE>
 
@@ -38,13 +39,20 @@ Options:
 | `--template-dir <CHEMIN>` | Lit les fragments dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire. |
 | `-y`, `--yes` | Global, et sans effet ici : `rbs add` ne demande rien. |
 
-## Les trois features
+## Les six features
 
 | Feature | Fichiers | Suite |
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, `docker-compose.yml` | `docker compose up --build` |
 | `ci` | `.github/workflows/ci.yml` | `git push` |
 | `auth` | huit fichiers sous `src/auth/`, une migration, et quatre fichiers du projet modifiés | recopier le secret, puis `rbs migrate up` |
+| `redis` | trois fichiers sous `src/cache/` | démarrer un Redis à l'URL de `[cache]` |
+| `mail` | cinq fichiers sous `src/mail/`, et un gabarit d'exemple | régler `[mail]`, un SMTP local par défaut |
+| `storage` | quatre fichiers sous `src/storage/` | ignorer `./storage`, ou passer le backend à `s3` |
+
+Les trois dernières sont les briques des guides [cache](../guides/cache.md),
+[courriel](../guides/mail.md) et [stockage](../guides/storage.md). Aucune ne monte de
+route : elles arrivent sur votre `AppState`, et ce qui les appelle vous revient.
 
 ```text
 $ rbs add docker
@@ -124,7 +132,7 @@ Tout autre nom est refusé avec la liste de ce qui est installable :
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : auth, ci, docker
+erreur : `graphql` n'est pas une feature installable : auth, ci, docker, mail, redis, storage
 ```
 
 ## L'idempotence

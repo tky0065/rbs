@@ -5,7 +5,8 @@ title: rbs add
 
 # `rbs add`
 
-Installs a feature into an existing project. Three are shipped: `auth`, `ci` and `docker`.
+Installs a feature into an existing project. Six are shipped: `auth`, `ci`, `docker`,
+`mail`, `redis` and `storage`.
 
 :::note
 rbs speaks French in its help screens and in its output. Every terminal block on this page
@@ -16,7 +17,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ```text
 $ rbs add --help
-Ajoute une feature à un projet existant : auth, ci, docker
+Ajoute une feature à un projet existant : auth, ci, docker, mail, redis, storage
 
 Usage: rbs add [OPTIONS] <FEATURE>
 
@@ -37,13 +38,20 @@ Options:
 | `--template-dir <CHEMIN>` | Reads the fragments from a directory holding one subdirectory per feature, instead of the ones embedded in the binary. |
 | `-y`, `--yes` | Global, and inert here: `rbs add` asks nothing. |
 
-## The three features
+## The six features
 
 | Feature | Files | Next step |
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, `docker-compose.yml` | `docker compose up --build` |
 | `ci` | `.github/workflows/ci.yml` | `git push` |
 | `auth` | eight files under `src/auth/`, one migration, and edits to four project files | copy the secret, then `rbs migrate up` |
+| `redis` | three files under `src/cache/` | start a Redis at the `[cache]` URL |
+| `mail` | five files under `src/mail/`, and a sample template | set `[mail]`, a local SMTP by default |
+| `storage` | four files under `src/storage/` | ignore `./storage`, or switch the backend to `s3` |
+
+The last three are the bricks of the [cache](../guides/cache.md),
+[mail](../guides/mail.md) and [storage](../guides/storage.md) guides. Each mounts no
+route: they arrive on your `AppState`, and what calls them is yours to write.
 
 ```text
 $ rbs add docker
@@ -122,7 +130,7 @@ Anything else is refused with the list of what is installable:
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : auth, ci, docker
+erreur : `graphql` n'est pas une feature installable : auth, ci, docker, mail, redis, storage
 ```
 
 ## Idempotence
