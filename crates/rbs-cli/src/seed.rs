@@ -11,7 +11,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::{cargo, dotenv, metadata, migrate};
+use crate::{anchors, cargo, dotenv, metadata, migrate};
 
 /// Racine du binaire des seeds dans le projet.
 const BINAIRE: &str = "src/seeds/main.rs";
@@ -35,6 +35,8 @@ pub(crate) struct Options {
 pub(crate) enum Output {
     /// Le binaire du projet a tourné.
     Insere,
+    /// Aucun seed n'est déclaré : il n'y avait rien à insérer.
+    Rien,
 }
 
 /// Ce qui peut empêcher d'insérer les seeds.
@@ -128,18 +130,25 @@ fn execute(
         return Err(Error::Production);
     }
 
-    ensure_binary(root)?;
+    let source = read_binary(root)?;
+
+    // Une ancre absente ne bloque pas : un binaire de seeds écrit à la main reste
+    // lançable. Seule une ancre présente et vide dit qu'il n'y a rien à insérer, et rien
+    // à insérer ne vaut pas la compilation d'un projet entier.
+    if anchors::body(&source, anchors::SEEDS).is_some_and(|body| body.trim().is_empty()) {
+        return Ok(Output::Rien);
+    }
 
     launch(root)?;
 
     Ok(Output::Insere)
 }
 
-/// Le projet porte-t-il un binaire de seeds ? Sinon, la panne se dit ici plutôt que dans
-/// la sortie de cargo, où elle ne dirait rien de ce qu'il faut faire.
-fn ensure_binary(root: &Path) -> Result<(), Error> {
+/// La source du binaire des seeds. Son absence se dit ici plutôt que dans la sortie de
+/// cargo, où elle ne dirait rien de ce qu'il faut faire.
+fn read_binary(root: &Path) -> Result<String, Error> {
     match fs::read_to_string(root.join(BINAIRE)) {
-        Ok(_) => Ok(()),
+        Ok(source) => Ok(source),
         Err(source) if source.kind() == io::ErrorKind::NotFound => Err(Error::SansSeeds),
         Err(source) => Err(Error::Acces {
             path: BINAIRE.to_string(),
@@ -204,16 +213,18 @@ mod tests {
         (parent, project.root)
     }
 
-    /// Le même projet, un binaire de seeds garanti présent.
+    /// Le même projet, un seed déclaré dans son ancre : il y a quelque chose à insérer.
     fn seeded() -> (TempDir, PathBuf) {
         let (parent, root) = project();
         let path = root.join(BINAIRE);
+        let source = fs::read_to_string(&path).expect("binaire de seeds lisible");
 
-        if !path.exists() {
-            fs::create_dir_all(path.parent().expect("le binaire est dans un répertoire"))
-                .expect("répertoire des seeds créable");
-            fs::write(&path, "fn main() {}\n").expect("binaire de seeds écrivable");
-        }
+        fs::write(
+            &path,
+            anchors::insert(&source, anchors::SEEDS, &["articles,".to_string()])
+                .expect("l'ancre est présente"),
+        )
+        .expect("binaire de seeds réécrivable");
 
         (parent, root)
     }
@@ -329,6 +340,42 @@ mod tests {
         assert!(remedy.contains("[[bin]]"), "{remedy}");
         assert!(remedy.contains("name = \"seed\""), "{remedy}");
         assert!(!lance, "cargo n'a rien à faire ici");
+    }
+
+    /// Le critère du squelette : un projet vierge n'est pas une panne, et ne compile rien.
+    #[test]
+    fn an_empty_anchor_reports_nothing_to_insert_without_launching_cargo() {
+        let (_parent, root) = project();
+
+        let (output, lance) = run_noting(&root, false, sans_env);
+
+        assert_eq!(
+            output.expect("un projet vierge n'est pas une erreur"),
+            Output::Rien
+        );
+        assert!(!lance, "il n'y avait rien à insérer");
+    }
+
+    #[test]
+    fn a_declared_seed_launches_the_project_binary() {
+        let (_parent, root) = seeded();
+
+        let (output, lance) = run_noting(&root, false, sans_env);
+
+        assert_eq!(output.expect("le lancement aboutit"), Output::Insere);
+        assert!(lance, "le binaire du projet aurait dû être lancé");
+    }
+
+    /// Un binaire de seeds écrit à la main n'a aucune ancre à porter : rbs le lance.
+    #[test]
+    fn a_binary_without_the_anchor_is_launched_all_the_same() {
+        let (_parent, root) = project();
+        fs::write(root.join(BINAIRE), "fn main() {}\n").expect("binaire de seeds réécrivable");
+
+        let (output, lance) = run_noting(&root, false, sans_env);
+
+        assert_eq!(output.expect("le lancement aboutit"), Output::Insere);
+        assert!(lance, "le binaire du projet aurait dû être lancé");
     }
 
     #[test]

@@ -6,10 +6,20 @@ resolver = "3"
 name = "file-drop"
 version = "0.1.0"
 edition = "2024"
+# Le paquet porte deux binaires : sans ce choix, `cargo run` ne saurait plus lequel lancer.
+default-run = "file-drop"
 
 [package.metadata.rbs]
 version = "0.1.0"
 features = ["health", "redis", "mail", "storage", "uploads"]
+
+[[bin]]
+name = "file-drop"
+path = "src/main.rs"
+
+[[bin]]
+name = "seed"
+path = "src/seeds/main.rs"
 
 [dependencies]
 rbs-core = { path = "../../crates/rbs-core" }

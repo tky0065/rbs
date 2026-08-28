@@ -118,6 +118,24 @@ mod tests {
         );
     }
 
+    /// Le huitième point d'insertion vit dans un second binaire, hors de `src/main.rs` :
+    /// sans ce test, l'oublier dans la liste ne se verrait nulle part.
+    #[test]
+    fn the_seeds_anchor_is_one_of_those_counted() {
+        let (_parent, root) = project();
+        remove(&root, "src/seeds/main.rs", "<rbs:seeds>");
+
+        let check = check(&root);
+
+        assert_eq!(check.state, State::Echec);
+        assert!(check.detail.contains("seeds"), "{}", check.detail);
+        assert!(
+            check.detail.contains("src/seeds/main.rs"),
+            "{}",
+            check.detail
+        );
+    }
+
     #[test]
     fn an_anchor_missing_its_closing_counts_as_absent() {
         let (_parent, root) = project();

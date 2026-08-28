@@ -6,10 +6,20 @@ resolver = "3"
 name = "hello-crud"
 version = "0.1.0"
 edition = "2024"
+# Le paquet porte deux binaires : sans ce choix, `cargo run` ne saurait plus lequel lancer.
+default-run = "hello-crud"
 
 [package.metadata.rbs]
 version = "0.1.0"
 features = ["health", "articles"]
+
+[[bin]]
+name = "hello-crud"
+path = "src/main.rs"
+
+[[bin]]
+name = "seed"
+path = "src/seeds/main.rs"
 
 [dependencies]
 rbs-core = { path = "../../crates/rbs-core" }

@@ -10,6 +10,30 @@ use tempfile::TempDir;
 
 mod common;
 
+/// Le critère du squelette : un projet vierge sort vert, et ne compile rien.
+#[test]
+fn on_a_fresh_project_the_command_says_there_is_nothing_to_insert() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+
+    let succes = Command::cargo_bin("rbs")
+        .expect("le binaire rbs doit être compilé")
+        .current_dir(&projet)
+        .arg("seed")
+        .assert()
+        .success();
+
+    let sortie = String::from_utf8_lossy(&succes.get_output().stdout).into_owned();
+    assert!(
+        sortie.contains("rien à insérer"),
+        "le message doit dire qu'il n'y a rien à insérer :\n{sortie}"
+    );
+    assert!(
+        !projet.join("target").exists(),
+        "cargo a tourné là où il n'y avait rien à insérer"
+    );
+}
+
 /// Le premier critère du lot : la production refuse, et le binaire du projet ne part pas.
 #[test]
 fn under_production_the_command_refuses_without_launching_the_project_binary() {

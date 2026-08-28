@@ -296,6 +296,7 @@ fn seed(force: bool) -> Result<(), seed::Error> {
 
     match seed::run(&seed::Options { directory, force })? {
         seed::Output::Insere => ui::success("seeds insérés"),
+        seed::Output::Rien => ui::success("aucun seed déclaré — rien à insérer"),
     }
 
     Ok(())
