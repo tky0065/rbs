@@ -88,11 +88,22 @@ pub(crate) const STARTUP: Anchor = Anchor {
     file: "src/main.rs",
 };
 
+/// Déclaration des seeds dans le binaire qui les applique.
+///
+/// Seule ancre à vivre dans une invocation de `macro_rules!` : elle porte des
+/// identifiants de module, que la macro déclare et enchaîne d'un même geste. Un `mod` non
+/// inline ne s'écrit pas dans un bloc — c'est ce qui vaut deux ancres à la crate
+/// `migration` — et la macro évite ici d'en poser une seconde.
+pub(crate) const SEEDS: Anchor = Anchor {
+    name: "seeds",
+    file: "src/seeds/main.rs",
+};
+
 /// Les points d'insertion du squelette.
 ///
 /// La génération vise chaque ancre nommément ; `rbs doctor` parcourt cette liste pour
 /// vérifier qu'un projet les porte toutes.
-pub(crate) const ANCRES: [Anchor; 8] = [
+pub(crate) const ANCRES: [Anchor; 9] = [
     FEATURES,
     ROUTES,
     OPENAPI,
@@ -101,6 +112,7 @@ pub(crate) const ANCRES: [Anchor; 8] = [
     STATE_CHAMPS,
     STATE_INIT,
     STARTUP,
+    SEEDS,
 ];
 
 /// Une ancre attendue que le fichier ne porte pas.
@@ -150,6 +162,23 @@ pub(crate) fn insert(source: &str, anchor: Anchor, lines: &[String]) -> Result<S
         &source[..closing],
         &source[closing..]
     ))
+}
+
+/// Ce que l'ancre contient, entre ses deux balises, ou `None` si elle est absente.
+///
+/// `rbs seed` s'en sert pour distinguer un projet sans seed déclaré d'un projet qui en a :
+/// le premier n'a aucune raison de lancer cargo.
+pub(crate) fn body(source: &str, anchor: Anchor) -> Option<&str> {
+    let (opening, _) = line_of(source, &anchor.opening())?;
+    let (closing, _) = line_of(source, &anchor.closing())?;
+
+    if closing < opening {
+        return None;
+    }
+
+    let apres_ouverture = opening + source[opening..].find('\n').map_or(0, |fin| fin + 1);
+
+    Some(&source[apres_ouverture.min(closing)..closing])
 }
 
 /// Découpe les lignes à insérer en groupes indivisibles.
@@ -348,6 +377,32 @@ pub fn router(state: AppState) -> Router {
         let error = insert(cite, ROUTES, &lines(&["peu importe"])).expect_err("aucune ancre");
 
         assert_eq!(error.anchor, ROUTES);
+    }
+
+    #[test]
+    fn an_untouched_anchor_has_an_empty_body() {
+        let body = body(ROUTEUR, ROUTES).expect("l'ancre est présente");
+
+        assert!(body.trim().is_empty(), "corps inattendu : {body:?}");
+    }
+
+    #[test]
+    fn a_filled_anchor_gives_back_what_was_inserted() {
+        let rempli = insert(ROUTEUR, ROUTES, &lines(&[".merge(crate::users::routes())"]))
+            .expect("l'ancre est présente");
+
+        let body = body(&rempli, ROUTES).expect("l'ancre est présente");
+
+        assert!(body.contains(".merge(crate::users::routes())"), "{body:?}");
+        assert!(
+            !body.contains("<rbs:routes>"),
+            "les balises ne font pas partie du corps : {body:?}"
+        );
+    }
+
+    #[test]
+    fn a_missing_anchor_has_no_body() {
+        assert_eq!(body("fn main() {}\n", ROUTES), None);
     }
 
     #[test]

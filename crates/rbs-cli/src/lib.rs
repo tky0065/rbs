@@ -1,5 +1,6 @@
 mod add;
 mod anchors;
+mod cargo;
 mod cli;
 mod doctor;
 mod dotenv;
@@ -11,6 +12,7 @@ mod migrate;
 mod new;
 mod plan;
 mod prompts;
+mod seed;
 mod template;
 mod templates;
 mod ui;
@@ -92,6 +94,16 @@ pub fn run() {
 
             if let Err(error) = migrate(action) {
                 ui::error(&error.to_string());
+                std::process::exit(1);
+            }
+        }
+
+        Commands::Seed { force } => {
+            if let Err(error) = seed(force) {
+                ui::error(&error.to_string());
+                if let Some(remedy) = error.remedy() {
+                    ui::info(&format!("\n{remedy}"));
+                }
                 std::process::exit(1);
             }
         }
@@ -273,6 +285,21 @@ fn migrate(action: migrate::Action) -> Result<(), Box<dyn Error>> {
             ui::success(&format!("{} créée", fresh.file));
             ui::info("\n  décrivez le changement de schéma, puis `rbs migrate up`");
         }
+    }
+
+    Ok(())
+}
+
+/// Insère les données de démonstration du projet courant.
+fn seed(force: bool) -> Result<(), seed::Error> {
+    let directory = std::env::current_dir().map_err(|source| seed::Error::Acces {
+        path: ".".to_string(),
+        source,
+    })?;
+
+    match seed::run(&seed::Options { directory, force })? {
+        seed::Output::Insere => ui::success("seeds insérés"),
+        seed::Output::Rien => ui::success("aucun seed déclaré — rien à insérer"),
     }
 
     Ok(())

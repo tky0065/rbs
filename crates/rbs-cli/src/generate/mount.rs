@@ -54,6 +54,20 @@ pub(crate) fn for_migration(module: &str) -> Vec<Mount> {
     ]
 }
 
+/// Ce que le seed de `module` ajoute au binaire des seeds.
+///
+/// Séparé de [`pour`] pour la même raison que [`for_migration`] : une feature écrite à la
+/// main n'a pas d'entité, donc rien à semer.
+///
+/// L'ancre empile dans l'ordre de génération, qui est aussi celui des migrations : le jour
+/// où un seed dépendra d'un autre, c'est cet ordre-là qui tiendra, non l'alphabet.
+pub(crate) fn for_seed(module: &str) -> Vec<Mount> {
+    vec![Mount {
+        anchor: anchors::SEEDS,
+        lines: vec![format!("{module},")],
+    }]
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -128,11 +142,30 @@ mod tests {
     }
 
     #[test]
+    fn the_seed_is_declared_by_its_module_name() {
+        let montages = for_seed("blog_posts");
+
+        assert_eq!(lines(&montages, anchors::SEEDS), ["blog_posts,"]);
+    }
+
+    /// Une feature écrite à la main n'a pas d'entité : rien à semer, donc rien à déclarer.
+    #[test]
+    fn mounting_a_feature_declares_no_seed() {
+        let montages = pour("users");
+
+        assert!(
+            !montages.iter().any(|mount| mount.anchor == anchors::SEEDS),
+            "le binaire des seeds ne doit pas être touché : {montages:?}"
+        );
+    }
+
+    #[test]
     fn each_mount_targets_a_skeleton_anchor() {
         let mut montages = pour("users");
         montages.extend(for_migration("m20260826_143000_create_users"));
+        montages.extend(for_seed("users"));
 
-        assert_eq!(montages.len(), 5, "{montages:?}");
+        assert_eq!(montages.len(), 6, "{montages:?}");
         for mount in &montages {
             assert!(
                 anchors::ANCRES.contains(&mount.anchor),

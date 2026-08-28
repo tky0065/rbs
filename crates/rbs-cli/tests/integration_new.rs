@@ -58,7 +58,7 @@ fn the_generated_project_compiles_and_passes_its_tests() {
 
     // `rustfmt` sur les racines de modules et non `cargo fmt` : lancé sous `cargo test`,
     // celui-ci retrouve le workspace de rbs lui-même et signalerait ses fichiers.
-    for racine_de_modules in ["src/main.rs", "migration/src/lib.rs"] {
+    for racine_de_modules in ["src/main.rs", "src/seeds/main.rs", "migration/src/lib.rs"] {
         Command::new("rustfmt")
             .args(["--edition", "2024", "--check"])
             .arg(projet.join(racine_de_modules))
