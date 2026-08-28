@@ -38,6 +38,12 @@ version = "0.23"
 nom     = "serde_json"
 version = "1.0"
 
+# `tokio::time` sert à l'expiration, que les tests du fragment attendent réellement.
+# `redis`/`tokio-comp` l'active par unification, mais une feature dont le projet a besoin
+# ne se prend pas dans la dépendance d'un tiers, qui peut la retirer sans prévenir.
+[cargo.tokio]
+features = ["time"]
+
 [[config]]
 fichier = "config/default.toml"
 section = "cache"
