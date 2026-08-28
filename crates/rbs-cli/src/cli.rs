@@ -65,6 +65,9 @@ pub enum Commands {
         command: MigrateCommands,
     },
 
+    /// Démarre le projet : services, migrations, serveur relancé à chaque changement.
+    Dev,
+
     /// Diagnostique le projet : ancres, .env, base joignable, versions.
     Doctor,
 }
@@ -137,7 +140,7 @@ mod tests {
         let command = Cli::command();
         let help = command.clone().render_long_help().to_string();
 
-        for expected in ["new", "add", "generate", "migrate", "doctor"] {
+        for expected in ["new", "add", "generate", "migrate", "dev", "doctor"] {
             let sous_commande = command
                 .get_subcommands()
                 .find(|s| s.get_name() == expected)

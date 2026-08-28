@@ -1,6 +1,7 @@
 mod add;
 mod anchors;
 mod cli;
+mod dev;
 mod doctor;
 mod dotenv;
 mod generate;
@@ -92,6 +93,20 @@ pub fn run() {
 
             if let Err(error) = migrate(action) {
                 ui::error(&error.to_string());
+                std::process::exit(1);
+            }
+        }
+
+        Commands::Dev => {
+            let resultat = std::env::current_dir()
+                .map_err(dev::Error::Cwd)
+                .and_then(|directory| dev::run(&directory));
+
+            if let Err(error) = resultat {
+                ui::error(&error.to_string());
+                if let Some(remedy) = error.remedy() {
+                    ui::info(&format!("\n{remedy}"));
+                }
                 std::process::exit(1);
             }
         }

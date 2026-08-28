@@ -104,7 +104,7 @@ fn url(variables: &[(String, String)]) -> Option<String> {
 }
 
 /// Vrai si une connexion TCP aboutit dans le délai imparti.
-fn reachable(hote: &str, port: u16) -> bool {
+pub(crate) fn reachable(hote: &str, port: u16) -> bool {
     let Ok(adresses) = (hote, port).to_socket_addrs() else {
         return false;
     };
@@ -128,7 +128,7 @@ fn version(root: &Path, variables: &[(String, String)]) -> Result<u32, String> {
 /// Découpe une URL PostgreSQL en hôte et port.
 ///
 /// Le dernier `@` sépare : un mot de passe a le droit d'en contenir un.
-fn host_and_port(url: &str) -> Option<(String, u16)> {
+pub(crate) fn host_and_port(url: &str) -> Option<(String, u16)> {
     let reste = url
         .strip_prefix("postgres://")
         .or_else(|| url.strip_prefix("postgresql://"))?;
