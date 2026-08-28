@@ -18,8 +18,10 @@ modifié.
 
 ## État
 
-La version 0.1 est en construction. **Aucune promesse semver avant la 1.0** : l'API
-publique de `rbs-core` peut changer d'une version mineure à l'autre.
+Version 0.4.0. Les quatre jalons de la feuille de route sont livrés — le socle,
+l'authentification, les intégrations, le confort. **rbs suit le versionnage sémantique à
+partir de la 1.0** : la [page de compatibilité](./compatibility.md) dit ce que la promesse
+couvre, et ce qu'elle laisse délibérément dehors.
 
 ## À quoi ressemble le code généré
 
