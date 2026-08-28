@@ -151,3 +151,27 @@ async fn envoyer_detache_rend_la_main_sans_attendre_l_envoi() {
         .recv_timeout(Duration::from_secs(10))
         .expect("l'envoi n'a pas été lancé en arrière-plan");
 }
+
+/// L'envoi joué contre un vrai serveur SMTP, gabarit compris.
+///
+/// `#[ignore]` : il lui faut le serveur que décrit la section `[mail]` — Mailpit ou
+/// MailHog en développement. `cargo test -- --ignored` le lance, `RBS_MAIL__SMTP_PORT`
+/// en surchargeant le port au besoin.
+///
+/// Ce que le test ne peut pas voir d'ici, c'est ce qui est *arrivé* : il envoie, et c'est
+/// la boîte du serveur qui porte la preuve.
+#[tokio::test]
+#[ignore = "joint le serveur SMTP de la section [mail]"]
+async fn un_message_a_gabarit_part_vers_le_serveur_smtp() {
+    let mailer = Mailer::depuis_config().expect("la section [mail] doit être lisible");
+
+    mailer
+        .envoyer_gabarit(
+            "ada@example.org",
+            "Bienvenue chez nous",
+            "bienvenue.html",
+            context! { nom => "Ada", lien => "https://example.org/compte" },
+        )
+        .await
+        .expect("l'envoi doit aboutir");
+}
