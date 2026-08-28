@@ -18,9 +18,13 @@ const TITRE: &str = "base";
 /// Port de PostgreSQL quand l'URL n'en donne pas.
 const PORT_PAR_DEFAUT: u16 = 5432;
 
-/// Version minimale : `uuidv7()`, que les migrations générées posent en défaut de clé
-/// primaire, n'existe qu'à partir de PostgreSQL 18.
-const MINIMUM: u32 = 180_000;
+/// Version minimale : la plus ancienne encore maintenue par la communauté.
+///
+/// Rien dans le code généré n'exige davantage depuis que le modèle pose lui-même son
+/// identifiant — `uuid`, `timestamptz` et `CURRENT_TIMESTAMP` sont bien plus anciens. Un
+/// plancher fixé sur une propriété technique disparue serait une règle que personne ne
+/// saurait plus mettre à jour.
+const MINIMUM: u32 = 140_000;
 
 /// Délai au-delà duquel l'hôte est tenu pour injoignable.
 const DELAI: Duration = Duration::from_secs(3);
@@ -81,7 +85,8 @@ pub(crate) fn check(root: &Path) -> Check {
                 readable(MINIMUM)
             ),
             format!(
-                "les migrations générées posent uuidv7() en défaut de clé primaire, apparu en PostgreSQL {}",
+                "PostgreSQL {} est la plus ancienne version encore maintenue : les \
+                 précédentes ne reçoivent plus de correctif de sécurité",
                 readable(MINIMUM)
             ),
         ),
@@ -231,11 +236,14 @@ mod tests {
         assert_eq!(readable(170_004), "17.4");
     }
 
+    // Le plancher ne tient plus à `uuidv7()`, que le modèle pose désormais lui-même : il
+    // tient au support communautaire, 14 étant la plus vieille version encore maintenue.
     #[test]
-    fn postgresql_18_is_the_minimum_because_uuidv7_depends_on_it() {
-        assert!(recent_enough(180_000), "18.0 convient");
+    fn postgresql_14_is_the_minimum_because_older_releases_are_out_of_support() {
+        assert!(recent_enough(140_000), "14.0 convient");
+        assert!(recent_enough(170_004), "17.4 convient");
         assert!(recent_enough(190_002), "une version ultérieure convient");
-        assert!(!recent_enough(170_009), "17.9 reste en deçà du minimum");
+        assert!(!recent_enough(130_009), "13.9 reste en deçà du minimum");
     }
 
     #[test]

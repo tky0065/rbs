@@ -563,6 +563,38 @@ mod tests {
         }
     }
 
+    // L'identifiant est désormais posé par le modèle : `uuid` sert au code de production
+    // et non plus aux seuls tests, et c'est `v7` qui le fournit.
+    #[test]
+    fn uuid_is_a_production_dependency_carrying_v7() {
+        let parent = parent();
+
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+
+        let manifest = read(&project.root.join("Cargo.toml"));
+        let (production, dev) = manifest
+            .split_once("[dev-dependencies]")
+            .expect("le manifeste porte ses deux sections");
+
+        assert!(
+            production.contains("uuid = "),
+            "`uuid` n'est pas une dépendance de production :\n{manifest}"
+        );
+        assert!(
+            !dev.contains("uuid = "),
+            "`uuid` est déclarée deux fois :\n{manifest}"
+        );
+        assert!(
+            production.contains("\"v7\""),
+            "la feature `v7` manque :\n{manifest}"
+        );
+        // Les tests générés tirent leurs valeurs aléatoires avec `new_v4`.
+        assert!(
+            production.contains("\"v4\""),
+            "la feature `v4` manque aux tests générés :\n{manifest}"
+        );
+    }
+
     #[test]
     fn without_core_path_the_manifest_depends_on_the_published_core_version() {
         let parent = parent();

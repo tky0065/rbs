@@ -22,9 +22,9 @@ use testcontainers::{Container, GenericImage, ImageExt};
 
 mod common;
 
-/// `uuidv7()`, que la migration du fragment pose en défaut de clé primaire, n'existe qu'à
-/// partir de PostgreSQL 18.
-const IMAGE: (&str, &str) = ("postgres", "18");
+/// PostgreSQL **17** et non 18 : c'est ce qui prouve que l'exigence de la 18 est tombée
+/// avec le défaut `uuidv7()`, désormais posé par le modèle.
+const IMAGE: (&str, &str) = ("postgres", "17");
 
 const UTILISATEUR: &str = "rbs";
 const MOT_DE_PASSE: &str = "rbs";

@@ -11,13 +11,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Posts::Table)
                     .if_not_exists()
-                    .col(
-                        ColumnDef::new(Posts::Id)
-                            .uuid()
-                            .not_null()
-                            .default(Expr::cust("uuidv7()"))
-                            .primary_key(),
-                    )
+                    .col(ColumnDef::new(Posts::Id).uuid().not_null().primary_key())
                     .col(ColumnDef::new(Posts::Title).string().not_null())
                     .col(ColumnDef::new(Posts::Body).text().not_null())
                     .col(ColumnDef::new(Posts::Published).boolean().not_null())

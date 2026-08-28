@@ -34,6 +34,22 @@ mod tests {
         );
     }
 
+    // Tous les chemins d'insertion du projet passent par `..Default::default()`, que la
+    // macro fait déléguer à `ActiveModelBehavior::new()` : c'est le seul point à écrire.
+    #[test]
+    fn the_model_lays_the_v7_identifier_itself() {
+        let rendered = entity("users", "name:string");
+
+        assert!(
+            rendered.contains("Uuid::now_v7()"),
+            "le modèle ne pose pas l'identifiant :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("fn new() -> Self"),
+            "l'identifiant n'est pas posé par `new()`, seul point que `Default` appelle :\n{rendered}"
+        );
+    }
+
     #[test]
     fn the_table_carries_the_plural_name_of_the_feature() {
         let rendered = entity("blog_posts", "title:string");
@@ -139,7 +155,7 @@ mod tests {
         assert!(rendered.contains("pub struct Model {"), "{rendered}");
         assert!(rendered.contains("pub enum Relation {}"), "{rendered}");
         assert!(
-            rendered.contains("impl ActiveModelBehavior for ActiveModel {}"),
+            rendered.contains("impl ActiveModelBehavior for ActiveModel {"),
             "{rendered}"
         );
     }

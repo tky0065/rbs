@@ -153,6 +153,31 @@ async fn the_full_lifecycle_goes_through_the_api() {
     assert_eq!(status, StatusCode::NOT_FOUND, "elle répond encore");
 }
 
+/// Deux créations à la suite portent des identifiants croissants.
+///
+/// C'est ce qui sépare un UUIDv7 d'un v4, et ce dont dépend la liste : elle trie sur
+/// l'`id` pour rendre le plus récent en tête. Un test qui se contenterait de constater
+/// la présence d'un UUID laisserait passer la régression.
+#[tokio::test]
+async fn two_creations_in_a_row_carry_increasing_ids() {
+    let api = application().await;
+    let collection = "/{@ module @}";
+
+    let (status, premier) = call(&api, request("POST", collection, creation())).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {premier}");
+    let (status, second) = call(&api, request("POST", collection, creation())).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {second}");
+
+    let lire = |rendered: &Value| {
+        Uuid::parse_str(rendered["id"].as_str().expect("identifiant rendu"))
+            .expect("identifiant lisible")
+    };
+    let (premier, second) = (lire(&premier), lire(&second));
+
+    assert_eq!(premier.get_version_num(), 7, "{premier} n'est pas un UUIDv7");
+    assert!(second > premier, "{second} ne suit pas {premier}");
+}
+
 #[tokio::test]
 async fn an_unknown_id_returns_404() {
     let api = application().await;

@@ -15,7 +15,6 @@ impl MigrationTrait for Migration {
                         ColumnDef::new({@ iden @}::Id)
                             .uuid()
                             .not_null()
-                            .default(Expr::cust("uuidv7()"))
                             .primary_key(),
                     )
 {%- for field in fields %}

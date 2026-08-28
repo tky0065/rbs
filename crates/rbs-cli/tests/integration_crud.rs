@@ -14,9 +14,9 @@ use testcontainers::{GenericImage, ImageExt};
 
 mod common;
 
-/// `uuidv7()`, que les migrations générées posent en défaut de clé primaire, n'existe
-/// qu'à partir de PostgreSQL 18.
-const IMAGE: (&str, &str) = ("postgres", "18");
+/// PostgreSQL **17** et non 18 : c'est ce qui prouve que l'exigence de la 18 est tombée
+/// avec le défaut `uuidv7()`, désormais posé par le modèle.
+const IMAGE: (&str, &str) = ("postgres", "17");
 
 const UTILISATEUR: &str = "rbs";
 const MOT_DE_PASSE: &str = "rbs";
@@ -85,12 +85,28 @@ fn a_generated_crud_migrates_and_passes_its_tests_against_postgresql() {
 
     // Les tests générés montent l'application sur la base décrite par le `.env` : ils ne
     // passent que si la migration a bien été appliquée juste avant.
-    Command::new("cargo")
+    let sortie = Command::new("cargo")
         .current_dir(&projet)
         .env("CARGO_TARGET_DIR", common::cible())
         .args(["test", "--workspace"])
         .assert()
-        .success();
+        .success()
+        .get_output()
+        .clone();
+
+    let joues = format!(
+        "{}{}",
+        String::from_utf8_lossy(&sortie.stdout),
+        String::from_utf8_lossy(&sortie.stderr)
+    );
+
+    // Le critère de l'identifiant v7 vit dans le projet, et il s'exige nommément : un
+    // gabarit qui cesserait de livrer ce test laisserait celui-ci au vert, `cargo test`
+    // sortant en 0 sur une suite amputée.
+    assert!(
+        joues.contains("test articles::tests::two_creations_in_a_row_carry_increasing_ids ... ok"),
+        "le test des identifiants croissants n'a pas été joué :\n{joues}"
+    );
 
     rbs(&projet)
         .env("CARGO_TARGET_DIR", common::cible())

@@ -20,6 +20,9 @@ async fn application() -> Router {
 
     router(AppState::new(db, config).expect("état partagé constructible"))
 }
+// endregion: corps_illisible
+// endregion: erreur_404
+// endregion: cycle_de_vie
 // endregion: harnais
 
 /// Fait traverser le routeur à `request`, et rend son statut avec son corps.
@@ -87,6 +90,8 @@ fn modification() -> Value {
 }
 
 // region: cycle_de_vie
+// region: erreur_404
+// region: corps_illisible
 #[tokio::test]
 async fn the_full_lifecycle_goes_through_the_api() {
     let api = application().await;
@@ -131,9 +136,36 @@ async fn the_full_lifecycle_goes_through_the_api() {
     let (status, _) = call(&api, without_body("GET", &resource)).await;
     assert_eq!(status, StatusCode::NOT_FOUND, "elle répond encore");
 }
-// endregion: cycle_de_vie
 
-// region: erreur_404
+/// Deux créations à la suite portent des identifiants croissants.
+///
+/// C'est ce qui sépare un UUIDv7 d'un v4, et ce dont dépend la liste : elle trie sur
+/// l'`id` pour rendre le plus récent en tête. Un test qui se contenterait de constater
+/// la présence d'un UUID laisserait passer la régression.
+#[tokio::test]
+async fn two_creations_in_a_row_carry_increasing_ids() {
+    let api = application().await;
+    let collection = "/articles";
+
+    let (status, premier) = call(&api, request("POST", collection, creation())).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {premier}");
+    let (status, second) = call(&api, request("POST", collection, creation())).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {second}");
+
+    let lire = |rendered: &Value| {
+        Uuid::parse_str(rendered["id"].as_str().expect("identifiant rendu"))
+            .expect("identifiant lisible")
+    };
+    let (premier, second) = (lire(&premier), lire(&second));
+
+    assert_eq!(
+        premier.get_version_num(),
+        7,
+        "{premier} n'est pas un UUIDv7"
+    );
+    assert!(second > premier, "{second} ne suit pas {premier}");
+}
+
 #[tokio::test]
 async fn an_unknown_id_returns_404() {
     let api = application().await;
@@ -145,9 +177,7 @@ async fn an_unknown_id_returns_404() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["status"], 404, "{body}");
 }
-// endregion: erreur_404
 
-// region: corps_illisible
 #[tokio::test]
 async fn an_unreadable_body_returns_400() {
     let api = application().await;
@@ -163,4 +193,3 @@ async fn an_unreadable_body_returns_400() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["status"], 400, "{body}");
 }
-// endregion: corps_illisible

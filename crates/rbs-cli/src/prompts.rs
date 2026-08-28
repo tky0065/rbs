@@ -105,7 +105,9 @@ fn translate(error: InquireError) -> PromptError {
 /// Ce que la question ajoute pour le moteur choisi, quand elle a quelque chose à dire.
 fn help_for(database: Database) -> Option<&'static str> {
     match database {
-        Database::Postgres => Some("PostgreSQL 18 minimum : `uuidv7()` y est natif"),
+        Database::Postgres => {
+            Some("PostgreSQL 14 minimum : les versions antérieures sont hors support")
+        }
         Database::Mysql => None,
         Database::Sqlite => Some("un chemin de fichier : le serveur n'existe pas"),
     }

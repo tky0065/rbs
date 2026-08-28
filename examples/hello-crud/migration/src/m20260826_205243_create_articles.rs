@@ -12,13 +12,7 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table(Articles::Table)
                     .if_not_exists()
-                    .col(
-                        ColumnDef::new(Articles::Id)
-                            .uuid()
-                            .not_null()
-                            .default(Expr::cust("uuidv7()"))
-                            .primary_key(),
-                    )
+                    .col(ColumnDef::new(Articles::Id).uuid().not_null().primary_key())
                     .col(ColumnDef::new(Articles::Title).string().not_null())
                     .col(ColumnDef::new(Articles::Body).text().not_null())
                     .col(ColumnDef::new(Articles::Published).boolean().not_null())
@@ -48,6 +42,7 @@ impl MigrationTrait for Migration {
             .await
     }
 }
+// endregion: colonnes
 
 // region: colonnes
 #[derive(DeriveIden)]
@@ -60,4 +55,3 @@ enum Articles {
     CreatedAt,
     UpdatedAt,
 }
-// endregion: colonnes

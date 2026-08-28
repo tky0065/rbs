@@ -1,3 +1,4 @@
+use sea_orm::ActiveValue::Set;
 use sea_orm::entity::prelude::*;
 
 /// Rôle applicatif, stocké en texte.
@@ -34,7 +35,20 @@ pub mod user {
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
     pub enum Relation {}
 
-    impl ActiveModelBehavior for ActiveModel {}
+    /// L'identifiant est posé ici, et non par un défaut de colonne : `uuidv7()` n'a
+    /// d'équivalent à écrire ni en MySQL ni en SQLite.
+    ///
+    /// `new()` est le seul point à écrire — la macro fait déléguer `Default::default()` ici,
+    /// et tout ce que le projet insère passe par `..Default::default()`. La monotonie est
+    /// garantie par processus, là où celle de PostgreSQL l'était par serveur.
+    impl ActiveModelBehavior for ActiveModel {
+        fn new() -> Self {
+            Self {
+                id: Set(Uuid::now_v7()),
+                ..ActiveModelTrait::default()
+            }
+        }
+    }
 }
 
 pub mod refresh_token {
@@ -57,5 +71,18 @@ pub mod refresh_token {
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
     pub enum Relation {}
 
-    impl ActiveModelBehavior for ActiveModel {}
+    /// L'identifiant est posé ici, et non par un défaut de colonne : `uuidv7()` n'a
+    /// d'équivalent à écrire ni en MySQL ni en SQLite.
+    ///
+    /// `new()` est le seul point à écrire — la macro fait déléguer `Default::default()` ici,
+    /// et tout ce que le projet insère passe par `..Default::default()`. La monotonie est
+    /// garantie par processus, là où celle de PostgreSQL l'était par serveur.
+    impl ActiveModelBehavior for ActiveModel {
+        fn new() -> Self {
+            Self {
+                id: Set(Uuid::now_v7()),
+                ..ActiveModelTrait::default()
+            }
+        }
+    }
 }
