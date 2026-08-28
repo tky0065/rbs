@@ -1,9 +1,8 @@
 # TODO — rbs
 
-Tâches actionnables. La **v0.1** et la **v0.2** sont détaillées ; les jalons plus
-lointains figurent en grosses mailles et seront détaillés à leur tour, avec ce que les
-précédents auront appris. Détailler un jalon ne l'ouvre pas : l'ordre des lots reste
-contraignant.
+Tâches actionnables. De la **v0.1** à la **v0.4** les jalons sont détaillés ; la **v1.0**
+figure en grosses mailles et sera détaillée à son tour, avec ce que les précédents auront
+appris. Détailler un jalon ne l'ouvre pas : l'ordre des lots reste contraignant.
 
 Design de référence : [`docs/superpowers/specs/2026-08-25-rbs-design.md`](docs/superpowers/specs/2026-08-25-rbs-design.md)
 Vision et jalons : [`ROADMAP.md`](ROADMAP.md)
@@ -639,16 +638,167 @@ par l'auteur du projet, et qu'une crate tierce le lui retirerait.
 
 ---
 
+## 🧰 v0.4 — Confort
+
+**Détaillé le 2026-08-28. Conception et décisions :**
+[`docs/superpowers/specs/2026-08-28-v0.4-confort-design.md`](docs/superpowers/specs/2026-08-28-v0.4-confort-design.md).
+
+> **Le support de MySQL et SQLite reste dans ce jalon, en dernier lot**, sur arbitrage du
+> mainteneur : il aurait pu devenir un jalon v0.5, intercalé avant le gel de l'API publique
+> de `rbs-core` que v1.0 promet — geler `ConnectError`, dont le message nomme PostgreSQL,
+> graverait le couplage dans le contrat de compatibilité. La conséquence est assumée et
+> bornée : `R` pose du SQL que `S` devra porter, ce que `R3` amortit en isolant le dépilage
+> dans une fonction unique dès le premier jour.
+
+Ordre : `(P ∥ Q ∥ R) → S → T`. Les trois premiers lots sont indépendants — trois chantiers
+sans fichier de fond commun, qui se rejoignent sur l'enum `Commands` de `cli.rs` à deux
+lignes chacun. **Le goulot est entier à la vérification**, comme en v0.3 : cible de
+compilation partagée, verrou de cargo, un conteneur par test ; les `--ignored` se passent
+en fin de parcours, une par une.
+
+`S` est **le seul lot autorisé à modifier `rbs-core`** — dispositif repris de `K`, et c'est
+lui qui rend le critère de sortie mesurable, par les deux diffs de `T4`.
+
+### Lot P — Seeds
+
+- [ ] **P1** · Commande `rbs seed`
+      Enveloppe un binaire du projet, sur le motif de `rbs migrate` (`migrate/mod.rs:163`) :
+      le CLI ne parle jamais à la base et ne gagne aucun client SQL. Le garde-fou de
+      production vit dans la commande et non dans le code généré — un seed est fait pour
+      être modifié, le refus ne doit pas pouvoir être retiré par mégarde.
+      ✓ Sous `RBS_ENV=production` → refus nommant `--force`, code non nul, et le binaire
+      du projet n'est **pas** lancé.
+      ✓ Projet sans `src/seeds/` → message disant comment en créer un, non une erreur de cargo.
+
+- [ ] **P2** · `src/seeds/` et son binaire au squelette
+      Un module et son binaire, derrière une ancre `<rbs:seeds>` — huitième point
+      d'insertion, que `doctor` compte.
+      ✓ `rbs new` puis `rbs seed` sur un projet vierge → exit 0, message disant qu'il n'y a
+      rien à insérer.
+      ✓ `clippy --workspace --all-targets -- -D warnings` et `rustfmt --check` propres sur
+      le projet généré.
+
+- [ ] **P3** · `rbs generate crud` dépose le seed de son entité
+      Du Rust typé passant par l'entité générée : un champ renommé casse à la compilation,
+      et non en silence à l'exécution. C'est ce qui met ce lot hors d'atteinte de `S`.
+      ✓ Le fichier existe et l'ancre `<rbs:seeds>` porte son appel.
+      ✓ `rbs seed` puis `GET /<entité>` rend les lignes insérées.
+      ✓ Deux `generate crud` successifs → deux seeds, une ancre toujours triée.
+
+### Lot Q — `rbs dev`
+
+- [ ] **Q1** · Orchestration du démarrage
+      Compose remonté si `docker` est déclarée dans `[package.metadata.rbs]`, attente de la
+      base, `migrate up`, puis le serveur. C'est le démarrage en une commande, qui est la
+      moitié de la valeur de `rbs dev`.
+      ✓ Projet sans la feature `docker` → aucun compose cherché, démarrage quand même.
+      ✓ Base injoignable → message nommant ce qui manque, non une trace de panique.
+
+- [ ] **Q2** · Le watch, `watchexec 8.4`
+      Le point dur n'est ni le debounce ni le filtrage, tous deux faciles, mais la coupure
+      du serveur enfant : un `cargo run` tué sans son enfant laisse le port occupé, et le
+      geste diffère sur les trois plateformes.
+      ✓ Fichier de `src/` touché → redémarrage ; fichier de `target/` touché → rien.
+      ✓ Le serveur enfant meurt avec son groupe : le port est libre au redémarrage suivant,
+      vérifié sur les trois plateformes de la CI.
+
+### Lot R — Jobs en arrière-plan
+
+Une table, et non Redis : le manifeste de fragment n'a aucun champ pour exiger une autre
+feature, et un job poussé dans Redis survivrait au rollback de la transaction qui le
+motivait. `jobs` est un fragment, `rbs add jobs`, comme `redis`, `mail` et `storage`.
+
+- [ ] **R1** · Manifeste du fragment, table et section `[jobs]`
+      `serde_json` monte de `[dev-dependencies]` en dépendance de production pour le payload.
+      ✓ `rbs new` puis `rbs add jobs` → clippy et fmt propres sur le projet généré.
+      ✓ `rbs migrate up` crée la table avec statut, tentatives, `disponible_a` et payload.
+      ✓ `rbs add jobs` deux fois → rien écrit la seconde fois.
+
+- [ ] **R2** · Enfilage typé et atomicité avec le métier
+      Le seul critère qui justifie d'avoir choisi la base contre Redis. S'il ne passe pas,
+      le support n'a pas d'intérêt sur une file en mémoire.
+      ✓ Un job enfilé dans une transaction **annulée** n'existe pas après le rollback.
+      ✓ Un job enfilé dans une transaction committée est visible du worker.
+
+- [ ] **R3** · Le worker : réservation, réessai, échec définitif
+      Le dépilage est isolé dans `reserver_prochain_job` **dès maintenant**, pour que `S3`
+      n'ait qu'un corps de fonction à trois branches à écrire au lieu d'une chasse à la
+      requête. Le nombre de tentatives et l'attente entre deux viennent de `[jobs]`.
+      ✓ Deux workers concurrents ne réservent jamais le même job.
+      ✓ Un job qui échoue est réessayé, puis marqué en échec après N tentatives.
+      ✓ Le dépilage n'apparaît qu'à un seul endroit du fragment, mesuré au `grep`.
+
+- [ ] **R4** · `integration_jobs` sous conteneur — la survie au redémarrage
+      C'est ce qui distingue ce jalon du `tokio::spawn` détaché de `M2`, et cela se prouve
+      plutôt que cela ne s'affirme.
+      ✓ Processus tué entre l'enfilage et l'exécution, puis relancé → le job s'exécute.
+      ✓ Les tests livrés au projet tournent : `cargo test` du projet généré.
+
+### Lot S — Portabilité MySQL et SQLite
+
+**Seul lot du jalon autorisé à modifier `rbs-core`.**
+
+- [ ] **S1** · `rbs new --database postgres|mysql|sqlite`
+      Manifestes, `.env.example`, compose et configuration suivent la valeur choisie.
+      ✓ Les trois valeurs produisent un projet qui compile.
+      ✓ Une valeur inconnue → refus nommant les trois admises.
+      ✓ Sans le flag, `postgres` reste le défaut : aucun projet existant ne change.
+
+- [ ] **S2** · Identifiant v7 posé par l'application
+      Le gabarit de migration perd `Expr::cust("uuidv7()")`, qui n'a pas d'équivalent à
+      écrire en MySQL ni en SQLite. `uuid` monte en dépendance de production avec la feature
+      `v7` ; le commentaire du squelette qui explique pourquoi elle était en dev se réécrit.
+      ✓ Deux entités créées à la suite ont des identifiants **croissants** — ce qu'un `v4`
+      ne donnerait pas, et ce qu'un test vérifiant seulement la présence d'un UUID ne
+      prouverait pas.
+      ✓ `rbs migrate up` passe sur **PostgreSQL 17** : l'exigence 18 relevée par `V1` tombe.
+      ✓ Les trois exemples régénérés, `integration_examples` vert.
+
+- [ ] **S3** · `reserver_prochain_job` à trois branches
+      `FOR UPDATE SKIP LOCKED` en PostgreSQL et MySQL 8 ; SQLite n'en a pas besoin, n'ayant
+      qu'un seul écrivain — une transaction immédiate y suffit.
+      ✓ Le test de concurrence de `R3` passe sur les trois bases.
+      ✓ La CI joue le bout-en-bout sur PostgreSQL et SQLite ; MySQL reçoit un `#[ignore]`
+      sous conteneur, lancé à la main comme `L3`, `M3` et `N3`.
+
+- [ ] **S4** · Le noyau cesse de nommer PostgreSQL
+      `ConnectError` est un type public dont le message dit aujourd'hui « vérifiez que le
+      serveur PostgreSQL est démarré », sur un projet qui peut désormais tourner sur trois
+      moteurs.
+      ✓ Le message nomme le moteur réellement configuré.
+      ✓ `doctor` ne suppose plus PostgreSQL.
+
+### Lot T — Documentation et sortie du jalon
+
+- [ ] **T1** · Exemple `newsletter-queue` compilé en CI
+      Les seeds peuplent les abonnés, les jobs envoient. S'il faut y ajouter `mail` pour
+      qu'il soit parlant, cela se tranche sur pièce — au prix d'un conteneur de plus en CI.
+      ✓ Compilé par le step `examples/` de la CI.
+      ✓ `integration_examples` le compare à une génération fraîche.
+
+- [ ] **T2** · Pages de documentation FR et EN
+      ✓ Parité stricte FR/EN mesurée comme en `V2`, `J3` et `O2`.
+      ✓ Aucun extrait de code non issu de `newsletter-queue`.
+      ✓ La page de `mail` dit ce qu'`envoyer_detache` ne garantit pas et montre le passage
+      à un job — la fonction est conservée, le fragment devant rester utilisable seul.
+
+- [ ] **T3** · `doctor` diagnostique les jobs et la base
+      ✓ `jobs` déclarée sans section `[jobs]` → `✗`.
+      ✓ URL `mysql://` avec `sqlx-postgres` au manifeste → `✗` nommant l'écart.
+
+- [ ] **T4** · Critère de sortie du jalon
+      Le `ROADMAP` n'en énonce pas pour v0.4 ; celui-ci est proposé par la conception §2.9.
+      ✓ `rbs new --database` pour les trois valeurs, puis `cargo test` → vert sur chacun.
+      ✓ Un job survit au redémarrage du processus, rejoué sur le projet livré.
+      ✓ `git diff --stat` de `crates/rbs-core/` → 0 ligne sur `P`, `Q`, `R` réunis, et
+      0 ligne après `S` : seul `S` a ouvert le noyau.
+
+---
+
 ## ⏳ Jalons suivants
 
 Volontairement en grosses mailles. Détailler ces tâches aujourd'hui serait de la
 fiction : elles seront réécrites avec ce que les jalons précédents auront appris.
-
-### v0.4 — Confort
-- [ ] Seeds et données de démonstration
-- [ ] `rbs dev` — rechargement à chaud
-- [ ] Jobs en arrière-plan
-- [ ] Support MySQL et SQLite
 
 ### v1.0 — Stabilité
 - [ ] Gel de l'API publique de `rbs-core`
