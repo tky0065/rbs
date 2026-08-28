@@ -1,0 +1,20 @@
+//! Envoi de courriels par SMTP.
+//!
+//! Le transport est bâti une fois au démarrage et partagé par l'état : `lettre` tient son
+//! propre pool de connexions, qu'un transport par message rendrait inutile.
+//!
+//! Aucune route n'est montée ici. Le module est la brique ; l'usage appartient au projet.
+
+// Rien dans le projet n'appelle encore ces fonctions : leurs appelants sont les handlers
+// à écrire. Sans cette permission, `clippy -D warnings` refuserait un module dont tout
+// est un point d'extension.
+#![allow(dead_code)]
+
+pub mod config;
+pub mod gabarit;
+mod service;
+
+#[cfg(test)]
+mod tests;
+
+pub use service::Mailer;

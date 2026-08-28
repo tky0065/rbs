@@ -1,0 +1,62 @@
+//! Applique, annule et inventorie les migrations du projet.
+//!
+//! `rbs migrate` enveloppe ce binaire : il transmet `DATABASE_URL` et met l'inventaire
+//! en forme. Rien n'oblige à passer par lui — `cargo run -p migration -- status` rend le
+//! même état, une migration par ligne.
+
+use std::error::Error;
+use std::process::ExitCode;
+
+use migration::{Migrator, MigratorTrait};
+use sea_orm_migration::MigrationStatus;
+use sea_orm_migration::sea_orm::{ConnectionTrait, Database, Statement};
+
+#[tokio::main]
+async fn main() -> ExitCode {
+    let commande = std::env::args()
+        .nth(1)
+        .unwrap_or_else(|| "status".to_string());
+
+    match executer(&commande).await {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(erreur) => {
+            eprintln!("{erreur}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+async fn executer(commande: &str) -> Result<(), Box<dyn Error>> {
+    let url = std::env::var("RBS_DATABASE__URL")
+        .map_err(|_| "RBS_DATABASE__URL n'est pas définie : renseignez-la dans .env")?;
+
+    let db = Database::connect(&url).await?;
+
+    match commande {
+        "up" => Migrator::up(&db, None).await?,
+        // Annuler tout d'un coup se demande explicitement, migration par migration.
+        "down" => Migrator::down(&db, Some(1)).await?,
+        "status" => {
+            for migration in Migrator::get_migration_with_status(&db).await? {
+                let etat = match migration.status() {
+                    MigrationStatus::Applied => "applied",
+                    MigrationStatus::Pending => "pending",
+                };
+                println!("{etat}\t{}", migration.name());
+            }
+        }
+        "version" => {
+            let requete =
+                Statement::from_string(db.get_database_backend(), "SHOW server_version_num");
+            let reponse = db
+                .query_one_raw(requete)
+                .await?
+                .ok_or("PostgreSQL n'a pas rendu sa version")?;
+
+            println!("version\t{}", reponse.try_get_by_index::<String>(0)?);
+        }
+        _ => return Err(format!("commande inconnue : {commande}").into()),
+    }
+
+    Ok(())
+}

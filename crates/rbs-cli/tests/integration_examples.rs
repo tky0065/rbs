@@ -54,6 +54,19 @@ const EXEMPLES: &[Exemple] = &[
             "src/auth/guard.rs",
         ],
     },
+    Exemple {
+        nom: "file-drop",
+        database_url: "postgres://rbs:rbs@localhost:5432/file_drop",
+        // `rbs add redis` inscrit `mod cache;`, non `mod redis;`. L'ancre empile dans
+        // l'ordre d'installation et doit rester triée : `uploads` est le nom de
+        // ressource qui la laisse close derrière `storage`.
+        features: &["redis", "mail", "storage"],
+        crud: "uploads",
+        // `owner_email` finit par `_email` : le DTO généré gagne sa contrainte d'email
+        // sans qu'on l'écrive, et le courriel a un destinataire qui vient du modèle.
+        champs: "title:string,owner_email:string,content_type:string,size:int",
+        edite_a_la_main: &[],
+    },
 ];
 
 const REGENERER: &str = "examples/README.md donne la commande de régénération";
@@ -73,6 +86,11 @@ fn hello_crud_est_celui_que_le_cli_produit_aujourd_hui() {
 #[test]
 fn blog_auth_est_celui_que_le_cli_produit_aujourd_hui() {
     verifier_non_derive(exemple("blog-auth"));
+}
+
+#[test]
+fn file_drop_est_celui_que_le_cli_produit_aujourd_hui() {
+    verifier_non_derive(exemple("file-drop"));
 }
 
 fn verifier_non_derive(exemple: &Exemple) {
@@ -116,13 +134,12 @@ fn engendrer(parent: &Path, exemple: &Exemple) -> PathBuf {
 
     let racine = parent.join(exemple.nom);
 
-    // `add` refuse d'écrire dans un working tree sale, et `rbs new` initialise le dépôt
-    // sans rien commiter : sans ce commit, la première feature s'arrête avant d'écrire.
-    if !exemple.features.is_empty() {
-        common::commiter(&racine, "projet neuf");
-    }
-
     for feature in exemple.features {
+        // `add` refuse d'écrire dans un working tree sale. `rbs new` initialise le dépôt
+        // sans rien commiter, et chaque feature laisse à son tour de quoi arrêter la
+        // suivante : le commit se prend avant chacune, non une fois pour toutes.
+        common::commiter(&racine, &format!("avant {feature}"));
+
         assert_cmd::Command::cargo_bin("rbs")
             .expect("le binaire rbs doit être compilé")
             .current_dir(&racine)

@@ -1,0 +1,117 @@
+use std::time::Duration;
+
+use anyhow::Context;
+use lettre::message::Mailbox;
+use lettre::message::header::ContentType;
+use lettre::transport::smtp::authentication::Credentials;
+use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
+use rbs_core::{Error, Result};
+use serde::Serialize;
+
+use super::config::{MailConfig, Tls};
+use super::gabarit::Gabarits;
+
+/// Le transport SMTP, l'expéditeur et les gabarits du projet, clonés avec l'état.
+#[derive(Debug, Clone)]
+pub struct Mailer {
+    transport: AsyncSmtpTransport<Tokio1Executor>,
+    expediteur: Mailbox,
+    gabarits: Gabarits,
+}
+
+impl Mailer {
+    /// Bâtit le transport depuis la section `[mail]`.
+    pub fn depuis_config() -> anyhow::Result<Self> {
+        let config = rbs_core::config::section::<MailConfig>("mail")
+            .context("section [mail] de la configuration")?;
+
+        Self::nouveau(&config)
+    }
+
+    /// Faillible mais synchrone : rien n'est ouvert ici, la première connexion attend le
+    /// premier message. L'expéditeur est analysé maintenant pour qu'une faute de frappe
+    /// arrête le démarrage plutôt que le premier envoi.
+    ///
+    /// À appeler depuis un runtime Tokio — celui de `main` — sans quoi le pool de `lettre`
+    /// panique en y inscrivant sa tâche d'entretien.
+    pub fn nouveau(config: &MailConfig) -> anyhow::Result<Self> {
+        let hote = config.smtp_host.as_str();
+        let batisseur = match config.tls {
+            Tls::Aucun => AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(hote),
+            Tls::Starttls => AsyncSmtpTransport::<Tokio1Executor>::starttls_relay(hote)?,
+            Tls::Wrapper => AsyncSmtpTransport::<Tokio1Executor>::relay(hote)?,
+        }
+        .port(config.smtp_port)
+        .timeout(Some(Duration::from_secs(config.timeout_secs)));
+
+        let batisseur = if config.smtp_user.is_empty() {
+            batisseur
+        } else {
+            batisseur.credentials(Credentials::new(
+                config.smtp_user.clone(),
+                config.smtp_password.clone(),
+            ))
+        };
+
+        Ok(Self {
+            transport: batisseur.build(),
+            expediteur: config
+                .from
+                .parse()
+                .with_context(|| format!("expéditeur « {} »", config.from))?,
+            gabarits: Gabarits::nouveaux(&config.gabarits),
+        })
+    }
+
+    /// Prépare un message HTML de l'expéditeur configuré vers `destinataire`.
+    pub fn message(&self, destinataire: &str, sujet: &str, corps: String) -> Result<Message> {
+        let destinataire: Mailbox = destinataire.parse().map_err(interne)?;
+
+        Message::builder()
+            .from(self.expediteur.clone())
+            .to(destinataire)
+            .subject(sujet)
+            .header(ContentType::TEXT_HTML)
+            .body(corps)
+            .map_err(interne)
+    }
+
+    pub async fn envoyer(&self, message: Message) -> Result<()> {
+        self.transport.send(message).await.map_err(interne)?;
+
+        Ok(())
+    }
+
+    /// Rend `gabarit` avec `contexte`, et envoie le résultat.
+    pub async fn envoyer_gabarit<S: Serialize>(
+        &self,
+        destinataire: &str,
+        sujet: &str,
+        gabarit: &str,
+        contexte: S,
+    ) -> Result<()> {
+        let corps = self.gabarits.rendre(gabarit, contexte)?;
+
+        self.envoyer(self.message(destinataire, sujet, corps)?)
+            .await
+    }
+
+    /// Lance l'envoi et rend la main sans l'attendre.
+    ///
+    /// Ni file ni réessai : un message perdu l'est pour de bon, et seul le journal en
+    /// garde trace. C'est le prix d'un envoi qui ne retient pas la réponse HTTP.
+    pub fn envoyer_detache(&self, message: Message) {
+        let transport = self.transport.clone();
+
+        tokio::spawn(async move {
+            if let Err(erreur) = transport.send(message).await {
+                tracing::error!(%erreur, "envoi de courriel échoué");
+            }
+        });
+    }
+}
+
+/// Une panne du transport n'apprend rien au client : elle reste au journal du serveur.
+fn interne(source: impl std::error::Error + Send + Sync + 'static) -> Error {
+    Error::Internal(source.into())
+}
