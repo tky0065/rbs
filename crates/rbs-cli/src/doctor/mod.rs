@@ -8,6 +8,7 @@ pub mod anchors;
 pub mod auth;
 pub mod base;
 pub mod env;
+pub mod jobs;
 pub mod mail;
 pub mod redis;
 pub mod render;
@@ -120,11 +121,12 @@ type FeatureCheck = (&'static str, fn(&Path) -> Check);
 /// `redis` s'installe en `src/cache/` sous une section `[cache]` : c'est le nom de la
 /// crate d'un côté, celui du service rendu de l'autre. Le tableau porte le nom déclaré,
 /// seul commun aux quatre.
-const FEATURE_CHECKS: [FeatureCheck; 4] = [
+const FEATURE_CHECKS: [FeatureCheck; 5] = [
     ("auth", auth::check),
     ("redis", redis::check),
     ("mail", mail::check),
     ("storage", storage::check),
+    ("jobs", jobs::check),
 ];
 
 /// Vrai si `config/default.toml` porte une section `[name]`.
@@ -280,6 +282,21 @@ mod tests {
             .collect();
 
         assert_eq!(installes, vec!["redis", "mail", "storage"], "{installes:?}");
+    }
+
+    /// La feature ne se lit qu'au manifeste : un projet qui la déclare reçoit sa ligne,
+    /// que sa configuration porte ou non la section correspondante.
+    #[test]
+    fn a_project_declaring_jobs_receives_its_check() {
+        let (_parent, root) = project(&["health", "jobs"]);
+
+        let report = run(&root).expect("c'est un projet rbs");
+
+        assert!(
+            titles(&report).contains(&"jobs"),
+            "la feature est déclarée, son contrôle doit figurer : {:?}",
+            titles(&report)
+        );
     }
 
     #[test]

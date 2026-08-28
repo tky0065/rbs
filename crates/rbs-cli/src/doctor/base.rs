@@ -50,6 +50,12 @@ pub(crate) fn check(root: &Path) -> Check {
         }
     };
 
+    // Un serveur qui répond ne prouve rien quand le pilote compilé ne sait pas parler son
+    // protocole : l'écart se dit avant que le port soit sondé.
+    if let Some(ecart) = ecart(root, &url) {
+        return ecart;
+    }
+
     let database = database_of(root);
 
     let ou = match joignable(database, &url) {
@@ -86,6 +92,64 @@ pub(crate) fn check(root: &Path) -> Check {
             "vérifiez que `cargo run -p migration -- version` aboutit",
         ),
     }
+}
+
+/// L'écart entre le pilote que le projet compile et le moteur que son URL désigne.
+///
+/// Les deux valeurs sont nommées plutôt que leur conclusion : c'est l'une ou l'autre que
+/// le lecteur aura à corriger, et « configuration invalide » le renverrait aux deux
+/// fichiers pour savoir laquelle.
+fn ecart(root: &Path, url: &str) -> Option<Check> {
+    let compile = pilote(root)?;
+    let vise = Database::TOUS
+        .into_iter()
+        .find(|moteur| moteur.accepte(url))?;
+
+    if compile == vise {
+        return None;
+    }
+
+    let scheme = crate::database::scheme_of(url)?;
+
+    Some(Check::failed(
+        TITRE,
+        format!(
+            "le manifeste compile `{}` et {} est une URL `{scheme}://`",
+            compile.sea_orm_feature(),
+            migrate::URL
+        ),
+        format!(
+            "alignez les deux : la feature `{}` de sea-orm au manifeste, \
+             ou une URL `{}://` dans le .env",
+            vise.sea_orm_feature(),
+            compile.schemes()[0]
+        ),
+    ))
+}
+
+/// Moteur que le manifeste compile, lu à la feature de `sea-orm`.
+///
+/// C'est elle que `sqlx` embarque, et donc le seul pilote dont le binaire disposera.
+/// `[package.metadata.rbs].database` n'en est que le suivi, qu'une édition à la main
+/// laisse derrière elle sans rien casser à la compilation.
+fn pilote(root: &Path) -> Option<Database> {
+    let source = std::fs::read_to_string(root.join("Cargo.toml")).ok()?;
+    let manifest: toml_edit::DocumentMut = source.parse().ok()?;
+
+    let features = manifest
+        .get("dependencies")?
+        .get("sea-orm")?
+        .get("features")?
+        .as_array()?;
+
+    features
+        .iter()
+        .filter_map(|feature| feature.as_str())
+        .find_map(|feature| {
+            Database::TOUS
+                .into_iter()
+                .find(|moteur| moteur.sea_orm_feature() == feature)
+        })
 }
 
 /// Moteur que le manifeste déclare, PostgreSQL à défaut de manifeste lisible.
@@ -390,6 +454,57 @@ mod tests {
             Some(PathBuf::from("demo.db"))
         );
         assert_eq!(chemin_sqlite("postgres://localhost/demo"), None);
+    }
+
+    /// Réécrit le `.env` du projet pour viser `url`.
+    ///
+    /// `new::create` refuse une URL étrangère au moteur : la contradiction ne peut
+    /// naître que d'une édition postérieure, et c'est celle-là que le test rejoue.
+    fn viser(root: &Path, url: &str) {
+        std::fs::write(
+            root.join(".env"),
+            format!("RBS_ENV=development\n{}={url}\n", migrate::URL),
+        )
+        .expect("écriture du .env");
+    }
+
+    #[test]
+    fn the_compiled_driver_is_read_from_the_sea_orm_feature() {
+        let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
+
+        assert_eq!(pilote(&root), Some(Database::Postgres));
+    }
+
+    #[test]
+    fn a_driver_at_odds_with_the_url_names_both_values() {
+        let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
+        viser(&root, "mysql://root:root@127.0.0.1:1/demo");
+
+        let check = check(&root);
+
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
+        assert!(check.detail.contains("sqlx-postgres"), "{}", check.detail);
+        assert!(check.detail.contains("mysql://"), "{}", check.detail);
+    }
+
+    /// Le remède nomme les deux corrections possibles, sans choisir pour le lecteur.
+    #[test]
+    fn the_remedy_offers_either_side_of_the_gap() {
+        let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
+        viser(&root, "mysql://root:root@127.0.0.1:1/demo");
+
+        let remedy = check(&root).remedy.expect("un échec porte son remède");
+
+        assert!(remedy.contains("sqlx-mysql"), "{remedy}");
+        assert!(remedy.contains("postgres://"), "{remedy}");
+    }
+
+    /// Une URL en accord avec le pilote laisse le diagnostic aller jusqu'à la connexion.
+    #[test]
+    fn a_url_matching_the_driver_raises_no_gap() {
+        let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
+
+        assert!(ecart(&root, "postgresql://rbs@127.0.0.1:1/demo").is_none());
     }
 
     #[test]
