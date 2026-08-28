@@ -1,0 +1,47 @@
+name: Publication
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  publier:
+    name: crates.io
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # Premier step utile, avant même le dry-run : celui-ci compile les deux crates,
+      # soit plusieurs minutes de travail engagé sur un tag qu'on refusera de toute façon.
+      - name: garde de version
+        run: .github/scripts/garde-version.sh "${{ github.ref_name }}"
+
+      # Le dry-run constate ce qu'aucune compilation locale ne rappelle : que le paquet
+      # emporte bien les templates que le binaire embarque. La panne se verrait sinon au
+      # moment de la publication, quand crates.io a déjà pris la version.
+      - name: cargo publish (dry-run)
+        run: |
+          cargo publish --dry-run --locked -p rbs-core
+          cargo publish --dry-run --locked -p rbs-cli
+
+      # `rbs-cli` ne dépend pas de `rbs-core`, mais il engendre des manifestes qui
+      # réclament `rbs-core = "<sa propre version>"` : un CLI installable avant que le
+      # noyau soit indexé produirait des projets qui ne résolvent pas.
+      #
+      # Aucune attente entre les deux : l'ordre suffit, rien ici ne consomme l'autre.
+      - name: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: |
+          cargo publish --locked -p rbs-core
+          cargo publish --locked -p rbs-cli
