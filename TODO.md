@@ -821,7 +821,7 @@ jalon v0.1, et deux `V1` dans ce fichier rendraient ambiguë chaque référence 
 
 ### Lot U — Publication
 
-- [ ] **U1** · Workflow de publication sur tag
+- [ ] **U1** · Workflow de publication sur tag — PARTIEL 2026-08-28 : les deux critères `✓` sont prouvés, dont un **en conditions réelles** — sur le run du tag `v0.4.0`, les steps « garde de version » et « cargo publish (dry-run) » sont verts ; en local, `garde-version.sh v0.4.0` refuse un workspace en 0.1.0 en nommant les deux versions puis « publication refusée, aucune crate n'a été envoyée », et la garde change de verdict dans les deux sens après le passage en 0.4.0 · la case reste ouverte comme la tâche le prévoit — elle attend le run réel de `U3`, lequel a échoué au dernier step pour une raison hors dépôt (voir `U3`)
       `release.yml`, déclenché par un tag `v*`, publie `rbs-core` puis `rbs-cli` en
       `--locked`. Le point dur n'est pas la publication mais la **garde** : un tag `v0.4.0`
       posé sur un workspace resté à `0.1.0` publierait une version qui ne dit pas son nom,
@@ -839,7 +839,7 @@ jalon v0.1, et deux `V1` dans ce fichier rendraient ambiguë chaque référence 
       ✓ Parité FR/EN des fichiers racine, mesurée comme en `V2`.
       ✓ Aucune entrée pour une version non publiée.
 
-- [ ] **U3** · Publication réelle de 0.4.0
+- [ ] **U3** · Publication réelle de 0.4.0 — PARTIEL 2026-08-28 : **tout le dépôt est prêt et rien n'est publié** · workspace en 0.4.0, cinq verrous régénérés, journal daté, `NOYAU_PUBLIE` à `true`, `cargo test` 0 failed, `clippy` et `fmt` à 0 — le contrôle de non-dérive a rattrapé les quatre exemples restés en `[package.metadata.rbs].version = "0.1.0"`, premier cas d'usage de `rbs upgrade` fait à la main · `main` poussé, tag `v0.4.0` posé, run déclenché : garde ✓, dry-run ✓, **`cargo publish` ✗** sur `rbs-core` à l'upload — « status 400 : A verified email address is required to publish crates to crates.io » · `rbs-core` a échoué **avant** `rbs-cli`, donc aucune version n'est partie et rien n'est à `yank` (`cargo info` : les deux introuvables au registre) · **reste à faire hors dépôt** : vérifier l'adresse e-mail sur https://crates.io/settings/profile, puis `gh run rerun 33213962910` — le tag est en place, rien à défaire · le token, lui, fonctionne : un secret invalide aurait rendu 403, non 400 · les trois critères `✓` sont donc **non prouvés**, aucun ne l'étant sans publication
       Workspace à `0.4.0`, tag, run réel du workflow. C'est ce qui lève la friction sur
       laquelle `V1` a échoué : `new.rs:238` engendre `rbs-core = { version = "…" }` dès que
       `--core-path` est absent, et le parcours du `README` cesse d'exiger le contournement.
