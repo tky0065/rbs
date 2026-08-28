@@ -12,6 +12,7 @@ use sea_orm::{Database, DatabaseConnection};
 ///
 /// Un `mod` non inline ne s'écrit pas dans un bloc : la déclaration des modules et leur
 /// enchaînement se font donc d'un seul geste, à hauteur d'item.
+// region: macro
 macro_rules! seeds {
     ($($module:ident),* $(,)?) => {
         $(mod $module;)*
@@ -30,12 +31,15 @@ macro_rules! seeds {
         }
     };
 }
+// endregion: macro
 
+// region: ancre
 seeds! {
     // <rbs:seeds>
     subscribers,
     // </rbs:seeds>
 }
+// endregion: ancre
 
 #[tokio::main]
 async fn main() -> ExitCode {

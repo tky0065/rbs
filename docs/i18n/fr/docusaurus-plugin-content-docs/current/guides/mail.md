@@ -11,7 +11,8 @@ autres briques, elle ne monte aucune route — le moment où un message part est
 que seul votre domaine peut prendre.
 
 Tous les extraits de cette page viennent de
-[`examples/file-drop`](https://github.com/tky0065/rbs/tree/main/examples/file-drop), un
+[`examples/newsletter-queue`](https://github.com/tky0065/rbs/tree/main/examples/newsletter-queue),
+un
 projet engendré par le CLI et compilé en CI. Rien ici n'est écrit à la main pour la
 documentation.
 
@@ -46,7 +47,7 @@ qui fonctionne, et que vous êtes censé remplacer.
 
 ## Configuration
 
-```rust file=examples/file-drop/src/mail/config.rs
+```rust file=examples/newsletter-queue/src/mail/config.rs
 ```
 
 Les défauts décrivent un serveur de développement : le port 1025 en clair, celui sur lequel
@@ -70,7 +71,7 @@ authentification n'a besoin ni de l'un ni de l'autre.
 
 ## Le transport
 
-```rust file=examples/file-drop/src/mail/service.rs region=construction
+```rust file=examples/newsletter-queue/src/mail/service.rs region=construction
 ```
 
 Deux choses se décident ici, et toutes deux portent sur le *moment* de l'échec.
@@ -92,7 +93,7 @@ connexions, qu'un transport par message rendrait inutile.
 Les corps sont des gabarits [minijinja](https://docs.rs/minijinja) lus dans le répertoire
 que nomme `templates` — `templates/mail` par défaut :
 
-```html file=examples/file-drop/templates/mail/depot.html
+```html file=examples/newsletter-queue/templates/mail/newsletter.html
 ```
 
 `Templates` enveloppe l'environnement dans un `Arc`, parce qu'`AppState` se clone à chaque
@@ -108,7 +109,7 @@ aucun répertoire lorsqu'on cherche ce qui ne va pas.
 
 Le cas courant rend et envoie en un appel :
 
-```rust file=examples/file-drop/src/mail/service.rs region=send_template
+```rust file=examples/newsletter-queue/src/mail/service.rs region=send_template
 ```
 
 `message()` reste disponible si vous préférez bâtir le `Message` vous-même, et `send()` en
@@ -123,29 +124,43 @@ le client reçoit un 500 — voir le [guide des erreurs](./errors.md).
 Envoyer dans un handler fait attendre la réponse HTTP après le serveur SMTP. Quand le
 message ne conditionne pas la réponse, il peut partir détaché :
 
-```rust file=examples/file-drop/src/mail/service.rs region=send_detached
+```rust file=examples/newsletter-queue/src/mail/service.rs region=send_detached
 ```
 
 **Lisez le compromis avant d'y recourir.** Ni file ni réessai : un message perdu l'est pour
-de bon, et le journal en est la seule trace. C'est le prix d'un envoi qui ne retient pas la
-réponse, et c'est un prix juste pour une notification — non pour une réinitialisation de
-mot de passe, où l'utilisateur attend ce courriel et où rien d'autre ne lui dira qu'il a
-échoué.
+de bon, et le journal en est la seule trace. Ni le serveur SMTP indisponible une minute, ni
+une résolution DNS qui bronche, ni un redémarrage entre le détachement et l'envoi — rien de
+tout cela n'est rattrapable, puisque rien ne se souvient que le message a existé.
 
-## Ce que l'exemple en fait
+C'est le prix d'un envoi qui ne retient pas la réponse, et c'est un prix juste pour une
+notification. Ce n'en est pas un pour une réinitialisation de mot de passe, où l'utilisateur
+attend ce courriel et où rien d'autre ne lui dira qu'il a échoué.
 
-`file-drop` prévient le déposant à la création d'un dépôt, et le fait dans sa propre tâche :
+## Le passage à un job
 
-```rust file=examples/file-drop/src/uploads/service.rs region=notify
+Quand il vous faut le réessai, le message doit survivre au processus. Cela veut dire
+l'écrire quelque part, et c'est ce qu'est la [feature jobs](./jobs.md) :
+
+```rust file=examples/newsletter-queue/src/jobs/newsletter.rs region=job
 ```
 
-Le champ `owner_email` est ce qui fait venir le destinataire du modèle plutôt que d'une
-constante — et, finissant par `_email`, il a valu au DTO engendré sa contrainte d'adresse
-sans qu'une ligne soit écrite. Voir [`rbs generate`](../cli/generate.md).
+Lisez-le face au `send_detached` ci-dessus. Rien de l'envoi n'a changé — même `Mailer`, même
+`send_template`, même gabarit. Ce qui a changé, c'est qui tient l'échec. `send_detached`
+l'avale dans une ligne de journal ; ici l'erreur est *rendue*, et la rendre est ce qui
+demande le réessai.
 
-Remarquez qu'il ne s'agit pas de `send_detached` : le message n'existe pas encore, puisque
-rendre le gabarit fait partie de ce que l'on détache. Le motif est le même, un cran plus
-haut.
+L'enfilage est l'autre moitié, et il a lieu dans la transaction qui a motivé le courriel :
+
+```rust file=examples/newsletter-queue/src/subscribers/service.rs region=broadcast
+```
+
+Ce qui veut dire que la lettre existe si et seulement si le travail qui la justifiait a été
+committé. Un `send_detached` deux lignes plus haut serait parti quoi qu'il arrive — y
+compris pour une transaction annulée.
+
+`send_detached` est toujours là, sous une permission qui ne vaut que pour lui : le fragment
+doit rester utilisable seul, et un message dont la perte est sans conséquence n'a pas besoin
+d'une ligne en base. Installer `jobs` est une décision, non un prérequis.
 
 ## Les tests
 
@@ -167,8 +182,8 @@ surcharge le port. Voir le [guide des tests](./testing.md).
 
 - **quand envoyer** — aucune route, aucun crochet, aucun événement. L'exemple envoie à la
   création parce que c'est ce dont son domaine parle ;
-- **la file et les réessais** — ni l'une ni les autres ici. Un message qui échoue est
-  journalisé, puis perdu ;
+- **la file et les réessais** — ni l'une ni les autres dans cette feature. `rbs add jobs`
+  est ce qui les ajoute, et la section ci-dessus dit comment les deux s'emboîtent ;
 - **les corps en texte simple et les pièces jointes** — les corps partent en HTML ;
   `lettre::Message` sait bâtir du multipart si vous en avez besoin ;
 - **les retours d'erreur, les liens de désinscription, les gabarits par langue** — hors de

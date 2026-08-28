@@ -18,25 +18,26 @@ sortie de terminal ne se traduit pas.
 ## Synopsis
 
 ```text
-$ rbs new --help
+$ rbs new -h
 Crée un projet prêt à démarrer, avec sa base, ses migrations et sa route /health
 
-Usage: rbs new [OPTIONS] <NOM>
+Usage: rbs new [OPTIONS] <NAME>
 
 Arguments:
-  <NOM>  Nom du projet, qui est aussi celui du répertoire créé
+  <NAME>  Nom du projet, qui est aussi celui du répertoire créé
 
 Options:
-      --database-url <URL>     URL de la base PostgreSQL, à défaut de quoi la question est posée
+      --database-url <URL>     URL de connexion, à défaut de quoi la question est posée
+      --database <MOTEUR>      Moteur de base sur lequel le projet tournera [default: postgres] [possible values: postgres, mysql, sqlite]
       --with <FEATURES>        Features à installer sans passer par les questions, séparées par des virgules
       --core-path <CHEMIN>     Crate `rbs-core` locale à utiliser au lieu de la version publiée
       --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
   -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
-  -h, --help                   Print help
+  -h, --help                   Print help (see more with '--help')
   -V, --version                Print version
 ```
 
-`<NOM>` est à la fois le nom du paquet Cargo et celui du répertoire. Il commence par une
+`<NAME>` est à la fois le nom du paquet Cargo et celui du répertoire. Il commence par une
 lettre ASCII et ne porte que des lettres, des chiffres, `-` et `_`.
 
 ## Les flags
@@ -44,6 +45,7 @@ lettre ASCII et ne porte que des lettres, des chiffres, `-` et `_`.
 | Flag | Effet |
 |---|---|
 | `--database-url <URL>` | URL de connexion écrite dans le `.env` du projet sous `RBS_DATABASE__URL`. Absente, la question est posée — ou la valeur par défaut est prise sous `--yes`. |
+| `--database <MOTEUR>` | Moteur sur lequel le projet tournera : `postgres`, `mysql` ou `sqlite`. `postgres` par défaut. |
 | `--with <FEATURES>` | Features à installer à la création, séparées par des virgules. Ce que 0.1.0 en fait est décrit plus bas. |
 | `--core-path <CHEMIN>` | Fait pointer le manifeste généré vers une crate `rbs-core` locale plutôt que vers la version publiée. Le chemin est canonisé : Cargo le résout depuis le projet créé, et non depuis le répertoire d'où la commande est lancée. |
 | `--template-dir <CHEMIN>` | Rend le projet depuis un répertoire de templates, au lieu de celles embarquées dans le binaire. |
@@ -52,6 +54,42 @@ lettre ASCII et ne porte que des lettres, des chiffres, `-` et `_`.
 `--template-dir` et `--yes` sont globaux — toutes les commandes les acceptent — mais `--yes`
 n'est lu que par `rbs new`, seule commande qui pose des questions, et `--template-dir` par
 `rbs new` et [`rbs add`](./add.md).
+
+## Choisir le moteur
+
+```text
+$ rbs new blog --database sqlite --yes
+```
+
+Manifestes, `.env.example`, compose et configuration suivent tous la valeur choisie.
+`sea-orm` reçoit la feature `sqlx-*` correspondante, et la migration engendrée évite ce qui
+n'a pas d'équivalent sur les deux autres.
+
+Une valeur inconnue est refusée avant que rien ne soit écrit :
+
+```text
+$ rbs new blog --database oracle
+error: invalid value 'oracle' for '--database <MOTEUR>'
+  [possible values: postgres, mysql, sqlite]
+
+For more information, try '--help'.
+```
+
+Sans le drapeau, `postgres` reste le défaut, et un manifeste sans clé `database` se relit
+comme un projet PostgreSQL — aucun projet créé avant l'existence de ce drapeau ne change de
+comportement.
+
+:::warning
+`--database` et `--database-url` doivent s'accorder. Demander `--database mysql` avec une
+URL `postgres://` est un refus, levé dans la phase de vérification et donc avant le premier
+fichier écrit.
+
+La même contradiction atteinte après coup — en éditant le `.env` d'un projet existant — est
+ce que [`rbs doctor`](./doctor.md) constate, en nommant les deux valeurs.
+:::
+
+SQLite est celui qui change la forme du projet plutôt qu'une de ses lignes : ni compose, ni
+attente de la base dans [`rbs dev`](./dev.md), et une URL sans hôte ni port.
 
 ## Créer un projet
 

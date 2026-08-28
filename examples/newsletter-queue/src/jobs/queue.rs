@@ -73,6 +73,7 @@ FOR UPDATE SKIP LOCKED";
 const RESERVATION_MYSQL: &str = "\
 UPDATE jobs SET status = ?, attempts = attempts + 1, updated_at = ? WHERE id = ?";
 
+// region: enqueue
 /// Enfile un job, exécutable dès maintenant, et rend l'identifiant de sa ligne.
 ///
 /// `db` est un `ConnectionTrait` et non une connexion, et c'est toute la raison d'avoir
@@ -85,6 +86,7 @@ where
 {
     enqueue_at(db, job, Utc::now().fixed_offset()).await
 }
+// endregion: enqueue
 
 /// Enfile un job qui ne deviendra dépilable qu'à `available_at`.
 pub async fn enqueue_at<C, J>(
