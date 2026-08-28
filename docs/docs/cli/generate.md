@@ -299,7 +299,7 @@ suggests and what the run above used.
 ## Anchors
 
 `rbs generate` never rewrites an AST. It inserts between comment markers the skeleton
-carries, and it uses six of the eight — the two in `src/state.rs` belong to the fragments
+carries, and it uses six of the nine — the two in `src/state.rs` and `// <rbs:startup>` belong to the fragments
 [`rbs add`](./add.md) installs:
 
 | Anchor | File |
@@ -323,7 +323,7 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) checks the seven anchors, so a missing one can be found before a
+[`rbs doctor`](./doctor.md) checks the nine anchors, so a missing one can be found before a
 generation trips over it.
 
 ## Failures
