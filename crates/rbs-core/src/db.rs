@@ -25,6 +25,7 @@ const MASQUE: &str = "***";
      base visée : {url}\n\
      vérifiez `database.url` (RBS_DATABASE__URL) et {conseil}"
 )]
+#[non_exhaustive]
 pub struct ConnectError {
     /// URL visée, mot de passe masqué.
     url: String,

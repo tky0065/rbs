@@ -19,6 +19,7 @@ use validator::ValidationErrors;
 /// Les messages ci-dessous s'adressent au journal serveur : `Database` et `Internal` y
 /// portent leur source, que la réponse HTTP ne divulgue jamais au client.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum Error {
     /// Ressource absente. Porte le nom de la ressource, pas un message rédigé.
     #[error("{0} introuvable")]

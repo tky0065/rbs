@@ -15,6 +15,7 @@ const HORODATAGE: &str = "%Y-%m-%dT%H:%M:%S%.3fZ";
 ///
 /// Rend un objet JSON par ligne, portant `ts`, `level`, `target`, `msg`, puis les champs
 /// de l'événement et de ses spans parents, à plat et dans leur type d'origine.
+#[non_exhaustive]
 pub struct JsonFormat {
     horodatage: ChronoUtc,
 }

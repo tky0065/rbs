@@ -24,6 +24,7 @@ const NIVEAU_PAR_DEFAUT: &str = "info";
 /// [`ConfigError`](crate::config::ConfigError) : une erreur survenue au démarrage ne
 /// devient jamais une réponse HTTP.
 #[derive(Debug, thiserror::Error)]
+#[non_exhaustive]
 pub enum LogError {
     /// Valeur de [`VARIABLE_FORMAT`] hors des formats connus.
     #[error("`{VARIABLE_FORMAT}` porte une value invalide : `{0}` (expected `pretty` ou `json`)")]
@@ -35,6 +36,7 @@ pub enum LogError {
 
 /// Format de rendu des logs.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub enum LogFormat {
     /// Une ligne lisible par événement, colorée sur un terminal.
     #[default]

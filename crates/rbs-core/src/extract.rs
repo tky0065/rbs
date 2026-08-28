@@ -27,6 +27,7 @@ const SCHEMA: &str = "bearer";
 /// consommerait interdirait à [`ValidatedJson`] de le lire ensuite.
 #[cfg(feature = "auth")]
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Identity {
     /// Identifiant de l'utilisateur, tel que porté par `sub`.
     pub user_id: String,
