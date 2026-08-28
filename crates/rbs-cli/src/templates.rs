@@ -802,11 +802,41 @@ mod tests {
         );
     }
 
+    /// Le dépilage porte ses trois moteurs, et lui seul.
+    ///
+    /// `SKIP LOCKED` est du PostgreSQL et du MySQL 8 ; SQLite ne le connaît pas et n'en a
+    /// pas besoin, ne laissant écrire qu'un processus à la fois. Le tri se fait à
+    /// l'exécution : le fragment livre les trois branches, le projet n'en emprunte qu'une.
+    #[test]
+    fn the_dequeue_carries_its_three_engines_and_nothing_else_does() {
+        let racine = Path::new(RACINE_FEATURES).join("jobs");
+        let queue = read(&racine.join("queue.rs.jinja"));
+
+        for moteur in [
+            "DatabaseBackend::Postgres",
+            "DatabaseBackend::MySql",
+            "DatabaseBackend::Sqlite",
+        ] {
+            assert!(
+                queue.contains(moteur),
+                "le dépilage ne traite pas {moteur} :\n{queue}"
+            );
+        }
+
+        // Deux moteurs la portent, et la clause n'a pas à paraître ailleurs — surtout pas
+        // dans la branche SQLite, qui la refuserait à l'exécution.
+        assert_eq!(
+            queue.matches("FOR UPDATE SKIP LOCKED").count(),
+            3,
+            "la clause doit paraître dans les deux requêtes qui l'admettent et dans son \
+             commentaire, et nulle part ailleurs :\n{queue}"
+        );
+    }
+
     /// Le dépilage de la file n'apparaît qu'à un seul endroit du fragment.
     ///
-    /// C'est ce qui rend le portage vers un autre moteur tenable : `FOR UPDATE SKIP
-    /// LOCKED` est du PostgreSQL, et il n'y a qu'un corps de fonction à récrire tant qu'il
-    /// ne s'est pas dispersé dans le worker.
+    /// C'est ce qui rend le portage vers un autre moteur tenable : il n'y a qu'un corps de
+    /// fonction à récrire tant qu'il ne s'est pas dispersé dans le worker.
     #[test]
     fn the_dequeue_appears_in_a_single_place_of_the_jobs_fragment() {
         let racine = Path::new(RACINE_FEATURES).join("jobs");
@@ -827,12 +857,6 @@ mod tests {
         assert_eq!(porteurs, ["queue.rs.jinja"], "porteurs : {porteurs:?}");
 
         let queue = read(&racine.join("queue.rs.jinja"));
-        assert_eq!(
-            queue.matches("FOR UPDATE SKIP LOCKED").count(),
-            2,
-            "la clause doit paraître une fois dans le SQL et une fois dans son \
-             commentaire, et nulle part ailleurs :\n{queue}"
-        );
         assert_eq!(
             queue.matches("pub async fn reserver_prochain_job").count(),
             1,
