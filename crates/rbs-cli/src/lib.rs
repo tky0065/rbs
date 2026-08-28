@@ -2,6 +2,7 @@ mod add;
 mod anchors;
 mod cargo;
 mod cli;
+mod dev;
 mod doctor;
 mod dotenv;
 mod generate;
@@ -100,6 +101,20 @@ pub fn run() {
 
         Commands::Seed { force } => {
             if let Err(error) = seed(force) {
+                ui::error(&error.to_string());
+                if let Some(remedy) = error.remedy() {
+                    ui::info(&format!("\n{remedy}"));
+                }
+                std::process::exit(1);
+            }
+        }
+
+        Commands::Dev => {
+            let resultat = std::env::current_dir()
+                .map_err(dev::Error::Cwd)
+                .and_then(|directory| dev::run(&directory));
+
+            if let Err(error) = resultat {
                 ui::error(&error.to_string());
                 if let Some(remedy) = error.remedy() {
                     ui::info(&format!("\n{remedy}"));
