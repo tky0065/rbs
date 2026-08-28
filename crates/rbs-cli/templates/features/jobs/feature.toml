@@ -1,0 +1,70 @@
+[feature]
+description = "jobs en arrière-plan : une table, un enfilage transactionnel, un worker qui réessaie"
+
+[[files]]
+source      = "mod.rs.jinja"
+destination = "src/jobs/mod.rs"
+
+[[files]]
+source      = "config.rs.jinja"
+destination = "src/jobs/config.rs"
+
+[[files]]
+source      = "model.rs.jinja"
+destination = "src/jobs/model.rs"
+
+[[files]]
+source      = "queue.rs.jinja"
+destination = "src/jobs/queue.rs"
+
+[[files]]
+source      = "worker.rs.jinja"
+destination = "src/jobs/worker.rs"
+
+[[files]]
+source      = "demo.rs.jinja"
+destination = "src/jobs/demo.rs"
+
+[[files]]
+source      = "tests.rs.jinja"
+destination = "src/jobs/tests.rs"
+
+[[anchors]]
+anchor  = "features"
+content = "mod jobs;"
+
+# Le worker vit dans le processus de l'API, et non dans un binaire à part : c'est ce qui
+# donne à un job l'`AppState` du projet, donc le mailer, le cache et le stockage que les
+# autres fragments y déposent.
+[[anchors]]
+anchor  = "startup"
+content = "crate::jobs::worker::spawn(state.clone());"
+
+[migration]
+source = "migration.rs.jinja"
+name   = "create_jobs"
+
+[[dependencies]]
+name    = "async-trait"
+version = "0.1"
+
+# Le payload est une valeur JSON, que sea-orm ne sait lire qu'avec cette feature.
+[cargo.sea-orm]
+features = ["with-json"]
+
+# `time` : le worker dort entre deux tours de boucle quand la file est vide. `sync` : les
+# tests livrés se relaient sur l'unique table `jobs`, et leur verrou traverse un `await`.
+[cargo.tokio]
+features = ["time", "sync"]
+
+[[config]]
+file    = "config/default.toml"
+section = "jobs"
+content = """
+# Tentatives d'un job avant qu'il soit tenu pour définitivement en échec, et attente
+# avant qu'une tentative ratée redevienne exécutable. Ces deux valeurs se règlent à
+# l'usage : elles sont ici pour ne pas avoir à rouvrir le fragment.
+max_attempts = 5
+retry_delay_secs = 30
+poll_interval_secs = 1
+"""

@@ -1,0 +1,120 @@
+use chrono::{TimeDelta, Utc};
+use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
+use sea_orm::{ActiveModelTrait, ConnectionTrait, DatabaseConnection, EntityTrait, Set, Statement};
+
+use super::Config;
+use super::Job;
+use super::model::{ActiveModel, Entity, Model, Status};
+
+/// La requête de dépilage, et le seul SQL écrit à la main du fragment.
+///
+/// Réserver la ligne et incrémenter son compteur sont un seul `UPDATE` : deux workers ne
+/// peuvent donc pas se voir attribuer la même, quel que soit leur entrelacement. Un
+/// `SELECT` suivi d'un `UPDATE` les leur donnerait tous les deux.
+///
+/// `FOR UPDATE SKIP LOCKED` est du PostgreSQL. C'est la seule ligne du fragment qu'un
+/// autre moteur obligerait à réécrire, et elle est ici pour cela.
+const RESERVATION: &str = "\
+UPDATE jobs
+SET status = $1, attempts = attempts + 1, updated_at = now()
+WHERE id = (
+    SELECT id FROM jobs
+    WHERE status = $2 AND available_at <= now()
+    ORDER BY available_at, id
+    FOR UPDATE SKIP LOCKED
+    LIMIT 1
+)
+RETURNING id, kind, payload, status, attempts, available_at, last_error, created_at, updated_at";
+
+/// Enfile un job, exécutable dès maintenant, et rend l'identifiant de sa ligne.
+///
+/// `db` est un `ConnectionTrait` et non une connexion, et c'est toute la raison d'avoir
+/// mis la file en base : une transaction en est un. Passez-lui celle du métier, et le job
+/// naît si et seulement si elle est committée.
+pub async fn enqueue<C, J>(db: &C, job: &J) -> anyhow::Result<Uuid>
+where
+    C: ConnectionTrait,
+    J: Job,
+{
+    enqueue_at(db, job, Utc::now().fixed_offset()).await
+}
+
+/// Enfile un job qui ne deviendra dépilable qu'à `available_at`.
+pub async fn enqueue_at<C, J>(
+    db: &C,
+    job: &J,
+    available_at: DateTimeWithTimeZone,
+) -> anyhow::Result<Uuid>
+where
+    C: ConnectionTrait,
+    J: Job,
+{
+    // L'identifiant, le statut et le compteur viennent des défauts de la table : ce que
+    // l'appelant n'a pas à choisir, il n'a pas à l'écrire.
+    let ligne = ActiveModel {
+        kind: Set(J::KIND.to_string()),
+        payload: Set(serde_json::to_value(job)?),
+        available_at: Set(available_at),
+        ..Default::default()
+    };
+
+    Ok(ligne.insert(db).await?.id)
+}
+
+/// Réserve le prochain job dépilable, ou rend `None` si la file n'a rien à donner.
+///
+/// **C'est le seul endroit du fragment où la file est dépilée**, et c'est délibéré : le
+/// jour où un autre moteur devra la porter, il n'y a que ce corps de fonction à écrire.
+pub async fn reserver_prochain_job(db: &DatabaseConnection) -> anyhow::Result<Option<Model>> {
+    let statement = Statement::from_sql_and_values(
+        db.get_database_backend(),
+        RESERVATION,
+        [
+            Status::Running.as_str().into(),
+            Status::Pending.as_str().into(),
+        ],
+    );
+
+    Ok(Entity::find().from_raw_sql(statement).one(db).await?)
+}
+
+/// Marque un job réussi.
+pub async fn mark_done(db: &DatabaseConnection, job: &Model) -> anyhow::Result<()> {
+    let mut ligne: ActiveModel = job.clone().into();
+    ligne.status = Set(Status::Done);
+    ligne.last_error = Set(None);
+    ligne.updated_at = Set(Utc::now().fixed_offset());
+    ligne.update(db).await?;
+
+    Ok(())
+}
+
+/// Replace un job raté dans la file, ou le condamne s'il a épuisé ses tentatives, et rend
+/// le statut retenu.
+///
+/// `attempts` a déjà été incrémenté par la réservation : le compteur lu ici est celui de
+/// la tentative qui vient d'échouer.
+pub async fn retry_or_fail(
+    db: &DatabaseConnection,
+    job: &Model,
+    config: &Config,
+    error: &anyhow::Error,
+) -> anyhow::Result<Status> {
+    let status = if job.attempts >= config.max_attempts {
+        Status::Failed
+    } else {
+        Status::Pending
+    };
+
+    let attente = TimeDelta::try_seconds(config.retry_delay_secs as i64)
+        .unwrap_or_else(|| TimeDelta::seconds(0));
+
+    let mut ligne: ActiveModel = job.clone().into();
+    ligne.status = Set(status);
+    ligne.last_error = Set(Some(format!("{error:#}")));
+    ligne.available_at = Set((Utc::now() + attente).fixed_offset());
+    ligne.updated_at = Set(Utc::now().fixed_offset());
+    ligne.update(db).await?;
+
+    Ok(status)
+}

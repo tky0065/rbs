@@ -79,11 +79,20 @@ pub(crate) const STATE_INIT: Anchor = Anchor {
     file: "src/state.rs",
 };
 
+/// Tâches de fond lancées au démarrage, l'état construit et le serveur pas encore lié.
+///
+/// Distincte de [`STATE_INIT`] : ce qui vit dans l'état est une valeur, ce qui vit ici est
+/// une tâche, et une valeur ne peut pas se détacher elle-même.
+pub(crate) const STARTUP: Anchor = Anchor {
+    name: "startup",
+    file: "src/main.rs",
+};
+
 /// Les points d'insertion du squelette.
 ///
 /// La génération vise chaque ancre nommément ; `rbs doctor` parcourt cette liste pour
 /// vérifier qu'un projet les porte toutes.
-pub(crate) const ANCRES: [Anchor; 7] = [
+pub(crate) const ANCRES: [Anchor; 8] = [
     FEATURES,
     ROUTES,
     OPENAPI,
@@ -91,6 +100,7 @@ pub(crate) const ANCRES: [Anchor; 7] = [
     MIGRATIONS,
     STATE_CHAMPS,
     STATE_INIT,
+    STARTUP,
 ];
 
 /// Une ancre attendue que le fichier ne porte pas.

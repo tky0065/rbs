@@ -783,6 +783,44 @@ mod tests {
         );
     }
 
+    /// Le dépilage de la file n'apparaît qu'à un seul endroit du fragment.
+    ///
+    /// C'est ce qui rend le portage vers un autre moteur tenable : `FOR UPDATE SKIP
+    /// LOCKED` est du PostgreSQL, et il n'y a qu'un corps de fonction à récrire tant qu'il
+    /// ne s'est pas dispersé dans le worker.
+    #[test]
+    fn the_dequeue_appears_in_a_single_place_of_the_jobs_fragment() {
+        let racine = Path::new(RACINE_FEATURES).join("jobs");
+        let mut fichiers = Vec::new();
+        walk(&racine, &mut fichiers);
+
+        let porteurs: Vec<String> = fichiers
+            .iter()
+            .filter(|path| read(path).contains("FOR UPDATE SKIP LOCKED"))
+            .map(|path| {
+                path.file_name()
+                    .unwrap_or_default()
+                    .to_string_lossy()
+                    .into_owned()
+            })
+            .collect();
+
+        assert_eq!(porteurs, ["queue.rs.jinja"], "porteurs : {porteurs:?}");
+
+        let queue = read(&racine.join("queue.rs.jinja"));
+        assert_eq!(
+            queue.matches("FOR UPDATE SKIP LOCKED").count(),
+            2,
+            "la clause doit paraître une fois dans le SQL et une fois dans son \
+             commentaire, et nulle part ailleurs :\n{queue}"
+        );
+        assert_eq!(
+            queue.matches("pub async fn reserver_prochain_job").count(),
+            1,
+            "le dépilage doit tenir dans une fonction unique :\n{queue}"
+        );
+    }
+
     #[test]
     fn the_docker_compose_targets_postgres_18() {
         // `uuidv7()` n'est natif qu'à partir de PostgreSQL 18, et toute entité générée en

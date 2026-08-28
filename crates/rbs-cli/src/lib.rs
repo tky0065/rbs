@@ -207,6 +207,9 @@ fn suite(feature: &str) -> Option<&'static str> {
             "les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez \
              storage.backend à \"s3\" et recopiez les RBS_STORAGE__* de .env.example",
         ),
+        // La table n'existe pas encore, et le worker démarre avec l'API : sans la
+        // migration, chaque tour de boucle échoue sur une relation absente.
+        "jobs" => Some("rbs migrate up, puis inscrivez vos jobs dans src/jobs/mod.rs"),
         _ => None,
     }
 }

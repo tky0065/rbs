@@ -42,7 +42,7 @@ pub enum Commands {
         core_path: Option<PathBuf>,
     },
 
-    /// Ajoute une feature à un projet existant : auth, ci, docker, mail, redis, storage.
+    /// Ajoute une feature : auth, ci, docker, jobs, mail, redis, storage.
     Add {
         /// Feature à installer.
         feature: String,

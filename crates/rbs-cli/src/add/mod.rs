@@ -346,6 +346,35 @@ mod tests {
         );
     }
 
+    /// Le worker de la file ne peut se détacher que d'un endroit du squelette, et le
+    /// fragment doit l'y viser : sans cette ligne, la file se remplit et rien ne la vide.
+    #[test]
+    fn the_jobs_plan_lands_its_worker_in_the_startup_anchor() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "jobs")).expect("le plan doit se calculer");
+
+        let main = projected(&planned, "src/main.rs");
+        let startup = main
+            .split_once("// <rbs:startup>")
+            .and_then(|(_, apres)| apres.split_once("// </rbs:startup>"))
+            .map(|(dedans, _)| dedans)
+            .expect("le squelette doit porter l'ancre de démarrage");
+
+        assert!(
+            startup.contains("crate::jobs::worker::spawn(state.clone());"),
+            "le worker n'est pas détaché au démarrage :\n{main}"
+        );
+
+        let configuration = projected(&planned, "config/default.toml");
+        for cle in ["max_attempts", "retry_delay_secs", "poll_interval_secs"] {
+            assert!(
+                configuration.contains(cle),
+                "`{cle}` manque à la section [jobs] :\n{configuration}"
+            );
+        }
+    }
+
     /// Le critère de la tâche : le mot de passe SMTP n'entre dans le projet que par
     /// l'environnement.
     ///
