@@ -602,10 +602,15 @@ par l'auteur du projet, et qu'une crate tierce le lui retirerait.
 
 ### Lot O — Documentation et sortie du jalon
 
-- [ ] **O1** · Exemple compilé en CI
+- [x] **O1** · Exemple compilé en CI — vérifié 2026-08-28 · `examples/file-drop` : `rbs new`, les trois features, puis un CRUD `uploads` · **le nom de la ressource n'est pas libre** — l'ancre `features` empile les `mod` dans l'ordre d'installation et doit rester triée, or `rbs add redis` inscrit `mod cache;` : `uploads` est ce qui la ferme derrière `storage` · `cargo test -p rbs-cli --test integration_examples` → 14 passed, dont `file_drop_is_what_the_cli_produces_today` et `the_hand_edits_of_file_drop_are_in_place` · la boucle `for exemple in examples/*/` de `ci.yml` jouée en local → les trois exemples à 0, sans modification du workflow (la boucle plutôt qu'un step par exemple était faite pour ça) · **les trois `#![allow(dead_code)]` de module retirés**, ce qui fait de `clippy -D warnings` la preuve du câblage : un appel oublié ne compile plus · trois morsures, chacune sur son assertion : une invalidation sur trois retirée → « toutes trois invalider » FAILED ; `#![allow(dead_code)]` remis sur le cache → « la permission de module tombe » FAILED ; `href="{{ lien }}"` → « le href doit porter la variable » FAILED · le README rejoué à la lettre dans un répertoire vierge reproduit l'exemple, aux deux fichiers de migration près, identiques à l'horodatage · **deux découvertes** : `engendrer` ne commitait qu'une fois avant la première feature, ce qu'aucun exemple à une seule feature ne pouvait montrer ; et le total est mis en cache plutôt que la page, `Page` n'étant que `Serialize` — la relire du cache exigerait de toucher au noyau, que `K` seul peut faire
+      **Premier critère réécrit le 2026-08-28, sur arbitrage.** Il exigeait les trois
+      plateformes ; `ci.yml` ne compile les exemples que sous Linux, et l'argumente :
+      « les contrôles de dépôt — format, exemples, dry-run — ne dépendent pas de la
+      plateforme ». `hello-crud` et `blog-auth` sont dans ce cas depuis toujours. C'est
+      un changement de critère, non une preuve, et il a été demandé.
       Un exemple portant les trois features. S'il s'avère illisible, il se scinde :
       l'installation isolée est de toute façon prouvée par `L3`, `M3` et `N3`.
-      ✓ Compilé par le step `examples/` de la CI, sur les trois plateformes.
+      ✓ Compilé par le step `examples/` de la CI.
       ✓ `integration_examples` le compare à une génération fraîche.
 
 - [ ] **O2** · Pages de documentation FR et EN
