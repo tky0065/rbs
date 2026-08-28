@@ -8,7 +8,10 @@ pub mod anchors;
 pub mod auth;
 pub mod base;
 pub mod env;
+pub mod mail;
+pub mod redis;
 pub mod render;
+pub mod storage;
 pub mod versions;
 
 use std::path::Path;
@@ -98,13 +101,59 @@ pub(crate) fn run(directory: &Path) -> Result<Report, Error> {
         base::check(&root),
     ];
 
-    // Un projet qui n'a pas installé `auth` n'a pas à lire une ligne à son sujet : le
-    // rapport ne porte que des contrôles dont le verdict le concerne.
-    if installed_feature(&root, "auth") {
-        checks.push(auth::check(&root));
+    // Un projet qui n'a pas installé une feature n'a pas à lire une ligne à son sujet :
+    // le rapport ne porte que des contrôles dont le verdict le concerne.
+    for (feature, check) in FEATURE_CHECKS {
+        if installed_feature(&root, feature) {
+            checks.push(check(&root));
+        }
     }
 
     Ok(Report { checks })
+}
+
+/// Une feature, sous le nom qu'elle porte dans le manifeste, et le contrôle qui la juge.
+type FeatureCheck = (&'static str, fn(&Path) -> Check);
+
+/// Le contrôle propre à chaque feature, sous le nom qu'elle porte dans le manifeste.
+///
+/// `redis` s'installe en `src/cache/` sous une section `[cache]` : c'est le nom de la
+/// crate d'un côté, celui du service rendu de l'autre. Le tableau porte le nom déclaré,
+/// seul commun aux quatre.
+const FEATURE_CHECKS: [FeatureCheck; 4] = [
+    ("auth", auth::check),
+    ("redis", redis::check),
+    ("mail", mail::check),
+    ("storage", storage::check),
+];
+
+/// Vrai si `config/default.toml` porte une section `[name]`.
+///
+/// Lu par `toml_edit` et non par recherche de texte : une section en commentaire n'est
+/// pas une section.
+fn section(root: &Path, name: &str) -> bool {
+    std::fs::read_to_string(root.join("config/default.toml"))
+        .ok()
+        .and_then(|source| source.parse::<toml_edit::DocumentMut>().ok())
+        .is_some_and(|document| document.get(name).is_some())
+}
+
+/// Valeur d'un champ de `config/default.toml`, s'il est renseigné.
+///
+/// Rend `None` aussi bien pour une section absente que pour un champ absent : ce qui
+/// intéresse un contrôle est de disposer ou non de la valeur, jamais laquelle des deux
+/// couches manque.
+fn field(root: &Path, section: &str, key: &str) -> Option<String> {
+    std::fs::read_to_string(root.join("config/default.toml"))
+        .ok()
+        .and_then(|source| source.parse::<toml_edit::DocumentMut>().ok())
+        .and_then(|document| {
+            document
+                .get(section)
+                .and_then(|table| table.get(key))
+                .and_then(|value| value.as_str())
+                .map(str::to_owned)
+        })
 }
 
 /// Vrai si `name` figure dans `[package.metadata.rbs].features`.
@@ -199,6 +248,37 @@ mod tests {
             "la feature est déclarée, son contrôle doit figurer : {:?}",
             titles(&report)
         );
+    }
+
+    #[test]
+    fn a_project_without_the_v03_features_has_none_of_their_checks() {
+        let (_parent, root) = project(&["health"]);
+
+        let report = run(&root).expect("c'est un projet rbs");
+
+        for feature in ["redis", "mail", "storage"] {
+            assert!(
+                !titles(&report).contains(&feature),
+                "`{feature}` n'est pas installée, sa ligne n'a rien à faire au rapport : {:?}",
+                titles(&report)
+            );
+        }
+    }
+
+    /// L'ordre du rapport est celui du tableau, et non celui du manifeste : deux projets
+    /// portant les mêmes features se lisent pareil.
+    #[test]
+    fn the_three_v03_features_receive_their_checks_in_order() {
+        let (_parent, root) = project(&["health", "storage", "mail", "redis"]);
+
+        let report = run(&root).expect("c'est un projet rbs");
+
+        let installes: Vec<&str> = titles(&report)
+            .into_iter()
+            .filter(|title| ["redis", "mail", "storage"].contains(title))
+            .collect();
+
+        assert_eq!(installes, vec!["redis", "mail", "storage"], "{installes:?}");
     }
 
     #[test]

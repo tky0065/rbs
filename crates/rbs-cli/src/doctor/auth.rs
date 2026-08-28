@@ -76,7 +76,7 @@ fn check_with(root: &Path, env: impl Fn(&str) -> Option<String>) -> Check {
         }
     }
 
-    if !auth_section(root) {
+    if !super::section(root, "auth") {
         defauts.push(format!("{CONFIG} ne porte pas de section `[auth]`"));
         remedes.push(format!(
             "ajoutez à {CONFIG} :\n[auth]\naccess_ttl_secs = 900\nrefresh_ttl_secs = 2592000"
@@ -88,17 +88,6 @@ fn check_with(root: &Path, env: impl Fn(&str) -> Option<String>) -> Check {
     }
 
     Check::failed(TITRE, defauts.join(" ; "), remedes.join("\n"))
-}
-
-/// Vrai si `config/default.toml` porte une section `[auth]`.
-///
-/// Lu par `toml_edit` et non par recherche de texte : un `[auth]` en commentaire n'est
-/// pas une section.
-fn auth_section(root: &Path) -> bool {
-    std::fs::read_to_string(root.join(CONFIG))
-        .ok()
-        .and_then(|source| source.parse::<toml_edit::DocumentMut>().ok())
-        .is_some_and(|document| document.get("auth").is_some())
 }
 
 #[cfg(test)]
