@@ -26,12 +26,15 @@ const NOYAU_PUBLIE: bool = true;
 
 /// Compare la version qui a généré le projet, celle de son noyau et celle du CLI.
 pub(crate) fn check(root: &Path) -> Check {
-    check_with(root, NOYAU_PUBLIE)
+    check_with(root, NOYAU_PUBLIE, CLI)
 }
 
-/// Le verdict, la publication du noyau étant donnée en paramètre : les deux chemins
-/// restent exerçables par les tests de part et d'autre de la bascule de `NOYAU_PUBLIE`.
-fn check_with(root: &Path, noyau_publie: bool) -> Check {
+/// Le verdict, la publication du noyau et la version du CLI étant données en paramètres.
+///
+/// Les deux chemins restent ainsi exerçables par les tests de part et d'autre de la
+/// bascule de `NOYAU_PUBLIE`, et de part et d'autre du numéro que porte le binaire — un
+/// écart de version ne s'observe pas autrement depuis le dépôt qui produit ce numéro.
+fn check_with(root: &Path, noyau_publie: bool, cli: &str) -> Check {
     let manifest = root.join("Cargo.toml");
 
     let metadonnees = match crate::metadata::read(&manifest) {
@@ -43,9 +46,9 @@ fn check_with(root: &Path, noyau_publie: bool) -> Check {
 
     let mut ecarts = Vec::new();
 
-    if metadonnees.version != CLI {
+    if metadonnees.version != cli {
         ecarts.push(format!(
-            "projet généré par rbs {}, CLI {CLI}",
+            "projet généré par rbs {}, CLI {cli}",
             metadonnees.version
         ));
     }
@@ -56,7 +59,7 @@ fn check_with(root: &Path, noyau_publie: bool) -> Check {
             return Check::failed(
                 TITRE,
                 detail,
-                format!("déclarez rbs-core = \"{CLI}\" dans [dependencies]"),
+                format!("déclarez rbs-core = \"{cli}\" dans [dependencies]"),
             );
         }
     };
@@ -73,24 +76,31 @@ fn check_with(root: &Path, noyau_publie: bool) -> Check {
                  rbs-core = { path = \"<clone>/crates/rbs-core\" }",
             );
         }
-        Core::Version(version) if version == CLI => format!("rbs-core {version}"),
+        Core::Version(version) if version == cli => format!("rbs-core {version}"),
         Core::Version(version) => {
-            ecarts.push(format!("rbs-core {version}, CLI {CLI}"));
+            ecarts.push(format!("rbs-core {version}, CLI {cli}"));
             String::new()
         }
     };
 
     if ecarts.is_empty() {
-        return Check::ok(TITRE, format!("projet et {core} alignés sur le CLI {CLI}"));
+        return Check::ok(TITRE, format!("projet et {core} alignés sur le CLI {cli}"));
     }
 
-    Check::failed(
-        TITRE,
-        ecarts.join(" ; "),
-        format!(
-            "alignez le projet sur rbs {CLI}, ou relancez la commande avec le CLI qui l'a généré"
-        ),
-    )
+    Check::failed(TITRE, ecarts.join(" ; "), remede(&metadonnees.version, cli))
+}
+
+/// Le geste qui referme l'écart, selon le sens dans lequel il se creuse.
+///
+/// `rbs upgrade` ne redescend pas un projet : le nommer à qui est en avance sur son CLI
+/// enverrait vers une commande qui refuse. De ce côté-là, ce n'est pas le projet qu'il
+/// faut bouger, mais le binaire.
+fn remede(projet: &str, cli: &str) -> String {
+    if crate::upgrade::posterieure(projet, cli) {
+        return "relancez la commande avec le CLI qui a généré le projet".to_string();
+    }
+
+    format!("lancez `rbs upgrade` : il aligne le manifeste du projet sur rbs {cli}")
 }
 
 /// D'où le projet tire `rbs-core`.
@@ -189,7 +199,7 @@ mod tests {
     fn a_registry_core_is_reported_while_rbs_is_unpublished() {
         let (_parent, root) = project();
 
-        let check = check_with(&root, false);
+        let check = check_with(&root, false, CLI);
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(check.detail.contains("crates.io"), "{}", check.detail);
@@ -200,7 +210,7 @@ mod tests {
     fn the_remedy_gives_the_local_path_to_declare() {
         let (_parent, root) = project();
 
-        let check = check_with(&root, false);
+        let check = check_with(&root, false, CLI);
         let remedy = check.remedy.expect("un échec porte son remède");
 
         assert!(remedy.contains("path"), "{remedy}");
@@ -212,7 +222,7 @@ mod tests {
         let (_parent, root) = project();
         rewrite(&root, &noyau(), "rbs-core = \"0.0.1\"");
 
-        let check = check_with(&root, false);
+        let check = check_with(&root, false, CLI);
 
         assert_eq!(check.state, State::Echec);
         assert!(check.detail.contains("crates.io"), "{}", check.detail);
@@ -223,14 +233,14 @@ mod tests {
     fn check_decides_from_the_publication_constant() {
         let (_parent, root) = project();
 
-        assert_eq!(check(&root), check_with(&root, NOYAU_PUBLIE));
+        assert_eq!(check(&root), check_with(&root, NOYAU_PUBLIE, CLI));
     }
 
     #[test]
     fn once_the_core_is_published_a_fresh_project_is_consistent() {
         let (_parent, root) = project();
 
-        let check = check_with(&root, true);
+        let check = check_with(&root, true, CLI);
 
         assert_eq!(check.state, State::Bon, "{}", check.detail);
         assert!(check.detail.contains(CLI));
@@ -241,7 +251,7 @@ mod tests {
         let (_parent, root) = project();
         rewrite(&root, &noyau(), "rbs-core = \"0.0.1\"");
 
-        let check = check_with(&root, true);
+        let check = check_with(&root, true, CLI);
 
         assert_eq!(check.state, State::Echec);
         assert!(check.detail.contains("rbs-core"));
@@ -258,11 +268,54 @@ mod tests {
             "version = \"0.0.1\"\nfeatures",
         );
 
-        let check = check_with(&root, false);
+        let check = check_with(&root, false, CLI);
 
         assert_eq!(check.state, State::Echec);
         assert!(check.detail.contains("0.0.1"));
         assert!(check.detail.contains(CLI));
+    }
+
+    /// Une version que le dépôt n'atteindra pas de sitôt : le projet neuf est alors en
+    /// retard sur le CLI sans dépendre du numéro courant du workspace.
+    const FUTUR: &str = "1.0.0";
+
+    #[test]
+    fn a_project_behind_the_cli_is_told_which_command_closes_the_gap() {
+        let (_parent, root) = project();
+
+        let check = check_with(&root, true, FUTUR);
+        let remedy = check.remedy.expect("un échec porte son remède");
+
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
+        assert!(check.detail.contains(CLI), "{}", check.detail);
+        assert!(check.detail.contains(FUTUR), "{}", check.detail);
+        assert!(remedy.contains("rbs upgrade"), "{remedy}");
+    }
+
+    #[test]
+    fn an_aligned_project_keeps_the_line_it_has_always_had() {
+        let (_parent, root) = project();
+
+        let check = check_with(&root, true, CLI);
+
+        assert_eq!(check.state, State::Bon, "{}", check.detail);
+        assert_eq!(
+            check.detail,
+            format!("projet et rbs-core {CLI} alignés sur le CLI {CLI}")
+        );
+        assert_eq!(check.remedy, None, "une ligne ✓ ne porte pas de remède");
+    }
+
+    #[test]
+    fn a_project_ahead_of_the_cli_is_not_sent_to_a_command_that_refuses_it() {
+        let (_parent, root) = project();
+
+        let check = check_with(&root, true, "0.0.1");
+        let remedy = check.remedy.expect("un échec porte son remède");
+
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
+        assert!(!remedy.contains("upgrade"), "{remedy}");
+        assert!(remedy.contains("CLI"), "{remedy}");
     }
 
     #[test]
@@ -270,7 +323,7 @@ mod tests {
         let (_parent, root) = project();
         local_core(&root);
 
-        let check = check_with(&root, false);
+        let check = check_with(&root, false, CLI);
 
         assert_eq!(check.state, State::Bon, "{}", check.detail);
         assert!(
@@ -285,7 +338,7 @@ mod tests {
         let (_parent, root) = project();
         rewrite(&root, &format!("{}\n", noyau()), "");
 
-        let check = check_with(&root, false);
+        let check = check_with(&root, false, CLI);
 
         assert_eq!(check.state, State::Echec);
         assert!(check.detail.contains("rbs-core"));

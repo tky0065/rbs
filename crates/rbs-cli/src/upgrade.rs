@@ -157,7 +157,7 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
 /// Une comparaison de versions ne vaut pas une dépendance de plus pour une seule
 /// question. Ce qui ne se réduit pas à trois nombres n'est pas tenu pour postérieur :
 /// mieux vaut mettre à niveau un manifeste douteux que refuser à tort.
-fn posterieure(projet: &str, cli: &str) -> bool {
+pub(crate) fn posterieure(projet: &str, cli: &str) -> bool {
     matches!(
         nombres(projet).zip(nombres(cli)),
         Some((projet, cli)) if projet > cli
