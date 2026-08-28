@@ -23,7 +23,7 @@ name = "seed"
 path = "src/seeds/main.rs"
 
 [dependencies]
-rbs-core = { path = "../../crates/rbs-core" }
+rbs-core = { path = "../../crates/rbs-core", default-features = false, features = ["postgres"] }
 anyhow = "1.0"
 axum = "0.8"
 chrono = "0.4"

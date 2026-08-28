@@ -154,7 +154,7 @@ pub fn create(options: &Options, parent: &Path) -> Result<Project, Error> {
         });
     }
 
-    let dependency = core_dependency(options.core_path.as_deref())?;
+    let dependency = core_dependency(options.core_path.as_deref(), options.database)?;
     let rendus = render(options, &dependency)?;
 
     write(&root, &rendus).map_err(|(path, source)| {
@@ -229,21 +229,30 @@ fn validate_features(features: &[String]) -> Result<(), Error> {
 ///
 /// Le chemin est canonisé : Cargo le résout depuis le manifeste du projet créé, pas
 /// depuis le répertoire où la commande a été lancée.
-fn core_dependency(core_path: Option<&Path>) -> Result<String, Error> {
-    let Some(path) = core_path else {
-        return Ok(format!("\"{}\"", env!("CARGO_PKG_VERSION")));
+///
+/// Le pilote se choisit ici, et les défauts du noyau sont coupés : les laisser actifs
+/// ferait compiler PostgreSQL à un projet MySQL, les features de Cargo s'unifiant sur
+/// toute la dépendance.
+fn core_dependency(core_path: Option<&Path>, database: Database) -> Result<String, Error> {
+    let provenance = match core_path {
+        None => format!("version = \"{}\"", env!("CARGO_PKG_VERSION")),
+        Some(path) => {
+            let absolu = path
+                .canonicalize()
+                .map_err(|source| Error::NoyauIntrouvable {
+                    path: path.display().to_string(),
+                    source,
+                })?;
+
+            let value = toml_edit::Value::from(absolu.display().to_string());
+
+            format!("path = {}", value.to_string().trim())
+        }
     };
 
-    let absolu = path
-        .canonicalize()
-        .map_err(|source| Error::NoyauIntrouvable {
-            path: path.display().to_string(),
-            source,
-        })?;
-
-    let value = toml_edit::Value::from(absolu.display().to_string());
-
-    Ok(format!("{{ path = {} }}", value.to_string().trim()))
+    Ok(format!(
+        "{{ {provenance}, default-features = false, features = [\"{database}\"] }}"
+    ))
 }
 
 /// Rend toutes les templates. Aucun fichier n'est écrit tant que la dernière n'a pas
@@ -395,6 +404,35 @@ mod tests {
             manifeste.contains("database = \"postgres\""),
             "le manifeste n'inscrit pas le moteur :\n{manifeste}"
         );
+    }
+
+    // Le noyau n'épingle plus de pilote : sans cette sélection, un projet MySQL
+    // compilerait aussi celui de PostgreSQL, par unification des features de Cargo.
+    #[test]
+    fn the_core_dependency_selects_the_driver_of_the_chosen_engine() {
+        for engine in Database::TOUS {
+            let parent = parent();
+            let mut options = options("mon-api");
+            options.database = engine;
+            options.database_url = engine.default_url("mon_api");
+
+            let project = create(&options, parent.path()).expect("le projet doit se créer");
+
+            let manifeste = read(&project.root.join("Cargo.toml"));
+            let ligne = manifeste
+                .lines()
+                .find(|ligne| ligne.starts_with("rbs-core = "))
+                .unwrap_or_else(|| panic!("`rbs-core` absente du manifeste :\n{manifeste}"));
+
+            assert!(
+                ligne.contains(&format!("\"{engine}\"")),
+                "la dépendance au noyau ne choisit pas {engine} : {ligne}"
+            );
+            assert!(
+                ligne.contains("default-features = false"),
+                "les défauts du noyau rameneraient PostgreSQL : {ligne}"
+            );
+        }
     }
 
     #[test]
@@ -602,7 +640,7 @@ mod tests {
         let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
 
         let manifest = read(&project.root.join("Cargo.toml"));
-        let expected = format!("rbs-core = \"{}\"", env!("CARGO_PKG_VERSION"));
+        let expected = format!("version = \"{}\"", env!("CARGO_PKG_VERSION"));
         assert!(
             manifest.contains(&expected),
             "`{expected}` absent du manifeste :\n{manifest}"

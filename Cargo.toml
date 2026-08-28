@@ -29,7 +29,10 @@ jsonwebtoken = { version = "10.3.0", default-features = false, features = ["rust
 minijinja = { version = "2.24.0", features = ["custom_syntax"] }
 nu-ansi-term = "0.50.3"
 rand = "0.10.2"
-sea-orm = { version = "2.0.2", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
+# Aucun pilote ici : `rbs-core` les expose en features, et le projet engendré choisit
+# le sien. Un pilote épinglé au workspace ferait compiler PostgreSQL à un projet MySQL,
+# les features de Cargo s'unifiant sur toute la dépendance.
+sea-orm = { version = "2.0.2", features = ["runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha2 = "0.11.0"
