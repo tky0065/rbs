@@ -12,6 +12,11 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use testcontainers::core::wait::LogWaitStrategy;
+use testcontainers::core::{IntoContainerPort, WaitFor};
+use testcontainers::runners::SyncRunner;
+use testcontainers::{Container, GenericImage, ImageExt};
+
 /// Racine du dépôt, d'où se déduisent le noyau local et la cible de compilation.
 pub fn depot() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -142,4 +147,67 @@ fn collect(racine: &Path, repertoire: &Path, fichiers: &mut Empreinte) {
             fichiers.insert(relatif.to_path_buf(), contenu);
         }
     }
+}
+
+// --- Bases sous conteneur ---------------------------------------------------------
+//
+// Deux fichiers de tests démarrent les mêmes bases : `integration_jobs`, qui y joue la
+// file, et `integration_new`, qui y joue la suite d'un projet engendré par moteur. Les
+// démarreurs vivent donc ici plutôt que dans l'un des deux.
+
+/// PostgreSQL **17** et non 18 : c'est ce qui prouve que l'exigence de la 18 est tombée
+/// avec le défaut `uuidv7()`, désormais posé par le modèle.
+pub const IMAGE: (&str, &str) = ("postgres", "17");
+
+pub const UTILISATEUR: &str = "rbs";
+pub const MOT_DE_PASSE: &str = "rbs";
+pub const BASE: &str = "demo";
+
+/// Un PostgreSQL neuf, prêt à recevoir le schéma d'un projet généré.
+pub fn start_postgres() -> Container<GenericImage> {
+    GenericImage::new(IMAGE.0, IMAGE.1)
+        .with_wait_for(WaitFor::log(
+            // PostgreSQL annonce une première fois qu'il accepte les connexions pendant
+            // son initialisation, où il n'écoute que sur son socket local : attendre la
+            // seconde annonce évite un test qui échoue une fois sur trois.
+            LogWaitStrategy::stdout_or_stderr("database system is ready to accept connections")
+                .with_times(2),
+        ))
+        .with_env_var("POSTGRES_USER", UTILISATEUR)
+        .with_env_var("POSTGRES_PASSWORD", MOT_DE_PASSE)
+        .with_env_var("POSTGRES_DB", BASE)
+        .start()
+        .expect("PostgreSQL doit démarrer — Docker est-il lancé ?")
+}
+
+/// MySQL 8, dont `FOR UPDATE SKIP LOCKED` est contemporain.
+pub fn start_mysql() -> Container<GenericImage> {
+    GenericImage::new("mysql", "8")
+        .with_wait_for(WaitFor::log(
+            // Comme PostgreSQL, MySQL annonce deux fois qu'il est prêt : la première fois
+            // pendant son initialisation, où il n'écoute que localement.
+            LogWaitStrategy::stdout_or_stderr("ready for connections").with_times(2),
+        ))
+        .with_env_var("MYSQL_ROOT_PASSWORD", MOT_DE_PASSE)
+        .with_env_var("MYSQL_DATABASE", BASE)
+        .start()
+        .expect("MySQL doit démarrer — Docker est-il lancé ?")
+}
+
+/// L'URL de connexion à `mysql`, vue depuis l'hôte.
+pub fn url_of_mysql(mysql: &Container<GenericImage>) -> String {
+    let port = mysql
+        .get_host_port_ipv4(3306.tcp())
+        .expect("le port de MySQL doit être publié");
+
+    format!("mysql://root:{MOT_DE_PASSE}@127.0.0.1:{port}/{BASE}")
+}
+
+/// L'URL de connexion à `postgres`, vue depuis l'hôte.
+pub fn url_of(postgres: &Container<GenericImage>) -> String {
+    let port = postgres
+        .get_host_port_ipv4(5432.tcp())
+        .expect("le port de PostgreSQL doit être publié");
+
+    format!("postgres://{UTILISATEUR}:{MOT_DE_PASSE}@127.0.0.1:{port}/{BASE}")
 }

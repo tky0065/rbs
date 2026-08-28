@@ -15,20 +15,10 @@ use std::time::{Duration, Instant};
 
 use assert_cmd::Command;
 use tempfile::TempDir;
-use testcontainers::core::wait::LogWaitStrategy;
-use testcontainers::core::{ExecCommand, IntoContainerPort, WaitFor};
-use testcontainers::runners::SyncRunner;
-use testcontainers::{Container, GenericImage, ImageExt};
+use testcontainers::core::ExecCommand;
+use testcontainers::{Container, GenericImage};
 
 mod common;
-
-/// PostgreSQL **17** et non 18 : c'est ce qui prouve que l'exigence de la 18 est tombée
-/// avec le défaut `uuidv7()`, désormais posé par le modèle.
-const IMAGE: (&str, &str) = ("postgres", "17");
-
-const UTILISATEUR: &str = "rbs";
-const MOT_DE_PASSE: &str = "rbs";
-const BASE: &str = "demo";
 
 /// Les tests que le fragment livre au projet et qui joignent la base.
 const TESTS: [&str; 4] = [
@@ -44,9 +34,9 @@ const MESSAGE: &str = "survivant";
 #[test]
 #[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
 fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
-    let postgres = start_postgres();
+    let postgres = common::start_postgres();
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = project_with_jobs(&url_of(&postgres), &parent);
+    let racine = project_with_jobs(&common::url_of(&postgres), &parent);
 
     migrate(&racine);
 
@@ -88,12 +78,12 @@ fn the_dequeue_never_hands_the_same_job_twice_on_the_three_engines() {
         fichier.to_str().expect("chemin représentable")
     );
 
-    let postgres = start_postgres();
-    let mysql = start_mysql();
+    let postgres = common::start_postgres();
+    let mysql = common::start_mysql();
 
     for (moteur, url, parent) in [
-        ("postgres", url_of(&postgres), None),
-        ("mysql", url_of_mysql(&mysql), None),
+        ("postgres", common::url_of(&postgres), None),
+        ("mysql", common::url_of_mysql(&mysql), None),
         ("sqlite", url_sqlite, Some(&parent_sqlite)),
     ] {
         let propre;
@@ -164,9 +154,9 @@ fn the_dequeue_never_hands_the_same_job_twice_on_the_three_engines() {
 #[test]
 #[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
 fn a_job_enqueued_before_the_process_is_killed_runs_after_the_restart() {
-    let postgres = start_postgres();
+    let postgres = common::start_postgres();
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = project_with_jobs(&url_of(&postgres), &parent);
+    let racine = project_with_jobs(&common::url_of(&postgres), &parent);
 
     migrate(&racine);
     compile(&racine);
@@ -200,55 +190,6 @@ fn a_job_enqueued_before_the_process_is_killed_runs_after_the_restart() {
         "1",
         "le job a été tenté plus d'une fois :\n{journal}"
     );
-}
-
-/// Un PostgreSQL neuf, prêt à recevoir le schéma d'un projet généré.
-fn start_postgres() -> Container<GenericImage> {
-    GenericImage::new(IMAGE.0, IMAGE.1)
-        .with_wait_for(WaitFor::log(
-            // PostgreSQL annonce une première fois qu'il accepte les connexions pendant
-            // son initialisation, où il n'écoute que sur son socket local : attendre la
-            // seconde annonce évite un test qui échoue une fois sur trois.
-            LogWaitStrategy::stdout_or_stderr("database system is ready to accept connections")
-                .with_times(2),
-        ))
-        .with_env_var("POSTGRES_USER", UTILISATEUR)
-        .with_env_var("POSTGRES_PASSWORD", MOT_DE_PASSE)
-        .with_env_var("POSTGRES_DB", BASE)
-        .start()
-        .expect("PostgreSQL doit démarrer — Docker est-il lancé ?")
-}
-
-/// MySQL 8, dont `FOR UPDATE SKIP LOCKED` est contemporain.
-fn start_mysql() -> Container<GenericImage> {
-    GenericImage::new("mysql", "8")
-        .with_wait_for(WaitFor::log(
-            // Comme PostgreSQL, MySQL annonce deux fois qu'il est prêt : la première fois
-            // pendant son initialisation, où il n'écoute que localement.
-            LogWaitStrategy::stdout_or_stderr("ready for connections").with_times(2),
-        ))
-        .with_env_var("MYSQL_ROOT_PASSWORD", MOT_DE_PASSE)
-        .with_env_var("MYSQL_DATABASE", BASE)
-        .start()
-        .expect("MySQL doit démarrer — Docker est-il lancé ?")
-}
-
-/// L'URL de connexion à `mysql`, vue depuis l'hôte.
-fn url_of_mysql(mysql: &Container<GenericImage>) -> String {
-    let port = mysql
-        .get_host_port_ipv4(3306.tcp())
-        .expect("le port de MySQL doit être publié");
-
-    format!("mysql://root:{MOT_DE_PASSE}@127.0.0.1:{port}/{BASE}")
-}
-
-/// L'URL de connexion à `postgres`, vue depuis l'hôte.
-fn url_of(postgres: &Container<GenericImage>) -> String {
-    let port = postgres
-        .get_host_port_ipv4(5432.tcp())
-        .expect("le port de PostgreSQL doit être publié");
-
-    format!("postgres://{UTILISATEUR}:{MOT_DE_PASSE}@127.0.0.1:{port}/{BASE}")
 }
 
 /// Un projet neuf portant `jobs`, sa base pointée sur `url`.
@@ -388,9 +329,9 @@ fn psql(postgres: &Container<GenericImage>, request: &str) -> String {
         .exec(ExecCommand::new([
             "psql",
             "-U",
-            UTILISATEUR,
+            common::UTILISATEUR,
             "-d",
-            BASE,
+            common::BASE,
             "-tAc",
             request,
         ]))
