@@ -9,31 +9,30 @@ modifier.
 
 ## Statut
 
-La version 0.1 est en construction.
+Version 0.4.0. Les quatre jalons de la feuille de route sont livrés — le socle,
+l'authentification, les intégrations, le confort — et
+[`CHANGELOG.fr.md`](CHANGELOG.fr.md) dit ce que chacun apporte.
 
 **Aucune promesse semver n'est faite avant la 1.0.** L'API publique de `rbs-core` peut
 changer entre deux versions mineures, sans cycle de dépréciation et sans chemin de
-migration. Épinglez une version exacte, lisez le journal des commits avant de monter de
-version, et attendez-vous à corriger du code. Figer cette API, c'est ce que veut dire 1.0
-ici ; jusque-là, rien n'est figé.
-
-rbs n'est pas non plus publié sur crates.io — cela viendra également avec la 1.0.
+migration. Épinglez une version exacte, lisez le journal des modifications avant de monter
+de version, et attendez-vous à corriger du code. Figer cette API, c'est ce que veut dire
+1.0 ici ; jusque-là, rien n'est figé.
 
 ## Installation
 
-Rust 1.85 ou plus. Les projets générés visent PostgreSQL 18 ou plus.
+Rust 1.85 ou plus. Un projet généré tourne sur PostgreSQL 14 ou plus, MySQL 8.0 ou plus, ou
+SQLite 3.35 ou plus.
 
 ```bash
-cargo install --git https://github.com/tky0065/rbs rbs-cli
+cargo install rbs-cli
 ```
 
 Le paquet s'appelle `rbs-cli` ; le binaire installé s'appelle `rbs`.
 
-Cette commande vous donne le binaire, et rien d'autre. Tant que `rbs-core` n'est pas sur
-crates.io, un projet généré a besoin d'une copie locale contre laquelle compiler — ce qui
-suppose de cloner le dépôt plutôt que d'installer depuis lui. Le
-**[guide de démarrage](https://tky0065.github.io/rbs/fr/getting-started)** porte cette
-séquence, ainsi que la base de données que les commandes attendent ; suivez-le plutôt que
+Cette commande vous donne le binaire, et rien d'autre : le
+**[guide de démarrage](https://tky0065.github.io/rbs/fr/getting-started)** porte la base de
+données que les commandes attendent, et la sortie de chacune d'elles. Suivez-le plutôt que
 l'esquisse ci-dessous, qui laisse les deux de côté.
 
 > L'écosystème Ruby publie un outil sans rapport, lui aussi nommé `rbs`. Si
@@ -53,8 +52,9 @@ rbs generate crud articles --fields 'title:string,body:text,published:bool'
 rbs migrate up
 ```
 
-C'est la silhouette de la chose, pas une transcription à coller : la 0.1 réclame deux
-arguments de plus que ceux montrés ici, et une base de données qui répond. Le
+C'est la silhouette de la chose, pas une transcription à coller : il y faut une base de
+données qui répond, et `rbs new` vous posera deux questions que les commandes ci-dessus ne
+portent pas. Le
 [guide de démarrage](https://tky0065.github.io/rbs/fr/getting-started) en donne la version
 exécutable, avec la sortie de chaque commande.
 
@@ -103,18 +103,19 @@ service, lui, ne voit jamais de `DatabaseConnection`.
 ## Documentation
 
 Le site est à l'adresse **<https://tky0065.github.io/rbs/fr/>** : démarrage, architecture,
-référence du CLI, guides. Le binaire porte cinq commandes — `new`, `add`, `generate`,
-`migrate`, `doctor` — et le site documente chacune d'elles.
+référence du CLI, guides. Le binaire porte sept commandes — `new`, `add`, `generate`,
+`migrate`, `seed`, `dev`, `doctor` — et le site documente chacune d'elles.
 
-[`ROADMAP.md`](ROADMAP.md) énumère ce que couvre la 0.1, ce qu'ajoutent les jalons suivants,
-et ce qui est délibérément laissé de côté.
+[`CHANGELOG.fr.md`](CHANGELOG.fr.md) dit ce qu'a apporté chaque version, écrit pour qui
+installe rbs. [`ROADMAP.md`](ROADMAP.md) prend l'autre sens : ce que couvrent les jalons, et
+ce qui est délibérément laissé de côté.
 
 ## Contribuer
 
 Commencez par [`CONTRIBUTING.fr.md`](CONTRIBUTING.fr.md) : ce qu'il faut installer, les
 vérifications que lance la CI, et les conventions que le dépôt s'impose. Travailler sur le
 code Rust ne demande jamais Node. Le projet suit le
-[Contributor Covenant](CODE_OF_CONDUCT.md).
+[Contributor Covenant](CODE_OF_CONDUCT.fr.md).
 
 ## Licence
 
