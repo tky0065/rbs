@@ -852,7 +852,7 @@ jalon v0.1, et deux `V1` dans ce fichier rendraient ambiguë chaque référence 
 
 ### Lot W — Le gel
 
-- [ ] **W1** · `cargo-semver-checks` en CI
+- [x] **W1** · `cargo-semver-checks` en CI — vérifié 2026-08-28 · `main` tel quel → **vert sur le runner GitHub**, step `cargo semver-checks` `success`, et en local « 196 checks: 196 pass, 58 skip · no semver update required », sortie 0 · morsure **relancée par moi sur une autre variante que celle de l'agent** : `Error::Conflict` retirée → « failure enum_variant_missing » nommant « variant `Error::Conflict`, previously in file …/rbs-core-0.4.0/src/error.rs:48 », sortie **100** — la comparaison porte bien sur la 0.4.0 **du registre** · arbre restauré, `shasum` identique · **le choix des features n'était pas cosmétique** : sur un dépôt sain les deux jeux rendent 196/196, le vert ne disant rien de la surface examinée ; mordu derrière `auth` — `token::fingerprint` renommée — `--default-features` répond **196 pass, sortie 0**, totalement aveugle, quand `--all-features` nomme `rbs_core::token::fingerprint` · sans lui les cinq entrées que `auth` gouverne (`hash`, `jwt`, `token`, `Identity`, `HasAuth`) seraient restées hors du gel · portée `rbs-core` seule, `rbs-cli` n'étant pas couvert par la promesse · `actionlint` sortie 0 · la morsure n'est pas rejouée sur le runner, ce qui exigerait de casser `main` : elle l'est en local avec l'outil exact que l'action installe (cargo-semver-checks 0.50.0)
       Un gel annoncé dans une page de documentation est une intention ; l'outil en fait une
       contrainte, en répondant à « ce changement est-il une rupture ? » là où un instantané
       textuel de l'API ne répond qu'à « l'API a-t-elle changé ? ». Il lui faut une version
@@ -883,7 +883,7 @@ jalon v0.1, et deux `V1` dans ce fichier rendraient ambiguë chaque référence 
 
 ### Lot X — `rbs upgrade`
 
-- [ ] **X1** · La commande
+- [x] **X1** · La commande — vérifié 2026-08-28 · les quatre critères joués **sur un projet réel** avec le binaire construit, non par les seuls tests · projet ramené à 0.0.1 puis `rbs upgrade` → plan affiché « rbs 0.0.1 → 0.4.0 · ~ Cargo.toml modifié », puis `rbs-core` **et** `[package.metadata.rbs].version` à 0.4.0, la version du projet lui-même (ligne 7) intacte · relancée → « ✓ le projet est déjà en rbs 0.4.0 — rien à faire », **empreinte mtime+taille de tout l'arbre identique avant/après** · projet en 9.9.9 → sortie 1, « le projet est en rbs 9.9.9, le CLI en 0.4.0 : `rbs upgrade` ne redescend pas un projet — relancez-le avec un CLI en 9.9.9 ou plus récent » · `git diff --name-only` après coup → `Cargo.toml` seul · en prime la garde d'arbre propre nomme les fichiers fautifs · `PatchToml` étendu par **ajout pur** d'`AlignerSurVersion` — diff de `plan/action.rs` sans une ligne retirée, et les tests de `add` toujours verts · `cargo test -p rbs-cli` 0 échec, `clippy -D warnings` et `fmt --check` propres · **réserve sur la méthode** : le rouge du TDD a été obtenu après coup par mutation (`align_version` neutralisée → 5 tests sur 8 tombent, dont les quatre porteurs) et non avant l'implémentation · `--force` ajouté hors critères, par symétrie avec `add` et `generate`, la séquence obligatoire l'imposant · la page de documentation relève de `Y1`, qui la porte déjà
       Séquence obligatoire du projet — lire → planifier → vérifier → afficher → appliquer
       (conception principale §4.4), working tree Git propre exigé. Elle n'écrit que dans
       `Cargo.toml` : le code engendré est fait pour être modifié, et une commande qui le
