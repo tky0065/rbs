@@ -26,7 +26,7 @@ const NIVEAU_PAR_DEFAUT: &str = "info";
 #[derive(Debug, thiserror::Error)]
 pub enum LogError {
     /// Valeur de [`VARIABLE_FORMAT`] hors des formats connus.
-    #[error("`{VARIABLE_FORMAT}` porte une valeur invalide : `{0}` (attendu `pretty` ou `json`)")]
+    #[error("`{VARIABLE_FORMAT}` porte une value invalide : `{0}` (expected `pretty` ou `json`)")]
     FormatInconnu(String),
     /// Un abonné global est déjà posé.
     #[error("abonné de journalisation déjà posé : {0}")]
@@ -46,11 +46,11 @@ pub enum LogFormat {
 impl FromStr for LogFormat {
     type Err = LogError;
 
-    fn from_str(valeur: &str) -> Result<Self, Self::Err> {
-        match valeur.trim().to_ascii_lowercase().as_str() {
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        match value.trim().to_ascii_lowercase().as_str() {
             "pretty" => Ok(Self::Pretty),
             "json" => Ok(Self::Json),
-            _ => Err(LogError::FormatInconnu(valeur.to_owned())),
+            _ => Err(LogError::FormatInconnu(value.to_owned())),
         }
     }
 }
@@ -66,11 +66,11 @@ impl FromStr for LogFormat {
 /// déjà posé.
 pub fn init() -> Result<(), LogError> {
     let format = match env::var(VARIABLE_FORMAT) {
-        Ok(valeur) => valeur.parse()?,
+        Ok(value) => value.parse()?,
         Err(VarError::NotPresent) => LogFormat::default(),
-        Err(VarError::NotUnicode(valeur)) => {
+        Err(VarError::NotUnicode(value)) => {
             return Err(LogError::FormatInconnu(
-                valeur.to_string_lossy().into_owned(),
+                value.to_string_lossy().into_owned(),
             ));
         }
     };
@@ -103,7 +103,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn le_format_se_lit_depuis_son_nom() {
+    fn the_format_reads_from_its_name() {
         assert_eq!("pretty".parse::<LogFormat>().unwrap(), LogFormat::Pretty);
         assert_eq!("json".parse::<LogFormat>().unwrap(), LogFormat::Json);
         assert_eq!(" JSON ".parse::<LogFormat>().unwrap(), LogFormat::Json);
@@ -111,20 +111,17 @@ mod tests {
     }
 
     #[test]
-    fn un_format_inconnu_est_refuse_en_nommant_la_variable_et_les_valeurs_admises() {
-        let erreur = "texte".parse::<LogFormat>().unwrap_err().to_string();
+    fn an_unknown_format_is_rejected_naming_the_variable_and_the_allowed_values() {
+        let error = "text".parse::<LogFormat>().unwrap_err().to_string();
 
         assert!(
-            erreur.contains("RBS_LOG_FORMAT"),
-            "variable non nommée : {erreur}"
+            error.contains("RBS_LOG_FORMAT"),
+            "variable non nommée : {error}"
         );
+        assert!(error.contains("text"), "value fautive absente : {error}");
         assert!(
-            erreur.contains("texte"),
-            "valeur fautive absente : {erreur}"
-        );
-        assert!(
-            erreur.contains("pretty") && erreur.contains("json"),
-            "valeurs admises absentes : {erreur}"
+            error.contains("pretty") && error.contains("json"),
+            "valeurs admises absentes : {error}"
         );
     }
 }

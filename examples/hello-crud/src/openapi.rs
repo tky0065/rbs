@@ -1,6 +1,6 @@
 use axum::routing::get;
 use axum::{Json, Router};
-use rbs_core::ReponsesCommunes;
+use rbs_core::CommonResponses;
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
@@ -9,7 +9,7 @@ use crate::state::AppState;
 // region: document
 #[derive(OpenApi)]
 #[openapi(
-    modifiers(&ReponsesCommunes),
+    modifiers(&CommonResponses),
     paths(
         crate::health::controller::sante,
         // <rbs:openapi>

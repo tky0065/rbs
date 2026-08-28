@@ -30,7 +30,7 @@ pub struct Pagination {
 
 /// Ce que le client a écrit dans la chaîne de requête, avant bornage.
 #[derive(Debug, Deserialize)]
-struct Parametres {
+struct Params {
     page: Option<u64>,
     per_page: Option<u64>,
 }
@@ -79,7 +79,7 @@ where
         // Traitement asymétrique voulu : une valeur hors bornes est ramenée en silence,
         // mais une valeur illisible est signalée. Ignorer `per_page=abc` ferait débugger
         // au client une pagination qui « ne marche pas », sans rien pour l'aider.
-        let Query(parametres) = Query::<Parametres>::from_request_parts(parts, state)
+        let Query(parametres) = Query::<Params>::from_request_parts(parts, state)
             .await
             .map_err(|rejet| Error::BadRequest(rejet.body_text()))?;
 
@@ -131,8 +131,8 @@ mod tests {
     use serde_json::{Value, json};
     use tower::ServiceExt;
 
-    /// Interroge `/` avec la chaîne de requête donnée et rend `(statut, corps JSON)`.
-    async fn interroger(query: &str) -> (StatusCode, Value) {
+    /// Interroge `/` avec la chaîne de requête donnée et rend `(statut, body JSON)`.
+    async fn query(query: &str) -> (StatusCode, Value) {
         async fn handler(pagination: Pagination) -> axum::Json<Value> {
             axum::Json(json!({
                 "page": pagination.page(),
@@ -141,7 +141,7 @@ mod tests {
             }))
         }
 
-        let reponse = Router::new()
+        let response = Router::new()
             .route("/", get(handler))
             .oneshot(
                 Request::builder()
@@ -150,59 +150,59 @@ mod tests {
                     .expect("requête valide"),
             )
             .await
-            .expect("le routeur doit répondre");
+            .expect("le router doit répondre");
 
-        let status = reponse.status();
-        let octets = to_bytes(reponse.into_body(), usize::MAX)
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX)
             .await
-            .expect("corps lisible");
+            .expect("body lisible");
 
-        (status, serde_json::from_slice(&octets).expect("corps JSON"))
+        (status, serde_json::from_slice(&bytes).expect("body JSON"))
     }
 
     #[tokio::test]
-    async fn les_valeurs_par_defaut_s_appliquent_sans_parametre() {
-        let (status, corps) = interroger("").await;
+    async fn the_default_values_apply_without_a_parameter() {
+        let (status, body) = query("").await;
 
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(corps["page"], PAGE_PAR_DEFAUT);
-        assert_eq!(corps["per_page"], PAR_PAGE_PAR_DEFAUT);
+        assert_eq!(body["page"], PAGE_PAR_DEFAUT);
+        assert_eq!(body["per_page"], PAR_PAGE_PAR_DEFAUT);
     }
 
     #[tokio::test]
-    async fn per_page_au_dela_du_maximum_est_plafonne_sans_erreur() {
-        let (status, corps) = interroger("per_page=5000").await;
+    async fn per_page_beyond_the_maximum_is_capped_without_an_error() {
+        let (status, body) = query("per_page=5000").await;
 
-        assert_eq!(status, StatusCode::OK, "le plafonnement est muet : {corps}");
-        assert_eq!(corps["per_page"], PAR_PAGE_MAX);
+        assert_eq!(status, StatusCode::OK, "le plafonnement est muet : {body}");
+        assert_eq!(body["per_page"], PAR_PAGE_MAX);
     }
 
     #[tokio::test]
-    async fn page_zero_est_ramenee_a_la_premiere_page() {
-        let (status, corps) = interroger("page=0&per_page=0").await;
+    async fn page_zero_is_brought_back_to_the_first_page() {
+        let (status, body) = query("page=0&per_page=0").await;
 
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(corps["page"], 1);
-        assert_eq!(corps["per_page"], 1, "une page vide n'aurait aucun sens");
+        assert_eq!(body["page"], 1);
+        assert_eq!(body["per_page"], 1, "une page vide n'aurait aucun sens");
     }
 
     #[tokio::test]
-    async fn un_parametre_non_numerique_repond_400() {
-        let (status, corps) = interroger("per_page=abc").await;
+    async fn a_non_numeric_parameter_answers_400() {
+        let (status, body) = query("per_page=abc").await;
 
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(corps["status"], 400);
+        assert_eq!(body["status"], 400);
     }
 
     #[tokio::test]
-    async fn l_offset_suit_la_page_demandee() {
-        let (_, corps) = interroger("page=3&per_page=20").await;
+    async fn the_offset_follows_the_requested_page() {
+        let (_, body) = query("page=3&per_page=20").await;
 
-        assert_eq!(corps["offset"], 40);
+        assert_eq!(body["offset"], 40);
     }
 
     #[test]
-    fn l_enveloppe_porte_les_donnees_et_leur_meta() {
+    fn the_envelope_carries_the_data_and_their_meta() {
         let pagination = Pagination::new(2, 20);
 
         let page = Page::new(vec!["a", "b"], &pagination, 143);
@@ -217,12 +217,12 @@ mod tests {
     }
 
     #[test]
-    fn un_ensemble_vide_ne_compte_aucune_page() {
+    fn an_empty_set_counts_no_page() {
         let page: Page<&str> = Page::new(Vec::new(), &Pagination::new(1, 20), 0);
 
-        let rendu = serde_json::to_value(&page).expect("sérialisable");
+        let rendered = serde_json::to_value(&page).expect("sérialisable");
 
-        assert_eq!(rendu["meta"]["total_pages"], 0);
-        assert_eq!(rendu["data"], json!([]));
+        assert_eq!(rendered["meta"]["total_pages"], 0);
+        assert_eq!(rendered["data"], json!([]));
     }
 }

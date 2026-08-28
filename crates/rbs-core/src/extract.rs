@@ -39,14 +39,14 @@ impl<S: HasAuth> FromRequestParts<S> for Identity {
     type Rejection = Error;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let jeton = parts
+        let token = parts
             .headers
             .get(AUTHORIZATION)
-            .and_then(|valeur| valeur.to_str().ok())
-            .and_then(porteur)
+            .and_then(|value| value.to_str().ok())
+            .and_then(bearer)
             .ok_or(Error::Unauthorized)?;
 
-        let claims = crate::jwt::verifier(jeton, &state.auth().secret)?;
+        let claims = crate::jwt::verify(token, &state.auth().secret)?;
 
         Ok(Self {
             user_id: claims.sub,
@@ -55,15 +55,15 @@ impl<S: HasAuth> FromRequestParts<S> for Identity {
     }
 }
 
-/// Isole le jeton d'un en-tête `Authorization: Bearer <jeton>`.
+/// Isole le jeton d'un en-tête `Authorization: Bearer <token>`.
 ///
 /// La RFC 7235 déclare le schéma insensible à la casse ; un client qui envoie `bearer`
 /// est conforme, et le refuser serait un bug difficile à diagnostiquer côté appelant.
 #[cfg(feature = "auth")]
-fn porteur(en_tete: &str) -> Option<&str> {
-    let (schema, jeton) = en_tete.split_once(' ')?;
+fn bearer(header: &str) -> Option<&str> {
+    let (schema, token) = header.split_once(' ')?;
 
-    schema.eq_ignore_ascii_case(SCHEMA).then(|| jeton.trim())
+    schema.eq_ignore_ascii_case(SCHEMA).then(|| token.trim())
 }
 
 /// Corps JSON désérialisé **puis** validé.
@@ -117,16 +117,16 @@ mod tests {
     use validator::Validate;
 
     #[derive(Debug, Deserialize, Validate)]
-    struct Inscription {
+    struct Registration {
         #[validate(email(message = "adresse électronique invalide"))]
         email: String,
         #[validate(range(min = 18, message = "âge minimum : 18 ans"))]
         age: u8,
     }
 
-    /// Poste `corps` sur un handler qui exige un [`Inscription`] validé.
-    async fn poster(corps: &'static str, content_type: Option<&str>) -> (StatusCode, Value) {
-        async fn handler(ValidatedJson(recu): ValidatedJson<Inscription>) -> String {
+    /// Poste `body` sur un handler qui exige un [`Registration`] validé.
+    async fn post_json(body: &'static str, content_type: Option<&str>) -> (StatusCode, Value) {
+        async fn handler(ValidatedJson(recu): ValidatedJson<Registration>) -> String {
             recu.email
         }
 
@@ -135,67 +135,67 @@ mod tests {
             requete = requete.header(header::CONTENT_TYPE, content_type);
         }
 
-        let reponse = Router::new()
+        let response = Router::new()
             .route("/", post(handler))
-            .oneshot(requete.body(Body::from(corps)).expect("requête valide"))
+            .oneshot(requete.body(Body::from(body)).expect("requête valide"))
             .await
-            .expect("le routeur doit répondre");
+            .expect("le router doit répondre");
 
-        let status = reponse.status();
-        let octets = to_bytes(reponse.into_body(), usize::MAX)
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX)
             .await
-            .expect("corps lisible");
-        let corps = serde_json::from_slice(&octets)
-            .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&octets).into_owned()));
+            .expect("body lisible");
+        let body = serde_json::from_slice(&bytes)
+            .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into_owned()));
 
-        (status, corps)
+        (status, body)
     }
 
     #[tokio::test]
-    async fn un_corps_valide_est_extrait_tel_quel() {
-        let (status, corps) = poster(
+    async fn a_valid_body_is_extracted_as_is() {
+        let (status, body) = post_json(
             r#"{"email":"alice@exemple.fr","age":30}"#,
             Some("application/json"),
         )
         .await;
 
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(corps, Value::String("alice@exemple.fr".to_owned()));
+        assert_eq!(body, Value::String("alice@exemple.fr".to_owned()));
     }
 
     #[tokio::test]
-    async fn un_corps_invalide_repond_422_avec_le_detail_par_champ() {
-        let (status, corps) = poster(
+    async fn an_invalid_body_answers_422_with_the_per_field_detail() {
+        let (status, body) = post_json(
             r#"{"email":"pas-une-adresse","age":12}"#,
             Some("application/json"),
         )
         .await;
 
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-        assert_eq!(corps["status"], 422);
-        assert_eq!(corps["errors"]["email"][0], "adresse électronique invalide");
-        assert_eq!(corps["errors"]["age"][0], "âge minimum : 18 ans");
+        assert_eq!(body["status"], 422);
+        assert_eq!(body["errors"]["email"][0], "adresse électronique invalide");
+        assert_eq!(body["errors"]["age"][0], "âge minimum : 18 ans");
     }
 
     #[tokio::test]
-    async fn un_json_malforme_repond_400_pas_500() {
-        let (status, corps) =
-            poster(r#"{"email":"alice@exemple.fr","#, Some("application/json")).await;
+    async fn malformed_json_answers_400_not_500() {
+        let (status, body) =
+            post_json(r#"{"email":"alice@exemple.fr","#, Some("application/json")).await;
 
-        assert_eq!(status, StatusCode::BAD_REQUEST, "obtenu : {corps}");
-        assert_eq!(corps["status"], 400);
+        assert_eq!(status, StatusCode::BAD_REQUEST, "obtenu : {body}");
+        assert_eq!(body["status"], 400);
         assert!(
-            corps["detail"].is_string(),
-            "la cause doit rester lisible : {corps}"
+            body["detail"].is_string(),
+            "la cause doit rester lisible : {body}"
         );
     }
 
     #[tokio::test]
-    async fn un_content_type_absent_repond_400_pas_500() {
-        let (status, corps) = poster(r#"{"email":"alice@exemple.fr","age":30}"#, None).await;
+    async fn a_missing_content_type_answers_400_not_500() {
+        let (status, body) = post_json(r#"{"email":"alice@exemple.fr","age":30}"#, None).await;
 
-        assert_eq!(status, StatusCode::BAD_REQUEST, "obtenu : {corps}");
-        assert_eq!(corps["status"], 400);
+        assert_eq!(status, StatusCode::BAD_REQUEST, "obtenu : {body}");
+        assert_eq!(body["status"], 400);
     }
 
     #[cfg(feature = "auth")]
@@ -211,10 +211,10 @@ mod tests {
         use sea_orm::DatabaseConnection;
         use tower::ServiceExt;
 
-        const SECRET: &str = "un secret de test qui porte au moins trente-deux octets";
+        const SECRET: &str = "un secret de test qui porte au moins trente-deux bytes";
 
         /// Expiration lointaine, pour les cas où la validité temporelle n'est pas le sujet.
-        const PLUS_TARD: i64 = 4_102_444_800;
+        const LATER: i64 = 4_102_444_800;
 
         /// Ce que `state.rs` générera dans le projet : le `CoreState` composé, plus la
         /// ligne d'`impl HasAuth` qui donne au noyau l'accès au secret.
@@ -231,7 +231,7 @@ mod tests {
 
         impl HasAuth for AppState {}
 
-        fn etat() -> AppState {
+        fn state() -> AppState {
             let config = Config {
                 env: "development".to_owned(),
                 server: ServerConfig {
@@ -263,8 +263,8 @@ mod tests {
             }
         }
 
-        fn jeton(exp: i64, secret: &str) -> String {
-            jwt::signer(
+        fn token(exp: i64, secret: &str) -> String {
+            jwt::sign(
                 &Claims {
                     sub: "u1".to_owned(),
                     role: "admin".to_owned(),
@@ -278,7 +278,7 @@ mod tests {
         }
 
         /// Appelle un handler protégé, avec ou sans en-tête `Authorization`.
-        async fn appeler(autorisation: Option<&str>) -> (StatusCode, Option<String>, String) {
+        async fn call(autorisation: Option<&str>) -> (StatusCode, Option<String>, String) {
             async fn handler(identite: Identity) -> String {
                 format!("{} {}", identite.user_id, identite.role)
             }
@@ -288,72 +288,72 @@ mod tests {
                 requete = requete.header(header::AUTHORIZATION, autorisation);
             }
 
-            let reponse = Router::new()
+            let response = Router::new()
                 .route("/", get(handler))
-                .with_state(etat())
+                .with_state(state())
                 .oneshot(requete.body(Body::empty()).expect("requête valide"))
                 .await
-                .expect("le routeur doit répondre");
+                .expect("le router doit répondre");
 
-            let status = reponse.status();
-            let content_type = reponse
+            let status = response.status();
+            let content_type = response
                 .headers()
                 .get(header::CONTENT_TYPE)
-                .map(|valeur| valeur.to_str().expect("content-type ASCII").to_owned());
-            let octets = to_bytes(reponse.into_body(), usize::MAX)
+                .map(|value| value.to_str().expect("content-type ASCII").to_owned());
+            let bytes = to_bytes(response.into_body(), usize::MAX)
                 .await
-                .expect("corps lisible");
+                .expect("body lisible");
 
             (
                 status,
                 content_type,
-                String::from_utf8_lossy(&octets).into_owned(),
+                String::from_utf8_lossy(&bytes).into_owned(),
             )
         }
 
         #[tokio::test]
-        async fn sans_en_tete_authorization_la_reponse_est_401_en_problem_json() {
-            let (status, content_type, corps) = appeler(None).await;
+        async fn without_an_authorization_header_the_response_is_401_in_problem_json() {
+            let (status, content_type, body) = call(None).await;
 
-            assert_eq!(status, StatusCode::UNAUTHORIZED, "obtenu : {corps}");
+            assert_eq!(status, StatusCode::UNAUTHORIZED, "obtenu : {body}");
             assert_eq!(content_type.as_deref(), Some("application/problem+json"));
         }
 
         #[tokio::test]
-        async fn un_jeton_invalide_ou_expire_rend_401() {
-            let expire = format!("Bearer {}", jeton(0, SECRET));
-            let (status, _, corps) = appeler(Some(&expire)).await;
-            assert_eq!(status, StatusCode::UNAUTHORIZED, "expiré, obtenu : {corps}");
+        async fn an_invalid_or_expired_token_returns_401() {
+            let expire = format!("Bearer {}", token(0, SECRET));
+            let (status, _, body) = call(Some(&expire)).await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED, "expiré, obtenu : {body}");
 
             let autre_secret = format!(
                 "Bearer {}",
-                jeton(PLUS_TARD, "un autre secret tout aussi long ici")
+                token(LATER, "un other secret tout aussi long ici")
             );
-            let (status, _, corps) = appeler(Some(&autre_secret)).await;
-            assert_eq!(status, StatusCode::UNAUTHORIZED, "signé ailleurs : {corps}");
+            let (status, _, body) = call(Some(&autre_secret)).await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED, "signé ailleurs : {body}");
 
-            let (status, _, corps) = appeler(Some("Bearer pas-un-jeton")).await;
-            assert_eq!(status, StatusCode::UNAUTHORIZED, "malformé : {corps}");
+            let (status, _, body) = call(Some("Bearer pas-un-token")).await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED, "malformé : {body}");
         }
 
         #[tokio::test]
-        async fn un_jeton_valide_peuple_l_identite_depuis_les_claims() {
-            let porteur = format!("Bearer {}", jeton(PLUS_TARD, SECRET));
+        async fn a_valid_token_populates_the_identity_from_the_claims() {
+            let bearer = format!("Bearer {}", token(LATER, SECRET));
 
-            let (status, _, corps) = appeler(Some(&porteur)).await;
+            let (status, _, body) = call(Some(&bearer)).await;
 
-            assert_eq!(status, StatusCode::OK, "obtenu : {corps}");
-            assert_eq!(corps, "u1 admin");
+            assert_eq!(status, StatusCode::OK, "obtenu : {body}");
+            assert_eq!(body, "u1 admin");
         }
 
         #[tokio::test]
-        async fn un_en_tete_sans_le_schema_bearer_est_refuse() {
-            let (status, _, corps) = appeler(Some(&jeton(PLUS_TARD, SECRET))).await;
+        async fn a_header_without_the_bearer_scheme_is_rejected() {
+            let (status, _, body) = call(Some(&token(LATER, SECRET))).await;
 
             assert_eq!(
                 status,
                 StatusCode::UNAUTHORIZED,
-                "un jeton nu, hors du schéma `Bearer`, n'est pas une autorisation : {corps}"
+                "un token nu, hors du schéma `Bearer`, n'est pas une autorisation : {body}"
             );
         }
     }

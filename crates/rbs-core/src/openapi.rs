@@ -1,6 +1,6 @@
 //! Déclaration unique des réponses d'erreur du document OpenAPI.
 //!
-//! Le projet généré accroche [`ReponsesCommunes`] une fois sur son `#[derive(OpenApi)]` ;
+//! Le projet généré accroche [`CommonResponses`] une fois sur son `#[derive(OpenApi)]` ;
 //! ses handlers n'ont alors plus à répéter les réponses que toute opération partage.
 
 use std::collections::BTreeMap;
@@ -44,10 +44,10 @@ pub struct ProblemDetails {
 /// peut produire, le runtime validant partout et pouvant défaillir partout — et enregistre
 /// les autres dans `components/responses`, référençables par nom depuis un handler.
 #[derive(Debug, Clone, Copy)]
-pub struct ReponsesCommunes;
+pub struct CommonResponses;
 
 /// Réponses enregistrées sous `components/responses`, avec leur description.
-const NOMMEES: [(&str, &str); 5] = [
+const NAMED: [(&str, &str); 5] = [
     ("BadRequest", "requête mal formée"),
     ("Unauthorized", "authentification requise"),
     ("Forbidden", "accès interdit"),
@@ -57,26 +57,26 @@ const NOMMEES: [(&str, &str); 5] = [
 
 /// Nom du schéma de sécurité, tel que les handlers le référencent dans `security(...)`.
 #[cfg(feature = "auth")]
-pub const NOM_DU_SCHEMA: &str = "bearer";
+pub const SCHEME_NAME: &str = "bearer";
 
 /// Réponses ajoutées d'office à chaque opération.
-const UNIVERSELLES: [(&str, &str); 2] = [
-    ("422", "échec de validation, détaillé par champ"),
-    ("500", "erreur interne"),
+const UNIVERSAL: [(&str, &str); 2] = [
+    ("422", "échec de validation, détaillé par field"),
+    ("500", "error interne"),
 ];
 
-impl Modify for ReponsesCommunes {
+impl Modify for CommonResponses {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         let composants = openapi.components.get_or_insert_with(Default::default);
         composants
             .schemas
             .entry(ProblemDetails::name().into_owned())
             .or_insert_with(ProblemDetails::schema);
-        for (nom, description) in NOMMEES {
+        for (name, description) in NAMED {
             composants
                 .responses
-                .entry(nom.to_owned())
-                .or_insert_with(|| probleme(description).into());
+                .entry(name.to_owned())
+                .or_insert_with(|| problem(description).into());
         }
 
         // Le schéma accompagne les réponses 401 et 403 déclarées juste au-dessus : un
@@ -84,7 +84,7 @@ impl Modify for ReponsesCommunes {
         // deviner. Il ne s'ajoute que si l'authentification est compilée.
         #[cfg(feature = "auth")]
         composants.add_security_scheme(
-            NOM_DU_SCHEMA,
+            SCHEME_NAME,
             SecurityScheme::Http(
                 HttpBuilder::new()
                     .scheme(HttpAuthScheme::Bearer)
@@ -93,21 +93,21 @@ impl Modify for ReponsesCommunes {
             ),
         );
 
-        for chemin in openapi.paths.paths.values_mut() {
+        for path in openapi.paths.paths.values_mut() {
             // `PathItem` expose une option par verbe plutôt qu'une table : les parcourir
             // tous est le seul moyen d'atteindre chaque opération déclarée.
             let operations = [
-                &mut chemin.get,
-                &mut chemin.put,
-                &mut chemin.post,
-                &mut chemin.delete,
-                &mut chemin.options,
-                &mut chemin.head,
-                &mut chemin.patch,
-                &mut chemin.trace,
+                &mut path.get,
+                &mut path.put,
+                &mut path.post,
+                &mut path.delete,
+                &mut path.options,
+                &mut path.head,
+                &mut path.patch,
+                &mut path.trace,
             ];
             for operation in operations.into_iter().flatten() {
-                completer(operation);
+                complete(operation);
             }
         }
     }
@@ -117,20 +117,20 @@ impl Modify for ReponsesCommunes {
 ///
 /// Seulement celles qui manquent : un handler qui documente son propre 422 en sait plus
 /// sur son cas que le noyau, et sa description ne doit pas être écrasée.
-fn completer(operation: &mut Operation) {
-    for (statut, description) in UNIVERSELLES {
+fn complete(operation: &mut Operation) {
+    for (statut, description) in UNIVERSAL {
         if operation.responses.responses.contains_key(statut) {
             continue;
         }
         operation
             .responses
             .responses
-            .insert(statut.to_owned(), probleme(description).into());
+            .insert(statut.to_owned(), problem(description).into());
     }
 }
 
 /// Construit une réponse dont le corps est un [`ProblemDetails`].
-fn probleme(description: &str) -> Response {
+fn problem(description: &str) -> Response {
     ResponseBuilder::new()
         .description(description)
         .content(
@@ -151,7 +151,7 @@ mod tests {
     /// Un handler documenté au strict minimum : ni 422 ni 500.
     #[utoipa::path(get, path = "/things", responses((status = 200, description = "ok")))]
     #[allow(dead_code)]
-    fn lister() {}
+    fn list_all() {}
 
     /// Un handler qui documente lui-même son 422.
     #[utoipa::path(
@@ -159,14 +159,14 @@ mod tests {
         path = "/things",
         responses(
             (status = 201, description = "créé"),
-            (status = 422, description = "le nom est déjà pris"),
+            (status = 422, description = "le name est déjà pris"),
         )
     )]
     #[allow(dead_code)]
-    fn creer() {}
+    fn create() {}
 
     #[derive(OpenApi)]
-    #[openapi(paths(lister, creer), modifiers(&ReponsesCommunes))]
+    #[openapi(paths(list_all, create), modifiers(&CommonResponses))]
     struct Doc;
 
     fn document() -> Value {
@@ -174,40 +174,40 @@ mod tests {
     }
 
     #[test]
-    fn le_document_decrit_422_et_500_sans_annotation_par_handler() {
+    fn the_document_describes_422_and_500_without_per_handler_annotation() {
         let doc = document();
 
-        let reponses = &doc["paths"]["/things"]["get"]["responses"];
+        let responses = &doc["paths"]["/things"]["get"]["responses"];
         assert!(
-            reponses.get("422").is_some(),
-            "422 absent du document : {reponses}"
+            responses.get("422").is_some(),
+            "422 absent du document : {responses}"
         );
         assert!(
-            reponses.get("500").is_some(),
-            "500 absent du document : {reponses}"
+            responses.get("500").is_some(),
+            "500 absent du document : {responses}"
         );
     }
 
     #[test]
-    fn une_reponse_declaree_par_le_handler_n_est_pas_ecrasee() {
+    fn a_response_declared_by_the_handler_is_not_overwritten() {
         let doc = document();
 
-        let reponses = &doc["paths"]["/things"]["post"]["responses"];
+        let responses = &doc["paths"]["/things"]["post"]["responses"];
         assert_eq!(
-            reponses["422"]["description"], "le nom est déjà pris",
-            "le handler qui documente son 422 doit garder le sien : {reponses}"
+            responses["422"]["description"], "le name est déjà pris",
+            "le handler qui documente son 422 doit garder le sien : {responses}"
         );
-        assert!(reponses.get("500").is_some(), "500 attendu : {reponses}");
+        assert!(responses.get("500").is_some(), "500 expected : {responses}");
     }
 
     /// Le document annonce 401 et 403 : sans ce schéma, il ne dit nulle part comment s'y
     /// conformer, et un client généré depuis lui n'a aucun moyen de le deviner.
     #[cfg(feature = "auth")]
     #[test]
-    fn le_schema_de_securite_bearer_est_declare() {
+    fn the_bearer_security_scheme_is_declared() {
         let doc = document();
 
-        let schema = &doc["components"]["securitySchemes"][NOM_DU_SCHEMA];
+        let schema = &doc["components"]["securitySchemes"][SCHEME_NAME];
         assert_eq!(schema["type"], "http", "{schema}");
         assert_eq!(schema["scheme"], "bearer", "{schema}");
         assert_eq!(schema["bearerFormat"], "JWT", "{schema}");
@@ -217,7 +217,7 @@ mod tests {
     /// doit pas se retrouver à exiger un jeton.
     #[cfg(feature = "auth")]
     #[test]
-    fn le_schema_declare_n_est_impose_a_aucune_operation() {
+    fn the_declared_scheme_is_imposed_on_no_operation() {
         let doc = document();
 
         assert!(
@@ -227,11 +227,11 @@ mod tests {
     }
 
     #[test]
-    fn les_reponses_communes_sont_referencables_par_nom() {
+    fn the_common_responses_are_referenceable_by_name() {
         let doc = document();
 
-        let communes = &doc["components"]["responses"];
-        for nom in [
+        let common = &doc["components"]["responses"];
+        for name in [
             "BadRequest",
             "Unauthorized",
             "Forbidden",
@@ -239,21 +239,21 @@ mod tests {
             "Conflict",
         ] {
             assert!(
-                communes.get(nom).is_some(),
-                "réponse commune `{nom}` absente : {communes}"
+                common.get(name).is_some(),
+                "réponse commune `{name}` absente : {common}"
             );
         }
     }
 
     #[test]
-    fn le_schema_du_probleme_decrit_les_champs_rfc_9457() {
+    fn the_problem_schema_describes_the_rfc_9457_fields() {
         let doc = document();
 
-        let proprietes = &doc["components"]["schemas"]["ProblemDetails"]["properties"];
-        for champ in ["type", "title", "status", "detail", "errors", "request_id"] {
+        let properties = &doc["components"]["schemas"]["ProblemDetails"]["properties"];
+        for field in ["type", "title", "status", "detail", "errors", "request_id"] {
             assert!(
-                proprietes.get(champ).is_some(),
-                "champ `{champ}` absent du schéma : {proprietes}"
+                properties.get(field).is_some(),
+                "field `{field}` absent du schéma : {properties}"
             );
         }
     }

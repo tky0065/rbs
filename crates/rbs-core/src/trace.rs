@@ -37,19 +37,19 @@ pub async fn middleware(request: Request, next: Next) -> Response {
     );
 
     let debut = Instant::now();
-    let reponse = next.run(request).instrument(span.clone()).await;
+    let response = next.run(request).instrument(span.clone()).await;
     let latence = debut.elapsed();
 
     // Émis dans le span, pour que l'événement porte lui aussi le `request_id` : statut et
     // latence ne sont connus qu'ici, quand le span est déjà ouvert.
-    let _entree = span.enter();
+    let _input = span.enter();
     tracing::info!(
-        status = reponse.status().as_u16(),
+        status = response.status().as_u16(),
         latency_ms = latence.as_secs_f64() * 1_000.0,
         "request"
     );
 
-    reponse
+    response
 }
 
 #[cfg(test)]
@@ -64,21 +64,21 @@ mod tests {
     use serde_json::Value;
     use tower::ServiceExt;
 
-    /// Appelle `/` sous un abonné jetable et rend `(identifiant renvoyé, lignes JSON)`.
+    /// Appelle `/` sous un abonné jetable et rend `(identifiant renvoyé, lines JSON)`.
     ///
     /// Le test est synchrone : `capture` pose l'abonné pour le thread courant le temps
     /// d'une closure, et le futur y est mené à terme par un runtime local.
-    fn appeler(routeur: Router) -> (String, Vec<Value>) {
+    fn call(router: Router) -> (String, Vec<Value>) {
         let mut identifiant = String::new();
 
-        let sortie = capture(JsonFormat::new(), JsonFormat::new(), || {
+        let output = capture(JsonFormat::new(), JsonFormat::new(), || {
             let runtime = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .expect("runtime de test");
 
             identifiant = runtime.block_on(async {
-                let reponse = routeur
+                let response = router
                     .oneshot(
                         Request::builder()
                             .uri("/")
@@ -86,9 +86,9 @@ mod tests {
                             .expect("requête valide"),
                     )
                     .await
-                    .expect("le routeur doit répondre");
+                    .expect("le router doit répondre");
 
-                reponse
+                response
                     .headers()
                     .get(request_id::X_REQUEST_ID)
                     .expect("la réponse doit porter l'en-tête")
@@ -98,16 +98,16 @@ mod tests {
             });
         });
 
-        let lignes = sortie
+        let lines = output
             .lines()
-            .map(|ligne| serde_json::from_str(ligne).unwrap_or_else(|e| panic!("({e}) {ligne}")))
+            .map(|line| serde_json::from_str(line).unwrap_or_else(|e| panic!("({e}) {line}")))
             .collect();
 
-        (identifiant, lignes)
+        (identifiant, lines)
     }
 
     /// Monte `handler` derrière les deux middlewares, dans l'ordre que le module impose.
-    fn routeur<H, T>(handler: H) -> Router
+    fn router<H, T>(handler: H) -> Router
     where
         H: axum::handler::Handler<T, ()>,
         T: 'static,
@@ -119,59 +119,59 @@ mod tests {
     }
 
     #[test]
-    fn un_log_emis_dans_un_handler_porte_le_request_id_de_sa_requete() {
+    fn a_log_emitted_in_a_handler_carries_the_request_id_of_its_request() {
         async fn handler() -> &'static str {
             tracing::info!("depuis le handler");
             "ok"
         }
 
-        let (identifiant, lignes) = appeler(routeur(handler));
+        let (identifiant, lines) = call(router(handler));
 
-        let ligne = lignes
+        let line = lines
             .iter()
-            .find(|ligne| ligne["msg"] == "depuis le handler")
+            .find(|line| line["msg"] == "depuis le handler")
             .expect("le log du handler doit être journalisé");
         assert_eq!(
-            ligne["request_id"],
+            line["request_id"],
             Value::String(identifiant),
-            "le log du handler doit porter le request_id de sa requête : {ligne}"
+            "le log du handler doit porter le request_id de sa requête : {line}"
         );
     }
 
     #[test]
-    fn l_evenement_final_porte_la_methode_le_chemin_le_statut_et_la_latence() {
+    fn the_final_event_carries_the_method_the_path_the_status_and_the_latency() {
         async fn handler() -> &'static str {
             "ok"
         }
 
-        let (identifiant, lignes) = appeler(routeur(handler));
+        let (identifiant, lines) = call(router(handler));
 
-        let ligne = lignes
+        let line = lines
             .iter()
-            .find(|ligne| ligne["msg"] == "request")
+            .find(|line| line["msg"] == "request")
             .expect("l'événement de fin de requête doit être journalisé");
-        assert_eq!(ligne["method"], "GET");
-        assert_eq!(ligne["path"], "/");
-        assert_eq!(ligne["status"], 200);
-        assert_eq!(ligne["request_id"], Value::String(identifiant));
+        assert_eq!(line["method"], "GET");
+        assert_eq!(line["path"], "/");
+        assert_eq!(line["status"], 200);
+        assert_eq!(line["request_id"], Value::String(identifiant));
         assert!(
-            ligne["latency_ms"].is_number(),
-            "latence absente ou non numérique : {ligne}"
+            line["latency_ms"].is_number(),
+            "latence absente ou non numérique : {line}"
         );
     }
 
     #[test]
-    fn une_reponse_d_erreur_est_tracee_avec_son_statut() {
+    fn an_error_response_is_traced_with_its_status() {
         async fn handler() -> StatusCode {
             StatusCode::INTERNAL_SERVER_ERROR
         }
 
-        let (_, lignes) = appeler(routeur(handler));
+        let (_, lines) = call(router(handler));
 
-        let ligne = lignes
+        let line = lines
             .iter()
-            .find(|ligne| ligne["msg"] == "request")
+            .find(|line| line["msg"] == "request")
             .expect("l'événement de fin de requête doit être journalisé");
-        assert_eq!(ligne["status"], 500);
+        assert_eq!(line["status"], 500);
     }
 }

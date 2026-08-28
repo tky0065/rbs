@@ -10,7 +10,7 @@ use tracing_subscriber::fmt::{FormatEvent, FormatFields, MakeWriter};
 pub(crate) struct Tampon(Arc<Mutex<Vec<u8>>>);
 
 impl Tampon {
-    fn contenu(&self) -> String {
+    fn content(&self) -> String {
         String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
     }
 }
@@ -35,18 +35,18 @@ impl<'a> MakeWriter<'a> for Tampon {
 }
 
 /// Émet des événements dans un abonné jetable et rend ce qui a été écrit.
-pub(crate) fn capture<E, F>(evenement: E, champs: F, emettre: impl FnOnce()) -> String
+pub(crate) fn capture<E, F>(evenement: E, fields: F, emettre: impl FnOnce()) -> String
 where
     E: FormatEvent<Registry, F> + Send + Sync + 'static,
     F: for<'a> FormatFields<'a> + Send + Sync + 'static,
 {
     let tampon = Tampon::default();
     let abonne = tracing_subscriber::fmt()
-        .fmt_fields(champs)
+        .fmt_fields(fields)
         .event_format(evenement)
         .with_writer(tampon.clone())
         .with_max_level(tracing::Level::TRACE)
         .finish();
     tracing::subscriber::with_default(abonne, emettre);
-    tampon.contenu()
+    tampon.content()
 }

@@ -27,12 +27,12 @@ impl JsonFormat {
         }
     }
 
-    fn horodater(&self) -> String {
-        let mut rendu = String::new();
+    fn timestamp(&self) -> String {
+        let mut rendered = String::new();
         // `FormatTime` n'écrit que dans un `Writer` : le détour par une chaîne est le
         // seul moyen d'obtenir la valeur à insérer dans l'objet JSON.
-        let _ = self.horodatage.format_time(&mut Writer::new(&mut rendu));
-        rendu
+        let _ = self.horodatage.format_time(&mut Writer::new(&mut rendered));
+        rendered
     }
 }
 
@@ -53,20 +53,20 @@ where
         mut writer: Writer<'_>,
         event: &Event<'_>,
     ) -> fmt::Result {
-        let metadonnees = event.metadata();
+        let metadata = event.metadata();
 
         let mut visiteur = ChampsJson::default();
         event.record(&mut visiteur);
 
-        let mut objet = visiteur.champs;
-        objet.insert("ts".to_owned(), Value::String(self.horodater()));
+        let mut objet = visiteur.fields;
+        objet.insert("ts".to_owned(), Value::String(self.timestamp()));
         objet.insert(
             "level".to_owned(),
-            Value::String(metadonnees.level().to_string()),
+            Value::String(metadata.level().to_string()),
         );
         objet.insert(
             "target".to_owned(),
-            Value::String(metadonnees.target().to_owned()),
+            Value::String(metadata.target().to_owned()),
         );
         objet.insert("msg".to_owned(), Value::String(visiteur.message));
 
@@ -79,11 +79,11 @@ where
                 let Some(formates) = extensions.get::<FormattedFields<N>>() else {
                     continue;
                 };
-                let Ok(Value::Object(champs)) = serde_json::from_str(&formates.fields) else {
+                let Ok(Value::Object(fields)) = serde_json::from_str(&formates.fields) else {
                     continue;
                 };
-                for (cle, valeur) in champs {
-                    objet.entry(cle).or_insert(valeur);
+                for (cle, value) in fields {
+                    objet.entry(cle).or_insert(value);
                 }
             }
         }
@@ -103,57 +103,57 @@ impl<'writer> FormatFields<'writer> for JsonFormat {
 
         if !visiteur.message.is_empty() {
             visiteur
-                .champs
+                .fields
                 .insert("msg".to_owned(), Value::String(visiteur.message));
         }
-        write!(writer, "{}", Value::Object(visiteur.champs))
+        write!(writer, "{}", Value::Object(visiteur.fields))
     }
 }
 
 #[derive(Default)]
 struct ChampsJson {
     message: String,
-    champs: Map<String, Value>,
+    fields: Map<String, Value>,
 }
 
 impl ChampsJson {
-    fn inserer(&mut self, champ: &Field, valeur: Value) {
-        self.champs.insert(champ.name().to_owned(), valeur);
+    fn insert(&mut self, field: &Field, value: Value) {
+        self.fields.insert(field.name().to_owned(), value);
     }
 }
 
 impl Visit for ChampsJson {
-    fn record_bool(&mut self, champ: &Field, valeur: bool) {
-        self.inserer(champ, Value::Bool(valeur));
+    fn record_bool(&mut self, field: &Field, value: bool) {
+        self.insert(field, Value::Bool(value));
     }
 
-    fn record_i64(&mut self, champ: &Field, valeur: i64) {
-        self.inserer(champ, Value::from(valeur));
+    fn record_i64(&mut self, field: &Field, value: i64) {
+        self.insert(field, Value::from(value));
     }
 
-    fn record_u64(&mut self, champ: &Field, valeur: u64) {
-        self.inserer(champ, Value::from(valeur));
+    fn record_u64(&mut self, field: &Field, value: u64) {
+        self.insert(field, Value::from(value));
     }
 
-    fn record_f64(&mut self, champ: &Field, valeur: f64) {
-        self.inserer(champ, Value::from(valeur));
+    fn record_f64(&mut self, field: &Field, value: f64) {
+        self.insert(field, Value::from(value));
     }
 
-    fn record_str(&mut self, champ: &Field, valeur: &str) {
-        if champ.name() == "message" {
-            self.message = valeur.to_owned();
+    fn record_str(&mut self, field: &Field, value: &str) {
+        if field.name() == "message" {
+            self.message = value.to_owned();
             return;
         }
-        self.inserer(champ, Value::String(valeur.to_owned()));
+        self.insert(field, Value::String(value.to_owned()));
     }
 
-    fn record_debug(&mut self, champ: &Field, valeur: &dyn fmt::Debug) {
-        let rendu = format!("{valeur:?}");
-        if champ.name() == "message" {
-            self.message = rendu;
+    fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+        let rendered = format!("{value:?}");
+        if field.name() == "message" {
+            self.message = rendered;
             return;
         }
-        self.inserer(champ, Value::String(rendu));
+        self.insert(field, Value::String(rendered));
     }
 }
 
@@ -162,35 +162,35 @@ mod tests {
     use super::super::aide::capture;
     use super::*;
 
-    fn rendre(emettre: impl FnOnce()) -> String {
+    fn render(emettre: impl FnOnce()) -> String {
         capture(JsonFormat::new(), JsonFormat::new(), emettre)
     }
 
     #[test]
-    fn chaque_ligne_est_un_json_valide_portant_ts_level_et_msg() {
-        let sortie = rendre(|| {
+    fn each_line_is_valid_json_carrying_ts_level_and_msg() {
+        let output = render(|| {
             tracing::info!("serveur démarré");
             tracing::warn!(actives = 18, "pool proche de la saturation");
             tracing::error!("requête refusée");
         });
 
-        let lignes: Vec<&str> = sortie.lines().collect();
-        assert_eq!(lignes.len(), 3, "trois lignes attendues : {sortie:?}");
-        for ligne in lignes {
-            let objet: serde_json::Value = serde_json::from_str(ligne)
-                .unwrap_or_else(|e| panic!("ligne non JSON ({e}) : {ligne}"));
+        let lines: Vec<&str> = output.lines().collect();
+        assert_eq!(lines.len(), 3, "trois lines attendues : {output:?}");
+        for line in lines {
+            let objet: serde_json::Value = serde_json::from_str(line)
+                .unwrap_or_else(|e| panic!("line non JSON ({e}) : {line}"));
             for cle in ["ts", "level", "msg"] {
-                assert!(objet.get(cle).is_some(), "clé {cle} absente : {ligne}");
+                assert!(objet.get(cle).is_some(), "clé {cle} absente : {line}");
             }
         }
     }
 
     #[test]
-    fn les_champs_conservent_leur_type_json() {
-        let sortie =
-            rendre(|| tracing::error!(status = 422, latency_ms = 12.4, actif = true, "refus"));
+    fn the_fields_keep_their_json_type() {
+        let output =
+            render(|| tracing::error!(status = 422, latency_ms = 12.4, actif = true, "refus"));
 
-        let objet: serde_json::Value = serde_json::from_str(sortie.trim()).expect("ligne non JSON");
+        let objet: serde_json::Value = serde_json::from_str(output.trim()).expect("line non JSON");
         assert_eq!(objet["status"], serde_json::json!(422));
         assert_eq!(objet["latency_ms"], serde_json::json!(12.4));
         assert_eq!(objet["actif"], serde_json::json!(true));
@@ -198,14 +198,14 @@ mod tests {
     }
 
     #[test]
-    fn les_champs_d_un_span_parent_remontent_dans_l_objet() {
-        let sortie = rendre(|| {
+    fn the_fields_of_a_parent_span_surface_in_the_object() {
+        let output = render(|| {
             let span = tracing::info_span!("requete", request_id = "01JQ3F8K2P");
-            let _entree = span.enter();
+            let _input = span.enter();
             tracing::error!(status = 422, "requête refusée");
         });
 
-        let objet: serde_json::Value = serde_json::from_str(sortie.trim()).expect("ligne non JSON");
+        let objet: serde_json::Value = serde_json::from_str(output.trim()).expect("line non JSON");
         assert_eq!(objet["request_id"], serde_json::json!("01JQ3F8K2P"));
         assert_eq!(objet["status"], serde_json::json!(422));
     }

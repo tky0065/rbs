@@ -12,7 +12,7 @@ use rand::rngs::SysRng;
 use sha2::{Digest, Sha256};
 
 /// Longueur du jeton tiré, en octets.
-const OCTETS: usize = 32;
+const BYTES: usize = 32;
 
 /// Tire un jeton opaque de 32 octets, encodé en base64url sans remplissage.
 ///
@@ -20,23 +20,23 @@ const OCTETS: usize = 32;
 ///
 /// Panique si le générateur du système est indisponible. Aucun appelant ne saurait
 /// traiter cet échec : sans source d'aléa, il n'y a pas de session à ouvrir.
-pub fn aleatoire() -> String {
-    let mut octets = [0u8; OCTETS];
+pub fn random() -> String {
+    let mut bytes = [0u8; BYTES];
     SysRng
-        .try_fill_bytes(&mut octets)
+        .try_fill_bytes(&mut bytes)
         .expect("le générateur du système doit être disponible");
 
-    URL_SAFE_NO_PAD.encode(octets)
+    URL_SAFE_NO_PAD.encode(bytes)
 }
 
 /// Empreinte SHA-256 d'un jeton, en hexadécimal minuscule, pour le stockage.
 ///
 /// C'est elle qui va en base : une base lue par un tiers ne lui donne alors aucune
 /// session utilisable.
-pub fn empreinte(jeton: &str) -> String {
-    Sha256::digest(jeton.as_bytes())
+pub fn fingerprint(token: &str) -> String {
+    Sha256::digest(token.as_bytes())
         .iter()
-        .map(|octet| format!("{octet:02x}"))
+        .map(|byte| format!("{byte:02x}"))
         .collect()
 }
 
@@ -45,26 +45,26 @@ mod tests {
     use super::*;
 
     #[test]
-    fn deux_tirages_successifs_different() {
-        assert_ne!(aleatoire(), aleatoire());
+    fn two_successive_draws_differ() {
+        assert_ne!(random(), random());
     }
 
     #[test]
-    fn le_jeton_decode_porte_au_moins_32_octets() {
-        let octets = URL_SAFE_NO_PAD
-            .decode(aleatoire())
+    fn the_decoded_token_carries_at_least_32_bytes() {
+        let bytes = URL_SAFE_NO_PAD
+            .decode(random())
             .expect("base64url sans remplissage");
 
-        assert!(octets.len() >= 32, "obtenu : {} octets", octets.len());
+        assert!(bytes.len() >= 32, "obtenu : {} bytes", bytes.len());
     }
 
     #[test]
-    fn l_empreinte_est_deterministe_et_ne_rend_pas_le_jeton() {
-        let jeton = aleatoire();
+    fn the_fingerprint_is_deterministic_and_does_not_return_the_token() {
+        let token = random();
 
-        assert_eq!(empreinte(&jeton), empreinte(&jeton));
-        assert_ne!(empreinte(&jeton), jeton);
-        assert_eq!(empreinte(&jeton).len(), 64, "SHA-256 en hexadécimal");
-        assert_ne!(empreinte(&jeton), empreinte(&aleatoire()));
+        assert_eq!(fingerprint(&token), fingerprint(&token));
+        assert_ne!(fingerprint(&token), token);
+        assert_eq!(fingerprint(&token).len(), 64, "SHA-256 en hexadécimal");
+        assert_ne!(fingerprint(&token), fingerprint(&random()));
     }
 }

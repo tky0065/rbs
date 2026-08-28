@@ -18,17 +18,17 @@ use crate::state::HasCoreState;
 
 /// Santé de l'application et de ses dépendances.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
-pub struct Sante {
+pub struct Health {
     /// Verdict d'ensemble.
-    pub status: Statut,
+    pub status: Status,
     /// Détail par dépendance.
-    pub checks: Controles,
+    pub checks: Checks,
 }
 
 /// Verdict d'ensemble d'un contrôle de santé.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
-pub enum Statut {
+pub enum Status {
     /// Toutes les dépendances répondent.
     Ok,
     /// Au moins une dépendance ne répond pas.
@@ -40,15 +40,15 @@ pub enum Statut {
 /// Les contrôles sont imbriqués plutôt qu'à plat pour qu'une dépendance ajoutée plus
 /// tard — cache, file, stockage — n'oblige pas à toucher la racine du corps.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
-pub struct Controles {
+pub struct Checks {
     /// État de la base de données.
-    pub database: Controle,
+    pub database: Check,
 }
 
 /// Résultat d'un contrôle de dépendance.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
-pub enum Controle {
+pub enum Check {
     /// La dépendance répond.
     Ok,
     /// La dépendance ne répond pas.
@@ -68,36 +68,36 @@ pub async fn handler<S>(State(state): State<S>) -> Response
 where
     S: HasCoreState,
 {
-    let (status, sante) = etat(state.core().db().ping().await);
+    let (status, health) = verdict(state.core().db().ping().await);
 
-    (status, axum::Json(sante)).into_response()
+    (status, axum::Json(health)).into_response()
 }
 
 /// Traduit le résultat du ping en verdict.
 ///
 /// Séparée du transport pour que la branche « base saine » reste couverte : sans base
 /// démarrée, seule la branche 503 est atteignable par une requête réelle.
-fn etat(ping: Result<(), DbErr>) -> (StatusCode, Sante) {
+fn verdict(ping: Result<(), DbErr>) -> (StatusCode, Health) {
     match ping {
         Ok(()) => (
             StatusCode::OK,
-            Sante {
-                status: Statut::Ok,
-                checks: Controles {
-                    database: Controle::Ok,
+            Health {
+                status: Status::Ok,
+                checks: Checks {
+                    database: Check::Ok,
                 },
             },
         ),
-        Err(erreur) => {
+        Err(error) => {
             // La cause part au journal et nulle part ailleurs : un contrôle de santé est
             // souvent exposé sans authentification.
-            tracing::error!(erreur = %erreur, "base de données injoignable");
+            tracing::error!(error = %error, "base de données injoignable");
             (
                 StatusCode::SERVICE_UNAVAILABLE,
-                Sante {
-                    status: Statut::Unavailable,
-                    checks: Controles {
-                        database: Controle::Unreachable,
+                Health {
+                    status: Status::Unavailable,
+                    checks: Checks {
+                        database: Check::Unreachable,
                     },
                 },
             )
@@ -138,7 +138,7 @@ mod tests {
             },
             #[cfg(feature = "auth")]
             auth: crate::config::AuthConfig {
-                secret: "un secret de test qui porte au moins trente-deux octets".to_owned(),
+                secret: "un secret de test qui porte au moins trente-deux bytes".to_owned(),
                 access_ttl_secs: 900,
                 refresh_ttl_secs: 2_592_000,
             },
@@ -146,13 +146,13 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn une_base_indisponible_repond_503_pas_200() {
+    async fn an_unavailable_database_answers_503_not_200() {
         // `DatabaseConnection::default()` est un pool déconnecté : `ping` y échoue sans
         // qu'aucune base n'ait à tourner.
-        let etat = CoreState::new(DatabaseConnection::default(), config());
+        let verdict = CoreState::new(DatabaseConnection::default(), config());
 
-        let reponse = routes()
-            .with_state(etat)
+        let response = routes()
+            .with_state(verdict)
             .oneshot(
                 Request::builder()
                     .uri("/health")
@@ -160,52 +160,52 @@ mod tests {
                     .expect("requête valide"),
             )
             .await
-            .expect("le routeur doit répondre");
+            .expect("le router doit répondre");
 
-        assert_eq!(reponse.status(), StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
 
-        let octets = to_bytes(reponse.into_body(), usize::MAX)
+        let bytes = to_bytes(response.into_body(), usize::MAX)
             .await
-            .expect("corps lisible");
-        let corps: Value = serde_json::from_slice(&octets).expect("corps JSON");
+            .expect("body lisible");
+        let body: Value = serde_json::from_slice(&bytes).expect("body JSON");
         assert_eq!(
-            corps,
+            body,
             json!({ "status": "unavailable", "checks": { "database": "unreachable" } })
         );
     }
 
     #[test]
-    fn une_base_saine_donne_200_et_un_statut_ok() {
-        let (status, sante) = etat(Ok(()));
+    fn a_healthy_database_gives_200_and_an_ok_status() {
+        let (status, health) = verdict(Ok(()));
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(
-            serde_json::to_value(sante).expect("sérialisable"),
+            serde_json::to_value(health).expect("sérialisable"),
             json!({ "status": "ok", "checks": { "database": "ok" } })
         );
     }
 
     #[test]
-    fn une_base_injoignable_donne_503_et_nomme_le_controle_en_echec() {
-        let (status, sante) = etat(Err(DbErr::Conn(sea_orm::RuntimeErr::Internal(
+    fn an_unreachable_database_gives_503_and_names_the_failed_check() {
+        let (status, health) = verdict(Err(DbErr::Conn(sea_orm::RuntimeErr::Internal(
             "connexion refusée".to_owned(),
         ))));
 
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
-        assert_eq!(sante.checks.database, Controle::Unreachable);
+        assert_eq!(health.checks.database, Check::Unreachable);
     }
 
     #[test]
-    fn le_detail_de_l_erreur_base_ne_fuit_pas_dans_la_reponse() {
-        let (_, sante) = etat(Err(DbErr::Conn(sea_orm::RuntimeErr::Internal(
+    fn the_database_error_detail_does_not_leak_into_the_response() {
+        let (_, health) = verdict(Err(DbErr::Conn(sea_orm::RuntimeErr::Internal(
             "postgres://alice:s3cr3t@localhost/app injoignable".to_owned(),
         ))));
 
-        let rendu = serde_json::to_string(&sante).expect("sérialisable");
+        let rendered = serde_json::to_string(&health).expect("sérialisable");
 
         assert!(
-            !rendu.contains("s3cr3t") && !rendu.contains("injoignable"),
-            "le détail de l'erreur ne doit pas atteindre le client : {rendu}"
+            !rendered.contains("s3cr3t") && !rendered.contains("injoignable"),
+            "le détail de l'error ne doit pas atteindre le client : {rendered}"
         );
     }
 }

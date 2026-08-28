@@ -11,36 +11,36 @@ use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, Salt
 
 use crate::Error;
 
-/// Hache `mot_de_passe` avec Argon2id et un sel tiré pour cet appel.
+/// Hache `password` avec Argon2id et un sel tiré pour cet appel.
 ///
 /// # Erreurs
 ///
 /// Échoue si le générateur du système ou Argon2 défaille — jamais du fait de l'entrée.
-pub fn hacher(mot_de_passe: &str) -> crate::Result<String> {
-    let sel = SaltString::generate(&mut OsRng);
+pub fn hash_password(password: &str) -> crate::Result<String> {
+    let salt = SaltString::generate(&mut OsRng);
 
     Argon2::default()
-        .hash_password(mot_de_passe.as_bytes(), &sel)
+        .hash_password(password.as_bytes(), &salt)
         .map(|hash| hash.to_string())
-        .map_err(|erreur| Error::Internal(anyhow::anyhow!("hachage Argon2 : {erreur}")))
+        .map_err(|error| Error::Internal(anyhow::anyhow!("hachage Argon2 : {error}")))
 }
 
-/// Vérifie `mot_de_passe` contre un `hash` au format PHC.
+/// Vérifie `password` contre un `hash` au format PHC.
 ///
 /// # Erreurs
 ///
 /// Échoue si `hash` est illisible, ce qui vient de la base ou d'un bug, jamais du
 /// client. Un mot de passe faux n'est pas une erreur : c'est `Ok(false)`.
-pub fn verifier(mot_de_passe: &str, hash: &str) -> crate::Result<bool> {
-    let attendu = PasswordHash::new(hash)
-        .map_err(|erreur| Error::Internal(anyhow::anyhow!("hash PHC illisible : {erreur}")))?;
+pub fn verify_password(password: &str, hash: &str) -> crate::Result<bool> {
+    let expected = PasswordHash::new(hash)
+        .map_err(|error| Error::Internal(anyhow::anyhow!("hash PHC illisible : {error}")))?;
 
-    match Argon2::default().verify_password(mot_de_passe.as_bytes(), &attendu) {
+    match Argon2::default().verify_password(password.as_bytes(), &expected) {
         Ok(()) => Ok(true),
         // Le seul cas où l'échec vient du client : il ne doit pas devenir un 500.
         Err(argon2::password_hash::Error::Password) => Ok(false),
-        Err(erreur) => Err(Error::Internal(anyhow::anyhow!(
-            "vérification Argon2 : {erreur}"
+        Err(error) => Err(Error::Internal(anyhow::anyhow!(
+            "vérification Argon2 : {error}"
         ))),
     }
 }
@@ -50,21 +50,21 @@ mod tests {
     use super::*;
 
     #[test]
-    fn deux_hachages_du_meme_mot_de_passe_different() {
-        let a = hacher("correct horse battery staple").expect("hachage");
-        let b = hacher("correct horse battery staple").expect("hachage");
-        assert_ne!(a, b, "le sel doit être tiré à chaque appel");
+    fn two_hashes_of_the_same_password_differ() {
+        let a = hash_password("correct horse battery staple").expect("hachage");
+        let b = hash_password("correct horse battery staple").expect("hachage");
+        assert_ne!(a, b, "le salt doit être tiré à chaque appel");
     }
 
     #[test]
-    fn verifier_accepte_le_bon_mot_de_passe_et_rejette_un_autre() {
-        let hash = hacher("s3cr3t").expect("hachage");
-        assert!(verifier("s3cr3t", &hash).expect("vérification"));
-        assert!(!verifier("s3cr3T", &hash).expect("vérification"));
+    fn verify_accepts_the_right_password_and_rejects_another() {
+        let hash = hash_password("s3cr3t").expect("hachage");
+        assert!(verify_password("s3cr3t", &hash).expect("vérification"));
+        assert!(!verify_password("s3cr3T", &hash).expect("vérification"));
     }
 
     #[test]
-    fn un_hash_malforme_rend_une_erreur_sans_paniquer() {
-        assert!(verifier("s3cr3t", "pas un hash PHC").is_err());
+    fn a_malformed_hash_returns_an_error_without_panicking() {
+        assert!(verify_password("s3cr3t", "pas un hash PHC").is_err());
     }
 }

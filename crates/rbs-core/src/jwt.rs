@@ -29,22 +29,22 @@ pub struct Claims {
 /// Le serveur répond 401 dans les trois cas ; le distinguo sert au client, à qui
 /// « ton jeton a expiré, rafraîchis-le » indique quoi faire.
 #[derive(Debug, thiserror::Error)]
-pub enum ErreurJwt {
+pub enum JwtError {
     /// La date d'expiration du jeton est passée.
-    #[error("jeton expiré")]
-    Expire,
+    #[error("token expiré")]
+    Expired,
     /// La signature ne correspond pas au secret.
     #[error("signature invalide")]
     Signature,
     /// Structure, algorithme ou claims illisibles.
-    #[error("jeton malformé : {0}")]
-    Malforme(String),
+    #[error("token malformé : {0}")]
+    Malformed(String),
 }
 
 // Aucune des trois causes ne se distingue dans la réponse : divulguer laquelle a joué
 // renseignerait un attaquant sur l'état de son jeton.
-impl From<ErreurJwt> for Error {
-    fn from(_: ErreurJwt) -> Self {
+impl From<JwtError> for Error {
+    fn from(_: JwtError) -> Self {
         Self::Unauthorized
     }
 }
@@ -54,34 +54,34 @@ impl From<ErreurJwt> for Error {
 /// # Erreurs
 ///
 /// Échoue si les claims ne peuvent pas être sérialisés ou le secret exploité.
-pub fn signer(claims: &Claims, secret: &str) -> crate::Result<String> {
+pub fn sign(claims: &Claims, secret: &str) -> crate::Result<String> {
     encode(
         &Header::new(Algorithm::HS256),
         claims,
         &EncodingKey::from_secret(secret.as_bytes()),
     )
-    .map_err(|erreur| Error::Internal(anyhow::anyhow!("signature du jeton : {erreur}")))
+    .map_err(|error| Error::Internal(anyhow::anyhow!("signature du token : {error}")))
 }
 
-/// Vérifie `jeton` avec `secret` et rend ses claims.
+/// Vérifie `token` avec `secret` et rend ses claims.
 ///
 /// L'algorithme attendu est imposé ici et non lu dans l'en-tête du jeton : un
 /// vérificateur qui fait confiance à l'en-tête accepte un jeton signé autrement.
 ///
 /// # Erreurs
 ///
-/// Rend [`ErreurJwt::Expire`], [`ErreurJwt::Signature`] ou [`ErreurJwt::Malforme`].
-pub fn verifier(jeton: &str, secret: &str) -> Result<Claims, ErreurJwt> {
+/// Rend [`JwtError::Expired`], [`JwtError::Signature`] ou [`JwtError::Malformed`].
+pub fn verify(token: &str, secret: &str) -> Result<Claims, JwtError> {
     decode::<Claims>(
-        jeton,
+        token,
         &DecodingKey::from_secret(secret.as_bytes()),
         &Validation::new(Algorithm::HS256),
     )
-    .map(|jeton| jeton.claims)
-    .map_err(|erreur| match erreur.kind() {
-        ErrorKind::ExpiredSignature => ErreurJwt::Expire,
-        ErrorKind::InvalidSignature => ErreurJwt::Signature,
-        autre => ErreurJwt::Malforme(format!("{autre:?}")),
+    .map(|token| token.claims)
+    .map_err(|error| match error.kind() {
+        ErrorKind::ExpiredSignature => JwtError::Expired,
+        ErrorKind::InvalidSignature => JwtError::Signature,
+        other => JwtError::Malformed(format!("{other:?}")),
     })
 }
 
@@ -89,7 +89,7 @@ pub fn verifier(jeton: &str, secret: &str) -> Result<Claims, ErreurJwt> {
 mod tests {
     use super::*;
 
-    const SECRET: &str = "un secret de test qui porte au moins trente-deux octets";
+    const SECRET: &str = "un secret de test qui porte au moins trente-deux bytes";
 
     /// Un jeu de claims complet, dont seule l'expiration varie d'un test à l'autre.
     fn claims(exp: i64) -> Claims {
@@ -103,44 +103,44 @@ mod tests {
     }
 
     /// Expiration lointaine, pour les cas où la validité temporelle n'est pas le sujet.
-    const PLUS_TARD: i64 = 4_102_444_800;
+    const LATER: i64 = 4_102_444_800;
 
     #[test]
-    fn signer_puis_verifier_restitue_les_claims() {
-        let attendu = claims(PLUS_TARD);
+    fn signing_then_verifying_restores_the_claims() {
+        let expected = claims(LATER);
 
-        let jeton = signer(&attendu, SECRET).expect("signature");
+        let token = sign(&expected, SECRET).expect("signature");
 
-        assert_eq!(verifier(&jeton, SECRET).expect("vérification"), attendu);
+        assert_eq!(verify(&token, SECRET).expect("vérification"), expected);
     }
 
     #[test]
-    fn un_jeton_expire_rend_une_erreur_distincte_de_la_signature() {
-        let jeton = signer(&claims(0), SECRET).expect("signature");
+    fn an_expired_token_returns_an_error_distinct_from_the_signature() {
+        let token = sign(&claims(0), SECRET).expect("signature");
 
-        assert!(matches!(verifier(&jeton, SECRET), Err(ErreurJwt::Expire),));
+        assert!(matches!(verify(&token, SECRET), Err(JwtError::Expired),));
     }
 
     #[test]
-    fn une_signature_invalide_est_rejetee() {
-        let jeton = signer(&claims(PLUS_TARD), SECRET).expect("signature");
+    fn an_invalid_signature_is_rejected() {
+        let token = sign(&claims(LATER), SECRET).expect("signature");
 
         assert!(matches!(
-            verifier(&jeton, "un autre secret tout aussi long ici"),
-            Err(ErreurJwt::Signature),
+            verify(&token, "un other secret tout aussi long ici"),
+            Err(JwtError::Signature),
         ));
     }
 
     #[test]
-    fn un_jeton_alg_none_est_rejete() {
-        let jeton = signer(&claims(PLUS_TARD), SECRET).expect("signature");
-        let charge = jeton.split('.').nth(1).expect("charge utile");
+    fn an_alg_none_token_is_rejected() {
+        let token = sign(&claims(LATER), SECRET).expect("signature");
+        let charge = token.split('.').nth(1).expect("charge utile");
         // `{"alg":"none","typ":"JWT"}` en base64url, suivi d'une signature vide.
         let forge = format!("eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.{charge}.");
 
         assert!(
-            verifier(&forge, SECRET).is_err(),
-            "un jeton non signé ne doit jamais être accepté"
+            verify(&forge, SECRET).is_err(),
+            "un token non signé ne doit jamais être accepté"
         );
     }
 
@@ -148,17 +148,17 @@ mod tests {
     // pas de variante `None`. La confusion d'algorithme réellement atteignable est
     // celle-ci — un algorithme supporté, mais autre que celui attendu.
     #[test]
-    fn un_jeton_signe_avec_un_autre_algorithme_est_rejete() {
-        let jeton = encode(
+    fn a_token_signed_with_another_algorithm_is_rejected() {
+        let token = encode(
             &Header::new(Algorithm::HS512),
-            &claims(PLUS_TARD),
+            &claims(LATER),
             &EncodingKey::from_secret(SECRET.as_bytes()),
         )
         .expect("signature HS512");
 
         assert!(
-            verifier(&jeton, SECRET).is_err(),
-            "l'algorithme attendu doit être imposé, pas lu dans l'en-tête"
+            verify(&token, SECRET).is_err(),
+            "l'algorithme expected doit être imposé, pas lu dans l'en-tête"
         );
     }
 }

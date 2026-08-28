@@ -52,10 +52,10 @@ pub async fn connect(config: &DatabaseConfig) -> Result<DatabaseConnection, Conn
         .sqlx_logging(false);
 
     Database::connect(options).await.map_err(|source| {
-        let secret = mot_de_passe(&config.url);
+        let secret = password(&config.url);
         ConnectError {
-            url: expurger(&config.url, secret),
-            cause: expurger(&source.to_string(), secret),
+            url: strip(&config.url, secret),
+            cause: strip(&source.to_string(), secret),
         }
     })
 }
@@ -65,7 +65,7 @@ pub async fn connect(config: &DatabaseConfig) -> Result<DatabaseConnection, Conn
 /// Le découpage est textuel plutôt que par parsing d'URL, pour traiter aussi les chaînes
 /// que le parseur rejette — ce sont précisément celles qui finissent dans un message
 /// d'erreur.
-fn mot_de_passe(url: &str) -> Option<&str> {
+fn password(url: &str) -> Option<&str> {
     let autorite = &url[url.find("://")? + 3..];
     let fin = autorite.find('/').unwrap_or(autorite.len());
     let arobase = autorite[..fin].rfind('@')?;
@@ -74,15 +74,15 @@ fn mot_de_passe(url: &str) -> Option<&str> {
     Some(&autorite[deux_points + 1..arobase])
 }
 
-/// Remplace `secret` par [`MASQUE`] partout dans `texte`.
+/// Remplace `secret` par [`MASQUE`] partout dans `text`.
 ///
 /// Le remplacement est global et non ancré : un mot de passe qui serait aussi le nom de
 /// la base masquerait les deux. Masquer de trop est le bon sens de l'erreur pour un texte
 /// qui part dans les logs.
-fn expurger(texte: &str, secret: Option<&str>) -> String {
+fn strip(text: &str, secret: Option<&str>) -> String {
     match secret {
-        Some(secret) if !secret.is_empty() => texte.replace(secret, MASQUE),
-        _ => texte.to_owned(),
+        Some(secret) if !secret.is_empty() => text.replace(secret, MASQUE),
+        _ => text.to_owned(),
     }
 }
 
@@ -103,33 +103,33 @@ mod tests {
     }
 
     /// Masque le mot de passe que `url` porte elle-même.
-    fn masquer(url: &str) -> String {
-        expurger(url, mot_de_passe(url))
+    fn mask(url: &str) -> String {
+        strip(url, password(url))
     }
 
     #[tokio::test]
-    async fn une_url_invalide_echoue_avec_un_message_nommant_le_champ() {
-        let erreur = connect(&config("pas-une-url"))
+    async fn an_invalid_url_fails_with_a_message_naming_the_field() {
+        let error = connect(&config("pas-une-url"))
             .await
             .expect_err("`pas-une-url` n'est pas une URL de connexion");
 
-        let message = erreur.to_string();
+        let message = error.to_string();
         assert!(
             message.contains("database.url"),
-            "le message doit nommer le champ à corriger, obtenu : {message}"
+            "le message doit nommer le field à corriger, obtenu : {message}"
         );
     }
 
     #[tokio::test]
-    async fn le_mot_de_passe_n_apparait_pas_dans_le_message_d_erreur() {
-        let erreur = connect(&config("postgres://alice:s3cr3t@localhost:99999/app"))
+    async fn the_password_does_not_appear_in_the_error_message() {
+        let error = connect(&config("postgres://alice:s3cr3t@localhost:99999/app"))
             .await
             .expect_err("le port 99999 est hors bornes");
 
-        let message = format!("{erreur} {erreur:?}");
+        let message = format!("{error} {error:?}");
         assert!(
             !message.contains("s3cr3t"),
-            "mot de passe divulgué dans l'erreur : {message}"
+            "mot de passe divulgué dans l'error : {message}"
         );
         assert!(
             message.contains("localhost"),
@@ -138,29 +138,29 @@ mod tests {
     }
 
     #[test]
-    fn le_masquage_remplace_le_mot_de_passe_et_preserve_le_reste() {
+    fn masking_replaces_the_password_and_preserves_the_rest() {
         assert_eq!(
-            masquer("postgres://alice:s3cr3t@localhost:5432/app"),
+            mask("postgres://alice:s3cr3t@localhost:5432/app"),
             "postgres://alice:***@localhost:5432/app"
         );
     }
 
     #[test]
-    fn le_masquage_laisse_intactes_les_url_sans_mot_de_passe() {
+    fn masking_leaves_urls_without_a_password_intact() {
         for url in [
             "postgres://alice@localhost/app",
             "postgres://localhost/app",
             "pas-une-url",
             "",
         ] {
-            assert_eq!(masquer(url), url, "URL modifiée à tort : {url}");
+            assert_eq!(mask(url), url, "URL modifiée à tort : {url}");
         }
     }
 
     #[test]
-    fn le_masquage_ignore_un_deux_points_situe_apres_l_autorite() {
+    fn masking_ignores_a_colon_placed_after_the_authority() {
         assert_eq!(
-            masquer("postgres://localhost:5432/app"),
+            mask("postgres://localhost:5432/app"),
             "postgres://localhost:5432/app"
         );
     }

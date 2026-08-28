@@ -18,7 +18,7 @@ use super::repository::{self, Model};
 /// Le mot de passe qu'il couvre n'ouvre rien — seule sa vérification compte, pas son
 /// résultat.
 static HASH_DE_COMPARAISON: LazyLock<String> = LazyLock::new(|| {
-    hash::hacher("aucun compte ne porte ce mot de passe").expect("hachage du hash témoin")
+    hash::hash_password("aucun compte ne porte ce mot de passe").expect("hachage du hash témoin")
 });
 
 pub async fn register(db: &DatabaseConnection, entree: RegisterRequest) -> Result<UserResponse> {
@@ -32,7 +32,7 @@ pub async fn register(db: &DatabaseConnection, entree: RegisterRequest) -> Resul
         )));
     }
 
-    let hash = hash::hacher(&entree.password)?;
+    let hash = hash::hash_password(&entree.password)?;
     let cree = repository::create(db, &entree.email, &hash).await?;
 
     Ok(profil(cree))
@@ -53,7 +53,7 @@ pub async fn login(
             trouve.password_hash.as_str()
         });
 
-    let correspond = hash::verifier(&entree.password, hash)?;
+    let correspond = hash::verify_password(&entree.password, hash)?;
 
     match utilisateur {
         Some(utilisateur) if correspond => emettre(db, auth, &utilisateur).await,
@@ -68,7 +68,7 @@ pub async fn refresh(
     auth: &AuthConfig,
     entree: RefreshRequest,
 ) -> Result<TokenPair> {
-    let empreinte = token::empreinte(&entree.refresh_token);
+    let empreinte = token::fingerprint(&entree.refresh_token);
     let maintenant = Utc::now().fixed_offset();
 
     // Jeton inconnu, déjà tourné ou périmé : la même erreur pour les trois. Les
@@ -92,7 +92,7 @@ pub async fn refresh(
 }
 
 pub async fn logout(db: &DatabaseConnection, entree: RefreshRequest) -> Result<()> {
-    let empreinte = token::empreinte(&entree.refresh_token);
+    let empreinte = token::fingerprint(&entree.refresh_token);
 
     let session = repository::find_refresh_token(db, &empreinte)
         .await?
@@ -131,16 +131,16 @@ async fn emettre(
         iat: maintenant.timestamp(),
         // Un jeton opaque fait un identifiant de jeton aussi bon qu'un UUID, sans réclamer
         // au projet le générateur qu'il n'embarque pas.
-        jti: token::aleatoire(),
+        jti: token::random(),
     };
 
-    let access_token = jwt::signer(&claims, &auth.secret)?;
+    let access_token = jwt::sign(&claims, &auth.secret)?;
 
-    let refresh_token = token::aleatoire();
+    let refresh_token = token::random();
     repository::create_refresh_token(
         db,
         utilisateur.id,
-        token::empreinte(&refresh_token),
+        token::fingerprint(&refresh_token),
         (maintenant + Duration::seconds(auth.refresh_ttl_secs as i64)).fixed_offset(),
     )
     .await?;

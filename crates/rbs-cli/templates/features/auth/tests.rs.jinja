@@ -354,7 +354,7 @@ async fn la_table_porte_l_empreinte_et_jamais_le_jeton() {
 
     assert_eq!(
         ligne.token_hash,
-        rbs_core::token::empreinte(&jeton),
+        rbs_core::token::fingerprint(&jeton),
         "la colonne ne porte pas l'empreinte du jeton"
     );
     assert_ne!(ligne.token_hash, jeton, "le jeton lui-même est stocké");

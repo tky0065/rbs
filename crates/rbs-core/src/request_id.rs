@@ -33,15 +33,15 @@ pub async fn middleware(request: Request, next: Next) -> Response {
     let id = reprendre(request.headers().get(&X_REQUEST_ID))
         .unwrap_or_else(|| Ulid::generate().to_string());
 
-    let mut reponse = scope(id.clone(), next.run(request)).await;
+    let mut response = scope(id.clone(), next.run(request)).await;
 
     // `reprendre` n'accepte que de l'ASCII imprimable et un ULID n'en sort pas : la
     // conversion ne peut pas échouer, mais on ne la force pas pour autant.
-    if let Ok(valeur) = HeaderValue::from_str(&id) {
-        reponse.headers_mut().insert(X_REQUEST_ID, valeur);
+    if let Ok(value) = HeaderValue::from_str(&id) {
+        response.headers_mut().insert(X_REQUEST_ID, value);
     }
 
-    reponse
+    response
 }
 
 /// Retient un identifiant amont, s'il est exploitable.
@@ -83,7 +83,7 @@ mod tests {
 
     /// Envoie une requête au travers du middleware et renvoie
     /// `(en-tête de réponse, identifiant vu par le handler)`.
-    async fn appeler(entrant: Option<&str>) -> (String, String) {
+    async fn call(entrant: Option<&str>) -> (String, String) {
         async fn handler() -> String {
             current().unwrap_or_default()
         }
@@ -97,58 +97,58 @@ mod tests {
             requete = requete.header(X_REQUEST_ID, entrant);
         }
 
-        let reponse = app
+        let response = app
             .oneshot(requete.body(Body::empty()).expect("requête valide"))
             .await
-            .expect("le routeur doit répondre");
+            .expect("le router doit répondre");
 
-        let en_tete = reponse
+        let header = response
             .headers()
             .get(X_REQUEST_ID)
             .expect("la réponse doit porter l'en-tête")
             .to_str()
             .expect("en-tête ASCII")
             .to_owned();
-        let corps = to_bytes(reponse.into_body(), usize::MAX)
+        let body = to_bytes(response.into_body(), usize::MAX)
             .await
-            .expect("corps lisible");
+            .expect("body lisible");
 
         (
-            en_tete,
-            String::from_utf8(corps.to_vec()).expect("corps UTF-8"),
+            header,
+            String::from_utf8(body.to_vec()).expect("body UTF-8"),
         )
     }
 
     #[tokio::test]
-    async fn current_retourne_none_hors_requete() {
+    async fn current_returns_none_outside_a_request() {
         assert_eq!(current(), None);
     }
 
     #[tokio::test]
-    async fn current_retourne_l_identifiant_du_scope() {
+    async fn current_returns_the_scope_identifier() {
         let vu = scope("01JQ3F8K2P".to_string(), async { current() }).await;
 
         assert_eq!(vu.as_deref(), Some("01JQ3F8K2P"));
     }
 
     #[tokio::test]
-    async fn deux_requetes_recoivent_deux_identifiants_distincts() {
-        let (premier, _) = appeler(None).await;
-        let (second, _) = appeler(None).await;
+    async fn two_requests_receive_two_distinct_identifiers() {
+        let (premier, _) = call(None).await;
+        let (second, _) = call(None).await;
 
         assert_ne!(premier, second);
         assert_eq!(premier.len(), 26, "un ULID fait 26 caractères : {premier}");
     }
 
     #[tokio::test]
-    async fn un_en_tete_entrant_est_conserve_tel_quel_dans_la_reponse() {
-        let (en_tete, _) = appeler(Some("trace-amont-42")).await;
+    async fn an_incoming_header_is_kept_as_is_in_the_response() {
+        let (header, _) = call(Some("trace-amont-42")).await;
 
-        assert_eq!(en_tete, "trace-amont-42");
+        assert_eq!(header, "trace-amont-42");
     }
 
     #[tokio::test]
-    async fn un_en_tete_aberrant_est_ignore_au_profit_d_un_ulid_genere() {
+    async fn an_aberrant_header_is_ignored_in_favour_of_a_generated_ulid() {
         // Un saut de ligne ne peut pas franchir `HeaderValue` : la garde couvre ce que
         // la couche HTTP laisse passer, soit la longueur et les octets non-ASCII.
         for aberrant in [
@@ -156,17 +156,17 @@ mod tests {
             "trace-ÿ".to_owned(),
             String::new(),
         ] {
-            let (en_tete, _) = appeler(Some(&aberrant)).await;
+            let (header, _) = call(Some(&aberrant)).await;
 
-            assert_ne!(en_tete, aberrant, "en-tête aberrant repris : {aberrant:?}");
-            assert_eq!(en_tete.len(), 26, "un ULID était attendu : {en_tete}");
+            assert_ne!(header, aberrant, "en-tête aberrant repris : {aberrant:?}");
+            assert_eq!(header.len(), 26, "un ULID était expected : {header}");
         }
     }
 
     #[tokio::test]
-    async fn le_handler_lit_l_identifiant_de_sa_propre_requete() {
-        let (en_tete, vu_par_le_handler) = appeler(None).await;
+    async fn the_handler_reads_the_identifier_of_its_own_request() {
+        let (header, vu_par_le_handler) = call(None).await;
 
-        assert_eq!(en_tete, vu_par_le_handler);
+        assert_eq!(header, vu_par_le_handler);
     }
 }

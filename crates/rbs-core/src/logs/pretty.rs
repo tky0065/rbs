@@ -15,7 +15,7 @@ const LARGEUR_CIBLE: usize = 18;
 
 /// Formateur d'événements `tracing` pensé pour la lecture en développement.
 ///
-/// Rend une ligne par événement : `HH:MM:SS  NIVEAU  cible  message  clé=valeur`.
+/// Rend une ligne par événement : `HH:MM:SS  NIVEAU  target  message  clé=value`.
 ///
 /// Le même type sert de formateur de champs. Poser les deux ensemble
 /// (`.event_format(…).fmt_fields(…)`) est ce qui garantit que les champs hérités
@@ -39,16 +39,16 @@ impl PrettyFormat {
         }
     }
 
-    fn peindre(&self, style: Style, texte: &str) -> String {
+    fn paint(&self, style: Style, text: &str) -> String {
         if self.ansi {
-            style.paint(texte).to_string()
+            style.paint(text).to_string()
         } else {
-            texte.to_owned()
+            text.to_owned()
         }
     }
 
-    fn style_du_niveau(niveau: &Level) -> Style {
-        match *niveau {
+    fn level_style(level: &Level) -> Style {
+        match *level {
             Level::TRACE => Color::DarkGray.into(),
             Level::DEBUG => Color::Blue.into(),
             Level::INFO => Color::Green.into(),
@@ -75,18 +75,18 @@ where
         mut writer: Writer<'_>,
         event: &Event<'_>,
     ) -> fmt::Result {
-        let metadonnees = event.metadata();
+        let metadata = event.metadata();
 
         self.horodatage.format_time(&mut writer)?;
 
         // La couleur est appliquée après l'alignement : les séquences ANSI comptent
         // dans la largeur demandée à `format!` et décaleraient les colonnes.
-        let niveau = format!("{:<LARGEUR_NIVEAU$}", metadonnees.level().as_str());
-        let style = Self::style_du_niveau(metadonnees.level());
-        write!(writer, "  {}", self.peindre(style, &niveau))?;
+        let level = format!("{:<LARGEUR_NIVEAU$}", metadata.level().as_str());
+        let style = Self::level_style(metadata.level());
+        write!(writer, "  {}", self.paint(style, &level))?;
 
-        let cible = format!("{:<LARGEUR_CIBLE$}", metadonnees.target());
-        write!(writer, "  {}", self.peindre(Style::new().dimmed(), &cible))?;
+        let target = format!("{:<LARGEUR_CIBLE$}", metadata.target());
+        write!(writer, "  {}", self.paint(Style::new().dimmed(), &target))?;
 
         let mut visiteur = ChampsEvenement::default();
         event.record(&mut visiteur);
@@ -95,9 +95,9 @@ where
         // Les champs des spans parents suivent ceux de l'événement : sans eux, le
         // `request_id` que le middleware attache au span ne serait jamais journalisé.
         // Ils arrivent déjà peints par l'implémentation de `FormatFields` ci-dessous.
-        let mut champs = Vec::new();
-        if !visiteur.champs.is_empty() {
-            champs.push(self.peindre(Style::new().dimmed(), &visiteur.champs));
+        let mut fields = Vec::new();
+        if !visiteur.fields.is_empty() {
+            fields.push(self.paint(Style::new().dimmed(), &visiteur.fields));
         }
         if let Some(portee) = ctx.event_scope() {
             for span in portee {
@@ -106,13 +106,13 @@ where
                     continue;
                 };
                 if !formates.fields.is_empty() {
-                    champs.push(formates.fields.clone());
+                    fields.push(formates.fields.clone());
                 }
             }
         }
 
-        if !champs.is_empty() {
-            write!(writer, "  {}", champs.join(" "))?;
+        if !fields.is_empty() {
+            write!(writer, "  {}", fields.join(" "))?;
         }
 
         writeln!(writer)
@@ -128,13 +128,13 @@ impl<'writer> FormatFields<'writer> for PrettyFormat {
         let mut visiteur = ChampsEvenement::default();
         fields.record(&mut visiteur);
 
-        if visiteur.champs.is_empty() {
+        if visiteur.fields.is_empty() {
             return Ok(());
         }
         write!(
             writer,
             "{}",
-            self.peindre(Style::new().dimmed(), &visiteur.champs)
+            self.paint(Style::new().dimmed(), &visiteur.fields)
         )
     }
 }
@@ -142,30 +142,30 @@ impl<'writer> FormatFields<'writer> for PrettyFormat {
 #[derive(Default)]
 struct ChampsEvenement {
     message: String,
-    champs: String,
+    fields: String,
 }
 
 impl ChampsEvenement {
-    fn ajouter(&mut self, champ: &Field, valeur: fmt::Arguments<'_>) {
-        if champ.name() == "message" {
-            let _ = write!(self.message, "{valeur}");
+    fn add(&mut self, field: &Field, value: fmt::Arguments<'_>) {
+        if field.name() == "message" {
+            let _ = write!(self.message, "{value}");
             return;
         }
 
-        if !self.champs.is_empty() {
-            self.champs.push(' ');
+        if !self.fields.is_empty() {
+            self.fields.push(' ');
         }
-        let _ = write!(self.champs, "{}={}", champ.name(), valeur);
+        let _ = write!(self.fields, "{}={}", field.name(), value);
     }
 }
 
 impl Visit for ChampsEvenement {
-    fn record_str(&mut self, champ: &Field, valeur: &str) {
-        self.ajouter(champ, format_args!("{valeur}"));
+    fn record_str(&mut self, field: &Field, value: &str) {
+        self.add(field, format_args!("{value}"));
     }
 
-    fn record_debug(&mut self, champ: &Field, valeur: &dyn fmt::Debug) {
-        self.ajouter(champ, format_args!("{valeur:?}"));
+    fn record_debug(&mut self, field: &Field, value: &dyn fmt::Debug) {
+        self.add(field, format_args!("{value:?}"));
     }
 }
 
@@ -174,80 +174,80 @@ mod tests {
     use super::super::aide::capture;
     use super::*;
 
-    fn rendre(format: PrettyFormat, emettre: impl FnOnce()) -> String {
-        let champs = PrettyFormat::with_ansi(format.ansi);
-        capture(format, champs, emettre)
+    fn render(format: PrettyFormat, emettre: impl FnOnce()) -> String {
+        let fields = PrettyFormat::with_ansi(format.ansi);
+        capture(format, fields, emettre)
     }
 
     #[test]
-    fn aucune_couleur_quand_la_sortie_n_est_pas_un_tty() {
-        let sortie = rendre(PrettyFormat::new(), || {
+    fn no_colour_when_the_output_is_not_a_tty() {
+        let output = render(PrettyFormat::new(), || {
             let span = tracing::info_span!("requete", request_id = "01JQ3F8K2P");
-            let _entree = span.enter();
+            let _input = span.enter();
             tracing::info!(status = 200, "bonjour");
         });
 
         assert!(
-            !sortie.contains('\u{1b}'),
-            "sortie colorée hors TTY : {sortie:?}"
+            !output.contains('\u{1b}'),
+            "output colorée hors TTY : {output:?}"
         );
     }
 
     #[test]
-    fn les_couleurs_sont_presentes_quand_elles_sont_forcees() {
-        let sortie = rendre(PrettyFormat::with_ansi(true), || tracing::info!("bonjour"));
+    fn the_colours_are_present_when_they_are_forced() {
+        let output = render(PrettyFormat::with_ansi(true), || tracing::info!("bonjour"));
 
         assert!(
-            sortie.contains('\u{1b}'),
-            "aucune séquence ANSI : {sortie:?}"
+            output.contains('\u{1b}'),
+            "aucune séquence ANSI : {output:?}"
         );
     }
 
     #[test]
-    fn la_ligne_porte_le_niveau_la_cible_le_message_puis_les_champs() {
-        let sortie = rendre(PrettyFormat::with_ansi(false), || {
+    fn the_line_carries_the_level_the_target_the_message_then_the_fields() {
+        let output = render(PrettyFormat::with_ansi(false), || {
             tracing::warn!(actives = 18, max = 20, "pool proche de la saturation")
         });
 
-        let niveau = sortie.find("WARN").expect("niveau absent");
-        let cible = sortie
+        let level = output.find("WARN").expect("level absent");
+        let target = output
             .find("rbs_core::logs::pretty")
-            .expect("cible absente");
-        let message = sortie
+            .expect("target absente");
+        let message = output
             .find("pool proche de la saturation")
             .expect("message absent");
-        let champs = sortie.find("actives=18").expect("champs absents");
+        let fields = output.find("actives=18").expect("fields absents");
 
         assert!(
-            niveau < cible && cible < message && message < champs,
-            "ordre inattendu : {sortie:?}"
+            level < target && target < message && message < fields,
+            "ordre inattendu : {output:?}"
         );
-        assert!(sortie.contains("max=20"), "champ manquant : {sortie:?}");
+        assert!(output.contains("max=20"), "field manquant : {output:?}");
     }
 
     #[test]
-    fn les_champs_d_un_span_parent_sont_repris_apres_ceux_de_l_evenement() {
-        let sortie = rendre(PrettyFormat::with_ansi(false), || {
+    fn the_fields_of_a_parent_span_follow_those_of_the_event() {
+        let output = render(PrettyFormat::with_ansi(false), || {
             let span = tracing::info_span!("requete", request_id = "01JQ3F8K2P");
-            let _entree = span.enter();
+            let _input = span.enter();
             tracing::error!(status = 422, "requête refusée");
         });
 
-        let champ_evenement = sortie.find("status=422").expect("champ d'événement absent");
-        let champ_span = sortie
+        let champ_evenement = output.find("status=422").expect("field d'événement absent");
+        let champ_span = output
             .find("request_id=01JQ3F8K2P")
-            .expect("champ de span absent");
+            .expect("field de span absent");
 
-        assert!(champ_evenement < champ_span, "ordre inattendu : {sortie:?}");
+        assert!(champ_evenement < champ_span, "ordre inattendu : {output:?}");
         assert!(
-            !sortie.contains('"'),
-            "valeurs entre guillemets : {sortie:?}"
+            !output.contains('"'),
+            "valeurs entre guillemets : {output:?}"
         );
     }
 
     #[test]
-    fn les_cinq_niveaux_sont_rendus_avec_leur_libelle() {
-        let sortie = rendre(PrettyFormat::with_ansi(false), || {
+    fn the_five_levels_render_with_their_label() {
+        let output = render(PrettyFormat::with_ansi(false), || {
             tracing::trace!("t");
             tracing::debug!("d");
             tracing::info!("i");
@@ -255,11 +255,8 @@ mod tests {
             tracing::error!("e");
         });
 
-        for niveau in ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"] {
-            assert!(
-                sortie.contains(niveau),
-                "niveau {niveau} absent : {sortie:?}"
-            );
+        for level in ["TRACE", "DEBUG", "INFO", "WARN", "ERROR"] {
+            assert!(output.contains(level), "level {level} absent : {output:?}");
         }
     }
 }

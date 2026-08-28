@@ -126,7 +126,7 @@ mod tests {
             },
             #[cfg(feature = "auth")]
             auth: crate::config::AuthConfig {
-                secret: "un secret de test qui porte au moins trente-deux octets".to_owned(),
+                secret: "un secret de test qui porte au moins trente-deux bytes".to_owned(),
                 access_ttl_secs: 900,
                 refresh_ttl_secs: 2_592_000,
             },
@@ -135,7 +135,7 @@ mod tests {
 
     /// `DatabaseConnection::default()` est un état déconnecté : aucun test n'a besoin
     /// d'une base démarrée pour manipuler l'état.
-    fn etat(salutation: &'static str) -> AppState {
+    fn state(salutation: &'static str) -> AppState {
         AppState {
             core: CoreState::new(DatabaseConnection::default(), config()),
             salutation,
@@ -143,41 +143,41 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn un_handler_extrait_l_etat_du_projet_et_repond() {
+    async fn a_handler_extracts_the_project_state_and_answers() {
         async fn handler(State(state): State<AppState>) -> String {
             format!("{} {}", state.salutation, state.core().config().env)
         }
 
         let app = Router::new()
             .route("/", get(handler))
-            .with_state(etat("bonjour"));
+            .with_state(state("bonjour"));
 
-        let reponse = app
+        let response = app
             .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
             .await
-            .expect("le routeur doit répondre");
+            .expect("le router doit répondre");
 
-        assert_eq!(reponse.status(), StatusCode::OK);
-        let corps = to_bytes(reponse.into_body(), usize::MAX)
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = to_bytes(response.into_body(), usize::MAX)
             .await
-            .expect("corps lisible");
-        assert_eq!(&corps[..], b"bonjour development");
+            .expect("body lisible");
+        assert_eq!(&body[..], b"bonjour development");
     }
 
     #[test]
-    fn l_etat_se_clone_sans_copier_la_configuration() {
-        let etat = etat("bonjour");
-        let clone = etat.clone();
+    fn the_state_clones_without_copying_the_configuration() {
+        let state = state("bonjour");
+        let clone = state.clone();
 
         assert!(
-            Arc::ptr_eq(&etat.core.config, &clone.core.config),
+            Arc::ptr_eq(&state.core.config, &clone.core.config),
             "le clone doit partager la configuration, pas la recopier"
         );
     }
 
     #[test]
-    fn core_state_sert_d_etat_a_lui_seul() {
-        let core = etat("bonjour").core;
+    fn core_state_serves_as_a_state_on_its_own() {
+        let core = state("bonjour").core;
 
         assert_eq!(core.core().config().env, core.config().env);
     }

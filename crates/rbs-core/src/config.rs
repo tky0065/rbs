@@ -119,20 +119,20 @@ pub enum ConfigError {
     #[error("configuration invalide : {0}")]
     Invalide(Box<figment::Error>),
     /// Fichier `.env` présent mais illisible.
-    #[error("fichier `.env` illisible : {0}")]
+    #[error("file `.env` illisible : {0}")]
     Dotenv(#[from] dotenvy::Error),
     /// Section demandée absente de toutes les couches de la cascade.
     #[error("configuration invalide : la section `{0}` est absente")]
     SectionAbsente(String),
     /// Secret de signature trop court pour HS256.
     #[cfg(feature = "auth")]
-    #[error("configuration invalide : `auth.secret` doit porter au moins 32 octets, {0} fournis")]
+    #[error("configuration invalide : `auth.secret` doit porter au moins 32 bytes, {0} fournis")]
     SecretTropCourt(usize),
 }
 
 impl From<figment::Error> for ConfigError {
-    fn from(erreur: figment::Error) -> Self {
-        Self::Invalide(Box::new(erreur))
+    fn from(error: figment::Error) -> Self {
+        Self::Invalide(Box::new(error))
     }
 }
 
@@ -166,16 +166,16 @@ impl Config {
 ///
 /// Échoue si la section est absente de toutes les couches, si un champ requis manque, ou
 /// si une valeur est mal typée.
-pub fn section<T: serde::de::DeserializeOwned>(nom: &str) -> Result<T, ConfigError> {
+pub fn section<T: serde::de::DeserializeOwned>(name: &str) -> Result<T, ConfigError> {
     let figment = figment()?;
 
     // Une section absente se distingue d'une section mal remplie : le message qui nomme la
     // table manquante mène à `config/default.toml`, celui de figment à un champ isolé.
-    if !figment.contains(nom) {
-        return Err(ConfigError::SectionAbsente(nom.to_owned()));
+    if !figment.contains(name) {
+        return Err(ConfigError::SectionAbsente(name.to_owned()));
     }
 
-    Ok(figment.extract_inner(nom)?)
+    Ok(figment.extract_inner(name)?)
 }
 
 /// Assemble les cinq couches.
@@ -208,15 +208,15 @@ fn figment() -> Result<Figment, ConfigError> {
 
     let base = base.merge(Toml::file("config/default.toml"));
 
-    let profil: String = surcharges(base.clone())?
+    let profile: String = overrides(base.clone())?
         .extract_inner("env")
         .unwrap_or_else(|_| PROFIL_PAR_DEFAUT.to_owned());
 
-    surcharges(base.merge(Toml::file(format!("config/{profil}.toml"))))
+    overrides(base.merge(Toml::file(format!("config/{profile}.toml"))))
 }
 
 /// Empile la couche `.env` puis celle de l'environnement, qui la recouvre.
-fn surcharges(figment: Figment) -> Result<Figment, ConfigError> {
+fn overrides(figment: Figment) -> Result<Figment, ConfigError> {
     Ok(dotenv(figment, ".env")?.merge(Env::prefixed(PREFIXE).split("__")))
 }
 
@@ -225,23 +225,23 @@ fn surcharges(figment: Figment) -> Result<Figment, ConfigError> {
 /// `dotenvy::dotenv()` exporterait ces valeurs dans l'environnement global : la
 /// précédence entre les deux couches deviendrait implicite, et les tests fuiteraient
 /// les uns dans les autres. Un fichier absent est une couche vide, pas une erreur.
-fn dotenv(mut figment: Figment, chemin: impl AsRef<Path>) -> Result<Figment, ConfigError> {
-    let entrees = match dotenvy::from_path_iter(chemin.as_ref()) {
-        Ok(entrees) => entrees,
-        Err(dotenvy::Error::Io(erreur)) if erreur.kind() == std::io::ErrorKind::NotFound => {
+fn dotenv(mut figment: Figment, path: impl AsRef<Path>) -> Result<Figment, ConfigError> {
+    let entries = match dotenvy::from_path_iter(path.as_ref()) {
+        Ok(entries) => entries,
+        Err(dotenvy::Error::Io(error)) if error.kind() == std::io::ErrorKind::NotFound => {
             return Ok(figment);
         }
-        Err(erreur) => return Err(erreur.into()),
+        Err(error) => return Err(error.into()),
     };
 
-    for entree in entrees {
-        let (cle, valeur) = entree?;
+    for input in entries {
+        let (cle, value) = input?;
         let Some(cle) = cle.strip_prefix(PREFIXE) else {
             continue;
         };
         let cle = cle.to_lowercase().replace("__", ".");
-        let valeur: Value = valeur.parse().expect("infaillible");
-        figment = figment.merge(Serialized::default(&cle, valeur));
+        let value: Value = value.parse().expect("infaillible");
+        figment = figment.merge(Serialized::default(&cle, value));
     }
 
     Ok(figment)
@@ -257,17 +257,17 @@ mod tests {
 
     /// Secret satisfaisant la longueur minimale, pour les cas qui ne portent pas sur lui.
     #[cfg(feature = "auth")]
-    const SECRET_DE_TEST: &str = "un secret de test qui porte au moins trente-deux octets";
+    const SECRET_DE_TEST: &str = "un secret de test qui porte au moins trente-deux bytes";
 
     /// Le flag `auth` rend `auth.secret` requis. Les cas qui portent sur autre chose le
     /// fournissent par l'environnement plutôt que d'alourdir chaque fixture TOML.
     #[cfg(feature = "auth")]
-    fn secret_de_test(jail: &mut Jail) {
+    fn test_secret(jail: &mut Jail) {
         jail.set_env("RBS_AUTH__SECRET", SECRET_DE_TEST);
     }
 
     #[cfg(not(feature = "auth"))]
-    fn secret_de_test(_jail: &mut Jail) {}
+    fn test_secret(_jail: &mut Jail) {}
 
     const DEFAULT_TOML: &str = r#"
         [server]
@@ -278,32 +278,32 @@ mod tests {
     "#;
 
     #[test]
-    fn un_champ_requis_manquant_fait_echouer_le_chargement_en_nommant_le_champ() {
+    fn a_missing_required_field_fails_the_load_naming_the_field() {
         Jail::expect_with(|jail| {
             jail.clear_env();
-            secret_de_test(jail);
+            test_secret(jail);
             jail.create_dir("config")?;
             jail.create_file(
                 "config/default.toml",
                 "[server]\nport = 8080\n\n[database]\n",
             )?;
 
-            let erreur = Config::load().expect_err("`database.url` n'a pas de défaut");
+            let error = Config::load().expect_err("`database.url` n'a pas de défaut");
 
-            let message = erreur.to_string();
+            let message = error.to_string();
             assert!(
                 message.contains("url"),
-                "le message doit nommer le champ fautif, obtenu : {message}"
+                "le message doit nommer le field fautif, obtenu : {message}"
             );
             Ok(())
         });
     }
 
     #[test]
-    fn une_variable_d_environnement_ecrase_la_valeur_du_fichier_toml() {
+    fn an_environment_variable_overrides_the_toml_file_value() {
         Jail::expect_with(|jail| {
             jail.clear_env();
-            secret_de_test(jail);
+            test_secret(jail);
             jail.create_dir("config")?;
             jail.create_file("config/default.toml", DEFAULT_TOML)?;
             jail.set_env("RBS_SERVER__PORT", "9999");
@@ -316,10 +316,10 @@ mod tests {
     }
 
     #[test]
-    fn le_fichier_dotenv_est_lu_mais_cede_devant_l_environnement() {
+    fn the_dotenv_file_is_read_but_yields_to_the_environment() {
         Jail::expect_with(|jail| {
             jail.clear_env();
-            secret_de_test(jail);
+            test_secret(jail);
             jail.create_dir("config")?;
             jail.create_file("config/default.toml", DEFAULT_TOML)?;
             jail.create_file(".env", "RBS_SERVER__PORT=7777\nRBS_SERVER__HOST=0.0.0.0\n")?;
@@ -327,17 +327,17 @@ mod tests {
 
             let config = Config::load().expect("la configuration doit se charger");
 
-            assert_eq!(config.server.host, "0.0.0.0", "valeur lue depuis `.env`");
+            assert_eq!(config.server.host, "0.0.0.0", "value lue depuis `.env`");
             assert_eq!(config.server.port, 9999, "l'environnement l'emporte");
             Ok(())
         });
     }
 
     #[test]
-    fn le_fichier_du_profil_ecrase_le_fichier_par_defaut() {
+    fn the_profile_file_overrides_the_default_file() {
         Jail::expect_with(|jail| {
             jail.clear_env();
-            secret_de_test(jail);
+            test_secret(jail);
             jail.create_dir("config")?;
             jail.create_file("config/default.toml", DEFAULT_TOML)?;
             jail.create_file("config/production.toml", "[server]\nport = 80\n")?;
@@ -352,10 +352,10 @@ mod tests {
     }
 
     #[test]
-    fn le_profil_se_lit_aussi_depuis_le_fichier_dotenv() {
+    fn the_profile_also_reads_from_the_dotenv_file() {
         Jail::expect_with(|jail| {
             jail.clear_env();
-            secret_de_test(jail);
+            test_secret(jail);
             jail.create_dir("config")?;
             jail.create_file("config/default.toml", DEFAULT_TOML)?;
             jail.create_file("config/staging.toml", "[server]\nport = 81\n")?;
@@ -369,10 +369,10 @@ mod tests {
     }
 
     #[test]
-    fn les_reglages_du_pool_ont_des_defauts_sans_configuration() {
+    fn the_pool_settings_have_defaults_without_configuration() {
         Jail::expect_with(|jail| {
             jail.clear_env();
-            secret_de_test(jail);
+            test_secret(jail);
             jail.set_env("RBS_DATABASE__URL", "postgres://localhost/app");
 
             let database = Config::load()
@@ -390,10 +390,10 @@ mod tests {
     }
 
     #[test]
-    fn un_reglage_du_pool_se_surcharge_par_l_environnement() {
+    fn a_pool_setting_is_overridden_by_the_environment() {
         Jail::expect_with(|jail| {
             jail.clear_env();
-            secret_de_test(jail);
+            test_secret(jail);
             jail.set_env("RBS_DATABASE__URL", "postgres://localhost/app");
             jail.set_env("RBS_DATABASE__MAX_CONNECTIONS", "42");
 
@@ -405,10 +405,10 @@ mod tests {
     }
 
     #[test]
-    fn les_valeurs_par_defaut_s_appliquent_sans_aucun_fichier() {
+    fn the_default_values_apply_without_any_file() {
         Jail::expect_with(|jail| {
             jail.clear_env();
-            secret_de_test(jail);
+            test_secret(jail);
             jail.set_env("RBS_DATABASE__URL", "postgres://localhost/app");
 
             let config = Config::load().expect("la configuration doit se charger");
@@ -421,10 +421,10 @@ mod tests {
     }
 
     #[test]
-    fn sans_section_docs_swagger_et_le_document_json_sont_exposes() {
+    fn without_a_docs_section_swagger_and_the_json_document_are_exposed() {
         Jail::expect_with(|jail| {
             jail.clear_env();
-            secret_de_test(jail);
+            test_secret(jail);
             jail.create_dir("config")?;
             jail.create_file("config/default.toml", DEFAULT_TOML)?;
 
@@ -437,10 +437,10 @@ mod tests {
     }
 
     #[test]
-    fn couper_swagger_laisse_le_document_json_expose() {
+    fn turning_swagger_off_leaves_the_json_document_exposed() {
         Jail::expect_with(|jail| {
             jail.clear_env();
-            secret_de_test(jail);
+            test_secret(jail);
             jail.create_dir("config")?;
             jail.create_file(
                 "config/default.toml",
@@ -459,10 +459,10 @@ mod tests {
     }
 
     #[test]
-    fn une_variable_d_environnement_coupe_swagger() {
+    fn an_environment_variable_turns_swagger_off() {
         Jail::expect_with(|jail| {
             jail.clear_env();
-            secret_de_test(jail);
+            test_secret(jail);
             jail.create_dir("config")?;
             jail.create_file("config/default.toml", DEFAULT_TOML)?;
             jail.set_env("RBS_DOCS__SWAGGER_UI", "false");
@@ -476,18 +476,18 @@ mod tests {
 
     #[cfg(feature = "auth")]
     #[test]
-    fn un_secret_absent_fait_echouer_le_chargement_en_nommant_le_champ() {
+    fn a_missing_secret_fails_the_load_naming_the_field() {
         Jail::expect_with(|jail| {
             jail.clear_env();
             jail.create_dir("config")?;
             jail.create_file("config/default.toml", DEFAULT_TOML)?;
 
-            let erreur = Config::load().expect_err("`auth.secret` n'a pas de défaut");
+            let error = Config::load().expect_err("`auth.secret` n'a pas de défaut");
 
-            let message = erreur.to_string();
+            let message = error.to_string();
             assert!(
                 message.contains("`secret`") && message.contains("auth"),
-                "le message doit nommer le champ fautif, obtenu : {message}"
+                "le message doit nommer le field fautif, obtenu : {message}"
             );
             Ok(())
         });
@@ -495,7 +495,7 @@ mod tests {
 
     #[cfg(feature = "auth")]
     #[test]
-    fn un_secret_de_moins_de_32_octets_est_refuse_au_chargement() {
+    fn a_secret_under_32_bytes_is_rejected_at_load() {
         Jail::expect_with(|jail| {
             jail.clear_env();
             jail.create_dir("config")?;
@@ -504,11 +504,11 @@ mod tests {
                 &format!("{DEFAULT_TOML}\n[auth]\nsecret = \"trop court\"\n"),
             )?;
 
-            let erreur = Config::load().expect_err("un secret de 10 octets doit être refusé");
+            let error = Config::load().expect_err("un secret de 10 bytes doit être refusé");
 
             assert!(
-                matches!(erreur, ConfigError::SecretTropCourt(10)),
-                "obtenu : {erreur:?}"
+                matches!(error, ConfigError::SecretTropCourt(10)),
+                "obtenu : {error:?}"
             );
             Ok(())
         });
@@ -516,14 +516,14 @@ mod tests {
 
     #[cfg(feature = "auth")]
     #[test]
-    fn sans_duree_de_vie_configuree_l_acces_dure_quinze_minutes_et_le_refresh_trente_jours() {
+    fn without_a_configured_lifetime_access_lasts_fifteen_minutes_and_refresh_thirty_days() {
         Jail::expect_with(|jail| {
             jail.clear_env();
             jail.create_dir("config")?;
             jail.create_file(
                 "config/default.toml",
                 &format!(
-                    "{DEFAULT_TOML}\n[auth]\nsecret = \"un secret de test qui porte trente-deux octets\"\n"
+                    "{DEFAULT_TOML}\n[auth]\nsecret = \"un secret de test qui porte trente-deux bytes\"\n"
                 ),
             )?;
 
@@ -541,23 +541,23 @@ mod tests {
     #[derive(Debug, Deserialize)]
     struct SectionEtrangere {
         url: String,
-        #[serde(default = "ttl_par_defaut")]
+        #[serde(default = "default_ttl")]
         ttl_secs: u64,
     }
 
     /// Défaut porté par l'appelant, et par lui seul.
-    fn ttl_par_defaut() -> u64 {
+    fn default_ttl() -> u64 {
         300
     }
 
     #[test]
-    fn une_section_absente_rend_une_erreur_nommant_la_section() {
+    fn a_missing_section_returns_an_error_naming_the_section() {
         Jail::expect_with(|jail| {
             jail.clear_env();
             jail.create_dir("config")?;
             jail.create_file("config/default.toml", DEFAULT_TOML)?;
 
-            let erreur = section::<SectionEtrangere>("externe")
+            let error = section::<SectionEtrangere>("externe")
                 .expect_err("aucune section `externe` n'est déclarée");
 
             // L'assertion porte sur la variante et non sur le seul message : figment nomme
@@ -565,15 +565,15 @@ mod tests {
             // là où la table entière est à créer. Un test qui ne lirait que le message
             // passerait sans la garde, et ne prouverait donc rien d'elle.
             assert!(
-                matches!(&erreur, ConfigError::SectionAbsente(section) if section == "externe"),
-                "attendu SectionAbsente(\"externe\"), obtenu : {erreur:?}"
+                matches!(&error, ConfigError::SectionAbsente(section) if section == "externe"),
+                "expected SectionAbsente(\"externe\"), obtenu : {error:?}"
             );
             Ok(())
         });
     }
 
     #[test]
-    fn pour_une_section_etrangere_le_profil_puis_l_environnement_l_emportent() {
+    fn for_a_foreign_section_the_profile_then_the_environment_win() {
         Jail::expect_with(|jail| {
             jail.clear_env();
             jail.create_dir("config")?;
@@ -583,7 +583,7 @@ mod tests {
             )?;
             jail.create_file(
                 "config/production.toml",
-                "[externe]\nurl = \"depuis-le-profil\"\nttl_secs = 2\n",
+                "[externe]\nurl = \"depuis-le-profile\"\nttl_secs = 2\n",
             )?;
             jail.set_env("RBS_ENV", "production");
             jail.set_env("RBS_EXTERNE__TTL_SECS", "3");
@@ -592,8 +592,8 @@ mod tests {
                 section::<SectionEtrangere>("externe").expect("la section doit se charger");
 
             assert_eq!(
-                externe.url, "depuis-le-profil",
-                "le fichier du profil doit écraser le fichier par défaut"
+                externe.url, "depuis-le-profile",
+                "le file du profile doit écraser le file par défaut"
             );
             assert_eq!(
                 externe.ttl_secs, 3,
@@ -604,7 +604,7 @@ mod tests {
     }
 
     #[test]
-    fn les_defauts_serde_de_l_appelant_sont_respectes() {
+    fn the_callers_serde_defaults_are_honoured() {
         Jail::expect_with(|jail| {
             jail.clear_env();
             jail.create_dir("config")?;

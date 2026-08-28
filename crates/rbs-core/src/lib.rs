@@ -54,7 +54,7 @@ pub use error::{Error, Result};
 #[cfg(feature = "auth")]
 pub use extract::Identity;
 pub use extract::ValidatedJson;
-pub use openapi::{ProblemDetails, ReponsesCommunes};
+pub use openapi::{CommonResponses, ProblemDetails};
 pub use pagination::{Page, Pagination};
 #[cfg(feature = "auth")]
 pub use state::HasAuth;
