@@ -207,14 +207,16 @@ plan pour /private/tmp/rbs-demo/blog
   + src/articles/service.rs                             créé
   + src/articles/controller.rs                          créé
   + src/articles/tests.rs                               créé
+  + src/seeds/articles.rs                               créé
   + migration/src/m20260826_213608_create_articles.rs   créé
   ~ src/main.rs                                         modifié
   ~ src/router.rs                                       modifié
   ~ src/openapi.rs                                      modifié
   ~ migration/src/lib.rs                                modifié
+  ~ src/seeds/main.rs                                   modifié
   ~ Cargo.toml                                          modifié
 
-  13 fichiers à écrire
+  15 fichiers à écrire
 
   rien n'a été écrit (--dry-run)
 ```
@@ -232,20 +234,22 @@ plan pour /private/tmp/rbs-demo/blog
   + src/articles/service.rs                             créé
   + src/articles/controller.rs                          créé
   + src/articles/tests.rs                               créé
+  + src/seeds/articles.rs                               créé
   + migration/src/m20260826_213608_create_articles.rs   créé
   ~ src/main.rs                                         modifié
   ~ src/router.rs                                       modifié
   ~ src/openapi.rs                                      modifié
   ~ migration/src/lib.rs                                modifié
+  ~ src/seeds/main.rs                                   modifié
   ~ Cargo.toml                                          modifié
 
-  13 fichiers à écrire
-✓ articles générée — 8 fichiers
+  15 fichiers à écrire
+✓ articles générée — 9 fichiers
 
   la migration m20260826_213608_create_articles reste à appliquer avant de lancer le projet
 ```
 
-Eight files created, five modified through their anchors. The feature is then recorded in
+Nine files created, six modified through their anchors. The feature is then recorded in
 the manifest, which is what makes the command idempotent:
 
 ```text
@@ -295,7 +299,7 @@ suggests and what the run above used.
 ## Anchors
 
 `rbs generate` never rewrites an AST. It inserts between comment markers the skeleton
-carries, and it uses five of the seven — the two in `src/state.rs` belong to the fragments
+carries, and it uses six of the nine — the two in `src/state.rs` and `// <rbs:startup>` belong to the fragments
 [`rbs add`](./add.md) installs:
 
 | Anchor | File |
@@ -305,6 +309,7 @@ carries, and it uses five of the seven — the two in `src/state.rs` belong to t
 | `// <rbs:openapi>` | `src/openapi.rs` |
 | `// <rbs:migration_modules>` | `migration/src/lib.rs` |
 | `// <rbs:migrations>` | `migration/src/lib.rs` |
+| `// <rbs:seeds>` | `src/seeds/main.rs` |
 
 Remove one and the command writes nothing at all — not the feature files either — and
 prints the block to paste back:
@@ -318,7 +323,7 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) checks the seven anchors, so a missing one can be found before a
+[`rbs doctor`](./doctor.md) checks the nine anchors, so a missing one can be found before a
 generation trips over it.
 
 ## Failures

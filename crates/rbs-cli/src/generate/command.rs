@@ -14,7 +14,7 @@ use crate::plan;
 
 use super::feature::Feature;
 use super::{
-    controller, dto, entity, fields, format, migration, mount, name, repository, service,
+    controller, dto, entity, fields, format, migration, mount, name, repository, seed, service,
     tests_http,
 };
 
@@ -170,6 +170,9 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     if let Some(migration) = &migration {
         montages.extend(mount::for_migration(migration));
     }
+    if options.complete {
+        montages.extend(mount::for_seed(&module));
+    }
     for mount in montages {
         builder.insert(mount.anchor, &mount.lines)?;
     }
@@ -202,6 +205,9 @@ fn render(feature: &Feature, complete: bool) -> Result<(Vec<File>, Option<String
 
     if complete {
         files.push((dans("tests.rs"), tests_http::render(feature)));
+        // Hors du répertoire de la feature : le seed appartient au binaire qui l'applique,
+        // et non au module que le routeur monte.
+        files.push((format!("src/seeds/{module}.rs"), seed::render(feature)));
     }
 
     let mut rendus = Vec::with_capacity(files.len() + 1);
@@ -476,6 +482,51 @@ mod tests {
         assert!(lib.contains("::Migration),"), "{lib}");
     }
 
+    /// Le premier critère du lot : le seed est écrit, et l'ancre porte son appel.
+    #[test]
+    fn a_crud_drops_its_seed_and_declares_it_in_the_anchor() {
+        let (_parent, root) = project();
+
+        run(&options(&root, "articles", Some("title:string"), true))
+            .expect("la génération doit aboutir");
+
+        assert!(
+            root.join("src/seeds/articles.rs").exists(),
+            "le seed de la feature manque"
+        );
+
+        let binaire = read(&root.join("src/seeds/main.rs"));
+        let ancre = crate::anchors::body(&binaire, crate::anchors::SEEDS)
+            .expect("l'ancre des seeds est présente");
+        assert_eq!(ancre.trim(), "articles,", "{binaire}");
+    }
+
+    /// Le troisième critère : deux générations, deux seeds, une ancre en ordre.
+    #[test]
+    fn two_generations_leave_two_seeds_and_an_orderly_anchor() {
+        let (_parent, root) = project();
+
+        for feature in ["articles", "notes"] {
+            run(&options(&root, feature, Some("title:string"), true))
+                .expect("la génération doit aboutir");
+        }
+
+        assert!(root.join("src/seeds/articles.rs").exists());
+        assert!(root.join("src/seeds/notes.rs").exists());
+
+        let binaire = read(&root.join("src/seeds/main.rs"));
+        let ancre = crate::anchors::body(&binaire, crate::anchors::SEEDS)
+            .expect("l'ancre des seeds est présente");
+        let declarations: Vec<&str> = ancre
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .collect();
+
+        assert_eq!(declarations, ["articles,", "notes,"], "{binaire}");
+    }
+
+    /// Une feature écrite à la main n'a pas d'entité : rien à semer.
     #[test]
     fn an_empty_feature_writes_neither_migration_nor_tests() {
         let (_parent, root) = project();
@@ -492,6 +543,14 @@ mod tests {
         assert!(
             !read(&root.join("migration/src/lib.rs")).contains("notes"),
             "la crate migration ne doit pas être touchée"
+        );
+        assert!(
+            !root.join("src/seeds/notes.rs").exists(),
+            "une feature sans entité n'a rien à semer"
+        );
+        assert!(
+            !read(&root.join("src/seeds/main.rs")).contains("notes"),
+            "le binaire des seeds ne doit pas être touché"
         );
         assert!(
             !read(&root.join("src/notes/mod.rs")).contains("mod tests;"),

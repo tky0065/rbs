@@ -328,6 +328,7 @@ mod tests {
             "migration/src/main.rs",
             "src/health/controller.rs",
             "src/health/mod.rs",
+            "src/seeds/main.rs",
             "src/main.rs",
             "src/openapi.rs",
             "src/router.rs",

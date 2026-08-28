@@ -42,7 +42,7 @@ pub enum Commands {
         core_path: Option<PathBuf>,
     },
 
-    /// Ajoute une feature à un projet existant : auth, ci, docker, mail, redis, storage.
+    /// Ajoute une feature : auth, ci, docker, jobs, mail, redis, storage.
     Add {
         /// Feature à installer.
         feature: String,
@@ -64,6 +64,16 @@ pub enum Commands {
         #[command(subcommand)]
         command: MigrateCommands,
     },
+
+    /// Insère les données de démonstration du projet.
+    Seed {
+        /// Insère même sous RBS_ENV=production.
+        #[arg(long)]
+        force: bool,
+    },
+
+    /// Démarre le projet : services, migrations, serveur relancé à chaque changement.
+    Dev,
 
     /// Diagnostique le projet : ancres, .env, base joignable, versions.
     Doctor,
@@ -137,7 +147,7 @@ mod tests {
         let command = Cli::command();
         let help = command.clone().render_long_help().to_string();
 
-        for expected in ["new", "add", "generate", "migrate", "doctor"] {
+        for expected in ["new", "add", "generate", "migrate", "seed", "dev", "doctor"] {
             let sous_commande = command
                 .get_subcommands()
                 .find(|s| s.get_name() == expected)

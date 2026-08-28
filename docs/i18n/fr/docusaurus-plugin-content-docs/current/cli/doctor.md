@@ -38,7 +38,7 @@ aucune n'a d'effet ici.
 
 | Contrôle | Ce qu'il regarde |
 |---|---|
-| `ancres` | Les sept points d'insertion : `// <rbs:features>` dans `src/main.rs`, `// <rbs:routes>` dans `src/router.rs`, `// <rbs:openapi>` dans `src/openapi.rs`, `// <rbs:migration_modules>` et `// <rbs:migrations>` dans `migration/src/lib.rs`, `// <rbs:state_champs>` et `// <rbs:state_init>` dans `src/state.rs`. |
+| `ancres` | Les neuf points d'insertion : `// <rbs:features>` dans `src/main.rs`, `// <rbs:routes>` dans `src/router.rs`, `// <rbs:openapi>` dans `src/openapi.rs`, `// <rbs:migration_modules>` et `// <rbs:migrations>` dans `migration/src/lib.rs`, `// <rbs:state_champs>` et `// <rbs:state_init>` dans `src/state.rs`, `// <rbs:startup>` dans `src/main.rs`, `// <rbs:seeds>` dans `src/seeds/main.rs`. |
 | `.env` | Toute variable déclarée par `.env.example` est renseignée dans `.env`. `.env.example` sert de référence parce qu'il est versionné et généré avec le squelette — une liste tenue dans le CLI aurait fait deux vérités à synchroniser. |
 | `versions` | Le rbs inscrit dans `[package.metadata.rbs]`, la dépendance `rbs-core`, et le CLI qui diagnostique. |
 | `base` | Une connexion TCP en moins de trois secondes, puis la version du serveur — demandée au binaire de la crate `migration`, rbs n'embarquant aucun client SQL. PostgreSQL 18 est le minimum : `uuidv7()`, que les migrations générées posent en défaut de clé primaire, n'existe pas avant. |

@@ -1,6 +1,8 @@
 mod add;
 mod anchors;
+mod cargo;
 mod cli;
+mod dev;
 mod doctor;
 mod dotenv;
 mod generate;
@@ -11,6 +13,7 @@ mod migrate;
 mod new;
 mod plan;
 mod prompts;
+mod seed;
 mod template;
 mod templates;
 mod ui;
@@ -92,6 +95,30 @@ pub fn run() {
 
             if let Err(error) = migrate(action) {
                 ui::error(&error.to_string());
+                std::process::exit(1);
+            }
+        }
+
+        Commands::Seed { force } => {
+            if let Err(error) = seed(force) {
+                ui::error(&error.to_string());
+                if let Some(remedy) = error.remedy() {
+                    ui::info(&format!("\n{remedy}"));
+                }
+                std::process::exit(1);
+            }
+        }
+
+        Commands::Dev => {
+            let resultat = std::env::current_dir()
+                .map_err(dev::Error::Cwd)
+                .and_then(|directory| dev::run(&directory));
+
+            if let Err(error) = resultat {
+                ui::error(&error.to_string());
+                if let Some(remedy) = error.remedy() {
+                    ui::info(&format!("\n{remedy}"));
+                }
                 std::process::exit(1);
             }
         }
@@ -207,6 +234,9 @@ fn suite(feature: &str) -> Option<&'static str> {
             "les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez \
              storage.backend à \"s3\" et recopiez les RBS_STORAGE__* de .env.example",
         ),
+        // La table n'existe pas encore, et le worker démarre avec l'API : sans la
+        // migration, chaque tour de boucle échoue sur une relation absente.
+        "jobs" => Some("rbs migrate up, puis inscrivez vos jobs dans src/jobs/mod.rs"),
         _ => None,
     }
 }
@@ -270,6 +300,21 @@ fn migrate(action: migrate::Action) -> Result<(), Box<dyn Error>> {
             ui::success(&format!("{} créée", fresh.file));
             ui::info("\n  décrivez le changement de schéma, puis `rbs migrate up`");
         }
+    }
+
+    Ok(())
+}
+
+/// Insère les données de démonstration du projet courant.
+fn seed(force: bool) -> Result<(), seed::Error> {
+    let directory = std::env::current_dir().map_err(|source| seed::Error::Acces {
+        path: ".".to_string(),
+        source,
+    })?;
+
+    match seed::run(&seed::Options { directory, force })? {
+        seed::Output::Insere => ui::success("seeds insérés"),
+        seed::Output::Rien => ui::success("aucun seed déclaré — rien à insérer"),
     }
 
     Ok(())
