@@ -110,6 +110,40 @@ fn a_project_ahead_of_the_binary_is_refused_by_naming_both_versions() {
     assert!(rendu.contains(CLI), "{rendu}");
 }
 
+/// La note du saut est affichée après l'alignement, et son absence n'est pas une erreur.
+///
+/// Ce que le binaire doit dire dépend du catalogue embarqué : la note attendue est donc
+/// cherchée là où elle vit, pour que le test dise la même chose de part et d'autre d'une
+/// publication qui en ajoute une.
+#[test]
+fn the_note_of_the_jump_follows_the_alignment_or_says_it_is_missing() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+    dater(&projet, "0.0.1");
+    common::commiter(&projet, "initial");
+
+    let rendu = String::from_utf8(
+        rbs(&projet)
+            .arg("upgrade")
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone(),
+    )
+    .expect("la sortie est de l'UTF-8");
+
+    let note = Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("notes/{CLI}.md"));
+
+    if note.exists() {
+        let contenu = fs::read_to_string(&note).expect("la note est lisible");
+        let titre = contenu.lines().next().expect("une note a un titre");
+        assert!(rendu.contains(titre), "{rendu}");
+    } else {
+        assert!(rendu.contains("aucune note de migration"), "{rendu}");
+    }
+}
+
 /// Réécrit la version que `[package.metadata.rbs]` garde de la génération.
 fn dater(projet: &Path, version: &str) {
     let manifeste = manifeste(projet);

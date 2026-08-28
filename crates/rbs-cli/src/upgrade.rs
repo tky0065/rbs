@@ -166,7 +166,7 @@ pub(crate) fn posterieure(projet: &str, cli: &str) -> bool {
 
 /// Les trois nombres d'une version, la pré-publication et les métadonnées de compilation
 /// laissées de côté.
-fn nombres(version: &str) -> Option<[u64; 3]> {
+pub(crate) fn nombres(version: &str) -> Option<[u64; 3]> {
     let mut parts = version
         .split(['-', '+'])
         .next()

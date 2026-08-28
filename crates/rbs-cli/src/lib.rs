@@ -12,6 +12,7 @@ mod manifest;
 mod metadata;
 mod migrate;
 mod new;
+mod notes;
 mod plan;
 mod prompts;
 mod seed;
@@ -328,6 +329,21 @@ fn upgrade(force: bool) -> Result<(), upgrade::Error> {
     plan::application::apply(&planned.plan, force)?;
 
     ui::success(&format!("manifeste aligné sur rbs {}", planned.vers));
+
+    let notes = notes::traversees(&planned.depuis, &planned.vers);
+    if notes.is_empty() {
+        // Toutes les versions ne rompent pas quelque chose : un saut sans note n'est pas
+        // un catalogue en défaut, et ne doit pas se lire comme un échec.
+        ui::info(&format!(
+            "\n  aucune note de migration pour rbs {} → {}",
+            planned.depuis, planned.vers
+        ));
+    } else {
+        for note in notes {
+            println!("\n{}", note.trim_end());
+        }
+    }
+
     // Le manifeste ne fait qu'énoncer la version voulue : tant que le lock n'a pas suivi,
     // le projet compile encore contre l'ancien noyau.
     ui::info("\n  cargo update -p rbs-core, puis cargo test");
