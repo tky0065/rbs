@@ -260,6 +260,7 @@ mod tests {
     use minijinja::{Value, context};
 
     use super::*;
+    use crate::database::Database;
     use crate::template::Renderer;
 
     /// Racine des templates du squelette, résolue depuis la crate plutôt que depuis le
@@ -287,13 +288,23 @@ mod tests {
     ];
 
     /// Contexte de rendu minimal : les cinq variables que `rbs new` fournira.
+    /// Le contexte que `new::render` construit, recopié ici.
+    ///
+    /// La divergence se voit : une variable ajoutée là-bas et oubliée ici fait tomber
+    /// `each_template_renders_with_the_context_of_a_creation` sur la template qui
+    /// l'emploie.
     fn context() -> Value {
+        let database = Database::default();
+
         context! {
             project_name => "mon-api",
             crate_name => "mon_api",
             rbs_core_dep => "\"0.1\"",
             rbs_version => "0.1.0",
             database_url => "postgres://postgres:postgres@localhost:5432/mon_api",
+            database => database.name(),
+            sea_orm_feature => database.sea_orm_feature(),
+            database_url_par_defaut => database.default_url("mon_api"),
         }
     }
 
@@ -388,7 +399,7 @@ mod tests {
     }
 
     #[test]
-    fn each_template_renders_with_the_five_variables() {
+    fn each_template_renders_with_the_context_of_a_creation() {
         let renderer = Renderer::new();
 
         for path in templates() {
@@ -573,10 +584,17 @@ mod tests {
     const DESTINATIONS_DOCKER: [&str; 3] = [".dockerignore", "Dockerfile", "docker-compose.yml"];
 
     /// Contexte de rendu d'un fragment : les deux variables qu'un projet existant fournit.
+    /// Le contexte que `add::plan_for` construit, recopié ici.
     fn feature_context() -> Value {
+        let database = Database::default();
+
         context! {
             project_name => "mon-api",
             crate_name => "mon_api",
+            database => database.name(),
+            database_a_un_serveur => database.a_un_serveur(),
+            database_url_compose => database.compose_url("mon_api"),
+            database_url_par_defaut => database.default_url("mon_api"),
         }
     }
 

@@ -2,6 +2,8 @@ use std::fmt;
 
 use inquire::{InquireError, MultiSelect, Text};
 
+use crate::database::Database;
+
 /// Nom retenu quand ni le flag ni la question ne l'ont fixé.
 const NOM_DEFAUT: &str = "mon-api";
 
@@ -13,7 +15,7 @@ const FEATURES_DISPONIBLES: &[&str] = &["docker", "ci"];
 pub struct ProjectOptions {
     /// Nom du projet, qui est aussi celui du répertoire créé.
     pub name: String,
-    /// URL de connexion PostgreSQL écrite dans le `.env` du projet.
+    /// URL de connexion écrite dans le `.env` du projet.
     pub database_url: String,
     /// Features à installer à la création.
     pub features: Vec<String>,
@@ -50,7 +52,7 @@ impl std::error::Error for PromptError {}
 /// soit testable sans terminal — et que l'absence d'appel soit observable.
 trait Questions {
     fn name(&self, defaut: &str) -> Result<String, PromptError>;
-    fn database_url(&self, defaut: &str) -> Result<String, PromptError>;
+    fn database_url(&self, database: Database, defaut: &str) -> Result<String, PromptError>;
     fn features(&self, disponibles: &[&str]) -> Result<Vec<String>, PromptError>;
 }
 
@@ -65,12 +67,15 @@ impl Questions for Interactive {
             .map_err(translate)
     }
 
-    fn database_url(&self, defaut: &str) -> Result<String, PromptError> {
-        Text::new("URL de la base PostgreSQL ?")
-            .with_default(defaut)
-            .with_help_message("PostgreSQL 18 minimum : `uuidv7()` y est natif")
-            .prompt()
-            .map_err(translate)
+    fn database_url(&self, database: Database, defaut: &str) -> Result<String, PromptError> {
+        let question = format!("URL de la base {database} ?");
+        let mut champ = Text::new(&question).with_default(defaut);
+
+        if let Some(aide) = help_for(database) {
+            champ = champ.with_help_message(aide);
+        }
+
+        champ.prompt().map_err(translate)
     }
 
     fn features(&self, disponibles: &[&str]) -> Result<Vec<String>, PromptError> {
@@ -97,21 +102,30 @@ fn translate(error: InquireError) -> PromptError {
     }
 }
 
-/// URL par défaut, dérivée du nom du projet.
-fn default_database_url(name: &str) -> String {
-    // Un identifiant PostgreSQL non entre guillemets n'admet pas le tiret.
-    let base = name.replace('-', "_");
-    format!("postgres://postgres:postgres@localhost:5432/{base}")
+/// Ce que la question ajoute pour le moteur choisi, quand elle a quelque chose à dire.
+fn help_for(database: Database) -> Option<&'static str> {
+    match database {
+        Database::Postgres => Some("PostgreSQL 18 minimum : `uuidv7()` y est natif"),
+        Database::Mysql => None,
+        Database::Sqlite => Some("un chemin de fichier : le serveur n'existe pas"),
+    }
+}
+
+/// URL par défaut, dérivée du moteur et du nom du projet.
+fn default_database_url(database: Database, name: &str) -> String {
+    // Un identifiant de base non entre guillemets n'admet pas le tiret.
+    database.default_url(&name.replace('-', "_"))
 }
 
 /// Complète les valeurs absentes des flags, en questionnant l'utilisateur sauf si `yes`.
 pub fn resolve(
     name: Option<String>,
     database_url: Option<String>,
+    database: Database,
     features: Option<Vec<String>>,
     yes: bool,
 ) -> Result<ProjectOptions, PromptError> {
-    resolve_with(&Interactive, name, database_url, features, yes)
+    resolve_with(&Interactive, name, database_url, database, features, yes)
 }
 
 /// `yes` court-circuite avant toute question : la résolution devient purement
@@ -121,6 +135,7 @@ fn resolve_with<Q: Questions>(
     questions: &Q,
     name: Option<String>,
     database_url: Option<String>,
+    database: Database,
     features: Option<Vec<String>>,
     yes: bool,
 ) -> Result<ProjectOptions, PromptError> {
@@ -130,11 +145,11 @@ fn resolve_with<Q: Questions>(
         None => questions.name(NOM_DEFAUT)?,
     };
 
-    let defaut_url = default_database_url(&name);
+    let defaut_url = default_database_url(database, &name);
     let database_url = match database_url {
         Some(url) => url,
         None if yes => defaut_url,
-        None => questions.database_url(&defaut_url)?,
+        None => questions.database_url(database, &defaut_url)?,
     };
 
     let features = match features {
@@ -174,7 +189,7 @@ mod tests {
             Ok("repondu".to_string())
         }
 
-        fn database_url(&self, _defaut: &str) -> Result<String, PromptError> {
+        fn database_url(&self, _database: Database, _defaut: &str) -> Result<String, PromptError> {
             self.written.borrow_mut().push("database_url");
             Ok("postgres://repondu".to_string())
         }
@@ -189,7 +204,7 @@ mod tests {
     fn with_yes_resolution_returns_the_defaults_without_asking() {
         let espion = Spy::default();
 
-        let options = resolve_with(&espion, None, None, None, true).unwrap();
+        let options = resolve_with(&espion, None, None, Database::default(), None, true).unwrap();
 
         assert!(
             espion.written().is_empty(),
@@ -208,8 +223,15 @@ mod tests {
     fn the_name_flag_wins_over_the_default_and_names_the_database() {
         let espion = Spy::default();
 
-        let options =
-            resolve_with(&espion, Some("mon-projet".to_string()), None, None, true).unwrap();
+        let options = resolve_with(
+            &espion,
+            Some("mon-projet".to_string()),
+            None,
+            Database::default(),
+            None,
+            true,
+        )
+        .unwrap();
 
         assert!(espion.written().is_empty());
         assert_eq!(options.name, "mon-projet");
@@ -228,6 +250,7 @@ mod tests {
             &espion,
             None,
             Some("postgres://ailleurs:5432/db".to_string()),
+            Database::default(),
             None,
             true,
         )
@@ -245,6 +268,7 @@ mod tests {
             &espion,
             None,
             None,
+            Database::default(),
             Some(vec!["docker".to_string(), "ci".to_string()]),
             true,
         )
@@ -258,7 +282,7 @@ mod tests {
     fn without_yes_each_missing_value_becomes_a_question() {
         let espion = Spy::default();
 
-        let options = resolve_with(&espion, None, None, None, false).unwrap();
+        let options = resolve_with(&espion, None, None, Database::default(), None, false).unwrap();
 
         assert_eq!(espion.written(), ["name", "database_url", "features"]);
         assert_eq!(options.name, "repondu");
@@ -270,7 +294,15 @@ mod tests {
     fn without_yes_a_supplied_flag_skips_its_question() {
         let espion = Spy::default();
 
-        resolve_with(&espion, Some("api".to_string()), None, None, false).unwrap();
+        resolve_with(
+            &espion,
+            Some("api".to_string()),
+            None,
+            Database::default(),
+            None,
+            false,
+        )
+        .unwrap();
 
         assert_eq!(espion.written(), ["database_url", "features"]);
     }

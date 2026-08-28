@@ -12,6 +12,7 @@ default-run = "{@ project_name @}"
 [package.metadata.rbs]
 version = "{@ rbs_version @}"
 features = ["health"]
+database = "{@ database @}"
 
 [[bin]]
 name = "{@ project_name @}"
@@ -26,7 +27,7 @@ rbs-core = {@ rbs_core_dep @}
 anyhow = "1.0"
 axum = "0.8"
 chrono = "0.4"
-sea-orm = { version = "2.0", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
+sea-orm = { version = "2.0", features = ["{@ sea_orm_feature @}", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }

@@ -175,9 +175,17 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     })?;
 
     let nom_projet = metadata::package_name(&root.join("Cargo.toml"))?;
+    let crate_name = nom_projet.replace('-', "_");
+    // Le moteur vient du manifeste, seul endroit où le choix de `rbs new` a survécu : un
+    // fragment posé six mois plus tard n'a plus les flags de la création.
+    let database = metadata::read(&root.join("Cargo.toml"))?.database;
     let context = context! {
         project_name => nom_projet.clone(),
-        crate_name => nom_projet.replace('-', "_"),
+        crate_name => crate_name.clone(),
+        database => database.name(),
+        database_a_un_serveur => database.a_un_serveur(),
+        database_url_compose => database.compose_url(&crate_name),
+        database_url_par_defaut => database.default_url(&crate_name),
     };
 
     let mut builder = plan::Builder::new(root);
@@ -233,6 +241,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::database::Database;
     use crate::plan::Status;
 
     /// Empreinte récursive d'un répertoire : chemin relatif -> contenu.
@@ -262,11 +271,17 @@ mod tests {
 
     /// Un projet déroulé par `rbs new`, sans passer par le binaire ni par cargo.
     fn project() -> (TempDir, PathBuf) {
+        project_on(Database::default())
+    }
+
+    /// Le même, sur le moteur demandé — ce que `rbs new --database` produit.
+    fn project_on(database: Database) -> (TempDir, PathBuf) {
         let parent = TempDir::new().expect("répertoire temporaire créable");
         let project = crate::new::create(
             &crate::new::Options {
                 name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
+                database_url: database.default_url("demo_api"),
+                database,
                 features: Vec::new(),
                 core_path: None,
                 template_dir: None,
@@ -315,6 +330,83 @@ mod tests {
                 String::from_utf8_lossy(&output.stderr)
             );
         }
+    }
+
+    // SQLite n'a pas de serveur : un service `db` que rien ne peut atteindre ferait
+    // échouer `docker compose up` sur une image qui n'a rien à faire là. Docker garde
+    // son autre rôle, conteneuriser l'application.
+    #[test]
+    fn a_sqlite_project_gets_a_compose_without_a_database_service() {
+        let (_parent, root) = project_on(Database::Sqlite);
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(
+            !compose.contains("  db:"),
+            "le compose monte une base pour SQLite :\n{compose}"
+        );
+        assert!(
+            !compose.contains("condition: service_healthy"),
+            "le compose fait attendre un service sur une base absente :\n{compose}"
+        );
+        assert!(
+            compose.contains("sqlite://"),
+            "le compose ne porte pas l'URL SQLite :\n{compose}"
+        );
+    }
+
+    #[test]
+    fn a_mysql_project_gets_a_mysql_service() {
+        let (_parent, root) = project_on(Database::Mysql);
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(
+            compose.contains("image: mysql:"),
+            "le compose ne monte pas MySQL :\n{compose}"
+        );
+        assert!(
+            !compose.contains("postgres"),
+            "le compose nomme encore PostgreSQL :\n{compose}"
+        );
+    }
+
+    // Les services de GitHub Actions sont des conteneurs : en réclamer un pour SQLite
+    // ferait attendre la CI sur une image qui n'a rien à servir.
+    #[test]
+    fn a_sqlite_project_gets_a_workflow_without_a_database_service() {
+        let (_parent, root) = project_on(Database::Sqlite);
+
+        let planned = plan_for(&options(&root, "ci")).expect("le plan doit se calculer");
+        let workflow = projected(&planned, ".github/workflows/ci.yml");
+
+        assert!(
+            !workflow.contains("services:"),
+            "le workflow réclame un service pour SQLite :\n{workflow}"
+        );
+        assert!(
+            workflow.contains("sqlite://"),
+            "le workflow ne porte pas l'URL SQLite :\n{workflow}"
+        );
+    }
+
+    #[test]
+    fn a_mysql_project_gets_a_workflow_service_on_mysql() {
+        let (_parent, root) = project_on(Database::Mysql);
+
+        let planned = plan_for(&options(&root, "ci")).expect("le plan doit se calculer");
+        let workflow = projected(&planned, ".github/workflows/ci.yml");
+
+        assert!(
+            workflow.contains("image: mysql:"),
+            "le workflow ne monte pas MySQL :\n{workflow}"
+        );
+        assert!(
+            !workflow.contains("postgres"),
+            "le workflow nomme encore PostgreSQL :\n{workflow}"
+        );
     }
 
     /// Le contenu qu'un plan projette pour `path`.

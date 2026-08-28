@@ -16,14 +16,16 @@ env:
   CARGO_TERM_COLOR: always
   # Les tests montent l'application sur une vraie base, et `.env` n'est pas versionné :
   # l'URL vient d'ici, comme elle viendrait de l'environnement en production.
-  RBS_DATABASE__URL: postgres://postgres:postgres@localhost:5432/{@ crate_name @}
+  RBS_DATABASE__URL: {@ database_url_par_defaut @}
 
 jobs:
   ci:
     name: fmt · clippy · test
     runs-on: ubuntu-latest
+{%- if database_a_un_serveur %}
 
     services:
+{%- if database == "postgres" %}
       postgres:
         image: postgres:18
         env:
@@ -34,9 +36,21 @@ jobs:
           - 5432:5432
         options: >-
           --health-cmd "pg_isready -U postgres"
+{%- else %}
+      mysql:
+        image: mysql:8
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: {@ crate_name @}
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd "mysqladmin ping -h 127.0.0.1 -uroot -proot"
+{%- endif %}
           --health-interval 2s
           --health-timeout 3s
           --health-retries 30
+{%- endif %}
 
     steps:
       - uses: actions/checkout@v7

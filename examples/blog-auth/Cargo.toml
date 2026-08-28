@@ -12,6 +12,7 @@ default-run = "blog-auth"
 [package.metadata.rbs]
 version = "0.1.0"
 features = ["health", "auth", "posts"]
+database = "postgres"
 
 [[bin]]
 name = "blog-auth"

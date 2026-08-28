@@ -9,6 +9,8 @@ use std::path::{Path, PathBuf};
 
 use toml_edit::{Array, DocumentMut, InlineTable, Item, Value};
 
+use crate::database::Database;
+
 /// Remonte de `start` jusqu'au projet rbs qui le contient.
 ///
 /// Le manifeste seul ne suffit pas à trancher : la crate `migration` en porte un, et une
@@ -27,6 +29,8 @@ pub struct Metadata {
     pub version: String,
     /// Features installées, dans l'ordre où elles ont été ajoutées.
     pub features: Vec<String>,
+    /// Moteur de base sur lequel le projet a été créé.
+    pub database: Database,
 }
 
 /// Une dépendance telle qu'un patch de manifeste la réclame.
@@ -81,6 +85,20 @@ pub enum Error {
         key: &'static str,
     },
 
+    /// La clé `database` porte une valeur qui n'est pas un moteur rbs.
+    #[error(
+        "`package.metadata.rbs.database` vaut `{database}` dans {path} : \
+         moteurs connus — {known}"
+    )]
+    MoteurInconnu {
+        /// Chemin du manifeste.
+        path: String,
+        /// Valeur refusée.
+        database: String,
+        /// Moteurs que rbs connaît.
+        known: String,
+    },
+
     /// Une déclaration du manifeste n'a pas la forme qu'un patch sait manipuler.
     #[error("`{key}` n'a pas la forme attendue dans {path}")]
     Declaration {
@@ -129,6 +147,7 @@ pub fn read(cargo_toml: &Path) -> Result<Metadata, Error> {
     Ok(Metadata {
         version: version(rbs, cargo_toml)?,
         features: features(rbs, cargo_toml)?,
+        database: database(rbs, cargo_toml)?,
     })
 }
 
@@ -403,6 +422,27 @@ fn version(rbs: &Item, cargo_toml: &Path) -> Result<String, Error> {
         })
 }
 
+/// Moteur déclaré par le manifeste.
+///
+/// Son absence n'est pas une erreur : les projets créés avant que le moteur soit un
+/// choix n'ont pas la clé, et sont des projets PostgreSQL.
+fn database(rbs: &Item, cargo_toml: &Path) -> Result<Database, Error> {
+    let Some(declared) = rbs.get("database") else {
+        return Ok(Database::default());
+    };
+
+    let name = declared.as_str().ok_or_else(|| Error::Field {
+        path: name_of(cargo_toml),
+        key: "database",
+    })?;
+
+    Database::from_name(name).ok_or_else(|| Error::MoteurInconnu {
+        path: name_of(cargo_toml),
+        database: name.to_owned(),
+        known: Database::TOUS.map(Database::name).join(", "),
+    })
+}
+
 fn features(rbs: &Item, cargo_toml: &Path) -> Result<Vec<String>, Error> {
     let manquant = || Error::Field {
         path: name_of(cargo_toml),
@@ -456,6 +496,8 @@ mod tests {
                     crate_name => "mon_api",
                     rbs_core_dep => "\"0.1\"",
                     rbs_version => "0.1.0",
+                    database => Database::default().name(),
+                    sea_orm_feature => Database::default().sea_orm_feature(),
                 },
             )
             .expect("le manifeste doit se rendre");
@@ -479,6 +521,57 @@ mod tests {
 
         assert_eq!(metadonnees.version, "0.1.0");
         assert_eq!(metadonnees.features, vec!["health".to_string()]);
+        assert_eq!(metadonnees.database, Database::Postgres);
+    }
+
+    // Le critère de S1 : aucun projet existant ne change. Les manifestes créés avant que
+    // le moteur soit un choix n'ont pas la clé, et doivent rester des projets PostgreSQL.
+    #[test]
+    fn a_manifest_without_a_database_key_reads_back_as_postgres() {
+        let (_repertoire, path) = write(
+            "[package]\nname = \"demo\"\n\n\
+             [package.metadata.rbs]\nversion = \"0.1.0\"\nfeatures = []\n",
+        );
+
+        let metadonnees = read(&path).expect("un manifeste sans moteur reste lisible");
+
+        assert_eq!(metadonnees.database, Database::Postgres);
+    }
+
+    #[test]
+    fn a_declared_database_reads_back_as_itself() {
+        for engine in Database::TOUS {
+            let (_repertoire, path) = write(format!(
+                "[package]\nname = \"demo\"\n\n\
+                 [package.metadata.rbs]\nversion = \"0.1.0\"\nfeatures = []\n\
+                 database = \"{}\"\n",
+                engine.name()
+            ));
+
+            let metadonnees = read(&path).expect("le manifeste porte un moteur connu");
+
+            assert_eq!(metadonnees.database, engine);
+        }
+    }
+
+    // Une valeur inconnue est une faute de frappe dans un fichier que l'utilisateur
+    // édite : la corriger en silence vers `postgres` produirait un projet dont le
+    // manifeste et le comportement divergent.
+    #[test]
+    fn an_unknown_database_is_rejected_naming_the_key() {
+        let (_repertoire, path) = write(
+            "[package]\nname = \"demo\"\n\n\
+             [package.metadata.rbs]\nversion = \"0.1.0\"\nfeatures = []\n\
+             database = \"oracle\"\n",
+        );
+
+        let error = read(&path).expect_err("`oracle` n'est pas un moteur rbs");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("database"),
+            "le message ne nomme pas la clé fautive : {message}"
+        );
     }
 
     #[test]

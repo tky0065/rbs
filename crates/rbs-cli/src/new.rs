@@ -13,6 +13,7 @@ use std::process::Command;
 
 use minijinja::context;
 
+use crate::database::Database;
 use crate::template::Renderer;
 use crate::templates::Source;
 
@@ -28,6 +29,8 @@ pub struct Options {
     pub name: String,
     /// URL de connexion écrite dans le `.env` du projet.
     pub database_url: String,
+    /// Moteur de base sur lequel le projet tournera.
+    pub database: Database,
     /// Features demandées à la création.
     pub features: Vec<String>,
     /// Noyau local à utiliser au lieu de la version publiée.
@@ -79,6 +82,20 @@ pub enum Error {
         known: String,
     },
 
+    /// Le moteur choisi et l'URL donnée ne désignent pas la même base.
+    #[error(
+        "`--database {database}` n'accepte pas cette URL : attendu `{expected}://`, \
+         trouvé {found} — choisissez l'un ou l'autre"
+    )]
+    UrlEtrangereAuMoteur {
+        /// Moteur demandé au flag.
+        database: Database,
+        /// Schéma que le moteur attendait.
+        expected: &'static str,
+        /// Ce que l'URL porte, cité tel quel.
+        found: String,
+    },
+
     /// Le chemin visé est déjà pris.
     #[error("{path} existe déjà : choisissez un autre nom, ou retirez ce répertoire")]
     RepertoireOccupe {
@@ -128,6 +145,7 @@ pub enum Error {
 pub fn create(options: &Options, parent: &Path) -> Result<Project, Error> {
     validate_name(&options.name)?;
     validate_features(&options.features)?;
+    validate_database(options.database, &options.database_url)?;
 
     let root = parent.join(&options.name);
     if root.exists() {
@@ -168,6 +186,23 @@ fn validate_name(name: &str) -> Result<(), Error> {
             name: name.to_owned(),
         })
     }
+}
+
+/// L'URL doit désigner le moteur choisi, faute de quoi le projet compilerait avec un
+/// pilote et échouerait à la connexion — la faute que `doctor` rattrape après coup.
+fn validate_database(database: Database, url: &str) -> Result<(), Error> {
+    if database.accepte(url) {
+        return Ok(());
+    }
+
+    Err(Error::UrlEtrangereAuMoteur {
+        database,
+        expected: database.schemes()[0],
+        found: match crate::database::scheme_of(url) {
+            Some(scheme) => format!("`{scheme}://`"),
+            None => "aucun schéma".to_owned(),
+        },
+    })
 }
 
 /// `--with` n'installe rien : il nomme des features que seul `rbs add` pose.
@@ -225,6 +260,9 @@ fn render(options: &Options, dependency: &str) -> Result<Vec<(PathBuf, String)>,
         rbs_core_dep => dependency,
         rbs_version => env!("CARGO_PKG_VERSION"),
         database_url => options.database_url.as_str(),
+        database => options.database.name(),
+        sea_orm_feature => options.database.sea_orm_feature(),
+        database_url_par_defaut => options.database.default_url(&crate_name(&options.name)),
     };
 
     files
@@ -293,6 +331,7 @@ mod tests {
         Options {
             name: name.to_owned(),
             database_url: "postgres://alice:s3cr3t@localhost:5432/api".to_owned(),
+            database: Database::Postgres,
             features: Vec::new(),
             core_path: None,
             template_dir: Some(PathBuf::from(SQUELETTE)),
@@ -307,6 +346,102 @@ mod tests {
         fs::read_to_string(path).unwrap_or_else(|error| {
             panic!("{} illisible : {error}", path.display());
         })
+    }
+
+    // Le refus vit dans la phase de vérification : rien n'est rendu, donc rien n'est
+    // écrit. C'est ce que la seconde assertion mesure, et non le seul message.
+    #[test]
+    fn an_url_foreign_to_the_engine_is_refused_before_anything_is_written() {
+        let parent = parent();
+        let mut options = options("mon-api");
+        options.database = Database::Mysql;
+
+        let error = create(&options, parent.path()).expect_err("l'URL n'est pas une URL MySQL");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("mysql") && message.contains("postgres"),
+            "le message ne nomme pas les deux côtés de l'écart : {message}"
+        );
+        assert!(
+            !parent.path().join("mon-api").exists(),
+            "un projet a été écrit malgré le refus"
+        );
+    }
+
+    #[test]
+    fn an_url_of_the_chosen_engine_is_accepted() {
+        let parent = parent();
+        let mut options = options("mon-api");
+        options.database = Database::Sqlite;
+        options.database_url = "sqlite://mon_api.db?mode=rwc".to_owned();
+
+        create(&options, parent.path()).expect("l'URL désigne bien le moteur choisi");
+    }
+
+    // Le troisième critère de S1 : sans le flag, aucun projet existant ne change.
+    #[test]
+    fn without_the_flag_the_manifest_stays_on_postgres() {
+        let parent = parent();
+
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+
+        let manifeste = read(&project.root.join("Cargo.toml"));
+        assert!(
+            manifeste.contains("sqlx-postgres"),
+            "le manifeste ne porte pas le pilote PostgreSQL :\n{manifeste}"
+        );
+        assert!(
+            manifeste.contains("database = \"postgres\""),
+            "le manifeste n'inscrit pas le moteur :\n{manifeste}"
+        );
+    }
+
+    #[test]
+    fn each_engine_writes_its_own_driver_in_both_manifests() {
+        for engine in Database::TOUS {
+            let parent = parent();
+            let mut options = options("mon-api");
+            options.database = engine;
+            options.database_url = engine.default_url("mon_api");
+
+            let project = create(&options, parent.path()).expect("le projet doit se créer");
+
+            for manifeste in ["Cargo.toml", "migration/Cargo.toml"] {
+                let text = read(&project.root.join(manifeste));
+                assert!(
+                    text.contains(engine.sea_orm_feature()),
+                    "{manifeste} ne porte pas `{}` pour {engine} :\n{text}",
+                    engine.sea_orm_feature()
+                );
+            }
+
+            let racine = read(&project.root.join("Cargo.toml"));
+            assert!(
+                racine.contains(&format!("database = \"{engine}\"")),
+                "le manifeste n'inscrit pas `{engine}` :\n{racine}"
+            );
+        }
+    }
+
+    // L'URL du `.env` est celle qui sert à se connecter : un `.env` PostgreSQL dans un
+    // projet SQLite se verrait au premier `rbs migrate up`, pas à la création.
+    #[test]
+    fn the_dotenv_carries_the_url_of_the_chosen_engine() {
+        let parent = parent();
+        let mut options = options("mon-api");
+        options.database = Database::Sqlite;
+        options.database_url = "sqlite://mon_api.db?mode=rwc".to_owned();
+
+        let project = create(&options, parent.path()).expect("le projet doit se créer");
+
+        for fichier in [".env", ".env.example"] {
+            let text = read(&project.root.join(fichier));
+            assert!(
+                text.contains("sqlite://"),
+                "{fichier} ne porte pas l'URL du moteur choisi :\n{text}"
+            );
+        }
     }
 
     #[test]
