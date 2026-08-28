@@ -83,6 +83,13 @@ pub enum Commands {
 
     /// Diagnostique le projet : ancres, .env, base joignable, versions.
     Doctor,
+
+    /// Aligne le manifeste du projet sur la version du CLI : rbs-core et les métadonnées.
+    Upgrade {
+        /// Met à niveau même si le working tree Git est sale.
+        #[arg(long)]
+        force: bool,
+    },
 }
 
 #[derive(Debug, PartialEq, Subcommand)]
@@ -153,7 +160,9 @@ mod tests {
         let command = Cli::command();
         let help = command.clone().render_long_help().to_string();
 
-        for expected in ["new", "add", "generate", "migrate", "seed", "dev", "doctor"] {
+        for expected in [
+            "new", "add", "generate", "migrate", "seed", "dev", "doctor", "upgrade",
+        ] {
             let sous_commande = command
                 .get_subcommands()
                 .find(|s| s.get_name() == expected)
