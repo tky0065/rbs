@@ -144,7 +144,7 @@ fn the_s3_backend_builds_without_touching_the_network() {
     let duree = depart.elapsed();
 
     assert!(
-        format!("{storage:?}").contains("StockageS3"),
+        format!("{storage:?}").contains("S3Storage"),
         "`backend = \"s3\"` doit construire le backend S3 : {storage:?}"
     );
     // Une erreur de connexion avalée en silence resterait invisible aux `expect`
