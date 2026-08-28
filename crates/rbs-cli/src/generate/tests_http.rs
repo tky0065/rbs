@@ -163,7 +163,7 @@ mod tests {
             r#"request("POST", collection, sent.clone())"#,
             r#"let resource = format!("{collection}/{id}");"#,
             r#"without_body("GET", &resource)"#,
-            r#"let premiere = format!("{collection}?per_page=1");"#,
+            r#"let premiere = format!("{collection}?per_page=50");"#,
             r#"request("PUT", &resource, sent.clone())"#,
             r#"without_body("DELETE", &resource)"#,
         ] {

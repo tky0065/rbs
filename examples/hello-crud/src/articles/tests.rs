@@ -20,9 +20,6 @@ async fn application() -> Router {
 
     router(AppState::new(db, config).expect("état partagé constructible"))
 }
-// endregion: corps_illisible
-// endregion: erreur_404
-// endregion: cycle_de_vie
 // endregion: harnais
 
 /// Fait traverser le routeur à `request`, et rend son statut avec son corps.
@@ -90,8 +87,6 @@ fn modification() -> Value {
 }
 
 // region: cycle_de_vie
-// region: erreur_404
-// region: corps_illisible
 #[tokio::test]
 async fn the_full_lifecycle_goes_through_the_api() {
     let api = application().await;
@@ -111,12 +106,30 @@ async fn the_full_lifecycle_goes_through_the_api() {
     assert_eq!(status, StatusCode::OK, "relecture refusée : {read}");
     assert_eq!(read["id"], created["id"], "l'identifiant doit être stable");
 
-    // L'`id` est un UUIDv7 et la liste trie du plus récent au plus ancien : ce qui vient
-    // d'être créé ouvre la première page.
-    let premiere = format!("{collection}?per_page=1");
+    // L'`id` est un UUIDv7 et la liste trie du plus récent au plus ancien. Ce qui se
+    // vérifie est que la ligne créée est sur la première page et que la page est
+    // ordonnée — non qu'elle en occupe la première place : les tests tournent en
+    // parallèle, et un autre peut écrire entre la création et la lecture.
+    let premiere = format!("{collection}?per_page=50");
     let (status, page) = call(&api, without_body("GET", &premiere)).await;
     assert_eq!(status, StatusCode::OK, "liste refusée : {page}");
-    assert_eq!(page["data"][0]["id"], created["id"], "liste : {page}");
+
+    let ids: Vec<&str> = page["data"]
+        .as_array()
+        .expect("la liste rend un tableau")
+        .iter()
+        .map(|ligne| ligne["id"].as_str().expect("identifiant rendu"))
+        .collect();
+
+    assert!(
+        ids.contains(&created["id"].as_str().expect("identifiant rendu")),
+        "la ligne créée est absente de la première page : {page}"
+    );
+
+    let mut decroissants = ids.clone();
+    decroissants.sort_unstable_by(|gauche, droite| droite.cmp(gauche));
+    assert_eq!(ids, decroissants, "la liste n'est pas triée : {page}");
+
     assert!(
         page["meta"]["total"].as_u64().unwrap_or_default() >= 1,
         "la page doit compter au moins ce qui vient d'être créé : {page}"
@@ -136,6 +149,7 @@ async fn the_full_lifecycle_goes_through_the_api() {
     let (status, _) = call(&api, without_body("GET", &resource)).await;
     assert_eq!(status, StatusCode::NOT_FOUND, "elle répond encore");
 }
+// endregion: cycle_de_vie
 
 /// Deux créations à la suite portent des identifiants croissants.
 ///
@@ -166,6 +180,7 @@ async fn two_creations_in_a_row_carry_increasing_ids() {
     assert!(second > premier, "{second} ne suit pas {premier}");
 }
 
+// region: erreur_404
 #[tokio::test]
 async fn an_unknown_id_returns_404() {
     let api = application().await;
@@ -177,7 +192,9 @@ async fn an_unknown_id_returns_404() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["status"], 404, "{body}");
 }
+// endregion: erreur_404
 
+// region: corps_illisible
 #[tokio::test]
 async fn an_unreadable_body_returns_400() {
     let api = application().await;
@@ -193,3 +210,4 @@ async fn an_unreadable_body_returns_400() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["status"], 400, "{body}");
 }
+// endregion: corps_illisible

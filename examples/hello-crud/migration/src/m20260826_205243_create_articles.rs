@@ -42,7 +42,6 @@ impl MigrationTrait for Migration {
             .await
     }
 }
-// endregion: colonnes
 
 // region: colonnes
 #[derive(DeriveIden)]
@@ -55,3 +54,4 @@ enum Articles {
     CreatedAt,
     UpdatedAt,
 }
+// endregion: colonnes

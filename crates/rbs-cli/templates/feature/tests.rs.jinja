@@ -127,12 +127,30 @@ async fn the_full_lifecycle_goes_through_the_api() {
     assert_eq!(status, StatusCode::OK, "relecture refusée : {read}");
     assert_eq!(read["id"], created["id"], "l'identifiant doit être stable");
 
-    // L'`id` est un UUIDv7 et la liste trie du plus récent au plus ancien : ce qui vient
-    // d'être créé ouvre la première page.
-    let premiere = format!("{collection}?per_page=1");
+    // L'`id` est un UUIDv7 et la liste trie du plus récent au plus ancien. Ce qui se
+    // vérifie est que la ligne créée est sur la première page et que la page est
+    // ordonnée — non qu'elle en occupe la première place : les tests tournent en
+    // parallèle, et un autre peut écrire entre la création et la lecture.
+    let premiere = format!("{collection}?per_page=50");
     let (status, page) = call(&api, without_body("GET", &premiere)).await;
     assert_eq!(status, StatusCode::OK, "liste refusée : {page}");
-    assert_eq!(page["data"][0]["id"], created["id"], "liste : {page}");
+
+    let ids: Vec<&str> = page["data"]
+        .as_array()
+        .expect("la liste rend un tableau")
+        .iter()
+        .map(|ligne| ligne["id"].as_str().expect("identifiant rendu"))
+        .collect();
+
+    assert!(
+        ids.contains(&created["id"].as_str().expect("identifiant rendu")),
+        "la ligne créée est absente de la première page : {page}"
+    );
+
+    let mut decroissants = ids.clone();
+    decroissants.sort_unstable_by(|gauche, droite| droite.cmp(gauche));
+    assert_eq!(ids, decroissants, "la liste n'est pas triée : {page}");
+
     assert!(
         page["meta"]["total"].as_u64().unwrap_or_default() >= 1,
         "la page doit compter au moins ce qui vient d'être créé : {page}"
