@@ -40,6 +40,24 @@ jobs:
       - name: cargo test
         run: cargo test --workspace --all-features
 
+      # `clippy` et les tests disent que le dépôt compile contre lui-même ; ils ne disent
+      # rien des projets déjà bâtis sur la version parue. Un instantané textuel de l'API
+      # ne répondrait qu'à « l'API a-t-elle changé ? », question à laquelle un ajout
+      # compatible répond oui pour rien : l'outil répond « est-ce une rupture ? », en
+      # confrontant la surface courante à celle de la dernière version sur crates.io.
+      #
+      # `rbs-core` seule : `rbs-cli` livre un binaire, et que sa bibliothèque soit visible
+      # est un détail de construction, pas une offre de compatibilité.
+      #
+      # `all-features` parce que `auth` gouverne à lui seul cinq entrées publiques —
+      # `hash`, `jwt`, `token`, `Identity`, `HasAuth`. Sous les features par défaut,
+      # renommer `token::fingerprint` passe vert : la surface examinée n'en contient rien.
+      - name: cargo semver-checks
+        uses: obi1kenobi/cargo-semver-checks-action@v2
+        with:
+          package: rbs-core
+          feature-group: all-features
+
       - name: cargo test (intégration)
         run: cargo test --workspace --all-features -- --ignored
 
