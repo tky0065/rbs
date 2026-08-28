@@ -33,6 +33,7 @@ macro_rules! seeds {
 
 seeds! {
     // <rbs:seeds>
+    articles,
     // </rbs:seeds>
 }
 

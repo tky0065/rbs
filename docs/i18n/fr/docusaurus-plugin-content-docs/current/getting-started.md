@@ -11,7 +11,7 @@ si votre terminal affiche la même chose, vous n'avez pas dévié — aux durée
 identifiants et aux dates près, qui sont les vôtres. Une seule chose a été retirée des
 blocs : le chemin absolu du répertoire où l'exécution a eu lieu, noté `…/demo`.
 
-En 0.1, le CLI parle français : `✓ demo créé — 15 fichiers` est une ligne de succès. Les
+En 0.1, le CLI parle français : `✓ demo créé — 16 fichiers` est une ligne de succès. Les
 options, les noms de fichiers et le code généré, eux, sont les mêmes quelle que soit la
 langue.
 
@@ -93,7 +93,7 @@ rbs new demo --yes \
 ```
 
 ```text
-✓ demo créé — 15 fichiers
+✓ demo créé — 16 fichiers
 
   cd demo
   cargo run          # la base visée est dans .env
@@ -115,11 +115,12 @@ terminal où poser ses questions : c'est pourquoi un script ou un job de CI a be
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
 ```
 
-Quinze fichiers, et aucun n'est une boîte noire :
+Seize fichiers, et aucun n'est une boîte noire :
 
 - `src/main.rs`, `src/router.rs`, `src/state.rs`, `src/openapi.rs` — le montage.
 - `src/health/` — une première feature, pour que la forme soit visible avant d'en
   générer une.
+- `src/seeds/` — un second binaire, `seed`, que `rbs seed` lance.
 - `migration/` — une seconde crate, qui porte les migrations.
 - `config/default.toml` et `config/development.toml` — hôte, port, taille du pool.
 - `.env` — l'URL de la base et les réglages de logs, tenus hors de Git.

@@ -56,13 +56,13 @@ only by `rbs new`, the one command that asks anything, and `--template-dir` only
 
 ```text
 $ rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --core-path /private/tmp/rbs-core --yes
-✓ blog créé — 15 fichiers
+✓ blog créé — 16 fichiers
 
   cd blog
   cargo run          # la base visée est dans .env
 ```
 
-The fifteen files:
+The sixteen files:
 
 ```text
 blog/.env
@@ -79,6 +79,7 @@ blog/src/health/mod.rs
 blog/src/main.rs
 blog/src/openapi.rs
 blog/src/router.rs
+blog/src/seeds/main.rs
 blog/src/state.rs
 ```
 
@@ -128,7 +129,7 @@ skeleton with one line appended to its `.env.jinja`:
 
 ```text
 $ rbs new maison --template-dir /private/tmp/rbs-demo/mes-templates --core-path /private/tmp/rbs-core --yes
-✓ maison créé — 15 fichiers
+✓ maison créé — 16 fichiers
 
   cd maison
   cargo run          # la base visée est dans .env

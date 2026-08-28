@@ -210,14 +210,16 @@ plan pour /private/tmp/rbs-demo/blog
   + src/articles/service.rs                             créé
   + src/articles/controller.rs                          créé
   + src/articles/tests.rs                               créé
+  + src/seeds/articles.rs                               créé
   + migration/src/m20260826_213608_create_articles.rs   créé
   ~ src/main.rs                                         modifié
   ~ src/router.rs                                       modifié
   ~ src/openapi.rs                                      modifié
   ~ migration/src/lib.rs                                modifié
+  ~ src/seeds/main.rs                                   modifié
   ~ Cargo.toml                                          modifié
 
-  13 fichiers à écrire
+  15 fichiers à écrire
 
   rien n'a été écrit (--dry-run)
 ```
@@ -235,20 +237,22 @@ plan pour /private/tmp/rbs-demo/blog
   + src/articles/service.rs                             créé
   + src/articles/controller.rs                          créé
   + src/articles/tests.rs                               créé
+  + src/seeds/articles.rs                               créé
   + migration/src/m20260826_213608_create_articles.rs   créé
   ~ src/main.rs                                         modifié
   ~ src/router.rs                                       modifié
   ~ src/openapi.rs                                      modifié
   ~ migration/src/lib.rs                                modifié
+  ~ src/seeds/main.rs                                   modifié
   ~ Cargo.toml                                          modifié
 
-  13 fichiers à écrire
-✓ articles générée — 8 fichiers
+  15 fichiers à écrire
+✓ articles générée — 9 fichiers
 
   la migration m20260826_213608_create_articles reste à appliquer avant de lancer le projet
 ```
 
-Huit fichiers créés, cinq modifiés par leurs ancres. La feature est ensuite inscrite dans le
+Neuf fichiers créés, six modifiés par leurs ancres. La feature est ensuite inscrite dans le
 manifeste, ce qui rend la commande idempotente :
 
 ```text
@@ -298,7 +302,7 @@ le message suggère et ce que l'exécution ci-dessus a utilisé.
 ## Les ancres
 
 `rbs generate` ne réécrit jamais d'AST. Il insère entre des marqueurs en commentaires que le
-squelette porte, et il en emploie cinq sur sept — les deux de `src/state.rs` appartiennent
+squelette porte, et il en emploie six sur huit — les deux de `src/state.rs` appartiennent
 aux fragments qu'installe [`rbs add`](./add.md) :
 
 | Ancre | Fichier |
@@ -308,6 +312,7 @@ aux fragments qu'installe [`rbs add`](./add.md) :
 | `// <rbs:openapi>` | `src/openapi.rs` |
 | `// <rbs:migration_modules>` | `migration/src/lib.rs` |
 | `// <rbs:migrations>` | `migration/src/lib.rs` |
+| `// <rbs:seeds>` | `src/seeds/main.rs` |
 
 Retirez-en une et la commande n'écrit rien du tout — pas même les fichiers de la feature —
 et affiche le bloc à recoller :

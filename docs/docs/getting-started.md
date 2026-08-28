@@ -11,7 +11,7 @@ your terminal prints matches, you have not drifted — timings, identifiers and 
 excepted, which are yours. Only one thing was edited out of the blocks: the absolute
 path of the directory the run happened in, written `…/demo` below.
 
-The CLI speaks French in 0.1: `✓ demo créé — 15 fichiers` is a success line, not an
+The CLI speaks French in 0.1: `✓ demo créé — 16 fichiers` is a success line, not an
 error. Only the messages are translated-in-waiting; the flags, the file names and the
 generated code are the same in every locale.
 
@@ -92,7 +92,7 @@ rbs new demo --yes \
 ```
 
 ```text
-✓ demo créé — 15 fichiers
+✓ demo créé — 16 fichiers
 
   cd demo
   cargo run          # la base visée est dans .env
@@ -113,10 +113,11 @@ run without a terminal to ask in, so `--yes` is what a script or a CI job needs:
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
 ```
 
-Fifteen files, and none of them a black box:
+Sixteen files, and none of them a black box:
 
 - `src/main.rs`, `src/router.rs`, `src/state.rs`, `src/openapi.rs` — the wiring.
 - `src/health/` — a first feature, so the shape is visible before you generate one.
+- `src/seeds/` — a second binary, `seed`, which `rbs seed` runs.
 - `migration/` — a second crate, holding the migrations.
 - `config/default.toml` and `config/development.toml` — host, port, pool sizes.
 - `.env` — the database URL and the log settings, kept out of Git.

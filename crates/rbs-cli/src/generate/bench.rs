@@ -259,6 +259,51 @@ async fn apply() {
             .expect("cargo doit être lançable")
     }
 
+    /// Lance le binaire `rbs` dans le projet, et rapporte sa sortie.
+    ///
+    /// Sous le même verrou que `cargo` : `rbs migrate` et `rbs seed` en lancent un, et il
+    /// doit écrire dans la cible partagée comme les autres.
+    pub(crate) fn rbs(&self, arguments: &[&str]) -> Output {
+        let _exclusivite = CARGO.lock().unwrap_or_else(PoisonError::into_inner);
+
+        Command::cargo_bin("rbs")
+            .expect("le binaire rbs doit être compilé")
+            .current_dir(&self.root)
+            .env("CARGO_TARGET_DIR", repo().join("target/rbs-integration"))
+            .args(arguments)
+            .output()
+            .expect("rbs doit être lançable")
+    }
+
+    /// Lance `rbs` en exigeant qu'il aboutisse.
+    pub(crate) fn rbs_ok(&self, arguments: &[&str]) {
+        let output = self.rbs(arguments);
+
+        assert!(
+            output.status.success(),
+            "`rbs {}` a échoué :\n{}\n{}",
+            arguments.join(" "),
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    /// Lance les tests du projet dont le nom porte `filtre`, et rapporte leur sortie.
+    pub(crate) fn test_matching(&self, filtre: &str) {
+        let output = self.cargo(&["test", filtre], &[]);
+        let journal = String::from_utf8_lossy(&output.stdout);
+
+        assert!(
+            output.status.success(),
+            "les tests du projet échouent :\n{journal}\n{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            tests_run(&journal) > 0,
+            "aucun test n'a été exécuté :\n{journal}"
+        );
+    }
+
     /// Lance les tests du projet, et rapporte leur sortie.
     pub(crate) fn test_of(&self) {
         let output = self.cargo(&["test"], &[]);
@@ -321,6 +366,30 @@ async fn apply() {
             output.status.success(),
             "les tests de migration échouent :\n{}\n{}",
             String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
+    /// Passe le projet au niveau qu'exige la CI que `rbs add ci` y pose.
+    ///
+    /// Un warning laissé dans du code généré rendrait rouge, dès le premier push, du code
+    /// que l'utilisateur n'a pas écrit.
+    pub(crate) fn clippy(&self) {
+        let output = self.cargo(
+            &[
+                "clippy",
+                "--workspace",
+                "--all-targets",
+                "--",
+                "-D",
+                "warnings",
+            ],
+            &[],
+        );
+
+        assert!(
+            output.status.success(),
+            "clippy refuse le projet :\n{}",
             String::from_utf8_lossy(&output.stderr)
         );
     }

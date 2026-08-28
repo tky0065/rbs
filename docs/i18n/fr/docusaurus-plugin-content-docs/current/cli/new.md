@@ -57,7 +57,7 @@ n'est lu que par `rbs new`, seule commande qui pose des questions, et `--templat
 
 ```text
 $ rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --core-path /private/tmp/rbs-core --yes
-✓ blog créé — 15 fichiers
+✓ blog créé — 16 fichiers
 
   cd blog
   cargo run          # la base visée est dans .env
@@ -80,6 +80,7 @@ blog/src/health/mod.rs
 blog/src/main.rs
 blog/src/openapi.rs
 blog/src/router.rs
+blog/src/seeds/main.rs
 blog/src/state.rs
 ```
 
@@ -130,7 +131,7 @@ du squelette dont le `.env.jinja` porte une ligne de plus :
 
 ```text
 $ rbs new maison --template-dir /private/tmp/rbs-demo/mes-templates --core-path /private/tmp/rbs-core --yes
-✓ maison créé — 15 fichiers
+✓ maison créé — 16 fichiers
 
   cd maison
   cargo run          # la base visée est dans .env
