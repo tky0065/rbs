@@ -2,6 +2,7 @@ mod add;
 mod anchors;
 mod cargo;
 mod cli;
+mod database;
 mod dev;
 mod doctor;
 mod dotenv;
@@ -24,6 +25,7 @@ use std::path::PathBuf;
 use clap::Parser;
 
 use cli::{Cli, Commands, GenerateCommands, MigrateCommands};
+use database::Database;
 
 /// Le corps de la commande, appelé à l'identique par les deux binaires livrés.
 pub fn run() {
@@ -33,12 +35,14 @@ pub fn run() {
         Commands::New {
             name,
             database_url,
+            database,
             with,
             core_path,
         } => {
             let resultat = create_project(
                 name,
                 database_url,
+                database,
                 with,
                 core_path,
                 cli.template_dir,
@@ -139,6 +143,7 @@ pub fn run() {
 fn create_project(
     name: String,
     database_url: Option<String>,
+    database: Database,
     with: Vec<String>,
     core_path: Option<PathBuf>,
     template_dir: Option<PathBuf>,
@@ -146,12 +151,13 @@ fn create_project(
 ) -> Result<(), Box<dyn Error>> {
     // Un `--with` absent laisse la question ouverte ; un `--with` vide n'existe pas.
     let features = (!with.is_empty()).then_some(with);
-    let options = prompts::resolve(Some(name), database_url, features, yes)?;
+    let options = prompts::resolve(Some(name), database_url, database, features, yes)?;
 
     let project = new::create(
         &new::Options {
             name: options.name,
             database_url: options.database_url,
+            database,
             features: options.features,
             core_path,
             template_dir,

@@ -2,6 +2,8 @@ use std::path::PathBuf;
 
 use clap::{Parser, Subcommand};
 
+use crate::database::Database;
+
 #[derive(Debug, PartialEq, Parser)]
 #[command(
     name = "rbs",
@@ -29,9 +31,13 @@ pub enum Commands {
         /// Nom du projet, qui est aussi celui du répertoire créé.
         name: String,
 
-        /// URL de la base PostgreSQL, à défaut de quoi la question est posée.
+        /// URL de connexion, à défaut de quoi la question est posée.
         #[arg(long, value_name = "URL")]
         database_url: Option<String>,
+
+        /// Moteur de base sur lequel le projet tournera.
+        #[arg(long, value_name = "MOTEUR", default_value_t = Database::default())]
+        database: Database,
 
         /// Features à installer sans passer par les questions, séparées par des virgules.
         #[arg(long, value_name = "FEATURES", value_delimiter = ',')]

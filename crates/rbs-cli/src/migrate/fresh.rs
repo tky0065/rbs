@@ -154,6 +154,7 @@ mod tests {
             &crate::new::Options {
                 name: "demo-api".to_string(),
                 database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
+                database: Default::default(),
                 features: Vec::new(),
                 core_path: None,
                 template_dir: None,

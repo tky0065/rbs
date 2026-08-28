@@ -1,7 +1,9 @@
 name: {@ project_name @}
 
 services:
+{%- if database_a_un_serveur %}
   db:
+{%- if database == "postgres" %}
     image: postgres:18-alpine
     environment:
       POSTGRES_USER: postgres
@@ -18,9 +20,25 @@ services:
       - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d {@ crate_name @}"]
+{%- else %}
+    image: mysql:8
+    environment:
+      MYSQL_ROOT_PASSWORD: root
+      MYSQL_DATABASE: {@ crate_name @}
+    # Le port n'est pas publié, pour la même raison qu'ailleurs : la machine héberge
+    # souvent déjà un serveur sur 3306. Pour l'ouvrir, ajouter `ports: ["3306:3306"]`.
+    volumes:
+      - mysqldata:/var/lib/mysql
+    # `mysqladmin ping` répond avant que la base du projet existe : le healthcheck
+    # interroge donc le schéma, faute de quoi `migrate` démarrerait trop tôt.
+    healthcheck:
+      test:
+        ["CMD-SHELL", "mysql -uroot -proot -e 'use {@ crate_name @}' 2>/dev/null"]
+{%- endif %}
       interval: 2s
       timeout: 3s
       retries: 30
+{%- endif %}
 
   # Les migrations tournent une fois, à part : l'API ne démarre pas sur un schéma absent,
   # et n'a pas à porter cette responsabilité au démarrage.
@@ -28,10 +46,15 @@ services:
     build: .
     command: ["migration", "up"]
     environment:
-      RBS_DATABASE__URL: postgres://postgres:postgres@db:5432/{@ crate_name @}
+      RBS_DATABASE__URL: {@ database_url_compose @}
+{%- if database_a_un_serveur %}
     depends_on:
       db:
         condition: service_healthy
+{%- else %}
+    volumes:
+      - sqlitedata:/data
+{%- endif %}
     restart: "no"
 
   api:
@@ -40,16 +63,30 @@ services:
       # config/default.toml écoute sur 127.0.0.1, ce qui rend le conteneur injoignable
       # depuis l'hôte. L'environnement l'emporte sur le TOML.
       RBS_SERVER__HOST: 0.0.0.0
-      RBS_DATABASE__URL: postgres://postgres:postgres@db:5432/{@ crate_name @}
+      RBS_DATABASE__URL: {@ database_url_compose @}
       RBS_LOG_FORMAT: json
       RUST_LOG: info
     ports:
       - "8080:8080"
     depends_on:
+{%- if database_a_un_serveur %}
       db:
         condition: service_healthy
+{%- endif %}
       migrate:
         condition: service_completed_successfully
+{%- if not database_a_un_serveur %}
+    # Le fichier de base est partagé avec `migrate` : sans ce volume, chaque conteneur
+    # travaillerait sur le sien et l'API démarrerait sur un schéma vide.
+    volumes:
+      - sqlitedata:/data
+{%- endif %}
 
 volumes:
+{%- if database == "postgres" %}
   pgdata:
+{%- elif database == "mysql" %}
+  mysqldata:
+{%- else %}
+  sqlitedata:
+{%- endif %}

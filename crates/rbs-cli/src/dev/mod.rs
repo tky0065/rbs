@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::time::{Duration, Instant};
 
+use crate::database::Database;
 use crate::doctor::base;
 use crate::{metadata, migrate};
 
@@ -155,15 +156,30 @@ fn plan_with(root: &Path, exists: impl Fn(&Path) -> bool) -> Result<Vec<Step>, E
         }
     }
 
-    let variables = migrate::project_variables(root)?;
-    let url = url(&variables).ok_or(Error::UrlIllisible)?;
-    let (host, port) = base::host_and_port(&url).ok_or(Error::UrlIllisible)?;
+    // SQLite n'a pas de serveur : son URL ne porte ni hôte ni port, et attendre qu'un
+    // port réponde ferait échouer un projet parfaitement démarrable.
+    if database_of(root).a_un_serveur() {
+        let variables = migrate::project_variables(root)?;
+        let url = url(&variables).ok_or(Error::UrlIllisible)?;
+        let (host, port) = base::host_and_port(&url).ok_or(Error::UrlIllisible)?;
 
-    steps.push(Step::Database { host, port });
+        steps.push(Step::Database { host, port });
+    }
+
     steps.push(Step::Migrations);
     steps.push(Step::Server);
 
     Ok(steps)
+}
+
+/// Moteur que le manifeste déclare, PostgreSQL à défaut de manifeste lisible.
+///
+/// Un manifeste illisible n'est pas tranché ici : les étapes suivantes le rencontreront
+/// avec un message qui nomme le fichier, là où un échec ici ne dirait que « moteur ».
+fn database_of(root: &Path) -> Database {
+    metadata::read(&root.join("Cargo.toml"))
+        .map(|metadata| metadata.database)
+        .unwrap_or_default()
 }
 
 /// Vrai si `[package.metadata.rbs]` déclare la feature `docker`.
@@ -275,11 +291,17 @@ mod tests {
 
     /// Un projet déroulé par `rbs new`, sans passer par le binaire ni par cargo.
     fn project(features: &[&str], url: &str) -> (TempDir, PathBuf) {
+        project_on(Database::default(), features, url)
+    }
+
+    /// Le même, sur le moteur demandé.
+    fn project_on(database: Database, features: &[&str], url: &str) -> (TempDir, PathBuf) {
         let parent = TempDir::new().expect("répertoire temporaire créable");
         let project = crate::new::create(
             &crate::new::Options {
                 name: "demo-api".to_string(),
                 database_url: url.to_string(),
+                database,
                 features: features.iter().map(|f| (*f).to_string()).collect(),
                 core_path: None,
                 template_dir: None,
@@ -289,6 +311,30 @@ mod tests {
         .expect("le projet doit se créer");
 
         (parent, project.root)
+    }
+
+    // SQLite n'a pas de serveur : attendre qu'un port réponde ferait échouer `rbs dev`
+    // sur un projet parfaitement démarrable, et l'URL n'a de toute façon ni hôte ni port.
+    #[test]
+    fn a_sqlite_project_waits_for_no_database_and_starts_anyway() {
+        let (_parent, root) = project_on(Database::Sqlite, &[], "sqlite://demo_api.db?mode=rwc");
+
+        let steps = plan(&root).expect("le plan doit se calculer");
+
+        assert!(
+            !steps
+                .iter()
+                .any(|step| matches!(step, Step::Database { .. })),
+            "le plan attend une base que SQLite n'a pas : {steps:?}"
+        );
+        assert!(
+            steps.iter().any(|step| matches!(step, Step::Migrations)),
+            "le plan n'applique plus les migrations : {steps:?}"
+        );
+        assert!(
+            steps.iter().any(|step| matches!(step, Step::Server)),
+            "le plan ne démarre plus le serveur : {steps:?}"
+        );
     }
 
     /// Installe la feature `docker` par le vrai chemin de `rbs add`.
