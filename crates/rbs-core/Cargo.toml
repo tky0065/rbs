@@ -8,7 +8,13 @@ license.workspace = true
 repository.workspace = true
 
 [features]
-default = []
+# Le pilote par défaut reste PostgreSQL : un projet antérieur au choix du moteur n'en
+# nomme aucun, et doit continuer de compiler tel quel.
+default = ["postgres"]
+
+postgres = ["sea-orm/sqlx-postgres"]
+mysql = ["sea-orm/sqlx-mysql"]
+sqlite = ["sea-orm/sqlx-sqlite"]
 
 auth = ["dep:argon2", "dep:base64", "dep:jsonwebtoken", "dep:rand", "dep:sha2"]
 

@@ -152,10 +152,21 @@ fn the_configuration_and_the_environment_receive_what_auth_requires() {
     let env = fs::read_to_string(racine.join(".env.example")).expect(".env.example lisible");
     assert!(env.contains("RBS_AUTH__SECRET"), "secret absent :\n{env}");
 
+    // `auth` s'ajoute au pilote que la création a choisi : la liste porte les deux, et
+    // écraser l'une par l'autre ferait échouer la compilation du projet.
     let manifeste = fs::read_to_string(racine.join("Cargo.toml")).expect("Cargo.toml lisible");
+    let noyau = manifeste
+        .lines()
+        .find(|ligne| ligne.starts_with("rbs-core = "))
+        .unwrap_or_else(|| panic!("`rbs-core` absente du manifeste :\n{manifeste}"));
+
     assert!(
-        manifeste.contains("features = [\"auth\"]"),
-        "le flag `auth` de rbs-core n'est pas activé :\n{manifeste}"
+        noyau.contains("\"auth\""),
+        "le flag `auth` de rbs-core n'est pas activé : {noyau}"
+    );
+    assert!(
+        noyau.contains("\"postgres\""),
+        "le pilote a été écrasé par la feature : {noyau}"
     );
 }
 

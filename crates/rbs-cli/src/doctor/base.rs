@@ -6,25 +6,19 @@
 //! `rbs migrate` le fait déjà.
 
 use std::net::{TcpStream, ToSocketAddrs};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use crate::database::Database;
 use crate::migrate;
 
 use super::Check;
 
 const TITRE: &str = "base";
 
-/// Port de PostgreSQL quand l'URL n'en donne pas.
-const PORT_PAR_DEFAUT: u16 = 5432;
-
-/// Version minimale : la plus ancienne encore maintenue par la communauté.
-///
-/// Rien dans le code généré n'exige davantage depuis que le modèle pose lui-même son
-/// identifiant — `uuid`, `timestamptz` et `CURRENT_TIMESTAMP` sont bien plus anciens. Un
-/// plancher fixé sur une propriété technique disparue serait une règle que personne ne
-/// saurait plus mettre à jour.
-const MINIMUM: u32 = 140_000;
+/// Ports supposés quand l'URL n'en donne pas.
+const PORT_POSTGRES: u16 = 5432;
+const PORT_MYSQL: u16 = 3306;
 
 /// Délai au-delà duquel l'hôte est tenu pour injoignable.
 const DELAI: Duration = Duration::from_secs(3);
@@ -56,46 +50,99 @@ pub(crate) fn check(root: &Path) -> Check {
         }
     };
 
-    let Some((hote, port)) = host_and_port(&url) else {
-        return Check::failed(
-            TITRE,
-            format!("{} n'est pas une URL PostgreSQL", migrate::URL),
-            "attendu : postgres://utilisateur:motdepasse@hote:port/base",
-        );
+    let database = database_of(root);
+
+    let ou = match joignable(database, &url) {
+        Ok(ou) => ou,
+        Err(echec) => return echec,
     };
 
-    if !reachable(&hote, port) {
-        return Check::failed(
-            TITRE,
-            format!("rien ne répond sur {hote}:{port}"),
-            "démarrez PostgreSQL, ou corrigez l'URL du .env",
-        );
-    }
+    let (minimum, cause) = plancher(database);
 
     match version(root, &variables) {
-        Ok(number) if recent_enough(number) => Check::ok(
-            TITRE,
-            format!("PostgreSQL {} répond sur {hote}:{port}", readable(number)),
-        ),
-        Ok(number) => Check::failed(
-            TITRE,
-            format!(
-                "PostgreSQL {} sur {hote}:{port}, {} attendu au minimum",
-                readable(number),
-                readable(MINIMUM)
+        Ok(brut) => match parse_version(database, &brut) {
+            Some(version) if version >= minimum => Check::ok(
+                TITRE,
+                format!("{database} {} répond sur {ou}", readable(version)),
             ),
-            format!(
-                "PostgreSQL {} est la plus ancienne version encore maintenue : les \
-                 précédentes ne reçoivent plus de correctif de sécurité",
-                readable(MINIMUM)
+            Some(version) => Check::failed(
+                TITRE,
+                format!(
+                    "{database} {} sur {ou}, {} attendu au minimum",
+                    readable(version),
+                    readable(minimum)
+                ),
+                format!("{database} {} est exigée par {cause}", readable(minimum)),
             ),
-        ),
+            None => Check::failed(
+                TITRE,
+                format!("{ou} répond, mais sa version reste illisible : {brut}"),
+                "vérifiez que `cargo run -p migration -- version` aboutit",
+            ),
+        },
         Err(detail) => Check::failed(
             TITRE,
-            format!("{hote}:{port} répond, mais sa version reste inconnue : {detail}"),
+            format!("{ou} répond, mais sa version reste inconnue : {detail}"),
             "vérifiez que `cargo run -p migration -- version` aboutit",
         ),
     }
+}
+
+/// Moteur que le manifeste déclare, PostgreSQL à défaut de manifeste lisible.
+fn database_of(root: &Path) -> Database {
+    crate::metadata::read(&root.join("Cargo.toml"))
+        .map(|metadata| metadata.database)
+        .unwrap_or_default()
+}
+
+/// Dit où la base se trouve, ou pourquoi on ne l'atteint pas.
+///
+/// SQLite n'est pas sondé par le réseau : ce qui le rend joignable est un fichier
+/// ouvrable, ou un répertoire où il puisse naître — `mode=rwc` le crée au démarrage.
+fn joignable(database: Database, url: &str) -> Result<String, Check> {
+    if database == Database::Sqlite {
+        let Some(chemin) = chemin_sqlite(url) else {
+            return Err(Check::failed(
+                TITRE,
+                format!("{} n'est pas une URL SQLite", migrate::URL),
+                "attendu : sqlite://chemin/vers/base.db?mode=rwc",
+            ));
+        };
+
+        let accueil = chemin
+            .parent()
+            .filter(|parent| !parent.as_os_str().is_empty());
+        if chemin.is_file() || accueil.is_none_or(Path::is_dir) {
+            return Ok(chemin.display().to_string());
+        }
+
+        return Err(Check::failed(
+            TITRE,
+            format!(
+                "{} n'existe pas et son répertoire non plus",
+                chemin.display()
+            ),
+            "créez le répertoire, ou corrigez l'URL du .env",
+        ));
+    }
+
+    let Some((hote, port)) = host_and_port(url) else {
+        return Err(Check::failed(
+            TITRE,
+            format!("{} n'est pas une URL {database}", migrate::URL),
+            "attendu : moteur://utilisateur:motdepasse@hote:port/base",
+        ));
+    };
+
+    if !reachable(&hote, port) {
+        return Err(Check::failed(
+            TITRE,
+            format!("rien ne répond sur {hote}:{port}"),
+            format!("démarrez {database}, ou corrigez l'URL du .env"),
+        ));
+    }
+
+    Ok(format!("{hote}:{port}"))
 }
 
 /// L'URL visée : celle du `.env`, ou celle que l'appelant a exportée.
@@ -119,24 +166,32 @@ pub(crate) fn reachable(hote: &str, port: u16) -> bool {
         .any(|adresse| TcpStream::connect_timeout(&adresse, DELAI).is_ok())
 }
 
-/// Demande son `server_version_num` au binaire de la crate `migration`.
-fn version(root: &Path, variables: &[(String, String)]) -> Result<u32, String> {
+/// Demande sa version au binaire de la crate `migration`, telle qu'il la rend.
+///
+/// L'interprétation appartient à l'appelant : chaque moteur a sa forme, et seul lui sait
+/// lequel il interroge.
+fn version(root: &Path, variables: &[(String, String)]) -> Result<String, String> {
     let output = migrate::launch(root, "version", variables, true).map_err(|e| e.to_string())?;
 
     output
         .split_whitespace()
         .next_back()
-        .and_then(|number| number.parse().ok())
+        .map(str::to_owned)
         .ok_or_else(|| format!("réponse incomprise : {}", output.trim()))
 }
 
-/// Découpe une URL PostgreSQL en hôte et port.
+/// Découpe une URL en hôte et port, quel que soit celui des deux moteurs à serveur.
 ///
 /// Le dernier `@` sépare : un mot de passe a le droit d'en contenir un.
 pub(crate) fn host_and_port(url: &str) -> Option<(String, u16)> {
-    let reste = url
+    let (reste, defaut) = url
         .strip_prefix("postgres://")
-        .or_else(|| url.strip_prefix("postgresql://"))?;
+        .or_else(|| url.strip_prefix("postgresql://"))
+        .map(|reste| (reste, PORT_POSTGRES))
+        .or_else(|| {
+            url.strip_prefix("mysql://")
+                .map(|reste| (reste, PORT_MYSQL))
+        })?;
 
     let apres_identifiants = match reste.rsplit_once('@') {
         Some((_, after)) => after,
@@ -150,18 +205,63 @@ pub(crate) fn host_and_port(url: &str) -> Option<(String, u16)> {
 
     match autorite.rsplit_once(':') {
         Some((hote, port)) => Some((hote.to_string(), port.parse().ok()?)),
-        None => Some((autorite.to_string(), PORT_PAR_DEFAUT)),
+        None => Some((autorite.to_string(), defaut)),
     }
 }
 
-/// Vrai si le serveur sait poser `uuidv7()`.
-fn recent_enough(version: u32) -> bool {
-    version >= MINIMUM
+/// Une version comparable : majeure et mineure, quelle que soit la forme rendue.
+type Version = (u32, u32);
+
+/// Plancher du moteur, et la cause qui le fixe.
+///
+/// Chacun a la sienne, et aucune n'est un chiffre repris d'ailleurs : un plancher sans
+/// cause est une règle que personne ne saura mettre à jour.
+fn plancher(database: Database) -> (Version, &'static str) {
+    match database {
+        Database::Postgres => (
+            (14, 0),
+            "le support communautaire, les versions antérieures ne recevant plus de correctif de sécurité",
+        ),
+        Database::Mysql => (
+            (8, 0),
+            "`FOR UPDATE SKIP LOCKED`, dont le dépilage des jobs dépend",
+        ),
+        Database::Sqlite => (
+            (3, 35),
+            "`UPDATE … RETURNING`, dont le dépilage des jobs dépend",
+        ),
+    }
 }
 
-/// Rend un `server_version_num` lisible : `180001` devient `18.1`.
-fn readable(version: u32) -> String {
-    format!("{}.{}", version / 10_000, version % 10_000)
+/// Lit la version que `migration -- version` a rendue, selon le moteur interrogé.
+fn parse_version(database: Database, brut: &str) -> Option<Version> {
+    if database == Database::Postgres {
+        // `server_version_num` est un entier compact : 170004 pour 17.4.
+        let numero: u32 = brut.parse().ok()?;
+        return Some((numero / 10_000, numero % 10_000));
+    }
+
+    // « 8.4.0 », mais aussi « 8.0.36-0ubuntu0.22.04.1 » : les paquets de distribution
+    // suffixent la version d'une révision qui ne dit rien du moteur.
+    let mut morceaux = brut.split(['.', '-']);
+
+    Some((
+        morceaux.next()?.parse().ok()?,
+        morceaux.next()?.parse().ok()?,
+    ))
+}
+
+/// Le chemin du fichier que désigne une URL SQLite.
+fn chemin_sqlite(url: &str) -> Option<PathBuf> {
+    let reste = url.strip_prefix("sqlite://")?;
+    let chemin = reste.split('?').next().filter(|c| !c.is_empty())?;
+
+    Some(PathBuf::from(chemin))
+}
+
+/// Rend une version lisible : `(18, 1)` devient `18.1`.
+fn readable(version: Version) -> String {
+    format!("{}.{}", version.0, version.1)
 }
 
 #[cfg(test)]
@@ -204,7 +304,7 @@ mod tests {
     fn sans_port_celui_de_postgresql_est_supposé() {
         assert_eq!(
             host_and_port("postgres://rbs:rbs@db.interne/demo"),
-            Some(("db.interne".to_string(), PORT_PAR_DEFAUT))
+            Some(("db.interne".to_string(), PORT_POSTGRES))
         );
     }
 
@@ -220,30 +320,76 @@ mod tests {
     fn a_url_without_credentials_stays_readable() {
         assert_eq!(
             host_and_port("postgres://localhost/demo"),
-            Some(("localhost".to_string(), PORT_PAR_DEFAUT))
+            Some(("localhost".to_string(), PORT_POSTGRES))
         );
     }
 
     #[test]
-    fn a_url_that_is_not_postgresql_is_rejected() {
-        assert_eq!(host_and_port("mysql://localhost/demo"), None);
+    fn a_mysql_url_reads_back_with_its_own_default_port() {
+        assert_eq!(
+            host_and_port("mysql://root:root@db.interne/demo"),
+            Some(("db.interne".to_string(), PORT_MYSQL))
+        );
+    }
+
+    /// SQLite n'a ni hôte ni port : le sonder par le réseau n'a pas de sens.
+    #[test]
+    fn a_sqlite_url_has_neither_host_nor_port() {
+        assert_eq!(host_and_port("sqlite://demo.db?mode=rwc"), None);
     }
 
     #[test]
     fn the_version_number_renders_as_major_minor() {
-        assert_eq!(readable(180_001), "18.1");
-        assert_eq!(readable(180_000), "18.0");
-        assert_eq!(readable(170_004), "17.4");
+        assert_eq!(readable((18, 1)), "18.1");
+        assert_eq!(readable((3, 45)), "3.45");
     }
 
-    // Le plancher ne tient plus à `uuidv7()`, que le modèle pose désormais lui-même : il
-    // tient au support communautaire, 14 étant la plus vieille version encore maintenue.
+    /// Chaque moteur dit sa version dans sa propre forme.
     #[test]
-    fn postgresql_14_is_the_minimum_because_older_releases_are_out_of_support() {
-        assert!(recent_enough(140_000), "14.0 convient");
-        assert!(recent_enough(170_004), "17.4 convient");
-        assert!(recent_enough(190_002), "une version ultérieure convient");
-        assert!(!recent_enough(130_009), "13.9 reste en deçà du minimum");
+    fn each_engine_version_reads_back_in_its_own_shape() {
+        assert_eq!(
+            parse_version(Database::Postgres, "170004"),
+            Some((17, 4)),
+            "`server_version_num` est un entier compact"
+        );
+        // Les paquets de distribution suffixent la version d'un numéro de révision.
+        assert_eq!(
+            parse_version(Database::Mysql, "8.0.36-0ubuntu0.22.04.1"),
+            Some((8, 0))
+        );
+        assert_eq!(parse_version(Database::Mysql, "8.4.0"), Some((8, 4)));
+        assert_eq!(parse_version(Database::Sqlite, "3.45.1"), Some((3, 45)));
+        assert_eq!(parse_version(Database::Sqlite, "n'importe quoi"), None);
+    }
+
+    /// Chaque plancher a une cause, et elle est vérifiable.
+    #[test]
+    fn each_engine_carries_its_own_floor() {
+        assert_eq!(plancher(Database::Postgres).0, (14, 0));
+        // `FOR UPDATE SKIP LOCKED`, dont le dépilage des jobs dépend.
+        assert_eq!(plancher(Database::Mysql).0, (8, 0));
+        // `UPDATE … RETURNING`, dont le dépilage des jobs dépend.
+        assert_eq!(plancher(Database::Sqlite).0, (3, 35));
+
+        for moteur in Database::TOUS {
+            assert!(
+                !plancher(moteur).1.is_empty(),
+                "{moteur} n'a pas de cause à son plancher"
+            );
+        }
+    }
+
+    #[test]
+    fn a_sqlite_url_yields_the_file_it_designates() {
+        assert_eq!(
+            chemin_sqlite("sqlite:///var/lib/demo.db?mode=rwc"),
+            Some(PathBuf::from("/var/lib/demo.db"))
+        );
+        assert_eq!(
+            chemin_sqlite("sqlite://demo.db"),
+            Some(PathBuf::from("demo.db"))
+        );
+        assert_eq!(chemin_sqlite("postgres://localhost/demo"), None);
     }
 
     #[test]

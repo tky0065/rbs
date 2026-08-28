@@ -123,6 +123,34 @@ fn the_dequeue_never_hands_the_same_job_twice_on_the_three_engines() {
             ),
             "le test de concurrence n'a pas été joué sur {moteur} :\n{joues}"
         );
+
+        // `doctor` interroge la base pour sa version : une requête écrite pour PostgreSQL
+        // le ferait échouer ici, et nulle part ailleurs.
+        let diagnostic = rbs(&racine)
+            .env("CARGO_TARGET_DIR", &cible)
+            .arg("doctor")
+            .assert()
+            .success()
+            .get_output()
+            .clone();
+
+        let rendu = String::from_utf8_lossy(&diagnostic.stdout).into_owned();
+
+        // `rbs doctor` sort en 0 même quand un contrôle échoue : c'est la ligne rendue
+        // qui tranche, non le code de sortie.
+        let ligne = rendu
+            .lines()
+            .find(|ligne| ligne.contains("base"))
+            .unwrap_or_else(|| panic!("`doctor` ne rend aucune ligne « base » :\n{rendu}"));
+
+        assert!(
+            ligne.contains('✓'),
+            "`doctor` refuse la base sur {moteur} : {ligne}"
+        );
+        assert!(
+            moteur == "postgres" || !rendu.contains("PostgreSQL"),
+            "`doctor` nomme encore PostgreSQL sur {moteur} :\n{rendu}"
+        );
     }
 }
 

@@ -23,13 +23,35 @@ const MASQUE: &str = "***";
 #[error(
     "connexion à la base impossible : {cause}\n\
      base visée : {url}\n\
-     vérifiez `database.url` (RBS_DATABASE__URL) et que le serveur PostgreSQL est démarré"
+     vérifiez `database.url` (RBS_DATABASE__URL) et {conseil}"
 )]
 pub struct ConnectError {
     /// URL visée, mot de passe masqué.
     url: String,
     /// Cause remontée par SeaORM, mot de passe masqué.
     cause: String,
+    /// Ce qu'il reste à vérifier, propre au moteur que l'URL désigne.
+    conseil: String,
+}
+
+/// Ce que l'URL laisse vérifier en plus du champ, selon le moteur qu'elle désigne.
+///
+/// Le moteur se lit dans le schéma et non dans les métadonnées du projet : le noyau est
+/// une bibliothèque, et le `Cargo.toml` qui l'emploie ne lui appartient pas. SQLite n'a
+/// pas de serveur à démarrer, mais un fichier à rendre accessible.
+fn conseil(url: &str) -> String {
+    let moteur = match url.split_once("://").map(|(scheme, _)| scheme) {
+        Some("postgres" | "postgresql") => "PostgreSQL",
+        Some("mysql") => "MySQL",
+        Some("sqlite") => {
+            return "que le fichier de base est accessible en écriture, \
+                    son répertoire compris"
+                .to_owned();
+        }
+        _ => return "que le serveur de base est démarré".to_owned(),
+    };
+
+    format!("que le serveur {moteur} est démarré")
 }
 
 /// Ouvre le pool de connexions décrit par `config`.
@@ -56,6 +78,7 @@ pub async fn connect(config: &DatabaseConfig) -> Result<DatabaseConnection, Conn
         ConnectError {
             url: strip(&config.url, secret),
             cause: strip(&source.to_string(), secret),
+            conseil: conseil(&config.url),
         }
     })
 }
@@ -117,6 +140,49 @@ mod tests {
         assert!(
             message.contains("database.url"),
             "le message doit nommer le field à corriger, obtenu : {message}"
+        );
+    }
+
+    // Le message est celui que lit un développeur dont l'application refuse de démarrer :
+    // lui parler de PostgreSQL quand il a configuré MySQL l'envoie chercher au mauvais
+    // endroit. SQLite n'a pas de serveur du tout — sa phrase change de nature.
+    #[tokio::test]
+    async fn the_message_names_the_engine_actually_configured() {
+        for (url, attendu) in [
+            ("postgres://alice@localhost:99999/app", "PostgreSQL"),
+            ("postgresql://alice@localhost:99999/app", "PostgreSQL"),
+            ("mysql://alice@localhost:99999/app", "MySQL"),
+        ] {
+            let error = connect(&config(url))
+                .await
+                .expect_err("le port 99999 est hors bornes");
+
+            let message = error.to_string();
+            assert!(
+                message.contains(attendu),
+                "le message ne nomme pas {attendu} : {message}"
+            );
+            assert!(
+                message.contains("est démarré"),
+                "le message ne parle pas d'un serveur : {message}"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn sqlite_is_told_about_a_file_rather_than_a_server() {
+        let error = connect(&config("sqlite:///introuvable/app.db"))
+            .await
+            .expect_err("le répertoire n'existe pas");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("fichier"),
+            "SQLite n'a pas de serveur : le message doit parler du fichier : {message}"
+        );
+        assert!(
+            !message.contains("démarré"),
+            "SQLite n'a rien à démarrer : {message}"
         );
     }
 

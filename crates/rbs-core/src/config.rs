@@ -66,8 +66,8 @@ pub struct ServerConfig {
 /// production, qu'un projet sous charge ajuste sans forker le runtime.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct DatabaseConfig {
-    /// URL de connexion PostgreSQL. Aucune valeur par défaut : son absence fait échouer
-    /// le démarrage.
+    /// URL de connexion, dont le schéma désigne le moteur. Aucune valeur par défaut :
+    /// son absence fait échouer le démarrage.
     pub url: String,
     /// Nombre maximum de connexions ouvertes simultanément.
     pub max_connections: u32,

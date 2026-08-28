@@ -155,6 +155,16 @@ mod tests {
         (parent, project.root)
     }
 
+    /// La dépendance au noyau telle que `rbs new` l'écrit, pilote compris.
+    ///
+    /// Elle sert d'ancre aux réécritures : `version = "…"` seul figure aussi dans
+    /// `[package.metadata.rbs]`, et le viser y toucherait aussi.
+    fn noyau() -> String {
+        format!(
+            "rbs-core = {{ version = \"{CLI}\", default-features = false, features = [\"postgres\"] }}"
+        )
+    }
+
     /// Remplace un fragment du manifeste du projet.
     fn rewrite(root: &Path, before: &str, after: &str) {
         let path = root.join("Cargo.toml");
@@ -168,8 +178,9 @@ mod tests {
     fn local_core(root: &Path) {
         rewrite(
             root,
-            &format!("rbs-core = \"{CLI}\""),
-            "rbs-core = { path = \"../../crates/rbs-core\" }",
+            &noyau(),
+            "rbs-core = { path = \"../../crates/rbs-core\", default-features = false, \
+             features = [\"postgres\"] }",
         );
     }
 
@@ -198,11 +209,7 @@ mod tests {
     #[test]
     fn not_being_published_outweighs_the_version_gap() {
         let (_parent, root) = project();
-        rewrite(
-            &root,
-            &format!("rbs-core = \"{CLI}\""),
-            "rbs-core = \"0.0.1\"",
-        );
+        rewrite(&root, &noyau(), "rbs-core = \"0.0.1\"");
 
         let check = check_with(&root, false);
 
@@ -231,11 +238,7 @@ mod tests {
     #[test]
     fn once_the_core_is_published_a_version_gap_is_still_reported() {
         let (_parent, root) = project();
-        rewrite(
-            &root,
-            &format!("rbs-core = \"{CLI}\""),
-            "rbs-core = \"0.0.1\"",
-        );
+        rewrite(&root, &noyau(), "rbs-core = \"0.0.1\"");
 
         let check = check_with(&root, true);
 
@@ -279,7 +282,7 @@ mod tests {
     #[test]
     fn a_manifest_without_a_core_dependency_is_reported() {
         let (_parent, root) = project();
-        rewrite(&root, &format!("rbs-core = \"{CLI}\"\n"), "");
+        rewrite(&root, &format!("{}\n", noyau()), "");
 
         let check = check_with(&root, false);
 
