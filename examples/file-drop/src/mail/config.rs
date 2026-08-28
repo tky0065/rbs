@@ -17,7 +17,7 @@ pub struct MailConfig {
     pub from: String,
     pub timeout_secs: u64,
     /// Répertoire des gabarits de messages, relatif à la racine du projet.
-    pub gabarits: String,
+    pub templates: String,
 }
 
 impl Default for MailConfig {
@@ -30,7 +30,7 @@ impl Default for MailConfig {
             tls: Tls::Aucun,
             from: "no-reply@localhost".to_string(),
             timeout_secs: 10,
-            gabarits: "templates/mail".to_string(),
+            templates: "templates/mail".to_string(),
         }
     }
 }

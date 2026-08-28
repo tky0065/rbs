@@ -11,8 +11,8 @@
 #![allow(dead_code)]
 
 pub mod config;
-pub mod gabarit;
 mod service;
+pub mod template;
 
 #[cfg(test)]
 mod tests;

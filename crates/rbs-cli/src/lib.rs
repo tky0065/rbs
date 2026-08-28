@@ -204,7 +204,7 @@ fn suite(feature: &str) -> Option<&'static str> {
         "mail" => Some("réglez [mail] dans config/default.toml — un SMTP local par défaut"),
         // Le backend par défaut écrit sous une racine du dépôt, que rien n'ignore encore.
         "storage" => Some(
-            "les objets vont sous ./stockage : ajoutez-le à .gitignore, ou passez \
+            "les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez \
              storage.backend à \"s3\" et recopiez les RBS_STORAGE__* de .env.example",
         ),
         _ => None,

@@ -553,10 +553,7 @@ fn le_fragment_redis_ecrit_les_ancres_d_etat_les_dependances_et_la_section_cache
     let etat = fs::read_to_string(racine.join("src/state.rs")).expect("state.rs est lisible");
     for (ancre, ligne) in [
         ("state_champs", "pub cache: crate::cache::Cache,"),
-        (
-            "state_init",
-            "cache: crate::cache::Cache::depuis_config()?,",
-        ),
+        ("state_init", "cache: crate::cache::Cache::from_config()?,"),
     ] {
         let ouverture = format!("// <rbs:{ancre}>");
         let fermeture = format!("// </rbs:{ancre}>");

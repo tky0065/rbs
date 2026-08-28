@@ -17,7 +17,7 @@ use crate::router::router;
 use crate::state::AppState;
 
 /// Un mot de passe qui satisfait la validation du DTO, partagé par les tests.
-const MOT_DE_PASSE: &str = "un mot de passe assez long";
+const PASSWORD: &str = "un mot de passe assez long";
 
 /// Monte l'application sur la base décrite par `.env`, sans écouter sur le réseau.
 ///
@@ -35,7 +35,7 @@ async fn application() -> Router {
 ///
 /// Deux garanties de la rotation ne s'observent que dans la table : l'empreinte qui y est
 /// stockée, et le refus d'un jeton dont la date est passée — qu'il faut y fabriquer.
-async fn connexion() -> DatabaseConnection {
+async fn connection() -> DatabaseConnection {
     let config = rbs_core::Config::load().expect("configuration lisible");
 
     rbs_core::db::connect(&config.database)
@@ -44,24 +44,24 @@ async fn connexion() -> DatabaseConnection {
 }
 
 /// Fait traverser le routeur à `requete`, et rend son statut avec son corps.
-async fn appeler(api: &Router, requete: Request<Body>) -> (StatusCode, Value) {
-    let reponse = api
+async fn call(api: &Router, requete: Request<Body>) -> (StatusCode, Value) {
+    let response = api
         .clone()
         .oneshot(requete)
         .await
         .expect("l'application doit répondre");
-    let statut = reponse.status();
-    let octets = to_bytes(reponse.into_body(), usize::MAX)
+    let status = response.status();
+    let octets = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("corps de réponse lisible");
 
     // Une réponse sans corps se lit `null` plutôt que d'arrêter le test.
-    let corps = serde_json::from_slice(&octets).unwrap_or(Value::Null);
+    let body = serde_json::from_slice(&octets).unwrap_or(Value::Null);
 
-    (statut, corps)
+    (status, body)
 }
 
-fn sans_corps(methode: &str, chemin: &str) -> Request<Body> {
+fn without_body(methode: &str, chemin: &str) -> Request<Body> {
     Request::builder()
         .method(methode)
         .uri(chemin)
@@ -69,37 +69,37 @@ fn sans_corps(methode: &str, chemin: &str) -> Request<Body> {
         .expect("requête bien formée")
 }
 
-fn poster(chemin: &str, corps: Value) -> Request<Body> {
+fn post_json(chemin: &str, body: Value) -> Request<Body> {
     Request::builder()
         .method("POST")
         .uri(chemin)
         .header("content-type", "application/json")
-        .body(Body::from(corps.to_string()))
+        .body(Body::from(body.to_string()))
         .expect("requête bien formée")
 }
 
 /// Une adresse jamais inscrite : les tests partagent une base qu'ils ne vident pas.
-fn email_neuf() -> String {
+fn fresh_email() -> String {
     format!("{}@exemple.test", Uuid::new_v4())
 }
 
 /// Inscrit `email` et rend le corps de la réponse.
-async fn inscrire(api: &Router, email: &str) -> (StatusCode, Value) {
-    appeler(
+async fn register(api: &Router, email: &str) -> (StatusCode, Value) {
+    call(
         api,
-        poster(
+        post_json(
             "/auth/register",
-            json!({ "email": email, "password": MOT_DE_PASSE }),
+            json!({ "email": email, "password": PASSWORD }),
         ),
     )
     .await
 }
 
 /// Tente une connexion et rend statut et corps.
-async fn connecter(api: &Router, email: &str, mot_de_passe: &str) -> (StatusCode, Value) {
-    appeler(
+async fn authenticate(api: &Router, email: &str, mot_de_passe: &str) -> (StatusCode, Value) {
+    call(
         api,
-        poster(
+        post_json(
             "/auth/login",
             json!({ "email": email, "password": mot_de_passe }),
         ),
@@ -110,18 +110,18 @@ async fn connecter(api: &Router, email: &str, mot_de_passe: &str) -> (StatusCode
 /// La garde tient avant même que le service existe : `Identity` refuse la requête sans
 /// jamais atteindre le controller.
 #[tokio::test]
-async fn me_sans_jeton_rend_401() {
+async fn me_without_a_token_returns_401() {
     let api = application().await;
 
-    let (statut, corps) = appeler(&api, sans_corps("GET", "/auth/me")).await;
+    let (status, body) = call(&api, without_body("GET", "/auth/me")).await;
 
-    assert_eq!(statut, StatusCode::UNAUTHORIZED);
-    assert_eq!(corps["status"], 401, "{corps}");
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["status"], 401, "{body}");
 }
 
 /// Un jeton que le service n'a pas signé ne vaut pas mieux qu'aucun jeton.
 #[tokio::test]
-async fn me_avec_un_jeton_illisible_rend_401() {
+async fn me_with_an_unreadable_token_returns_401() {
     let api = application().await;
     let requete = Request::builder()
         .method("GET")
@@ -130,39 +130,39 @@ async fn me_avec_un_jeton_illisible_rend_401() {
         .body(Body::empty())
         .expect("requête bien formée");
 
-    let (statut, corps) = appeler(&api, requete).await;
+    let (status, body) = call(&api, requete).await;
 
-    assert_eq!(statut, StatusCode::UNAUTHORIZED);
-    assert_eq!(corps["status"], 401, "{corps}");
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["status"], 401, "{body}");
 }
 
 #[tokio::test]
-async fn inscription_rend_201_et_le_profil_cree() {
+async fn registration_returns_201_and_the_created_profile() {
     let api = application().await;
-    let email = email_neuf();
+    let email = fresh_email();
 
-    let (statut, corps) = inscrire(&api, &email).await;
+    let (status, body) = register(&api, &email).await;
 
-    assert_eq!(statut, StatusCode::CREATED, "{corps}");
-    assert_eq!(corps["email"], email, "{corps}");
-    assert_eq!(corps["role"], "user", "{corps}");
-    assert!(corps["id"].is_string(), "{corps}");
+    assert_eq!(status, StatusCode::CREATED, "{body}");
+    assert_eq!(body["email"], email, "{body}");
+    assert_eq!(body["role"], "user", "{body}");
+    assert!(body["id"].is_string(), "{body}");
 }
 
 /// Ni le hash ni le mot de passe reçu ne repartent vers le client.
 #[tokio::test]
-async fn le_hash_n_apparait_pas_dans_la_reponse() {
+async fn the_hash_does_not_appear_in_the_response() {
     let api = application().await;
 
-    let (_, corps) = inscrire(&api, &email_neuf()).await;
+    let (_, body) = register(&api, &fresh_email()).await;
 
-    let texte = corps.to_string();
+    let texte = body.to_string();
     assert!(
         !texte.contains("$argon2"),
         "hash dans la réponse :\n{texte}"
     );
     assert!(
-        !texte.contains(MOT_DE_PASSE),
+        !texte.contains(PASSWORD),
         "mot de passe dans la réponse :\n{texte}"
     );
     assert!(
@@ -172,16 +172,16 @@ async fn le_hash_n_apparait_pas_dans_la_reponse() {
 }
 
 #[tokio::test]
-async fn un_email_deja_pris_rend_409() {
+async fn an_email_already_taken_returns_409() {
     let api = application().await;
-    let email = email_neuf();
+    let email = fresh_email();
 
-    let (premier, corps) = inscrire(&api, &email).await;
-    assert_eq!(premier, StatusCode::CREATED, "{corps}");
+    let (premier, body) = register(&api, &email).await;
+    assert_eq!(premier, StatusCode::CREATED, "{body}");
 
-    let (second, corps) = inscrire(&api, &email).await;
+    let (second, body) = register(&api, &email).await;
 
-    assert_eq!(second, StatusCode::CONFLICT, "{corps}");
+    assert_eq!(second, StatusCode::CONFLICT, "{body}");
 }
 
 /// Les deux échecs sont indiscernables : un corps qui différerait dirait à un attaquant
@@ -191,20 +191,20 @@ async fn un_email_deja_pris_rend_409() {
 /// construction, et corréler une réponse à une ligne de journal ne renseigne personne sur
 /// l'existence d'un compte.
 #[tokio::test]
-async fn mot_de_passe_errone_et_email_inconnu_rendent_la_meme_401() {
+async fn a_wrong_password_and_an_unknown_email_return_the_same_401() {
     let api = application().await;
-    let inscrit = email_neuf();
-    inscrire(&api, &inscrit).await;
+    let inscrit = fresh_email();
+    register(&api, &inscrit).await;
 
     let (statut_faux, mut corps_faux) =
-        connecter(&api, &inscrit, "un tout autre mot de passe").await;
-    let (statut_inconnu, mut corps_inconnu) = connecter(&api, &email_neuf(), MOT_DE_PASSE).await;
+        authenticate(&api, &inscrit, "un tout autre mot de passe").await;
+    let (statut_inconnu, mut corps_inconnu) = authenticate(&api, &fresh_email(), PASSWORD).await;
 
     assert_eq!(statut_faux, StatusCode::UNAUTHORIZED, "{corps_faux}");
     assert_eq!(statut_inconnu, StatusCode::UNAUTHORIZED, "{corps_inconnu}");
 
-    for corps in [&mut corps_faux, &mut corps_inconnu] {
-        if let Some(objet) = corps.as_object_mut() {
+    for body in [&mut corps_faux, &mut corps_inconnu] {
+        if let Some(objet) = body.as_object_mut() {
             objet.remove("request_id");
         }
     }
@@ -222,21 +222,21 @@ async fn mot_de_passe_errone_et_email_inconnu_rendent_la_meme_401() {
 /// comptes. Le rapport toléré est large — il sépare l'absence de vérification, d'un ordre
 /// de grandeur, d'un hachage à vide, qui coûte le même temps.
 #[tokio::test]
-async fn un_email_inconnu_coute_le_meme_temps_qu_un_mot_de_passe_faux() {
+async fn an_unknown_email_costs_the_same_time_as_a_wrong_password() {
     let api = application().await;
-    let inscrit = email_neuf();
-    inscrire(&api, &inscrit).await;
+    let inscrit = fresh_email();
+    register(&api, &inscrit).await;
 
     // Un tour à vide : le hash de comparaison se calcule au premier passage, et son coût
     // ne doit pas être imputé à la mesure.
-    connecter(&api, &email_neuf(), MOT_DE_PASSE).await;
+    authenticate(&api, &fresh_email(), PASSWORD).await;
 
     let depart = Instant::now();
-    connecter(&api, &inscrit, "un tout autre mot de passe").await;
+    authenticate(&api, &inscrit, "un tout autre mot de passe").await;
     let mot_de_passe_faux = depart.elapsed();
 
     let depart = Instant::now();
-    connecter(&api, &email_neuf(), MOT_DE_PASSE).await;
+    authenticate(&api, &fresh_email(), PASSWORD).await;
     let email_inconnu = depart.elapsed();
 
     assert!(
@@ -247,34 +247,34 @@ async fn un_email_inconnu_coute_le_meme_temps_qu_un_mot_de_passe_faux() {
 }
 
 /// Inscrit une adresse neuve et ouvre une session : l'identifiant du compte et sa paire.
-async fn ouvrir_session(api: &Router) -> (Uuid, Value) {
-    let email = email_neuf();
-    let (_, profil) = inscrire(api, &email).await;
+async fn login_as(api: &Router) -> (Uuid, Value) {
+    let email = fresh_email();
+    let (_, profile) = register(api, &email).await;
     let id = Uuid::parse_str(
-        profil["id"]
+        profile["id"]
             .as_str()
             .expect("le profil porte un identifiant"),
     )
     .expect("identifiant lisible");
 
-    let (statut, paire) = connecter(api, &email, MOT_DE_PASSE).await;
-    assert_eq!(statut, StatusCode::OK, "{paire}");
+    let (status, paire) = authenticate(api, &email, PASSWORD).await;
+    assert_eq!(status, StatusCode::OK, "{paire}");
 
     (id, paire)
 }
 
 /// Le jeton de rafraîchissement d'une paire.
-fn refresh_de(paire: &Value) -> String {
+fn refresh_for(paire: &Value) -> String {
     paire["refresh_token"]
         .as_str()
         .expect("la paire doit porter un jeton de rafraîchissement")
         .to_owned()
 }
 
-async fn rafraichir(api: &Router, jeton: &str) -> (StatusCode, Value) {
-    appeler(
+async fn refresh(api: &Router, token: &str) -> (StatusCode, Value) {
+    call(
         api,
-        poster("/auth/refresh", json!({ "refresh_token": jeton })),
+        post_json("/auth/refresh", json!({ "refresh_token": token })),
     )
     .await
 }
@@ -283,7 +283,7 @@ async fn rafraichir(api: &Router, jeton: &str) -> (StatusCode, Value) {
 ///
 /// La recherche porte sur le compte et non sur l'empreinte : chercher par ce qu'on veut
 /// vérifier ferait échouer le test à la lecture, sans jamais atteindre l'assertion.
-async fn ligne_de_session(db: &DatabaseConnection, user_id: Uuid) -> refresh_token::Model {
+async fn session_row(db: &DatabaseConnection, user_id: Uuid) -> refresh_token::Model {
     refresh_token::Entity::find()
         .filter(refresh_token::Column::UserId.eq(user_id))
         .one(db)
@@ -293,13 +293,13 @@ async fn ligne_de_session(db: &DatabaseConnection, user_id: Uuid) -> refresh_tok
 }
 
 #[tokio::test]
-async fn un_refresh_valide_rend_une_nouvelle_paire() {
+async fn a_valid_refresh_returns_a_new_pair() {
     let api = application().await;
-    let (_, paire) = ouvrir_session(&api).await;
+    let (_, paire) = login_as(&api).await;
 
-    let (statut, nouvelle) = rafraichir(&api, &refresh_de(&paire)).await;
+    let (status, nouvelle) = refresh(&api, &refresh_for(&paire)).await;
 
-    assert_eq!(statut, StatusCode::OK, "{nouvelle}");
+    assert_eq!(status, StatusCode::OK, "{nouvelle}");
     assert_eq!(nouvelle["token_type"], "Bearer", "{nouvelle}");
     assert_ne!(
         nouvelle["refresh_token"], paire["refresh_token"],
@@ -312,55 +312,55 @@ async fn un_refresh_valide_rend_une_nouvelle_paire() {
 }
 
 #[tokio::test]
-async fn l_ancien_refresh_est_ensuite_refuse() {
+async fn the_old_refresh_is_then_rejected() {
     let api = application().await;
-    let ancien = refresh_de(&ouvrir_session(&api).await.1);
+    let ancien = refresh_for(&login_as(&api).await.1);
 
-    let (statut, corps) = rafraichir(&api, &ancien).await;
-    assert_eq!(statut, StatusCode::OK, "{corps}");
+    let (status, body) = refresh(&api, &ancien).await;
+    assert_eq!(status, StatusCode::OK, "{body}");
 
-    let (rejeu, corps) = rafraichir(&api, &ancien).await;
+    let (rejeu, body) = refresh(&api, &ancien).await;
 
-    assert_eq!(rejeu, StatusCode::UNAUTHORIZED, "{corps}");
+    assert_eq!(rejeu, StatusCode::UNAUTHORIZED, "{body}");
 }
 
 /// La ligne est reculée dans le passé plutôt que forgée : elle garde ainsi tout ce que
 /// `login` y a mis, et seule son expiration la disqualifie.
 #[tokio::test]
-async fn un_refresh_expire_rend_401() {
+async fn an_expired_refresh_returns_401() {
     let api = application().await;
-    let db = connexion().await;
-    let (compte, paire) = ouvrir_session(&api).await;
-    let jeton = refresh_de(&paire);
+    let db = connection().await;
+    let (compte, paire) = login_as(&api).await;
+    let token = refresh_for(&paire);
 
-    let mut ligne: refresh_token::ActiveModel = ligne_de_session(&db, compte).await.into();
+    let mut ligne: refresh_token::ActiveModel = session_row(&db, compte).await.into();
     ligne.expires_at = Set((Utc::now() - chrono::Duration::seconds(1)).fixed_offset());
     ligne.update(&db).await.expect("expiration reculée");
 
-    let (statut, corps) = rafraichir(&api, &jeton).await;
+    let (status, body) = refresh(&api, &token).await;
 
-    assert_eq!(statut, StatusCode::UNAUTHORIZED, "{corps}");
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
 }
 
 /// Une base lue par un tiers ne lui donne aucune session utilisable.
 #[tokio::test]
-async fn la_table_porte_l_empreinte_et_jamais_le_jeton() {
+async fn the_table_carries_the_fingerprint_and_never_the_token() {
     let api = application().await;
-    let db = connexion().await;
-    let (compte, paire) = ouvrir_session(&api).await;
-    let jeton = refresh_de(&paire);
+    let db = connection().await;
+    let (compte, paire) = login_as(&api).await;
+    let token = refresh_for(&paire);
 
-    let ligne = ligne_de_session(&db, compte).await;
+    let ligne = session_row(&db, compte).await;
 
     assert_eq!(
         ligne.token_hash,
-        rbs_core::token::fingerprint(&jeton),
+        rbs_core::token::fingerprint(&token),
         "la colonne ne porte pas l'empreinte du jeton"
     );
-    assert_ne!(ligne.token_hash, jeton, "le jeton lui-même est stocké");
+    assert_ne!(ligne.token_hash, token, "le jeton lui-même est stocké");
 
     let en_clair = refresh_token::Entity::find()
-        .filter(refresh_token::Column::TokenHash.eq(jeton.clone()))
+        .filter(refresh_token::Column::TokenHash.eq(token.clone()))
         .one(&db)
         .await
         .expect("la table doit être interrogeable");
@@ -371,37 +371,37 @@ async fn la_table_porte_l_empreinte_et_jamais_le_jeton() {
     );
 }
 
-async fn deconnecter(api: &Router, jeton: &str) -> (StatusCode, Value) {
-    appeler(
+async fn logout(api: &Router, token: &str) -> (StatusCode, Value) {
+    call(
         api,
-        poster("/auth/logout", json!({ "refresh_token": jeton })),
+        post_json("/auth/logout", json!({ "refresh_token": token })),
     )
     .await
 }
 
 #[tokio::test]
-async fn logout_rend_204() {
+async fn logout_returns_204() {
     let api = application().await;
-    let (_, paire) = ouvrir_session(&api).await;
+    let (_, paire) = login_as(&api).await;
 
-    let (statut, corps) = deconnecter(&api, &refresh_de(&paire)).await;
+    let (status, body) = logout(&api, &refresh_for(&paire)).await;
 
-    assert_eq!(statut, StatusCode::NO_CONTENT, "{corps}");
-    assert_eq!(corps, Value::Null, "un 204 ne porte pas de corps");
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
+    assert_eq!(body, Value::Null, "un 204 ne porte pas de corps");
 }
 
 #[tokio::test]
-async fn le_refresh_revoque_rend_401() {
+async fn a_revoked_refresh_returns_401() {
     let api = application().await;
-    let (_, paire) = ouvrir_session(&api).await;
-    let jeton = refresh_de(&paire);
+    let (_, paire) = login_as(&api).await;
+    let token = refresh_for(&paire);
 
-    let (statut, corps) = deconnecter(&api, &jeton).await;
-    assert_eq!(statut, StatusCode::NO_CONTENT, "{corps}");
+    let (status, body) = logout(&api, &token).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
 
-    let (statut, corps) = rafraichir(&api, &jeton).await;
+    let (status, body) = refresh(&api, &token).await;
 
-    assert_eq!(statut, StatusCode::UNAUTHORIZED, "{corps}");
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
 }
 
 /// Se déconnecter d'un appareil ne déconnecte pas les autres.
@@ -409,23 +409,23 @@ async fn le_refresh_revoque_rend_401() {
 /// C'est la garantie que ce lot ajoute : la révocation porte sur la ligne présentée, et
 /// non sur le compte qui la détient.
 #[tokio::test]
-async fn les_autres_sessions_du_meme_compte_restent_valides() {
+async fn the_other_sessions_of_the_same_account_stay_valid() {
     let api = application().await;
-    let email = email_neuf();
-    inscrire(&api, &email).await;
+    let email = fresh_email();
+    register(&api, &email).await;
 
-    let (_, premiere) = connecter(&api, &email, MOT_DE_PASSE).await;
-    let (_, seconde) = connecter(&api, &email, MOT_DE_PASSE).await;
+    let (_, premiere) = authenticate(&api, &email, PASSWORD).await;
+    let (_, seconde) = authenticate(&api, &email, PASSWORD).await;
 
-    let (statut, corps) = deconnecter(&api, &refresh_de(&premiere)).await;
-    assert_eq!(statut, StatusCode::NO_CONTENT, "{corps}");
+    let (status, body) = logout(&api, &refresh_for(&premiere)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "{body}");
 
-    let (statut, corps) = rafraichir(&api, &refresh_de(&seconde)).await;
+    let (status, body) = refresh(&api, &refresh_for(&seconde)).await;
 
     assert_eq!(
-        statut,
+        status,
         StatusCode::OK,
-        "la seconde session a été fermée avec la première : {corps}"
+        "la seconde session a été fermée avec la première : {body}"
     );
 }
 
@@ -433,8 +433,8 @@ async fn les_autres_sessions_du_meme_compte_restent_valides() {
 ///
 /// Le fragment n'en livre aucune : c'est à vous d'en poser sur vos propres routes, et
 /// voici comment. Le handler se contente d'exiger le rôle avant de répondre.
-async fn route_reservee_aux_admins() -> Router {
-    async fn reservee(identite: Identity) -> rbs_core::Result<StatusCode> {
+async fn admin_only_route() -> Router {
+    async fn restricted(identite: Identity) -> rbs_core::Result<StatusCode> {
         identite.require_role(Role::Admin)?;
 
         Ok(StatusCode::OK)
@@ -446,21 +446,21 @@ async fn route_reservee_aux_admins() -> Router {
         .expect("base joignable");
 
     Router::new()
-        .route("/reserve", get(reservee))
+        .route("/reserve", get(restricted))
         .with_state(AppState::new(db, config).expect("état partagé constructible"))
 }
 
-fn avec_jeton(methode: &str, chemin: &str, jeton: &str) -> Request<Body> {
+fn with_token(methode: &str, chemin: &str, token: &str) -> Request<Body> {
     Request::builder()
         .method(methode)
         .uri(chemin)
-        .header("authorization", format!("Bearer {jeton}"))
+        .header("authorization", format!("Bearer {token}"))
         .body(Body::empty())
         .expect("requête bien formée")
 }
 
 /// Le jeton d'accès d'une paire.
-fn acces_de(paire: &Value) -> String {
+fn access_for(paire: &Value) -> String {
     paire["access_token"]
         .as_str()
         .expect("la paire doit porter un jeton d'accès")
@@ -471,11 +471,11 @@ fn acces_de(paire: &Value) -> String {
 ///
 /// La promotion passe par la base : l'inscription rend toujours un `user`, par défaut de
 /// la table, et le rôle ne voyage que dans un jeton émis après coup.
-async fn ouvrir_session_admin(api: &Router, db: &DatabaseConnection) -> Value {
-    let email = email_neuf();
-    let (_, profil) = inscrire(api, &email).await;
+async fn login_as_admin(api: &Router, db: &DatabaseConnection) -> Value {
+    let email = fresh_email();
+    let (_, profile) = register(api, &email).await;
     let id = Uuid::parse_str(
-        profil["id"]
+        profile["id"]
             .as_str()
             .expect("le profil porte un identifiant"),
     )
@@ -491,8 +491,8 @@ async fn ouvrir_session_admin(api: &Router, db: &DatabaseConnection) -> Value {
     promu.role = Set(Role::Admin);
     promu.update(db).await.expect("compte promu");
 
-    let (statut, paire) = connecter(api, &email, MOT_DE_PASSE).await;
-    assert_eq!(statut, StatusCode::OK, "{paire}");
+    let (status, paire) = authenticate(api, &email, PASSWORD).await;
+    assert_eq!(status, StatusCode::OK, "{paire}");
 
     paire
 }
@@ -502,69 +502,75 @@ async fn ouvrir_session_admin(api: &Router, db: &DatabaseConnection) -> Value {
 /// Les deux se confondent aisément : ici c'est l'extractor `Identity` qui tranche, avant
 /// que le corps du handler — et donc la garde — s'exécute.
 #[tokio::test]
-async fn sans_jeton_la_route_admin_rend_401() {
-    let api = route_reservee_aux_admins().await;
+async fn without_a_token_the_admin_route_returns_401() {
+    let api = admin_only_route().await;
 
-    let (statut, corps) = appeler(&api, sans_corps("GET", "/reserve")).await;
+    let (status, body) = call(&api, without_body("GET", "/reserve")).await;
 
-    assert_eq!(statut, StatusCode::UNAUTHORIZED, "{corps}");
-    assert_ne!(statut, StatusCode::FORBIDDEN, "{corps}");
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
+    assert_ne!(status, StatusCode::FORBIDDEN, "{body}");
 }
 
 #[tokio::test]
-async fn un_user_sur_une_route_admin_rend_403() {
+async fn a_user_on_an_admin_route_returns_403() {
     let api = application().await;
-    let reservee = route_reservee_aux_admins().await;
-    let (_, paire) = ouvrir_session(&api).await;
+    let restricted = admin_only_route().await;
+    let (_, paire) = login_as(&api).await;
 
-    let (statut, corps) =
-        appeler(&reservee, avec_jeton("GET", "/reserve", &acces_de(&paire))).await;
+    let (status, body) = call(
+        &restricted,
+        with_token("GET", "/reserve", &access_for(&paire)),
+    )
+    .await;
 
-    assert_eq!(statut, StatusCode::FORBIDDEN, "{corps}");
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
 }
 
 #[tokio::test]
-async fn un_admin_sur_la_meme_route_rend_200() {
+async fn an_admin_on_the_same_route_returns_200() {
     let api = application().await;
-    let db = connexion().await;
-    let reservee = route_reservee_aux_admins().await;
-    let paire = ouvrir_session_admin(&api, &db).await;
+    let db = connection().await;
+    let restricted = admin_only_route().await;
+    let paire = login_as_admin(&api, &db).await;
 
-    let (statut, corps) =
-        appeler(&reservee, avec_jeton("GET", "/reserve", &acces_de(&paire))).await;
+    let (status, body) = call(
+        &restricted,
+        with_token("GET", "/reserve", &access_for(&paire)),
+    )
+    .await;
 
-    assert_eq!(statut, StatusCode::OK, "{corps}");
+    assert_eq!(status, StatusCode::OK, "{body}");
 }
 
 #[tokio::test]
-async fn me_rend_le_profil_de_l_appelant() {
+async fn me_returns_the_callers_profile() {
     let api = application().await;
-    let email = email_neuf();
-    let (_, inscrit) = inscrire(&api, &email).await;
-    let (_, paire) = connecter(&api, &email, MOT_DE_PASSE).await;
+    let email = fresh_email();
+    let (_, inscrit) = register(&api, &email).await;
+    let (_, paire) = authenticate(&api, &email, PASSWORD).await;
 
-    let (statut, profil) = appeler(&api, avec_jeton("GET", "/auth/me", &acces_de(&paire))).await;
+    let (status, profile) = call(&api, with_token("GET", "/auth/me", &access_for(&paire))).await;
 
-    assert_eq!(statut, StatusCode::OK, "{profil}");
-    assert_eq!(profil["id"], inscrit["id"], "{profil}");
-    assert_eq!(profil["email"], email, "{profil}");
-    assert_eq!(profil["role"], "user", "{profil}");
+    assert_eq!(status, StatusCode::OK, "{profile}");
+    assert_eq!(profile["id"], inscrit["id"], "{profile}");
+    assert_eq!(profile["email"], email, "{profile}");
+    assert_eq!(profile["role"], "user", "{profile}");
 }
 
 /// Le document tel que le serveur le publie.
-async fn document_openapi(api: &Router) -> Value {
-    let (statut, document) = appeler(api, sans_corps("GET", "/api-docs/openapi.json")).await;
+async fn openapi_document(api: &Router) -> Value {
+    let (status, document) = call(api, without_body("GET", "/api-docs/openapi.json")).await;
 
-    assert_eq!(statut, StatusCode::OK, "le document doit être exposé");
+    assert_eq!(status, StatusCode::OK, "le document doit être exposé");
 
     document
 }
 
 #[tokio::test]
-async fn le_document_openapi_porte_les_cinq_chemins_d_auth() {
+async fn the_openapi_document_carries_the_five_auth_paths() {
     let api = application().await;
 
-    let document = document_openapi(&api).await;
+    let document = openapi_document(&api).await;
 
     for chemin in [
         "/auth/register",
@@ -583,10 +589,10 @@ async fn le_document_openapi_porte_les_cinq_chemins_d_auth() {
 /// Un client généré depuis ce document doit savoir comment s'authentifier, et sur quelles
 /// routes le faire.
 #[tokio::test]
-async fn le_schema_bearer_est_declare_et_me_le_porte() {
+async fn the_bearer_scheme_is_declared_and_me_carries_it() {
     let api = application().await;
 
-    let document = document_openapi(&api).await;
+    let document = openapi_document(&api).await;
 
     let schema = &document["components"]["securitySchemes"]["bearer"];
     assert_eq!(schema["type"], "http", "{schema}");
@@ -607,10 +613,10 @@ async fn le_schema_bearer_est_declare_et_me_le_porte() {
 /// `refresh` et `logout` s'authentifient par leur corps : leur apposer le schéma
 /// décrirait une exigence que le serveur ne pose pas.
 #[tokio::test]
-async fn les_routes_sans_en_tete_ne_declarent_pas_le_schema() {
+async fn the_routes_without_a_header_do_not_declare_the_scheme() {
     let api = application().await;
 
-    let document = document_openapi(&api).await;
+    let document = openapi_document(&api).await;
 
     for chemin in [
         "/auth/register",

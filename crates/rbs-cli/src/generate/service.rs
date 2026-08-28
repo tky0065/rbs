@@ -32,7 +32,7 @@ mod tests {
         for signature in [
             "pub async fn list(\n    db: &DatabaseConnection,\n    pagination: &Pagination,\n) -> Result<Page<ArticleResponse>> {",
             "pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<ArticleResponse> {",
-            "pub async fn create(db: &DatabaseConnection, entree: CreateArticle) -> Result<ArticleResponse> {",
+            "pub async fn create(db: &DatabaseConnection, input: CreateArticle) -> Result<ArticleResponse> {",
             "pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<()> {",
         ] {
             assert!(
@@ -41,7 +41,7 @@ mod tests {
             );
         }
         assert!(
-            rendu.contains("pub async fn update(") && rendu.contains("entree: UpdateArticle"),
+            rendu.contains("pub async fn update(") && rendu.contains("input: UpdateArticle"),
             "signature d'update inattendue :\n{rendu}"
         );
     }
@@ -105,8 +105,8 @@ mod tests {
     fn la_creation_pose_chaque_champ_declare() {
         let rendu = service("articles", "titre:string,resume:text:optional");
 
-        assert!(rendu.contains("titre: Set(entree.titre),"), "{rendu}");
-        assert!(rendu.contains("resume: Set(entree.resume),"), "{rendu}");
+        assert!(rendu.contains("titre: Set(input.titre),"), "{rendu}");
+        assert!(rendu.contains("resume: Set(input.resume),"), "{rendu}");
         assert!(
             rendu.contains("..Default::default()"),
             "id et horodatages sont posés par la base :\n{rendu}"
@@ -119,13 +119,13 @@ mod tests {
 
         assert!(
             rendu.contains(
-                "if let Some(titre) = entree.titre {\n        article.titre = Set(titre);\n    }"
+                "if let Some(titre) = input.titre {\n        article.titre = Set(titre);\n    }"
             ),
             "champ obligatoire mal appliqué :\n{rendu}"
         );
         assert!(
             rendu.contains(
-                "if let Some(vues) = entree.vues {\n        article.vues = Set(vues);\n    }"
+                "if let Some(vues) = input.vues {\n        article.vues = Set(vues);\n    }"
             ),
             "champ obligatoire mal appliqué :\n{rendu}"
         );

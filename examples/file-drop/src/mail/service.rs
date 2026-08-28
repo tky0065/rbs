@@ -9,23 +9,23 @@ use rbs_core::{Error, Result};
 use serde::Serialize;
 
 use super::config::{MailConfig, Tls};
-use super::gabarit::Gabarits;
+use super::template::Templates;
 
 /// Le transport SMTP, l'expéditeur et les gabarits du projet, clonés avec l'état.
 #[derive(Debug, Clone)]
 pub struct Mailer {
     transport: AsyncSmtpTransport<Tokio1Executor>,
-    expediteur: Mailbox,
-    gabarits: Gabarits,
+    sender: Mailbox,
+    templates: Templates,
 }
 
 impl Mailer {
     /// Bâtit le transport depuis la section `[mail]`.
-    pub fn depuis_config() -> anyhow::Result<Self> {
+    pub fn from_config() -> anyhow::Result<Self> {
         let config = rbs_core::config::section::<MailConfig>("mail")
             .context("section [mail] de la configuration")?;
 
-        Self::nouveau(&config)
+        Self::new(&config)
     }
 
     /// Faillible mais synchrone : rien n'est ouvert ici, la première connexion attend le
@@ -34,7 +34,7 @@ impl Mailer {
     ///
     /// À appeler depuis un runtime Tokio — celui de `main` — sans quoi le pool de `lettre`
     /// panique en y inscrivant sa tâche d'entretien.
-    pub fn nouveau(config: &MailConfig) -> anyhow::Result<Self> {
+    pub fn new(config: &MailConfig) -> anyhow::Result<Self> {
         let hote = config.smtp_host.as_str();
         let batisseur = match config.tls {
             Tls::Aucun => AsyncSmtpTransport::<Tokio1Executor>::builder_dangerous(hote),
@@ -55,63 +55,62 @@ impl Mailer {
 
         Ok(Self {
             transport: batisseur.build(),
-            expediteur: config
+            sender: config
                 .from
                 .parse()
                 .with_context(|| format!("expéditeur « {} »", config.from))?,
-            gabarits: Gabarits::nouveaux(&config.gabarits),
+            templates: Templates::new(&config.templates),
         })
     }
 
-    /// Prépare un message HTML de l'expéditeur configuré vers `destinataire`.
-    pub fn message(&self, destinataire: &str, sujet: &str, corps: String) -> Result<Message> {
-        let destinataire: Mailbox = destinataire.parse().map_err(interne)?;
+    /// Prépare un message HTML de l'expéditeur configuré vers `recipient`.
+    pub fn message(&self, recipient: &str, subject: &str, body: String) -> Result<Message> {
+        let recipient: Mailbox = recipient.parse().map_err(internal)?;
 
         Message::builder()
-            .from(self.expediteur.clone())
-            .to(destinataire)
-            .subject(sujet)
+            .from(self.sender.clone())
+            .to(recipient)
+            .subject(subject)
             .header(ContentType::TEXT_HTML)
-            .body(corps)
-            .map_err(interne)
+            .body(body)
+            .map_err(internal)
     }
 
-    pub async fn envoyer(&self, message: Message) -> Result<()> {
-        self.transport.send(message).await.map_err(interne)?;
+    pub async fn send(&self, message: Message) -> Result<()> {
+        self.transport.send(message).await.map_err(internal)?;
 
         Ok(())
     }
 
-    /// Rend `gabarit` avec `contexte`, et envoie le résultat.
-    pub async fn envoyer_gabarit<S: Serialize>(
+    /// Rend `template` avec `context`, et envoie le résultat.
+    pub async fn send_template<S: Serialize>(
         &self,
-        destinataire: &str,
-        sujet: &str,
-        gabarit: &str,
-        contexte: S,
+        recipient: &str,
+        subject: &str,
+        template: &str,
+        context: S,
     ) -> Result<()> {
-        let corps = self.gabarits.rendre(gabarit, contexte)?;
+        let body = self.templates.render(template, context)?;
 
-        self.envoyer(self.message(destinataire, sujet, corps)?)
-            .await
+        self.send(self.message(recipient, subject, body)?).await
     }
 
     /// Lance l'envoi et rend la main sans l'attendre.
     ///
     /// Ni file ni réessai : un message perdu l'est pour de bon, et seul le journal en
     /// garde trace. C'est le prix d'un envoi qui ne retient pas la réponse HTTP.
-    pub fn envoyer_detache(&self, message: Message) {
+    pub fn send_detached(&self, message: Message) {
         let transport = self.transport.clone();
 
         tokio::spawn(async move {
-            if let Err(erreur) = transport.send(message).await {
-                tracing::error!(%erreur, "envoi de courriel échoué");
+            if let Err(error) = transport.send(message).await {
+                tracing::error!(%error, "envoi de courriel échoué");
             }
         });
     }
 }
 
 /// Une panne du transport n'apprend rien au client : elle reste au journal du serveur.
-fn interne(source: impl std::error::Error + Send + Sync + 'static) -> Error {
+fn internal(source: impl std::error::Error + Send + Sync + 'static) -> Error {
     Error::Internal(source.into())
 }

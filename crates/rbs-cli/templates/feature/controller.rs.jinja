@@ -38,9 +38,9 @@ pub async fn list(
 )]
 pub async fn create(
     State(state): State<AppState>,
-    ValidatedJson(entree): ValidatedJson<Create{@ entite @}>,
+    ValidatedJson(input): ValidatedJson<Create{@ entite @}>,
 ) -> Result<(StatusCode, Json<{@ entite @}Response>)> {
-    let {@ singulier @} = service::create(state.core().db(), entree).await?;
+    let {@ singulier @} = service::create(state.core().db(), input).await?;
 
     Ok((StatusCode::CREATED, Json({@ singulier @})))
 }
@@ -78,9 +78,9 @@ pub async fn find(
 pub async fn update(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    ValidatedJson(entree): ValidatedJson<Update{@ entite @}>,
+    ValidatedJson(input): ValidatedJson<Update{@ entite @}>,
 ) -> Result<Json<{@ entite @}Response>> {
-    Ok(Json(service::update(state.core().db(), id, entree).await?))
+    Ok(Json(service::update(state.core().db(), id, input).await?))
 }
 
 #[utoipa::path(

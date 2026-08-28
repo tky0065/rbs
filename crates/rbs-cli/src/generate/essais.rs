@@ -27,7 +27,7 @@ pub(crate) fn rendre(feature: &Feature) -> Result<String, minijinja::Error> {
             champs => champs,
             compares => noms(&feature.champs, |champ| !horodatage(champ)),
             horodates => noms(&feature.champs, horodatage),
-            suffixe => feature.champs.iter().any(textuel),
+            suffix => feature.champs.iter().any(textuel),
         },
     )
 }
@@ -57,10 +57,10 @@ impl ChampDeTest {
 fn valeur(champ: &Champ, marque: &str) -> String {
     match champ.type_ {
         TypeChamp::String | TypeChamp::Text if champ.valide_email() => {
-            format!("format!(\"{}-{marque}{{suffixe}}@example.com\")", champ.nom)
+            format!("format!(\"{}-{marque}{{suffix}}@example.com\")", champ.nom)
         }
         TypeChamp::String | TypeChamp::Text => {
-            format!("format!(\"{}-{marque}{{suffixe}}\")", champ.nom)
+            format!("format!(\"{}-{marque}{{suffix}}\")", champ.nom)
         }
         TypeChamp::Int => si_modifie(marque, "42", "43"),
         TypeChamp::Float => si_modifie(marque, "4.2", "8.4"),
@@ -115,9 +115,9 @@ mod tests {
         let rendu = essais("articles", CHAMPS);
 
         for signature in [
-            "async fn le_cycle_de_vie_complet_passe_par_l_api()",
-            "async fn un_identifiant_inconnu_rend_404()",
-            "async fn un_corps_illisible_rend_400()",
+            "async fn the_full_lifecycle_goes_through_the_api()",
+            "async fn an_unknown_id_returns_404()",
+            "async fn an_unreadable_body_returns_400()",
         ] {
             assert!(
                 rendu.contains(signature),
@@ -140,7 +140,7 @@ mod tests {
             "l'application doit être construite comme au démarrage :\n{rendu}"
         );
         assert!(
-            rendu.contains(".oneshot(requete)"),
+            rendu.contains(".oneshot(request)"),
             "les requêtes doivent traverser le routeur sans réseau :\n{rendu}"
         );
         assert!(
@@ -155,12 +155,12 @@ mod tests {
 
         for appel in [
             r#"let collection = "/blog_posts";"#,
-            r#"requete("POST", collection, envoye.clone())"#,
-            r#"let ressource = format!("{collection}/{id}");"#,
-            r#"sans_corps("GET", &ressource)"#,
+            r#"request("POST", collection, sent.clone())"#,
+            r#"let resource = format!("{collection}/{id}");"#,
+            r#"without_body("GET", &resource)"#,
             r#"let premiere = format!("{collection}?per_page=1");"#,
-            r#"requete("PUT", &ressource, envoye.clone())"#,
-            r#"sans_corps("DELETE", &ressource)"#,
+            r#"request("PUT", &resource, sent.clone())"#,
+            r#"without_body("DELETE", &resource)"#,
         ] {
             assert!(rendu.contains(appel), "« {appel} » absent :\n{rendu}");
         }
@@ -180,15 +180,15 @@ mod tests {
         let rendu = essais("articles", CHAMPS);
 
         assert!(
-            rendu.contains("let suffixe = Uuid::new_v4();"),
+            rendu.contains("let suffix = Uuid::new_v4();"),
             "le suffixe rend chaque exécution indépendante de la précédente :\n{rendu}"
         );
         assert!(
-            rendu.contains(r#""titre": format!("titre-{suffixe}")"#),
+            rendu.contains(r#""titre": format!("titre-{suffix}")"#),
             "le titre doit porter le suffixe :\n{rendu}"
         );
         assert!(
-            rendu.contains(r#""titre": format!("titre-modifie-{suffixe}")"#),
+            rendu.contains(r#""titre": format!("titre-modifie-{suffix}")"#),
             "la mise à jour doit envoyer une autre valeur :\n{rendu}"
         );
     }
@@ -198,7 +198,7 @@ mod tests {
         let rendu = essais("articles", CHAMPS);
 
         assert!(
-            rendu.contains(r#""email": format!("email-{suffixe}@example.com")"#),
+            rendu.contains(r#""email": format!("email-{suffix}@example.com")"#),
             "la contrainte d'email refuserait toute autre valeur :\n{rendu}"
         );
     }
@@ -241,16 +241,16 @@ mod tests {
             "auteur_id",
         ] {
             assert!(
-                rendu.contains(&format!(r#"comparer(&cree, &envoye, "{champ}");"#)),
+                rendu.contains(&format!(r#"compare(&created, &sent, "{champ}");"#)),
                 "« {champ} » doit être comparé à ce qui a été envoyé :\n{rendu}"
             );
         }
         assert!(
-            !rendu.contains(r#"comparer(&cree, &envoye, "publie_le");"#),
+            !rendu.contains(r#"compare(&created, &sent, "publie_le");"#),
             "PostgreSQL ne rend pas l'horodatage dans le format envoyé :\n{rendu}"
         );
         assert!(
-            rendu.contains(r#"renseigne(&cree, "publie_le");"#),
+            rendu.contains(r#"filled(&created, "publie_le");"#),
             "l'horodatage doit au moins être rendu :\n{rendu}"
         );
     }
@@ -260,18 +260,18 @@ mod tests {
         let rendu = essais("articles", "titre:string");
 
         assert!(
-            !rendu.contains("fn renseigne("),
+            !rendu.contains("fn filled("),
             "une aide inutilisée laisserait un avertissement :\n{rendu}"
         );
-        assert!(rendu.contains("fn comparer("), "{rendu}");
+        assert!(rendu.contains("fn compare("), "{rendu}");
     }
 
     #[test]
     fn une_feature_sans_champ_ne_porte_aucune_aide_inutilisee() {
         let rendu = essais("articles", "");
 
-        assert!(!rendu.contains("fn comparer("), "{rendu}");
-        assert!(!rendu.contains("fn renseigne("), "{rendu}");
+        assert!(!rendu.contains("fn compare("), "{rendu}");
+        assert!(!rendu.contains("fn filled("), "{rendu}");
         assert!(!rendu.contains("let suffixe ="), "{rendu}");
         assert!(
             rendu.contains("json!({})"),

@@ -28,8 +28,8 @@ smtp_user = ""
 tls = "none"
 from = "no-reply@localhost"
 timeout_secs = 10
-gabarits = "templates/mail"
+templates = "templates/mail"
 
 [storage]
 backend = "fs"
-racine = "./stockage"
+root = "./storage"

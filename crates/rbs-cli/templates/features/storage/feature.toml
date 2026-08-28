@@ -6,8 +6,8 @@ source = "mod.rs.jinja"
 cible  = "src/storage/mod.rs"
 
 [[fichiers]]
-source = "fichiers.rs.jinja"
-cible  = "src/storage/fichiers.rs"
+source = "files.rs.jinja"
+cible  = "src/storage/files.rs"
 
 [[fichiers]]
 source = "s3.rs.jinja"
@@ -30,7 +30,7 @@ pub storage: std::sync::Arc<dyn crate::storage::Storage>,
 
 [[ancres]]
 ancre   = "state_init"
-contenu = "storage: crate::storage::depuis_config()?,"
+contenu = "storage: crate::storage::from_config()?,"
 
 [[dependances]]
 nom     = "async-trait"
@@ -52,7 +52,7 @@ fichier = "config/default.toml"
 section = "storage"
 contenu = """
 backend = "fs"
-racine = "./stockage"
+root = "./storage"
 """
 
 [[env]]

@@ -29,15 +29,15 @@ pub struct Cache {
 
 impl Cache {
     /// Construit le cache depuis la section `[cache]` de la configuration.
-    pub fn depuis_config() -> anyhow::Result<Self> {
-        Self::nouveau(&Config::charger()?)
+    pub fn from_config() -> anyhow::Result<Self> {
+        Self::new(&Config::load()?)
     }
 
     /// Construit le cache sur une configuration déjà chargée.
     ///
     /// Aucune connexion n'est ouverte ici : le pool est paresseux, et joint le serveur au
     /// premier appel. C'est ce qui permet à `AppState::new` de rester synchrone.
-    pub fn nouveau(config: &Config) -> anyhow::Result<Self> {
+    pub fn new(config: &Config) -> anyhow::Result<Self> {
         let pool = deadpool_redis::Config::from_url(&config.url)
             .create_pool(Some(Runtime::Tokio1))
             .with_context(|| format!("pool Redis inconstructible pour `{}`", config.url))?;
@@ -49,40 +49,40 @@ impl Cache {
     }
 
     /// Lit une valeur. Une clé absente ou expirée rend `None`.
-    pub async fn get<T: DeserializeOwned>(&self, cle: &str) -> Result<Option<T>> {
-        let mut connexion = self.connexion().await?;
-        let brut: Option<Vec<u8>> = connexion
-            .get(cle)
+    pub async fn get<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
+        let mut connection = self.connection().await?;
+        let brut: Option<Vec<u8>> = connection
+            .get(key)
             .await
-            .with_context(|| format!("lecture de `{cle}` impossible"))?;
+            .with_context(|| format!("lecture de `{key}` impossible"))?;
 
-        Ok(decoder(brut)?)
+        Ok(decode(brut)?)
     }
 
     /// Écrit une valeur, pour la durée de vie que porte la configuration.
-    pub async fn set<T: Serialize + ?Sized>(&self, cle: &str, valeur: &T) -> Result<()> {
-        self.set_ttl(cle, valeur, self.ttl).await
+    pub async fn set<T: Serialize + ?Sized>(&self, key: &str, value: &T) -> Result<()> {
+        self.set_ttl(key, value, self.ttl).await
     }
 
     /// Écrit une valeur pour une durée de vie donnée. Une durée nulle : aucune expiration.
     pub async fn set_ttl<T: Serialize + ?Sized>(
         &self,
-        cle: &str,
-        valeur: &T,
+        key: &str,
+        value: &T,
         ttl: Duration,
     ) -> Result<()> {
-        let encode = encoder(valeur)?;
-        let mut connexion = self.connexion().await?;
-        let echec = || format!("écriture de `{cle}` impossible");
+        let encode = encode(value)?;
+        let mut connection = self.connection().await?;
+        let echec = || format!("écriture de `{key}` impossible");
 
         if ttl.is_zero() {
-            connexion
-                .set::<_, _, ()>(cle, encode)
+            connection
+                .set::<_, _, ()>(key, encode)
                 .await
                 .with_context(echec)?;
         } else {
-            connexion
-                .set_ex::<_, _, ()>(cle, encode, ttl.as_secs())
+            connection
+                .set_ex::<_, _, ()>(key, encode, ttl.as_secs())
                 .await
                 .with_context(echec)?;
         }
@@ -91,12 +91,12 @@ impl Cache {
     }
 
     /// Retire une clé. Une clé absente n'est pas une erreur.
-    pub async fn invalider(&self, cle: &str) -> Result<()> {
-        let mut connexion = self.connexion().await?;
-        connexion
-            .del::<_, ()>(cle)
+    pub async fn invalidate(&self, key: &str) -> Result<()> {
+        let mut connection = self.connection().await?;
+        connection
+            .del::<_, ()>(key)
             .await
-            .with_context(|| format!("suppression de `{cle}` impossible"))?;
+            .with_context(|| format!("suppression de `{key}` impossible"))?;
 
         Ok(())
     }
@@ -105,36 +105,36 @@ impl Cache {
     ///
     /// `SCAN` plutôt que `KEYS` : le second bloque le serveur le temps de parcourir tout
     /// l'espace de clés.
-    pub async fn invalider_prefixe(&self, prefixe: &str) -> Result<usize> {
-        let mut connexion = self.connexion().await?;
-        let echec = || format!("balayage du préfixe `{prefixe}` impossible");
+    pub async fn invalidate_prefix(&self, prefix: &str) -> Result<usize> {
+        let mut connection = self.connection().await?;
+        let echec = || format!("balayage du préfixe `{prefix}` impossible");
 
         let mut rendues = Vec::new();
         {
-            let mut cles = connexion
-                .scan_match::<_, String>(motif(prefixe))
+            let mut keys = connection
+                .scan_match::<_, String>(pattern(prefix))
                 .await
                 .with_context(echec)?;
 
-            while let Some(cle) = cles.next_item().await {
-                rendues.push(cle.with_context(echec)?);
+            while let Some(key) = keys.next_item().await {
+                rendues.push(key.with_context(echec)?);
             }
         }
 
-        let cles = a_supprimer(prefixe, rendues);
-        if cles.is_empty() {
+        let keys = to_delete(prefix, rendues);
+        if keys.is_empty() {
             return Ok(0);
         }
 
-        connexion
-            .del::<_, ()>(&cles)
+        connection
+            .del::<_, ()>(&keys)
             .await
-            .with_context(|| format!("suppression du préfixe `{prefixe}` impossible"))?;
+            .with_context(|| format!("suppression du préfixe `{prefix}` impossible"))?;
 
-        Ok(cles.len())
+        Ok(keys.len())
     }
 
-    async fn connexion(&self) -> Result<Connection> {
+    async fn connection(&self) -> Result<Connection> {
         Ok(self
             .pool
             .get()
@@ -143,13 +143,13 @@ impl Cache {
     }
 }
 
-fn encoder<T: Serialize + ?Sized>(valeur: &T) -> anyhow::Result<Vec<u8>> {
-    serde_json::to_vec(valeur).context("valeur non sérialisable")
+fn encode<T: Serialize + ?Sized>(value: &T) -> anyhow::Result<Vec<u8>> {
+    serde_json::to_vec(value).context("valeur non sérialisable")
 }
 
 /// `nil` — clé absente ou expirée — rend `None` : le cas courant d'un cache n'est pas
 /// une panne, et l'appelant enchaîne sur sa source de vérité.
-fn decoder<T: DeserializeOwned>(brut: Option<Vec<u8>>) -> anyhow::Result<Option<T>> {
+fn decode<T: DeserializeOwned>(brut: Option<Vec<u8>>) -> anyhow::Result<Option<T>> {
     match brut {
         None => Ok(None),
         Some(octets) => serde_json::from_slice(&octets)
@@ -159,27 +159,27 @@ fn decoder<T: DeserializeOwned>(brut: Option<Vec<u8>>) -> anyhow::Result<Option<
 }
 
 /// Le motif `SCAN MATCH` d'un préfixe, métacaractères de glob échappés.
-fn motif(prefixe: &str) -> String {
-    let mut motif = String::with_capacity(prefixe.len() + 1);
+fn pattern(prefix: &str) -> String {
+    let mut pattern = String::with_capacity(prefix.len() + 1);
 
-    for caractere in prefixe.chars() {
+    for caractere in prefix.chars() {
         if matches!(caractere, '*' | '?' | '[' | ']' | '\\') {
-            motif.push('\\');
+            pattern.push('\\');
         }
-        motif.push(caractere);
+        pattern.push(caractere);
     }
 
-    motif.push('*');
-    motif
+    pattern.push('*');
+    pattern
 }
 
 /// Parmi les clés que le serveur a rendues, celles que le préfixe emporte réellement.
 ///
 /// Le motif est un glob interprété à l'autre bout, et une suppression ne se défait pas :
 /// le préfixe se revérifie ici, où il est sûr.
-fn a_supprimer(prefixe: &str, mut cles: Vec<String>) -> Vec<String> {
-    cles.retain(|cle| cle.starts_with(prefixe));
-    cles
+fn to_delete(prefix: &str, mut keys: Vec<String>) -> Vec<String> {
+    keys.retain(|key| key.starts_with(prefix));
+    keys
 }
 
 // L'accesseur vit ici et non dans `state.rs` : il arrive avec la feature, et repart

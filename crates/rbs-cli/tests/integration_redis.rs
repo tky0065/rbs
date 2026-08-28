@@ -2,7 +2,7 @@
 //!
 //! Les tests du fragment prouvent ses fonctions pures — encodage, motif de balayage,
 //! refiltrage du préfixe. Celui-ci fait traverser `Cache::set`, `Cache::get` et
-//! `Cache::invalider_prefixe` par un vrai serveur, seul endroit où l'expiration d'une clé
+//! `Cache::invalidate_prefix` par un vrai serveur, seul endroit où l'expiration d'une clé
 //! peut être attestée autrement que par une horloge simulée.
 
 use assert_cmd::Command;
@@ -63,9 +63,9 @@ fn le_cache_d_un_projet_genere_se_joue_contre_un_redis_reel() {
     // les deux lignes qui suivent, un fragment qui cesserait de livrer ses tests serveur
     // laisserait celui-ci au vert sans que rien n'ait joint Redis.
     for test in [
-        "le_parcours_complet_se_joue_contre_un_serveur",
-        "une_valeur_a_ttl_d_une_seconde_a_disparu_apres_l_attente",
-        "un_prefixe_a_metacaractere_n_emporte_que_ce_qu_il_designe",
+        "the_full_run_plays_against_a_server",
+        "a_value_with_a_one_second_ttl_is_gone_after_the_wait",
+        "a_prefix_with_a_metacharacter_only_removes_what_it_designates",
     ] {
         assert!(
             journal.contains(&format!("test cache::tests::{test} ... ok")),

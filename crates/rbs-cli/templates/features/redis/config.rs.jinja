@@ -8,24 +8,24 @@ use serde::Deserialize;
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     /// URL du serveur, mot de passe compris : `redis://:secret@hote:6379/0`.
-    #[serde(default = "url_par_defaut")]
+    #[serde(default = "default_url")]
     pub url: String,
     /// Durée de vie que `Cache::set` applique, en secondes. Zéro : aucune expiration.
-    #[serde(default = "ttl_par_defaut")]
+    #[serde(default = "default_ttl")]
     pub ttl_secs: u64,
 }
 
 impl Config {
     /// Relit la cascade de configuration pour la seule section `[cache]`.
-    pub fn charger() -> Result<Self, rbs_core::config::ConfigError> {
+    pub fn load() -> Result<Self, rbs_core::config::ConfigError> {
         rbs_core::config::section("cache")
     }
 }
 
-fn url_par_defaut() -> String {
+fn default_url() -> String {
     "redis://127.0.0.1:6379".to_string()
 }
 
-fn ttl_par_defaut() -> u64 {
+fn default_ttl() -> u64 {
     300
 }

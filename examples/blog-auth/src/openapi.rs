@@ -10,7 +10,7 @@ use crate::state::AppState;
 #[openapi(
     modifiers(&CommonResponses),
     paths(
-        crate::health::controller::sante,
+        crate::health::controller::health,
         // <rbs:openapi>
         crate::auth::controller::register,
         crate::auth::controller::login,

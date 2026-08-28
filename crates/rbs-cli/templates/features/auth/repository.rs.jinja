@@ -36,27 +36,27 @@ pub async fn create(db: &DatabaseConnection, email: &str, password_hash: &str) -
     nouveau
         .insert(db)
         .await
-        .map_err(|erreur| match erreur.sql_err() {
+        .map_err(|error| match error.sql_err() {
             Some(SqlErr::UniqueConstraintViolation(_)) => {
                 Error::Conflict(format!("l'adresse {email} est déjà inscrite"))
             }
-            _ => Error::from(erreur),
+            _ => Error::from(error),
         })
 }
 
 /// Ouvre une session de rafraîchissement.
 ///
-/// `empreinte` et non le jeton : c'est ce que la table doit porter pour qu'une base lue
+/// `fingerprint` et non le jeton : c'est ce que la table doit porter pour qu'une base lue
 /// par un tiers ne lui donne aucune session utilisable.
 pub async fn create_refresh_token(
     db: &DatabaseConnection,
     user_id: Uuid,
-    empreinte: String,
+    fingerprint: String,
     expire_a: DateTimeWithTimeZone,
 ) -> Result<()> {
     refresh_token::ActiveModel {
         user_id: Set(user_id),
-        token_hash: Set(empreinte),
+        token_hash: Set(fingerprint),
         expires_at: Set(expire_a),
         ..Default::default()
     }
@@ -68,10 +68,10 @@ pub async fn create_refresh_token(
 
 pub async fn find_refresh_token(
     db: &DatabaseConnection,
-    empreinte: &str,
+    fingerprint: &str,
 ) -> Result<Option<refresh_token::Model>> {
     Ok(refresh_token::Entity::find()
-        .filter(refresh_token::Column::TokenHash.eq(empreinte))
+        .filter(refresh_token::Column::TokenHash.eq(fingerprint))
         .one(db)
         .await?)
 }
@@ -81,7 +81,7 @@ pub async fn find_refresh_token(
 /// L'`UPDATE` porte sa propre condition plutôt que de suivre une lecture : deux
 /// rafraîchissements simultanés du même jeton franchiraient tous deux la lecture avant
 /// que l'un ait écrit, et repartiraient chacun avec une paire valide.
-pub async fn consommer(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
+pub async fn consume(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
     let touchees = refresh_token::Entity::update_many()
         .col_expr(refresh_token::Column::RevokedAt, Expr::current_timestamp())
         .filter(refresh_token::Column::Id.eq(id))

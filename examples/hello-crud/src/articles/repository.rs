@@ -1,4 +1,3 @@
-// region: imports
 use rbs_core::{Pagination, Result};
 use sea_orm::prelude::Uuid;
 use sea_orm::{
@@ -10,9 +9,7 @@ use super::model::{Column, Entity};
 // Le service passe par cette porte plutôt que par `model.rs` : la couche qui parle à la
 // base reste la seule à connaître l'entité.
 pub use super::model::{ActiveModel, Model};
-// endregion: imports
 
-// region: list
 pub async fn list(db: &DatabaseConnection, pagination: &Pagination) -> Result<(Vec<Model>, u64)> {
     let total = Entity::find().count(db).await?;
     // L'`id` est un UUIDv7 : son ordre est celui des insertions. Trier dessus donne une
@@ -26,7 +23,6 @@ pub async fn list(db: &DatabaseConnection, pagination: &Pagination) -> Result<(V
 
     Ok((articles, total))
 }
-// endregion: list
 
 pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>> {
     Ok(Entity::find_by_id(id).one(db).await?)

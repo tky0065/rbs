@@ -23,17 +23,17 @@ use super::model::Role;
 // l'utilise — elle masquerait alors du code réellement mort.
 #[allow(dead_code)]
 pub trait RequireRole {
-    /// Rend [`Error::Forbidden`] si l'appelant ne porte pas `attendu`.
-    fn require_role(&self, attendu: Role) -> Result<()>;
+    /// Rend [`Error::Forbidden`] si l'appelant ne porte pas `expected`.
+    fn require_role(&self, expected: Role) -> Result<()>;
 }
 
 impl RequireRole for Identity {
-    fn require_role(&self, attendu: Role) -> Result<()> {
+    fn require_role(&self, expected: Role) -> Result<()> {
         // Un rôle que l'enum ne connaît plus vient d'un jeton signé par une version
         // antérieure du projet : il n'ouvre rien, et ne fait pas tomber le serveur.
         let porte = Role::try_from_value(&self.role).map_err(|_| Error::Forbidden)?;
 
-        if porte == attendu {
+        if porte == expected {
             Ok(())
         } else {
             Err(Error::Forbidden)

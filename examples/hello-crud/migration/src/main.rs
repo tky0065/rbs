@@ -17,16 +17,16 @@ async fn main() -> ExitCode {
         .nth(1)
         .unwrap_or_else(|| "status".to_string());
 
-    match executer(&commande).await {
+    match run(&commande).await {
         Ok(()) => ExitCode::SUCCESS,
-        Err(erreur) => {
-            eprintln!("{erreur}");
+        Err(error) => {
+            eprintln!("{error}");
             ExitCode::FAILURE
         }
     }
 }
 
-async fn executer(commande: &str) -> Result<(), Box<dyn Error>> {
+async fn run(commande: &str) -> Result<(), Box<dyn Error>> {
     let url = std::env::var("RBS_DATABASE__URL")
         .map_err(|_| "RBS_DATABASE__URL n'est pas définie : renseignez-la dans .env")?;
 
@@ -46,14 +46,14 @@ async fn executer(commande: &str) -> Result<(), Box<dyn Error>> {
             }
         }
         "version" => {
-            let requete =
+            let request =
                 Statement::from_string(db.get_database_backend(), "SHOW server_version_num");
-            let reponse = db
-                .query_one_raw(requete)
+            let response = db
+                .query_one_raw(request)
                 .await?
                 .ok_or("PostgreSQL n'a pas rendu sa version")?;
 
-            println!("version\t{}", reponse.try_get_by_index::<String>(0)?);
+            println!("version\t{}", response.try_get_by_index::<String>(0)?);
         }
         _ => return Err(format!("commande inconnue : {commande}").into()),
     }

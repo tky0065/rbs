@@ -20,44 +20,44 @@ async fn application() -> Router {
     router(AppState::new(db, config).expect("état partagé constructible"))
 }
 
-/// Fait traverser le routeur à `requete`, et rend son statut avec son corps.
-async fn appeler(api: &Router, requete: Request<Body>) -> (StatusCode, Value) {
-    let reponse = api
+/// Fait traverser le routeur à `request`, et rend son statut avec son corps.
+async fn call(api: &Router, request: Request<Body>) -> (StatusCode, Value) {
+    let response = api
         .clone()
-        .oneshot(requete)
+        .oneshot(request)
         .await
         .expect("l'application doit répondre");
-    let statut = reponse.status();
-    let octets = to_bytes(reponse.into_body(), usize::MAX)
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("corps de réponse lisible");
 
     // La suppression ne rend aucun corps : il se lit `null` plutôt que d'arrêter le test.
-    let corps = serde_json::from_slice(&octets).unwrap_or(Value::Null);
+    let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
 
-    (statut, corps)
+    (status, body)
 }
 
-fn requete(methode: &str, chemin: &str, corps: Value) -> Request<Body> {
+fn request(method: &str, path: &str, body: Value) -> Request<Body> {
     Request::builder()
-        .method(methode)
-        .uri(chemin)
+        .method(method)
+        .uri(path)
         .header("content-type", "application/json")
-        .body(Body::from(corps.to_string()))
+        .body(Body::from(body.to_string()))
         .expect("requête bien formée")
 }
 
-fn sans_corps(methode: &str, chemin: &str) -> Request<Body> {
+fn without_body(method: &str, path: &str) -> Request<Body> {
     Request::builder()
-        .method(methode)
-        .uri(chemin)
+        .method(method)
+        .uri(path)
         .body(Body::empty())
         .expect("requête bien formée")
 }
 
 /// Compare à la réponse la valeur envoyée pour `champ`.
-fn comparer(rendu: &Value, envoye: &Value, champ: &str) {
-    assert_eq!(rendu[champ], envoye[champ], "« {champ} » mal rendu");
+fn compare(rendered: &Value, sent: &Value, champ: &str) {
+    assert_eq!(rendered[champ], sent[champ], "« {champ} » mal rendu");
 }
 
 /// Corps de création dont les valeurs textuelles portent un suffixe tiré au sort.
@@ -65,98 +65,98 @@ fn comparer(rendu: &Value, envoye: &Value, champ: &str) {
 /// Les champs uniques interdisent de rejouer deux fois la même valeur : le suffixe rend
 /// chaque exécution indépendante des précédentes.
 fn creation() -> Value {
-    let suffixe = Uuid::new_v4();
+    let suffix = Uuid::new_v4();
 
     json!({
-        "title": format!("title-{suffixe}"),
-        "owner_email": format!("owner_email-{suffixe}@example.com"),
-        "content_type": format!("content_type-{suffixe}"),
+        "title": format!("title-{suffix}"),
+        "owner_email": format!("owner_email-{suffix}@example.com"),
+        "content_type": format!("content_type-{suffix}"),
         "size": 42,
     })
 }
 
 fn modification() -> Value {
-    let suffixe = Uuid::new_v4();
+    let suffix = Uuid::new_v4();
 
     json!({
-        "title": format!("title-modifie-{suffixe}"),
-        "owner_email": format!("owner_email-modifie-{suffixe}@example.com"),
-        "content_type": format!("content_type-modifie-{suffixe}"),
+        "title": format!("title-modifie-{suffix}"),
+        "owner_email": format!("owner_email-modifie-{suffix}@example.com"),
+        "content_type": format!("content_type-modifie-{suffix}"),
         "size": 43,
     })
 }
 
 #[tokio::test]
-async fn le_cycle_de_vie_complet_passe_par_l_api() {
+async fn the_full_lifecycle_goes_through_the_api() {
     let api = application().await;
     let collection = "/uploads";
-    let envoye = creation();
+    let sent = creation();
 
-    let (statut, cree) = appeler(&api, requete("POST", collection, envoye.clone())).await;
-    assert_eq!(statut, StatusCode::CREATED, "création refusée : {cree}");
-    comparer(&cree, &envoye, "title");
-    comparer(&cree, &envoye, "owner_email");
-    comparer(&cree, &envoye, "content_type");
-    comparer(&cree, &envoye, "size");
+    let (status, created) = call(&api, request("POST", collection, sent.clone())).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {created}");
+    compare(&created, &sent, "title");
+    compare(&created, &sent, "owner_email");
+    compare(&created, &sent, "content_type");
+    compare(&created, &sent, "size");
 
-    let id = cree["id"].as_str().expect("identifiant rendu");
-    let ressource = format!("{collection}/{id}");
+    let id = created["id"].as_str().expect("identifiant rendu");
+    let resource = format!("{collection}/{id}");
 
-    let (statut, lu) = appeler(&api, sans_corps("GET", &ressource)).await;
-    assert_eq!(statut, StatusCode::OK, "relecture refusée : {lu}");
-    assert_eq!(lu["id"], cree["id"], "l'identifiant doit être stable");
+    let (status, read) = call(&api, without_body("GET", &resource)).await;
+    assert_eq!(status, StatusCode::OK, "relecture refusée : {read}");
+    assert_eq!(read["id"], created["id"], "l'identifiant doit être stable");
 
     // L'`id` est un UUIDv7 et la liste trie du plus récent au plus ancien : ce qui vient
     // d'être créé ouvre la première page.
     let premiere = format!("{collection}?per_page=1");
-    let (statut, page) = appeler(&api, sans_corps("GET", &premiere)).await;
-    assert_eq!(statut, StatusCode::OK, "liste refusée : {page}");
-    assert_eq!(page["data"][0]["id"], cree["id"], "liste : {page}");
+    let (status, page) = call(&api, without_body("GET", &premiere)).await;
+    assert_eq!(status, StatusCode::OK, "liste refusée : {page}");
+    assert_eq!(page["data"][0]["id"], created["id"], "liste : {page}");
     assert!(
         page["meta"]["total"].as_u64().unwrap_or_default() >= 1,
         "la page doit compter au moins ce qui vient d'être créé : {page}"
     );
 
-    let envoye = modification();
-    let mise_a_jour = requete("PUT", &ressource, envoye.clone());
-    let (statut, modifie) = appeler(&api, mise_a_jour).await;
-    assert_eq!(statut, StatusCode::OK, "mise à jour refusée : {modifie}");
-    comparer(&modifie, &envoye, "title");
-    comparer(&modifie, &envoye, "owner_email");
-    comparer(&modifie, &envoye, "content_type");
-    comparer(&modifie, &envoye, "size");
+    let sent = modification();
+    let mise_a_jour = request("PUT", &resource, sent.clone());
+    let (status, updated) = call(&api, mise_a_jour).await;
+    assert_eq!(status, StatusCode::OK, "mise à jour refusée : {updated}");
+    compare(&updated, &sent, "title");
+    compare(&updated, &sent, "owner_email");
+    compare(&updated, &sent, "content_type");
+    compare(&updated, &sent, "size");
 
-    let (statut, _) = appeler(&api, sans_corps("DELETE", &ressource)).await;
-    assert_eq!(statut, StatusCode::NO_CONTENT, "suppression refusée");
+    let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
 
-    let (statut, _) = appeler(&api, sans_corps("GET", &ressource)).await;
-    assert_eq!(statut, StatusCode::NOT_FOUND, "elle répond encore");
+    let (status, _) = call(&api, without_body("GET", &resource)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "elle répond encore");
 }
 
 #[tokio::test]
-async fn un_identifiant_inconnu_rend_404() {
+async fn an_unknown_id_returns_404() {
     let api = application().await;
     let inconnu = Uuid::new_v4();
-    let ressource = format!("/uploads/{inconnu}");
+    let resource = format!("/uploads/{inconnu}");
 
-    let (statut, corps) = appeler(&api, sans_corps("GET", &ressource)).await;
+    let (status, body) = call(&api, without_body("GET", &resource)).await;
 
-    assert_eq!(statut, StatusCode::NOT_FOUND);
-    assert_eq!(corps["status"], 404, "{corps}");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["status"], 404, "{body}");
 }
 
 #[tokio::test]
-async fn un_corps_illisible_rend_400() {
+async fn an_unreadable_body_returns_400() {
     let api = application().await;
-    let tronque = Request::builder()
+    let truncated = Request::builder()
         .method("POST")
         .uri("/uploads")
         .header("content-type", "application/json")
         .body(Body::from("{"))
         .expect("requête bien formée");
 
-    let (statut, corps) = appeler(&api, tronque).await;
+    let (status, body) = call(&api, truncated).await;
 
-    assert_eq!(statut, StatusCode::BAD_REQUEST);
-    assert_eq!(corps["status"], 400, "{corps}");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["status"], 400, "{body}");
 }

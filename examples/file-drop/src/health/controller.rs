@@ -8,6 +8,6 @@ use crate::state::AppState;
     path = "/health",
     responses((status = 200, description = "l'application et ses dépendances répondent"))
 )]
-pub async fn sante(state: State<AppState>) -> Response {
+pub async fn health(state: State<AppState>) -> Response {
     rbs_core::health::handler(state).await
 }

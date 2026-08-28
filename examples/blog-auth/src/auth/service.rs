@@ -21,29 +21,26 @@ static HASH_DE_COMPARAISON: LazyLock<String> = LazyLock::new(|| {
     hash::hash_password("aucun compte ne porte ce mot de passe").expect("hachage du hash témoin")
 });
 
-pub async fn register(db: &DatabaseConnection, entree: RegisterRequest) -> Result<UserResponse> {
-    if repository::find_by_email(db, &entree.email)
-        .await?
-        .is_some()
-    {
+pub async fn register(db: &DatabaseConnection, input: RegisterRequest) -> Result<UserResponse> {
+    if repository::find_by_email(db, &input.email).await?.is_some() {
         return Err(Error::Conflict(format!(
             "l'adresse {} est déjà inscrite",
-            entree.email
+            input.email
         )));
     }
 
-    let hash = hash::hash_password(&entree.password)?;
-    let cree = repository::create(db, &entree.email, &hash).await?;
+    let hash = hash::hash_password(&input.password)?;
+    let cree = repository::create(db, &input.email, &hash).await?;
 
-    Ok(profil(cree))
+    Ok(profile(cree))
 }
 
 pub async fn login(
     db: &DatabaseConnection,
     auth: &AuthConfig,
-    entree: LoginRequest,
+    input: LoginRequest,
 ) -> Result<TokenPair> {
-    let utilisateur = repository::find_by_email(db, &entree.email).await?;
+    let utilisateur = repository::find_by_email(db, &input.email).await?;
 
     // Le mot de passe est vérifié même lorsqu'aucun compte ne répond : sortir plus tôt
     // ici distinguerait une adresse inscrite d'une autre par le seul temps de réponse.
@@ -53,10 +50,10 @@ pub async fn login(
             trouve.password_hash.as_str()
         });
 
-    let correspond = hash::verify_password(&entree.password, hash)?;
+    let correspond = hash::verify_password(&input.password, hash)?;
 
     match utilisateur {
-        Some(utilisateur) if correspond => emettre(db, auth, &utilisateur).await,
+        Some(utilisateur) if correspond => issue(db, auth, &utilisateur).await,
         // Mot de passe faux et adresse inconnue rendent la même erreur : les distinguer
         // dirait à un attaquant quelles adresses sont inscrites.
         _ => Err(Error::Unauthorized),
@@ -66,21 +63,21 @@ pub async fn login(
 pub async fn refresh(
     db: &DatabaseConnection,
     auth: &AuthConfig,
-    entree: RefreshRequest,
+    input: RefreshRequest,
 ) -> Result<TokenPair> {
-    let empreinte = token::fingerprint(&entree.refresh_token);
+    let fingerprint = token::fingerprint(&input.refresh_token);
     let maintenant = Utc::now().fixed_offset();
 
     // Jeton inconnu, déjà tourné ou périmé : la même erreur pour les trois. Les
     // distinguer renseignerait sur l'état des sessions.
-    let session = repository::find_refresh_token(db, &empreinte)
+    let session = repository::find_refresh_token(db, &fingerprint)
         .await?
         .filter(|session| session.expires_at > maintenant)
         .ok_or(Error::Unauthorized)?;
 
-    // Rien ici ne relit `revoked_at` : c'est `consommer` qui porte la condition, et elle
+    // Rien ici ne relit `revoked_at` : c'est `consume` qui porte la condition, et elle
     // seule peut la porter sans laisser passer deux rafraîchissements concurrents.
-    if !repository::consommer(db, session.id).await? {
+    if !repository::consume(db, session.id).await? {
         return Err(Error::Unauthorized);
     }
 
@@ -88,19 +85,19 @@ pub async fn refresh(
         .await?
         .ok_or(Error::Unauthorized)?;
 
-    emettre(db, auth, &utilisateur).await
+    issue(db, auth, &utilisateur).await
 }
 
-pub async fn logout(db: &DatabaseConnection, entree: RefreshRequest) -> Result<()> {
-    let empreinte = token::fingerprint(&entree.refresh_token);
+pub async fn logout(db: &DatabaseConnection, input: RefreshRequest) -> Result<()> {
+    let fingerprint = token::fingerprint(&input.refresh_token);
 
-    let session = repository::find_refresh_token(db, &empreinte)
+    let session = repository::find_refresh_token(db, &fingerprint)
         .await?
         .ok_or(Error::Unauthorized)?;
 
     // La session ferme la ligne présentée, et elle seule : les autres appareils du même
     // compte gardent la leur. Un jeton déjà fermé ne l'est pas deux fois.
-    if !repository::consommer(db, session.id).await? {
+    if !repository::consume(db, session.id).await? {
         return Err(Error::Unauthorized);
     }
 
@@ -112,12 +109,12 @@ pub async fn me(db: &DatabaseConnection, id: Uuid) -> Result<UserResponse> {
     // `NotFound` laisserait entendre que la session, elle, tient encore.
     repository::find(db, id)
         .await?
-        .map(profil)
+        .map(profile)
         .ok_or(Error::Unauthorized)
 }
 
 /// Signe un jeton d'accès et ouvre la session de rafraîchissement qui l'accompagne.
-async fn emettre(
+async fn issue(
     db: &DatabaseConnection,
     auth: &AuthConfig,
     utilisateur: &Model,
@@ -157,7 +154,7 @@ async fn emettre(
 ///
 /// Le hash n'a aucun chemin vers le client : `UserResponse` ne porte pas le champ, et
 /// cette fonction est le seul passage du modèle vers la réponse.
-fn profil(utilisateur: Model) -> UserResponse {
+fn profile(utilisateur: Model) -> UserResponse {
     UserResponse {
         id: utilisateur.id,
         email: utilisateur.email,

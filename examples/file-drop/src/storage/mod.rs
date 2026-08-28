@@ -1,4 +1,4 @@
-pub mod fichiers;
+pub mod files;
 pub mod s3;
 
 #[cfg(test)]
@@ -15,15 +15,15 @@ use serde::Deserialize;
 pub enum StorageError {
     /// Aucun objet n'est déposé sous cette clé.
     #[error("aucun objet sous `{0}`")]
-    Introuvable(String),
+    NotFound(String),
 
     /// La clé sortirait de la racine configurée.
     #[error("clé refusée : `{0}` sort de la racine du stockage")]
-    CleRefusee(String),
+    RejectedKey(String),
 
     /// Le backend n'a pas répondu.
     #[error("stockage indisponible : {0}")]
-    Indisponible(#[source] Box<dyn std::error::Error + Send + Sync>),
+    Unavailable(#[source] Box<dyn std::error::Error + Send + Sync>),
 }
 
 // Aucun handler du squelette n'appelle encore ces méthodes : la permission tombe avec la
@@ -31,36 +31,36 @@ pub enum StorageError {
 #[async_trait]
 #[allow(dead_code)]
 pub trait Storage: std::fmt::Debug + Send + Sync {
-    /// Dépose `contenu` sous `cle`, en écrasant l'objet qui s'y trouvait.
-    async fn deposer(&self, cle: &str, contenu: Vec<u8>) -> Result<(), StorageError>;
+    /// Dépose `content` sous `key`, en écrasant l'objet qui s'y trouvait.
+    async fn put(&self, key: &str, content: Vec<u8>) -> Result<(), StorageError>;
 
-    /// Rend le contenu déposé sous `cle`.
-    async fn lire(&self, cle: &str) -> Result<Vec<u8>, StorageError>;
+    /// Rend le contenu déposé sous `key`.
+    async fn get(&self, key: &str) -> Result<Vec<u8>, StorageError>;
 
-    /// Retire l'objet déposé sous `cle`. Une clé absente n'est pas une erreur.
-    async fn supprimer(&self, cle: &str) -> Result<(), StorageError>;
+    /// Retire l'objet déposé sous `key`. Une clé absente n'est pas une erreur.
+    async fn delete(&self, key: &str) -> Result<(), StorageError>;
 
-    /// Un objet est-il déposé sous `cle` ?
-    async fn existe(&self, cle: &str) -> Result<bool, StorageError>;
+    /// Un objet est-il déposé sous `key` ?
+    async fn exists(&self, key: &str) -> Result<bool, StorageError>;
 }
 
 /// Section `[storage]` de la configuration.
 #[derive(Debug, Clone, Deserialize)]
 pub struct StorageConfig {
     /// Implémentation retenue.
-    #[serde(default = "backend_par_defaut")]
+    #[serde(default = "default_backend")]
     pub backend: String,
 
     /// Racine du backend `fs`, créée au premier dépôt.
-    #[serde(default = "racine_par_defaut")]
-    pub racine: PathBuf,
+    #[serde(default = "default_root")]
+    pub root: PathBuf,
 
     /// Bucket du backend `s3`.
     #[serde(default)]
     pub bucket: String,
 
     /// Région du backend `s3`.
-    #[serde(default = "region_par_defaut")]
+    #[serde(default = "default_region")]
     pub region: String,
 
     /// URL du service, à renseigner pour toute API compatible S3 autre qu'AWS.
@@ -80,56 +80,56 @@ pub struct StorageConfig {
     pub force_path_style: bool,
 }
 
-fn backend_par_defaut() -> String {
+fn default_backend() -> String {
     "fs".to_owned()
 }
 
-fn racine_par_defaut() -> PathBuf {
+fn default_root() -> PathBuf {
     PathBuf::from("./stockage")
 }
 
-fn region_par_defaut() -> String {
+fn default_region() -> String {
     "us-east-1".to_owned()
 }
 
 /// Le stockage que décrit la section `[storage]`.
-pub fn depuis_config() -> anyhow::Result<Arc<dyn Storage>> {
-    construire(rbs_core::config::section::<StorageConfig>("storage")?)
+pub fn from_config() -> anyhow::Result<Arc<dyn Storage>> {
+    build(rbs_core::config::section::<StorageConfig>("storage")?)
 }
 
 /// Le stockage décrit par `config`, sans toucher ni à la configuration ni au réseau.
-fn construire(config: StorageConfig) -> anyhow::Result<Arc<dyn Storage>> {
+fn build(config: StorageConfig) -> anyhow::Result<Arc<dyn Storage>> {
     match config.backend.as_str() {
-        "fs" => Ok(Arc::new(fichiers::StockageFichiers::nouveau(config.racine))),
-        "s3" => Ok(Arc::new(s3::StockageS3::nouveau(&config))),
+        "fs" => Ok(Arc::new(files::FileStorage::new(config.root))),
+        "s3" => Ok(Arc::new(s3::S3Storage::new(&config))),
         inconnu => anyhow::bail!(
             "storage.backend = \"{inconnu}\" : les valeurs admises sont \"fs\" et \"s3\""
         ),
     }
 }
 
-/// Résout `cle` en un chemin relatif sûr, ou la refuse.
+/// Résout `key` en un chemin relatif sûr, ou la refuse.
 ///
 /// Un nom d'objet vient souvent de l'utilisateur. La clé est donc parcourue composant par
 /// composant et refusée dès qu'un `..` passe au-dessus de la racine — une recherche de
 /// sous-chaîne, elle, laisserait passer `a/../../b`.
-pub fn normaliser(cle: &str) -> Result<String, StorageError> {
-    let refus = || StorageError::CleRefusee(cle.to_owned());
+pub fn normalize(key: &str) -> Result<String, StorageError> {
+    let rejection = || StorageError::RejectedKey(key.to_owned());
     let mut segments: Vec<&str> = Vec::new();
 
-    for composant in Path::new(cle).components() {
+    for composant in Path::new(key).components() {
         match composant {
             Component::CurDir => {}
             Component::ParentDir => {
-                segments.pop().ok_or_else(refus)?;
+                segments.pop().ok_or_else(rejection)?;
             }
-            Component::Normal(segment) => segments.push(segment.to_str().ok_or_else(refus)?),
-            Component::RootDir | Component::Prefix(_) => return Err(refus()),
+            Component::Normal(segment) => segments.push(segment.to_str().ok_or_else(rejection)?),
+            Component::RootDir | Component::Prefix(_) => return Err(rejection()),
         }
     }
 
     if segments.is_empty() {
-        return Err(refus());
+        return Err(rejection());
     }
 
     Ok(segments.join("/"))

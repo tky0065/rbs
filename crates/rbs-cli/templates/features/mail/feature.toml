@@ -10,8 +10,8 @@ source = "config.rs.jinja"
 cible  = "src/mail/config.rs"
 
 [[fichiers]]
-source = "gabarit.rs.jinja"
-cible  = "src/mail/gabarit.rs"
+source = "template.rs.jinja"
+cible  = "src/mail/template.rs"
 
 [[fichiers]]
 source = "service.rs.jinja"
@@ -41,7 +41,7 @@ pub mail: crate::mail::Mailer,
 
 [[ancres]]
 ancre   = "state_init"
-contenu = "mail: crate::mail::Mailer::depuis_config()?,"
+contenu = "mail: crate::mail::Mailer::from_config()?,"
 
 # `default_features = false` : les défauts de `lettre` activent `native-tls`, qui réclame
 # OpenSSL sur les trois plateformes de la CI. `ring` et `webpki-roots` ne sont pas
@@ -79,7 +79,7 @@ smtp_user = ""
 tls = "none"
 from = "no-reply@localhost"
 timeout_secs = 10
-gabarits = "templates/mail"
+templates = "templates/mail"
 """
 
 [[env]]

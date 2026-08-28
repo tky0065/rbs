@@ -152,11 +152,11 @@ mod tests {
         let rendu = controller("articles");
 
         assert!(
-            rendu.contains("ValidatedJson(entree): ValidatedJson<CreateArticle>"),
+            rendu.contains("ValidatedJson(input): ValidatedJson<CreateArticle>"),
             "la création doit valider son corps :\n{rendu}"
         );
         assert!(
-            rendu.contains("ValidatedJson(entree): ValidatedJson<UpdateArticle>"),
+            rendu.contains("ValidatedJson(input): ValidatedJson<UpdateArticle>"),
             "la mise à jour doit valider son corps :\n{rendu}"
         );
     }

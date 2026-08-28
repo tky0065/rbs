@@ -23,7 +23,7 @@ contenu = "pub cache: crate::cache::Cache,"
 
 [[ancres]]
 ancre   = "state_init"
-contenu = "cache: crate::cache::Cache::depuis_config()?,"
+contenu = "cache: crate::cache::Cache::from_config()?,"
 
 [[dependances]]
 nom      = "redis"

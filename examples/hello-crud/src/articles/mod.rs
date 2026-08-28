@@ -12,7 +12,6 @@ use axum::routing::get;
 
 use crate::state::AppState;
 
-// region: routes
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/articles", get(controller::list).post(controller::create))
@@ -23,4 +22,3 @@ pub fn routes() -> Router<AppState> {
                 .delete(controller::delete),
         )
 }
-// endregion: routes

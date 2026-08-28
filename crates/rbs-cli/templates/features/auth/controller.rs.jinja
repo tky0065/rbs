@@ -21,9 +21,9 @@ use crate::state::AppState;
 )]
 pub async fn register(
     State(state): State<AppState>,
-    ValidatedJson(entree): ValidatedJson<RegisterRequest>,
+    ValidatedJson(input): ValidatedJson<RegisterRequest>,
 ) -> Result<(StatusCode, Json<UserResponse>)> {
-    let cree = service::register(state.core().db(), entree).await?;
+    let cree = service::register(state.core().db(), input).await?;
 
     Ok((StatusCode::CREATED, Json(cree)))
 }
@@ -42,10 +42,10 @@ pub async fn register(
 )]
 pub async fn login(
     State(state): State<AppState>,
-    ValidatedJson(entree): ValidatedJson<LoginRequest>,
+    ValidatedJson(input): ValidatedJson<LoginRequest>,
 ) -> Result<Json<TokenPair>> {
     Ok(Json(
-        service::login(state.core().db(), state.auth(), entree).await?,
+        service::login(state.core().db(), state.auth(), input).await?,
     ))
 }
 
@@ -61,10 +61,10 @@ pub async fn login(
 )]
 pub async fn refresh(
     State(state): State<AppState>,
-    ValidatedJson(entree): ValidatedJson<RefreshRequest>,
+    ValidatedJson(input): ValidatedJson<RefreshRequest>,
 ) -> Result<Json<TokenPair>> {
     Ok(Json(
-        service::refresh(state.core().db(), state.auth(), entree).await?,
+        service::refresh(state.core().db(), state.auth(), input).await?,
     ))
 }
 
@@ -80,9 +80,9 @@ pub async fn refresh(
 )]
 pub async fn logout(
     State(state): State<AppState>,
-    ValidatedJson(entree): ValidatedJson<RefreshRequest>,
+    ValidatedJson(input): ValidatedJson<RefreshRequest>,
 ) -> Result<StatusCode> {
-    service::logout(state.core().db(), entree).await?;
+    service::logout(state.core().db(), input).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }

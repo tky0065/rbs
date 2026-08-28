@@ -27,12 +27,12 @@ pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<UploadResponse> {
     Ok(upload.into())
 }
 
-pub async fn create(db: &DatabaseConnection, entree: CreateUpload) -> Result<UploadResponse> {
+pub async fn create(db: &DatabaseConnection, input: CreateUpload) -> Result<UploadResponse> {
     let upload = ActiveModel {
-        title: Set(entree.title),
-        owner_email: Set(entree.owner_email),
-        content_type: Set(entree.content_type),
-        size: Set(entree.size),
+        title: Set(input.title),
+        owner_email: Set(input.owner_email),
+        content_type: Set(input.content_type),
+        size: Set(input.size),
         ..Default::default()
     };
 
@@ -42,7 +42,7 @@ pub async fn create(db: &DatabaseConnection, entree: CreateUpload) -> Result<Upl
 pub async fn update(
     db: &DatabaseConnection,
     id: Uuid,
-    entree: UpdateUpload,
+    input: UpdateUpload,
 ) -> Result<UploadResponse> {
     let mut upload: ActiveModel = repository::find(db, id)
         .await?
@@ -51,16 +51,16 @@ pub async fn update(
 
     // Un champ absent du corps garde sa valeur : cette route ne peut donc pas remettre un
     // champ optionnel à NULL. Ajoutez-y le cas si votre API en a besoin.
-    if let Some(title) = entree.title {
+    if let Some(title) = input.title {
         upload.title = Set(title);
     }
-    if let Some(owner_email) = entree.owner_email {
+    if let Some(owner_email) = input.owner_email {
         upload.owner_email = Set(owner_email);
     }
-    if let Some(content_type) = entree.content_type {
+    if let Some(content_type) = input.content_type {
         upload.content_type = Set(content_type);
     }
-    if let Some(size) = entree.size {
+    if let Some(size) = input.size {
         upload.size = Set(size);
     }
     upload.updated_at = Set(chrono::Utc::now().into());

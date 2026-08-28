@@ -20,9 +20,9 @@ impl AppState {
         Ok(Self {
             core: CoreState::new(db, config),
             // <rbs:state_init>
-            cache: crate::cache::Cache::depuis_config()?,
-            mail: crate::mail::Mailer::depuis_config()?,
-            storage: crate::storage::depuis_config()?,
+            cache: crate::cache::Cache::from_config()?,
+            mail: crate::mail::Mailer::from_config()?,
+            storage: crate::storage::from_config()?,
             // </rbs:state_init>
         })
     }

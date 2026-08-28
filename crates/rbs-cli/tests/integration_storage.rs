@@ -21,8 +21,8 @@ const CLE: &str = "rbs-test";
 const SECRET: &str = "rbs-test-secret";
 
 const TESTS: [&str; 2] = [
-    "le_backend_s3_passe_la_meme_ronde_que_le_backend_fichiers",
-    "un_objet_depose_par_le_trait_se_relit_par_le_client_s3",
+    "the_s3_backend_passes_the_same_round_as_the_file_backend",
+    "an_object_put_by_the_trait_reads_back_through_the_s3_client",
 ];
 
 #[test]

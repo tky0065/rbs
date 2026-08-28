@@ -21,7 +21,7 @@ mod common;
 
 const IMAGE: (&str, &str) = ("axllent/mailpit", "latest");
 
-const ENVOI: &str = "un_message_a_gabarit_part_vers_le_serveur_smtp";
+const ENVOI: &str = "a_templated_message_goes_out_to_the_smtp_server";
 
 #[test]
 #[ignore = "démarre Mailpit et compile un projet Axum + SeaORM complet : plusieurs minutes"]

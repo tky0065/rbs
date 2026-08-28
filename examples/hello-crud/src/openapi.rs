@@ -6,12 +6,11 @@ use utoipa_swagger_ui::SwaggerUi;
 
 use crate::state::AppState;
 
-// region: document
 #[derive(OpenApi)]
 #[openapi(
     modifiers(&CommonResponses),
     paths(
-        crate::health::controller::sante,
+        crate::health::controller::health,
         // <rbs:openapi>
         crate::articles::controller::list,
         crate::articles::controller::create,
@@ -22,9 +21,7 @@ use crate::state::AppState;
     )
 )]
 pub struct ApiDoc;
-// endregion: document
 
-// region: exposition
 pub fn routes(config: &rbs_core::Config) -> Router<AppState> {
     match (config.docs.swagger_ui, config.docs.openapi_json) {
         // Swagger UI charge le document par HTTP et monte lui-même sa route : l'afficher
@@ -36,7 +33,6 @@ pub fn routes(config: &rbs_core::Config) -> Router<AppState> {
         (false, false) => Router::new(),
     }
 }
-// endregion: exposition
 
 async fn document() -> Json<utoipa::openapi::OpenApi> {
     Json(ApiDoc::openapi())

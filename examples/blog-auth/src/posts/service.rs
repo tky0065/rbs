@@ -24,18 +24,18 @@ pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<PostResponse> {
     Ok(post.into())
 }
 
-pub async fn create(db: &DatabaseConnection, entree: CreatePost) -> Result<PostResponse> {
+pub async fn create(db: &DatabaseConnection, input: CreatePost) -> Result<PostResponse> {
     let post = ActiveModel {
-        title: Set(entree.title),
-        body: Set(entree.body),
-        published: Set(entree.published),
+        title: Set(input.title),
+        body: Set(input.body),
+        published: Set(input.published),
         ..Default::default()
     };
 
     Ok(repository::create(db, post).await?.into())
 }
 
-pub async fn update(db: &DatabaseConnection, id: Uuid, entree: UpdatePost) -> Result<PostResponse> {
+pub async fn update(db: &DatabaseConnection, id: Uuid, input: UpdatePost) -> Result<PostResponse> {
     let mut post: ActiveModel = repository::find(db, id)
         .await?
         .ok_or(Error::NotFound("post"))?
@@ -43,13 +43,13 @@ pub async fn update(db: &DatabaseConnection, id: Uuid, entree: UpdatePost) -> Re
 
     // Un champ absent du corps garde sa valeur : cette route ne peut donc pas remettre un
     // champ optionnel à NULL. Ajoutez-y le cas si votre API en a besoin.
-    if let Some(title) = entree.title {
+    if let Some(title) = input.title {
         post.title = Set(title);
     }
-    if let Some(body) = entree.body {
+    if let Some(body) = input.body {
         post.body = Set(body);
     }
-    if let Some(published) = entree.published {
+    if let Some(published) = input.published {
         post.published = Set(published);
     }
     post.updated_at = Set(chrono::Utc::now().into());

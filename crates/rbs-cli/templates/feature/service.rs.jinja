@@ -28,10 +28,10 @@ pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<{@ entite @}Respo
     Ok({@ singulier @}.into())
 }
 
-pub async fn create(db: &DatabaseConnection, entree: Create{@ entite @}) -> Result<{@ entite @}Response> {
+pub async fn create(db: &DatabaseConnection, input: Create{@ entite @}) -> Result<{@ entite @}Response> {
     let {@ singulier @} = ActiveModel {
 {%- for champ in champs %}
-        {@ champ.nom @}: Set(entree.{@ champ.nom @}),
+        {@ champ.nom @}: Set(input.{@ champ.nom @}),
 {%- endfor %}
         ..Default::default()
     };
@@ -42,7 +42,7 @@ pub async fn create(db: &DatabaseConnection, entree: Create{@ entite @}) -> Resu
 pub async fn update(
     db: &DatabaseConnection,
     id: Uuid,
-    entree: Update{@ entite @},
+    input: Update{@ entite @},
 ) -> Result<{@ entite @}Response> {
     let mut {@ singulier @}: ActiveModel = repository::find(db, id)
         .await?
@@ -52,7 +52,7 @@ pub async fn update(
     // Un champ absent du corps garde sa valeur : cette route ne peut donc pas remettre un
     // champ optionnel à NULL. Ajoutez-y le cas si votre API en a besoin.
 {%- for champ in champs %}
-    if let Some({@ champ.nom @}) = entree.{@ champ.nom @} {
+    if let Some({@ champ.nom @}) = input.{@ champ.nom @} {
         {@ singulier @}.{@ champ.nom @} = Set({@ ("Some(" ~ champ.nom ~ ")") if champ.optionnel else champ.nom @});
     }
 {%- endfor %}

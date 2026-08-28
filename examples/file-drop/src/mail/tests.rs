@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 use minijinja::context;
 
 use super::config::{MailConfig, Tls};
-use super::gabarit::Gabarits;
 use super::service::Mailer;
+use super::template::Templates;
 
 /// Une configuration de test : le serveur local en clair, sans identifiants.
 ///
@@ -20,32 +20,32 @@ fn config() -> MailConfig {
 }
 
 #[tokio::test]
-async fn les_trois_modes_de_chiffrement_batissent_un_transport() {
+async fn the_three_encryption_modes_build_a_transport() {
     for tls in [Tls::Aucun, Tls::Starttls, Tls::Wrapper] {
-        Mailer::nouveau(&MailConfig { tls, ..config() })
-            .unwrap_or_else(|erreur| panic!("le transport {tls:?} doit se bâtir : {erreur}"));
+        Mailer::new(&MailConfig { tls, ..config() })
+            .unwrap_or_else(|error| panic!("le transport {tls:?} doit se bâtir : {error}"));
     }
 }
 
 /// L'expéditeur est analysé au démarrage, pas au premier message : une faute de frappe
 /// dans `config/default.toml` doit arrêter le serveur, non une requête au hasard.
 #[tokio::test]
-async fn un_expediteur_invalide_arrete_la_construction_en_le_nommant() {
-    let erreur = Mailer::nouveau(&MailConfig {
+async fn an_invalid_sender_stops_the_build_naming_it() {
+    let error = Mailer::new(&MailConfig {
         from: "pas une adresse".to_string(),
         ..config()
     })
     .expect_err("« pas une adresse » n'est pas un expéditeur");
 
     assert!(
-        format!("{erreur:#}").contains("pas une adresse"),
-        "l'erreur ne nomme pas l'expéditeur fautif : {erreur:#}"
+        format!("{error:#}").contains("pas une adresse"),
+        "l'erreur ne nomme pas l'expéditeur fautif : {error:#}"
     );
 }
 
 #[tokio::test]
-async fn le_message_porte_l_expediteur_configure_et_son_destinataire() {
-    let mailer = Mailer::nouveau(&config()).expect("le transport doit se bâtir");
+async fn the_message_carries_the_configured_sender_and_its_recipient() {
+    let mailer = Mailer::new(&config()).expect("le transport doit se bâtir");
 
     let message = mailer
         .message(
@@ -55,53 +55,53 @@ async fn le_message_porte_l_expediteur_configure_et_son_destinataire() {
         )
         .expect("le message doit se construire");
 
-    let rendu = String::from_utf8(message.formatted()).expect("un message est de l'UTF-8");
+    let rendered = String::from_utf8(message.formatted()).expect("un message est de l'UTF-8");
 
     assert!(
-        rendu.contains("From: Facteur <no-reply@example.test>"),
-        "{rendu}"
+        rendered.contains("From: Facteur <no-reply@example.test>"),
+        "{rendered}"
     );
-    assert!(rendu.contains("To: client@example.test"), "{rendu}");
-    assert!(rendu.contains("Subject: Bienvenue"), "{rendu}");
+    assert!(rendered.contains("To: client@example.test"), "{rendered}");
+    assert!(rendered.contains("Subject: Bienvenue"), "{rendered}");
 }
 
 /// Le gabarit livré par le fragment, tel que le projet le trouve sur son disque.
-fn gabarits() -> Gabarits {
-    Gabarits::nouveaux(MailConfig::default().gabarits)
+fn templates() -> Templates {
+    Templates::new(MailConfig::default().templates)
 }
 
 #[test]
-fn le_gabarit_rendu_porte_les_variables_qui_lui_sont_passees() {
-    let rendu = gabarits()
-        .rendre(
+fn the_rendered_template_carries_the_variables_passed_to_it() {
+    let rendered = templates()
+        .render(
             "bienvenue.html",
-            context! { nom => "Ada & Lovelace", lien => "https://example.test/compte" },
+            context! { name => "Ada & Lovelace", link => "https://example.test/compte" },
         )
         .expect("le gabarit livré doit se rendre");
 
     // L'esperluette ressort échappée : le gabarit porte l'extension `.html`, dont
     // minijinja tire l'échappement. Un nom venu de la base n'y injecte pas de balise.
     assert!(
-        rendu.contains("Ada &amp; Lovelace"),
-        "le nom n'est pas rendu :\n{rendu}"
+        rendered.contains("Ada &amp; Lovelace"),
+        "le nom n'est pas rendu :\n{rendered}"
     );
     assert!(
-        rendu.contains("example.test"),
-        "le lien n'est pas rendu :\n{rendu}"
+        rendered.contains("example.test"),
+        "le lien n'est pas rendu :\n{rendered}"
     );
 }
 
 /// L'erreur nomme le fichier, que minijinja ne connaît que par son nom de gabarit :
 /// « absent.html » seul n'aide personne à trouver le répertoire qui le manque.
 #[test]
-fn un_gabarit_introuvable_nomme_le_fichier_sans_paniquer() {
-    let erreur = gabarits()
-        .rendre("absent.html", context! {})
+fn a_missing_template_names_the_file_without_panicking() {
+    let error = templates()
+        .render("absent.html", context! {})
         .expect_err("« absent.html » n'existe pas");
 
     assert!(
-        erreur.to_string().contains("templates/mail/absent.html"),
-        "l'erreur ne nomme pas le fichier : {erreur}"
+        error.to_string().contains("templates/mail/absent.html"),
+        "l'erreur ne nomme pas le fichier : {error}"
     );
 }
 
@@ -115,19 +115,19 @@ fn un_gabarit_introuvable_nomme_le_fichier_sans_paniquer() {
 /// `multi_thread` : sur le runtime à fil unique, la tâche détachée n'aurait aucun fil pour
 /// tourner pendant que le test attend la connexion.
 #[tokio::test(flavor = "multi_thread")]
-async fn envoyer_detache_rend_la_main_sans_attendre_l_envoi() {
+async fn send_detached_returns_without_awaiting_the_send() {
     let ecoute = TcpListener::bind("127.0.0.1:0").expect("un port libre de la boucle locale");
     let port = ecoute.local_addr().expect("l'écoute est liée").port();
     let (annonce, connexions) = mpsc::channel();
 
     std::thread::spawn(move || {
-        let connexion = ecoute.accept();
+        let connection = ecoute.accept();
         let _ = annonce.send(());
         std::thread::sleep(Duration::from_secs(1));
-        drop(connexion);
+        drop(connection);
     });
 
-    let mailer = Mailer::nouveau(&MailConfig {
+    let mailer = Mailer::new(&MailConfig {
         smtp_host: "127.0.0.1".to_string(),
         smtp_port: port,
         timeout_secs: 30,
@@ -140,7 +140,7 @@ async fn envoyer_detache_rend_la_main_sans_attendre_l_envoi() {
         .expect("le message doit se construire");
 
     let debut = Instant::now();
-    mailer.envoyer_detache(message);
+    mailer.send_detached(message);
     let rendue = debut.elapsed();
 
     assert!(
@@ -162,15 +162,15 @@ async fn envoyer_detache_rend_la_main_sans_attendre_l_envoi() {
 /// la boîte du serveur qui porte la preuve.
 #[tokio::test]
 #[ignore = "joint le serveur SMTP de la section [mail]"]
-async fn un_message_a_gabarit_part_vers_le_serveur_smtp() {
-    let mailer = Mailer::depuis_config().expect("la section [mail] doit être lisible");
+async fn a_templated_message_goes_out_to_the_smtp_server() {
+    let mailer = Mailer::from_config().expect("la section [mail] doit être lisible");
 
     mailer
-        .envoyer_gabarit(
+        .send_template(
             "ada@example.org",
             "Bienvenue chez nous",
             "bienvenue.html",
-            context! { nom => "Ada", lien => "https://example.org/compte" },
+            context! { name => "Ada", link => "https://example.org/compte" },
         )
         .await
         .expect("l'envoi doit aboutir");

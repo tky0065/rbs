@@ -9,7 +9,7 @@
     #[schema(value_type = {@ "Option<String>" if optionnel else "String" @}, format = DateTime)]
 {%- endif %}
 {%- endmacro -%}
-{% macro corps(champs, tout_optionnel) -%}
+{% macro body(champs, tout_optionnel) -%}
 {% if champs %} {
 {%- for champ in champs %}
 {@- schema_datetime(champ, tout_optionnel or champ.optionnel) @}
@@ -30,10 +30,10 @@ use validator::Validate;
 use super::model::Model;
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
-pub struct Create{@ entite @}{@ corps(champs, false) @}
+pub struct Create{@ entite @}{@ body(champs, false) @}
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
-pub struct Update{@ entite @}{@ corps(champs, true) @}
+pub struct Update{@ entite @}{@ body(champs, true) @}
 
 #[derive(Debug, Serialize, ToSchema)]
 pub struct {@ entite @}Response {

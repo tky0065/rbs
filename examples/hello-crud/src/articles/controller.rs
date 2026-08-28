@@ -25,7 +25,6 @@ pub async fn list(
     Ok(Json(service::list(state.core().db(), &pagination).await?))
 }
 
-// region: create
 #[utoipa::path(
     post,
     path = "/articles",
@@ -38,13 +37,12 @@ pub async fn list(
 )]
 pub async fn create(
     State(state): State<AppState>,
-    ValidatedJson(entree): ValidatedJson<CreateArticle>,
+    ValidatedJson(input): ValidatedJson<CreateArticle>,
 ) -> Result<(StatusCode, Json<ArticleResponse>)> {
-    let article = service::create(state.core().db(), entree).await?;
+    let article = service::create(state.core().db(), input).await?;
 
     Ok((StatusCode::CREATED, Json(article)))
 }
-// endregion: create
 
 #[utoipa::path(
     get,
@@ -79,9 +77,9 @@ pub async fn find(
 pub async fn update(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    ValidatedJson(entree): ValidatedJson<UpdateArticle>,
+    ValidatedJson(input): ValidatedJson<UpdateArticle>,
 ) -> Result<Json<ArticleResponse>> {
-    Ok(Json(service::update(state.core().db(), id, entree).await?))
+    Ok(Json(service::update(state.core().db(), id, input).await?))
 }
 
 #[utoipa::path(
