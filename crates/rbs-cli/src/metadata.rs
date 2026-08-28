@@ -9,20 +9,20 @@ use std::path::{Path, PathBuf};
 
 use toml_edit::{Array, DocumentMut, InlineTable, Item, Value};
 
-/// Remonte de `depart` jusqu'au projet rbs qui le contient.
+/// Remonte de `start` jusqu'au projet rbs qui le contient.
 ///
 /// Le manifeste seul ne suffit pas à trancher : la crate `migration` en porte un, et une
 /// commande lancée depuis `migration/src` viserait sinon la mauvaise racine.
-pub fn racine_du_projet(depart: &Path) -> Option<PathBuf> {
-    depart
+pub fn project_root(start: &Path) -> Option<PathBuf> {
+    start
         .ancestors()
-        .find(|candidat| lire(&candidat.join("Cargo.toml")).is_ok())
+        .find(|candidat| read(&candidat.join("Cargo.toml")).is_ok())
         .map(Path::to_path_buf)
 }
 
 /// Métadonnées rbs d'un projet, telles que portées par son `Cargo.toml`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Metadonnees {
+pub struct Metadata {
     /// Version de rbs qui a généré le projet.
     pub version: String,
     /// Features installées, dans l'ordre où elles ont été ajoutées.
@@ -31,9 +31,9 @@ pub struct Metadonnees {
 
 /// Une dépendance telle qu'un patch de manifeste la réclame.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Dependance {
+pub struct Dependency {
     /// Nom du paquet, tel qu'il sera écrit en clé de `[dependencies]`.
-    pub nom: String,
+    pub name: String,
     /// Version demandée, recopiée telle quelle dans le manifeste.
     pub version: String,
     /// Features à activer sur ce paquet.
@@ -44,89 +44,89 @@ pub struct Dependance {
 
 /// Ce qui peut empêcher de lire ou de mettre à jour les métadonnées d'un projet.
 #[derive(Debug, thiserror::Error)]
-pub enum Erreur {
+pub enum Error {
     /// Le manifeste n'a pas pu être lu ou réécrit.
-    #[error("{chemin} est inaccessible : {source}")]
+    #[error("{path} est inaccessible : {source}")]
     Acces {
         /// Chemin du manifeste.
-        chemin: String,
+        path: String,
         /// Cause système.
         source: std::io::Error,
     },
 
     /// Le manifeste n'est pas du TOML valide.
-    #[error("{chemin} n'est pas un TOML valide : {source}")]
+    #[error("{path} n'est pas un TOML valide : {source}")]
     Syntaxe {
         /// Chemin du manifeste.
-        chemin: String,
+        path: String,
         /// Cause de l'analyse.
         source: toml_edit::TomlError,
     },
 
     /// Le manifeste ne porte pas de section `[package.metadata.rbs]`.
     #[error(
-        "{chemin} ne porte pas de section `[package.metadata.rbs]` : ce répertoire n'est pas un projet rbs"
+        "{path} ne porte pas de section `[package.metadata.rbs]` : ce répertoire n'est pas un projet rbs"
     )]
     PasUnProjet {
         /// Chemin du manifeste.
-        chemin: String,
+        path: String,
     },
 
     /// Une clé attendue est absente ou porte le mauvais type.
-    #[error("`package.metadata.rbs.{cle}` est absente ou mal typée dans {chemin}")]
-    Champ {
+    #[error("`package.metadata.rbs.{key}` est absente ou mal typée dans {path}")]
+    Field {
         /// Chemin du manifeste.
-        chemin: String,
+        path: String,
         /// Clé fautive.
-        cle: &'static str,
+        key: &'static str,
     },
 
     /// Une déclaration du manifeste n'a pas la forme qu'un patch sait manipuler.
-    #[error("`{cle}` n'a pas la forme attendue dans {chemin}")]
+    #[error("`{key}` n'a pas la forme attendue dans {path}")]
     Declaration {
         /// Chemin du manifeste.
-        chemin: String,
+        path: String,
         /// Clé fautive, telle qu'elle apparaît dans le manifeste.
-        cle: String,
+        key: String,
     },
 
     /// La dépendance est déjà déclarée, dans une version que le patch ne peut pas
     /// remplacer sans décider à la place du développeur.
-    #[error("{chemin} déclare déjà `{dependance}` en version {presente}, et non {demandee}")]
+    #[error("{path} déclare déjà `{dependency}` en version {present}, et non {demandee}")]
     VersionIncompatible {
         /// Chemin du manifeste.
-        chemin: String,
+        path: String,
         /// Dépendance en cause.
-        dependance: String,
+        dependency: String,
         /// Version que le manifeste porte.
-        presente: String,
+        present: String,
         /// Version que le patch réclame.
         demandee: String,
     },
 
     /// Une feature est réclamée sur une dépendance que le manifeste ne déclare pas.
-    #[error("{chemin} ne déclare pas la dépendance `{dependance}`")]
+    #[error("{path} ne déclare pas la dépendance `{dependency}`")]
     DependanceAbsente {
         /// Chemin du manifeste.
-        chemin: String,
+        path: String,
         /// Dépendance introuvable.
-        dependance: String,
+        dependency: String,
     },
 }
 
 /// Lit les métadonnées rbs du manifeste désigné.
-pub fn lire(cargo_toml: &Path) -> Result<Metadonnees, Erreur> {
-    let document = charger(cargo_toml)?;
+pub fn read(cargo_toml: &Path) -> Result<Metadata, Error> {
+    let document = load(cargo_toml)?;
 
     let rbs = document
         .get("package")
         .and_then(|package| package.get("metadata"))
         .and_then(|metadata| metadata.get("rbs"))
-        .ok_or_else(|| Erreur::PasUnProjet {
-            chemin: nommer(cargo_toml),
+        .ok_or_else(|| Error::PasUnProjet {
+            path: name_of(cargo_toml),
         })?;
 
-    Ok(Metadonnees {
+    Ok(Metadata {
         version: version(rbs, cargo_toml)?,
         features: features(rbs, cargo_toml)?,
     })
@@ -136,25 +136,25 @@ pub fn lire(cargo_toml: &Path) -> Result<Metadonnees, Erreur> {
 ///
 /// C'est le nom du binaire du projet, et la racine de celui de sa base : les fragments de
 /// feature en ont besoin là où `rbs new` disposait encore du nom saisi.
-pub fn nom_du_paquet(cargo_toml: &Path) -> Result<String, Erreur> {
-    let document = charger(cargo_toml)?;
+pub fn package_name(cargo_toml: &Path) -> Result<String, Error> {
+    let document = load(cargo_toml)?;
 
     document
         .get("package")
         .and_then(|package| package.get("name"))
         .and_then(Item::as_str)
         .map(str::to_owned)
-        .ok_or_else(|| Erreur::Champ {
-            chemin: nommer(cargo_toml),
-            cle: "name",
+        .ok_or_else(|| Error::Field {
+            path: name_of(cargo_toml),
+            key: "name",
         })
 }
 
 /// Rend le manifeste avec `feature` inscrite, ou `None` si elle y est déjà.
 ///
-/// `nom` ne désigne le fichier que dans les messages d'erreur : rien n'est lu ni écrit ici.
-pub fn inscrire_feature(texte: &str, feature: &str, nom: &str) -> Result<Option<String>, Erreur> {
-    let mut document = analyser(texte, nom)?;
+/// `name` ne désigne le fichier que dans les messages d'erreur : rien n'est lu ni écrit ici.
+pub fn record_feature(text: &str, feature: &str, name: &str) -> Result<Option<String>, Error> {
+    let mut document = parse(text, name)?;
 
     // `get_mut` sur une clé absente la crée à `Item::None` pour permettre l'écriture :
     // vérifier l'existence de la section avant de la traverser en mutable évite qu'une
@@ -165,8 +165,8 @@ pub fn inscrire_feature(texte: &str, feature: &str, nom: &str) -> Result<Option<
         .and_then(|metadata| metadata.get("rbs"))
         .is_none()
     {
-        return Err(Erreur::PasUnProjet {
-            chemin: nom.to_string(),
+        return Err(Error::PasUnProjet {
+            path: name.to_string(),
         });
     }
 
@@ -179,14 +179,14 @@ pub fn inscrire_feature(texte: &str, feature: &str, nom: &str) -> Result<Option<
     let installees = rbs
         .get_mut("features")
         .and_then(Item::as_array_mut)
-        .ok_or_else(|| Erreur::Champ {
-            chemin: nom.to_string(),
-            cle: "features",
+        .ok_or_else(|| Error::Field {
+            path: name.to_string(),
+            key: "features",
         })?;
 
     if installees
         .iter()
-        .any(|valeur| valeur.as_str() == Some(feature))
+        .any(|value| value.as_str() == Some(feature))
     {
         return Ok(None);
     }
@@ -202,49 +202,45 @@ pub fn inscrire_feature(texte: &str, feature: &str, nom: &str) -> Result<Option<
 /// Une version déjà déclarée qui diffère est un conflit, pas un silence : la remplacer
 /// casserait un choix du développeur, la taire installerait une feature contre une version
 /// qui ne la porte pas.
-pub fn ajouter_dependance(
-    texte: &str,
-    dep: &Dependance,
-    nom: &str,
-) -> Result<Option<String>, Erreur> {
-    let mut document = analyser(texte, nom)?;
+pub fn add_dependency(text: &str, dep: &Dependency, name: &str) -> Result<Option<String>, Error> {
+    let mut document = parse(text, name)?;
 
-    let dependances = document
+    let dependencies = document
         .entry("dependencies")
         .or_insert_with(toml_edit::table)
         .as_table_like_mut()
-        .ok_or_else(|| Erreur::Declaration {
-            chemin: nom.to_string(),
-            cle: "dependencies".to_string(),
+        .ok_or_else(|| Error::Declaration {
+            path: name.to_string(),
+            key: "dependencies".to_string(),
         })?;
 
-    let Some(declaree) = dependances.get_mut(&dep.nom) else {
-        dependances.insert(&dep.nom, declaration(dep));
+    let Some(declared) = dependencies.get_mut(&dep.name) else {
+        dependencies.insert(&dep.name, declaration(dep));
         return Ok(Some(document.to_string()));
     };
 
-    if let Some(presente) = version_declaree(declaree)
-        && presente != dep.version
+    if let Some(present) = declared_version(declared)
+        && present != dep.version
     {
-        return Err(Erreur::VersionIncompatible {
-            chemin: nom.to_string(),
-            dependance: dep.nom.clone(),
-            presente: presente.to_string(),
+        return Err(Error::VersionIncompatible {
+            path: name.to_string(),
+            dependency: dep.name.clone(),
+            present: present.to_string(),
             demandee: dep.version.clone(),
         });
     }
 
-    let mal_formee = || Erreur::Declaration {
-        chemin: nom.to_string(),
-        cle: dep.nom.clone(),
+    let malformed = || Error::Declaration {
+        path: name.to_string(),
+        key: dep.name.clone(),
     };
 
     let mut modifie = false;
     if !dep.default_features {
-        modifie |= couper_defauts(declaree).ok_or_else(mal_formee)?;
+        modifie |= strip_defaults(declared).ok_or_else(malformed)?;
     }
     for feature in &dep.features {
-        modifie |= activer_feature(declaree, feature).ok_or_else(mal_formee)?;
+        modifie |= enable_feature(declared, feature).ok_or_else(malformed)?;
     }
 
     Ok(modifie.then(|| document.to_string()))
@@ -255,34 +251,34 @@ pub fn ajouter_dependance(
 ///
 /// Une dépendance absente est une erreur de l'appelant : activer une feature suppose de
 /// savoir dans quelle version, ce que seul l'appelant sait.
-pub fn ajouter_feature_a_dependance(
-    texte: &str,
+pub fn add_feature_to_dependency(
+    text: &str,
     dep: &str,
     feature: &str,
-    nom: &str,
-) -> Result<Option<String>, Erreur> {
-    let mut document = analyser(texte, nom)?;
+    name: &str,
+) -> Result<Option<String>, Error> {
+    let mut document = parse(text, name)?;
 
-    let absente = || Erreur::DependanceAbsente {
-        chemin: nom.to_string(),
-        dependance: dep.to_string(),
+    let absente = || Error::DependanceAbsente {
+        path: name.to_string(),
+        dependency: dep.to_string(),
     };
 
     let modifie = {
-        let dependances = document
+        let dependencies = document
             .get_mut("dependencies")
             .ok_or_else(absente)?
             .as_table_like_mut()
-            .ok_or_else(|| Erreur::Declaration {
-                chemin: nom.to_string(),
-                cle: "dependencies".to_string(),
+            .ok_or_else(|| Error::Declaration {
+                path: name.to_string(),
+                key: "dependencies".to_string(),
             })?;
 
-        let declaree = dependances.get_mut(dep).ok_or_else(absente)?;
+        let declared = dependencies.get_mut(dep).ok_or_else(absente)?;
 
-        activer_feature(declaree, feature).ok_or_else(|| Erreur::Declaration {
-            chemin: nom.to_string(),
-            cle: dep.to_string(),
+        enable_feature(declared, feature).ok_or_else(|| Error::Declaration {
+            path: name.to_string(),
+            key: dep.to_string(),
         })?
     };
 
@@ -293,7 +289,7 @@ pub fn ajouter_feature_a_dependance(
 ///
 /// Une version nue tant qu'il n'y a rien d'autre à dire : c'est la forme qu'un développeur
 /// aurait écrite, et le manifeste n'a pas à s'alourdir d'une table pour une seule clé.
-fn declaration(dep: &Dependance) -> Item {
+fn declaration(dep: &Dependency) -> Item {
     if dep.features.is_empty() && dep.default_features {
         return Item::Value(Value::from(dep.version.as_str()));
     }
@@ -315,18 +311,18 @@ fn declaration(dep: &Dependance) -> Item {
 
 /// La version que la déclaration porte, ou `None` si elle n'en porte pas — cas d'une
 /// dépendance en `path` ou en `git`, que le patch laisse alors telle quelle.
-fn version_declaree(declaree: &Item) -> Option<&str> {
-    declaree
+fn declared_version(declared: &Item) -> Option<&str> {
+    declared
         .as_str()
-        .or_else(|| declaree.get("version").and_then(Item::as_str))
+        .or_else(|| declared.get("version").and_then(Item::as_str))
 }
 
 /// Coupe les défauts d'une déclaration, en rendant `false` s'ils l'étaient déjà et `None`
 /// si la déclaration n'a pas une forme manipulable.
-fn couper_defauts(declaree: &mut Item) -> Option<bool> {
-    etaler(declaree)?;
+fn strip_defaults(declared: &mut Item) -> Option<bool> {
+    spread(declared)?;
 
-    let table = declaree.as_table_like_mut()?;
+    let table = declared.as_table_like_mut()?;
     if table.get("default-features").and_then(Item::as_bool) == Some(false) {
         return Some(false);
     }
@@ -338,19 +334,16 @@ fn couper_defauts(declaree: &mut Item) -> Option<bool> {
 
 /// Active `feature` sur une déclaration, en rendant `false` si elle y était déjà et `None`
 /// si la déclaration n'a pas une forme manipulable.
-fn activer_feature(declaree: &mut Item, feature: &str) -> Option<bool> {
-    etaler(declaree)?;
+fn enable_feature(declared: &mut Item, feature: &str) -> Option<bool> {
+    spread(declared)?;
 
-    let table = declaree.as_table_like_mut()?;
+    let table = declared.as_table_like_mut()?;
     let features = table
         .entry("features")
         .or_insert(Item::Value(Value::Array(Array::new())))
         .as_array_mut()?;
 
-    if features
-        .iter()
-        .any(|valeur| valeur.as_str() == Some(feature))
-    {
+    if features.iter().any(|value| value.as_str() == Some(feature)) {
         return Some(false);
     }
 
@@ -364,57 +357,56 @@ fn activer_feature(declaree: &mut Item, feature: &str) -> Option<bool> {
 ///
 /// Le décor d'une déclaration en chaîne, qui porte l'espacement et le commentaire de fin
 /// de ligne, est reporté sur la table.
-fn etaler(declaree: &mut Item) -> Option<()> {
-    let Some(version) = declaree.as_str().map(str::to_owned) else {
+fn spread(declared: &mut Item) -> Option<()> {
+    let Some(version) = declared.as_str().map(str::to_owned) else {
         return Some(());
     };
 
-    let decor = declaree.as_value()?.decor().clone();
+    let decor = declared.as_value()?.decor().clone();
 
     let mut table = InlineTable::new();
     table.insert("version", Value::from(version));
 
-    let mut valeur = Value::InlineTable(table);
-    *valeur.decor_mut() = decor;
-    *declaree = Item::Value(valeur);
+    let mut value = Value::InlineTable(table);
+    *value.decor_mut() = decor;
+    *declared = Item::Value(value);
 
     Some(())
 }
 
 /// Analyse un manifeste en préservant sa mise en forme et ses commentaires.
-fn analyser(texte: &str, nom: &str) -> Result<DocumentMut, Erreur> {
-    texte
-        .parse::<DocumentMut>()
-        .map_err(|source| Erreur::Syntaxe {
-            chemin: nom.to_string(),
+fn parse(text: &str, name: &str) -> Result<DocumentMut, Error> {
+    text.parse::<DocumentMut>()
+        .map_err(|source| Error::Syntaxe {
+            path: name.to_string(),
             source,
         })
 }
 
 /// Analyse le manifeste en préservant sa mise en forme et ses commentaires.
-fn charger(cargo_toml: &Path) -> Result<DocumentMut, Erreur> {
-    let source = fs::read_to_string(cargo_toml).map_err(|source| Erreur::Acces {
-        chemin: nommer(cargo_toml),
+fn load(cargo_toml: &Path) -> Result<DocumentMut, Error> {
+    let source = fs::read_to_string(cargo_toml).map_err(|source| Error::Acces {
+        path: name_of(cargo_toml),
         source,
     })?;
 
-    analyser(&source, &nommer(cargo_toml))
+    parse(&source, &name_of(cargo_toml))
 }
 
-fn version(rbs: &Item, cargo_toml: &Path) -> Result<String, Erreur> {
+fn version(rbs: &Item, cargo_toml: &Path) -> Result<String, Error> {
     rbs.get("version")
         .and_then(Item::as_str)
         .map(str::to_owned)
-        .ok_or_else(|| Erreur::Champ {
-            chemin: nommer(cargo_toml),
-            cle: "version",
+        .ok_or_else(|| Error::Field {
+            path: name_of(cargo_toml),
+            key: "version",
         })
 }
 
-fn features(rbs: &Item, cargo_toml: &Path) -> Result<Vec<String>, Erreur> {
-    let manquant = || Erreur::Champ {
-        chemin: nommer(cargo_toml),
-        cle: "features",
+fn features(rbs: &Item, cargo_toml: &Path) -> Result<Vec<String>, Error> {
+    let manquant = || Error::Field {
+        path: name_of(cargo_toml),
+        key: "features",
     };
 
     rbs.get("features")
@@ -423,13 +415,13 @@ fn features(rbs: &Item, cargo_toml: &Path) -> Result<Vec<String>, Erreur> {
         .iter()
         // Une entrée qui n'est pas une chaîne est une erreur, pas une entrée à ignorer :
         // silencieusement écartée, elle serait réinstallée au prochain `rbs add`.
-        .map(|valeur| valeur.as_str().map(str::to_owned))
+        .map(|value| value.as_str().map(str::to_owned))
         .collect::<Option<Vec<_>>>()
         .ok_or_else(manquant)
 }
 
 /// Le chemin tel qu'il apparaîtra dans un message d'erreur.
-fn nommer(cargo_toml: &Path) -> String {
+fn name_of(cargo_toml: &Path) -> String {
     cargo_toml.display().to_string()
 }
 
@@ -453,51 +445,51 @@ mod tests {
 
     /// Déroule le manifeste du squelette dans un répertoire temporaire. C'est le plus
     /// proche d'un projet fraîchement généré tant que `rbs new` n'existe pas.
-    fn projet_genere() -> (TempDir, PathBuf) {
+    fn generated_project() -> (TempDir, PathBuf) {
         let source = fs::read_to_string(MANIFESTE).expect("le manifeste du squelette est lisible");
 
-        let rendu = Renderer::new()
-            .rendre(
+        let rendered = Renderer::new()
+            .render(
                 &source,
                 context! {
-                    nom_projet => "mon-api",
-                    nom_crate => "mon_api",
+                    project_name => "mon-api",
+                    crate_name => "mon_api",
                     rbs_core_dep => "\"0.1\"",
                     rbs_version => "0.1.0",
                 },
             )
             .expect("le manifeste doit se rendre");
 
-        ecrire(rendu)
+        write(rendered)
     }
 
-    fn ecrire(contenu: impl AsRef<[u8]>) -> (TempDir, PathBuf) {
-        let repertoire = TempDir::new().expect("répertoire temporaire créable");
-        let chemin = repertoire.path().join("Cargo.toml");
-        fs::write(&chemin, contenu).expect("manifeste écrit");
+    fn write(content: impl AsRef<[u8]>) -> (TempDir, PathBuf) {
+        let directory = TempDir::new().expect("répertoire temporaire créable");
+        let path = directory.path().join("Cargo.toml");
+        fs::write(&path, content).expect("manifeste écrit");
 
-        (repertoire, chemin)
+        (directory, path)
     }
 
     #[test]
-    fn les_metadonnees_d_un_projet_genere_se_relisent() {
-        let (_repertoire, chemin) = projet_genere();
+    fn the_metadata_of_a_generated_project_reads_back() {
+        let (_repertoire, path) = generated_project();
 
-        let metadonnees = lire(&chemin).expect("le manifeste généré porte ses métadonnées");
+        let metadonnees = read(&path).expect("le manifeste généré porte ses métadonnées");
 
         assert_eq!(metadonnees.version, "0.1.0");
         assert_eq!(metadonnees.features, vec!["health".to_string()]);
     }
 
     #[test]
-    fn un_manifeste_sans_section_rbs_est_refuse_en_nommant_le_fichier() {
-        let (_repertoire, chemin) = ecrire("[package]\nname = \"mon-api\"\n");
+    fn a_manifest_without_an_rbs_section_is_rejected_naming_the_file() {
+        let (_repertoire, path) = write("[package]\nname = \"mon-api\"\n");
 
-        let erreur = lire(&chemin).expect_err("un manifeste sans section rbs n'est pas un projet");
+        let error = read(&path).expect_err("un manifeste sans section rbs n'est pas un projet");
 
-        let message = erreur.to_string();
+        let message = error.to_string();
         assert!(
-            message.contains(&chemin.display().to_string()),
+            message.contains(&path.display().to_string()),
             "le message ne nomme pas le fichier : {message}"
         );
         assert!(
@@ -516,22 +508,22 @@ features = ["health"]
 "#;
 
     #[test]
-    fn une_feature_absente_est_inscrite_sans_toucher_au_reste_du_manifeste() {
-        let rendu = inscrire_feature(MANIFESTE_MINIMAL, "docker", "Cargo.toml")
+    fn a_missing_feature_is_recorded_without_touching_the_rest_of_the_manifest() {
+        let rendered = record_feature(MANIFESTE_MINIMAL, "docker", "Cargo.toml")
             .expect("le manifeste est valide")
             .expect("la feature est absente, le texte change");
 
-        assert!(rendu.contains(r#"features = ["health", "docker"]"#));
-        assert!(rendu.contains("# les features installées"));
-        assert!(rendu.starts_with("[package]\nname = \"demo\"\n"));
+        assert!(rendered.contains(r#"features = ["health", "docker"]"#));
+        assert!(rendered.contains("# les features installées"));
+        assert!(rendered.starts_with("[package]\nname = \"demo\"\n"));
     }
 
     #[test]
-    fn une_feature_deja_inscrite_ne_produit_aucun_texte() {
-        let rendu = inscrire_feature(MANIFESTE_MINIMAL, "health", "Cargo.toml")
+    fn an_already_recorded_feature_produces_no_text() {
+        let rendered = record_feature(MANIFESTE_MINIMAL, "health", "Cargo.toml")
             .expect("le manifeste est valide");
 
-        assert_eq!(rendu, None);
+        assert_eq!(rendered, None);
     }
 
     const MANIFESTE_DEPS: &str = r#"[package]
@@ -545,11 +537,11 @@ tokio = { version = "1", features = ["macros"] }
 "#;
 
     #[test]
-    fn une_dependance_absente_s_ajoute_sans_deplacer_le_reste() {
-        let rendu = ajouter_dependance(
+    fn a_missing_dependency_is_added_without_moving_the_rest() {
+        let rendered = add_dependency(
             MANIFESTE_DEPS,
-            &Dependance {
-                nom: "redis".into(),
+            &Dependency {
+                name: "redis".into(),
                 version: "0.32".into(),
                 features: vec![],
                 default_features: true,
@@ -559,20 +551,23 @@ tokio = { version = "1", features = ["macros"] }
         .expect("le manifeste est valide")
         .expect("la dépendance est absente");
 
-        assert!(rendu.contains(r#"redis = "0.32""#), "{rendu}");
-        assert!(rendu.contains("# les dépendances du projet"), "{rendu}");
+        assert!(rendered.contains(r#"redis = "0.32""#), "{rendered}");
         assert!(
-            rendu.contains(r#"axum = "0.9"       # le serveur"#),
-            "{rendu}"
+            rendered.contains("# les dépendances du projet"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains(r#"axum = "0.9"       # le serveur"#),
+            "{rendered}"
         );
     }
 
     #[test]
-    fn une_dependance_deja_declaree_ne_produit_aucun_texte() {
-        let rendu = ajouter_dependance(
+    fn an_already_declared_dependency_produces_no_text() {
+        let rendered = add_dependency(
             MANIFESTE_DEPS,
-            &Dependance {
-                nom: "axum".into(),
+            &Dependency {
+                name: "axum".into(),
                 version: "0.9".into(),
                 features: vec![],
                 default_features: true,
@@ -581,15 +576,15 @@ tokio = { version = "1", features = ["macros"] }
         )
         .expect("le manifeste est valide");
 
-        assert_eq!(rendu, None);
+        assert_eq!(rendered, None);
     }
 
     #[test]
-    fn une_dependance_declaree_dans_une_autre_version_est_un_conflit() {
-        let erreur = ajouter_dependance(
+    fn a_dependency_declared_at_another_version_is_a_conflict() {
+        let error = add_dependency(
             MANIFESTE_DEPS,
-            &Dependance {
-                nom: "axum".into(),
+            &Dependency {
+                name: "axum".into(),
                 version: "0.8".into(),
                 features: vec![],
                 default_features: true,
@@ -599,10 +594,10 @@ tokio = { version = "1", features = ["macros"] }
         .expect_err("les deux versions ne se réconcilient pas");
 
         assert!(
-            matches!(erreur, Erreur::VersionIncompatible { .. }),
-            "{erreur}"
+            matches!(error, Error::VersionIncompatible { .. }),
+            "{error}"
         );
-        let message = erreur.to_string();
+        let message = error.to_string();
         assert!(message.contains("axum"), "{message}");
         assert!(
             message.contains("0.8") && message.contains("0.9"),
@@ -611,11 +606,11 @@ tokio = { version = "1", features = ["macros"] }
     }
 
     #[test]
-    fn une_dependance_declaree_sans_toutes_ses_features_les_recoit() {
-        let rendu = ajouter_dependance(
+    fn a_dependency_declared_without_all_its_features_receives_them() {
+        let rendered = add_dependency(
             MANIFESTE_DEPS,
-            &Dependance {
-                nom: "tokio".into(),
+            &Dependency {
+                name: "tokio".into(),
                 version: "1".into(),
                 features: vec!["rt-multi-thread".into()],
                 default_features: true,
@@ -626,9 +621,9 @@ tokio = { version = "1", features = ["macros"] }
         .expect("la feature manque");
 
         assert!(
-            rendu
+            rendered
                 .contains(r#"tokio = { version = "1", features = ["macros", "rt-multi-thread"] }"#),
-            "{rendu}"
+            "{rendered}"
         );
     }
 
@@ -636,11 +631,11 @@ tokio = { version = "1", features = ["macros"] }
     /// eux : c'est le seul chemin par lequel `default-features` arrive sur une déclaration
     /// existante, et le commentaire du développeur doit y survivre comme ailleurs.
     #[test]
-    fn une_dependance_deja_declaree_recoit_la_coupure_de_ses_defauts() {
-        let rendu = ajouter_dependance(
+    fn an_already_declared_dependency_receives_its_default_features_cut() {
+        let rendered = add_dependency(
             MANIFESTE_DEPS,
-            &Dependance {
-                nom: "axum".into(),
+            &Dependency {
+                name: "axum".into(),
                 version: "0.9".into(),
                 features: vec![],
                 default_features: false,
@@ -650,20 +645,20 @@ tokio = { version = "1", features = ["macros"] }
         .expect("le manifeste est valide")
         .expect("les défauts sont encore actifs");
 
-        let ligne = ligne_de(&rendu, "axum");
+        let line = line_of(&rendered, "axum");
         assert!(
-            ligne.contains(r#"axum = { version = "0.9", default-features = false }"#),
-            "{ligne}"
+            line.contains(r#"axum = { version = "0.9", default-features = false }"#),
+            "{line}"
         );
-        assert!(ligne.contains("# le serveur"), "{ligne}");
+        assert!(line.contains("# le serveur"), "{line}");
     }
 
     #[test]
-    fn une_coupure_de_defauts_deja_ecrite_ne_produit_aucun_texte() {
-        let coupee = ajouter_dependance(
+    fn an_already_written_default_features_cut_produces_no_text() {
+        let cut = add_dependency(
             MANIFESTE_DEPS,
-            &Dependance {
-                nom: "axum".into(),
+            &Dependency {
+                name: "axum".into(),
                 version: "0.9".into(),
                 features: vec![],
                 default_features: false,
@@ -673,10 +668,10 @@ tokio = { version = "1", features = ["macros"] }
         .expect("le manifeste est valide")
         .expect("les défauts sont encore actifs");
 
-        let rendu = ajouter_dependance(
-            &coupee,
-            &Dependance {
-                nom: "axum".into(),
+        let rendered = add_dependency(
+            &cut,
+            &Dependency {
+                name: "axum".into(),
                 version: "0.9".into(),
                 features: vec![],
                 default_features: false,
@@ -685,15 +680,15 @@ tokio = { version = "1", features = ["macros"] }
         )
         .expect("le manifeste est valide");
 
-        assert_eq!(rendu, None);
+        assert_eq!(rendered, None);
     }
 
     #[test]
-    fn une_dependance_avec_features_se_declare_en_table_inline() {
-        let rendu = ajouter_dependance(
+    fn a_dependency_with_features_is_declared_as_an_inline_table() {
+        let rendered = add_dependency(
             MANIFESTE_DEPS,
-            &Dependance {
-                nom: "redis".into(),
+            &Dependency {
+                name: "redis".into(),
                 version: "0.32".into(),
                 features: vec!["tokio-comp".into()],
                 default_features: true,
@@ -704,17 +699,17 @@ tokio = { version = "1", features = ["macros"] }
         .expect("la dépendance est absente");
 
         assert!(
-            rendu.contains(r#"redis = { version = "0.32", features = ["tokio-comp"] }"#),
-            "{rendu}"
+            rendered.contains(r#"redis = { version = "0.32", features = ["tokio-comp"] }"#),
+            "{rendered}"
         );
     }
 
     #[test]
-    fn un_manifeste_sans_table_dependencies_en_recoit_une() {
-        let rendu = ajouter_dependance(
+    fn a_manifest_without_a_dependencies_table_receives_one() {
+        let rendered = add_dependency(
             MANIFESTE_MINIMAL,
-            &Dependance {
-                nom: "redis".into(),
+            &Dependency {
+                name: "redis".into(),
                 version: "0.32".into(),
                 features: vec![],
                 default_features: true,
@@ -724,101 +719,92 @@ tokio = { version = "1", features = ["macros"] }
         .expect("le manifeste est valide")
         .expect("la dépendance est absente");
 
-        assert!(rendu.contains("[dependencies]"), "{rendu}");
-        assert!(rendu.contains(r#"redis = "0.32""#), "{rendu}");
-        assert!(rendu.contains("# les features installées"), "{rendu}");
+        assert!(rendered.contains("[dependencies]"), "{rendered}");
+        assert!(rendered.contains(r#"redis = "0.32""#), "{rendered}");
+        assert!(rendered.contains("# les features installées"), "{rendered}");
         assert_eq!(
-            lire_dependance(&rendu, "redis"),
+            read_dependency(&rendered, "redis"),
             Some("0.32".to_string()),
-            "la dépendance n'a pas atterri dans `[dependencies]` :\n{rendu}"
+            "la dépendance n'a pas atterri dans `[dependencies]` :\n{rendered}"
         );
     }
 
-    /// La version que le manifeste rendu déclare pour `dependance`, table inline ou chaîne.
-    fn lire_dependance(texte: &str, dependance: &str) -> Option<String> {
-        let document = texte.parse::<DocumentMut>().expect("TOML valide");
-        let item = document.get("dependencies")?.get(dependance)?;
+    /// La version que le manifeste rendu déclare pour `dependency`, table inline ou chaîne.
+    fn read_dependency(text: &str, dependency: &str) -> Option<String> {
+        let document = text.parse::<DocumentMut>().expect("TOML valide");
+        let item = document.get("dependencies")?.get(dependency)?;
 
         item.as_str()
             .or_else(|| item.get("version").and_then(|v| v.as_str()))
             .map(str::to_owned)
     }
 
-    /// La ligne du manifeste rendu qui déclare `dependance`.
-    fn ligne_de(texte: &str, dependance: &str) -> String {
-        texte
-            .lines()
-            .find(|ligne| ligne.starts_with(dependance))
-            .unwrap_or_else(|| panic!("`{dependance}` n'est plus déclarée :\n{texte}"))
+    /// La ligne du manifeste rendu qui déclare `dependency`.
+    fn line_of(text: &str, dependency: &str) -> String {
+        text.lines()
+            .find(|line| line.starts_with(dependency))
+            .unwrap_or_else(|| panic!("`{dependency}` n'est plus déclarée :\n{text}"))
             .to_string()
     }
 
     #[test]
-    fn une_feature_s_ajoute_a_une_dependance_deja_en_table_inline() {
-        let rendu =
-            ajouter_feature_a_dependance(MANIFESTE_DEPS, "tokio", "rt-multi-thread", "Cargo.toml")
+    fn a_feature_is_added_to_a_dependency_already_in_an_inline_table() {
+        let rendered =
+            add_feature_to_dependency(MANIFESTE_DEPS, "tokio", "rt-multi-thread", "Cargo.toml")
                 .expect("le manifeste est valide")
                 .expect("la feature manque");
 
         assert_eq!(
-            ligne_de(&rendu, "tokio"),
+            line_of(&rendered, "tokio"),
             r#"tokio = { version = "1", features = ["macros", "rt-multi-thread"] }"#
         );
     }
 
     #[test]
-    fn une_dependance_en_chaine_devient_une_table_inline_en_gardant_son_commentaire() {
-        let rendu = ajouter_feature_a_dependance(MANIFESTE_DEPS, "axum", "macros", "Cargo.toml")
+    fn a_string_dependency_becomes_an_inline_table_keeping_its_comment() {
+        let rendered = add_feature_to_dependency(MANIFESTE_DEPS, "axum", "macros", "Cargo.toml")
             .expect("le manifeste est valide")
             .expect("la feature manque");
 
-        let ligne = ligne_de(&rendu, "axum");
+        let line = line_of(&rendered, "axum");
         assert!(
-            ligne.contains(r#"axum = { version = "0.9", features = ["macros"] }"#),
-            "la déclaration n'est pas devenue une table inline : {ligne}"
+            line.contains(r#"axum = { version = "0.9", features = ["macros"] }"#),
+            "la déclaration n'est pas devenue une table inline : {line}"
         );
         assert!(
-            ligne.contains("# le serveur"),
-            "le commentaire de fin de ligne a été perdu : {ligne}"
+            line.contains("# le serveur"),
+            "le commentaire de fin de ligne a été perdu : {line}"
         );
     }
 
     #[test]
-    fn une_feature_deja_active_ne_produit_aucun_texte() {
-        let rendu = ajouter_feature_a_dependance(MANIFESTE_DEPS, "tokio", "macros", "Cargo.toml")
+    fn an_already_enabled_feature_produces_no_text() {
+        let rendered = add_feature_to_dependency(MANIFESTE_DEPS, "tokio", "macros", "Cargo.toml")
             .expect("le manifeste est valide");
 
-        assert_eq!(rendu, None);
+        assert_eq!(rendered, None);
     }
 
     #[test]
-    fn une_dependance_absente_est_refusee() {
-        let erreur =
-            ajouter_feature_a_dependance(MANIFESTE_DEPS, "redis", "tokio-comp", "Cargo.toml")
-                .expect_err("la dépendance manque");
+    fn a_missing_dependency_is_rejected() {
+        let error = add_feature_to_dependency(MANIFESTE_DEPS, "redis", "tokio-comp", "Cargo.toml")
+            .expect_err("la dépendance manque");
 
-        assert!(
-            matches!(erreur, Erreur::DependanceAbsente { .. }),
-            "{erreur}"
-        );
-        assert!(erreur.to_string().contains("redis"), "{erreur}");
+        assert!(matches!(error, Error::DependanceAbsente { .. }), "{error}");
+        assert!(error.to_string().contains("redis"), "{error}");
     }
 
     #[test]
-    fn une_feature_sur_un_manifeste_sans_dependances_est_refusee() {
-        let erreur =
-            ajouter_feature_a_dependance(MANIFESTE_MINIMAL, "axum", "macros", "Cargo.toml")
-                .expect_err("il n'y a pas de table `[dependencies]`");
+    fn a_feature_on_a_manifest_without_dependencies_is_rejected() {
+        let error = add_feature_to_dependency(MANIFESTE_MINIMAL, "axum", "macros", "Cargo.toml")
+            .expect_err("il n'y a pas de table `[dependencies]`");
 
-        assert!(
-            matches!(erreur, Erreur::DependanceAbsente { .. }),
-            "{erreur}"
-        );
+        assert!(matches!(error, Error::DependanceAbsente { .. }), "{error}");
     }
 
     /// Manifeste témoin : commentaires de tête et de fin de ligne, lignes vides,
     /// alignements irréguliers, tables voisines que le patch doit ignorer.
-    const TEMOIN: &str = r#"# Manifeste écrit à la main.
+    const TEMOIN: &str = r#"# Manifest écrit à la main.
 [package]
 name    = "demo"           # aligné exprès
 version = "0.1.0"
@@ -833,7 +819,7 @@ tokio      = { version = "1", features = ["macros"] }
 [dev-dependencies]
 tempfile = "3"   # rien à voir avec le patch
 
-# l'état de rbs dans ce projet
+# l'état de rbs dans ce project
 [package.metadata.rbs]
 version = "0.1.0"
 features = ["health"]
@@ -843,16 +829,16 @@ features = ["health"]
     ///
     /// Diff naïf par appariement : il suffit ici, où l'on veut seulement établir que rien
     /// d'autre que la zone patchée n'a bougé.
-    fn lignes_modifiees(avant: &str, apres: &str) -> (Vec<String>, Vec<String>) {
-        let mut restantes: Vec<&str> = apres.lines().collect();
+    fn modified_lines(before: &str, after: &str) -> (Vec<String>, Vec<String>) {
+        let mut restantes: Vec<&str> = after.lines().collect();
         let mut perdues = Vec::new();
 
-        for ligne in avant.lines() {
-            match restantes.iter().position(|candidate| *candidate == ligne) {
+        for line in before.lines() {
+            match restantes.iter().position(|candidate| *candidate == line) {
                 Some(index) => {
                     restantes.remove(index);
                 }
-                None => perdues.push(ligne.to_string()),
+                None => perdues.push(line.to_string()),
             }
         }
 
@@ -860,40 +846,39 @@ features = ["health"]
     }
 
     /// Les lignes du texte, privées de celles qu'un patch était censé toucher.
-    fn hors_zone(texte: &str, touchees: &[String]) -> Vec<String> {
-        texte
-            .lines()
-            .filter(|ligne| !touchees.iter().any(|touchee| touchee == ligne))
+    fn out_of_range(text: &str, touchees: &[String]) -> Vec<String> {
+        text.lines()
+            .filter(|line| !touchees.iter().any(|touchee| touchee == line))
             .map(str::to_owned)
             .collect()
     }
 
-    /// Établit qu'entre `TEMOIN` et `rendu`, seules les lignes annoncées ont changé — et
+    /// Établit qu'entre `TEMOIN` et `rendered`, seules les lignes annoncées ont changé — et
     /// que le reste est resté dans le même ordre.
-    fn seules_ces_lignes_ont_change(rendu: &str, perdues: &[&str], gagnees: &[&str]) {
-        let attendu = (
+    fn only_these_lines_changed(rendered: &str, perdues: &[&str], gagnees: &[&str]) {
+        let expected = (
             perdues.iter().map(|l| l.to_string()).collect::<Vec<_>>(),
             gagnees.iter().map(|l| l.to_string()).collect::<Vec<_>>(),
         );
 
         assert_eq!(
-            lignes_modifiees(TEMOIN, rendu),
-            attendu,
-            "le patch a débordé de sa ligne :\n{rendu}"
+            modified_lines(TEMOIN, rendered),
+            expected,
+            "le patch a débordé de sa ligne :\n{rendered}"
         );
         assert_eq!(
-            hors_zone(TEMOIN, &attendu.0),
-            hors_zone(rendu, &attendu.1),
-            "le patch a réordonné le manifeste :\n{rendu}"
+            out_of_range(TEMOIN, &expected.0),
+            out_of_range(rendered, &expected.1),
+            "le patch a réordonné le manifeste :\n{rendered}"
         );
     }
 
     #[test]
-    fn un_ajout_de_dependance_ne_modifie_que_sa_propre_ligne() {
-        let rendu = ajouter_dependance(
+    fn adding_a_dependency_only_touches_its_own_line() {
+        let rendered = add_dependency(
             TEMOIN,
-            &Dependance {
-                nom: "redis".into(),
+            &Dependency {
+                name: "redis".into(),
                 version: "0.32".into(),
                 features: vec!["tokio-comp".into()],
                 default_features: true,
@@ -903,21 +888,21 @@ features = ["health"]
         .expect("le manifeste est valide")
         .expect("la dépendance est absente");
 
-        seules_ces_lignes_ont_change(
-            &rendu,
+        only_these_lines_changed(
+            &rendered,
             &[],
             &[r#"redis = { version = "0.32", features = ["tokio-comp"] }"#],
         );
     }
 
     #[test]
-    fn un_ajout_de_feature_a_une_dependance_ne_modifie_que_sa_propre_ligne() {
-        let rendu = ajouter_feature_a_dependance(TEMOIN, "sea-orm", "with-uuid", "Cargo.toml")
+    fn adding_a_feature_to_a_dependency_only_touches_its_own_line() {
+        let rendered = add_feature_to_dependency(TEMOIN, "sea-orm", "with-uuid", "Cargo.toml")
             .expect("le manifeste est valide")
             .expect("la feature manque");
 
-        seules_ces_lignes_ont_change(
-            &rendu,
+        only_these_lines_changed(
+            &rendered,
             &[r#"sea-orm    = { version = "1.1", features = ["runtime-tokio-rustls"] }"#],
             &[
                 r#"sea-orm    = { version = "1.1", features = ["runtime-tokio-rustls", "with-uuid"] }"#,
@@ -926,23 +911,23 @@ features = ["health"]
     }
 
     #[test]
-    fn une_inscription_de_feature_rbs_ne_modifie_que_sa_propre_ligne() {
-        let rendu = inscrire_feature(TEMOIN, "docker", "Cargo.toml")
+    fn recording_an_rbs_feature_only_touches_its_own_line() {
+        let rendered = record_feature(TEMOIN, "docker", "Cargo.toml")
             .expect("le manifeste est valide")
             .expect("la feature est absente");
 
-        seules_ces_lignes_ont_change(
-            &rendu,
+        only_these_lines_changed(
+            &rendered,
             &[r#"features = ["health"]"#],
             &[r#"features = ["health", "docker"]"#],
         );
     }
 
     #[test]
-    fn un_manifeste_sans_section_rbs_est_refuse() {
-        let erreur = inscrire_feature("[package]\nname = \"demo\"\n", "docker", "Cargo.toml")
+    fn a_manifest_without_an_rbs_section_is_rejected() {
+        let error = record_feature("[package]\nname = \"demo\"\n", "docker", "Cargo.toml")
             .expect_err("la section manque");
 
-        assert!(matches!(erreur, Erreur::PasUnProjet { .. }));
+        assert!(matches!(error, Error::PasUnProjet { .. }));
     }
 }

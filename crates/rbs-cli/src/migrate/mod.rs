@@ -4,15 +4,15 @@
 //! le moteur de SeaORM n'est pas réimplémenté, seulement rendu lisible. `new` n'a besoin
 //! de personne — ni de cargo, ni d'une base démarrée.
 
-pub mod etat;
-pub mod nouvelle;
-pub mod rendu;
+pub mod fresh;
+pub mod render;
+pub mod state;
 
 use std::io;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-use crate::generate::migration::horodatage_courant;
+use crate::generate::migration::current_timestamp;
 use crate::{dotenv, metadata};
 
 /// La variable qui porte l'URL de la base, telle que le projet la nomme.
@@ -31,12 +31,12 @@ pub(crate) enum Action {
     /// Inventorie les migrations et leur état.
     Status,
     /// Crée un fichier de migration vide.
-    Nouvelle(String),
+    Fresh(String),
 }
 
 /// Ce qu'une action a produit, à afficher.
 #[derive(Debug)]
-pub(crate) enum Sortie {
+pub(crate) enum Output {
     /// Les migrations en attente ont été appliquées.
     Appliquees,
     /// La dernière migration appliquée a été annulée.
@@ -44,12 +44,12 @@ pub(crate) enum Sortie {
     /// L'inventaire, déjà mis en forme.
     Inventaire(String),
     /// La migration créée.
-    Creee(nouvelle::Nouvelle),
+    Creee(fresh::Fresh),
 }
 
 /// Ce qui peut empêcher de piloter les migrations.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum Erreur {
+pub(crate) enum Error {
     /// La commande n'a pas été lancée depuis un projet rbs.
     #[error(
         "cette commande attend un projet rbs : aucun Cargo.toml portant [package.metadata.rbs] au-dessus d'ici"
@@ -58,7 +58,7 @@ pub(crate) enum Erreur {
 
     /// Le `.env` du projet est absent ou illisible.
     #[error("{0}")]
-    Env(#[from] dotenv::Erreur),
+    Env(#[from] dotenv::Error),
 
     /// Le `.env` ne dit pas quelle base viser.
     #[error("{URL} est absente du .env : rbs ne sait pas quelle base migrer")]
@@ -77,48 +77,48 @@ pub(crate) enum Erreur {
 
     /// La sortie du binaire de migration n'a pas pu être analysée.
     #[error("{0}")]
-    Etat(#[from] etat::Erreur),
+    State(#[from] state::Error),
 
     /// La migration n'a pas pu être créée.
     #[error("{0}")]
-    Nouvelle(#[from] nouvelle::Erreur),
+    Fresh(#[from] fresh::Error),
 }
 
-/// Exécute `action` dans le projet qui contient `repertoire`.
-pub(crate) fn executer(action: Action, repertoire: &Path) -> Result<Sortie, Erreur> {
-    let racine = metadata::racine_du_projet(repertoire).ok_or(Erreur::PasUnProjet)?;
+/// Exécute `action` dans le projet qui contient `directory`.
+pub(crate) fn run(action: Action, directory: &Path) -> Result<Output, Error> {
+    let root = metadata::project_root(directory).ok_or(Error::PasUnProjet)?;
 
-    if let Action::Nouvelle(nom) = action {
-        return Ok(Sortie::Creee(nouvelle::executer(
-            &racine,
-            &nom,
-            &horodatage_courant(),
+    if let Action::Fresh(name) = action {
+        return Ok(Output::Creee(fresh::run(
+            &root,
+            &name,
+            &current_timestamp(),
         )?));
     }
 
-    let variables = variables_du_projet(&racine)?;
+    let variables = project_variables(&root)?;
 
     match action {
         Action::Up => {
-            lancer(&racine, "up", &variables, false)?;
-            Ok(Sortie::Appliquees)
+            launch(&root, "up", &variables, false)?;
+            Ok(Output::Appliquees)
         }
         Action::Down => {
-            lancer(&racine, "down", &variables, false)?;
-            Ok(Sortie::Annulee)
+            launch(&root, "down", &variables, false)?;
+            Ok(Output::Annulee)
         }
         Action::Status => {
-            let sortie = lancer(&racine, "status", &variables, true)?;
-            Ok(Sortie::Inventaire(rendu::status(&etat::analyser(&sortie)?)))
+            let output = launch(&root, "status", &variables, true)?;
+            Ok(Output::Inventaire(render::status(&state::parse(&output)?)))
         }
-        Action::Nouvelle(_) => unreachable!("traitée avant la lecture du .env"),
+        Action::Fresh(_) => unreachable!("traitée avant la lecture du .env"),
     }
 }
 
 /// Lit le `.env` du projet et en tire ce qu'il faut transmettre au sous-processus.
-pub(crate) fn variables_du_projet(racine: &Path) -> Result<Vec<(String, String)>, Erreur> {
-    let paires = dotenv::lire(&racine.join(".env"))?;
-    preparer(paires, |cle| std::env::var_os(cle).is_some())
+pub(crate) fn project_variables(root: &Path) -> Result<Vec<(String, String)>, Error> {
+    let paires = dotenv::read(&root.join(".env"))?;
+    prepare(paires, |key| std::env::var_os(key).is_some())
 }
 
 /// Retient du `.env` ce que le sous-processus n'a pas déjà, et exige de savoir quelle
@@ -126,12 +126,12 @@ pub(crate) fn variables_du_projet(racine: &Path) -> Result<Vec<(String, String)>
 ///
 /// L'environnement de l'appelant l'emporte : `RBS_DATABASE__URL=… rbs migrate up` doit
 /// pouvoir viser une autre base sans toucher au fichier du projet.
-fn preparer(
+fn prepare(
     paires: Vec<(String, String)>,
     definie: impl Fn(&str) -> bool,
-) -> Result<Vec<(String, String)>, Erreur> {
-    if !definie(URL) && dotenv::valeur(&paires, URL).is_none() {
-        return Err(Erreur::SansUrl);
+) -> Result<Vec<(String, String)>, Error> {
+    if !definie(URL) && dotenv::value(&paires, URL).is_none() {
+        return Err(Error::SansUrl);
     }
 
     Ok(variables(paires, definie))
@@ -143,7 +143,7 @@ fn variables(
 ) -> Vec<(String, String)> {
     paires
         .into_iter()
-        .filter(|(cle, _)| !definie(cle))
+        .filter(|(key, _)| !definie(key))
         .collect()
 }
 
@@ -151,36 +151,36 @@ fn variables(
 ///
 /// `stderr` reste hérité : la progression de cargo, qui compile la crate au premier
 /// appel, doit rester visible pendant que la sortie utile est capturée.
-pub(crate) fn lancer(
-    racine: &Path,
-    commande: &str,
+pub(crate) fn launch(
+    root: &Path,
+    command: &str,
     variables: &[(String, String)],
     capturer: bool,
-) -> Result<String, Erreur> {
+) -> Result<String, Error> {
     let mut processus = Command::new("cargo");
     processus
-        .current_dir(racine)
-        .args(["run", "-p", "migration", "--", commande])
-        .envs(variables.iter().map(|(cle, valeur)| (cle, valeur)))
+        .current_dir(root)
+        .args(["run", "-p", "migration", "--", command])
+        .envs(variables.iter().map(|(key, value)| (key, value)))
         .stdout(if capturer {
             Stdio::piped()
         } else {
             Stdio::inherit()
         });
 
-    let sortie = processus
+    let output = processus
         .spawn()
-        .map_err(Erreur::Cargo)?
+        .map_err(Error::Cargo)?
         .wait_with_output()
-        .map_err(Erreur::Cargo)?;
+        .map_err(Error::Cargo)?;
 
-    if !sortie.status.success() {
-        return Err(Erreur::Migration {
-            code: sortie.status.code().unwrap_or(1),
+    if !output.status.success() {
+        return Err(Error::Migration {
+            code: output.status.code().unwrap_or(1),
         });
     }
 
-    Ok(String::from_utf8_lossy(&sortie.stdout).into_owned())
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }
 
 #[cfg(test)]
@@ -192,11 +192,11 @@ mod tests {
     use super::*;
 
     /// Un projet déroulé par `rbs new`, sans passer par le binaire ni par cargo.
-    fn projet() -> (TempDir, PathBuf) {
+    fn project() -> (TempDir, PathBuf) {
         let parent = TempDir::new().expect("répertoire temporaire créable");
-        let projet = crate::new::creer(
+        let project = crate::new::create(
             &crate::new::Options {
-                nom: "demo-api".to_string(),
+                name: "demo-api".to_string(),
                 database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
                 features: Vec::new(),
                 core_path: None,
@@ -206,80 +206,80 @@ mod tests {
         )
         .expect("le projet doit se créer");
 
-        (parent, projet.racine)
+        (parent, project.root)
     }
 
     #[test]
-    fn hors_d_un_projet_rbs_rien_n_est_lance() {
+    fn outside_an_rbs_project_nothing_is_launched() {
         let ailleurs = TempDir::new().expect("répertoire temporaire créable");
 
-        let erreur = executer(Action::Status, ailleurs.path()).expect_err("ce n'est pas un projet");
+        let error = run(Action::Status, ailleurs.path()).expect_err("ce n'est pas un projet");
 
-        assert!(matches!(erreur, Erreur::PasUnProjet));
+        assert!(matches!(error, Error::PasUnProjet));
     }
 
     #[test]
-    fn la_variable_attendue_est_celle_qu_un_projet_neuf_ecrit_dans_son_env() {
-        let (_parent, racine) = projet();
+    fn the_expected_variable_is_the_one_a_fresh_project_writes_in_its_env() {
+        let (_parent, root) = project();
 
-        let paires = dotenv::lire(&racine.join(".env")).expect("le .env est lisible");
+        let paires = dotenv::read(&root.join(".env")).expect("le .env est lisible");
 
         assert!(
-            dotenv::valeur(&paires, URL).is_some(),
+            dotenv::value(&paires, URL).is_some(),
             "migrate cherche {URL}, absente du .env généré"
         );
     }
 
     #[test]
-    fn un_env_absent_est_signale_avec_son_chemin() {
-        let (_parent, racine) = projet();
-        std::fs::remove_file(racine.join(".env")).expect("le .env existe");
+    fn a_missing_env_is_reported_with_its_path() {
+        let (_parent, root) = project();
+        std::fs::remove_file(root.join(".env")).expect("le .env existe");
 
-        let erreur = executer(Action::Status, &racine).expect_err("le .env manque");
+        let error = run(Action::Status, &root).expect_err("le .env manque");
 
-        assert!(erreur.to_string().contains(".env"));
+        assert!(error.to_string().contains(".env"));
     }
 
     #[test]
-    fn sans_url_nulle_part_la_base_visee_est_inconnue() {
+    fn with_no_url_anywhere_the_targeted_database_is_unknown() {
         let paires = vec![("RUST_LOG".to_string(), "info".to_string())];
 
-        let erreur = preparer(paires, |_| false).expect_err("aucune URL n'est connue");
+        let error = prepare(paires, |_| false).expect_err("aucune URL n'est connue");
 
-        assert!(erreur.to_string().contains(URL));
+        assert!(error.to_string().contains(URL));
     }
 
     #[test]
-    fn une_url_heritee_de_l_environnement_suffit() {
+    fn a_url_inherited_from_the_environment_is_enough() {
         let paires = vec![("RUST_LOG".to_string(), "info".to_string())];
 
-        preparer(paires, |cle| cle == URL).expect("l'appelant fournit l'URL");
+        prepare(paires, |key| key == URL).expect("l'appelant fournit l'URL");
     }
 
     #[test]
-    fn une_migration_creee_depuis_un_sous_repertoire_vise_la_racine_du_projet() {
-        let (_parent, racine) = projet();
+    fn a_migration_created_from_a_subdirectory_targets_the_project_root() {
+        let (_parent, root) = project();
 
-        let sortie = executer(
-            Action::Nouvelle("ajout_index".to_string()),
-            &racine.join("migration/src"),
+        let output = run(
+            Action::Fresh("ajout_index".to_string()),
+            &root.join("migration/src"),
         )
         .expect("la migration se crée");
 
-        let Sortie::Creee(nouvelle) = sortie else {
+        let Output::Creee(fresh) = output else {
             panic!("une création rend la migration créée");
         };
-        assert!(racine.join(&nouvelle.fichier).is_file());
+        assert!(root.join(&fresh.file).is_file());
     }
 
     #[test]
-    fn une_variable_deja_definie_prime_sur_celle_du_fichier() {
+    fn an_already_defined_variable_wins_over_the_file_one() {
         let paires = vec![
             (URL.to_string(), "postgres://du-fichier".to_string()),
             ("RUST_LOG".to_string(), "info".to_string()),
         ];
 
-        let transmises = variables(paires, |cle| cle == URL);
+        let transmises = variables(paires, |key| key == URL);
 
         assert_eq!(
             transmises,

@@ -5,12 +5,14 @@ use validator::Validate;
 
 use super::model::Model;
 
+// region: entree
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct CreateArticle {
     pub title: String,
     pub body: String,
     pub published: bool,
 }
+// endregion: entree
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct UpdateArticle {
@@ -19,6 +21,7 @@ pub struct UpdateArticle {
     pub published: Option<bool>,
 }
 
+// region: reponse
 #[derive(Debug, Serialize, ToSchema)]
 pub struct ArticleResponse {
     pub id: Uuid,
@@ -30,6 +33,7 @@ pub struct ArticleResponse {
     #[schema(value_type = String, format = DateTime)]
     pub updated_at: DateTimeWithTimeZone,
 }
+// endregion: reponse
 
 impl From<Model> for ArticleResponse {
     fn from(model: Model) -> Self {

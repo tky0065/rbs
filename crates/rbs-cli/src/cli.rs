@@ -27,7 +27,7 @@ pub enum Commands {
     /// Crée un projet prêt à démarrer, avec sa base, ses migrations et sa route /health.
     New {
         /// Nom du projet, qui est aussi celui du répertoire créé.
-        nom: String,
+        name: String,
 
         /// URL de la base PostgreSQL, à défaut de quoi la question est posée.
         #[arg(long, value_name = "URL")]
@@ -74,7 +74,7 @@ pub enum GenerateCommands {
     /// Génère une feature CRUD complète, entité et migration comprises.
     Crud {
         /// Nom de la feature, au pluriel.
-        nom: String,
+        name: String,
 
         /// Champs de l'entité, ex. "name:string,email:string:unique".
         #[arg(long, value_name = "CHAMPS")]
@@ -92,7 +92,7 @@ pub enum GenerateCommands {
     /// Génère une feature vide : six fichiers, aucun champ.
     Feature {
         /// Nom de la feature.
-        nom: String,
+        name: String,
 
         /// Écrit même si le working tree Git est sale.
         #[arg(long)]
@@ -118,7 +118,7 @@ pub enum MigrateCommands {
     /// Crée un fichier de migration vide.
     New {
         /// Nom de la migration.
-        nom: String,
+        name: String,
     },
 }
 
@@ -128,39 +128,39 @@ mod tests {
     use clap::CommandFactory;
 
     #[test]
-    fn la_declaration_clap_est_coherente() {
+    fn the_clap_declaration_is_consistent() {
         Cli::command().debug_assert();
     }
 
     #[test]
-    fn le_help_liste_les_commandes_prevues_avec_une_description() {
-        let commande = Cli::command();
-        let help = commande.clone().render_long_help().to_string();
+    fn the_help_lists_the_planned_commands_with_a_description() {
+        let command = Cli::command();
+        let help = command.clone().render_long_help().to_string();
 
-        for attendue in ["new", "add", "generate", "migrate", "doctor"] {
-            let sous_commande = commande
+        for expected in ["new", "add", "generate", "migrate", "doctor"] {
+            let sous_commande = command
                 .get_subcommands()
-                .find(|s| s.get_name() == attendue)
-                .unwrap_or_else(|| panic!("`{attendue}` absente du CLI"));
+                .find(|s| s.get_name() == expected)
+                .unwrap_or_else(|| panic!("`{expected}` absente du CLI"));
 
             assert!(
                 sous_commande.get_about().is_some(),
-                "`{attendue}` n'a pas de description"
+                "`{expected}` n'a pas de description"
             );
             assert!(
-                help.contains(attendue),
-                "`{attendue}` absente du help :\n{help}"
+                help.contains(expected),
+                "`{expected}` absente du help :\n{help}"
             );
         }
     }
 
     #[test]
-    fn le_help_d_add_nomme_toutes_les_features_installables() {
+    fn the_add_help_names_every_installable_feature() {
         // La description est écrite à la main quand la liste, elle, vient des fragments
         // embarqués : `auth` a été livrée sans que cette phrase la mentionne.
         let installables = crate::templates::Source::feature(None, "_aucune_feature_de_ce_nom_")
             .expect_err("ce nom ne doit désigner aucun fragment")
-            .connues;
+            .known;
 
         let description = Cli::command()
             .find_subcommand_mut("add")
@@ -178,7 +178,7 @@ mod tests {
     }
 
     #[test]
-    fn le_help_de_generate_liste_crud_et_feature() {
+    fn the_generate_help_lists_crud_and_feature() {
         let help = Cli::command()
             .find_subcommand_mut("generate")
             .expect("`generate` absente du CLI")
@@ -190,7 +190,7 @@ mod tests {
     }
 
     #[test]
-    fn l_alias_g_parse_comme_generate() {
+    fn the_g_alias_parses_as_generate() {
         let court = Cli::try_parse_from(["rbs", "g", "crud", "users"]).unwrap();
         let long = Cli::try_parse_from(["rbs", "generate", "crud", "users"]).unwrap();
 

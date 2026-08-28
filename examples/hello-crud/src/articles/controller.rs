@@ -25,6 +25,7 @@ pub async fn list(
     Ok(Json(service::list(state.core().db(), &pagination).await?))
 }
 
+// region: create
 #[utoipa::path(
     post,
     path = "/articles",
@@ -43,6 +44,7 @@ pub async fn create(
 
     Ok((StatusCode::CREATED, Json(article)))
 }
+// endregion: create
 
 #[utoipa::path(
     get,

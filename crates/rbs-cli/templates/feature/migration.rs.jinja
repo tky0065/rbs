@@ -18,8 +18,8 @@ impl MigrationTrait for Migration {
                             .default(Expr::cust("uuidv7()"))
                             .primary_key(),
                     )
-{%- for champ in champs %}
-                    .col(ColumnDef::new({@ iden @}::{@ champ.nom_pascal @}).{@ champ.methode_migration @}.{@ "null()" if champ.optionnel else "not_null()" @}{@ ".unique_key()" if champ.unique else "" @})
+{%- for field in fields %}
+                    .col(ColumnDef::new({@ iden @}::{@ field.pascal_name @}).{@ field.migration_method @}.{@ "null()" if field.optional else "not_null()" @}{@ ".unique_key()" if field.unique else "" @})
 {%- endfor %}
                     .col(
                         ColumnDef::new({@ iden @}::CreatedAt)
@@ -36,14 +36,14 @@ impl MigrationTrait for Migration {
                     .to_owned(),
             )
             .await?;
-{% for champ in champs if champ.index %}
+{% for field in fields if field.index %}
         manager
             .create_index(
                 Index::create()
                     .if_not_exists()
-                    .name("idx_{@ table @}_{@ champ.nom @}")
+                    .name("idx_{@ table @}_{@ field.name @}")
                     .table({@ iden @}::Table)
-                    .col({@ iden @}::{@ champ.nom_pascal @})
+                    .col({@ iden @}::{@ field.pascal_name @})
                     .to_owned(),
             )
             .await?;
@@ -62,8 +62,8 @@ impl MigrationTrait for Migration {
 enum {@ iden @} {
     Table,
     Id,
-{%- for champ in champs %}
-    {@ champ.nom_pascal @},
+{%- for field in fields %}
+    {@ field.pascal_name @},
 {%- endfor %}
     CreatedAt,
     UpdatedAt,

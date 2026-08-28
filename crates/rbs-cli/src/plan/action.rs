@@ -1,28 +1,28 @@
 //! Ce qu'un plan décrit : des actions, leur effet, et ce qu'elles produiront.
 //!
 //! Types seuls : la lecture du disque et le calcul des statuts appartiennent au
-//! constructeur.
+//! builder.
 
-use crate::ancres::Ancre;
-use crate::metadata::Dependance;
+use crate::anchors::Anchor;
+use crate::metadata::Dependency;
 
 /// Une action du plan : le fichier qu'elle vise, ce qu'elle y fait, et ce qu'elle
 /// produira.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Action {
     /// Chemin du fichier visé, relatif à la racine du projet.
-    pub chemin: String,
-    pub effet: Effet,
-    pub statut: Statut,
+    pub path: String,
+    pub effet: Effect,
+    pub statut: Status,
 }
 
 /// Ce qu'une action fait au fichier qu'elle vise.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Effet {
+pub(crate) enum Effect {
     /// Écrit un fichier dont le contenu est entièrement connu.
-    Creer { contenu: String },
+    Creer { content: String },
     /// Ajoute des lignes dans une ancre, juste avant sa balise fermante.
-    Inserer { ancre: Ancre, lignes: Vec<String> },
+    Inserer { anchor: Anchor, lines: Vec<String> },
     /// Modifie un manifeste TOML en préservant sa mise en forme.
     PatcherToml { patch: PatchToml },
     /// Ajoute une section à un document TOML qui n'est pas un manifeste Cargo.
@@ -30,16 +30,16 @@ pub(crate) enum Effet {
         /// Nom de la section, tel qu'il paraît entre crochets.
         section: String,
         /// Corps de la section, tel que le manifeste du fragment le déclare.
-        contenu: String,
+        content: String,
     },
     /// Ajoute une variable à un fichier d'environnement.
     AjouterVariable {
         /// Nom de la variable.
-        cle: String,
+        key: String,
         /// Valeur d'exemple.
-        valeur: String,
+        value: String,
         /// Ce que la variable attend, en commentaire au-dessus d'elle.
-        commentaire: Option<String>,
+        comment: Option<String>,
     },
 }
 
@@ -49,11 +49,11 @@ pub(crate) enum PatchToml {
     /// Inscrit une feature dans `[package.metadata.rbs]`.
     InscrireFeature(String),
     /// Déclare une dépendance dans `[dependencies]`.
-    AjouterDependance(Dependance),
+    AjouterDependance(Dependency),
     /// Active une feature sur une dépendance que le manifeste déclare déjà.
     AjouterFeatureADependance {
         /// Nom de la dépendance visée.
-        dependance: String,
+        dependency: String,
         /// Feature à y activer.
         feature: String,
     },
@@ -65,7 +65,7 @@ pub(crate) enum PatchToml {
 /// à ce que les actions précédentes du plan ont projeté : sans cela, un plan pourrait
 /// réclamer un forçage sur un fichier que lui seul a écrit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Statut {
+pub(crate) enum Status {
     /// Le contenu final diffère de celui d'origine : l'action aura un effet.
     AFaire,
     /// Le contenu final égale celui d'origine : l'action est sans effet.
@@ -75,17 +75,17 @@ pub(crate) enum Statut {
     Conflit,
 }
 
-impl Statut {
+impl Status {
     /// Statut d'un fichier que plusieurs actions visent.
     ///
     /// Un conflit prime : il ne se dissout pas parce qu'une autre action du plan touche
     /// le même fichier. À l'inverse, un fichier n'est sans effet que si aucune de ses
     /// actions n'en a.
-    pub fn agrege(self, autre: Statut) -> Statut {
-        match (self, autre) {
-            (Statut::Conflit, _) | (_, Statut::Conflit) => Statut::Conflit,
-            (Statut::AFaire, _) | (_, Statut::AFaire) => Statut::AFaire,
-            (Statut::DejaFait, Statut::DejaFait) => Statut::DejaFait,
+    pub fn merge(self, other: Status) -> Status {
+        match (self, other) {
+            (Status::Conflit, _) | (_, Status::Conflit) => Status::Conflit,
+            (Status::AFaire, _) | (_, Status::AFaire) => Status::AFaire,
+            (Status::DejaFait, Status::DejaFait) => Status::DejaFait,
         }
     }
 }

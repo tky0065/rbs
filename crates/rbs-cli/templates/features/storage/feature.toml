@@ -1,69 +1,69 @@
 [feature]
 description = "stockage d'objets : un trait à quatre méthodes, deux backends — fichiers et S3"
 
-[[fichiers]]
-source = "mod.rs.jinja"
-cible  = "src/storage/mod.rs"
+[[files]]
+source      = "mod.rs.jinja"
+destination = "src/storage/mod.rs"
 
-[[fichiers]]
-source = "files.rs.jinja"
-cible  = "src/storage/files.rs"
+[[files]]
+source      = "files.rs.jinja"
+destination = "src/storage/files.rs"
 
-[[fichiers]]
-source = "s3.rs.jinja"
-cible  = "src/storage/s3.rs"
+[[files]]
+source      = "s3.rs.jinja"
+destination = "src/storage/s3.rs"
 
-[[fichiers]]
-source = "tests.rs.jinja"
-cible  = "src/storage/tests.rs"
+[[files]]
+source      = "tests.rs.jinja"
+destination = "src/storage/tests.rs"
 
-[[ancres]]
-ancre   = "features"
-contenu = "mod storage;"
+[[anchors]]
+anchor  = "features"
+content = "mod storage;"
 
-[[ancres]]
-ancre   = "state_champs"
-contenu = """
+[[anchors]]
+anchor  = "state_champs"
+content = """
 #[allow(dead_code)]
 pub storage: std::sync::Arc<dyn crate::storage::Storage>,
 """
 
-[[ancres]]
-ancre   = "state_init"
-contenu = "storage: crate::storage::from_config()?,"
+[[anchors]]
+anchor  = "state_init"
+content = "storage: crate::storage::from_config()?,"
 
-[[dependances]]
-nom     = "async-trait"
+[[dependencies]]
+name    = "async-trait"
 version = "0.1"
 
-[[dependances]]
-nom     = "thiserror"
+[[dependencies]]
+name    = "thiserror"
 version = "2.0"
 
-[[dependances]]
-nom     = "aws-sdk-s3"
+[[dependencies]]
+name    = "aws-sdk-s3"
 version = "1.144"
 
 [cargo.tokio]
 features = ["fs"]
 
 [[config]]
-fichier = "config/default.toml"
+file    = "config/default.toml"
 section = "storage"
-contenu = """
+content = """
 backend = "fs"
 root = "./storage"
 """
 
 [[env]]
-cle         = "RBS_STORAGE__BUCKET"
-valeur      = "demo"
-commentaire = "Backend `s3` : sans effet tant que storage.backend vaut \"fs\"."
+key     = "RBS_STORAGE__BUCKET"
+value   = "demo"
+comment = "Backend `s3` : sans effet tant que storage.backend vaut \"fs\"."
 
 [[env]]
-cle    = "RBS_STORAGE__ACCESS_KEY_ID"
-valeur = "changez-moi"
+key   = "RBS_STORAGE__ACCESS_KEY_ID"
+value = "changez-moi"
 
 [[env]]
-cle    = "RBS_STORAGE__SECRET_ACCESS_KEY"
-valeur = "changez-moi"
+key   = "RBS_STORAGE__SECRET_ACCESS_KEY"
+value = "changez-moi"

@@ -35,9 +35,9 @@ impl Renderer {
         Self { environnement }
     }
 
-    /// Rend la template `source` avec `contexte`, et échoue si une variable manque.
-    pub fn rendre<S: Serialize>(&self, source: &str, contexte: S) -> Result<String, Error> {
-        self.environnement.render_str(source, contexte)
+    /// Rend la template `source` avec `context`, et échoue si une variable manque.
+    pub fn render<S: Serialize>(&self, source: &str, context: S) -> Result<String, Error> {
+        self.environnement.render_str(source, context)
     }
 }
 
@@ -53,63 +53,63 @@ mod tests {
     use minijinja::{ErrorKind, context};
 
     #[test]
-    fn une_template_contenant_un_format_rust_se_rend_intacte() {
+    fn a_template_containing_a_rust_format_renders_intact() {
         let source = r#"let ligne = format!("{{}}", valeur);"#;
 
-        let rendu = Renderer::new()
-            .rendre(source, context! {})
+        let rendered = Renderer::new()
+            .render(source, context! {})
             .expect("le rendu doit réussir");
 
-        assert_eq!(rendu, source);
+        assert_eq!(rendered, source);
     }
 
     #[test]
-    fn le_retour_a_la_ligne_final_est_preserve() {
-        let rendu = Renderer::new()
-            .rendre("fn main() {}\n", context! {})
+    fn the_trailing_newline_is_preserved() {
+        let rendered = Renderer::new()
+            .render("fn main() {}\n", context! {})
             .expect("le rendu doit réussir");
 
-        assert_eq!(rendu, "fn main() {}\n");
+        assert_eq!(rendered, "fn main() {}\n");
     }
 
     #[test]
-    fn une_expression_github_actions_traverse_le_rendu_intacte() {
+    fn a_github_actions_expression_survives_the_render_intact() {
         let source = "token: ${{ secrets.TOKEN }}";
 
-        let rendu = Renderer::new()
-            .rendre(source, context! {})
+        let rendered = Renderer::new()
+            .render(source, context! {})
             .expect("le rendu doit réussir");
 
-        assert_eq!(rendu, source);
+        assert_eq!(rendered, source);
     }
 
     #[test]
-    fn une_variable_non_fournie_fait_echouer_le_rendu() {
-        let erreur = Renderer::new()
-            .rendre("nom = {@ nom @}", context! {})
+    fn a_missing_variable_fails_the_render() {
+        let error = Renderer::new()
+            .render("nom = {@ name @}", context! {})
             .expect_err("une variable absente ne doit pas rendre une chaîne vide");
 
-        assert_eq!(erreur.kind(), ErrorKind::UndefinedError);
+        assert_eq!(error.kind(), ErrorKind::UndefinedError);
     }
 
     #[test]
-    fn les_caracteres_reserves_du_html_ne_sont_pas_echappes() {
-        let rendu = Renderer::new()
-            .rendre(
+    fn the_html_reserved_characters_are_not_escaped() {
+        let rendered = Renderer::new()
+            .render(
                 "{@ borne @}",
                 context! { borne => "T: Into<String> & Clone" },
             )
             .expect("le rendu doit réussir");
 
-        assert_eq!(rendu, "T: Into<String> & Clone");
+        assert_eq!(rendered, "T: Into<String> & Clone");
     }
 
     #[test]
-    fn une_variable_fournie_est_substituee() {
-        let rendu = Renderer::new()
-            .rendre("name = \"{@ nom @}\"", context! { nom => "mon-api" })
+    fn a_supplied_variable_is_substituted() {
+        let rendered = Renderer::new()
+            .render("name = \"{@ name @}\"", context! { name => "mon-api" })
             .expect("le rendu doit réussir");
 
-        assert_eq!(rendu, "name = \"mon-api\"");
+        assert_eq!(rendered, "name = \"mon-api\"");
     }
 }

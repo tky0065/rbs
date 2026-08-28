@@ -1,11 +1,11 @@
 mod add;
-mod ancres;
+mod anchors;
 mod cli;
 mod doctor;
 mod dotenv;
 mod generate;
 mod git;
-mod manifeste;
+mod manifest;
 mod metadata;
 mod migrate;
 mod new;
@@ -23,18 +23,18 @@ use clap::Parser;
 use cli::{Cli, Commands, GenerateCommands, MigrateCommands};
 
 /// Le corps de la commande, appelé à l'identique par les deux binaires livrés.
-pub fn executer() {
+pub fn run() {
     let cli = Cli::parse();
 
     match cli.command {
         Commands::New {
-            nom,
+            name,
             database_url,
             with,
             core_path,
         } => {
-            let resultat = creer_projet(
-                nom,
+            let resultat = create_project(
+                name,
                 database_url,
                 with,
                 core_path,
@@ -42,41 +42,41 @@ pub fn executer() {
                 cli.yes,
             );
 
-            if let Err(erreur) = resultat {
-                ui::error(&erreur.to_string());
+            if let Err(error) = resultat {
+                ui::error(&error.to_string());
                 std::process::exit(1);
             }
         }
 
         Commands::Add { feature, force } => {
-            if let Err(erreur) = ajouter(feature, force, cli.template_dir) {
-                ui::error(&erreur.to_string());
-                if let Some(remede) = erreur.remede() {
-                    ui::info(&format!("\n{remede}"));
+            if let Err(error) = add(feature, force, cli.template_dir) {
+                ui::error(&error.to_string());
+                if let Some(remedy) = error.remedy() {
+                    ui::info(&format!("\n{remedy}"));
                 }
                 std::process::exit(1);
             }
         }
 
         Commands::Generate { command } => {
-            let (nom, fields, complete, force, dry_run) = match command {
+            let (name, fields, complete, force, dry_run) = match command {
                 GenerateCommands::Crud {
-                    nom,
+                    name,
                     fields,
                     force,
                     dry_run,
-                } => (nom, fields, true, force, dry_run),
+                } => (name, fields, true, force, dry_run),
                 GenerateCommands::Feature {
-                    nom,
+                    name,
                     force,
                     dry_run,
-                } => (nom, None, false, force, dry_run),
+                } => (name, None, false, force, dry_run),
             };
 
-            if let Err(erreur) = generer(nom, fields, complete, force, dry_run) {
-                ui::error(&erreur.to_string());
-                if let Some(remede) = erreur.remede() {
-                    ui::info(&format!("\n{remede}"));
+            if let Err(error) = generate(name, fields, complete, force, dry_run) {
+                ui::error(&error.to_string());
+                if let Some(remedy) = error.remedy() {
+                    ui::info(&format!("\n{remedy}"));
                 }
                 std::process::exit(1);
             }
@@ -87,30 +87,30 @@ pub fn executer() {
                 MigrateCommands::Up => migrate::Action::Up,
                 MigrateCommands::Down => migrate::Action::Down,
                 MigrateCommands::Status => migrate::Action::Status,
-                MigrateCommands::New { nom } => migrate::Action::Nouvelle(nom),
+                MigrateCommands::New { name } => migrate::Action::Fresh(name),
             };
 
-            if let Err(erreur) = migrer(action) {
-                ui::error(&erreur.to_string());
+            if let Err(error) = migrate(action) {
+                ui::error(&error.to_string());
                 std::process::exit(1);
             }
         }
 
-        Commands::Doctor => match diagnostiquer() {
+        Commands::Doctor => match diagnose() {
             Ok(true) => {}
             // Un diagnostic qui trouve quelque chose n'est pas un échec de la commande,
             // mais un script doit pouvoir le distinguer d'un projet sain.
             Ok(false) => std::process::exit(1),
-            Err(erreur) => {
-                ui::error(&erreur.to_string());
+            Err(error) => {
+                ui::error(&error.to_string());
                 std::process::exit(1);
             }
         },
     }
 }
 
-fn creer_projet(
-    nom: String,
+fn create_project(
+    name: String,
     database_url: Option<String>,
     with: Vec<String>,
     core_path: Option<PathBuf>,
@@ -119,11 +119,11 @@ fn creer_projet(
 ) -> Result<(), Box<dyn Error>> {
     // Un `--with` absent laisse la question ouverte ; un `--with` vide n'existe pas.
     let features = (!with.is_empty()).then_some(with);
-    let options = prompts::resoudre(Some(nom), database_url, features, yes)?;
+    let options = prompts::resolve(Some(name), database_url, features, yes)?;
 
-    let projet = new::creer(
+    let project = new::create(
         &new::Options {
-            nom: options.nom,
+            name: options.name,
             database_url: options.database_url,
             features: options.features,
             core_path,
@@ -132,49 +132,49 @@ fn creer_projet(
         &std::env::current_dir()?,
     )?;
 
-    let nom = projet
-        .racine
+    let name = project
+        .root
         .file_name()
-        .unwrap_or(projet.racine.as_os_str())
+        .unwrap_or(project.root.as_os_str())
         .to_string_lossy();
 
-    ui::success(&format!("{nom} créé — {}", ui::fichiers(projet.fichiers)));
-    if !projet.depot_git {
+    ui::success(&format!("{name} créé — {}", ui::files(project.files)));
+    if !project.depot_git {
         ui::warn("`git init` n'a pas abouti : le projet est complet, mais sans dépôt");
     }
     ui::info(&format!(
-        "\n  cd {nom}\n  cargo run          # la base visée est dans .env"
+        "\n  cd {name}\n  cargo run          # la base visée est dans .env"
     ));
 
     Ok(())
 }
 
 /// Installe une feature dans le projet courant, plan affiché avant écriture.
-fn ajouter(feature: String, force: bool, template_dir: Option<PathBuf>) -> Result<(), add::Erreur> {
-    let repertoire = std::env::current_dir().map_err(|source| add::Erreur::Acces {
-        chemin: ".".to_string(),
+fn add(feature: String, force: bool, template_dir: Option<PathBuf>) -> Result<(), add::Error> {
+    let directory = std::env::current_dir().map_err(|source| add::Error::Acces {
+        path: ".".to_string(),
         source,
     })?;
-    let planifiee = add::planifier(&add::Options {
+    let planned = add::plan_for(&add::Options {
         feature: feature.clone(),
-        repertoire,
+        directory,
         force,
         template_dir,
     })?;
 
-    if planifiee.deja_installee {
+    if planned.deja_installee {
         ui::success(&format!("{feature} est déjà installée — rien à faire"));
         return Ok(());
     }
 
-    ui::info(&format!("{feature} : {}\n", planifiee.description));
-    println!("{}", plan::rendu::plan(&planifiee.plan));
+    ui::info(&format!("{feature} : {}\n", planned.description));
+    println!("{}", plan::render::plan(&planned.plan));
 
-    plan::application::appliquer(&planifiee.plan, force)?;
+    plan::application::apply(&planned.plan, force)?;
 
     ui::success(&format!(
         "{feature} installée — {}",
-        ui::fichiers(planifiee.fichiers.len())
+        ui::files(planned.files.len())
     ));
 
     if let Some(suite) = suite(&feature) {
@@ -211,33 +211,32 @@ fn suite(feature: &str) -> Option<&'static str> {
     }
 }
 
-fn generer(
-    nom: String,
+fn generate(
+    name: String,
     fields: Option<String>,
     complete: bool,
     force: bool,
     dry_run: bool,
-) -> Result<(), generate::commande::Erreur> {
-    let feature = nom.clone();
-    let repertoire =
-        std::env::current_dir().map_err(|source| generate::commande::Erreur::Acces {
-            chemin: ".".to_string(),
-            source,
-        })?;
-    let planifiee = generate::commande::planifier(&generate::commande::Options {
-        nom,
+) -> Result<(), generate::command::Error> {
+    let feature = name.clone();
+    let directory = std::env::current_dir().map_err(|source| generate::command::Error::Acces {
+        path: ".".to_string(),
+        source,
+    })?;
+    let planned = generate::command::plan_for(&generate::command::Options {
+        name,
         fields,
         complete,
-        repertoire,
+        directory,
         force,
     })?;
 
     // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande
     // s'apprête à faire ne doit pas se découvrir après coup.
-    println!("{}", plan::rendu::plan(&planifiee.plan));
+    println!("{}", plan::render::plan(&planned.plan));
 
     // Avant le plan, l'avertissement se perdrait au-dessus de sept lignes de fichiers.
-    if let Some(avertissement) = &planifiee.avertissement {
+    if let Some(avertissement) = &planned.avertissement {
         ui::warn(avertissement);
     }
 
@@ -246,14 +245,14 @@ fn generer(
         return Ok(());
     }
 
-    plan::application::appliquer(&planifiee.plan, force)?;
+    plan::application::apply(&planned.plan, force)?;
 
     ui::success(&format!(
         "{feature} générée — {}",
-        ui::fichiers(planifiee.fichiers.len())
+        ui::files(planned.files.len())
     ));
 
-    if let Some(migration) = &planifiee.migration {
+    if let Some(migration) = &planned.migration {
         ui::info(&format!(
             "\n  la migration {migration} reste à appliquer avant de lancer le projet"
         ));
@@ -262,13 +261,13 @@ fn generer(
     Ok(())
 }
 
-fn migrer(action: migrate::Action) -> Result<(), Box<dyn Error>> {
-    match migrate::executer(action, &std::env::current_dir()?)? {
-        migrate::Sortie::Appliquees => ui::success("migrations appliquées"),
-        migrate::Sortie::Annulee => ui::success("dernière migration annulée"),
-        migrate::Sortie::Inventaire(inventaire) => println!("{inventaire}"),
-        migrate::Sortie::Creee(nouvelle) => {
-            ui::success(&format!("{} créée", nouvelle.fichier));
+fn migrate(action: migrate::Action) -> Result<(), Box<dyn Error>> {
+    match migrate::run(action, &std::env::current_dir()?)? {
+        migrate::Output::Appliquees => ui::success("migrations appliquées"),
+        migrate::Output::Annulee => ui::success("dernière migration annulée"),
+        migrate::Output::Inventaire(inventaire) => println!("{inventaire}"),
+        migrate::Output::Creee(fresh) => {
+            ui::success(&format!("{} créée", fresh.file));
             ui::info("\n  décrivez le changement de schéma, puis `rbs migrate up`");
         }
     }
@@ -277,18 +276,18 @@ fn migrer(action: migrate::Action) -> Result<(), Box<dyn Error>> {
 }
 
 /// Rend le rapport et dit si le projet est sain.
-fn diagnostiquer() -> Result<bool, Box<dyn Error>> {
-    let rapport = doctor::executer(&std::env::current_dir()?)?;
+fn diagnose() -> Result<bool, Box<dyn Error>> {
+    let report = doctor::run(&std::env::current_dir()?)?;
 
-    println!("{}", doctor::rendu::rapport(&rapport));
+    println!("{}", doctor::render::report(&report));
 
-    if rapport.reussi() {
+    if report.succeeded() {
         ui::success("le projet est sain");
     } else {
         ui::warn("le projet demande votre attention");
     }
 
-    Ok(rapport.reussi())
+    Ok(report.succeeded())
 }
 
 #[cfg(test)]
@@ -296,12 +295,12 @@ mod tests {
     use super::*;
 
     #[test]
-    fn toute_feature_installable_dit_ce_qu_il_reste_a_faire() {
+    fn every_installable_feature_says_what_is_left_to_do() {
         // `auth` est celle dont l'étape suivante compte le plus — sans le secret, le
         // projet ne démarre pas — et fut la seule à n'en afficher aucune.
         let installables = templates::Source::feature(None, "_aucune_feature_de_ce_nom_")
             .expect_err("ce nom ne doit désigner aucun fragment")
-            .connues;
+            .known;
 
         for feature in installables.split(", ") {
             assert!(
@@ -312,7 +311,7 @@ mod tests {
     }
 
     #[test]
-    fn la_suite_d_auth_nomme_le_secret_qui_manque_au_demarrage() {
+    fn the_auth_suite_names_the_secret_missing_at_startup() {
         let suite = suite("auth").expect("`auth` doit dire ce qu'il reste à faire");
 
         // `add auth` n'écrit la variable que dans `.env.example` : le lecteur qui ne la

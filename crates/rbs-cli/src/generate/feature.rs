@@ -7,33 +7,33 @@
 use serde::Serialize;
 use serde::ser::{SerializeStruct, Serializer};
 
-use super::champs::{Champ, en_pascal_case};
+use super::fields::{Field, to_pascal_case};
 
 /// Une feature à générer, telle que la voient l'entité, les DTO et la migration.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Feature {
     /// Nom au pluriel, en snake_case : le module et la table le portent tel quel.
-    pub nom: String,
+    pub name: String,
     /// Champs déclarés dans `--fields`, sans `id` ni les horodatages.
-    pub champs: Vec<Champ>,
+    pub fields: Vec<Field>,
 }
 
 impl Feature {
-    pub(crate) fn nouvelle(nom: &str, champs: Vec<Champ>) -> Self {
+    pub(crate) fn fresh(name: &str, fields: Vec<Field>) -> Self {
         Self {
-            nom: nom.to_string(),
-            champs,
+            name: name.to_string(),
+            fields,
         }
     }
 
     /// Nom du module et de la table : le nom donné, inchangé.
     pub(crate) fn module(&self) -> &str {
-        &self.nom
+        &self.name
     }
 
     /// Nom de l'entité en PascalCase singulier : `blog_posts` donne `BlogPost`.
-    pub(crate) fn entite(&self) -> String {
-        en_pascal_case(&self.singulier())
+    pub(crate) fn entity(&self) -> String {
+        to_pascal_case(&self.singular())
     }
 
     /// Nom de l'enum `DeriveIden` de la migration : `blog_posts` donne `BlogPosts`.
@@ -41,27 +41,27 @@ impl Feature {
     /// SeaORM tire le nom de la table de celui de l'enum, pas de sa variante `Table` :
     /// l'enum se nomme donc au pluriel, contrairement à l'entité.
     pub(crate) fn iden(&self) -> String {
-        en_pascal_case(&self.nom)
+        to_pascal_case(&self.name)
     }
 
     /// Nom singulier en snake_case : `blog_posts` donne `blog_post`.
-    pub(crate) fn singulier(&self) -> String {
-        au_singulier(&self.nom)
+    pub(crate) fn singular(&self) -> String {
+        to_singular(&self.name)
     }
 }
 
-/// Sérialisé à la main, comme `Champ` : minijinja ne voit pas les méthodes Rust, et les
-/// templates lisent `entite` comme elles lisent `module`.
+/// Sérialisé à la main, comme `Field` : minijinja ne voit pas les méthodes Rust, et les
+/// templates lisent `entity` comme elles lisent `module`.
 impl Serialize for Feature {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut etat = serializer.serialize_struct("Feature", 6)?;
-        etat.serialize_field("module", self.module())?;
-        etat.serialize_field("table", self.module())?;
-        etat.serialize_field("entite", &self.entite())?;
-        etat.serialize_field("iden", &self.iden())?;
-        etat.serialize_field("singulier", &self.singulier())?;
-        etat.serialize_field("champs", &self.champs)?;
-        etat.end()
+        let mut state = serializer.serialize_struct("Feature", 6)?;
+        state.serialize_field("module", self.module())?;
+        state.serialize_field("table", self.module())?;
+        state.serialize_field("entity", &self.entity())?;
+        state.serialize_field("iden", &self.iden())?;
+        state.serialize_field("singular", &self.singular())?;
+        state.serialize_field("fields", &self.fields)?;
+        state.end()
     }
 }
 
@@ -71,18 +71,18 @@ impl Serialize for Feature {
 /// cherche est un nom de type Rust, que l'utilisateur relira et pourra corriger, pas une
 /// forme grammaticale juste. Les cas irréguliers — `people`, `children` — sortent
 /// inchangés, ce qui donne une entité `People` : lisible, et rectifiable à la main.
-pub(crate) fn au_singulier(nom: &str) -> String {
-    let (prefixe, dernier) = match nom.rfind('_') {
-        Some(coupe) => nom.split_at(coupe + 1),
-        None => ("", nom),
+pub(crate) fn to_singular(name: &str) -> String {
+    let (prefixe, dernier) = match name.rfind('_') {
+        Some(coupe) => name.split_at(coupe + 1),
+        None => ("", name),
     };
 
-    let singulier = if let Some(racine) = dernier.strip_suffix("ies") {
+    let singular = if let Some(root) = dernier.strip_suffix("ies") {
         // `ies` sur un mot d'une syllabe — `ties`, `pies` — ne vient pas d'un `y`.
-        if racine.is_empty() {
+        if root.is_empty() {
             dernier.to_string()
         } else {
-            format!("{racine}y")
+            format!("{root}y")
         }
     } else if SIFFLANTES
         .iter()
@@ -96,7 +96,7 @@ pub(crate) fn au_singulier(nom: &str) -> String {
         dernier.to_string()
     };
 
-    format!("{prefixe}{singulier}")
+    format!("{prefixe}{singular}")
 }
 
 /// Consonnes après lesquelles le pluriel anglais s'écrit `es` et non `s`.
@@ -110,58 +110,58 @@ mod tests {
     use super::*;
 
     #[test]
-    fn un_pluriel_regulier_perd_son_s() {
-        assert_eq!(au_singulier("users"), "user");
-        assert_eq!(au_singulier("articles"), "article");
-        assert_eq!(au_singulier("comments"), "comment");
+    fn a_regular_plural_loses_its_s() {
+        assert_eq!(to_singular("users"), "user");
+        assert_eq!(to_singular("articles"), "article");
+        assert_eq!(to_singular("comments"), "comment");
     }
 
     #[test]
-    fn un_pluriel_en_ies_redevient_y() {
-        assert_eq!(au_singulier("categories"), "category");
-        assert_eq!(au_singulier("companies"), "company");
+    fn a_plural_in_ies_becomes_y_again() {
+        assert_eq!(to_singular("categories"), "category");
+        assert_eq!(to_singular("companies"), "company");
     }
 
     #[test]
-    fn un_pluriel_en_es_apres_sifflante_perd_ses_deux_lettres() {
-        assert_eq!(au_singulier("addresses"), "address");
-        assert_eq!(au_singulier("boxes"), "box");
-        assert_eq!(au_singulier("branches"), "branch");
-        assert_eq!(au_singulier("dishes"), "dish");
+    fn a_plural_in_es_after_a_sibilant_loses_both_letters() {
+        assert_eq!(to_singular("addresses"), "address");
+        assert_eq!(to_singular("boxes"), "box");
+        assert_eq!(to_singular("branches"), "branch");
+        assert_eq!(to_singular("dishes"), "dish");
     }
 
     #[test]
-    fn un_nom_deja_singulier_traverse_intact() {
-        assert_eq!(au_singulier("status"), "status");
-        assert_eq!(au_singulier("person"), "person");
-        assert_eq!(au_singulier("data"), "data");
+    fn an_already_singular_name_passes_through_intact() {
+        assert_eq!(to_singular("status"), "status");
+        assert_eq!(to_singular("person"), "person");
+        assert_eq!(to_singular("data"), "data");
     }
 
     #[test]
-    fn seul_le_dernier_mot_est_singularise() {
-        assert_eq!(au_singulier("blog_posts"), "blog_post");
-        assert_eq!(au_singulier("users_categories"), "users_category");
+    fn only_the_last_word_is_singularised() {
+        assert_eq!(to_singular("blog_posts"), "blog_post");
+        assert_eq!(to_singular("users_categories"), "users_category");
     }
 
     #[test]
-    fn l_entite_est_le_singulier_en_pascal_case() {
-        let feature = Feature::nouvelle("blog_posts", Vec::new());
+    fn the_entity_is_the_singular_in_pascal_case() {
+        let feature = Feature::fresh("blog_posts", Vec::new());
 
-        assert_eq!(feature.entite(), "BlogPost");
-        assert_eq!(feature.singulier(), "blog_post");
+        assert_eq!(feature.entity(), "BlogPost");
+        assert_eq!(feature.singular(), "blog_post");
         assert_eq!(feature.module(), "blog_posts");
     }
 
     #[test]
-    fn la_serialisation_expose_les_noms_derives_aux_templates() {
-        let feature = Feature::nouvelle("users", Vec::new());
+    fn serialisation_exposes_the_derived_names_to_the_templates() {
+        let feature = Feature::fresh("users", Vec::new());
         let vue = serde_json::to_value(&feature).expect("la feature doit se sérialiser");
 
         assert_eq!(vue["module"], "users");
         assert_eq!(vue["table"], "users");
-        assert_eq!(vue["entite"], "User");
+        assert_eq!(vue["entity"], "User");
         assert_eq!(vue["iden"], "Users");
-        assert_eq!(vue["singulier"], "user");
-        assert!(vue["champs"].is_array(), "les champs doivent être exposés");
+        assert_eq!(vue["singular"], "user");
+        assert!(vue["fields"].is_array(), "les champs doivent être exposés");
     }
 }

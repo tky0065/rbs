@@ -20,7 +20,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home --uid 10001 api
 
-COPY --from=builder /build/target/release/{@ nom_projet @} /usr/local/bin/
+COPY --from=builder /build/target/release/{@ project_name @} /usr/local/bin/
 COPY --from=builder /build/target/release/migration /usr/local/bin/
 
 WORKDIR /app
@@ -31,4 +31,4 @@ EXPOSE 8080
 
 # Les deux binaires sont dans le PATH, et rien n'est figé par un ENTRYPOINT : le
 # `command:` du compose y substitue `migration up`.
-CMD ["{@ nom_projet @}"]
+CMD ["{@ project_name @}"]

@@ -1,4 +1,4 @@
-name: {@ nom_projet @}
+name: {@ project_name @}
 
 services:
   db:
@@ -6,7 +6,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: {@ nom_crate @}
+      POSTGRES_DB: {@ crate_name @}
     # Le port de la base n'est pas publié : il entrerait en conflit avec le PostgreSQL
     # que la machine héberge souvent déjà, et l'API l'atteint par le réseau du compose.
     # Pour l'ouvrir sur l'hôte, ajouter `ports: ["5432:5432"]` ici.
@@ -17,7 +17,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d {@ nom_crate @}"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d {@ crate_name @}"]
       interval: 2s
       timeout: 3s
       retries: 30
@@ -28,7 +28,7 @@ services:
     build: .
     command: ["migration", "up"]
     environment:
-      RBS_DATABASE__URL: postgres://postgres:postgres@db:5432/{@ nom_crate @}
+      RBS_DATABASE__URL: postgres://postgres:postgres@db:5432/{@ crate_name @}
     depends_on:
       db:
         condition: service_healthy
@@ -40,7 +40,7 @@ services:
       # config/default.toml écoute sur 127.0.0.1, ce qui rend le conteneur injoignable
       # depuis l'hôte. L'environnement l'emporte sur le TOML.
       RBS_SERVER__HOST: 0.0.0.0
-      RBS_DATABASE__URL: postgres://postgres:postgres@db:5432/{@ nom_crate @}
+      RBS_DATABASE__URL: postgres://postgres:postgres@db:5432/{@ crate_name @}
       RBS_LOG_FORMAT: json
       RUST_LOG: info
     ports:

@@ -16,41 +16,41 @@ use testcontainers::core::{IntoContainerPort, WaitFor};
 use testcontainers::runners::SyncRunner;
 use testcontainers::{Container, ImageExt};
 
-use crate::ancres::{self, Ancre};
+use crate::anchors::{self, Anchor};
 
-use super::montage::{self, Montage};
+use super::mount::{self, Mount};
 
 /// PostgreSQL 18 en conteneur, et l'URL de connexion qui y mène.
 ///
 /// La version n'est pas négociable : `uuidv7()` n'est native qu'à partir de la 18, et la
 /// spec assume ce plancher plutôt qu'une fonction PL/pgSQL de compatibilité.
-pub(crate) struct BaseDeTest {
+pub(crate) struct TestDatabase {
     _conteneur: Container<GenericImage>,
     url: String,
 }
 
-impl BaseDeTest {
-    pub(crate) fn demarrer() -> Self {
+impl TestDatabase {
+    pub(crate) fn start() -> Self {
         // Le message d'ouverture paraît deux fois : le serveur temporaire de l'initdb
         // l'écrit avant que la base définitive n'existe. S'y connecter à la première
         // occurrence donne un refus, ou pire, une base qui disparaît sous le test.
-        let ouverture = || WaitFor::message_on_stderr("ready to accept connections");
+        let opening = || WaitFor::message_on_stderr("ready to accept connections");
 
-        let conteneur = GenericImage::new("postgres", "18")
-            .with_wait_for(ouverture())
-            .with_wait_for(ouverture())
+        let container = GenericImage::new("postgres", "18")
+            .with_wait_for(opening())
+            .with_wait_for(opening())
             .with_env_var("POSTGRES_USER", "rbs")
             .with_env_var("POSTGRES_PASSWORD", "rbs")
             .with_env_var("POSTGRES_DB", "demo_api")
             .start()
             .expect("PostgreSQL 18 doit démarrer — Docker requis");
-        let port = conteneur
+        let port = container
             .get_host_port_ipv4(5432.tcp())
             .expect("port de la base exposé");
 
         Self {
             url: format!("postgres://rbs:rbs@127.0.0.1:{port}/demo_api"),
-            _conteneur: conteneur,
+            _conteneur: container,
         }
     }
 
@@ -73,7 +73,7 @@ impl BaseDeTest {
 static CARGO: Mutex<()> = Mutex::new(());
 
 /// Racine du dépôt, d'où se déduisent le noyau local et la cible de compilation.
-pub(crate) fn depot() -> PathBuf {
+pub(crate) fn repo() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../..")
         .canonicalize()
@@ -81,14 +81,14 @@ pub(crate) fn depot() -> PathBuf {
 }
 
 /// Un projet neuf, créé par le binaire livré, prêt à recevoir une feature.
-pub(crate) struct Projet {
+pub(crate) struct Project {
     _parent: TempDir,
-    racine: PathBuf,
+    root: PathBuf,
 }
 
-impl Projet {
-    pub(crate) fn neuf() -> Self {
-        Self::neuf_sur("postgres://rbs:rbs@localhost:5432/demo_api")
+impl Project {
+    pub(crate) fn fresh() -> Self {
+        Self::fresh_on("postgres://rbs:rbs@localhost:5432/demo_api")
     }
 
     /// Un projet neuf dont le `.env` vise `url`.
@@ -96,9 +96,9 @@ impl Projet {
     /// Ce que le projet lit de sa base passe par sa configuration : un test qui exerce
     /// l'application montée doit donc pointer le `.env` sur le conteneur, et non fournir
     /// l'URL à l'exécution.
-    pub(crate) fn neuf_sur(url: &str) -> Self {
+    pub(crate) fn fresh_on(url: &str) -> Self {
         let parent = TempDir::new().expect("répertoire temporaire créable");
-        let noyau = depot().join("crates/rbs-core");
+        let core = repo().join("crates/rbs-core");
 
         Command::cargo_bin("rbs")
             .expect("le binaire rbs doit être compilé")
@@ -109,76 +109,76 @@ impl Projet {
                 "--database-url",
                 url,
                 "--core-path",
-                noyau.to_str().expect("chemin du noyau représentable"),
+                core.to_str().expect("chemin du noyau représentable"),
                 "--yes",
             ])
             .assert()
             .success();
 
-        let racine = parent.path().join("demo-api");
+        let root = parent.path().join("demo-api");
 
         Self {
             _parent: parent,
-            racine,
+            root,
         }
     }
 
-    pub(crate) fn racine(&self) -> &Path {
-        &self.racine
+    pub(crate) fn root(&self) -> &Path {
+        &self.root
     }
 
     /// Écrit `src/<module>/` avec les fichiers donnés, et déclare le module.
-    pub(crate) fn poser_feature(&self, module: &str, fichiers: &[(&str, &str)]) {
-        let repertoire = self.racine.join("src").join(module);
-        fs::create_dir_all(&repertoire).expect("répertoire de feature créable");
+    pub(crate) fn write_feature(&self, module: &str, files: &[(&str, &str)]) {
+        let directory = self.root.join("src").join(module);
+        fs::create_dir_all(&directory).expect("répertoire de feature créable");
 
         // Un `mod.rs` fourni l'emporte : dès que la feature porte son propre `routes()`,
         // la liste de déclarations déduite des noms de fichiers ne suffit plus.
-        let declarations = fichiers
+        let declarations = files
             .iter()
-            .find(|(nom, _)| *nom == "mod.rs")
+            .find(|(name, _)| *name == "mod.rs")
             .map_or_else(
                 || {
-                    fichiers
+                    files
                         .iter()
-                        .map(|(nom, _)| {
-                            let module = nom.trim_end_matches(".rs");
+                        .map(|(name, _)| {
+                            let module = name.trim_end_matches(".rs");
                             format!("pub mod {module};\n")
                         })
                         .collect()
                 },
-                |(_, contenu)| (*contenu).to_string(),
+                |(_, content)| (*content).to_string(),
             );
 
-        fs::write(repertoire.join("mod.rs"), declarations).expect("mod.rs écrivable");
+        fs::write(directory.join("mod.rs"), declarations).expect("mod.rs écrivable");
 
-        for (nom, contenu) in fichiers.iter().filter(|(nom, _)| *nom != "mod.rs") {
-            fs::write(repertoire.join(nom), contenu).expect("fichier de feature écrivable");
+        for (name, content) in files.iter().filter(|(name, _)| *name != "mod.rs") {
+            fs::write(directory.join(name), content).expect("fichier de feature écrivable");
         }
 
-        self.monter(&montage::pour(module), &[ancres::FEATURES]);
+        self.mount(&mount::pour(module), &[anchors::FEATURES]);
     }
 
     /// Monte les routes de `module` et ses handlers dans le document OpenAPI.
-    pub(crate) fn monter_feature(&self, module: &str) {
-        self.monter(&montage::pour(module), &[ancres::ROUTES, ancres::OPENAPI]);
+    pub(crate) fn mount_feature(&self, module: &str) {
+        self.mount(&mount::pour(module), &[anchors::ROUTES, anchors::OPENAPI]);
     }
 
     /// Écrit dans les ancres `visees` par le moteur du CLI, et non à la main.
     ///
     /// Ce que le banc simulerait ici est précisément ce qu'il doit éprouver : la seule
     /// preuve que le moteur d'ancres produit du Rust valide est un projet qui compile.
-    fn monter(&self, montages: &[Montage], visees: &[Ancre]) {
-        for montage in montages.iter().filter(|m| visees.contains(&m.ancre)) {
-            let chemin = self.racine.join(montage.ancre.fichier);
-            let source = fs::read_to_string(&chemin)
-                .unwrap_or_else(|erreur| panic!("{} illisible : {erreur}", chemin.display()));
+    fn mount(&self, montages: &[Mount], visees: &[Anchor]) {
+        for mount in montages.iter().filter(|m| visees.contains(&m.anchor)) {
+            let path = self.root.join(mount.anchor.file);
+            let source = fs::read_to_string(&path)
+                .unwrap_or_else(|error| panic!("{} illisible : {error}", path.display()));
 
-            let rendu = ancres::inserer(&source, montage.ancre, &montage.lignes)
-                .unwrap_or_else(|erreur| panic!("{erreur}"));
+            let rendered = anchors::insert(&source, mount.anchor, &mount.lines)
+                .unwrap_or_else(|error| panic!("{error}"));
 
-            fs::write(&chemin, rendu)
-                .unwrap_or_else(|erreur| panic!("{} non écrit : {erreur}", chemin.display()));
+            fs::write(&path, rendered)
+                .unwrap_or_else(|error| panic!("{} non écrit : {error}", path.display()));
         }
     }
 
@@ -186,37 +186,38 @@ impl Projet {
     ///
     /// Le projet généré est un binaire : un test d'intégration ne peut pas atteindre ses
     /// modules. Ce qui doit inspecter le projet de l'intérieur passe donc par ici.
-    pub(crate) fn poser_test_unitaire(&self, nom: &str, contenu: &str) {
-        let sources = self.racine.join("src");
-        fs::write(sources.join(format!("{nom}.rs")), contenu).expect("module de test écrivable");
+    pub(crate) fn write_unit_test(&self, name: &str, content: &str) {
+        let sources = self.root.join("src");
+        fs::write(sources.join(format!("{name}.rs")), content).expect("module de test écrivable");
 
         let main = sources.join("main.rs");
         let source = fs::read_to_string(&main).expect("main.rs lisible");
 
-        fs::write(&main, format!("#[cfg(test)]\nmod {nom};\n{source}")).expect("main.rs écrivable");
+        fs::write(&main, format!("#[cfg(test)]\nmod {name};\n{source}"))
+            .expect("main.rs écrivable");
     }
 
-    /// Recopie le projet sous `target/atelier/` et rend son chemin.
+    /// Recopie le projet sous `target/workshop/` et rend son chemin.
     ///
     /// Le répertoire temporaire disparaît avec le test ; les critères qui demandent une
     /// revue à l'œil — Swagger UI, la mise en page des logs — ont besoin d'un projet qui
     /// survit, qu'on démarre et qu'on regarde.
-    pub(crate) fn conserver(&self) -> PathBuf {
-        let destination = depot().join("target/atelier");
+    pub(crate) fn keep(&self) -> PathBuf {
+        let destination = repo().join("target/atelier");
         let _ = fs::remove_dir_all(&destination);
         fs::create_dir_all(&destination).expect("répertoire d'atelier créable");
 
-        let sortie = std::process::Command::new("cp")
+        let output = std::process::Command::new("cp")
             .arg("-R")
-            .arg(self.racine.join("."))
+            .arg(self.root.join("."))
             .arg(&destination)
             .output()
             .expect("copie lançable");
 
         assert!(
-            sortie.status.success(),
+            output.status.success(),
             "copie du projet impossible :\n{}",
-            String::from_utf8_lossy(&sortie.stderr)
+            String::from_utf8_lossy(&output.stderr)
         );
 
         destination
@@ -225,14 +226,14 @@ impl Projet {
     /// Applique les migrations du projet contre `url`, puis retire de quoi les appliquer.
     ///
     /// La crate `migration` n'a pas de binaire et `rbs migrate` n'existe pas encore : la
-    /// montée passe par un test jetable, effacé aussitôt pour que `tester()` ne trouve
+    /// montée passe par un test jetable, effacé aussitôt pour que `test_of()` ne trouve
     /// dans le projet que du code généré.
-    pub(crate) fn migrer(&self, url: &str) {
+    pub(crate) fn migrate(&self, url: &str) {
         const MONTEE: &str = r#"use migration::{Migrator, MigratorTrait};
 use sea_orm_migration::sea_orm::Database;
 
 #[tokio::test]
-async fn appliquer() {
+async fn apply() {
     let url = std::env::var("DATABASE_URL").expect("DATABASE_URL doit être fournie");
     let db = Database::connect(&url).await.expect("connexion à la base");
 
@@ -240,10 +241,9 @@ async fn appliquer() {
 }
 "#;
 
-        self.poser_test_de_migration("montee", MONTEE);
-        self.tester_migration(url);
-        fs::remove_file(self.racine.join("migration/tests/montee.rs"))
-            .expect("test jetable effacé");
+        self.write_migration_test("montee", MONTEE);
+        self.test_migration(url);
+        fs::remove_file(self.root.join("migration/tests/montee.rs")).expect("test jetable effacé");
     }
 
     /// Lance cargo sur le projet, un seul appel à la fois.
@@ -251,8 +251,8 @@ async fn appliquer() {
         let _exclusivite = CARGO.lock().unwrap_or_else(PoisonError::into_inner);
 
         std::process::Command::new("cargo")
-            .current_dir(&self.racine)
-            .env("CARGO_TARGET_DIR", depot().join("target/rbs-integration"))
+            .current_dir(&self.root)
+            .env("CARGO_TARGET_DIR", repo().join("target/rbs-integration"))
             .envs(variables.iter().copied())
             .args(arguments)
             .output()
@@ -260,31 +260,31 @@ async fn appliquer() {
     }
 
     /// Lance les tests du projet, et rapporte leur sortie.
-    pub(crate) fn tester(&self) {
-        let sortie = self.cargo(&["test"], &[]);
-        let journal = String::from_utf8_lossy(&sortie.stdout);
+    pub(crate) fn test_of(&self) {
+        let output = self.cargo(&["test"], &[]);
+        let journal = String::from_utf8_lossy(&output.stdout);
 
         assert!(
-            sortie.status.success(),
+            output.status.success(),
             "les tests du projet échouent :\n{journal}\n{}",
-            String::from_utf8_lossy(&sortie.stderr)
+            String::from_utf8_lossy(&output.stderr)
         );
         // Un `cargo test` qui ne trouve aucun test sort vert : sans ce garde-fou, une
         // feature dont les tests ne seraient pas compilés passerait pour vérifiée.
         assert!(
-            tests_executes(&journal) > 0,
+            tests_run(&journal) > 0,
             "aucun test n'a été exécuté :\n{journal}"
         );
     }
 
     /// Ajoute une migration au projet, la déclare et l'inscrit dans le `Migrator`.
-    pub(crate) fn poser_migration(&self, module: &str, contenu: &str) {
-        let sources = self.racine.join("migration/src");
-        fs::write(sources.join(format!("{module}.rs")), contenu).expect("migration écrivable");
+    pub(crate) fn write_migration(&self, module: &str, content: &str) {
+        let sources = self.root.join("migration/src");
+        fs::write(sources.join(format!("{module}.rs")), content).expect("migration écrivable");
 
-        self.monter(
-            &montage::pour_migration(module),
-            &[ancres::MIGRATION_MODULES, ancres::MIGRATIONS],
+        self.mount(
+            &mount::for_migration(module),
+            &[anchors::MIGRATION_MODULES, anchors::MIGRATIONS],
         );
     }
 
@@ -292,16 +292,16 @@ async fn appliquer() {
     ///
     /// `tokio` s'ajoute avec lui : une migration n'a pas besoin d'exécuteur, seul le test
     /// qui l'applique en réclame un.
-    pub(crate) fn poser_test_de_migration(&self, nom: &str, contenu: &str) {
-        let tests = self.racine.join("migration/tests");
+    pub(crate) fn write_migration_test(&self, name: &str, content: &str) {
+        let tests = self.root.join("migration/tests");
         fs::create_dir_all(&tests).expect("répertoire de tests créable");
-        fs::write(tests.join(format!("{nom}.rs")), contenu).expect("test écrivable");
+        fs::write(tests.join(format!("{name}.rs")), content).expect("test écrivable");
 
-        let manifeste = self.racine.join("migration/Cargo.toml");
-        let source = fs::read_to_string(&manifeste).expect("manifeste de migration lisible");
+        let manifest = self.root.join("migration/Cargo.toml");
+        let source = fs::read_to_string(&manifest).expect("manifeste de migration lisible");
 
         fs::write(
-            &manifeste,
+            &manifest,
             format!(
                 "{source}\n[dev-dependencies]\n\
                  tokio = {{ version = \"1\", features = [\"macros\", \"rt-multi-thread\"] }}\n"
@@ -311,37 +311,37 @@ async fn appliquer() {
     }
 
     /// Lance les tests de la crate `migration` contre `url`, et rapporte leur sortie.
-    pub(crate) fn tester_migration(&self, url: &str) {
-        let sortie = self.cargo(
+    pub(crate) fn test_migration(&self, url: &str) {
+        let output = self.cargo(
             &["test", "-p", "migration", "--", "--nocapture"],
             &[("DATABASE_URL", url)],
         );
 
         assert!(
-            sortie.status.success(),
+            output.status.success(),
             "les tests de migration échouent :\n{}\n{}",
-            String::from_utf8_lossy(&sortie.stdout),
-            String::from_utf8_lossy(&sortie.stderr)
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
         );
     }
 
     /// Compile le projet, et échoue en rapportant la sortie de `cargo` telle quelle.
-    pub(crate) fn compiler(&self) {
-        let sortie = self.cargo(&["build", "--workspace"], &[]);
+    pub(crate) fn compile(&self) {
+        let output = self.cargo(&["build", "--workspace"], &[]);
 
         assert!(
-            sortie.status.success(),
+            output.status.success(),
             "le projet ne compile pas :\n{}",
-            String::from_utf8_lossy(&sortie.stderr)
+            String::from_utf8_lossy(&output.stderr)
         );
     }
 }
 
 /// Nombre de tests passés, tous les binaires de test du projet confondus.
-fn tests_executes(journal: &str) -> u32 {
+fn tests_run(journal: &str) -> u32 {
     journal
         .lines()
-        .filter_map(|ligne| ligne.strip_prefix("test result: ok. "))
+        .filter_map(|line| line.strip_prefix("test result: ok. "))
         .filter_map(|reste| reste.split_whitespace().next())
         .filter_map(|nombre| nombre.parse::<u32>().ok())
         .sum()
@@ -352,7 +352,7 @@ fn tests_executes(journal: &str) -> u32 {
 /// Le code généré est écrit à la main dans des templates, sans que rien ne garantisse
 /// qu'il porte déjà la mise en forme de rustfmt. Sans cette vérification, le premier
 /// `cargo fmt` de l'utilisateur produirait un diff sur des fichiers qu'il n'a pas touchés.
-pub(crate) fn formate(source: &str) -> String {
+pub(crate) fn formatted(source: &str) -> String {
     use std::io::Write;
     use std::process::Stdio;
 
@@ -371,15 +371,15 @@ pub(crate) fn formate(source: &str) -> String {
         .write_all(source.as_bytes())
         .expect("source transmissible à rustfmt");
 
-    let sortie = rustfmt
+    let output = rustfmt
         .wait_with_output()
         .expect("rustfmt doit rendre la main");
 
     assert!(
-        sortie.status.success(),
+        output.status.success(),
         "rustfmt refuse le rendu :\n{}",
-        String::from_utf8_lossy(&sortie.stderr)
+        String::from_utf8_lossy(&output.stderr)
     );
 
-    String::from_utf8(sortie.stdout).expect("rustfmt rend de l'UTF-8")
+    String::from_utf8(output.stdout).expect("rustfmt rend de l'UTF-8")
 }

@@ -7,83 +7,83 @@ use std::fmt;
 
 /// Un point d'insertion, et le fichier du projet qui le porte.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) struct Ancre {
+pub(crate) struct Anchor {
     /// Nom tel qu'il paraît entre les chevrons : `features` pour `// <rbs:features>`.
-    pub nom: &'static str,
+    pub name: &'static str,
     /// Chemin du fichier porteur, relatif à la racine du projet.
-    pub fichier: &'static str,
+    pub file: &'static str,
 }
 
-impl Ancre {
+impl Anchor {
     /// Balise ouvrante, telle qu'elle est écrite dans le fichier.
-    pub(crate) fn ouverture(&self) -> String {
-        format!("// <rbs:{}>", self.nom)
+    pub(crate) fn opening(&self) -> String {
+        format!("// <rbs:{}>", self.name)
     }
 
     /// Balise fermante, telle qu'elle est écrite dans le fichier.
-    pub(crate) fn fermeture(&self) -> String {
-        format!("// </rbs:{}>", self.nom)
+    pub(crate) fn closing(&self) -> String {
+        format!("// </rbs:{}>", self.name)
     }
 
     /// Le bloc à recoller quand l'ancre a disparu, prêt à être collé tel quel.
-    pub(crate) fn bloc(&self) -> String {
-        format!("{}\n{}", self.ouverture(), self.fermeture())
+    pub(crate) fn block(&self) -> String {
+        format!("{}\n{}", self.opening(), self.closing())
     }
 }
 
 /// Déclaration des modules de feature, en tête de `main.rs`.
-pub(crate) const FEATURES: Ancre = Ancre {
-    nom: "features",
-    fichier: "src/main.rs",
+pub(crate) const FEATURES: Anchor = Anchor {
+    name: "features",
+    file: "src/main.rs",
 };
 
 /// Montage des routes d'une feature dans le routeur.
-pub(crate) const ROUTES: Ancre = Ancre {
-    nom: "routes",
-    fichier: "src/router.rs",
+pub(crate) const ROUTES: Anchor = Anchor {
+    name: "routes",
+    file: "src/router.rs",
 };
 
 /// Enregistrement des chemins d'une feature dans le document OpenAPI.
-pub(crate) const OPENAPI: Ancre = Ancre {
-    nom: "openapi",
-    fichier: "src/openapi.rs",
+pub(crate) const OPENAPI: Anchor = Anchor {
+    name: "openapi",
+    file: "src/openapi.rs",
 };
 
 /// Déclaration des fichiers de migration.
 ///
 /// Distincte de [`MIGRATIONS`] : Rust interdit un `mod` non-inline dans un bloc, et la
 /// déclaration ne peut donc pas tenir dans le `vec!` du `Migrator`.
-pub(crate) const MIGRATION_MODULES: Ancre = Ancre {
-    nom: "migration_modules",
-    fichier: "migration/src/lib.rs",
+pub(crate) const MIGRATION_MODULES: Anchor = Anchor {
+    name: "migration_modules",
+    file: "migration/src/lib.rs",
 };
 
 /// Inscription des migrations dans le `Migrator`.
-pub(crate) const MIGRATIONS: Ancre = Ancre {
-    nom: "migrations",
-    fichier: "migration/src/lib.rs",
+pub(crate) const MIGRATIONS: Anchor = Anchor {
+    name: "migrations",
+    file: "migration/src/lib.rs",
 };
 
 /// Déclaration d'un champ partagé dans la struct `AppState`.
-pub(crate) const STATE_CHAMPS: Ancre = Ancre {
-    nom: "state_champs",
-    fichier: "src/state.rs",
+pub(crate) const STATE_CHAMPS: Anchor = Anchor {
+    name: "state_champs",
+    file: "src/state.rs",
 };
 
 /// Initialisation de ce champ dans `AppState::new`.
 ///
 /// Distincte de [`STATE_CHAMPS`] : un champ se déclare à un endroit et se construit à un
 /// autre, et une ancre unique ne pourrait pas viser les deux.
-pub(crate) const STATE_INIT: Ancre = Ancre {
-    nom: "state_init",
-    fichier: "src/state.rs",
+pub(crate) const STATE_INIT: Anchor = Anchor {
+    name: "state_init",
+    file: "src/state.rs",
 };
 
 /// Les points d'insertion du squelette.
 ///
 /// La génération vise chaque ancre nommément ; `rbs doctor` parcourt cette liste pour
 /// vérifier qu'un projet les porte toutes.
-pub(crate) const ANCRES: [Ancre; 7] = [
+pub(crate) const ANCRES: [Anchor; 7] = [
     FEATURES,
     ROUTES,
     OPENAPI,
@@ -95,50 +95,50 @@ pub(crate) const ANCRES: [Ancre; 7] = [
 
 /// Une ancre attendue que le fichier ne porte pas.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Absente {
-    pub ancre: Ancre,
+pub(crate) struct Missing {
+    pub anchor: Anchor,
 }
 
-impl fmt::Display for Absente {
+impl fmt::Display for Missing {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
             "ancre {} introuvable dans {}",
-            self.ancre.ouverture(),
-            self.ancre.fichier
+            self.anchor.opening(),
+            self.anchor.file
         )
     }
 }
 
-impl std::error::Error for Absente {}
+impl std::error::Error for Missing {}
 
-/// Insère `lignes` dans `ancre`, juste avant sa balise fermante.
+/// Insère `lines` dans `anchor`, juste avant sa balise fermante.
 ///
 /// Une ligne déjà présente dans l'ancre n'est pas réécrite, et le contenu qui s'y trouve
 /// déjà traverse l'insertion tel quel : le développeur a pu l'ordonner ou l'indenter à sa
 /// façon, et rien ici ne le sait mieux que lui.
-pub(crate) fn inserer(source: &str, ancre: Ancre, lignes: &[String]) -> Result<String, Absente> {
-    let absente = || Absente { ancre };
+pub(crate) fn insert(source: &str, anchor: Anchor, lines: &[String]) -> Result<String, Missing> {
+    let absente = || Missing { anchor };
 
-    let (ouverture, _) = ligne_de(source, &ancre.ouverture()).ok_or_else(absente)?;
-    let (fermeture, indentation) = ligne_de(source, &ancre.fermeture()).ok_or_else(absente)?;
+    let (opening, _) = line_of(source, &anchor.opening()).ok_or_else(absente)?;
+    let (closing, indentation) = line_of(source, &anchor.closing()).ok_or_else(absente)?;
 
-    if fermeture < ouverture {
+    if closing < opening {
         return Err(absente());
     }
 
-    let dedans = &source[ouverture..fermeture];
-    let ajouts: String = groupes(lignes)
+    let dedans = &source[opening..closing];
+    let ajouts: String = groups(lines)
         .into_iter()
-        .filter(|groupe| !groupe.iter().all(|ligne| contient(dedans, ligne)))
+        .filter(|groupe| !groupe.iter().all(|line| contains(dedans, line)))
         .flatten()
-        .map(|ligne| format!("{indentation}{ligne}\n"))
+        .map(|line| format!("{indentation}{line}\n"))
         .collect();
 
     Ok(format!(
         "{}{ajouts}{}",
-        &source[..fermeture],
-        &source[fermeture..]
+        &source[..closing],
+        &source[closing..]
     ))
 }
 
@@ -150,48 +150,49 @@ pub(crate) fn inserer(source: &str, ancre: Ancre, lignes: &[String]) -> Result<S
 ///
 /// Les lignes autonomes — les chemins OpenAPI d'une feature — forment chacune leur
 /// groupe, et restent donc dédupliquées une à une.
-fn groupes(lignes: &[String]) -> Vec<Vec<&String>> {
-    let mut groupes = Vec::new();
+fn groups(lines: &[String]) -> Vec<Vec<&String>> {
+    let mut groups = Vec::new();
     let mut courant = Vec::new();
 
-    for ligne in lignes {
-        let qualifie = matches!(ligne.trim_start().get(..2), Some("#[") | Some("//"));
-        courant.push(ligne);
+    for line in lines {
+        let qualifie = matches!(line.trim_start().get(..2), Some("#[") | Some("//"));
+        courant.push(line);
 
         if !qualifie {
-            groupes.push(std::mem::take(&mut courant));
+            groups.push(std::mem::take(&mut courant));
         }
     }
 
     if !courant.is_empty() {
-        groupes.push(courant);
+        groups.push(courant);
     }
 
-    groupes
+    groups
 }
 
 /// Début de la ligne ne portant que `balise`, et l'indentation de cette ligne.
 ///
 /// La ligne doit ne porter qu'elle : une balise citée dans une chaîne — le bloc à recoller
 /// qu'affiche le CLI, par exemple — n'ouvre pas une ancre.
-fn ligne_de(source: &str, balise: &str) -> Option<(usize, String)> {
+fn line_of(source: &str, balise: &str) -> Option<(usize, String)> {
     let mut debut = 0;
 
-    for ligne in source.split_inclusive('\n') {
-        if ligne.trim() == balise {
-            let indentation = ligne[..ligne.len() - ligne.trim_start().len()].to_string();
+    for line in source.split_inclusive('\n') {
+        if line.trim() == balise {
+            let indentation = line[..line.len() - line.trim_start().len()].to_string();
             return Some((debut, indentation));
         }
-        debut += ligne.len();
+        debut += line.len();
     }
 
     None
 }
 
-/// `ligne` figure-t-elle déjà dans le bloc, à l'indentation près ?
-fn contient(bloc: &str, ligne: &str) -> bool {
-    bloc.lines()
-        .any(|existante| existante.trim() == ligne.trim())
+/// `line` figure-t-elle déjà dans le bloc, à l'indentation près ?
+fn contains(block: &str, line: &str) -> bool {
+    block
+        .lines()
+        .any(|existante| existante.trim() == line.trim())
 }
 
 #[cfg(test)]
@@ -208,65 +209,57 @@ pub fn router(state: AppState) -> Router {
 }
 ";
 
-    fn lignes(sources: &[&str]) -> Vec<String> {
+    fn lines(sources: &[&str]) -> Vec<String> {
         sources.iter().map(|s| (*s).to_string()).collect()
     }
 
     #[test]
-    fn l_insertion_se_place_juste_avant_la_balise_fermante() {
-        let rendu = inserer(
-            ROUTEUR,
-            ROUTES,
-            &lignes(&[".merge(crate::users::routes())"]),
-        )
-        .expect("l'ancre est présente");
+    fn the_insertion_lands_just_before_the_closing_tag() {
+        let rendered = insert(ROUTEUR, ROUTES, &lines(&[".merge(crate::users::routes())"]))
+            .expect("l'ancre est présente");
 
         assert!(
-            rendu.contains(
+            rendered.contains(
                 "        // <rbs:routes>\n        \
                  .merge(crate::users::routes())\n        // </rbs:routes>"
             ),
-            "insertion mal placée :\n{rendu}"
+            "insertion mal placée :\n{rendered}"
         );
     }
 
     #[test]
-    fn l_indentation_est_celle_de_la_balise_fermante() {
-        let rendu = inserer(
-            ROUTEUR,
-            ROUTES,
-            &lignes(&[".merge(crate::users::routes())"]),
-        )
-        .expect("l'ancre est présente");
+    fn the_indentation_is_that_of_the_closing_tag() {
+        let rendered = insert(ROUTEUR, ROUTES, &lines(&[".merge(crate::users::routes())"]))
+            .expect("l'ancre est présente");
 
-        let inseree = rendu
+        let inserted = rendered
             .lines()
-            .find(|ligne| ligne.contains("users::routes"))
+            .find(|line| line.contains("users::routes"))
             .expect("la ligne doit être insérée");
 
-        assert_eq!(inseree, "        .merge(crate::users::routes())");
+        assert_eq!(inserted, "        .merge(crate::users::routes())");
     }
 
     #[test]
-    fn plusieurs_lignes_gardent_l_ordre_dans_lequel_elles_sont_donnees() {
-        let rendu = inserer(
+    fn several_lines_keep_the_order_they_are_given_in() {
+        let rendered = insert(
             ROUTEUR,
             ROUTES,
-            &lignes(&["premiere()", "deuxieme()", "troisieme()"]),
+            &lines(&["premiere()", "deuxieme()", "troisieme()"]),
         )
         .expect("l'ancre est présente");
 
         let rangs: Vec<usize> = ["premiere()", "deuxieme()", "troisieme()"]
             .iter()
-            .map(|ligne| rendu.find(ligne).expect("ligne insérée"))
+            .map(|line| rendered.find(line).expect("ligne insérée"))
             .collect();
 
-        assert!(rangs[0] < rangs[1] && rangs[1] < rangs[2], "{rendu}");
+        assert!(rangs[0] < rangs[1] && rangs[1] < rangs[2], "{rendered}");
     }
 
     /// Le critère du lot : ce que le développeur a écrit dans l'ancre lui appartient.
     #[test]
-    fn le_contenu_existant_n_est_ni_reordonne_ni_reformate() {
+    fn the_existing_content_is_neither_reordered_nor_reformatted() {
         let peuple = "\
 pub fn router(state: AppState) -> Router {
     Router::new()
@@ -278,29 +271,25 @@ pub fn router(state: AppState) -> Router {
 }
 ";
 
-        let rendu = inserer(peuple, ROUTES, &lignes(&[".merge(crate::users::routes())"]))
+        let rendered = insert(peuple, ROUTES, &lines(&[".merge(crate::users::routes())"]))
             .expect("l'ancre est présente");
 
-        let attendu = peuple.replace(
+        let expected = peuple.replace(
             "        // </rbs:routes>",
             "        .merge(crate::users::routes())\n        // </rbs:routes>",
         );
-        assert_eq!(rendu, attendu, "le contenu existant a bougé");
+        assert_eq!(rendered, expected, "le contenu existant a bougé");
     }
 
     #[test]
-    fn une_ligne_deja_presente_n_est_pas_reinseree() {
-        let une_fois = inserer(
-            ROUTEUR,
-            ROUTES,
-            &lignes(&[".merge(crate::users::routes())"]),
-        )
-        .expect("l'ancre est présente");
+    fn an_already_present_line_is_not_reinserted() {
+        let une_fois = insert(ROUTEUR, ROUTES, &lines(&[".merge(crate::users::routes())"]))
+            .expect("l'ancre est présente");
 
-        let deux_fois = inserer(
+        let deux_fois = insert(
             &une_fois,
             ROUTES,
-            &lignes(&[".merge(crate::users::routes())"]),
+            &lines(&[".merge(crate::users::routes())"]),
         )
         .expect("l'ancre est présente");
 
@@ -308,62 +297,61 @@ pub fn router(state: AppState) -> Router {
     }
 
     #[test]
-    fn seules_les_lignes_absentes_sont_ajoutees() {
-        let une_fois =
-            inserer(ROUTEUR, ROUTES, &lignes(&["deja()"])).expect("l'ancre est présente");
+    fn only_the_missing_lines_are_added() {
+        let une_fois = insert(ROUTEUR, ROUTES, &lines(&["deja()"])).expect("l'ancre est présente");
 
-        let rendu = inserer(&une_fois, ROUTES, &lignes(&["deja()", "nouvelle()"]))
+        let rendered = insert(&une_fois, ROUTES, &lines(&["deja()", "nouvelle()"]))
             .expect("l'ancre est présente");
 
-        assert_eq!(rendu.matches("deja()").count(), 1, "{rendu}");
-        assert_eq!(rendu.matches("nouvelle()").count(), 1, "{rendu}");
+        assert_eq!(rendered.matches("deja()").count(), 1, "{rendered}");
+        assert_eq!(rendered.matches("nouvelle()").count(), 1, "{rendered}");
     }
 
     #[test]
-    fn une_ancre_absente_est_signalee_avec_son_fichier() {
-        let erreur = inserer("fn main() {}\n", ROUTES, &lignes(&["peu importe"]))
+    fn a_missing_anchor_is_reported_with_its_file() {
+        let error = insert("fn main() {}\n", ROUTES, &lines(&["peu importe"]))
             .expect_err("l'ancre est absente");
 
-        assert_eq!(erreur.ancre, ROUTES);
+        assert_eq!(error.anchor, ROUTES);
         assert_eq!(
-            erreur.to_string(),
+            error.to_string(),
             "ancre // <rbs:routes> introuvable dans src/router.rs"
         );
     }
 
     #[test]
-    fn une_ancre_dont_la_fermeture_manque_est_signalee() {
+    fn an_anchor_missing_its_closing_is_reported() {
         let tronque = "// <rbs:routes>\n";
 
-        let erreur =
-            inserer(tronque, ROUTES, &lignes(&["peu importe"])).expect_err("fermeture absente");
+        let error =
+            insert(tronque, ROUTES, &lines(&["peu importe"])).expect_err("fermeture absente");
 
-        assert_eq!(erreur.ancre, ROUTES);
+        assert_eq!(error.anchor, ROUTES);
     }
 
     /// Une occurrence citée dans du code — une chaîne, un message d'erreur — n'ouvre pas
     /// une ancre : seule une ligne qui ne porte qu'elle en est une.
     #[test]
-    fn une_balise_citee_au_milieu_d_une_ligne_n_est_pas_une_ancre() {
+    fn a_tag_quoted_mid_line_is_not_an_anchor() {
         let cite = "let aide = \"ajoute // <rbs:routes> puis // </rbs:routes>\";\n";
 
-        let erreur = inserer(cite, ROUTES, &lignes(&["peu importe"])).expect_err("aucune ancre");
+        let error = insert(cite, ROUTES, &lines(&["peu importe"])).expect_err("aucune ancre");
 
-        assert_eq!(erreur.ancre, ROUTES);
+        assert_eq!(error.anchor, ROUTES);
     }
 
     #[test]
-    fn le_bloc_a_recoller_porte_les_deux_balises_de_l_ancre() {
-        assert_eq!(ROUTES.bloc(), "// <rbs:routes>\n// </rbs:routes>");
+    fn the_block_to_paste_carries_both_tags_of_the_anchor() {
+        assert_eq!(ROUTES.block(), "// <rbs:routes>\n// </rbs:routes>");
     }
 
     #[test]
-    fn les_ancres_portent_des_noms_distincts() {
-        for (rang, ancre) in ANCRES.iter().enumerate() {
+    fn the_anchors_carry_distinct_names() {
+        for (rang, anchor) in ANCRES.iter().enumerate() {
             assert!(
-                !ANCRES[..rang].iter().any(|autre| autre.nom == ancre.nom),
+                !ANCRES[..rang].iter().any(|other| other.name == anchor.name),
                 "`{}` déclarée deux fois",
-                ancre.nom
+                anchor.name
             );
         }
     }
@@ -372,7 +360,7 @@ pub fn router(state: AppState) -> Router {
     /// sans que le bloc de l'un rende celui de l'autre superflu. Dédupliquer ligne à
     /// ligne amputait le second de sa ligne commune et laissait le reste orphelin.
     #[test]
-    fn le_bloc_est_pose_entier_quand_une_seule_de_ses_lignes_est_deja_la() {
+    fn the_block_is_written_whole_when_only_one_of_its_lines_is_already_there() {
         let source = "\
 struct AppState {
     // <rbs:state_champs>
@@ -382,7 +370,7 @@ struct AppState {
 }
 ";
 
-        let apres = inserer(
+        let after = insert(
             source,
             STATE_CHAMPS,
             &[
@@ -393,13 +381,13 @@ struct AppState {
         .expect("l'ancre est présente");
 
         assert_eq!(
-            apres.matches("#[allow(dead_code)]").count(),
+            after.matches("#[allow(dead_code)]").count(),
             2,
-            "chaque champ porte le sien : {apres}"
+            "chaque champ porte le sien : {after}"
         );
         assert!(
-            apres.contains("pub storage: Arc<dyn Storage>,"),
-            "le champ ne doit pas être laissé de côté : {apres}"
+            after.contains("pub storage: Arc<dyn Storage>,"),
+            "le champ ne doit pas être laissé de côté : {after}"
         );
     }
 }

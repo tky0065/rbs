@@ -237,7 +237,7 @@ fn masquer_chemin_du_noyau(ligne: &str) -> String {
     let Some(delimiteur) = ligne[apres_cle..]
         .chars()
         .next()
-        .filter(|marque| *marque == '"' || *marque == '\'')
+        .filter(|mark| *mark == '"' || *mark == '\'')
     else {
         return ligne.to_string();
     };
@@ -261,14 +261,14 @@ fn masquer_horodatage(texte: &str) -> String {
     let mut i = 0;
 
     // `m` + AAAAMMJJ + `_` + HHMMSS, soit seize caractères.
-    let horodatage_en = |depart: usize| {
-        depart + 16 <= lettres.len()
-            && lettres[depart] == 'm'
-            && lettres[depart + 1..depart + 9]
+    let horodatage_en = |start: usize| {
+        start + 16 <= lettres.len()
+            && lettres[start] == 'm'
+            && lettres[start + 1..start + 9]
                 .iter()
                 .all(char::is_ascii_digit)
-            && lettres[depart + 9] == '_'
-            && lettres[depart + 10..depart + 16]
+            && lettres[start + 9] == '_'
+            && lettres[start + 10..start + 16]
                 .iter()
                 .all(char::is_ascii_digit)
     };

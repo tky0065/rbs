@@ -6,55 +6,55 @@
 use std::path::Path;
 use std::process::Command;
 
-/// Les chemins des fichiers suivis modifiés sous `racine`.
+/// Les chemins des fichiers suivis modifiés sous `root`.
 ///
 /// Vide hors d'un dépôt Git, si `git` est introuvable, ou si le working tree est propre :
 /// dans ces trois cas, il n'y a rien à protéger.
-pub(crate) fn fichiers_modifies(racine: &Path) -> Vec<String> {
-    let Ok(sortie) = Command::new("git")
+pub(crate) fn modified_files(root: &Path) -> Vec<String> {
+    let Ok(output) = Command::new("git")
         .args(["status", "--porcelain"])
-        .current_dir(racine)
+        .current_dir(root)
         .output()
     else {
         return Vec::new();
     };
 
-    if !sortie.status.success() {
+    if !output.status.success() {
         return Vec::new();
     }
 
-    String::from_utf8_lossy(&sortie.stdout)
+    String::from_utf8_lossy(&output.stdout)
         .lines()
         // Les fichiers non suivis sont précisément ceux que le CLI s'apprête à créer.
-        .filter(|ligne| !ligne.starts_with("??"))
-        .filter_map(chemin)
+        .filter(|line| !line.starts_with("??"))
+        .filter_map(path)
         .collect()
 }
 
-/// Le chemin d'une ligne `XY chemin`, ou sa destination pour un renommage
-/// `R  ancien -> nouveau`.
-fn chemin(ligne: &str) -> Option<String> {
-    let chemin = ligne.get(3..)?.trim();
-    let chemin = chemin.rsplit(" -> ").next()?;
+/// Le chemin d'une ligne `XY path`, ou sa destination pour un renommage
+/// `R  ancien -> new`.
+fn path(line: &str) -> Option<String> {
+    let path = line.get(3..)?.trim();
+    let path = path.rsplit(" -> ").next()?;
 
-    (!chemin.is_empty()).then(|| chemin.to_string())
+    (!path.is_empty()).then(|| path.to_string())
 }
 
 /// Énumère des chemins en cause, sans dérouler une liste illisible.
 ///
 /// Un working tree sale peut compter des centaines de fichiers : les nommer tous noie le
 /// message dans ce qu'il est censé rendre lisible.
-pub(crate) fn enumerer(fichiers: &[String]) -> String {
+pub(crate) fn enumerate(files: &[String]) -> String {
     const NOMMES: usize = 5;
 
-    let debut = fichiers
+    let debut = files
         .iter()
         .take(NOMMES)
         .map(String::as_str)
         .collect::<Vec<_>>()
         .join(", ");
 
-    match fichiers.len().saturating_sub(NOMMES) {
+    match files.len().saturating_sub(NOMMES) {
         0 => debut,
         reste => format!("{debut} … et {reste} autres"),
     }
@@ -71,76 +71,70 @@ mod tests {
 
     /// Un dépôt Git jetable, avec un commit initial : `git status` d'un dépôt sans commit
     /// se comporte autrement.
-    fn depot() -> TempDir {
-        let depot = TempDir::new().expect("répertoire temporaire créable");
+    fn repo() -> TempDir {
+        let repo = TempDir::new().expect("répertoire temporaire créable");
 
-        git(depot.path(), &["init", "--quiet"]);
-        git(depot.path(), &["config", "user.email", "rbs@example.test"]);
-        git(depot.path(), &["config", "user.name", "rbs"]);
+        git(repo.path(), &["init", "--quiet"]);
+        git(repo.path(), &["config", "user.email", "rbs@example.test"]);
+        git(repo.path(), &["config", "user.name", "rbs"]);
 
-        fs::write(depot.path().join("suivi.txt"), "initial\n").expect("fichier écrivable");
+        fs::write(repo.path().join("suivi.txt"), "initial\n").expect("fichier écrivable");
 
-        git(depot.path(), &["add", "suivi.txt"]);
-        git(depot.path(), &["commit", "--quiet", "-m", "initial"]);
+        git(repo.path(), &["add", "suivi.txt"]);
+        git(repo.path(), &["commit", "--quiet", "-m", "initial"]);
 
-        depot
+        repo
     }
 
-    fn git(racine: &Path, arguments: &[&str]) {
-        let sortie = Command::new("git")
+    fn git(root: &Path, arguments: &[&str]) {
+        let output = Command::new("git")
             .args(arguments)
-            .current_dir(racine)
+            .current_dir(root)
             .env("GIT_CONFIG_GLOBAL", "/dev/null")
             .env("GIT_CONFIG_SYSTEM", "/dev/null")
             .output()
             .expect("git doit être lançable");
 
         assert!(
-            sortie.status.success(),
+            output.status.success(),
             "git {arguments:?} a échoué :\n{}",
-            String::from_utf8_lossy(&sortie.stderr)
+            String::from_utf8_lossy(&output.stderr)
         );
     }
 
     #[test]
-    fn un_working_tree_propre_ne_signale_rien() {
-        assert!(fichiers_modifies(depot().path()).is_empty());
+    fn a_clean_working_tree_reports_nothing() {
+        assert!(modified_files(repo().path()).is_empty());
     }
 
     #[test]
-    fn un_fichier_suivi_modifie_est_signale() {
-        let depot = depot();
-        fs::write(depot.path().join("suivi.txt"), "modifié\n").expect("fichier réécrivable");
+    fn a_modified_tracked_file_is_reported() {
+        let repo = repo();
+        fs::write(repo.path().join("suivi.txt"), "modifié\n").expect("fichier réécrivable");
 
-        assert_eq!(
-            fichiers_modifies(depot.path()),
-            vec!["suivi.txt".to_string()]
-        );
+        assert_eq!(modified_files(repo.path()), vec!["suivi.txt".to_string()]);
     }
 
     #[test]
-    fn un_fichier_non_suivi_ne_bloque_pas() {
-        let depot = depot();
-        fs::write(depot.path().join("nouveau.txt"), "jamais ajouté\n").expect("fichier écrivable");
+    fn an_untracked_file_does_not_block() {
+        let repo = repo();
+        fs::write(repo.path().join("nouveau.txt"), "jamais ajouté\n").expect("fichier écrivable");
 
-        assert!(fichiers_modifies(depot.path()).is_empty());
+        assert!(modified_files(repo.path()).is_empty());
     }
 
     #[test]
-    fn un_fichier_suivi_renomme_est_signale_par_sa_destination() {
-        let depot = depot();
-        git(depot.path(), &["mv", "suivi.txt", "renomme.txt"]);
+    fn a_renamed_tracked_file_is_reported_by_its_destination() {
+        let repo = repo();
+        git(repo.path(), &["mv", "suivi.txt", "renomme.txt"]);
 
-        assert_eq!(
-            fichiers_modifies(depot.path()),
-            vec!["renomme.txt".to_string()]
-        );
+        assert_eq!(modified_files(repo.path()), vec!["renomme.txt".to_string()]);
     }
 
     #[test]
-    fn un_repertoire_hors_depot_ne_signale_rien() {
+    fn a_directory_outside_a_repository_reports_nothing() {
         let ailleurs = TempDir::new().expect("répertoire temporaire créable");
 
-        assert!(fichiers_modifies(ailleurs.path()).is_empty());
+        assert!(modified_files(ailleurs.path()).is_empty());
     }
 }

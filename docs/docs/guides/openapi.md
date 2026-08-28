@@ -23,9 +23,9 @@ nothing: it prints the block for you to paste instead of guessing where it belon
 Adding an operation by hand is the same gesture: annotate the handler with
 `#[utoipa::path(...)]`, then name it inside `paths(...)`.
 
-## `ReponsesCommunes`, declared once
+## `CommonResponses`, declared once
 
-`modifiers(&ReponsesCommunes)` is the whole of the error documentation. It runs over the
+`modifiers(&CommonResponses)` is the whole of the error documentation. It runs over the
 finished document and does three things:
 
 - registers the `ProblemDetails` schema — the very type that produces error bodies at

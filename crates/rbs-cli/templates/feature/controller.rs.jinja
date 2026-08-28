@@ -1,4 +1,4 @@
-{% set dto = ["Create" ~ entite, entite ~ "Response", "Update" ~ entite] | sort -%}
+{% set dto = ["Create" ~ entity, entity ~ "Response", "Update" ~ entity] | sort -%}
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
@@ -17,12 +17,12 @@ use crate::state::AppState;
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
     ),
-    responses((status = 200, description = "page de {@ module @}", body = Page<{@ entite @}Response>))
+    responses((status = 200, description = "page de {@ module @}", body = Page<{@ entity @}Response>))
 )]
 pub async fn list(
     State(state): State<AppState>,
     pagination: Pagination,
-) -> Result<Json<Page<{@ entite @}Response>>> {
+) -> Result<Json<Page<{@ entity @}Response>>> {
     Ok(Json(service::list(state.core().db(), &pagination).await?))
 }
 
@@ -30,35 +30,35 @@ pub async fn list(
     post,
     path = "/{@ module @}",
     tag = "{@ module @}",
-    request_body = Create{@ entite @},
+    request_body = Create{@ entity @},
     responses(
-        (status = 201, description = "{@ singulier @} créé", body = {@ entite @}Response),
+        (status = 201, description = "{@ singular @} créé", body = {@ entity @}Response),
         (status = 400, description = "corps illisible", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn create(
     State(state): State<AppState>,
-    ValidatedJson(input): ValidatedJson<Create{@ entite @}>,
-) -> Result<(StatusCode, Json<{@ entite @}Response>)> {
-    let {@ singulier @} = service::create(state.core().db(), input).await?;
+    ValidatedJson(input): ValidatedJson<Create{@ entity @}>,
+) -> Result<(StatusCode, Json<{@ entity @}Response>)> {
+    let {@ singular @} = service::create(state.core().db(), input).await?;
 
-    Ok((StatusCode::CREATED, Json({@ singulier @})))
+    Ok((StatusCode::CREATED, Json({@ singular @})))
 }
 
 #[utoipa::path(
     get,
     path = "/{@ module @}/{id}",
     tag = "{@ module @}",
-    params(("id" = Uuid, Path, description = "identifiant de {@ singulier @}")),
+    params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
     responses(
-        (status = 200, description = "{@ singulier @} demandé", body = {@ entite @}Response),
-        (status = 404, description = "{@ singulier @} introuvable", body = ProblemDetails, content_type = "application/problem+json")
+        (status = 200, description = "{@ singular @} demandé", body = {@ entity @}Response),
+        (status = 404, description = "{@ singular @} introuvable", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn find(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-) -> Result<Json<{@ entite @}Response>> {
+) -> Result<Json<{@ entity @}Response>> {
     Ok(Json(service::find(state.core().db(), id).await?))
 }
 
@@ -68,18 +68,18 @@ pub async fn find(
     put,
     path = "/{@ module @}/{id}",
     tag = "{@ module @}",
-    params(("id" = Uuid, Path, description = "identifiant de {@ singulier @}")),
-    request_body = Update{@ entite @},
+    params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
+    request_body = Update{@ entity @},
     responses(
-        (status = 200, description = "{@ singulier @} mis à jour", body = {@ entite @}Response),
-        (status = 404, description = "{@ singulier @} introuvable", body = ProblemDetails, content_type = "application/problem+json")
+        (status = 200, description = "{@ singular @} mis à jour", body = {@ entity @}Response),
+        (status = 404, description = "{@ singular @} introuvable", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn update(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
-    ValidatedJson(input): ValidatedJson<Update{@ entite @}>,
-) -> Result<Json<{@ entite @}Response>> {
+    ValidatedJson(input): ValidatedJson<Update{@ entity @}>,
+) -> Result<Json<{@ entity @}Response>> {
     Ok(Json(service::update(state.core().db(), id, input).await?))
 }
 
@@ -87,10 +87,10 @@ pub async fn update(
     delete,
     path = "/{@ module @}/{id}",
     tag = "{@ module @}",
-    params(("id" = Uuid, Path, description = "identifiant de {@ singulier @}")),
+    params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
     responses(
-        (status = 204, description = "{@ singulier @} supprimé"),
-        (status = 404, description = "{@ singulier @} introuvable", body = ProblemDetails, content_type = "application/problem+json")
+        (status = 204, description = "{@ singular @} supprimé"),
+        (status = 404, description = "{@ singular @} introuvable", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<StatusCode> {

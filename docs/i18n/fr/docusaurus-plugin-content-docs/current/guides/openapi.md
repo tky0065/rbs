@@ -23,9 +23,9 @@ n'écrit rien — il affiche le bloc à coller plutôt que de deviner où il va.
 Ajouter une opération à la main est le même geste : annoter le handler d'un
 `#[utoipa::path(...)]`, puis le nommer dans `paths(...)`.
 
-## `ReponsesCommunes`, déclarée une fois
+## `CommonResponses`, déclarée une fois
 
-`modifiers(&ReponsesCommunes)` porte à lui seul toute la documentation des erreurs. Il
+`modifiers(&CommonResponses)` porte à lui seul toute la documentation des erreurs. Il
 parcourt le document fini et fait trois choses :
 
 - il enregistre le schéma `ProblemDetails` — le type même qui produit les corps d'erreur à

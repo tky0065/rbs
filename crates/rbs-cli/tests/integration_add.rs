@@ -130,7 +130,7 @@ fn une_ancre_supprimee_refuse_l_ecriture_et_affiche_le_bloc_a_coller() {
 /// Un projet porteur de modifications non commitées refuse l'installation, qui rendrait
 /// les siennes indiscernables — sauf si le développeur passe outre.
 #[test]
-fn un_working_tree_sale_refuse_sans_force_et_passe_avec() {
+fn a_dirty_working_tree_refuses_without_force_and_passes_with_it() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = projet_commite(&parent);
 
@@ -222,26 +222,26 @@ fn fragment_a_code() -> TempDir {
     fs::write(
         essai.join("feature.toml"),
         "[feature]\ndescription = \"un fragment de test\"\n\n\
-         [[fichiers]]\nsource = \"mod.rs.jinja\"\ncible = \"src/essai/mod.rs\"\n\n\
-         [[fichiers]]\nsource = \"service.rs.jinja\"\ncible = \"src/essai/service.rs\"\n\n\
-         [[ancres]]\nancre = \"features\"\ncontenu = \"mod essai;\"\n\n\
-         [[ancres]]\nancre = \"routes\"\ncontenu = \".merge(crate::essai::routes())\"\n\n\
-         [[ancres]]\nancre = \"state_champs\"\ncontenu = \"essai: crate::essai::Client,\"\n\n\
-         [[ancres]]\nancre = \"state_init\"\ncontenu = \"essai: crate::essai::client()?,\"\n\n\
-         [migration]\nsource = \"table.rs.jinja\"\nnom = \"create_essais\"\n\n\
-         [[dependances]]\nnom = \"lettre\"\nversion = \"0.11\"\n\
+         [[files]]\nsource = \"mod.rs.jinja\"\ndestination = \"src/essai/mod.rs\"\n\n\
+         [[files]]\nsource = \"service.rs.jinja\"\ndestination = \"src/essai/service.rs\"\n\n\
+         [[anchors]]\nanchor = \"features\"\ncontent = \"mod essai;\"\n\n\
+         [[anchors]]\nanchor = \"routes\"\ncontent = \".merge(crate::essai::routes())\"\n\n\
+         [[anchors]]\nanchor = \"state_champs\"\ncontent = \"essai: crate::essai::Client,\"\n\n\
+         [[anchors]]\nanchor = \"state_init\"\ncontent = \"essai: crate::essai::client()?,\"\n\n\
+         [migration]\nsource = \"table.rs.jinja\"\nname = \"create_essais\"\n\n\
+         [[dependencies]]\nname = \"lettre\"\nversion = \"0.11\"\n\
          default_features = false\nfeatures = [\"smtp-transport\", \"builder\"]\n\n\
-         [[dependances]]\nnom = \"axum\"\nversion = \"0.8\"\n\n\
+         [[dependencies]]\nname = \"axum\"\nversion = \"0.8\"\n\n\
          [cargo.rbs-core]\nfeatures = [\"auth\"]\n\n\
-         [[config]]\nfichier = \"config/default.toml\"\nsection = \"essai\"\n\
-         contenu = \"\"\"\nttl_secs = 900\n\"\"\"\n\n\
-         [[env]]\ncle = \"RBS_ESSAI__SECRET\"\nvaleur = \"changez-moi\"\n\
-         commentaire = \"au moins 32 octets\"\n",
+         [[config]]\nfile = \"config/default.toml\"\nsection = \"essai\"\n\
+         content = \"\"\"\nttl_secs = 900\n\"\"\"\n\n\
+         [[env]]\nkey = \"RBS_ESSAI__SECRET\"\nvalue = \"changez-moi\"\n\
+         comment = \"au moins 32 octets\"\n",
     )
     .expect("le manifeste s'écrit");
 
     for (nom, contenu) in [
-        ("mod.rs.jinja", "// {@ nom_crate @}\npub mod service;\n"),
+        ("mod.rs.jinja", "// {@ crate_name @}\npub mod service;\n"),
         ("service.rs.jinja", "pub fn rien() {}\n"),
         ("table.rs.jinja", "// la table des essais\n"),
     ] {
@@ -314,25 +314,25 @@ fn les_deux_ancres_d_etat_recoivent_le_contenu_declare() {
         sortie.stderr
     );
 
-    let etat = fs::read_to_string(racine.join("src/state.rs")).expect("state.rs est lisible");
+    let state = fs::read_to_string(racine.join("src/state.rs")).expect("state.rs est lisible");
 
-    for (ancre, ligne) in [
+    for (anchor, ligne) in [
         ("state_champs", "essai: crate::essai::Client,"),
         ("state_init", "essai: crate::essai::client()?,"),
     ] {
-        let ouverture = format!("// <rbs:{ancre}>");
-        let fermeture = format!("// </rbs:{ancre}>");
-        let debut = etat
+        let ouverture = format!("// <rbs:{anchor}>");
+        let fermeture = format!("// </rbs:{anchor}>");
+        let debut = state
             .find(&ouverture)
-            .unwrap_or_else(|| panic!("state.rs ne porte pas `{ouverture}` :\n{etat}"))
+            .unwrap_or_else(|| panic!("state.rs ne porte pas `{ouverture}` :\n{state}"))
             + ouverture.len();
-        let fin = etat
+        let fin = state
             .find(&fermeture)
-            .unwrap_or_else(|| panic!("state.rs ne porte pas `{fermeture}` :\n{etat}"));
+            .unwrap_or_else(|| panic!("state.rs ne porte pas `{fermeture}` :\n{state}"));
 
         assert!(
-            etat[debut..fin].contains(ligne),
-            "l'ancre `{ancre}` ne porte pas `{ligne}` :\n{etat}"
+            state[debut..fin].contains(ligne),
+            "l'ancre `{anchor}` ne porte pas `{ligne}` :\n{state}"
         );
     }
 }
@@ -347,8 +347,8 @@ fn une_ancre_d_etat_absente_arrete_l_installation_sans_rien_ecrire() {
     let racine = projet_commite(&parent);
     let fragments = fragment_a_code();
 
-    let etat = racine.join("src/state.rs");
-    let source = fs::read_to_string(&etat).expect("state.rs est lisible");
+    let state = racine.join("src/state.rs");
+    let source = fs::read_to_string(&state).expect("state.rs est lisible");
     assert!(
         source.contains("rbs:state_champs"),
         "l'ancre visée doit exister avant d'être retirée, sans quoi le test ne prouve rien"
@@ -358,7 +358,7 @@ fn une_ancre_d_etat_absente_arrete_l_installation_sans_rien_ecrire() {
         .filter(|ligne| !ligne.contains("rbs:state_champs"))
         .collect::<Vec<_>>()
         .join("\n");
-    fs::write(&etat, format!("{ampute}\n")).expect("state.rs s'écrit");
+    fs::write(&state, format!("{ampute}\n")).expect("state.rs s'écrit");
     common::commiter(&racine, "état sans son ancre");
 
     let avant = common::empreinte(&racine);
@@ -493,8 +493,8 @@ fn une_ancre_absente_arrete_l_installation_sans_rien_ecrire() {
     let racine = projet_commite(&parent);
     let fragments = fragment_a_code();
 
-    let routeur = racine.join("src/router.rs");
-    let source = fs::read_to_string(&routeur).expect("le routeur est lisible");
+    let router = racine.join("src/router.rs");
+    let source = fs::read_to_string(&router).expect("le routeur est lisible");
     let ampute = source
         .lines()
         .filter(|ligne| !ligne.contains("rbs:routes"))
@@ -504,7 +504,7 @@ fn une_ancre_absente_arrete_l_installation_sans_rien_ecrire() {
         source, ampute,
         "l'ancre visée doit exister avant d'être retirée, sans quoi le test ne prouve rien"
     );
-    fs::write(&routeur, format!("{ampute}\n")).expect("le routeur s'écrit");
+    fs::write(&router, format!("{ampute}\n")).expect("le routeur s'écrit");
     common::commiter(&racine, "routeur sans son ancre");
 
     let avant = common::empreinte(&racine);
@@ -550,24 +550,24 @@ fn le_fragment_redis_ecrit_les_ancres_d_etat_les_dependances_et_la_section_cache
         sortie.stderr
     );
 
-    let etat = fs::read_to_string(racine.join("src/state.rs")).expect("state.rs est lisible");
-    for (ancre, ligne) in [
+    let state = fs::read_to_string(racine.join("src/state.rs")).expect("state.rs est lisible");
+    for (anchor, ligne) in [
         ("state_champs", "pub cache: crate::cache::Cache,"),
         ("state_init", "cache: crate::cache::Cache::from_config()?,"),
     ] {
-        let ouverture = format!("// <rbs:{ancre}>");
-        let fermeture = format!("// </rbs:{ancre}>");
-        let debut = etat
+        let ouverture = format!("// <rbs:{anchor}>");
+        let fermeture = format!("// </rbs:{anchor}>");
+        let debut = state
             .find(&ouverture)
-            .unwrap_or_else(|| panic!("state.rs ne porte pas `{ouverture}` :\n{etat}"))
+            .unwrap_or_else(|| panic!("state.rs ne porte pas `{ouverture}` :\n{state}"))
             + ouverture.len();
-        let fin = etat
+        let fin = state
             .find(&fermeture)
-            .unwrap_or_else(|| panic!("state.rs ne porte pas `{fermeture}` :\n{etat}"));
+            .unwrap_or_else(|| panic!("state.rs ne porte pas `{fermeture}` :\n{state}"));
 
         assert!(
-            etat[debut..fin].contains(ligne),
-            "l'ancre `{ancre}` ne porte pas `{ligne}` :\n{etat}"
+            state[debut..fin].contains(ligne),
+            "l'ancre `{anchor}` ne porte pas `{ligne}` :\n{state}"
         );
     }
 

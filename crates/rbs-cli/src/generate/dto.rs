@@ -1,4 +1,4 @@
-//! Rendu de `<nom>/dto.rs` : les trois formes que la feature expose en HTTP.
+//! Rendu de `<name>/dto.rs` : les trois formes que la feature expose en HTTP.
 
 use crate::template::Renderer;
 
@@ -10,55 +10,56 @@ const TEMPLATE: &str = include_str!(concat!(
 ));
 
 /// Rend les DTO de `feature`.
-pub(crate) fn rendre(feature: &Feature) -> Result<String, minijinja::Error> {
-    Renderer::new().rendre(TEMPLATE, feature)
+pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
+    Renderer::new().render(TEMPLATE, feature)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generate::{banc, champs, entite};
+    use crate::generate::{bench, entity, fields};
 
-    fn dto(nom: &str, fields: &str) -> String {
-        let champs = champs::analyser(fields).expect("les champs du test doivent être valides");
-        rendre(&Feature::nouvelle(nom, champs)).expect("les DTO doivent se rendre")
+    fn dto(name: &str, fields: &str) -> String {
+        let fields = fields::parse(fields).expect("les champs du test doivent être valides");
+        render(&Feature::fresh(name, fields)).expect("les DTO doivent se rendre")
     }
 
     #[test]
-    fn un_champ_email_produit_une_contrainte_de_validation_d_email() {
-        let rendu = dto("users", "email:string,nom:string");
+    fn an_email_field_produces_an_email_validation_constraint() {
+        let rendered = dto("users", "email:string,nom:string");
 
         assert!(
-            rendu.contains("#[validate(email)]\n    pub email: String,"),
-            "contrainte d'email absente de Create :\n{rendu}"
+            rendered.contains("#[validate(email)]\n    pub email: String,"),
+            "contrainte d'email absente de Create :\n{rendered}"
         );
         assert!(
-            rendu.contains("#[validate(email)]\n    pub email: Option<String>,"),
-            "contrainte d'email absente d'Update :\n{rendu}"
-        );
-    }
-
-    #[test]
-    fn un_champ_ordinaire_ne_porte_aucune_contrainte() {
-        let rendu = dto("users", "nom:string");
-
-        assert!(
-            !rendu.contains("#[validate(email)]"),
-            "contrainte posée à tort :\n{rendu}"
+            rendered.contains("#[validate(email)]\n    pub email: Option<String>,"),
+            "contrainte d'email absente d'Update :\n{rendered}"
         );
     }
 
     #[test]
-    fn un_champ_datetime_declare_son_format_openapi() {
-        let rendu = dto(
+    fn an_ordinary_field_carries_no_constraint() {
+        let rendered = dto("users", "nom:string");
+
+        assert!(
+            !rendered.contains("#[validate(email)]"),
+            "contrainte posée à tort :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn a_datetime_field_declares_its_openapi_format() {
+        let rendered = dto(
             "articles",
-            "publie_le:datetime,archive_le:datetime:optional",
+            "published_at:datetime,archive_le:datetime:optional",
         );
 
-        let creation = extraire(&rendu, "pub struct CreateArticle {");
+        let creation = extract(&rendered, "pub struct CreateArticle {");
         assert!(
-            creation
-                .contains("#[schema(value_type = String, format = DateTime)]\n    pub publie_le:"),
+            creation.contains(
+                "#[schema(value_type = String, format = DateTime)]\n    pub published_at:"
+            ),
             "format OpenAPI absent sur un datetime obligatoire :\n{creation}"
         );
         assert!(
@@ -68,7 +69,7 @@ mod tests {
             "format OpenAPI absent sur un datetime optionnel :\n{creation}"
         );
 
-        let maj = extraire(&rendu, "pub struct UpdateArticle {");
+        let maj = extract(&rendered, "pub struct UpdateArticle {");
         assert!(
             !maj.contains("value_type = String,"),
             "dans Update, tout champ est optionnel, le schéma aussi :\n{maj}"
@@ -76,39 +77,39 @@ mod tests {
     }
 
     #[test]
-    fn les_horodatages_de_la_reponse_declarent_leur_format() {
-        let rendu = dto("users", "nom:string");
-        let reponse = extraire(&rendu, "pub struct UserResponse {");
+    fn the_response_timestamps_declare_their_format() {
+        let rendered = dto("users", "nom:string");
+        let response = extract(&rendered, "pub struct UserResponse {");
 
         assert_eq!(
-            reponse
+            response
                 .matches("#[schema(value_type = String, format = DateTime)]")
                 .count(),
             2,
-            "les deux horodatages doivent déclarer leur format :\n{reponse}"
+            "les deux horodatages doivent déclarer leur format :\n{response}"
         );
     }
 
     #[test]
-    fn les_trois_dto_portent_le_nom_singulier_de_l_entite() {
-        let rendu = dto("blog_posts", "titre:string");
+    fn the_three_dtos_carry_the_singular_name_of_the_entity() {
+        let rendered = dto("blog_posts", "title:string");
 
-        for attendu in [
+        for expected in [
             "pub struct CreateBlogPost {",
             "pub struct UpdateBlogPost {",
             "pub struct BlogPostResponse {",
         ] {
             assert!(
-                rendu.contains(attendu),
-                "« {attendu} » absent de :\n{rendu}"
+                rendered.contains(expected),
+                "« {expected} » absent de :\n{rendered}"
             );
         }
     }
 
     #[test]
-    fn le_dto_de_creation_reprend_les_champs_declares() {
-        let rendu = dto("users", "nom:string,age:int,bio:text:optional");
-        let creation = extraire(&rendu, "pub struct CreateUser {");
+    fn the_creation_dto_takes_the_declared_fields() {
+        let rendered = dto("users", "nom:string,age:int,bio:text:optional");
+        let creation = extract(&rendered, "pub struct CreateUser {");
 
         assert!(creation.contains("pub nom: String,"), "{creation}");
         assert!(creation.contains("pub age: i32,"), "{creation}");
@@ -120,9 +121,9 @@ mod tests {
     }
 
     #[test]
-    fn le_dto_de_mise_a_jour_rend_tous_ses_champs_optionnels() {
-        let rendu = dto("users", "nom:string,age:int,bio:text:optional");
-        let maj = extraire(&rendu, "pub struct UpdateUser {");
+    fn the_update_dto_makes_all_its_fields_optional() {
+        let rendered = dto("users", "nom:string,age:int,bio:text:optional");
+        let maj = extract(&rendered, "pub struct UpdateUser {");
 
         assert!(maj.contains("pub nom: Option<String>,"), "{maj}");
         assert!(maj.contains("pub age: Option<i32>,"), "{maj}");
@@ -133,99 +134,99 @@ mod tests {
     }
 
     #[test]
-    fn le_dto_de_reponse_ajoute_l_identifiant_et_les_horodatages() {
-        let rendu = dto("users", "nom:string");
-        let reponse = extraire(&rendu, "pub struct UserResponse {");
+    fn the_response_dto_adds_the_id_and_the_timestamps() {
+        let rendered = dto("users", "nom:string");
+        let response = extract(&rendered, "pub struct UserResponse {");
 
-        assert!(reponse.contains("pub id: Uuid,"), "{reponse}");
-        assert!(reponse.contains("pub nom: String,"), "{reponse}");
+        assert!(response.contains("pub id: Uuid,"), "{response}");
+        assert!(response.contains("pub nom: String,"), "{response}");
         assert!(
-            reponse.contains("pub created_at: DateTimeWithTimeZone,"),
-            "{reponse}"
+            response.contains("pub created_at: DateTimeWithTimeZone,"),
+            "{response}"
         );
         assert!(
-            reponse.contains("pub updated_at: DateTimeWithTimeZone,"),
-            "{reponse}"
-        );
-    }
-
-    #[test]
-    fn la_reponse_se_construit_depuis_l_entite() {
-        let rendu = dto("users", "nom:string");
-
-        assert!(
-            rendu.contains("impl From<Model> for UserResponse {"),
-            "conversion depuis l'entité absente :\n{rendu}"
+            response.contains("pub updated_at: DateTimeWithTimeZone,"),
+            "{response}"
         );
     }
 
     #[test]
-    fn les_dto_entrants_derivent_la_deserialisation_et_la_validation() {
-        let rendu = dto("users", "nom:string");
+    fn the_response_is_built_from_the_entity() {
+        let rendered = dto("users", "nom:string");
+
+        assert!(
+            rendered.contains("impl From<Model> for UserResponse {"),
+            "conversion depuis l'entité absente :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn incoming_dtos_derive_deserialisation_and_validation() {
+        let rendered = dto("users", "nom:string");
 
         assert_eq!(
-            rendu
+            rendered
                 .matches("#[derive(Debug, Deserialize, ToSchema, Validate)]")
                 .count(),
             2,
-            "les deux DTO entrants doivent dériver Deserialize, ToSchema et Validate :\n{rendu}"
+            "les deux DTO entrants doivent dériver Deserialize, ToSchema et Validate :\n{rendered}"
         );
         assert!(
-            rendu.contains("#[derive(Debug, Serialize, ToSchema)]"),
-            "le DTO sortant doit dériver Serialize et ToSchema :\n{rendu}"
+            rendered.contains("#[derive(Debug, Serialize, ToSchema)]"),
+            "le DTO sortant doit dériver Serialize et ToSchema :\n{rendered}"
         );
     }
 
     #[test]
-    fn une_feature_sans_champ_rend_trois_dto_valides() {
-        let rendu = dto("tokens", "");
+    fn a_field_less_feature_renders_three_valid_dtos() {
+        let rendered = dto("tokens", "");
 
-        assert!(rendu.contains("pub struct CreateToken {}"), "{rendu}");
-        assert!(rendu.contains("pub struct UpdateToken {}"), "{rendu}");
-        assert!(rendu.contains("pub id: Uuid,"), "{rendu}");
+        assert!(rendered.contains("pub struct CreateToken {}"), "{rendered}");
+        assert!(rendered.contains("pub struct UpdateToken {}"), "{rendered}");
+        assert!(rendered.contains("pub id: Uuid,"), "{rendered}");
     }
 
     #[test]
     #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
-    fn les_dto_generes_compilent_dans_un_projet_neuf() {
-        let fields = "titre:string,email:string:unique,resume:text:optional,vues:int,\
-                      publie:bool,auteur_id:uuid,publie_le:datetime";
-        let champs = champs::analyser(fields).expect("champs valides");
-        let feature = Feature::nouvelle("articles", champs);
+    fn the_generated_dtos_compile_in_a_fresh_project() {
+        let fields = "title:string,email:string:unique,summary:text:optional,views:int,\
+                      published:bool,auteur_id:uuid,published_at:datetime";
+        let fields = fields::parse(fields).expect("champs valides");
+        let feature = Feature::fresh("articles", fields);
 
-        let projet = banc::Projet::neuf();
-        projet.poser_feature(
+        let project = bench::Project::fresh();
+        project.write_feature(
             "articles",
             &[
                 (
                     "model.rs",
-                    &entite::rendre(&feature).expect("entité rendue"),
+                    &entity::render(&feature).expect("entité rendue"),
                 ),
-                ("dto.rs", &rendre(&feature).expect("DTO rendus")),
+                ("dto.rs", &render(&feature).expect("DTO rendus")),
             ],
         );
-        projet.compiler();
+        project.compile();
     }
 
     /// Rendu complet imprimé pour la revue de lecture qu'exige le lot.
     #[test]
     #[ignore = "affichage pour revue humaine"]
-    fn apercu() {
+    fn preview() {
         println!(
             "{}",
             dto(
                 "articles",
-                "titre:string,email:string,resume:text:optional,vues:int"
+                "title:string,email:string,summary:text:optional,views:int"
             )
         );
     }
 
     /// Isole une struct du rendu, de son en-tête à son accolade fermante.
-    fn extraire<'a>(rendu: &'a str, entete: &str) -> &'a str {
-        let debut = rendu
+    fn extract<'a>(rendered: &'a str, entete: &str) -> &'a str {
+        let debut = rendered
             .find(entete)
-            .unwrap_or_else(|| panic!("« {entete} » absent :\n{rendu}"));
-        let reste = &rendu[debut..];
+            .unwrap_or_else(|| panic!("« {entete} » absent :\n{rendered}"));
+        let reste = &rendered[debut..];
         let fin = reste.find("\n}").map_or(reste.len(), |offset| offset + 2);
 
         &reste[..fin]

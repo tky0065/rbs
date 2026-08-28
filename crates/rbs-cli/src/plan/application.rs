@@ -4,16 +4,16 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use super::{Fichier, Plan, Statut};
+use super::{File, Plan, Status};
 
 /// Ce qui peut empêcher d'appliquer un plan.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum Erreur {
+pub(crate) enum Error {
     /// Une écriture a échoué ; ce que le plan avait déjà écrit a été défait.
-    #[error("{chemin} n'a pu être écrit : {source} — le projet a été laissé intact")]
+    #[error("{path} n'a pu être écrit : {source} — le projet a été laissé intact")]
     Ecriture {
         /// Chemin fautif, relatif à la racine.
-        chemin: String,
+        path: String,
         /// Cause système.
         source: std::io::Error,
     },
@@ -29,33 +29,33 @@ pub(crate) enum Erreur {
 ///
 /// Les conflits s'arbitrent avant la première écriture : un plan refusé à mi-chemin aurait
 /// à être défait, alors qu'il n'aurait jamais dû commencer.
-pub(crate) fn appliquer(plan: &Plan, force: bool) -> Result<Vec<String>, Erreur> {
+pub(crate) fn apply(plan: &Plan, force: bool) -> Result<Vec<String>, Error> {
     if !force {
         let bloquants: Vec<&str> = plan
-            .fichiers()
+            .files()
             .iter()
-            .filter(|fichier| fichier.statut == Statut::Conflit)
-            .map(|fichier| fichier.chemin.as_str())
+            .filter(|file| file.statut == Status::Conflit)
+            .map(|file| file.path.as_str())
             .collect();
 
         if !bloquants.is_empty() {
-            return Err(Erreur::Conflit {
+            return Err(Error::Conflit {
                 chemins: bloquants.join(", "),
             });
         }
     }
 
-    let mut journal = Journal::default();
+    let mut journal = Log::default();
 
-    for fichier in plan.fichiers() {
-        if fichier.statut == Statut::DejaFait {
+    for file in plan.files() {
+        if file.statut == Status::DejaFait {
             continue;
         }
 
-        if let Err(source) = journal.ecrire(plan.racine(), fichier) {
-            journal.defaire(plan.racine());
-            return Err(Erreur::Ecriture {
-                chemin: fichier.chemin.clone(),
+        if let Err(source) = journal.write(plan.root(), file) {
+            journal.undo(plan.root());
+            return Err(Error::Ecriture {
+                path: file.path.clone(),
                 source,
             });
         }
@@ -66,7 +66,7 @@ pub(crate) fn appliquer(plan: &Plan, force: bool) -> Result<Vec<String>, Erreur>
 
 /// Ce que l'application a fait, dans l'ordre, pour pouvoir le défaire.
 #[derive(Default)]
-struct Journal {
+struct Log {
     /// Chemins écrits, relatifs à la racine.
     ecrits: Vec<String>,
     /// Contenu d'origine de chaque chemin écrit : `None` s'il n'existait pas.
@@ -75,18 +75,18 @@ struct Journal {
     repertoires: Vec<PathBuf>,
 }
 
-impl Journal {
+impl Log {
     /// Écrit un fichier après avoir noté de quoi le défaire.
-    fn ecrire(&mut self, racine: &Path, fichier: &Fichier) -> io::Result<()> {
-        let chemin = racine.join(&fichier.chemin);
+    fn write(&mut self, root: &Path, file: &File) -> io::Result<()> {
+        let path = root.join(&file.path);
 
-        if let Some(parent) = chemin.parent() {
-            self.creer_repertoires(parent)?;
+        if let Some(parent) = path.parent() {
+            self.create_directories(parent)?;
         }
 
-        fs::write(&chemin, &fichier.apres)?;
-        self.ecrits.push(fichier.chemin.clone());
-        self.origines.push(fichier.avant.clone());
+        fs::write(&path, &file.after)?;
+        self.ecrits.push(file.path.clone());
+        self.origines.push(file.before.clone());
 
         Ok(())
     }
@@ -95,7 +95,7 @@ impl Journal {
     ///
     /// `create_dir_all` ne dit pas ce qu'il a créé : sans cet inventaire, un rollback
     /// laisserait derrière lui des répertoires vides que le projet ne connaissait pas.
-    fn creer_repertoires(&mut self, parent: &Path) -> io::Result<()> {
+    fn create_directories(&mut self, parent: &Path) -> io::Result<()> {
         let mut a_creer = Vec::new();
         for ancetre in parent.ancestors() {
             if ancetre.exists() {
@@ -114,17 +114,17 @@ impl Journal {
     ///
     /// Les échecs de restauration sont tus : on est déjà sur un chemin d'erreur, et
     /// l'erreur qui a tout déclenché est plus utile que celle du nettoyage.
-    fn defaire(&self, racine: &Path) {
-        for (chemin, origine) in self.ecrits.iter().zip(&self.origines).rev() {
-            let chemin = racine.join(chemin);
-            let _ = match origine {
-                Some(contenu) => fs::write(&chemin, contenu),
-                None => fs::remove_file(&chemin),
+    fn undo(&self, root: &Path) {
+        for (path, origin) in self.ecrits.iter().zip(&self.origines).rev() {
+            let path = root.join(path);
+            let _ = match origin {
+                Some(content) => fs::write(&path, content),
+                None => fs::remove_file(&path),
             };
         }
 
-        for repertoire in self.repertoires.iter().rev() {
-            let _ = fs::remove_dir(repertoire);
+        for directory in self.repertoires.iter().rev() {
+            let _ = fs::remove_dir(directory);
         }
     }
 }
@@ -137,23 +137,23 @@ mod tests {
 
     use tempfile::TempDir;
 
-    use super::super::{Fichier, Statut};
+    use super::super::{File, Status};
     use super::*;
 
-    fn fichier(chemin: &str, avant: Option<&str>, apres: &str, statut: Statut) -> Fichier {
-        Fichier {
-            chemin: chemin.to_string(),
-            avant: avant.map(str::to_string),
-            apres: apres.to_string(),
+    fn file(path: &str, before: Option<&str>, after: &str, statut: Status) -> File {
+        File {
+            path: path.to_string(),
+            before: before.map(str::to_string),
+            after: after.to_string(),
             statut,
         }
     }
 
-    fn plan_de(racine: &Path, fichiers: Vec<Fichier>) -> Plan {
+    fn plan_of(root: &Path, files: Vec<File>) -> Plan {
         Plan {
-            racine: racine.to_path_buf(),
+            root: root.to_path_buf(),
             actions: Vec::new(),
-            fichiers,
+            files,
         }
     }
 
@@ -161,26 +161,23 @@ mod tests {
     ///
     /// Plus forte qu'une vérification d'absence : elle attrape aussi ce qu'on n'aurait pas
     /// pensé à chercher, un répertoire vide laissé derrière compris.
-    fn empreinte(racine: &Path) -> BTreeMap<PathBuf, Option<String>> {
+    fn fingerprint(root: &Path) -> BTreeMap<PathBuf, Option<String>> {
         let mut vue = BTreeMap::new();
-        let mut a_visiter = vec![racine.to_path_buf()];
+        let mut a_visiter = vec![root.to_path_buf()];
 
-        while let Some(repertoire) = a_visiter.pop() {
-            for entree in fs::read_dir(&repertoire).expect("le répertoire se lit") {
-                let chemin = entree.expect("l'entrée se lit").path();
-                let relatif = chemin
-                    .strip_prefix(racine)
+        while let Some(directory) = a_visiter.pop() {
+            for input in fs::read_dir(&directory).expect("le répertoire se lit") {
+                let path = input.expect("l'entrée se lit").path();
+                let relatif = path
+                    .strip_prefix(root)
                     .expect("le chemin est sous la racine")
                     .to_path_buf();
 
-                if chemin.is_dir() {
+                if path.is_dir() {
                     vue.insert(relatif, None);
-                    a_visiter.push(chemin);
+                    a_visiter.push(path);
                 } else {
-                    vue.insert(
-                        relatif,
-                        Some(fs::read_to_string(&chemin).unwrap_or_default()),
-                    );
+                    vue.insert(relatif, Some(fs::read_to_string(&path).unwrap_or_default()));
                 }
             }
         }
@@ -188,176 +185,176 @@ mod tests {
         vue
     }
 
-    fn projet() -> TempDir {
+    fn project() -> TempDir {
         TempDir::new().expect("le répertoire temporaire se crée")
     }
 
     #[test]
-    fn un_plan_sans_conflit_ecrit_tous_ses_fichiers() {
-        let projet = projet();
-        fs::write(projet.path().join("Cargo.toml"), "[package]\n").expect("l'écriture aboutit");
+    fn a_conflict_free_plan_writes_all_its_files() {
+        let project = project();
+        fs::write(project.path().join("Cargo.toml"), "[package]\n").expect("l'écriture aboutit");
 
-        let plan = plan_de(
-            projet.path(),
+        let plan = plan_of(
+            project.path(),
             vec![
-                fichier("Dockerfile", None, "FROM rust\n", Statut::AFaire),
-                fichier("src/notes/mod.rs", None, "pub mod dto;\n", Statut::AFaire),
-                fichier(
+                file("Dockerfile", None, "FROM rust\n", Status::AFaire),
+                file("src/notes/mod.rs", None, "pub mod dto;\n", Status::AFaire),
+                file(
                     "Cargo.toml",
                     Some("[package]\n"),
                     "[package]\nname = \"demo\"\n",
-                    Statut::AFaire,
+                    Status::AFaire,
                 ),
             ],
         );
 
-        let ecrits = appliquer(&plan, false).expect("rien ne s'oppose à l'écriture");
+        let ecrits = apply(&plan, false).expect("rien ne s'oppose à l'écriture");
 
         assert_eq!(ecrits.len(), 3, "{ecrits:?}");
         assert_eq!(
-            fs::read_to_string(projet.path().join("Dockerfile")).expect("le fichier existe"),
+            fs::read_to_string(project.path().join("Dockerfile")).expect("le fichier existe"),
             "FROM rust\n"
         );
         assert_eq!(
-            fs::read_to_string(projet.path().join("src/notes/mod.rs")).expect("le fichier existe"),
+            fs::read_to_string(project.path().join("src/notes/mod.rs")).expect("le fichier existe"),
             "pub mod dto;\n"
         );
         assert_eq!(
-            fs::read_to_string(projet.path().join("Cargo.toml")).expect("le fichier existe"),
+            fs::read_to_string(project.path().join("Cargo.toml")).expect("le fichier existe"),
             "[package]\nname = \"demo\"\n"
         );
     }
 
     #[test]
-    fn un_fichier_deja_conforme_n_est_pas_reecrit() {
-        let projet = projet();
-        fs::write(projet.path().join("Dockerfile"), "FROM rust\n").expect("l'écriture aboutit");
+    fn an_already_conforming_file_is_not_rewritten() {
+        let project = project();
+        fs::write(project.path().join("Dockerfile"), "FROM rust\n").expect("l'écriture aboutit");
 
-        let plan = plan_de(
-            projet.path(),
-            vec![fichier(
+        let plan = plan_of(
+            project.path(),
+            vec![file(
                 "Dockerfile",
                 Some("FROM rust\n"),
                 "FROM rust\n",
-                Statut::DejaFait,
+                Status::DejaFait,
             )],
         );
 
-        let ecrits = appliquer(&plan, false).expect("il n'y a rien à faire");
+        let ecrits = apply(&plan, false).expect("il n'y a rien à faire");
 
         assert!(ecrits.is_empty(), "{ecrits:?}");
     }
 
     #[test]
-    fn un_conflit_fait_refuser_le_plan_avant_la_premiere_ecriture() {
-        let projet = projet();
-        fs::write(projet.path().join("src.rs"), "écrit à la main\n").expect("l'écriture aboutit");
-        let avant = empreinte(projet.path());
+    fn a_conflict_rejects_the_plan_before_the_first_write() {
+        let project = project();
+        fs::write(project.path().join("src.rs"), "écrit à la main\n").expect("l'écriture aboutit");
+        let before = fingerprint(project.path());
 
-        let plan = plan_de(
-            projet.path(),
+        let plan = plan_of(
+            project.path(),
             vec![
-                fichier("Dockerfile", None, "FROM rust\n", Statut::AFaire),
-                fichier(
+                file("Dockerfile", None, "FROM rust\n", Status::AFaire),
+                file(
                     "src.rs",
                     Some("écrit à la main\n"),
                     "écrasé\n",
-                    Statut::Conflit,
+                    Status::Conflit,
                 ),
             ],
         );
 
-        let erreur = appliquer(&plan, false).expect_err("le conflit doit arrêter le plan");
+        let error = apply(&plan, false).expect_err("le conflit doit arrêter le plan");
 
-        assert!(matches!(erreur, Erreur::Conflit { .. }), "{erreur:?}");
-        assert!(erreur.to_string().contains("src.rs"), "{erreur}");
+        assert!(matches!(error, Error::Conflit { .. }), "{error:?}");
+        assert!(error.to_string().contains("src.rs"), "{error}");
         assert_eq!(
-            empreinte(projet.path()),
-            avant,
+            fingerprint(project.path()),
+            before,
             "rien ne doit avoir été écrit"
         );
     }
 
     #[test]
-    fn un_conflit_force_est_ecrase() {
-        let projet = projet();
-        fs::write(projet.path().join("src.rs"), "écrit à la main\n").expect("l'écriture aboutit");
+    fn a_forced_conflict_is_overwritten() {
+        let project = project();
+        fs::write(project.path().join("src.rs"), "écrit à la main\n").expect("l'écriture aboutit");
 
-        let plan = plan_de(
-            projet.path(),
-            vec![fichier(
+        let plan = plan_of(
+            project.path(),
+            vec![file(
                 "src.rs",
                 Some("écrit à la main\n"),
                 "écrasé\n",
-                Statut::Conflit,
+                Status::Conflit,
             )],
         );
 
-        appliquer(&plan, true).expect("--force écrase");
+        apply(&plan, true).expect("--force écrase");
 
         assert_eq!(
-            fs::read_to_string(projet.path().join("src.rs")).expect("le fichier existe"),
+            fs::read_to_string(project.path().join("src.rs")).expect("le fichier existe"),
             "écrasé\n"
         );
     }
 
     /// Le critère de la tâche : un échec en cours d'application ne laisse rien derrière.
     #[test]
-    fn un_echec_sur_la_quatrieme_action_annule_les_trois_premieres() {
-        let projet = projet();
-        fs::write(projet.path().join("Cargo.toml"), "[package]\n").expect("l'écriture aboutit");
+    fn a_failure_on_the_fourth_action_rolls_back_the_first_three() {
+        let project = project();
+        fs::write(project.path().join("Cargo.toml"), "[package]\n").expect("l'écriture aboutit");
         // Le parent du quatrième fichier est un fichier régulier : `create_dir_all` y
         // échouera pour de vrai, sans point d'injection dans le code de production.
         fs::write(
-            projet.path().join("obstacle"),
+            project.path().join("obstacle"),
             "je ne suis pas un répertoire\n",
         )
         .expect("l'écriture aboutit");
-        let avant = empreinte(projet.path());
+        let before = fingerprint(project.path());
 
-        let plan = plan_de(
-            projet.path(),
+        let plan = plan_of(
+            project.path(),
             vec![
-                fichier("Dockerfile", None, "FROM rust\n", Statut::AFaire),
-                fichier("src/notes/mod.rs", None, "pub mod dto;\n", Statut::AFaire),
-                fichier(
+                file("Dockerfile", None, "FROM rust\n", Status::AFaire),
+                file("src/notes/mod.rs", None, "pub mod dto;\n", Status::AFaire),
+                file(
                     "Cargo.toml",
                     Some("[package]\n"),
                     "[package]\nname = \"demo\"\n",
-                    Statut::AFaire,
+                    Status::AFaire,
                 ),
-                fichier("obstacle/x.rs", None, "jamais écrit\n", Statut::AFaire),
+                file("obstacle/x.rs", None, "jamais écrit\n", Status::AFaire),
             ],
         );
 
-        let erreur = appliquer(&plan, false).expect_err("la quatrième action doit échouer");
+        let error = apply(&plan, false).expect_err("la quatrième action doit échouer");
 
-        assert!(matches!(erreur, Erreur::Ecriture { .. }), "{erreur:?}");
+        assert!(matches!(error, Error::Ecriture { .. }), "{error:?}");
         assert_eq!(
-            empreinte(projet.path()),
-            avant,
+            fingerprint(project.path()),
+            before,
             "les trois premières actions doivent avoir été annulées"
         );
     }
 
     #[test]
-    fn un_repertoire_cree_puis_annule_ne_reste_pas_derriere() {
-        let projet = projet();
-        fs::write(projet.path().join("obstacle"), "pas un répertoire\n")
+    fn a_directory_created_then_rolled_back_does_not_linger() {
+        let project = project();
+        fs::write(project.path().join("obstacle"), "pas un répertoire\n")
             .expect("l'écriture aboutit");
 
-        let plan = plan_de(
-            projet.path(),
+        let plan = plan_of(
+            project.path(),
             vec![
-                fichier("src/notes/mod.rs", None, "pub mod dto;\n", Statut::AFaire),
-                fichier("obstacle/x.rs", None, "jamais écrit\n", Statut::AFaire),
+                file("src/notes/mod.rs", None, "pub mod dto;\n", Status::AFaire),
+                file("obstacle/x.rs", None, "jamais écrit\n", Status::AFaire),
             ],
         );
 
-        appliquer(&plan, false).expect_err("la seconde action doit échouer");
+        apply(&plan, false).expect_err("la seconde action doit échouer");
 
         assert!(
-            !projet.path().join("src").exists(),
+            !project.path().join("src").exists(),
             "`src/` a été créé par le plan : il doit disparaître avec lui"
         );
     }

@@ -4,11 +4,11 @@
 //! diagnostic qui s'arrête au premier problème oblige à le relancer autant de fois qu'il
 //! y a de problèmes.
 
-pub mod ancres;
+pub mod anchors;
 pub mod auth;
 pub mod base;
 pub mod env;
-pub mod rendu;
+pub mod render;
 pub mod versions;
 
 use std::path::Path;
@@ -17,7 +17,7 @@ use crate::metadata;
 
 /// Verdict d'un contrôle.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum Etat {
+pub(crate) enum State {
     /// Rien à signaler.
     Bon,
     /// Ce qui empêche le projet de fonctionner.
@@ -26,60 +26,60 @@ pub(crate) enum Etat {
 
 /// Ce qu'un contrôle a constaté.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Controle {
-    /// Ce qui est vérifié, en un mot : `ancres`, `.env`, `versions`, `base`.
-    pub titre: &'static str,
+pub(crate) struct Check {
+    /// Ce qui est vérifié, en un mot : `anchors`, `.env`, `versions`, `base`.
+    pub title: &'static str,
     /// Verdict.
-    pub etat: Etat,
+    pub state: State,
     /// Ce qui a été constaté, en une ligne.
     pub detail: String,
     /// Quoi faire, quand il y a quelque chose à faire.
-    pub remede: Option<String>,
+    pub remedy: Option<String>,
 }
 
-impl Controle {
+impl Check {
     /// Un contrôle sans rien à signaler.
-    pub(crate) fn bon(titre: &'static str, detail: impl Into<String>) -> Self {
+    pub(crate) fn ok(title: &'static str, detail: impl Into<String>) -> Self {
         Self {
-            titre,
-            etat: Etat::Bon,
+            title,
+            state: State::Bon,
             detail: detail.into(),
-            remede: None,
+            remedy: None,
         }
     }
 
     /// Un contrôle en échec, et le geste qui le corrige.
-    pub(crate) fn echec(
-        titre: &'static str,
+    pub(crate) fn failed(
+        title: &'static str,
         detail: impl Into<String>,
-        remede: impl Into<String>,
+        remedy: impl Into<String>,
     ) -> Self {
         Self {
-            titre,
-            etat: Etat::Echec,
+            title,
+            state: State::Echec,
             detail: detail.into(),
-            remede: Some(remede.into()),
+            remedy: Some(remedy.into()),
         }
     }
 }
 
 /// L'ensemble des constats, dans l'ordre où ils ont été faits.
 #[derive(Debug)]
-pub(crate) struct Rapport {
+pub(crate) struct Report {
     /// Les contrôles, tous exécutés.
-    pub controles: Vec<Controle>,
+    pub checks: Vec<Check>,
 }
 
-impl Rapport {
+impl Report {
     /// Vrai si aucun contrôle n'a échoué.
-    pub(crate) fn reussi(&self) -> bool {
-        self.controles.iter().all(|c| c.etat == Etat::Bon)
+    pub(crate) fn succeeded(&self) -> bool {
+        self.checks.iter().all(|c| c.state == State::Bon)
     }
 }
 
 /// Ce qui peut empêcher de diagnostiquer.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum Erreur {
+pub(crate) enum Error {
     /// La commande n'a pas été lancée depuis un projet rbs.
     #[error(
         "cette commande attend un projet rbs : aucun Cargo.toml portant [package.metadata.rbs] au-dessus d'ici"
@@ -87,30 +87,30 @@ pub(crate) enum Erreur {
     PasUnProjet,
 }
 
-/// Diagnostique le projet qui contient `repertoire`.
-pub(crate) fn executer(repertoire: &Path) -> Result<Rapport, Erreur> {
-    let racine = metadata::racine_du_projet(repertoire).ok_or(Erreur::PasUnProjet)?;
+/// Diagnostique le projet qui contient `directory`.
+pub(crate) fn run(directory: &Path) -> Result<Report, Error> {
+    let root = metadata::project_root(directory).ok_or(Error::PasUnProjet)?;
 
-    let mut controles = vec![
-        ancres::controler(&racine),
-        env::controler(&racine),
-        versions::controler(&racine),
-        base::controler(&racine),
+    let mut checks = vec![
+        anchors::check(&root),
+        env::check(&root),
+        versions::check(&root),
+        base::check(&root),
     ];
 
     // Un projet qui n'a pas installé `auth` n'a pas à lire une ligne à son sujet : le
     // rapport ne porte que des contrôles dont le verdict le concerne.
-    if feature_installee(&racine, "auth") {
-        controles.push(auth::controler(&racine));
+    if installed_feature(&root, "auth") {
+        checks.push(auth::check(&root));
     }
 
-    Ok(Rapport { controles })
+    Ok(Report { checks })
 }
 
-/// Vrai si `nom` figure dans `[package.metadata.rbs].features`.
-fn feature_installee(racine: &Path, nom: &str) -> bool {
-    metadata::lire(&racine.join("Cargo.toml"))
-        .is_ok_and(|metadonnees| metadonnees.features.iter().any(|feature| feature == nom))
+/// Vrai si `name` figure dans `[package.metadata.rbs].features`.
+fn installed_feature(root: &Path, name: &str) -> bool {
+    metadata::read(&root.join("Cargo.toml"))
+        .is_ok_and(|metadonnees| metadonnees.features.iter().any(|feature| feature == name))
 }
 
 #[cfg(test)]
@@ -120,29 +120,29 @@ mod tests {
     use super::*;
 
     #[test]
-    fn hors_d_un_projet_rbs_rien_n_est_diagnostique() {
+    fn outside_an_rbs_project_nothing_is_diagnosed() {
         let ailleurs = TempDir::new().expect("répertoire temporaire créable");
 
-        let erreur = executer(ailleurs.path()).expect_err("ce n'est pas un projet");
+        let error = run(ailleurs.path()).expect_err("ce n'est pas un projet");
 
-        assert!(matches!(erreur, Erreur::PasUnProjet));
+        assert!(matches!(error, Error::PasUnProjet));
     }
 
     #[test]
-    fn un_rapport_sans_echec_est_reussi() {
-        let rapport = Rapport {
-            controles: vec![Controle::bon("ancres", "les 5 sont en place")],
+    fn a_report_without_a_failure_has_succeeded() {
+        let report = Report {
+            checks: vec![Check::ok("ancres", "les 5 sont en place")],
         };
 
-        assert!(rapport.reussi());
+        assert!(report.succeeded());
     }
 
     /// Un projet neuf, dont les features sont celles passées.
-    fn projet(features: &[&str]) -> (TempDir, std::path::PathBuf) {
+    fn project(features: &[&str]) -> (TempDir, std::path::PathBuf) {
         let parent = TempDir::new().expect("répertoire temporaire créable");
-        let projet = crate::new::creer(
+        let project = crate::new::create(
             &crate::new::Options {
-                nom: "demo-api".to_string(),
+                name: "demo-api".to_string(),
                 database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
                 features: Vec::new(),
                 core_path: None,
@@ -152,15 +152,15 @@ mod tests {
         )
         .expect("le projet doit se créer");
 
-        let manifeste = projet.racine.join("Cargo.toml");
-        let source = std::fs::read_to_string(&manifeste).expect("manifeste lisible");
+        let manifest = project.root.join("Cargo.toml");
+        let source = std::fs::read_to_string(&manifest).expect("manifeste lisible");
         let declarees = features
             .iter()
             .map(|feature| format!("\"{feature}\""))
             .collect::<Vec<_>>()
             .join(", ");
         std::fs::write(
-            &manifeste,
+            &manifest,
             source.replace(
                 "features = [\"health\"]",
                 &format!("features = [{declarees}]"),
@@ -168,48 +168,48 @@ mod tests {
         )
         .expect("manifeste inscriptible");
 
-        (parent, projet.racine)
+        (parent, project.root)
     }
 
-    fn titres(rapport: &Rapport) -> Vec<&'static str> {
-        rapport.controles.iter().map(|c| c.titre).collect()
+    fn titles(report: &Report) -> Vec<&'static str> {
+        report.checks.iter().map(|c| c.title).collect()
     }
 
     #[test]
-    fn un_projet_sans_auth_n_a_pas_de_controle_auth() {
-        let (_parent, racine) = projet(&["health"]);
+    fn a_project_without_auth_has_no_auth_check() {
+        let (_parent, root) = project(&["health"]);
 
-        let rapport = executer(&racine).expect("c'est un projet rbs");
+        let report = run(&root).expect("c'est un projet rbs");
 
         assert!(
-            !titres(&rapport).contains(&"auth"),
+            !titles(&report).contains(&"auth"),
             "un projet sans auth n'a pas à lire une ligne à son sujet : {:?}",
-            titres(&rapport)
+            titles(&report)
         );
     }
 
     #[test]
-    fn un_projet_portant_auth_recoit_son_controle() {
-        let (_parent, racine) = projet(&["health", "auth"]);
+    fn a_project_carrying_auth_receives_its_check() {
+        let (_parent, root) = project(&["health", "auth"]);
 
-        let rapport = executer(&racine).expect("c'est un projet rbs");
+        let report = run(&root).expect("c'est un projet rbs");
 
         assert!(
-            titres(&rapport).contains(&"auth"),
+            titles(&report).contains(&"auth"),
             "la feature est déclarée, son contrôle doit figurer : {:?}",
-            titres(&rapport)
+            titles(&report)
         );
     }
 
     #[test]
-    fn un_seul_echec_fait_echouer_le_rapport() {
-        let rapport = Rapport {
-            controles: vec![
-                Controle::bon("ancres", "les 5 sont en place"),
-                Controle::echec(".env", "RBS_ENV manque", "ajoutez RBS_ENV"),
+    fn a_single_failure_fails_the_report() {
+        let report = Report {
+            checks: vec![
+                Check::ok("ancres", "les 5 sont en place"),
+                Check::failed(".env", "RBS_ENV manque", "ajoutez RBS_ENV"),
             ],
         };
 
-        assert!(!rapport.reussi());
+        assert!(!report.succeeded());
     }
 }

@@ -1,4 +1,4 @@
-//! Rendu de `<nom>/service.rs` : les décisions métier de la feature.
+//! Rendu de `<name>/service.rs` : les décisions métier de la feature.
 
 use crate::template::Renderer;
 
@@ -10,24 +10,24 @@ const TEMPLATE: &str = include_str!(concat!(
 ));
 
 /// Rend le service de `feature`.
-pub(crate) fn rendre(feature: &Feature) -> Result<String, minijinja::Error> {
-    Renderer::new().rendre(TEMPLATE, feature)
+pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
+    Renderer::new().render(TEMPLATE, feature)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::generate::feature::Feature;
-    use crate::generate::{banc, champs, dto, entite, repository};
+    use crate::generate::{bench, dto, entity, fields, repository};
 
-    fn service(nom: &str, fields: &str) -> String {
-        let champs = champs::analyser(fields).expect("les champs du test doivent être valides");
-        rendre(&Feature::nouvelle(nom, champs)).expect("le service doit se rendre")
+    fn service(name: &str, fields: &str) -> String {
+        let fields = fields::parse(fields).expect("les champs du test doivent être valides");
+        render(&Feature::fresh(name, fields)).expect("le service doit se rendre")
     }
 
     #[test]
-    fn le_service_expose_les_cinq_operations_du_crud() {
-        let rendu = service("articles", "titre:string");
+    fn the_service_exposes_the_five_crud_operations() {
+        let rendered = service("articles", "title:string");
 
         for signature in [
             "pub async fn list(\n    db: &DatabaseConnection,\n    pagination: &Pagination,\n) -> Result<Page<ArticleResponse>> {",
@@ -36,166 +36,169 @@ mod tests {
             "pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<()> {",
         ] {
             assert!(
-                rendu.contains(signature),
-                "« {signature} » absente :\n{rendu}"
+                rendered.contains(signature),
+                "« {signature} » absente :\n{rendered}"
             );
         }
         assert!(
-            rendu.contains("pub async fn update(") && rendu.contains("input: UpdateArticle"),
-            "signature d'update inattendue :\n{rendu}"
+            rendered.contains("pub async fn update(") && rendered.contains("input: UpdateArticle"),
+            "signature d'update inattendue :\n{rendered}"
         );
     }
 
     #[test]
-    fn aucune_requete_seaorm_n_est_construite_ici() {
-        let rendu = service("articles", "titre:string,vues:int");
+    fn no_seaorm_query_is_built_here() {
+        let rendered = service("articles", "title:string,views:int");
 
         assert!(
-            !rendu.contains("EntityTrait"),
-            "le service ne parle pas à la base :\n{rendu}"
+            !rendered.contains("EntityTrait"),
+            "le service ne parle pas à la base :\n{rendered}"
         );
         for interdit in ["Entity::find", "Entity::delete", ".all(db)", ".one(db)"] {
             assert!(
-                !rendu.contains(interdit),
-                "« {interdit} » n'a rien à faire ici :\n{rendu}"
+                !rendered.contains(interdit),
+                "« {interdit} » n'a rien à faire ici :\n{rendered}"
             );
         }
     }
 
     #[test]
-    fn l_entite_n_est_atteinte_qu_a_travers_le_repository() {
-        let rendu = service("articles", "titre:string");
+    fn the_entity_is_only_reached_through_the_repository() {
+        let rendered = service("articles", "title:string");
 
         assert!(
-            !rendu.contains("super::model"),
-            "le service ne connaît que repository.rs et dto.rs :\n{rendu}"
+            !rendered.contains("super::model"),
+            "le service ne connaît que repository.rs et dto.rs :\n{rendered}"
         );
         assert!(
-            rendu.contains("use super::repository::{self, ActiveModel};"),
-            "l'ActiveModel doit venir du repository :\n{rendu}"
+            rendered.contains("use super::repository::{self, ActiveModel};"),
+            "l'ActiveModel doit venir du repository :\n{rendered}"
         );
     }
 
     #[test]
-    fn l_absence_devient_une_erreur_nommee() {
-        let rendu = service("blog_posts", "titre:string");
+    fn absence_becomes_a_named_error() {
+        let rendered = service("blog_posts", "title:string");
 
         assert_eq!(
-            rendu.matches(r#"Error::NotFound("blog_post")"#).count(),
+            rendered.matches(r#"Error::NotFound("blog_post")"#).count(),
             3,
-            "find, update et delete doivent chacun signaler l'absence :\n{rendu}"
+            "find, update et delete doivent chacun signaler l'absence :\n{rendered}"
         );
     }
 
     #[test]
-    fn la_liste_assemble_la_page_du_noyau() {
-        let rendu = service("articles", "titre:string");
+    fn the_list_assembles_the_core_page() {
+        let rendered = service("articles", "title:string");
 
         assert!(
-            rendu.contains("let (articles, total) = repository::list(db, pagination).await?;"),
-            "la liste doit venir du repository :\n{rendu}"
+            rendered.contains("let (articles, total) = repository::list(db, pagination).await?;"),
+            "la liste doit venir du repository :\n{rendered}"
         );
         assert!(
-            rendu.contains("Ok(Page::new("),
-            "l'assemblage de la page revient au service :\n{rendu}"
-        );
-    }
-
-    #[test]
-    fn la_creation_pose_chaque_champ_declare() {
-        let rendu = service("articles", "titre:string,resume:text:optional");
-
-        assert!(rendu.contains("titre: Set(input.titre),"), "{rendu}");
-        assert!(rendu.contains("resume: Set(input.resume),"), "{rendu}");
-        assert!(
-            rendu.contains("..Default::default()"),
-            "id et horodatages sont posés par la base :\n{rendu}"
+            rendered.contains("Ok(Page::new("),
+            "l'assemblage de la page revient au service :\n{rendered}"
         );
     }
 
     #[test]
-    fn la_mise_a_jour_n_ecrit_que_les_champs_recus() {
-        let rendu = service("articles", "titre:string,vues:int");
+    fn creation_sets_every_declared_field() {
+        let rendered = service("articles", "title:string,summary:text:optional");
+
+        assert!(rendered.contains("title: Set(input.title),"), "{rendered}");
+        assert!(
+            rendered.contains("summary: Set(input.summary),"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("..Default::default()"),
+            "id et horodatages sont posés par la base :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn the_update_only_writes_the_fields_it_receives() {
+        let rendered = service("articles", "title:string,views:int");
 
         assert!(
-            rendu.contains(
-                "if let Some(titre) = input.titre {\n        article.titre = Set(titre);\n    }"
+            rendered.contains(
+                "if let Some(title) = input.title {\n        article.title = Set(title);\n    }"
             ),
-            "champ obligatoire mal appliqué :\n{rendu}"
+            "champ obligatoire mal appliqué :\n{rendered}"
         );
         assert!(
-            rendu.contains(
-                "if let Some(vues) = input.vues {\n        article.vues = Set(vues);\n    }"
+            rendered.contains(
+                "if let Some(views) = input.views {\n        article.views = Set(views);\n    }"
             ),
-            "champ obligatoire mal appliqué :\n{rendu}"
+            "champ obligatoire mal appliqué :\n{rendered}"
         );
     }
 
     #[test]
-    fn un_champ_optionnel_reste_optionnel_dans_la_colonne() {
-        let rendu = service("articles", "resume:text:optional");
+    fn an_optional_field_stays_optional_in_the_column() {
+        let rendered = service("articles", "summary:text:optional");
 
         assert!(
-            rendu.contains("article.resume = Set(Some(resume));"),
-            "la colonne est nullable : la valeur reçue doit y être réemballée :\n{rendu}"
+            rendered.contains("article.summary = Set(Some(summary));"),
+            "la colonne est nullable : la valeur reçue doit y être réemballée :\n{rendered}"
         );
     }
 
     #[test]
-    fn la_mise_a_jour_horodate_le_changement() {
-        let rendu = service("articles", "titre:string");
+    fn the_update_timestamps_the_change() {
+        let rendered = service("articles", "title:string");
 
         assert!(
-            rendu.contains("article.updated_at = Set(chrono::Utc::now().into());"),
-            "`updated_at` doit être posé par le service :\n{rendu}"
+            rendered.contains("article.updated_at = Set(chrono::Utc::now().into());"),
+            "`updated_at` doit être posé par le service :\n{rendered}"
         );
     }
 
     #[test]
-    fn une_feature_sans_champ_rend_un_service_valide() {
-        let rendu = service("tokens", "");
+    fn a_field_less_feature_renders_a_valid_service() {
+        let rendered = service("tokens", "");
 
-        assert!(rendu.contains("let token = ActiveModel {"), "{rendu}");
+        assert!(rendered.contains("let token = ActiveModel {"), "{rendered}");
         assert!(
-            !rendu.contains("if let Some("),
-            "rien à appliquer :\n{rendu}"
+            !rendered.contains("if let Some("),
+            "rien à appliquer :\n{rendered}"
         );
     }
 
     #[test]
     #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
-    fn le_service_genere_compile_dans_un_projet_neuf() {
-        let fields = "titre:string,email:string:unique,resume:text:optional,vues:int,\
-                      publie:bool,auteur_id:uuid,publie_le:datetime";
-        let champs = champs::analyser(fields).expect("champs valides");
-        let feature = Feature::nouvelle("articles", champs);
+    fn the_generated_service_compiles_in_a_fresh_project() {
+        let fields = "title:string,email:string:unique,summary:text:optional,views:int,\
+                      published:bool,auteur_id:uuid,published_at:datetime";
+        let fields = fields::parse(fields).expect("champs valides");
+        let feature = Feature::fresh("articles", fields);
 
-        let projet = banc::Projet::neuf();
-        projet.poser_feature(
+        let project = bench::Project::fresh();
+        project.write_feature(
             "articles",
             &[
                 (
                     "model.rs",
-                    &entite::rendre(&feature).expect("entité rendue"),
+                    &entity::render(&feature).expect("entité rendue"),
                 ),
-                ("dto.rs", &dto::rendre(&feature).expect("DTO rendus")),
+                ("dto.rs", &dto::render(&feature).expect("DTO rendus")),
                 (
                     "repository.rs",
-                    &repository::rendre(&feature).expect("repository rendu"),
+                    &repository::render(&feature).expect("repository rendu"),
                 ),
-                ("service.rs", &rendre(&feature).expect("service rendu")),
+                ("service.rs", &render(&feature).expect("service rendu")),
             ],
         );
-        projet.compiler();
+        project.compile();
     }
 
     /// Rendu complet imprimé pour la revue de lecture qu'exige le lot.
     #[test]
     #[ignore = "affichage pour revue humaine"]
-    fn apercu() {
+    fn preview() {
         println!(
             "{}",
-            service("articles", "titre:string,resume:text:optional,vues:int")
+            service("articles", "title:string,summary:text:optional,views:int")
         );
     }
 }

@@ -8,9 +8,9 @@ use std::path::Path;
 
 use minijinja::Value;
 
-use crate::ancres::{self, Ancre};
-use crate::generate::montage;
-use crate::manifeste::Manifeste;
+use crate::anchors::{self, Anchor};
+use crate::generate::mount;
+use crate::manifest::Manifest;
 use crate::metadata;
 use crate::plan;
 use crate::template::Renderer;
@@ -25,22 +25,22 @@ const FICHIER_ENV: &str = ".env.example";
 /// Le fragment tel que l'installation le voit.
 pub(crate) struct Fragment<'a> {
     /// Nom de la feature, pour les messages d'erreur.
-    pub nom: &'a str,
+    pub name: &'a str,
     /// Ce que son manifeste déclare.
-    pub manifeste: &'a Manifeste,
+    pub manifest: &'a Manifest,
     /// Ses templates, telles que la source les a lues.
-    pub templates: &'a [templates::Fichier],
+    pub templates: &'a [templates::File],
     /// Contexte de rendu, déduit du projet visé.
-    pub contexte: Value,
+    pub context: Value,
     /// Horodatage que portera la migration du fragment.
     ///
     /// Il est reçu et non lu de l'horloge : une planification doit être reproductible.
-    pub horodatage: &'a str,
+    pub timestamp: &'a str,
 }
 
 /// Ce qui peut empêcher d'interpréter un manifeste.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum Erreur {
+pub(crate) enum Error {
     /// Le manifeste désigne une template que le fragment ne porte pas.
     #[error("{feature}/feature.toml déclare `{template}`, absente du fragment")]
     TemplateAbsente {
@@ -51,120 +51,120 @@ pub(crate) enum Erreur {
     },
 
     /// Le manifeste vise une ancre que le squelette ne porte pas.
-    #[error("{feature}/feature.toml vise l'ancre `{ancre}`, qui n'existe pas : {connues}")]
+    #[error("{feature}/feature.toml vise l'ancre `{anchor}`, qui n'existe pas : {known}")]
     AncreInconnue {
         /// Feature en cours d'installation.
         feature: String,
         /// Nom d'ancre refusé.
-        ancre: String,
+        anchor: String,
         /// Les ancres du squelette, énumérées.
-        connues: String,
+        known: String,
     },
 
     /// Une template ne s'est pas rendue.
-    #[error("{fichier} ne se rend pas : {source}")]
+    #[error("{file} ne se rend pas : {source}")]
     Rendu {
         /// Fichier fautif.
-        fichier: String,
+        file: String,
         /// Cause du moteur de rendu.
         source: minijinja::Error,
     },
 
     /// L'action n'a pas pu être planifiée.
     #[error("{0}")]
-    Plan(#[from] plan::Erreur),
+    Plan(#[from] plan::Error),
 }
 
 /// Ajoute au plan ce que le manifeste déclare, et rend les chemins déposés.
 pub(crate) fn actions(
     fragment: &Fragment,
-    constructeur: &mut plan::Constructeur,
-) -> Result<Vec<String>, Erreur> {
+    builder: &mut plan::Builder,
+) -> Result<Vec<String>, Error> {
     let renderer = Renderer::new();
     let mut deposes = Vec::new();
 
     for (destination, source) in a_deposer(fragment)? {
-        let contenu = rendre(&renderer, fragment, source, &destination)?;
+        let content = render(&renderer, fragment, source, &destination)?;
 
-        constructeur.creer(&destination, &contenu)?;
+        builder.create(&destination, &content)?;
         deposes.push(destination);
     }
 
-    if let Some(declaree) = &fragment.manifeste.migration {
+    if let Some(declared) = &fragment.manifest.migration {
         // Le format est celui de `generate crud` et de `migrate new` : deux formats
         // d'horodatage dans un même projet, ce sont deux ordres de migration possibles.
-        let module = format!("m{}_{}", fragment.horodatage, declaree.nom);
-        let chemin = format!("migration/src/{module}.rs");
-        let contenu = rendre(
+        let module = format!("m{}_{}", fragment.timestamp, declared.name);
+        let path = format!("migration/src/{module}.rs");
+        let content = render(
             &renderer,
             fragment,
-            template(fragment, &declaree.source)?,
-            &chemin,
+            template(fragment, &declared.source)?,
+            &path,
         )?;
 
-        constructeur.creer(&chemin, &contenu)?;
-        deposes.push(chemin);
+        builder.create(&path, &content)?;
+        deposes.push(path);
 
-        for montage in montage::pour_migration(&module) {
-            constructeur.inserer(montage.ancre, &montage.lignes)?;
+        for mount in mount::for_migration(&module) {
+            builder.insert(mount.anchor, &mount.lines)?;
         }
     }
 
-    for insertion in &fragment.manifeste.ancres {
-        let ancre = ancre(fragment, &insertion.ancre)?;
-        constructeur.inserer(ancre, &lignes(&insertion.contenu))?;
+    for insertion in &fragment.manifest.anchors {
+        let anchor = anchor(fragment, &insertion.anchor)?;
+        builder.insert(anchor, &lines(&insertion.content))?;
     }
 
     // Avant les features de `[cargo.<crate>]` : activer une feature suppose la dépendance
     // déclarée, et un fragment peut fort bien viser une crate qu'il apporte lui-même.
-    for declaree in &fragment.manifeste.dependances {
-        constructeur.patcher(plan::PatchToml::AjouterDependance(metadata::Dependance {
-            nom: declaree.nom.clone(),
-            version: declaree.version.clone(),
-            features: declaree.features.clone(),
-            default_features: declaree.default_features,
+    for declared in &fragment.manifest.dependencies {
+        builder.patch(plan::PatchToml::AjouterDependance(metadata::Dependency {
+            name: declared.name.clone(),
+            version: declared.version.clone(),
+            features: declared.features.clone(),
+            default_features: declared.default_features,
         }))?;
     }
 
-    for (crate_, patch) in &fragment.manifeste.cargo {
+    for (crate_, patch) in &fragment.manifest.cargo {
         for feature in &patch.features {
-            constructeur.patcher(plan::PatchToml::AjouterFeatureADependance {
-                dependance: crate_.clone(),
+            builder.patch(plan::PatchToml::AjouterFeatureADependance {
+                dependency: crate_.clone(),
                 feature: feature.clone(),
             })?;
         }
     }
 
-    for section in &fragment.manifeste.config {
-        constructeur.ajouter_section(&section.fichier, &section.section, &section.contenu)?;
+    for section in &fragment.manifest.config {
+        builder.add_section(&section.file, &section.section, &section.content)?;
     }
 
-    for variable in &fragment.manifeste.env {
-        constructeur.ajouter_variable(
+    for variable in &fragment.manifest.env {
+        builder.add_variable(
             FICHIER_ENV,
-            &variable.cle,
-            &variable.valeur,
-            variable.commentaire.as_deref(),
+            &variable.key,
+            &variable.value,
+            variable.comment.as_deref(),
         )?;
     }
 
     Ok(deposes)
 }
 
-/// L'ancre du squelette que le manifeste désigne par `nom`.
+/// L'ancre du squelette que le manifeste désigne par `name`.
 ///
 /// Un nom inconnu est une faute du manifeste : l'ignorer installerait une feature dont
 /// le montage manquerait, ce que seule la compilation du projet révélerait.
-fn ancre(fragment: &Fragment, nom: &str) -> Result<Ancre, Erreur> {
-    ancres::ANCRES
+fn anchor(fragment: &Fragment, name: &str) -> Result<Anchor, Error> {
+    anchors::ANCRES
         .into_iter()
-        .find(|ancre| ancre.nom == nom)
-        .ok_or_else(|| Erreur::AncreInconnue {
-            feature: fragment.nom.to_string(),
-            ancre: nom.to_string(),
-            connues: ancres::ANCRES
+        .find(|anchor| anchor.name == name)
+        .ok_or_else(|| Error::AncreInconnue {
+            feature: fragment.name.to_string(),
+            anchor: name.to_string(),
+            known: anchors::ANCRES
                 .iter()
-                .map(|ancre| ancre.nom)
+                .map(|anchor| anchor.name)
                 .collect::<Vec<_>>()
                 .join(", "),
         })
@@ -174,36 +174,36 @@ fn ancre(fragment: &Fragment, nom: &str) -> Result<Ancre, Erreur> {
 ///
 /// Une ancre en reçoit souvent plusieurs — les cinq chemins OpenAPI d'une feature — et
 /// une chaîne TOML multiligne est la façon naturelle de les écrire.
-fn lignes(contenu: &str) -> Vec<String> {
-    contenu
+fn lines(content: &str) -> Vec<String> {
+    content
         .lines()
-        .filter(|ligne| !ligne.trim().is_empty())
-        .map(|ligne| ligne.trim_end().to_string())
+        .filter(|line| !line.trim().is_empty())
+        .map(|line| line.trim_end().to_string())
         .collect()
 }
 
 /// Rend `source` dans le contexte du fragment, en nommant `destination` si elle échoue.
-fn rendre(
+fn render(
     renderer: &Renderer,
     fragment: &Fragment,
     source: &str,
     destination: &str,
-) -> Result<String, Erreur> {
+) -> Result<String, Error> {
     renderer
-        .rendre(source, fragment.contexte.clone())
-        .map_err(|source| Erreur::Rendu {
-            fichier: destination.to_string(),
+        .render(source, fragment.context.clone())
+        .map_err(|source| Error::Rendu {
+            file: destination.to_string(),
             source,
         })
 }
 
 /// Les templates à déposer, avec leur chemin dans le projet.
 ///
-/// Sans `[[fichiers]]`, le fragment est copié tel quel : un fragment qui n'apporte pas de
+/// Sans `[[files]]`, le fragment est copié tel quel : un fragment qui n'apporte pas de
 /// code Rust n'a rien à déclarer pour que ses fichiers arrivent où leur arborescence les
 /// place déjà.
-fn a_deposer<'a>(fragment: &'a Fragment) -> Result<Vec<(String, &'a str)>, Erreur> {
-    if fragment.manifeste.fichiers.is_empty() {
+fn a_deposer<'a>(fragment: &'a Fragment) -> Result<Vec<(String, &'a str)>, Error> {
+    if fragment.manifest.files.is_empty() {
         return Ok(fragment
             .templates
             .iter()
@@ -217,26 +217,26 @@ fn a_deposer<'a>(fragment: &'a Fragment) -> Result<Vec<(String, &'a str)>, Erreu
     }
 
     fragment
-        .manifeste
-        .fichiers
+        .manifest
+        .files
         .iter()
         .map(|declare| {
             let source = template(fragment, &declare.source)?;
-            Ok((declare.cible.clone(), source))
+            Ok((declare.destination.clone(), source))
         })
         .collect()
 }
 
-/// La source de la template que le manifeste désigne par `nom`.
-fn template<'a>(fragment: &'a Fragment, nom: &str) -> Result<&'a str, Erreur> {
+/// La source de la template que le manifeste désigne par `name`.
+fn template<'a>(fragment: &'a Fragment, name: &str) -> Result<&'a str, Error> {
     fragment
         .templates
         .iter()
-        .find(|template| template.origine == Path::new(nom))
+        .find(|template| template.origin == Path::new(name))
         .map(|template| template.source.as_str())
-        .ok_or_else(|| Erreur::TemplateAbsente {
-            feature: fragment.nom.to_string(),
-            template: nom.to_string(),
+        .ok_or_else(|| Error::TemplateAbsente {
+            feature: fragment.name.to_string(),
+            template: name.to_string(),
         })
 }
 
@@ -248,90 +248,87 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::manifeste;
+    use crate::manifest;
 
     /// Une template du fragment, telle que la source la restituerait.
-    fn template_de(origine: &str, source: &str) -> templates::Fichier {
-        let origine = PathBuf::from(origine);
-        let destination = if origine
-            .extension()
-            .is_some_and(|suffixe| suffixe == "jinja")
-        {
-            origine.with_extension("")
+    fn template_of(origin: &str, source: &str) -> templates::File {
+        let origin = PathBuf::from(origin);
+        let destination = if origin.extension().is_some_and(|suffixe| suffixe == "jinja") {
+            origin.with_extension("")
         } else {
-            origine.clone()
+            origin.clone()
         };
 
-        templates::Fichier {
+        templates::File {
             destination,
-            origine,
+            origin,
             source: source.to_string(),
         }
     }
 
     /// Planifie l'installation d'un fragment décrit par son manifeste et ses templates.
-    fn planifier(
-        racine: &Path,
-        manifeste: &str,
-        templates: &[templates::Fichier],
-    ) -> Result<(Vec<String>, plan::Plan), Erreur> {
-        let manifeste = manifeste::lire(manifeste, "essai/feature.toml")
+    fn plan_for(
+        root: &Path,
+        manifest: &str,
+        templates: &[templates::File],
+    ) -> Result<(Vec<String>, plan::Plan), Error> {
+        let manifest = manifest::read(manifest, "essai/feature.toml")
             .expect("le manifeste du test doit être valide");
-        let mut constructeur = plan::Constructeur::nouveau(racine.to_path_buf());
+        let mut builder = plan::Builder::new(root.to_path_buf());
 
         let deposes = actions(
             &Fragment {
-                nom: "essai",
-                manifeste: &manifeste,
+                name: "essai",
+                manifest: &manifest,
                 templates,
-                contexte: context! { nom_projet => "demo-api", nom_crate => "demo_api" },
-                horodatage: "20260827_120000",
+                context: context! { nom_projet => "demo-api", crate_name => "demo_api" },
+                timestamp: "20260827_120000",
             },
-            &mut constructeur,
+            &mut builder,
         )?;
 
-        Ok((deposes, constructeur.finir()))
+        Ok((deposes, builder.finir()))
     }
 
     #[test]
-    fn sans_section_fichiers_le_fragment_est_copie_tel_quel() {
-        let projet = TempDir::new().expect("répertoire temporaire créable");
+    fn without_a_files_section_the_fragment_is_copied_as_is() {
+        let project = TempDir::new().expect("répertoire temporaire créable");
         let templates = [
-            template_de("Dockerfile.jinja", "FROM rust\n"),
-            template_de(".dockerignore", "target\n"),
+            template_of("Dockerfile.jinja", "FROM rust\n"),
+            template_of(".dockerignore", "target\n"),
         ];
 
-        let (deposes, plan) = planifier(
-            projet.path(),
+        let (deposes, plan) = plan_for(
+            project.path(),
             "[feature]\ndescription = \"docker\"\n",
             &templates,
         )
         .expect("le plan doit se calculer");
 
         assert_eq!(deposes, ["Dockerfile", ".dockerignore"]);
-        assert_eq!(plan.fichiers().len(), 2);
-        assert_eq!(plan.fichiers()[0].apres, "FROM rust\n");
+        assert_eq!(plan.files().len(), 2);
+        assert_eq!(plan.files()[0].after, "FROM rust\n");
     }
 
     #[test]
-    fn une_template_declaree_est_deposee_a_la_cible_qui_l_accompagne() {
-        let projet = TempDir::new().expect("répertoire temporaire créable");
-        let templates = [template_de(
+    fn a_declared_template_is_written_to_the_destination_beside_it() {
+        let project = TempDir::new().expect("répertoire temporaire créable");
+        let templates = [template_of(
             "model.rs.jinja",
-            "// {@ nom_crate @}\npub struct User;\n",
+            "// {@ crate_name @}\npub struct User;\n",
         )];
 
-        let (deposes, plan) = planifier(
-            projet.path(),
+        let (deposes, plan) = plan_for(
+            project.path(),
             "[feature]\ndescription = \"auth\"\n\n\
-             [[fichiers]]\nsource = \"model.rs.jinja\"\ncible = \"src/auth/model.rs\"\n",
+             [[files]]\nsource = \"model.rs.jinja\"\ndestination = \"src/auth/model.rs\"\n",
             &templates,
         )
         .expect("le plan doit se calculer");
 
         assert_eq!(deposes, ["src/auth/model.rs"]);
-        assert_eq!(plan.fichiers()[0].chemin, "src/auth/model.rs");
-        assert_eq!(plan.fichiers()[0].apres, "// demo_api\npub struct User;\n");
+        assert_eq!(plan.files()[0].path, "src/auth/model.rs");
+        assert_eq!(plan.files()[0].after, "// demo_api\npub struct User;\n");
     }
 
     /// Un manifeste de projet réaliste : une dépendance nue, une commentée en fin de
@@ -349,38 +346,38 @@ axum = \"0.8\"
     /// Un fragment qui n'exerce que les patchs : manifeste, configuration, environnement.
     const PATCHS: &str = "[feature]\ndescription = \"auth\"\n\n\
          [cargo.rbs-core]\nfeatures = [\"auth\"]\n\n\
-         [[config]]\nfichier = \"config/default.toml\"\nsection = \"auth\"\n\
-         contenu = \"\"\"\naccess_ttl_secs = 900\nrefresh_ttl_secs = 2592000\n\"\"\"\n\n\
-         [[env]]\ncle = \"RBS_AUTH__SECRET\"\nvaleur = \"changez-moi\"\n\
-         commentaire = \"Secret de signature HS256, au moins 32 octets\"\n";
+         [[config]]\nfile = \"config/default.toml\"\nsection = \"auth\"\n\
+         content = \"\"\"\naccess_ttl_secs = 900\nrefresh_ttl_secs = 2592000\n\"\"\"\n\n\
+         [[env]]\nkey = \"RBS_AUTH__SECRET\"\nvalue = \"changez-moi\"\n\
+         comment = \"Secret de signature HS256, au moins 32 octets\"\n";
 
     /// Pose les fichiers du projet que les patchs viseront.
-    fn avec(racine: &Path, fichiers: &[(&str, &str)]) {
-        for (chemin, contenu) in fichiers {
-            let cible = racine.join(chemin);
-            if let Some(parent) = cible.parent() {
+    fn avec(root: &Path, files: &[(&str, &str)]) {
+        for (path, content) in files {
+            let destination = root.join(path);
+            if let Some(parent) = destination.parent() {
                 std::fs::create_dir_all(parent).expect("le répertoire se crée");
             }
-            std::fs::write(cible, contenu).expect("le fichier s'écrit");
+            std::fs::write(destination, content).expect("le fichier s'écrit");
         }
     }
 
-    /// Le contenu que le plan projette pour `chemin`.
-    fn projete<'plan>(plan: &'plan plan::Plan, chemin: &str) -> &'plan str {
+    /// Le contenu que le plan projette pour `path`.
+    fn projected<'plan>(plan: &'plan plan::Plan, path: &str) -> &'plan str {
         &plan
-            .fichiers()
+            .files()
             .iter()
-            .find(|fichier| fichier.chemin == chemin)
-            .unwrap_or_else(|| panic!("{chemin} absent du plan"))
-            .apres
+            .find(|file| file.path == path)
+            .unwrap_or_else(|| panic!("{path} absent du plan"))
+            .after
     }
 
     /// Le critère de la tâche : le patch touche une ligne et laisse les autres intactes.
     #[test]
-    fn rbs_core_gagne_la_feature_sans_que_le_reste_soit_reformate() {
-        let projet = TempDir::new().expect("répertoire temporaire créable");
+    fn rbs_core_gains_the_feature_without_the_rest_being_reformatted() {
+        let project = TempDir::new().expect("répertoire temporaire créable");
         avec(
-            projet.path(),
+            project.path(),
             &[
                 ("Cargo.toml", CARGO),
                 ("config/default.toml", "[server]\nport = 8080\n"),
@@ -388,26 +385,26 @@ axum = \"0.8\"
             ],
         );
 
-        let (_, plan) = planifier(projet.path(), PATCHS, &[]).expect("le plan doit se calculer");
-        let apres = projete(&plan, "Cargo.toml");
+        let (_, plan) = plan_for(project.path(), PATCHS, &[]).expect("le plan doit se calculer");
+        let after = projected(&plan, "Cargo.toml");
 
         let attendues = CARGO.lines().count();
-        assert_eq!(apres.lines().count(), attendues, "{apres}");
+        assert_eq!(after.lines().count(), attendues, "{after}");
 
-        for (rang, (avant, apres)) in CARGO.lines().zip(apres.lines()).enumerate() {
-            if avant.starts_with("rbs-core") {
+        for (rang, (before, after)) in CARGO.lines().zip(after.lines()).enumerate() {
+            if before.starts_with("rbs-core") {
                 continue;
             }
-            assert_eq!(avant, apres, "la ligne {} a été reformatée", rang + 1);
+            assert_eq!(before, after, "la ligne {} a été reformatée", rang + 1);
         }
     }
 
     /// Le critère de la tâche : ce que le développeur a annoté lui appartient.
     #[test]
-    fn les_commentaires_du_developpeur_survivent_au_patch() {
-        let projet = TempDir::new().expect("répertoire temporaire créable");
+    fn the_developers_comments_survive_the_patch() {
+        let project = TempDir::new().expect("répertoire temporaire créable");
         avec(
-            projet.path(),
+            project.path(),
             &[
                 ("Cargo.toml", CARGO),
                 ("config/default.toml", "[server]\nport = 8080\n"),
@@ -415,28 +412,28 @@ axum = \"0.8\"
             ],
         );
 
-        let (_, plan) = planifier(projet.path(), PATCHS, &[]).expect("le plan doit se calculer");
-        let apres = projete(&plan, "Cargo.toml");
+        let (_, plan) = plan_for(project.path(), PATCHS, &[]).expect("le plan doit se calculer");
+        let after = projected(&plan, "Cargo.toml");
 
         assert!(
-            apres.contains("# le noyau, épinglé par `rbs new`"),
-            "le commentaire de bloc a disparu :\n{apres}"
+            after.contains("# le noyau, épinglé par `rbs new`"),
+            "le commentaire de bloc a disparu :\n{after}"
         );
         assert!(
-            apres.contains(
+            after.contains(
                 "rbs-core = { version = \"0.1.0\", features = [\"auth\"] }   \
                  # ne pas remonter sans relire le CHANGELOG"
             ),
-            "le commentaire de fin de ligne a disparu :\n{apres}"
+            "le commentaire de fin de ligne a disparu :\n{after}"
         );
     }
 
     /// Le critère de la tâche : la configuration et l'environnement du fragment arrivent.
     #[test]
-    fn la_section_de_configuration_et_la_variable_d_environnement_sont_ajoutees() {
-        let projet = TempDir::new().expect("répertoire temporaire créable");
+    fn the_configuration_section_and_the_environment_variable_are_added() {
+        let project = TempDir::new().expect("répertoire temporaire créable");
         avec(
-            projet.path(),
+            project.path(),
             &[
                 ("Cargo.toml", CARGO),
                 ("config/default.toml", "[server]\nport = 8080\n"),
@@ -444,15 +441,15 @@ axum = \"0.8\"
             ],
         );
 
-        let (_, plan) = planifier(projet.path(), PATCHS, &[]).expect("le plan doit se calculer");
+        let (_, plan) = plan_for(project.path(), PATCHS, &[]).expect("le plan doit se calculer");
 
-        let config = projete(&plan, "config/default.toml");
+        let config = projected(&plan, "config/default.toml");
         assert!(config.starts_with("[server]\nport = 8080\n"), "{config}");
         assert!(config.contains("[auth]"), "{config}");
         assert!(config.contains("access_ttl_secs = 900"), "{config}");
         assert!(config.contains("refresh_ttl_secs = 2592000"), "{config}");
 
-        let env = projete(&plan, ".env.example");
+        let env = projected(&plan, ".env.example");
         assert!(env.starts_with("RBS_DATABASE__URL=postgres://\n"), "{env}");
         assert!(
             env.contains(
@@ -464,10 +461,10 @@ axum = \"0.8\"
 
     /// Le critère de la tâche : un patch déjà posé ne se repose pas.
     #[test]
-    fn les_trois_patchs_sont_sans_effet_la_seconde_fois() {
-        let projet = TempDir::new().expect("répertoire temporaire créable");
+    fn the_three_patches_are_no_ops_the_second_time() {
+        let project = TempDir::new().expect("répertoire temporaire créable");
         avec(
-            projet.path(),
+            project.path(),
             &[
                 ("Cargo.toml", CARGO),
                 ("config/default.toml", "[server]\nport = 8080\n"),
@@ -475,20 +472,20 @@ axum = \"0.8\"
             ],
         );
 
-        let (_, premier) = planifier(projet.path(), PATCHS, &[]).expect("le plan doit se calculer");
-        for fichier in premier.fichiers() {
-            avec(projet.path(), &[(&fichier.chemin, &fichier.apres)]);
+        let (_, premier) = plan_for(project.path(), PATCHS, &[]).expect("le plan doit se calculer");
+        for file in premier.files() {
+            avec(project.path(), &[(&file.path, &file.after)]);
         }
 
-        let (_, second) = planifier(projet.path(), PATCHS, &[]).expect("le plan se recalcule");
+        let (_, second) = plan_for(project.path(), PATCHS, &[]).expect("le plan se recalcule");
 
-        for fichier in second.fichiers() {
+        for file in second.files() {
             assert_eq!(
-                fichier.statut,
-                plan::Statut::DejaFait,
+                file.statut,
+                plan::Status::DejaFait,
                 "{} n'est pas sans effet :\n{}",
-                fichier.chemin,
-                fichier.apres
+                file.path,
+                file.after
             );
         }
     }
@@ -496,90 +493,90 @@ axum = \"0.8\"
     /// Un fragment qui n'apporte que des crates tierces, versions figées comme le veut le
     /// moule. `axum` est déjà déclarée par le projet, `lettre` non.
     const DEPENDANCES: &str = "[feature]\ndescription = \"mail\"\n\n\
-         [[dependances]]\nnom = \"lettre\"\nversion = \"0.11\"\n\
+         [[dependencies]]\nname = \"lettre\"\nversion = \"0.11\"\n\
          default_features = false\nfeatures = [\"smtp-transport\", \"builder\"]\n\n\
-         [[dependances]]\nnom = \"axum\"\nversion = \"0.8\"\n";
+         [[dependencies]]\nname = \"axum\"\nversion = \"0.8\"\n";
 
     /// Le manifeste que l'installation de `DEPENDANCES` projette sur `CARGO`.
-    fn cargo_apres_dependances(projet: &TempDir) -> String {
-        avec(projet.path(), &[("Cargo.toml", CARGO)]);
+    fn cargo_after_dependencies(project: &TempDir) -> String {
+        avec(project.path(), &[("Cargo.toml", CARGO)]);
 
         let (_, plan) =
-            planifier(projet.path(), DEPENDANCES, &[]).expect("le plan doit se calculer");
+            plan_for(project.path(), DEPENDANCES, &[]).expect("le plan doit se calculer");
 
-        projete(&plan, "Cargo.toml").to_string()
+        projected(&plan, "Cargo.toml").to_string()
     }
 
     /// Le critère de la tâche : la version, les features et le `default-features` du
     /// fragment arrivent tels quels dans `[dependencies]`.
     #[test]
-    fn la_dependance_declaree_arrive_avec_sa_version_ses_features_et_son_default_features() {
-        let projet = TempDir::new().expect("répertoire temporaire créable");
+    fn the_declared_dependency_arrives_with_its_version_its_features_and_its_default_features() {
+        let project = TempDir::new().expect("répertoire temporaire créable");
 
-        let apres = cargo_apres_dependances(&projet);
+        let after = cargo_after_dependencies(&project);
 
         assert!(
-            apres.contains(
+            after.contains(
                 "lettre = { version = \"0.11\", default-features = false, \
                  features = [\"smtp-transport\", \"builder\"] }"
             ),
-            "{apres}"
+            "{after}"
         );
     }
 
     /// Le critère de la tâche : ce que le développeur a écrit et annoté lui appartient.
     #[test]
-    fn les_commentaires_et_la_mise_en_forme_survivent_a_l_ajout_d_une_dependance() {
-        let projet = TempDir::new().expect("répertoire temporaire créable");
+    fn comments_and_formatting_survive_adding_a_dependency() {
+        let project = TempDir::new().expect("répertoire temporaire créable");
 
-        let apres = cargo_apres_dependances(&projet);
+        let after = cargo_after_dependencies(&project);
 
-        for ligne in CARGO.lines() {
+        for line in CARGO.lines() {
             assert!(
-                apres.lines().any(|rendue| rendue == ligne),
-                "la ligne « {ligne} » a été reformatée :\n{apres}"
+                after.lines().any(|rendue| rendue == line),
+                "la ligne « {line} » a été reformatée :\n{after}"
             );
         }
         assert_eq!(
-            apres.lines().count(),
+            after.lines().count(),
             CARGO.lines().count() + 1,
-            "le patch a débordé de la ligne qu'il ajoute :\n{apres}"
+            "le patch a débordé de la ligne qu'il ajoute :\n{after}"
         );
     }
 
     /// Le critère de la tâche : une crate que le projet déclare déjà reste déclarée une
     /// fois. Sans quoi cargo refuserait le manifeste que le fragment vient d'écrire.
     #[test]
-    fn une_dependance_deja_declaree_dans_le_projet_n_est_pas_dupliquee() {
-        let projet = TempDir::new().expect("répertoire temporaire créable");
+    fn a_dependency_already_declared_in_the_project_is_not_duplicated() {
+        let project = TempDir::new().expect("répertoire temporaire créable");
 
-        let apres = cargo_apres_dependances(&projet);
+        let after = cargo_after_dependencies(&project);
 
         assert_eq!(
-            apres
+            after
                 .lines()
-                .filter(|ligne| ligne.starts_with("axum"))
+                .filter(|line| line.starts_with("axum"))
                 .count(),
             1,
-            "{apres}"
+            "{after}"
         );
-        assert!(apres.contains("axum = \"0.8\"\n"), "{apres}");
+        assert!(after.contains("axum = \"0.8\"\n"), "{after}");
     }
 
     /// Une template déclarée mais absente est une faute du manifeste, pas un silence.
     #[test]
-    fn une_template_declaree_et_absente_est_signalee_par_son_nom() {
-        let projet = TempDir::new().expect("répertoire temporaire créable");
+    fn a_declared_but_missing_template_is_reported_by_its_name() {
+        let project = TempDir::new().expect("répertoire temporaire créable");
 
-        let erreur = planifier(
-            projet.path(),
+        let error = plan_for(
+            project.path(),
             "[feature]\ndescription = \"auth\"\n\n\
-             [[fichiers]]\nsource = \"absente.rs.jinja\"\ncible = \"src/auth/model.rs\"\n",
+             [[files]]\nsource = \"absente.rs.jinja\"\ndestination = \"src/auth/model.rs\"\n",
             &[],
         )
         .expect_err("la template n'existe pas");
 
-        assert!(matches!(erreur, Erreur::TemplateAbsente { .. }), "{erreur}");
-        assert!(erreur.to_string().contains("absente.rs.jinja"), "{erreur}");
+        assert!(matches!(error, Error::TemplateAbsente { .. }), "{error}");
+        assert!(error.to_string().contains("absente.rs.jinja"), "{error}");
     }
 }

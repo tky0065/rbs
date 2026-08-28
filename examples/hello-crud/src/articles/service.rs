@@ -1,3 +1,4 @@
+// region: imports
 use rbs_core::{Error, Page, Pagination, Result};
 use sea_orm::ActiveValue::Set;
 use sea_orm::DatabaseConnection;
@@ -5,6 +6,7 @@ use sea_orm::prelude::Uuid;
 
 use super::dto::{ArticleResponse, CreateArticle, UpdateArticle};
 use super::repository::{self, ActiveModel};
+// endregion: imports
 
 pub async fn list(
     db: &DatabaseConnection,
@@ -19,6 +21,7 @@ pub async fn list(
     ))
 }
 
+// region: find
 pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<ArticleResponse> {
     let article = repository::find(db, id)
         .await?
@@ -26,6 +29,7 @@ pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<ArticleResponse> 
 
     Ok(article.into())
 }
+// endregion: find
 
 pub async fn create(db: &DatabaseConnection, input: CreateArticle) -> Result<ArticleResponse> {
     let article = ActiveModel {

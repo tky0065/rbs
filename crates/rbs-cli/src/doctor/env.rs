@@ -8,31 +8,31 @@ use std::path::Path;
 
 use crate::dotenv;
 
-use super::Controle;
+use super::Check;
 
 const TITRE: &str = ".env";
 const FICHIER: &str = ".env";
 const EXEMPLE: &str = ".env.example";
 
 /// Vérifie que le `.env` porte tout ce que `.env.example` déclare.
-pub(crate) fn controler(racine: &Path) -> Controle {
-    let attendues = match dotenv::lire(&racine.join(EXEMPLE)) {
+pub(crate) fn check(root: &Path) -> Check {
+    let attendues = match dotenv::read(&root.join(EXEMPLE)) {
         Ok(paires) => paires,
-        Err(erreur) => {
-            return Controle::echec(
+        Err(error) => {
+            return Check::failed(
                 TITRE,
-                erreur.to_string(),
+                error.to_string(),
                 format!("{EXEMPLE} est la référence du diagnostic : restaurez-le depuis Git"),
             );
         }
     };
 
-    let presentes = match dotenv::lire(&racine.join(FICHIER)) {
+    let presentes = match dotenv::read(&root.join(FICHIER)) {
         Ok(paires) => paires,
-        Err(erreur) => {
-            return Controle::echec(
+        Err(error) => {
+            return Check::failed(
                 TITRE,
-                erreur.to_string(),
+                error.to_string(),
                 format!("cp {EXEMPLE} {FICHIER}, puis renseignez l'URL de votre base"),
             );
         }
@@ -41,12 +41,12 @@ pub(crate) fn controler(racine: &Path) -> Controle {
     // Une variable propre au projet est légitime : seule l'absence est un défaut.
     let manquantes: Vec<&str> = attendues
         .iter()
-        .map(|(cle, _)| cle.as_str())
-        .filter(|cle| dotenv::valeur(&presentes, cle).is_none())
+        .map(|(key, _)| key.as_str())
+        .filter(|key| dotenv::value(&presentes, key).is_none())
         .collect();
 
     if manquantes.is_empty() {
-        return Controle::bon(
+        return Check::ok(
             TITRE,
             format!(
                 "les {} variables de {EXEMPLE} sont renseignées",
@@ -55,7 +55,7 @@ pub(crate) fn controler(racine: &Path) -> Controle {
         );
     }
 
-    Controle::echec(
+    Check::failed(
         TITRE,
         format!(
             "{} absente{} du {FICHIER}",
@@ -66,7 +66,7 @@ pub(crate) fn controler(racine: &Path) -> Controle {
             "ajoutez au {FICHIER} :\n{}",
             manquantes
                 .iter()
-                .map(|cle| format!("{cle}={}", dotenv::valeur(&attendues, cle).unwrap_or("")))
+                .map(|key| format!("{key}={}", dotenv::value(&attendues, key).unwrap_or("")))
                 .collect::<Vec<_>>()
                 .join("\n")
         ),
@@ -80,14 +80,14 @@ mod tests {
 
     use tempfile::TempDir;
 
-    use super::super::Etat;
+    use super::super::State;
     use super::*;
 
-    fn projet() -> (TempDir, PathBuf) {
+    fn project() -> (TempDir, PathBuf) {
         let parent = TempDir::new().expect("répertoire temporaire créable");
-        let projet = crate::new::creer(
+        let project = crate::new::create(
             &crate::new::Options {
-                nom: "demo-api".to_string(),
+                name: "demo-api".to_string(),
                 database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
                 features: Vec::new(),
                 core_path: None,
@@ -97,95 +97,95 @@ mod tests {
         )
         .expect("le projet doit se créer");
 
-        (parent, projet.racine)
+        (parent, project.root)
     }
 
-    /// Retire du `.env` la ligne portant `cle`.
-    fn retirer(racine: &Path, cle: &str) {
-        let chemin = racine.join(FICHIER);
-        let source = fs::read_to_string(&chemin).expect("le .env est lisible");
+    /// Retire du `.env` la ligne portant `key`.
+    fn remove(root: &Path, key: &str) {
+        let path = root.join(FICHIER);
+        let source = fs::read_to_string(&path).expect("le .env est lisible");
         let ampute: Vec<_> = source
             .lines()
-            .filter(|ligne| !ligne.starts_with(cle))
+            .filter(|line| !line.starts_with(key))
             .collect();
-        fs::write(&chemin, ampute.join("\n")).expect("le .env est réécrivable");
+        fs::write(&path, ampute.join("\n")).expect("le .env est réécrivable");
     }
 
     #[test]
-    fn un_projet_neuf_a_un_env_complet() {
-        let (_parent, racine) = projet();
+    fn a_fresh_project_has_a_complete_env() {
+        let (_parent, root) = project();
 
-        let controle = controler(&racine);
+        let check = check(&root);
 
-        assert_eq!(controle.etat, Etat::Bon, "{}", controle.detail);
-        assert!(controle.remede.is_none());
+        assert_eq!(check.state, State::Bon, "{}", check.detail);
+        assert!(check.remedy.is_none());
     }
 
     #[test]
-    fn une_variable_de_l_exemple_absente_du_env_est_nommee() {
-        let (_parent, racine) = projet();
-        retirer(&racine, "RBS_LOG_FORMAT");
+    fn a_variable_from_the_example_missing_from_env_is_named() {
+        let (_parent, root) = project();
+        remove(&root, "RBS_LOG_FORMAT");
 
-        let controle = controler(&racine);
+        let check = check(&root);
 
-        assert_eq!(controle.etat, Etat::Echec);
-        assert!(controle.detail.contains("RBS_LOG_FORMAT"));
+        assert_eq!(check.state, State::Echec);
+        assert!(check.detail.contains("RBS_LOG_FORMAT"));
         assert!(
-            controle
-                .remede
+            check
+                .remedy
                 .expect("un échec porte son remède")
                 .contains("RBS_LOG_FORMAT")
         );
     }
 
     #[test]
-    fn le_constat_s_accorde_avec_le_nombre_de_variables_manquantes() {
-        let (_parent, racine) = projet();
-        retirer(&racine, "RBS_LOG_FORMAT");
+    fn the_finding_agrees_with_the_number_of_missing_variables() {
+        let (_parent, root) = project();
+        remove(&root, "RBS_LOG_FORMAT");
 
-        assert!(controler(&racine).detail.contains("absente du"));
+        assert!(check(&root).detail.contains("absente du"));
 
-        retirer(&racine, "RUST_LOG");
+        remove(&root, "RUST_LOG");
 
-        assert!(controler(&racine).detail.contains("absentes du"));
+        assert!(check(&root).detail.contains("absentes du"));
     }
 
     #[test]
-    fn une_variable_propre_au_projet_ne_derange_pas() {
-        let (_parent, racine) = projet();
-        let chemin = racine.join(FICHIER);
-        let source = fs::read_to_string(&chemin).expect("le .env est lisible");
-        fs::write(&chemin, format!("{source}\nSTRIPE_KEY=sk_test\n")).expect("écriture");
+    fn a_project_specific_variable_does_not_get_in_the_way() {
+        let (_parent, root) = project();
+        let path = root.join(FICHIER);
+        let source = fs::read_to_string(&path).expect("le .env est lisible");
+        fs::write(&path, format!("{source}\nSTRIPE_KEY=sk_test\n")).expect("écriture");
 
-        let controle = controler(&racine);
+        let check = check(&root);
 
-        assert_eq!(controle.etat, Etat::Bon, "{}", controle.detail);
+        assert_eq!(check.state, State::Bon, "{}", check.detail);
     }
 
     #[test]
-    fn un_env_absent_renvoie_a_l_exemple_qui_le_reconstitue() {
-        let (_parent, racine) = projet();
-        fs::remove_file(racine.join(FICHIER)).expect("le .env existe");
+    fn a_missing_env_points_to_the_example_that_rebuilds_it() {
+        let (_parent, root) = project();
+        fs::remove_file(root.join(FICHIER)).expect("le .env existe");
 
-        let controle = controler(&racine);
+        let check = check(&root);
 
-        assert_eq!(controle.etat, Etat::Echec);
+        assert_eq!(check.state, State::Echec);
         assert!(
-            controle
-                .remede
+            check
+                .remedy
                 .expect("un échec porte son remède")
                 .contains(EXEMPLE)
         );
     }
 
     #[test]
-    fn sans_exemple_le_controle_le_dit_plutot_que_de_conclure_au_vert() {
-        let (_parent, racine) = projet();
-        fs::remove_file(racine.join(EXEMPLE)).expect("l'exemple existe");
+    fn without_the_example_file_the_check_says_so_rather_than_concluding_green() {
+        let (_parent, root) = project();
+        fs::remove_file(root.join(EXEMPLE)).expect("l'exemple existe");
 
-        let controle = controler(&racine);
+        let check = check(&root);
 
-        assert_eq!(controle.etat, Etat::Echec);
-        assert!(controle.detail.contains(EXEMPLE));
+        assert_eq!(check.state, State::Echec);
+        assert!(check.detail.contains(EXEMPLE));
     }
 }

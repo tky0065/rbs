@@ -28,12 +28,12 @@ pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>> {
     Ok(Entity::find_by_id(id).one(db).await?)
 }
 
-pub async fn create(db: &DatabaseConnection, {@ singulier @}: ActiveModel) -> Result<Model> {
-    Ok({@ singulier @}.insert(db).await?)
+pub async fn create(db: &DatabaseConnection, {@ singular @}: ActiveModel) -> Result<Model> {
+    Ok({@ singular @}.insert(db).await?)
 }
 
-pub async fn update(db: &DatabaseConnection, {@ singulier @}: ActiveModel) -> Result<Model> {
-    Ok({@ singulier @}.update(db).await?)
+pub async fn update(db: &DatabaseConnection, {@ singular @}: ActiveModel) -> Result<Model> {
+    Ok({@ singular @}.update(db).await?)
 }
 
 pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<bool> {

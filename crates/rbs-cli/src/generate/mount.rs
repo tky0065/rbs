@@ -4,32 +4,32 @@
 //! — pour qu'une insertion se suffise à elle-même : aucune seconde écriture dans un bloc
 //! `use` ne l'accompagne.
 
-use crate::ancres::{self, Ancre};
+use crate::anchors::{self, Anchor};
 
 /// Les handlers que le controller généré expose, dans l'ordre où ils y sont écrits.
 const HANDLERS: [&str; 5] = ["list", "create", "find", "update", "delete"];
 
 /// Une insertion à faire : l'ancre visée, et les lignes à y ajouter.
 #[derive(Debug, PartialEq, Eq)]
-pub(crate) struct Montage {
-    pub ancre: Ancre,
-    pub lignes: Vec<String>,
+pub(crate) struct Mount {
+    pub anchor: Anchor,
+    pub lines: Vec<String>,
 }
 
 /// Ce que la feature `module` ajoute au binaire du projet.
-pub(crate) fn pour(module: &str) -> Vec<Montage> {
+pub(crate) fn pour(module: &str) -> Vec<Mount> {
     vec![
-        Montage {
-            ancre: ancres::FEATURES,
-            lignes: vec![format!("mod {module};")],
+        Mount {
+            anchor: anchors::FEATURES,
+            lines: vec![format!("mod {module};")],
         },
-        Montage {
-            ancre: ancres::ROUTES,
-            lignes: vec![format!(".merge(crate::{module}::routes())")],
+        Mount {
+            anchor: anchors::ROUTES,
+            lines: vec![format!(".merge(crate::{module}::routes())")],
         },
-        Montage {
-            ancre: ancres::OPENAPI,
-            lignes: HANDLERS
+        Mount {
+            anchor: anchors::OPENAPI,
+            lines: HANDLERS
                 .iter()
                 .map(|handler| format!("crate::{module}::controller::{handler},"))
                 .collect(),
@@ -41,15 +41,15 @@ pub(crate) fn pour(module: &str) -> Vec<Montage> {
 ///
 /// Elle se déclare et s'inscrit séparément : une feature écrite à la main n'a pas de
 /// migration générée, et le `Migrator` ne doit alors rien apprendre.
-pub(crate) fn pour_migration(module: &str) -> Vec<Montage> {
+pub(crate) fn for_migration(module: &str) -> Vec<Mount> {
     vec![
-        Montage {
-            ancre: ancres::MIGRATION_MODULES,
-            lignes: vec![format!("mod {module};")],
+        Mount {
+            anchor: anchors::MIGRATION_MODULES,
+            lines: vec![format!("mod {module};")],
         },
-        Montage {
-            ancre: ancres::MIGRATIONS,
-            lignes: vec![format!("Box::new({module}::Migration),")],
+        Mount {
+            anchor: anchors::MIGRATIONS,
+            lines: vec![format!("Box::new({module}::Migration),")],
         },
     ]
 }
@@ -58,37 +58,37 @@ pub(crate) fn pour_migration(module: &str) -> Vec<Montage> {
 mod tests {
     use super::*;
 
-    fn lignes(montages: &[Montage], ancre: Ancre) -> &[String] {
+    fn lines(montages: &[Mount], anchor: Anchor) -> &[String] {
         &montages
             .iter()
-            .find(|montage| montage.ancre == ancre)
-            .unwrap_or_else(|| panic!("aucun montage pour `{}`", ancre.nom))
-            .lignes
+            .find(|mount| mount.anchor == anchor)
+            .unwrap_or_else(|| panic!("aucun montage pour `{}`", anchor.name))
+            .lines
     }
 
     #[test]
-    fn le_module_de_la_feature_est_declare_dans_main() {
+    fn the_feature_module_is_declared_in_main() {
         let montages = pour("users");
 
-        assert_eq!(lignes(&montages, ancres::FEATURES), ["mod users;"]);
+        assert_eq!(lines(&montages, anchors::FEATURES), ["mod users;"]);
     }
 
     #[test]
-    fn les_routes_sont_montees_par_un_chemin_absolu() {
+    fn the_routes_are_mounted_by_an_absolute_path() {
         let montages = pour("blog_posts");
 
         assert_eq!(
-            lignes(&montages, ancres::ROUTES),
+            lines(&montages, anchors::ROUTES),
             [".merge(crate::blog_posts::routes())"]
         );
     }
 
     #[test]
-    fn les_cinq_handlers_entrent_dans_le_document_openapi() {
+    fn the_five_handlers_enter_the_openapi_document() {
         let montages = pour("users");
 
         assert_eq!(
-            lignes(&montages, ancres::OPENAPI),
+            lines(&montages, anchors::OPENAPI),
             [
                 "crate::users::controller::list,",
                 "crate::users::controller::create,",
@@ -100,15 +100,15 @@ mod tests {
     }
 
     #[test]
-    fn la_migration_est_declaree_puis_inscrite_dans_le_migrator() {
-        let montages = pour_migration("m20260826_143000_create_users");
+    fn the_migration_is_declared_then_recorded_in_the_migrator() {
+        let montages = for_migration("m20260826_143000_create_users");
 
         assert_eq!(
-            lignes(&montages, ancres::MIGRATION_MODULES),
+            lines(&montages, anchors::MIGRATION_MODULES),
             ["mod m20260826_143000_create_users;"]
         );
         assert_eq!(
-            lignes(&montages, ancres::MIGRATIONS),
+            lines(&montages, anchors::MIGRATIONS),
             ["Box::new(m20260826_143000_create_users::Migration),"]
         );
     }
@@ -116,28 +116,28 @@ mod tests {
     /// Une feature écrite à la main porte sa propre migration, ou n'en a pas : le CLI
     /// n'inscrit dans le `Migrator` que ce qu'il a lui-même généré.
     #[test]
-    fn le_montage_d_une_feature_ne_touche_pas_a_la_crate_migration() {
+    fn mounting_a_feature_does_not_touch_the_migration_crate() {
         let montages = pour("users");
 
         assert!(
             !montages
                 .iter()
-                .any(|montage| montage.ancre.fichier == ancres::MIGRATIONS.fichier),
+                .any(|mount| mount.anchor.file == anchors::MIGRATIONS.file),
             "la crate migration ne doit pas être touchée : {montages:?}"
         );
     }
 
     #[test]
-    fn chaque_montage_vise_une_ancre_du_squelette() {
+    fn each_mount_targets_a_skeleton_anchor() {
         let mut montages = pour("users");
-        montages.extend(pour_migration("m20260826_143000_create_users"));
+        montages.extend(for_migration("m20260826_143000_create_users"));
 
         assert_eq!(montages.len(), 5, "{montages:?}");
-        for montage in &montages {
+        for mount in &montages {
             assert!(
-                ancres::ANCRES.contains(&montage.ancre),
+                anchors::ANCRES.contains(&mount.anchor),
                 "`{}` n'est pas une ancre du squelette",
-                montage.ancre.nom
+                mount.anchor.name
             );
         }
     }

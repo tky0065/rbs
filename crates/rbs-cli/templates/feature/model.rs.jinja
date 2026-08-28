@@ -5,16 +5,16 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-{%- for champ in champs %}
-{%- set attributs = [
-        'column_type = "' ~ champ.attribut_column_type ~ '"' if champ.attribut_column_type else none,
-        "unique" if champ.unique else none,
-        "indexed" if champ.index else none,
+{%- for field in fields %}
+{%- set attributes = [
+        'column_type = "' ~ field.column_type_attribute ~ '"' if field.column_type_attribute else none,
+        "unique" if field.unique else none,
+        "indexed" if field.index else none,
     ] | select | join(", ") %}
-{%- if attributs %}
-    #[sea_orm({@ attributs @})]
+{%- if attributes %}
+    #[sea_orm({@ attributes @})]
 {%- endif %}
-    pub {@ champ.nom @}: {@ champ.type_rust @},
+    pub {@ field.name @}: {@ field.rust_type @},
 {%- endfor %}
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,

@@ -22,22 +22,22 @@ pub fn info(message: &str) {
 }
 
 /// Colore un fragment en vert, pour ce qui est acquis.
-pub fn vert(texte: &str) -> String {
-    style(texte).green().to_string()
+pub fn green(text: &str) -> String {
+    style(text).green().to_string()
 }
 
 /// Atténue un fragment, pour ce qui reste à faire.
-pub fn attenue(texte: &str) -> String {
-    style(texte).dim().to_string()
+pub fn dimmed(text: &str) -> String {
+    style(text).dim().to_string()
 }
 
 /// Colore un fragment en rouge, pour ce qui est en défaut.
-pub fn rouge(texte: &str) -> String {
-    style(texte).red().to_string()
+pub fn red(text: &str) -> String {
+    style(text).red().to_string()
 }
 
 /// Accorde un décompte de fichiers : « 1 fichier », « 3 fichiers ».
-pub fn fichiers(compte: usize) -> String {
+pub fn files(compte: usize) -> String {
     let pluriel = if compte > 1 { "s" } else { "" };
     format!("{compte} fichier{pluriel}")
 }
@@ -47,18 +47,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn un_seul_fichier_reste_au_singulier() {
-        assert_eq!(fichiers(1), "1 fichier");
+    fn a_single_file_stays_singular() {
+        assert_eq!(files(1), "1 fichier");
     }
 
     #[test]
-    fn plusieurs_fichiers_prennent_la_marque_du_pluriel() {
-        assert_eq!(fichiers(3), "3 fichiers");
+    fn several_files_take_the_plural_mark() {
+        assert_eq!(files(3), "3 fichiers");
     }
 
     /// Zéro s'écrit au singulier en français, contrairement à l'anglais.
     #[test]
-    fn zero_fichier_reste_au_singulier() {
-        assert_eq!(fichiers(0), "0 fichier");
+    fn zero_files_stays_singular() {
+        assert_eq!(files(0), "0 fichier");
     }
 }

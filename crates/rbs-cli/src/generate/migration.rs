@@ -20,189 +20,189 @@ pub(crate) struct Migration {
     /// libre, et le renommer après application déclencherait une seconde exécution.
     pub module: String,
     /// Source Rust du fichier de migration.
-    pub contenu: String,
+    pub content: String,
 }
 
 /// Horodatage UTC au format qu'attend `DeriveMigrationName`.
-pub(crate) fn horodatage_courant() -> String {
+pub(crate) fn current_timestamp() -> String {
     Utc::now().format("%Y%m%d_%H%M%S").to_string()
 }
 
-/// Rend la migration de `feature`, datée de `horodatage`.
+/// Rend la migration de `feature`, datée de `timestamp`.
 ///
 /// L'horodatage est reçu et non lu de l'horloge : un rendu doit être reproductible.
-pub(crate) fn rendre(feature: &Feature, horodatage: &str) -> Result<Migration, minijinja::Error> {
-    let module = format!("m{horodatage}_create_{}", feature.module());
-    let contenu = Renderer::new().rendre(TEMPLATE, feature)?;
+pub(crate) fn render(feature: &Feature, timestamp: &str) -> Result<Migration, minijinja::Error> {
+    let module = format!("m{timestamp}_create_{}", feature.module());
+    let content = Renderer::new().render(TEMPLATE, feature)?;
 
-    Ok(Migration { module, contenu })
+    Ok(Migration { module, content })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generate::{banc, champs};
+    use crate::generate::{bench, fields};
 
     const HORODATAGE: &str = "20260826_143000";
 
-    fn migration(nom: &str, fields: &str) -> Migration {
-        let champs = champs::analyser(fields).expect("les champs du test doivent être valides");
-        rendre(&Feature::nouvelle(nom, champs), HORODATAGE).expect("la migration doit se rendre")
+    fn migration(name: &str, fields: &str) -> Migration {
+        let fields = fields::parse(fields).expect("les champs du test doivent être valides");
+        render(&Feature::fresh(name, fields), HORODATAGE).expect("la migration doit se rendre")
     }
 
     #[test]
-    fn le_module_porte_l_horodatage_et_la_table() {
+    fn the_module_carries_the_timestamp_and_the_table() {
         assert_eq!(
-            migration("blog_posts", "titre:string").module,
+            migration("blog_posts", "title:string").module,
             "m20260826_143000_create_blog_posts"
         );
     }
 
     #[test]
-    fn l_horodatage_courant_a_la_forme_attendue_par_seaorm() {
-        let horodatage = horodatage_courant();
+    fn the_current_timestamp_has_the_shape_seaorm_expects() {
+        let timestamp = current_timestamp();
 
-        assert_eq!(horodatage.len(), 15, "« {horodatage} »");
-        assert_eq!(&horodatage[8..9], "_", "« {horodatage} »");
+        assert_eq!(timestamp.len(), 15, "« {timestamp} »");
+        assert_eq!(&timestamp[8..9], "_", "« {timestamp} »");
         assert!(
-            horodatage
+            timestamp
                 .chars()
                 .enumerate()
                 .all(|(rang, c)| rang == 8 || c.is_ascii_digit()),
-            "« {horodatage} »"
+            "« {timestamp} »"
         );
     }
 
     #[test]
-    fn la_cle_primaire_porte_le_defaut_uuidv7() {
-        let rendu = migration("users", "nom:string").contenu;
+    fn the_primary_key_carries_the_uuidv7_default() {
+        let rendered = migration("users", "nom:string").content;
 
         assert!(
-            rendu.contains(r#".default(Expr::cust("uuidv7()"))"#),
-            "défaut uuidv7 absent :\n{rendu}"
+            rendered.contains(r#".default(Expr::cust("uuidv7()"))"#),
+            "défaut uuidv7 absent :\n{rendered}"
         );
-        assert!(rendu.contains(".primary_key()"), "{rendu}");
+        assert!(rendered.contains(".primary_key()"), "{rendered}");
     }
 
     #[test]
-    fn chaque_type_se_projette_vers_sa_methode_de_colonne() {
-        let rendu = migration(
-            "echantillons",
-            "titre:string,quantite:int,prix:float,actif:bool,proprietaire:uuid,\
-             publie_le:datetime,corps:text",
+    fn each_type_projects_to_its_column_method() {
+        let rendered = migration(
+            "samples",
+            "title:string,quantity:int,price:float,active:bool,owner:uuid,\
+             published_at:datetime,body:text",
         )
-        .contenu;
+        .content;
 
-        for attendu in [
-            "ColumnDef::new(Echantillons::Titre).string()",
-            "ColumnDef::new(Echantillons::Quantite).integer()",
-            "ColumnDef::new(Echantillons::Prix).double()",
-            "ColumnDef::new(Echantillons::Actif).boolean()",
-            "ColumnDef::new(Echantillons::Proprietaire).uuid()",
-            "ColumnDef::new(Echantillons::PublieLe).timestamp_with_time_zone()",
-            "ColumnDef::new(Echantillons::Corps).text()",
+        for expected in [
+            "ColumnDef::new(Samples::Title).string()",
+            "ColumnDef::new(Samples::Quantity).integer()",
+            "ColumnDef::new(Samples::Price).double()",
+            "ColumnDef::new(Samples::Active).boolean()",
+            "ColumnDef::new(Samples::Owner).uuid()",
+            "ColumnDef::new(Samples::PublishedAt).timestamp_with_time_zone()",
+            "ColumnDef::new(Samples::Body).text()",
         ] {
             assert!(
-                rendu.contains(attendu),
-                "« {attendu} » absent de :\n{rendu}"
+                rendered.contains(expected),
+                "« {expected} » absent de :\n{rendered}"
             );
         }
     }
 
     #[test]
-    fn un_champ_optionnel_est_nullable() {
-        let rendu = migration("users", "bio:text:optional").contenu;
+    fn an_optional_field_is_nullable() {
+        let rendered = migration("users", "bio:text:optional").content;
 
         assert!(
-            rendu.contains("ColumnDef::new(Users::Bio).text().null()"),
-            "colonne optionnelle non nullable :\n{rendu}"
+            rendered.contains("ColumnDef::new(Users::Bio).text().null()"),
+            "colonne optionnelle non nullable :\n{rendered}"
         );
     }
 
     #[test]
-    fn un_champ_obligatoire_est_not_null() {
-        let rendu = migration("users", "nom:string").contenu;
+    fn a_required_field_is_not_null() {
+        let rendered = migration("users", "nom:string").content;
 
         assert!(
-            rendu.contains("ColumnDef::new(Users::Nom).string().not_null()"),
-            "colonne obligatoire non contrainte :\n{rendu}"
+            rendered.contains("ColumnDef::new(Users::Nom).string().not_null()"),
+            "colonne obligatoire non contrainte :\n{rendered}"
         );
     }
 
     #[test]
-    fn un_champ_unique_porte_sa_contrainte() {
-        let rendu = migration("users", "email:string:unique").contenu;
+    fn a_unique_field_carries_its_constraint() {
+        let rendered = migration("users", "email:string:unique").content;
 
         assert!(
-            rendu.contains("ColumnDef::new(Users::Email).string().not_null().unique_key()"),
-            "contrainte d'unicité absente :\n{rendu}"
+            rendered.contains("ColumnDef::new(Users::Email).string().not_null().unique_key()"),
+            "contrainte d'unicité absente :\n{rendered}"
         );
     }
 
     #[test]
-    fn un_champ_indexe_recoit_son_index_nomme() {
-        let rendu = migration("articles", "slug:string:index").contenu;
+    fn an_indexed_field_receives_its_named_index() {
+        let rendered = migration("articles", "slug:string:index").content;
 
         assert!(
-            rendu.contains(r#".name("idx_articles_slug")"#),
-            "index nommé absent :\n{rendu}"
+            rendered.contains(r#".name("idx_articles_slug")"#),
+            "index nommé absent :\n{rendered}"
         );
-        assert!(rendu.contains(".col(Articles::Slug)"), "{rendu}");
+        assert!(rendered.contains(".col(Articles::Slug)"), "{rendered}");
     }
 
     #[test]
-    fn un_champ_sans_modificateur_ne_cree_aucun_index() {
-        let rendu = migration("users", "nom:string").contenu;
+    fn a_field_without_a_modifier_creates_no_index() {
+        let rendered = migration("users", "nom:string").content;
 
         assert!(
-            !rendu.contains("create_index"),
-            "index créé sans avoir été demandé :\n{rendu}"
+            !rendered.contains("create_index"),
+            "index créé sans avoir été demandé :\n{rendered}"
         );
     }
 
     #[test]
-    fn les_horodatages_sont_poses_avec_leur_defaut() {
-        let rendu = migration("users", "nom:string").contenu;
+    fn the_timestamps_are_set_with_their_default() {
+        let rendered = migration("users", "nom:string").content;
 
-        let compact: String = rendu.split_whitespace().collect::<Vec<_>>().join(" ");
+        let compact: String = rendered.split_whitespace().collect::<Vec<_>>().join(" ");
 
-        for colonne in ["CreatedAt", "UpdatedAt"] {
+        for column in ["CreatedAt", "UpdatedAt"] {
             assert!(
                 compact.contains(&format!(
-                    "ColumnDef::new(Users::{colonne}) .timestamp_with_time_zone() .not_null() \
+                    "ColumnDef::new(Users::{column}) .timestamp_with_time_zone() .not_null() \
                      .default(Expr::current_timestamp())"
                 )),
-                "colonne {colonne} mal définie :\n{rendu}"
+                "colonne {column} mal définie :\n{rendered}"
             );
         }
     }
 
     #[test]
-    fn la_descente_supprime_la_table() {
-        let rendu = migration("users", "nom:string").contenu;
+    fn the_down_migration_drops_the_table() {
+        let rendered = migration("users", "nom:string").content;
 
         assert!(
-            rendu.contains("Table::drop().table(Users::Table)"),
-            "descente absente :\n{rendu}"
+            rendered.contains("Table::drop().table(Users::Table)"),
+            "descente absente :\n{rendered}"
         );
     }
 
     #[test]
-    fn l_enum_iden_declare_la_table_et_toutes_ses_colonnes() {
-        let rendu = migration("blog_posts", "titre:string,publie:bool").contenu;
+    fn the_iden_enum_declares_the_table_and_all_its_columns() {
+        let rendered = migration("blog_posts", "title:string,published:bool").content;
 
-        assert!(rendu.contains("enum BlogPosts {"), "{rendu}");
+        assert!(rendered.contains("enum BlogPosts {"), "{rendered}");
         for variante in [
             "Table,",
             "Id,",
-            "Titre,",
-            "Publie,",
+            "Title,",
+            "Published,",
             "CreatedAt,",
             "UpdatedAt,",
         ] {
             assert!(
-                rendu.contains(variante),
-                "variante {variante} absente :\n{rendu}"
+                rendered.contains(variante),
+                "variante {variante} absente :\n{rendered}"
             );
         }
     }
@@ -213,7 +213,7 @@ use sea_orm_migration::sea_orm::{
     ConnectionTrait, Database, DatabaseBackend, DatabaseConnection, Statement,
 };
 
-async fn scalaire(db: &DatabaseConnection, sql: &str) -> String {
+async fn scalar(db: &DatabaseConnection, sql: &str) -> String {
     db.query_one_raw(Statement::from_string(DatabaseBackend::Postgres, sql))
         .await
         .expect("la requête doit aboutir")
@@ -222,8 +222,8 @@ async fn scalaire(db: &DatabaseConnection, sql: &str) -> String {
         .expect("colonne textuelle")
 }
 
-async fn millisecondes(db: &DatabaseConnection) -> i64 {
-    scalaire(db, "SELECT floor(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint::text")
+async fn milliseconds(db: &DatabaseConnection) -> i64 {
+    scalar(db, "SELECT floor(EXTRACT(EPOCH FROM clock_timestamp()) * 1000)::bigint::text")
         .await
         .parse()
         .expect("horloge de la base")
@@ -236,7 +236,7 @@ async fn la_migration_monte_insere_et_redescend() {
 
     Migrator::up(&db, None).await.expect("montée de la migration");
 
-    let defaut = scalaire(
+    let defaut = scalar(
         &db,
         "SELECT column_default FROM information_schema.columns \
          WHERE table_name = 'articles' AND column_name = 'id'",
@@ -244,32 +244,32 @@ async fn la_migration_monte_insere_et_redescend() {
     .await;
     assert!(defaut.contains("uuidv7()"), "défaut de la colonne id : {defaut}");
 
-    let avant = millisecondes(&db).await;
-    db.execute_unprepared("INSERT INTO articles (titre, slug) VALUES ('essai', 'essai')")
+    let before = milliseconds(&db).await;
+    db.execute_unprepared("INSERT INTO articles (title, slug) VALUES ('essai', 'essai')")
         .await
         .expect("insertion sans identifiant");
-    let apres = millisecondes(&db).await;
+    let after = milliseconds(&db).await;
 
-    let id = scalaire(&db, "SELECT id::text FROM articles").await;
+    let id = scalar(&db, "SELECT id::text FROM articles").await;
     assert_eq!(id.chars().nth(14), Some('7'), "version de l'UUID : {id}");
 
     let tete: String = id.chars().filter(|c| *c != '-').take(12).collect();
-    let horodatage = i64::from_str_radix(&tete, 16).expect("tête hexadécimale de l'UUID");
+    let timestamp = i64::from_str_radix(&tete, 16).expect("tête hexadécimale de l'UUID");
     assert!(
-        (avant..=apres).contains(&horodatage),
-        "horodatage {horodatage} hors de l'intervalle d'insertion [{avant}, {apres}]"
+        (before..=after).contains(&timestamp),
+        "horodatage {timestamp} hors de l'intervalle d'insertion [{before}, {after}]"
     );
 
     Migrator::down(&db, None).await.expect("descente de la migration");
 
-    let tables = scalaire(
+    let tables = scalar(
         &db,
         "SELECT count(*)::text FROM information_schema.tables WHERE table_name = 'articles'",
     )
     .await;
     assert_eq!(tables, "0", "la table survit à la descente");
 
-    let suivies = scalaire(&db, "SELECT count(*)::text FROM seaql_migrations").await;
+    let suivies = scalar(&db, "SELECT count(*)::text FROM seaql_migrations").await;
     assert_eq!(suivies, "0", "la migration reste inscrite après sa descente");
 
     Migrator::up(&db, None).await.expect("remontée après descente");
@@ -279,18 +279,18 @@ async fn la_migration_monte_insere_et_redescend() {
 
     #[test]
     #[ignore = "démarre PostgreSQL 18 en conteneur et compile la crate migration"]
-    fn la_migration_generee_est_reversible_et_pose_un_uuidv7() {
-        let champs = champs::analyser("titre:string,slug:string:unique,resume:text:optional")
+    fn the_generated_migration_is_reversible_and_sets_a_uuidv7() {
+        let fields = fields::parse("title:string,slug:string:unique,summary:text:optional")
             .expect("champs valides");
-        let rendue = rendre(&Feature::nouvelle("articles", champs), HORODATAGE)
+        let rendue = render(&Feature::fresh("articles", fields), HORODATAGE)
             .expect("la migration doit se rendre");
 
-        let projet = banc::Projet::neuf();
-        projet.poser_migration(&rendue.module, &rendue.contenu);
-        projet.poser_test_de_migration("reversibilite", REVERSIBILITE);
+        let project = bench::Project::fresh();
+        project.write_migration(&rendue.module, &rendue.content);
+        project.write_migration_test("reversibilite", REVERSIBILITE);
 
-        let base = banc::BaseDeTest::demarrer();
-        projet.tester_migration(base.url());
+        let base = bench::TestDatabase::start();
+        project.test_migration(base.url());
     }
 
     /// `uuidv7()` tronque l'horodatage qu'il inscrit ; un cast direct en `bigint`, lui,
@@ -303,31 +303,31 @@ async fn la_migration_monte_insere_et_redescend() {
     /// horloge, et c'est tout son intérêt — elle tient là où le test qu'elle protège
     /// n'échoue qu'une fois sur deux.
     #[test]
-    fn les_bornes_du_test_d_inversibilite_tronquent_comme_uuidv7() {
+    fn the_bounds_of_the_reversibility_test_truncate_like_uuidv7() {
         let borne = REVERSIBILITE
             .lines()
-            .find(|ligne| ligne.contains("EXTRACT(EPOCH"))
+            .find(|line| line.contains("EXTRACT(EPOCH"))
             .expect("le test posé doit lire l'horloge de la base");
 
         assert!(
             borne.contains("floor("),
             "la borne arrondit au lieu de tronquer : elle passera au-dessus de \
-             l'horodatage de uuidv7 une fois sur deux :\n{borne}"
+             l'timestamp de uuidv7 une fois sur deux :\n{borne}"
         );
     }
 
     /// Rendu complet imprimé pour la revue de lecture qu'exige le lot.
     #[test]
     #[ignore = "affichage pour revue humaine"]
-    fn apercu() {
+    fn preview() {
         println!(
             "{}",
             migration(
                 "articles",
-                "titre:string,slug:string:unique,resume:text:optional,vues:int,\
-                 publie_le:datetime,auteur:uuid:index"
+                "title:string,slug:string:unique,summary:text:optional,views:int,\
+                 published_at:datetime,auteur:uuid:index"
             )
-            .contenu
+            .content
         );
     }
 }

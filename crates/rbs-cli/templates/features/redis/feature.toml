@@ -1,41 +1,41 @@
 [feature]
 description = "cache Redis : pool paresseux partagé par l'état, valeurs typées par serde"
 
-[[fichiers]]
-source = "mod.rs.jinja"
-cible  = "src/cache/mod.rs"
+[[files]]
+source      = "mod.rs.jinja"
+destination = "src/cache/mod.rs"
 
-[[fichiers]]
-source = "config.rs.jinja"
-cible  = "src/cache/config.rs"
+[[files]]
+source      = "config.rs.jinja"
+destination = "src/cache/config.rs"
 
-[[fichiers]]
-source = "tests.rs.jinja"
-cible  = "src/cache/tests.rs"
+[[files]]
+source      = "tests.rs.jinja"
+destination = "src/cache/tests.rs"
 
-[[ancres]]
-ancre   = "features"
-contenu = "mod cache;"
+[[anchors]]
+anchor  = "features"
+content = "mod cache;"
 
-[[ancres]]
-ancre   = "state_champs"
-contenu = "pub cache: crate::cache::Cache,"
+[[anchors]]
+anchor  = "state_champs"
+content = "pub cache: crate::cache::Cache,"
 
-[[ancres]]
-ancre   = "state_init"
-contenu = "cache: crate::cache::Cache::from_config()?,"
+[[anchors]]
+anchor  = "state_init"
+content = "cache: crate::cache::Cache::from_config()?,"
 
-[[dependances]]
-nom      = "redis"
+[[dependencies]]
+name     = "redis"
 version  = "1.6"
 features = ["tokio-comp"]
 
-[[dependances]]
-nom     = "deadpool-redis"
+[[dependencies]]
+name    = "deadpool-redis"
 version = "0.23"
 
-[[dependances]]
-nom     = "serde_json"
+[[dependencies]]
+name    = "serde_json"
 version = "1.0"
 
 # `tokio::time` sert à l'expiration, que les tests du fragment attendent réellement.
@@ -45,9 +45,9 @@ version = "1.0"
 features = ["time"]
 
 [[config]]
-fichier = "config/default.toml"
+file    = "config/default.toml"
 section = "cache"
-contenu = """
+content = """
 url = "redis://127.0.0.1:6379"
 ttl_secs = 300
 """

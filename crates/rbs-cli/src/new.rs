@@ -25,7 +25,7 @@ const FEATURES_CONNUES: &[&str] = &["docker", "ci", "auth", "redis", "storage", 
 /// Ce qu'il faut savoir avant de créer un projet, questions et flags confondus.
 pub struct Options {
     /// Nom du projet, qui est aussi celui du répertoire et du paquet Cargo.
-    pub nom: String,
+    pub name: String,
     /// URL de connexion écrite dans le `.env` du projet.
     pub database_url: String,
     /// Features demandées à la création.
@@ -38,26 +38,26 @@ pub struct Options {
 
 /// Ce qu'un projet créé rapporte à son appelant.
 #[derive(Debug)]
-pub struct Projet {
+pub struct Project {
     /// Racine du projet créé.
-    pub racine: PathBuf,
+    pub root: PathBuf,
     /// Nombre de fichiers écrits.
-    pub fichiers: usize,
+    pub files: usize,
     /// `git init` a abouti. Faux n'invalide pas le projet.
     pub depot_git: bool,
 }
 
 /// Ce qui peut empêcher la création d'un projet.
 #[derive(Debug, thiserror::Error)]
-pub enum Erreur {
+pub enum Error {
     /// Le nom ne peut être ni un paquet Cargo ni un répertoire.
     #[error(
-        "`{nom}` n'est pas un nom de projet utilisable : lettres, chiffres, `-` et `_`, \
+        "`{name}` n'est pas un name de project utilisable : lettres, chiffres, `-` et `_`, \
          en commençant par une lettre"
     )]
     NomInvalide {
         /// Nom refusé.
-        nom: String,
+        name: String,
     },
 
     /// La feature existe, mais `--with` ne l'installe pas à la création.
@@ -71,26 +71,26 @@ pub enum Erreur {
     },
 
     /// La feature demandée n'existe pas.
-    #[error("`{feature}` n'est pas une feature rbs — disponibles : {connues}")]
+    #[error("`{feature}` n'est pas une feature rbs — disponibles : {known}")]
     FeatureInconnue {
         /// Feature demandée.
         feature: String,
         /// Features que rbs connaît.
-        connues: String,
+        known: String,
     },
 
     /// Le chemin visé est déjà pris.
-    #[error("{chemin} existe déjà : choisissez un autre nom, ou retirez ce répertoire")]
+    #[error("{path} existe déjà : choisissez un autre nom, ou retirez ce répertoire")]
     RepertoireOccupe {
         /// Chemin visé.
-        chemin: String,
+        path: String,
     },
 
     /// `--core-path` ne désigne pas un répertoire lisible.
-    #[error("{chemin} est introuvable : `--core-path` désigne la crate `rbs-core` ({source})")]
+    #[error("{path} est introuvable : `--core-path` désigne la crate `rbs-core` ({source})")]
     NoyauIntrouvable {
         /// Chemin donné.
-        chemin: String,
+        path: String,
         /// Cause système.
         source: io::Error,
     },
@@ -109,10 +109,10 @@ pub enum Erreur {
     },
 
     /// L'arborescence n'a pas pu être écrite.
-    #[error("écriture impossible dans {chemin} : {source}")]
+    #[error("écriture impossible dans {path} : {source}")]
     Ecriture {
         /// Chemin en cause.
-        chemin: String,
+        path: String,
         /// Cause système.
         source: io::Error,
     },
@@ -125,47 +125,47 @@ pub enum Erreur {
 /// Échoue si le nom, les features ou le chemin visé sont inutilisables, si une template
 /// ne se rend pas, ou si l'écriture échoue. Dans tous les cas, rien de ce que la commande
 /// a créé ne subsiste.
-pub fn creer(options: &Options, parent: &Path) -> Result<Projet, Erreur> {
-    valider_nom(&options.nom)?;
-    valider_features(&options.features)?;
+pub fn create(options: &Options, parent: &Path) -> Result<Project, Error> {
+    validate_name(&options.name)?;
+    validate_features(&options.features)?;
 
-    let racine = parent.join(&options.nom);
-    if racine.exists() {
-        return Err(Erreur::RepertoireOccupe {
-            chemin: racine.display().to_string(),
+    let root = parent.join(&options.name);
+    if root.exists() {
+        return Err(Error::RepertoireOccupe {
+            path: root.display().to_string(),
         });
     }
 
-    let dependance = dependance_noyau(options.core_path.as_deref())?;
-    let rendus = rendre(options, &dependance)?;
+    let dependency = core_dependency(options.core_path.as_deref())?;
+    let rendus = render(options, &dependency)?;
 
-    ecrire(&racine, &rendus).map_err(|(chemin, source)| {
+    write(&root, &rendus).map_err(|(path, source)| {
         // Le répertoire n'existait pas : le retirer entièrement ne peut rien emporter
         // qui préexistait à la commande.
-        let _ = fs::remove_dir_all(&racine);
-        Erreur::Ecriture { chemin, source }
+        let _ = fs::remove_dir_all(&root);
+        Error::Ecriture { path, source }
     })?;
 
-    Ok(Projet {
-        depot_git: git_init(&racine),
-        fichiers: rendus.len(),
-        racine,
+    Ok(Project {
+        depot_git: git_init(&root),
+        files: rendus.len(),
+        root,
     })
 }
 
 /// Le nom devient un `name` de manifeste et un nom de répertoire : ce qui n'est pas
 /// valide pour les deux est refusé avant que quoi que ce soit s'écrive.
-fn valider_nom(nom: &str) -> Result<(), Erreur> {
-    let utilisable = nom.starts_with(|premier: char| premier.is_ascii_alphabetic())
-        && nom.chars().all(|caractere| {
+fn validate_name(name: &str) -> Result<(), Error> {
+    let utilisable = name.starts_with(|premier: char| premier.is_ascii_alphabetic())
+        && name.chars().all(|caractere| {
             caractere.is_ascii_alphanumeric() || caractere == '-' || caractere == '_'
         });
 
     if utilisable {
         Ok(())
     } else {
-        Err(Erreur::NomInvalide {
-            nom: nom.to_owned(),
+        Err(Error::NomInvalide {
+            name: name.to_owned(),
         })
     }
 }
@@ -175,17 +175,17 @@ fn valider_nom(nom: &str) -> Result<(), Erreur> {
 /// Les inscrire dans `[package.metadata.rbs]` sans rien poser rendrait leur installation
 /// ultérieure impossible : l'idempotence du §4.2 porte sur ces métadonnées, pas sur la
 /// présence des fichiers.
-fn valider_features(features: &[String]) -> Result<(), Erreur> {
+fn validate_features(features: &[String]) -> Result<(), Error> {
     match features.first() {
         None => Ok(()),
         Some(feature) if FEATURES_CONNUES.contains(&feature.as_str()) => {
-            Err(Erreur::FeatureAVenir {
+            Err(Error::FeatureAVenir {
                 feature: feature.clone(),
             })
         }
-        Some(feature) => Err(Erreur::FeatureInconnue {
+        Some(feature) => Err(Error::FeatureInconnue {
             feature: feature.clone(),
-            connues: FEATURES_CONNUES.join(", "),
+            known: FEATURES_CONNUES.join(", "),
         }),
     }
 }
@@ -194,64 +194,65 @@ fn valider_features(features: &[String]) -> Result<(), Erreur> {
 ///
 /// Le chemin est canonisé : Cargo le résout depuis le manifeste du projet créé, pas
 /// depuis le répertoire où la commande a été lancée.
-fn dependance_noyau(core_path: Option<&Path>) -> Result<String, Erreur> {
-    let Some(chemin) = core_path else {
+fn core_dependency(core_path: Option<&Path>) -> Result<String, Error> {
+    let Some(path) = core_path else {
         return Ok(format!("\"{}\"", env!("CARGO_PKG_VERSION")));
     };
 
-    let absolu = chemin
+    let absolu = path
         .canonicalize()
-        .map_err(|source| Erreur::NoyauIntrouvable {
-            chemin: chemin.display().to_string(),
+        .map_err(|source| Error::NoyauIntrouvable {
+            path: path.display().to_string(),
             source,
         })?;
 
-    let valeur = toml_edit::Value::from(absolu.display().to_string());
+    let value = toml_edit::Value::from(absolu.display().to_string());
 
-    Ok(format!("{{ path = {} }}", valeur.to_string().trim()))
+    Ok(format!("{{ path = {} }}", value.to_string().trim()))
 }
 
 /// Rend toutes les templates. Aucun fichier n'est écrit tant que la dernière n'a pas
 /// abouti : une variable oubliée ne doit pas laisser un projet à moitié généré.
-fn rendre(options: &Options, dependance: &str) -> Result<Vec<(PathBuf, String)>, Erreur> {
-    let fichiers = Source::nouvelle(options.template_dir.as_deref())
-        .fichiers()
-        .map_err(Erreur::Templates)?;
+fn render(options: &Options, dependency: &str) -> Result<Vec<(PathBuf, String)>, Error> {
+    let files = Source::fresh(options.template_dir.as_deref())
+        .files()
+        .map_err(Error::Templates)?;
 
     let renderer = Renderer::new();
-    let contexte = context! {
-        nom_projet => options.nom.as_str(),
-        nom_crate => nom_crate(&options.nom),
-        rbs_core_dep => dependance,
+    let context = context! {
+        project_name => options.name.as_str(),
+        crate_name => crate_name(&options.name),
+        rbs_core_dep => dependency,
         rbs_version => env!("CARGO_PKG_VERSION"),
         database_url => options.database_url.as_str(),
     };
 
-    fichiers
+    files
         .into_iter()
-        .map(|fichier| {
-            let rendu = renderer
-                .rendre(&fichier.source, &contexte)
-                .map_err(|source| Erreur::Rendu {
-                    template: fichier.destination.display().to_string(),
-                    source,
-                })?;
+        .map(|file| {
+            let rendered =
+                renderer
+                    .render(&file.source, &context)
+                    .map_err(|source| Error::Rendu {
+                        template: file.destination.display().to_string(),
+                        source,
+                    })?;
 
-            Ok((fichier.destination, rendu))
+            Ok((file.destination, rendered))
         })
         .collect()
 }
 
 /// Écrit l'arborescence, en nommant le chemin qui a échoué.
-fn ecrire(racine: &Path, rendus: &[(PathBuf, String)]) -> Result<(), (String, io::Error)> {
-    for (destination, contenu) in rendus {
-        let chemin = racine.join(destination);
+fn write(root: &Path, rendus: &[(PathBuf, String)]) -> Result<(), (String, io::Error)> {
+    for (destination, content) in rendus {
+        let path = root.join(destination);
 
-        if let Some(parent) = chemin.parent() {
-            fs::create_dir_all(parent).map_err(|erreur| (parent.display().to_string(), erreur))?;
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).map_err(|error| (parent.display().to_string(), error))?;
         }
 
-        fs::write(&chemin, contenu).map_err(|erreur| (chemin.display().to_string(), erreur))?;
+        fs::write(&path, content).map_err(|error| (path.display().to_string(), error))?;
     }
 
     Ok(())
@@ -261,18 +262,18 @@ fn ecrire(racine: &Path, rendus: &[(PathBuf, String)]) -> Result<(), (String, io
 ///
 /// L'échec n'est pas fatal : un projet sans dépôt reste un projet valide, et `git` peut
 /// tout simplement ne pas être installé.
-fn git_init(racine: &Path) -> bool {
+fn git_init(root: &Path) -> bool {
     Command::new("git")
         .args(["init", "--quiet"])
-        .current_dir(racine)
+        .current_dir(root)
         .status()
         .is_ok_and(|statut| statut.success())
 }
 
 /// Nom de la crate correspondant au nom du projet : un tiret n'est pas un caractère
 /// d'identifiant Rust.
-fn nom_crate(nom: &str) -> String {
-    nom.replace('-', "_")
+fn crate_name(name: &str) -> String {
+    name.replace('-', "_")
 }
 
 #[cfg(test)]
@@ -288,9 +289,9 @@ mod tests {
     /// que sur une copie embarquée au moment de leur compilation.
     const SQUELETTE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/project");
 
-    fn options(nom: &str) -> Options {
+    fn options(name: &str) -> Options {
         Options {
-            nom: nom.to_owned(),
+            name: name.to_owned(),
             database_url: "postgres://alice:s3cr3t@localhost:5432/api".to_owned(),
             features: Vec::new(),
             core_path: None,
@@ -302,19 +303,19 @@ mod tests {
         TempDir::new().expect("répertoire temporaire créable")
     }
 
-    fn lire(chemin: &Path) -> String {
-        fs::read_to_string(chemin).unwrap_or_else(|erreur| {
-            panic!("{} illisible : {erreur}", chemin.display());
+    fn read(path: &Path) -> String {
+        fs::read_to_string(path).unwrap_or_else(|error| {
+            panic!("{} illisible : {error}", path.display());
         })
     }
 
     #[test]
-    fn le_squelette_complet_est_ecrit_aux_chemins_attendus() {
+    fn the_full_skeleton_is_written_to_the_expected_paths() {
         let parent = parent();
 
-        let projet = creer(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
 
-        assert_eq!(projet.racine, parent.path().join("mon-api"));
+        assert_eq!(project.root, parent.path().join("mon-api"));
         for relatif in [
             ".env",
             ".env.example",
@@ -333,59 +334,59 @@ mod tests {
             "src/state.rs",
         ] {
             assert!(
-                projet.racine.join(relatif).is_file(),
+                project.root.join(relatif).is_file(),
                 "{relatif} absent du projet créé"
             );
         }
     }
 
     #[test]
-    fn la_crate_migration_expose_un_binaire_pilotable_par_rbs_migrate() {
+    fn the_migration_crate_exposes_a_binary_drivable_by_rbs_migrate() {
         let parent = parent();
 
-        let projet = creer(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
 
-        let manifeste = lire(&projet.racine.join("migration/Cargo.toml"));
+        let manifest = read(&project.root.join("migration/Cargo.toml"));
         assert!(
-            manifeste.contains("[[bin]]"),
+            manifest.contains("[[bin]]"),
             "la crate migration n'expose aucun binaire à envelopper"
         );
         assert!(
-            manifeste.contains("tokio"),
+            manifest.contains("tokio"),
             "le binaire de migration n'a pas de runtime asynchrone"
         );
     }
 
     #[test]
-    fn le_nom_du_projet_devient_celui_du_paquet_et_de_la_crate() {
+    fn the_project_name_becomes_the_package_and_crate_name() {
         let parent = parent();
 
-        let projet = creer(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
 
         assert!(
-            lire(&projet.racine.join("Cargo.toml")).contains("name = \"mon-api\""),
+            read(&project.root.join("Cargo.toml")).contains("name = \"mon-api\""),
             "le manifeste ne porte pas le nom du projet"
         );
         // Un tiret n'est pas un caractère d'identifiant Rust : les filtres de log visent
         // la crate, pas le paquet.
         assert!(
-            lire(&projet.racine.join(".env")).contains("RUST_LOG=info,mon_api=debug"),
+            read(&project.root.join(".env")).contains("RUST_LOG=info,mon_api=debug"),
             "le filtre de log ne vise pas la crate"
         );
     }
 
     #[test]
-    fn le_fichier_env_porte_l_url_choisie_quand_l_exemple_reste_generique() {
+    fn the_env_file_carries_the_chosen_url_while_the_example_stays_generic() {
         let parent = parent();
 
-        let projet = creer(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
 
         assert!(
-            lire(&projet.racine.join(".env"))
+            read(&project.root.join(".env"))
                 .contains("RBS_DATABASE__URL=postgres://alice:s3cr3t@localhost:5432/api"),
             "l'URL choisie n'est pas dans le `.env`"
         );
-        let exemple = lire(&projet.racine.join(".env.example"));
+        let exemple = read(&project.root.join(".env.example"));
         assert!(
             !exemple.contains("s3cr3t"),
             "le `.env.example`, versionné, porte le mot de passe de l'utilisateur :\n{exemple}"
@@ -393,13 +394,13 @@ mod tests {
     }
 
     #[test]
-    fn les_metadonnees_du_projet_cree_se_relisent() {
+    fn the_metadata_of_the_created_project_reads_back() {
         let parent = parent();
 
-        let projet = creer(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
 
         let metadonnees =
-            crate::metadata::lire(&projet.racine.join("Cargo.toml")).expect("métadonnées lisibles");
+            crate::metadata::read(&project.root.join("Cargo.toml")).expect("métadonnées lisibles");
         assert_eq!(metadonnees.version, env!("CARGO_PKG_VERSION"));
         assert_eq!(metadonnees.features, vec!["health".to_string()]);
     }
@@ -408,52 +409,52 @@ mod tests {
     /// relisent du JSON : sans ces deux crates, le projet généré ne compilerait pas ses
     /// propres tests.
     #[test]
-    fn le_manifeste_porte_les_dependances_de_developpement_des_tests_generes() {
+    fn the_manifest_carries_the_dev_dependencies_of_the_generated_tests() {
         let parent = parent();
 
-        let projet = creer(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
 
-        let manifeste = lire(&projet.racine.join("Cargo.toml"));
+        let manifest = read(&project.root.join("Cargo.toml"));
         assert!(
-            manifeste.contains("[dev-dependencies]"),
-            "section absente :\n{manifeste}"
+            manifest.contains("[dev-dependencies]"),
+            "section absente :\n{manifest}"
         );
-        for dependance in ["tower = ", "serde_json = ", "uuid = "] {
+        for dependency in ["tower = ", "serde_json = ", "uuid = "] {
             assert!(
-                manifeste.contains(dependance),
-                "`{dependance}` absente :\n{manifeste}"
+                manifest.contains(dependency),
+                "`{dependency}` absente :\n{manifest}"
             );
         }
     }
 
     #[test]
-    fn sans_core_path_le_manifeste_depend_de_la_version_publiee_du_noyau() {
+    fn without_core_path_the_manifest_depends_on_the_published_core_version() {
         let parent = parent();
 
-        let projet = creer(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
 
-        let manifeste = lire(&projet.racine.join("Cargo.toml"));
-        let attendu = format!("rbs-core = \"{}\"", env!("CARGO_PKG_VERSION"));
+        let manifest = read(&project.root.join("Cargo.toml"));
+        let expected = format!("rbs-core = \"{}\"", env!("CARGO_PKG_VERSION"));
         assert!(
-            manifeste.contains(&attendu),
-            "`{attendu}` absent du manifeste :\n{manifeste}"
+            manifest.contains(&expected),
+            "`{expected}` absent du manifeste :\n{manifest}"
         );
     }
 
     #[test]
-    fn avec_core_path_le_manifeste_depend_du_noyau_local_par_un_chemin_absolu() {
+    fn with_core_path_the_manifest_depends_on_the_local_core_by_an_absolute_path() {
         let parent = parent();
-        let noyau = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../rbs-core"));
+        let core = PathBuf::from(concat!(env!("CARGO_MANIFEST_DIR"), "/../rbs-core"));
         let mut options = options("mon-api");
-        options.core_path = Some(noyau.clone());
+        options.core_path = Some(core.clone());
 
-        let projet = creer(&options, parent.path()).expect("le projet doit se créer");
+        let project = create(&options, parent.path()).expect("le projet doit se créer");
 
-        let brut = lire(&projet.racine.join("Cargo.toml"));
-        let manifeste: toml_edit::DocumentMut = brut
+        let brut = read(&project.root.join("Cargo.toml"));
+        let manifest: toml_edit::DocumentMut = brut
             .parse()
-            .unwrap_or_else(|erreur| panic!("manifeste illisible comme TOML : {erreur}\n{brut}"));
-        let absolu = noyau.canonicalize().expect("le noyau existe");
+            .unwrap_or_else(|error| panic!("manifeste illisible comme TOML : {error}\n{brut}"));
+        let absolu = core.canonicalize().expect("le noyau existe");
 
         // Le chemin se compare après analyse, jamais sur le texte du manifeste : un
         // chemin Windows y est inscrit avec ses antislashs échappés, et une comparaison
@@ -461,23 +462,23 @@ mod tests {
         //
         // Cargo résout un chemin relatif depuis le manifeste du projet créé, pas depuis
         // le répertoire où la commande a été lancée : d'où l'absolu.
-        let inscrit = manifeste["dependencies"]["rbs-core"]["path"]
+        let inscrit = manifest["dependencies"]["rbs-core"]["path"]
             .as_str()
             .unwrap_or_else(|| panic!("la dépendance au noyau doit porter un `path` :\n{brut}"));
         assert_eq!(Path::new(inscrit), absolu);
     }
 
     #[test]
-    fn un_core_path_introuvable_est_refuse_avant_toute_creation() {
+    fn an_unfindable_core_path_is_rejected_before_any_creation() {
         let parent = parent();
         let mut options = options("mon-api");
         options.core_path = Some(PathBuf::from("/introuvable/rbs-core"));
 
-        let erreur = creer(&options, parent.path()).expect_err("un noyau absent doit être refusé");
+        let error = create(&options, parent.path()).expect_err("un noyau absent doit être refusé");
 
         assert!(
-            erreur.to_string().contains("/introuvable/rbs-core"),
-            "le message ne nomme pas le chemin : {erreur}"
+            error.to_string().contains("/introuvable/rbs-core"),
+            "le message ne nomme pas le chemin : {error}"
         );
         assert!(
             !parent.path().join("mon-api").exists(),
@@ -486,15 +487,15 @@ mod tests {
     }
 
     #[test]
-    fn une_feature_non_installable_est_refusee_avant_toute_creation() {
+    fn a_non_installable_feature_is_rejected_before_any_creation() {
         let parent = parent();
         let mut options = options("mon-api");
         options.features = vec!["docker".to_owned()];
 
-        let erreur =
-            creer(&options, parent.path()).expect_err("`docker` n'est pas encore installable");
+        let error =
+            create(&options, parent.path()).expect_err("`docker` n'est pas encore installable");
 
-        let message = erreur.to_string();
+        let message = error.to_string();
         assert!(
             message.contains("docker") && message.contains("rbs add"),
             "le message ne dit pas comment obtenir la feature : {message}"
@@ -506,7 +507,7 @@ mod tests {
     }
 
     #[test]
-    fn toute_feature_qu_add_installe_est_connue_a_la_creation() {
+    fn every_feature_add_installs_is_known_at_creation() {
         // Les deux listes se sont désynchronisées une fois : `auth` livrée par `add`,
         // et refusée ici comme si elle n'existait pas.
         for feature in ["docker", "ci", "auth"] {
@@ -514,9 +515,9 @@ mod tests {
             let mut options = options("mon-api");
             options.features = vec![feature.to_owned()];
 
-            let erreur = creer(&options, parent.path())
+            let error = create(&options, parent.path())
                 .expect_err("`--with` n'installe aucune feature à la création");
-            let message = erreur.to_string();
+            let message = error.to_string();
 
             assert!(
                 message.contains(&format!("rbs add {feature}")),
@@ -530,30 +531,30 @@ mod tests {
     }
 
     #[test]
-    fn le_renvoi_vers_add_ne_pretend_pas_que_la_commande_manque() {
+    fn the_pointer_to_add_does_not_pretend_the_command_is_missing() {
         let parent = parent();
         let mut options = options("mon-api");
         options.features = vec!["auth".to_owned()];
 
-        let erreur = creer(&options, parent.path()).expect_err("`--with` n'installe rien");
+        let error = create(&options, parent.path()).expect_err("`--with` n'installe rien");
 
         // `add` expose les trois features depuis le lot I. Le message qui annonçait le
         // contraire envoyait le lecteur attendre une commande déjà livrée.
         assert!(
-            !erreur.to_string().contains("n'expose pas"),
-            "le message dit encore qu'`add` n'expose pas la feature : {erreur}"
+            !error.to_string().contains("n'expose pas"),
+            "le message dit encore qu'`add` n'expose pas la feature : {error}"
         );
     }
 
     #[test]
-    fn une_feature_inconnue_ne_se_confond_pas_avec_une_feature_a_venir() {
+    fn an_unknown_feature_is_not_confused_with_an_upcoming_one() {
         let parent = parent();
         let mut options = options("mon-api");
         options.features = vec!["kubernetes".to_owned()];
 
-        let erreur = creer(&options, parent.path()).expect_err("`kubernetes` n'existe pas");
+        let error = create(&options, parent.path()).expect_err("`kubernetes` n'existe pas");
 
-        let message = erreur.to_string();
+        let message = error.to_string();
         assert!(
             message.contains("kubernetes") && message.contains("docker"),
             "le message ne nomme pas les features existantes : {message}"
@@ -561,42 +562,42 @@ mod tests {
     }
 
     #[test]
-    fn un_nom_qui_n_est_pas_un_paquet_cargo_est_refuse() {
+    fn a_name_that_is_not_a_cargo_package_is_rejected() {
         let parent = parent();
 
         // Un nom traverse jusqu'au `name` du manifeste et jusqu'au chemin créé : un
         // espace produit un TOML invalide, `..` écrit hors du répertoire visé.
-        for nom in ["mon api", "../evasion", "3volution", ""] {
-            let resultat = creer(&options(nom), parent.path());
+        for name in ["mon api", "../evasion", "3volution", ""] {
+            let resultat = create(&options(name), parent.path());
 
             assert!(
                 resultat.is_err(),
-                "`{nom}` a été accepté comme nom de projet"
+                "`{name}` a été accepté comme nom de projet"
             );
         }
 
         let restes: Vec<_> = fs::read_dir(parent.path())
             .expect("répertoire lisible")
-            .map(|entree| entree.expect("entrée lisible").path())
+            .map(|input| input.expect("entrée lisible").path())
             .collect();
         assert!(restes.is_empty(), "des fichiers ont été créés : {restes:?}");
     }
 
     #[test]
-    fn un_repertoire_occupe_est_refuse_sans_rien_ecrire() {
+    fn an_occupied_directory_is_rejected_without_writing_anything() {
         let parent = parent();
         let occupe = parent.path().join("mon-api");
         fs::create_dir(&occupe).expect("répertoire créable");
         fs::write(occupe.join("travail.rs"), "à ne pas perdre").expect("fichier écrit");
 
-        let erreur =
-            creer(&options("mon-api"), parent.path()).expect_err("un répertoire occupé est refusé");
+        let error = create(&options("mon-api"), parent.path())
+            .expect_err("un répertoire occupé est refusé");
 
         assert!(
-            erreur.to_string().contains("mon-api"),
-            "le message ne nomme pas le répertoire : {erreur}"
+            error.to_string().contains("mon-api"),
+            "le message ne nomme pas le répertoire : {error}"
         );
-        assert_eq!(lire(&occupe.join("travail.rs")), "à ne pas perdre");
+        assert_eq!(read(&occupe.join("travail.rs")), "à ne pas perdre");
         assert!(
             !occupe.join("Cargo.toml").exists(),
             "un fichier du squelette a été écrit dans le répertoire occupé"
@@ -604,13 +605,13 @@ mod tests {
     }
 
     #[test]
-    fn un_rendu_qui_echoue_ne_laisse_pas_de_projet_partiel() {
+    fn a_failing_render_leaves_no_partial_project() {
         let parent = parent();
         let templates = parent.path().join("templates");
         fs::create_dir(&templates).expect("répertoire créable");
         fs::write(
             templates.join("Cargo.toml.jinja"),
-            "name = \"{@ nom_projet @}\"",
+            "name = \"{@ project_name @}\"",
         )
         .expect("template écrite");
         fs::write(templates.join("src.rs.jinja"), "{@ variable_absente @}")
@@ -618,12 +619,12 @@ mod tests {
         let mut options = options("mon-api");
         options.template_dir = Some(templates);
 
-        let erreur = creer(&options, parent.path())
+        let error = create(&options, parent.path())
             .expect_err("une variable absente doit arrêter la génération");
 
         assert!(
-            erreur.to_string().contains("src.rs"),
-            "le message ne nomme pas la template fautive : {erreur}"
+            error.to_string().contains("src.rs"),
+            "le message ne nomme pas la template fautive : {error}"
         );
         assert!(
             !parent.path().join("mon-api").exists(),
@@ -632,14 +633,14 @@ mod tests {
     }
 
     #[test]
-    fn le_projet_cree_est_un_depot_git() {
+    fn the_created_project_is_a_git_repository() {
         let parent = parent();
 
-        let projet = creer(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
 
-        assert!(projet.depot_git, "`git init` non signalé dans le rapport");
+        assert!(project.depot_git, "`git init` non signalé dans le rapport");
         assert!(
-            projet.racine.join(".git").exists(),
+            project.root.join(".git").exists(),
             "le projet créé n'est pas un dépôt"
         );
     }

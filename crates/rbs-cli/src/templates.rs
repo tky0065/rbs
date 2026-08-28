@@ -34,33 +34,33 @@ pub enum Source {
 
 /// Une feature dont aucun fragment n'existe, ni embarqué ni sur le disque.
 #[derive(Debug, thiserror::Error)]
-#[error("`{feature}` n'est pas une feature installable : {connues}")]
-pub struct Inconnue {
+#[error("`{feature}` n'est pas une feature installable : {known}")]
+pub struct Unknown {
     /// Nom demandé.
     pub feature: String,
     /// Les features que la source propose, énumérées.
-    pub connues: String,
+    pub known: String,
 }
 
 /// Une template et le chemin auquel son rendu sera écrit.
 #[derive(Debug)]
-pub struct Fichier {
+pub struct File {
     /// Chemin de sortie relatif à la racine du projet, suffixe `.jinja` retiré.
     pub destination: PathBuf,
     /// Chemin de la template dans sa source, suffixe compris.
     ///
     /// C'est par lui qu'un manifeste de fragment désigne une template : la destination,
     /// elle, y est déclarée séparément.
-    pub origine: PathBuf,
+    pub origin: PathBuf,
     /// Source de la template, telle quelle : le rendu est l'affaire de l'appelant.
     pub source: String,
 }
 
 impl Source {
     /// Retient le répertoire donné par `--template-dir`, ou l'embarqué à défaut.
-    pub fn nouvelle(repertoire: Option<&Path>) -> Self {
-        match repertoire {
-            Some(chemin) => Self::Repertoire(chemin.to_path_buf()),
+    pub fn fresh(directory: Option<&Path>) -> Self {
+        match directory {
+            Some(path) => Self::Repertoire(path.to_path_buf()),
             None => Self::Embarquees(&PROJET),
         }
     }
@@ -69,26 +69,26 @@ impl Source {
     ///
     /// Une feature sans fragment est refusée ici plutôt qu'au rendu : un catalogue vide
     /// produirait un plan vide, donc une commande qui réussit sans rien faire.
-    pub fn feature(repertoire: Option<&Path>, feature: &str) -> Result<Self, Inconnue> {
-        match repertoire {
-            Some(chemin) => {
-                let fragment = chemin.join(feature);
+    pub fn feature(directory: Option<&Path>, feature: &str) -> Result<Self, Unknown> {
+        match directory {
+            Some(path) => {
+                let fragment = path.join(feature);
 
                 if fragment.is_dir() {
                     Ok(Self::Repertoire(fragment))
                 } else {
-                    Err(Inconnue {
+                    Err(Unknown {
                         feature: feature.to_owned(),
-                        connues: enumerer(noms_du_disque(chemin)),
+                        known: enumerate(names_on_disk(path)),
                     })
                 }
             }
             None => FEATURES
                 .get_dir(feature)
                 .map(Self::Embarquees)
-                .ok_or_else(|| Inconnue {
+                .ok_or_else(|| Unknown {
                     feature: feature.to_owned(),
-                    connues: enumerer(noms_embarques()),
+                    known: enumerate(embedded_names()),
                 }),
         }
     }
@@ -100,101 +100,97 @@ impl Source {
     ///
     /// Le manifeste d'un fragment est écarté : il déclare ce que l'installation fait au
     /// projet, il n'est pas un des fichiers qu'elle y dépose.
-    pub fn fichiers(&self) -> io::Result<Vec<Fichier>> {
-        let mut fichiers = self.tout()?;
+    pub fn files(&self) -> io::Result<Vec<File>> {
+        let mut files = self.all()?;
 
-        fichiers.retain(|fichier| fichier.destination != Path::new(MANIFESTE));
+        files.retain(|file| file.destination != Path::new(MANIFESTE));
 
-        Ok(fichiers)
+        Ok(files)
     }
 
     /// Source du manifeste du fragment, ou `None` s'il n'en porte pas.
-    pub fn manifeste(&self) -> io::Result<Option<String>> {
+    pub fn manifest(&self) -> io::Result<Option<String>> {
         Ok(self
-            .tout()?
+            .all()?
             .into_iter()
-            .find(|fichier| fichier.destination == Path::new(MANIFESTE))
-            .map(|fichier| fichier.source))
+            .find(|file| file.destination == Path::new(MANIFESTE))
+            .map(|file| file.source))
     }
 
     /// Toutes les entrées du répertoire, manifeste compris.
-    fn tout(&self) -> io::Result<Vec<Fichier>> {
-        let mut fichiers = Vec::new();
+    fn all(&self) -> io::Result<Vec<File>> {
+        let mut files = Vec::new();
 
         match self {
-            Self::Embarquees(racine) => lire_embarquees(racine, racine.path(), &mut fichiers)?,
-            Self::Repertoire(racine) => lire_repertoire(racine, racine, &mut fichiers)?,
+            Self::Embarquees(root) => read_embedded(root, root.path(), &mut files)?,
+            Self::Repertoire(root) => read_directory(root, root, &mut files)?,
         }
 
-        fichiers.sort_by(|gauche, droite| gauche.destination.cmp(&droite.destination));
+        files.sort_by(|gauche, droite| gauche.destination.cmp(&droite.destination));
 
-        Ok(fichiers)
+        Ok(files)
     }
 }
 
 /// Les features dont le binaire porte un fragment, triées.
-fn noms_embarques() -> Vec<String> {
-    let mut noms: Vec<String> = FEATURES
+fn embedded_names() -> Vec<String> {
+    let mut names: Vec<String> = FEATURES
         .dirs()
         .filter_map(|dir| dir.path().file_name())
-        .map(|nom| nom.to_string_lossy().into_owned())
+        .map(|name| name.to_string_lossy().into_owned())
         .collect();
 
-    noms.sort();
-    noms
+    names.sort();
+    names
 }
 
 /// Les features qu'un `--template-dir` propose, triées, ou rien s'il est illisible.
-fn noms_du_disque(repertoire: &Path) -> Vec<String> {
-    let Ok(entrees) = std::fs::read_dir(repertoire) else {
+fn names_on_disk(directory: &Path) -> Vec<String> {
+    let Ok(entrees) = std::fs::read_dir(directory) else {
         return Vec::new();
     };
 
-    let mut noms: Vec<String> = entrees
+    let mut names: Vec<String> = entrees
         .flatten()
-        .filter(|entree| entree.path().is_dir())
-        .map(|entree| entree.file_name().to_string_lossy().into_owned())
+        .filter(|input| input.path().is_dir())
+        .map(|input| input.file_name().to_string_lossy().into_owned())
         .collect();
 
-    noms.sort();
-    noms
+    names.sort();
+    names
 }
 
 /// Rend une liste de features lisible dans un message d'erreur.
-fn enumerer(noms: Vec<String>) -> String {
-    if noms.is_empty() {
+fn enumerate(names: Vec<String>) -> String {
+    if names.is_empty() {
         "aucune n'est disponible".to_string()
     } else {
-        noms.join(", ")
+        names.join(", ")
     }
 }
 
-fn lire_embarquees(
-    repertoire: &Dir<'static>,
-    base: &Path,
-    fichiers: &mut Vec<Fichier>,
-) -> io::Result<()> {
-    for sous_repertoire in repertoire.dirs() {
-        lire_embarquees(sous_repertoire, base, fichiers)?;
+fn read_embedded(directory: &Dir<'static>, base: &Path, files: &mut Vec<File>) -> io::Result<()> {
+    for sous_repertoire in directory.dirs() {
+        read_embedded(sous_repertoire, base, files)?;
     }
 
-    for fichier in repertoire.files() {
+    for file in directory.files() {
         // Une template non-UTF-8 est une template qu'aucun rendu ne traversera : la
         // laisser passer déplacerait l'échec dans l'écriture du projet.
-        let source = fichier.contents_utf8().ok_or_else(|| {
+        let source = file.contents_utf8().ok_or_else(|| {
             io::Error::new(
                 io::ErrorKind::InvalidData,
-                format!("{} n'est pas de l'UTF-8", fichier.path().display()),
+                format!("{} n'est pas de l'UTF-8", file.path().display()),
             )
         })?;
 
         // Le chemin d'un fichier embarqué est relatif à la racine de l'`include_dir!`, et
         // non au fragment ouvert : sans ce retrait, `add docker` viserait `docker/Dockerfile`.
-        let relatif = fichier.path().strip_prefix(base).unwrap_or(fichier.path());
+        let relatif = file.path().strip_prefix(base).unwrap_or(file.path());
 
-        fichiers.push(Fichier {
+        files.push(File {
             destination: destination(relatif),
-            origine: relatif.to_path_buf(),
+            origin: relatif.to_path_buf(),
             source: source.to_owned(),
         });
     }
@@ -202,27 +198,23 @@ fn lire_embarquees(
     Ok(())
 }
 
-fn lire_repertoire(
-    racine: &Path,
-    repertoire: &Path,
-    fichiers: &mut Vec<Fichier>,
-) -> io::Result<()> {
-    let entrees = std::fs::read_dir(repertoire).map_err(|erreur| nommer(repertoire, erreur))?;
+fn read_directory(root: &Path, directory: &Path, files: &mut Vec<File>) -> io::Result<()> {
+    let entrees = std::fs::read_dir(directory).map_err(|error| name_of(directory, error))?;
 
-    for entree in entrees {
-        let chemin = entree.map_err(|erreur| nommer(repertoire, erreur))?.path();
+    for input in entrees {
+        let path = input.map_err(|error| name_of(directory, error))?.path();
 
-        if chemin.is_dir() {
-            lire_repertoire(racine, &chemin, fichiers)?;
+        if path.is_dir() {
+            read_directory(root, &path, files)?;
             continue;
         }
 
-        let source = std::fs::read_to_string(&chemin).map_err(|erreur| nommer(&chemin, erreur))?;
-        let relatif = chemin.strip_prefix(racine).unwrap_or(&chemin);
+        let source = std::fs::read_to_string(&path).map_err(|error| name_of(&path, error))?;
+        let relatif = path.strip_prefix(root).unwrap_or(&path);
 
-        fichiers.push(Fichier {
+        files.push(File {
             destination: destination(relatif),
-            origine: relatif.to_path_buf(),
+            origin: relatif.to_path_buf(),
             source,
         });
     }
@@ -251,8 +243,8 @@ fn destination(template: &Path) -> PathBuf {
 ///
 /// Un `--template-dir` mal saisi est l'erreur la plus probable de ce flag, et
 /// « No such file or directory » seul ne la corrige pas.
-fn nommer(chemin: &Path, erreur: io::Error) -> io::Error {
-    io::Error::new(erreur.kind(), format!("{} : {erreur}", chemin.display()))
+fn name_of(path: &Path, error: io::Error) -> io::Error {
+    io::Error::new(error.kind(), format!("{} : {error}", path.display()))
 }
 
 #[cfg(test)]
@@ -294,10 +286,10 @@ mod tests {
     ];
 
     /// Contexte de rendu minimal : les cinq variables que `rbs new` fournira.
-    fn contexte() -> Value {
+    fn context() -> Value {
         context! {
-            nom_projet => "mon-api",
-            nom_crate => "mon_api",
+            project_name => "mon-api",
+            crate_name => "mon_api",
             rbs_core_dep => "\"0.1\"",
             rbs_version => "0.1.0",
             database_url => "postgres://postgres:postgres@localhost:5432/mon_api",
@@ -307,7 +299,7 @@ mod tests {
     /// Toutes les templates du squelette, répertoires imbriqués compris.
     fn templates() -> Vec<PathBuf> {
         let mut trouvees = Vec::new();
-        parcourir(Path::new(RACINE), &mut trouvees);
+        walk(Path::new(RACINE), &mut trouvees);
 
         assert!(
             !trouvees.is_empty(),
@@ -317,99 +309,97 @@ mod tests {
         trouvees
     }
 
-    fn parcourir(repertoire: &Path, trouvees: &mut Vec<PathBuf>) {
-        let entrees = fs::read_dir(repertoire).unwrap_or_else(|erreur| {
-            panic!("{} illisible : {erreur}", repertoire.display());
+    fn walk(directory: &Path, trouvees: &mut Vec<PathBuf>) {
+        let entrees = fs::read_dir(directory).unwrap_or_else(|error| {
+            panic!("{} illisible : {error}", directory.display());
         });
 
-        for entree in entrees {
-            let chemin = entree.expect("entrée de répertoire lisible").path();
-            if chemin.is_dir() {
-                parcourir(&chemin, trouvees);
+        for input in entrees {
+            let path = input.expect("entrée de répertoire lisible").path();
+            if path.is_dir() {
+                walk(&path, trouvees);
             } else {
-                trouvees.push(chemin);
+                trouvees.push(path);
             }
         }
     }
 
-    fn lire(chemin: &Path) -> String {
-        fs::read_to_string(chemin).unwrap_or_else(|erreur| {
-            panic!("{} illisible : {erreur}", chemin.display());
+    fn read(path: &Path) -> String {
+        fs::read_to_string(path).unwrap_or_else(|error| {
+            panic!("{} illisible : {error}", path.display());
         })
     }
 
     #[test]
-    fn chaque_template_porte_le_suffixe_jinja() {
-        for chemin in templates() {
+    fn each_template_carries_the_jinja_suffix() {
+        for path in templates() {
             assert_eq!(
-                chemin.extension().and_then(|suffixe| suffixe.to_str()),
+                path.extension().and_then(|suffixe| suffixe.to_str()),
                 Some("jinja"),
                 "{} ne porte pas le suffixe `.jinja`",
-                chemin.display()
+                path.display()
             );
         }
     }
 
     #[test]
-    fn l_ancre_des_features_suit_les_modules_du_squelette_dans_main() {
-        let source = lire(&Path::new(RACINE).join("src/main.rs.jinja"));
+    fn the_features_anchor_follows_the_skeleton_modules_in_main() {
+        let source = read(&Path::new(RACINE).join("src/main.rs.jinja"));
 
         let modules = source
             .find("mod state;")
             .expect("les modules du squelette doivent être déclarés");
-        let ancre = source
+        let anchor = source
             .find("// <rbs:features>")
             .expect("main.rs doit porter l'ancre des features");
 
         assert!(
-            modules < ancre,
+            modules < anchor,
             "l'ancre doit suivre les modules du squelette :\n{source}"
         );
     }
 
     #[test]
-    fn chaque_ancre_est_ouverte_puis_refermee_dans_son_fichier() {
-        for ancre in crate::ancres::ANCRES {
-            let relatif = format!("{}.jinja", ancre.fichier);
-            let source = lire(&Path::new(RACINE).join(&relatif));
+    fn each_anchor_is_opened_then_closed_in_its_file() {
+        for anchor in crate::anchors::ANCRES {
+            let relatif = format!("{}.jinja", anchor.file);
+            let source = read(&Path::new(RACINE).join(&relatif));
 
-            let ouverture = ancre.ouverture();
-            let fermeture = ancre.fermeture();
+            let opening = anchor.opening();
+            let closing = anchor.closing();
 
             assert_eq!(
-                source.matches(&ouverture).count(),
+                source.matches(&opening).count(),
                 1,
-                "{relatif} doit porter une fois `{ouverture}`"
+                "{relatif} doit porter une fois `{opening}`"
             );
             assert_eq!(
-                source.matches(&fermeture).count(),
+                source.matches(&closing).count(),
                 1,
-                "{relatif} doit porter une fois `{fermeture}`"
+                "{relatif} doit porter une fois `{closing}`"
             );
             assert!(
-                source.find(&ouverture) < source.find(&fermeture),
+                source.find(&opening) < source.find(&closing),
                 "{relatif} referme `{}` avant de l'ouvrir",
-                ancre.nom
+                anchor.name
             );
         }
     }
 
     #[test]
-    fn chaque_template_se_rend_avec_les_cinq_variables() {
+    fn each_template_renders_with_the_five_variables() {
         let renderer = Renderer::new();
 
-        for chemin in templates() {
-            let source = lire(&chemin);
-            renderer
-                .rendre(&source, contexte())
-                .unwrap_or_else(|erreur| {
-                    panic!("{} ne se rend pas : {erreur}", chemin.display());
-                });
+        for path in templates() {
+            let source = read(&path);
+            renderer.render(&source, context()).unwrap_or_else(|error| {
+                panic!("{} ne se rend pas : {error}", path.display());
+            });
         }
     }
 
     #[test]
-    fn chaque_template_rust_du_squelette_est_conforme_a_rustfmt() {
+    fn each_rust_template_of_the_skeleton_conforms_to_rustfmt() {
         // Le workflow d'`rbs add ci` lance `cargo fmt --check` sur le projet généré : un
         // squelette non conforme le fait échouer au premier pas, sur du code que le
         // développeur n'a pas écrit.
@@ -417,35 +407,32 @@ mod tests {
         // Le squelette est déroulé en entier plutôt que fichier par fichier : rustfmt suit
         // les déclarations de modules, et un `main.rs` seul ne résout pas ses `mod`.
         let renderer = Renderer::new();
-        let temporaire = tempfile::tempdir().expect("répertoire temporaire créable");
-        let racine = temporaire.path();
+        let temp = tempfile::tempdir().expect("répertoire temporaire créable");
+        let root = temp.path();
 
-        let fichiers = Source::nouvelle(None)
-            .fichiers()
+        let files = Source::fresh(None)
+            .files()
             .expect("les templates embarquées doivent se lire");
 
         let mut sources = Vec::new();
-        for fichier in &fichiers {
-            let destination = racine.join(&fichier.destination);
+        for file in &files {
+            let destination = root.join(&file.destination);
             if let Some(parent) = destination.parent() {
                 fs::create_dir_all(parent).expect("le répertoire est créable");
             }
 
-            let rendu = renderer
-                .rendre(&fichier.source, contexte())
-                .unwrap_or_else(|erreur| {
-                    panic!(
-                        "{} ne se rend pas : {erreur}",
-                        fichier.destination.display()
-                    )
+            let rendered = renderer
+                .render(&file.source, context())
+                .unwrap_or_else(|error| {
+                    panic!("{} ne se rend pas : {error}", file.destination.display())
                 });
-            fs::write(&destination, rendu).expect("le rendu est écrivable");
+            fs::write(&destination, rendered).expect("le rendu est écrivable");
 
             if destination
                 .extension()
                 .is_some_and(|suffixe| suffixe == "rs")
             {
-                sources.push((fichier.destination.clone(), destination));
+                sources.push((file.destination.clone(), destination));
             }
         }
 
@@ -454,101 +441,101 @@ mod tests {
             "le squelette ne porte aucun fichier Rust"
         );
 
-        for (relatif, chemin) in sources {
-            let sortie = std::process::Command::new("rustfmt")
+        for (relatif, path) in sources {
+            let output = std::process::Command::new("rustfmt")
                 .args(["--edition", "2024", "--check"])
-                .arg(&chemin)
+                .arg(&path)
                 .output()
                 .expect("rustfmt doit être lançable");
 
             assert!(
-                sortie.status.success(),
+                output.status.success(),
                 "{} n'est pas conforme à rustfmt :\n{}{}",
                 relatif.display(),
-                String::from_utf8_lossy(&sortie.stdout),
-                String::from_utf8_lossy(&sortie.stderr)
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
             );
         }
     }
 
     #[test]
-    fn le_manifeste_rendu_porte_le_nom_du_projet_et_la_dependance_au_noyau() {
-        let source = lire(&Path::new(RACINE).join("Cargo.toml.jinja"));
+    fn the_rendered_manifest_carries_the_project_name_and_the_core_dependency() {
+        let source = read(&Path::new(RACINE).join("Cargo.toml.jinja"));
 
-        let rendu = Renderer::new()
-            .rendre(&source, contexte())
+        let rendered = Renderer::new()
+            .render(&source, context())
             .expect("le manifeste doit se rendre");
 
         assert!(
-            rendu.contains("name = \"mon-api\""),
-            "nom du paquet absent du manifeste rendu :\n{rendu}"
+            rendered.contains("name = \"mon-api\""),
+            "nom du paquet absent du manifeste rendu :\n{rendered}"
         );
         assert!(
-            rendu.contains("rbs-core = \"0.1\""),
-            "dépendance au noyau absente du manifeste rendu :\n{rendu}"
+            rendered.contains("rbs-core = \"0.1\""),
+            "dépendance au noyau absente du manifeste rendu :\n{rendered}"
         );
     }
 
     #[test]
-    fn la_source_embarquee_restitue_le_squelette_avec_ses_chemins_de_sortie() {
-        let fichiers = Source::nouvelle(None)
-            .fichiers()
+    fn the_embedded_source_yields_the_skeleton_with_its_output_paths() {
+        let files = Source::fresh(None)
+            .files()
             .expect("les templates embarquées doivent se lire");
 
-        let destinations: Vec<String> = fichiers
+        let destinations: Vec<String> = files
             .iter()
-            .map(|fichier| fichier.destination.to_string_lossy().into_owned())
+            .map(|file| file.destination.to_string_lossy().into_owned())
             .collect();
 
         assert_eq!(destinations, DESTINATIONS);
 
-        for fichier in &fichiers {
+        for file in &files {
             assert!(
-                !fichier.source.is_empty(),
+                !file.source.is_empty(),
                 "{} est embarquée vide",
-                fichier.destination.display()
+                file.destination.display()
             );
         }
     }
 
     #[test]
-    fn aucune_destination_ne_porte_le_suffixe_jinja() {
-        let fichiers = Source::nouvelle(None)
-            .fichiers()
+    fn no_destination_carries_the_jinja_suffix() {
+        let files = Source::fresh(None)
+            .files()
             .expect("les templates embarquées doivent se lire");
 
-        for fichier in fichiers {
+        for file in files {
             assert_ne!(
-                fichier.destination.extension(),
+                file.destination.extension(),
                 Some("jinja".as_ref()),
                 "{} garde le suffixe `.jinja`",
-                fichier.destination.display()
+                file.destination.display()
             );
         }
     }
 
     #[test]
-    fn un_repertoire_de_templates_prend_le_pas_sur_l_embarque() {
-        let repertoire = tempfile::tempdir().expect("répertoire temporaire créable");
-        fs::create_dir(repertoire.path().join("config")).expect("sous-répertoire créable");
+    fn a_templates_directory_takes_precedence_over_the_embedded_one() {
+        let directory = tempfile::tempdir().expect("répertoire temporaire créable");
+        fs::create_dir(directory.path().join("config")).expect("sous-répertoire créable");
         fs::write(
-            repertoire.path().join("Cargo.toml.jinja"),
+            directory.path().join("Cargo.toml.jinja"),
             "name = \"surcharge\"",
         )
         .expect("template écrivable");
         fs::write(
-            repertoire.path().join("config/default.toml.jinja"),
+            directory.path().join("config/default.toml.jinja"),
             "port = 1",
         )
         .expect("template écrivable");
 
-        let fichiers = Source::nouvelle(Some(repertoire.path()))
-            .fichiers()
+        let files = Source::fresh(Some(directory.path()))
+            .files()
             .expect("le répertoire doit se lire");
 
-        let destinations: Vec<&Path> = fichiers
+        let destinations: Vec<&Path> = files
             .iter()
-            .map(|fichier| fichier.destination.as_path())
+            .map(|file| file.destination.as_path())
             .collect();
 
         // Comparer des `Path` et non leur rendu : sous Windows, `config/default.toml`
@@ -561,20 +548,20 @@ mod tests {
                 &Path::new("config").join("default.toml")
             ]
         );
-        assert_eq!(fichiers[0].source, "name = \"surcharge\"");
+        assert_eq!(files[0].source, "name = \"surcharge\"");
     }
 
     #[test]
-    fn un_repertoire_de_templates_inexistant_echoue_en_nommant_le_chemin() {
+    fn a_nonexistent_templates_directory_fails_naming_the_path() {
         let absent = Path::new("/introuvable/templates/rbs");
 
-        let erreur = Source::nouvelle(Some(absent))
-            .fichiers()
+        let error = Source::fresh(Some(absent))
+            .files()
             .expect_err("un répertoire absent ne doit pas rendre une liste vide");
 
         assert!(
-            erreur.to_string().contains("/introuvable/templates/rbs"),
-            "le message ne nomme pas le chemin : {erreur}"
+            error.to_string().contains("/introuvable/templates/rbs"),
+            "le message ne nomme pas le chemin : {error}"
         );
     }
 
@@ -585,10 +572,10 @@ mod tests {
     const DESTINATIONS_DOCKER: [&str; 3] = [".dockerignore", "Dockerfile", "docker-compose.yml"];
 
     /// Contexte de rendu d'un fragment : les deux variables qu'un projet existant fournit.
-    fn contexte_feature() -> Value {
+    fn feature_context() -> Value {
         context! {
-            nom_projet => "mon-api",
-            nom_crate => "mon_api",
+            project_name => "mon-api",
+            crate_name => "mon_api",
         }
     }
 
@@ -596,10 +583,10 @@ mod tests {
     ///
     /// Le manifeste d'un fragment n'en est pas une : il décrit l'installation, il n'y
     /// est pas déposé.
-    fn templates_de_features() -> Vec<PathBuf> {
+    fn feature_templates() -> Vec<PathBuf> {
         let mut trouvees = Vec::new();
-        parcourir(Path::new(RACINE_FEATURES), &mut trouvees);
-        trouvees.retain(|chemin| chemin.file_name() != Some(MANIFESTE.as_ref()));
+        walk(Path::new(RACINE_FEATURES), &mut trouvees);
+        trouvees.retain(|path| path.file_name() != Some(MANIFESTE.as_ref()));
 
         assert!(
             !trouvees.is_empty(),
@@ -611,155 +598,155 @@ mod tests {
 
     /// Le manifeste décrit l'installation ; il n'a rien à faire dans le projet installé.
     #[test]
-    fn le_manifeste_du_fragment_n_est_pas_copie_dans_le_projet() {
+    fn the_fragment_manifest_is_not_copied_into_the_project() {
         for feature in ["docker", "ci"] {
-            let fichiers = Source::feature(None, feature)
+            let files = Source::feature(None, feature)
                 .expect("le fragment doit exister")
-                .fichiers()
+                .files()
                 .expect("les templates embarquées doivent se lire");
 
             assert!(
-                !fichiers
+                !files
                     .iter()
-                    .any(|fichier| fichier.destination == Path::new(MANIFESTE)),
+                    .any(|file| file.destination == Path::new(MANIFESTE)),
                 "`{MANIFESTE}` serait déposé par `add {feature}` : {:?}",
-                fichiers
+                files
                     .iter()
-                    .map(|fichier| fichier.destination.display().to_string())
+                    .map(|file| file.destination.display().to_string())
                     .collect::<Vec<_>>()
             );
         }
     }
 
     #[test]
-    fn la_source_d_une_feature_restitue_ses_fichiers_embarques() {
-        let fichiers = Source::feature(None, "docker")
+    fn a_feature_source_yields_its_embedded_files() {
+        let files = Source::feature(None, "docker")
             .expect("`docker` doit être une feature connue")
-            .fichiers()
+            .files()
             .expect("les templates embarquées doivent se lire");
 
-        let destinations: Vec<String> = fichiers
+        let destinations: Vec<String> = files
             .iter()
-            .map(|fichier| fichier.destination.to_string_lossy().into_owned())
+            .map(|file| file.destination.to_string_lossy().into_owned())
             .collect();
 
         assert_eq!(destinations, DESTINATIONS_DOCKER);
 
-        for fichier in &fichiers {
+        for file in &files {
             assert!(
-                !fichier.source.is_empty(),
+                !file.source.is_empty(),
                 "{} est embarquée vide",
-                fichier.destination.display()
+                file.destination.display()
             );
         }
     }
 
     #[test]
-    fn une_feature_inconnue_est_signalee_par_son_nom() {
-        let erreur = Source::feature(None, "_aucune_feature_de_ce_nom_")
+    fn an_unknown_feature_is_reported_by_its_name() {
+        let error = Source::feature(None, "_aucune_feature_de_ce_nom_")
             .expect_err("aucun fragment ne porte ce nom : la source ne doit pas être vide");
 
         assert!(
-            erreur.to_string().contains("_aucune_feature_de_ce_nom_"),
-            "le message ne nomme pas la feature : {erreur}"
+            error.to_string().contains("_aucune_feature_de_ce_nom_"),
+            "le message ne nomme pas la feature : {error}"
         );
         // Énumérées une à une plutôt qu'en un bloc : la liste s'allonge à chaque fragment
         // livré, et l'ordre alphabétique intercale les nouveaux venus.
         for installable in ["auth", "ci", "docker", "mail", "redis", "storage"] {
             assert!(
-                erreur.to_string().contains(installable),
-                "le message n'énumère pas `{installable}` : {erreur}"
+                error.to_string().contains(installable),
+                "le message n'énumère pas `{installable}` : {error}"
             );
         }
     }
 
     #[test]
-    fn un_repertoire_de_templates_prend_le_pas_pour_une_feature() {
-        let repertoire = tempfile::tempdir().expect("répertoire temporaire créable");
-        fs::create_dir(repertoire.path().join("docker")).expect("sous-répertoire créable");
+    fn a_templates_directory_takes_precedence_for_a_feature() {
+        let directory = tempfile::tempdir().expect("répertoire temporaire créable");
+        fs::create_dir(directory.path().join("docker")).expect("sous-répertoire créable");
         fs::write(
-            repertoire.path().join("docker/Dockerfile.jinja"),
+            directory.path().join("docker/Dockerfile.jinja"),
             "FROM surcharge",
         )
         .expect("template écrivable");
 
-        let fichiers = Source::feature(Some(repertoire.path()), "docker")
+        let files = Source::feature(Some(directory.path()), "docker")
             .expect("le répertoire doit fournir la feature")
-            .fichiers()
+            .files()
             .expect("le répertoire doit se lire");
 
-        let destinations: Vec<String> = fichiers
+        let destinations: Vec<String> = files
             .iter()
-            .map(|fichier| fichier.destination.to_string_lossy().into_owned())
+            .map(|file| file.destination.to_string_lossy().into_owned())
             .collect();
 
         assert_eq!(destinations, ["Dockerfile"]);
-        assert_eq!(fichiers[0].source, "FROM surcharge");
+        assert_eq!(files[0].source, "FROM surcharge");
     }
 
     #[test]
-    fn chaque_template_de_feature_porte_le_suffixe_jinja() {
-        for chemin in templates_de_features() {
+    fn each_feature_template_carries_the_jinja_suffix() {
+        for path in feature_templates() {
             assert_eq!(
-                chemin.extension().and_then(|suffixe| suffixe.to_str()),
+                path.extension().and_then(|suffixe| suffixe.to_str()),
                 Some("jinja"),
                 "{} ne porte pas le suffixe `.jinja`",
-                chemin.display()
+                path.display()
             );
         }
     }
 
     #[test]
-    fn chaque_template_de_feature_se_rend_avec_son_contexte() {
+    fn each_feature_template_renders_with_its_context() {
         let renderer = Renderer::new();
 
-        for chemin in templates_de_features() {
-            let source = lire(&chemin);
+        for path in feature_templates() {
+            let source = read(&path);
             renderer
-                .rendre(&source, contexte_feature())
-                .unwrap_or_else(|erreur| {
-                    panic!("{} ne se rend pas : {erreur}", chemin.display());
+                .render(&source, feature_context())
+                .unwrap_or_else(|error| {
+                    panic!("{} ne se rend pas : {error}", path.display());
                 });
         }
     }
 
     #[test]
-    fn le_compose_de_docker_ne_publie_que_le_port_de_l_api() {
+    fn the_docker_compose_publishes_only_the_api_port() {
         // Publier 5432 fait échouer `docker compose up` sur toute machine portant déjà un
         // PostgreSQL, et la base n'a pas à être jointe depuis l'hôte : l'API l'atteint par
         // le réseau du compose, et `docker compose exec db psql` reste ouvert.
-        let source = lire(&Path::new(RACINE_FEATURES).join("docker/docker-compose.yml.jinja"));
+        let source = read(&Path::new(RACINE_FEATURES).join("docker/docker-compose.yml.jinja"));
 
         let publies: Vec<&str> = source
             .lines()
             .map(str::trim)
-            .filter(|ligne| ligne.starts_with("- \""))
+            .filter(|line| line.starts_with("- \""))
             .collect();
 
         assert_eq!(publies, ["- \"8080:8080\""], "ports publiés :\n{source}");
     }
 
     #[test]
-    fn la_source_de_ci_restitue_son_workflow() {
-        let fichiers = Source::feature(None, "ci")
+    fn the_ci_source_yields_its_workflow() {
+        let files = Source::feature(None, "ci")
             .expect("`ci` doit être une feature connue")
-            .fichiers()
+            .files()
             .expect("les templates embarquées doivent se lire");
 
-        let destinations: Vec<String> = fichiers
+        let destinations: Vec<String> = files
             .iter()
-            .map(|fichier| fichier.destination.to_string_lossy().into_owned())
+            .map(|file| file.destination.to_string_lossy().into_owned())
             .collect();
 
         assert_eq!(destinations, [".github/workflows/ci.yml"]);
     }
 
     #[test]
-    fn le_workflow_de_ci_amene_une_base_migree_avant_les_tests() {
+    fn the_ci_workflow_brings_a_migrated_database_before_the_tests() {
         // Les tests d'une feature générée montent l'application sur une vraie base et
         // supposent les migrations appliquées : sans elles, la CI échoue sur un schéma
         // absent, loin de sa cause.
-        let source = lire(&Path::new(RACINE_FEATURES).join("ci/.github/workflows/ci.yml.jinja"));
+        let source = read(&Path::new(RACINE_FEATURES).join("ci/.github/workflows/ci.yml.jinja"));
 
         assert!(
             source.contains("postgres:18"),
@@ -780,11 +767,11 @@ mod tests {
     }
 
     #[test]
-    fn le_builder_de_docker_installe_ce_dont_le_build_a_besoin() {
+    fn the_docker_builder_installs_what_the_build_needs() {
         // `utoipa-swagger-ui` télécharge son archive pendant la compilation, avec `curl`,
         // que l'image `rust:slim` ne porte pas : sans lui le build casse à la toute fin,
         // après plusieurs minutes de compilation.
-        let source = lire(&Path::new(RACINE_FEATURES).join("docker/Dockerfile.jinja"));
+        let source = read(&Path::new(RACINE_FEATURES).join("docker/Dockerfile.jinja"));
         let builder = source
             .split("AS runtime")
             .next()
@@ -797,10 +784,10 @@ mod tests {
     }
 
     #[test]
-    fn le_compose_de_docker_vise_postgres_18() {
+    fn the_docker_compose_targets_postgres_18() {
         // `uuidv7()` n'est natif qu'à partir de PostgreSQL 18, et toute entité générée en
         // dépend : une image plus ancienne casse le projet sans casser la compilation.
-        let source = lire(&Path::new(RACINE_FEATURES).join("docker/docker-compose.yml.jinja"));
+        let source = read(&Path::new(RACINE_FEATURES).join("docker/docker-compose.yml.jinja"));
 
         assert!(
             source.contains("postgres:18"),

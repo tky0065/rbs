@@ -9,7 +9,7 @@ use std::path::Path;
 
 use crate::dotenv;
 
-use super::Controle;
+use super::Check;
 
 const TITRE: &str = "auth";
 const SECRET: &str = "RBS_AUTH__SECRET";
@@ -25,19 +25,19 @@ const CONFIG: &str = "config/default.toml";
 const MINIMUM: usize = 32;
 
 /// Vérifie ce dont la feature `auth` a besoin pour démarrer.
-pub(crate) fn controler(racine: &Path) -> Controle {
-    controler_avec(racine, |cle| std::env::var(cle).ok())
+pub(crate) fn check(root: &Path) -> Check {
+    check_with(root, |key| std::env::var(key).ok())
 }
 
 /// Le contrôle, l'environnement passé en paramètre.
 ///
-/// L'environnement l'emporte sur le `.env`, comme dans `migrate::variables_du_projet` :
+/// L'environnement l'emporte sur le `.env`, comme dans `migrate::project_variables` :
 /// un diagnostic qui crierait au secret manquant alors qu'il est exporté serait faux.
-fn controler_avec(racine: &Path, env: impl Fn(&str) -> Option<String>) -> Controle {
-    let du_fichier = dotenv::lire(&racine.join(FICHIER)).unwrap_or_default();
-    let de_l_exemple = dotenv::lire(&racine.join(EXEMPLE)).unwrap_or_default();
+fn check_with(root: &Path, env: impl Fn(&str) -> Option<String>) -> Check {
+    let du_fichier = dotenv::read(&root.join(FICHIER)).unwrap_or_default();
+    let de_l_exemple = dotenv::read(&root.join(EXEMPLE)).unwrap_or_default();
 
-    let secret = env(SECRET).or_else(|| dotenv::valeur(&du_fichier, SECRET).map(str::to_owned));
+    let secret = env(SECRET).or_else(|| dotenv::value(&du_fichier, SECRET).map(str::to_owned));
 
     let mut defauts = Vec::new();
     let mut remedes = Vec::new();
@@ -51,11 +51,11 @@ fn controler_avec(racine: &Path, env: impl Fn(&str) -> Option<String>) -> Contro
                 "ajoutez au {FICHIER} une valeur tirée au hasard :\n{SECRET}=$(openssl rand -hex 32)"
             ));
         }
-        Some(valeur) => {
-            if valeur.len() < MINIMUM {
+        Some(value) => {
+            if value.len() < MINIMUM {
                 defauts.push(format!(
                     "{SECRET} porte {} octets, il en faut {MINIMUM}",
-                    valeur.len()
+                    value.len()
                 ));
                 remedes.push(format!(
                     "allongez {SECRET} :\n{SECRET}=$(openssl rand -hex 32)"
@@ -65,7 +65,7 @@ fn controler_avec(racine: &Path, env: impl Fn(&str) -> Option<String>) -> Contro
             // Comparé à `.env.example` plutôt qu'à une chaîne écrite ici : ce fichier est
             // la référence, et une reformulation d'`add auth` n'a alors rien à
             // resynchroniser.
-            if dotenv::valeur(&de_l_exemple, SECRET) == Some(valeur.as_str()) {
+            if dotenv::value(&de_l_exemple, SECRET) == Some(value.as_str()) {
                 defauts.push(format!(
                     "{SECRET} est resté à la valeur d'exemple, publiée dans Git"
                 ));
@@ -76,7 +76,7 @@ fn controler_avec(racine: &Path, env: impl Fn(&str) -> Option<String>) -> Contro
         }
     }
 
-    if !section_auth(racine) {
+    if !auth_section(root) {
         defauts.push(format!("{CONFIG} ne porte pas de section `[auth]`"));
         remedes.push(format!(
             "ajoutez à {CONFIG} :\n[auth]\naccess_ttl_secs = 900\nrefresh_ttl_secs = 2592000"
@@ -84,18 +84,18 @@ fn controler_avec(racine: &Path, env: impl Fn(&str) -> Option<String>) -> Contro
     }
 
     if defauts.is_empty() {
-        return Controle::bon(TITRE, "le secret et la configuration sont en place");
+        return Check::ok(TITRE, "le secret et la configuration sont en place");
     }
 
-    Controle::echec(TITRE, defauts.join(" ; "), remedes.join("\n"))
+    Check::failed(TITRE, defauts.join(" ; "), remedes.join("\n"))
 }
 
 /// Vrai si `config/default.toml` porte une section `[auth]`.
 ///
 /// Lu par `toml_edit` et non par recherche de texte : un `[auth]` en commentaire n'est
 /// pas une section.
-fn section_auth(racine: &Path) -> bool {
-    std::fs::read_to_string(racine.join(CONFIG))
+fn auth_section(root: &Path) -> bool {
+    std::fs::read_to_string(root.join(CONFIG))
         .ok()
         .and_then(|source| source.parse::<toml_edit::DocumentMut>().ok())
         .is_some_and(|document| document.get("auth").is_some())
@@ -108,18 +108,18 @@ mod tests {
 
     use tempfile::TempDir;
 
-    use super::super::Etat;
+    use super::super::State;
     use super::*;
 
     /// Un projet neuf, doté à la main de ce que `add auth` y dépose.
     ///
     /// La commande elle-même n'est pas appelée : ce contrôle ne lit que trois fichiers,
     /// et les poser directement garde le test à la seconde plutôt qu'à la minute.
-    fn projet_avec_auth() -> (TempDir, PathBuf) {
+    fn project_with_auth() -> (TempDir, PathBuf) {
         let parent = TempDir::new().expect("répertoire temporaire créable");
-        let projet = crate::new::creer(
+        let project = crate::new::create(
             &crate::new::Options {
-                nom: "demo-api".to_string(),
+                name: "demo-api".to_string(),
                 database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
                 features: Vec::new(),
                 core_path: None,
@@ -129,16 +129,16 @@ mod tests {
         )
         .expect("le projet doit se créer");
 
-        let racine = projet.racine;
+        let root = project.root;
 
-        ajouter(&racine, EXEMPLE, &format!("{SECRET}={EXEMPLE_DU_SECRET}\n"));
-        ajouter(
-            &racine,
+        add(&root, EXEMPLE, &format!("{SECRET}={EXEMPLE_DU_SECRET}\n"));
+        add(
+            &root,
             CONFIG,
             "\n[auth]\naccess_ttl_secs = 900\nrefresh_ttl_secs = 2592000\n",
         );
 
-        (parent, racine)
+        (parent, root)
     }
 
     /// La valeur que `add auth` écrit dans `.env.example`.
@@ -148,72 +148,72 @@ mod tests {
     /// Un secret acceptable : tiré au hasard et assez long.
     const SECRET_VALIDE: &str = "1f3c9a7e5b2d8064af1e3c5970b2d846e1c3a597f0b2d8461f3c9a7e5b2d8064";
 
-    fn ajouter(racine: &Path, fichier: &str, ligne: &str) {
-        let chemin = racine.join(fichier);
-        let source = fs::read_to_string(&chemin).unwrap_or_default();
-        fs::write(&chemin, format!("{source}{ligne}")).expect("fichier inscriptible");
+    fn add(root: &Path, file: &str, line: &str) {
+        let path = root.join(file);
+        let source = fs::read_to_string(&path).unwrap_or_default();
+        fs::write(&path, format!("{source}{line}")).expect("fichier inscriptible");
     }
 
     /// Sans environnement : ce que voit un utilisateur qui n'a rien exporté.
-    fn nu(_: &str) -> Option<String> {
+    fn bare(_: &str) -> Option<String> {
         None
     }
 
     #[test]
-    fn sans_secret_le_diagnostic_nomme_la_variable() {
-        let (_parent, racine) = projet_avec_auth();
+    fn without_a_secret_the_diagnosis_names_the_variable() {
+        let (_parent, root) = project_with_auth();
 
-        let controle = controler_avec(&racine, nu);
+        let check = check_with(&root, bare);
 
-        assert_eq!(controle.etat, Etat::Echec, "{}", controle.detail);
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(
-            controle.detail.contains(SECRET),
+            check.detail.contains(SECRET),
             "le détail doit nommer la variable : {}",
-            controle.detail
+            check.detail
         );
     }
 
     #[test]
-    fn un_secret_trop_court_est_refuse() {
-        let (_parent, racine) = projet_avec_auth();
+    fn a_too_short_secret_is_rejected() {
+        let (_parent, root) = project_with_auth();
         let court = "a".repeat(MINIMUM - 1);
-        ajouter(&racine, FICHIER, &format!("{SECRET}={court}\n"));
+        add(&root, FICHIER, &format!("{SECRET}={court}\n"));
 
-        let controle = controler_avec(&racine, nu);
+        let check = check_with(&root, bare);
 
-        assert_eq!(controle.etat, Etat::Echec, "{}", controle.detail);
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(
-            controle.detail.contains(&format!("{}", MINIMUM - 1)),
+            check.detail.contains(&format!("{}", MINIMUM - 1)),
             "le détail doit donner les octets fournis : {}",
-            controle.detail
+            check.detail
         );
     }
 
     #[test]
-    fn un_secret_reste_a_la_valeur_d_exemple_est_signale() {
-        let (_parent, racine) = projet_avec_auth();
-        ajouter(&racine, FICHIER, &format!("{SECRET}={EXEMPLE_DU_SECRET}\n"));
+    fn a_secret_left_at_the_example_value_is_reported() {
+        let (_parent, root) = project_with_auth();
+        add(&root, FICHIER, &format!("{SECRET}={EXEMPLE_DU_SECRET}\n"));
 
-        let controle = controler_avec(&racine, nu);
+        let check = check_with(&root, bare);
 
         assert_eq!(
-            controle.etat,
-            Etat::Echec,
+            check.state,
+            State::Echec,
             "un secret publié dans Git ne vaut pas mieux qu'aucun : {}",
-            controle.detail
+            check.detail
         );
         assert!(
-            controle.detail.contains("exemple"),
+            check.detail.contains("exemple"),
             "le détail doit dire d'où vient la valeur : {}",
-            controle.detail
+            check.detail
         );
     }
 
     #[test]
-    fn sans_section_auth_le_diagnostic_le_dit() {
-        let (_parent, racine) = projet_avec_auth();
-        ajouter(&racine, FICHIER, &format!("{SECRET}={SECRET_VALIDE}\n"));
-        let config = racine.join(CONFIG);
+    fn without_an_auth_section_the_diagnosis_says_so() {
+        let (_parent, root) = project_with_auth();
+        add(&root, FICHIER, &format!("{SECRET}={SECRET_VALIDE}\n"));
+        let config = root.join(CONFIG);
         let source = fs::read_to_string(&config).expect("config lisible");
         fs::write(
             &config,
@@ -221,54 +221,54 @@ mod tests {
         )
         .expect("config inscriptible");
 
-        let controle = controler_avec(&racine, nu);
+        let check = check_with(&root, bare);
 
-        assert_eq!(controle.etat, Etat::Echec, "{}", controle.detail);
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(
-            controle.detail.contains("[auth]"),
+            check.detail.contains("[auth]"),
             "le détail doit nommer la section : {}",
-            controle.detail
+            check.detail
         );
     }
 
     #[test]
-    fn un_projet_correctement_dote_ne_signale_rien() {
-        let (_parent, racine) = projet_avec_auth();
-        ajouter(&racine, FICHIER, &format!("{SECRET}={SECRET_VALIDE}\n"));
+    fn a_properly_equipped_project_reports_nothing() {
+        let (_parent, root) = project_with_auth();
+        add(&root, FICHIER, &format!("{SECRET}={SECRET_VALIDE}\n"));
 
-        let controle = controler_avec(&racine, nu);
+        let check = check_with(&root, bare);
 
-        assert_eq!(controle.etat, Etat::Bon, "{}", controle.detail);
+        assert_eq!(check.state, State::Bon, "{}", check.detail);
     }
 
     #[test]
-    fn le_secret_de_l_environnement_dispense_du_fichier() {
-        let (_parent, racine) = projet_avec_auth();
+    fn a_secret_from_the_environment_makes_the_file_unnecessary() {
+        let (_parent, root) = project_with_auth();
 
         // Le `.env` ne porte rien : seul l'environnement répond.
-        let controle = controler_avec(&racine, |cle| {
-            (cle == SECRET).then(|| SECRET_VALIDE.to_string())
+        let check = check_with(&root, |key| {
+            (key == SECRET).then(|| SECRET_VALIDE.to_string())
         });
 
         assert_eq!(
-            controle.etat,
-            Etat::Bon,
+            check.state,
+            State::Bon,
             "un secret exporté vaut un secret écrit : {}",
-            controle.detail
+            check.detail
         );
     }
 
     /// Une section en commentaire n'est pas une section.
     #[test]
-    fn un_auth_en_commentaire_ne_compte_pas_pour_une_section() {
-        let (_parent, racine) = projet_avec_auth();
-        ajouter(&racine, FICHIER, &format!("{SECRET}={SECRET_VALIDE}\n"));
-        let config = racine.join(CONFIG);
+    fn a_commented_out_auth_does_not_count_as_a_section() {
+        let (_parent, root) = project_with_auth();
+        add(&root, FICHIER, &format!("{SECRET}={SECRET_VALIDE}\n"));
+        let config = root.join(CONFIG);
         let source = fs::read_to_string(&config).expect("config lisible");
         fs::write(&config, source.replace("[auth]", "# [auth]")).expect("config inscriptible");
 
-        let controle = controler_avec(&racine, nu);
+        let check = check_with(&root, bare);
 
-        assert_eq!(controle.etat, Etat::Echec, "{}", controle.detail);
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
     }
 }

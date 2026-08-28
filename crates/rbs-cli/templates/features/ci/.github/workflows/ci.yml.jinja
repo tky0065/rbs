@@ -16,7 +16,7 @@ env:
   CARGO_TERM_COLOR: always
   # Les tests montent l'application sur une vraie base, et `.env` n'est pas versionné :
   # l'URL vient d'ici, comme elle viendrait de l'environnement en production.
-  RBS_DATABASE__URL: postgres://postgres:postgres@localhost:5432/{@ nom_crate @}
+  RBS_DATABASE__URL: postgres://postgres:postgres@localhost:5432/{@ crate_name @}
 
 jobs:
   ci:
@@ -29,7 +29,7 @@ jobs:
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: {@ nom_crate @}
+          POSTGRES_DB: {@ crate_name @}
         ports:
           - 5432:5432
         options: >-

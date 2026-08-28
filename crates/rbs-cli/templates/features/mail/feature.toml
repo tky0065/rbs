@@ -1,54 +1,54 @@
 [feature]
 description = "envoi de courriels par SMTP : transport partagé, gabarits minijinja"
 
-[[fichiers]]
-source = "mod.rs.jinja"
-cible  = "src/mail/mod.rs"
+[[files]]
+source      = "mod.rs.jinja"
+destination = "src/mail/mod.rs"
 
-[[fichiers]]
-source = "config.rs.jinja"
-cible  = "src/mail/config.rs"
+[[files]]
+source      = "config.rs.jinja"
+destination = "src/mail/config.rs"
 
-[[fichiers]]
-source = "template.rs.jinja"
-cible  = "src/mail/template.rs"
+[[files]]
+source      = "template.rs.jinja"
+destination = "src/mail/template.rs"
 
-[[fichiers]]
-source = "service.rs.jinja"
-cible  = "src/mail/service.rs"
+[[files]]
+source      = "service.rs.jinja"
+destination = "src/mail/service.rs"
 
-[[fichiers]]
-source = "tests.rs.jinja"
-cible  = "src/mail/tests.rs"
+[[files]]
+source      = "tests.rs.jinja"
+destination = "src/mail/tests.rs"
 
 # Le gabarit est déposé dans le projet, non embarqué dans un binaire : c'est un texte que
 # son auteur relit et récrit.
-[[fichiers]]
-source = "bienvenue.html.jinja"
-cible  = "templates/mail/bienvenue.html"
+[[files]]
+source      = "bienvenue.html.jinja"
+destination = "templates/mail/bienvenue.html"
 
-[[ancres]]
-ancre   = "features"
-contenu = "mod mail;"
+[[anchors]]
+anchor  = "features"
+content = "mod mail;"
 
-[[ancres]]
-ancre   = "state_champs"
-contenu = """
+[[anchors]]
+anchor  = "state_champs"
+content = """
 // Le transport n'a pas encore de lecteur : ce sont les handlers du projet qui en seront.
 #[allow(dead_code)]
 pub mail: crate::mail::Mailer,
 """
 
-[[ancres]]
-ancre   = "state_init"
-contenu = "mail: crate::mail::Mailer::from_config()?,"
+[[anchors]]
+anchor  = "state_init"
+content = "mail: crate::mail::Mailer::from_config()?,"
 
 # `default_features = false` : les défauts de `lettre` activent `native-tls`, qui réclame
 # OpenSSL sur les trois plateformes de la CI. `ring` et `webpki-roots` ne sont pas
 # facultatives — `rustls` refuse de compiler sans un fournisseur cryptographique ni un
 # magasin de racines, et ces deux-là sont les seuls à ne rien demander au système.
-[[dependances]]
-nom              = "lettre"
+[[dependencies]]
+name             = "lettre"
 version          = "0.11"
 default_features = false
 features         = [
@@ -61,15 +61,15 @@ features         = [
 ]
 
 # `loader` ne fait pas partie des défauts de la crate, et `path_loader` en dépend.
-[[dependances]]
-nom      = "minijinja"
+[[dependencies]]
+name     = "minijinja"
 version  = "2.24"
 features = ["loader"]
 
 [[config]]
-fichier = "config/default.toml"
+file    = "config/default.toml"
 section = "mail"
-contenu = """
+content = """
 # Mailpit et MailHog écoutent sur 1025, en clair : c'est le serveur de développement.
 # En production, `tls = "starttls"` et un `smtp_user` — dont le mot de passe vient de
 # RBS_MAIL__SMTP_PASSWORD, et jamais de ce fichier, qui est versionné.
@@ -83,6 +83,6 @@ templates = "templates/mail"
 """
 
 [[env]]
-cle         = "RBS_MAIL__SMTP_PASSWORD"
-valeur      = ""
-commentaire = "Mot de passe du compte SMTP. Reste vide tant que `smtp_user` l'est."
+key     = "RBS_MAIL__SMTP_PASSWORD"
+value   = ""
+comment = "Mot de passe du compte SMTP. Reste vide tant que `smtp_user` l'est."

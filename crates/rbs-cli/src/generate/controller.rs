@@ -1,4 +1,4 @@
-//! Rendu de `<nom>/controller.rs` et du `mod.rs` qui monte ses routes.
+//! Rendu de `<name>/controller.rs` et du `mod.rs` qui monte ses routes.
 
 use minijinja::{Value, context};
 
@@ -17,18 +17,18 @@ const MODULE: &str = include_str!(concat!(
 ));
 
 /// Rend les handlers de `feature` et leurs annotations OpenAPI.
-pub(crate) fn rendre(feature: &Feature) -> Result<String, minijinja::Error> {
-    Renderer::new().rendre(CONTROLLER, feature)
+pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
+    Renderer::new().render(CONTROLLER, feature)
 }
 
 /// Rend le `mod.rs` de `feature` : ses fichiers et son `routes()`.
 ///
-/// `avec_tests` déclare le module `tests` : une feature écrite à la main n'en porte pas,
+/// `with_tests` déclare le module `tests` : une feature écrite à la main n'en porte pas,
 /// et le déclarer empêcherait la compilation.
-pub(crate) fn rendre_mod(feature: &Feature, avec_tests: bool) -> Result<String, minijinja::Error> {
-    Renderer::new().rendre(
+pub(crate) fn render_mod(feature: &Feature, with_tests: bool) -> Result<String, minijinja::Error> {
+    Renderer::new().render(
         MODULE,
-        context! { avec_tests, ..Value::from_serialize(feature) },
+        context! { with_tests, ..Value::from_serialize(feature) },
     )
 }
 
@@ -36,26 +36,26 @@ pub(crate) fn rendre_mod(feature: &Feature, avec_tests: bool) -> Result<String, 
 mod tests {
     use super::*;
     use crate::generate::feature::Feature;
-    use crate::generate::{banc, champs, dto, entite, repository, service};
+    use crate::generate::{bench, dto, entity, fields, repository, service};
 
-    fn controller(nom: &str) -> String {
-        let champs = champs::analyser("titre:string").expect("champs valides");
-        rendre(&Feature::nouvelle(nom, champs)).expect("le controller doit se rendre")
+    fn controller(name: &str) -> String {
+        let fields = fields::parse("title:string").expect("champs valides");
+        render(&Feature::fresh(name, fields)).expect("le controller doit se rendre")
     }
 
-    fn module(nom: &str) -> String {
-        let champs = champs::analyser("titre:string").expect("champs valides");
-        rendre_mod(&Feature::nouvelle(nom, champs), false).expect("le mod.rs doit se rendre")
+    fn module(name: &str) -> String {
+        let fields = fields::parse("title:string").expect("champs valides");
+        render_mod(&Feature::fresh(name, fields), false).expect("le mod.rs doit se rendre")
     }
 
-    fn module_avec_tests(nom: &str) -> String {
-        let champs = champs::analyser("titre:string").expect("champs valides");
-        rendre_mod(&Feature::nouvelle(nom, champs), true).expect("le mod.rs doit se rendre")
+    fn module_with_tests(name: &str) -> String {
+        let fields = fields::parse("title:string").expect("champs valides");
+        render_mod(&Feature::fresh(name, fields), true).expect("le mod.rs doit se rendre")
     }
 
     #[test]
-    fn les_cinq_handlers_sont_declares() {
-        let rendu = controller("articles");
+    fn the_five_handlers_are_declared() {
+        let rendered = controller("articles");
 
         for signature in [
             "pub async fn list(",
@@ -65,26 +65,26 @@ mod tests {
             "pub async fn delete(",
         ] {
             assert!(
-                rendu.contains(signature),
-                "« {signature} » absent :\n{rendu}"
+                rendered.contains(signature),
+                "« {signature} » absent :\n{rendered}"
             );
         }
     }
 
     #[test]
-    fn chaque_handler_porte_son_annotation_utoipa() {
-        let rendu = controller("articles");
+    fn each_handler_carries_its_utoipa_annotation() {
+        let rendered = controller("articles");
 
         assert_eq!(
-            rendu.matches("#[utoipa::path(").count(),
+            rendered.matches("#[utoipa::path(").count(),
             5,
-            "les cinq handlers doivent être documentés :\n{rendu}"
+            "les cinq handlers doivent être documentés :\n{rendered}"
         );
     }
 
     #[test]
-    fn les_cinq_verbes_et_leurs_chemins_sont_documentes() {
-        let rendu = controller("blog_posts");
+    fn the_five_verbs_and_their_paths_are_documented() {
+        let rendered = controller("blog_posts");
 
         for annotation in [
             "    get,\n    path = \"/blog_posts\",",
@@ -94,107 +94,108 @@ mod tests {
             "    delete,\n    path = \"/blog_posts/{id}\",",
         ] {
             assert!(
-                rendu.contains(annotation),
-                "annotation attendue absente :\n{annotation}\n---\n{rendu}"
+                rendered.contains(annotation),
+                "annotation attendue absente :\n{annotation}\n---\n{rendered}"
             );
         }
     }
 
     #[test]
-    fn les_corps_de_reponse_nomment_les_dto() {
-        let rendu = controller("articles");
+    fn the_response_bodies_name_the_dtos() {
+        let rendered = controller("articles");
 
         assert!(
-            rendu.contains("body = Page<ArticleResponse>"),
-            "la liste doit annoncer une page :\n{rendu}"
+            rendered.contains("body = Page<ArticleResponse>"),
+            "la liste doit annoncer une page :\n{rendered}"
         );
         assert_eq!(
-            rendu.matches("body = ArticleResponse").count(),
+            rendered.matches("body = ArticleResponse").count(),
             3,
-            "create, find et update rendent l'entité :\n{rendu}"
+            "create, find et update rendent l'entité :\n{rendered}"
         );
         assert!(
-            rendu.contains("request_body = CreateArticle")
-                && rendu.contains("request_body = UpdateArticle"),
-            "les corps de requête doivent être documentés :\n{rendu}"
+            rendered.contains("request_body = CreateArticle")
+                && rendered.contains("request_body = UpdateArticle"),
+            "les corps de requête doivent être documentés :\n{rendered}"
         );
     }
 
     #[test]
-    fn la_creation_repond_201_et_la_suppression_204() {
-        let rendu = controller("articles");
+    fn creation_answers_201_and_deletion_204() {
+        let rendered = controller("articles");
 
-        assert!(rendu.contains("status = 201"), "{rendu}");
-        assert!(rendu.contains("status = 204"), "{rendu}");
+        assert!(rendered.contains("status = 201"), "{rendered}");
+        assert!(rendered.contains("status = 204"), "{rendered}");
         assert!(
-            rendu.contains("Ok((StatusCode::CREATED, Json(article)))"),
-            "la création doit rendre 201 :\n{rendu}"
+            rendered.contains("Ok((StatusCode::CREATED, Json(article)))"),
+            "la création doit rendre 201 :\n{rendered}"
         );
         assert!(
-            rendu.contains("Ok(StatusCode::NO_CONTENT)"),
-            "la suppression doit rendre 204 :\n{rendu}"
+            rendered.contains("Ok(StatusCode::NO_CONTENT)"),
+            "la suppression doit rendre 204 :\n{rendered}"
         );
     }
 
     #[test]
-    fn l_absence_est_documentee_la_ou_elle_peut_survenir() {
-        let rendu = controller("articles");
+    fn absence_is_documented_where_it_can_occur() {
+        let rendered = controller("articles");
 
         assert_eq!(
-            rendu.matches("status = 404").count(),
+            rendered.matches("status = 404").count(),
             3,
-            "find, update et delete peuvent ne rien trouver :\n{rendu}"
+            "find, update et delete peuvent ne rien trouver :\n{rendered}"
         );
     }
 
     #[test]
-    fn les_corps_entrants_passent_par_la_validation_du_noyau() {
-        let rendu = controller("articles");
+    fn incoming_bodies_go_through_the_core_validation() {
+        let rendered = controller("articles");
 
         assert!(
-            rendu.contains("ValidatedJson(input): ValidatedJson<CreateArticle>"),
-            "la création doit valider son corps :\n{rendu}"
+            rendered.contains("ValidatedJson(input): ValidatedJson<CreateArticle>"),
+            "la création doit valider son corps :\n{rendered}"
         );
         assert!(
-            rendu.contains("ValidatedJson(input): ValidatedJson<UpdateArticle>"),
-            "la mise à jour doit valider son corps :\n{rendu}"
-        );
-    }
-
-    #[test]
-    fn aucune_requete_seaorm_n_atteint_la_couche_http() {
-        let rendu = controller("articles");
-
-        assert!(
-            !rendu.contains("sea_orm::Entity") && !rendu.contains("ActiveModel"),
-            "le controller ne connaît que service.rs :\n{rendu}"
-        );
-        assert!(
-            !rendu.contains("super::repository") && !rendu.contains("super::model"),
-            "le controller ne connaît que service.rs :\n{rendu}"
+            rendered.contains("ValidatedJson(input): ValidatedJson<UpdateArticle>"),
+            "la mise à jour doit valider son corps :\n{rendered}"
         );
     }
 
     #[test]
-    fn le_module_monte_les_cinq_routes() {
-        let rendu = module("articles");
+    fn no_seaorm_query_reaches_the_http_layer() {
+        let rendered = controller("articles");
 
         assert!(
-            rendu.contains(".route(\"/articles\", get(controller::list).post(controller::create))"),
-            "routes de collection absentes :\n{rendu}"
+            !rendered.contains("sea_orm::Entity") && !rendered.contains("ActiveModel"),
+            "le controller ne connaît que service.rs :\n{rendered}"
         );
         assert!(
-            rendu.contains("\"/articles/{id}\"")
-                && rendu.contains("get(controller::find)")
-                && rendu.contains(".put(controller::update)")
-                && rendu.contains(".delete(controller::delete)"),
-            "routes unitaires absentes :\n{rendu}"
+            !rendered.contains("super::repository") && !rendered.contains("super::model"),
+            "le controller ne connaît que service.rs :\n{rendered}"
         );
     }
 
     #[test]
-    fn le_module_declare_les_six_fichiers_de_la_feature() {
-        let rendu = module("articles");
+    fn the_module_mounts_the_five_routes() {
+        let rendered = module("articles");
+
+        assert!(
+            rendered
+                .contains(".route(\"/articles\", get(controller::list).post(controller::create))"),
+            "routes de collection absentes :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("\"/articles/{id}\"")
+                && rendered.contains("get(controller::find)")
+                && rendered.contains(".put(controller::update)")
+                && rendered.contains(".delete(controller::delete)"),
+            "routes unitaires absentes :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn the_module_declares_the_six_files_of_the_feature() {
+        let rendered = module("articles");
 
         for declaration in [
             "pub mod controller;",
@@ -204,15 +205,15 @@ mod tests {
             "pub mod service;",
         ] {
             assert!(
-                rendu.contains(declaration),
-                "« {declaration} » absent :\n{rendu}"
+                rendered.contains(declaration),
+                "« {declaration} » absent :\n{rendered}"
             );
         }
     }
 
     #[test]
-    fn le_module_declare_les_tests_lorsqu_ils_sont_generes() {
-        let avec = module_avec_tests("articles");
+    fn the_module_declares_the_tests_when_they_are_generated() {
+        let avec = module_with_tests("articles");
 
         assert!(
             avec.contains("#[cfg(test)]\nmod tests;"),
@@ -223,7 +224,7 @@ mod tests {
     /// Une feature écrite à la main n'a pas de `tests.rs` : le déclarer empêcherait la
     /// compilation du projet.
     #[test]
-    fn le_module_ne_declare_pas_de_tests_lorsqu_il_n_y_en_a_pas() {
+    fn the_module_declares_no_tests_when_there_are_none() {
         let sans = module("articles");
 
         assert!(!sans.contains("mod tests;"), "{sans}");
@@ -238,7 +239,7 @@ mod tests {
 use crate::openapi::ApiDoc;
 
 #[test]
-fn les_cinq_routes_de_la_feature_sont_documentees() {
+fn the_five_routes_of_the_feature_are_documented() {
     let doc = ApiDoc::openapi();
 
     let collection = doc
@@ -249,120 +250,120 @@ fn les_cinq_routes_de_la_feature_sont_documentees() {
     assert!(collection.get.is_some(), "GET de collection absent");
     assert!(collection.post.is_some(), "POST de collection absent");
 
-    let unitaire = doc
+    let unit = doc
         .paths
         .paths
         .get("/articles/{id}")
         .expect("chemin unitaire absent du document");
-    assert!(unitaire.get.is_some(), "GET unitaire absent");
-    assert!(unitaire.put.is_some(), "PUT unitaire absent");
-    assert!(unitaire.delete.is_some(), "DELETE unitaire absent");
+    assert!(unit.get.is_some(), "GET unitaire absent");
+    assert!(unit.put.is_some(), "PUT unitaire absent");
+    assert!(unit.delete.is_some(), "DELETE unitaire absent");
 }
 
 #[test]
 fn chaque_route_annonce_le_schema_qu_elle_rend() {
     let doc = ApiDoc::openapi();
     let composants = doc.components.expect("composants absents du document");
-    let noms: Vec<&str> = composants.schemas.keys().map(String::as_str).collect();
+    let names: Vec<&str> = composants.schemas.keys().map(String::as_str).collect();
 
-    for attendu in ["ArticleResponse", "CreateArticle", "UpdateArticle"] {
+    for expected in ["ArticleResponse", "CreateArticle", "UpdateArticle"] {
         assert!(
-            noms.contains(&attendu),
-            "schema {attendu} absent, present : {noms:?}"
+            names.contains(&expected),
+            "schema {expected} absent, present : {names:?}"
         );
     }
     assert!(
-        noms.iter().any(|nom| nom.contains("Page")),
-        "le schema de la page est absent, present : {noms:?}"
+        names.iter().any(|name| name.contains("Page")),
+        "le schema de la page est absent, present : {names:?}"
     );
 }
 "#;
 
     #[test]
     #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
-    fn les_cinq_routes_paraissent_dans_le_document_openapi() {
-        let fields = "titre:string,email:string:unique,resume:text:optional,vues:int,\
-                      publie:bool,auteur_id:uuid,publie_le:datetime";
-        let champs = champs::analyser(fields).expect("champs valides");
-        let feature = Feature::nouvelle("articles", champs);
+    fn the_five_routes_appear_in_the_openapi_document() {
+        let fields = "title:string,email:string:unique,summary:text:optional,views:int,\
+                      published:bool,auteur_id:uuid,published_at:datetime";
+        let fields = fields::parse(fields).expect("champs valides");
+        let feature = Feature::fresh("articles", fields);
 
-        let projet = banc::Projet::neuf();
-        projet.poser_feature(
+        let project = bench::Project::fresh();
+        project.write_feature(
             "articles",
             &[
                 (
                     "mod.rs",
-                    &rendre_mod(&feature, false).expect("mod.rs rendu"),
+                    &render_mod(&feature, false).expect("mod.rs rendu"),
                 ),
                 (
                     "model.rs",
-                    &entite::rendre(&feature).expect("entité rendue"),
+                    &entity::render(&feature).expect("entité rendue"),
                 ),
-                ("dto.rs", &dto::rendre(&feature).expect("DTO rendus")),
+                ("dto.rs", &dto::render(&feature).expect("DTO rendus")),
                 (
                     "repository.rs",
-                    &repository::rendre(&feature).expect("repository rendu"),
+                    &repository::render(&feature).expect("repository rendu"),
                 ),
                 (
                     "service.rs",
-                    &service::rendre(&feature).expect("service rendu"),
+                    &service::render(&feature).expect("service rendu"),
                 ),
                 (
                     "controller.rs",
-                    &rendre(&feature).expect("controller rendu"),
+                    &render(&feature).expect("controller rendu"),
                 ),
             ],
         );
-        projet.monter_feature("articles");
-        projet.poser_test_unitaire("verification_openapi", VERIFICATION);
-        projet.tester();
+        project.mount_feature("articles");
+        project.write_unit_test("verification_openapi", VERIFICATION);
+        project.test_of();
     }
 
-    /// Monte un projet complet sous `target/atelier/`, pour la revue de Swagger UI.
+    /// Monte un projet complet sous `target/workshop/`, pour la revue de Swagger UI.
     #[test]
     #[ignore = "atelier : laisse un projet démarrable derrière lui"]
-    fn atelier() {
-        let fields = "titre:string,email:string:unique,resume:text:optional,vues:int,\
-                      publie:bool,auteur_id:uuid,publie_le:datetime";
-        let champs = champs::analyser(fields).expect("champs valides");
-        let feature = Feature::nouvelle("articles", champs);
+    fn workshop() {
+        let fields = "title:string,email:string:unique,summary:text:optional,views:int,\
+                      published:bool,auteur_id:uuid,published_at:datetime";
+        let fields = fields::parse(fields).expect("champs valides");
+        let feature = Feature::fresh("articles", fields);
 
-        let projet = banc::Projet::neuf();
-        projet.poser_feature(
+        let project = bench::Project::fresh();
+        project.write_feature(
             "articles",
             &[
                 (
                     "mod.rs",
-                    &rendre_mod(&feature, false).expect("mod.rs rendu"),
+                    &render_mod(&feature, false).expect("mod.rs rendu"),
                 ),
                 (
                     "model.rs",
-                    &entite::rendre(&feature).expect("entité rendue"),
+                    &entity::render(&feature).expect("entité rendue"),
                 ),
-                ("dto.rs", &dto::rendre(&feature).expect("DTO rendus")),
+                ("dto.rs", &dto::render(&feature).expect("DTO rendus")),
                 (
                     "repository.rs",
-                    &repository::rendre(&feature).expect("repository rendu"),
+                    &repository::render(&feature).expect("repository rendu"),
                 ),
                 (
                     "service.rs",
-                    &service::rendre(&feature).expect("service rendu"),
+                    &service::render(&feature).expect("service rendu"),
                 ),
                 (
                     "controller.rs",
-                    &rendre(&feature).expect("controller rendu"),
+                    &render(&feature).expect("controller rendu"),
                 ),
             ],
         );
-        projet.monter_feature("articles");
+        project.mount_feature("articles");
 
-        println!("{}", projet.conserver().display());
+        println!("{}", project.keep().display());
     }
 
     /// Rendu complet imprimé pour la revue de lecture qu'exige le lot.
     #[test]
     #[ignore = "affichage pour revue humaine"]
-    fn apercu() {
+    fn preview() {
         println!(
             "{}\n// ---- mod.rs ----\n{}",
             controller("articles"),

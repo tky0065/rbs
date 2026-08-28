@@ -1,49 +1,49 @@
 [feature]
 description = "authentification JWT : Argon2, jetons d'accès et de rafraîchissement, rôles"
 
-[[fichiers]]
-source = "mod.rs.jinja"
-cible  = "src/auth/mod.rs"
+[[files]]
+source      = "mod.rs.jinja"
+destination = "src/auth/mod.rs"
 
-[[fichiers]]
-source = "model.rs.jinja"
-cible  = "src/auth/model.rs"
+[[files]]
+source      = "model.rs.jinja"
+destination = "src/auth/model.rs"
 
-[[fichiers]]
-source = "dto.rs.jinja"
-cible  = "src/auth/dto.rs"
+[[files]]
+source      = "dto.rs.jinja"
+destination = "src/auth/dto.rs"
 
-[[fichiers]]
-source = "repository.rs.jinja"
-cible  = "src/auth/repository.rs"
+[[files]]
+source      = "repository.rs.jinja"
+destination = "src/auth/repository.rs"
 
-[[fichiers]]
-source = "service.rs.jinja"
-cible  = "src/auth/service.rs"
+[[files]]
+source      = "service.rs.jinja"
+destination = "src/auth/service.rs"
 
-[[fichiers]]
-source = "controller.rs.jinja"
-cible  = "src/auth/controller.rs"
+[[files]]
+source      = "controller.rs.jinja"
+destination = "src/auth/controller.rs"
 
-[[fichiers]]
-source = "guard.rs.jinja"
-cible  = "src/auth/guard.rs"
+[[files]]
+source      = "guard.rs.jinja"
+destination = "src/auth/guard.rs"
 
-[[fichiers]]
-source = "tests.rs.jinja"
-cible  = "src/auth/tests.rs"
+[[files]]
+source      = "tests.rs.jinja"
+destination = "src/auth/tests.rs"
 
-[[ancres]]
-ancre   = "features"
-contenu = "mod auth;"
+[[anchors]]
+anchor  = "features"
+content = "mod auth;"
 
-[[ancres]]
-ancre   = "routes"
-contenu = ".merge(crate::auth::routes())"
+[[anchors]]
+anchor  = "routes"
+content = ".merge(crate::auth::routes())"
 
-[[ancres]]
-ancre   = "openapi"
-contenu = """
+[[anchors]]
+anchor  = "openapi"
+content = """
 crate::auth::controller::register,
 crate::auth::controller::login,
 crate::auth::controller::refresh,
@@ -53,20 +53,20 @@ crate::auth::controller::me,
 
 [migration]
 source = "migration.rs.jinja"
-nom    = "create_auth_tables"
+name   = "create_auth_tables"
 
 [cargo.rbs-core]
 features = ["auth"]
 
 [[config]]
-fichier = "config/default.toml"
+file    = "config/default.toml"
 section = "auth"
-contenu = """
+content = """
 access_ttl_secs = 900
 refresh_ttl_secs = 2592000
 """
 
 [[env]]
-cle         = "RBS_AUTH__SECRET"
-valeur      = "changez-moi-par-un-secret-tire-au-hasard-de-32-octets-au-moins"
-commentaire = "Secret de signature HS256. 32 octets au moins, sans quoi le démarrage échoue."
+key     = "RBS_AUTH__SECRET"
+value   = "changez-moi-par-un-secret-tire-au-hasard-de-32-octets-au-moins"
+comment = "Secret de signature HS256. 32 octets au moins, sans quoi le démarrage échoue."

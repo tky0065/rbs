@@ -16,7 +16,7 @@ use std::path::{Path, PathBuf};
 use minijinja::context;
 
 use crate::git;
-use crate::manifeste;
+use crate::manifest;
 use crate::metadata;
 use crate::plan;
 use crate::templates::{self, Source};
@@ -26,7 +26,7 @@ pub(crate) struct Options {
     /// Nom de la feature, tel que le sous-répertoire de `templates/features` la nomme.
     pub feature: String,
     /// Répertoire d'où la commande est lancée.
-    pub repertoire: PathBuf,
+    pub directory: PathBuf,
     /// Installe même si le projet porte des modifications non commitées.
     pub force: bool,
     /// Répertoire de templates remplaçant celles embarquées.
@@ -35,11 +35,11 @@ pub(crate) struct Options {
 
 /// Ce qu'une installation fera au projet, entièrement calculé et rien d'écrit.
 #[derive(Debug)]
-pub(crate) struct Planifiee {
+pub(crate) struct Planned {
     /// Le plan, à afficher puis à appliquer.
     pub plan: plan::Plan,
     /// Chemins des fichiers de la feature, relatifs à la racine du projet.
-    pub fichiers: Vec<String>,
+    pub files: Vec<String>,
     /// Ce que le fragment annonce installer, tel que son manifeste le décrit.
     pub description: String,
     /// Le projet inscrit déjà cette feature : le plan est vide et rien ne sera écrit.
@@ -48,20 +48,20 @@ pub(crate) struct Planifiee {
 
 /// Ce qui peut empêcher d'installer une feature.
 #[derive(Debug, thiserror::Error)]
-pub(crate) enum Erreur {
+pub(crate) enum Error {
     /// La commande n'a pas été lancée dans un projet rbs.
     #[error("aucun projet rbs ici : `rbs add` s'exécute dans un projet créé par `rbs new`")]
     PasUnProjet,
 
     /// Aucun fragment ne porte ce nom.
     #[error("{0}")]
-    Inconnue(#[from] templates::Inconnue),
+    Unknown(#[from] templates::Unknown),
 
     /// Un fichier du projet ou une template n'a pu être lu.
-    #[error("{chemin} est inaccessible : {source}")]
+    #[error("{path} est inaccessible : {source}")]
     Acces {
         /// Chemin fautif.
-        chemin: String,
+        path: String,
         /// Cause système.
         source: io::Error,
     },
@@ -78,55 +78,55 @@ pub(crate) enum Erreur {
 
     /// Le manifeste du fragment ne se lit pas.
     #[error("{0}")]
-    Manifeste(#[from] manifeste::Erreur),
+    Manifest(#[from] manifest::Error),
 
     /// Ce que le manifeste déclare n'a pas pu être planifié.
     #[error("{0}")]
-    Installation(#[from] installation::Erreur),
+    Installation(#[from] installation::Error),
 
     /// Le projet porte des modifications non commitées, qu'une installation rendrait
     /// indiscernables des siennes.
-    #[error("le working tree n'est pas propre : {fichiers} — commitez, ou relancez avec --force")]
+    #[error("le working tree n'est pas propre : {files} — commitez, ou relancez avec --force")]
     WorkingTreeSale {
         /// Fichiers suivis modifiés, énumérés.
-        fichiers: String,
+        files: String,
     },
 
     /// Le manifeste du projet n'a pu être lu.
     #[error("{0}")]
-    Metadonnees(#[from] metadata::Erreur),
+    Metadata(#[from] metadata::Error),
 
     /// Le plan de l'installation n'a pu être calculé.
     #[error("{0}")]
-    Plan(#[from] plan::Erreur),
+    Plan(#[from] plan::Error),
 
     /// Le plan n'a pu être appliqué au projet.
     #[error("{0}")]
-    Application(#[from] plan::application::Erreur),
+    Application(#[from] plan::application::Error),
 }
 
-impl Erreur {
+impl Error {
     /// Ce que le développeur peut coller pour réparer, quand la panne se répare ainsi.
     ///
     /// Seule une ancre disparue a un remède tenant en un bloc de texte : les autres pannes
     /// se règlent par une décision — commiter, corriger le manifeste du fragment.
-    pub(crate) fn remede(&self) -> Option<String> {
-        let plan::Erreur::Ancre(absente) = self.plan()? else {
+    pub(crate) fn remedy(&self) -> Option<String> {
+        let plan::Error::Anchor(absente) = self.plan()? else {
             return None;
         };
 
         Some(format!(
             "dans {} :\n{}",
-            absente.ancre.fichier,
-            absente.ancre.bloc()
+            absente.anchor.file,
+            absente.anchor.block()
         ))
     }
 
     /// L'erreur de planification que celle-ci porte, directement ou par l'installation.
-    fn plan(&self) -> Option<&plan::Erreur> {
+    fn plan(&self) -> Option<&plan::Error> {
         match self {
-            Erreur::Plan(erreur) | Erreur::Installation(installation::Erreur::Plan(erreur)) => {
-                Some(erreur)
+            Error::Plan(error) | Error::Installation(installation::Error::Plan(error)) => {
+                Some(error)
             }
             _ => None,
         }
@@ -134,92 +134,92 @@ impl Erreur {
 }
 
 /// Calcule ce que l'installation de `options` ferait au projet, sans rien écrire.
-pub(crate) fn planifier(options: &Options) -> Result<Planifiee, Erreur> {
-    let depart = options
-        .repertoire
+pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
+    let start = options
+        .directory
         .canonicalize()
-        .map_err(|source| acces(&options.repertoire, source))?;
-    let racine = metadata::racine_du_projet(&depart).ok_or(Erreur::PasUnProjet)?;
+        .map_err(|source| access(&options.directory, source))?;
+    let root = metadata::project_root(&start).ok_or(Error::PasUnProjet)?;
 
     // L'idempotence se juge sur `[package.metadata.rbs]`, et non sur la présence des
     // fichiers installés : la migration d'un fragment est horodatée, et un projet dont
     // le développeur a supprimé un fichier en recevrait une seconde, datée d'un autre
     // instant. Ce que `rbs add` a posé lui appartient ensuite.
-    if metadata::lire(&racine.join("Cargo.toml"))?
+    if metadata::read(&root.join("Cargo.toml"))?
         .features
         .iter()
         .any(|installee| installee == &options.feature)
     {
-        return Ok(Planifiee {
-            plan: plan::Constructeur::nouveau(racine).finir(),
-            fichiers: Vec::new(),
+        return Ok(Planned {
+            plan: plan::Builder::new(root).finir(),
+            files: Vec::new(),
             description: String::new(),
             deja_installee: true,
         });
     }
 
     if !options.force {
-        let modifies = git::fichiers_modifies(&racine);
+        let modifies = git::modified_files(&root);
         if !modifies.is_empty() {
-            return Err(Erreur::WorkingTreeSale {
-                fichiers: git::enumerer(&modifies),
+            return Err(Error::WorkingTreeSale {
+                files: git::enumerate(&modifies),
             });
         }
     }
 
     let source = Source::feature(options.template_dir.as_deref(), &options.feature)?;
-    let manifeste = lire_manifeste(&source, &options.feature)?;
-    let templates = source.fichiers().map_err(|source| Erreur::Acces {
-        chemin: options.feature.clone(),
+    let manifest = read_manifest(&source, &options.feature)?;
+    let templates = source.files().map_err(|source| Error::Acces {
+        path: options.feature.clone(),
         source,
     })?;
 
-    let nom_projet = metadata::nom_du_paquet(&racine.join("Cargo.toml"))?;
-    let contexte = context! {
-        nom_projet => nom_projet.clone(),
-        nom_crate => nom_projet.replace('-', "_"),
+    let nom_projet = metadata::package_name(&root.join("Cargo.toml"))?;
+    let context = context! {
+        project_name => nom_projet.clone(),
+        crate_name => nom_projet.replace('-', "_"),
     };
 
-    let mut constructeur = plan::Constructeur::nouveau(racine);
-    let fichiers = installation::actions(
+    let mut builder = plan::Builder::new(root);
+    let files = installation::actions(
         &installation::Fragment {
-            nom: &options.feature,
-            manifeste: &manifeste,
+            name: &options.feature,
+            manifest: &manifest,
             templates: &templates,
-            contexte,
-            horodatage: &crate::generate::migration::horodatage_courant(),
+            context,
+            timestamp: &crate::generate::migration::current_timestamp(),
         },
-        &mut constructeur,
+        &mut builder,
     )?;
 
-    constructeur.patcher(plan::PatchToml::InscrireFeature(options.feature.clone()))?;
+    builder.patch(plan::PatchToml::InscrireFeature(options.feature.clone()))?;
 
-    Ok(Planifiee {
-        plan: constructeur.finir(),
-        fichiers,
-        description: manifeste.feature.description,
+    Ok(Planned {
+        plan: builder.finir(),
+        files,
+        description: manifest.feature.description,
         deja_installee: false,
     })
 }
 
 /// Lit le manifeste du fragment, qui dit ce que son installation fait au projet.
-fn lire_manifeste(source: &Source, feature: &str) -> Result<manifeste::Manifeste, Erreur> {
-    let texte = source
-        .manifeste()
-        .map_err(|source| Erreur::Acces {
-            chemin: feature.to_string(),
+fn read_manifest(source: &Source, feature: &str) -> Result<manifest::Manifest, Error> {
+    let text = source
+        .manifest()
+        .map_err(|source| Error::Acces {
+            path: feature.to_string(),
             source,
         })?
-        .ok_or_else(|| Erreur::SansManifeste {
+        .ok_or_else(|| Error::SansManifeste {
             feature: feature.to_string(),
         })?;
 
-    Ok(manifeste::lire(&texte, &format!("{feature}/feature.toml"))?)
+    Ok(manifest::read(&text, &format!("{feature}/feature.toml"))?)
 }
 
-fn acces(chemin: &Path, source: io::Error) -> Erreur {
-    Erreur::Acces {
-        chemin: chemin.display().to_string(),
+fn access(path: &Path, source: io::Error) -> Error {
+    Error::Acces {
+        path: path.display().to_string(),
         source,
     }
 }
@@ -233,26 +233,26 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-    use crate::plan::Statut;
+    use crate::plan::Status;
 
     /// Empreinte récursive d'un répertoire : chemin relatif -> contenu.
-    fn empreinte(racine: &Path) -> BTreeMap<PathBuf, String> {
+    fn fingerprint(root: &Path) -> BTreeMap<PathBuf, String> {
         let mut vue = BTreeMap::new();
-        let mut a_visiter = vec![racine.to_path_buf()];
+        let mut a_visiter = vec![root.to_path_buf()];
 
-        while let Some(repertoire) = a_visiter.pop() {
-            for entree in fs::read_dir(&repertoire).expect("le répertoire se lit") {
-                let chemin = entree.expect("l'entrée se lit").path();
-                let relatif = chemin
-                    .strip_prefix(racine)
+        while let Some(directory) = a_visiter.pop() {
+            for input in fs::read_dir(&directory).expect("le répertoire se lit") {
+                let path = input.expect("l'entrée se lit").path();
+                let relatif = path
+                    .strip_prefix(root)
                     .expect("le chemin est sous la racine")
                     .to_path_buf();
 
-                if chemin.is_dir() {
+                if path.is_dir() {
                     vue.insert(relatif, String::new());
-                    a_visiter.push(chemin);
+                    a_visiter.push(path);
                 } else {
-                    vue.insert(relatif, fs::read_to_string(&chemin).unwrap_or_default());
+                    vue.insert(relatif, fs::read_to_string(&path).unwrap_or_default());
                 }
             }
         }
@@ -261,11 +261,11 @@ mod tests {
     }
 
     /// Un projet déroulé par `rbs new`, sans passer par le binaire ni par cargo.
-    fn projet() -> (TempDir, PathBuf) {
+    fn project() -> (TempDir, PathBuf) {
         let parent = TempDir::new().expect("répertoire temporaire créable");
-        let projet = crate::new::creer(
+        let project = crate::new::create(
             &crate::new::Options {
-                nom: "demo-api".to_string(),
+                name: "demo-api".to_string(),
                 database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
                 features: Vec::new(),
                 core_path: None,
@@ -275,74 +275,74 @@ mod tests {
         )
         .expect("le projet doit se créer");
 
-        (parent, projet.racine)
+        (parent, project.root)
     }
 
-    fn options(racine: &Path, feature: &str) -> Options {
+    fn options(root: &Path, feature: &str) -> Options {
         Options {
             feature: feature.to_string(),
-            repertoire: racine.to_path_buf(),
+            directory: root.to_path_buf(),
             force: false,
             template_dir: None,
         }
     }
 
     /// Planifie puis applique, comme la commande le fait.
-    fn executer(options: &Options) -> Result<Planifiee, Erreur> {
-        let planifiee = planifier(options)?;
-        crate::plan::application::appliquer(&planifiee.plan, options.force)?;
+    fn run(options: &Options) -> Result<Planned, Error> {
+        let planned = plan_for(options)?;
+        crate::plan::application::apply(&planned.plan, options.force)?;
 
-        Ok(planifiee)
+        Ok(planned)
     }
 
     /// Fait du projet un dépôt dont tout est commité.
-    fn commiter(racine: &Path) {
+    fn commit(root: &Path) {
         for arguments in [
             vec!["config", "user.email", "rbs@example.test"],
             vec!["config", "user.name", "rbs"],
             vec!["add", "-A"],
             vec!["commit", "--quiet", "-m", "projet neuf"],
         ] {
-            let sortie = std::process::Command::new("git")
+            let output = std::process::Command::new("git")
                 .args(&arguments)
-                .current_dir(racine)
+                .current_dir(root)
                 .output()
                 .expect("git doit être lançable");
 
             assert!(
-                sortie.status.success(),
+                output.status.success(),
                 "git {arguments:?} a échoué :\n{}",
-                String::from_utf8_lossy(&sortie.stderr)
+                String::from_utf8_lossy(&output.stderr)
             );
         }
     }
 
-    /// Le contenu qu'un plan projette pour `chemin`.
-    fn projete<'plan>(planifiee: &'plan Planifiee, chemin: &str) -> &'plan str {
-        &planifiee
+    /// Le contenu qu'un plan projette pour `path`.
+    fn projected<'plan>(planned: &'plan Planned, path: &str) -> &'plan str {
+        &planned
             .plan
-            .fichiers()
+            .files()
             .iter()
-            .find(|fichier| fichier.chemin == chemin)
-            .unwrap_or_else(|| panic!("{chemin} absent du plan"))
-            .apres
+            .find(|file| file.path == path)
+            .unwrap_or_else(|| panic!("{path} absent du plan"))
+            .after
     }
 
     #[test]
-    fn le_plan_de_docker_cree_ses_trois_fichiers_et_inscrit_la_feature() {
-        let (_parent, racine) = projet();
+    fn the_docker_plan_creates_its_three_files_and_records_the_feature() {
+        let (_parent, root) = project();
 
-        let planifiee = planifier(&options(&racine, "docker")).expect("le plan doit se calculer");
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
 
         assert_eq!(
-            planifiee.fichiers,
+            planned.files,
             [".dockerignore", "Dockerfile", "docker-compose.yml"]
         );
 
-        let manifeste = projete(&planifiee, "Cargo.toml");
+        let manifest = projected(&planned, "Cargo.toml");
         assert!(
-            manifeste.contains("features = [\"health\", \"docker\"]"),
-            "la feature n'est pas inscrite dans le manifeste projeté :\n{manifeste}"
+            manifest.contains("features = [\"health\", \"docker\"]"),
+            "la feature n'est pas inscrite dans le manifeste projeté :\n{manifest}"
         );
     }
 
@@ -353,22 +353,22 @@ mod tests {
     /// d'exemple : un secret qui atterrirait dans le premier serait commité par le
     /// développeur sans qu'il l'ait décidé.
     #[test]
-    fn le_mot_de_passe_smtp_est_dans_l_environnement_et_dans_aucune_configuration() {
-        let (_parent, racine) = projet();
+    fn the_smtp_password_lives_in_the_environment_and_in_no_configuration() {
+        let (_parent, root) = project();
 
-        let planifiee = planifier(&options(&racine, "mail")).expect("le plan doit se calculer");
+        let planned = plan_for(&options(&root, "mail")).expect("le plan doit se calculer");
 
-        let env = projete(&planifiee, ".env.example");
+        let env = projected(&planned, ".env.example");
         assert!(
             env.contains("RBS_MAIL__SMTP_PASSWORD="),
             "le secret n'est pas déclaré dans .env.example :\n{env}"
         );
 
-        let configurations: Vec<&crate::plan::Fichier> = planifiee
+        let configurations: Vec<&crate::plan::File> = planned
             .plan
-            .fichiers()
+            .files()
             .iter()
-            .filter(|fichier| fichier.chemin.starts_with("config/"))
+            .filter(|file| file.path.starts_with("config/"))
             .collect();
 
         assert!(
@@ -376,94 +376,94 @@ mod tests {
             "le fragment n'écrit aucune configuration : le test ne prouverait rien"
         );
 
-        for fichier in configurations {
+        for file in configurations {
             // Les commentaires sont exclus : ce que figment lit, ce sont les clés, et
             // renvoyer le lecteur vers la variable d'environnement est précisément le
             // rôle d'un commentaire de `config/default.toml`.
-            let cles: String = fichier
-                .apres
+            let keys: String = file
+                .after
                 .lines()
-                .filter(|ligne| !ligne.trim_start().starts_with('#'))
+                .filter(|line| !line.trim_start().starts_with('#'))
                 .collect::<Vec<_>>()
                 .join("\n")
                 .to_lowercase();
 
             assert!(
-                !cles.contains("password"),
+                !keys.contains("password"),
                 "{} porte le secret en clé de configuration :\n{}",
-                fichier.chemin,
-                fichier.apres
+                file.path,
+                file.after
             );
         }
     }
 
     #[test]
-    fn planifier_ne_modifie_pas_le_repertoire_du_projet() {
-        let (_parent, racine) = projet();
-        let avant = empreinte(&racine);
+    fn planning_does_not_modify_the_project_directory() {
+        let (_parent, root) = project();
+        let before = fingerprint(&root);
 
-        planifier(&options(&racine, "docker")).expect("le plan doit se calculer");
+        plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
 
-        assert_eq!(empreinte(&racine), avant);
+        assert_eq!(fingerprint(&root), before);
     }
 
     #[test]
-    fn relancer_sur_un_projet_deja_dockerise_donne_un_plan_sans_effet() {
-        let (_parent, racine) = projet();
-        executer(&options(&racine, "docker")).expect("la première pose doit aboutir");
+    fn rerunning_on_an_already_dockerised_project_gives_a_no_op_plan() {
+        let (_parent, root) = project();
+        run(&options(&root, "docker")).expect("la première pose doit aboutir");
 
-        let planifiee = planifier(&options(&racine, "docker")).expect("le plan doit se recalculer");
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se recalculer");
 
         assert!(
-            planifiee.deja_installee,
+            planned.deja_installee,
             "le manifeste inscrit la feature : la relance n'a rien à planifier"
         );
-        for fichier in planifiee.plan.fichiers() {
+        for file in planned.plan.files() {
             assert_eq!(
-                fichier.statut,
-                Statut::DejaFait,
+                file.statut,
+                Status::DejaFait,
                 "{} n'est pas sans effet",
-                fichier.chemin
+                file.path
             );
         }
     }
 
     #[test]
-    fn hors_d_un_projet_rbs_la_commande_refuse() {
+    fn outside_an_rbs_project_the_command_refuses() {
         let ailleurs = TempDir::new().expect("répertoire temporaire créable");
 
-        let erreur = planifier(&options(ailleurs.path(), "docker"))
+        let error = plan_for(&options(ailleurs.path(), "docker"))
             .expect_err("un répertoire quelconque n'est pas un projet rbs");
 
-        assert!(matches!(erreur, Erreur::PasUnProjet), "{erreur}");
+        assert!(matches!(error, Error::PasUnProjet), "{error}");
     }
 
     #[test]
-    fn un_working_tree_sale_refuse_sans_force_et_passe_avec() {
-        let (_parent, racine) = projet();
-        commiter(&racine);
-        fs::write(racine.join("src/main.rs"), "// modifié").expect("le fichier est écrivable");
+    fn a_dirty_working_tree_refuses_without_force_and_passes_with_it() {
+        let (_parent, root) = project();
+        commit(&root);
+        fs::write(root.join("src/main.rs"), "// modifié").expect("le fichier est écrivable");
 
-        let erreur = planifier(&options(&racine, "docker"))
+        let error = plan_for(&options(&root, "docker"))
             .expect_err("un projet sale ne se modifie pas en silence");
-        assert!(matches!(erreur, Erreur::WorkingTreeSale { .. }), "{erreur}");
+        assert!(matches!(error, Error::WorkingTreeSale { .. }), "{error}");
 
-        let mut forcees = options(&racine, "docker");
+        let mut forcees = options(&root, "docker");
         forcees.force = true;
-        planifier(&forcees).expect("--force doit passer outre");
+        plan_for(&forcees).expect("--force doit passer outre");
     }
 
     #[test]
-    fn une_feature_inconnue_est_refusee_en_nommant_celles_qui_existent() {
-        let (_parent, racine) = projet();
+    fn an_unknown_feature_is_rejected_naming_the_existing_ones() {
+        let (_parent, root) = project();
 
-        let erreur = planifier(&options(&racine, "_aucune_feature_de_ce_nom_"))
+        let error = plan_for(&options(&root, "_aucune_feature_de_ce_nom_"))
             .expect_err("aucun fragment ne porte ce nom");
 
-        assert!(matches!(erreur, Erreur::Inconnue(_)), "{erreur}");
+        assert!(matches!(error, Error::Unknown(_)), "{error}");
         assert!(
-            erreur.to_string().contains("docker"),
-            "le message n'oriente pas vers ce qui existe : {erreur}"
+            error.to_string().contains("docker"),
+            "le message n'oriente pas vers ce qui existe : {error}"
         );
     }
 
@@ -471,134 +471,134 @@ mod tests {
     ///
     /// Le lot n'a pas de fragment à code Rust — `auth` est le lot suivant — et le moule
     /// ne s'éprouve que sur un fragment qui l'exerce.
-    fn fragment(manifeste: &str, templates: &[(&str, &str)]) -> TempDir {
-        let repertoire = TempDir::new().expect("répertoire temporaire créable");
-        let essai = repertoire.path().join("essai");
+    fn fragment(manifest: &str, templates: &[(&str, &str)]) -> TempDir {
+        let directory = TempDir::new().expect("répertoire temporaire créable");
+        let essai = directory.path().join("essai");
         fs::create_dir(&essai).expect("le fragment se crée");
-        fs::write(essai.join("feature.toml"), manifeste).expect("le manifeste s'écrit");
+        fs::write(essai.join("feature.toml"), manifest).expect("le manifeste s'écrit");
 
-        for (chemin, contenu) in templates {
-            let cible = essai.join(chemin);
-            if let Some(parent) = cible.parent() {
+        for (path, content) in templates {
+            let destination = essai.join(path);
+            if let Some(parent) = destination.parent() {
                 fs::create_dir_all(parent).expect("le répertoire se crée");
             }
-            fs::write(cible, contenu).expect("la template s'écrit");
+            fs::write(destination, content).expect("la template s'écrit");
         }
 
-        repertoire
+        directory
     }
 
     /// Les options d'installation du fragment de test posé dans `fragments`.
-    fn options_du_fragment(racine: &Path, fragments: &TempDir) -> Options {
-        let mut options = options(racine, "essai");
+    fn fragment_options(root: &Path, fragments: &TempDir) -> Options {
+        let mut options = options(root, "essai");
         options.template_dir = Some(fragments.path().to_path_buf());
         options
     }
 
-    /// La ligne qui précède immédiatement la balise fermante de `ancre`.
-    fn derniere_ligne_de(racine: &Path, ancre: crate::ancres::Ancre) -> String {
+    /// La ligne qui précède immédiatement la balise fermante de `anchor`.
+    fn last_line_of(root: &Path, anchor: crate::anchors::Anchor) -> String {
         let source =
-            fs::read_to_string(racine.join(ancre.fichier)).expect("le fichier de l'ancre se lit");
-        let fermeture = ancre.fermeture();
+            fs::read_to_string(root.join(anchor.file)).expect("le fichier de l'ancre se lit");
+        let closing = anchor.closing();
 
         source
             .lines()
-            .take_while(|ligne| ligne.trim() != fermeture)
+            .take_while(|line| line.trim() != closing)
             .last()
-            .unwrap_or_else(|| panic!("{} ne referme pas {}", ancre.fichier, ancre.nom))
+            .unwrap_or_else(|| panic!("{} ne referme pas {}", anchor.file, anchor.name))
             .trim()
             .to_string()
     }
 
     /// Le critère de la tâche : ce qu'un fragment déclare arrive dans l'ancre nommée.
     #[test]
-    fn le_contenu_declare_est_insere_dans_chacune_des_quatre_ancres() {
-        let (_parent, racine) = projet();
+    fn the_declared_content_is_inserted_into_each_of_the_four_anchors() {
+        let (_parent, root) = project();
         let fragments = fragment(
             "[feature]\ndescription = \"essai\"\n\n\
-             [[ancres]]\nancre = \"features\"\ncontenu = \"mod essai;\"\n\n\
-             [[ancres]]\nancre = \"routes\"\ncontenu = \".merge(crate::essai::routes())\"\n\n\
-             [[ancres]]\nancre = \"openapi\"\ncontenu = \"crate::essai::controller::list,\"\n\n\
-             [[ancres]]\nancre = \"migrations\"\ncontenu = \"Box::new(m0_essai::Migration),\"\n",
+             [[anchors]]\nanchor = \"features\"\ncontent = \"mod essai;\"\n\n\
+             [[anchors]]\nanchor = \"routes\"\ncontent = \".merge(crate::essai::routes())\"\n\n\
+             [[anchors]]\nanchor = \"openapi\"\ncontent = \"crate::essai::controller::list,\"\n\n\
+             [[anchors]]\nanchor = \"migrations\"\ncontent = \"Box::new(m0_essai::Migration),\"\n",
             &[],
         );
 
-        executer(&options_du_fragment(&racine, &fragments)).expect("l'installation doit aboutir");
+        run(&fragment_options(&root, &fragments)).expect("l'installation doit aboutir");
 
-        for (ancre, attendu) in [
-            (crate::ancres::FEATURES, "mod essai;"),
-            (crate::ancres::ROUTES, ".merge(crate::essai::routes())"),
-            (crate::ancres::OPENAPI, "crate::essai::controller::list,"),
-            (crate::ancres::MIGRATIONS, "Box::new(m0_essai::Migration),"),
+        for (anchor, expected) in [
+            (crate::anchors::FEATURES, "mod essai;"),
+            (crate::anchors::ROUTES, ".merge(crate::essai::routes())"),
+            (crate::anchors::OPENAPI, "crate::essai::controller::list,"),
+            (crate::anchors::MIGRATIONS, "Box::new(m0_essai::Migration),"),
         ] {
             assert_eq!(
-                derniere_ligne_de(&racine, ancre),
-                attendu,
+                last_line_of(&root, anchor),
+                expected,
                 "l'ancre `{}` ne porte pas la ligne déclarée",
-                ancre.nom
+                anchor.name
             );
         }
     }
 
     /// Le critère de la tâche : ancre absente, rien d'écrit, et le bloc sous la main.
     #[test]
-    fn une_ancre_absente_n_ecrit_rien_et_affiche_le_bloc() {
-        let (_parent, racine) = projet();
-        let router = racine.join("src/router.rs");
+    fn a_missing_anchor_writes_nothing_and_prints_the_block() {
+        let (_parent, root) = project();
+        let router = root.join("src/router.rs");
         let ampute: String = fs::read_to_string(&router)
             .expect("router.rs lisible")
             .lines()
-            .filter(|ligne| !ligne.contains("// <rbs:routes>"))
-            .map(|ligne| format!("{ligne}\n"))
+            .filter(|line| !line.contains("// <rbs:routes>"))
+            .map(|line| format!("{line}\n"))
             .collect();
         fs::write(&router, ampute).expect("router.rs inscriptible");
 
         let fragments = fragment(
             "[feature]\ndescription = \"essai\"\n\n\
-             [[fichiers]]\nsource = \"note.md.jinja\"\ncible = \"NOTE.md\"\n\n\
-             [[ancres]]\nancre = \"routes\"\ncontenu = \".merge(crate::essai::routes())\"\n",
+             [[files]]\nsource = \"note.md.jinja\"\ndestination = \"NOTE.md\"\n\n\
+             [[anchors]]\nanchor = \"routes\"\ncontent = \".merge(crate::essai::routes())\"\n",
             &[("note.md.jinja", "une note\n")],
         );
-        let avant = empreinte(&racine);
+        let before = fingerprint(&root);
 
-        let erreur = executer(&options_du_fragment(&racine, &fragments))
+        let error = run(&fragment_options(&root, &fragments))
             .expect_err("l'ancre manque : l'installation doit refuser");
 
-        let remede = erreur
-            .remede()
-            .unwrap_or_else(|| panic!("aucun bloc à coller pour : {erreur}"));
-        assert!(remede.contains("// <rbs:routes>"), "{remede}");
-        assert!(remede.contains("// </rbs:routes>"), "{remede}");
-        assert!(remede.contains("src/router.rs"), "{remede}");
+        let remedy = error
+            .remedy()
+            .unwrap_or_else(|| panic!("aucun bloc à coller pour : {error}"));
+        assert!(remedy.contains("// <rbs:routes>"), "{remedy}");
+        assert!(remedy.contains("// </rbs:routes>"), "{remedy}");
+        assert!(remedy.contains("src/router.rs"), "{remedy}");
 
         assert_eq!(
-            empreinte(&racine),
-            avant,
+            fingerprint(&root),
+            before,
             "l'ancre absente n'a pas empêché l'écriture"
         );
     }
 
     /// Le fragment de test qui apporte une migration, et son manifeste.
-    fn fragment_a_migration() -> TempDir {
+    fn fragment_has_migration() -> TempDir {
         fragment(
             "[feature]\ndescription = \"essai\"\n\n\
-             [migration]\nsource = \"users.rs.jinja\"\nnom = \"create_users\"\n",
-            &[("users.rs.jinja", "// la migration de {@ nom_crate @}\n")],
+             [migration]\nsource = \"users.rs.jinja\"\nname = \"create_users\"\n",
+            &[("users.rs.jinja", "// la migration de {@ crate_name @}\n")],
         )
     }
 
     /// Le nom du seul fichier de migration que le fragment a déposé.
-    fn migration_deposee(racine: &Path) -> String {
-        let deposees: Vec<String> = fs::read_dir(racine.join("migration/src"))
+    fn written_migration(root: &Path) -> String {
+        let deposees: Vec<String> = fs::read_dir(root.join("migration/src"))
             .expect("la crate migration existe")
-            .map(|entree| {
-                entree
+            .map(|input| {
+                input
                     .expect("l'entrée se lit")
                     .file_name()
                     .to_string_lossy()
                     .into_owned()
             })
-            .filter(|nom| nom.starts_with('m') && nom != "main.rs")
+            .filter(|name| name.starts_with('m') && name != "main.rs")
             .collect();
 
         assert_eq!(deposees.len(), 1, "{deposees:?}");
@@ -607,29 +607,29 @@ mod tests {
 
     /// Le critère de la tâche : le fichier porte l'horodatage qu'attend SeaORM.
     #[test]
-    fn la_migration_du_fragment_est_deposee_au_format_horodate() {
-        let (_parent, racine) = projet();
-        let fragments = fragment_a_migration();
+    fn the_fragment_migration_is_written_in_the_timestamped_format() {
+        let (_parent, root) = project();
+        let fragments = fragment_has_migration();
 
-        executer(&options_du_fragment(&racine, &fragments)).expect("l'installation doit aboutir");
+        run(&fragment_options(&root, &fragments)).expect("l'installation doit aboutir");
 
-        let depose = migration_deposee(&racine);
-        let horodatage = depose
+        let written = written_migration(&root);
+        let timestamp = written
             .strip_prefix('m')
             .and_then(|reste| reste.strip_suffix("_create_users.rs"))
-            .unwrap_or_else(|| panic!("« {depose} » n'a pas la forme attendue"));
+            .unwrap_or_else(|| panic!("« {written} » n'a pas la forme attendue"));
 
-        assert_eq!(horodatage.len(), 15, "« {depose} »");
-        assert_eq!(&horodatage[8..9], "_", "« {depose} »");
+        assert_eq!(timestamp.len(), 15, "« {written} »");
+        assert_eq!(&timestamp[8..9], "_", "« {written} »");
         assert!(
-            horodatage
+            timestamp
                 .chars()
                 .enumerate()
                 .all(|(rang, c)| rang == 8 || c.is_ascii_digit()),
-            "« {depose} »"
+            "« {written} »"
         );
         assert_eq!(
-            fs::read_to_string(racine.join("migration/src").join(&depose))
+            fs::read_to_string(root.join("migration/src").join(&written))
                 .expect("la migration se lit"),
             "// la migration de demo_api\n"
         );
@@ -637,47 +637,47 @@ mod tests {
 
     /// Le critère de la tâche : une migration déposée est une migration montée.
     #[test]
-    fn l_ancre_migrations_est_completee_par_l_appel_correspondant() {
-        let (_parent, racine) = projet();
-        let fragments = fragment_a_migration();
+    fn the_migrations_anchor_is_completed_by_the_matching_call() {
+        let (_parent, root) = project();
+        let fragments = fragment_has_migration();
 
-        executer(&options_du_fragment(&racine, &fragments)).expect("l'installation doit aboutir");
+        run(&fragment_options(&root, &fragments)).expect("l'installation doit aboutir");
 
-        let module = migration_deposee(&racine).replace(".rs", "");
+        let module = written_migration(&root).replace(".rs", "");
         assert_eq!(
-            derniere_ligne_de(&racine, crate::ancres::MIGRATION_MODULES),
+            last_line_of(&root, crate::anchors::MIGRATION_MODULES),
             format!("mod {module};")
         );
         assert_eq!(
-            derniere_ligne_de(&racine, crate::ancres::MIGRATIONS),
+            last_line_of(&root, crate::anchors::MIGRATIONS),
             format!("Box::new({module}::Migration),")
         );
     }
 
     /// Une ancre que le squelette ne porte pas est une faute du manifeste.
     #[test]
-    fn une_ancre_inconnue_est_refusee_en_nommant_celles_qui_existent() {
-        let (_parent, racine) = projet();
+    fn an_unknown_anchor_is_rejected_naming_the_existing_ones() {
+        let (_parent, root) = project();
         let fragments = fragment(
             "[feature]\ndescription = \"essai\"\n\n\
-             [[ancres]]\nancre = \"middlewares\"\ncontenu = \"peu importe\"\n",
+             [[anchors]]\nanchor = \"middlewares\"\ncontent = \"peu importe\"\n",
             &[],
         );
 
-        let erreur = planifier(&options_du_fragment(&racine, &fragments))
+        let error = plan_for(&fragment_options(&root, &fragments))
             .expect_err("`middlewares` n'est pas une ancre du squelette");
 
-        assert!(erreur.to_string().contains("middlewares"), "{erreur}");
+        assert!(error.to_string().contains("middlewares"), "{error}");
         assert!(
-            erreur.to_string().contains("routes"),
-            "le message n'oriente pas vers les ancres qui existent : {erreur}"
+            error.to_string().contains("routes"),
+            "le message n'oriente pas vers les ancres qui existent : {error}"
         );
     }
 
     /// Un fragment muet ne s'installe pas à vide : il le dit.
     #[test]
-    fn un_fragment_sans_manifeste_est_refuse_en_nommant_le_fichier_attendu() {
-        let (_parent, racine) = projet();
+    fn a_fragment_without_a_manifest_is_rejected_naming_the_expected_file() {
+        let (_parent, root) = project();
         let fragments = TempDir::new().expect("répertoire temporaire créable");
         fs::create_dir(fragments.path().join("muette")).expect("le fragment se crée");
         fs::write(
@@ -686,24 +686,24 @@ mod tests {
         )
         .expect("la template s'écrit");
 
-        let mut options = options(&racine, "muette");
+        let mut options = options(&root, "muette");
         options.template_dir = Some(fragments.path().to_path_buf());
 
-        let erreur = planifier(&options).expect_err("le fragment ne déclare rien");
+        let error = plan_for(&options).expect_err("le fragment ne déclare rien");
 
-        assert!(matches!(erreur, Erreur::SansManifeste { .. }), "{erreur}");
+        assert!(matches!(error, Error::SansManifeste { .. }), "{error}");
         assert!(
-            erreur.to_string().contains("muette/feature.toml"),
-            "le message ne nomme pas le manifeste attendu : {erreur}"
+            error.to_string().contains("muette/feature.toml"),
+            "le message ne nomme pas le manifeste attendu : {error}"
         );
     }
 
     #[test]
-    fn le_compose_projete_nomme_la_base_du_projet_et_ouvre_l_hote() {
-        let (_parent, racine) = projet();
+    fn the_projected_compose_names_the_project_database_and_opens_the_host() {
+        let (_parent, root) = project();
 
-        let planifiee = planifier(&options(&racine, "docker")).expect("le plan doit se calculer");
-        let compose = projete(&planifiee, "docker-compose.yml");
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
 
         // Le défaut de `config/default.toml` est 127.0.0.1 : sans cette variable, l'API
         // conteneurisée n'est joignable depuis nulle part.

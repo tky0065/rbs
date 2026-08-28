@@ -66,12 +66,12 @@ fn projet_avec_auth(parent: &TempDir) -> PathBuf {
 }
 
 /// Le contenu d'une ancre, balises exclues.
-fn dans_l_ancre(racine: &Path, fichier: &str, ancre: &str) -> String {
+fn dans_l_ancre(racine: &Path, fichier: &str, anchor: &str) -> String {
     let source = fs::read_to_string(racine.join(fichier))
         .unwrap_or_else(|erreur| panic!("{fichier} illisible : {erreur}"));
 
-    let ouverture = format!("// <rbs:{ancre}>");
-    let fermeture = format!("// </rbs:{ancre}>");
+    let ouverture = format!("// <rbs:{anchor}>");
+    let fermeture = format!("// </rbs:{anchor}>");
 
     let debut = source
         .find(&ouverture)
@@ -101,12 +101,12 @@ fn les_quatre_ancres_du_projet_sont_completees() {
         ("migration/src/lib.rs", "migrations", "create_auth_tables"),
     ];
 
-    for (fichier, ancre, ligne) in attendu {
-        let contenu = dans_l_ancre(&racine, fichier, ancre);
+    for (fichier, anchor, ligne) in attendu {
+        let contenu = dans_l_ancre(&racine, fichier, anchor);
 
         assert!(
             contenu.contains(ligne),
-            "l'ancre `{ancre}` de {fichier} ne porte pas `{ligne}` :\n{contenu}"
+            "l'ancre `{anchor}` de {fichier} ne porte pas `{ligne}` :\n{contenu}"
         );
     }
 }
@@ -507,10 +507,10 @@ fn acces(paire: &Value) -> String {
     champ(paire, "access_token")
 }
 
-fn champ(paire: &Value, nom: &str) -> String {
-    paire[nom]
+fn champ(paire: &Value, name: &str) -> String {
+    paire[name]
         .as_str()
-        .unwrap_or_else(|| panic!("la paire doit porter `{nom}` : {paire}"))
+        .unwrap_or_else(|| panic!("la paire doit porter `{name}` : {paire}"))
         .to_owned()
 }
 
@@ -525,7 +525,7 @@ fn champ(paire: &Value, nom: &str) -> String {
 #[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
 fn une_route_gardee_refuse_un_user_authentifie() {
     const EMAIL: &str = "sans-droits@exemple.test";
-    const ARTICLE: &str = r#"{"title":"Un titre","body":"Un corps.","published":true}"#;
+    const ARTICLE: &str = r#"{"title":"Un title","body":"Un corps.","published":true}"#;
 
     let postgres = demarrer_postgres();
     let _cible = cible_a_soi();

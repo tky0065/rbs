@@ -1,3 +1,3 @@
 fn main() {
-    rbs_cli::executer();
+    rbs_cli::run();
 }

@@ -4,19 +4,19 @@
   à la main plutôt que par un import renommé, qui casserait sans bruit à la première
   retouche de l'utilisateur.
 -#}
-{% macro schema_datetime(champ, optionnel) -%}
-{% if champ.type == "datetime" %}
-    #[schema(value_type = {@ "Option<String>" if optionnel else "String" @}, format = DateTime)]
+{% macro schema_datetime(field, optional) -%}
+{% if field.type == "datetime" %}
+    #[schema(value_type = {@ "Option<String>" if optional else "String" @}, format = DateTime)]
 {%- endif %}
 {%- endmacro -%}
-{% macro body(champs, tout_optionnel) -%}
-{% if champs %} {
-{%- for champ in champs %}
-{@- schema_datetime(champ, tout_optionnel or champ.optionnel) @}
-{%- if champ.valide_email %}
+{% macro body(fields, all_optional) -%}
+{% if fields %} {
+{%- for field in fields %}
+{@- schema_datetime(field, all_optional or field.optional) @}
+{%- if field.valide_email %}
     #[validate(email)]
 {%- endif %}
-    pub {@ champ.nom @}: {@ "Option<" ~ champ.type_rust_nu ~ ">" if tout_optionnel else champ.type_rust @},
+    pub {@ field.name @}: {@ "Option<" ~ field.bare_rust_type ~ ">" if all_optional else field.rust_type @},
 {%- endfor %}
 }
 {%- else %} {}
@@ -30,17 +30,17 @@ use validator::Validate;
 use super::model::Model;
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
-pub struct Create{@ entite @}{@ body(champs, false) @}
+pub struct Create{@ entity @}{@ body(fields, false) @}
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
-pub struct Update{@ entite @}{@ body(champs, true) @}
+pub struct Update{@ entity @}{@ body(fields, true) @}
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct {@ entite @}Response {
+pub struct {@ entity @}Response {
     pub id: Uuid,
-{%- for champ in champs %}
-{@- schema_datetime(champ, champ.optionnel) @}
-    pub {@ champ.nom @}: {@ champ.type_rust @},
+{%- for field in fields %}
+{@- schema_datetime(field, field.optional) @}
+    pub {@ field.name @}: {@ field.rust_type @},
 {%- endfor %}
     #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
@@ -48,12 +48,12 @@ pub struct {@ entite @}Response {
     pub updated_at: DateTimeWithTimeZone,
 }
 
-impl From<Model> for {@ entite @}Response {
+impl From<Model> for {@ entity @}Response {
     fn from(model: Model) -> Self {
         Self {
             id: model.id,
-{%- for champ in champs %}
-            {@ champ.nom @}: model.{@ champ.nom @},
+{%- for field in fields %}
+            {@ field.name @}: model.{@ field.name @},
 {%- endfor %}
             created_at: model.created_at,
             updated_at: model.updated_at,

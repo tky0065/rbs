@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::router::router;
 use crate::state::AppState;
 
+// region: harnais
 /// Monte l'application sur la base décrite par `.env`, sans écouter sur le réseau.
 ///
 /// Les migrations sont supposées appliquées : elles précèdent `cargo test`.
@@ -19,6 +20,7 @@ async fn application() -> Router {
 
     router(AppState::new(db, config).expect("état partagé constructible"))
 }
+// endregion: harnais
 
 /// Fait traverser le routeur à `request`, et rend son statut avec son corps.
 async fn call(api: &Router, request: Request<Body>) -> (StatusCode, Value) {
@@ -84,6 +86,7 @@ fn modification() -> Value {
     })
 }
 
+// region: cycle_de_vie
 #[tokio::test]
 async fn the_full_lifecycle_goes_through_the_api() {
     let api = application().await;
@@ -128,7 +131,9 @@ async fn the_full_lifecycle_goes_through_the_api() {
     let (status, _) = call(&api, without_body("GET", &resource)).await;
     assert_eq!(status, StatusCode::NOT_FOUND, "elle répond encore");
 }
+// endregion: cycle_de_vie
 
+// region: erreur_404
 #[tokio::test]
 async fn an_unknown_id_returns_404() {
     let api = application().await;
@@ -140,7 +145,9 @@ async fn an_unknown_id_returns_404() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["status"], 404, "{body}");
 }
+// endregion: erreur_404
 
+// region: corps_illisible
 #[tokio::test]
 async fn an_unreadable_body_returns_400() {
     let api = application().await;
@@ -156,3 +163,4 @@ async fn an_unreadable_body_returns_400() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["status"], 400, "{body}");
 }
+// endregion: corps_illisible
