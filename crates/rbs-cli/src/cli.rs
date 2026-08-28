@@ -65,6 +65,13 @@ pub enum Commands {
         command: MigrateCommands,
     },
 
+    /// Insère les données de démonstration du projet.
+    Seed {
+        /// Insère même sous RBS_ENV=production.
+        #[arg(long)]
+        force: bool,
+    },
+
     /// Diagnostique le projet : ancres, .env, base joignable, versions.
     Doctor,
 }
@@ -137,7 +144,7 @@ mod tests {
         let command = Cli::command();
         let help = command.clone().render_long_help().to_string();
 
-        for expected in ["new", "add", "generate", "migrate", "doctor"] {
+        for expected in ["new", "add", "generate", "migrate", "seed", "doctor"] {
             let sous_commande = command
                 .get_subcommands()
                 .find(|s| s.get_name() == expected)

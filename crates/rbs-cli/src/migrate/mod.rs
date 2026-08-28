@@ -10,10 +10,9 @@ pub mod state;
 
 use std::io;
 use std::path::Path;
-use std::process::{Command, Stdio};
 
 use crate::generate::migration::current_timestamp;
-use crate::{dotenv, metadata};
+use crate::{cargo, dotenv, metadata};
 
 /// La variable qui porte l'URL de la base, telle que le projet la nomme.
 ///
@@ -148,39 +147,22 @@ fn variables(
 }
 
 /// Lance le binaire de la crate `migration` du projet.
-///
-/// `stderr` reste hérité : la progression de cargo, qui compile la crate au premier
-/// appel, doit rester visible pendant que la sortie utile est capturée.
 pub(crate) fn launch(
     root: &Path,
     command: &str,
     variables: &[(String, String)],
     capturer: bool,
 ) -> Result<String, Error> {
-    let mut processus = Command::new("cargo");
-    processus
-        .current_dir(root)
-        .args(["run", "-p", "migration", "--", command])
-        .envs(variables.iter().map(|(key, value)| (key, value)))
-        .stdout(if capturer {
-            Stdio::piped()
-        } else {
-            Stdio::inherit()
-        });
-
-    let output = processus
-        .spawn()
-        .map_err(Error::Cargo)?
-        .wait_with_output()
-        .map_err(Error::Cargo)?;
-
-    if !output.status.success() {
-        return Err(Error::Migration {
-            code: output.status.code().unwrap_or(1),
-        });
-    }
-
-    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+    cargo::run(
+        root,
+        &["run", "-p", "migration", "--", command],
+        variables,
+        capturer,
+    )
+    .map_err(|error| match error {
+        cargo::Error::Lancement(source) => Error::Cargo(source),
+        cargo::Error::Statut(code) => Error::Migration { code },
+    })
 }
 
 #[cfg(test)]
