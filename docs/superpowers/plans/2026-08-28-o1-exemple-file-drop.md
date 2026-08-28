@@ -16,6 +16,11 @@ Le travail neuf est l'exemple lui-même et son câblage.
 
 **Design :** approuvé en chat le 2026-08-28 (tâche `O1` de `TODO.md`).
 
+**Note du 2026-08-28, après la tâche 1 :** les identifiants du dépôt sont passés à
+l'anglais entre la tâche 1 et la tâche 2. Les signatures citées plus bas sont celles
+d'après la migration — voir
+`docs/superpowers/plans/2026-08-28-glossaire-migration-anglais.md`.
+
 ## Contraintes globales
 
 - L'ancre `features` empile les `mod` dans l'ordre d'installation et doit rester
@@ -141,21 +146,21 @@ un fichier ». C'est ici que ces phrases deviennent vraies.
   (`edite_a_la_main` + `les_editions_a_la_main_de_file_drop_sont_en_place`)
 
 **Interfaces consommées** (relevées dans les fragments, à ne pas deviner) :
-- `Cache::get<T: DeserializeOwned>(&self, cle) -> Result<Option<T>>`,
-  `Cache::set<T: Serialize + ?Sized>(&self, cle, &T) -> Result<()>`,
-  `Cache::invalider_prefixe(&self, prefixe) -> Result<usize>`
-- `Mailer::message(&self, destinataire, sujet, corps) -> Result<Message>`,
-  `Mailer::envoyer_gabarit<S: Serialize>(&self, destinataire, sujet, gabarit, contexte) -> Result<()>`,
-  `Mailer::envoyer_detache(&self, message)`
-- `Storage::deposer(&self, cle, Vec<u8>)`, `Storage::lire(&self, cle) -> Vec<u8>`,
-  `Storage::supprimer(&self, cle)`, `Storage::existe(&self, cle) -> bool`
+- `Cache::get<T: DeserializeOwned>(&self, key) -> Result<Option<T>>`,
+  `Cache::set<T: Serialize + ?Sized>(&self, key, &T) -> Result<()>`,
+  `Cache::invalidate_prefix(&self, prefix) -> Result<usize>`
+- `Mailer::message(&self, recipient, subject, body) -> Result<Message>`,
+  `Mailer::send_template<S: Serialize>(&self, recipient, subject, template, context) -> Result<()>`,
+  `Mailer::send_detached(&self, message)`
+- `Storage::put(&self, key, Vec<u8>)`, `Storage::get(&self, key) -> Vec<u8>`,
+  `Storage::delete(&self, key)`, `Storage::exists(&self, key) -> bool`
 - L'état porte les champs publics `state.cache`, `state.mail`, `state.storage` ;
   `state.rs` reste intact, c'est là que les ancres se lisent.
 
 - [ ] **Étape 1 : le gabarit du dépôt**
 
 `examples/file-drop/templates/mail/depot.html`, sur la forme de `bienvenue.html` que
-le fragment livre (contexte `{ titre, lien }`).
+le fragment livre (contexte `{ title, link }`).
 
 - [ ] **Étape 2 : écrire les tests qui échouent**
 
@@ -176,7 +181,7 @@ for module in ["cache", "mail", "storage"] {
 }
 ```
 
-plus la présence de `invalider_prefixe`, `envoyer_detache` et `deposer` dans
+plus la présence de `invalidate_prefix`, `send_detached` et `put` dans
 `src/uploads/service.rs`.
 
 - [ ] **Étape 3 : les voir échouer**

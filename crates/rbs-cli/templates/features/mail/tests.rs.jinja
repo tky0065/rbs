@@ -89,6 +89,20 @@ fn the_rendered_template_carries_the_variables_passed_to_it() {
         rendered.contains("example.test"),
         "le lien n'est pas rendu :\n{rendered}"
     );
+    // Le lien est attendu dans l'attribut, non seulement dans le texte : une variable
+    // mal nommée dans un `href` rend un lien vide sans que le corps le montre.
+    //
+    // L'hôte seul, et non l'URL entière : le gabarit porte l'extension `.html`, dont
+    // minijinja tire l'échappement, et ses `/` ressortent en `&#x2f;`.
+    let href = rendered
+        .split_once(r#"<a href=""#)
+        .and_then(|(_, reste)| reste.split_once('"'))
+        .map(|(href, _)| href)
+        .expect("le gabarit doit porter un lien");
+    assert!(
+        href.contains("example.test"),
+        "le href ne porte pas le lien :\n{rendered}"
+    );
 }
 
 /// L'erreur nomme le fichier, que minijinja ne connaît que par son nom de gabarit :
