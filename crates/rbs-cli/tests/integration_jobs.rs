@@ -69,6 +69,63 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     }
 }
 
+/// Le critère de la portabilité : le dépilage tient sur les trois moteurs.
+///
+/// Le test de concurrence vit dans le projet engendré — c'est lui qui compte, et il est
+/// exigé nommément : `cargo test -- --ignored` sort en 0 même quand il ne filtre **aucun**
+/// test, et un fragment qui cesserait de livrer ses tests laisserait celui-ci au vert.
+///
+/// Une cible de compilation par moteur : les trois activent des features `sea-orm`
+/// différentes, et une cible commune ferait recompiler `sea-orm` et `sqlx` à chaque
+/// bascule — y compris pour les tests qui n'ont rien demandé.
+#[test]
+#[ignore = "démarre PostgreSQL et MySQL et compile un projet par moteur : plusieurs minutes"]
+fn the_dequeue_never_hands_the_same_job_twice_on_the_three_engines() {
+    let parent_sqlite = TempDir::new().expect("répertoire temporaire créable");
+    let fichier = parent_sqlite.path().join("demo.db");
+    let url_sqlite = format!(
+        "sqlite://{}?mode=rwc",
+        fichier.to_str().expect("chemin représentable")
+    );
+
+    let postgres = start_postgres();
+    let mysql = start_mysql();
+
+    for (moteur, url, parent) in [
+        ("postgres", url_of(&postgres), None),
+        ("mysql", url_of_mysql(&mysql), None),
+        ("sqlite", url_sqlite, Some(&parent_sqlite)),
+    ] {
+        let propre;
+        let parent = match parent {
+            Some(parent) => parent,
+            None => {
+                propre = TempDir::new().expect("répertoire temporaire créable");
+                &propre
+            }
+        };
+
+        eprintln!("── moteur : {moteur} ──");
+
+        let cible = common::cible_pour(moteur);
+        let racine = project_with_jobs_on(moteur, &url, parent);
+
+        migrate_dans(&racine, &cible);
+
+        let (abouti, joues) = cargo_test_brut(&racine, &cible, &["--", "--ignored"]);
+        assert!(
+            abouti,
+            "les tests du projet ont échoué sur {moteur} :\n{joues}"
+        );
+        assert!(
+            joues.contains(
+                "test jobs::tests::two_concurrent_workers_never_reserve_the_same_job ... ok"
+            ),
+            "le test de concurrence n'a pas été joué sur {moteur} :\n{joues}"
+        );
+    }
+}
+
 /// Le critère du jalon : un job enfilé pendant qu'un processus tourne s'exécute après que
 /// ce processus a été tué et relancé.
 ///
@@ -134,6 +191,29 @@ fn start_postgres() -> Container<GenericImage> {
         .expect("PostgreSQL doit démarrer — Docker est-il lancé ?")
 }
 
+/// MySQL 8, dont `FOR UPDATE SKIP LOCKED` est contemporain.
+fn start_mysql() -> Container<GenericImage> {
+    GenericImage::new("mysql", "8")
+        .with_wait_for(WaitFor::log(
+            // Comme PostgreSQL, MySQL annonce deux fois qu'il est prêt : la première fois
+            // pendant son initialisation, où il n'écoute que localement.
+            LogWaitStrategy::stdout_or_stderr("ready for connections").with_times(2),
+        ))
+        .with_env_var("MYSQL_ROOT_PASSWORD", MOT_DE_PASSE)
+        .with_env_var("MYSQL_DATABASE", BASE)
+        .start()
+        .expect("MySQL doit démarrer — Docker est-il lancé ?")
+}
+
+/// L'URL de connexion à `mysql`, vue depuis l'hôte.
+fn url_of_mysql(mysql: &Container<GenericImage>) -> String {
+    let port = mysql
+        .get_host_port_ipv4(3306.tcp())
+        .expect("le port de MySQL doit être publié");
+
+    format!("mysql://root:{MOT_DE_PASSE}@127.0.0.1:{port}/{BASE}")
+}
+
 /// L'URL de connexion à `postgres`, vue depuis l'hôte.
 fn url_of(postgres: &Container<GenericImage>) -> String {
     let port = postgres
@@ -145,12 +225,19 @@ fn url_of(postgres: &Container<GenericImage>) -> String {
 
 /// Un projet neuf portant `jobs`, sa base pointée sur `url`.
 fn project_with_jobs(url: &str, parent: &TempDir) -> PathBuf {
+    project_with_jobs_on("postgres", url, parent)
+}
+
+/// Le même, sur le moteur demandé.
+fn project_with_jobs_on(moteur: &str, url: &str, parent: &TempDir) -> PathBuf {
     let racine = parent.path().join("demo-api");
 
     rbs(parent.path())
         .args([
             "new",
             "demo-api",
+            "--database",
+            moteur,
             "--database-url",
             url,
             "--core-path",
@@ -170,8 +257,12 @@ fn project_with_jobs(url: &str, parent: &TempDir) -> PathBuf {
 }
 
 fn migrate(racine: &Path) {
+    migrate_dans(racine, &common::cible());
+}
+
+fn migrate_dans(racine: &Path, cible: &Path) {
     rbs(racine)
-        .env("CARGO_TARGET_DIR", common::cible())
+        .env("CARGO_TARGET_DIR", cible)
         .args(["migrate", "up"])
         .assert()
         .success();
@@ -189,9 +280,21 @@ fn compile(racine: &Path) {
 
 /// Joue `cargo test` dans le projet et rend ses deux flux réunis.
 fn cargo_test(racine: &Path, arguments: &[&str]) -> String {
+    cargo_test_dans(racine, &common::cible(), arguments)
+}
+
+fn cargo_test_dans(racine: &Path, cible: &Path, arguments: &[&str]) -> String {
+    let (abouti, journal) = cargo_test_brut(racine, cible, arguments);
+    assert!(abouti, "les tests du projet ont échoué :\n{journal}");
+
+    journal
+}
+
+/// Le même, rendant l'issue plutôt que de trancher : l'appelant sait quel moteur il joue.
+fn cargo_test_brut(racine: &Path, cible: &Path, arguments: &[&str]) -> (bool, String) {
     let output = std::process::Command::new("cargo")
         .current_dir(racine)
-        .env("CARGO_TARGET_DIR", common::cible())
+        .env("CARGO_TARGET_DIR", cible)
         .arg("test")
         .arg("--workspace")
         .args(arguments)
@@ -204,12 +307,7 @@ fn cargo_test(racine: &Path, arguments: &[&str]) -> String {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    assert!(
-        output.status.success(),
-        "les tests du projet ont échoué :\n{journal}"
-    );
-
-    journal
+    (output.status.success(), journal)
 }
 
 /// Enfile un job directement dans la table, sans passer par un processus du projet.
