@@ -171,3 +171,79 @@ fn un_backend_inconnu_echoue_en_nommant_les_valeurs_admises() {
         "le message ne nomme pas les valeurs admises : {erreur}"
     );
 }
+
+// Les deux tests qui suivent joignent le service que décrit la section `[storage]`, avec
+// `backend = "s3"` : MinIO en développement, S3 en production. `cargo test -- --ignored`
+// les lance, les `RBS_STORAGE__*` désignant le bucket et le service.
+
+/// La ronde du trait, rejouée telle quelle contre S3.
+///
+/// C'est la même fonction que le backend fichiers traverse plus haut, appelée sans une
+/// ligne de différence : un jeu réécrit pour S3 prouverait que S3 marche, jamais que le
+/// trait abstrait.
+#[tokio::test]
+#[ignore = "joint le service S3 de la section [storage]"]
+async fn le_backend_s3_passe_la_meme_ronde_que_le_backend_fichiers() {
+    let stockage = super::depuis_config().expect("la section [storage] doit être lisible");
+
+    ronde(&*stockage).await;
+}
+
+/// Un objet déposé par le trait, relu sans lui.
+///
+/// Le client est bâti ici, et non emprunté à `StockageS3` dont le champ est privé : une
+/// relecture qui repasserait par le même client ne dirait rien de ce qui est réellement
+/// arrivé dans le bucket.
+#[tokio::test]
+#[ignore = "joint le service S3 de la section [storage]"]
+async fn un_objet_depose_par_le_trait_se_relit_par_le_client_s3() {
+    let config = rbs_core::config::section::<StorageConfig>("storage")
+        .expect("la section [storage] doit être lisible");
+    let stockage = construire(config.clone()).expect("le backend doit se construire");
+
+    let cle = "hors-trait/recu.bin";
+    stockage
+        .deposer(cle, b"charge utile".to_vec())
+        .await
+        .expect("le dépôt doit aboutir");
+
+    let identifiants = aws_sdk_s3::config::Credentials::new(
+        config.access_key_id.clone(),
+        config.secret_access_key.clone(),
+        None,
+        None,
+        "test-hors-trait",
+    );
+
+    let mut client = aws_sdk_s3::Config::builder()
+        .behavior_version(aws_sdk_s3::config::BehaviorVersion::latest())
+        .region(aws_sdk_s3::config::Region::new(config.region.clone()))
+        .credentials_provider(identifiants)
+        .force_path_style(config.force_path_style);
+
+    if let Some(endpoint) = &config.endpoint {
+        client = client.endpoint_url(endpoint);
+    }
+
+    let objet = aws_sdk_s3::Client::from_conf(client.build())
+        .get_object()
+        .bucket(&config.bucket)
+        .key(cle)
+        .send()
+        .await
+        .expect("l'objet doit être dans le bucket");
+
+    let contenu = objet
+        .body
+        .collect()
+        .await
+        .expect("le corps de l'objet doit se lire")
+        .into_bytes();
+
+    assert_eq!(contenu.as_ref(), b"charge utile");
+
+    stockage
+        .supprimer(cle)
+        .await
+        .expect("la suppression doit aboutir");
+}
