@@ -18,10 +18,11 @@ const TITRE: &str = "versions";
 /// Version du CLI en train de diagnostiquer.
 const CLI: &str = env!("CARGO_PKG_VERSION");
 
-/// Faux tant que `rbs-core` n'est pas sur crates.io : un projet qui l'y déclare ne résout
-/// pas, et `doctor` est le seul endroit où le lecteur bloqué peut l'apprendre. Le CLI ne
-/// peut pas le vérifier sans requête réseau, dans un diagnostic qui doit rester local.
-const NOYAU_PUBLIE: bool = false;
+/// Vrai depuis la publication de `rbs-core` sur crates.io : un projet qui l'y déclare
+/// résout désormais, et ne se diagnostique plus en échec pour cette seule raison. Le CLI
+/// ne peut pas le vérifier sans requête réseau, dans un diagnostic qui doit rester local —
+/// d'où une constante, que la première publication a fait basculer.
+const NOYAU_PUBLIE: bool = true;
 
 /// Compare la version qui a généré le projet, celle de son noyau et celle du CLI.
 pub(crate) fn check(root: &Path) -> Check {

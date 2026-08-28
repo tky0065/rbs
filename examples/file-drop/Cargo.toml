@@ -10,7 +10,7 @@ edition = "2024"
 default-run = "file-drop"
 
 [package.metadata.rbs]
-version = "0.1.0"
+version = "0.4.0"
 features = ["health", "redis", "mail", "storage", "uploads"]
 database = "postgres"
 

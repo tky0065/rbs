@@ -58,14 +58,29 @@ jobs:
             echo "::endgroup::"
           done
 
+      # La garde de publication n'est exercée, en conditions réelles, que le jour d'un tag
+      # posé de travers — trop tard pour découvrir qu'elle laisse passer. On la mord donc
+      # ici sur ses deux verdicts, à chaque commit.
+      - name: garde de version (les deux verdicts)
+        run: |
+          version=$(cargo pkgid -p rbs-core | sed 's/.*[@#]//')
+          if ! .github/scripts/garde-version.sh "v$version"; then
+            echo "la garde refuse le tag concordant v$version" >&2
+            exit 1
+          fi
+          if .github/scripts/garde-version.sh v99.0.0; then
+            echo "la garde accepte le tag discordant v99.0.0" >&2
+            exit 1
+          fi
+
       # Les templates que le binaire embarque vivent sous `crates/rbs-cli` : `cargo
       # package` n'emporte aucun fichier extérieur au paquet. Rien dans une compilation
       # locale ne le rappelle — seul le dry-run le constate, et la régression passerait
       # inaperçue jusqu'au jour de la publication.
       - name: cargo publish (dry-run)
         run: |
-          cargo publish --dry-run -p rbs-core
-          cargo publish --dry-run -p rbs-cli
+          cargo publish --dry-run --locked -p rbs-core
+          cargo publish --dry-run --locked -p rbs-cli
 
   # Ce que ces deux plateformes prouvent, c'est que rbs manipule les chemins sans
   # supposer `/` — la faute que ce projet commettrait, puisqu'il écrit des arborescences.
