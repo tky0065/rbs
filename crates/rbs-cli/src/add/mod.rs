@@ -656,6 +656,64 @@ mod tests {
         }
     }
 
+    /// Le fragment annonçait redis://127.0.0.1:6379 dans config/default.toml sans que
+    /// rien y réponde. Le service le sert, et sans profil : c'est une dépendance de
+    /// développement, que `rbs dev` doit monter.
+    #[test]
+    fn adding_redis_serves_the_url_its_config_announces() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "redis")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(compose.contains("redis:8-alpine"), "{compose}");
+        assert!(compose.contains("- \"6379:6379\""), "{compose}");
+        assert!(
+            !compose.contains("profiles"),
+            "un service de développement n'a pas de profil :\n{compose}"
+        );
+    }
+
+    #[test]
+    fn adding_mail_serves_the_smtp_port_its_config_announces() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "mail")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(compose.contains("axllent/mailpit"), "{compose}");
+        assert!(compose.contains("- \"1025:1025\""), "{compose}");
+        assert!(compose.contains("- \"8025:8025\""), "{compose}");
+    }
+
+    /// Deux fragments dans un même compose ne se marchent pas dessus : chacun a son
+    /// service, et le fichier reste du YAML.
+    #[test]
+    fn two_fragments_share_the_same_anchor_without_colliding() {
+        let (_parent, root) = project();
+
+        run(&options(&root, "redis")).expect("la première pose doit aboutir");
+        let planned = plan_for(&options(&root, "mail")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(compose.contains("redis:8-alpine"), "{compose}");
+        assert!(compose.contains("axllent/mailpit"), "{compose}");
+        assert_eq!(
+            compose.matches("image: postgres:18-alpine").count(),
+            1,
+            "{compose}"
+        );
+        // `db`, `redis` et `mailpit` ouvrent chacun un `ports:` : une ligne nue déjà posée
+        // par redis ne doit pas faire disparaître celle de mail, laissant sa liste de
+        // ports orpheline.
+        assert_eq!(
+            compose.matches("ports:").count(),
+            3,
+            "un des trois services a perdu son en-tête ports: :\n{compose}"
+        );
+        assert!(compose.contains("- \"1025:1025\""), "{compose}");
+    }
+
     #[test]
     fn planning_does_not_modify_the_project_directory() {
         let (_parent, root) = project();

@@ -224,6 +224,11 @@ pub(crate) fn body(source: &str, anchor: Anchor) -> Option<&str> {
 /// ligne qui la suit. Dédupliquer sans elle amputait un champ de son `#[allow(…)]` dès
 /// qu'un autre fragment en avait posé un, et laissait le champ orphelin.
 ///
+/// Une clé YAML nue (`ports:`, sans valeur sur la ligne) qualifie de la même façon : deux
+/// fragments distincts sous l'ancre `services` peuvent tous deux ouvrir un `ports:`, et
+/// dérouler cette seule ligne comme groupe la ferait disparaître dès le second fragment,
+/// la trouvant déjà dans le bloc — orphelinant sa liste de ports comme du texte libre.
+///
 /// Les lignes autonomes — les chemins OpenAPI d'une feature — forment chacune leur
 /// groupe, et restent donc dédupliquées une à une.
 fn groups(lines: &[String]) -> Vec<Vec<&String>> {
@@ -231,12 +236,14 @@ fn groups(lines: &[String]) -> Vec<Vec<&String>> {
     let mut courant = Vec::new();
 
     for line in lines {
-        // `# ` : un commentaire YAML. `#[` et `//` : leurs homologues Rust. Les trois
-        // qualifient la ligne suivante et ne valent pas pour eux-mêmes.
+        // `# ` : un commentaire YAML. `#[` et `//` : leurs homologues Rust. Une ligne qui
+        // ne porte qu'une clé (`ports:`) : son unique caractère de fin trahit l'absence de
+        // valeur inline. Les quatre qualifient la ligne suivante et ne valent pas pour
+        // elles-mêmes.
         let qualifie = matches!(
             line.trim_start().get(..2),
             Some("#[") | Some("//") | Some("# ")
-        );
+        ) || line.trim_end().ends_with(':');
         courant.push(line);
 
         if !qualifie {
@@ -386,6 +393,53 @@ pub fn router(state: AppState) -> Router {
 
         assert_eq!(rendered.matches("deja()").count(), 1, "{rendered}");
         assert_eq!(rendered.matches("nouvelle()").count(), 1, "{rendered}");
+    }
+
+    /// Deux services YAML qui ouvrent chacun un `ports:` : le second ne doit pas perdre
+    /// sa clé sous prétexte qu'un premier fragment en a déjà posé une. Sans le
+    /// qualificatif des clés nues dans `groups`, `ports:` — présent dans le bloc depuis le
+    /// premier service — se filtrait comme groupe à lui seul, et les deux lignes de liste
+    /// du second atterrissaient sans l'en-tête qui les rattache à leur service.
+    #[test]
+    fn a_bare_key_shared_by_two_services_is_not_dropped_from_the_second() {
+        let compose = "\
+services:
+  # <rbs:services>
+  # </rbs:services>
+";
+
+        let premier = insert(
+            compose,
+            SERVICES,
+            &lines(&[
+                "redis:",
+                "  image: redis:8-alpine",
+                "  ports:",
+                "    - \"6379:6379\"",
+            ]),
+        )
+        .expect("l'ancre est présente");
+
+        let second = insert(
+            &premier,
+            SERVICES,
+            &lines(&[
+                "mailpit:",
+                "  image: axllent/mailpit:latest",
+                "  ports:",
+                "    - \"1025:1025\"",
+                "    - \"8025:8025\"",
+            ]),
+        )
+        .expect("l'ancre est présente");
+
+        assert!(
+            second.contains(
+                "  mailpit:\n    image: axllent/mailpit:latest\n    ports:\n      \
+                 - \"1025:1025\"\n      - \"8025:8025\""
+            ),
+            "le second service a perdu sa clé ports: :\n{second}"
+        );
     }
 
     #[test]
