@@ -69,13 +69,13 @@ impl Feature {
     /// est déclarée.
     pub(crate) fn ambiguous_targets(&self) -> Vec<AmbiguousTarget> {
         let counts = self.target_counts();
-        let mut deja_vues = HashSet::new();
+        let mut already_seen = HashSet::new();
 
         self.fields
             .iter()
             .filter_map(|field| field.relation())
             .filter(|relation| counts.get(&relation.target) != Some(&1))
-            .filter(|relation| deja_vues.insert(relation.target.clone()))
+            .filter(|relation| already_seen.insert(relation.target.clone()))
             .map(|relation| {
                 AmbiguousTarget::new(&relation.target, self.variants_towards(&relation.target))
             })
@@ -117,21 +117,21 @@ pub(crate) struct AmbiguousTarget {
 
 impl AmbiguousTarget {
     fn new(target: &str, variants: Vec<String>) -> Self {
-        let nommees = variants
+        let named = variants
             .iter()
             .map(|variant| format!("`{variant}`"))
             .collect::<Vec<_>>()
             .join(", ");
         // La première variante déclarée sert d'exemple : n'importe laquelle joint la même
         // table, le choix n'a donc pas besoin d'être significatif.
-        let exemple = variants.first().cloned().unwrap_or_default();
+        let example = variants.first().cloned().unwrap_or_default();
 
         Self {
             comment: format!(
-                "// `{target}` est visée par {compte} relations ({nommees}) : `Related` \
+                "// `{target}` est visée par {count} relations ({named}) : `Related` \
                  serait ambigu. Joindre explicitement, par exemple\n\
-                 // `Entity::find().join(JoinType::LeftJoin, Relation::{exemple}.def())`.",
-                compte = variants.len(),
+                 // `Entity::find().join(JoinType::LeftJoin, Relation::{example}.def())`.",
+                count = variants.len(),
             ),
         }
     }
