@@ -394,6 +394,23 @@ mod tests {
         );
     }
 
+    /// SQLite n'a pas de serveur : `migrate` et `api` se partagent un fichier, et sans ce
+    /// volume chacun travaillerait sur le sien — la migration n'atteindrait jamais la base
+    /// que l'API ouvre.
+    #[test]
+    fn a_sqlite_project_shares_its_database_file_between_migrate_and_api() {
+        let (_parent, root) = project_on(Database::Sqlite);
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert_eq!(
+            compose.matches("- sqlitedata:/data").count(),
+            2,
+            "migrate et api doivent monter le même volume :\n{compose}"
+        );
+    }
+
     #[test]
     fn a_mysql_project_gets_a_mysql_service() {
         let (_parent, root) = project_on(Database::Mysql);

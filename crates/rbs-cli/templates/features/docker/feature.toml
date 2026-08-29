@@ -29,6 +29,12 @@ migrate:
   environment:
     RBS_DATABASE__URL: {@ database_url_compose @}
   restart: "no"
+{%- if not database_a_un_serveur %}
+  # Le fichier de base est partagé avec `api` : sans ce volume, chaque conteneur
+  # travaillerait sur le sien et l'API démarrerait sur un schéma vide.
+  volumes:
+    - sqlitedata:/data
+{%- endif %}
 api:
   profiles: ["app"]
   build: .
@@ -44,4 +50,8 @@ api:
   depends_on:
     migrate:
       condition: service_completed_successfully
+{%- if not database_a_un_serveur %}
+  volumes:
+    - sqlitedata:/data
+{%- endif %}
 """
