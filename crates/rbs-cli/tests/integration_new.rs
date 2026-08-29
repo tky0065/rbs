@@ -1,6 +1,10 @@
 //! Le seul test qui prouve que rbs fonctionne : il invoque le binaire livré, pas
 //! `new::creer`, et compile ce que ce binaire a produit.
 
+use std::fs;
+use std::net::TcpListener;
+use std::path::{Path, PathBuf};
+
 use assert_cmd::Command;
 use tempfile::TempDir;
 
@@ -213,5 +217,159 @@ fn each_engine_produces_a_project_whose_tests_pass() {
                  quand il ne joue rien :\n{rendu}"
             );
         }
+    }
+}
+
+/// Le parcours que la documentation enseigne, joué en entier : créer, monter la base par
+/// le seul compose engendré, migrer, compiler. Les tests ci-dessus prouvent la forme du
+/// compose ; celui-ci prouve qu'il sert — aucune valeur n'est recopiée d'un fichier à
+/// l'autre.
+///
+/// Ce qu'il attraperait : un port publié qui ne suit pas l'URL du `.env` (`migrate` et le
+/// binaire compilé chercheraient la base ailleurs que là où le compose l'a montée), un
+/// service `db` mal formé ou une ancre `<rbs:services>` produisant un YAML que `docker
+/// compose` refuserait, ou une variable d'environnement que le squelette engendré
+/// attendrait à la main — puisqu'aucune n'est passée ici, ni à `compose`, ni à `migrate`.
+#[test]
+#[ignore = "démarre PostgreSQL par le compose engendré et compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn the_generated_compose_serves_the_project_it_was_generated_for() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let noyau = common::noyau();
+
+    // Tiré au sort à chaque exécution : deux lancements concurrents ne doivent pas se
+    // disputer 5432, que cette machine héberge déjà pour d'autres PostgreSQL locaux. Le
+    // retrouver dans l'URL une fois la base migrée est aussi ce qui prouve que le port
+    // publié par le compose suit l'URL du projet plutôt qu'une valeur figée dans la
+    // template.
+    let port = free_port();
+    let url = format!("postgres://rbs:secret@localhost:{port}/demo");
+
+    rbs(parent.path())
+        .args(["new", "demo", "--yes", "--database-url", &url])
+        .args([
+            "--core-path",
+            noyau.to_str().expect("chemin du noyau représentable"),
+        ])
+        .assert()
+        .success();
+
+    let root = parent.path().join("demo");
+
+    // Le compose engendré, et lui seul : aucun `docker run` ni variable d'environnement
+    // passée à la main — précisément ce que ce test doit prouver.
+    compose(&root, &["up", "-d", "--wait"]).assert().success();
+    // Démonte les conteneurs et le volume même si une assertion plus bas échoue : une
+    // panique en cours de route ne doit rien laisser tourner derrière elle.
+    let _garde = ComposeGuard { root: root.clone() };
+
+    rbs(&root)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .args(["migrate", "up"])
+        .assert()
+        .success();
+
+    Command::new("cargo")
+        .current_dir(&root)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .arg("build")
+        .assert()
+        .success();
+}
+
+/// Deux fragments posés à la création cohabitent, et le projet qui en résulte compile.
+///
+/// Ce qu'il attraperait : un ordre d'insertion où la seconde feature écraserait l'ancre
+/// de la première plutôt que de s'y ajouter, une dépendance Cargo dupliquée ou en conflit
+/// entre les deux fragments, ou une ancre `<rbs:services>` produisant, une fois le service
+/// redis ajouté à côté du `db` déjà présent, un compose que `docker compose config`
+/// refuserait.
+#[test]
+#[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn a_project_created_with_two_features_compiles() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let noyau = common::noyau();
+
+    let sortie = rbs(parent.path())
+        .args(["new", "demo", "--yes", "--with", "auth,redis"])
+        .args([
+            "--database-url",
+            "postgres://rbs:secret@localhost:5432/demo",
+        ])
+        .args([
+            "--core-path",
+            noyau.to_str().expect("chemin du noyau représentable"),
+        ])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+
+    let stdout = String::from_utf8_lossy(&sortie.stdout);
+    for pose in ["+ auth", "+ redis"] {
+        assert!(
+            stdout.contains(pose),
+            "la sortie ne rapporte pas `{pose}` posée :\n{stdout}"
+        );
+    }
+
+    let root = parent.path().join("demo");
+
+    assert!(root.join("src/auth/service.rs").is_file());
+    assert!(root.join("src/cache/mod.rs").is_file());
+
+    let compose_yml = fs::read_to_string(root.join("docker-compose.yml")).expect("compose lisible");
+    assert!(compose_yml.contains("redis:8-alpine"), "{compose_yml}");
+
+    Command::new("docker")
+        .current_dir(&root)
+        .args(["compose", "config"])
+        .assert()
+        .success();
+
+    Command::new("cargo")
+        .current_dir(&root)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .arg("build")
+        .assert()
+        .success();
+}
+
+/// Le binaire livré, lancé depuis `repertoire`.
+fn rbs(repertoire: impl AsRef<Path>) -> Command {
+    let mut commande = Command::cargo_bin("rbs").expect("le binaire rbs doit être compilé");
+    commande.current_dir(repertoire);
+    commande
+}
+
+/// Le compose du projet, invoqué comme `rbs dev` l'invoque en interne : jamais un
+/// `docker run` qui contournerait ce que ces tests doivent prouver.
+fn compose(root: &Path, args: &[&str]) -> Command {
+    let mut commande = Command::new("docker");
+    commande.current_dir(root).arg("compose").args(args);
+    commande
+}
+
+/// Un port TCP libre, relâché aussitôt : lié puis rendu avant que le compose ne s'en
+/// serve, il reste disponible le temps que `docker compose up` le publie.
+fn free_port() -> u16 {
+    TcpListener::bind("127.0.0.1:0")
+        .expect("l'hôte doit pouvoir prêter un port")
+        .local_addr()
+        .expect("adresse locale lisible")
+        .port()
+}
+
+/// Démonte le compose de `root` quand ce garde tombe, succès ou panique confondus.
+///
+/// `.output()` et non `.assert()` : un `Drop` qui panique pendant qu'un autre panique se
+/// déroule déjà ferait avorter le processus de test plutôt que de rapporter l'échec
+/// d'origine.
+struct ComposeGuard {
+    root: PathBuf,
+}
+
+impl Drop for ComposeGuard {
+    fn drop(&mut self) {
+        let _ = compose(&self.root, &["down", "-v"]).output();
     }
 }
