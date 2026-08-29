@@ -537,4 +537,32 @@ struct AppState {
             "une seconde insertion ne doit rien ajouter :\n{deux_fois}"
         );
     }
+
+    /// Le cas asymétrique, seul à distinguer les deux comportements : le commentaire est
+    /// déjà dans l'ancre, la ligne qu'il qualifie ne l'est pas encore. Sans le
+    /// groupement, le commentaire passerait pour posé et le service s'insérerait seul,
+    /// sous un commentaire qui ne le concerne pas.
+    #[test]
+    fn a_yaml_comment_already_present_does_not_orphan_the_line_it_qualifies() {
+        let compose = Anchor {
+            name: "services",
+            file: "docker-compose.yml",
+            comment: "#",
+            optional: true,
+        };
+        // Une autre feature a posé ce commentaire, et un service qui l'en sépare.
+        let source = "services:\n  # <rbs:services>\n  # le cache du projet\n  memcached:\n  # </rbs:services>\n";
+        let lines = vec!["# le cache du projet".to_string(), "redis:".to_string()];
+
+        let apres = insert(source, compose, &lines).expect("l'ancre est présente");
+
+        assert!(
+            apres.contains("  # le cache du projet\n  redis:\n"),
+            "le service doit arriver avec son propre commentaire :\n{apres}"
+        );
+        assert!(
+            !apres.contains("  memcached:\n  redis:\n"),
+            "le service ne doit pas s'insérer nu sous un commentaire étranger :\n{apres}"
+        );
+    }
 }
