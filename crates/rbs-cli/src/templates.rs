@@ -133,7 +133,7 @@ impl Source {
 }
 
 /// Les features dont le binaire porte un fragment, triées.
-fn embedded_names() -> Vec<String> {
+pub(crate) fn embedded_names() -> Vec<String> {
     let mut names: Vec<String> = FEATURES
         .dirs()
         .filter_map(|dir| dir.path().file_name())
@@ -158,6 +158,18 @@ fn names_on_disk(directory: &Path) -> Vec<String> {
 
     names.sort();
     names
+}
+
+/// Les features installables, celles du `--template-dir` s'il en désigne un.
+///
+/// Une seule liste pour la question de `rbs new`, la validation de `--with` et le message
+/// qui énumère les features connues : trois listes écrites à la main avaient divergé, et
+/// `jobs` manquait à celle qui décidait.
+pub(crate) fn feature_names(directory: Option<&Path>) -> Vec<String> {
+    match directory {
+        Some(directory) => names_on_disk(directory),
+        None => embedded_names(),
+    }
 }
 
 /// Rend une liste de features lisible dans un message d'erreur.

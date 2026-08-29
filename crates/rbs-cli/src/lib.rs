@@ -161,7 +161,15 @@ fn create_project(
 ) -> Result<(), Box<dyn Error>> {
     // Un `--with` absent laisse la question ouverte ; un `--with` vide n'existe pas.
     let features = (!with.is_empty()).then_some(with);
-    let options = prompts::resolve(Some(name), database_url, database, features, yes)?;
+    let disponibles = templates::feature_names(template_dir.as_deref());
+    let options = prompts::resolve(
+        Some(name),
+        database_url,
+        database,
+        features,
+        &disponibles,
+        yes,
+    )?;
 
     let project = new::create(
         &new::Options {
@@ -184,6 +192,14 @@ fn create_project(
     ui::success(&format!("{name} créé — {}", ui::files(project.files)));
     if !project.depot_git {
         ui::warn("`git init` n'a pas abouti : le projet est complet, mais sans dépôt");
+    }
+    for pose in &project.installed {
+        let migration = if pose.migration { ", 1 migration" } else { "" };
+        ui::info(&format!(
+            "  + {:<8} {}{migration}",
+            pose.name,
+            ui::files(pose.files)
+        ));
     }
     let compose = project.root.join("docker-compose.yml").exists();
     let demarrage = if compose {

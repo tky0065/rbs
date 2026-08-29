@@ -17,12 +17,6 @@ use crate::database::Database;
 use crate::template::Renderer;
 use crate::templates::Source;
 
-/// Features que les questions de création proposent, et que `rbs add` installe.
-///
-/// Elle double la liste que `add` tire des fragments embarqués : une feature absente
-/// d'ici est refusée à la création comme si rbs ne la connaissait pas.
-const FEATURES_CONNUES: &[&str] = &["docker", "ci", "auth", "redis", "storage", "mail"];
-
 /// Nom du compose à la racine du projet, tel que la template le rend et que `rbs dev` le
 /// cherche.
 const COMPOSE: &str = "docker-compose.yml";
@@ -52,6 +46,19 @@ pub struct Project {
     pub files: usize,
     /// `git init` a abouti. Faux n'invalide pas le projet.
     pub depot_git: bool,
+    /// Les features que `--with` (ou la question) a demandées, et qui se sont installées.
+    pub installed: Vec<InstalledFeature>,
+}
+
+/// Une feature posée par la création, et ce qu'elle a écrit.
+#[derive(Debug)]
+pub struct InstalledFeature {
+    /// Nom de la feature, tel que `rbs add` l'accepte.
+    pub name: String,
+    /// Nombre de fichiers que le fragment a déposés.
+    pub files: usize,
+    /// Le fragment a posé une migration.
+    pub migration: bool,
 }
 
 /// Ce qui peut empêcher la création d'un projet.
@@ -67,14 +74,13 @@ pub enum Error {
         name: String,
     },
 
-    /// La feature existe, mais `--with` ne l'installe pas à la création.
-    #[error(
-        "`{feature}` ne s'installe pas à la création : créez le projet sans `--with`, \
-         puis `rbs add {feature}`"
-    )]
-    FeatureAVenir {
-        /// Feature demandée.
+    /// Une feature demandée n'a pas pu être installée.
+    #[error("`{feature}` n'a pas pu être installée : {source}")]
+    Installation {
+        /// Feature en cause.
         feature: String,
+        /// Cause remontée par l'installation.
+        source: Box<crate::add::Error>,
     },
 
     /// La feature demandée n'existe pas.
@@ -147,8 +153,10 @@ pub enum Error {
 /// ne se rend pas, ou si l'écriture échoue. Dans tous les cas, rien de ce que la commande
 /// a créé ne subsiste.
 pub fn create(options: &Options, parent: &Path) -> Result<Project, Error> {
+    let disponibles = crate::templates::feature_names(options.template_dir.as_deref());
+
     validate_name(&options.name)?;
-    validate_features(&options.features)?;
+    validate_features(&options.features, &disponibles)?;
     validate_database(options.database, &options.database_url)?;
 
     let root = parent.join(&options.name);
@@ -168,10 +176,63 @@ pub fn create(options: &Options, parent: &Path) -> Result<Project, Error> {
         Error::Ecriture { path, source }
     })?;
 
+    // L'ordre est celui de la liste dérivée, non celui de la frappe : les insertions dans
+    // le Migrator et dans le compose suivent l'ordre d'installation, et deux `--with`
+    // équivalents doivent rendre deux projets identiques.
+    let demandees: Vec<&String> = disponibles
+        .iter()
+        .filter(|feature| options.features.contains(feature))
+        .collect();
+
+    let mut installed = Vec::new();
+    for feature in demandees {
+        match install(&root, feature, options.template_dir.as_deref()) {
+            Ok(pose) => installed.push(pose),
+            Err(source) => {
+                // Le répertoire n'existait pas avant la commande : le retirer entièrement
+                // ne peut rien emporter qui lui préexistait.
+                let _ = fs::remove_dir_all(&root);
+                return Err(Error::Installation {
+                    feature: feature.clone(),
+                    source: Box::new(source),
+                });
+            }
+        }
+    }
+
     Ok(Project {
         depot_git: git_init(&root),
         files: rendus.len(),
+        installed,
         root,
+    })
+}
+
+/// Pose une feature dans le projet tout juste créé, par le pipeline de `rbs add`.
+fn install(
+    root: &Path,
+    feature: &str,
+    template_dir: Option<&Path>,
+) -> Result<InstalledFeature, crate::add::Error> {
+    let planned = crate::add::plan_for(&crate::add::Options {
+        directory: root.to_path_buf(),
+        feature: feature.to_string(),
+        force: false,
+        template_dir: template_dir.map(Path::to_path_buf),
+    })?;
+
+    let migration = planned
+        .files
+        .iter()
+        .any(|file| file.starts_with("migration/src/"));
+    let files = planned.files.len();
+
+    crate::plan::application::apply(&planned.plan, false)?;
+
+    Ok(InstalledFeature {
+        name: feature.to_string(),
+        files,
+        migration,
     })
 }
 
@@ -209,24 +270,19 @@ fn validate_database(database: Database, url: &str) -> Result<(), Error> {
     })
 }
 
-/// `--with` n'installe rien : il nomme des features que seul `rbs add` pose.
-///
-/// Les inscrire dans `[package.metadata.rbs]` sans rien poser rendrait leur installation
-/// ultérieure impossible : l'idempotence du §4.2 porte sur ces métadonnées, pas sur la
-/// présence des fichiers.
-fn validate_features(features: &[String]) -> Result<(), Error> {
-    match features.first() {
-        None => Ok(()),
-        Some(feature) if FEATURES_CONNUES.contains(&feature.as_str()) => {
-            Err(Error::FeatureAVenir {
+/// Une feature que rbs ne connaît pas est refusée avant qu'un fichier soit écrit — comme
+/// le nom du projet et l'URL le sont déjà.
+fn validate_features(features: &[String], disponibles: &[String]) -> Result<(), Error> {
+    for feature in features {
+        if !disponibles.contains(feature) {
+            return Err(Error::FeatureInconnue {
                 feature: feature.clone(),
-            })
+                known: disponibles.join(", "),
+            });
         }
-        Some(feature) => Err(Error::FeatureInconnue {
-            feature: feature.clone(),
-            known: FEATURES_CONNUES.join(", "),
-        }),
     }
+
+    Ok(())
 }
 
 /// Valeur de la dépendance à `rbs-core` dans le manifeste généré.
@@ -722,77 +778,145 @@ mod tests {
     }
 
     #[test]
-    fn a_non_installable_feature_is_rejected_before_any_creation() {
-        let parent = parent();
-        let mut options = options("mon-api");
-        options.features = vec!["docker".to_owned()];
+    fn an_unknown_feature_is_refused_before_anything_is_written() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
 
-        let error =
-            create(&options, parent.path()).expect_err("`docker` n'est pas encore installable");
+        let error = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo".to_string(),
+                database: Database::Postgres,
+                features: vec!["graphql".to_string()],
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect_err("`graphql` n'est pas une feature");
 
         let message = error.to_string();
+        assert!(message.contains("graphql"), "{message}");
         assert!(
-            message.contains("docker") && message.contains("rbs add"),
-            "le message ne dit pas comment obtenir la feature : {message}"
+            message.contains("jobs"),
+            "la liste doit être complète : {message}"
         );
         assert!(
-            !parent.path().join("mon-api").exists(),
-            "un projet a été créé malgré l'échec"
+            !parent.path().join("demo").exists(),
+            "rien ne doit être écrit"
         );
     }
 
+    /// `jobs` était refusé par une liste qui l'avait oublié, alors que `rbs add jobs`
+    /// fonctionnait.
     #[test]
-    fn every_feature_add_installs_is_known_at_creation() {
-        // Les deux listes se sont désynchronisées une fois : `auth` livrée par `add`,
-        // et refusée ici comme si elle n'existait pas.
-        for feature in ["docker", "ci", "auth"] {
-            let parent = parent();
-            let mut options = options("mon-api");
-            options.features = vec![feature.to_owned()];
+    fn every_embedded_feature_is_accepted_by_name() {
+        for feature in crate::templates::feature_names(None) {
+            let parent = TempDir::new().expect("répertoire temporaire créable");
 
-            let error = create(&options, parent.path())
-                .expect_err("`--with` n'installe aucune feature à la création");
-            let message = error.to_string();
-
-            assert!(
-                message.contains(&format!("rbs add {feature}")),
-                "le message ne renvoie pas vers `rbs add {feature}` : {message}"
-            );
-            assert!(
-                !message.contains("n'est pas une feature rbs"),
-                "`{feature}` est traitée comme inconnue : {message}"
-            );
+            create(
+                &Options {
+                    name: "demo".to_string(),
+                    database_url: "postgres://rbs:rbs@localhost:5432/demo".to_string(),
+                    database: Database::Postgres,
+                    features: vec![feature.clone()],
+                    core_path: None,
+                    template_dir: None,
+                },
+                parent.path(),
+            )
+            .unwrap_or_else(|error| panic!("`{feature}` doit s'installer : {error}"));
         }
     }
 
     #[test]
-    fn the_pointer_to_add_does_not_pretend_the_command_is_missing() {
-        let parent = parent();
-        let mut options = options("mon-api");
-        options.features = vec!["auth".to_owned()];
+    fn a_requested_feature_is_actually_installed() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo".to_string(),
+                database: Database::Postgres,
+                features: vec!["auth".to_string()],
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
 
-        let error = create(&options, parent.path()).expect_err("`--with` n'installe rien");
+        assert!(project.root.join("src/auth/service.rs").is_file());
 
-        // `add` expose les trois features depuis le lot I. Le message qui annonçait le
-        // contraire envoyait le lecteur attendre une commande déjà livrée.
-        assert!(
-            !error.to_string().contains("n'expose pas"),
-            "le message dit encore qu'`add` n'expose pas la feature : {error}"
+        let main = fs::read_to_string(project.root.join("src/main.rs")).expect("main lisible");
+        assert!(main.contains("mod auth;"), "{main}");
+
+        let manifest = fs::read_to_string(project.root.join("Cargo.toml")).expect("manifeste");
+        assert!(manifest.contains("\"auth\""), "{manifest}");
+
+        assert_eq!(project.installed.len(), 1);
+        assert_eq!(project.installed[0].name, "auth");
+        assert!(project.installed[0].migration);
+    }
+
+    /// L'ordre de frappe ne doit pas décider du contenu : deux `--with` équivalents
+    /// produisent deux projets identiques.
+    #[test]
+    fn the_install_order_does_not_depend_on_the_typing_order() {
+        let rendu = |features: Vec<String>| {
+            let parent = TempDir::new().expect("répertoire temporaire créable");
+            let project = create(
+                &Options {
+                    name: "demo".to_string(),
+                    database_url: "postgres://rbs:rbs@localhost:5432/demo".to_string(),
+                    database: Database::Postgres,
+                    features,
+                    core_path: None,
+                    template_dir: None,
+                },
+                parent.path(),
+            )
+            .expect("le projet doit se créer");
+
+            let main = fs::read_to_string(project.root.join("src/main.rs")).expect("main");
+            let compose =
+                fs::read_to_string(project.root.join("docker-compose.yml")).expect("compose");
+            (main, compose)
+        };
+
+        assert_eq!(
+            rendu(vec!["redis".into(), "mail".into()]),
+            rendu(vec!["mail".into(), "redis".into()])
         );
     }
 
     #[test]
-    fn an_unknown_feature_is_not_confused_with_an_upcoming_one() {
-        let parent = parent();
-        let mut options = options("mon-api");
-        options.features = vec!["kubernetes".to_owned()];
+    fn a_failed_installation_leaves_no_project_behind() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let directory = TempDir::new().expect("répertoire temporaire créable");
+        // Un fragment vide : son manifeste est illisible, l'installation échoue.
+        fs::create_dir(directory.path().join("cassee")).expect("répertoire créable");
+        fs::write(
+            directory.path().join("cassee/feature.toml"),
+            "pas du toml [",
+        )
+        .expect("écriture possible");
 
-        let error = create(&options, parent.path()).expect_err("`kubernetes` n'existe pas");
+        let error = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo".to_string(),
+                database: Database::Postgres,
+                features: vec!["cassee".to_string()],
+                core_path: None,
+                template_dir: Some(directory.path().to_path_buf()),
+            },
+            parent.path(),
+        )
+        .expect_err("le fragment est cassé");
 
-        let message = error.to_string();
+        assert!(error.to_string().contains("cassee"), "{error}");
         assert!(
-            message.contains("kubernetes") && message.contains("docker"),
-            "le message ne nomme pas les features existantes : {message}"
+            !parent.path().join("demo").exists(),
+            "le projet à moitié installé ne doit pas subsister"
         );
     }
 

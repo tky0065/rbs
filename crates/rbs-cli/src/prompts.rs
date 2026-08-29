@@ -7,9 +7,6 @@ use crate::database::Database;
 /// Nom retenu quand ni le flag ni la question ne l'ont fixé.
 const NOM_DEFAUT: &str = "mon-api";
 
-/// Features proposées à la création. Les autres arrivent en v0.2.
-const FEATURES_DISPONIBLES: &[&str] = &["docker", "ci"];
-
 /// Les réponses aux trois questions de `rbs new`, d'où qu'elles viennent.
 #[derive(Debug, PartialEq)]
 pub struct ProjectOptions {
@@ -53,7 +50,7 @@ impl std::error::Error for PromptError {}
 trait Questions {
     fn name(&self, defaut: &str) -> Result<String, PromptError>;
     fn database_url(&self, database: Database, defaut: &str) -> Result<String, PromptError>;
-    fn features(&self, disponibles: &[&str]) -> Result<Vec<String>, PromptError>;
+    fn features(&self, disponibles: &[String]) -> Result<Vec<String>, PromptError>;
 }
 
 /// Les questions telles que l'utilisateur les voit.
@@ -78,13 +75,12 @@ impl Questions for Interactive {
         champ.prompt().map_err(translate)
     }
 
-    fn features(&self, disponibles: &[&str]) -> Result<Vec<String>, PromptError> {
+    fn features(&self, disponibles: &[String]) -> Result<Vec<String>, PromptError> {
         MultiSelect::new("Features à installer ?", disponibles.to_vec())
             .with_help_message(
                 "espace pour cocher, entrée pour valider — `rbs add` en ajoute plus tard",
             )
             .prompt()
-            .map(|choisies| choisies.into_iter().map(str::to_string).collect())
             .map_err(translate)
     }
 }
@@ -125,9 +121,18 @@ pub fn resolve(
     database_url: Option<String>,
     database: Database,
     features: Option<Vec<String>>,
+    disponibles: &[String],
     yes: bool,
 ) -> Result<ProjectOptions, PromptError> {
-    resolve_with(&Interactive, name, database_url, database, features, yes)
+    resolve_with(
+        &Interactive,
+        name,
+        database_url,
+        database,
+        features,
+        disponibles,
+        yes,
+    )
 }
 
 /// `yes` court-circuite avant toute question : la résolution devient purement
@@ -139,6 +144,7 @@ fn resolve_with<Q: Questions>(
     database_url: Option<String>,
     database: Database,
     features: Option<Vec<String>>,
+    disponibles: &[String],
     yes: bool,
 ) -> Result<ProjectOptions, PromptError> {
     let name = match name {
@@ -157,7 +163,7 @@ fn resolve_with<Q: Questions>(
     let features = match features {
         Some(features) => features,
         None if yes => Vec::new(),
-        None => questions.features(FEATURES_DISPONIBLES)?,
+        None => questions.features(disponibles)?,
     };
 
     Ok(ProjectOptions {
@@ -177,11 +183,18 @@ mod tests {
     #[derive(Default)]
     struct Spy {
         written: RefCell<Vec<&'static str>>,
+        /// Ce que la question « features » a reçu à proposer, pour prouver qu'elle
+        /// reçoit bien la liste dérivée des fragments et non une liste écrite à la main.
+        features_recues: RefCell<Vec<String>>,
     }
 
     impl Spy {
         fn written(&self) -> Vec<&'static str> {
             self.written.borrow().clone()
+        }
+
+        fn features_proposees(&self) -> Vec<String> {
+            self.features_recues.borrow().clone()
         }
     }
 
@@ -196,17 +209,56 @@ mod tests {
             Ok("postgres://repondu".to_string())
         }
 
-        fn features(&self, _disponibles: &[&str]) -> Result<Vec<String>, PromptError> {
+        fn features(&self, disponibles: &[String]) -> Result<Vec<String>, PromptError> {
             self.written.borrow_mut().push("features");
+            *self.features_recues.borrow_mut() = disponibles.to_vec();
             Ok(vec!["repondu".to_string()])
         }
+    }
+
+    /// Une liste minimale pour les tests dont l'assertion ne porte pas sur son contenu.
+    fn disponibles() -> Vec<String> {
+        vec!["docker".to_string(), "ci".to_string()]
+    }
+
+    /// Une liste écrite à la main se désynchronise : celle-ci se dérive des fragments
+    /// que le binaire embarque.
+    #[test]
+    fn the_question_offers_every_embedded_feature() {
+        let spy = Spy::default();
+
+        resolve_with(
+            &spy,
+            Some("demo".into()),
+            Some("postgres://x".into()),
+            Database::Postgres,
+            None,
+            &crate::templates::feature_names(None),
+            false,
+        )
+        .expect("les questions doivent aboutir");
+
+        assert_eq!(
+            spy.features_proposees(),
+            crate::templates::feature_names(None),
+            "la question doit proposer les sept fragments"
+        );
     }
 
     #[test]
     fn with_yes_resolution_returns_the_defaults_without_asking() {
         let espion = Spy::default();
 
-        let options = resolve_with(&espion, None, None, Database::default(), None, true).unwrap();
+        let options = resolve_with(
+            &espion,
+            None,
+            None,
+            Database::default(),
+            None,
+            &disponibles(),
+            true,
+        )
+        .unwrap();
 
         assert!(
             espion.written().is_empty(),
@@ -231,6 +283,7 @@ mod tests {
             None,
             Database::default(),
             None,
+            &disponibles(),
             true,
         )
         .unwrap();
@@ -254,6 +307,7 @@ mod tests {
             Some("postgres://ailleurs:5432/db".to_string()),
             Database::default(),
             None,
+            &disponibles(),
             true,
         )
         .unwrap();
@@ -272,6 +326,7 @@ mod tests {
             None,
             Database::default(),
             Some(vec!["docker".to_string(), "ci".to_string()]),
+            &disponibles(),
             true,
         )
         .unwrap();
@@ -284,7 +339,16 @@ mod tests {
     fn without_yes_each_missing_value_becomes_a_question() {
         let espion = Spy::default();
 
-        let options = resolve_with(&espion, None, None, Database::default(), None, false).unwrap();
+        let options = resolve_with(
+            &espion,
+            None,
+            None,
+            Database::default(),
+            None,
+            &disponibles(),
+            false,
+        )
+        .unwrap();
 
         assert_eq!(espion.written(), ["name", "database_url", "features"]);
         assert_eq!(options.name, "repondu");
@@ -302,6 +366,7 @@ mod tests {
             None,
             Database::default(),
             None,
+            &disponibles(),
             false,
         )
         .unwrap();
