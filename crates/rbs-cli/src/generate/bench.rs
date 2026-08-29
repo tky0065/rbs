@@ -20,10 +20,12 @@ use crate::anchors::{self, Anchor};
 
 use super::mount::{self, Mount};
 
-/// PostgreSQL 18 en conteneur, et l'URL de connexion qui y mène.
+/// PostgreSQL en conteneur, et l'URL de connexion qui y mène.
 ///
-/// La version n'est pas négociable : `uuidv7()` n'est native qu'à partir de la 18, et la
-/// spec assume ce plancher plutôt qu'une fonction PL/pgSQL de compatibilité.
+/// La version tenue ici est délibérément au-dessus du plancher que `doctor` fait
+/// respecter, sans l'être de beaucoup : l'identifiant v7 étant posé par le modèle, aucun
+/// moteur n'a plus à connaître `uuidv7()`, et le banc gagne à tourner sur une version que
+/// les projets rencontrent.
 pub(crate) struct TestDatabase {
     _conteneur: Container<GenericImage>,
     url: String,
