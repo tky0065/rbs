@@ -47,7 +47,7 @@ Un gabarit d'exemple, `templates/mail/bienvenue.html`, l'accompagne — un point
 qui fonctionne, et que vous êtes censé remplacer. La ligne `docker-compose.yml` ci-dessus,
 c'est un service `mailpit` sans profil : `docker compose up -d`, tel quel, celui que lance
 [`rbs dev`](../cli/dev.md), le monte avec la base, et son interface web répond sur
-`:8025`. Rien à démarrer à la main.
+`:8025`.
 
 ## Configuration
 

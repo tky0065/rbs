@@ -47,8 +47,8 @@ Options:
 | `ci` | `.github/workflows/ci.yml` | `git push` |
 | `auth` | huit fichiers sous `src/auth/`, une migration, et quatre fichiers du projet modifiés | recopier le secret, puis `rbs migrate up` |
 | `jobs` | sept fichiers sous `src/jobs/`, une migration, et une section `[jobs]` de configuration | `rbs migrate up`, puis inscrire vos jobs dans `src/jobs/mod.rs` |
-| `redis` | trois fichiers sous `src/cache/`, et un service `redis` inséré dans le compose du projet | déjà démarré, une fois `docker compose up -d` fait |
-| `mail` | cinq fichiers sous `src/mail/`, un gabarit d'exemple, et un service `mailpit` inséré dans le compose du projet | déjà démarré, une fois `docker compose up -d` fait |
+| `redis` | trois fichiers sous `src/cache/`, et un service `redis` inséré dans le compose du projet | le compose le porte déjà — `docker compose up -d` le démarre |
+| `mail` | cinq fichiers sous `src/mail/`, un gabarit d'exemple, et un service `mailpit` inséré dans le compose du projet | régler `[mail]` dans `config/default.toml` — un SMTP local par défaut |
 | `storage` | quatre fichiers sous `src/storage/` | ignorer `./storage`, ou passer le backend à `s3` |
 
 Les trois dernières sont les briques des guides [cache](../guides/cache.md),
@@ -73,13 +73,12 @@ plan pour /private/tmp/rbs-demo/blog
   4 fichiers à écrire
 ✓ docker installée — 2 fichiers
 
-  docker compose up --build
+  docker compose --profile app up --build
 ```
 
-La suite nomme ce que `docker compose up` démarre déjà sans lui — c'est le profil qui
-ajoute `api` et `migrate` : `docker compose --profile app up --build` construit l'image et
-lance l'ensemble, `docker compose up -d` seul laisse l'infrastructure tranquille, ce dont
-[`rbs dev`](./dev.md) se sert.
+`migrate` et `api` portent `profiles: ["app"]` : c'est le profil qui les bâtit et les
+démarre. `docker compose up -d` seul — ce que [`rbs dev`](./dev.md) lance — laisse
+l'infrastructure tranquille.
 
 Un projet sans compose où insérer — SQLite, ou créé avant rbs 1.1.0 — en reçoit un entier :
 
@@ -97,7 +96,7 @@ plan pour /private/tmp/rbs-demo/depot
   4 fichiers à écrire
 ✓ docker installée — 3 fichiers
 
-  docker compose up --build
+  docker compose --profile app up --build
 ```
 
 Un compose réécrit à la main qui a perdu son ancre `# <rbs:services>` n'est pas touché :
@@ -206,7 +205,7 @@ plan pour /private/tmp/rbs-demo/blog
   1 fichier à écrire, 3 inchangés
 ✓ docker installée — 2 fichiers
 
-  docker compose up --build
+  docker compose --profile app up --build
 ```
 
 Les marques du plan se lisent : `+` créé, `~` modifié, `·` inchangé, `!` en conflit.
@@ -259,7 +258,7 @@ plan pour /private/tmp/rbs-demo/blog
   1 fichier à écrire, 1 en conflit
 ✓ docker installée — 1 fichier
 
-  docker compose up --build
+  docker compose --profile app up --build
 
 $ cat Dockerfile
 FROM scratch

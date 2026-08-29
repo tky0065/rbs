@@ -46,8 +46,8 @@ Options:
 | `ci` | `.github/workflows/ci.yml` | `git push` |
 | `auth` | eight files under `src/auth/`, one migration, and edits to four project files | copy the secret, then `rbs migrate up` |
 | `jobs` | seven files under `src/jobs/`, one migration, and a `[jobs]` config section | `rbs migrate up`, then register your jobs in `src/jobs/mod.rs` |
-| `redis` | three files under `src/cache/`, and a `redis` service inserted into the project's compose | already running, once `docker compose up -d` is |
-| `mail` | five files under `src/mail/`, a sample template, and a `mailpit` service inserted into the project's compose | already running, once `docker compose up -d` is |
+| `redis` | three files under `src/cache/`, and a `redis` service inserted into the project's compose | the compose already carries it — `docker compose up -d` starts it |
+| `mail` | five files under `src/mail/`, a sample template, and a `mailpit` service inserted into the project's compose | set `[mail]` in `config/default.toml` — a local SMTP by default |
 | `storage` | four files under `src/storage/` | ignore `./storage`, or switch the backend to `s3` |
 
 The last three are the bricks of the [cache](../guides/cache.md),
@@ -72,13 +72,12 @@ plan pour /private/tmp/rbs-demo/blog
   4 fichiers à écrire
 ✓ docker installée — 2 fichiers
 
-  docker compose up --build
+  docker compose --profile app up --build
 ```
 
-The hint names what `docker compose up` already starts without it — the profile is what
-adds `api` and `migrate`: `docker compose --profile app up --build` builds the image and
-runs the whole thing, `docker compose up -d` on its own leaves the infrastructure alone,
-which is what [`rbs dev`](./dev.md) relies on.
+`migrate` and `api` carry `profiles: ["app"]`: the profile is what builds and starts them.
+`docker compose up -d` on its own — the one [`rbs dev`](./dev.md) runs — leaves the
+infrastructure alone.
 
 A project with no compose to insert into — SQLite, or created before rbs 1.1.0 — gets a
 whole one instead:
@@ -97,7 +96,7 @@ plan pour /private/tmp/rbs-demo/depot
   4 fichiers à écrire
 ✓ docker installée — 3 fichiers
 
-  docker compose up --build
+  docker compose --profile app up --build
 ```
 
 A compose edited by hand that has lost its `# <rbs:services>` anchor is not touched — the
@@ -205,7 +204,7 @@ plan pour /private/tmp/rbs-demo/blog
   1 fichier à écrire, 3 inchangés
 ✓ docker installée — 2 fichiers
 
-  docker compose up --build
+  docker compose --profile app up --build
 ```
 
 Markers in the plan read: `+` created, `~` modified, `·` unchanged, `!` conflicting.
@@ -258,7 +257,7 @@ plan pour /private/tmp/rbs-demo/blog
   1 fichier à écrire, 1 en conflit
 ✓ docker installée — 1 fichier
 
-  docker compose up --build
+  docker compose --profile app up --build
 
 $ cat Dockerfile
 FROM scratch

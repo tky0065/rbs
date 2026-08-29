@@ -46,7 +46,7 @@ A sample template, `templates/mail/bienvenue.html`, comes with it — a working 
 point you are meant to replace. The `docker-compose.yml` line above is a `mailpit`
 service, no profile attached: `docker compose up -d` — plain, the one [`rbs
 dev`](../cli/dev.md) runs — brings it up alongside the database, and its web UI answers on
-`:8025`. Nothing to start by hand.
+`:8025`.
 
 ## Configuration
 

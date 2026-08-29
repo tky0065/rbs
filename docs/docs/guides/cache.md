@@ -34,12 +34,12 @@ plan pour /private/tmp/rbs-demo/depot
   8 fichiers à écrire
 ✓ redis installée — 3 fichiers
 
-  un Redis doit écouter à l'URL de la section [cache] de config/default.toml
+  le compose du projet porte déjà un service redis — docker compose up -d le démarre ; sans compose, faites écouter un Redis à l'URL de [cache] de config/default.toml
 ```
 
-The hint is already met: the `docker-compose.yml` line above is `redis` inserted into the
-project's compose, no profile attached, so `docker compose up -d` — plain, the one [`rbs
-dev`](../cli/dev.md) runs — brings it up alongside the database. Nothing to start by hand.
+The `docker-compose.yml` line above is `redis` inserted into the project's compose, no
+profile attached, so `docker compose up -d` — plain, the one [`rbs dev`](../cli/dev.md)
+runs — brings it up alongside the database.
 
 The feature is named `redis` and the module is named `cache`: the first names the crate
 the manifest declares, the second names what your code calls. [`rbs doctor`](../cli/doctor.md)
