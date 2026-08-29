@@ -16,10 +16,6 @@ use super::Check;
 
 const TITRE: &str = "base";
 
-/// Ports supposés quand l'URL n'en donne pas.
-const PORT_POSTGRES: u16 = 5432;
-const PORT_MYSQL: u16 = 3306;
-
 /// Délai au-delà duquel l'hôte est tenu pour injoignable.
 const DELAI: Duration = Duration::from_secs(3);
 
@@ -58,7 +54,7 @@ pub(crate) fn check(root: &Path) -> Check {
 
     let database = database_of(root);
 
-    let ou = match joignable(database, &url) {
+    let ou = match joignable(root, database, &url) {
         Ok(ou) => ou,
         Err(echec) => return echec,
     };
@@ -163,7 +159,7 @@ fn database_of(root: &Path) -> Database {
 ///
 /// SQLite n'est pas sondé par le réseau : ce qui le rend joignable est un fichier
 /// ouvrable, ou un répertoire où il puisse naître — `mode=rwc` le crée au démarrage.
-fn joignable(database: Database, url: &str) -> Result<String, Check> {
+fn joignable(root: &Path, database: Database, url: &str) -> Result<String, Check> {
     if database == Database::Sqlite {
         let Some(chemin) = chemin_sqlite(url) else {
             return Err(Check::failed(
@@ -199,10 +195,19 @@ fn joignable(database: Database, url: &str) -> Result<String, Check> {
     };
 
     if !reachable(&hote, port) {
+        // Un projet sans compose n'a rien à démarrer par docker : lui suggérer la
+        // commande enverrait sur une piste qui n'existe pas.
+        let remedy = if root.join("docker-compose.yml").is_file() {
+            "lancez `docker compose up -d` à la racine du projet, ou corrigez l'URL du .env"
+                .to_string()
+        } else {
+            format!("démarrez {database}, ou corrigez l'URL du .env")
+        };
+
         return Err(Check::failed(
             TITRE,
             format!("rien ne répond sur {hote}:{port}"),
-            format!("démarrez {database}, ou corrigez l'URL du .env"),
+            remedy,
         ));
     }
 
@@ -245,32 +250,8 @@ fn version(root: &Path, variables: &[(String, String)]) -> Result<String, String
 }
 
 /// Découpe une URL en hôte et port, quel que soit celui des deux moteurs à serveur.
-///
-/// Le dernier `@` sépare : un mot de passe a le droit d'en contenir un.
 pub(crate) fn host_and_port(url: &str) -> Option<(String, u16)> {
-    let (reste, defaut) = url
-        .strip_prefix("postgres://")
-        .or_else(|| url.strip_prefix("postgresql://"))
-        .map(|reste| (reste, PORT_POSTGRES))
-        .or_else(|| {
-            url.strip_prefix("mysql://")
-                .map(|reste| (reste, PORT_MYSQL))
-        })?;
-
-    let apres_identifiants = match reste.rsplit_once('@') {
-        Some((_, after)) => after,
-        None => reste,
-    };
-
-    let autorite = apres_identifiants
-        .split(['/', '?'])
-        .next()
-        .filter(|autorite| !autorite.is_empty())?;
-
-    match autorite.rsplit_once(':') {
-        Some((hote, port)) => Some((hote.to_string(), port.parse().ok()?)),
-        None => Some((autorite.to_string(), defaut)),
-    }
+    crate::url::parse(url).map(|connexion| (connexion.host, connexion.port))
 }
 
 /// Une version comparable : majeure et mineure, quelle que soit la forme rendue.
@@ -368,7 +349,7 @@ mod tests {
     fn sans_port_celui_de_postgresql_est_supposé() {
         assert_eq!(
             host_and_port("postgres://rbs:rbs@db.interne/demo"),
-            Some(("db.interne".to_string(), PORT_POSTGRES))
+            Some(("db.interne".to_string(), 5432))
         );
     }
 
@@ -384,7 +365,7 @@ mod tests {
     fn a_url_without_credentials_stays_readable() {
         assert_eq!(
             host_and_port("postgres://localhost/demo"),
-            Some(("localhost".to_string(), PORT_POSTGRES))
+            Some(("localhost".to_string(), 5432))
         );
     }
 
@@ -392,7 +373,7 @@ mod tests {
     fn a_mysql_url_reads_back_with_its_own_default_port() {
         assert_eq!(
             host_and_port("mysql://root:root@db.interne/demo"),
-            Some(("db.interne".to_string(), PORT_MYSQL))
+            Some(("db.interne".to_string(), 3306))
         );
     }
 
@@ -517,6 +498,30 @@ mod tests {
         assert_eq!(check.state, State::Echec);
         assert!(check.detail.contains("127.0.0.1:1"));
         assert!(check.remedy.is_some());
+    }
+
+    /// Un projet dont la base a un serveur porte un compose : le remède nomme la
+    /// commande plutôt que de renvoyer vers un moteur à installer soi-même.
+    #[test]
+    fn the_remedy_names_the_project_compose_when_it_has_one() {
+        let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
+
+        let remedy = check(&root).remedy.expect("un échec porte son remède");
+
+        assert!(remedy.contains("docker compose up -d"), "{remedy}");
+    }
+
+    /// Sans compose, la commande docker n'existe pas pour ce projet : le remède retombe
+    /// sur le nom du moteur plutôt que de suggérer un fichier absent.
+    #[test]
+    fn the_remedy_falls_back_to_the_engine_without_a_compose() {
+        let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
+        std::fs::remove_file(root.join("docker-compose.yml")).expect("le compose doit exister");
+
+        let remedy = check(&root).remedy.expect("un échec porte son remède");
+
+        assert!(!remedy.contains("docker compose"), "{remedy}");
+        assert!(remedy.contains("démarrez"), "{remedy}");
     }
 
     #[test]

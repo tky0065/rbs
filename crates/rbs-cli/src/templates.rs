@@ -133,7 +133,7 @@ impl Source {
 }
 
 /// Les features dont le binaire porte un fragment, triées.
-fn embedded_names() -> Vec<String> {
+pub(crate) fn embedded_names() -> Vec<String> {
     let mut names: Vec<String> = FEATURES
         .dirs()
         .filter_map(|dir| dir.path().file_name())
@@ -158,6 +158,18 @@ fn names_on_disk(directory: &Path) -> Vec<String> {
 
     names.sort();
     names
+}
+
+/// Les features installables, celles du `--template-dir` s'il en désigne un.
+///
+/// Une seule liste pour la question de `rbs new`, la validation de `--with` et le message
+/// qui énumère les features connues : trois listes écrites à la main avaient divergé, et
+/// `jobs` manquait à celle qui décidait.
+pub(crate) fn feature_names(directory: Option<&Path>) -> Vec<String> {
+    match directory {
+        Some(directory) => names_on_disk(directory),
+        None => embedded_names(),
+    }
 }
 
 /// Rend une liste de features lisible dans un message d'erreur.
@@ -268,13 +280,17 @@ mod tests {
     const RACINE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/project");
 
     /// Les chemins de sortie attendus du squelette, tels que `rbs new` les écrira.
-    const DESTINATIONS: [&str; 16] = [
+    ///
+    /// `docker-compose.yml` en fait partie : la source les rend tous, et c'est `rbs new`
+    /// qui l'écarte pour un projet qui n'a rien à monter.
+    const DESTINATIONS: [&str; 17] = [
         ".env",
         ".env.example",
         ".gitignore",
         "Cargo.toml",
         "config/default.toml",
         "config/development.toml",
+        "docker-compose.yml",
         "migration/Cargo.toml",
         "migration/src/lib.rs",
         "migration/src/main.rs",
@@ -287,7 +303,7 @@ mod tests {
         "src/state.rs",
     ];
 
-    /// Contexte de rendu minimal : les cinq variables que `rbs new` fournira.
+    /// Contexte de rendu minimal : les variables que `rbs new` fournira.
     /// Le contexte que `new::render` construit, recopié ici.
     ///
     /// La divergence se voit : une variable ajoutée là-bas et oubliée ici fait tomber
@@ -305,6 +321,10 @@ mod tests {
             database => database.name(),
             sea_orm_feature => database.sea_orm_feature(),
             database_url_par_defaut => database.default_url("mon_api"),
+            database_user => "postgres",
+            database_password => "postgres",
+            database_name => "mon_api",
+            database_port => 5432,
         }
     }
 
@@ -375,7 +395,15 @@ mod tests {
     fn each_anchor_is_opened_then_closed_in_its_file() {
         for anchor in crate::anchors::ANCRES {
             let relatif = format!("{}.jinja", anchor.file);
-            let source = read(&Path::new(RACINE).join(&relatif));
+            let chemin = Path::new(RACINE).join(&relatif);
+
+            // Une ancre optionnelle peut vivre dans un fichier qu'un fragment dépose et
+            // que le squelette ne rend pas : il n'y a alors aucune template à contrôler.
+            if anchor.optional && !chemin.exists() {
+                continue;
+            }
+
+            let source = read(&chemin);
 
             let opening = anchor.opening();
             let closing = anchor.closing();
@@ -595,6 +623,10 @@ mod tests {
             database_a_un_serveur => database.a_un_serveur(),
             database_url_compose => database.compose_url("mon_api"),
             database_url_par_defaut => database.default_url("mon_api"),
+            database_user => "rbs",
+            database_password => "rbs",
+            database_name => "mon_api",
+            database_port => 5432u16,
         }
     }
 
@@ -729,20 +761,30 @@ mod tests {
         }
     }
 
+    /// Renversement assumé de la décision inverse : le compose ne publiait pas 5432
+    /// parce que l'API l'atteignait par le réseau du compose. Le compose du squelette
+    /// sert `cargo run` sur l'hôte, qui ne l'atteint que par un port publié.
     #[test]
-    fn the_docker_compose_publishes_only_the_api_port() {
-        // Publier 5432 fait échouer `docker compose up` sur toute machine portant déjà un
-        // PostgreSQL, et la base n'a pas à être jointe depuis l'hôte : l'API l'atteint par
-        // le réseau du compose, et `docker compose exec db psql` reste ouvert.
-        let source = read(&Path::new(RACINE_FEATURES).join("docker/docker-compose.yml.jinja"));
+    fn the_project_compose_publishes_the_database_port() {
+        let source = read(&Path::new(RACINE).join("docker-compose.yml.jinja"));
 
-        let publies: Vec<&str> = source
-            .lines()
-            .map(str::trim)
-            .filter(|line| line.starts_with("- \""))
-            .collect();
+        assert!(
+            source.contains("{@ database_port @}:5432"),
+            "le compose doit publier le port du .env :\n{source}"
+        );
+    }
 
-        assert_eq!(publies, ["- \"8080:8080\""], "ports publiés :\n{source}");
+    #[test]
+    fn the_project_compose_targets_the_latest_stable_postgres() {
+        // Le code généré ne réclame plus la 18 depuis que le modèle pose lui-même son
+        // identifiant : c'est un choix de défaut pour un projet neuf, non une exigence.
+        // Le test l'épingle pour que l'image ne vieillisse pas en silence.
+        let source = read(&Path::new(RACINE).join("docker-compose.yml.jinja"));
+
+        assert!(
+            source.contains("postgres:18"),
+            "le compose ne vise pas PostgreSQL 18 :\n{source}"
+        );
     }
 
     #[test]
@@ -864,16 +906,106 @@ mod tests {
         );
     }
 
-    #[test]
-    fn the_docker_compose_targets_the_latest_stable_postgres() {
-        // Le code généré ne réclame plus la 18 depuis que le modèle pose lui-même son
-        // identifiant : c'est un choix de défaut pour un projet neuf, non une exigence.
-        // Le test l'épingle pour que l'image ne vieillisse pas en silence.
-        let source = read(&Path::new(RACINE_FEATURES).join("docker/docker-compose.yml.jinja"));
+    /// Une balise Jinja de contrôle (`{%- if … %}`, `{%- endif %}`) s'écrit au ras de la
+    /// marge par convention du dépôt, quelle que soit la profondeur YAML environnante :
+    /// elle ne porte donc aucune indentation à retirer, dans aucun des deux fichiers.
+    fn est_balise_jinja(line: &str) -> bool {
+        line.trim_start().starts_with("{%")
+    }
 
-        assert!(
-            source.contains("postgres:18"),
-            "le compose ne vise pas PostgreSQL 18 :\n{source}"
+    /// Retire l'indentation commune à toutes les lignes non vides d'un bloc, pour comparer
+    /// le contenu d'une ancre au niveau racine d'un manifeste à son équivalent imbriqué
+    /// sous `services:` dans un fichier YAML — modulo l'indentation, sans quoi les deux
+    /// diffèreraient sur chaque ligne plutôt que sur celle qui a vraiment divergé. Les
+    /// balises Jinja sont exclues du calcul et laissées à la marge : les compter ferait
+    /// tomber l'indentation mesurée à zéro, celle qu'elles portent réellement.
+    fn dedent(text: &str) -> String {
+        let indentation = text
+            .lines()
+            .filter(|line| !line.trim().is_empty() && !est_balise_jinja(line))
+            .map(|line| line.len() - line.trim_start().len())
+            .min()
+            .unwrap_or(0);
+
+        text.lines()
+            .map(|line| {
+                if line.trim().is_empty() || est_balise_jinja(line) {
+                    line.trim_start()
+                } else {
+                    &line[indentation.min(line.len())..]
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            .trim()
+            .to_string()
+    }
+
+    /// Le bloc `migrate`/`api` existe en deux exemplaires qui doivent rester identiques au
+    /// caractère près : le `content` de l'ancre `services` du manifeste du fragment
+    /// `docker`, inséré dans un compose qui existe déjà, et le corps de la même ancre dans
+    /// le compose de repli qu'`if_absent` écrit pour un projet qui n'en a pas encore.
+    ///
+    /// Une seule ligne désynchronisée (`restart: "no"` devenu `restart: always` d'un seul
+    /// côté, mesuré en relecture) fait que la ligne survivante s'attache au mauvais
+    /// service dans le fichier fraîchement écrit, sans qu'aucune commande n'échoue et sans
+    /// qu'aucun autre test ne le remarque : c'est ce test qui doit mordre à sa place.
+    #[test]
+    fn the_services_anchor_content_matches_the_fallback_compose_body() {
+        let manifeste = read(&Path::new(RACINE_FEATURES).join("docker/feature.toml"));
+        let manifest = crate::manifest::read(&manifeste, "docker/feature.toml")
+            .expect("le manifeste du fragment docker doit se lire");
+
+        let content = &manifest
+            .anchors
+            .iter()
+            .find(|insertion| insertion.anchor == "services")
+            .expect("le fragment docker déclare l'ancre services")
+            .content;
+
+        let compose = read(&Path::new(RACINE_FEATURES).join("docker/docker-compose.yml.jinja"));
+        let corps = crate::anchors::body(&compose, crate::anchors::SERVICES)
+            .expect("le compose de repli doit porter l'ancre services");
+
+        assert_eq!(
+            dedent(content),
+            dedent(corps),
+            "le contenu de l'ancre du manifeste diverge du corps du compose de repli"
+        );
+    }
+
+    /// Début et fin du service `db`, identiques dans le corps de la fonction de test elle
+    /// aussi : c'est la même chaîne dont la présence est vérifiée dans les deux fichiers.
+    const DEBUT_SERVICE_DB: &str = "\n  db:\n";
+    const FIN_SERVICE_DB: &str = "      retries: 30\n";
+
+    /// Isole le service `db`, de sa déclaration à la fin de son healthcheck.
+    fn service_db(source: &str) -> &str {
+        let debut = source
+            .find(DEBUT_SERVICE_DB)
+            .expect("le service db doit être présent")
+            + 1;
+        let fin_relative = source[debut..]
+            .find(FIN_SERVICE_DB)
+            .expect("le healthcheck du service db doit être présent");
+
+        &source[debut..debut + fin_relative + FIN_SERVICE_DB.len()]
+    }
+
+    /// Le service `db` est dupliqué entre le compose du squelette — écrit quand un projet
+    /// a de quoi le rendre utile — et le compose de repli du fragment `docker` — écrit pour
+    /// un projet qui n'a pas encore de compose. Une divergence entre les deux serait plus
+    /// douce que celle de `migrate`/`api` (les deux composent des fichiers valides), mais
+    /// romprait la même promesse : que les deux chemins d'écriture rendent le même service.
+    #[test]
+    fn the_db_service_matches_between_the_skeleton_and_the_fallback_compose() {
+        let squelette = read(&Path::new(RACINE).join("docker-compose.yml.jinja"));
+        let repli = read(&Path::new(RACINE_FEATURES).join("docker/docker-compose.yml.jinja"));
+
+        assert_eq!(
+            service_db(&squelette),
+            service_db(&repli),
+            "le service db diverge entre le compose du squelette et celui du fragment docker"
         );
     }
 }

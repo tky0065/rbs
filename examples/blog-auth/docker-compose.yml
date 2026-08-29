@@ -1,0 +1,30 @@
+name: blog-auth
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: rbs
+      POSTGRES_PASSWORD: rbs
+      POSTGRES_DB: blog_auth
+    # Le port publié est celui du .env : c'est ce qui rend `docker compose up -d` suivi
+    # de `cargo run` vrai sans recopier une valeur d'un fichier à l'autre. Le conflit
+    # avec un PostgreSQL déjà installé sur la machine se règle en changeant les deux.
+    ports:
+      - "5432:5432"
+    # PostgreSQL 18 place ses données sous /var/lib/postgresql/18/docker : c'est le
+    # répertoire parent qui se monte, et non le /var/lib/postgresql/data des versions
+    # précédentes, qui ne persisterait rien.
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rbs -d blog_auth"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # <rbs:services>
+  # </rbs:services>
+
+volumes:
+  pgdata:

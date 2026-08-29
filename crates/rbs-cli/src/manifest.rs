@@ -44,6 +44,12 @@ pub(crate) struct Description {
 pub(crate) struct DeclaredFile {
     pub source: String,
     pub destination: String,
+    /// Le fichier n'est déposé que si le projet ne le porte pas déjà.
+    ///
+    /// Réservé aux fichiers qu'un fragment étend d'ordinaire par une ancre : sans ce
+    /// repli, un projet antérieur à l'ancre n'aurait aucun moyen d'obtenir le fichier.
+    #[serde(default)]
+    pub if_absent: bool,
 }
 
 #[derive(Debug, Deserialize)]

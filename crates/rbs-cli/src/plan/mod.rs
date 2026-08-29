@@ -134,9 +134,9 @@ pub(crate) struct Builder {
 
 impl Builder {
     /// Ouvre un plan vide sur le projet enraciné en `root`.
-    pub fn new(root: PathBuf) -> Self {
+    pub fn new(root: impl Into<PathBuf>) -> Self {
         Self {
-            root,
+            root: root.into(),
             actions: Vec::new(),
             files: Vec::new(),
         }
@@ -308,6 +308,11 @@ impl Builder {
         }
     }
 
+    /// Le projet porte-t-il déjà ce fichier, sur le disque ou par une action projetée ?
+    pub fn exists(&self, path: &str) -> Result<bool, Error> {
+        Ok(self.states(path)?.courant.is_some())
+    }
+
     /// Une action précédente a-t-elle déjà calculé le contenu final de ce fichier ?
     fn projected(&self, path: &str) -> bool {
         self.files.iter().any(|file| file.path == path)
@@ -401,6 +406,16 @@ mod tests {
     fn with_router(project: &TempDir, source: &str) {
         fs::create_dir_all(project.path().join("src")).expect("le répertoire se crée");
         fs::write(project.path().join("src/router.rs"), source).expect("l'écriture aboutit");
+    }
+
+    #[test]
+    fn a_file_written_on_disk_is_reported_as_existing() {
+        let root = TempDir::new().expect("répertoire temporaire créable");
+        fs::write(root.path().join("present.yml"), "services:\n").expect("écriture possible");
+        let builder = Builder::new(root.path());
+
+        assert!(builder.exists("present.yml").expect("lecture possible"));
+        assert!(!builder.exists("absent.yml").expect("lecture possible"));
     }
 
     #[test]

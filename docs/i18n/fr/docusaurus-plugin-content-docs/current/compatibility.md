@@ -59,10 +59,11 @@ réponses OpenAPI. Leur forme est gelée plus étroitement que le reste, non moi
 
 C'est le périmètre qu'on oublie, et celui dont la perte fait le plus mal.
 
-À côté de votre code, un projet engendré porte deux choses que vous n'appelez jamais : neuf
-ancres en commentaires — `// <rbs:features>`, `// <rbs:routes>`, `// <rbs:openapi>`,
-`// <rbs:migration_modules>`, `// <rbs:migrations>`, `// <rbs:state_champs>`,
-`// <rbs:state_init>`, `// <rbs:startup>`, `// <rbs:seeds>` — et une section
+À côté de votre code, un projet engendré porte deux choses que vous n'appelez jamais : dix
+ancres en commentaires — neuf en Rust, `// <rbs:features>`, `// <rbs:routes>`,
+`// <rbs:openapi>`, `// <rbs:migration_modules>`, `// <rbs:migrations>`,
+`// <rbs:state_champs>`, `// <rbs:state_init>`, `// <rbs:startup>`, `// <rbs:seeds>`, plus
+une en YAML pour tout projet qui porte un compose, `# <rbs:services>` — et une section
 `[package.metadata.rbs]` dans `Cargo.toml`, qui consigne la version de rbs ayant engendré
 le projet, les features qui y sont installées et la base qu'il vise. Ni l'une ni l'autre
 n'est une API Rust. Une promesse de compatibilité écrite pour les seules API Rust
@@ -80,7 +81,7 @@ bloc à coller à la main — à chaque commande, indéfiniment.
 
 Le format est donc couvert exactement comme l'API Rust l'est. À l'intérieur de la 1.x :
 
-- les neuf noms d'ancres et leur syntaxe de commentaire ne changent pas, non plus que la
+- les dix noms d'ancres et leur syntaxe de commentaire ne changent pas, non plus que la
   règle voulant qu'une commande n'écrive rien quand son ancre manque ;
 - les clés de `[package.metadata.rbs]` gardent leur nom et leur sens. Une clé peut
   s'ajouter ; une clé absente se lit comme un défaut, jamais comme une erreur.
@@ -89,7 +90,8 @@ Ce qui n'est pas promis, c'est qu'un projet engendré en 0.4.0 porte déjà tout
 qu'une feature ultérieure réclame. Il ne les porte pas, et ne les portera jamais — des
 features neuves apportent des ancres neuves. Ce cas est prévu plutôt que subi : la commande
 signale l'ancre introuvable et affiche le bloc, et [`rbs doctor`](./cli/doctor.md) les
-vérifie toutes les neuf avant que rien n'aille mal.
+vérifie toutes les dix — neuf sur un projet sans compose pour en porter une dixième —
+avant que rien n'aille mal.
 
 ## Ce que la promesse laisse dehors
 

@@ -20,6 +20,7 @@ mod template;
 mod templates;
 mod ui;
 mod upgrade;
+mod url;
 
 use std::error::Error;
 use std::path::PathBuf;
@@ -160,7 +161,15 @@ fn create_project(
 ) -> Result<(), Box<dyn Error>> {
     // Un `--with` absent laisse la question ouverte ; un `--with` vide n'existe pas.
     let features = (!with.is_empty()).then_some(with);
-    let options = prompts::resolve(Some(name), database_url, database, features, yes)?;
+    let disponibles = templates::feature_names(template_dir.as_deref());
+    let options = prompts::resolve(
+        Some(name),
+        database_url,
+        database,
+        features,
+        &disponibles,
+        yes,
+    )?;
 
     let project = new::create(
         &new::Options {
@@ -184,9 +193,27 @@ fn create_project(
     if !project.depot_git {
         ui::warn("`git init` n'a pas abouti : le projet est complet, mais sans dépôt");
     }
-    ui::info(&format!(
-        "\n  cd {name}\n  cargo run          # la base visée est dans .env"
-    ));
+    for pose in &project.installed {
+        let migration = if pose.migration { ", 1 migration" } else { "" };
+        ui::info(&format!(
+            "  + {:<8} {}{migration}",
+            pose.name,
+            ui::files(pose.files)
+        ));
+    }
+    // `add` affiche ce conseil pour chaque feature qu'il installe ; `new` l'avalait,
+    // laissant par exemple `--with auth` démarrer un projet où `RBS_AUTH__SECRET` manque
+    // au `.env` sans que rien ne l'ait annoncé.
+    for suite in suites_installees(&project.installed) {
+        ui::info(&format!("\n  {suite}"));
+    }
+    let compose = project.root.join("docker-compose.yml").exists();
+    let demarrage = if compose {
+        "\n  docker compose up -d   # la base du .env, montée\n  cargo run              # ou `rbs dev`, qui enchaîne les deux"
+    } else {
+        "\n  cargo run          # la base visée est dans .env"
+    };
+    ui::info(&format!("\n  cd {name}{demarrage}"));
 
     Ok(())
 }
@@ -226,21 +253,39 @@ fn add(feature: String, force: bool, template_dir: Option<PathBuf>) -> Result<()
     Ok(())
 }
 
+/// Les conseils de suite des features que `new` vient d'installer, dans l'ordre
+/// d'installation.
+///
+/// `rbs new --with` passe par le même `install` qu'`rbs add` (`new::install`), mais
+/// n'appelait jamais `suite()` : le développeur perdait le seul avertissement qui compte
+/// pour `auth`, dont le projet ne démarre pas sans lui.
+fn suites_installees(installed: &[new::InstalledFeature]) -> Vec<&'static str> {
+    installed
+        .iter()
+        .filter_map(|pose| suite(&pose.name))
+        .collect()
+}
+
 /// Ce qu'il reste à faire de la main du développeur, une fois la feature posée.
 fn suite(feature: &str) -> Option<&'static str> {
     match feature {
-        "docker" => Some("docker compose up --build"),
+        // `migrate` et `api` portent `profiles: ["app"]` : sans ce flag, `docker compose
+        // up` ne bâtit ni ne démarre ni l'un ni l'autre — seul `db` reste dans le
+        // périmètre par défaut, celui que `rbs dev` monte.
+        "docker" => Some("docker compose --profile app up --build"),
         "ci" => Some("git push : le workflow s'exécute à la prochaine poussée"),
         // Le secret n'est écrit que dans `.env.example` : le `.env` du projet, lui, est
         // hors du fragment, et sans la variable le serveur refuse de démarrer.
         "auth" => {
             Some("recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up")
         }
-        // Le pool est paresseux : le projet démarre sans Redis, et ne le joint qu'au
-        // premier appel au cache.
-        "redis" => {
-            Some("un Redis doit écouter à l'URL de la section [cache] de config/default.toml")
-        }
+        // Le fragment dépose lui-même un service `redis` dans le compose du projet : le
+        // pool est paresseux, mais rien à fournir séparément une fois ce service monté.
+        "redis" => Some(
+            "le compose du projet porte déjà un service redis — docker compose up -d le \
+             démarre ; sans compose, faites écouter un Redis à l'URL de [cache] de \
+             config/default.toml",
+        ),
         // Le défaut vise un Mailpit local : sans ce rappel, le premier envoi en
         // production partirait vers `localhost:1025`.
         "mail" => Some("réglez [mail] dans config/default.toml — un SMTP local par défaut"),
@@ -413,6 +458,73 @@ mod tests {
                 "`{feature}` s'installe sans dire ce qu'il reste à faire"
             );
         }
+    }
+
+    /// `rbs new --with auth` pose la feature mais avalait le conseil qu'`add auth` aurait
+    /// affiché : sans lui, `RBS_AUTH__SECRET` manque au `.env` et `cargo run` échoue,
+    /// sans que rien ne l'ait dit avant.
+    #[test]
+    fn new_names_the_suite_of_each_installed_feature() {
+        let installed = vec![
+            new::InstalledFeature {
+                name: "auth".to_string(),
+                files: 9,
+                migration: true,
+            },
+            new::InstalledFeature {
+                name: "redis".to_string(),
+                files: 3,
+                migration: false,
+            },
+        ];
+
+        let suites = suites_installees(&installed);
+
+        assert_eq!(
+            suites,
+            vec![suite("auth").unwrap(), suite("redis").unwrap()]
+        );
+    }
+
+    /// `ci` n'a rien à ajouter au-delà de son propre conseil ; une feature sans suite ne
+    /// doit pas laisser de ligne vide dans la liste.
+    #[test]
+    fn new_skips_features_without_a_suite() {
+        let installed = vec![new::InstalledFeature {
+            name: "storage".to_string(),
+            files: 4,
+            migration: false,
+        }];
+
+        assert_eq!(
+            suites_installees(&installed),
+            vec![suite("storage").unwrap()]
+        );
+    }
+
+    /// `migrate` et `api` portent `profiles: ["app"]` : sans `--profile app`,
+    /// `docker compose up --build` ne bâtit ni ne démarre rien de ce que la feature vient
+    /// de poser, mesuré par `docker compose config --services` qui ne rend que `db`.
+    #[test]
+    fn the_docker_suite_names_the_app_profile() {
+        let suite = suite("docker").expect("`docker` doit dire ce qu'il reste à faire");
+
+        assert!(
+            suite.contains("--profile app"),
+            "la suite ne démarre pas les services du profil app : {suite}"
+        );
+    }
+
+    /// `rbs add redis` dépose déjà le service `redis` dans le compose du projet : la
+    /// suite ne doit pas laisser croire qu'un Redis reste à fournir séparément.
+    #[test]
+    fn the_redis_suite_names_the_compose_service_already_inserted() {
+        let suite = suite("redis").expect("`redis` doit dire ce qu'il reste à faire");
+
+        assert!(
+            suite.contains("docker compose"),
+            "la suite ne mentionne pas le compose où le service vient d'être inséré : {suite}"
+        );
     }
 
     #[test]

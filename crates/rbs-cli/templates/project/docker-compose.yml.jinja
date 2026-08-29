@@ -1,7 +1,6 @@
 name: {@ project_name @}
 
 services:
-{%- if database_a_un_serveur %}
   db:
 {%- if database == "postgres" %}
     image: postgres:18-alpine
@@ -43,50 +42,13 @@ services:
       interval: 2s
       timeout: 3s
       retries: 30
-{%- endif %}
 
   # <rbs:services>
-  # Les migrations tournent une fois, à part : l'API ne démarre pas sur un schéma absent,
-  # et n'a pas à porter cette responsabilité au démarrage.
-  migrate:
-    profiles: ["app"]
-    build: .
-    command: ["migration", "up"]
-    environment:
-      RBS_DATABASE__URL: {@ database_url_compose @}
-    restart: "no"
-{%- if not database_a_un_serveur %}
-    # Le fichier de base est partagé avec `api` : sans ce volume, chaque conteneur
-    # travaillerait sur le sien et l'API démarrerait sur un schéma vide.
-    volumes:
-      - sqlitedata:/data
-{%- endif %}
-  api:
-    profiles: ["app"]
-    build: .
-    environment:
-      # config/default.toml écoute sur 127.0.0.1, ce qui rend le conteneur injoignable
-      # depuis l'hôte. L'environnement l'emporte sur le TOML.
-      RBS_SERVER__HOST: 0.0.0.0
-      RBS_DATABASE__URL: {@ database_url_compose @}
-      RBS_LOG_FORMAT: json
-      RUST_LOG: info
-    ports:
-      - "8080:8080"
-    depends_on:
-      migrate:
-        condition: service_completed_successfully
-{%- if not database_a_un_serveur %}
-    volumes:
-      - sqlitedata:/data
-{%- endif %}
   # </rbs:services>
 
 volumes:
 {%- if database == "postgres" %}
   pgdata:
-{%- elif database == "mysql" %}
-  mysqldata:
 {%- else %}
-  sqlitedata:
+  mysqldata:
 {%- endif %}

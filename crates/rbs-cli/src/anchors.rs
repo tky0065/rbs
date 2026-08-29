@@ -12,17 +12,24 @@ pub(crate) struct Anchor {
     pub name: &'static str,
     /// Chemin du fichier porteur, relatif à la racine du projet.
     pub file: &'static str,
+    /// Marqueur de commentaire du langage porteur : `//` en Rust, `#` en YAML.
+    pub comment: &'static str,
+    /// L'ancre peut légitimement manquer, son fichier porteur étant lui-même facultatif.
+    ///
+    /// `doctor` ne réclame pas une ancre optionnelle dont le fichier est absent : un
+    /// projet SQLite n'a pas de compose, et n'a donc pas à passer pour incomplet.
+    pub optional: bool,
 }
 
 impl Anchor {
     /// Balise ouvrante, telle qu'elle est écrite dans le fichier.
     pub(crate) fn opening(&self) -> String {
-        format!("// <rbs:{}>", self.name)
+        format!("{} <rbs:{}>", self.comment, self.name)
     }
 
     /// Balise fermante, telle qu'elle est écrite dans le fichier.
     pub(crate) fn closing(&self) -> String {
-        format!("// </rbs:{}>", self.name)
+        format!("{} </rbs:{}>", self.comment, self.name)
     }
 
     /// Le bloc à recoller quand l'ancre a disparu, prêt à être collé tel quel.
@@ -35,18 +42,24 @@ impl Anchor {
 pub(crate) const FEATURES: Anchor = Anchor {
     name: "features",
     file: "src/main.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Montage des routes d'une feature dans le routeur.
 pub(crate) const ROUTES: Anchor = Anchor {
     name: "routes",
     file: "src/router.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Enregistrement des chemins d'une feature dans le document OpenAPI.
 pub(crate) const OPENAPI: Anchor = Anchor {
     name: "openapi",
     file: "src/openapi.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Déclaration des fichiers de migration.
@@ -56,18 +69,24 @@ pub(crate) const OPENAPI: Anchor = Anchor {
 pub(crate) const MIGRATION_MODULES: Anchor = Anchor {
     name: "migration_modules",
     file: "migration/src/lib.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Inscription des migrations dans le `Migrator`.
 pub(crate) const MIGRATIONS: Anchor = Anchor {
     name: "migrations",
     file: "migration/src/lib.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Déclaration d'un champ partagé dans la struct `AppState`.
 pub(crate) const STATE_CHAMPS: Anchor = Anchor {
     name: "state_champs",
     file: "src/state.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Initialisation de ce champ dans `AppState::new`.
@@ -77,6 +96,8 @@ pub(crate) const STATE_CHAMPS: Anchor = Anchor {
 pub(crate) const STATE_INIT: Anchor = Anchor {
     name: "state_init",
     file: "src/state.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Tâches de fond lancées au démarrage, l'état construit et le serveur pas encore lié.
@@ -86,6 +107,8 @@ pub(crate) const STATE_INIT: Anchor = Anchor {
 pub(crate) const STARTUP: Anchor = Anchor {
     name: "startup",
     file: "src/main.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Déclaration des seeds dans le binaire qui les applique.
@@ -97,13 +120,27 @@ pub(crate) const STARTUP: Anchor = Anchor {
 pub(crate) const SEEDS: Anchor = Anchor {
     name: "seeds",
     file: "src/seeds/main.rs",
+    comment: "//",
+    optional: false,
+};
+
+/// Services que les fragments ajoutent au compose du projet.
+///
+/// Optionnelle : un projet SQLite, un projet visant une base distante, un projet dont
+/// l'URL ne porte pas d'identifiants et tout projet créé avant la 1.1.0 n'ont pas de
+/// compose, et n'ont donc pas cette ancre à porter.
+pub(crate) const SERVICES: Anchor = Anchor {
+    name: "services",
+    file: "docker-compose.yml",
+    comment: "#",
+    optional: true,
 };
 
 /// Les points d'insertion du squelette.
 ///
 /// La génération vise chaque ancre nommément ; `rbs doctor` parcourt cette liste pour
 /// vérifier qu'un projet les porte toutes.
-pub(crate) const ANCRES: [Anchor; 9] = [
+pub(crate) const ANCRES: [Anchor; 10] = [
     FEATURES,
     ROUTES,
     OPENAPI,
@@ -113,6 +150,7 @@ pub(crate) const ANCRES: [Anchor; 9] = [
     STATE_INIT,
     STARTUP,
     SEEDS,
+    SERVICES,
 ];
 
 /// Une ancre attendue que le fichier ne porte pas.
@@ -187,14 +225,36 @@ pub(crate) fn body(source: &str, anchor: Anchor) -> Option<&str> {
 /// ligne qui la suit. Dédupliquer sans elle amputait un champ de son `#[allow(…)]` dès
 /// qu'un autre fragment en avait posé un, et laissait le champ orphelin.
 ///
+/// Une clé YAML nue (`ports:`, sans valeur sur la ligne) qualifie de la même façon : deux
+/// fragments distincts sous l'ancre `services` peuvent tous deux ouvrir un `ports:`, et
+/// dérouler cette seule ligne comme groupe la ferait disparaître dès le second fragment,
+/// la trouvant déjà dans le bloc — orphelinant sa liste de ports comme du texte libre.
+///
 /// Les lignes autonomes — les chemins OpenAPI d'une feature — forment chacune leur
 /// groupe, et restent donc dédupliquées une à une.
+///
+/// **Limite à connaître avant d'y toucher** : la déduplication qui suit (`insert`, via
+/// `contains`) compare chaque ligne au texte déjà présent sous l'ancre, sans aucune notion
+/// de bloc ni de service porteur — un groupe d'une seule ligne autonome identique ailleurs
+/// dans l'ancre est vu comme déjà posé, où qu'il se trouve. Un futur fragment dont le
+/// healthcheck réutilise une valeur générique qu'un fragment antérieur a déjà déposée dans
+/// l'ancre — `interval: 2s`, `retries: 30` — la perdrait donc en silence : la ligne ne
+/// serait pas réinsérée dans le bloc du nouveau service, qui s'en trouverait incomplet
+/// sans qu'aucune commande n'échoue. Ne pas corriger ce prédicat pour cette raison seule :
+/// il documente une limite connue, pas un bogue à combler à l'aveugle.
 fn groups(lines: &[String]) -> Vec<Vec<&String>> {
     let mut groups = Vec::new();
     let mut courant = Vec::new();
 
     for line in lines {
-        let qualifie = matches!(line.trim_start().get(..2), Some("#[") | Some("//"));
+        // `# ` : un commentaire YAML. `#[` et `//` : leurs homologues Rust. Une ligne qui
+        // ne porte qu'une clé (`ports:`) : son unique caractère de fin trahit l'absence de
+        // valeur inline. Les quatre qualifient la ligne suivante et ne valent pas pour
+        // elles-mêmes.
+        let qualifie = matches!(
+            line.trim_start().get(..2),
+            Some("#[") | Some("//") | Some("# ")
+        ) || line.trim_end().ends_with(':');
         courant.push(line);
 
         if !qualifie {
@@ -346,6 +406,53 @@ pub fn router(state: AppState) -> Router {
         assert_eq!(rendered.matches("nouvelle()").count(), 1, "{rendered}");
     }
 
+    /// Deux services YAML qui ouvrent chacun un `ports:` : le second ne doit pas perdre
+    /// sa clé sous prétexte qu'un premier fragment en a déjà posé une. Sans le
+    /// qualificatif des clés nues dans `groups`, `ports:` — présent dans le bloc depuis le
+    /// premier service — se filtrait comme groupe à lui seul, et les deux lignes de liste
+    /// du second atterrissaient sans l'en-tête qui les rattache à leur service.
+    #[test]
+    fn a_bare_key_shared_by_two_services_is_not_dropped_from_the_second() {
+        let compose = "\
+services:
+  # <rbs:services>
+  # </rbs:services>
+";
+
+        let premier = insert(
+            compose,
+            SERVICES,
+            &lines(&[
+                "redis:",
+                "  image: redis:8-alpine",
+                "  ports:",
+                "    - \"6379:6379\"",
+            ]),
+        )
+        .expect("l'ancre est présente");
+
+        let second = insert(
+            &premier,
+            SERVICES,
+            &lines(&[
+                "mailpit:",
+                "  image: axllent/mailpit:latest",
+                "  ports:",
+                "    - \"1025:1025\"",
+                "    - \"8025:8025\"",
+            ]),
+        )
+        .expect("l'ancre est présente");
+
+        assert!(
+            second.contains(
+                "  mailpit:\n    image: axllent/mailpit:latest\n    ports:\n      \
+                 - \"1025:1025\"\n      - \"8025:8025\""
+            ),
+            "le second service a perdu sa clé ports: :\n{second}"
+        );
+    }
+
     #[test]
     fn a_missing_anchor_is_reported_with_its_file() {
         let error = insert("fn main() {}\n", ROUTES, &lines(&["peu importe"]))
@@ -454,5 +561,110 @@ struct AppState {
             after.contains("pub storage: Arc<dyn Storage>,"),
             "le champ ne doit pas être laissé de côté : {after}"
         );
+    }
+
+    #[test]
+    fn a_yaml_anchor_is_written_with_a_hash() {
+        let compose = Anchor {
+            name: "services",
+            file: "docker-compose.yml",
+            comment: "#",
+            optional: true,
+        };
+
+        assert_eq!(compose.opening(), "# <rbs:services>");
+        assert_eq!(compose.closing(), "# </rbs:services>");
+        assert_eq!(compose.block(), "# <rbs:services>\n# </rbs:services>");
+    }
+
+    #[test]
+    fn the_rust_anchors_keep_their_double_slash() {
+        for anchor in ANCRES {
+            if anchor.comment == "//" {
+                assert_eq!(anchor.opening(), format!("// <rbs:{}>", anchor.name));
+            }
+        }
+    }
+
+    /// Un commentaire YAML qualifie le service qui le suit, comme `#[allow(…)]` qualifie
+    /// le champ Rust qui le suit : les dédupliquer séparément laisserait l'un des deux
+    /// orphelin.
+    #[test]
+    fn a_yaml_comment_stays_attached_to_the_line_below_it() {
+        let compose = Anchor {
+            name: "services",
+            file: "docker-compose.yml",
+            comment: "#",
+            optional: true,
+        };
+        let source = "services:\n  # <rbs:services>\n  # </rbs:services>\n";
+        let lines = vec!["# le cache du projet".to_string(), "redis:".to_string()];
+
+        let apres = insert(source, compose, &lines).expect("l'ancre est présente");
+
+        assert!(
+            apres.contains("  # le cache du projet\n  redis:\n"),
+            "le commentaire doit précéder son service :\n{apres}"
+        );
+
+        let deux_fois = insert(&apres, compose, &lines).expect("l'ancre est toujours là");
+        assert_eq!(
+            deux_fois.matches("redis:").count(),
+            1,
+            "une seconde insertion ne doit rien ajouter :\n{deux_fois}"
+        );
+    }
+
+    /// Le cas asymétrique, seul à distinguer les deux comportements : le commentaire est
+    /// déjà dans l'ancre, la ligne qu'il qualifie ne l'est pas encore. Sans le
+    /// groupement, le commentaire passerait pour posé et le service s'insérerait seul,
+    /// sous un commentaire qui ne le concerne pas.
+    #[test]
+    fn a_yaml_comment_already_present_does_not_orphan_the_line_it_qualifies() {
+        let compose = Anchor {
+            name: "services",
+            file: "docker-compose.yml",
+            comment: "#",
+            optional: true,
+        };
+        // Une autre feature a posé ce commentaire, et un service qui l'en sépare.
+        let source = "services:\n  # <rbs:services>\n  # le cache du projet\n  memcached:\n  # </rbs:services>\n";
+        let lines = vec!["# le cache du projet".to_string(), "redis:".to_string()];
+
+        let apres = insert(source, compose, &lines).expect("l'ancre est présente");
+
+        assert!(
+            apres.contains("  # le cache du projet\n  redis:\n"),
+            "le service doit arriver avec son propre commentaire :\n{apres}"
+        );
+        assert!(
+            !apres.contains("  memcached:\n  redis:\n"),
+            "le service ne doit pas s'insérer nu sous un commentaire étranger :\n{apres}"
+        );
+    }
+
+    // `SERVICES` étant un `const`, clippy évalue `SERVICES.optional` à la compilation et
+    // signale l'assertion comme triviale ; elle mord pourtant si quelqu'un change le
+    // champ, ce que clippy ne voit pas.
+    #[allow(clippy::assertions_on_constants)]
+    #[test]
+    fn the_services_anchor_lives_in_the_compose_and_is_optional() {
+        assert_eq!(SERVICES.file, "docker-compose.yml");
+        assert_eq!(SERVICES.comment, "#");
+        assert!(SERVICES.optional);
+        assert!(ANCRES.contains(&SERVICES));
+    }
+
+    /// Une ancre optionnelle est l'exception : toutes les autres décrivent un fichier que
+    /// le squelette écrit toujours, et leur absence est un défaut.
+    #[test]
+    fn only_the_services_anchor_is_optional() {
+        let optionnelles: Vec<&str> = ANCRES
+            .iter()
+            .filter(|anchor| anchor.optional)
+            .map(|anchor| anchor.name)
+            .collect();
+
+        assert_eq!(optionnelles, ["services"]);
     }
 }

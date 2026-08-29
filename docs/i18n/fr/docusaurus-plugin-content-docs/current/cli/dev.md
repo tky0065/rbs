@@ -44,13 +44,33 @@ un projet existant :
 
 Quatre étapes au plus, dans cet ordre :
 
-1. **`docker compose up -d`**, si et seulement si la feature `docker` est déclarée dans
-   `[package.metadata.rbs]`. Un projet sans elle ne fait chercher aucun compose ;
+1. **`docker compose up -d`**, si et seulement si le projet porte un `docker-compose.yml`
+   — écrit par [`rbs new`](./new.md) pour la plupart des projets, que `docker` soit
+   installée ou non. Un projet sans l'un ni l'autre ne fait chercher aucun compose ;
 2. **l'attente de la base**, jusqu'à ce qu'elle accepte une connexion. Sautée pour SQLite,
    qui n'a pas de serveur à attendre — son URL n'a ni hôte ni port ;
 3. **[`rbs migrate up`](./migrate.md)**, pour qu'un changement de schéma récupéré d'un
    collègue s'applique sans seconde commande ;
 4. **le serveur**, `cargo run`, relancé à chaque changement sous `src/`.
+
+Un projet avec un compose — le cas par défaut, pour la plupart — montre l'étape en plus,
+en tête :
+
+```text
+  compose     docker-compose.yml
+  base        localhost:15432
+  migrations  rbs migrate up
+  serveur     cargo run, relancé à chaque changement
+```
+
+`docker compose up -d` est appelée sans `--profile` — la même commande que nomme l'indice
+de [`rbs new`](./new.md). Cela remonte `db` et ce qu'y ont ajouté [`redis`](../guides/cache.md)
+ou [`mail`](../guides/mail.md), tous hors de tout profil, mais jamais `api` ni `migrate` :
+[`rbs add docker`](./add.md) a placé les deux sous le profil `app`, précisément pour que
+`rbs dev` — qui fait tourner le serveur lui-même, depuis les sources, à chaque
+sauvegarde — n'ait jamais d'image à construire. `docker compose --profile app up --build`
+est l'autre chemin, celui qui fait tourner le projet comme son propre conteneur au lieu
+d'un `cargo run`.
 
 ## Deux patiences, et non une
 
@@ -65,7 +85,7 @@ démarrer PostgreSQL sont trente secondes perdues.
 ```text
 erreur : rien ne répond sur 127.0.0.1:1 : la base du projet n'est pas démarrée
 
-démarrez-la — `docker compose up -d` si la feature docker est installée — ou corrigez RBS_DATABASE__URL dans le .env du projet
+démarrez-la — `docker compose up -d` à la racine du projet — ou corrigez RBS_DATABASE__URL dans le .env du projet
 ```
 
 Le message nomme l'hôte et le port essayés, et les deux issues. Ce n'est pas une trace de

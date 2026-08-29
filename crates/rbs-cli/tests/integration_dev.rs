@@ -62,7 +62,12 @@ fn a_project_pointing_at_a_dead_port_names_the_host_and_port() {
         .assert()
         .success();
 
-    let (code, sortie) = dev(&parent.path().join("demo-api"));
+    let projet = parent.path().join("demo-api");
+    // Le squelette écrit un compose réel pour une base locale : le laisser ferait `dev`
+    // lancer un vrai `docker compose up -d`, contraire au but de ce test — voir l'en-tête.
+    std::fs::remove_file(projet.join("docker-compose.yml")).expect("le compose doit exister");
+
+    let (code, sortie) = dev(&projet);
 
     assert_eq!(code, 1, "code de sortie inattendu :\n{sortie}");
     assert!(

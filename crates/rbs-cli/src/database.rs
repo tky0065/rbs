@@ -74,6 +74,15 @@ impl Database {
         }
     }
 
+    /// Port que le serveur du moteur écoute, ou `None` pour un moteur qui n'en a pas.
+    pub fn default_port(self) -> Option<u16> {
+        match self {
+            Self::Postgres => Some(5432),
+            Self::Mysql => Some(3306),
+            Self::Sqlite => None,
+        }
+    }
+
     /// Le moteur a-t-il un serveur à monter et à attendre ?
     ///
     /// Répond pour le service `db` du compose comme pour l'attente de `rbs dev`.

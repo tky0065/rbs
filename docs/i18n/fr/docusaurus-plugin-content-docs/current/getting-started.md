@@ -11,16 +11,20 @@ si votre terminal affiche la même chose, vous n'avez pas dévié — aux durée
 identifiants et aux dates près, qui sont les vôtres. Une seule chose a été retirée des
 blocs : le chemin absolu du répertoire où l'exécution a eu lieu, noté `…/demo`.
 
-Le CLI parle français : `✓ demo créé — 16 fichiers` est une ligne de succès. Les
+Le CLI parle français : `✓ demo créé — 17 fichiers` est une ligne de succès. Les
 options, les noms de fichiers et le code généré, eux, sont les mêmes quelle que soit la
 langue.
 
 ## Ce qu'il vous faut
 
 - **Rust stable**, édition 2024. L'exécution ci-dessous a utilisé `rustc 1.96.0`.
-- **PostgreSQL 14 ou plus.** La ligne Docker ci-dessous suffit ; un serveur existant fait
-  tout aussi bien l'affaire, du moment que vous pouvez pointer une URL dessus. Ce plancher
-  est la plus ancienne version encore corrigée côté sécurité : les modèles générés posent
+- **Docker, avec Compose.** `rbs new` écrit un `docker-compose.yml` portant la base que
+  décrit l'URL du projet ; `docker compose up -d` est ce qui la démarre, quelques
+  sections plus bas. Un serveur existant fait tout aussi bien l'affaire à la place, du
+  moment que vous pouvez pointer une URL dessus — voir
+  [les deux cas où le compose ne s'écrit pas](./cli/new.md).
+- **PostgreSQL 14 ou plus**, peu importe comment vous vous le procurez. Ce plancher est la
+  plus ancienne version encore corrigée côté sécurité : les modèles générés posent
   eux-mêmes leur identifiant v7, et rien de ce qu'exécute un projet ne réclame de
   `uuidv7()` au serveur.
 - **curl**, ou n'importe quel client HTTP, pour la dernière section.
@@ -62,31 +66,18 @@ vous tapez.
 
 :::
 
-## Démarrer une base
-
-rbs ne gère pas votre base : il attend une URL qui répond. Le plus court chemin pour en
-avoir une :
-
-```bash
-docker run --rm -d --name rbs-demo \
-  -e POSTGRES_USER=rbs -e POSTGRES_PASSWORD=rbs -e POSTGRES_DB=demo \
-  -p 5432:5432 postgres:18
-```
-
-Laissez-la tourner jusqu'à la fin de cette page. `docker stop rbs-demo` la supprime une
-fois que vous avez fini — le conteneur a été lancé avec `--rm`, rien ne subsiste.
-
 ## Créer le projet
 
 ```bash
-rbs new demo --yes --database-url postgres://rbs:rbs@localhost:5432/demo
+rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 ```
 
 ```text
-✓ demo créé — 16 fichiers
+✓ demo créé — 17 fichiers
 
   cd demo
-  cargo run          # la base visée est dans .env
+  docker compose up -d   # la base du .env, montée
+  cargo run              # ou `rbs dev`, qui enchaîne les deux
 ```
 
 Le manifeste écrit par la commande dépend de `rbs-core` publié sur crates.io : il n'y a
@@ -104,7 +95,7 @@ terminal où poser ses questions : c'est pourquoi un script ou un job de CI a be
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
 ```
 
-Seize fichiers, et aucun n'est une boîte noire :
+Dix-sept fichiers, et aucun n'est une boîte noire :
 
 - `src/main.rs`, `src/router.rs`, `src/state.rs`, `src/openapi.rs` — le montage.
 - `src/health/` — une première feature, pour que la forme soit visible avant d'en
@@ -112,6 +103,7 @@ Seize fichiers, et aucun n'est une boîte noire :
 - `src/seeds/` — un second binaire, `seed`, que `rbs seed` lance.
 - `migration/` — une seconde crate, qui porte les migrations.
 - `config/default.toml` et `config/development.toml` — hôte, port, taille du pool.
+- `docker-compose.yml` — la base du projet, construite depuis l'URL ci-dessous.
 - `.env` — l'URL de la base et les réglages de logs, tenus hors de Git.
 - `.env.example` — les mêmes clés sans secret, versionnées.
 
@@ -119,11 +111,74 @@ Le `.env` écrit par la commande porte l'URL que vous avez passée :
 
 ```text
 RBS_ENV=development
-RBS_DATABASE__URL=postgres://rbs:rbs@localhost:5432/demo
+RBS_DATABASE__URL=postgres://rbs:secret@localhost:5432/demo
 
 RBS_LOG_FORMAT=pretty
 RUST_LOG=info,demo=debug
 ```
+
+## Démarrer la base
+
+`docker-compose.yml` porte les identifiants, le nom de la base et le port publié — tous
+lus dans l'URL ci-dessus, aucun retapé :
+
+```yaml
+name: demo
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: rbs
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: demo
+    # Le port publié est celui du .env : c'est ce qui rend `docker compose up -d` suivi
+    # de `cargo run` vrai sans recopier une valeur d'un fichier à l'autre. Le conflit
+    # avec un PostgreSQL déjà installé sur la machine se règle en changeant les deux.
+    ports:
+      - "5432:5432"
+    # PostgreSQL 18 place ses données sous /var/lib/postgresql/18/docker : c'est le
+    # répertoire parent qui se monte, et non le /var/lib/postgresql/data des versions
+    # précédentes, qui ne persisterait rien.
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rbs -d demo"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # <rbs:services>
+  # </rbs:services>
+
+volumes:
+  pgdata:
+```
+
+```bash
+docker compose up -d --wait
+```
+
+```text
+ Network demo_default  Creating
+ Network demo_default  Created
+ Volume demo_pgdata  Creating
+ Volume demo_pgdata  Created
+ Container demo-db-1  Creating
+ Container demo-db-1  Created
+ Container demo-db-1  Starting
+ Container demo-db-1  Started
+ Container demo-db-1  Waiting
+ Container demo-db-1  Healthy
+```
+
+`--wait` est ce qui rend la commande suivante de cette page — la première migration —
+sûre à lancer tout de suite : sans lui, `docker compose up -d` rend la main dès que le
+conteneur démarre, avant que PostgreSQL soit prêt à accepter une connexion.
+
+Rien ne s'écrit ici pour un projet SQLite — il n'y a pas de serveur à démarrer — ni pour
+une URL dont l'hôte n'est pas local : le conteneur ne ferait que doubler une base déjà
+joignable ailleurs. Les deux cas sont couverts dans [`rbs new`](./cli/new.md).
 
 ## La première migration
 
@@ -326,18 +381,19 @@ rbs doctor
 ```
 
 ```text
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.38s
      Running `target/debug/migration version`
-  ✓ ancres     les 9 points d'insertion sont en place
+  ✓ ancres     les 10 points d'insertion sont en place
   ✓ .env       les 4 variables de .env.example sont renseignées
-  ✓ versions   projet et rbs-core 1.0.0 alignés sur le CLI 1.0.0
+  ✓ versions   projet et rbs-core 1.0.1 alignés sur le CLI 1.0.1
   ✓ base       postgres 18.6 répond sur localhost:5432
 ✓ le projet est sain
 ```
 
-Quatre vérifications : les ancres sont toujours en place, `.env` porte chaque clé que
-déclare `.env.example`, le projet et `rbs-core` s'accordent avec la version du CLI, et la
-base répond.
+Quatre vérifications : les ancres sont toujours en place — dix ici, neuf du squelette
+plus celle du compose, qui sort du compte pour un projet sans `docker-compose.yml` —
+`.env` porte chaque clé que déclare `.env.example`, le projet et `rbs-core` s'accordent
+avec la version du CLI, et la base répond.
 
 ## Pour aller plus loin
 

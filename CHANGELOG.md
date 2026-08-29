@@ -10,6 +10,36 @@ between minor versions with no deprecation cycle.
 
 *[Version française](CHANGELOG.fr.md).*
 
+## [1.1.0] — 2026-08-29
+
+### Added
+
+- `rbs new` writes a `docker-compose.yml` carrying the project's database, with the
+  identifiers, database name and published port all taken from the URL it was given.
+  `docker compose up -d` then `cargo run` are enough — nothing is retyped. Nothing is
+  written for a SQLite project or for a URL whose host is not local, in both cases for
+  want of anything to mount.
+- `rbs add docker` now inserts its `api` and `migrate` services into the project's
+  compose, under the `app` profile, instead of depositing a whole file — unless there is
+  no compose to insert into, in which case it still writes one entire, deployment
+  services included. A compose that has lost its `# <rbs:services>` anchor is left
+  untouched, the block printed to paste back.
+- `rbs add redis` and `rbs add mail` each insert their own service — `redis:8-alpine`,
+  `axllent/mailpit` — into the project's compose, outside any profile: `docker compose up
+  -d` alone brings them up.
+- `rbs dev` mounts the compose stack whenever the project has one, regardless of whether
+  `docker` is installed — the compose is the skeleton's since `rbs new`, not a mark of the
+  fragment above.
+
+### Changed
+
+- `--with` installs the features it names instead of refusing all of them: `rbs new
+  mon-api --with auth` used to fail with an explicit error and exit code 1; it installs
+  `auth` now, in the same pass that writes the project. The installation order is
+  derived from the names — alphabetical — rather than the order they were typed in.
+- `--with jobs` is accepted: it was refused by a list the fragment's addition had left
+  out of.
+
 ## [1.0.1] — 2026-08-29
 
 ### Fixed

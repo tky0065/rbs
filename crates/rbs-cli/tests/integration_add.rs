@@ -169,17 +169,23 @@ fn a_dirty_working_tree_refuses_without_force_and_passes_with_it() {
 
 /// Un échec au milieu de l'application ne laisse pas un projet à moitié modifié.
 ///
-/// L'échec n'est pas injecté : le fichier que le plan écrira en second est posé en lecture
-/// seule. `Permissions::set_readonly` vaut sur Unix comme sur Windows, et le plan est
-/// appliqué dans l'ordre alphabétique — `Cargo.toml` puis `Dockerfile` sont bel et bien
-/// écrits avant que `docker-compose.yml` ne fasse échouer l'ensemble.
+/// L'échec n'est pas injecté : `docker-compose.yml` porte son ancre — la planification
+/// calcule donc l'insertion avec succès — mais le fichier est posé en lecture seule, et
+/// c'est l'écriture qui échoue. `Permissions::set_readonly` vaut sur Unix comme sur
+/// Windows. Le plan écrit `Dockerfile` et `.dockerignore` avant de buter sur
+/// `docker-compose.yml`, troisième fichier du plan : c'est leur retrait qui prouve la
+/// restauration.
 #[test]
 fn a_failure_during_application_restores_the_files_already_written() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = committed_project(&parent);
 
     let piege = racine.join("docker-compose.yml");
-    fs::write(&piege, "# posé par le test, en lecture seule\n").expect("piège inscriptible");
+    fs::write(
+        &piege,
+        "services:\n  # <rbs:services>\n  # </rbs:services>\n",
+    )
+    .expect("piège inscriptible");
     let mut permissions = fs::metadata(&piege).expect("piège lisible").permissions();
     permissions.set_readonly(true);
     fs::set_permissions(&piege, permissions).expect("permissions modifiables");
@@ -193,9 +199,7 @@ fn a_failure_during_application_restores_the_files_already_written() {
     common::commiter(&racine, "piège");
     let avant = common::empreinte(&racine);
 
-    // `--force` dépasse la garde du conflit, que le piège déclenche : ce qui est éprouvé
-    // ici est l'échec d'écriture qui vient après, pas la garde qui l'aurait devancé.
-    let output = Sortie::de(rbs(&racine).args(["add", "docker", "--force"]));
+    let output = Sortie::de(rbs(&racine).args(["add", "docker"]));
 
     assert!(
         !output.succes,

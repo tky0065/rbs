@@ -18,6 +18,7 @@ use minijinja::context;
 use crate::git;
 use crate::manifest;
 use crate::metadata;
+use crate::migrate;
 use crate::plan;
 use crate::templates::{self, Source};
 
@@ -179,13 +180,38 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // Le moteur vient du manifeste, seul endroit où le choix de `rbs new` a survécu : un
     // fragment posé six mois plus tard n'a plus les flags de la création.
     let database = metadata::read(&root.join("Cargo.toml"))?.database;
+
+    // L'URL du projet, non une valeur par défaut : le compose que le fragment engendre
+    // doit se connecter à la base que le projet interroge, avec ses identifiants.
+    let url = migrate::project_variables(&root)
+        .ok()
+        .and_then(|variables| crate::dotenv::value(&variables, migrate::URL).map(str::to_string))
+        .unwrap_or_else(|| database.default_url(&crate_name));
+    let connexion = crate::url::parse(&url);
+
+    // Une URL sans chemin rend un nom de base vide, que le repli ne rattraperait pas
+    // s'il ne guettait que `None` : le compose porterait un `POSTGRES_DB:` vide, et le
+    // service ne deviendrait jamais sain.
+    let nom_base = connexion
+        .as_ref()
+        .map(|c| c.database.clone())
+        .filter(|base| !base.is_empty())
+        .unwrap_or_else(|| crate_name.clone());
+
     let context = context! {
         project_name => nom_projet.clone(),
         crate_name => crate_name.clone(),
         database => database.name(),
         database_a_un_serveur => database.a_un_serveur(),
-        database_url_compose => database.compose_url(&crate_name),
+        database_url_compose => match connexion.as_ref() {
+            Some(connexion) => crate::url::interne(connexion, database, &nom_base),
+            None => database.compose_url(&crate_name),
+        },
         database_url_par_defaut => database.default_url(&crate_name),
+        database_user => connexion.as_ref().map(|c| c.user.clone()).unwrap_or_default(),
+        database_password => connexion.as_ref().map(|c| c.password.clone()).unwrap_or_default(),
+        database_name => nom_base,
+        database_port => connexion.as_ref().map(|c| c.port).unwrap_or_default(),
     };
 
     let mut builder = plan::Builder::new(root);
@@ -270,8 +296,26 @@ mod tests {
     }
 
     /// Un projet déroulé par `rbs new`, sans passer par le binaire ni par cargo.
+    ///
+    /// L'URL porte des identifiants distincts du moteur (`rbs`, non `postgres`) — la même
+    /// qu'utilise `doctor/anchors.rs` — pour que le compose interne ne puisse pas passer
+    /// pour correct en confondant les deux.
     fn project() -> (TempDir, PathBuf) {
-        project_on(Database::default())
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = crate::new::create(
+            &crate::new::Options {
+                name: "demo-api".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
+                database: Database::default(),
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        (parent, project.root)
     }
 
     /// Le même, sur le moteur demandé — ce que `rbs new --database` produit.
@@ -356,6 +400,23 @@ mod tests {
         );
     }
 
+    /// SQLite n'a pas de serveur : `migrate` et `api` se partagent un fichier, et sans ce
+    /// volume chacun travaillerait sur le sien — la migration n'atteindrait jamais la base
+    /// que l'API ouvre.
+    #[test]
+    fn a_sqlite_project_shares_its_database_file_between_migrate_and_api() {
+        let (_parent, root) = project_on(Database::Sqlite);
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert_eq!(
+            compose.matches("- sqlitedata:/data").count(),
+            2,
+            "migrate et api doivent monter le même volume :\n{compose}"
+        );
+    }
+
     #[test]
     fn a_mysql_project_gets_a_mysql_service() {
         let (_parent, root) = project_on(Database::Mysql);
@@ -420,21 +481,104 @@ mod tests {
             .after
     }
 
+    /// Le compose du squelette existe déjà : seuls `Dockerfile` et `.dockerignore` sont
+    /// déposés, le compose recevant ses services par insertion (voir plus bas).
     #[test]
-    fn the_docker_plan_creates_its_three_files_and_records_the_feature() {
+    fn the_docker_plan_creates_its_two_files_and_records_the_feature() {
         let (_parent, root) = project();
 
         let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
 
-        assert_eq!(
-            planned.files,
-            [".dockerignore", "Dockerfile", "docker-compose.yml"]
-        );
+        assert_eq!(planned.files, ["Dockerfile", ".dockerignore"]);
 
         let manifest = projected(&planned, "Cargo.toml");
         assert!(
             manifest.contains("features = [\"health\", \"docker\"]"),
             "la feature n'est pas inscrite dans le manifeste projeté :\n{manifest}"
+        );
+    }
+
+    /// Trois états, trois comportements. Le premier : le projet a son compose, `add
+    /// docker` n'y ajoute que ce qui manque.
+    #[test]
+    fn adding_docker_to_a_project_with_a_compose_inserts_its_services() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert_eq!(
+            compose.matches("image: postgres:18-alpine").count(),
+            1,
+            "le service de base ne doit pas être doublé :\n{compose}"
+        );
+        assert!(compose.contains("profiles: [\"app\"]"), "{compose}");
+        assert!(
+            compose.contains("command: [\"migration\", \"up\"]"),
+            "{compose}"
+        );
+        assert!(
+            !planned.files.iter().any(|f| f == "docker-compose.yml"),
+            "le compose n'est pas déposé mais inséré : {:?}",
+            planned.files
+        );
+    }
+
+    /// Le deuxième : un projet créé avant la 1.1.0 n'a pas de compose. Le fragment lui en
+    /// écrit un entier, ancre comprise, sans quoi il n'aurait aucun moyen d'en obtenir un.
+    #[test]
+    fn adding_docker_to_a_project_without_a_compose_writes_the_whole_file() {
+        let (_parent, root) = project();
+        fs::remove_file(root.join("docker-compose.yml")).expect("le compose doit exister");
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(compose.contains("image: postgres:18-alpine"), "{compose}");
+        assert!(compose.contains("# <rbs:services>"), "{compose}");
+        assert_eq!(
+            compose.matches("profiles: [\"app\"]").count(),
+            2,
+            "api et migrate, une fois chacun :\n{compose}"
+        );
+        assert!(planned.files.iter().any(|f| f == "docker-compose.yml"));
+    }
+
+    /// Le troisième : un compose réécrit à la main a perdu son ancre. Le CLI n'écrit
+    /// rien et affiche le bloc à recoller — la convention du projet.
+    #[test]
+    fn adding_docker_to_a_compose_without_its_anchor_refuses_and_shows_the_block() {
+        let (_parent, root) = project();
+        fs::write(
+            root.join("docker-compose.yml"),
+            "services:\n  db:\n    image: postgres\n",
+        )
+        .expect("écriture possible");
+
+        let error = plan_for(&options(&root, "docker")).expect_err("l'ancre manque");
+
+        let message = error.to_string();
+        assert!(message.contains("docker-compose.yml"), "{message}");
+        assert!(
+            error
+                .remedy()
+                .is_some_and(|r| r.contains("# <rbs:services>")),
+            "le bloc à coller doit être affiché : {error:?}"
+        );
+    }
+
+    /// Le compose interne ne peut pas garder `postgres:postgres` en dur : la base du
+    /// projet a les identifiants de son .env, et `migrate` ne s'y connecterait pas.
+    #[test]
+    fn the_internal_url_carries_the_credentials_of_the_project() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(
+            compose.contains("postgres://rbs:rbs@db:5432/demo_api"),
+            "{compose}"
         );
     }
 
@@ -516,6 +660,64 @@ mod tests {
                 file.after
             );
         }
+    }
+
+    /// Le fragment annonçait redis://127.0.0.1:6379 dans config/default.toml sans que
+    /// rien y réponde. Le service le sert, et sans profil : c'est une dépendance de
+    /// développement, que `rbs dev` doit monter.
+    #[test]
+    fn adding_redis_serves_the_url_its_config_announces() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "redis")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(compose.contains("redis:8-alpine"), "{compose}");
+        assert!(compose.contains("- \"6379:6379\""), "{compose}");
+        assert!(
+            !compose.contains("profiles"),
+            "un service de développement n'a pas de profil :\n{compose}"
+        );
+    }
+
+    #[test]
+    fn adding_mail_serves_the_smtp_port_its_config_announces() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "mail")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(compose.contains("axllent/mailpit"), "{compose}");
+        assert!(compose.contains("- \"1025:1025\""), "{compose}");
+        assert!(compose.contains("- \"8025:8025\""), "{compose}");
+    }
+
+    /// Deux fragments dans un même compose ne se marchent pas dessus : chacun a son
+    /// service, et le fichier reste du YAML.
+    #[test]
+    fn two_fragments_share_the_same_anchor_without_colliding() {
+        let (_parent, root) = project();
+
+        run(&options(&root, "redis")).expect("la première pose doit aboutir");
+        let planned = plan_for(&options(&root, "mail")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(compose.contains("redis:8-alpine"), "{compose}");
+        assert!(compose.contains("axllent/mailpit"), "{compose}");
+        assert_eq!(
+            compose.matches("image: postgres:18-alpine").count(),
+            1,
+            "{compose}"
+        );
+        // `db`, `redis` et `mailpit` ouvrent chacun un `ports:` : une ligne nue déjà posée
+        // par redis ne doit pas faire disparaître celle de mail, laissant sa liste de
+        // ports orpheline.
+        assert_eq!(
+            compose.matches("ports:").count(),
+            3,
+            "un des trois services a perdu son en-tête ports: :\n{compose}"
+        );
+        assert!(compose.contains("- \"1025:1025\""), "{compose}");
     }
 
     #[test]
@@ -835,6 +1037,36 @@ mod tests {
         assert!(
             compose.contains("POSTGRES_DB: demo_api"),
             "le compose ne nomme pas la base du projet :\n{compose}"
+        );
+    }
+
+    /// Le même repli que `new.rs` sur une URL sans nom de base : sans lui, `POSTGRES_DB:`
+    /// reste vide et `RBS_DATABASE__URL` s'arrête à `/`, ce que l'image officielle refuse
+    /// au démarrage.
+    #[test]
+    fn an_empty_database_name_in_the_project_env_falls_back_to_the_crate_name() {
+        let (_parent, root) = project();
+        let env = fs::read_to_string(root.join(".env")).expect("le .env doit exister");
+        let sans_nom_de_base = env.replace(
+            "RBS_DATABASE__URL=postgres://rbs:rbs@localhost:5432/demo_api",
+            "RBS_DATABASE__URL=postgres://rbs:rbs@localhost:5432",
+        );
+        assert_ne!(
+            env, sans_nom_de_base,
+            "la ligne attendue n'a pas été trouvée"
+        );
+        fs::write(root.join(".env"), sans_nom_de_base).expect("le .env doit se réécrire");
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(
+            compose.contains("POSTGRES_DB: demo_api"),
+            "le compose laisse POSTGRES_DB vide :\n{compose}"
+        );
+        assert!(
+            !compose.contains("RBS_DATABASE__URL: postgres://rbs:rbs@db:5432/\n"),
+            "l'URL interne s'arrête sur un nom de base vide :\n{compose}"
         );
     }
 }

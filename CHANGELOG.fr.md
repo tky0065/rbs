@@ -11,6 +11,37 @@ dépréciation.
 
 *[English version](CHANGELOG.md).*
 
+## [1.1.0] — 2026-08-29
+
+### Ajouté
+
+- `rbs new` écrit un `docker-compose.yml` portant la base du projet, avec les
+  identifiants, le nom de base et le port publié tous tirés de l'URL qui lui a été
+  donnée. `docker compose up -d` puis `cargo run` suffisent — rien n'est retapé. Rien
+  n'est écrit pour un projet SQLite ni pour une URL dont l'hôte n'est pas local, faute
+  d'avoir quoi que ce soit à monter dans les deux cas.
+- `rbs add docker` insère désormais ses services `api` et `migrate` dans le compose du
+  projet, sous le profil `app`, au lieu de déposer un fichier entier — sauf s'il n'y a
+  aucun compose où insérer, auquel cas il en écrit toujours un entier, services de
+  déploiement compris. Un compose ayant perdu son ancre `# <rbs:services>` n'est pas
+  touché, le bloc s'affichant à coller.
+- `rbs add redis` et `rbs add mail` insèrent chacun leur propre service —
+  `redis:8-alpine`, `axllent/mailpit` — dans le compose du projet, hors de tout profil :
+  `docker compose up -d` seul les monte.
+- `rbs dev` monte la pile du compose dès que le projet en porte un, que `docker` soit
+  installée ou non — le compose est celui du squelette depuis `rbs new`, pas une marque
+  du fragment ci-dessus.
+
+### Modifié
+
+- `--with` installe les features qu'il nomme au lieu de les refuser toutes : `rbs new
+  mon-api --with auth` échouait auparavant avec une erreur explicite et un code de sortie
+  1 ; elle installe `auth` désormais, dans la même passe qui écrit le projet. L'ordre
+  d'installation est dérivé des noms — alphabétique — plutôt que de l'ordre où ils ont
+  été tapés.
+- `--with jobs` est accepté : il était refusé par une liste que l'ajout du fragment avait
+  laissée incomplète.
+
 ## [1.0.1] — 2026-08-29
 
 ### Corrigé

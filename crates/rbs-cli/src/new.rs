@@ -1,6 +1,6 @@
 //! Création d'un projet complet : squelette rendu, arborescence écrite, dépôt initialisé.
 //!
-//! La commande suit la séquence du §4.4 de la spec, dans l'ordre où elle rend les échecs
+//! La commande suit la séquence du §5.2 de la spec, dans l'ordre où elle rend les échecs
 //! inoffensifs : ce qui peut être vérifié l'est avant que le rendu commence, et le rendu
 //! aboutit entièrement avant que le premier fichier soit écrit. Un nom refusé, une
 //! feature indisponible ou une variable de template absente laissent donc le disque
@@ -17,11 +17,9 @@ use crate::database::Database;
 use crate::template::Renderer;
 use crate::templates::Source;
 
-/// Features que les questions de création proposent, et que `rbs add` installe.
-///
-/// Elle double la liste que `add` tire des fragments embarqués : une feature absente
-/// d'ici est refusée à la création comme si rbs ne la connaissait pas.
-const FEATURES_CONNUES: &[&str] = &["docker", "ci", "auth", "redis", "storage", "mail"];
+/// Nom du compose à la racine du projet, tel que la template le rend et que `rbs dev` le
+/// cherche.
+const COMPOSE: &str = "docker-compose.yml";
 
 /// Ce qu'il faut savoir avant de créer un projet, questions et flags confondus.
 pub struct Options {
@@ -48,6 +46,19 @@ pub struct Project {
     pub files: usize,
     /// `git init` a abouti. Faux n'invalide pas le projet.
     pub depot_git: bool,
+    /// Les features que `--with` (ou la question) a demandées, et qui se sont installées.
+    pub installed: Vec<InstalledFeature>,
+}
+
+/// Une feature posée par la création, et ce qu'elle a écrit.
+#[derive(Debug)]
+pub struct InstalledFeature {
+    /// Nom de la feature, tel que `rbs add` l'accepte.
+    pub name: String,
+    /// Nombre de fichiers que le fragment a déposés.
+    pub files: usize,
+    /// Le fragment a posé une migration.
+    pub migration: bool,
 }
 
 /// Ce qui peut empêcher la création d'un projet.
@@ -63,14 +74,13 @@ pub enum Error {
         name: String,
     },
 
-    /// La feature existe, mais `--with` ne l'installe pas à la création.
-    #[error(
-        "`{feature}` ne s'installe pas à la création : créez le projet sans `--with`, \
-         puis `rbs add {feature}`"
-    )]
-    FeatureAVenir {
-        /// Feature demandée.
+    /// Une feature demandée n'a pas pu être installée.
+    #[error("`{feature}` n'a pas pu être installée : {source}")]
+    Installation {
+        /// Feature en cause.
         feature: String,
+        /// Cause remontée par l'installation.
+        source: Box<crate::add::Error>,
     },
 
     /// La feature demandée n'existe pas.
@@ -143,8 +153,10 @@ pub enum Error {
 /// ne se rend pas, ou si l'écriture échoue. Dans tous les cas, rien de ce que la commande
 /// a créé ne subsiste.
 pub fn create(options: &Options, parent: &Path) -> Result<Project, Error> {
+    let disponibles = crate::templates::feature_names(options.template_dir.as_deref());
+
     validate_name(&options.name)?;
-    validate_features(&options.features)?;
+    validate_features(&options.features, &disponibles)?;
     validate_database(options.database, &options.database_url)?;
 
     let root = parent.join(&options.name);
@@ -164,10 +176,63 @@ pub fn create(options: &Options, parent: &Path) -> Result<Project, Error> {
         Error::Ecriture { path, source }
     })?;
 
+    // L'ordre est celui de la liste dérivée, non celui de la frappe : les insertions dans
+    // le Migrator et dans le compose suivent l'ordre d'installation, et deux `--with`
+    // équivalents doivent rendre deux projets identiques.
+    let demandees: Vec<&String> = disponibles
+        .iter()
+        .filter(|feature| options.features.contains(feature))
+        .collect();
+
+    let mut installed = Vec::new();
+    for feature in demandees {
+        match install(&root, feature, options.template_dir.as_deref()) {
+            Ok(pose) => installed.push(pose),
+            Err(source) => {
+                // Le répertoire n'existait pas avant la commande : le retirer entièrement
+                // ne peut rien emporter qui lui préexistait.
+                let _ = fs::remove_dir_all(&root);
+                return Err(Error::Installation {
+                    feature: feature.clone(),
+                    source: Box::new(source),
+                });
+            }
+        }
+    }
+
     Ok(Project {
         depot_git: git_init(&root),
         files: rendus.len(),
+        installed,
         root,
+    })
+}
+
+/// Pose une feature dans le projet tout juste créé, par le pipeline de `rbs add`.
+fn install(
+    root: &Path,
+    feature: &str,
+    template_dir: Option<&Path>,
+) -> Result<InstalledFeature, crate::add::Error> {
+    let planned = crate::add::plan_for(&crate::add::Options {
+        directory: root.to_path_buf(),
+        feature: feature.to_string(),
+        force: false,
+        template_dir: template_dir.map(Path::to_path_buf),
+    })?;
+
+    let migration = planned
+        .files
+        .iter()
+        .any(|file| file.starts_with("migration/src/"));
+    let files = planned.files.len();
+
+    crate::plan::application::apply(&planned.plan, false)?;
+
+    Ok(InstalledFeature {
+        name: feature.to_string(),
+        files,
+        migration,
     })
 }
 
@@ -205,24 +270,19 @@ fn validate_database(database: Database, url: &str) -> Result<(), Error> {
     })
 }
 
-/// `--with` n'installe rien : il nomme des features que seul `rbs add` pose.
-///
-/// Les inscrire dans `[package.metadata.rbs]` sans rien poser rendrait leur installation
-/// ultérieure impossible : l'idempotence du §4.2 porte sur ces métadonnées, pas sur la
-/// présence des fichiers.
-fn validate_features(features: &[String]) -> Result<(), Error> {
-    match features.first() {
-        None => Ok(()),
-        Some(feature) if FEATURES_CONNUES.contains(&feature.as_str()) => {
-            Err(Error::FeatureAVenir {
+/// Une feature que rbs ne connaît pas est refusée avant qu'un fichier soit écrit — comme
+/// le nom du projet et l'URL le sont déjà.
+fn validate_features(features: &[String], disponibles: &[String]) -> Result<(), Error> {
+    for feature in features {
+        if !disponibles.contains(feature) {
+            return Err(Error::FeatureInconnue {
                 feature: feature.clone(),
-            })
+                known: disponibles.join(", "),
+            });
         }
-        Some(feature) => Err(Error::FeatureInconnue {
-            feature: feature.clone(),
-            known: FEATURES_CONNUES.join(", "),
-        }),
     }
+
+    Ok(())
 }
 
 /// Valeur de la dépendance à `rbs-core` dans le manifeste généré.
@@ -258,9 +318,14 @@ fn core_dependency(core_path: Option<&Path>, database: Database) -> Result<Strin
 /// Rend toutes les templates. Aucun fichier n'est écrit tant que la dernière n'a pas
 /// abouti : une variable oubliée ne doit pas laisser un projet à moitié généré.
 fn render(options: &Options, dependency: &str) -> Result<Vec<(PathBuf, String)>, Error> {
-    let files = Source::fresh(options.template_dir.as_deref())
+    let mut files = Source::fresh(options.template_dir.as_deref())
         .files()
         .map_err(Error::Templates)?;
+
+    let connexion = crate::url::parse(&options.database_url);
+    if !compose_utile(options, connexion.as_ref()) {
+        files.retain(|file| file.destination != Path::new(COMPOSE));
+    }
 
     let renderer = Renderer::new();
     let context = context! {
@@ -272,6 +337,17 @@ fn render(options: &Options, dependency: &str) -> Result<Vec<(PathBuf, String)>,
         database => options.database.name(),
         sea_orm_feature => options.database.sea_orm_feature(),
         database_url_par_defaut => options.database.default_url(&crate_name(&options.name)),
+        database_user => connexion.as_ref().map(|c| c.user.clone()).unwrap_or_default(),
+        database_password => connexion.as_ref().map(|c| c.password.clone()).unwrap_or_default(),
+        // Une URL sans chemin rend un nom de base vide, que le repli ne rattraperait pas
+        // s'il ne guettait que `None` : le compose porterait un `POSTGRES_DB:` vide, et
+        // le service ne deviendrait jamais sain.
+        database_name => connexion
+            .as_ref()
+            .map(|c| c.database.clone())
+            .filter(|base| !base.is_empty())
+            .unwrap_or_else(|| crate_name(&options.name)),
+        database_port => connexion.as_ref().map(|c| c.port).unwrap_or_default(),
     };
 
     files
@@ -315,6 +391,20 @@ fn git_init(root: &Path) -> bool {
         .current_dir(root)
         .status()
         .is_ok_and(|statut| statut.success())
+}
+
+/// Le compose n'est écrit que s'il éviterait un `docker run` tapé à la main.
+///
+/// SQLite n'a rien à monter. Une base distante non plus : engendrer un service local que
+/// `rbs dev` monterait pendant que l'application en interroge un autre serait pire que de
+/// ne rien écrire. Une URL sans identifiants — valide, `parse` l'accepte — vaut la même
+/// abstention : l'image PostgreSQL officielle refuse de s'initialiser sans mot de passe,
+/// et un compose qui ne peut pas démarrer est pire qu'un compose absent.
+fn compose_utile(options: &Options, connexion: Option<&crate::url::Connection>) -> bool {
+    options.database.a_un_serveur()
+        && connexion.is_some_and(|connexion| {
+            connexion.est_locale() && !connexion.user.is_empty() && !connexion.password.is_empty()
+        })
 }
 
 /// Nom de la crate correspondant au nom du projet : un tiret n'est pas un caractère
@@ -693,77 +783,145 @@ mod tests {
     }
 
     #[test]
-    fn a_non_installable_feature_is_rejected_before_any_creation() {
-        let parent = parent();
-        let mut options = options("mon-api");
-        options.features = vec!["docker".to_owned()];
+    fn an_unknown_feature_is_refused_before_anything_is_written() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
 
-        let error =
-            create(&options, parent.path()).expect_err("`docker` n'est pas encore installable");
+        let error = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo".to_string(),
+                database: Database::Postgres,
+                features: vec!["graphql".to_string()],
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect_err("`graphql` n'est pas une feature");
 
         let message = error.to_string();
+        assert!(message.contains("graphql"), "{message}");
         assert!(
-            message.contains("docker") && message.contains("rbs add"),
-            "le message ne dit pas comment obtenir la feature : {message}"
+            message.contains("jobs"),
+            "la liste doit être complète : {message}"
         );
         assert!(
-            !parent.path().join("mon-api").exists(),
-            "un projet a été créé malgré l'échec"
+            !parent.path().join("demo").exists(),
+            "rien ne doit être écrit"
         );
     }
 
+    /// `jobs` était refusé par une liste qui l'avait oublié, alors que `rbs add jobs`
+    /// fonctionnait.
     #[test]
-    fn every_feature_add_installs_is_known_at_creation() {
-        // Les deux listes se sont désynchronisées une fois : `auth` livrée par `add`,
-        // et refusée ici comme si elle n'existait pas.
-        for feature in ["docker", "ci", "auth"] {
-            let parent = parent();
-            let mut options = options("mon-api");
-            options.features = vec![feature.to_owned()];
+    fn every_embedded_feature_is_accepted_by_name() {
+        for feature in crate::templates::feature_names(None) {
+            let parent = TempDir::new().expect("répertoire temporaire créable");
 
-            let error = create(&options, parent.path())
-                .expect_err("`--with` n'installe aucune feature à la création");
-            let message = error.to_string();
-
-            assert!(
-                message.contains(&format!("rbs add {feature}")),
-                "le message ne renvoie pas vers `rbs add {feature}` : {message}"
-            );
-            assert!(
-                !message.contains("n'est pas une feature rbs"),
-                "`{feature}` est traitée comme inconnue : {message}"
-            );
+            create(
+                &Options {
+                    name: "demo".to_string(),
+                    database_url: "postgres://rbs:rbs@localhost:5432/demo".to_string(),
+                    database: Database::Postgres,
+                    features: vec![feature.clone()],
+                    core_path: None,
+                    template_dir: None,
+                },
+                parent.path(),
+            )
+            .unwrap_or_else(|error| panic!("`{feature}` doit s'installer : {error}"));
         }
     }
 
     #[test]
-    fn the_pointer_to_add_does_not_pretend_the_command_is_missing() {
-        let parent = parent();
-        let mut options = options("mon-api");
-        options.features = vec!["auth".to_owned()];
+    fn a_requested_feature_is_actually_installed() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo".to_string(),
+                database: Database::Postgres,
+                features: vec!["auth".to_string()],
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
 
-        let error = create(&options, parent.path()).expect_err("`--with` n'installe rien");
+        assert!(project.root.join("src/auth/service.rs").is_file());
 
-        // `add` expose les trois features depuis le lot I. Le message qui annonçait le
-        // contraire envoyait le lecteur attendre une commande déjà livrée.
-        assert!(
-            !error.to_string().contains("n'expose pas"),
-            "le message dit encore qu'`add` n'expose pas la feature : {error}"
+        let main = fs::read_to_string(project.root.join("src/main.rs")).expect("main lisible");
+        assert!(main.contains("mod auth;"), "{main}");
+
+        let manifest = fs::read_to_string(project.root.join("Cargo.toml")).expect("manifeste");
+        assert!(manifest.contains("\"auth\""), "{manifest}");
+
+        assert_eq!(project.installed.len(), 1);
+        assert_eq!(project.installed[0].name, "auth");
+        assert!(project.installed[0].migration);
+    }
+
+    /// L'ordre de frappe ne doit pas décider du contenu : deux `--with` équivalents
+    /// produisent deux projets identiques.
+    #[test]
+    fn the_install_order_does_not_depend_on_the_typing_order() {
+        let rendu = |features: Vec<String>| {
+            let parent = TempDir::new().expect("répertoire temporaire créable");
+            let project = create(
+                &Options {
+                    name: "demo".to_string(),
+                    database_url: "postgres://rbs:rbs@localhost:5432/demo".to_string(),
+                    database: Database::Postgres,
+                    features,
+                    core_path: None,
+                    template_dir: None,
+                },
+                parent.path(),
+            )
+            .expect("le projet doit se créer");
+
+            let main = fs::read_to_string(project.root.join("src/main.rs")).expect("main");
+            let compose =
+                fs::read_to_string(project.root.join("docker-compose.yml")).expect("compose");
+            (main, compose)
+        };
+
+        assert_eq!(
+            rendu(vec!["redis".into(), "mail".into()]),
+            rendu(vec!["mail".into(), "redis".into()])
         );
     }
 
     #[test]
-    fn an_unknown_feature_is_not_confused_with_an_upcoming_one() {
-        let parent = parent();
-        let mut options = options("mon-api");
-        options.features = vec!["kubernetes".to_owned()];
+    fn a_failed_installation_leaves_no_project_behind() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let directory = TempDir::new().expect("répertoire temporaire créable");
+        // Un fragment vide : son manifeste est illisible, l'installation échoue.
+        fs::create_dir(directory.path().join("cassee")).expect("répertoire créable");
+        fs::write(
+            directory.path().join("cassee/feature.toml"),
+            "pas du toml [",
+        )
+        .expect("écriture possible");
 
-        let error = create(&options, parent.path()).expect_err("`kubernetes` n'existe pas");
+        let error = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo".to_string(),
+                database: Database::Postgres,
+                features: vec!["cassee".to_string()],
+                core_path: None,
+                template_dir: Some(directory.path().to_path_buf()),
+            },
+            parent.path(),
+        )
+        .expect_err("le fragment est cassé");
 
-        let message = error.to_string();
+        assert!(error.to_string().contains("cassee"), "{error}");
         assert!(
-            message.contains("kubernetes") && message.contains("docker"),
-            "le message ne nomme pas les features existantes : {message}"
+            !parent.path().join("demo").exists(),
+            "le projet à moitié installé ne doit pas subsister"
         );
     }
 
@@ -849,5 +1007,148 @@ mod tests {
             project.root.join(".git").exists(),
             "le projet créé n'est pas un dépôt"
         );
+    }
+
+    /// Le compose n'est utile que s'il évite un `docker run` tapé à la main : c'est le
+    /// seul critère qui décide de son écriture.
+    #[test]
+    fn a_local_postgres_project_gets_a_compose() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://rbs:secret@localhost:5432/demo".to_string(),
+                database: Database::Postgres,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        let compose = fs::read_to_string(project.root.join("docker-compose.yml"))
+            .expect("le compose doit être écrit");
+
+        assert!(compose.contains("POSTGRES_USER: rbs"), "{compose}");
+        assert!(compose.contains("POSTGRES_PASSWORD: secret"), "{compose}");
+        assert!(compose.contains("POSTGRES_DB: demo"), "{compose}");
+        assert!(compose.contains("- \"5432:5432\""), "{compose}");
+        assert!(compose.contains("# <rbs:services>"), "{compose}");
+        assert!(compose.contains("# </rbs:services>"), "{compose}");
+        assert_eq!(project.files, 17);
+    }
+
+    /// Le port publié est celui du .env, non 5432 en dur : sans quoi `cargo run` sur
+    /// l'hôte joindrait un port que le conteneur n'expose pas.
+    #[test]
+    fn the_published_port_is_the_one_the_project_will_dial() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:15432/demo".to_string(),
+                database: Database::Postgres,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        let compose = fs::read_to_string(project.root.join("docker-compose.yml"))
+            .expect("le compose doit être écrit");
+
+        assert!(compose.contains("- \"15432:5432\""), "{compose}");
+    }
+
+    /// Une URL sans nom de base laisse `POSTGRES_DB:` vide, donc un service que le
+    /// healthcheck ne déclare jamais sain : le nom du projet prend le relais.
+    #[test]
+    fn a_url_without_a_database_names_the_one_the_project_will_open() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "mon-api".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432".to_string(),
+                database: Database::Postgres,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        let compose = fs::read_to_string(project.root.join("docker-compose.yml"))
+            .expect("le compose doit être écrit");
+
+        assert!(compose.contains("POSTGRES_DB: mon_api"), "{compose}");
+    }
+
+    #[test]
+    fn a_sqlite_project_gets_no_compose() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "sqlite://demo.db?mode=rwc".to_string(),
+                database: Database::Sqlite,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        assert!(!project.root.join("docker-compose.yml").exists());
+        assert_eq!(project.files, 16);
+    }
+
+    #[test]
+    fn a_remote_database_gets_no_compose() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://rbs:rbs@db.prod.exemple:5432/demo".to_string(),
+                database: Database::Postgres,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        assert!(!project.root.join("docker-compose.yml").exists());
+        assert_eq!(project.files, 16);
+    }
+
+    /// Une URL sans identifiants est valide et acceptée par `parse` : sans cette
+    /// abstention, le compose porterait `POSTGRES_USER:` et `POSTGRES_PASSWORD:` vides,
+    /// rendus `null` par `docker compose config` — l'image officielle refuse alors de
+    /// s'initialiser. Écrire un compose qui ne peut pas démarrer est pire que ne rien
+    /// écrire, la même raison que pour SQLite et l'hôte distant.
+    #[test]
+    fn a_database_url_without_credentials_gets_no_compose() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://localhost:5432/demo".to_string(),
+                database: Database::Postgres,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        assert!(!project.root.join("docker-compose.yml").exists());
+        assert_eq!(project.files, 16);
     }
 }
