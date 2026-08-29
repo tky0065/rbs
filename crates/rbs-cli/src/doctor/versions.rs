@@ -275,20 +275,28 @@ mod tests {
         assert!(check.detail.contains(CLI));
     }
 
-    /// Une version que le dépôt n'atteindra pas de sitôt : le projet neuf est alors en
-    /// retard sur le CLI sans dépendre du numéro courant du workspace.
-    const FUTUR: &str = "1.0.0";
+    /// Une version strictement postérieure à celle du workspace, **dérivée d'elle** : un
+    /// numéro figé ici finit rattrapé, et le projet neuf cesse alors d'être en retard sur
+    /// un futur devenu présent — ce qui est arrivé à `"1.0.0"` le jour de sa publication.
+    fn futur() -> &'static str {
+        static FUTUR: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+            let [majeur, ..] = crate::upgrade::nombres(CLI).expect("la version du CLI se lit");
+            format!("{}.0.0", majeur + 1)
+        });
+
+        &FUTUR
+    }
 
     #[test]
     fn a_project_behind_the_cli_is_told_which_command_closes_the_gap() {
         let (_parent, root) = project();
 
-        let check = check_with(&root, true, FUTUR);
+        let check = check_with(&root, true, futur());
         let remedy = check.remedy.expect("un échec porte son remède");
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(check.detail.contains(CLI), "{}", check.detail);
-        assert!(check.detail.contains(FUTUR), "{}", check.detail);
+        assert!(check.detail.contains(futur()), "{}", check.detail);
         assert!(remedy.contains("rbs upgrade"), "{remedy}");
     }
 

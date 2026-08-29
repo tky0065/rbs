@@ -11,6 +11,44 @@ dépréciation.
 
 *[English version](CHANGELOG.md).*
 
+## [1.0.0] — 2026-08-29
+
+L'API publique de `rbs-core` est figée. À partir d'ici, le versionnage sémantique est une
+promesse et non une forme : à l'intérieur de la 1.x, rien n'est retiré, renommé ni doté
+d'un autre sens, et `cargo-semver-checks` fait échouer la construction plutôt que de
+laisser passer. La promesse couvre aussi le format des ancres en commentaires et de
+`[package.metadata.rbs]` : un projet engendré par une version du CLI reste lisible par la
+suivante. La [page de compatibilité](https://tky0065.github.io/rbs/fr/compatibility) énonce
+les cinq périmètres.
+
+### Ajouté
+
+- `rbs upgrade` aligne le manifeste d'un projet existant sur la version du CLI, et affiche
+  les notes de migration du saut. Elle n'écrit que dans `Cargo.toml` : le code engendré
+  dans vos sources vous appartient dès qu'il est écrit.
+- `rbs doctor` nomme désormais cette commande quand il trouve un projet en retard sur le
+  CLI, au lieu de décrire un alignement à faire à la main.
+- Les notes de migration sont embarquées dans le binaire, une par version qui introduit une
+  rupture.
+
+### Modifié
+
+- **Rupture.** 22 types publics de `rbs-core` portent `#[non_exhaustive]` : les 7 enums
+  (`Error`, `ConfigError`, `JwtError`, `LogError`, `Status`, `Check`, `LogFormat`) et 15
+  structs. Un `match` exhaustif sur un de ces enums réclame désormais un bras `_ =>`, et
+  ces structs ne se construisent plus par un littéral hors de la crate — passez par leur
+  constructeur, ou par la configuration désérialisée. C'est le prix du gel, et il se paie
+  ici parce qu'après la 1.0 il aurait coûté une 2.0.
+- `Claims`, `ValidatedJson<T>` et `CommonResponses` en sont délibérément exclus : le code
+  qu'écrivent `rbs new` et `rbs generate` les construit ou les déstructure. **Un projet
+  engendré traverse cette version sans une ligne à changer.**
+
+### Corrigé
+
+- Le plancher PostgreSQL documenté était 18, exigence tombée depuis que les modèles
+  engendrés posent eux-mêmes l'identifiant v7. `rbs doctor` fait respecter 14, et les
+  guides le disent désormais.
+
 ## [0.4.0] — 2026-08-28
 
 Cette première entrée est la première version publiée : elle ne fait donc qu'ajouter. Elle rassemble
@@ -91,4 +129,5 @@ démarrage, architecture, référence du CLI et guides, en français et en angla
 Rust 1.85 ou plus, édition 2024. Un projet généré tourne sur PostgreSQL 14 ou plus,
 MySQL 8.0 ou plus, ou SQLite 3.35 ou plus — `rbs doctor` refuse tout ce qui est en dessous.
 
+[1.0.0]: https://github.com/tky0065/rbs/releases/tag/v1.0.0
 [0.4.0]: https://github.com/tky0065/rbs/releases/tag/v0.4.0

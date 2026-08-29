@@ -193,9 +193,19 @@ mod tests {
 
     use super::*;
 
-    /// Une version que le dépôt n'atteindra pas de sitôt : les tests qui la visent
-    /// exercent la mise à niveau sans dépendre du numéro courant du workspace.
-    const FUTUR: &str = "1.0.0";
+    /// Une version strictement postérieure à celle du workspace, **dérivée d'elle**.
+    ///
+    /// Un numéro figé ici finit par être rattrapé : `"1.0.0"` l'a été le jour de sa
+    /// publication, et cinq tests ont cessé d'exercer ce qu'ils décrivaient — le projet
+    /// neuf n'était plus en retard sur un futur devenu présent.
+    fn futur() -> &'static str {
+        static FUTUR: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+            let [majeur, ..] = super::nombres(CLI).expect("la version du CLI se lit");
+            format!("{}.0.0", majeur + 1)
+        });
+
+        &FUTUR
+    }
 
     /// Un projet neuf, tel que `rbs new` l'écrit, dans son dépôt Git.
     fn project(core_path: Option<PathBuf>) -> (TempDir, PathBuf) {
@@ -304,14 +314,15 @@ mod tests {
     fn a_project_behind_the_cli_is_aligned_on_both_numbers() {
         let (_parent, root) = project(None);
 
-        let planned = plan_for_with(&options(&root), FUTUR).expect("la mise à niveau se planifie");
+        let planned =
+            plan_for_with(&options(&root), futur()).expect("la mise à niveau se planifie");
 
         assert!(
             !planned.deja_a_jour,
             "un projet en retard a quelque chose à faire"
         );
         assert_eq!(planned.depuis, CLI);
-        assert_eq!(planned.vers, FUTUR);
+        assert_eq!(planned.vers, futur());
 
         let rendu = plan::render::plan(&planned.plan);
         assert!(rendu.contains("Cargo.toml"), "{rendu}");
@@ -321,14 +332,14 @@ mod tests {
 
         let manifeste = manifeste(&root);
         assert!(
-            manifeste.contains(&format!("rbs-core = {{ version = \"{FUTUR}\"")),
+            manifeste.contains(&format!("rbs-core = {{ version = \"{}\"", futur())),
             "le noyau n'a pas suivi :\n{manifeste}"
         );
         assert_eq!(
             metadata::read(&root.join("Cargo.toml"))
                 .expect("le manifeste reste lisible")
                 .version,
-            FUTUR
+            futur()
         );
     }
 
@@ -336,14 +347,15 @@ mod tests {
     fn a_project_already_on_the_target_has_nothing_to_do_and_writes_nothing() {
         let (_parent, root) = project(None);
         assert!(
-            !upgrade(&root, FUTUR).deja_a_jour,
+            !upgrade(&root, futur()).deja_a_jour,
             "la première mise à niveau doit avoir eu quelque chose à faire"
         );
 
         let avant = empreinte(&root);
-        let planned = plan_for_with(&options(&root), FUTUR).expect("la mise à niveau se planifie");
+        let planned =
+            plan_for_with(&options(&root), futur()).expect("la mise à niveau se planifie");
 
-        assert!(planned.deja_a_jour, "le projet est déjà en {FUTUR}");
+        assert!(planned.deja_a_jour, "le projet est déjà en {}", futur());
         assert!(
             plan::render::plan(&planned.plan).contains("inchangé"),
             "{}",
@@ -357,12 +369,12 @@ mod tests {
         let (_parent, root) = project(None);
         upgrade(&root, "9.9.9");
 
-        let error = plan_for_with(&options(&root), FUTUR)
+        let error = plan_for_with(&options(&root), futur())
             .expect_err("un CLI antérieur au projet doit refuser");
 
         let message = error.to_string();
         assert!(message.contains("9.9.9"), "{message}");
-        assert!(message.contains(FUTUR), "{message}");
+        assert!(message.contains(futur()), "{message}");
     }
 
     #[test]
@@ -370,7 +382,7 @@ mod tests {
         let (_parent, root) = project(None);
         commit(&root);
 
-        upgrade(&root, FUTUR);
+        upgrade(&root, futur());
 
         assert_eq!(git(&root, &["status", "--porcelain"]), " M Cargo.toml\n");
     }
@@ -380,7 +392,7 @@ mod tests {
         let noyau = Path::new(env!("CARGO_MANIFEST_DIR")).join("../rbs-core");
         let (_parent, root) = project(Some(noyau));
 
-        upgrade(&root, FUTUR);
+        upgrade(&root, futur());
 
         let manifeste = manifeste(&root);
         assert!(
@@ -391,7 +403,7 @@ mod tests {
             metadata::read(&root.join("Cargo.toml"))
                 .expect("le manifeste reste lisible")
                 .version,
-            FUTUR,
+            futur(),
             "la métadonnée doit suivre même sans version à changer sur le noyau"
         );
     }
@@ -416,7 +428,7 @@ mod tests {
         fs::write(root.join("src/main.rs"), "// en cours\n").expect("fichier réécrivable");
 
         let error =
-            plan_for_with(&options(&root), FUTUR).expect_err("un working tree sale doit bloquer");
+            plan_for_with(&options(&root), futur()).expect_err("un working tree sale doit bloquer");
 
         assert!(error.to_string().contains("src/main.rs"), "{error}");
     }

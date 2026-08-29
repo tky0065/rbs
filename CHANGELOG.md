@@ -10,6 +10,42 @@ between minor versions with no deprecation cycle.
 
 *[Version française](CHANGELOG.fr.md).*
 
+## [1.0.0] — 2026-08-29
+
+The public API of `rbs-core` is frozen. From here on, semantic versioning is a promise and
+not a shape: nothing inside the 1.x line is removed, renamed or given another meaning, and
+`cargo-semver-checks` fails the build rather than let it happen. The promise covers the
+format of the comment anchors and of `[package.metadata.rbs]` too, so a project generated
+by one version of the CLI stays readable by the next. The [compatibility
+page](https://tky0065.github.io/rbs/compatibility) sets out the five scopes.
+
+### Added
+
+- `rbs upgrade` aligns an existing project's manifest on the version of the CLI, and shows
+  the migration notes of the jump. It writes to `Cargo.toml` and to nothing else: the code
+  generated into your tree is yours from the moment it is written.
+- `rbs doctor` now names that command when it finds a project behind the CLI, instead of
+  describing an alignment done by hand.
+- Migration notes are embedded in the binary, one per version that introduces a break.
+
+### Changed
+
+- **Breaking.** 22 public types of `rbs-core` carry `#[non_exhaustive]`: the 7 enums
+  (`Error`, `ConfigError`, `JwtError`, `LogError`, `Status`, `Check`, `LogFormat`) and 15
+  structs. An exhaustive `match` on one of those enums now needs a `_ =>` arm, and those
+  structs are no longer built from a literal outside the crate — go through the
+  constructor, or through the deserialised configuration. This is the price of the freeze,
+  and it is paid here because after 1.0 it would have cost a 2.0.
+- `Claims`, `ValidatedJson<T>` and `CommonResponses` are deliberately left out: the code
+  `rbs new` and `rbs generate` write builds or destructures them. **A generated project
+  crosses this version without a single line to change.**
+
+### Fixed
+
+- The documented PostgreSQL floor was 18, a requirement that fell when generated models
+  started setting the v7 identifier themselves. `rbs doctor` enforces 14, and the guides
+  now say so.
+
 ## [0.4.0] — 2026-08-28
 
 This first entry is the first published version, so it only adds. It gathers the four
@@ -88,4 +124,5 @@ architecture, CLI reference and guides, in English and French.
 Rust 1.85 or later, Rust edition 2024. A generated project runs on PostgreSQL 14 or later,
 MySQL 8.0 or later, or SQLite 3.35 or later — `rbs doctor` refuses anything below those.
 
+[1.0.0]: https://github.com/tky0065/rbs/releases/tag/v1.0.0
 [0.4.0]: https://github.com/tky0065/rbs/releases/tag/v0.4.0
