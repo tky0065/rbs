@@ -61,7 +61,7 @@ pub(crate) enum Error {
 
     /// Les champs ne s'analysent pas.
     #[error("{0}")]
-    Champs(fields::FieldsError),
+    Fields(fields::FieldsError),
 
     /// La feature occupe déjà son répertoire.
     #[error("{path} existe déjà : la feature `{feature}` est déjà là")]
@@ -143,7 +143,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     name::validate(&options.name).map_err(Error::Nom)?;
     let fields =
-        fields::parse(options.fields.as_deref().unwrap_or_default()).map_err(Error::Champs)?;
+        fields::parse(options.fields.as_deref().unwrap_or_default()).map_err(Error::Fields)?;
 
     let feature = Feature::fresh(&options.name, fields);
     let module = feature.module().to_string();

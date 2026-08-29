@@ -5,107 +5,107 @@ use super::FieldType;
 /// Toutes les fautes relevées dans une chaîne `--fields`, dans l'ordre des champs.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct FieldsError {
-    pub erreurs: Vec<FieldError>,
+    pub errors: Vec<FieldError>,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct FieldError {
     /// Rang du champ dans la chaîne, à partir de 1.
-    pub rang: usize,
+    pub rank: usize,
     /// Le nom du champ, ou la portion brute quand le nom n'a pas pu être lu.
-    pub libelle: String,
+    pub label: String,
     pub kind: ErrorKind,
 }
 
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ErrorKind {
-    FormeInvalide,
-    PasEnSnakeCase { suggestion: Option<String> },
-    MotCleRust { suggestions: Vec<String> },
-    NomReserve,
-    NomCollisionMigration,
-    NomEnDouble { rang_precedent: usize },
-    TypeInconnu { name: String },
-    ModificateurInconnu { name: String },
-    ModificateurEnDouble { name: String },
-    IndexRedondant,
+    InvalidForm,
+    NotSnakeCase { suggestion: Option<String> },
+    RustKeyword { suggestions: Vec<String> },
+    ReservedName,
+    MigrationNameCollision,
+    DuplicateName { previous_rank: usize },
+    UnknownType { name: String },
+    UnknownModifier { name: String },
+    DuplicateModifier { name: String },
+    RedundantIndex,
 }
 
 impl ErrorKind {
-    fn message(&self, libelle: &str) -> String {
+    fn message(&self, label: &str) -> String {
         match self {
-            Self::FormeInvalide => "forme attendue : « nom:type[:modificateur…] »".to_string(),
-            Self::PasEnSnakeCase { .. } => {
+            Self::InvalidForm => "forme attendue : « nom:type[:modificateur…] »".to_string(),
+            Self::NotSnakeCase { .. } => {
                 "le nom doit être en snake_case : minuscules ASCII, chiffres et souligné"
                     .to_string()
             }
-            Self::MotCleRust { .. } => format!("« {libelle} » est un mot-clé Rust"),
-            Self::NomReserve => format!("« {libelle} » ne se déclare pas"),
-            Self::NomCollisionMigration => format!(
-                "« {libelle} » entrerait en collision avec l'identifiant de la table dans la migration"
+            Self::RustKeyword { .. } => format!("« {label} » est un mot-clé Rust"),
+            Self::ReservedName => format!("« {label} » ne se déclare pas"),
+            Self::MigrationNameCollision => format!(
+                "« {label} » entrerait en collision avec l'identifiant de la table dans la migration"
             ),
-            Self::NomEnDouble { rang_precedent } => {
-                format!("« {libelle} » est déjà déclaré au champ {rang_precedent}")
+            Self::DuplicateName { previous_rank } => {
+                format!("« {label} » est déjà déclaré au champ {previous_rank}")
             }
-            Self::TypeInconnu { name } => format!("type inconnu « {name} »"),
-            Self::ModificateurInconnu { name } => format!("modificateur inconnu « {name} »"),
-            Self::ModificateurEnDouble { name } => {
+            Self::UnknownType { name } => format!("type inconnu « {name} »"),
+            Self::UnknownModifier { name } => format!("modificateur inconnu « {name} »"),
+            Self::DuplicateModifier { name } => {
                 format!("modificateur « {name} » en double")
             }
-            Self::IndexRedondant => {
+            Self::RedundantIndex => {
                 "« index » redondant : « unique » pose déjà un index".to_string()
             }
         }
     }
 
-    fn index(&self, libelle: &str) -> Option<String> {
+    fn hint(&self, label: &str) -> Option<String> {
         match self {
-            Self::FormeInvalide => Some("exemple : « email:string:unique »".to_string()),
-            Self::PasEnSnakeCase { suggestion } => suggestion
+            Self::InvalidForm => Some("exemple : « email:string:unique »".to_string()),
+            Self::NotSnakeCase { suggestion } => suggestion
                 .as_ref()
                 .map(|value| format!("essayez « {value} »")),
-            Self::MotCleRust { suggestions } => {
-                let liste: Vec<String> = suggestions.iter().map(|s| format!("« {s} »")).collect();
-                Some(format!("essayez {}", liste.join(" ou ")))
+            Self::RustKeyword { suggestions } => {
+                let list: Vec<String> = suggestions.iter().map(|s| format!("« {s} »")).collect();
+                Some(format!("essayez {}", list.join(" ou ")))
             }
-            Self::NomReserve => {
+            Self::ReservedName => {
                 Some("id, created_at et updated_at sont posés sur toute entité".to_string())
             }
-            Self::NomCollisionMigration => Some(format!("essayez « {libelle}_ »")),
-            Self::NomEnDouble { .. } => {
+            Self::MigrationNameCollision => Some(format!("essayez « {label}_ »")),
+            Self::DuplicateName { .. } => {
                 Some("un nom de champ ne peut apparaître qu'une fois".to_string())
             }
-            Self::TypeInconnu { .. } => Some(FieldType::NOMS.join(", ")),
-            Self::ModificateurInconnu { .. } => Some("unique, optional, index".to_string()),
-            Self::ModificateurEnDouble { .. } => None,
-            Self::IndexRedondant => Some("retirez « index »".to_string()),
+            Self::UnknownType { .. } => Some(FieldType::NAMES.join(", ")),
+            Self::UnknownModifier { .. } => Some("unique, optional, index".to_string()),
+            Self::DuplicateModifier { .. } => None,
+            Self::RedundantIndex => Some("retirez « index »".to_string()),
         }
     }
 }
 
 impl fmt::Display for FieldsError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut premier = true;
-        for error in &self.erreurs {
-            if !premier {
+        let mut first = true;
+        for error in &self.errors {
+            if !first {
                 writeln!(f)?;
             }
-            premier = false;
+            first = false;
 
-            let message = error.kind.message(&error.libelle);
+            let message = error.kind.message(&error.label);
             // Une portion vide n'a pas de libellé à citer : « champ 2 «  » » se lit mal.
-            if error.libelle.is_empty() {
-                write!(f, "erreur : champ {} — {message}", error.rang)?;
+            if error.label.is_empty() {
+                write!(f, "erreur : champ {} — {message}", error.rank)?;
             } else {
                 write!(
                     f,
                     "erreur : champ {} « {} » — {message}",
-                    error.rang, error.libelle
+                    error.rank, error.label
                 )?;
             }
 
-            if let Some(index) = error.kind.index(&error.libelle) {
-                write!(f, "\n        → {index}")?;
+            if let Some(hint) = error.kind.hint(&error.label) {
+                write!(f, "\n        → {hint}")?;
             }
         }
         Ok(())
@@ -118,31 +118,31 @@ impl std::error::Error for FieldsError {}
 /// `HTTPStatus` donne `http_status` et `EMAIL` donne `email`. Découper à chaque capitale
 /// produirait `h_t_t_p_status`, une suggestion que personne n'accepterait.
 pub(crate) fn to_snake_case(name: &str) -> String {
-    let caracteres: Vec<char> = name.chars().collect();
+    let characters: Vec<char> = name.chars().collect();
     let mut output = String::with_capacity(name.len() + 4);
 
-    for (rang, &caractere) in caracteres.iter().enumerate() {
-        if caractere == '-' || caractere == ' ' {
+    for (rank, &character) in characters.iter().enumerate() {
+        if character == '-' || character == ' ' {
             if !output.is_empty() && !output.ends_with('_') {
                 output.push('_');
             }
             continue;
         }
 
-        if caractere.is_uppercase() {
+        if character.is_uppercase() {
             // Une capitale ouvre un mot quand elle suit une minuscule (`firstName`) ou
             // quand elle termine un acronyme accolé au mot suivant (`HTTPStatus`).
-            let follows_a_lowercase = rang > 0 && !caracteres[rang - 1].is_uppercase();
-            let precedes_a_lowercase = caracteres
-                .get(rang + 1)
+            let follows_a_lowercase = rank > 0 && !characters[rank - 1].is_uppercase();
+            let precedes_a_lowercase = characters
+                .get(rank + 1)
                 .is_some_and(|suivant| suivant.is_lowercase());
 
-            if rang > 0 && (follows_a_lowercase || precedes_a_lowercase) && !output.ends_with('_') {
+            if rank > 0 && (follows_a_lowercase || precedes_a_lowercase) && !output.ends_with('_') {
                 output.push('_');
             }
-            output.extend(caractere.to_lowercase());
+            output.extend(character.to_lowercase());
         } else {
-            output.push(caractere);
+            output.push(character);
         }
     }
 
@@ -151,8 +151,8 @@ pub(crate) fn to_snake_case(name: &str) -> String {
 
 /// Le suffixe `_` marche pour tout mot-clé ; les quatre alias devant lui sont ceux
 /// qu'un développeur écrirait de lui-même.
-pub(crate) fn keyword_suggestions(mot: &str) -> Vec<String> {
-    let alias = match mot {
+pub(crate) fn keyword_suggestions(word: &str) -> Vec<String> {
+    let alias = match word {
         "type" => Some("kind"),
         "ref" => Some("reference"),
         "match" => Some("matching"),
@@ -163,7 +163,7 @@ pub(crate) fn keyword_suggestions(mot: &str) -> Vec<String> {
     alias
         .map(str::to_string)
         .into_iter()
-        .chain(std::iter::once(format!("{mot}_")))
+        .chain(std::iter::once(format!("{word}_")))
         .collect()
 }
 
@@ -171,11 +171,11 @@ pub(crate) fn keyword_suggestions(mot: &str) -> Vec<String> {
 mod tests {
     use super::*;
 
-    fn rendered(kind: ErrorKind, libelle: &str) -> String {
+    fn rendered(kind: ErrorKind, label: &str) -> String {
         FieldsError {
-            erreurs: vec![FieldError {
-                rang: 1,
-                libelle: libelle.to_string(),
+            errors: vec![FieldError {
+                rank: 1,
+                label: label.to_string(),
                 kind,
             }],
         }
@@ -184,7 +184,7 @@ mod tests {
 
     #[test]
     fn an_invalid_form_shows_the_expected_form() {
-        let text = rendered(ErrorKind::FormeInvalide, "title");
+        let text = rendered(ErrorKind::InvalidForm, "title");
         assert_eq!(
             text,
             "erreur : champ 1 « title » — forme attendue : « nom:type[:modificateur…] »\n\
@@ -195,7 +195,7 @@ mod tests {
     #[test]
     fn a_badly_cased_name_suggests_its_snake_case_form() {
         let text = rendered(
-            ErrorKind::PasEnSnakeCase {
+            ErrorKind::NotSnakeCase {
                 suggestion: Some("title".to_string()),
             },
             "Title",
@@ -206,7 +206,7 @@ mod tests {
 
     #[test]
     fn a_name_with_no_possible_recasing_gets_no_hint() {
-        let text = rendered(ErrorKind::PasEnSnakeCase { suggestion: None }, "prénom");
+        let text = rendered(ErrorKind::NotSnakeCase { suggestion: None }, "prénom");
 
         assert!(
             text.contains("minuscules ASCII, chiffres et souligné"),
@@ -218,7 +218,7 @@ mod tests {
     #[test]
     fn a_rust_keyword_suggests_its_two_fallbacks() {
         let text = rendered(
-            ErrorKind::MotCleRust {
+            ErrorKind::RustKeyword {
                 suggestions: vec!["kind".to_string(), "type_".to_string()],
             },
             "type",
@@ -229,7 +229,7 @@ mod tests {
 
     #[test]
     fn a_reserved_name_recalls_the_three_implicit_columns() {
-        let text = rendered(ErrorKind::NomReserve, "id");
+        let text = rendered(ErrorKind::ReservedName, "id");
         assert!(text.contains("« id » ne se déclare pas"), "{text}");
         assert!(
             text.contains("id, created_at et updated_at sont posés sur toute entité"),
@@ -239,7 +239,7 @@ mod tests {
 
     #[test]
     fn a_table_name_announces_the_collision_in_the_migration() {
-        let text = rendered(ErrorKind::NomCollisionMigration, "table");
+        let text = rendered(ErrorKind::MigrationNameCollision, "table");
         assert!(
             text.contains(
                 "« table » entrerait en collision avec l'identifiant de la table dans la migration"
@@ -251,7 +251,7 @@ mod tests {
 
     #[test]
     fn a_duplicated_name_points_back_to_the_previous_field() {
-        let text = rendered(ErrorKind::NomEnDouble { rang_precedent: 1 }, "email");
+        let text = rendered(ErrorKind::DuplicateName { previous_rank: 1 }, "email");
         assert!(
             text.contains("« email » est déjà déclaré au champ 1"),
             "{text}"
@@ -265,13 +265,13 @@ mod tests {
     #[test]
     fn an_unknown_type_lists_the_allowed_types() {
         let text = rendered(
-            ErrorKind::TypeInconnu {
+            ErrorKind::UnknownType {
                 name: "decimal".to_string(),
             },
             "price",
         );
         assert!(text.contains("type inconnu « decimal »"), "{text}");
-        for mot in FieldType::NOMS {
+        for mot in FieldType::NAMES {
             assert!(text.contains(mot), "« {mot} » absent de : {text}");
         }
     }
@@ -279,7 +279,7 @@ mod tests {
     #[test]
     fn an_unknown_modifier_lists_the_three_allowed_ones() {
         let text = rendered(
-            ErrorKind::ModificateurInconnu {
+            ErrorKind::UnknownModifier {
                 name: "uniq".to_string(),
             },
             "name",
@@ -291,7 +291,7 @@ mod tests {
     #[test]
     fn a_duplicated_modifier_is_named() {
         let text = rendered(
-            ErrorKind::ModificateurEnDouble {
+            ErrorKind::DuplicateModifier {
                 name: "unique".to_string(),
             },
             "email",
@@ -301,7 +301,7 @@ mod tests {
 
     #[test]
     fn a_redundant_index_explains_why() {
-        let text = rendered(ErrorKind::IndexRedondant, "slug");
+        let text = rendered(ErrorKind::RedundantIndex, "slug");
         assert!(
             text.contains("« index » redondant : « unique » pose déjà un index"),
             "{text}"
@@ -312,18 +312,18 @@ mod tests {
     #[test]
     fn several_errors_render_one_block_each_in_order() {
         let text = FieldsError {
-            erreurs: vec![
+            errors: vec![
                 FieldError {
-                    rang: 1,
-                    libelle: "Title".to_string(),
-                    kind: ErrorKind::PasEnSnakeCase {
+                    rank: 1,
+                    label: "Title".to_string(),
+                    kind: ErrorKind::NotSnakeCase {
                         suggestion: Some("title".to_string()),
                     },
                 },
                 FieldError {
-                    rang: 2,
-                    libelle: "type".to_string(),
-                    kind: ErrorKind::MotCleRust {
+                    rank: 2,
+                    label: "type".to_string(),
+                    kind: ErrorKind::RustKeyword {
                         suggestions: vec!["kind".to_string(), "type_".to_string()],
                     },
                 },

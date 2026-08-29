@@ -18,7 +18,7 @@ pub(crate) enum FieldType {
 }
 
 impl FieldType {
-    pub(crate) const NOMS: [&'static str; 7] =
+    pub(crate) const NAMES: [&'static str; 7] =
         ["string", "int", "float", "bool", "uuid", "datetime", "text"];
 
     pub(crate) fn parse(mot: &str) -> Option<Self> {
@@ -85,13 +85,13 @@ pub(crate) struct Field {
     pub name: String,
     pub type_: FieldType,
     pub unique: bool,
-    pub optionnel: bool,
+    pub optional: bool,
     pub index: bool,
 }
 
 impl Field {
     pub(crate) fn rust_type(&self) -> String {
-        if self.optionnel {
+        if self.optional {
             format!("Option<{}>", self.type_.rust_type())
         } else {
             self.type_.rust_type().to_string()
@@ -125,7 +125,7 @@ impl Serialize for Field {
         state.serialize_field("pascal_name", &self.pascal_name())?;
         state.serialize_field("type", self.type_.name())?;
         state.serialize_field("unique", &self.unique)?;
-        state.serialize_field("optional", &self.optionnel)?;
+        state.serialize_field("optional", &self.optional)?;
         state.serialize_field("index", &self.index)?;
         state.serialize_field("rust_type", &self.rust_type())?;
         state.serialize_field("bare_rust_type", self.type_.rust_type())?;
@@ -139,10 +139,10 @@ impl Serialize for Field {
 /// Recasse un identifiant snake_case en PascalCase.
 pub(crate) fn to_pascal_case(name: &str) -> String {
     name.split('_')
-        .map(|mot| {
-            let mut caracteres = mot.chars();
-            match caracteres.next() {
-                Some(premier) => premier.to_uppercase().chain(caracteres).collect(),
+        .map(|word| {
+            let mut characters = word.chars();
+            match characters.next() {
+                Some(first) => first.to_uppercase().chain(characters).collect(),
                 None => String::new(),
             }
         })
@@ -157,140 +157,140 @@ pub(crate) fn parse(input: &str) -> Result<Vec<Field>, FieldsError> {
     }
 
     let mut fields = Vec::new();
-    let mut erreurs = Vec::new();
-    let mut rangs_par_nom: Vec<(String, usize)> = Vec::new();
+    let mut errors = Vec::new();
+    let mut ranks_by_name: Vec<(String, usize)> = Vec::new();
 
-    for (rang, portion) in input.split(',').enumerate() {
-        let rang = rang + 1;
+    for (rank, chunk) in input.split(',').enumerate() {
+        let rank = rank + 1;
 
         // L'homonymie se contrôle après la validation du champ lui-même : un champ
         // fautif par ailleurs signale sa propre faute, pas le doublon.
-        match parse_field(rang, portion.trim()) {
-            Ok(champ) => match rangs_par_nom.iter().find(|(name, _)| *name == champ.name) {
-                Some(&(_, rang_precedent)) => erreurs.push(FieldError {
-                    rang,
-                    libelle: champ.name,
-                    kind: ErrorKind::NomEnDouble { rang_precedent },
+        match parse_field(rank, chunk.trim()) {
+            Ok(field) => match ranks_by_name.iter().find(|(name, _)| *name == field.name) {
+                Some(&(_, previous_rank)) => errors.push(FieldError {
+                    rank,
+                    label: field.name,
+                    kind: ErrorKind::DuplicateName { previous_rank },
                 }),
                 None => {
-                    rangs_par_nom.push((champ.name.clone(), rang));
-                    fields.push(champ);
+                    ranks_by_name.push((field.name.clone(), rank));
+                    fields.push(field);
                 }
             },
-            Err(error) => erreurs.push(error),
+            Err(error) => errors.push(error),
         }
     }
 
-    if erreurs.is_empty() {
+    if errors.is_empty() {
         Ok(fields)
     } else {
-        Err(FieldsError { erreurs })
+        Err(FieldsError { errors })
     }
 }
 
-fn parse_field(rang: usize, portion: &str) -> Result<Field, FieldError> {
-    let error = |libelle: &str, kind| FieldError {
-        rang,
-        libelle: libelle.to_string(),
+fn parse_field(rank: usize, chunk: &str) -> Result<Field, FieldError> {
+    let error = |label: &str, kind| FieldError {
+        rank,
+        label: label.to_string(),
         kind,
     };
 
-    let mut parties = portion.split(':').map(str::trim);
-    let name = parties.next().unwrap_or_default();
-    let type_brut = parties.next().unwrap_or_default();
+    let mut parts = chunk.split(':').map(str::trim);
+    let name = parts.next().unwrap_or_default();
+    let raw_type = parts.next().unwrap_or_default();
 
-    if name.is_empty() || type_brut.is_empty() {
-        return Err(error(portion, ErrorKind::FormeInvalide));
+    if name.is_empty() || raw_type.is_empty() {
+        return Err(error(chunk, ErrorKind::InvalidForm));
     }
 
     if !is_snake_case(name) {
         // Une recasse qui rendrait le nom inchangé, ou toujours invalide — un nom
         // accentué, par exemple — vaut mieux ne pas être proposée du tout.
-        let recasse = to_snake_case(name);
-        let suggestion = (recasse != name && is_snake_case(&recasse)).then_some(recasse);
+        let recased = to_snake_case(name);
+        let suggestion = (recased != name && is_snake_case(&recased)).then_some(recased);
 
-        return Err(error(name, ErrorKind::PasEnSnakeCase { suggestion }));
+        return Err(error(name, ErrorKind::NotSnakeCase { suggestion }));
     }
 
-    if MOTS_CLES_RUST.contains(&name) {
+    if RUST_KEYWORDS.contains(&name) {
         return Err(error(
             name,
-            ErrorKind::MotCleRust {
+            ErrorKind::RustKeyword {
                 suggestions: keyword_suggestions(name),
             },
         ));
     }
 
-    if NOMS_POSES_PAR_RBS.contains(&name) {
-        return Err(error(name, ErrorKind::NomReserve));
+    if NAMES_SET_BY_RBS.contains(&name) {
+        return Err(error(name, ErrorKind::ReservedName));
     }
 
     // La migration écrit `enum Users { Table, Id, … }` : un champ `table` y ajouterait
     // une seconde variante `Table`.
-    if name == NOM_DE_LA_TABLE_EN_MIGRATION {
-        return Err(error(name, ErrorKind::NomCollisionMigration));
+    if name == TABLE_NAME_IN_MIGRATION {
+        return Err(error(name, ErrorKind::MigrationNameCollision));
     }
 
-    let Some(type_) = FieldType::parse(type_brut) else {
+    let Some(type_) = FieldType::parse(raw_type) else {
         return Err(error(
             name,
-            ErrorKind::TypeInconnu {
-                name: type_brut.to_string(),
+            ErrorKind::UnknownType {
+                name: raw_type.to_string(),
             },
         ));
     };
 
-    let mut champ = Field {
+    let mut field = Field {
         name: name.to_string(),
         type_,
         unique: false,
-        optionnel: false,
+        optional: false,
         index: false,
     };
 
-    for modificateur in parties {
+    for modifier in parts {
         // Un séparateur surnuméraire — `email:string:` — est une faute de forme, pas un
         // modificateur dont le nom serait vide.
-        if modificateur.is_empty() {
-            return Err(error(name, ErrorKind::FormeInvalide));
+        if modifier.is_empty() {
+            return Err(error(name, ErrorKind::InvalidForm));
         }
 
-        let drapeau = match modificateur {
-            "unique" => &mut champ.unique,
-            "optional" => &mut champ.optionnel,
-            "index" => &mut champ.index,
-            inconnu => {
+        let flag = match modifier {
+            "unique" => &mut field.unique,
+            "optional" => &mut field.optional,
+            "index" => &mut field.index,
+            unknown => {
                 return Err(error(
                     name,
-                    ErrorKind::ModificateurInconnu {
-                        name: inconnu.to_string(),
+                    ErrorKind::UnknownModifier {
+                        name: unknown.to_string(),
                     },
                 ));
             }
         };
 
-        if *drapeau {
+        if *flag {
             return Err(error(
                 name,
-                ErrorKind::ModificateurEnDouble {
-                    name: modificateur.to_string(),
+                ErrorKind::DuplicateModifier {
+                    name: modifier.to_string(),
                 },
             ));
         }
 
-        *drapeau = true;
+        *flag = true;
     }
 
-    if champ.unique && champ.index {
-        return Err(error(name, ErrorKind::IndexRedondant));
+    if field.unique && field.index {
+        return Err(error(name, ErrorKind::RedundantIndex));
     }
 
-    Ok(champ)
+    Ok(field)
 }
 
 /// Mots-clés stricts et réservés des éditions 2015 à 2024. Un champ ainsi nommé
 /// produirait une entité que rustc refuse, quarante secondes plus tard.
-pub(crate) const MOTS_CLES_RUST: [&str; 51] = [
+pub(crate) const RUST_KEYWORDS: [&str; 51] = [
     "abstract", "as", "async", "await", "become", "box", "break", "const", "continue", "crate",
     "do", "dyn", "else", "enum", "extern", "false", "final", "fn", "for", "gen", "if", "impl",
     "in", "let", "loop", "macro", "match", "mod", "move", "mut", "override", "priv", "pub", "ref",
@@ -299,17 +299,17 @@ pub(crate) const MOTS_CLES_RUST: [&str; 51] = [
 ];
 
 /// Posées par rbs sur toute entité : les redéclarer donnerait deux fois la colonne.
-const NOMS_POSES_PAR_RBS: [&str; 3] = ["id", "created_at", "updated_at"];
+const NAMES_SET_BY_RBS: [&str; 3] = ["id", "created_at", "updated_at"];
 
 /// Variante que `#[derive(DeriveIden)]` réserve au nom de la table dans la migration.
-const NOM_DE_LA_TABLE_EN_MIGRATION: &str = "table";
+const TABLE_NAME_IN_MIGRATION: &str = "table";
 
 pub(crate) fn is_snake_case(name: &str) -> bool {
-    let Some(premier) = name.chars().next() else {
+    let Some(first) = name.chars().next() else {
         return false;
     };
 
-    premier.is_ascii_lowercase()
+    first.is_ascii_lowercase()
         && !name.ends_with('_')
         && name
             .chars()
@@ -344,8 +344,8 @@ mod tests {
 
         let valident: Vec<_> = fields
             .iter()
-            .filter(|champ| champ.validates_email())
-            .map(|champ| champ.name.as_str())
+            .filter(|field| field.validates_email())
+            .map(|field| field.name.as_str())
             .collect();
 
         assert_eq!(valident, ["email", "contact_email"]);
@@ -360,8 +360,8 @@ mod tests {
 
     #[test]
     fn name_of_is_the_inverse_of_parse() {
-        for mot in FieldType::NOMS {
-            let type_ = FieldType::parse(mot).expect("NOMS ne liste que des types connus");
+        for mot in FieldType::NAMES {
+            let type_ = FieldType::parse(mot).expect("NAMES ne liste que des types connus");
             assert_eq!(type_.name(), mot);
         }
     }
@@ -394,11 +394,11 @@ mod tests {
     #[test]
     fn only_text_carries_a_column_type_attribute() {
         assert_eq!(FieldType::Text.column_type_attribute(), Some("Text"));
-        for mot in FieldType::NOMS {
+        for mot in FieldType::NAMES {
             if mot == "text" {
                 continue;
             }
-            let type_ = FieldType::parse(mot).expect("NOMS ne liste que des types connus");
+            let type_ = FieldType::parse(mot).expect("NAMES ne liste que des types connus");
             assert_eq!(type_.column_type_attribute(), None, "type « {mot} »");
         }
     }
@@ -409,16 +409,16 @@ mod tests {
             name: "title".to_string(),
             type_: FieldType::String,
             unique: false,
-            optionnel: false,
+            optional: false,
             index: false,
         };
-        let optionnel = Field {
-            optionnel: true,
+        let optional = Field {
+            optional: true,
             ..required.clone()
         };
 
         assert_eq!(required.rust_type(), "String");
-        assert_eq!(optionnel.rust_type(), "Option<String>");
+        assert_eq!(optional.rust_type(), "Option<String>");
     }
 
     fn fields(input: &str) -> Vec<Field> {
@@ -439,14 +439,14 @@ mod tests {
         assert_eq!(fields[0].name, "title");
         assert_eq!(fields[0].type_, FieldType::String);
         assert!(!fields[0].unique);
-        assert!(!fields[0].optionnel);
+        assert!(!fields[0].optional);
         assert!(!fields[0].index);
     }
 
     #[test]
     fn each_modifier_raises_its_flag() {
         assert!(fields("email:string:unique")[0].unique);
-        assert!(fields("bio:text:optional")[0].optionnel);
+        assert!(fields("bio:text:optional")[0].optional);
         assert!(fields("slug:string:index")[0].index);
     }
 
@@ -469,7 +469,7 @@ mod tests {
     #[test]
     fn the_fields_keep_their_declaration_order() {
         let fields = fields("un:string,deux:int,trois:bool");
-        let names: Vec<&str> = fields.iter().map(|champ| champ.name.as_str()).collect();
+        let names: Vec<&str> = fields.iter().map(|field| field.name.as_str()).collect();
 
         assert_eq!(names, ["un", "deux", "trois"]);
     }
@@ -478,19 +478,19 @@ mod tests {
     fn a_field_without_a_type_is_an_invalid_form() {
         let error = parse("title").expect_err("un champ sans type est refusé");
 
-        assert_eq!(error.erreurs.len(), 1);
-        assert_eq!(error.erreurs[0].rang, 1);
-        assert_eq!(error.erreurs[0].libelle, "title");
-        assert_eq!(error.erreurs[0].kind, ErrorKind::FormeInvalide);
+        assert_eq!(error.errors.len(), 1);
+        assert_eq!(error.errors[0].rank, 1);
+        assert_eq!(error.errors[0].label, "title");
+        assert_eq!(error.errors[0].kind, ErrorKind::InvalidForm);
     }
 
     #[test]
     fn a_trailing_comma_is_an_invalid_form() {
         let error = parse("title:string,").expect_err("la virgule finale est refusée");
 
-        assert_eq!(error.erreurs.len(), 1);
-        assert_eq!(error.erreurs[0].rang, 2);
-        assert_eq!(error.erreurs[0].kind, ErrorKind::FormeInvalide);
+        assert_eq!(error.errors.len(), 1);
+        assert_eq!(error.errors[0].rank, 2);
+        assert_eq!(error.errors[0].kind, ErrorKind::InvalidForm);
         assert_eq!(
             error.to_string(),
             "erreur : champ 2 — forme attendue : « nom:type[:modificateur…] »\n\
@@ -502,20 +502,20 @@ mod tests {
     fn an_extra_separator_is_an_invalid_form() {
         let error = parse("email:string:").expect_err("le séparateur final est refusé");
 
-        assert_eq!(error.erreurs.len(), 1);
-        assert_eq!(error.erreurs[0].libelle, "email");
-        assert_eq!(error.erreurs[0].kind, ErrorKind::FormeInvalide);
-        assert_eq!(kind("email:string::unique"), ErrorKind::FormeInvalide);
+        assert_eq!(error.errors.len(), 1);
+        assert_eq!(error.errors[0].label, "email");
+        assert_eq!(error.errors[0].kind, ErrorKind::InvalidForm);
+        assert_eq!(kind("email:string::unique"), ErrorKind::InvalidForm);
     }
 
     #[test]
     fn a_type_outside_the_grammar_is_reported_on_its_field() {
         let error = parse("price:decimal").expect_err("decimal n'est pas dans la grammaire");
 
-        assert_eq!(error.erreurs[0].libelle, "price");
+        assert_eq!(error.errors[0].label, "price");
         assert_eq!(
-            error.erreurs[0].kind,
-            ErrorKind::TypeInconnu {
+            error.errors[0].kind,
+            ErrorKind::UnknownType {
                 name: "decimal".to_string()
             }
         );
@@ -523,21 +523,21 @@ mod tests {
 
     fn kind(input: &str) -> ErrorKind {
         let mut error = parse(input).expect_err("la chaîne doit être refusée");
-        assert_eq!(error.erreurs.len(), 1, "une seule faute attendue");
-        error.erreurs.remove(0).kind
+        assert_eq!(error.errors.len(), 1, "une seule faute attendue");
+        error.errors.remove(0).kind
     }
 
     #[test]
     fn a_non_snake_case_name_is_rejected_with_its_recasing() {
         assert_eq!(
             kind("Title:string"),
-            ErrorKind::PasEnSnakeCase {
+            ErrorKind::NotSnakeCase {
                 suggestion: Some("title".to_string())
             }
         );
         assert_eq!(
             kind("firstName:string"),
-            ErrorKind::PasEnSnakeCase {
+            ErrorKind::NotSnakeCase {
                 suggestion: Some("first_name".to_string())
             }
         );
@@ -547,7 +547,7 @@ mod tests {
     fn an_accented_name_is_rejected_without_a_misleading_suggestion() {
         assert_eq!(
             kind("prénom:string"),
-            ErrorKind::PasEnSnakeCase { suggestion: None }
+            ErrorKind::NotSnakeCase { suggestion: None }
         );
     }
 
@@ -555,11 +555,11 @@ mod tests {
     fn a_name_with_a_trailing_underscore_or_a_leading_digit_is_rejected() {
         assert!(matches!(
             kind("titre_:string"),
-            ErrorKind::PasEnSnakeCase { .. }
+            ErrorKind::NotSnakeCase { .. }
         ));
         assert!(matches!(
             kind("1titre:string"),
-            ErrorKind::PasEnSnakeCase { .. }
+            ErrorKind::NotSnakeCase { .. }
         ));
     }
 
@@ -573,14 +573,20 @@ mod tests {
     fn a_rust_keyword_is_rejected_before_compilation() {
         assert_eq!(
             kind("type:string"),
-            ErrorKind::MotCleRust {
+            ErrorKind::RustKeyword {
                 suggestions: vec!["kind".to_string(), "type_".to_string()]
             }
         );
-        assert!(matches!(kind("match:string"), ErrorKind::MotCleRust { .. }));
-        assert!(matches!(kind("async:bool"), ErrorKind::MotCleRust { .. }));
-        assert!(matches!(kind("box:string"), ErrorKind::MotCleRust { .. }));
-        assert!(matches!(kind("yield:string"), ErrorKind::MotCleRust { .. }));
+        assert!(matches!(
+            kind("match:string"),
+            ErrorKind::RustKeyword { .. }
+        ));
+        assert!(matches!(kind("async:bool"), ErrorKind::RustKeyword { .. }));
+        assert!(matches!(kind("box:string"), ErrorKind::RustKeyword { .. }));
+        assert!(matches!(
+            kind("yield:string"),
+            ErrorKind::RustKeyword { .. }
+        ));
     }
 
     #[test]
@@ -588,7 +594,7 @@ mod tests {
         for name in ["id", "created_at", "updated_at"] {
             assert_eq!(
                 kind(&format!("{name}:string")),
-                ErrorKind::NomReserve,
+                ErrorKind::ReservedName,
                 "nom « {name} »"
             );
         }
@@ -596,19 +602,19 @@ mod tests {
 
     #[test]
     fn a_field_named_table_is_rejected_for_the_migration() {
-        assert_eq!(kind("table:string"), ErrorKind::NomCollisionMigration);
+        assert_eq!(kind("table:string"), ErrorKind::MigrationNameCollision);
     }
 
     #[test]
     fn two_fields_with_the_same_name_are_rejected() {
         let error = parse("email:string,email:int").expect_err("l'homonyme est refusé");
 
-        assert_eq!(error.erreurs.len(), 1);
-        assert_eq!(error.erreurs[0].rang, 2);
-        assert_eq!(error.erreurs[0].libelle, "email");
+        assert_eq!(error.errors.len(), 1);
+        assert_eq!(error.errors[0].rank, 2);
+        assert_eq!(error.errors[0].label, "email");
         assert_eq!(
-            error.erreurs[0].kind,
-            ErrorKind::NomEnDouble { rang_precedent: 1 }
+            error.errors[0].kind,
+            ErrorKind::DuplicateName { previous_rank: 1 }
         );
     }
 
@@ -617,11 +623,11 @@ mod tests {
         let error =
             parse("email:string,name:string,email:string").expect_err("l'homonyme est refusé");
 
-        assert_eq!(error.erreurs.len(), 1);
-        assert_eq!(error.erreurs[0].rang, 3);
+        assert_eq!(error.errors.len(), 1);
+        assert_eq!(error.errors[0].rank, 3);
         assert_eq!(
-            error.erreurs[0].kind,
-            ErrorKind::NomEnDouble { rang_precedent: 1 }
+            error.errors[0].kind,
+            ErrorKind::DuplicateName { previous_rank: 1 }
         );
     }
 
@@ -630,14 +636,14 @@ mod tests {
         let error = parse("Title:string,email:string,email:string")
             .expect_err("deux fautes sont attendues");
 
-        assert_eq!(error.erreurs.len(), 2);
+        assert_eq!(error.errors.len(), 2);
         assert!(matches!(
-            error.erreurs[0].kind,
-            ErrorKind::PasEnSnakeCase { .. }
+            error.errors[0].kind,
+            ErrorKind::NotSnakeCase { .. }
         ));
         assert_eq!(
-            error.erreurs[1].kind,
-            ErrorKind::NomEnDouble { rang_precedent: 2 }
+            error.errors[1].kind,
+            ErrorKind::DuplicateName { previous_rank: 2 }
         );
     }
 
@@ -645,7 +651,7 @@ mod tests {
     fn a_duplicated_modifier_is_rejected() {
         assert_eq!(
             kind("email:string:unique:unique"),
-            ErrorKind::ModificateurEnDouble {
+            ErrorKind::DuplicateModifier {
                 name: "unique".to_string()
             }
         );
@@ -653,8 +659,8 @@ mod tests {
 
     #[test]
     fn unique_with_index_is_rejected_as_redundant() {
-        assert_eq!(kind("slug:string:unique:index"), ErrorKind::IndexRedondant);
-        assert_eq!(kind("slug:string:index:unique"), ErrorKind::IndexRedondant);
+        assert_eq!(kind("slug:string:unique:index"), ErrorKind::RedundantIndex);
+        assert_eq!(kind("slug:string:index:unique"), ErrorKind::RedundantIndex);
     }
 
     #[test]
@@ -668,21 +674,21 @@ mod tests {
         let error =
             parse("Title:string,type:text,price:decimal").expect_err("trois fautes attendues");
 
-        assert_eq!(error.erreurs.len(), 3);
-        assert_eq!(error.erreurs[0].rang, 1);
+        assert_eq!(error.errors.len(), 3);
+        assert_eq!(error.errors[0].rank, 1);
         assert!(matches!(
-            error.erreurs[0].kind,
-            ErrorKind::PasEnSnakeCase { .. }
+            error.errors[0].kind,
+            ErrorKind::NotSnakeCase { .. }
         ));
-        assert_eq!(error.erreurs[1].rang, 2);
+        assert_eq!(error.errors[1].rank, 2);
         assert!(matches!(
-            error.erreurs[1].kind,
-            ErrorKind::MotCleRust { .. }
+            error.errors[1].kind,
+            ErrorKind::RustKeyword { .. }
         ));
-        assert_eq!(error.erreurs[2].rang, 3);
+        assert_eq!(error.errors[2].rank, 3);
         assert!(matches!(
-            error.erreurs[2].kind,
-            ErrorKind::TypeInconnu { .. }
+            error.errors[2].kind,
+            ErrorKind::UnknownType { .. }
         ));
     }
 
@@ -690,10 +696,10 @@ mod tests {
     fn a_field_carrying_two_faults_surfaces_only_the_first() {
         let error = parse("Type:decimal").expect_err("deux fautes, une seule remontée");
 
-        assert_eq!(error.erreurs.len(), 1);
+        assert_eq!(error.errors.len(), 1);
         assert!(matches!(
-            error.erreurs[0].kind,
-            ErrorKind::PasEnSnakeCase { .. }
+            error.errors[0].kind,
+            ErrorKind::NotSnakeCase { .. }
         ));
     }
 

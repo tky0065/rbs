@@ -7,7 +7,7 @@
 use std::fmt;
 
 use super::fields::error::{keyword_suggestions, to_snake_case};
-use super::fields::{MOTS_CLES_RUST, is_snake_case};
+use super::fields::{RUST_KEYWORDS, is_snake_case};
 
 /// Ce qui rend un nom de feature inutilisable.
 #[derive(Debug, PartialEq, Eq)]
@@ -49,7 +49,7 @@ pub(crate) fn validate(name: &str) -> Result<(), NameError> {
         return error(Kind::PasEnSnakeCase { suggestion });
     }
 
-    if MOTS_CLES_RUST.contains(&name) {
+    if RUST_KEYWORDS.contains(&name) {
         return error(Kind::MotCleRust);
     }
 

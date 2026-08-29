@@ -57,7 +57,7 @@ impl SeedField {
             name: champ.name.clone(),
             // Un champ optionnel reste une colonne comme les autres : la renseigner rend
             // le seed lisible, là où un `None` ne montrerait rien.
-            value: if champ.optionnel {
+            value: if champ.optional {
                 format!("Some({value})")
             } else {
                 value
