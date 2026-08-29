@@ -124,11 +124,22 @@ pub(crate) const SEEDS: Anchor = Anchor {
     optional: false,
 };
 
+/// Services que les fragments ajoutent au compose du projet.
+///
+/// Optionnelle : un projet SQLite, un projet visant une base distante et tout projet créé
+/// avant la 1.1.0 n'ont pas de compose, et n'ont donc pas cette ancre à porter.
+pub(crate) const SERVICES: Anchor = Anchor {
+    name: "services",
+    file: "docker-compose.yml",
+    comment: "#",
+    optional: true,
+};
+
 /// Les points d'insertion du squelette.
 ///
 /// La génération vise chaque ancre nommément ; `rbs doctor` parcourt cette liste pour
 /// vérifier qu'un projet les porte toutes.
-pub(crate) const ANCRES: [Anchor; 9] = [
+pub(crate) const ANCRES: [Anchor; 10] = [
     FEATURES,
     ROUTES,
     OPENAPI,
@@ -138,6 +149,7 @@ pub(crate) const ANCRES: [Anchor; 9] = [
     STATE_INIT,
     STARTUP,
     SEEDS,
+    SERVICES,
 ];
 
 /// Une ancre attendue que le fichier ne porte pas.
@@ -564,5 +576,30 @@ struct AppState {
             !apres.contains("  memcached:\n  redis:\n"),
             "le service ne doit pas s'insérer nu sous un commentaire étranger :\n{apres}"
         );
+    }
+
+    // `SERVICES` étant un `const`, clippy évalue `SERVICES.optional` à la compilation et
+    // signale l'assertion comme triviale ; elle mord pourtant si quelqu'un change le
+    // champ, ce que clippy ne voit pas.
+    #[allow(clippy::assertions_on_constants)]
+    #[test]
+    fn the_services_anchor_lives_in_the_compose_and_is_optional() {
+        assert_eq!(SERVICES.file, "docker-compose.yml");
+        assert_eq!(SERVICES.comment, "#");
+        assert!(SERVICES.optional);
+        assert!(ANCRES.contains(&SERVICES));
+    }
+
+    /// Une ancre optionnelle est l'exception : toutes les autres décrivent un fichier que
+    /// le squelette écrit toujours, et leur absence est un défaut.
+    #[test]
+    fn only_the_services_anchor_is_optional() {
+        let optionnelles: Vec<&str> = ANCRES
+            .iter()
+            .filter(|anchor| anchor.optional)
+            .map(|anchor| anchor.name)
+            .collect();
+
+        assert_eq!(optionnelles, ["services"]);
     }
 }

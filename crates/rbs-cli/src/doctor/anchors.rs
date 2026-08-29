@@ -14,12 +14,19 @@ const TITRE: &str = "ancres";
 
 /// Vérifie que le projet porte toutes ses ancres, et dit comment recoller les absentes.
 pub(crate) fn check(root: &Path) -> Check {
-    let absentes: Vec<&Anchor> = ANCRES.iter().filter(|a| !present(root, a)).collect();
+    // Une ancre optionnelle dont le fichier n'existe pas n'est pas applicable : la
+    // réclamer ferait passer pour incomplet un projet qui ne l'est pas.
+    let applicables: Vec<&Anchor> = ANCRES
+        .iter()
+        .filter(|anchor| !anchor.optional || root.join(anchor.file).exists())
+        .collect();
+
+    let absentes: Vec<&&Anchor> = applicables.iter().filter(|a| !present(root, a)).collect();
 
     if absentes.is_empty() {
         return Check::ok(
             TITRE,
-            format!("les {} points d'insertion sont en place", ANCRES.len()),
+            format!("les {} points d'insertion sont en place", applicables.len()),
         );
     }
 
@@ -90,8 +97,11 @@ mod tests {
         let check = check(&root);
 
         assert_eq!(check.state, State::Bon);
+        // Le squelette n'écrit pas encore de compose : seules les neuf ancres non
+        // optionnelles sont applicables. `ANCRES.len()` vaudra de nouveau ce compte une
+        // fois `docker-compose.yml` généré.
         assert!(
-            check.detail.contains(&ANCRES.len().to_string()),
+            check.detail.contains(&(ANCRES.len() - 1).to_string()),
             "{}",
             check.detail
         );
@@ -173,5 +183,39 @@ mod tests {
 
         assert_eq!(check.state, State::Echec);
         assert!(check.detail.contains("src/openapi.rs"));
+    }
+
+    #[test]
+    #[ignore = "le squelette n'écrit pas encore de compose"]
+    fn an_optional_anchor_whose_file_is_absent_is_not_missing() {
+        let (_parent, root) = project();
+        fs::remove_file(root.join("docker-compose.yml")).expect("le compose doit exister");
+
+        let check = check(&root);
+
+        assert_eq!(check.state, State::Bon, "{check:?}");
+        assert!(
+            check.detail.contains('9'),
+            "seules les neuf ancres applicables comptent : {}",
+            check.detail
+        );
+    }
+
+    #[test]
+    #[ignore = "le squelette n'écrit pas encore de compose"]
+    fn an_optional_anchor_removed_from_a_present_file_is_missing() {
+        let (_parent, root) = project();
+        remove(&root, "docker-compose.yml", "<rbs:services>");
+
+        let check = check(&root);
+
+        assert_eq!(check.state, State::Echec, "{check:?}");
+        assert!(
+            check
+                .detail
+                .contains("services manque dans docker-compose.yml"),
+            "{}",
+            check.detail
+        );
     }
 }

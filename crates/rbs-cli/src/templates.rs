@@ -375,7 +375,15 @@ mod tests {
     fn each_anchor_is_opened_then_closed_in_its_file() {
         for anchor in crate::anchors::ANCRES {
             let relatif = format!("{}.jinja", anchor.file);
-            let source = read(&Path::new(RACINE).join(&relatif));
+            let chemin = Path::new(RACINE).join(&relatif);
+
+            // Une ancre optionnelle peut viser un template que le squelette n'écrit pas
+            // encore : sa présence ici anticipe la tâche qui l'ajoutera.
+            if anchor.optional && !chemin.exists() {
+                continue;
+            }
+
+            let source = read(&chemin);
 
             let opening = anchor.opening();
             let closing = anchor.closing();
