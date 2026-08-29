@@ -905,4 +905,107 @@ mod tests {
             "le dépilage doit tenir dans une fonction unique :\n{queue}"
         );
     }
+
+    /// Une balise Jinja de contrôle (`{%- if … %}`, `{%- endif %}`) s'écrit au ras de la
+    /// marge par convention du dépôt, quelle que soit la profondeur YAML environnante :
+    /// elle ne porte donc aucune indentation à retirer, dans aucun des deux fichiers.
+    fn est_balise_jinja(line: &str) -> bool {
+        line.trim_start().starts_with("{%")
+    }
+
+    /// Retire l'indentation commune à toutes les lignes non vides d'un bloc, pour comparer
+    /// le contenu d'une ancre au niveau racine d'un manifeste à son équivalent imbriqué
+    /// sous `services:` dans un fichier YAML — modulo l'indentation, sans quoi les deux
+    /// diffèreraient sur chaque ligne plutôt que sur celle qui a vraiment divergé. Les
+    /// balises Jinja sont exclues du calcul et laissées à la marge : les compter ferait
+    /// tomber l'indentation mesurée à zéro, celle qu'elles portent réellement.
+    fn dedent(text: &str) -> String {
+        let indentation = text
+            .lines()
+            .filter(|line| !line.trim().is_empty() && !est_balise_jinja(line))
+            .map(|line| line.len() - line.trim_start().len())
+            .min()
+            .unwrap_or(0);
+
+        text.lines()
+            .map(|line| {
+                if line.trim().is_empty() || est_balise_jinja(line) {
+                    line.trim_start()
+                } else {
+                    &line[indentation.min(line.len())..]
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+            .trim()
+            .to_string()
+    }
+
+    /// Le bloc `migrate`/`api` existe en deux exemplaires qui doivent rester identiques au
+    /// caractère près : le `content` de l'ancre `services` du manifeste du fragment
+    /// `docker`, inséré dans un compose qui existe déjà, et le corps de la même ancre dans
+    /// le compose de repli qu'`if_absent` écrit pour un projet qui n'en a pas encore.
+    ///
+    /// Une seule ligne désynchronisée (`restart: "no"` devenu `restart: always` d'un seul
+    /// côté, mesuré en relecture) fait que la ligne survivante s'attache au mauvais
+    /// service dans le fichier fraîchement écrit, sans qu'aucune commande n'échoue et sans
+    /// qu'aucun autre test ne le remarque : c'est ce test qui doit mordre à sa place.
+    #[test]
+    fn the_services_anchor_content_matches_the_fallback_compose_body() {
+        let manifeste = read(&Path::new(RACINE_FEATURES).join("docker/feature.toml"));
+        let manifest = crate::manifest::read(&manifeste, "docker/feature.toml")
+            .expect("le manifeste du fragment docker doit se lire");
+
+        let content = &manifest
+            .anchors
+            .iter()
+            .find(|insertion| insertion.anchor == "services")
+            .expect("le fragment docker déclare l'ancre services")
+            .content;
+
+        let compose = read(&Path::new(RACINE_FEATURES).join("docker/docker-compose.yml.jinja"));
+        let corps = crate::anchors::body(&compose, crate::anchors::SERVICES)
+            .expect("le compose de repli doit porter l'ancre services");
+
+        assert_eq!(
+            dedent(content),
+            dedent(corps),
+            "le contenu de l'ancre du manifeste diverge du corps du compose de repli"
+        );
+    }
+
+    /// Début et fin du service `db`, identiques dans le corps de la fonction de test elle
+    /// aussi : c'est la même chaîne dont la présence est vérifiée dans les deux fichiers.
+    const DEBUT_SERVICE_DB: &str = "\n  db:\n";
+    const FIN_SERVICE_DB: &str = "      retries: 30\n";
+
+    /// Isole le service `db`, de sa déclaration à la fin de son healthcheck.
+    fn service_db(source: &str) -> &str {
+        let debut = source
+            .find(DEBUT_SERVICE_DB)
+            .expect("le service db doit être présent")
+            + 1;
+        let fin_relative = source[debut..]
+            .find(FIN_SERVICE_DB)
+            .expect("le healthcheck du service db doit être présent");
+
+        &source[debut..debut + fin_relative + FIN_SERVICE_DB.len()]
+    }
+
+    /// Le service `db` est dupliqué entre le compose du squelette — écrit quand un projet
+    /// a de quoi le rendre utile — et le compose de repli du fragment `docker` — écrit pour
+    /// un projet qui n'a pas encore de compose. Une divergence entre les deux serait plus
+    /// douce que celle de `migrate`/`api` (les deux composent des fichiers valides), mais
+    /// romprait la même promesse : que les deux chemins d'écriture rendent le même service.
+    #[test]
+    fn the_db_service_matches_between_the_skeleton_and_the_fallback_compose() {
+        let squelette = read(&Path::new(RACINE).join("docker-compose.yml.jinja"));
+        let repli = read(&Path::new(RACINE_FEATURES).join("docker/docker-compose.yml.jinja"));
+
+        assert_eq!(
+            service_db(&squelette),
+            service_db(&repli),
+            "le service db diverge entre le compose du squelette et celui du fragment docker"
+        );
+    }
 }
