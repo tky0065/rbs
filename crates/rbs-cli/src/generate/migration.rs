@@ -421,8 +421,19 @@ async fn la_migration_monte_insere_et_redescend() {
     fn the_generated_migration_compiles_with_its_foreign_key() {
         let project = bench::Project::fresh();
 
-        // La cible d'abord : une migration ne compile pas contre une table absente de
-        // la crate `migration`.
+        // Le fichier de migration redéclare localement l'énumération `Users` — la
+        // contrainte n'est donc pas un lien de compilation vers le fichier de sa
+        // cible, et l'ordre d'écriture ci-dessous n'a aucune incidence sur ce que ce
+        // test prouve. `users` est écrite quand même : elle donne un décor réaliste,
+        // dont un futur test d'exécution (qui applique réellement les migrations,
+        // dans l'ordre, contre une base) aura besoin.
+        //
+        // Ce que ce test prouve : la chaîne `.foreign_key(ForeignKey::create()…)`,
+        // son `ForeignKeyAction` et la déclaration du `DeriveIden` cible passent le
+        // typage de `sea_orm_migration`, et le fichier engendré est du Rust que
+        // `rustc` accepte. Ce qu'il ne prouve pas : que les migrations s'appliquent
+        // dans le bon ordre — une propriété d'exécution, qui ne s'éprouve que contre
+        // une vraie base.
         let users = migration("users", "email:string:unique");
         project.write_migration(&users.module, &users.content);
 
