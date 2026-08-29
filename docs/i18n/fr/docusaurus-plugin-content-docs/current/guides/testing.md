@@ -68,7 +68,7 @@ dit si le schéma n'est pas là.
 ## Comment rbs se teste lui-même
 
 Les tests d'intégration du cadre ne supposent rien de démarré. Ils lancent un conteneur
-PostgreSQL 18 avec `testcontainers`, génèrent un projet dans un répertoire temporaire,
+PostgreSQL 17 avec `testcontainers`, génèrent un projet dans un répertoire temporaire,
 appliquent ses migrations et exécutent ses tests — le binaire `rbs` étant invoqué
 exactement comme vous l'invoqueriez.
 
@@ -83,6 +83,8 @@ cargo test -p rbs-cli --test integration_crud -- --ignored
 Lent qu'il soit, c'est le seul test qui prouve que rbs fonctionne réellement. Tout le
 reste vérifie une chaîne de caractères.
 
-PostgreSQL 18 n'y est pas négociable, pour la raison donnée dans le
-[guide des migrations](./migrations.md) : les clés primaires générées ont `uuidv7()` pour
-défaut, native seulement à partir de cette version.
+Que le conteneur tourne en 17 est un test en soi. Pour la raison donnée dans le
+[guide des migrations](./migrations.md), les clés primaires engendrées sont posées par le
+modèle et non par un défaut de colonne : rien de ce qu'exécute un projet engendré ne réclame
+le `uuidv7()` arrivé avec PostgreSQL 18. Le plancher que `rbs doctor` fait respecter est la
+14, la plus ancienne version encore corrigée côté sécurité.

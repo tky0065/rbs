@@ -50,10 +50,11 @@ The migration for `articles` above, exactly as generated:
 ```rust file=examples/hello-crud/migration/src/m20260826_205243_create_articles.rs region=up
 ```
 
-Three columns are added to the ones you named. `id` is a UUID defaulted by `uuidv7()`,
-which makes identifiers sort by creation time — **PostgreSQL 18 is the floor**, since
-that is where `uuidv7()` became native. `created_at` and `updated_at` both default to the
-transaction timestamp.
+Three columns are added to the ones you named. `id` is a UUID with no column default:
+**the generated model sets it**, with `Uuid::now_v7()`, just before the insert. Identifiers
+still sort by creation time, and no engine is ever asked for a `uuidv7()` of its own — which
+is what lets the same migration run on PostgreSQL, MySQL and SQLite alike. `created_at` and
+`updated_at` both default to the transaction timestamp.
 
 The column names are declared in the `DeriveIden` enum at the bottom of the file, which is
 what the SeaORM query builder refers to:

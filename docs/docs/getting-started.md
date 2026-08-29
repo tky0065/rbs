@@ -18,10 +18,10 @@ generated code are the same in every locale.
 ## What you need
 
 - **Rust stable**, edition 2024. This run used `rustc 1.96.0`.
-- **PostgreSQL 18 or later.** The Docker one-liner below is enough; an existing server
-  works just as well, as long as you can point a URL at it — and as long as it is an 18.
-  Generated migrations default their primary key to `uuidv7()`, which earlier versions do
-  not have.
+- **PostgreSQL 14 or later.** The Docker one-liner below is enough; an existing server
+  works just as well, as long as you can point a URL at it. That floor is the oldest
+  release still receiving security fixes: generated models set their own v7 identifier, so
+  nothing a project runs asks the server for a `uuidv7()` of its own.
 - **curl**, or any HTTP client, for the last section.
 - **A clone of the rbs repository.** 0.1 is not on crates.io yet, which has two
   consequences you will meet below.
