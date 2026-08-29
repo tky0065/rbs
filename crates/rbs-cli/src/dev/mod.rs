@@ -110,6 +110,14 @@ impl Error {
                 "attendu : {}=postgres://utilisateur:motdepasse@hote:port/base",
                 migrate::URL
             )),
+            // Le compose du squelette est le chemin par défaut depuis cette branche :
+            // un projet sans Docker installé n'a plus besoin d'`add docker` pour heurter
+            // cette erreur, et doit repartir sans lui — ce que le contrôle de présence du
+            // compose, au début de `plan()`, garantit déjà si le fichier disparaît.
+            Self::Docker(_) => Some(format!(
+                "installez Docker, ou supprimez {COMPOSE} pour démarrer la base vous-même \
+                 — `rbs dev` repart alors sans lui"
+            )),
             _ => None,
         }
     }
@@ -388,6 +396,27 @@ mod tests {
             steps.first(),
             Some(&Step::Compose(root.join(COMPOSE))),
             "le compose n'ouvre pas le démarrage : {steps:?}"
+        );
+    }
+
+    /// Avant cette branche, seul un projet ayant fait `rbs add docker` heurtait
+    /// `Error::Docker` ; le compose du squelette en fait désormais le chemin par défaut,
+    /// et `Error::Docker` tombait dans le `_ => None` de `remedy()`, sans aucun remède.
+    #[test]
+    fn docker_not_being_launchable_names_both_ways_out() {
+        let error = Error::Docker(io::Error::from(io::ErrorKind::NotFound));
+
+        let remedy = error
+            .remedy()
+            .expect("l'absence de docker doit dire quoi faire");
+
+        assert!(
+            remedy.to_lowercase().contains("docker"),
+            "le remède ne parle pas d'installer Docker : {remedy}"
+        );
+        assert!(
+            remedy.contains(COMPOSE),
+            "le remède ne dit pas de retirer le compose pour démarrer sans lui : {remedy}"
         );
     }
 
