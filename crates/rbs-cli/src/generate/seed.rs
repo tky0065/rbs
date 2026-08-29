@@ -54,7 +54,7 @@ impl SeedField {
         let value = value(champ, rang);
 
         Self {
-            name: champ.name.clone(),
+            name: champ.column_name(),
             // Un champ optionnel reste une colonne comme les autres : la renseigner rend
             // le seed lisible, là où un `None` ne montrerait rien.
             value: if champ.optional {
@@ -281,6 +281,22 @@ async fn les_semis_sont_rendus_par_l_api() {
         // Le seed déposé est du code que l'utilisateur n'a pas écrit : il ne doit pas
         // rendre rouge la CI que `rbs add ci` pose dans son projet.
         project.clippy();
+    }
+
+    /// Une référence est nommée par sa colonne, pas par le nom déclaré : rien d'autre ne
+    /// s'appelle `author` sur l'`ActiveModel` généré.
+    #[test]
+    fn a_reference_seeds_its_column_not_its_relation_name() {
+        let rendered = seed("posts", "author:references:users:optional");
+
+        assert!(
+            rendered.contains("author_id: Set(Some(Uuid::from_u128(1))),"),
+            "la colonne doit être nommée « author_id » :\n{rendered}"
+        );
+        assert!(
+            !rendered.contains("author: Set("),
+            "le nom déclaré ne doit pas fuir jusqu'au seed :\n{rendered}"
+        );
     }
 
     #[test]

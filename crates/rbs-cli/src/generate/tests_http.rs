@@ -43,7 +43,7 @@ struct TestField {
 impl TestField {
     fn from(champ: &Field) -> Self {
         Self {
-            name: champ.name.clone(),
+            name: champ.column_name(),
             creation: value(champ, ""),
             modification: value(champ, "modifie-"),
         }
@@ -89,11 +89,11 @@ fn textual(champ: &Field) -> bool {
     matches!(champ.column_type(), FieldType::String | FieldType::Text)
 }
 
-fn names(fields: &[Field], retenu: impl Fn(&Field) -> bool) -> Vec<&str> {
+fn names(fields: &[Field], retenu: impl Fn(&Field) -> bool) -> Vec<String> {
     fields
         .iter()
         .filter(|champ| retenu(champ))
-        .map(|champ| champ.name.as_str())
+        .map(Field::column_name)
         .collect()
 }
 
@@ -284,6 +284,26 @@ mod tests {
         assert!(
             rendered.contains("json!({})"),
             "le corps de création reste un objet vide :\n{rendered}"
+        );
+    }
+
+    /// Une référence est nommée par sa colonne, pas par le nom déclaré : le DTO n'a pas
+    /// de champ `author`, seulement `author_id`.
+    #[test]
+    fn a_reference_is_named_by_its_column_not_its_relation_name() {
+        let rendered = trials("posts", "author:references:users");
+
+        assert!(
+            rendered.contains(r#""author_id": Uuid::new_v4().to_string(),"#),
+            "la colonne doit être nommée « author_id » :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(r#"compare(&created, &sent, "author_id");"#),
+            "la comparaison doit porter sur la colonne :\n{rendered}"
+        );
+        assert!(
+            !rendered.contains(r#""author":"#),
+            "le nom déclaré ne doit pas fuir :\n{rendered}"
         );
     }
 
