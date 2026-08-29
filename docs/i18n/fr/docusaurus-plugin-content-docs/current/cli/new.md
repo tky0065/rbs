@@ -46,8 +46,8 @@ lettre ASCII et ne porte que des lettres, des chiffres, `-` et `_`.
 |---|---|
 | `--database-url <URL>` | URL de connexion écrite dans le `.env` du projet sous `RBS_DATABASE__URL`. Absente, la question est posée — ou la valeur par défaut est prise sous `--yes`. |
 | `--database <MOTEUR>` | Moteur sur lequel le projet tournera : `postgres`, `mysql` ou `sqlite`. `postgres` par défaut. |
-| `--with <FEATURES>` | Features à installer à la création, séparées par des virgules. Ce que 0.1.0 en fait est décrit plus bas. |
-| `--core-path <CHEMIN>` | Fait pointer le manifeste généré vers une crate `rbs-core` locale plutôt que vers la version publiée. Le chemin est canonisé : Cargo le résout depuis le projet créé, et non depuis le répertoire d'où la commande est lancée. |
+| `--with <FEATURES>` | Features à installer à la création, séparées par des virgules. Ce que cette version en fait est décrit plus bas. |
+| `--core-path <CHEMIN>` | Fait pointer le manifeste généré vers une crate `rbs-core` locale plutôt que vers la version publiée — le mode dans lequel rbs se développe, décrit [plus bas](#construire-contre-un-noyau-local). |
 | `--template-dir <CHEMIN>` | Rend le projet depuis un répertoire de templates, au lieu de celles embarquées dans le binaire. |
 | `-y`, `--yes` | Ne demande rien : prend les valeurs par défaut et exécute. |
 
@@ -94,7 +94,7 @@ attente de la base dans [`rbs dev`](./dev.md), et une URL sans hôte ni port.
 ## Créer un projet
 
 ```text
-$ rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --core-path /private/tmp/rbs-core --yes
+$ rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes
 ✓ blog créé — 16 fichiers
 
   cd blog
@@ -125,8 +125,8 @@ blog/src/state.rs
 `git init` passe en dernier. S'il échoue, le projet reste complet : la commande le signale
 sur stderr au lieu d'échouer.
 
-Le parcours de ces pages utilise `--core-path` parce que `rbs-core` 0.1.0 n'est pas encore
-sur crates.io. Sans ce flag, le manifeste reçoit `rbs-core = "0.1.0"` depuis le registre.
+Le manifeste dépend de `rbs-core` publié sur crates.io, dans la version du CLI qui l'a
+écrit. Il n'y a rien à construire ni à cloner d'abord.
 
 ## Ce qui porte l'idempotence
 
@@ -135,16 +135,18 @@ garde un état sur le projet :
 
 ```text
 [package.metadata.rbs]
-version = "0.1.0"
+version = "1.0.0"
 features = ["health"]
+database = "postgres"
 ```
 
 `version` est le rbs qui a généré le projet — [`rbs doctor`](./doctor.md) la compare à la
-sienne. `features` s'allonge à mesure que [`rbs generate`](./generate.md) et
-[`rbs add`](./add.md) installent, et c'est ce qui fait d'une seconde exécution de la même
-commande une non-opération plutôt qu'un doublon. Un fichier d'état à part se serait
-désynchronisé du dépôt la première fois qu'on aurait oublié de le committer ; le manifeste,
-lui, est déjà versionné.
+sienne, et [`rbs upgrade`](./upgrade.md) est ce qui la fait bouger. `database` est le
+moteur pour lequel le projet a été créé. `features` s'allonge à mesure que
+[`rbs generate`](./generate.md) et [`rbs add`](./add.md) installent, et c'est ce qui fait
+d'une seconde exécution de la même commande une non-opération plutôt qu'un doublon. Un
+fichier d'état à part se serait désynchronisé du dépôt la première fois qu'on aurait
+oublié de le committer ; le manifeste, lui, est déjà versionné.
 
 ## Les trois questions
 
@@ -161,6 +163,33 @@ $ rbs new sans-tty < /dev/null
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
 ```
 
+## Construire contre un noyau local
+
+Par défaut, le manifeste généré dépend de `rbs-core` pris au registre, ce que veut un
+projet. `--core-path` remplace cette dépendance par un chemin vers une copie locale de la
+crate :
+
+```text
+$ rbs new blog --core-path /private/tmp/rbs-core --yes
+✓ blog créé — 16 fichiers
+
+  cd blog
+  cargo run          # la base visée est dans .env
+
+$ grep rbs-core blog/Cargo.toml
+rbs-core = { path = "/private/tmp/rbs-core", default-features = false, features = ["postgres"] }
+```
+
+C'est le mode dans lequel rbs se développe, et la seule raison de saisir ce flag : une
+modification du noyau s'éprouve en engendrant un projet contre lui, avant que la version
+qui la porte soit publiée. Le chemin est canonisé dans le manifeste : Cargo le résout
+depuis le projet, et non depuis le répertoire d'où la commande a été lancée.
+
+Deux commandes lisent alors le manifeste autrement. [`rbs doctor`](./doctor.md) annonce un
+noyau pris d'un chemin local au lieu d'en nommer la version, et
+[`rbs upgrade`](./upgrade.md) laisse la dépendance en place — un chemin n'a pas de version
+à monter.
+
 ## Des templates prises du disque
 
 `--template-dir` remplace le squelette embarqué par un répertoire de même forme : une
@@ -168,7 +197,7 @@ template `.jinja` par fichier à écrire, le suffixe retiré en sortie. Ci-desso
 du squelette dont le `.env.jinja` porte une ligne de plus :
 
 ```text
-$ rbs new maison --template-dir /private/tmp/rbs-demo/mes-templates --core-path /private/tmp/rbs-core --yes
+$ rbs new maison --template-dir /private/tmp/rbs-demo/mes-templates --yes
 ✓ maison créé — 16 fichiers
 
   cd maison

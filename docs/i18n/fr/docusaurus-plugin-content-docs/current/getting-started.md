@@ -11,7 +11,7 @@ si votre terminal affiche la même chose, vous n'avez pas dévié — aux durée
 identifiants et aux dates près, qui sont les vôtres. Une seule chose a été retirée des
 blocs : le chemin absolu du répertoire où l'exécution a eu lieu, noté `…/demo`.
 
-En 0.1, le CLI parle français : `✓ demo créé — 16 fichiers` est une ligne de succès. Les
+Le CLI parle français : `✓ demo créé — 16 fichiers` est une ligne de succès. Les
 options, les noms de fichiers et le code généré, eux, sont les mêmes quelle que soit la
 langue.
 
@@ -24,34 +24,25 @@ langue.
   eux-mêmes leur identifiant v7, et rien de ce qu'exécute un projet ne réclame de
   `uuidv7()` au serveur.
 - **curl**, ou n'importe quel client HTTP, pour la dernière section.
-- **Un clone du dépôt rbs.** La 0.1 n'est pas encore sur crates.io, ce qui a deux
-  conséquences que vous rencontrerez plus bas.
 
 ## Installer le CLI
 
-Une fois la 0.1 publiée, ce sera `cargo install rbs-cli` : le paquet s'appelle `rbs-cli`,
-la commande qu'il installe `rbs`, et le nom `rbs` sur crates.io appartient à un projet
-sans rapport. En attendant, elle se construit depuis le dépôt :
+Le paquet s'appelle `rbs-cli`, la commande qu'il installe `rbs`, et le nom `rbs` sur
+crates.io appartient à un projet sans rapport :
 
 ```bash
-git clone https://github.com/tky0065/rbs
-cd rbs
-cargo install --path crates/rbs-cli
-cd ..
+cargo install rbs-cli
 ```
 
 Un exécutable `rbs` atterrit dans `~/.cargo/bin`, accompagné d'une seconde copie nommée
-`rbs-cli`, pour le cas que décrit l'encart plus bas. Le dernier `cd` vous fait ressortir du
-clone : la suite de cette page travaille depuis le répertoire qui le *contient*, si bien
-que le projet que vous allez créer atterrit à côté du clone et non dedans. Vérifiez que
-le binaire répond :
+`rbs-cli`, pour le cas que décrit l'encart plus bas. Vérifiez que le binaire répond :
 
 ```bash
 rbs --version
 ```
 
 ```text
-rbs 0.1.0
+rbs 1.0.0
 ```
 
 :::note
@@ -88,9 +79,7 @@ fois que vous avez fini — le conteneur a été lancé avec `--rm`, rien ne sub
 ## Créer le projet
 
 ```bash
-rbs new demo --yes \
-  --database-url postgres://rbs:rbs@localhost:5432/demo \
-  --core-path rbs/crates/rbs-core
+rbs new demo --yes --database-url postgres://rbs:rbs@localhost:5432/demo
 ```
 
 ```text
@@ -100,11 +89,10 @@ rbs new demo --yes \
   cargo run          # la base visée est dans .env
 ```
 
-`--core-path` est la seconde conséquence de la 0.1 non publiée : sans lui, le manifeste
-généré réclame `rbs-core = "0.1.0"` sur crates.io, où il n'existe pas encore, et
-`cargo build` échoue à la résolution. Pointez l'option sur le répertoire
-`crates/rbs-core` du clone que vous venez de faire — un chemin relatif convient, le CLI
-inscrit l'absolu dans `Cargo.toml`.
+Le manifeste écrit par la commande dépend de `rbs-core` publié sur crates.io : il n'y a
+rien à faire pointer sur quoi que ce soit, ni rien à construire d'abord — `cargo build`
+le résout comme n'importe quelle autre dépendance. Le seul cas qui demande davantage est
+la contribution au noyau lui-même, et [`rbs new --core-path`](./cli/new.md) s'en charge.
 
 `--yes` répond à chaque question par son défaut — ici, la feature `health` et rien
 d'autre. Sans lui, le CLI demande, dans l'ordre, l'URL de la base si `--database-url`
@@ -149,7 +137,7 @@ les dernières lignes qui comptent :
 
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 25.91s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 32.48s
      Running `target/debug/migration up`
 ✓ migrations appliquées
 ```
@@ -176,17 +164,19 @@ plan pour …/demo
   + src/articles/service.rs                             créé
   + src/articles/controller.rs                          créé
   + src/articles/tests.rs                               créé
-  + migration/src/m20260826_214305_create_articles.rs   créé
+  + src/seeds/articles.rs                               créé
+  + migration/src/m20260829_100554_create_articles.rs   créé
   ~ src/main.rs                                         modifié
   ~ src/router.rs                                       modifié
   ~ src/openapi.rs                                      modifié
   ~ migration/src/lib.rs                                modifié
+  ~ src/seeds/main.rs                                   modifié
   ~ Cargo.toml                                          modifié
 
-  13 fichiers à écrire
-✓ articles générée — 8 fichiers
+  15 fichiers à écrire
+✓ articles générée — 9 fichiers
 
-  la migration m20260826_214305_create_articles reste à appliquer avant de lancer le projet
+  la migration m20260829_100554_create_articles reste à appliquer avant de lancer le projet
 ```
 
 Votre fichier de migration portera un autre horodatage : le nom est construit à l'instant
@@ -194,9 +184,9 @@ où vous lancez la commande. Le reste est identique.
 
 Deux choses à remarquer. L'entité et sa migration viennent toutes deux de `--fields`,
 sans base démarrée et sans introspection — le schéma est déclaré une fois, dans la
-commande. Et les quatre lignes `~` sont des modifications de fichiers qui vous
-appartiennent : le CLI a inséré dans des ancres en commentaires (`// <rbs:features>`,
-`<rbs:routes>`, `<rbs:openapi>`, `<rbs:migrations>`) plutôt que de réécrire votre code.
+commande. Et les lignes `~` sont des modifications de fichiers qui vous appartiennent :
+le CLI a inséré dans des ancres en commentaires (`// <rbs:features>`, `<rbs:routes>`,
+`<rbs:openapi>`, `<rbs:seeds>`, `<rbs:migrations>`) plutôt que de réécrire votre code.
 Supprimez une ancre et le CLI cesse d'y écrire : il affiche le bloc à coller.
 
 Appliquez la nouvelle migration :
@@ -208,21 +198,21 @@ rbs migrate status
 
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.07s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.02s
      Running `target/debug/migration up`
 ✓ migrations appliquées
 ```
 
 ```text
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.09s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s
      Running `target/debug/migration status`
-  ✓ m20260826_214305_create_articles   appliquée
+  ✓ m20260829_100554_create_articles   appliquée
 ```
 
 ## Ce que le générateur a écrit
 
-Six fichiers par feature, plus ses tests, avec une seule direction de dépendance :
-contrôleur → service → dépôt → modèle. Voici le gestionnaire de `POST /articles`, lu
+Six fichiers par feature, plus ses tests et son seed, avec une seule direction de
+dépendance : contrôleur → service → dépôt → modèle. Voici le gestionnaire de `POST /articles`, lu
 dans [`examples/hello-crud`](https://github.com/tky0065/rbs/tree/main/examples/hello-crud) —
 la même feature, produite par la même commande :
 
@@ -245,7 +235,7 @@ La première compilation est longue — c'est tout l'arbre Axum, SeaORM et utoip
 terminée :
 
 ```text
-21:43:30  INFO   demo                démarrage  adresse=127.0.0.1:8080
+10:06:25  INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
 
 C'est le formateur de logs `pretty` : horodatage, niveau, cible, message, champs. Passez
@@ -263,9 +253,9 @@ curl -i http://127.0.0.1:8080/health
 ```text
 HTTP/1.1 200 OK
 content-type: application/json
-x-request-id: 01M100EQEJX68AKBH79CHX5R6B
+x-request-id: 01M16FRBHD0ZHWCN4EAEAW3TGK
 content-length: 42
-date: Wed, 26 Aug 2026 21:43:39 GMT
+date: Sat, 29 Aug 2026 10:06:30 GMT
 
 {"status":"ok","checks":{"database":"ok"}}
 ```
@@ -283,11 +273,11 @@ curl -i -X POST http://127.0.0.1:8080/articles \
 ```text
 HTTP/1.1 201 Created
 content-type: application/json
-x-request-id: 01M100EQEWHSSAMH7N54N4CEG3
+x-request-id: 01M16FRBHQDCDV859ADGK8ZMJG
 content-length: 191
-date: Wed, 26 Aug 2026 21:43:39 GMT
+date: Sat, 29 Aug 2026 10:06:30 GMT
 
-{"id":"01a04007-5dde-7103-97cd-6531d6f67704","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-08-26T21:43:39.741644Z","updated_at":"2026-08-26T21:43:39.741644Z"}
+{"id":"01a04cfc-2e37-78a1-bcb1-6599b0c362e2","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-08-29T10:06:30.457086Z","updated_at":"2026-08-29T10:06:30.457086Z"}
 ```
 
 L'identifiant et les horodatages viennent du serveur : `id`, `created_at` et `updated_at`
@@ -298,7 +288,7 @@ curl http://127.0.0.1:8080/articles
 ```
 
 ```text
-{"data":[{"id":"01a04007-5dde-7103-97cd-6531d6f67704","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-08-26T21:43:39.741644Z","updated_at":"2026-08-26T21:43:39.741644Z"}],"meta":{"page":1,"per_page":20,"total":1,"total_pages":1}}
+{"data":[{"id":"01a04cfc-2e37-78a1-bcb1-6599b0c362e2","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-08-29T10:06:30.457086Z","updated_at":"2026-08-29T10:06:30.457086Z"}],"meta":{"page":1,"per_page":20,"total":1,"total_pages":1}}
 ```
 
 Les collections sont paginées par défaut, sous `data` et `meta`. `?page=` et `?per_page=`
@@ -308,9 +298,9 @@ s'y déplacent. Les trois routes restantes — `GET`, `PUT` et `DELETE` sur
 Pendant ce temps, le terminal du serveur affiche une ligne par requête :
 
 ```text
-21:43:39  INFO   rbs_core::trace     request  status=200 latency_ms=0.711291 request_id=01M100EQEJX68AKBH79CHX5R6B method=GET path=/health
-21:43:39  INFO   rbs_core::trace     request  status=201 latency_ms=3.819458 request_id=01M100EQEWHSSAMH7N54N4CEG3 method=POST path=/articles
-21:43:39  INFO   rbs_core::trace     request  status=200 latency_ms=36.957833 request_id=01M100EQF8K15VW6E8PNTV9JGY method=GET path=/articles
+10:06:30  INFO   rbs_core::trace     request  status=200 latency_ms=0.80275 request_id=01M16FRBHD0ZHWCN4EAEAW3TGK method=GET path=/health
+10:06:30  INFO   rbs_core::trace     request  status=201 latency_ms=4.517125 request_id=01M16FRBHQDCDV859ADGK8ZMJG method=POST path=/articles
+10:06:30  INFO   rbs_core::trace     request  status=200 latency_ms=35.174416 request_id=01M16FRBJ3RVKC5T37ACD8SM6F method=GET path=/articles
 ```
 
 ## Le document OpenAPI
@@ -336,12 +326,12 @@ rbs doctor
 ```
 
 ```text
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.25s
      Running `target/debug/migration version`
-  ✓ ancres     les 7 points d'insertion sont en place
+  ✓ ancres     les 9 points d'insertion sont en place
   ✓ .env       les 4 variables de .env.example sont renseignées
-  ✓ versions   projet et rbs-core pris d'un chemin local alignés sur le CLI 0.1.0
-  ✓ base       PostgreSQL 18.6 répond sur localhost:5432
+  ✓ versions   projet et rbs-core 1.0.0 alignés sur le CLI 1.0.0
+  ✓ base       postgres 18.6 répond sur localhost:5432
 ✓ le projet est sain
 ```
 
@@ -356,4 +346,4 @@ base répond.
 - `rbs generate crud --dry-run` affiche le plan sans rien écrire : c'est la façon la
   moins coûteuse de voir ce que produit un jeu de `--fields`.
 - La [feuille de route](https://github.com/tky0065/rbs/blob/main/ROADMAP.md) liste ce que
-  couvre la 0.1 et ce qui en est délibérément exclu.
+  couvre rbs et ce qui en est délibérément exclu.

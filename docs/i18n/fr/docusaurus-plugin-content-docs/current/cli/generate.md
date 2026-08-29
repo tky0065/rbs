@@ -257,8 +257,9 @@ manifeste, ce qui rend la commande idempotente :
 
 ```text
 [package.metadata.rbs]
-version = "0.1.0"
+version = "1.0.0"
 features = ["health", "articles"]
+database = "postgres"
 ```
 
 Les marques du plan se lisent : `+` créé, `~` modifié, `·` inchangé, `!` en conflit.

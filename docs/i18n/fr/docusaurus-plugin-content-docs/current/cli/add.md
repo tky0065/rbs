@@ -124,8 +124,9 @@ Dans chaque plan, la ligne `Cargo.toml` est l'endroit où l'installation s'inscr
 
 ```text
 [package.metadata.rbs]
-version = "0.1.0"
+version = "1.0.0"
 features = ["health", "docker", "ci", "auth"]
+database = "postgres"
 ```
 
 Tout autre nom est refusé avec la liste de ce qui est installable :

@@ -48,4 +48,4 @@ only one that names an `Entity`.
   [migrations](./guides/migrations.md), [testing](./guides/testing.md).
 
 The [roadmap](https://github.com/tky0065/rbs/blob/main/ROADMAP.md) lists what is in scope
-for 0.1 and what is deliberately left out.
+and what is deliberately left out.

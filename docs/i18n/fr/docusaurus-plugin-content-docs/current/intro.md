@@ -50,4 +50,4 @@ l'interroger : des six fichiers d'une feature, `repository.rs` est le seul à no
   [migrations](./guides/migrations.md), [tests](./guides/testing.md).
 
 La [feuille de route](https://github.com/tky0065/rbs/blob/main/ROADMAP.md) liste ce qui
-entre dans le périmètre de la 0.1 et ce qui en est délibérément exclu.
+entre dans le périmètre et ce qui en est délibérément exclu.
