@@ -201,6 +201,12 @@ fn create_project(
             ui::files(pose.files)
         ));
     }
+    // `add` affiche ce conseil pour chaque feature qu'il installe ; `new` l'avalait,
+    // laissant par exemple `--with auth` démarrer un projet où `RBS_AUTH__SECRET` manque
+    // au `.env` sans que rien ne l'ait annoncé.
+    for suite in suites_installees(&project.installed) {
+        ui::info(&format!("\n  {suite}"));
+    }
     let compose = project.root.join("docker-compose.yml").exists();
     let demarrage = if compose {
         "\n  docker compose up -d   # la base du .env, montée\n  cargo run              # ou `rbs dev`, qui enchaîne les deux"
@@ -245,6 +251,19 @@ fn add(feature: String, force: bool, template_dir: Option<PathBuf>) -> Result<()
     }
 
     Ok(())
+}
+
+/// Les conseils de suite des features que `new` vient d'installer, dans l'ordre
+/// d'installation.
+///
+/// `rbs new --with` passe par le même `install` qu'`rbs add` (`new::install`), mais
+/// n'appelait jamais `suite()` : le développeur perdait le seul avertissement qui compte
+/// pour `auth`, dont le projet ne démarre pas sans lui.
+fn suites_installees(installed: &[new::InstalledFeature]) -> Vec<&'static str> {
+    installed
+        .iter()
+        .filter_map(|pose| suite(&pose.name))
+        .collect()
 }
 
 /// Ce qu'il reste à faire de la main du développeur, une fois la feature posée.
@@ -439,6 +458,48 @@ mod tests {
                 "`{feature}` s'installe sans dire ce qu'il reste à faire"
             );
         }
+    }
+
+    /// `rbs new --with auth` pose la feature mais avalait le conseil qu'`add auth` aurait
+    /// affiché : sans lui, `RBS_AUTH__SECRET` manque au `.env` et `cargo run` échoue,
+    /// sans que rien ne l'ait dit avant.
+    #[test]
+    fn new_names_the_suite_of_each_installed_feature() {
+        let installed = vec![
+            new::InstalledFeature {
+                name: "auth".to_string(),
+                files: 9,
+                migration: true,
+            },
+            new::InstalledFeature {
+                name: "redis".to_string(),
+                files: 3,
+                migration: false,
+            },
+        ];
+
+        let suites = suites_installees(&installed);
+
+        assert_eq!(
+            suites,
+            vec![suite("auth").unwrap(), suite("redis").unwrap()]
+        );
+    }
+
+    /// `ci` n'a rien à ajouter au-delà de son propre conseil ; une feature sans suite ne
+    /// doit pas laisser de ligne vide dans la liste.
+    #[test]
+    fn new_skips_features_without_a_suite() {
+        let installed = vec![new::InstalledFeature {
+            name: "storage".to_string(),
+            files: 4,
+            migration: false,
+        }];
+
+        assert_eq!(
+            suites_installees(&installed),
+            vec![suite("storage").unwrap()]
+        );
     }
 
     /// `migrate` et `api` portent `profiles: ["app"]` : sans `--profile app`,
