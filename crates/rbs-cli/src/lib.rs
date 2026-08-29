@@ -250,18 +250,23 @@ fn add(feature: String, force: bool, template_dir: Option<PathBuf>) -> Result<()
 /// Ce qu'il reste à faire de la main du développeur, une fois la feature posée.
 fn suite(feature: &str) -> Option<&'static str> {
     match feature {
-        "docker" => Some("docker compose up --build"),
+        // `migrate` et `api` portent `profiles: ["app"]` : sans ce flag, `docker compose
+        // up` ne bâtit ni ne démarre ni l'un ni l'autre — seul `db` reste dans le
+        // périmètre par défaut, celui que `rbs dev` monte.
+        "docker" => Some("docker compose --profile app up --build"),
         "ci" => Some("git push : le workflow s'exécute à la prochaine poussée"),
         // Le secret n'est écrit que dans `.env.example` : le `.env` du projet, lui, est
         // hors du fragment, et sans la variable le serveur refuse de démarrer.
         "auth" => {
             Some("recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up")
         }
-        // Le pool est paresseux : le projet démarre sans Redis, et ne le joint qu'au
-        // premier appel au cache.
-        "redis" => {
-            Some("un Redis doit écouter à l'URL de la section [cache] de config/default.toml")
-        }
+        // Le fragment dépose lui-même un service `redis` dans le compose du projet : le
+        // pool est paresseux, mais rien à fournir séparément une fois ce service monté.
+        "redis" => Some(
+            "le compose du projet porte déjà un service redis — docker compose up -d le \
+             démarre ; sans compose, faites écouter un Redis à l'URL de [cache] de \
+             config/default.toml",
+        ),
         // Le défaut vise un Mailpit local : sans ce rappel, le premier envoi en
         // production partirait vers `localhost:1025`.
         "mail" => Some("réglez [mail] dans config/default.toml — un SMTP local par défaut"),
@@ -434,6 +439,31 @@ mod tests {
                 "`{feature}` s'installe sans dire ce qu'il reste à faire"
             );
         }
+    }
+
+    /// `migrate` et `api` portent `profiles: ["app"]` : sans `--profile app`,
+    /// `docker compose up --build` ne bâtit ni ne démarre rien de ce que la feature vient
+    /// de poser, mesuré par `docker compose config --services` qui ne rend que `db`.
+    #[test]
+    fn the_docker_suite_names_the_app_profile() {
+        let suite = suite("docker").expect("`docker` doit dire ce qu'il reste à faire");
+
+        assert!(
+            suite.contains("--profile app"),
+            "la suite ne démarre pas les services du profil app : {suite}"
+        );
+    }
+
+    /// `rbs add redis` dépose déjà le service `redis` dans le compose du projet : la
+    /// suite ne doit pas laisser croire qu'un Redis reste à fournir séparément.
+    #[test]
+    fn the_redis_suite_names_the_compose_service_already_inserted() {
+        let suite = suite("redis").expect("`redis` doit dire ce qu'il reste à faire");
+
+        assert!(
+            suite.contains("docker compose"),
+            "la suite ne mentionne pas le compose où le service vient d'être inséré : {suite}"
+        );
     }
 
     #[test]
