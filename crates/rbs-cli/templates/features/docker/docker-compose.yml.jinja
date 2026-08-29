@@ -6,58 +6,57 @@ services:
 {%- if database == "postgres" %}
     image: postgres:18-alpine
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: {@ crate_name @}
-    # Le port de la base n'est pas publié : il entrerait en conflit avec le PostgreSQL
-    # que la machine héberge souvent déjà, et l'API l'atteint par le réseau du compose.
-    # Pour l'ouvrir sur l'hôte, ajouter `ports: ["5432:5432"]` ici.
-    #
+      POSTGRES_USER: {@ database_user @}
+      POSTGRES_PASSWORD: {@ database_password @}
+      POSTGRES_DB: {@ database_name @}
+    # Le port publié est celui du .env : c'est ce qui rend `docker compose up -d` suivi
+    # de `cargo run` vrai sans recopier une valeur d'un fichier à l'autre. Le conflit
+    # avec un PostgreSQL déjà installé sur la machine se règle en changeant les deux.
+    ports:
+      - "{@ database_port @}:5432"
     # PostgreSQL 18 place ses données sous /var/lib/postgresql/18/docker : c'est le
     # répertoire parent qui se monte, et non le /var/lib/postgresql/data des versions
     # précédentes, qui ne persisterait rien.
     volumes:
       - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d {@ crate_name @}"]
+      test: ["CMD-SHELL", "pg_isready -U {@ database_user @} -d {@ database_name @}"]
 {%- else %}
     image: mysql:8
     environment:
-      MYSQL_ROOT_PASSWORD: root
-      MYSQL_DATABASE: {@ crate_name @}
-    # Le port n'est pas publié, pour la même raison qu'ailleurs : la machine héberge
-    # souvent déjà un serveur sur 3306. Pour l'ouvrir, ajouter `ports: ["3306:3306"]`.
+      MYSQL_ROOT_PASSWORD: {@ database_password @}
+      MYSQL_DATABASE: {@ database_name @}
+{%- if database_user != "root" %}
+      MYSQL_USER: {@ database_user @}
+      MYSQL_PASSWORD: {@ database_password @}
+{%- endif %}
+    ports:
+      - "{@ database_port @}:3306"
     volumes:
       - mysqldata:/var/lib/mysql
     # `mysqladmin ping` répond avant que la base du projet existe : le healthcheck
     # interroge donc le schéma, faute de quoi `migrate` démarrerait trop tôt.
     healthcheck:
       test:
-        ["CMD-SHELL", "mysql -uroot -proot -e 'use {@ crate_name @}' 2>/dev/null"]
+        ["CMD-SHELL", "mysql -uroot -p{@ database_password @} -e 'use {@ database_name @}' 2>/dev/null"]
 {%- endif %}
       interval: 2s
       timeout: 3s
       retries: 30
 {%- endif %}
 
+  # <rbs:services>
   # Les migrations tournent une fois, à part : l'API ne démarre pas sur un schéma absent,
   # et n'a pas à porter cette responsabilité au démarrage.
   migrate:
+    profiles: ["app"]
     build: .
     command: ["migration", "up"]
     environment:
       RBS_DATABASE__URL: {@ database_url_compose @}
-{%- if database_a_un_serveur %}
-    depends_on:
-      db:
-        condition: service_healthy
-{%- else %}
-    volumes:
-      - sqlitedata:/data
-{%- endif %}
     restart: "no"
-
   api:
+    profiles: ["app"]
     build: .
     environment:
       # config/default.toml écoute sur 127.0.0.1, ce qui rend le conteneur injoignable
@@ -69,18 +68,9 @@ services:
     ports:
       - "8080:8080"
     depends_on:
-{%- if database_a_un_serveur %}
-      db:
-        condition: service_healthy
-{%- endif %}
       migrate:
         condition: service_completed_successfully
-{%- if not database_a_un_serveur %}
-    # Le fichier de base est partagé avec `migrate` : sans ce volume, chaque conteneur
-    # travaillerait sur le sien et l'API démarrerait sur un schéma vide.
-    volumes:
-      - sqlitedata:/data
-{%- endif %}
+  # </rbs:services>
 
 volumes:
 {%- if database == "postgres" %}

@@ -104,9 +104,6 @@ pub(crate) fn parse(url: &str) -> Option<Connection> {
 ///
 /// L'hôte y est le service `db`, et le port celui que le conteneur écoute : celui que le
 /// compose a publié ne concerne que la machine hôte.
-///
-/// Sans appelant hors des tests tant que `new` n'engendre pas encore de compose.
-#[allow(dead_code)]
 pub(crate) fn interne(connexion: &Connection, database: Database) -> String {
     let scheme = database.name();
     let port = database.default_port().unwrap_or(connexion.port);

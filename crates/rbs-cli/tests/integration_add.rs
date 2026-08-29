@@ -61,13 +61,7 @@ fn installing_the_same_feature_twice_produces_nothing_the_second_time() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = committed_project(&parent);
 
-    // Le squelette pose son propre compose, que le fragment `docker` dépose par-dessus :
-    // la garde du conflit le protège, et seule la pose forcée passe. Ce qui est éprouvé
-    // ici est l'idempotence de la seconde installation, non cette garde.
-    rbs(&racine)
-        .args(["add", "docker", "--force"])
-        .assert()
-        .success();
+    rbs(&racine).args(["add", "docker"]).assert().success();
     common::commiter(&racine, "docker");
 
     let avant = common::empreinte(&racine);

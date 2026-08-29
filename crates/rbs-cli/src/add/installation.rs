@@ -83,7 +83,11 @@ pub(crate) fn actions(
     let renderer = Renderer::new();
     let mut deposes = Vec::new();
 
-    for (destination, source) in a_deposer(fragment)? {
+    for (destination, source, if_absent) in a_deposer(fragment)? {
+        if if_absent && builder.exists(&destination)? {
+            continue;
+        }
+
         let content = render(&renderer, fragment, source, &destination)?;
 
         builder.create(&destination, &content)?;
@@ -112,7 +116,11 @@ pub(crate) fn actions(
 
     for insertion in &fragment.manifest.anchors {
         let anchor = anchor(fragment, &insertion.anchor)?;
-        builder.insert(anchor, &lines(&insertion.content))?;
+        // Une ancre reçoit du contenu de manifeste, pas une template : sans ce rendu,
+        // une variable comme `{@ database_url_compose @}` atterrirait littéralement dans
+        // le fichier plutôt que sa valeur.
+        let content = render(&renderer, fragment, &insertion.content, anchor.file)?;
+        builder.insert(anchor, &lines(&content))?;
     }
 
     // Avant les features de `[cargo.<crate>]` : activer une feature suppose la dépendance
@@ -202,7 +210,7 @@ fn render(
 /// Sans `[[files]]`, le fragment est copié tel quel : un fragment qui n'apporte pas de
 /// code Rust n'a rien à déclarer pour que ses fichiers arrivent où leur arborescence les
 /// place déjà.
-fn a_deposer<'a>(fragment: &'a Fragment) -> Result<Vec<(String, &'a str)>, Error> {
+fn a_deposer<'a>(fragment: &'a Fragment) -> Result<Vec<(String, &'a str, bool)>, Error> {
     if fragment.manifest.files.is_empty() {
         return Ok(fragment
             .templates
@@ -211,6 +219,7 @@ fn a_deposer<'a>(fragment: &'a Fragment) -> Result<Vec<(String, &'a str)>, Error
                 (
                     template.destination.to_string_lossy().into_owned(),
                     template.source.as_str(),
+                    false,
                 )
             })
             .collect());
@@ -222,7 +231,7 @@ fn a_deposer<'a>(fragment: &'a Fragment) -> Result<Vec<(String, &'a str)>, Error
         .iter()
         .map(|declare| {
             let source = template(fragment, &declare.source)?;
-            Ok((declare.destination.clone(), source))
+            Ok((declare.destination.clone(), source, declare.if_absent))
         })
         .collect()
 }
@@ -578,5 +587,32 @@ axum = \"0.8\"
 
         assert!(matches!(error, Error::TemplateAbsente { .. }), "{error}");
         assert!(error.to_string().contains("absente.rs.jinja"), "{error}");
+    }
+
+    /// Le contenu d'une `[[anchors]]` passe par le moteur de rendu avant d'être inséré :
+    /// sans quoi une variable comme `database_url_compose` atterrirait littéralement dans
+    /// le fichier, au lieu de sa valeur.
+    #[test]
+    fn an_anchors_content_is_rendered_before_insertion() {
+        let project = TempDir::new().expect("répertoire temporaire créable");
+        avec(
+            project.path(),
+            &[("src/main.rs", "// <rbs:features>\n// </rbs:features>\n")],
+        );
+
+        let (_, plan) = plan_for(
+            project.path(),
+            "[feature]\ndescription = \"essai\"\n\n\
+             [[anchors]]\nanchor = \"features\"\ncontent = \"mod {@ crate_name @};\"\n",
+            &[],
+        )
+        .expect("le plan doit se calculer");
+        let after = projected(&plan, "src/main.rs");
+
+        assert!(after.contains("mod demo_api;"), "{after}");
+        assert!(
+            !after.contains("{@ crate_name @}"),
+            "la variable n'a pas été rendue :\n{after}"
+        );
     }
 }

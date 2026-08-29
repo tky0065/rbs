@@ -1,2 +1,47 @@
 [feature]
-description = "Dockerfile multi-étapes, .dockerignore et compose de développement"
+description = "Dockerfile multi-étapes, .dockerignore et services de déploiement"
+
+[[files]]
+source      = "Dockerfile.jinja"
+destination = "Dockerfile"
+
+[[files]]
+source      = ".dockerignore.jinja"
+destination = ".dockerignore"
+
+# Un projet créé avant la 1.1.0 n'a pas de compose : le fragment lui en écrit un entier,
+# services de déploiement compris. Là où le projet en a un, l'insertion ci-dessous suffit,
+# et sa déduplication rend l'opération sans effet sur le fichier tout juste écrit.
+[[files]]
+source      = "docker-compose.yml.jinja"
+destination = "docker-compose.yml"
+if_absent   = true
+
+[[anchors]]
+anchor  = "services"
+content = """
+# Les migrations tournent une fois, à part : l'API ne démarre pas sur un schéma absent,
+# et n'a pas à porter cette responsabilité au démarrage.
+migrate:
+  profiles: ["app"]
+  build: .
+  command: ["migration", "up"]
+  environment:
+    RBS_DATABASE__URL: {@ database_url_compose @}
+  restart: "no"
+api:
+  profiles: ["app"]
+  build: .
+  environment:
+    # config/default.toml écoute sur 127.0.0.1, ce qui rend le conteneur injoignable
+    # depuis l'hôte. L'environnement l'emporte sur le TOML.
+    RBS_SERVER__HOST: 0.0.0.0
+    RBS_DATABASE__URL: {@ database_url_compose @}
+    RBS_LOG_FORMAT: json
+    RUST_LOG: info
+  ports:
+    - "8080:8080"
+  depends_on:
+    migrate:
+      condition: service_completed_successfully
+"""

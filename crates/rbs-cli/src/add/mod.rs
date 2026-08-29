@@ -18,6 +18,7 @@ use minijinja::context;
 use crate::git;
 use crate::manifest;
 use crate::metadata;
+use crate::migrate;
 use crate::plan;
 use crate::templates::{self, Source};
 
@@ -179,13 +180,32 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // Le moteur vient du manifeste, seul endroit où le choix de `rbs new` a survécu : un
     // fragment posé six mois plus tard n'a plus les flags de la création.
     let database = metadata::read(&root.join("Cargo.toml"))?.database;
+
+    // L'URL du projet, non une valeur par défaut : le compose que le fragment engendre
+    // doit se connecter à la base que le projet interroge, avec ses identifiants.
+    let url = migrate::project_variables(&root)
+        .ok()
+        .and_then(|variables| crate::dotenv::value(&variables, migrate::URL).map(str::to_string))
+        .unwrap_or_else(|| database.default_url(&crate_name));
+    let connexion = crate::url::parse(&url);
+
     let context = context! {
         project_name => nom_projet.clone(),
         crate_name => crate_name.clone(),
         database => database.name(),
         database_a_un_serveur => database.a_un_serveur(),
-        database_url_compose => database.compose_url(&crate_name),
+        database_url_compose => match connexion.as_ref() {
+            Some(connexion) => crate::url::interne(connexion, database),
+            None => database.compose_url(&crate_name),
+        },
         database_url_par_defaut => database.default_url(&crate_name),
+        database_user => connexion.as_ref().map(|c| c.user.clone()).unwrap_or_default(),
+        database_password => connexion.as_ref().map(|c| c.password.clone()).unwrap_or_default(),
+        database_name => connexion
+            .as_ref()
+            .map(|c| c.database.clone())
+            .unwrap_or_else(|| crate_name.clone()),
+        database_port => connexion.as_ref().map(|c| c.port).unwrap_or_default(),
     };
 
     let mut builder = plan::Builder::new(root);
@@ -270,8 +290,26 @@ mod tests {
     }
 
     /// Un projet déroulé par `rbs new`, sans passer par le binaire ni par cargo.
+    ///
+    /// L'URL porte des identifiants distincts du moteur (`rbs`, non `postgres`) — la même
+    /// qu'utilise `doctor/anchors.rs` — pour que le compose interne ne puisse pas passer
+    /// pour correct en confondant les deux.
     fn project() -> (TempDir, PathBuf) {
-        project_on(Database::default())
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = crate::new::create(
+            &crate::new::Options {
+                name: "demo-api".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
+                database: Database::default(),
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        (parent, project.root)
     }
 
     /// Le même, sur le moteur demandé — ce que `rbs new --database` produit.
@@ -420,21 +458,104 @@ mod tests {
             .after
     }
 
+    /// Le compose du squelette existe déjà : seuls `Dockerfile` et `.dockerignore` sont
+    /// déposés, le compose recevant ses services par insertion (voir plus bas).
     #[test]
-    fn the_docker_plan_creates_its_three_files_and_records_the_feature() {
+    fn the_docker_plan_creates_its_two_files_and_records_the_feature() {
         let (_parent, root) = project();
 
         let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
 
-        assert_eq!(
-            planned.files,
-            [".dockerignore", "Dockerfile", "docker-compose.yml"]
-        );
+        assert_eq!(planned.files, ["Dockerfile", ".dockerignore"]);
 
         let manifest = projected(&planned, "Cargo.toml");
         assert!(
             manifest.contains("features = [\"health\", \"docker\"]"),
             "la feature n'est pas inscrite dans le manifeste projeté :\n{manifest}"
+        );
+    }
+
+    /// Trois états, trois comportements. Le premier : le projet a son compose, `add
+    /// docker` n'y ajoute que ce qui manque.
+    #[test]
+    fn adding_docker_to_a_project_with_a_compose_inserts_its_services() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert_eq!(
+            compose.matches("image: postgres:18-alpine").count(),
+            1,
+            "le service de base ne doit pas être doublé :\n{compose}"
+        );
+        assert!(compose.contains("profiles: [\"app\"]"), "{compose}");
+        assert!(
+            compose.contains("command: [\"migration\", \"up\"]"),
+            "{compose}"
+        );
+        assert!(
+            !planned.files.iter().any(|f| f == "docker-compose.yml"),
+            "le compose n'est pas déposé mais inséré : {:?}",
+            planned.files
+        );
+    }
+
+    /// Le deuxième : un projet créé avant la 1.1.0 n'a pas de compose. Le fragment lui en
+    /// écrit un entier, ancre comprise, sans quoi il n'aurait aucun moyen d'en obtenir un.
+    #[test]
+    fn adding_docker_to_a_project_without_a_compose_writes_the_whole_file() {
+        let (_parent, root) = project();
+        fs::remove_file(root.join("docker-compose.yml")).expect("le compose doit exister");
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(compose.contains("image: postgres:18-alpine"), "{compose}");
+        assert!(compose.contains("# <rbs:services>"), "{compose}");
+        assert_eq!(
+            compose.matches("profiles: [\"app\"]").count(),
+            2,
+            "api et migrate, une fois chacun :\n{compose}"
+        );
+        assert!(planned.files.iter().any(|f| f == "docker-compose.yml"));
+    }
+
+    /// Le troisième : un compose réécrit à la main a perdu son ancre. Le CLI n'écrit
+    /// rien et affiche le bloc à recoller — la convention du projet.
+    #[test]
+    fn adding_docker_to_a_compose_without_its_anchor_refuses_and_shows_the_block() {
+        let (_parent, root) = project();
+        fs::write(
+            root.join("docker-compose.yml"),
+            "services:\n  db:\n    image: postgres\n",
+        )
+        .expect("écriture possible");
+
+        let error = plan_for(&options(&root, "docker")).expect_err("l'ancre manque");
+
+        let message = error.to_string();
+        assert!(message.contains("docker-compose.yml"), "{message}");
+        assert!(
+            error
+                .remedy()
+                .is_some_and(|r| r.contains("# <rbs:services>")),
+            "le bloc à coller doit être affiché : {error:?}"
+        );
+    }
+
+    /// Le compose interne ne peut pas garder `postgres:postgres` en dur : la base du
+    /// projet a les identifiants de son .env, et `migrate` ne s'y connecterait pas.
+    #[test]
+    fn the_internal_url_carries_the_credentials_of_the_project() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(
+            compose.contains("postgres://rbs:rbs@db:5432/demo_api"),
+            "{compose}"
         );
     }
 
@@ -531,12 +652,7 @@ mod tests {
     #[test]
     fn rerunning_on_an_already_dockerised_project_gives_a_no_op_plan() {
         let (_parent, root) = project();
-        // Le squelette pose désormais son propre compose, que le fragment `docker`
-        // dépose par-dessus : la garde du conflit le protège, et seule la pose forcée
-        // passe. Ce que ce test éprouve est l'idempotence du manifeste, non cette garde.
-        let mut premiere = options(&root, "docker");
-        premiere.force = true;
-        run(&premiere).expect("la première pose doit aboutir");
+        run(&options(&root, "docker")).expect("la première pose doit aboutir");
 
         let planned = plan_for(&options(&root, "docker")).expect("le plan doit se recalculer");
 

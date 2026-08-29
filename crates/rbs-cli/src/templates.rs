@@ -611,6 +611,10 @@ mod tests {
             database_a_un_serveur => database.a_un_serveur(),
             database_url_compose => database.compose_url("mon_api"),
             database_url_par_defaut => database.default_url("mon_api"),
+            database_user => "rbs",
+            database_password => "rbs",
+            database_name => "mon_api",
+            database_port => 5432u16,
         }
     }
 
