@@ -3,10 +3,6 @@
 //! Le scan est textuel, non un parseur Rust : un modèle lourdement réécrit le fera
 //! échouer en refusant une cible, jamais en écrivant une relation fausse.
 
-// Rien ne consomme encore cet inventaire : seule la commande de relations, à venir,
-// appellera `scan`, `find` et `tables` en dehors des tests.
-#![allow(dead_code)]
-
 use std::fs;
 use std::path::Path;
 
@@ -22,6 +18,9 @@ pub(crate) struct Entity {
 }
 
 /// Parcourt `src/*/model.rs` et relève toute entité déclarée.
+// Rien n'appelle encore `scan` hors des tests : c'est la commande de génération,
+// à une tâche suivante, qui construira l'inventaire réel qu'elle scanne.
+#[allow(dead_code)]
 pub(crate) fn scan(root: &Path) -> Vec<Entity> {
     let mut found = Vec::new();
 

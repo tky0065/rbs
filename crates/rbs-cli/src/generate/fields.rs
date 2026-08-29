@@ -90,9 +90,6 @@ pub(crate) enum OnDelete {
 
 impl OnDelete {
     /// Nom de la variante `ForeignKeyAction` de sea-orm-migration.
-    // Rien ne consomme encore la valeur hors des tests : la migration d'une référence
-    // arrive à une tâche suivante.
-    #[allow(dead_code)]
     pub(crate) fn action(self) -> &'static str {
         match self {
             Self::Restrict => "Restrict",
@@ -163,14 +160,10 @@ impl Field {
     }
 
     /// Nom de la relation : le nom déclaré, tel quel.
-    // Rien ne consomme encore ces quatre méthodes hors des tests : `relations::resolve`
-    // et les templates de relation arrivent à une tâche suivante.
-    #[allow(dead_code)]
     pub(crate) fn relation_name(&self) -> &str {
         &self.name
     }
 
-    #[allow(dead_code)]
     pub(crate) fn reference(&self) -> Option<&Reference> {
         match &self.kind {
             FieldKind::Reference(reference) => Some(reference),
@@ -178,12 +171,13 @@ impl Field {
         }
     }
 
+    // Rien n'appelle encore `relation` hors des tests : les templates de relation, à
+    // une tâche suivante, la liront pour rendre le code SeaORM d'une référence.
     #[allow(dead_code)]
     pub(crate) fn relation(&self) -> Option<&RelationView> {
         self.relation.as_ref()
     }
 
-    #[allow(dead_code)]
     pub(crate) fn set_relation(&mut self, view: RelationView) {
         self.relation = Some(view);
     }

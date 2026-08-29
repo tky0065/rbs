@@ -11,6 +11,7 @@ pub(crate) mod format;
 pub(crate) mod migration;
 pub(crate) mod mount;
 pub(crate) mod name;
+pub(crate) mod relations;
 pub(crate) mod repository;
 pub(crate) mod seed;
 pub(crate) mod service;
