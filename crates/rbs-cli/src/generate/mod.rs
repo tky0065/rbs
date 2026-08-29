@@ -3,6 +3,7 @@ pub(crate) mod bench;
 pub(crate) mod command;
 pub(crate) mod controller;
 pub(crate) mod dto;
+pub(crate) mod entities;
 pub(crate) mod entity;
 pub(crate) mod feature;
 pub(crate) mod fields;
