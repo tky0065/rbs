@@ -1,6 +1,7 @@
 [package]
 name = "rbs-cli"
 description = "Le binaire `rbs` : génération et maintenance de projets Axum + SeaORM."
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
