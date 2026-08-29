@@ -1,6 +1,6 @@
 //! Création d'un projet complet : squelette rendu, arborescence écrite, dépôt initialisé.
 //!
-//! La commande suit la séquence du §4.4 de la spec, dans l'ordre où elle rend les échecs
+//! La commande suit la séquence du §5.2 de la spec, dans l'ordre où elle rend les échecs
 //! inoffensifs : ce qui peut être vérifié l'est avant que le rendu commence, et le rendu
 //! aboutit entièrement avant que le premier fichier soit écrit. Un nom refusé, une
 //! feature indisponible ou une variable de template absente laissent donc le disque

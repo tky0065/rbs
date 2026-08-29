@@ -232,6 +232,16 @@ pub(crate) fn body(source: &str, anchor: Anchor) -> Option<&str> {
 ///
 /// Les lignes autonomes — les chemins OpenAPI d'une feature — forment chacune leur
 /// groupe, et restent donc dédupliquées une à une.
+///
+/// **Limite à connaître avant d'y toucher** : la déduplication qui suit (`insert`, via
+/// `contains`) compare chaque ligne au texte déjà présent sous l'ancre, sans aucune notion
+/// de bloc ni de service porteur — un groupe d'une seule ligne autonome identique ailleurs
+/// dans l'ancre est vu comme déjà posé, où qu'il se trouve. Un futur fragment dont le
+/// healthcheck réutilise une valeur générique qu'un fragment antérieur a déjà déposée dans
+/// l'ancre — `interval: 2s`, `retries: 30` — la perdrait donc en silence : la ligne ne
+/// serait pas réinsérée dans le bloc du nouveau service, qui s'en trouverait incomplet
+/// sans qu'aucune commande n'échoue. Ne pas corriger ce prédicat pour cette raison seule :
+/// il documente une limite connue, pas un bogue à combler à l'aveugle.
 fn groups(lines: &[String]) -> Vec<Vec<&String>> {
     let mut groups = Vec::new();
     let mut courant = Vec::new();

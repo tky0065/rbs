@@ -300,12 +300,18 @@ volumes:
 add`](./add.md) inserts the services `docker` brings, and it is one of the ten anchors
 [`rbs doctor`](./doctor.md) checks — nine on a project with no compose to carry a tenth.
 
-Two cases write nothing:
+Four cases write nothing:
 
 - **a SQLite project** — there is no server to run, and its URL has neither host nor port
   to carry into a compose;
 - **a URL whose host is not local** — the container would only duplicate a database
-  already reachable elsewhere.
+  already reachable elsewhere;
+- **a URL without credentials** — valid, accepted by `--database-url`, but the official
+  PostgreSQL image refuses to initialize without a password: a compose that cannot start
+  is worse than no compose;
+- **a URL the parser refuses outright** — an unencoded separator in the password, for
+  instance, stops it rather than guess at a host or a database name: nothing is derived,
+  so there is nothing to write a compose from.
 
 ```text
 $ rbs new sqlite-demo --database sqlite --yes

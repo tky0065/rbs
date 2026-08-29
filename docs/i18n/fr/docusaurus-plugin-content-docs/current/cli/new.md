@@ -302,12 +302,18 @@ add`](./add.md) insère les services qu'apporte `docker`, et c'est l'une des dix
 vérifie [`rbs doctor`](./doctor.md) — neuf sur un projet sans compose pour en porter une
 dixième.
 
-Deux cas n'écrivent rien :
+Quatre cas n'écrivent rien :
 
 - **un projet SQLite** — il n'y a pas de serveur à démarrer, et son URL n'a ni hôte ni
   port à porter dans un compose ;
 - **une URL dont l'hôte n'est pas local** — le conteneur ne ferait que doubler une base
-  déjà joignable ailleurs.
+  déjà joignable ailleurs ;
+- **une URL sans identifiants** — valide, acceptée par `--database-url`, mais l'image
+  PostgreSQL officielle refuse de s'initialiser sans mot de passe : un compose qui ne peut
+  pas démarrer est pire que pas de compose ;
+- **une URL que l'analyseur refuse d'emblée** — un séparateur non encodé dans le mot de
+  passe, par exemple, l'arrête plutôt que de deviner un hôte ou un nom de base : rien n'en
+  est tiré, donc rien n'en écrit de compose.
 
 ```text
 $ rbs new sqlite-demo --database sqlite --yes

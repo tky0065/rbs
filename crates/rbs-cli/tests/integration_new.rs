@@ -271,12 +271,14 @@ fn the_generated_compose_serves_the_project_it_was_generated_for() {
         "le compose ne porte pas le nom unique du projet :\n{compose_yml}"
     );
 
+    // Démonte les conteneurs et le volume même si une assertion plus bas échoue — y
+    // compris celle du `up` lui-même : construite après, une panique de cette ligne aurait
+    // laissé les conteneurs tourner sans que rien ne les démonte.
+    let _garde = ComposeGuard { root: root.clone() };
+
     // Le compose engendré, et lui seul : aucun `docker run` ni variable d'environnement
     // passée à la main — précisément ce que ce test doit prouver.
     compose(&root, &["up", "-d", "--wait"]).assert().success();
-    // Démonte les conteneurs et le volume même si une assertion plus bas échoue : une
-    // panique en cours de route ne doit rien laisser tourner derrière elle.
-    let _garde = ComposeGuard { root: root.clone() };
 
     rbs(&root)
         .env("CARGO_TARGET_DIR", common::cible())
