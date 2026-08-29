@@ -47,30 +47,30 @@ pub(crate) fn parse(url: &str) -> Option<Connection> {
                 .map(|reste| (reste, Database::Mysql))
         })?;
 
-    // L'autorité s'arrête au premier `/` ou `?`, et le dernier `@` qui la précède sépare
-    // les identifiants : un `@` situé au-delà appartient au chemin.
-    let delimiteur = reste.find(['/', '?']).unwrap_or(reste.len());
-    let (identifiants, apres) = match reste[..delimiteur].rfind('@') {
-        Some(fin) => (&reste[..fin], &reste[fin + 1..]),
-        None => match premier_arobase_apres_identifiants(reste) {
-            Some(fin) => (&reste[..fin], &reste[fin + 1..]),
-            None => ("", reste),
-        },
+    // La requête ne fait partie ni de l'autorité ni du nom de la base, et l'autorité
+    // s'arrête au premier `/`. Chercher les identifiants avant ces deux découpes ferait
+    // couper l'URL au `@` d'un nom de base, qui emporterait avec lui le mot de passe et
+    // l'hôte.
+    let reste = reste.split('?').next()?;
+    let (autorite_complete, database) = match reste.split_once('/') {
+        Some((autorite, database)) => (autorite, database),
+        None => (reste, ""),
+    };
+
+    // Le dernier `@` de l'autorité sépare : un mot de passe a le droit d'en contenir un.
+    // Un `/` ou un `?` non encodé, en revanche, met fin à l'autorité — la RFC les veut
+    // encodés, et sqlx comme libpq les exigent de même. L'URL rend alors `None` plutôt
+    // qu'un hôte deviné : un hôte faux part dans un compose et dans une sonde réseau,
+    // un `None` ne va nulle part.
+    let (identifiants, autorite) = match autorite_complete.rsplit_once('@') {
+        Some((avant, apres)) => (avant, apres),
+        None => ("", autorite_complete),
     };
 
     let (user, password) = match identifiants.split_once(':') {
         Some((user, password)) => (user, password),
         None => (identifiants, ""),
     };
-
-    let fin_autorite = apres.find(['/', '?']).unwrap_or(apres.len());
-    let autorite = &apres[..fin_autorite];
-    let database = apres[fin_autorite..]
-        .strip_prefix('/')
-        .unwrap_or("")
-        .split('?')
-        .next()
-        .unwrap_or("");
 
     if autorite.is_empty() {
         return None;
@@ -102,24 +102,6 @@ pub(crate) fn parse(url: &str) -> Option<Connection> {
         port,
         database: database.to_string(),
     })
-}
-
-/// Position du `@` qui suit un mot de passe portant un `/` ou un `?` non encodé.
-///
-/// La RFC veut ces deux caractères encodés, mais un mot de passe engendré en base64 en
-/// porte un une fois sur deux, et refuser ces URL rendrait le CLI inutilisable avec la
-/// moitié des bases hébergées. Deux garde-fous évitent de prendre pour des identifiants
-/// un `@` qui n'en sépare aucun : c'est le **premier** `@` qui est retenu, non le dernier,
-/// qui appartiendrait au nom de la base ; et ce qui le précède doit porter un `:`, faute
-/// de quoi `postgres://localhost/de@mo` verrait son hôte tiré du nom de sa base.
-///
-/// Limite connue et délibérée : un mot de passe portant à la fois un `/` et un `@` non
-/// encodés (`rbs:sec/r@ss@localhost/demo`) est mal découpé. Deux caractères réservés non
-/// encodés dans un même mot de passe, c'est une URL qu'aucun outil ne lit correctement.
-fn premier_arobase_apres_identifiants(reste: &str) -> Option<usize> {
-    let position = reste.find('@')?;
-
-    reste[..position].contains(':').then_some(position)
 }
 
 /// L'URL de la même base, vue de l'intérieur du compose.
@@ -269,27 +251,14 @@ mod tests {
         assert!(!connexion.est_locale());
     }
 
-    /// Un mot de passe engendré en base64 porte un `/` une fois sur deux. La RFC veut
-    /// qu'il soit encodé ; refuser l'URL parce qu'il ne l'est pas rendrait le CLI
-    /// inutilisable avec la moitié des bases hébergées.
+    /// La RFC veut `/` et `?` encodés dans un mot de passe, et sqlx comme libpq l'exigent
+    /// de même : une URL qui ne les encode pas ne connecterait de toute façon pas. Le
+    /// refus est franc plutôt que deviné — un hôte faux partirait dans un compose et dans
+    /// une sonde réseau, là où un `None` ne va nulle part.
     #[test]
-    fn a_slash_in_the_password_does_not_end_the_authority() {
-        let connexion = parse("postgres://rbs:sec/ret@localhost:5432/demo").expect("URL valide");
-
-        assert_eq!(connexion.user, "rbs");
-        assert_eq!(connexion.password, "sec/ret");
-        assert_eq!(connexion.host, "localhost");
-        assert_eq!(connexion.port, 5432);
-        assert_eq!(connexion.database, "demo");
-    }
-
-    #[test]
-    fn a_question_mark_in_the_password_does_not_start_the_query() {
-        let connexion = parse("postgres://rbs:sec?ret@localhost:5432/demo").expect("URL valide");
-
-        assert_eq!(connexion.password, "sec?ret");
-        assert_eq!(connexion.host, "localhost");
-        assert_eq!(connexion.database, "demo");
+    fn an_unencoded_separator_in_the_password_is_refused_rather_than_guessed() {
+        assert!(parse("postgres://rbs:sec/ret@localhost:5432/demo").is_none());
+        assert!(parse("postgres://rbs:sec?ret@localhost:5432/demo").is_none());
     }
 
     /// Aucun identifiant, un `@` dans le nom de la base : rien ne doit être pris pour des
@@ -305,25 +274,41 @@ mod tests {
         assert_eq!(connexion.database, "de@mo");
     }
 
-    /// Les deux tolérances à la fois : un `/` non encodé dans le mot de passe et un `@`
-    /// dans le nom de la base. Le repli doit retenir le premier `@`, non le dernier.
+    /// Une autorité portant un port explicite ressemble à un couple utilisateur/mot de
+    /// passe, et c'est cette ressemblance qui a fait échouer trois découpes successives.
     #[test]
-    fn a_slash_in_the_password_and_an_at_sign_in_the_database_both_land_right() {
-        let connexion = parse("postgres://rbs:sec/ret@localhost:5432/demo@x").expect("URL valide");
+    fn an_explicit_port_is_not_mistaken_for_credentials() {
+        let connexion = parse("postgres://localhost:5432/de@mo").expect("URL valide");
 
-        assert_eq!(connexion.user, "rbs");
-        assert_eq!(connexion.password, "sec/ret");
+        assert_eq!(connexion.user, "");
+        assert_eq!(connexion.password, "");
         assert_eq!(connexion.host, "localhost");
         assert_eq!(connexion.port, 5432);
-        assert_eq!(connexion.database, "demo@x");
+        assert_eq!(connexion.database, "de@mo");
     }
 
     #[test]
-    fn a_slash_in_the_password_survives_an_at_sign_in_the_query() {
-        let connexion =
-            parse("postgres://rbs:sec/ret@localhost:5432/demo?x=1@y").expect("URL valide");
+    fn a_bracketed_ipv6_authority_without_credentials_keeps_its_host() {
+        let connexion = parse("postgres://[::1]:5432/de@mo").expect("URL valide");
 
-        assert_eq!(connexion.password, "sec/ret");
+        assert_eq!(connexion.host, "::1");
+        assert_eq!(connexion.port, 5432);
+        assert_eq!(connexion.database, "de@mo");
+    }
+
+    #[test]
+    fn a_colon_in_the_database_name_is_not_a_credentials_separator() {
+        let connexion = parse("postgres://localhost/de:mo@x").expect("URL valide");
+
+        assert_eq!(connexion.user, "");
+        assert_eq!(connexion.host, "localhost");
+        assert_eq!(connexion.database, "de:mo@x");
+    }
+
+    #[test]
+    fn an_at_sign_in_the_query_does_not_reach_the_authority() {
+        let connexion = parse("postgres://localhost:5432/demo?a=b@c").expect("URL valide");
+
         assert_eq!(connexion.host, "localhost");
         assert_eq!(connexion.database, "demo");
     }
