@@ -10,7 +10,7 @@ edition = "2024"
 default-run = "blog-auth"
 
 [package.metadata.rbs]
-version = "0.4.0"
+version = "1.0.0"
 features = ["health", "auth", "posts"]
 database = "postgres"
 
