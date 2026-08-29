@@ -60,21 +60,25 @@ configuration; your project declares its own `AppState` around it, free to gain 
 client or a mail service without asking the framework's permission. Core handlers reach
 the pool through the `HasCoreState` trait, whatever wraps it.
 
-### Four feature flags that do nothing yet
+### One filled feature flag, three still empty
 
-`rbs-core` declares four Cargo features — `auth`, `redis`, `mail`, `storage`. In 0.1 they
-are **declared but empty**: enabling one compiles nothing extra and pulls in no dependency.
-They reserve their names, so that 0.2 can fill them without renaming anything:
+`rbs-core` declares four Cargo features beyond the database drivers. One carries code; the
+other three reserve a name and nothing more:
 
-| Flag | What it will activate |
-|---|---|
-| `auth` | Argon2 hashing, JWTs, an identity extractor |
-| `redis` | A Redis client shared through the application state |
-| `mail` | Sending mail and rendering templates |
-| `storage` | File storage, local or S3-compatible |
+| Flag | State | What it carries |
+|---|---|---|
+| `auth` | **filled** | Argon2 hashing, JWTs, opaque tokens, an identity extractor |
+| `redis` | empty | A Redis client shared through the application state |
+| `mail` | empty | Sending mail and rendering templates |
+| `storage` | empty | File storage, local or S3-compatible |
 
-Naming them a version early costs nothing and settles the question of what they will be
-called. Turning one on today is not an error — it is simply a no-op.
+Enabling one of the three empty ones compiles nothing extra and pulls in no dependency —
+it is not an error, simply a no-op. Naming them early cost nothing and settled the question
+of what they would be called; `auth` is what that reservation was for, and it was filled
+without renaming anything.
+
+The empty three are also outside the compatibility promise: they carry no public API to
+freeze. Filling them is an addition, never a break.
 
 ## Anatomy of a feature
 

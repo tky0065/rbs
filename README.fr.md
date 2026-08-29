@@ -9,8 +9,8 @@ modifier.
 
 ## Statut
 
-Version 0.4.0. Les quatre jalons de la feuille de route sont livrés — le socle,
-l'authentification, les intégrations, le confort — et
+Version 1.0.0. Les cinq jalons de la feuille de route sont livrés — le socle,
+l'authentification, les intégrations, le confort, la stabilité — et
 [`CHANGELOG.fr.md`](CHANGELOG.fr.md) dit ce que chacun apporte.
 
 **rbs suit le versionnage sémantique à partir de la 1.0.** L'API publique de `rbs-core` est
@@ -106,8 +106,8 @@ service, lui, ne voit jamais de `DatabaseConnection`.
 ## Documentation
 
 Le site est à l'adresse **<https://tky0065.github.io/rbs/fr/>** : démarrage, architecture,
-référence du CLI, guides. Le binaire porte sept commandes — `new`, `add`, `generate`,
-`migrate`, `seed`, `dev`, `doctor` — et le site documente chacune d'elles.
+référence du CLI, guides. Le binaire porte huit commandes — `new`, `add`, `generate`,
+`migrate`, `seed`, `dev`, `doctor`, `upgrade` — et le site documente chacune d'elles.
 
 [`CHANGELOG.fr.md`](CHANGELOG.fr.md) dit ce qu'a apporté chaque version, écrit pour qui
 installe rbs. [`ROADMAP.md`](ROADMAP.md) prend l'autre sens : ce que couvrent les jalons, et

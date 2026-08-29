@@ -5,7 +5,7 @@ title: rbs add
 
 # `rbs add`
 
-Installe une feature dans un projet existant. Elle en livre six : `auth`, `ci`,
+Installe une feature dans un projet existant. Elle en livre sept : `auth`, `ci`, `jobs`,
 `docker`, `mail`, `redis` et `storage`.
 
 :::note
@@ -18,7 +18,7 @@ sortie de terminal ne se traduit pas.
 
 ```text
 $ rbs add --help
-Ajoute une feature à un projet existant : auth, ci, docker, mail, redis, storage
+Ajoute une feature : auth, ci, docker, jobs, mail, redis, storage
 
 Usage: rbs add [OPTIONS] <FEATURE>
 
@@ -39,13 +39,14 @@ Options:
 | `--template-dir <CHEMIN>` | Lit les fragments dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire. |
 | `-y`, `--yes` | Global, et sans effet ici : `rbs add` ne demande rien. |
 
-## Les six features
+## Les sept features
 
 | Feature | Fichiers | Suite |
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, `docker-compose.yml` | `docker compose up --build` |
 | `ci` | `.github/workflows/ci.yml` | `git push` |
 | `auth` | huit fichiers sous `src/auth/`, une migration, et quatre fichiers du projet modifiés | recopier le secret, puis `rbs migrate up` |
+| `jobs` | sept fichiers sous `src/jobs/`, une migration, et une section `[jobs]` de configuration | `rbs migrate up`, puis inscrire vos jobs dans `src/jobs/mod.rs` |
 | `redis` | trois fichiers sous `src/cache/` | démarrer un Redis à l'URL de `[cache]` |
 | `mail` | cinq fichiers sous `src/mail/`, et un gabarit d'exemple | régler `[mail]`, un SMTP local par défaut |
 | `storage` | quatre fichiers sous `src/storage/` | ignorer `./storage`, ou passer le backend à `s3` |
@@ -133,7 +134,7 @@ Tout autre nom est refusé avec la liste de ce qui est installable :
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : auth, ci, docker, mail, redis, storage
+erreur : `graphql` n'est pas une feature installable : auth, ci, docker, jobs, mail, redis, storage
 ```
 
 ## L'idempotence

@@ -9,9 +9,9 @@ read it and change it.
 
 ## Status
 
-Version 0.4.0. The four milestones of the roadmap are delivered — the foundation,
-authentication, integrations, comfort — and [`CHANGELOG.md`](CHANGELOG.md) says what each
-one gives you.
+Version 1.0.0. The five milestones of the roadmap are delivered — the foundation,
+authentication, integrations, comfort, stability — and [`CHANGELOG.md`](CHANGELOG.md) says
+what each one gives you.
 
 **rbs follows semantic versioning from 1.0 on.** The public API of `rbs-core` is frozen:
 inside the 1.x line nothing is removed, renamed or given another meaning, and
@@ -102,8 +102,8 @@ service, in turn, never sees a `DatabaseConnection`.
 ## Documentation
 
 The site is at **<https://tky0065.github.io/rbs/>**: getting started, architecture, CLI
-reference, guides. The binary carries seven commands — `new`, `add`, `generate`, `migrate`,
-`seed`, `dev`, `doctor` — and the site documents each one.
+reference, guides. The binary carries eight commands — `new`, `add`, `generate`, `migrate`,
+`seed`, `dev`, `doctor`, `upgrade` — and the site documents each one.
 
 [`CHANGELOG.md`](CHANGELOG.md) is what each release added, written for whoever installs rbs.
 [`ROADMAP.md`](ROADMAP.md) is the other direction: what the milestones cover, and what is

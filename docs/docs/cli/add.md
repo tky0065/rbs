@@ -5,7 +5,7 @@ title: rbs add
 
 # `rbs add`
 
-Installs a feature into an existing project. Six are shipped: `auth`, `ci`, `docker`,
+Installs a feature into an existing project. Seven are shipped: `auth`, `ci`, `docker`, `jobs`,
 `mail`, `redis` and `storage`.
 
 :::note
@@ -17,7 +17,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ```text
 $ rbs add --help
-Ajoute une feature à un projet existant : auth, ci, docker, mail, redis, storage
+Ajoute une feature : auth, ci, docker, jobs, mail, redis, storage
 
 Usage: rbs add [OPTIONS] <FEATURE>
 
@@ -38,13 +38,14 @@ Options:
 | `--template-dir <CHEMIN>` | Reads the fragments from a directory holding one subdirectory per feature, instead of the ones embedded in the binary. |
 | `-y`, `--yes` | Global, and inert here: `rbs add` asks nothing. |
 
-## The six features
+## The seven features
 
 | Feature | Files | Next step |
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, `docker-compose.yml` | `docker compose up --build` |
 | `ci` | `.github/workflows/ci.yml` | `git push` |
 | `auth` | eight files under `src/auth/`, one migration, and edits to four project files | copy the secret, then `rbs migrate up` |
+| `jobs` | seven files under `src/jobs/`, one migration, and a `[jobs]` config section | `rbs migrate up`, then register your jobs in `src/jobs/mod.rs` |
 | `redis` | three files under `src/cache/` | start a Redis at the `[cache]` URL |
 | `mail` | five files under `src/mail/`, and a sample template | set `[mail]`, a local SMTP by default |
 | `storage` | four files under `src/storage/` | ignore `./storage`, or switch the backend to `s3` |
@@ -131,7 +132,7 @@ Anything else is refused with the list of what is installable:
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : auth, ci, docker, mail, redis, storage
+erreur : `graphql` n'est pas une feature installable : auth, ci, docker, jobs, mail, redis, storage
 ```
 
 ## Idempotence

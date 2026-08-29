@@ -60,22 +60,25 @@ configuration ; votre projet déclare son propre `AppState` autour, libre d'y ga
 client Redis ou un service mail sans demander la permission au cadre. Les handlers du
 noyau atteignent le pool par le trait `HasCoreState`, quel que soit l'état qui l'enveloppe.
 
-### Quatre feature flags qui ne font encore rien
+### Un feature flag rempli, trois encore vides
 
-`rbs-core` déclare quatre features Cargo — `auth`, `redis`, `mail`, `storage`. En 0.1
-elles sont **déclarées mais vides** : en activer une ne compile rien de plus et n'ajoute
-aucune dépendance. Elles réservent leur nom, pour que la 0.2 les remplisse sans rien
-renommer :
+`rbs-core` déclare quatre features Cargo au-delà des pilotes de base. L'une porte du code,
+les trois autres réservent un nom et rien d'autre :
 
-| Flag | Ce qu'il activera |
-|---|---|
-| `auth` | Hachage Argon2, JWT, extracteur d'identité |
-| `redis` | Un client Redis partagé par l'état applicatif |
-| `mail` | Envoi de courriels et rendu de gabarits |
-| `storage` | Stockage de fichiers, local ou compatible S3 |
+| Flag | État | Ce qu'il porte |
+|---|---|---|
+| `auth` | **rempli** | Hachage Argon2, JWT, jetons opaques, extracteur d'identité |
+| `redis` | vide | Un client Redis partagé par l'état applicatif |
+| `mail` | vide | Envoi de courriels et rendu de gabarits |
+| `storage` | vide | Stockage de fichiers, local ou compatible S3 |
 
-Les nommer une version à l'avance ne coûte rien et tranche la question de leur nom. En
-activer une aujourd'hui n'est pas une erreur : c'est simplement sans effet.
+En activer une des trois vides ne compile rien de plus et n'ajoute aucune dépendance : ce
+n'est pas une erreur, c'est simplement sans effet. Les nommer à l'avance n'a rien coûté et
+a tranché la question de leur nom ; `auth` est ce à quoi cette réservation servait, et elle
+a été remplie sans rien renommer.
+
+Les trois vides sont aussi hors de la promesse de compatibilité : elles ne portent aucune
+API publique à geler. Les remplir est un ajout, jamais une rupture.
 
 ## L'anatomie d'une feature
 
