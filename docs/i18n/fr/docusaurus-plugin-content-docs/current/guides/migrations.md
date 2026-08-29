@@ -50,10 +50,12 @@ La migration des `articles` ci-dessus, telle qu'elle est générée :
 ```rust file=examples/hello-crud/migration/src/m20260826_205243_create_articles.rs region=up
 ```
 
-Trois colonnes s'ajoutent à celles que vous avez nommées. `id` est un UUID dont le défaut
-est `uuidv7()`, ce qui fait trier les identifiants par ordre de création — **PostgreSQL 18
-est le plancher**, puisque c'est là que `uuidv7()` est devenue native. `created_at` et
-`updated_at` prennent tous deux l'horodatage de la transaction pour défaut.
+Trois colonnes s'ajoutent à celles que vous avez nommées. `id` est un UUID sans défaut de
+colonne : **c'est le modèle engendré qui le pose**, avec `Uuid::now_v7()`, juste avant
+l'insertion. Les identifiants se trient toujours par ordre de création, et aucun moteur ne
+se voit réclamer un `uuidv7()` à lui — c'est ce qui permet à la même migration de tourner
+sur PostgreSQL, MySQL et SQLite indifféremment. `created_at` et `updated_at` prennent tous
+deux l'horodatage de la transaction pour défaut.
 
 Les noms de colonnes sont déclarés dans l'énumération `DeriveIden` en bas du fichier, à
 laquelle le constructeur de requêtes de SeaORM se réfère :
