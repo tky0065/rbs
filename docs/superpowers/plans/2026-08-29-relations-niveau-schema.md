@@ -1528,6 +1528,135 @@ git commit -m "feat(generate): pose la clé étrangère et son index dans la mig
 
 ---
 
+### Task 6b: Un seed n'invente pas de clé étrangère
+
+Découvert à l'exécution, absent de la spec comme du plan. `generate/seed.rs:85` projette tout `Uuid` sur `Uuid::from_u128(rang)` : une feature portant `author:references:users` engendre donc `author_id: Set(Uuid::from_u128(1))`, un identifiant qui ne référence rien. Inoffensif tant qu'aucune contrainte n'existe — mais la Task 6 vient de la poser, et `cargo run --bin seeds` échoue désormais sur une violation de clé étrangère.
+
+La règle retenue : une référence **optionnelle** se sème à `None`, valide puisque la colonne accepte le nul ; une référence **requise** rend l'entité non semable, et aucun fichier de seed n'est engendré pour elle. Semer une relation demanderait de connaître une ligne cible existante, ce qu'un seed indépendant ne peut pas savoir — et un seed engendré qui échoue à chaque lancement est un livrable cassé.
+
+**Files:**
+- Modify: `crates/rbs-cli/src/generate/seed.rs`
+- Modify: `crates/rbs-cli/src/generate/command.rs`
+
+**Interfaces:**
+- Consumes: `Field::reference()`, `Field.optional` (Task 3).
+- Produces: `pub(crate) fn is_seedable(feature: &Feature) -> bool` dans `seed.rs`.
+
+- [ ] **Step 1: Écrire les tests**
+
+Dans le `mod tests` de `crates/rbs-cli/src/generate/seed.rs` :
+
+```rust
+    #[test]
+    fn an_optional_reference_is_seeded_as_none() {
+        let rendered = seed("posts", "title:string,author:references:users:optional");
+
+        assert!(rendered.contains("author_id: Set(None),"), "{rendered}");
+        assert!(
+            !rendered.contains("Uuid::from_u128"),
+            "un identifiant inventé pointerait vers une ligne inexistante :\n{rendered}"
+        );
+    }
+
+    // Semer une référence requise demanderait de connaître une ligne cible existante,
+    // qu'un seed indépendant ne peut pas savoir. Mieux vaut ne rien engendrer que
+    // d'engendrer ce qui échouera à chaque lancement.
+    #[test]
+    fn a_required_reference_makes_the_entity_unseedable() {
+        let with = Feature::fresh(
+            "posts",
+            fields::parse("title:string,author:references:users").expect("acceptée"),
+        );
+        let without = Feature::fresh(
+            "posts",
+            fields::parse("title:string").expect("acceptée"),
+        );
+
+        assert!(!is_seedable(&with));
+        assert!(is_seedable(&without));
+    }
+
+    #[test]
+    fn an_optional_reference_leaves_the_entity_seedable() {
+        let feature = Feature::fresh(
+            "posts",
+            fields::parse("author:references:users:optional").expect("acceptée"),
+        );
+
+        assert!(is_seedable(&feature));
+    }
+```
+
+Le helper `seed` du module de tests résout les relations comme celui de la Task 5 :
+
+```rust
+    fn seed(name: &str, fields: &str) -> String {
+        let entities = [crate::generate::entities::Entity {
+            table: "users".to_string(),
+            module_path: "crate::auth::model::user".to_string(),
+            file: "src/auth/model.rs".to_string(),
+        }];
+        let mut parsed = fields::parse(fields).expect("les champs du test doivent être valides");
+        crate::generate::relations::resolve(&mut parsed, &entities, name)
+            .expect("les cibles du test doivent se résoudre");
+        render(&Feature::fresh(name, parsed)).expect("le seed doit se rendre")
+    }
+```
+
+- [ ] **Step 2: Lancer les tests, vérifier qu'ils échouent**
+
+Run: `cargo test -p rbs-cli --lib seed 2>&1 | tail -20`
+Expected: FAILED — `is_seedable` introuvable, et la référence optionnelle rendue en `Uuid::from_u128`.
+
+- [ ] **Step 3: Implémenter**
+
+Dans `seed.rs`, la valeur d'exemple d'une référence optionnelle est `None`, et la fonction qui décide de l'engendrement :
+
+```rust
+/// Une entité portant une référence **requise** ne se sème pas.
+///
+/// Le seed devrait connaître une ligne cible existante pour poser une valeur qui passe
+/// la contrainte, ce qu'un fichier indépendant ne peut pas savoir. Ne rien engendrer vaut
+/// mieux qu'engendrer un fichier qui échoue à chaque lancement.
+pub(crate) fn is_seedable(feature: &Feature) -> bool {
+    !feature
+        .fields
+        .iter()
+        .any(|field| field.reference().is_some() && !field.optional)
+}
+```
+
+Dans la fonction qui calcule la valeur d'exemple, traiter la référence optionnelle avant le passage par `column_type()` : elle rend `"None".to_string()`.
+
+- [ ] **Step 4: Lancer les tests, vérifier qu'ils passent**
+
+Run: `cargo test -p rbs-cli --lib seed 2>&1 | tail -20`
+Expected: tous passent.
+
+- [ ] **Step 5: Brancher la décision dans la génération**
+
+Dans `crates/rbs-cli/src/generate/command.rs`, le seed et son montage ne sont produits que si `seed::is_seedable(&feature)`. Lire d'abord comment le seed est actuellement conditionné — il l'est déjà par `complete`, et la nouvelle condition s'ajoute à celle-là.
+
+Quand le seed est écarté, la commande le dit dans sa sortie, sur le modèle des autres lignes d'information qu'elle affiche :
+
+```
+aucun seed pour posts : la référence « author » est requise, et un seed ne peut pas
+deviner vers quelle ligne pointer
+```
+
+Ajouter le test d'intégration qui le prouve, dans `crates/rbs-cli/tests/integration_relations.rs` si la Task 8 l'a déjà créé, sinon dans `integration_generate.rs` : générer une feature à référence requise, vérifier que `src/<feature>/seed.rs` **n'existe pas**, que la sortie nomme la relation en cause, et que le projet compile malgré tout.
+
+- [ ] **Step 6: Commit**
+
+```bash
+cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings
+cargo test -p rbs-cli
+git add crates/rbs-cli/src/generate/seed.rs crates/rbs-cli/src/generate/command.rs crates/rbs-cli/tests/
+git commit -m "fix(generate): n'engendre plus de seed inventant une clé étrangère"
+```
+
+---
+
 ### Task 7: Une ancre peut viser un fichier calculé
 
 L'ancre du côté inverse vit dans `src/<cible>/model.rs`, chemin connu seulement à l'exécution. Or `plan/mod.rs:180` fait `let path = anchor.file`, et `Anchor.file` est un `&'static str`.
