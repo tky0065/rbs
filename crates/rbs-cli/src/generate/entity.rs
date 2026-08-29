@@ -43,6 +43,18 @@ mod tests {
         }]
     }
 
+    // `tags` s'ajoute à `users` : un test d'ambiguïté doit aussi prouver qu'une relation
+    // ordinaire, vers une autre cible, continue de recevoir son `impl Related`.
+    fn users_and_tags_entities() -> Vec<crate::generate::entities::Entity> {
+        let mut entities = users_entity();
+        entities.push(crate::generate::entities::Entity {
+            table: "tags".to_string(),
+            module_path: "crate::tags::model".to_string(),
+            file: "src/tags/model.rs".to_string(),
+        });
+        entities
+    }
+
     #[test]
     fn the_primary_key_is_a_uuid_without_auto_increment() {
         let rendered = entity("users", "name:string");
@@ -220,6 +232,50 @@ mod tests {
         );
     }
 
+    // `Related<T>` prend le type cible pour seule clé : deux relations vers `users`
+    // implémenteraient toutes deux `Related<crate::auth::model::user::Entity> for
+    // Entity`, qu'`rustc` refuse (E0119). Aucune des deux n'a de meilleure prétention à
+    // l'implémentation que l'autre, donc aucune ne s'écrit.
+    #[test]
+    fn two_relations_to_the_same_target_yield_no_related_impl_and_a_comment_naming_both() {
+        let rendered = entity_with(
+            "posts",
+            "author:references:users,reviewer:references:users",
+            &users_entity(),
+        );
+
+        assert!(
+            !rendered.contains("impl Related<crate::auth::model::user::Entity> for Entity {"),
+            "un `impl Related` a été émis malgré l'ambiguïté :\n{rendered}"
+        );
+        assert!(rendered.contains("`users`"), "{rendered}");
+        assert!(rendered.contains("`Author`"), "{rendered}");
+        assert!(rendered.contains("`Reviewer`"), "{rendered}");
+    }
+
+    #[test]
+    fn two_relations_to_different_targets_each_get_their_own_related_impl() {
+        let rendered = entity_with(
+            "posts",
+            "author:references:users,editor:references:tags",
+            &users_and_tags_entities(),
+        );
+
+        assert!(
+            rendered.contains("impl Related<crate::auth::model::user::Entity> for Entity {"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("impl Related<crate::tags::model::Entity> for Entity {"),
+            "{rendered}"
+        );
+        assert_eq!(
+            rendered.matches("impl Related<").count(),
+            2,
+            "deux cibles distinctes, deux implémentations attendues :\n{rendered}"
+        );
+    }
+
     #[test]
     fn a_cascade_reference_carries_its_action() {
         let rendered = entity_with("posts", "author:references:users:cascade", &users_entity());
@@ -254,6 +310,25 @@ mod tests {
         );
     }
 
+    // La garde de `command.rs` (`the_render_goes_through_rustfmt_without_a_diff_…`) ne
+    // porte aucun champ `:references:` : rien n'y prouve que les blocs `impl Related` et
+    // le commentaire d'ambiguïté sortent déjà mis en forme. Ce test-ci les couvre au
+    // niveau du rendu, en passant par le même `resolve` qu'un vrai `generate crud`.
+    #[test]
+    fn the_render_with_relations_conforms_to_rustfmt_unique_and_ambiguous_alike() {
+        let rendered = entity_with(
+            "posts",
+            "author:references:users,reviewer:references:users,editor:references:tags",
+            &users_and_tags_entities(),
+        );
+
+        assert_eq!(
+            bench::formatted(&rendered),
+            rendered,
+            "un `cargo fmt` reformaterait le rendu portant des relations :\n{rendered}"
+        );
+    }
+
     #[test]
     #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
     fn the_generated_entity_compiles_in_a_fresh_project() {
@@ -278,6 +353,20 @@ mod tests {
                 "articles",
                 "title:string,slug:string:unique,summary:text:optional,views:int,published:bool,\
                  author:references:users",
+                &users_entity()
+            )
+        );
+    }
+
+    /// Rendu d'un modèle à deux relations vers la même cible, pour la revue de lecture.
+    #[test]
+    #[ignore = "affichage pour revue humaine"]
+    fn preview_two_relations_to_the_same_target() {
+        println!(
+            "{}",
+            entity_with(
+                "posts",
+                "title:string,author:references:users,reviewer:references:users",
                 &users_entity()
             )
         );

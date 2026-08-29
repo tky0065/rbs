@@ -35,13 +35,19 @@ pub enum Relation {
     // <rbs:relations>
     // </rbs:relations>
 }
-{% for field in fields if field.relation %}
-impl Related<{@ field.relation.entity_path @}> for Entity {
+{%- for relation in unique_relations %}
+
+impl Related<{@ relation.entity_path @}> for Entity {
     fn to() -> RelationDef {
-        Relation::{@ field.relation.variant @}.def()
+        Relation::{@ relation.variant @}.def()
     }
 }
-{% endfor %}
+{%- endfor %}
+{%- for ambiguous in ambiguous_targets %}
+
+{@ ambiguous.comment @}
+{%- endfor %}
+
 // <rbs:related>
 // </rbs:related>
 

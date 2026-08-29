@@ -4,10 +4,12 @@
 //! nomment au singulier — `User`, `CreateUser`. La dérivation est faite ici, une fois,
 //! plutôt que dans chaque template.
 
+use std::collections::{HashMap, HashSet};
+
 use serde::Serialize;
 use serde::ser::{SerializeStruct, Serializer};
 
-use super::fields::{Field, to_pascal_case};
+use super::fields::{Field, RelationView, to_pascal_case};
 
 /// Une feature à générer, telle que la voient l'entité, les DTO et la migration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -48,19 +50,106 @@ impl Feature {
     pub(crate) fn singular(&self) -> String {
         to_singular(&self.name)
     }
+
+    /// Relations dont la cible n'est visée qu'une fois : `impl Related` y a une réponse
+    /// juste. Deux relations vers la même table s'excluent l'une l'autre, quel que soit
+    /// leur nombre — `Related` prend un type pour clé, pas une paire (type, relation).
+    pub(crate) fn unique_relations(&self) -> Vec<&RelationView> {
+        let counts = self.target_counts();
+
+        self.fields
+            .iter()
+            .filter_map(|field| field.relation())
+            .filter(|relation| counts.get(&relation.target) == Some(&1))
+            .collect()
+    }
+
+    /// Tables visées par plus d'une relation : sans réponse juste pour `impl Related`, une
+    /// par table plutôt qu'une par relation, dans l'ordre où la première des concurrentes
+    /// est déclarée.
+    pub(crate) fn ambiguous_targets(&self) -> Vec<AmbiguousTarget> {
+        let counts = self.target_counts();
+        let mut deja_vues = HashSet::new();
+
+        self.fields
+            .iter()
+            .filter_map(|field| field.relation())
+            .filter(|relation| counts.get(&relation.target) != Some(&1))
+            .filter(|relation| deja_vues.insert(relation.target.clone()))
+            .map(|relation| {
+                AmbiguousTarget::new(&relation.target, self.variants_towards(&relation.target))
+            })
+            .collect()
+    }
+
+    /// Nombre de relations déclarées vers chaque table.
+    fn target_counts(&self) -> HashMap<String, usize> {
+        let mut counts = HashMap::new();
+        for relation in self.fields.iter().filter_map(|field| field.relation()) {
+            *counts.entry(relation.target.clone()).or_insert(0) += 1;
+        }
+        counts
+    }
+
+    /// Variantes `Relation` qui visent `target`, dans l'ordre de déclaration des champs.
+    fn variants_towards(&self, target: &str) -> Vec<String> {
+        self.fields
+            .iter()
+            .filter_map(|field| field.relation())
+            .filter(|relation| relation.target == target)
+            .map(|relation| relation.variant.clone())
+            .collect()
+    }
+}
+
+/// Une table visée par plus d'une relation de la feature.
+///
+/// `Related<T>` prend le type cible pour seule clé : deux relations vers la même table
+/// s'implémenteraient toutes deux `Related<T> for Entity`, ce que `rustc` refuse
+/// (`E0119`). Aucune des deux n'a de meilleure prétention à l'implémentation que l'autre,
+/// donc aucune n'est écrite — un commentaire explique comment joindre à la place.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct AmbiguousTarget {
+    /// Commentaire prêt à écrire, à la place de l'`impl Related` qu'on ne peut pas poser
+    /// sans arbitrairement préférer une des relations concurrentes.
+    pub comment: String,
+}
+
+impl AmbiguousTarget {
+    fn new(target: &str, variants: Vec<String>) -> Self {
+        let nommees = variants
+            .iter()
+            .map(|variant| format!("`{variant}`"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        // La première variante déclarée sert d'exemple : n'importe laquelle joint la même
+        // table, le choix n'a donc pas besoin d'être significatif.
+        let exemple = variants.first().cloned().unwrap_or_default();
+
+        Self {
+            comment: format!(
+                "// `{target}` est visée par {compte} relations ({nommees}) : `Related` \
+                 serait ambigu. Joindre explicitement, par exemple\n\
+                 // `Entity::find().join(JoinType::LeftJoin, Relation::{exemple}.def())`.",
+                compte = variants.len(),
+            ),
+        }
+    }
 }
 
 /// Sérialisé à la main, comme `Field` : minijinja ne voit pas les méthodes Rust, et les
 /// templates lisent `entity` comme elles lisent `module`.
 impl Serialize for Feature {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("Feature", 6)?;
+        let mut state = serializer.serialize_struct("Feature", 8)?;
         state.serialize_field("module", self.module())?;
         state.serialize_field("table", self.module())?;
         state.serialize_field("entity", &self.entity())?;
         state.serialize_field("iden", &self.iden())?;
         state.serialize_field("singular", &self.singular())?;
         state.serialize_field("fields", &self.fields)?;
+        state.serialize_field("unique_relations", &self.unique_relations())?;
+        state.serialize_field("ambiguous_targets", &self.ambiguous_targets())?;
         state.end()
     }
 }
