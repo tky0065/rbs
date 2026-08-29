@@ -1,6 +1,7 @@
 [package]
 name = "rbs-core"
 description = "Runtime partagé des projets générés par rbs : erreurs, configuration, logs, middlewares."
+readme = "README.md"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
