@@ -397,9 +397,14 @@ fn git_init(root: &Path) -> bool {
 ///
 /// SQLite n'a rien à monter. Une base distante non plus : engendrer un service local que
 /// `rbs dev` monterait pendant que l'application en interroge un autre serait pire que de
-/// ne rien écrire.
+/// ne rien écrire. Une URL sans identifiants — valide, `parse` l'accepte — vaut la même
+/// abstention : l'image PostgreSQL officielle refuse de s'initialiser sans mot de passe,
+/// et un compose qui ne peut pas démarrer est pire qu'un compose absent.
 fn compose_utile(options: &Options, connexion: Option<&crate::url::Connection>) -> bool {
-    options.database.a_un_serveur() && connexion.is_some_and(crate::url::Connection::est_locale)
+    options.database.a_un_serveur()
+        && connexion.is_some_and(|connexion| {
+            connexion.est_locale() && !connexion.user.is_empty() && !connexion.password.is_empty()
+        })
 }
 
 /// Nom de la crate correspondant au nom du projet : un tiret n'est pas un caractère
@@ -1109,6 +1114,31 @@ mod tests {
             &Options {
                 name: "demo".to_string(),
                 database_url: "postgres://rbs:rbs@db.prod.exemple:5432/demo".to_string(),
+                database: Database::Postgres,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        assert!(!project.root.join("docker-compose.yml").exists());
+        assert_eq!(project.files, 16);
+    }
+
+    /// Une URL sans identifiants est valide et acceptée par `parse` : sans cette
+    /// abstention, le compose porterait `POSTGRES_USER:` et `POSTGRES_PASSWORD:` vides,
+    /// rendus `null` par `docker compose config` — l'image officielle refuse alors de
+    /// s'initialiser. Écrire un compose qui ne peut pas démarrer est pire que ne rien
+    /// écrire, la même raison que pour SQLite et l'hôte distant.
+    #[test]
+    fn a_database_url_without_credentials_gets_no_compose() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://localhost:5432/demo".to_string(),
                 database: Database::Postgres,
                 features: Vec::new(),
                 core_path: None,

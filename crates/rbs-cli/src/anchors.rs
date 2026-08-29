@@ -126,8 +126,9 @@ pub(crate) const SEEDS: Anchor = Anchor {
 
 /// Services que les fragments ajoutent au compose du projet.
 ///
-/// Optionnelle : un projet SQLite, un projet visant une base distante et tout projet créé
-/// avant la 1.1.0 n'ont pas de compose, et n'ont donc pas cette ancre à porter.
+/// Optionnelle : un projet SQLite, un projet visant une base distante, un projet dont
+/// l'URL ne porte pas d'identifiants et tout projet créé avant la 1.1.0 n'ont pas de
+/// compose, et n'ont donc pas cette ancre à porter.
 pub(crate) const SERVICES: Anchor = Anchor {
     name: "services",
     file: "docker-compose.yml",
