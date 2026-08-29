@@ -15,7 +15,7 @@ use crate::database::Database;
 use crate::doctor::base;
 use crate::{metadata, migrate};
 
-/// Nom du fichier que la feature `docker` installe à la racine du projet.
+/// Nom du compose que le squelette écrit à la racine du projet.
 const COMPOSE: &str = "docker-compose.yml";
 
 /// Délai accordé à une base que rbs vient de remonter.
@@ -102,8 +102,8 @@ impl Error {
     pub(crate) fn remedy(&self) -> Option<String> {
         match self {
             Self::Injoignable { .. } => Some(format!(
-                "démarrez-la — `docker compose up -d` si la feature docker est installée — \
-                 ou corrigez {} dans le .env du projet",
+                "démarrez-la — `docker compose up -d` à la racine du projet — ou corrigez \
+                 {} dans le .env du projet",
                 migrate::URL
             )),
             Self::UrlIllisible => Some(format!(
@@ -137,23 +137,13 @@ fn patience(steps: &[Step]) -> Duration {
 
 /// Établit la séquence de démarrage à partir de l'état du projet.
 pub(crate) fn plan(root: &Path) -> Result<Vec<Step>, Error> {
-    plan_with(root, |path| path.is_file())
-}
-
-/// Le plan, la présence des fichiers étant décidée par `exists`.
-///
-/// La sonde est un paramètre pour qu'un test constate non seulement le plan produit, mais
-/// aussi qu'aucun compose n'a été *cherché* là où le projet n'en a pas demandé.
-fn plan_with(root: &Path, exists: impl Fn(&Path) -> bool) -> Result<Vec<Step>, Error> {
     let mut steps = Vec::new();
 
-    // L'ordre des deux conditions est le critère lui-même : un projet sans la feature ne
-    // doit pas voir son disque interrogé, fût-ce pour un fichier absent.
-    if declares_docker(root) {
-        let compose = root.join(COMPOSE);
-        if exists(&compose) {
-            steps.push(Step::Compose(compose));
-        }
+    // Le compose n'est plus la marque d'une feature : le squelette l'écrit pour tout
+    // projet dont la base a un serveur à monter. Sa présence est le seul critère.
+    let compose = root.join(COMPOSE);
+    if compose.is_file() {
+        steps.push(Step::Compose(compose));
     }
 
     // SQLite n'a pas de serveur : son URL ne porte ni hôte ni port, et attendre qu'un
@@ -180,12 +170,6 @@ fn database_of(root: &Path) -> Database {
     metadata::read(&root.join("Cargo.toml"))
         .map(|metadata| metadata.database)
         .unwrap_or_default()
-}
-
-/// Vrai si `[package.metadata.rbs]` déclare la feature `docker`.
-fn declares_docker(root: &Path) -> bool {
-    metadata::read(&root.join("Cargo.toml"))
-        .is_ok_and(|metadata| metadata.features.iter().any(|feature| feature == "docker"))
 }
 
 /// L'URL visée : celle du `.env`, ou celle que l'appelant a exportée.
@@ -281,7 +265,6 @@ fn render(steps: &[Step]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::cell::RefCell;
     use std::net::TcpListener;
     use std::path::PathBuf;
 
@@ -362,29 +345,35 @@ mod tests {
             .port()
     }
 
+    /// Le compose n'est plus conditionné à `[package.metadata.rbs] features` : le
+    /// squelette l'écrit, et un projet neuf doit démarrer sans `rbs add docker`.
     #[test]
-    fn without_the_docker_feature_no_compose_is_looked_for() {
+    fn a_fresh_project_mounts_its_compose_without_the_docker_feature() {
         let (_parent, root) = project(&[], "postgres://rbs:rbs@localhost:5432/demo_api");
-        let cherches = RefCell::new(Vec::new());
-
-        let steps = plan_with(&root, |path| {
-            cherches.borrow_mut().push(path.to_path_buf());
-            true
-        })
-        .expect("le plan se calcule");
-
         assert!(
-            cherches.borrow().is_empty(),
-            "un compose a été cherché sur un projet qui n'en a pas : {:?}",
-            cherches.borrow()
+            !crate::metadata::read(&root.join("Cargo.toml"))
+                .expect("manifeste lisible")
+                .features
+                .iter()
+                .any(|f| f == "docker"),
+            "le projet de ce test ne doit pas porter la feature"
         );
+
+        let steps = plan(&root).expect("le plan doit se calculer");
+
+        assert!(matches!(steps.first(), Some(Step::Compose(_))), "{steps:?}");
+    }
+
+    #[test]
+    fn a_project_without_a_compose_starts_at_the_database() {
+        let (_parent, root) = project(&[], "postgres://rbs:rbs@localhost:5432/demo_api");
+        std::fs::remove_file(root.join(COMPOSE)).expect("le compose doit exister");
+
+        let steps = plan(&root).expect("le plan doit se calculer");
+
         assert!(
             !steps.iter().any(|step| matches!(step, Step::Compose(_))),
-            "un compose est remonté sans la feature : {steps:?}"
-        );
-        assert!(
-            steps.contains(&Step::Server),
-            "le serveur ne démarre pas pour autant : {steps:?}"
+            "{steps:?}"
         );
     }
 
@@ -424,6 +413,9 @@ mod tests {
     fn a_startup_against_a_dead_port_stops_before_the_migrations() {
         let port = free_port();
         let (_parent, root) = project(&[], &format!("postgres://rbs:rbs@127.0.0.1:{port}/demo"));
+        // Le compose du squelette est réel : le laisser dans le plan ferait `start`
+        // lancer un vrai `docker compose up -d` avant même d'atteindre le port mort.
+        std::fs::remove_file(root.join(COMPOSE)).expect("le compose doit exister");
         let steps = plan(&root).expect("le plan se calcule");
 
         let error = start(&root, &steps, Duration::from_millis(10)).expect_err("le port est mort");

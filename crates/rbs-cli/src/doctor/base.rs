@@ -54,7 +54,7 @@ pub(crate) fn check(root: &Path) -> Check {
 
     let database = database_of(root);
 
-    let ou = match joignable(database, &url) {
+    let ou = match joignable(root, database, &url) {
         Ok(ou) => ou,
         Err(echec) => return echec,
     };
@@ -159,7 +159,7 @@ fn database_of(root: &Path) -> Database {
 ///
 /// SQLite n'est pas sondé par le réseau : ce qui le rend joignable est un fichier
 /// ouvrable, ou un répertoire où il puisse naître — `mode=rwc` le crée au démarrage.
-fn joignable(database: Database, url: &str) -> Result<String, Check> {
+fn joignable(root: &Path, database: Database, url: &str) -> Result<String, Check> {
     if database == Database::Sqlite {
         let Some(chemin) = chemin_sqlite(url) else {
             return Err(Check::failed(
@@ -195,10 +195,19 @@ fn joignable(database: Database, url: &str) -> Result<String, Check> {
     };
 
     if !reachable(&hote, port) {
+        // Un projet sans compose n'a rien à démarrer par docker : lui suggérer la
+        // commande enverrait sur une piste qui n'existe pas.
+        let remedy = if root.join("docker-compose.yml").is_file() {
+            "lancez `docker compose up -d` à la racine du projet, ou corrigez l'URL du .env"
+                .to_string()
+        } else {
+            format!("démarrez {database}, ou corrigez l'URL du .env")
+        };
+
         return Err(Check::failed(
             TITRE,
             format!("rien ne répond sur {hote}:{port}"),
-            format!("démarrez {database}, ou corrigez l'URL du .env"),
+            remedy,
         ));
     }
 
@@ -489,6 +498,30 @@ mod tests {
         assert_eq!(check.state, State::Echec);
         assert!(check.detail.contains("127.0.0.1:1"));
         assert!(check.remedy.is_some());
+    }
+
+    /// Un projet dont la base a un serveur porte un compose : le remède nomme la
+    /// commande plutôt que de renvoyer vers un moteur à installer soi-même.
+    #[test]
+    fn the_remedy_names_the_project_compose_when_it_has_one() {
+        let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
+
+        let remedy = check(&root).remedy.expect("un échec porte son remède");
+
+        assert!(remedy.contains("docker compose up -d"), "{remedy}");
+    }
+
+    /// Sans compose, la commande docker n'existe pas pour ce projet : le remède retombe
+    /// sur le nom du moteur plutôt que de suggérer un fichier absent.
+    #[test]
+    fn the_remedy_falls_back_to_the_engine_without_a_compose() {
+        let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
+        std::fs::remove_file(root.join("docker-compose.yml")).expect("le compose doit exister");
+
+        let remedy = check(&root).remedy.expect("un échec porte son remède");
+
+        assert!(!remedy.contains("docker compose"), "{remedy}");
+        assert!(remedy.contains("démarrez"), "{remedy}");
     }
 
     #[test]
