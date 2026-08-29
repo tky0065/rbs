@@ -33,7 +33,13 @@ pub mod user {
     }
 
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
+    pub enum Relation {
+        // <rbs:relations>
+        // </rbs:relations>
+    }
+
+    // <rbs:related>
+    // </rbs:related>
 
     /// L'identifiant est posé ici, et non par un défaut de colonne : `uuidv7()` n'a
     /// d'équivalent à écrire ni en MySQL ni en SQLite.
@@ -70,7 +76,13 @@ pub mod refresh_token {
     }
 
     #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-    pub enum Relation {}
+    pub enum Relation {
+        // <rbs:relations>
+        // </rbs:relations>
+    }
+
+    // <rbs:related>
+    // </rbs:related>
 
     /// L'identifiant est posé ici, et non par un défaut de colonne : `uuidv7()` n'a
     /// d'équivalent à écrire ni en MySQL ni en SQLite.

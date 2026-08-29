@@ -761,6 +761,49 @@ mod tests {
         }
     }
 
+    // `users` est la cible la plus probable de toute relation d'un projet rbs : sans les
+    // ancres, `rbs add auth` suivi d'une relation vers `users` dans un projet neuf ne
+    // pourrait jamais écrire son côté inverse — la règle qui protège un modèle antérieur
+    // au jalon viderait alors la fonctionnalité de sa substance sur son cas le plus
+    // courant. Les deux entités du fragment sont nichées dans un module, d'où
+    // l'indentation à huit espaces pour l'ancre interne à l'énumération.
+    #[test]
+    fn the_auth_fragment_carries_both_anchors_on_each_of_its_two_entities() {
+        let source = read(&Path::new(RACINE_FEATURES).join("auth/model.rs.jinja"));
+
+        assert_eq!(
+            source
+                .matches("        // <rbs:relations>\n        // </rbs:relations>")
+                .count(),
+            2,
+            "les deux entités (`user`, `refresh_token`) doivent porter l'ancre des \
+             variantes :\n{source}"
+        );
+        assert_eq!(
+            source
+                .matches("    // <rbs:related>\n    // </rbs:related>")
+                .count(),
+            2,
+            "les deux entités doivent porter l'ancre des `impl Related` :\n{source}"
+        );
+    }
+
+    #[test]
+    fn the_jobs_fragment_carries_both_anchors() {
+        let source = read(&Path::new(RACINE_FEATURES).join("jobs/model.rs.jinja"));
+
+        assert!(
+            source.contains(
+                "pub enum Relation {\n    // <rbs:relations>\n    // </rbs:relations>\n}"
+            ),
+            "{source}"
+        );
+        assert!(
+            source.contains("\n// <rbs:related>\n// </rbs:related>\n"),
+            "{source}"
+        );
+    }
+
     /// Renversement assumé de la décision inverse : le compose ne publiait pas 5432
     /// parce que l'API l'atteignait par le réseau du compose. Le compose du squelette
     /// sert `cargo run` sur l'hôte, qui ne l'atteint que par un port publié.
