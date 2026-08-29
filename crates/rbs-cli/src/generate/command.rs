@@ -46,6 +46,8 @@ pub(crate) struct Planned {
     pub migration: Option<String>,
     /// Ce que rustfmt n'a pas pu faire sur le rendu, s'il y a lieu.
     pub avertissement: Option<format::Avertissement>,
+    /// Nom de la relation qui a écarté le seed, si l'entité en porte une requise.
+    pub seed_ecarte: Option<String>,
 }
 
 /// Ce qui peut empêcher de générer une feature.
@@ -155,7 +157,12 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         });
     }
 
-    let (mut files, migration) = render(&feature, options.complete)?;
+    // Une référence requise rend l'entité non semable : un seed engendré échouerait à
+    // chaque lancement sur la contrainte de clé étrangère, faute de ligne cible connue.
+    let seedable = seed::is_seedable(&feature);
+    let seed_ecarte = (options.complete && !seedable).then(|| unseedable_reference(&feature));
+
+    let (mut files, migration) = render(&feature, options.complete, seedable)?;
 
     // Après le rendu et avant le plan : le plan porte le contenu exact qui sera écrit,
     // et c'est lui que `--dry-run` montre.
@@ -170,7 +177,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     if let Some(migration) = &migration {
         montages.extend(mount::for_migration(migration));
     }
-    if options.complete {
+    if options.complete && seedable {
         montages.extend(mount::for_seed(&module));
     }
     for mount in montages {
@@ -184,13 +191,32 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         files: files.into_iter().map(|(path, _)| path).collect(),
         migration,
         avertissement,
+        seed_ecarte,
     })
+}
+
+/// Nom de la relation dont la référence requise rend `feature` non semable.
+///
+/// N'est appelée que quand `is_seedable` a déjà répondu non : une référence bloquante
+/// existe forcément.
+fn unseedable_reference(feature: &Feature) -> String {
+    feature
+        .fields
+        .iter()
+        .find(|field| field.reference().is_some() && !field.optional)
+        .expect("is_seedable a déjà établi qu'une référence requise existe")
+        .relation_name()
+        .to_string()
 }
 
 /// Rend les fichiers de la feature, et sa migration si elle est complète.
 ///
 /// Rien n'est écrit ici : une template fautive doit échouer avant la première écriture.
-fn render(feature: &Feature, complete: bool) -> Result<(Vec<File>, Option<String>), Error> {
+fn render(
+    feature: &Feature,
+    complete: bool,
+    seedable: bool,
+) -> Result<(Vec<File>, Option<String>), Error> {
     let module = feature.module();
     let dans = |name: &str| format!("src/{module}/{name}");
 
@@ -205,6 +231,9 @@ fn render(feature: &Feature, complete: bool) -> Result<(Vec<File>, Option<String
 
     if complete {
         files.push((dans("tests.rs"), tests_http::render(feature)));
+    }
+
+    if complete && seedable {
         // Hors du répertoire de la feature : le seed appartient au binaire qui l'applique,
         // et non au module que le routeur monte.
         files.push((format!("src/seeds/{module}.rs"), seed::render(feature)));
@@ -525,6 +554,54 @@ mod tests {
             .collect();
 
         assert_eq!(declarations, ["articles,", "notes,"], "{binaire}");
+    }
+
+    /// Une référence requise rend l'entité non semable : ni le fichier ni son montage ne
+    /// sont produits, et le plan nomme la relation en cause.
+    #[test]
+    fn a_required_reference_writes_no_seed_and_names_the_relation() {
+        let (_parent, root) = project();
+
+        let planned = run(&options(
+            &root,
+            "posts",
+            Some("title:string,author:references:users"),
+            true,
+        ))
+        .expect("la génération doit aboutir malgré la référence requise");
+
+        assert!(
+            !root.join("src/seeds/posts.rs").exists(),
+            "un seed a été écrit malgré la référence requise"
+        );
+
+        let binaire = read(&root.join("src/seeds/main.rs"));
+        let ancre = crate::anchors::body(&binaire, crate::anchors::SEEDS)
+            .expect("l'ancre des seeds est présente");
+        assert_eq!(
+            ancre.trim(),
+            "",
+            "le seed écarté ne doit pas être monté :\n{binaire}"
+        );
+
+        assert_eq!(planned.seed_ecarte.as_deref(), Some("author"));
+    }
+
+    /// Une référence optionnelle, elle, ne bloque rien : le seed se sème à `None`.
+    #[test]
+    fn an_optional_reference_still_writes_its_seed() {
+        let (_parent, root) = project();
+
+        let planned = run(&options(
+            &root,
+            "posts",
+            Some("title:string,author:references:users:optional"),
+            true,
+        ))
+        .expect("la génération doit aboutir");
+
+        assert!(root.join("src/seeds/posts.rs").exists(), "le seed manque");
+        assert_eq!(planned.seed_ecarte, None);
     }
 
     /// Une feature écrite à la main n'a pas d'entité : rien à semer.

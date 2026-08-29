@@ -4,6 +4,8 @@
 //! `assert_cmd` a besoin pour trouver le binaire, n'est défini que pour les tests
 //! d'intégration. Dans `src/`, il faisait échouer `cargo test -p rbs-cli --bins`.
 
+use std::fs;
+
 use assert_cmd::Command;
 use tempfile::TempDir;
 
@@ -38,4 +40,63 @@ fn a_clashing_name_is_rejected_by_naming_it_and_without_writing_anything() {
             "`{nom}` a laissé un répertoire"
         );
     }
+}
+
+/// Une référence requise rend l'entité non semable : aucun seed n'est écrit, le montage
+/// ne l'inscrit pas non plus, et la commande le dit dans sa sortie — sans quoi l'absence
+/// du fichier se découvrirait en le cherchant en vain.
+#[test]
+#[ignore = "compile un projet Axum + SeaORM complet"]
+fn a_required_reference_leaves_no_seed_and_names_it_in_the_output() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = common::projet(parent.path());
+
+    let output = Command::cargo_bin("rbs")
+        .expect("le binaire rbs doit être compilé")
+        .current_dir(&racine)
+        .args([
+            "g",
+            "crud",
+            "posts",
+            "--fields",
+            "title:string,author:references:users",
+        ])
+        .output()
+        .expect("le binaire doit être lançable");
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "la génération doit aboutir malgré la référence requise :\n{stdout}\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.contains("aucun seed pour posts") && stdout.contains("« author »"),
+        "la sortie doit nommer la relation en cause :\n{stdout}"
+    );
+
+    assert!(
+        !racine.join("src/seeds/posts.rs").exists(),
+        "un seed a été écrit malgré la référence requise"
+    );
+
+    let binaire_des_seeds =
+        fs::read_to_string(racine.join("src/seeds/main.rs")).expect("le binaire des seeds se lit");
+    assert!(
+        !binaire_des_seeds.contains("posts,"),
+        "le seed écarté ne doit pas être monté :\n{binaire_des_seeds}"
+    );
+
+    // Le seul juge qui compte : un `mod` vers un fichier absent ne compilerait pas.
+    let compilation = std::process::Command::new("cargo")
+        .current_dir(&racine)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .args(["build", "--workspace"])
+        .output()
+        .expect("cargo doit être lançable");
+    assert!(
+        compilation.status.success(),
+        "le projet ne compile pas :\n{}",
+        String::from_utf8_lossy(&compilation.stderr)
+    );
 }

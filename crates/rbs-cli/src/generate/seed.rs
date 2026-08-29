@@ -37,7 +37,12 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
         context! {
             module => feature.module(),
             lignes => lignes,
-            uuid => feature.fields.iter().any(|c| c.column_type() == FieldType::Uuid),
+            // Une référence optionnelle se sème à `None`, jamais par `Uuid::from_u128` :
+            // elle ne doit pas à elle seule justifier l'importation.
+            uuid => feature
+                .fields
+                .iter()
+                .any(|c| c.column_type() == FieldType::Uuid && !(c.optional && c.reference().is_some())),
         },
     )
 }
@@ -55,9 +60,11 @@ impl SeedField {
 
         Self {
             name: champ.column_name(),
-            // Un champ optionnel reste une colonne comme les autres : la renseigner rend
-            // le seed lisible, là où un `None` ne montrerait rien.
-            value: if champ.optional {
+            // Une référence optionnelle est déjà rendue en `None` par `value` : l'envelopper
+            // dans `Some` produirait `Some(None)`. Les autres champs optionnels, eux, restent
+            // une colonne comme les autres : la renseigner rend le seed lisible, là où un
+            // `None` ne montrerait rien.
+            value: if champ.optional && champ.reference().is_none() {
                 format!("Some({value})")
             } else {
                 value
@@ -74,6 +81,13 @@ impl SeedField {
 /// `uuid` passe par `from_u128` plutôt que par `new_v4` : le générateur v4 demande une
 /// feature que le projet n'active que pour ses tests, et le binaire des seeds n'en est pas.
 fn value(champ: &Field, rang: usize) -> String {
+    // Une référence requise n'atteint jamais ce point : `is_seedable` écarte l'entité
+    // entière avant le rendu. Seule l'optionnelle s'y rend, et à `None` — un identifiant
+    // inventé pointerait vers une ligne que la contrainte de clé étrangère refuserait.
+    if champ.reference().is_some() && champ.optional {
+        return "None".to_string();
+    }
+
     match champ.column_type() {
         FieldType::String | FieldType::Text if champ.validates_email() => {
             format!("\"{}-{rang}@example.com\".to_owned()", champ.name)
@@ -87,6 +101,18 @@ fn value(champ: &Field, rang: usize) -> String {
     }
 }
 
+/// Une entité portant une référence **requise** ne se sème pas.
+///
+/// Le seed devrait connaître une ligne cible existante pour poser une valeur qui passe
+/// la contrainte, ce qu'un fichier indépendant ne peut pas savoir. Ne rien engendrer vaut
+/// mieux qu'engendrer un fichier qui échoue à chaque lancement.
+pub(crate) fn is_seedable(feature: &Feature) -> bool {
+    !feature
+        .fields
+        .iter()
+        .any(|field| field.reference().is_some() && !field.optional)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -96,8 +122,15 @@ mod tests {
                           note:float,published:bool,auteur_id:uuid,published_at:datetime";
 
     fn seed(name: &str, fields: &str) -> String {
-        let fields = fields::parse(fields).expect("champs valides");
-        render(&Feature::fresh(name, fields)).expect("le seed doit se rendre")
+        let entities = [crate::generate::entities::Entity {
+            table: "users".to_string(),
+            module_path: "crate::auth::model::user".to_string(),
+            file: "src/auth/model.rs".to_string(),
+        }];
+        let mut parsed = fields::parse(fields).expect("les champs du test doivent être valides");
+        crate::generate::relations::resolve(&mut parsed, &entities, name)
+            .expect("les cibles du test doivent se résoudre");
+        render(&Feature::fresh(name, parsed)).expect("le seed doit se rendre")
     }
 
     #[test]
@@ -290,13 +323,61 @@ async fn les_semis_sont_rendus_par_l_api() {
         let rendered = seed("posts", "author:references:users:optional");
 
         assert!(
-            rendered.contains("author_id: Set(Some(Uuid::from_u128(1))),"),
+            rendered.contains("author_id: Set(None),"),
             "la colonne doit être nommée « author_id » :\n{rendered}"
         );
         assert!(
             !rendered.contains("author: Set("),
             "le nom déclaré ne doit pas fuir jusqu'au seed :\n{rendered}"
         );
+    }
+
+    /// Sans autre champ `uuid`, l'unique référence de l'entité est optionnelle et se sème
+    /// à `None` : rien dans le corps du seed n'appelle plus jamais `Uuid`.
+    #[test]
+    fn an_optional_reference_alone_does_not_import_uuid() {
+        let rendered = seed("posts", "author:references:users:optional");
+
+        assert!(
+            !rendered.contains("use sea_orm::prelude::Uuid;"),
+            "une importation inutilisée laisserait un avertissement :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn an_optional_reference_is_seeded_as_none() {
+        let rendered = seed("posts", "title:string,author:references:users:optional");
+
+        assert!(rendered.contains("author_id: Set(None),"), "{rendered}");
+        assert!(
+            !rendered.contains("Uuid::from_u128"),
+            "un identifiant inventé pointerait vers une ligne inexistante :\n{rendered}"
+        );
+    }
+
+    // Semer une référence requise demanderait de connaître une ligne cible existante,
+    // qu'un seed indépendant ne peut pas savoir. Mieux vaut ne rien engendrer que
+    // d'engendrer ce qui échouera à chaque lancement.
+    #[test]
+    fn a_required_reference_makes_the_entity_unseedable() {
+        let with = Feature::fresh(
+            "posts",
+            fields::parse("title:string,author:references:users").expect("acceptée"),
+        );
+        let without = Feature::fresh("posts", fields::parse("title:string").expect("acceptée"));
+
+        assert!(!is_seedable(&with));
+        assert!(is_seedable(&without));
+    }
+
+    #[test]
+    fn an_optional_reference_leaves_the_entity_seedable() {
+        let feature = Feature::fresh(
+            "posts",
+            fields::parse("author:references:users:optional").expect("acceptée"),
+        );
+
+        assert!(is_seedable(&feature));
     }
 
     #[test]
