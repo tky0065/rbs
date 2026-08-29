@@ -918,7 +918,7 @@ jalon v0.1, et deux `V1` dans ce fichier rendraient ambiguë chaque référence 
       ✓ Parité stricte mesurée comme en `T2`.
       ✓ Aucun extrait écrit à la main : les sorties sont capturées sur le binaire.
 
-- [ ] **Y2** · Publication de 1.0.0
+- [x] **Y2** · Publication de 1.0.0 — vérifié 2026-08-29 · **`rbs-core 1.0.0` et `rbs-cli 1.0.0` sont sur crates.io**, run du tag `v1.0.0` vert sur tous ses steps **du premier coup** · `cargo install rbs-cli` → « Replaced package `rbs-cli v0.4.0` with `rbs-cli v1.0.0` », `rbs --version` → `rbs 1.0.0` · `rbs new` sans `--core-path` → `rbs-core = { version = "1.0.0" }` sans `path`, `cargo build` → Finished, verrou sur `registry+…crates.io-index` avec checksum · les trois bascules annoncées se produisent : `semver-checks` repasse au vert (`major change`, la rupture étant désormais déclarée), le contrôle de complétude des notes cesse de passer à vide, et la garde accepte `v1.0.0` en refusant `v0.4.0` · **la vérification a rattrapé un défaut avant le tag** : cinq tests sont tombés, `upgrade` et `doctor/versions` figeant `const FUTUR = "1.0.0"` — « une version que le dépôt n'atteindra pas de sitôt », atteinte le jour même ; la version visée se dérive désormais du workspace, et la correction a été éprouvée en la neutralisant (le test retombe) · entrée de CHANGELOG datée dans les deux langues, disant la promesse et la rupture qui la paie
       Workspace à `1.0.0`, entrée de CHANGELOG, tag, run réel.
       ✓ `cargo install rbs-cli` depuis crates.io → 1.0.0.
       ✓ `rbs new` sans `--core-path` → `cargo build` vert sur `rbs-core 1.0.0`.
