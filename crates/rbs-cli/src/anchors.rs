@@ -12,17 +12,24 @@ pub(crate) struct Anchor {
     pub name: &'static str,
     /// Chemin du fichier porteur, relatif à la racine du projet.
     pub file: &'static str,
+    /// Marqueur de commentaire du langage porteur : `//` en Rust, `#` en YAML.
+    pub comment: &'static str,
+    /// L'ancre peut légitimement manquer, son fichier porteur étant lui-même facultatif.
+    ///
+    /// `doctor` ne réclame pas une ancre optionnelle dont le fichier est absent : un
+    /// projet SQLite n'a pas de compose, et n'a donc pas à passer pour incomplet.
+    pub optional: bool,
 }
 
 impl Anchor {
     /// Balise ouvrante, telle qu'elle est écrite dans le fichier.
     pub(crate) fn opening(&self) -> String {
-        format!("// <rbs:{}>", self.name)
+        format!("{} <rbs:{}>", self.comment, self.name)
     }
 
     /// Balise fermante, telle qu'elle est écrite dans le fichier.
     pub(crate) fn closing(&self) -> String {
-        format!("// </rbs:{}>", self.name)
+        format!("{} </rbs:{}>", self.comment, self.name)
     }
 
     /// Le bloc à recoller quand l'ancre a disparu, prêt à être collé tel quel.
@@ -35,18 +42,24 @@ impl Anchor {
 pub(crate) const FEATURES: Anchor = Anchor {
     name: "features",
     file: "src/main.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Montage des routes d'une feature dans le routeur.
 pub(crate) const ROUTES: Anchor = Anchor {
     name: "routes",
     file: "src/router.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Enregistrement des chemins d'une feature dans le document OpenAPI.
 pub(crate) const OPENAPI: Anchor = Anchor {
     name: "openapi",
     file: "src/openapi.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Déclaration des fichiers de migration.
@@ -56,18 +69,24 @@ pub(crate) const OPENAPI: Anchor = Anchor {
 pub(crate) const MIGRATION_MODULES: Anchor = Anchor {
     name: "migration_modules",
     file: "migration/src/lib.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Inscription des migrations dans le `Migrator`.
 pub(crate) const MIGRATIONS: Anchor = Anchor {
     name: "migrations",
     file: "migration/src/lib.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Déclaration d'un champ partagé dans la struct `AppState`.
 pub(crate) const STATE_CHAMPS: Anchor = Anchor {
     name: "state_champs",
     file: "src/state.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Initialisation de ce champ dans `AppState::new`.
@@ -77,6 +96,8 @@ pub(crate) const STATE_CHAMPS: Anchor = Anchor {
 pub(crate) const STATE_INIT: Anchor = Anchor {
     name: "state_init",
     file: "src/state.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Tâches de fond lancées au démarrage, l'état construit et le serveur pas encore lié.
@@ -86,6 +107,8 @@ pub(crate) const STATE_INIT: Anchor = Anchor {
 pub(crate) const STARTUP: Anchor = Anchor {
     name: "startup",
     file: "src/main.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Déclaration des seeds dans le binaire qui les applique.
@@ -97,6 +120,8 @@ pub(crate) const STARTUP: Anchor = Anchor {
 pub(crate) const SEEDS: Anchor = Anchor {
     name: "seeds",
     file: "src/seeds/main.rs",
+    comment: "//",
+    optional: false,
 };
 
 /// Les points d'insertion du squelette.
@@ -194,7 +219,12 @@ fn groups(lines: &[String]) -> Vec<Vec<&String>> {
     let mut courant = Vec::new();
 
     for line in lines {
-        let qualifie = matches!(line.trim_start().get(..2), Some("#[") | Some("//"));
+        // `# ` : un commentaire YAML. `#[` et `//` : leurs homologues Rust. Les trois
+        // qualifient la ligne suivante et ne valent pas pour eux-mêmes.
+        let qualifie = matches!(
+            line.trim_start().get(..2),
+            Some("#[") | Some("//") | Some("# ")
+        );
         courant.push(line);
 
         if !qualifie {
@@ -453,6 +483,58 @@ struct AppState {
         assert!(
             after.contains("pub storage: Arc<dyn Storage>,"),
             "le champ ne doit pas être laissé de côté : {after}"
+        );
+    }
+
+    #[test]
+    fn a_yaml_anchor_is_written_with_a_hash() {
+        let compose = Anchor {
+            name: "services",
+            file: "docker-compose.yml",
+            comment: "#",
+            optional: true,
+        };
+
+        assert_eq!(compose.opening(), "# <rbs:services>");
+        assert_eq!(compose.closing(), "# </rbs:services>");
+        assert_eq!(compose.block(), "# <rbs:services>\n# </rbs:services>");
+    }
+
+    #[test]
+    fn the_rust_anchors_keep_their_double_slash() {
+        for anchor in ANCRES {
+            if anchor.comment == "//" {
+                assert_eq!(anchor.opening(), format!("// <rbs:{}>", anchor.name));
+            }
+        }
+    }
+
+    /// Un commentaire YAML qualifie le service qui le suit, comme `#[allow(…)]` qualifie
+    /// le champ Rust qui le suit : les dédupliquer séparément laisserait l'un des deux
+    /// orphelin.
+    #[test]
+    fn a_yaml_comment_stays_attached_to_the_line_below_it() {
+        let compose = Anchor {
+            name: "services",
+            file: "docker-compose.yml",
+            comment: "#",
+            optional: true,
+        };
+        let source = "services:\n  # <rbs:services>\n  # </rbs:services>\n";
+        let lines = vec!["# le cache du projet".to_string(), "redis:".to_string()];
+
+        let apres = insert(source, compose, &lines).expect("l'ancre est présente");
+
+        assert!(
+            apres.contains("  # le cache du projet\n  redis:\n"),
+            "le commentaire doit précéder son service :\n{apres}"
+        );
+
+        let deux_fois = insert(&apres, compose, &lines).expect("l'ancre est toujours là");
+        assert_eq!(
+            deux_fois.matches("redis:").count(),
+            1,
+            "une seconde insertion ne doit rien ajouter :\n{deux_fois}"
         );
     }
 }
