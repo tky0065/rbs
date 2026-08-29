@@ -189,22 +189,28 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         .unwrap_or_else(|| database.default_url(&crate_name));
     let connexion = crate::url::parse(&url);
 
+    // Une URL sans chemin rend un nom de base vide, que le repli ne rattraperait pas
+    // s'il ne guettait que `None` : le compose porterait un `POSTGRES_DB:` vide, et le
+    // service ne deviendrait jamais sain.
+    let nom_base = connexion
+        .as_ref()
+        .map(|c| c.database.clone())
+        .filter(|base| !base.is_empty())
+        .unwrap_or_else(|| crate_name.clone());
+
     let context = context! {
         project_name => nom_projet.clone(),
         crate_name => crate_name.clone(),
         database => database.name(),
         database_a_un_serveur => database.a_un_serveur(),
         database_url_compose => match connexion.as_ref() {
-            Some(connexion) => crate::url::interne(connexion, database),
+            Some(connexion) => crate::url::interne(connexion, database, &nom_base),
             None => database.compose_url(&crate_name),
         },
         database_url_par_defaut => database.default_url(&crate_name),
         database_user => connexion.as_ref().map(|c| c.user.clone()).unwrap_or_default(),
         database_password => connexion.as_ref().map(|c| c.password.clone()).unwrap_or_default(),
-        database_name => connexion
-            .as_ref()
-            .map(|c| c.database.clone())
-            .unwrap_or_else(|| crate_name.clone()),
+        database_name => nom_base,
         database_port => connexion.as_ref().map(|c| c.port).unwrap_or_default(),
     };
 
@@ -1031,6 +1037,36 @@ mod tests {
         assert!(
             compose.contains("POSTGRES_DB: demo_api"),
             "le compose ne nomme pas la base du projet :\n{compose}"
+        );
+    }
+
+    /// Le même repli que `new.rs` sur une URL sans nom de base : sans lui, `POSTGRES_DB:`
+    /// reste vide et `RBS_DATABASE__URL` s'arrête à `/`, ce que l'image officielle refuse
+    /// au démarrage.
+    #[test]
+    fn an_empty_database_name_in_the_project_env_falls_back_to_the_crate_name() {
+        let (_parent, root) = project();
+        let env = fs::read_to_string(root.join(".env")).expect("le .env doit exister");
+        let sans_nom_de_base = env.replace(
+            "RBS_DATABASE__URL=postgres://rbs:rbs@localhost:5432/demo_api",
+            "RBS_DATABASE__URL=postgres://rbs:rbs@localhost:5432",
+        );
+        assert_ne!(
+            env, sans_nom_de_base,
+            "la ligne attendue n'a pas été trouvée"
+        );
+        fs::write(root.join(".env"), sans_nom_de_base).expect("le .env doit se réécrire");
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(
+            compose.contains("POSTGRES_DB: demo_api"),
+            "le compose laisse POSTGRES_DB vide :\n{compose}"
+        );
+        assert!(
+            !compose.contains("RBS_DATABASE__URL: postgres://rbs:rbs@db:5432/\n"),
+            "l'URL interne s'arrête sur un nom de base vide :\n{compose}"
         );
     }
 }
