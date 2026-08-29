@@ -51,7 +51,7 @@ mod tests {
     /// Elle ne se lit pas dans le dépôt : entre deux publications, le workspace porte
     /// déjà le numéro à venir. Comme `NOYAU_PUBLIE` du diagnostic, la constante bascule
     /// au moment de publier — et c'est cette bascule qui met le catalogue en demeure.
-    const PUBLIEE: &str = "0.4.0";
+    const PUBLIEE: &str = "1.0.0";
 
     /// Suffixe d'une note ; son radical est la version qu'elle introduit.
     const SUFFIXE: &str = "md";
@@ -107,14 +107,29 @@ mod tests {
         assert!(traversees("0.4.0", "0.9.0").is_empty());
     }
 
+    /// Un saut qui enjambe une version en montre quand même la note : sans cela, la
+    /// rupture d'une version intermédiaire disparaîtrait au motif qu'on ne s'y est pas
+    /// arrêté.
+    ///
+    /// Le compte se dérive du catalogue plutôt que d'être figé : chaque publication en
+    /// ajoute une, et un nombre écrit ici serait faux dès la version suivante.
     #[test]
     fn a_jump_that_steps_over_a_version_still_shows_its_note() {
-        assert_eq!(traversees("0.4.0", "2.0.0").len(), 1);
+        let depuis_le_debut = traversees("0.0.1", "99.0.0").len();
+
+        assert!(depuis_le_debut > 0, "le catalogue n'est jamais vide");
+        assert_eq!(traversees("0.4.0", "99.0.0").len(), depuis_le_debut);
     }
 
     /// Le projet est déjà passé par la version : sa note ne le concerne plus.
     #[test]
     fn a_project_already_past_the_note_does_not_see_it_again() {
-        assert!(traversees("1.0.0", "2.0.0").is_empty());
+        let toutes = traversees("0.0.1", "99.0.0").len();
+
+        assert_eq!(
+            traversees("1.0.0", "99.0.0").len(),
+            toutes - 1,
+            "seule la note de 1.0.0 doit tomber"
+        );
     }
 }

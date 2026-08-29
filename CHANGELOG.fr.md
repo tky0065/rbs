@@ -11,6 +11,22 @@ dépréciation.
 
 *[English version](CHANGELOG.md).*
 
+## [1.0.1] — 2026-08-29
+
+### Corrigé
+
+- Les deux crates paraissaient sans README : aucun manifeste n'en déclarait, et les
+  fichiers du dépôt vivent hors du paquet — `cargo package` n'emporte rien d'extérieur à
+  la crate. Chacune porte désormais le sien.
+- La documentation faisait encore passer les nouveaux venus par `--core-path`, le
+  contournement d'un noyau absent de crates.io. Il y est publié depuis la 0.4.0. Le flag
+  garde sa vraie raison d'être — bâtir un projet contre un noyau local, ce qui est le mode
+  de développement de rbs — et le parcours de démarrage ne le mentionne plus.
+- `rbs add` documentait six features quand le binaire en livre sept : `jobs` manquait à la
+  page comme à sa capture d'aide.
+- La page d'architecture décrivait quatre feature flags « vides » du noyau. `auth` porte du
+  code depuis la v0.2 ; seules `redis`, `mail` et `storage` réservent encore un nom.
+
 ## [1.0.0] — 2026-08-29
 
 L'API publique de `rbs-core` est figée. À partir d'ici, le versionnage sémantique est une
@@ -129,5 +145,6 @@ démarrage, architecture, référence du CLI et guides, en français et en angla
 Rust 1.85 ou plus, édition 2024. Un projet généré tourne sur PostgreSQL 14 ou plus,
 MySQL 8.0 ou plus, ou SQLite 3.35 ou plus — `rbs doctor` refuse tout ce qui est en dessous.
 
+[1.0.1]: https://github.com/tky0065/rbs/releases/tag/v1.0.1
 [1.0.0]: https://github.com/tky0065/rbs/releases/tag/v1.0.0
 [0.4.0]: https://github.com/tky0065/rbs/releases/tag/v0.4.0
