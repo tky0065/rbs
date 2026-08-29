@@ -47,26 +47,34 @@ pub(crate) fn parse(url: &str) -> Option<Connection> {
                 .map(|reste| (reste, Database::Mysql))
         })?;
 
-    // La requête ne fait partie ni de l'autorité ni du nom de la base, et l'autorité
-    // s'arrête au premier `/`. Chercher les identifiants avant ces deux découpes faisait
-    // couper l'URL entière au dernier `@` : un nom de base en portant un emportait avec
-    // lui le mot de passe et l'hôte.
-    let reste = reste.split('?').next()?;
-    let (autorite_complete, database) = match reste.split_once('/') {
-        Some((autorite, database)) => (autorite, database),
-        None => (reste, ""),
-    };
-
-    // Le dernier `@` de l'autorité sépare : un mot de passe a le droit d'en contenir un.
-    let (identifiants, autorite) = match autorite_complete.rsplit_once('@') {
-        Some((avant, apres)) => (avant, apres),
-        None => ("", autorite_complete),
+    // L'autorité s'arrête au premier `/` ou `?`, et le dernier `@` qui la précède sépare
+    // les identifiants : un `@` situé au-delà appartient au chemin, et le prendre pour la
+    // fin des identifiants tirait l'hôte et le mot de passe du nom de la base.
+    let delimiteur = reste.find(['/', '?']).unwrap_or(reste.len());
+    let (identifiants, apres) = match reste[..delimiteur].rfind('@') {
+        Some(fin) => (&reste[..fin], &reste[fin + 1..]),
+        // Aucun `@` avant le délimiteur : c'est un `/` ou un `?` non encodé dans le mot de
+        // passe. La RFC l'interdit, un mot de passe engendré en base64 en porte un une
+        // fois sur deux. Le dernier `@` de l'URL redonne alors l'autorité.
+        None => match reste.rfind('@') {
+            Some(fin) => (&reste[..fin], &reste[fin + 1..]),
+            None => ("", reste),
+        },
     };
 
     let (user, password) = match identifiants.split_once(':') {
         Some((user, password)) => (user, password),
         None => (identifiants, ""),
     };
+
+    let fin_autorite = apres.find(['/', '?']).unwrap_or(apres.len());
+    let autorite = &apres[..fin_autorite];
+    let database = apres[fin_autorite..]
+        .strip_prefix('/')
+        .unwrap_or("")
+        .split('?')
+        .next()
+        .unwrap_or("");
 
     if autorite.is_empty() {
         return None;
@@ -245,5 +253,28 @@ mod tests {
         assert_eq!(connexion.host, "2001:db8::1");
         assert_eq!(connexion.port, 5432);
         assert!(!connexion.est_locale());
+    }
+
+    /// Un mot de passe engendré en base64 porte un `/` une fois sur deux. La RFC veut
+    /// qu'il soit encodé ; refuser l'URL parce qu'il ne l'est pas rendrait le CLI
+    /// inutilisable avec la moitié des bases hébergées.
+    #[test]
+    fn a_slash_in_the_password_does_not_end_the_authority() {
+        let connexion = parse("postgres://rbs:sec/ret@localhost:5432/demo").expect("URL valide");
+
+        assert_eq!(connexion.user, "rbs");
+        assert_eq!(connexion.password, "sec/ret");
+        assert_eq!(connexion.host, "localhost");
+        assert_eq!(connexion.port, 5432);
+        assert_eq!(connexion.database, "demo");
+    }
+
+    #[test]
+    fn a_question_mark_in_the_password_does_not_start_the_query() {
+        let connexion = parse("postgres://rbs:sec?ret@localhost:5432/demo").expect("URL valide");
+
+        assert_eq!(connexion.password, "sec?ret");
+        assert_eq!(connexion.host, "localhost");
+        assert_eq!(connexion.database, "demo");
     }
 }
