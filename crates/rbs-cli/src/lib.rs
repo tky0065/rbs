@@ -20,6 +20,7 @@ mod template;
 mod templates;
 mod ui;
 mod upgrade;
+mod url;
 
 use std::error::Error;
 use std::path::PathBuf;

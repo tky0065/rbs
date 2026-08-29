@@ -16,10 +16,6 @@ use super::Check;
 
 const TITRE: &str = "base";
 
-/// Ports supposés quand l'URL n'en donne pas.
-const PORT_POSTGRES: u16 = 5432;
-const PORT_MYSQL: u16 = 3306;
-
 /// Délai au-delà duquel l'hôte est tenu pour injoignable.
 const DELAI: Duration = Duration::from_secs(3);
 
@@ -245,32 +241,8 @@ fn version(root: &Path, variables: &[(String, String)]) -> Result<String, String
 }
 
 /// Découpe une URL en hôte et port, quel que soit celui des deux moteurs à serveur.
-///
-/// Le dernier `@` sépare : un mot de passe a le droit d'en contenir un.
 pub(crate) fn host_and_port(url: &str) -> Option<(String, u16)> {
-    let (reste, defaut) = url
-        .strip_prefix("postgres://")
-        .or_else(|| url.strip_prefix("postgresql://"))
-        .map(|reste| (reste, PORT_POSTGRES))
-        .or_else(|| {
-            url.strip_prefix("mysql://")
-                .map(|reste| (reste, PORT_MYSQL))
-        })?;
-
-    let apres_identifiants = match reste.rsplit_once('@') {
-        Some((_, after)) => after,
-        None => reste,
-    };
-
-    let autorite = apres_identifiants
-        .split(['/', '?'])
-        .next()
-        .filter(|autorite| !autorite.is_empty())?;
-
-    match autorite.rsplit_once(':') {
-        Some((hote, port)) => Some((hote.to_string(), port.parse().ok()?)),
-        None => Some((autorite.to_string(), defaut)),
-    }
+    crate::url::parse(url).map(|connexion| (connexion.host, connexion.port))
 }
 
 /// Une version comparable : majeure et mineure, quelle que soit la forme rendue.
@@ -368,7 +340,7 @@ mod tests {
     fn sans_port_celui_de_postgresql_est_supposé() {
         assert_eq!(
             host_and_port("postgres://rbs:rbs@db.interne/demo"),
-            Some(("db.interne".to_string(), PORT_POSTGRES))
+            Some(("db.interne".to_string(), 5432))
         );
     }
 
@@ -384,7 +356,7 @@ mod tests {
     fn a_url_without_credentials_stays_readable() {
         assert_eq!(
             host_and_port("postgres://localhost/demo"),
-            Some(("localhost".to_string(), PORT_POSTGRES))
+            Some(("localhost".to_string(), 5432))
         );
     }
 
@@ -392,7 +364,7 @@ mod tests {
     fn a_mysql_url_reads_back_with_its_own_default_port() {
         assert_eq!(
             host_and_port("mysql://root:root@db.interne/demo"),
-            Some(("db.interne".to_string(), PORT_MYSQL))
+            Some(("db.interne".to_string(), 3306))
         );
     }
 
