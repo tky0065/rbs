@@ -23,6 +23,10 @@ use crate::templates::Source;
 /// d'ici est refusée à la création comme si rbs ne la connaissait pas.
 const FEATURES_CONNUES: &[&str] = &["docker", "ci", "auth", "redis", "storage", "mail"];
 
+/// Nom du compose à la racine du projet, tel que la template le rend et que `rbs dev` le
+/// cherche.
+const COMPOSE: &str = "docker-compose.yml";
+
 /// Ce qu'il faut savoir avant de créer un projet, questions et flags confondus.
 pub struct Options {
     /// Nom du projet, qui est aussi celui du répertoire et du paquet Cargo.
@@ -258,9 +262,14 @@ fn core_dependency(core_path: Option<&Path>, database: Database) -> Result<Strin
 /// Rend toutes les templates. Aucun fichier n'est écrit tant que la dernière n'a pas
 /// abouti : une variable oubliée ne doit pas laisser un projet à moitié généré.
 fn render(options: &Options, dependency: &str) -> Result<Vec<(PathBuf, String)>, Error> {
-    let files = Source::fresh(options.template_dir.as_deref())
+    let mut files = Source::fresh(options.template_dir.as_deref())
         .files()
         .map_err(Error::Templates)?;
+
+    let connexion = crate::url::parse(&options.database_url);
+    if !compose_utile(options, connexion.as_ref()) {
+        files.retain(|file| file.destination != Path::new(COMPOSE));
+    }
 
     let renderer = Renderer::new();
     let context = context! {
@@ -272,6 +281,17 @@ fn render(options: &Options, dependency: &str) -> Result<Vec<(PathBuf, String)>,
         database => options.database.name(),
         sea_orm_feature => options.database.sea_orm_feature(),
         database_url_par_defaut => options.database.default_url(&crate_name(&options.name)),
+        database_user => connexion.as_ref().map(|c| c.user.clone()).unwrap_or_default(),
+        database_password => connexion.as_ref().map(|c| c.password.clone()).unwrap_or_default(),
+        // Une URL sans chemin rend un nom de base vide, que le repli ne rattraperait pas
+        // s'il ne guettait que `None` : le compose porterait un `POSTGRES_DB:` vide, et
+        // le service ne deviendrait jamais sain.
+        database_name => connexion
+            .as_ref()
+            .map(|c| c.database.clone())
+            .filter(|base| !base.is_empty())
+            .unwrap_or_else(|| crate_name(&options.name)),
+        database_port => connexion.as_ref().map(|c| c.port).unwrap_or_default(),
     };
 
     files
@@ -315,6 +335,15 @@ fn git_init(root: &Path) -> bool {
         .current_dir(root)
         .status()
         .is_ok_and(|statut| statut.success())
+}
+
+/// Le compose n'est écrit que s'il éviterait un `docker run` tapé à la main.
+///
+/// SQLite n'a rien à monter. Une base distante non plus : engendrer un service local que
+/// `rbs dev` monterait pendant que l'application en interroge un autre serait pire que de
+/// ne rien écrire.
+fn compose_utile(options: &Options, connexion: Option<&crate::url::Connection>) -> bool {
+    options.database.a_un_serveur() && connexion.is_some_and(crate::url::Connection::est_locale)
 }
 
 /// Nom de la crate correspondant au nom du projet : un tiret n'est pas un caractère
@@ -849,5 +878,123 @@ mod tests {
             project.root.join(".git").exists(),
             "le projet créé n'est pas un dépôt"
         );
+    }
+
+    /// Le compose n'est utile que s'il évite un `docker run` tapé à la main : c'est le
+    /// seul critère qui décide de son écriture.
+    #[test]
+    fn a_local_postgres_project_gets_a_compose() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://rbs:secret@localhost:5432/demo".to_string(),
+                database: Database::Postgres,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        let compose = fs::read_to_string(project.root.join("docker-compose.yml"))
+            .expect("le compose doit être écrit");
+
+        assert!(compose.contains("POSTGRES_USER: rbs"), "{compose}");
+        assert!(compose.contains("POSTGRES_PASSWORD: secret"), "{compose}");
+        assert!(compose.contains("POSTGRES_DB: demo"), "{compose}");
+        assert!(compose.contains("- \"5432:5432\""), "{compose}");
+        assert!(compose.contains("# <rbs:services>"), "{compose}");
+        assert!(compose.contains("# </rbs:services>"), "{compose}");
+        assert_eq!(project.files, 17);
+    }
+
+    /// Le port publié est celui du .env, non 5432 en dur : sans quoi `cargo run` sur
+    /// l'hôte joindrait un port que le conteneur n'expose pas.
+    #[test]
+    fn the_published_port_is_the_one_the_project_will_dial() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:15432/demo".to_string(),
+                database: Database::Postgres,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        let compose = fs::read_to_string(project.root.join("docker-compose.yml"))
+            .expect("le compose doit être écrit");
+
+        assert!(compose.contains("- \"15432:5432\""), "{compose}");
+    }
+
+    /// Une URL sans nom de base laisse `POSTGRES_DB:` vide, donc un service que le
+    /// healthcheck ne déclare jamais sain : le nom du projet prend le relais.
+    #[test]
+    fn a_url_without_a_database_names_the_one_the_project_will_open() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "mon-api".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432".to_string(),
+                database: Database::Postgres,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        let compose = fs::read_to_string(project.root.join("docker-compose.yml"))
+            .expect("le compose doit être écrit");
+
+        assert!(compose.contains("POSTGRES_DB: mon_api"), "{compose}");
+    }
+
+    #[test]
+    fn a_sqlite_project_gets_no_compose() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "sqlite://demo.db?mode=rwc".to_string(),
+                database: Database::Sqlite,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        assert!(!project.root.join("docker-compose.yml").exists());
+        assert_eq!(project.files, 16);
+    }
+
+    #[test]
+    fn a_remote_database_gets_no_compose() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://rbs:rbs@db.prod.exemple:5432/demo".to_string(),
+                database: Database::Postgres,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        assert!(!project.root.join("docker-compose.yml").exists());
+        assert_eq!(project.files, 16);
     }
 }

@@ -97,11 +97,8 @@ mod tests {
         let check = check(&root);
 
         assert_eq!(check.state, State::Bon);
-        // Le squelette n'écrit pas encore de compose : seules les neuf ancres non
-        // optionnelles sont applicables. `ANCRES.len()` vaudra de nouveau ce compte une
-        // fois `docker-compose.yml` généré.
         assert!(
-            check.detail.contains(&(ANCRES.len() - 1).to_string()),
+            check.detail.contains(&ANCRES.len().to_string()),
             "{}",
             check.detail
         );
@@ -186,7 +183,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "le squelette n'écrit pas encore de compose"]
     fn an_optional_anchor_whose_file_is_absent_is_not_missing() {
         let (_parent, root) = project();
         fs::remove_file(root.join("docker-compose.yml")).expect("le compose doit exister");
@@ -202,7 +198,6 @@ mod tests {
     }
 
     #[test]
-    #[ignore = "le squelette n'écrit pas encore de compose"]
     fn an_optional_anchor_removed_from_a_present_file_is_missing() {
         let (_parent, root) = project();
         remove(&root, "docker-compose.yml", "<rbs:services>");

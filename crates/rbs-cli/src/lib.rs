@@ -185,9 +185,13 @@ fn create_project(
     if !project.depot_git {
         ui::warn("`git init` n'a pas abouti : le projet est complet, mais sans dépôt");
     }
-    ui::info(&format!(
-        "\n  cd {name}\n  cargo run          # la base visée est dans .env"
-    ));
+    let compose = project.root.join("docker-compose.yml").exists();
+    let demarrage = if compose {
+        "\n  docker compose up -d   # la base du .env, montée\n  cargo run              # ou `rbs dev`, qui enchaîne les deux"
+    } else {
+        "\n  cargo run          # la base visée est dans .env"
+    };
+    ui::info(&format!("\n  cd {name}{demarrage}"));
 
     Ok(())
 }

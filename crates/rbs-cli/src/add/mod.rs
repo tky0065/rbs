@@ -531,7 +531,12 @@ mod tests {
     #[test]
     fn rerunning_on_an_already_dockerised_project_gives_a_no_op_plan() {
         let (_parent, root) = project();
-        run(&options(&root, "docker")).expect("la première pose doit aboutir");
+        // Le squelette pose désormais son propre compose, que le fragment `docker`
+        // dépose par-dessus : la garde du conflit le protège, et seule la pose forcée
+        // passe. Ce que ce test éprouve est l'idempotence du manifeste, non cette garde.
+        let mut premiere = options(&root, "docker");
+        premiere.force = true;
+        run(&premiere).expect("la première pose doit aboutir");
 
         let planned = plan_for(&options(&root, "docker")).expect("le plan doit se recalculer");
 

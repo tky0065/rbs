@@ -27,10 +27,6 @@ impl Connection {
     /// C'est la question que pose `rbs new` avant d'engendrer un compose : monter une
     /// base locale pour un projet qui en interroge une distante serait pire que ne rien
     /// écrire.
-    ///
-    /// `new` ne l'appelle pas encore : cette tâche ne fait que rassembler la lecture,
-    /// pas engendrer le compose qui s'en servira.
-    #[allow(dead_code)]
     pub(crate) fn est_locale(&self) -> bool {
         matches!(self.host.as_str(), "localhost" | "127.0.0.1" | "::1")
     }

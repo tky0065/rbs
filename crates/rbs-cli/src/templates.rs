@@ -268,13 +268,17 @@ mod tests {
     const RACINE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/project");
 
     /// Les chemins de sortie attendus du squelette, tels que `rbs new` les écrira.
-    const DESTINATIONS: [&str; 16] = [
+    ///
+    /// `docker-compose.yml` en fait partie : la source les rend tous, et c'est `rbs new`
+    /// qui l'écarte pour un projet qui n'a rien à monter.
+    const DESTINATIONS: [&str; 17] = [
         ".env",
         ".env.example",
         ".gitignore",
         "Cargo.toml",
         "config/default.toml",
         "config/development.toml",
+        "docker-compose.yml",
         "migration/Cargo.toml",
         "migration/src/lib.rs",
         "migration/src/main.rs",
@@ -287,7 +291,7 @@ mod tests {
         "src/state.rs",
     ];
 
-    /// Contexte de rendu minimal : les cinq variables que `rbs new` fournira.
+    /// Contexte de rendu minimal : les variables que `rbs new` fournira.
     /// Le contexte que `new::render` construit, recopié ici.
     ///
     /// La divergence se voit : une variable ajoutée là-bas et oubliée ici fait tomber
@@ -305,6 +309,10 @@ mod tests {
             database => database.name(),
             sea_orm_feature => database.sea_orm_feature(),
             database_url_par_defaut => database.default_url("mon_api"),
+            database_user => "postgres",
+            database_password => "postgres",
+            database_name => "mon_api",
+            database_port => 5432,
         }
     }
 
@@ -377,8 +385,8 @@ mod tests {
             let relatif = format!("{}.jinja", anchor.file);
             let chemin = Path::new(RACINE).join(&relatif);
 
-            // Une ancre optionnelle peut viser un template que le squelette n'écrit pas
-            // encore : sa présence ici anticipe la tâche qui l'ajoutera.
+            // Une ancre optionnelle peut vivre dans un fichier qu'un fragment dépose et
+            // que le squelette ne rend pas : il n'y a alors aucune template à contrôler.
             if anchor.optional && !chemin.exists() {
                 continue;
             }
@@ -737,20 +745,30 @@ mod tests {
         }
     }
 
+    /// Renversement assumé de la décision inverse : le compose ne publiait pas 5432
+    /// parce que l'API l'atteignait par le réseau du compose. Le compose du squelette
+    /// sert `cargo run` sur l'hôte, qui ne l'atteint que par un port publié.
     #[test]
-    fn the_docker_compose_publishes_only_the_api_port() {
-        // Publier 5432 fait échouer `docker compose up` sur toute machine portant déjà un
-        // PostgreSQL, et la base n'a pas à être jointe depuis l'hôte : l'API l'atteint par
-        // le réseau du compose, et `docker compose exec db psql` reste ouvert.
-        let source = read(&Path::new(RACINE_FEATURES).join("docker/docker-compose.yml.jinja"));
+    fn the_project_compose_publishes_the_database_port() {
+        let source = read(&Path::new(RACINE).join("docker-compose.yml.jinja"));
 
-        let publies: Vec<&str> = source
-            .lines()
-            .map(str::trim)
-            .filter(|line| line.starts_with("- \""))
-            .collect();
+        assert!(
+            source.contains("{@ database_port @}:5432"),
+            "le compose doit publier le port du .env :\n{source}"
+        );
+    }
 
-        assert_eq!(publies, ["- \"8080:8080\""], "ports publiés :\n{source}");
+    #[test]
+    fn the_project_compose_targets_the_latest_stable_postgres() {
+        // Le code généré ne réclame plus la 18 depuis que le modèle pose lui-même son
+        // identifiant : c'est un choix de défaut pour un projet neuf, non une exigence.
+        // Le test l'épingle pour que l'image ne vieillisse pas en silence.
+        let source = read(&Path::new(RACINE).join("docker-compose.yml.jinja"));
+
+        assert!(
+            source.contains("postgres:18"),
+            "le compose ne vise pas PostgreSQL 18 :\n{source}"
+        );
     }
 
     #[test]
@@ -869,19 +887,6 @@ mod tests {
             queue.matches("pub async fn reserver_prochain_job").count(),
             1,
             "le dépilage doit tenir dans une fonction unique :\n{queue}"
-        );
-    }
-
-    #[test]
-    fn the_docker_compose_targets_the_latest_stable_postgres() {
-        // Le code généré ne réclame plus la 18 depuis que le modèle pose lui-même son
-        // identifiant : c'est un choix de défaut pour un projet neuf, non une exigence.
-        // Le test l'épingle pour que l'image ne vieillisse pas en silence.
-        let source = read(&Path::new(RACINE_FEATURES).join("docker/docker-compose.yml.jinja"));
-
-        assert!(
-            source.contains("postgres:18"),
-            "le compose ne vise pas PostgreSQL 18 :\n{source}"
         );
     }
 }
