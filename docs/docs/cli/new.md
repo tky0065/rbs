@@ -45,7 +45,7 @@ letter and hold only letters, digits, `-` and `_`.
 |---|---|
 | `--database-url <URL>` | Connection URL written to the project's `.env` as `RBS_DATABASE__URL`. Absent, the question is asked — or the default is taken under `--yes`. |
 | `--database <MOTEUR>` | The engine the project will run on: `postgres`, `mysql` or `sqlite`. Defaults to `postgres`. |
-| `--with <FEATURES>` | Features to install at creation, comma-separated. What this version does with it is described below. |
+| `--with <FEATURES>` | Features to install at creation, comma-separated. Installed for real — see below. |
 | `--core-path <CHEMIN>` | Points the generated manifest at a local `rbs-core` checkout instead of the published crate — the mode rbs is developed in, described [below](#building-against-a-local-core). |
 | `--template-dir <CHEMIN>` | Renders the project from a directory of templates instead of the ones embedded in the binary. |
 | `-y`, `--yes` | Asks nothing: takes the defaults and runs. |
@@ -95,13 +95,14 @@ nor port.
 
 ```text
 $ rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes
-✓ blog créé — 16 fichiers
+✓ blog créé — 17 fichiers
 
   cd blog
-  cargo run          # la base visée est dans .env
+  docker compose up -d   # la base du .env, montée
+  cargo run              # ou `rbs dev`, qui enchaîne les deux
 ```
 
-The sixteen files:
+The seventeen files:
 
 ```text
 blog/.env
@@ -110,6 +111,7 @@ blog/.gitignore
 blog/Cargo.toml
 blog/config/default.toml
 blog/config/development.toml
+blog/docker-compose.yml
 blog/migration/Cargo.toml
 blog/migration/src/lib.rs
 blog/migration/src/main.rs
@@ -121,6 +123,9 @@ blog/src/router.rs
 blog/src/seeds/main.rs
 blog/src/state.rs
 ```
+
+`docker-compose.yml` is the generated compose, covered below — its port here is `55432`,
+taken from the URL rather than the engine's own `5432`.
 
 `git init` runs last. Should it fail, the project is still complete: the command says so
 on stderr instead of failing.
@@ -171,10 +176,11 @@ of the crate:
 
 ```text
 $ rbs new blog --core-path /private/tmp/rbs-core --yes
-✓ blog créé — 16 fichiers
+✓ blog créé — 17 fichiers
 
   cd blog
-  cargo run          # la base visée est dans .env
+  docker compose up -d   # la base du .env, montée
+  cargo run              # ou `rbs dev`, qui enchaîne les deux
 
 $ grep rbs-core blog/Cargo.toml
 rbs-core = { path = "/private/tmp/rbs-core", default-features = false, features = ["postgres"] }
@@ -198,34 +204,118 @@ skeleton with one line appended to its `.env.jinja`:
 
 ```text
 $ rbs new maison --template-dir /private/tmp/rbs-demo/mes-templates --yes
-✓ maison créé — 16 fichiers
+✓ maison créé — 17 fichiers
 
   cd maison
-  cargo run          # la base visée est dans .env
+  docker compose up -d   # la base du .env, montée
+  cargo run              # ou `rbs dev`, qui enchaîne les deux
 
 $ tail -2 maison/.env
 RUST_LOG=info,maison=debug
 MAISON=1
 ```
 
-## `--with` in this version
+## `--with` installs
 
-`--with` names features to install at creation. rbs knows three — `auth`, `ci` and
-`docker` — and refuses all of them here: it installs them through [`rbs add`](./add.md)
-instead, and says so rather than recording in `[package.metadata.rbs]` a feature it did
-not lay down.
+`--with` names features to install at creation, comma-separated. rbs knows seven —
+`auth`, `ci`, `docker`, `jobs`, `mail`, `redis` and `storage` — and installs every one
+named, in the same pass that writes the project:
 
 ```text
 $ rbs new site --with auth --yes
-erreur : `auth` ne s'installe pas à la création : créez le projet sans `--with`, puis `rbs add auth`
+✓ site créé — 17 fichiers
+  + auth     9 fichiers, 1 migration
+
+  cd site
+  docker compose up -d   # la base du .env, montée
+  cargo run              # ou `rbs dev`, qui enchaîne les deux
 ```
 
-A name that is no feature at all is refused with the list of those that are:
+The order installed is derived from the names rather than from the order they were typed
+in — alphabetical, the same order [`rbs add`](./add.md) lists the seven in:
+
+```text
+$ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes
+✓ with-demo créé — 17 fichiers
+  + auth     9 fichiers, 1 migration
+  + docker   2 fichiers
+  + storage  4 fichiers
+
+  cd with-demo
+  docker compose up -d   # la base du .env, montée
+  cargo run              # ou `rbs dev`, qui enchaîne les deux
+```
+
+`storage,auth,docker` was typed; `auth`, then `docker`, then `storage` were installed, and
+that is the order `[package.metadata.rbs]` records them in — the same one a second `rbs
+add` of any of them would leave untouched.
+
+A name that is no feature at all is refused before the first file is written:
 
 ```text
 $ rbs new site --with graphql --yes
-erreur : `graphql` n'est pas une feature rbs — disponibles : docker, ci, auth
+erreur : `graphql` n'est pas une feature rbs — disponibles : auth, ci, docker, jobs, mail, redis, storage
 ```
+
+## The generated compose
+
+Unless one of the two cases below applies, `rbs new` writes a `docker-compose.yml` next to
+the project, holding the database its URL describes — the identifiers, the database name
+and the published port all read from it, none of them retyped:
+
+```yaml
+name: blog
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: rbs
+      POSTGRES_PASSWORD: rbs
+      POSTGRES_DB: blog
+    ports:
+      - "55432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rbs -d blog"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # <rbs:services>
+  # </rbs:services>
+
+volumes:
+  pgdata:
+```
+
+`docker compose up -d` starts it. The `# <rbs:services>` anchor is where [`rbs
+add`](./add.md) inserts the services `docker` brings, and it is one of the ten anchors
+[`rbs doctor`](./doctor.md) checks — nine on a project with no compose to carry a tenth.
+
+Two cases write nothing:
+
+- **a SQLite project** — there is no server to run, and its URL has neither host nor port
+  to carry into a compose;
+- **a URL whose host is not local** — the container would only duplicate a database
+  already reachable elsewhere.
+
+```text
+$ rbs new sqlite-demo --database sqlite --yes
+✓ sqlite-demo créé — 16 fichiers
+
+  cd sqlite-demo
+  cargo run          # la base visée est dans .env
+```
+
+Sixteen files, not seventeen: the count is how you tell, since nothing in the output names
+the compose by absence.
+
+A project created before rbs 1.1.0 has no compose either, and running
+[`rbs upgrade`](./upgrade.md) does not add one — it only rewrites
+`[package.metadata.rbs]`. [`rbs add docker`](./add.md) writes a whole compose in that
+case, deployment services included.
 
 ## Failures
 

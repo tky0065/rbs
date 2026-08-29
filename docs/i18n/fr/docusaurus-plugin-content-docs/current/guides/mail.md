@@ -32,18 +32,22 @@ plan pour /private/tmp/rbs-demo/depot
   + templates/mail/bienvenue.html   créé
   ~ src/main.rs                     modifié
   ~ src/state.rs                    modifié
+  ~ docker-compose.yml              modifié
   ~ Cargo.toml                      modifié
   ~ config/default.toml             modifié
   ~ .env.example                    modifié
 
-  11 fichiers à écrire
+  12 fichiers à écrire
 ✓ mail installée — 6 fichiers
 
   réglez [mail] dans config/default.toml — un SMTP local par défaut
 ```
 
 Un gabarit d'exemple, `templates/mail/bienvenue.html`, l'accompagne — un point de départ
-qui fonctionne, et que vous êtes censé remplacer.
+qui fonctionne, et que vous êtes censé remplacer. La ligne `docker-compose.yml` ci-dessus,
+c'est un service `mailpit` sans profil : `docker compose up -d`, tel quel, celui que lance
+[`rbs dev`](../cli/dev.md), le monte avec la base, et son interface web répond sur
+`:8025`. Rien à démarrer à la main.
 
 ## Configuration
 

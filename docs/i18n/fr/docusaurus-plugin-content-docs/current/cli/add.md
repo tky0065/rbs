@@ -43,26 +43,54 @@ Options:
 
 | Feature | Fichiers | Suite |
 |---|---|---|
-| `docker` | `.dockerignore`, `Dockerfile`, `docker-compose.yml` | `docker compose up --build` |
+| `docker` | `.dockerignore`, `Dockerfile`, et ses services `api`/`migrate` insérés dans le compose du projet — un `docker-compose.yml` entier s'il n'y en a pas | `docker compose --profile app up --build` |
 | `ci` | `.github/workflows/ci.yml` | `git push` |
 | `auth` | huit fichiers sous `src/auth/`, une migration, et quatre fichiers du projet modifiés | recopier le secret, puis `rbs migrate up` |
 | `jobs` | sept fichiers sous `src/jobs/`, une migration, et une section `[jobs]` de configuration | `rbs migrate up`, puis inscrire vos jobs dans `src/jobs/mod.rs` |
-| `redis` | trois fichiers sous `src/cache/` | démarrer un Redis à l'URL de `[cache]` |
-| `mail` | cinq fichiers sous `src/mail/`, et un gabarit d'exemple | régler `[mail]`, un SMTP local par défaut |
+| `redis` | trois fichiers sous `src/cache/`, et un service `redis` inséré dans le compose du projet | déjà démarré, une fois `docker compose up -d` fait |
+| `mail` | cinq fichiers sous `src/mail/`, un gabarit d'exemple, et un service `mailpit` inséré dans le compose du projet | déjà démarré, une fois `docker compose up -d` fait |
 | `storage` | quatre fichiers sous `src/storage/` | ignorer `./storage`, ou passer le backend à `s3` |
 
 Les trois dernières sont les briques des guides [cache](../guides/cache.md),
 [courriel](../guides/mail.md) et [stockage](../guides/storage.md). Aucune ne monte de
 route : elles arrivent sur votre `AppState`, et ce qui les appelle vous revient.
 
+Un projet engendré par `rbs new` porte déjà un `docker-compose.yml` : `docker` écrit
+`Dockerfile` et `.dockerignore`, et insère ses deux services — `api`, `migrate` — dans
+l'ancre `# <rbs:services>` du compose, sous le profil `app` :
+
 ```text
 $ rbs add docker
-docker : Dockerfile multi-étapes, .dockerignore et compose de développement
+docker : Dockerfile multi-étapes, .dockerignore et services de déploiement
 
 plan pour /private/tmp/rbs-demo/blog
 
-  + .dockerignore        créé
   + Dockerfile           créé
+  + .dockerignore        créé
+  ~ docker-compose.yml   modifié
+  ~ Cargo.toml           modifié
+
+  4 fichiers à écrire
+✓ docker installée — 2 fichiers
+
+  docker compose up --build
+```
+
+La suite nomme ce que `docker compose up` démarre déjà sans lui — c'est le profil qui
+ajoute `api` et `migrate` : `docker compose --profile app up --build` construit l'image et
+lance l'ensemble, `docker compose up -d` seul laisse l'infrastructure tranquille, ce dont
+[`rbs dev`](./dev.md) se sert.
+
+Un projet sans compose où insérer — SQLite, ou créé avant rbs 1.1.0 — en reçoit un entier :
+
+```text
+$ rbs add docker
+docker : Dockerfile multi-étapes, .dockerignore et services de déploiement
+
+plan pour /private/tmp/rbs-demo/depot
+
+  + Dockerfile           créé
+  + .dockerignore        créé
   + docker-compose.yml   créé
   ~ Cargo.toml           modifié
 
@@ -70,6 +98,18 @@ plan pour /private/tmp/rbs-demo/blog
 ✓ docker installée — 3 fichiers
 
   docker compose up --build
+```
+
+Un compose réécrit à la main qui a perdu son ancre `# <rbs:services>` n'est pas touché :
+la commande n'écrit rien et affiche le bloc à recoller :
+
+```text
+$ rbs add docker
+erreur : ancre # <rbs:services> introuvable dans docker-compose.yml
+
+dans docker-compose.yml :
+# <rbs:services>
+# </rbs:services>
 ```
 
 ```text
@@ -154,17 +194,17 @@ que la ligne de manifeste qui manquait :
 
 ```text
 $ rbs add docker
-docker : Dockerfile multi-étapes, .dockerignore et compose de développement
+docker : Dockerfile multi-étapes, .dockerignore et services de déploiement
 
 plan pour /private/tmp/rbs-demo/blog
 
-  · .dockerignore        inchangé
   · Dockerfile           inchangé
+  · .dockerignore        inchangé
   · docker-compose.yml   inchangé
   ~ Cargo.toml           modifié
 
   1 fichier à écrire, 3 inchangés
-✓ docker installée — 3 fichiers
+✓ docker installée — 2 fichiers
 
   docker compose up --build
 ```
@@ -238,13 +278,18 @@ sinon un plan vide, donc une commande qui réussit sans rien faire.
 
 ## Les ancres
 
-`rbs add` écrit des fichiers entiers et modifie le manifeste ; c'est
-[`rbs generate`](./generate.md#les-ancres) qui insère dans les neuf ancres en commentaires
+`rbs add` écrit surtout des fichiers entiers et modifie le manifeste ; c'est [`rbs
+generate`](./generate.md#les-ancres) qui insère dans les neuf ancres en commentaires Rust
 du projet — `// <rbs:features>`, `// <rbs:routes>`, `// <rbs:openapi>`,
 `// <rbs:migration_modules>`, `// <rbs:migrations>`, `// <rbs:state_champs>`,
-`// <rbs:state_init>`, `// <rbs:startup>` et `// <rbs:seeds>`. La règle est la même pour les deux commandes : aucun AST n'est
-jamais réécrit, et une ancre absente fait que la commande n'écrit rien et affiche le bloc
-à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les neuf.
+`// <rbs:state_init>`, `// <rbs:startup>` et `// <rbs:seeds>`.
+
+`docker` est le seul fragment que `rbs add` installe à faire lui-même exception : ses
+services `api` et `migrate` vont dans `# <rbs:services>`, l'ancre YAML que porte un
+compose — voir [plus haut](#les-sept-features). La règle est la même partout : aucun AST
+n'est jamais réécrit, et une ancre absente fait que la commande n'écrit rien et affiche le
+bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les dix — neuf sur un
+projet sans compose pour en porter une dixième.
 
 ## Les échecs
 

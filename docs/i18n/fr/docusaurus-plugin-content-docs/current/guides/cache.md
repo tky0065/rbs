@@ -28,14 +28,19 @@ plan pour /private/tmp/rbs-demo/depot
   + src/cache/tests.rs    créé
   ~ src/main.rs           modifié
   ~ src/state.rs          modifié
+  ~ docker-compose.yml    modifié
   ~ Cargo.toml            modifié
   ~ config/default.toml   modifié
 
-  7 fichiers à écrire
+  8 fichiers à écrire
 ✓ redis installée — 3 fichiers
 
   un Redis doit écouter à l'URL de la section [cache] de config/default.toml
 ```
+
+L'indice est déjà satisfait : la ligne `docker-compose.yml` ci-dessus, c'est `redis`
+inséré dans le compose du projet, sans profil — `docker compose up -d`, tel quel, celui
+que lance [`rbs dev`](../cli/dev.md), le monte avec la base. Rien à démarrer à la main.
 
 La feature s'appelle `redis` et le module s'appelle `cache` : le premier nomme la crate
 que déclare le manifeste, le second nomme ce que votre code appelle.
