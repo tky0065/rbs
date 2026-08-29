@@ -29,6 +29,11 @@ pub(crate) enum ErrorKind {
     UnknownModifier { name: String },
     DuplicateModifier { name: String },
     RedundantIndex,
+    MissingTarget,
+    DerivedColumnName { suggestion: String },
+    NullifyWithoutOptional,
+    ConflictingOnDelete,
+    RedundantIndexOnReference,
 }
 
 impl ErrorKind {
@@ -55,6 +60,15 @@ impl ErrorKind {
             Self::RedundantIndex => {
                 "« index » redondant : « unique » pose déjà un index".to_string()
             }
+            Self::MissingTarget => "« references » attend une entité cible".to_string(),
+            Self::DerivedColumnName { .. } => {
+                format!("la colonne « {label} » est dérivée du nom de la relation")
+            }
+            Self::NullifyWithoutOptional => "« nullify » sur une colonne non nullable".to_string(),
+            Self::ConflictingOnDelete => "« cascade » et « nullify » se contredisent".to_string(),
+            Self::RedundantIndexOnReference => {
+                "« index » redondant : une clé étrangère est déjà indexée".to_string()
+            }
         }
     }
 
@@ -76,9 +90,18 @@ impl ErrorKind {
                 Some("un nom de champ ne peut apparaître qu'une fois".to_string())
             }
             Self::UnknownType { .. } => Some(FieldType::NAMES.join(", ")),
-            Self::UnknownModifier { .. } => Some("unique, optional, index".to_string()),
+            Self::UnknownModifier { .. } => {
+                Some("unique, optional, index — sur une référence : cascade, nullify".to_string())
+            }
             Self::DuplicateModifier { .. } => None,
             Self::RedundantIndex => Some("retirez « index »".to_string()),
+            Self::MissingTarget => Some("exemple : « author:references:users »".to_string()),
+            Self::DerivedColumnName { suggestion } => Some(format!("essayez « {suggestion} »")),
+            Self::NullifyWithoutOptional => {
+                Some("ajoutez « optional », ou choisissez « cascade »".to_string())
+            }
+            Self::ConflictingOnDelete => Some("gardez l'un des deux".to_string()),
+            Self::RedundantIndexOnReference => Some("retirez « index »".to_string()),
         }
     }
 }
@@ -277,7 +300,7 @@ mod tests {
     }
 
     #[test]
-    fn an_unknown_modifier_lists_the_three_allowed_ones() {
+    fn an_unknown_modifier_lists_the_allowed_ones() {
         let text = rendered(
             ErrorKind::UnknownModifier {
                 name: "uniq".to_string(),
@@ -285,7 +308,10 @@ mod tests {
             "name",
         );
         assert!(text.contains("modificateur inconnu « uniq »"), "{text}");
-        assert!(text.contains("unique, optional, index"), "{text}");
+        assert!(
+            text.contains("unique, optional, index — sur une référence : cascade, nullify"),
+            "{text}"
+        );
     }
 
     #[test]
@@ -352,5 +378,62 @@ mod tests {
         assert_eq!(keyword_suggestions("type"), vec!["kind", "type_"]);
         assert_eq!(keyword_suggestions("ref"), vec!["reference", "ref_"]);
         assert_eq!(keyword_suggestions("loop"), vec!["loop_"]);
+    }
+
+    #[test]
+    fn a_missing_target_shows_the_expected_form() {
+        let text = rendered(ErrorKind::MissingTarget, "author");
+        assert!(
+            text.contains("« references » attend une entité cible"),
+            "{text}"
+        );
+        assert!(
+            text.contains("→ exemple : « author:references:users »"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_derived_column_name_suggests_the_bare_form() {
+        let text = rendered(
+            ErrorKind::DerivedColumnName {
+                suggestion: "author".to_string(),
+            },
+            "author_id",
+        );
+        assert!(
+            text.contains("la colonne « author_id » est dérivée"),
+            "{text}"
+        );
+        assert!(text.contains("→ essayez « author »"), "{text}");
+    }
+
+    #[test]
+    fn nullify_without_optional_explains_the_contradiction() {
+        let text = rendered(ErrorKind::NullifyWithoutOptional, "author");
+        assert!(
+            text.contains("« nullify » sur une colonne non nullable"),
+            "{text}"
+        );
+        assert!(text.contains("→ ajoutez « optional »"), "{text}");
+    }
+
+    #[test]
+    fn two_on_delete_policies_are_named_together() {
+        let text = rendered(ErrorKind::ConflictingOnDelete, "author");
+        assert!(
+            text.contains("« cascade » et « nullify » se contredisent"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_redundant_index_on_a_reference_explains_why() {
+        let text = rendered(ErrorKind::RedundantIndexOnReference, "author");
+        assert!(
+            text.contains("une clé étrangère est déjà indexée"),
+            "{text}"
+        );
+        assert!(text.contains("→ retirez « index »"), "{text}");
     }
 }

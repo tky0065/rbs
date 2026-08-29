@@ -55,7 +55,7 @@ impl TestField {
 /// Les valeurs textuelles portent un suffixe tiré au sort : sans lui, un champ `unique`
 /// ferait échouer la seconde exécution des tests sur la première ligne restée en base.
 fn value(champ: &Field, mark: &str) -> String {
-    match champ.type_ {
+    match champ.column_type() {
         FieldType::String | FieldType::Text if champ.validates_email() => {
             format!("format!(\"{}-{mark}{{suffix}}@example.com\")", champ.name)
         }
@@ -82,11 +82,11 @@ fn if_modified(mark: &str, creation: &str, modification: &str) -> String {
 /// Un horodatage revient de PostgreSQL dans un autre format que celui envoyé : sa valeur
 /// ne se compare pas, seule sa présence se vérifie.
 fn timestamp(champ: &Field) -> bool {
-    champ.type_ == FieldType::Datetime
+    champ.column_type() == FieldType::Datetime
 }
 
 fn textual(champ: &Field) -> bool {
-    matches!(champ.type_, FieldType::String | FieldType::Text)
+    matches!(champ.column_type(), FieldType::String | FieldType::Text)
 }
 
 fn names(fields: &[Field], retenu: impl Fn(&Field) -> bool) -> Vec<&str> {

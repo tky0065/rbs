@@ -37,7 +37,7 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
         context! {
             module => feature.module(),
             lignes => lignes,
-            uuid => feature.fields.iter().any(|c| c.type_ == FieldType::Uuid),
+            uuid => feature.fields.iter().any(|c| c.column_type() == FieldType::Uuid),
         },
     )
 }
@@ -74,7 +74,7 @@ impl SeedField {
 /// `uuid` passe par `from_u128` plutôt que par `new_v4` : le générateur v4 demande une
 /// feature que le projet n'active que pour ses tests, et le binaire des seeds n'en est pas.
 fn value(champ: &Field, rang: usize) -> String {
-    match champ.type_ {
+    match champ.column_type() {
         FieldType::String | FieldType::Text if champ.validates_email() => {
             format!("\"{}-{rang}@example.com\".to_owned()", champ.name)
         }
