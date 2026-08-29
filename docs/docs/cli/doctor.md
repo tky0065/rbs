@@ -80,7 +80,7 @@ cold, before you start it. A section commented out does not count as a section.
 $ rbs doctor
   ✓ ancres     les 9 points d'insertion sont en place
   ✓ .env       les 4 variables de .env.example sont renseignées
-  ✓ versions   projet et rbs-core pris d'un chemin local alignés sur le CLI 0.1.0
+  ✓ versions   projet et rbs-core 1.0.0 alignés sur le CLI 1.0.0
   ✓ base       postgres 17.10 répond sur localhost:55446
   ✓ jobs       la configuration de la file est en place
 ✓ le projet est sain
@@ -102,7 +102,7 @@ $ rbs doctor
   ✗ .env       RBS_LOG_FORMAT absente du .env
       ajoutez au .env :
       RBS_LOG_FORMAT=pretty
-  ✓ versions   projet et rbs-core pris d'un chemin local alignés sur le CLI 0.1.0
+  ✓ versions   projet et rbs-core 1.0.0 alignés sur le CLI 1.0.0
   ✗ base       rien ne répond sur localhost:55446
       démarrez postgres, ou corrigez l'URL du .env
   ✓ jobs       la configuration de la file est en place
@@ -125,7 +125,7 @@ names the command to run by hand:
 $ rbs doctor
   ✓ ancres     les 9 points d'insertion sont en place
   ✓ .env       les 4 variables de .env.example sont renseignées
-  ✓ versions   projet et rbs-core pris d'un chemin local alignés sur le CLI 0.1.0
+  ✓ versions   projet et rbs-core 1.0.0 alignés sur le CLI 1.0.0
   ✗ base       localhost:55446 répond, mais sa version reste inconnue : la crate migration a échoué (code 1)
       vérifiez que `cargo run -p migration -- version` aboutit
   ✓ jobs       la configuration de la file est en place

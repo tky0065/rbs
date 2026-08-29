@@ -122,8 +122,9 @@ In each plan the `Cargo.toml` line is where the installation is recorded:
 
 ```text
 [package.metadata.rbs]
-version = "0.1.0"
+version = "1.0.0"
 features = ["health", "docker", "ci", "auth"]
+database = "postgres"
 ```
 
 Anything else is refused with the list of what is installable:
