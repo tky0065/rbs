@@ -21,8 +21,8 @@ impl FieldType {
     pub(crate) const NAMES: [&'static str; 7] =
         ["string", "int", "float", "bool", "uuid", "datetime", "text"];
 
-    pub(crate) fn parse(mot: &str) -> Option<Self> {
-        Some(match mot {
+    pub(crate) fn parse(word: &str) -> Option<Self> {
+        Some(match word {
             "string" => Self::String,
             "int" => Self::Int,
             "float" => Self::Float,
@@ -332,8 +332,8 @@ mod tests {
             ("text", FieldType::Text),
         ];
 
-        for (mot, expected) in cas {
-            assert_eq!(FieldType::parse(mot), Some(expected), "type « {mot} »");
+        for (word, expected) in cas {
+            assert_eq!(FieldType::parse(word), Some(expected), "type « {word} »");
         }
     }
 
@@ -360,9 +360,9 @@ mod tests {
 
     #[test]
     fn name_of_is_the_inverse_of_parse() {
-        for mot in FieldType::NAMES {
-            let type_ = FieldType::parse(mot).expect("NAMES ne liste que des types connus");
-            assert_eq!(type_.name(), mot);
+        for word in FieldType::NAMES {
+            let type_ = FieldType::parse(word).expect("NAMES ne liste que des types connus");
+            assert_eq!(type_.name(), word);
         }
     }
 
@@ -394,12 +394,12 @@ mod tests {
     #[test]
     fn only_text_carries_a_column_type_attribute() {
         assert_eq!(FieldType::Text.column_type_attribute(), Some("Text"));
-        for mot in FieldType::NAMES {
-            if mot == "text" {
+        for word in FieldType::NAMES {
+            if word == "text" {
                 continue;
             }
-            let type_ = FieldType::parse(mot).expect("NAMES ne liste que des types connus");
-            assert_eq!(type_.column_type_attribute(), None, "type « {mot} »");
+            let type_ = FieldType::parse(word).expect("NAMES ne liste que des types connus");
+            assert_eq!(type_.column_type_attribute(), None, "type « {word} »");
         }
     }
 

@@ -135,7 +135,7 @@ pub(crate) fn to_snake_case(name: &str) -> String {
             let follows_a_lowercase = rank > 0 && !characters[rank - 1].is_uppercase();
             let precedes_a_lowercase = characters
                 .get(rank + 1)
-                .is_some_and(|suivant| suivant.is_lowercase());
+                .is_some_and(|next| next.is_lowercase());
 
             if rank > 0 && (follows_a_lowercase || precedes_a_lowercase) && !output.ends_with('_') {
                 output.push('_');
@@ -271,8 +271,8 @@ mod tests {
             "price",
         );
         assert!(text.contains("type inconnu « decimal »"), "{text}");
-        for mot in FieldType::NAMES {
-            assert!(text.contains(mot), "« {mot} » absent de : {text}");
+        for word in FieldType::NAMES {
+            assert!(text.contains(word), "« {word} » absent de : {text}");
         }
     }
 
