@@ -332,7 +332,7 @@ fn generate(
 
     // Un fichier qui n'apparaît pas dans le plan doit se justifier : sans cette ligne,
     // l'absence du seed se découvrirait en cherchant un fichier qui n'a jamais existé.
-    if let Some(relation) = &planned.seed_ecarte {
+    if let Some(relation) = &planned.seed_skipped {
         ui::info(&format!(
             "\n  aucun seed pour {feature} : la référence « {relation} » est requise, et un \
              seed ne peut pas deviner vers quelle ligne pointer"

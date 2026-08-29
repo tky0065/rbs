@@ -47,7 +47,7 @@ pub(crate) struct Planned {
     /// Ce que rustfmt n'a pas pu faire sur le rendu, s'il y a lieu.
     pub avertissement: Option<format::Avertissement>,
     /// Nom de la relation qui a écarté le seed, si l'entité en porte une requise.
-    pub seed_ecarte: Option<String>,
+    pub seed_skipped: Option<String>,
 }
 
 /// Ce qui peut empêcher de générer une feature.
@@ -160,7 +160,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // Une référence requise rend l'entité non semable : un seed engendré échouerait à
     // chaque lancement sur la contrainte de clé étrangère, faute de ligne cible connue.
     let seedable = seed::is_seedable(&feature);
-    let seed_ecarte = (options.complete && !seedable).then(|| unseedable_reference(&feature));
+    let seed_skipped = (options.complete && !seedable).then(|| unseedable_reference(&feature));
 
     let (mut files, migration) = render(&feature, options.complete, seedable)?;
 
@@ -191,7 +191,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         files: files.into_iter().map(|(path, _)| path).collect(),
         migration,
         avertissement,
-        seed_ecarte,
+        seed_skipped,
     })
 }
 
@@ -584,7 +584,7 @@ mod tests {
             "le seed écarté ne doit pas être monté :\n{binaire}"
         );
 
-        assert_eq!(planned.seed_ecarte.as_deref(), Some("author"));
+        assert_eq!(planned.seed_skipped.as_deref(), Some("author"));
     }
 
     /// Une référence optionnelle, elle, ne bloque rien : le seed se sème à `None`.
@@ -601,7 +601,7 @@ mod tests {
         .expect("la génération doit aboutir");
 
         assert!(root.join("src/seeds/posts.rs").exists(), "le seed manque");
-        assert_eq!(planned.seed_ecarte, None);
+        assert_eq!(planned.seed_skipped, None);
     }
 
     /// Une feature écrite à la main n'a pas d'entité : rien à semer.
