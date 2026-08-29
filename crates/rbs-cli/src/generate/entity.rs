@@ -24,6 +24,25 @@ mod tests {
         render(&Feature::fresh(name, fields)).expect("l'entité doit se rendre")
     }
 
+    fn entity_with(
+        name: &str,
+        fields: &str,
+        entities: &[crate::generate::entities::Entity],
+    ) -> String {
+        let mut parsed = fields::parse(fields).expect("les champs du test doivent être valides");
+        crate::generate::relations::resolve(&mut parsed, entities, name)
+            .expect("les cibles du test doivent se résoudre");
+        render(&Feature::fresh(name, parsed)).expect("l'entité doit se rendre")
+    }
+
+    fn users_entity() -> Vec<crate::generate::entities::Entity> {
+        vec![crate::generate::entities::Entity {
+            table: "users".to_string(),
+            module_path: "crate::auth::model::user".to_string(),
+            file: "src/auth/model.rs".to_string(),
+        }]
+    }
+
     #[test]
     fn the_primary_key_is_a_uuid_without_auto_increment() {
         let rendered = entity("users", "name:string");
@@ -153,9 +172,84 @@ mod tests {
         let rendered = entity("tokens", "");
 
         assert!(rendered.contains("pub struct Model {"), "{rendered}");
-        assert!(rendered.contains("pub enum Relation {}"), "{rendered}");
+        assert!(rendered.contains("pub enum Relation {"), "{rendered}");
         assert!(
             rendered.contains("impl ActiveModelBehavior for ActiveModel {"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn a_reference_becomes_a_uuid_column_named_after_the_relation() {
+        let rendered = entity_with("posts", "author:references:users", &users_entity());
+
+        assert!(rendered.contains("pub author_id: Uuid,"), "{rendered}");
+    }
+
+    #[test]
+    fn a_reference_declares_its_variant_and_its_on_delete() {
+        let rendered = entity_with("posts", "author:references:users", &users_entity());
+
+        assert!(
+            rendered.contains(r#"belongs_to = "crate::auth::model::user::Entity""#),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains(r#"from = "Column::AuthorId""#),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains(r#"to = "crate::auth::model::user::Column::Id""#),
+            "{rendered}"
+        );
+        assert!(rendered.contains(r#"on_delete = "Restrict""#), "{rendered}");
+        assert!(rendered.contains("    Author,"), "{rendered}");
+    }
+
+    #[test]
+    fn a_reference_implements_related_towards_its_target() {
+        let rendered = entity_with("posts", "author:references:users", &users_entity());
+
+        assert!(
+            rendered.contains("impl Related<crate::auth::model::user::Entity> for Entity {"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("fn to() -> RelationDef {\n        Relation::Author.def()"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn a_cascade_reference_carries_its_action() {
+        let rendered = entity_with("posts", "author:references:users:cascade", &users_entity());
+
+        assert!(rendered.contains(r#"on_delete = "Cascade""#), "{rendered}");
+    }
+
+    // Les variantes vivent dans les accolades de l'énumération, les `impl Related` ne le
+    // peuvent pas : il faut donc deux ancres, et non une.
+    #[test]
+    fn the_model_carries_both_anchors_even_without_a_relation() {
+        let rendered = entity("posts", "title:string");
+
+        assert!(
+            rendered.contains("    // <rbs:relations>\n    // </rbs:relations>"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("// <rbs:related>\n// </rbs:related>"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn a_self_reference_points_at_the_local_entity() {
+        let rendered = entity_with("posts", "parent:references:posts:optional", &[]);
+
+        assert!(rendered.contains(r#"belongs_to = "Entity""#), "{rendered}");
+        assert!(
+            rendered.contains("pub parent_id: Option<Uuid>,"),
             "{rendered}"
         );
     }
@@ -180,9 +274,11 @@ mod tests {
     fn preview() {
         println!(
             "{}",
-            entity(
+            entity_with(
                 "articles",
-                "title:string,slug:string:unique,summary:text:optional,views:int,published:bool"
+                "title:string,slug:string:unique,summary:text:optional,views:int,published:bool,\
+                 author:references:users",
+                &users_entity()
             )
         );
     }

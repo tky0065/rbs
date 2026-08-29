@@ -22,7 +22,28 @@ pub struct Model {
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
-pub enum Relation {}
+pub enum Relation {
+{%- for field in fields if field.relation %}
+    #[sea_orm(
+        belongs_to = "{@ field.relation.entity_path @}",
+        from = "Column::{@ field.pascal_name @}",
+        to = "{@ field.relation.target_column_path @}",
+        on_delete = "{@ field.relation.on_delete @}"
+    )]
+    {@ field.relation.variant @},
+{%- endfor %}
+    // <rbs:relations>
+    // </rbs:relations>
+}
+{% for field in fields if field.relation %}
+impl Related<{@ field.relation.entity_path @}> for Entity {
+    fn to() -> RelationDef {
+        Relation::{@ field.relation.variant @}.def()
+    }
+}
+{% endfor %}
+// <rbs:related>
+// </rbs:related>
 
 /// L'identifiant est posé ici, et non par un défaut de colonne : `uuidv7()` n'a
 /// d'équivalent à écrire ni en MySQL ni en SQLite.
