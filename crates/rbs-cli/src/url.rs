@@ -48,15 +48,11 @@ pub(crate) fn parse(url: &str) -> Option<Connection> {
         })?;
 
     // L'autorité s'arrête au premier `/` ou `?`, et le dernier `@` qui la précède sépare
-    // les identifiants : un `@` situé au-delà appartient au chemin, et le prendre pour la
-    // fin des identifiants tirait l'hôte et le mot de passe du nom de la base.
+    // les identifiants : un `@` situé au-delà appartient au chemin.
     let delimiteur = reste.find(['/', '?']).unwrap_or(reste.len());
     let (identifiants, apres) = match reste[..delimiteur].rfind('@') {
         Some(fin) => (&reste[..fin], &reste[fin + 1..]),
-        // Aucun `@` avant le délimiteur : c'est un `/` ou un `?` non encodé dans le mot de
-        // passe. La RFC l'interdit, un mot de passe engendré en base64 en porte un une
-        // fois sur deux. Le dernier `@` de l'URL redonne alors l'autorité.
-        None => match reste.rfind('@') {
+        None => match premier_arobase_apres_identifiants(reste) {
             Some(fin) => (&reste[..fin], &reste[fin + 1..]),
             None => ("", reste),
         },
@@ -106,6 +102,24 @@ pub(crate) fn parse(url: &str) -> Option<Connection> {
         port,
         database: database.to_string(),
     })
+}
+
+/// Position du `@` qui suit un mot de passe portant un `/` ou un `?` non encodé.
+///
+/// La RFC veut ces deux caractères encodés, mais un mot de passe engendré en base64 en
+/// porte un une fois sur deux, et refuser ces URL rendrait le CLI inutilisable avec la
+/// moitié des bases hébergées. Deux garde-fous évitent de prendre pour des identifiants
+/// un `@` qui n'en sépare aucun : c'est le **premier** `@` qui est retenu, non le dernier,
+/// qui appartiendrait au nom de la base ; et ce qui le précède doit porter un `:`, faute
+/// de quoi `postgres://localhost/de@mo` verrait son hôte tiré du nom de sa base.
+///
+/// Limite connue et délibérée : un mot de passe portant à la fois un `/` et un `@` non
+/// encodés (`rbs:sec/r@ss@localhost/demo`) est mal découpé. Deux caractères réservés non
+/// encodés dans un même mot de passe, c'est une URL qu'aucun outil ne lit correctement.
+fn premier_arobase_apres_identifiants(reste: &str) -> Option<usize> {
+    let position = reste.find('@')?;
+
+    reste[..position].contains(':').then_some(position)
 }
 
 /// L'URL de la même base, vue de l'intérieur du compose.
@@ -274,6 +288,42 @@ mod tests {
         let connexion = parse("postgres://rbs:sec?ret@localhost:5432/demo").expect("URL valide");
 
         assert_eq!(connexion.password, "sec?ret");
+        assert_eq!(connexion.host, "localhost");
+        assert_eq!(connexion.database, "demo");
+    }
+
+    /// Aucun identifiant, un `@` dans le nom de la base : rien ne doit être pris pour des
+    /// identifiants, et l'hôte ne doit pas être tiré du chemin.
+    #[test]
+    fn an_at_sign_in_the_database_of_a_url_without_credentials_stays_in_the_database() {
+        let connexion = parse("postgres://localhost/de@mo").expect("URL valide");
+
+        assert_eq!(connexion.user, "");
+        assert_eq!(connexion.password, "");
+        assert_eq!(connexion.host, "localhost");
+        assert_eq!(connexion.port, 5432);
+        assert_eq!(connexion.database, "de@mo");
+    }
+
+    /// Les deux tolérances à la fois : un `/` non encodé dans le mot de passe et un `@`
+    /// dans le nom de la base. Le repli doit retenir le premier `@`, non le dernier.
+    #[test]
+    fn a_slash_in_the_password_and_an_at_sign_in_the_database_both_land_right() {
+        let connexion = parse("postgres://rbs:sec/ret@localhost:5432/demo@x").expect("URL valide");
+
+        assert_eq!(connexion.user, "rbs");
+        assert_eq!(connexion.password, "sec/ret");
+        assert_eq!(connexion.host, "localhost");
+        assert_eq!(connexion.port, 5432);
+        assert_eq!(connexion.database, "demo@x");
+    }
+
+    #[test]
+    fn a_slash_in_the_password_survives_an_at_sign_in_the_query() {
+        let connexion =
+            parse("postgres://rbs:sec/ret@localhost:5432/demo?x=1@y").expect("URL valide");
+
+        assert_eq!(connexion.password, "sec/ret");
         assert_eq!(connexion.host, "localhost");
         assert_eq!(connexion.database, "demo");
     }
