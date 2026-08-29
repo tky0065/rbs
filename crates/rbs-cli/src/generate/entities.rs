@@ -74,7 +74,7 @@ fn collect(source: &str, module_path: &str, file: &str, found: &mut Vec<Entity>)
         let trimmed = line.trim();
 
         if closes_at.is_none() {
-            if let Some(rest) = trimmed.strip_prefix("pub mod ") {
+            if let Some(rest) = strip_module_declaration(trimmed) {
                 if let Some(name) = rest.split(['{', ';', ' ']).next().filter(|n| !n.is_empty()) {
                     current = format!("{module_path}::{name}");
                     closes_at = Some(depth);
@@ -100,8 +100,34 @@ fn collect(source: &str, module_path: &str, file: &str, found: &mut Vec<Entity>)
     }
 }
 
+/// Reconnaît `mod nom`, sous n'importe laquelle de ses visibilités, et rend ce qui
+/// suit `mod `.
+///
+/// Un `model.rs` retouché à la main peut porter `mod`, `pub(crate) mod` ou
+/// `pub(super) mod` aussi bien que `pub mod` : ce sont toutes des déclarations de
+/// module valides, et ignorer les trois premières laisserait leurs entités
+/// silencieusement rattachées à la racine du fichier.
+fn strip_module_declaration(trimmed: &str) -> Option<&str> {
+    const VISIBILITIES: [&str; 3] = ["pub(crate) ", "pub(super) ", "pub "];
+
+    let after_visibility = VISIBILITIES
+        .iter()
+        .find_map(|prefix| trimmed.strip_prefix(prefix))
+        .unwrap_or(trimmed);
+
+    after_visibility.strip_prefix("mod ")
+}
+
 /// Extrait `users` de `#[sea_orm(table_name = "users")]`.
+///
+/// N'examine que les lignes d'attribut (`#[` ou `#![`) : un commentaire qui mentionne
+/// `table_name` en prose, par exemple pour expliquer un renommage, ne doit jamais être
+/// lu comme une déclaration.
 fn table_name(line: &str) -> Option<String> {
+    if !(line.starts_with("#[") || line.starts_with("#![")) {
+        return None;
+    }
+
     let rest = line.split_once("table_name")?.1;
     let rest = rest.split_once('"')?.1;
     let (name, _) = rest.split_once('"')?;
@@ -239,5 +265,65 @@ pub struct Model { pub id: Uuid }
 
         let sessions = find(&found, "sessions").expect("la table sessions doit être trouvée");
         assert_eq!(sessions.module_path, "crate::auth::model");
+    }
+
+    // `table_name` cherchait la sous-chaîne n'importe où sur la ligne : un commentaire
+    // qui la mentionne produirait une entité fantôme, table qui n'existe pas.
+    #[test]
+    fn a_comment_mentioning_table_name_is_not_read_as_a_declaration() {
+        let source = r#"
+// renommée depuis table_name "old_posts"
+#[sea_orm(table_name = "posts")]
+pub struct Model { pub id: Uuid }
+"#;
+        let root = project(&[("posts", source)]);
+        let found = scan(root.path());
+
+        assert_eq!(found.len(), 1, "{found:?}");
+        assert_eq!(found[0].table, "posts");
+    }
+
+    // Un `model.rs` retouché à la main peut nicher une entité sous `mod`,
+    // `pub(crate) mod` ou `pub(super) mod` : ce sont des syntaxes Rust valides, pas
+    // seulement `pub mod`. Ne pas les reconnaître laisse le `module_path` à la racine
+    // du fichier, silencieusement faux, alors que ce chemin sert ensuite à écrire du
+    // code.
+    #[test]
+    fn a_module_declared_with_any_visibility_is_still_recognized_as_nested() {
+        let source = r#"
+mod bare {
+    #[sea_orm(table_name = "bares")]
+    pub struct Model { pub id: Uuid }
+}
+
+pub(crate) mod crate_scoped {
+    #[sea_orm(table_name = "crate_scoped_items")]
+    pub struct Model { pub id: Uuid }
+}
+
+pub(super) mod super_scoped {
+    #[sea_orm(table_name = "super_scoped_items")]
+    pub struct Model { pub id: Uuid }
+}
+"#;
+        let root = project(&[("mixed", source)]);
+        let found = scan(root.path());
+
+        let bare = find(&found, "bares").expect("la table bares doit être trouvée");
+        assert_eq!(bare.module_path, "crate::mixed::model::bare", "{found:?}");
+
+        let crate_scoped = find(&found, "crate_scoped_items")
+            .expect("la table crate_scoped_items doit être trouvée");
+        assert_eq!(
+            crate_scoped.module_path,
+            "crate::mixed::model::crate_scoped"
+        );
+
+        let super_scoped = find(&found, "super_scoped_items")
+            .expect("la table super_scoped_items doit être trouvée");
+        assert_eq!(
+            super_scoped.module_path,
+            "crate::mixed::model::super_scoped"
+        );
     }
 }
