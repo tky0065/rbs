@@ -47,10 +47,20 @@ pub(crate) fn parse(url: &str) -> Option<Connection> {
                 .map(|reste| (reste, Database::Mysql))
         })?;
 
-    // Le dernier `@` sépare : un mot de passe a le droit d'en contenir un.
-    let (identifiants, apres) = match reste.rsplit_once('@') {
+    // La requête ne fait partie ni de l'autorité ni du nom de la base, et l'autorité
+    // s'arrête au premier `/`. Chercher les identifiants avant ces deux découpes faisait
+    // couper l'URL entière au dernier `@` : un nom de base en portant un emportait avec
+    // lui le mot de passe et l'hôte.
+    let reste = reste.split('?').next()?;
+    let (autorite_complete, database) = match reste.split_once('/') {
+        Some((autorite, database)) => (autorite, database),
+        None => (reste, ""),
+    };
+
+    // Le dernier `@` de l'autorité sépare : un mot de passe a le droit d'en contenir un.
+    let (identifiants, autorite) = match autorite_complete.rsplit_once('@') {
         Some((avant, apres)) => (avant, apres),
-        None => ("", reste),
+        None => ("", autorite_complete),
     };
 
     let (user, password) = match identifiants.split_once(':') {
@@ -58,24 +68,28 @@ pub(crate) fn parse(url: &str) -> Option<Connection> {
         None => (identifiants, ""),
     };
 
-    let autorite = apres
-        .split(['/', '?'])
-        .next()
-        .filter(|autorite| !autorite.is_empty())?;
+    if autorite.is_empty() {
+        return None;
+    }
 
     let defaut = moteur.default_port()?;
-    let (host, port) = match autorite.rsplit_once(':') {
-        Some((host, port)) => (host, port.parse().ok()?),
-        None => (autorite, defaut),
+    // Un hôte IPv6 s'écrit entre crochets, seule façon de distinguer les deux-points de
+    // l'adresse de celui du port. Les crochets appartiennent à l'URL, pas à l'hôte : les
+    // garder ferait échouer la résolution du nom autant que la comparaison à `::1`.
+    let (host, port) = match autorite.strip_prefix('[') {
+        Some(apres_crochet) => {
+            let (adresse, apres) = apres_crochet.split_once(']')?;
+            let port = match apres.strip_prefix(':') {
+                Some(port) => port.parse().ok()?,
+                None => defaut,
+            };
+            (adresse, port)
+        }
+        None => match autorite.rsplit_once(':') {
+            Some((host, port)) => (host, port.parse().ok()?),
+            None => (autorite, defaut),
+        },
     };
-
-    let database = apres
-        .split_once('/')
-        .map(|(_, apres_barre)| apres_barre)
-        .unwrap_or("")
-        .split('?')
-        .next()
-        .unwrap_or("");
 
     Some(Connection {
         user: user.to_string(),
@@ -198,5 +212,38 @@ mod tests {
             interne(&connexion, Database::Postgres),
             "postgres://rbs:secret@db:5432/demo"
         );
+    }
+
+    /// Un nom de base portant un `@` faisait couper l'URL entière au dernier `@` :
+    /// le mot de passe et l'hôte étaient alors tirés du chemin.
+    #[test]
+    fn an_at_sign_in_the_database_name_does_not_reach_the_credentials() {
+        let connexion = parse("postgres://rbs:secret@localhost:5432/demo@x").expect("URL valide");
+
+        assert_eq!(connexion.user, "rbs");
+        assert_eq!(connexion.password, "secret");
+        assert_eq!(connexion.host, "localhost");
+        assert_eq!(connexion.port, 5432);
+        assert_eq!(connexion.database, "demo@x");
+    }
+
+    /// Les crochets appartiennent à l'URL et non à l'hôte : `doctor` les passe à la
+    /// résolution de nom, qui les refuse, et la comparaison à la boucle locale échoue.
+    #[test]
+    fn a_bracketed_ipv6_host_loses_its_brackets() {
+        let connexion = parse("postgres://rbs:secret@[::1]:5432/demo").expect("URL valide");
+
+        assert_eq!(connexion.host, "::1");
+        assert_eq!(connexion.port, 5432);
+        assert!(connexion.est_locale());
+    }
+
+    #[test]
+    fn a_bracketed_ipv6_host_without_a_port_falls_back_to_the_engine_default() {
+        let connexion = parse("postgres://rbs:secret@[2001:db8::1]/demo").expect("URL valide");
+
+        assert_eq!(connexion.host, "2001:db8::1");
+        assert_eq!(connexion.port, 5432);
+        assert!(!connexion.est_locale());
     }
 }
