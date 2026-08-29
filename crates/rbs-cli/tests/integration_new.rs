@@ -244,8 +244,14 @@ fn the_generated_compose_serves_the_project_it_was_generated_for() {
     let port = free_port();
     let url = format!("postgres://rbs:secret@localhost:{port}/demo");
 
+    // Le nom du projet Docker Compose est global, indépendant du répertoire courant : un
+    // `name: demo` figé se disputerait avec toute autre exécution concurrente de ce même
+    // test, ou avec un conteneur resté d'un lancement tué avant que `ComposeGuard` n'ait
+    // pu démonter. Dérivé du port déjà tiré au sort, il est unique pour la même raison.
+    let name = format!("demo-{port}");
+
     rbs(parent.path())
-        .args(["new", "demo", "--yes", "--database-url", &url])
+        .args(["new", &name, "--yes", "--database-url", &url])
         .args([
             "--core-path",
             noyau.to_str().expect("chemin du noyau représentable"),
@@ -253,7 +259,17 @@ fn the_generated_compose_serves_the_project_it_was_generated_for() {
         .assert()
         .success();
 
-    let root = parent.path().join("demo");
+    let root = parent.path().join(&name);
+
+    // C'est ce `name:` que Docker emploie comme identifiant de projet — celui qui isole
+    // les ressources d'une exécution de celles d'une autre. Le vérifier ici, c'est
+    // vérifier que la protection porte bien sur ce que Docker regarde, pas seulement sur
+    // le nom du répertoire.
+    let compose_yml = fs::read_to_string(root.join("docker-compose.yml")).expect("compose lisible");
+    assert!(
+        compose_yml.contains(&format!("name: {name}")),
+        "le compose ne porte pas le nom unique du projet :\n{compose_yml}"
+    );
 
     // Le compose engendré, et lui seul : aucun `docker run` ni variable d'environnement
     // passée à la main — précisément ce que ce test doit prouver.
@@ -289,8 +305,12 @@ fn a_project_created_with_two_features_compiles() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let noyau = common::noyau();
 
+    // Distinct de celui du test précédent : la confusion entre les deux compose
+    // engendrés n'a pas besoin d'être empêchée par un tirage au sort ici, ce test
+    // n'appelant jamais `compose up` — seulement `docker compose config`, qui ne touche
+    // aucune ressource nommée globalement.
     let sortie = rbs(parent.path())
-        .args(["new", "demo", "--yes", "--with", "auth,redis"])
+        .args(["new", "demo-with-features", "--yes", "--with", "auth,redis"])
         .args([
             "--database-url",
             "postgres://rbs:secret@localhost:5432/demo",
@@ -312,7 +332,7 @@ fn a_project_created_with_two_features_compiles() {
         );
     }
 
-    let root = parent.path().join("demo");
+    let root = parent.path().join("demo-with-features");
 
     assert!(root.join("src/auth/service.rs").is_file());
     assert!(root.join("src/cache/mod.rs").is_file());
