@@ -5,7 +5,7 @@
 `rbs` donne aux développeurs backend Rust un socle et un outillage pour démarrer une API
 HTTP de production sans réécrire la même plomberie à chaque projet.
 
-**Stack** : Rust · Axum · SeaORM · utoipa/Swagger · PostgreSQL 18+
+**Stack** : Rust · Axum · SeaORM · utoipa/Swagger · PostgreSQL 14+ (MySQL 8.0+, SQLite 3.35+)
 
 Le projet livre deux choses indissociables : un runtime (`rbs-core`) qui porte le
 boilerplate invisible, et un CLI (`rbs`) qui génère le code que tu vas lire et modifier.
@@ -45,7 +45,8 @@ La chaîne complète, prouvée de bout en bout sur un seul cas avant d'être mul
 
 - `rbs new`, `rbs generate crud`, `rbs generate feature`
 - `rbs add docker | ci`, `rbs migrate`, `rbs doctor`
-- PostgreSQL 18+ (clés primaires UUIDv7), migrations SeaORM
+- PostgreSQL 14+, MySQL 8.0+ ou SQLite 3.35+ — les modèles posent eux-mêmes
+  l'identifiant v7, aucun moteur n'a à connaître `uuidv7()` ; migrations SeaORM
 - Erreurs typées (RFC 9457), logs colorés en dev / JSON en prod, configuration validée au boot
 - OpenAPI et Swagger UI générés avec le code
 - Documentation FR/EN, dépôt public, CI
@@ -104,8 +105,8 @@ servis par des crates dédiées que par un générateur généraliste.
 
 | Jalon | Statut |
 |---|---|
-| v0.1 Socle | 🚧 en cours |
-| v0.2 Auth | ⏳ planifié |
-| v0.3 Intégrations | ⏳ planifié |
-| v0.4 Confort | ⏳ planifié |
-| v1.0 Stabilité | ⏳ planifié |
+| v0.1 Socle | ✅ livré |
+| v0.2 Auth | ✅ livré |
+| v0.3 Intégrations | ✅ livré |
+| v0.4 Confort | ✅ livré — publiée sur crates.io le 2026-08-28 |
+| v1.0 Stabilité | ✅ livré — publiée le 2026-08-29, API de `rbs-core` figée |
