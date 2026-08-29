@@ -38,7 +38,7 @@ aucune n'a d'effet ici.
 
 | Contrôle | Ce qu'il regarde |
 |---|---|
-| `ancres` | Les neuf points d'insertion : `// <rbs:features>` dans `src/main.rs`, `// <rbs:routes>` dans `src/router.rs`, `// <rbs:openapi>` dans `src/openapi.rs`, `// <rbs:migration_modules>` et `// <rbs:migrations>` dans `migration/src/lib.rs`, `// <rbs:state_champs>` et `// <rbs:state_init>` dans `src/state.rs`, `// <rbs:startup>` dans `src/main.rs`, `// <rbs:seeds>` dans `src/seeds/main.rs`. |
+| `ancres` | Les neuf ancres Rust en commentaire : `// <rbs:features>` dans `src/main.rs`, `// <rbs:routes>` dans `src/router.rs`, `// <rbs:openapi>` dans `src/openapi.rs`, `// <rbs:migration_modules>` et `// <rbs:migrations>` dans `migration/src/lib.rs`, `// <rbs:state_champs>` et `// <rbs:state_init>` dans `src/state.rs`, `// <rbs:startup>` dans `src/main.rs`, `// <rbs:seeds>` dans `src/seeds/main.rs` — plus l'ancre YAML `# <rbs:services>` dans `docker-compose.yml`, dixième et optionnelle : un projet sans compose n'en a aucune à porter. |
 | `.env` | Toute variable déclarée par `.env.example` est renseignée dans `.env`. `.env.example` sert de référence parce qu'il est versionné et généré avec le squelette — une liste tenue dans le CLI aurait fait deux vérités à synchroniser. |
 | `versions` | Le rbs inscrit dans `[package.metadata.rbs]`, la dépendance `rbs-core`, et le CLI qui diagnostique. |
 | `base` | Le pilote compilé au manifeste face au schéma de l'URL, puis une connexion TCP en moins de trois secondes, puis la version du serveur — demandée au binaire de la crate `migration`, rbs n'embarquant aucun client SQL. Chaque moteur a son plancher, et chaque plancher sa raison : PostgreSQL 14, le plus ancien encore maintenu ; MySQL 8.0, pour `FOR UPDATE SKIP LOCKED` ; SQLite 3.35, pour `UPDATE … RETURNING`. |
@@ -83,9 +83,11 @@ une section.
 
 ```text
 $ rbs doctor
-  ✓ ancres     les 9 points d'insertion sont en place
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
+     Running `target/debug/migration version`
+  ✓ ancres     les 10 points d'insertion sont en place
   ✓ .env       les 4 variables de .env.example sont renseignées
-  ✓ versions   projet et rbs-core 1.0.0 alignés sur le CLI 1.0.0
+  ✓ versions   projet et rbs-core 1.1.0 alignés sur le CLI 1.1.0
   ✓ base       postgres 17.10 répond sur localhost:55446
   ✓ jobs       la configuration de la file est en place
 ✓ le projet est sain
@@ -107,9 +109,9 @@ $ rbs doctor
   ✗ .env       RBS_LOG_FORMAT absente du .env
       ajoutez au .env :
       RBS_LOG_FORMAT=pretty
-  ✓ versions   projet et rbs-core 1.0.0 alignés sur le CLI 1.0.0
+  ✓ versions   projet et rbs-core 1.1.0 alignés sur le CLI 1.1.0
   ✗ base       rien ne répond sur localhost:55446
-      démarrez postgres, ou corrigez l'URL du .env
+      lancez `docker compose up -d` à la racine du projet, ou corrigez l'URL du .env
   ✓ jobs       la configuration de la file est en place
 attention : le projet demande votre attention
 ```
@@ -128,10 +130,19 @@ commande à lancer à la main :
 
 ```text
 $ rbs doctor
-  ✓ ancres     les 9 points d'insertion sont en place
+   Compiling migration v0.1.0 (…/demo/migration)
+error[E0425]: cannot find value `url_de_la_base` in this scope
+  --> migration/src/main.rs:70:13
+   |
+70 |     let _ = url_de_la_base;
+   |             ^^^^^^^^^^^^^^ not found in this scope
+
+For more information about this error, try `rustc --explain E0425`.
+error: could not compile `migration` (bin "migration") due to 1 previous error
+  ✓ ancres     les 10 points d'insertion sont en place
   ✓ .env       les 4 variables de .env.example sont renseignées
-  ✓ versions   projet et rbs-core 1.0.0 alignés sur le CLI 1.0.0
-  ✗ base       localhost:55446 répond, mais sa version reste inconnue : la crate migration a échoué (code 1)
+  ✓ versions   projet et rbs-core 1.1.0 alignés sur le CLI 1.1.0
+  ✗ base       localhost:55446 répond, mais sa version reste inconnue : la crate migration a échoué (code 101)
       vérifiez que `cargo run -p migration -- version` aboutit
   ✓ jobs       la configuration de la file est en place
 attention : le projet demande votre attention

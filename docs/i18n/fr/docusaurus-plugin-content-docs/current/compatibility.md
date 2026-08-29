@@ -89,7 +89,8 @@ Ce qui n'est pas promis, c'est qu'un projet engendré en 0.4.0 porte déjà tout
 qu'une feature ultérieure réclame. Il ne les porte pas, et ne les portera jamais — des
 features neuves apportent des ancres neuves. Ce cas est prévu plutôt que subi : la commande
 signale l'ancre introuvable et affiche le bloc, et [`rbs doctor`](./cli/doctor.md) les
-vérifie toutes les neuf avant que rien n'aille mal.
+vérifie toutes les dix — neuf sur un projet sans compose pour en porter une dixième —
+avant que rien n'aille mal.
 
 ## Ce que la promesse laisse dehors
 

@@ -84,8 +84,8 @@ So the format is covered exactly as the Rust API is. Inside 1.x:
 What this does not promise is that a project generated in 0.4.0 already carries every
 anchor a later feature wants. It does not, and it never will — new features bring new
 anchors. That case is designed for rather than broken by: the command reports the anchor it
-could not find and prints the block, and [`rbs doctor`](./cli/doctor.md) checks all nine
-before anything goes wrong.
+could not find and prints the block, and [`rbs doctor`](./cli/doctor.md) checks all ten —
+nine on a project with no compose to carry the tenth — before anything goes wrong.
 
 ## What the promise leaves out
 

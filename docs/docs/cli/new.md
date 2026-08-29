@@ -273,8 +273,14 @@ services:
       POSTGRES_USER: rbs
       POSTGRES_PASSWORD: rbs
       POSTGRES_DB: blog
+    # Le port publié est celui du .env : c'est ce qui rend `docker compose up -d` suivi
+    # de `cargo run` vrai sans recopier une valeur d'un fichier à l'autre. Le conflit
+    # avec un PostgreSQL déjà installé sur la machine se règle en changeant les deux.
     ports:
       - "55432:5432"
+    # PostgreSQL 18 place ses données sous /var/lib/postgresql/18/docker : c'est le
+    # répertoire parent qui se monte, et non le /var/lib/postgresql/data des versions
+    # précédentes, qui ne persisterait rien.
     volumes:
       - pgdata:/var/lib/postgresql
     healthcheck:

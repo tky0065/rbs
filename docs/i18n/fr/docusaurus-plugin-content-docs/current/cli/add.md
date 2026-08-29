@@ -231,25 +231,32 @@ Un fichier qui existe avec un contenu que le fragment ne retrouve pas n'est ni f
 
 ```text
 $ rbs add docker --template-dir /private/tmp/rbs-demo/mes-features
+docker : Dockerfile minimal, pour l'exemple
+
 plan pour /private/tmp/rbs-demo/blog
 
   ! Dockerfile   conflit — relancer avec --force
-  · Cargo.toml   inchangé
+  ~ Cargo.toml   modifié
 
-  1 inchangé, 1 en conflit
+  1 fichier à écrire, 1 en conflit
 erreur : Dockerfile — relancer avec --force pour les écraser
 ```
 
-`--force` écrase, après avoir montré le même plan :
+`Cargo.toml` porte `~`, pas `·` : le manifeste n'inscrit pas encore `docker`, donc y
+écrire la ligne de la feature est un vrai changement — le plan se calcule avant que quoi
+que ce soit n'échoue, et c'est le conflit qui empêche de l'appliquer. `--force` écrase,
+après avoir montré le même plan :
 
 ```text
 $ rbs add docker --template-dir /private/tmp/rbs-demo/mes-features --force
+docker : Dockerfile minimal, pour l'exemple
+
 plan pour /private/tmp/rbs-demo/blog
 
   ! Dockerfile   conflit — relancer avec --force
-  · Cargo.toml   inchangé
+  ~ Cargo.toml   modifié
 
-  1 inchangé, 1 en conflit
+  1 fichier à écrire, 1 en conflit
 ✓ docker installée — 1 fichier
 
   docker compose up --build

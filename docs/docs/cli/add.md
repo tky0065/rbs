@@ -230,25 +230,32 @@ overwritten. The plan marks it `!`, and the command stops:
 
 ```text
 $ rbs add docker --template-dir /private/tmp/rbs-demo/mes-features
+docker : Dockerfile minimal, pour l'exemple
+
 plan pour /private/tmp/rbs-demo/blog
 
   ! Dockerfile   conflit — relancer avec --force
-  · Cargo.toml   inchangé
+  ~ Cargo.toml   modifié
 
-  1 inchangé, 1 en conflit
+  1 fichier à écrire, 1 en conflit
 erreur : Dockerfile — relancer avec --force pour les écraser
 ```
 
-`--force` overwrites, having shown the same plan first:
+`Cargo.toml` shows `~`, not `·`: the manifest does not yet record `docker`, so writing the
+feature's line there is a real change — the plan runs before anything fails, and the
+conflict is what stops it from being applied. `--force` overwrites, having shown the same
+plan first:
 
 ```text
 $ rbs add docker --template-dir /private/tmp/rbs-demo/mes-features --force
+docker : Dockerfile minimal, pour l'exemple
+
 plan pour /private/tmp/rbs-demo/blog
 
   ! Dockerfile   conflit — relancer avec --force
-  · Cargo.toml   inchangé
+  ~ Cargo.toml   modifié
 
-  1 inchangé, 1 en conflit
+  1 fichier à écrire, 1 en conflit
 ✓ docker installée — 1 fichier
 
   docker compose up --build

@@ -327,7 +327,8 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) contrôle les neuf ancres : une ancre disparue se trouve donc
+[`rbs doctor`](./doctor.md) contrôle les dix ancres — neuf sur un projet sans compose pour
+en porter une dixième : une ancre disparue se trouve donc
 avant qu'une génération ne bute dessus.
 
 ## Les échecs
