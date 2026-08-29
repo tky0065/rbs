@@ -50,6 +50,25 @@ mod tests {
         render(&Feature::fresh(name, fields), HORODATAGE).expect("la migration doit se rendre")
     }
 
+    fn users_entity() -> Vec<crate::generate::entities::Entity> {
+        vec![crate::generate::entities::Entity {
+            table: "users".to_string(),
+            module_path: "crate::auth::model::user".to_string(),
+            file: "src/auth/model.rs".to_string(),
+        }]
+    }
+
+    fn migration_with(
+        name: &str,
+        fields: &str,
+        entities: &[crate::generate::entities::Entity],
+    ) -> Migration {
+        let mut parsed = fields::parse(fields).expect("les champs du test doivent être valides");
+        crate::generate::relations::resolve(&mut parsed, entities, name)
+            .expect("les cibles du test doivent se résoudre");
+        render(&Feature::fresh(name, parsed), HORODATAGE).expect("la migration doit se rendre")
+    }
+
     #[test]
     fn the_module_carries_the_timestamp_and_the_table() {
         assert_eq!(
@@ -210,6 +229,100 @@ mod tests {
         }
     }
 
+    #[test]
+    fn a_reference_creates_its_foreign_key_named_after_table_and_column() {
+        let rendered = migration_with("posts", "author:references:users", &users_entity()).content;
+
+        assert!(
+            rendered.contains(r#".name("fk_posts_author_id")"#),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains(".from(Posts::Table, Posts::AuthorId)"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains(".to(Users::Table, Users::Id)"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains(".on_delete(ForeignKeyAction::Restrict)"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn the_referencing_column_is_a_not_null_uuid() {
+        let rendered = migration_with("posts", "author:references:users", &users_entity()).content;
+
+        assert!(
+            rendered.contains("ColumnDef::new(Posts::AuthorId).uuid().not_null()"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn an_optional_reference_is_nullable_and_can_be_set_null() {
+        let rendered = migration_with(
+            "posts",
+            "author:references:users:optional:nullify",
+            &users_entity(),
+        )
+        .content;
+
+        assert!(
+            rendered.contains("ColumnDef::new(Posts::AuthorId).uuid().null()"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains(".on_delete(ForeignKeyAction::SetNull)"),
+            "{rendered}"
+        );
+    }
+
+    // Sans index, la vérification de la contrainte au `DELETE` de la cible parcourt la
+    // table portante en entier.
+    #[test]
+    fn a_reference_gets_its_index() {
+        let rendered = migration_with("posts", "author:references:users", &users_entity()).content;
+
+        assert!(
+            rendered.contains(r#".name("idx_posts_author_id")"#),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn the_target_iden_is_declared_once_even_for_two_relations_to_the_same_table() {
+        let rendered = migration_with(
+            "posts",
+            "author:references:users,reviewer:references:users",
+            &users_entity(),
+        )
+        .content;
+
+        assert_eq!(
+            rendered.matches("enum Users {").count(),
+            1,
+            "l'identifiant de la table cible est déclaré deux fois :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("enum Users {\n    Table,\n    Id,\n}"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn a_self_reference_does_not_redeclare_its_own_iden() {
+        let rendered = migration_with("posts", "parent:references:posts:optional", &[]).content;
+
+        assert_eq!(rendered.matches("enum Posts {").count(), 1, "{rendered}");
+        assert!(
+            rendered.contains(".to(Posts::Table, Posts::Id)"),
+            "{rendered}"
+        );
+    }
+
     /// Test posé dans le projet généré : seule la base tranche ce que vaut la migration.
     const REVERSIBILITE: &str = r#"use migration::{Migrator, MigratorTrait};
 use sea_orm_migration::sea_orm::{
@@ -301,6 +414,26 @@ async fn la_migration_monte_insere_et_redescend() {
             REVERSIBILITE.contains("column_default IS NOT NULL"),
             "le test posé ne vérifie plus l'absence de défaut :\n{REVERSIBILITE}"
         );
+    }
+
+    #[test]
+    #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
+    fn the_generated_migration_compiles_with_its_foreign_key() {
+        let project = bench::Project::fresh();
+
+        // La cible d'abord : une migration ne compile pas contre une table absente de
+        // la crate `migration`.
+        let users = migration("users", "email:string:unique");
+        project.write_migration(&users.module, &users.content);
+
+        let posts = migration_with(
+            "posts",
+            "title:string,author:references:users",
+            &users_entity(),
+        );
+        project.write_migration(&posts.module, &posts.content);
+
+        project.compile();
     }
 
     /// Rendu complet imprimé pour la revue de lecture qu'exige le lot.

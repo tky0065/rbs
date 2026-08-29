@@ -20,6 +20,15 @@ impl MigrationTrait for Migration {
 {%- for field in fields %}
                     .col(ColumnDef::new({@ iden @}::{@ field.pascal_name @}).{@ field.migration_method @}.{@ "null()" if field.optional else "not_null()" @}{@ ".unique_key()" if field.unique else "" @})
 {%- endfor %}
+{%- for field in fields if field.relation %}
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_{@ table @}_{@ field.name @}")
+                            .from({@ iden @}::Table, {@ iden @}::{@ field.pascal_name @})
+                            .to({@ field.relation.target_iden @}::Table, {@ field.relation.target_iden @}::Id)
+                            .on_delete(ForeignKeyAction::{@ field.relation.on_delete @}),
+                    )
+{%- endfor %}
                     .col(
                         ColumnDef::new({@ iden @}::CreatedAt)
                             .timestamp_with_time_zone()
@@ -67,3 +76,10 @@ enum {@ iden @} {
     CreatedAt,
     UpdatedAt,
 }
+{% for target in target_idens %}
+#[derive(DeriveIden)]
+enum {@ target @} {
+    Table,
+    Id,
+}
+{% endfor %}

@@ -100,6 +100,23 @@ impl Feature {
             .map(|relation| relation.variant.clone())
             .collect()
     }
+
+    /// Identifiants `DeriveIden` des tables visées par les relations, dédupliqués et
+    /// privés de la sienne propre : une migration ne déclare pas deux fois le même enum.
+    pub(crate) fn target_idens(&self) -> Vec<String> {
+        let own = self.iden();
+        let mut idens: Vec<String> = self
+            .fields
+            .iter()
+            .filter_map(|field| field.relation())
+            .map(|relation| relation.target_iden.clone())
+            .filter(|iden| *iden != own)
+            .collect();
+        idens.sort();
+        idens.dedup();
+
+        idens
+    }
 }
 
 /// Une table visée par plus d'une relation de la feature.
@@ -141,7 +158,7 @@ impl AmbiguousTarget {
 /// templates lisent `entity` comme elles lisent `module`.
 impl Serialize for Feature {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("Feature", 8)?;
+        let mut state = serializer.serialize_struct("Feature", 9)?;
         state.serialize_field("module", self.module())?;
         state.serialize_field("table", self.module())?;
         state.serialize_field("entity", &self.entity())?;
@@ -150,6 +167,7 @@ impl Serialize for Feature {
         state.serialize_field("fields", &self.fields)?;
         state.serialize_field("unique_relations", &self.unique_relations())?;
         state.serialize_field("ambiguous_targets", &self.ambiguous_targets())?;
+        state.serialize_field("target_idens", &self.target_idens())?;
         state.end()
     }
 }
@@ -252,5 +270,25 @@ mod tests {
         assert_eq!(vue["iden"], "Users");
         assert_eq!(vue["singular"], "user");
         assert!(vue["fields"].is_array(), "les champs doivent être exposés");
+    }
+
+    #[test]
+    fn the_target_idens_are_deduplicated_and_exclude_the_own_table() {
+        let inventory = [crate::generate::entities::Entity {
+            table: "users".to_string(),
+            module_path: "crate::auth::model::user".to_string(),
+            file: "src/auth/model.rs".to_string(),
+        }];
+        let mut fields = crate::generate::fields::parse(
+            "a:references:users,b:references:users,c:references:posts",
+        )
+        .expect("la chaîne doit être acceptée");
+        crate::generate::relations::resolve(&mut fields, &inventory, "posts")
+            .expect("les cibles doivent se résoudre");
+        let feature = Feature::fresh("posts", fields);
+
+        // `Users` une seule fois pour deux relations, et `Posts` jamais : la migration
+        // déclare déjà l'identifiant de sa propre table.
+        assert_eq!(feature.target_idens(), ["Users"]);
     }
 }
