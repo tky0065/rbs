@@ -10,7 +10,7 @@ edition = "2024"
 default-run = "newsletter-queue"
 
 [package.metadata.rbs]
-version = "1.0.0"
+version = "1.0.1"
 features = ["health", "jobs", "mail", "subscribers"]
 database = "postgres"
 

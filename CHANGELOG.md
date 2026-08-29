@@ -10,6 +10,22 @@ between minor versions with no deprecation cycle.
 
 *[Version française](CHANGELOG.fr.md).*
 
+## [1.0.1] — 2026-08-29
+
+### Fixed
+
+- Both crates were published without a README: neither manifest declared one, and the
+  repository's own files live outside the package — `cargo package` carries nothing from
+  outside the crate. Each crate now ships its own.
+- The documentation still walked new users through `--core-path`, the workaround for a core
+  that was not on crates.io. It has been published since 0.4.0. The flag keeps its real
+  purpose — building a project against a local core, which is how rbs is developed — and
+  the getting-started path no longer mentions it.
+- `rbs add` documented six features when the binary ships seven: `jobs` was missing from
+  the page and from its captured help output.
+- The architecture page described four "empty" core feature flags. `auth` has carried code
+  since v0.2; only `redis`, `mail` and `storage` still reserve a name.
+
 ## [1.0.0] — 2026-08-29
 
 The public API of `rbs-core` is frozen. From here on, semantic versioning is a promise and
@@ -124,5 +140,6 @@ architecture, CLI reference and guides, in English and French.
 Rust 1.85 or later, Rust edition 2024. A generated project runs on PostgreSQL 14 or later,
 MySQL 8.0 or later, or SQLite 3.35 or later — `rbs doctor` refuses anything below those.
 
+[1.0.1]: https://github.com/tky0065/rbs/releases/tag/v1.0.1
 [1.0.0]: https://github.com/tky0065/rbs/releases/tag/v1.0.0
 [0.4.0]: https://github.com/tky0065/rbs/releases/tag/v0.4.0
