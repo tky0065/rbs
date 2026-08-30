@@ -247,15 +247,20 @@ pub(crate) fn homonymous_conflict(existing: &str, inverse: &Inverse) -> bool {
             .any(|line| line.trim() == variant_line.trim())
 }
 
-/// Vérifie que l'entité nommée porte bien une colonne référençant `table`.
+/// Vérifie que `child` porte bien une colonne référençant `parent`.
 ///
 /// Sans cette vérification, `--has-many` écrirait une variante que SeaORM rejetterait
 /// quarante secondes plus tard, à la compilation.
-pub(crate) fn child_references(child: &Entity, table: &str, root: &Path) -> bool {
+///
+/// Le chemin attendu vient du `module_path` que le scan a relevé, et n'est pas reconstruit
+/// depuis le nom de la table : une entité nichée — `users`, sous `crate::auth::model::user`
+/// — ne vit pas au chemin que son nom laisserait deviner, et l'attendre là déclarait
+/// l'enfant sans clé alors qu'il la portait.
+pub(crate) fn child_references(child: &Entity, parent: &Entity, root: &Path) -> bool {
     let Ok(source) = fs::read_to_string(root.join(&child.file)) else {
         return false;
     };
-    let expected = format!(r#"belongs_to = "crate::{table}::model::Entity""#);
+    let expected = format!(r#"belongs_to = "{}::Entity""#, parent.module_path);
 
     source.contains(&expected)
 }
@@ -283,6 +288,15 @@ mod tests {
                 file: "src/tags/model.rs".to_string(),
             },
         ]
+    }
+
+    /// Une entité de feature plate, telle que le scan la relèverait.
+    fn parent(table: &str) -> Entity {
+        Entity {
+            table: table.to_string(),
+            module_path: format!("crate::{table}::model"),
+            file: format!("src/{table}/model.rs"),
+        }
     }
 
     fn resolved(input: &str, generated: &str) -> Vec<fields::Field> {
@@ -555,7 +569,33 @@ mod tests {
             file: "src/comments/model.rs".to_string(),
         };
 
-        assert!(child_references(&child, "posts", root.path()));
+        assert!(child_references(&child, &parent("posts"), root.path()));
+    }
+
+    /// Le chemin attendu vient du `module_path` du parent, non de son nom de table :
+    /// `users` vit sous `crate::auth::model::user`, et l'attendre sous
+    /// `crate::users::model` déclarait l'enfant sans clé alors qu'il la portait.
+    #[test]
+    fn a_child_referencing_a_nested_parent_is_a_valid_has_many() {
+        let root = TempDir::new().expect("le répertoire se crée");
+        fs::create_dir_all(root.path().join("src/posts")).expect("le répertoire se crée");
+        fs::write(
+            root.path().join("src/posts/model.rs"),
+            "#[sea_orm(belongs_to = \"crate::auth::model::user::Entity\", from = \"Column::AuthorId\", to = \"crate::auth::model::user::Column::Id\")]\npub struct Model {}\n",
+        )
+        .expect("l'écriture aboutit");
+        let child = Entity {
+            table: "posts".to_string(),
+            module_path: "crate::posts::model".to_string(),
+            file: "src/posts/model.rs".to_string(),
+        };
+        let users = Entity {
+            table: "users".to_string(),
+            module_path: "crate::auth::model::user".to_string(),
+            file: "src/auth/model.rs".to_string(),
+        };
+
+        assert!(child_references(&child, &users, root.path()));
     }
 
     #[test]
@@ -573,6 +613,6 @@ mod tests {
             file: "src/comments/model.rs".to_string(),
         };
 
-        assert!(!child_references(&child, "posts", root.path()));
+        assert!(!child_references(&child, &parent("posts"), root.path()));
     }
 }

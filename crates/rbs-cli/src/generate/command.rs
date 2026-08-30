@@ -286,22 +286,26 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
 /// Calcule ce que `--has-many` écrirait dans le modèle de la feature déjà présente.
 ///
-/// Une réparation, non une génération : la feature nommée doit déjà exister, et chaque
+/// Une réparation, non une génération : la table nommée doit déjà exister, et chaque
 /// entité enfant nommée doit déjà porter, dans son propre modèle, la clé qui la rattache
 /// à elle — sans quoi la variante posée décrirait une relation que SeaORM refuserait à la
 /// compilation.
+///
+/// La feature réparée se cherche dans l'inventaire et non dans l'arborescence : une entité
+/// peut vivre ailleurs que sous le répertoire de son nom — `users` est nichée dans
+/// `src/auth/model.rs` — et la réclamer sous `src/users/` la déclarerait absente.
 fn plan_repair(options: &Options, root: &Path) -> Result<Planned, Error> {
     let module = options.name.clone();
+    let entities = entities::scan(root);
 
-    if !root.join("src").join(&module).exists() {
+    let Some(parent) = entities::find(&entities, &module).cloned() else {
         return Err(Error::Absente {
             path: format!("src/{module}"),
             feature: module,
         });
-    }
+    };
 
-    let entities = entities::scan(root);
-    let own_file = format!("src/{module}/model.rs");
+    let own_file = parent.file.clone();
 
     let mut inverses = Vec::with_capacity(options.has_many.len());
     for child_name in &options.has_many {
@@ -313,7 +317,7 @@ fn plan_repair(options: &Options, root: &Path) -> Result<Planned, Error> {
             }]));
         };
 
-        if !relations::child_references(child, &module, root) {
+        if !relations::child_references(child, &parent, root) {
             return Err(Error::EnfantSansCle {
                 child: child_name.clone(),
                 table: module.clone(),
@@ -326,7 +330,7 @@ fn plan_repair(options: &Options, root: &Path) -> Result<Planned, Error> {
         // `relations::inverses`, qui vaut ici à l'identique.
         inverses.push(relations::Inverse {
             file: own_file.clone(),
-            entity: module.clone(),
+            entity: parent.table.clone(),
             variant: vec![
                 format!(r#"#[sea_orm(has_many = "{target_entity}")]"#),
                 format!("{variant},"),
