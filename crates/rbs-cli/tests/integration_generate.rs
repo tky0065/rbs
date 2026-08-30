@@ -51,6 +51,13 @@ fn a_required_reference_leaves_no_seed_and_names_it_in_the_output() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = common::projet(parent.path());
 
+    Command::cargo_bin("rbs")
+        .expect("le binaire rbs doit être compilé")
+        .current_dir(&racine)
+        .args(["g", "crud", "users", "--fields", "email:string:unique"])
+        .assert()
+        .success();
+
     let output = Command::cargo_bin("rbs")
         .expect("le binaire rbs doit être compilé")
         .current_dir(&racine)
