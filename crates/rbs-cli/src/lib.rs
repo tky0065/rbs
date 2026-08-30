@@ -8,6 +8,7 @@ mod doctor;
 mod dotenv;
 mod generate;
 mod git;
+mod lang;
 mod manifest;
 mod metadata;
 mod migrate;
