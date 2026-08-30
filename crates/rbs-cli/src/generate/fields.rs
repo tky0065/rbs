@@ -686,7 +686,7 @@ mod tests {
         assert_eq!(error.errors[0].kind, ErrorKind::InvalidForm);
         assert_eq!(
             error.to_string(),
-            "erreur : champ 2 — forme attendue : « nom:type[:modificateur…] »\n\
+            "champ 2 — forme attendue : « nom:type[:modificateur…] »\n\
              \x20       → exemple : « email:string:unique »"
         );
     }

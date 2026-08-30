@@ -117,14 +117,13 @@ impl fmt::Display for FieldsError {
 
             let message = error.kind.message(&error.label);
             // Une portion vide n'a pas de libellé à citer : « champ 2 «  » » se lit mal.
+            //
+            // Le préfixe « erreur : » appartient à la couche d'affichage, qui le pose
+            // déjà : le porter ici aussi le double aux yeux de l'utilisateur.
             if error.label.is_empty() {
-                write!(f, "erreur : champ {} — {message}", error.rank)?;
+                write!(f, "champ {} — {message}", error.rank)?;
             } else {
-                write!(
-                    f,
-                    "erreur : champ {} « {} » — {message}",
-                    error.rank, error.label
-                )?;
+                write!(f, "champ {} « {} » — {message}", error.rank, error.label)?;
             }
 
             if let Some(hint) = error.kind.hint(&error.label) {
@@ -210,7 +209,7 @@ mod tests {
         let text = rendered(ErrorKind::InvalidForm, "title");
         assert_eq!(
             text,
-            "erreur : champ 1 « title » — forme attendue : « nom:type[:modificateur…] »\n\
+            "champ 1 « title » — forme attendue : « nom:type[:modificateur…] »\n\
              \x20       → exemple : « email:string:unique »"
         );
     }
@@ -359,8 +358,8 @@ mod tests {
 
         let lines: Vec<&str> = text.lines().collect();
         assert_eq!(lines.len(), 4, "{text}");
-        assert!(lines[0].starts_with("erreur : champ 1 « Title »"), "{text}");
-        assert!(lines[2].starts_with("erreur : champ 2 « type »"), "{text}");
+        assert!(lines[0].starts_with("champ 1 « Title »"), "{text}");
+        assert!(lines[2].starts_with("champ 2 « type »"), "{text}");
     }
 
     #[test]

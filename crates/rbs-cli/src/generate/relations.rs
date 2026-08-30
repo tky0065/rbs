@@ -119,9 +119,11 @@ pub(crate) struct TargetWithoutMigration {
 
 impl fmt::Display for TargetWithoutMigration {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Le préfixe « erreur : » appartient à la couche d'affichage, qui le pose déjà :
+        // le porter ici aussi le double aux yeux de l'utilisateur.
         write!(
             f,
-            "erreur : relation « {} » — « {} » n'a pas de migration dans ce projet\n        \
+            "relation « {} » — « {} » n'a pas de migration dans ce projet\n        \
              → une clé étrangère la viserait avant qu'aucune migration ne crée sa table : \
              écrivez sa migration avec `rbs migrate new`",
             self.relation, self.target,
