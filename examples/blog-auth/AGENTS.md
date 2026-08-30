@@ -91,8 +91,8 @@ l'enchaîne.
 
 <!-- rbs:inventory -->
 - rbs 1.1.0 · base postgres
-- Fragments installés : aucun
-- Entités engendrées : aucune
+- Fragments installés : auth
+- Entités engendrées : posts
 - Ancres du projet : features (src/lib.rs), routes (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml)
 <!-- /rbs:inventory -->
 
