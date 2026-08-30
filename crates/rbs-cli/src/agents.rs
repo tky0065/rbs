@@ -6,10 +6,6 @@
 //! construction, là où l'insertion incrémentale demande un dédoublonnage qui a déjà coûté
 //! plusieurs correctifs aux ancres du code.
 
-// Aucun consommateur n'existe encore : le calcul de l'inventaire et le rendu du guide
-// arrivent aux tâches suivantes, qui appelleront ces fonctions.
-#![allow(dead_code)]
-
 use std::path::Path;
 
 use crate::anchors;

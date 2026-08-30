@@ -56,6 +56,36 @@ fn a_driver_at_odds_with_the_url_is_named_on_both_sides() {
     );
 }
 
+/// Un guide absent se diagnostique à froid, comme le reste : c'est le seul moyen pour un
+/// développeur d'apprendre que son projet a cessé de dire aux agents comment travailler.
+#[test]
+fn a_deleted_agents_file_is_diagnosed() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+    viser(&projet, INJOIGNABLE);
+    fs::remove_file(projet.join("AGENTS.md")).expect("le fichier existe");
+
+    let rendu = diagnostic(&projet);
+
+    assert!(rendu.contains("AGENTS.md"), "{rendu}");
+    assert!(rendu.contains("rbs upgrade"), "{rendu}");
+}
+
+/// Le contrôle « le CLI d'abord » : il nomme le module écrit à la main sans faire échouer
+/// la commande, ce qu'un projet légitime doit pouvoir garder en CI.
+#[test]
+fn a_module_written_by_hand_is_reported_without_failing_the_command() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+    viser(&projet, INJOIGNABLE);
+    fs::create_dir_all(projet.join("src/webhooks")).expect("répertoire créable");
+    fs::write(projet.join("src/webhooks/mod.rs"), "// à la main\n").expect("l'écriture aboutit");
+
+    let rendu = diagnostic(&projet);
+
+    assert!(rendu.contains("webhooks"), "{rendu}");
+}
+
 /// Le `.env` du projet, réécrit pour viser `url`.
 fn viser(projet: &Path, url: &str) {
     let env = projet.join(".env");

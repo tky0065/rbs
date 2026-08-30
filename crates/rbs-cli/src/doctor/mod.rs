@@ -4,6 +4,7 @@
 //! diagnostic qui s'arrête au premier problème oblige à le relancer autant de fois qu'il
 //! y a de problèmes.
 
+pub mod agents;
 pub mod anchors;
 pub mod auth;
 pub mod base;
@@ -70,10 +71,6 @@ impl Check {
     }
 
     /// Un constat qui n'empêche rien, et ce qu'on peut en faire.
-    ///
-    /// Sans appelant hors tests avant la tâche suivante, qui l'invoquera pour le contrôle
-    /// du code écrit à la main hors du CLI.
-    #[allow(dead_code)]
     pub(crate) fn warned(
         title: &'static str,
         detail: impl Into<String>,
@@ -118,6 +115,7 @@ pub(crate) fn run(directory: &Path) -> Result<Report, Error> {
 
     let mut checks = vec![
         anchors::check(&root),
+        agents::check(&root),
         relations::check(&root),
         env::check(&root),
         versions::check(&root),
