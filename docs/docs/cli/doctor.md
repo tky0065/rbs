@@ -5,10 +5,11 @@ title: rbs doctor
 
 # `rbs doctor`
 
-Diagnoses a generated project through five checks: the anchors, the relations already
-written into its models, the `.env`, the versions and the database. Each is independent
-and returns its verdict without stopping the others — a diagnosis that halts on the first
-problem has to be re-run once per problem.
+Diagnoses a generated project through six checks: the anchors,
+[`AGENTS.md`](../guides/agents.md), the relations already written into its models, the
+`.env`, the versions and the database. Each is independent and returns its verdict without
+stopping the others — a diagnosis that halts on the first problem has to be re-run once
+per problem.
 
 :::note
 rbs speaks French in its help screens and in its output. Every terminal block on this page
@@ -33,11 +34,12 @@ Options:
 No flag of its own. The two global options are accepted because clap propagates them, and
 neither does anything here.
 
-## The five checks
+## The six checks
 
 | Check | What it looks at |
 |---|---|
 | `ancres` | The nine Rust comment anchors: `// <rbs:features>` in `src/lib.rs` — or in `src/main.rs`, on a project generated before that library existed — `// <rbs:routes>` in `src/router.rs`, `// <rbs:openapi>` in `src/openapi.rs`, `// <rbs:migration_modules>` and `// <rbs:migrations>` in `migration/src/lib.rs`, `// <rbs:state_champs>` and `// <rbs:state_init>` in `src/state.rs`, `// <rbs:startup>` in `src/main.rs`, `// <rbs:seeds>` in `src/seeds/main.rs` — plus the YAML `# <rbs:services>` in `docker-compose.yml`, tenth and optional: a project with no compose has none to carry it. |
+| `agents` | [`AGENTS.md`](../guides/agents.md): present, its two zones present, the guide's version matching the CLI's, the inventory matching the project, every declared feature backed by a directory — and, only as a warning, a directory under `src/` that nothing declares. Covered on its own below. |
 | `relations` | The two anchors a model needs to receive a relation — `// <rbs:relations:table>` and `// <rbs:related:table>`, one pair per entity. Outside the anchor registry above, since which file carries them depends on the project's own features. It only turns red on a model that already has a `belongs_to` or `has_many` but is missing one of its two anchors — a state a hand edit is the likely cause of, since [`rbs generate`](./generate.md) never leaves that behind. |
 | `.env` | Every variable declared by `.env.example` is set in `.env`. `.env.example` is the reference because it is versioned and generated alongside the skeleton — a list kept inside the CLI would have been a second truth to keep in sync. |
 | `versions` | The rbs recorded in `[package.metadata.rbs]`, the `rbs-core` dependency, and the CLI running the diagnosis. |
@@ -57,6 +59,26 @@ first would charge three seconds to a diagnosis that fits in two file reads:
 
 That is the contradiction [`rbs new`](./new.md) refuses outright, met here after the fact —
 on a project whose `.env` was edited later.
+
+## The one warning
+
+Every other verdict above is pass or fail. `agents` can also warn, on one condition only:
+a directory under `src/` that no installed fragment and no feature declared in
+`[package.metadata.rbs]` accounts for — code nobody generated.
+
+```text
+  ! agents      écrit hors du CLI : webhooks
+      légitime si rbs ne couvre pas ce code ; sinon, rbs generate le reprend
+```
+
+It stays a warning rather than a failure on purpose. Writing by hand what rbs does not
+generate — an endpoint that is not a CRUD, an external HTTP client, a business rule — is
+legitimate and expected; it is the very thing [`AGENTS.md`](../guides/agents.md) tells an
+agent to do when it runs into code rbs has no business generating. Failing the command over
+it would turn `rbs doctor` red on a perfectly healthy project the moment anyone adds that
+kind of code, which would make the check useless in CI. A warning changes neither the exit
+status nor the overall verdict: a project with nothing but a warning still exits 0 and is
+still reported as healthy — only an actual failure does that.
 
 ## Installed features
 
@@ -83,6 +105,7 @@ $ rbs doctor
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
      Running `target/debug/migration version`
   ✓ ancres     les 10 points d'insertion sont en place
+  ✓ agents     guide et inventaire à jour
   ✓ relations  les modèles portent leurs ancres de relation
   ✓ .env       les 4 variables de .env.example sont renseignées
   ✓ versions   projet et rbs-core 1.1.0 alignés sur le CLI 1.1.0
@@ -104,6 +127,7 @@ $ rbs doctor
       dans src/openapi.rs :
       // <rbs:openapi>
       // </rbs:openapi>
+  ✓ agents     guide et inventaire à jour
   ✓ relations  les modèles portent leurs ancres de relation
   ✗ .env       RBS_LOG_FORMAT absente du .env
       ajoutez au .env :
@@ -115,7 +139,7 @@ $ rbs doctor
 attention : le projet demande votre attention
 ```
 
-Three failures, three checks still green, and every failing line carries what to do about
+Three failures, four checks still green, and every failing line carries what to do about
 it — the anchor block to paste back, the `.env` line to add, the server to start.
 
 Exit status 1. A diagnosis that finds something is not a failure of the command, but a
@@ -139,6 +163,7 @@ error[E0425]: cannot find value `url_de_la_base` in this scope
 For more information about this error, try `rustc --explain E0425`.
 error: could not compile `migration` (bin "migration") due to 1 previous error
   ✓ ancres     les 10 points d'insertion sont en place
+  ✓ agents     guide et inventaire à jour
   ✓ relations  les modèles portent leurs ancres de relation
   ✓ .env       les 4 variables de .env.example sont renseignées
   ✓ versions   projet et rbs-core 1.1.0 alignés sur le CLI 1.1.0

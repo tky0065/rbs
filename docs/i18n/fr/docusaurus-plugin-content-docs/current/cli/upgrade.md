@@ -9,10 +9,15 @@ Aligne un projet engendré sur la version du CLI qui le lit : la dépendance `rb
 version consignée dans `[package.metadata.rbs]`. Il affiche ensuite les notes de migration
 que le saut traverse.
 
-Il n'écrit que dans `Cargo.toml`, et nulle part ailleurs. Le reste du projet — contrôleurs,
-configuration, migrations — vous appartient dès l'instant où [`rbs new`](./new.md) l'a
-posé, et le re-rendre sur une version plus récente effacerait votre travail sans que vous
-l'ayez demandé nommément.
+Il n'écrit que dans `Cargo.toml`, et dans les deux zones réservées d'
+[`AGENTS.md`](../guides/agents.md) — nulle part ailleurs. Le reste du projet —
+contrôleurs, configuration, migrations, et tout ce que vous écrivez hors de ces deux
+zones — vous appartient dès l'instant où [`rbs new`](./new.md) l'a posé, et le re-rendre
+sur une version plus récente effacerait votre travail sans que vous l'ayez demandé
+nommément. Le guide, lui, est différent : c'est du texte que rbs produit et versionne, si
+bien qu'un projet mis à niveau doit recevoir le mode d'emploi de la version qu'il fait
+tourner désormais, plutôt que de continuer à lire celui de la version qu'il vient de
+quitter.
 
 :::note
 Les blocs de terminal de cette page sont des sorties réelles, capturées en lançant la
@@ -87,16 +92,17 @@ La dernière ligne n'est pas un ornement. Le manifeste ne fait qu'énoncer la ve
 tant que le fichier de verrouillage n'a pas suivi, le projet compile encore contre l'ancien
 noyau.
 
-## Le manifeste, et rien d'autre
+## Le manifeste, et les zones d'AGENTS.md
 
 Juste après la mise à niveau ci-dessus, dans le même projet :
 
 ```text
 $ git diff --name-only
+AGENTS.md
 Cargo.toml
 ```
 
-C'est tout, et c'est ce qui rend la promesse de [la page de
+Deux fichiers, et c'est ce qui rend la promesse de [la page de
 compatibilité](../compatibility.md) vérifiable à la main :
 
 ```text
@@ -120,6 +126,33 @@ index 5fd2f9c..7cf0dc8 100644
 Deux lignes : la métadonnée et la dépendance. Un noyau pris d'un chemin local, par
 `rbs new --core-path` — le mode dans lequel rbs se développe — garde son chemin, une
 dépendance par chemin n'ayant pas de version à monter ; seule la version consignée bouge.
+
+```text
+$ git diff -U2 AGENTS.md
+diff --git a/AGENTS.md b/AGENTS.md
+index 9064e97..77cfedc 100644
+--- a/AGENTS.md
++++ b/AGENTS.md
+@@ -1,6 +1,6 @@
+ # demo — mode d'emploi pour agents
+
+-<!-- rbs:guide 0.4.0 -->
++<!-- rbs:guide 1.0.0 -->
+ ## Le CLI d'abord
+
+ Ce projet est engendré par rbs. **Toute fonctionnalité que rbs couvre passe par le CLI**,
+```
+
+Seule la version du marqueur d'ouverture bouge ici — le texte du guide lui-même ne change
+que le jour où une version le reformule vraiment. La zone d'inventaire, en dessous, est
+elle aussi recalculée à chaque mise à niveau, mais ne produit son propre diff que si les
+fragments, les entités ou le moteur de base du projet ont changé depuis la dernière
+écriture : régénérer un contenu identique n'est pas un octet écrit.
+
+Ce que vous avez ajouté hors des deux zones — le titre, `## Notes du projet`, tout ce qui
+vous appartient — reste intact, comme le reste du projet. C'est le contrôle `agents` de
+[`rbs doctor`](./doctor.md) qui aurait signalé un guide périmé avant que cette mise à
+niveau ne tourne.
 
 L'écriture passe par le même journal que toute commande touchant un projet existant : si
 une écriture échoue en cours de route, ce qui avait déjà été écrit est défait.

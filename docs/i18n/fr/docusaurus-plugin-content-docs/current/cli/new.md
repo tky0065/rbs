@@ -31,6 +31,7 @@ Options:
       --database <MOTEUR>      Moteur de base sur lequel le projet tournera [default: postgres] [possible values: postgres, mysql, sqlite]
       --with <FEATURES>        Features à installer sans passer par les questions, séparées par des virgules
       --core-path <CHEMIN>     Crate `rbs-core` locale à utiliser au lieu de la version publiée
+      --lang <LANGUE>          Langue de l'`AGENTS.md` engendré. À défaut, celle de l'environnement [possible values: fr, en]
       --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
   -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
   -h, --help                   Print help (see more with '--help')
@@ -48,6 +49,7 @@ lettre ASCII et ne porte que des lettres, des chiffres, `-` et `_`.
 | `--database <MOTEUR>` | Moteur sur lequel le projet tournera : `postgres`, `mysql` ou `sqlite`. `postgres` par défaut. |
 | `--with <FEATURES>` | Features à installer à la création, séparées par des virgules. Réellement installées — voir plus bas. |
 | `--core-path <CHEMIN>` | Fait pointer le manifeste généré vers une crate `rbs-core` locale plutôt que vers la version publiée — le mode dans lequel rbs se développe, décrit [plus bas](#construire-contre-un-noyau-local). |
+| `--lang <LANGUE>` | Langue de l'[`AGENTS.md`](../guides/agents.md) engendré : `fr` ou `en`. Absent, déduite de `LC_ALL`, puis de `LANG`. |
 | `--template-dir <CHEMIN>` | Rend le projet depuis un répertoire de templates, au lieu de celles embarquées dans le binaire. |
 | `-y`, `--yes` | Ne demande rien : prend les valeurs par défaut et exécute. |
 
@@ -95,19 +97,20 @@ attente de la base dans [`rbs dev`](./dev.md), et une URL sans hôte ni port.
 
 ```text
 $ rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes
-✓ blog créé — 18 fichiers
+✓ blog créé — 19 fichiers
 
   cd blog
   docker compose up -d   # la base du .env, montée
   cargo run              # ou `rbs dev`, qui enchaîne les deux
 ```
 
-Les dix-huit fichiers :
+Les dix-neuf fichiers :
 
 ```text
 blog/.env
 blog/.env.example
 blog/.gitignore
+blog/AGENTS.md
 blog/Cargo.toml
 blog/config/default.toml
 blog/config/development.toml
@@ -153,15 +156,38 @@ garde un état sur le projet :
 version = "1.0.0"
 features = ["health"]
 database = "postgres"
+lang = "fr"
 ```
 
 `version` est le rbs qui a généré le projet — [`rbs doctor`](./doctor.md) la compare à la
 sienne, et [`rbs upgrade`](./upgrade.md) est ce qui la fait bouger. `database` est le
 moteur pour lequel le projet a été créé. `features` s'allonge à mesure que
 [`rbs generate`](./generate.md) et [`rbs add`](./add.md) installent, et c'est ce qui fait
-d'une seconde exécution de la même commande une non-opération plutôt qu'un doublon. Un
-fichier d'état à part se serait désynchronisé du dépôt la première fois qu'on aurait
-oublié de le committer ; le manifeste, lui, est déjà versionné.
+d'une seconde exécution de la même commande une non-opération plutôt qu'un doublon. `lang`
+est la langue dans laquelle [`AGENTS.md`](../guides/agents.md) est écrit, couverte plus
+bas. Un fichier d'état à part se serait désynchronisé du dépôt la première fois qu'on
+aurait oublié de le committer ; le manifeste, lui, est déjà versionné.
+
+## La langue d'AGENTS.md
+
+`rbs new` écrit aussi [`AGENTS.md`](../guides/agents.md) à la racine du projet — le mode
+d'emploi de rbs, écrit pour un agent plutôt que pour un humain. `--lang` choisit la langue
+dans laquelle il est écrit :
+
+```text
+$ rbs new demo-api --database-url postgres://rbs:rbs@localhost:5432/demo_api --lang en --yes
+✓ demo-api créé — 19 fichiers
+
+$ grep lang demo-api/Cargo.toml
+lang = "en"
+```
+
+Sans le drapeau, la langue est déduite de l'environnement — `LC_ALL` d'abord, puis `LANG`
+— une valeur qui commence par `fr` donnant le français, toute autre valeur non vide
+donnant l'anglais, et l'absence de valeur donnant le français. Le choix s'inscrit dans
+tous les cas dans `lang`, dans `[package.metadata.rbs]` ci-dessus, ce qui permet à
+[`rbs add`](./add.md) et [`rbs upgrade`](./upgrade.md) de continuer à écrire le fichier
+dans la langue du projet plutôt que dans celle de qui lance la commande ensuite.
 
 ## Les trois questions
 
@@ -186,7 +212,7 @@ crate :
 
 ```text
 $ rbs new blog --core-path /private/tmp/rbs-core --yes
-✓ blog créé — 18 fichiers
+✓ blog créé — 19 fichiers
 
   cd blog
   docker compose up -d   # la base du .env, montée
@@ -214,7 +240,7 @@ du squelette dont le `.env.jinja` porte une ligne de plus :
 
 ```text
 $ rbs new maison --template-dir /private/tmp/rbs-demo/mes-templates --yes
-✓ maison créé — 18 fichiers
+✓ maison créé — 19 fichiers
 
   cd maison
   docker compose up -d   # la base du .env, montée
@@ -233,7 +259,7 @@ chacune des nommées, dans la même passe qui écrit le projet :
 
 ```text
 $ rbs new site --with auth --yes
-✓ site créé — 18 fichiers
+✓ site créé — 19 fichiers
   + auth     9 fichiers, 1 migration
 
   recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up
@@ -248,7 +274,7 @@ alphabétique, le même ordre dans lequel [`rbs add`](./add.md) énumère les se
 
 ```text
 $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes
-✓ with-demo créé — 18 fichiers
+✓ with-demo créé — 19 fichiers
   + auth     9 fichiers, 1 migration
   + docker   2 fichiers
   + storage  4 fichiers
@@ -335,18 +361,18 @@ Quatre cas n'écrivent rien :
 
 ```text
 $ rbs new sqlite-demo --database sqlite --yes
-✓ sqlite-demo créé — 17 fichiers
+✓ sqlite-demo créé — 18 fichiers
 
   cd sqlite-demo
   cargo run          # la base visée est dans .env
 ```
 
-Dix-sept fichiers, et non dix-huit : c'est au compte que ça se voit, rien dans la sortie ne
+Dix-huit fichiers, et non dix-neuf : c'est au compte que ça se voit, rien dans la sortie ne
 nommant le compose par son absence.
 
 Un projet créé avant rbs 1.1.0 n'a pas non plus de compose, et lancer [`rbs
-upgrade`](./upgrade.md) ne lui en ajoute pas — cette commande ne fait que réécrire
-`[package.metadata.rbs]`. [`rbs add docker`](./add.md) en écrit un entier dans ce cas,
+upgrade`](./upgrade.md) ne lui en ajoute pas — le compose ne fait pas plus partie de ce
+qu'elle touche que le `.env`. [`rbs add docker`](./add.md) en écrit un entier dans ce cas,
 services de déploiement compris.
 
 ## Les échecs
