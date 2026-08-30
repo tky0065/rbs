@@ -268,10 +268,30 @@ const SQUELETTE: &str = "health";
 /// qu'on ait à réécrire son manifeste.
 pub(crate) fn inventory(root: &Path, lang: Lang) -> Result<String, metadata::Error> {
     let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
+
+    Ok(inventory_of(
+        &metadonnees.features,
+        &metadonnees.version,
+        metadonnees.database,
+        root,
+        lang,
+    ))
+}
+
+/// L'inventaire d'un état donné du projet, le manifeste déjà lu.
+///
+/// Séparée d'[`inventory`] pour `add` et `generate`, qui doivent décrire le projet tel que
+/// leur plan le laissera, non tel que le manifeste du disque le décrit encore.
+pub(crate) fn inventory_of(
+    features: &[String],
+    version: &str,
+    database: crate::database::Database,
+    root: &Path,
+    lang: Lang,
+) -> String {
     let catalogue = crate::templates::feature_names(None);
 
-    let (fragments, entites): (Vec<&String>, Vec<&String>) = metadonnees
-        .features
+    let (fragments, entites): (Vec<&String>, Vec<&String>) = features
         .iter()
         .filter(|feature| feature.as_str() != SQUELETTE)
         // `partition` sur un itérateur de `&String` passe un `&&String` : le
@@ -280,14 +300,14 @@ pub(crate) fn inventory(root: &Path, lang: Lang) -> Result<String, metadata::Err
 
     let ancres = present_anchors(root);
 
-    Ok(match lang {
+    match lang {
         Lang::Fr => format!(
             "- rbs {} · base {}\n\
              - Fragments installés : {}\n\
              - Entités engendrées : {}\n\
              - Ancres du projet : {}",
-            metadonnees.version,
-            metadonnees.database.name(),
+            version,
+            database.name(),
             enumerate(&fragments, "aucun"),
             enumerate(&entites, "aucune"),
             ancres.join(", "),
@@ -297,13 +317,54 @@ pub(crate) fn inventory(root: &Path, lang: Lang) -> Result<String, metadata::Err
              - Fragments installed: {}\n\
              - Generated entities: {}\n\
              - Project anchors: {}",
-            metadonnees.version,
-            metadonnees.database.name(),
+            version,
+            database.name(),
             enumerate(&fragments, "none"),
             enumerate(&entites, "none"),
             ancres.join(", "),
         ),
-    })
+    }
+}
+
+/// Réécrit la zone d'inventaire de l'`AGENTS.md`, la feature ou l'entité qu'`ajoutee`
+/// nomme comprise.
+///
+/// Une zone ou un fichier absents ne sont pas une erreur : le développeur a pu retirer
+/// l'un ou l'autre, et une installation ne se refuse pas pour un fichier de
+/// documentation. La zone est alors simplement laissée de côté — `rbs doctor` la
+/// réclamera.
+pub(crate) fn refresh(
+    builder: &mut crate::plan::Builder,
+    root: &Path,
+    ajoutee: Option<&str>,
+) -> Result<Option<MissingZone>, crate::plan::Error> {
+    let Ok(metadonnees) = metadata::read(&root.join("Cargo.toml")) else {
+        return Ok(None);
+    };
+
+    let mut features = metadonnees.features.clone();
+    if let Some(ajoutee) = ajoutee {
+        if !features.iter().any(|feature| feature == ajoutee) {
+            features.push(ajoutee.to_string());
+        }
+    }
+
+    let content = inventory_of(
+        &features,
+        &metadonnees.version,
+        metadonnees.database,
+        root,
+        metadonnees.lang,
+    );
+
+    match builder.replace_zone(FICHIER, INVENTORY, &content, None) {
+        Ok(()) => Ok(None),
+        // Le fichier entier absent ne se signale pas ici : il n'y a pas de bloc à coller
+        // dans un fichier qui n'existe pas, et `rbs upgrade` sait le recréer.
+        Err(crate::plan::Error::FichierAbsent { .. }) => Ok(None),
+        Err(crate::plan::Error::ZoneAbsente { zone, .. }) => Ok(Some(zone)),
+        Err(autre) => Err(autre),
+    }
 }
 
 /// Les ancres que le projet porte réellement, chacune avec son fichier.
@@ -373,6 +434,24 @@ mod tests {
 
         assert!(rendu.contains(env!("CARGO_PKG_VERSION")), "{rendu}");
         assert!(rendu.contains("postgres"), "{rendu}");
+    }
+
+    /// `add` doit rendre l'inventaire du projet *après* installation, alors que le
+    /// manifeste du disque décrit encore celui d'avant.
+    #[test]
+    fn the_inventory_can_be_computed_from_a_projected_feature_list() {
+        let (_parent, root) = project(Vec::new());
+
+        let rendu = inventory_of(
+            &["health".to_string(), "auth".to_string()],
+            "1.2.0",
+            Default::default(),
+            &root,
+            Lang::Fr,
+        );
+
+        assert!(rendu.contains("auth"), "{rendu}");
+        assert!(rendu.contains("1.2.0"), "{rendu}");
     }
 
     /// Un fragment et une entité se distinguent par le catalogue des fragments : le

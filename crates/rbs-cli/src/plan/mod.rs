@@ -124,7 +124,6 @@ pub(crate) enum Error {
         path: String,
     },
     /// Le fichier ne porte pas la zone que l'action visait.
-    #[allow(dead_code)] // Sans appelant avant `add`, `generate` et `upgrade`.
     #[error("{path} : {zone}")]
     ZoneAbsente {
         /// Chemin du fichier visé.
@@ -217,7 +216,6 @@ impl Builder {
     ///
     /// Comme une insertion, l'action compose avec ce qu'elle trouve : elle ne remplace
     /// pas le fichier, et n'entre donc jamais en conflit.
-    #[allow(dead_code)] // Sans appelant avant `add`, `generate` et `upgrade`.
     pub fn replace_zone(
         &mut self,
         path: &str,

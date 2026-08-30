@@ -45,6 +45,8 @@ pub(crate) struct Planned {
     pub description: String,
     /// Le projet inscrit déjà cette feature : le plan est vide et rien ne sera écrit.
     pub deja_installee: bool,
+    /// La zone de l'`AGENTS.md` que le projet ne porte pas, s'il en manque une.
+    pub zone_manquante: Option<crate::agents::MissingZone>,
 }
 
 /// Ce qui peut empêcher d'installer une feature.
@@ -156,6 +158,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
             files: Vec::new(),
             description: String::new(),
             deja_installee: true,
+            zone_manquante: None,
         });
     }
 
@@ -222,7 +225,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         database_port => connexion.as_ref().map(|c| c.port).unwrap_or_default(),
     };
 
-    let mut builder = plan::Builder::new(root);
+    let mut builder = plan::Builder::new(root.clone());
     let files = installation::actions(
         &installation::Fragment {
             name: &options.feature,
@@ -236,11 +239,16 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     builder.patch(plan::PatchToml::InscrireFeature(options.feature.clone()))?;
 
+    // L'inventaire décrit le projet tel que ce plan le laissera : la feature vient d'y
+    // être inscrite, et le manifeste du disque l'ignore encore.
+    let zone_manquante = crate::agents::refresh(&mut builder, &root, Some(&options.feature))?;
+
     Ok(Planned {
         plan: builder.finir(),
         files,
         description: manifest.feature.description,
         deja_installee: false,
+        zone_manquante,
     })
 }
 
@@ -478,6 +486,45 @@ mod tests {
             !workflow.contains("postgres"),
             "le workflow nomme encore PostgreSQL :\n{workflow}"
         );
+    }
+
+    /// L'inventaire est ce que l'agent lit pour savoir ce que le projet porte : une
+    /// feature installée qui n'y figure pas le renvoie explorer le disque.
+    #[test]
+    fn installing_a_feature_names_it_in_the_agents_inventory() {
+        let (_parent, root) = project();
+
+        let planned = run(&Options {
+            feature: "redis".to_string(),
+            directory: root.clone(),
+            force: false,
+            template_dir: None,
+        })
+        .expect("le plan doit se calculer");
+
+        let agents = projected(&planned, "AGENTS.md");
+
+        assert!(agents.contains("redis"), "{agents}");
+        assert!(
+            agents.contains("## Notes du projet"),
+            "l'écriture a débordé de la zone"
+        );
+    }
+
+    /// Un fichier de documentation supprimé ne doit pas empêcher d'installer une feature.
+    #[test]
+    fn a_missing_agents_file_does_not_stop_the_installation() {
+        let (_parent, root) = project();
+        std::fs::remove_file(root.join("AGENTS.md")).expect("le fichier existe");
+
+        let planned = run(&Options {
+            feature: "redis".to_string(),
+            directory: root,
+            force: false,
+            template_dir: None,
+        });
+
+        assert!(planned.is_ok(), "{:?}", planned.err());
     }
 
     /// Le contenu qu'un plan projette pour `path`.

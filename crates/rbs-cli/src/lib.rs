@@ -274,6 +274,11 @@ fn add(feature: String, force: bool, template_dir: Option<PathBuf>) -> Result<()
     ui::info(&format!("{feature} : {}\n", planned.description));
     println!("{}", plan::render::plan(&planned.plan));
 
+    if let Some(zone) = &planned.zone_manquante {
+        ui::warn(&format!("{zone} — collez ce bloc pour la rétablir :"));
+        ui::info(&format!("\n{}", zone.block()));
+    }
+
     plan::application::apply(&planned.plan, force)?;
 
     ui::success(&format!(

@@ -42,7 +42,6 @@ pub(crate) enum Effect {
         comment: Option<String>,
     },
     /// Remplace le corps d'une zone délimitée, le reste du fichier intact.
-    #[allow(dead_code)] // Sans appelant avant `add`, `generate` et `upgrade`.
     RemplacerZone {
         /// Nom de la zone, tel qu'il paraît dans les marqueurs.
         zone: String,
