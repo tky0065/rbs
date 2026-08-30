@@ -161,11 +161,10 @@ fn splice(
 }
 
 /// Rend le corps de la zone du guide, dans la langue du projet.
-pub(crate) fn guide(
-    lang: Lang,
-    template_dir: Option<&Path>,
-    project: &str,
-) -> Result<String, Error> {
+///
+/// Ne prend pas le nom du projet : aucun des deux gabarits ne l'emploie, seul le titre
+/// que compose `document` en a besoin.
+pub(crate) fn guide(lang: Lang, template_dir: Option<&Path>) -> Result<String, Error> {
     let attendue = format!("{}.md", lang.name());
     let files = crate::templates::Source::agents(template_dir)
         .files()
@@ -185,7 +184,6 @@ pub(crate) fn guide(
         .render(
             &template.source,
             minijinja::context! {
-                project_name => project,
                 ancres => anchor_list(lang),
             },
         )
@@ -211,7 +209,7 @@ pub(crate) fn document(
          {}\n{}\n{}\n\n\
          {notes}\n",
         opening(GUIDE, Some(VERSION)),
-        guide(lang, template_dir, project)?,
+        guide(lang, template_dir)?,
         closing(GUIDE),
         opening(INVENTORY, None),
         inventory(root, lang)?,
@@ -553,7 +551,7 @@ mod tests {
         use clap::CommandFactory;
 
         for lang in [Lang::Fr, Lang::En] {
-            let rendu = guide(lang, None, "demo-api").expect("le guide se rend");
+            let rendu = guide(lang, None).expect("le guide se rend");
 
             for sous_commande in crate::cli::Cli::command().get_subcommands() {
                 // `help` est engendrée par clap lui-même : aucun guide n'a à la documenter.
@@ -575,7 +573,7 @@ mod tests {
     #[test]
     fn the_guide_names_every_anchor_of_the_registry() {
         for lang in [Lang::Fr, Lang::En] {
-            let rendu = guide(lang, None, "demo-api").expect("le guide se rend");
+            let rendu = guide(lang, None).expect("le guide se rend");
 
             for anchor in crate::anchors::ANCRES.iter() {
                 assert!(
@@ -587,20 +585,43 @@ mod tests {
         }
     }
 
-    /// Les deux langues doivent rester une seule documentation : une section ajoutée d'un
-    /// côté et pas de l'autre donne deux guides qui divergent en silence.
+    /// Sept sections, dans cet ordre, de chaque côté : un compte seul laisserait passer
+    /// une section renommée ou déplacée d'une seule langue.
     #[test]
-    fn both_languages_carry_the_same_number_of_sections() {
+    fn each_language_carries_its_sections_in_order() {
         let titres = |lang| {
-            guide(lang, None, "demo-api")
+            guide(lang, None)
                 .expect("le guide se rend")
                 .lines()
                 .filter(|line| line.starts_with("## "))
-                .count()
+                .map(str::to_string)
+                .collect::<Vec<_>>()
         };
 
-        assert_eq!(titres(Lang::Fr), titres(Lang::En));
-        assert_eq!(titres(Lang::Fr), 7);
+        assert_eq!(
+            titres(Lang::Fr),
+            [
+                "## Le CLI d'abord",
+                "## Les commandes",
+                "## Recettes",
+                "## Architecture imposée",
+                "## Les ancres",
+                "## Ce que rbs ne couvre pas",
+                "## Vérifier avant de conclure",
+            ]
+        );
+        assert_eq!(
+            titres(Lang::En),
+            [
+                "## CLI first",
+                "## Commands",
+                "## Recipes",
+                "## Enforced architecture",
+                "## Anchors",
+                "## What rbs does not cover",
+                "## Check before you conclude",
+            ]
+        );
     }
 
     #[test]
@@ -635,7 +656,7 @@ mod tests {
     /// des ancres est calculée, et c'est par là que le français s'y était glissé.
     #[test]
     fn the_english_guide_carries_no_french_in_its_anchor_list() {
-        let rendu = guide(Lang::En, None, "demo-api").expect("le guide se rend");
+        let rendu = guide(Lang::En, None).expect("le guide se rend");
 
         for francais in [" dans `", " et `", "de chaque entité"] {
             assert!(
