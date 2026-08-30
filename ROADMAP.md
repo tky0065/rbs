@@ -87,7 +87,7 @@ Publication sur crates.io, semver, CHANGELOG, `rbs upgrade`.
 **Critère de sortie** — l'API publique de `rbs-core` est figée. Jusque-là, aucune
 promesse de compatibilité n'est faite.
 
-### v1.2 — Agents
+### v1.1 — Agents
 
 Un `AGENTS.md` posé dans chaque projet engendré : le mode d'emploi de rbs écrit pour un
 agent. Deux zones délimitées appartiennent au CLI — le guide, versionné, et l'inventaire du
@@ -125,4 +125,4 @@ servis par des crates dédiées que par un générateur généraliste.
 | v0.3 Intégrations | ✅ livré |
 | v0.4 Confort | ✅ livré — publiée sur crates.io le 2026-08-28 |
 | v1.0 Stabilité | ✅ livré — publiée le 2026-08-29, API de `rbs-core` figée |
-| v1.2 Agents | 🚧 en cours — critère de sortie non encore éprouvé sur un agent réel |
+| v1.1 Agents | ✅ livré — publiée le 2026-08-30 ; critère de sortie non encore éprouvé sur un agent réel |
