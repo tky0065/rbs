@@ -243,7 +243,7 @@ fn normalize_fingerprint(
         .collect()
 }
 
-/// Trois différences sont attendues entre l'exemple du dépôt et une génération fraîche,
+/// Quatre différences sont attendues entre l'exemple du dépôt et une génération fraîche,
 /// et aucune ne trahit une dérive des templates.
 fn normalize(contenu: &str) -> String {
     contenu
@@ -251,7 +251,7 @@ fn normalize(contenu: &str) -> String {
         // L'exemple porte les marqueurs que la documentation cite ; ils n'ont rien à
         // faire dans les templates, donc rien à faire dans la comparaison.
         .filter(|ligne| !is_marker(ligne))
-        .map(|ligne| mask_timestamp(&mask_core_path(ligne)))
+        .map(|ligne| mask_timestamp(&mask_core_path(&mask_secret(ligne))))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -303,6 +303,29 @@ fn mask_core_path(ligne: &str) -> String {
     };
 
     format!("{}\"<NOYAU>\"{}", &ligne[..apres_cle], &ligne[fermeture..])
+}
+
+/// Neutralise un secret tiré à l'installation, que deux générations ne partagent jamais.
+///
+/// Seule la forme tirée — soixante-quatre hexadécimaux — est masquée : le placeholder
+/// de `.env.example` reste comparé caractère par caractère, et une template qui cesserait
+/// d'y déclarer la variable serait toujours signalée.
+fn mask_secret(ligne: &str) -> String {
+    const CLE: &str = "RBS_AUTH__SECRET=";
+
+    let Some(valeur) = ligne.strip_prefix(CLE) else {
+        return ligne.to_string();
+    };
+
+    if valeur.len() != 64
+        || !valeur
+            .chars()
+            .all(|lettre| lettre.is_ascii_hexdigit() && !lettre.is_uppercase())
+    {
+        return ligne.to_string();
+    }
+
+    format!("{CLE}<SECRET>")
 }
 
 /// Remplace `m20260826_205243` par `m<STAMP>` : le nom d'une migration porte la date et
@@ -456,6 +479,23 @@ fn the_core_features_stay_compared() {
     assert_ne!(normalize(avec), normalize(sans));
     assert!(normalize(avec).contains("features = [\"auth\"]"));
     assert!(!normalize(avec).contains("/Users/x"));
+}
+
+/// Deux secrets tirés se confondent, mais pas le placeholder de `.env.example`.
+///
+/// Masquer la ligne entière laisserait passer une template qui cesserait de déclarer la
+/// variable, ou qui publierait son secret dans le fichier versionné.
+#[test]
+fn a_drawn_secret_is_neutralised_but_the_published_placeholder_is_not() {
+    let premier =
+        "RBS_AUTH__SECRET=afac42334b295f8e48e9aef0c0de0c0ad4a15780bf54910d993f99ec78c0b72a";
+    let second =
+        "RBS_AUTH__SECRET=0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0";
+    let exemple = "RBS_AUTH__SECRET=changez-moi-par-un-secret-tire-au-hasard-de-32-octets-au-moins";
+
+    assert_eq!(normalize(premier), normalize(second));
+    assert_ne!(normalize(premier), normalize(exemple));
+    assert_eq!(normalize(exemple), exemple);
 }
 
 /// Vérifie que la comparaison voit une dérive de contenu, et pas seulement de nom de
