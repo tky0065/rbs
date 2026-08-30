@@ -2360,6 +2360,112 @@ git commit -m "feat(doctor): surveille les deux ancres de relation des modèles"
 
 ---
 
+### Task 10: Le projet engendré porte une bibliothèque
+
+Découvert en reproduisant la génération à la main, après la Task 8. Le binaire `seed` est une **racine de crate distincte** et rejoint l'entité par `#[path = "../<feature>/model.rs"] mod model;`. Dès que le côté inverse est écrit dans le modèle d'une cible semable, ce fichier porte `impl Related<crate::posts::model::Entity>` — et `crate::posts` n'existe pas dans cette racine :
+
+```
+error[E0433]: cannot find `posts` in `crate`
+  --> src/seeds/../users/model.rs:15:40
+error: could not compile `demo` (bin "seed") due to 2 previous errors
+```
+
+Tout projet engendré portant une relation cesse donc de compiler. Ni le test de bout en bout — qui applique les migrations sans toucher ce binaire — ni `cargo test -p rbs-cli` — qui ne compile aucun projet engendré par défaut — ne le voient.
+
+Le remède retenu supprime la cause plutôt que de la contourner : **le projet engendré gagne une bibliothèque**, dont les deux binaires dépendent. C'est la réponse Rust habituelle à deux binaires qui partagent du code, et la bidouille `#[path]` disparaît partout.
+
+**Files:**
+- Create: `crates/rbs-cli/templates/project/src/lib.rs.jinja`
+- Modify: `crates/rbs-cli/templates/project/src/main.rs.jinja`
+- Modify: `crates/rbs-cli/templates/project/src/seeds/main.rs.jinja`
+- Modify: `crates/rbs-cli/templates/feature/seed.rs.jinja`
+- Modify: `crates/rbs-cli/templates/project/Cargo.toml.jinja`
+- Modify: `crates/rbs-cli/src/anchors.rs`
+- Modify: `crates/rbs-cli/src/new.rs` (le fichier de plus à écrire)
+- Modify: `examples/` (les quatre projets, sous le juge de dérive)
+
+**Interfaces:**
+- Consomme : `Anchor` et son champ `file` dynamique (Task 7).
+- Produit : un squelette de projet à trois cibles — `[lib]`, `[[bin]] <projet>`, `[[bin]] seed`.
+
+- [ ] **Step 1: Établir la répartition**
+
+`src/lib.rs` porte ce que les deux binaires partagent, et **reçoit l'ancre `<rbs:features>`** :
+
+```rust
+pub mod health;
+pub mod openapi;
+pub mod router;
+pub mod state;
+// <rbs:features>
+// </rbs:features>
+```
+
+`src/main.rs` ne garde que le démarrage, et l'ancre `<rbs:startup>` qui lui appartient. Il nomme la bibliothèque par le nom du paquet **en snake_case** — `demo-api` donne `demo_api`, Cargo remplaçant les tirets. Vérifier si le contexte de rendu expose déjà cette forme ; sinon l'ajouter, et ne pas la recalculer dans la template.
+
+`src/seeds/main.rs` et `templates/feature/seed.rs.jinja` abandonnent `#[path]` et passent par la bibliothèque.
+
+- [ ] **Step 2: Écrire les tests avant les templates**
+
+Trois assertions au moins, dans le module qui éprouve déjà le rendu du squelette :
+
+```rust
+    #[test]
+    fn the_library_carries_the_feature_anchor_and_the_shared_modules() { … }
+
+    #[test]
+    fn the_binary_reaches_its_modules_through_the_library_crate() { … }
+
+    // La cause du défaut : une racine de crate distincte incluant un fichier
+    // qui référence des modules qu'elle ne déclare pas.
+    #[test]
+    fn no_generated_file_reaches_a_model_by_a_path_attribute() { … }
+```
+
+Le troisième est le garde-fou : il doit échouer si `#[path` reparaît dans un fichier engendré.
+
+- [ ] **Step 3: Déplacer l'ancre, avec son repli**
+
+`anchors::FEATURES` vise désormais `src/lib.rs`. Mais **tout projet engendré avant ce jalon porte cette ancre dans `src/main.rs`** et n'a pas de `lib.rs` : sans précaution, `rbs generate` et `rbs doctor` refuseraient de fonctionner sur l'ensemble du parc.
+
+L'ancre se résout donc par un repli : `src/lib.rs` s'il existe, `src/main.rs` sinon. Un projet ancien continue de fonctionner exactement comme aujourd'hui ; un projet neuf reçoit la bibliothèque. Écrire le test des deux cas.
+
+- [ ] **Step 4: Rendre le manifeste**
+
+`[lib]` s'ajoute aux deux `[[bin]]`. Vérifier que `cargo` ne se plaint pas d'une cible de bibliothèque implicite en double.
+
+- [ ] **Step 5: Éprouver de bout en bout, en compilant réellement**
+
+C'est le seul critère qui compte, et celui qui manquait :
+
+```bash
+cd "$(mktemp -d)" \
+  && rbs new demo --yes --core-path <chemin> \
+  && cd demo \
+  && rbs g crud users --fields "email:string:unique" \
+  && rbs g crud posts --fields "title:string,author:references:users" \
+  && cargo build
+```
+
+Attendu : `Finished`. C'est exactement la séquence qui échoue aujourd'hui sur `error[E0433]`. Porter la sortie réelle au rapport.
+
+Ajouter le test qui l'automatise, `#[ignore]` comme ses semblables : il compile un projet Axum + SeaORM complet.
+
+- [ ] **Step 6: Remettre les exemples à jour**
+
+Les quatre projets gagnent leur `src/lib.rs` et perdent leurs `#[path]`. Le juge de dérive tranche : `cargo test -p rbs-cli --test integration_examples` doit finir à 16 passés. Aucune tolérance ne s'ajoute à ce test.
+
+- [ ] **Step 7: Commit**
+
+```bash
+cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings
+cargo test -p rbs-cli
+git add -A
+git commit -m "fix(new): donne une bibliothèque au projet engendré"
+```
+
+---
+
 ## Ce que ce plan ne fait pas
 
 Les lots `R4` à `R8` de la spec — lecture `?include=`, écriture et traduction en 409, plusieurs-à-plusieurs, exemple compilé en CI, documentation bilingue — font l'objet de deux plans séparés, écrits à l'issue de celui-ci. Un plan écrit avant d'avoir rencontré le code qu'il planifie planifie une supposition.
