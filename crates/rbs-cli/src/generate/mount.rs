@@ -72,17 +72,23 @@ pub(crate) fn for_migration(module: &str) -> Vec<Mount> {
 /// Deux ancres et non une : la variante vit dans les accolades de l'énumération, l'`impl
 /// Related` ne le peut pas. Toutes deux portent le nom de l'entité visée : un fichier de
 /// modèle peut en décrire plusieurs.
+///
+/// Une cible visée par plusieurs relations n'a pas d'`impl Related` à recevoir, et le
+/// montage se réduit alors au commentaire qui l'explique.
 pub(crate) fn for_inverse(inverse: &relations::Inverse) -> Vec<Mount> {
-    vec![
-        Mount {
-            anchor: anchors::RELATIONS.for_entity(&inverse.file, &inverse.entity),
-            lines: inverse.variant.clone(),
-        },
-        Mount {
+    let mut montages = vec![Mount {
+        anchor: anchors::RELATIONS.for_entity(&inverse.file, &inverse.entity),
+        lines: inverse.variant.clone(),
+    }];
+
+    if !inverse.related.is_empty() {
+        montages.push(Mount {
             anchor: anchors::RELATED.for_entity(&inverse.file, &inverse.entity),
             lines: inverse.related.clone(),
-        },
-    ]
+        });
+    }
+
+    montages
 }
 
 /// Ce que le seed de `module` ajoute au binaire des seeds.
@@ -152,23 +158,23 @@ mod tests {
         );
     }
 
+    fn inverse_towards_users() -> relations::Inverse {
+        relations::Inverse {
+            file: "src/auth/model.rs".to_string(),
+            entity: "users".to_string(),
+            variant: vec![
+                r#"#[sea_orm(has_many = "crate::posts::model::Entity")]"#.to_string(),
+                "Posts,".to_string(),
+            ],
+            related: relations::related_impl("crate::posts::model::Entity", "Posts"),
+        }
+    }
+
     /// Les deux ancres visées portent le nom de l'entité, et non celui du seul fichier :
     /// `src/auth/model.rs` en porte deux paires, une par entité nichée.
     #[test]
     fn the_inverse_targets_the_two_anchors_of_its_entity() {
-        let inverse = relations::Inverse {
-            file: "src/auth/model.rs".to_string(),
-            entity: "users".to_string(),
-            variant: vec![
-                r#"    #[sea_orm(has_many = "crate::posts::model::Entity")]"#.to_string(),
-                "    Posts,".to_string(),
-            ],
-            related: vec![
-                "impl Related<crate::posts::model::Entity> for Entity {".to_string(),
-                "    fn to() -> RelationDef { Relation::Posts.def() }".to_string(),
-                "}".to_string(),
-            ],
-        };
+        let inverse = inverse_towards_users();
 
         let montages = for_inverse(&inverse);
 
@@ -180,6 +186,24 @@ mod tests {
             inverse.variant.as_slice()
         );
         assert_eq!(lines(&montages, related_anchor), inverse.related.as_slice());
+    }
+
+    /// Une cible visée plusieurs fois ne reçoit qu'un commentaire : rien à monter dans
+    /// l'ancre des `impl Related`, qui n'en recevra pas.
+    #[test]
+    fn an_inverse_without_a_related_impl_mounts_a_single_anchor() {
+        let inverse = relations::Inverse {
+            related: Vec::new(),
+            ..inverse_towards_users()
+        };
+
+        let montages = for_inverse(&inverse);
+
+        assert_eq!(montages.len(), 1, "{montages:?}");
+        assert_eq!(
+            montages[0].anchor,
+            anchors::RELATIONS.for_entity("src/auth/model.rs", "users")
+        );
     }
 
     #[test]

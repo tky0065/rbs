@@ -125,8 +125,17 @@ impl Feature {
 /// s'implémenteraient toutes deux `Related<T> for Entity`, ce que `rustc` refuse
 /// (`E0119`). Aucune des deux n'a de meilleure prétention à l'implémentation que l'autre,
 /// donc aucune n'est écrite — un commentaire explique comment joindre à la place.
+///
+/// L'omission vaut des deux côtés : `EntityTrait::has_many<R>` exige `R: Related<Self>`,
+/// et la variante `has_many` qu'on écrirait en face réclamerait précisément l'`impl
+/// Related` qu'on vient de ne pas poser. En retirer un et garder l'autre produit du code
+/// qui ne compile pas.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct AmbiguousTarget {
+    /// Table visée : `users`.
+    pub target: String,
+    /// Variantes `Relation` qui se la disputent, dans l'ordre de déclaration.
+    pub variants: Vec<String>,
     /// Commentaire prêt à écrire, à la place de l'`impl Related` qu'on ne peut pas poser
     /// sans arbitrairement préférer une des relations concurrentes.
     pub comment: String,
@@ -134,11 +143,7 @@ pub(crate) struct AmbiguousTarget {
 
 impl AmbiguousTarget {
     fn new(target: &str, variants: Vec<String>) -> Self {
-        let named = variants
-            .iter()
-            .map(|variant| format!("`{variant}`"))
-            .collect::<Vec<_>>()
-            .join(", ");
+        let named = named(&variants);
         // La première variante déclarée sert d'exemple : n'importe laquelle joint la même
         // table, le choix n'a donc pas besoin d'être significatif.
         let example = variants.first().cloned().unwrap_or_default();
@@ -146,12 +151,47 @@ impl AmbiguousTarget {
         Self {
             comment: format!(
                 "// `{target}` est visée par {count} relations ({named}) : `Related` \
-                 serait ambigu. Joindre explicitement, par exemple\n\
+                 serait ambigu, et son modèle ne reçoit donc pas non plus le `has_many` \
+                 en retour, qui l'exige. Joindre explicitement, par exemple\n\
                  // `Entity::find().join(JoinType::LeftJoin, Relation::{example}.def())`.",
                 count = variants.len(),
             ),
+            target: target.to_string(),
+            variants,
         }
     }
+
+    /// Le même constat, écrit dans le modèle de la cible, là où sa variante `has_many`
+    /// aurait été posée.
+    ///
+    /// Sans lui, la cible n'offrirait qu'une ancre vide : rien n'y dirait que la relation
+    /// existe bel et bien dans l'autre sens, ni pourquoi elle n'est pas déclarée ici.
+    pub(crate) fn inverse_comment(&self, module: &str) -> Vec<String> {
+        let named = named(&self.variants);
+
+        vec![
+            format!(
+                "// `{module}` vise cette table par {count} relations ({named}) : pas de \
+                 `has_many`",
+                count = self.variants.len(),
+            ),
+            format!(
+                "// ici, `EntityTrait::has_many` exigeant le `Related` que `{module}` ne peut \
+                 pas poser"
+            ),
+            "// sans arbitrer entre elles. Joindre explicitement depuis le côté portant."
+                .to_string(),
+        ]
+    }
+}
+
+/// Les variantes citées entre accents graves, comme un commentaire les énumère.
+fn named(variants: &[String]) -> String {
+    variants
+        .iter()
+        .map(|variant| format!("`{variant}`"))
+        .collect::<Vec<_>>()
+        .join(", ")
 }
 
 /// Sérialisé à la main, comme `Field` : minijinja ne voit pas les méthodes Rust, et les

@@ -335,11 +335,7 @@ fn plan_repair(options: &Options, root: &Path) -> Result<Planned, Error> {
                 format!(r#"#[sea_orm(has_many = "{target_entity}")]"#),
                 format!("{variant},"),
             ],
-            related: vec![
-                format!("impl Related<{target_entity}> for Entity {{"),
-                format!("    fn to() -> RelationDef {{ Relation::{variant}.def() }}"),
-                "}".to_string(),
-            ],
+            related: relations::related_impl(&target_entity, &variant),
         });
     }
 
@@ -1179,7 +1175,7 @@ mod tests {
         let variant_block = "    #[sea_orm(has_many = \"crate::comments::model::Entity\")]\n    \
              Comments,\n";
         let related_block = "impl Related<crate::comments::model::Entity> for Entity {\n    \
-             fn to() -> RelationDef { Relation::Comments.def() }\n}\n";
+             fn to() -> RelationDef {\n        Relation::Comments.def()\n    }\n}\n";
         let sans_inverse = read(&modele)
             .replace(variant_block, "")
             .replace(related_block, "");
@@ -1405,6 +1401,42 @@ mod tests {
             model.matches('{').count(),
             model.matches('}').count(),
             "les délimiteurs du modèle ne s'équilibrent plus :\n{model}"
+        );
+
+        project.compile();
+    }
+
+    /// Deux références d'une même feature vers une même cible : le côté portant renonce à
+    /// son `impl Related`, faute de pouvoir arbitrer, et la cible doit renoncer à sa
+    /// variante `has_many` — que `EntityTrait::has_many<R>` ne compile qu'avec un
+    /// `R: Related<Self>`. Écrire l'une sans l'autre donnait un `E0277`.
+    #[test]
+    #[ignore = "compile un projet Axum + SeaORM complet"]
+    fn two_references_of_one_feature_towards_one_target_compile() {
+        let project = bench::Project::fresh();
+        project.rbs_ok(&[
+            "generate",
+            "crud",
+            "editors",
+            "--fields",
+            "email:string:unique",
+        ]);
+        project.rbs_ok(&[
+            "generate",
+            "crud",
+            "drafts",
+            "--fields",
+            "title:string,author:references:editors,reviewer:references:editors",
+        ]);
+
+        let target = read(&project.root().join("src/editors/model.rs"));
+        assert!(
+            !target.contains("#[sea_orm(has_many"),
+            "la cible ne doit pas recevoir de variante `has_many` :\n{target}"
+        );
+        assert!(
+            target.contains("`Author`, `Reviewer`"),
+            "un commentaire doit dire pourquoi elle n'en reçoit pas :\n{target}"
         );
 
         project.compile();

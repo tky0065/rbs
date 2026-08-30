@@ -3,6 +3,7 @@
 //! Séparé du parseur, qui reste pur : une chaîne s'analyse sans projet, une cible ne se
 //! juge que contre un inventaire.
 
+use std::collections::HashSet;
 use std::fmt;
 use std::fs;
 use std::path::Path;
@@ -187,51 +188,91 @@ pub(crate) struct Inverse {
 /// Déclarer `author:references:users` sur `posts` implique que `users` a des `posts` :
 /// la relation n'est écrite qu'une fois, et son inverse en découle. Une auto-référence
 /// est exclue — ses deux côtés vivent déjà dans le même fichier.
+///
+/// Une cible visée plusieurs fois ne reçoit qu'un commentaire, une fois : sa variante
+/// `has_many` exigerait l'`impl Related` que l'ambiguïté interdit au côté portant.
 pub(crate) fn inverses(fields: &[Field], feature: &Feature, entities: &[Entity]) -> Vec<Inverse> {
     let own_entity = format!("crate::{}::model::Entity", feature.module());
     let variant = to_pascal_case(feature.module());
+    let ambiguous = feature.ambiguous_targets();
 
-    fields
-        .iter()
-        .filter_map(|field| {
-            let view = field.relation()?;
-            if view.target == feature.module() {
-                return None;
+    let mut produced = Vec::new();
+    let mut commented = HashSet::new();
+
+    for field in fields {
+        let Some(view) = field.relation() else {
+            continue;
+        };
+        if view.target == feature.module() {
+            continue;
+        }
+        let Some(target) = entities::find(entities, &view.target) else {
+            continue;
+        };
+
+        if let Some(concurrent) = ambiguous.iter().find(|other| other.target == view.target) {
+            // Une seule fois par table : le commentaire parle des relations concurrentes
+            // au pluriel, et le répéter à chacune d'elles le dirait deux fois.
+            if commented.insert(view.target.clone()) {
+                produced.push(Inverse {
+                    file: target.file.clone(),
+                    entity: target.table.clone(),
+                    variant: concurrent.inverse_comment(feature.module()),
+                    related: Vec::new(),
+                });
             }
-            let target = entities::find(entities, &view.target)?;
+            continue;
+        }
 
-            Some(Inverse {
-                file: target.file.clone(),
-                entity: target.table.clone(),
-                // Sans indentation propre : l'ancre `<rbs:relations:…>` vit dans le corps de
-                // l'énumération, et `anchors::insert` préfixe déjà chaque ligne de celle de
-                // sa balise fermante. L'ajouter ici la doublerait.
-                variant: vec![
-                    format!(r#"#[sea_orm(has_many = "{own_entity}")]"#),
-                    format!("{variant},"),
-                ],
-                related: vec![
-                    format!("impl Related<{own_entity}> for Entity {{"),
-                    format!("    fn to() -> RelationDef {{ Relation::{variant}.def() }}"),
-                    "}".to_string(),
-                ],
-            })
-        })
-        .collect()
+        produced.push(Inverse {
+            file: target.file.clone(),
+            entity: target.table.clone(),
+            // Sans indentation propre : l'ancre `<rbs:relations:…>` vit dans le corps de
+            // l'énumération, et `anchors::insert` préfixe déjà chaque ligne de celle de
+            // sa balise fermante. L'ajouter ici la doublerait.
+            variant: vec![
+                format!(r#"#[sea_orm(has_many = "{own_entity}")]"#),
+                format!("{variant},"),
+            ],
+            // Trois lignes plutôt qu'une : rustfmt éclate un corps de fonction, et un
+            // projet fraîchement engendré échouerait son premier `cargo fmt --check` sur
+            // une ligne que le CLI a lui-même écrite.
+            related: related_impl(&own_entity, &variant),
+        });
+    }
+
+    produced
+}
+
+/// L'`impl Related` d'un côté inverse, à la mise en forme de rustfmt.
+pub(crate) fn related_impl(entity_path: &str, variant: &str) -> Vec<String> {
+    vec![
+        format!("impl Related<{entity_path}> for Entity {{"),
+        "    fn to() -> RelationDef {".to_string(),
+        format!("        Relation::{variant}.def()"),
+        "    }".to_string(),
+        "}".to_string(),
+    ]
 }
 
 /// Une variante déjà présente dans le fichier cible, mais visant une autre entité.
 ///
-/// `anchors::insert` ne dédoublonne qu'un groupe identique dans son entier : deux
+/// `anchors::insert` ne dédoublonne qu'une séquence identique dans son entier : deux
 /// relations distinctes qui produiraient la même variante s'y inséreraient donc toutes
 /// deux, ce que `rustc` refuse comme identifiant dupliqué (`E0428`). C'est ce cas précis
 /// que ce contrôle referme, avant qu'aucune écriture n'ait lieu.
 ///
 /// La comparaison ignore l'indentation, comme `anchors::insert` le fait lui-même pour
-/// décider si un groupe est déjà posé : sans quoi une relation déjà écrite, retrouvée
+/// décider si une séquence est déjà posée : sans quoi une relation déjà écrite, retrouvée
 /// indentée par l'ancre, ne serait plus reconnue comme identique et se verrait refusée à
 /// tort au second passage.
 pub(crate) fn homonymous_conflict(existing: &str, inverse: &Inverse) -> bool {
+    // Un inverse sans `impl Related` n'écrit qu'un commentaire : il ne déclare aucun
+    // identifiant, donc n'entre en conflit avec aucun.
+    if inverse.related.is_empty() {
+        return false;
+    }
+
     let Some(variant_line) = inverse.variant.last() else {
         return false;
     };
@@ -416,20 +457,66 @@ mod tests {
         assert!(inverses(&fields, &feature, &[]).is_empty());
     }
 
+    /// La symétrie qu'exige `EntityTrait::has_many<R>`, qui réclame `R: Related<Self>` :
+    /// le côté portant n'écrit pas son `impl Related` quand deux relations se disputent
+    /// la cible, et la variante `has_many` d'en face, qui l'exigerait, ne s'écrit pas non
+    /// plus. Il ne reste qu'un commentaire, une fois pour les deux relations.
     #[test]
-    fn two_references_to_the_same_target_produce_two_inverses_in_one_file() {
+    fn two_references_to_one_target_leave_it_a_comment_instead_of_a_has_many() {
         let mut fields =
             fields::parse("author:references:users,reviewer:references:users").expect("acceptée");
         resolve(&mut fields, &inventory(), "posts").expect("cibles résolues");
         let feature = Feature::fresh("posts", fields.clone());
         let produced = inverses(&fields, &feature, &inventory());
 
-        assert_eq!(produced.len(), 2, "{produced:?}");
+        assert_eq!(produced.len(), 1, "{produced:?}");
+        assert_eq!(produced[0].file, "src/auth/model.rs");
+        assert_eq!(produced[0].entity, "users");
         assert!(
-            produced
+            produced[0].related.is_empty(),
+            "aucun `impl Related` ne peut être posé : {produced:?}"
+        );
+        assert!(
+            produced[0]
+                .variant
                 .iter()
-                .all(|i| i.file == "src/auth/model.rs" && i.entity == "users"),
-            "{produced:?}"
+                .all(|line| line.starts_with("//")),
+            "seul un commentaire est écrit : {produced:?}"
+        );
+        assert!(
+            produced[0]
+                .variant
+                .join(" ")
+                .contains("`Author`, `Reviewer`"),
+            "le commentaire doit nommer les relations concurrentes : {produced:?}"
+        );
+    }
+
+    /// L'entité visée accompagne le fichier : `src/auth/model.rs` porte deux entités, et
+    /// le fichier seul ne dirait pas laquelle reçoit la variante.
+    #[test]
+    fn an_inverse_names_the_entity_it_targets() {
+        let mut fields = fields::parse("author:references:users").expect("acceptée");
+        resolve(&mut fields, &inventory(), "posts").expect("cibles résolues");
+        let feature = Feature::fresh("posts", fields.clone());
+        let produced = inverses(&fields, &feature, &inventory());
+
+        assert_eq!(produced[0].entity, "users");
+    }
+
+    /// Le `impl Related` est écrit à la mise en forme de rustfmt : un projet fraîchement
+    /// engendré doit passer son premier `cargo fmt --check`.
+    #[test]
+    fn the_related_impl_is_written_the_way_rustfmt_would() {
+        assert_eq!(
+            related_impl("crate::posts::model::Entity", "Posts"),
+            [
+                "impl Related<crate::posts::model::Entity> for Entity {",
+                "    fn to() -> RelationDef {",
+                "        Relation::Posts.def()",
+                "    }",
+                "}",
+            ]
         );
     }
 
@@ -451,12 +538,7 @@ mod tests {
     #[test]
     fn a_target_without_a_migration_is_refused() {
         let root = TempDir::new().expect("le répertoire temporaire se crée");
-        fs::create_dir_all(root.path().join("migration/src")).expect("le répertoire se crée");
-        fs::write(
-            root.path().join("migration/src/lib.rs"),
-            "mod m20260826_143000_create_tags;\n",
-        )
-        .expect("l'écriture aboutit");
+        migration(root.path(), "Tags");
 
         let fields = resolved("author:references:users", "posts");
         let errors =
@@ -506,7 +588,7 @@ mod tests {
                 r#"    #[sea_orm(has_many = "crate::posts::model::Entity")]"#.to_string(),
                 "    Posts,".to_string(),
             ],
-            related: Vec::new(),
+            related: related_impl("crate::posts::model::Entity", "Posts"),
         };
 
         assert!(!homonymous_conflict(
@@ -524,7 +606,7 @@ mod tests {
                 r#"    #[sea_orm(has_many = "crate::posts::model::Entity")]"#.to_string(),
                 "    Posts,".to_string(),
             ],
-            related: Vec::new(),
+            related: related_impl("crate::posts::model::Entity", "Posts"),
         };
         let existing = format!(
             "    // <rbs:relations:users>\n{}\n    // </rbs:relations:users>\n",
@@ -545,7 +627,7 @@ mod tests {
                 r#"    #[sea_orm(has_many = "crate::posts::model::Entity")]"#.to_string(),
                 "    Posts,".to_string(),
             ],
-            related: Vec::new(),
+            related: related_impl("crate::posts::model::Entity", "Posts"),
         };
         let existing = "    // <rbs:relations:users>\n    \
              #[sea_orm(has_many = \"crate::somewhere::model::Entity\")]\n    Posts,\n    \
