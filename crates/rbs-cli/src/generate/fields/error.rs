@@ -113,13 +113,20 @@ impl fmt::Display for FieldsError {
             if !first {
                 writeln!(f)?;
             }
+
+            // `ui::error` pose « erreur : » une seule fois, en tête de la chaîne
+            // entière rendue par cet `impl` — pas devant chaque bloc qu'elle
+            // contient. Le premier bloc doit donc s'en passer pour ne pas le
+            // doubler, mais chaque bloc suivant en a besoin : sans lui, un second
+            // champ fautif se lirait comme la suite du premier, plutôt que comme
+            // une erreur distincte.
+            if !first {
+                write!(f, "erreur : ")?;
+            }
             first = false;
 
             let message = error.kind.message(&error.label);
             // Une portion vide n'a pas de libellé à citer : « champ 2 «  » » se lit mal.
-            //
-            // Le préfixe « erreur : » appartient à la couche d'affichage, qui le pose
-            // déjà : le porter ici aussi le double aux yeux de l'utilisateur.
             if error.label.is_empty() {
                 write!(f, "champ {} — {message}", error.rank)?;
             } else {
@@ -359,7 +366,7 @@ mod tests {
         let lines: Vec<&str> = text.lines().collect();
         assert_eq!(lines.len(), 4, "{text}");
         assert!(lines[0].starts_with("champ 1 « Title »"), "{text}");
-        assert!(lines[2].starts_with("champ 2 « type »"), "{text}");
+        assert!(lines[2].starts_with("erreur : champ 2 « type »"), "{text}");
     }
 
     #[test]

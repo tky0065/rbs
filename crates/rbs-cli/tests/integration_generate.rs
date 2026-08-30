@@ -42,6 +42,51 @@ fn a_clashing_name_is_rejected_by_naming_it_and_without_writing_anything() {
     }
 }
 
+/// `ui::error` ne pose « erreur : » qu'une fois, en tête de toute la sortie —
+/// `FieldsError` en rend pourtant un bloc par champ fautif. Seul le `Display` composé
+/// avec la couche d'affichage, comme l'utilisateur le lit réellement, peut prouver
+/// qu'aucun bloc n'est démuni ni doublé : un test qui n'interroge que `FieldsError`
+/// tout seul ne l'aurait pas vu.
+#[test]
+fn two_faulty_fields_each_keep_their_own_error_marker_once_composed_with_the_display() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = common::projet(parent.path());
+
+    let output = Command::cargo_bin("rbs")
+        .expect("le binaire rbs doit être compilé")
+        .current_dir(&racine)
+        .args([
+            "g",
+            "crud",
+            "articles",
+            "--fields",
+            "Title:string,type:string",
+        ])
+        .output()
+        .expect("le binaire doit être lançable");
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        !output.status.success(),
+        "les deux champs sont fautifs :\n{stderr}"
+    );
+    assert_eq!(
+        stderr.matches("erreur : ").count(),
+        2,
+        "un « erreur : » par champ fautif, ni doublé ni absent :\n{stderr}"
+    );
+    assert!(
+        !stderr.contains("erreur : erreur :"),
+        "le premier bloc ne doit pas doubler celui posé par la couche d'affichage :\n{stderr}"
+    );
+    assert!(stderr.contains("erreur : champ 1 « Title »"), "{stderr}");
+    assert!(
+        stderr.contains("erreur : champ 2 « type »"),
+        "le second bloc doit porter son propre marqueur, sans quoi il se lit comme la \
+         suite du premier :\n{stderr}"
+    );
+}
+
 /// Une référence requise rend l'entité non semable : aucun seed n'est écrit, le montage
 /// ne l'inscrit pas non plus, et la commande le dit dans sa sortie — sans quoi l'absence
 /// du fichier se découvrirait en le cherchant en vain.
