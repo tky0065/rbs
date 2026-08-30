@@ -19,7 +19,7 @@ destination = "src/storage/tests.rs"
 
 [[anchors]]
 anchor  = "features"
-content = "mod storage;"
+content = "pub mod storage;"
 
 [[anchors]]
 anchor  = "state_champs"

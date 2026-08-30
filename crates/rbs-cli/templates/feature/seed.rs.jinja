@@ -6,10 +6,7 @@ use sea_orm::prelude::Uuid;
 {%- endif %}
 use sea_orm::{ActiveModelTrait, DatabaseConnection, DbErr};
 
-// Le binaire des seeds est une racine de crate distincte de celle de l'application : il
-// rejoint l'entité par son chemin, et n'en appelle qu'une part.
-#[path = "../{@ module @}/model.rs"]
-mod model;
+use {@ crate_name @}::{@ module @}::model;
 
 /// Insère les {@ module @} de démonstration.
 pub async fn seed(db: &DatabaseConnection) -> Result<(), DbErr> {

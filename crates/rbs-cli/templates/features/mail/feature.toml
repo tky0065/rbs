@@ -29,7 +29,7 @@ destination = "templates/mail/bienvenue.html"
 
 [[anchors]]
 anchor  = "features"
-content = "mod mail;"
+content = "pub mod mail;"
 
 [[anchors]]
 anchor  = "state_champs"

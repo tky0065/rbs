@@ -598,7 +598,7 @@ mod tests {
             .expect("le squelette doit porter l'ancre de démarrage");
 
         assert!(
-            startup.contains("crate::jobs::worker::spawn(state.clone());"),
+            startup.contains("demo_api::jobs::worker::spawn(state.clone());"),
             "le worker n'est pas détaché au démarrage :\n{main}"
         );
 
@@ -849,7 +849,9 @@ mod tests {
         run(&fragment_options(&root, &fragments)).expect("l'installation doit aboutir");
 
         for (anchor, expected) in [
-            (crate::anchors::FEATURES, "mod essai;"),
+            // Le projet de `project()` porte une bibliothèque : c'est là que l'ancre
+            // résolue par repli atterrit, non plus dans `src/main.rs`.
+            (crate::anchors::FEATURES.in_file("src/lib.rs"), "mod essai;"),
             (crate::anchors::ROUTES, ".merge(crate::essai::routes())"),
             (crate::anchors::OPENAPI, "crate::essai::controller::list,"),
             (crate::anchors::MIGRATIONS, "Box::new(m0_essai::Migration),"),

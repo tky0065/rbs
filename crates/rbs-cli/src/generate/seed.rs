@@ -21,7 +21,10 @@ const TEMPLATE: &str = include_str!(concat!(
 const LIGNES: usize = 2;
 
 /// Rend le seed de `feature`.
-pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
+///
+/// `crate_name` est celui de la bibliothèque du projet : le seed est un binaire distinct
+/// de celui de l'application, et rejoint l'entité par ce chemin plutôt que par `#[path]`.
+pub(crate) fn render(feature: &Feature, crate_name: &str) -> Result<String, minijinja::Error> {
     let lignes: Vec<Vec<SeedField>> = (1..=LIGNES)
         .map(|rang| {
             feature
@@ -36,6 +39,7 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
         TEMPLATE,
         context! {
             module => feature.module(),
+            crate_name => crate_name,
             lignes => lignes,
             // Une référence optionnelle se sème à `None`, jamais par `Uuid::from_u128` :
             // elle ne doit pas à elle seule justifier l'importation.
@@ -130,16 +134,16 @@ mod tests {
         let mut parsed = fields::parse(fields).expect("les champs du test doivent être valides");
         crate::generate::relations::resolve(&mut parsed, &entities, name)
             .expect("les cibles du test doivent se résoudre");
-        render(&Feature::fresh(name, parsed)).expect("le seed doit se rendre")
+        render(&Feature::fresh(name, parsed), "demo_api").expect("le seed doit se rendre")
     }
 
     #[test]
-    fn the_entity_is_reached_by_its_path_in_the_feature() {
+    fn the_entity_is_reached_through_the_project_library() {
         let rendered = seed("articles", CHAMPS);
 
         assert!(
-            rendered.contains("#[path = \"../articles/model.rs\"]\nmod model;"),
-            "l'entité doit être rejointe par son chemin :\n{rendered}"
+            rendered.contains("use demo_api::articles::model;"),
+            "l'entité doit être rejointe par la bibliothèque du projet :\n{rendered}"
         );
     }
 
@@ -266,8 +270,8 @@ use axum::http::Request;
 use serde_json::Value;
 use tower::ServiceExt;
 
-use crate::router::router;
-use crate::state::AppState;
+use demo_api::router::router;
+use demo_api::state::AppState;
 
 #[tokio::test]
 async fn les_semis_sont_rendus_par_l_api() {

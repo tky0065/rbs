@@ -91,7 +91,7 @@ fn the_four_project_anchors_are_completed() {
     let racine = project_with_auth(&parent);
 
     let attendu = [
-        ("src/main.rs", "features", "mod auth;"),
+        ("src/lib.rs", "features", "pub mod auth;"),
         ("src/router.rs", "routes", ".merge(crate::auth::routes())"),
         (
             "src/openapi.rs",
@@ -230,8 +230,8 @@ fn the_project_carrying_auth_compiles_without_a_warning_and_is_formatted() {
     // `cargo test`, celui-ci retrouve le workspace de rbs lui-même et signale ses
     // fichiers — le test échouait alors sur du code sans rapport avec le projet généré,
     // et `--manifest-path` n'y change rien. rustfmt suit les déclarations de modules :
-    // `main.rs` emporte tout `src/auth/`, y compris son `mod tests`.
-    for racine_de_modules in ["src/main.rs", "migration/src/lib.rs"] {
+    // `lib.rs` emporte tout `src/auth/`, y compris son `mod tests`.
+    for racine_de_modules in ["src/lib.rs", "migration/src/lib.rs"] {
         Command::new("rustfmt")
             .args(["--edition", "2024", "--check"])
             .arg(racine.join(racine_de_modules))

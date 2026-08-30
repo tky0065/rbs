@@ -35,7 +35,7 @@ destination = "src/auth/tests.rs"
 
 [[anchors]]
 anchor  = "features"
-content = "mod auth;"
+content = "pub mod auth;"
 
 [[anchors]]
 anchor  = "routes"

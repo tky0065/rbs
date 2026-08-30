@@ -18,12 +18,23 @@ pub(crate) struct Mount {
     pub lines: Vec<String>,
 }
 
-/// Ce que la feature `module` ajoute au binaire du projet.
-pub(crate) fn pour(module: &str) -> Vec<Mount> {
+/// Ce que la feature `module` ajoute au projet.
+///
+/// `features` est déjà résolue par [`anchors::resolve_features`] : la déclaration du
+/// module se pose en `pub mod` quand la cible est `src/lib.rs`, faute de quoi le binaire
+/// des seeds ne pourrait pas atteindre l'entité depuis l'autre côté de la frontière de
+/// crate ; elle reste un `mod` privé sur un projet antérieur, encore réduit à `src/main.rs`.
+pub(crate) fn pour(module: &str, features: Anchor) -> Vec<Mount> {
+    let visibility = if features.file == "src/lib.rs" {
+        "pub "
+    } else {
+        ""
+    };
+
     vec![
         Mount {
-            anchor: anchors::FEATURES,
-            lines: vec![format!("mod {module};")],
+            anchor: features,
+            lines: vec![format!("{visibility}mod {module};")],
         },
         Mount {
             anchor: anchors::ROUTES,
@@ -100,15 +111,23 @@ mod tests {
     }
 
     #[test]
-    fn the_feature_module_is_declared_in_main() {
-        let montages = pour("users");
+    fn the_feature_module_is_declared_in_main_on_a_project_without_a_library() {
+        let montages = pour("users", anchors::FEATURES);
 
         assert_eq!(lines(&montages, anchors::FEATURES), ["mod users;"]);
     }
 
     #[test]
+    fn the_feature_module_is_declared_public_in_the_library() {
+        let lib = anchors::FEATURES.in_file("src/lib.rs");
+        let montages = pour("users", lib.clone());
+
+        assert_eq!(lines(&montages, lib), ["pub mod users;"]);
+    }
+
+    #[test]
     fn the_routes_are_mounted_by_an_absolute_path() {
-        let montages = pour("blog_posts");
+        let montages = pour("blog_posts", anchors::FEATURES);
 
         assert_eq!(
             lines(&montages, anchors::ROUTES),
@@ -118,7 +137,7 @@ mod tests {
 
     #[test]
     fn the_five_handlers_enter_the_openapi_document() {
-        let montages = pour("users");
+        let montages = pour("users", anchors::FEATURES);
 
         assert_eq!(
             lines(&montages, anchors::OPENAPI),
@@ -177,7 +196,7 @@ mod tests {
     /// n'inscrit dans le `Migrator` que ce qu'il a lui-même généré.
     #[test]
     fn mounting_a_feature_does_not_touch_the_migration_crate() {
-        let montages = pour("users");
+        let montages = pour("users", anchors::FEATURES);
 
         assert!(
             !montages
@@ -197,7 +216,7 @@ mod tests {
     /// Une feature écrite à la main n'a pas d'entité : rien à semer, donc rien à déclarer.
     #[test]
     fn mounting_a_feature_declares_no_seed() {
-        let montages = pour("users");
+        let montages = pour("users", anchors::FEATURES);
 
         assert!(
             !montages.iter().any(|mount| mount.anchor == anchors::SEEDS),
@@ -207,7 +226,7 @@ mod tests {
 
     #[test]
     fn each_mount_targets_a_skeleton_anchor() {
-        let mut montages = pour("users");
+        let mut montages = pour("users", anchors::FEATURES);
         montages.extend(for_migration("m20260826_143000_create_users"));
         montages.extend(for_seed("users"));
 

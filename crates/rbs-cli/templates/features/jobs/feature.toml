@@ -31,14 +31,14 @@ destination = "src/jobs/tests.rs"
 
 [[anchors]]
 anchor  = "features"
-content = "mod jobs;"
+content = "pub mod jobs;"
 
 # Le worker vit dans le processus de l'API, et non dans un binaire à part : c'est ce qui
 # donne à un job l'`AppState` du projet, donc le mailer, le cache et le stockage que les
 # autres fragments y déposent.
 [[anchors]]
 anchor  = "startup"
-content = "crate::jobs::worker::spawn(state.clone());"
+content = "{@ crate_name @}::jobs::worker::spawn(state.clone());"
 
 [migration]
 source = "migration.rs.jinja"

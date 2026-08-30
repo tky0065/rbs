@@ -15,7 +15,7 @@ destination = "src/cache/tests.rs"
 
 [[anchors]]
 anchor  = "features"
-content = "mod cache;"
+content = "pub mod cache;"
 
 [[anchors]]
 anchor  = "state_champs"

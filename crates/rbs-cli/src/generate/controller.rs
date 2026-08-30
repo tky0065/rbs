@@ -236,7 +236,7 @@ mod tests {
     /// `ApiDoc`. La vérification est donc posée comme module de test du binaire lui-même.
     const VERIFICATION: &str = r#"use utoipa::OpenApi;
 
-use crate::openapi::ApiDoc;
+use demo_api::openapi::ApiDoc;
 
 #[test]
 fn the_five_routes_of_the_feature_are_documented() {

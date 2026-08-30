@@ -6,7 +6,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::anchors::{ANCRES, Anchor};
+use crate::anchors::{self, ANCRES, Anchor};
 
 use super::Check;
 
@@ -14,9 +14,22 @@ const TITRE: &str = "ancres";
 
 /// Vérifie que le projet porte toutes ses ancres, et dit comment recoller les absentes.
 pub(crate) fn check(root: &Path) -> Check {
+    // L'ancre des features se résout par repli : `src/lib.rs` sur un projet engendré
+    // depuis ce jalon, `src/main.rs` sur un projet plus ancien, dépourvu de bibliothèque.
+    let anchors: Vec<Anchor> = ANCRES
+        .into_iter()
+        .map(|anchor| {
+            if anchor.name == anchors::FEATURES.name {
+                anchors::resolve_features(root)
+            } else {
+                anchor
+            }
+        })
+        .collect();
+
     // Une ancre optionnelle dont le fichier n'existe pas n'est pas applicable : la
     // réclamer ferait passer pour incomplet un projet qui ne l'est pas.
-    let applicables: Vec<&Anchor> = ANCRES
+    let applicables: Vec<&Anchor> = anchors
         .iter()
         .filter(|anchor| !anchor.optional || root.join(anchor.file.as_ref()).exists())
         .collect();

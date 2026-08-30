@@ -591,6 +591,7 @@ mod tests {
             "migration/src/main.rs",
             "src/health/controller.rs",
             "src/health/mod.rs",
+            "src/lib.rs",
             "src/seeds/main.rs",
             "src/main.rs",
             "src/openapi.rs",
@@ -851,8 +852,8 @@ mod tests {
 
         assert!(project.root.join("src/auth/service.rs").is_file());
 
-        let main = fs::read_to_string(project.root.join("src/main.rs")).expect("main lisible");
-        assert!(main.contains("mod auth;"), "{main}");
+        let lib = fs::read_to_string(project.root.join("src/lib.rs")).expect("lib lisible");
+        assert!(lib.contains("pub mod auth;"), "{lib}");
 
         let manifest = fs::read_to_string(project.root.join("Cargo.toml")).expect("manifeste");
         assert!(manifest.contains("\"auth\""), "{manifest}");
@@ -881,10 +882,10 @@ mod tests {
             )
             .expect("le projet doit se créer");
 
-            let main = fs::read_to_string(project.root.join("src/main.rs")).expect("main");
+            let lib = fs::read_to_string(project.root.join("src/lib.rs")).expect("lib");
             let compose =
                 fs::read_to_string(project.root.join("docker-compose.yml")).expect("compose");
-            (main, compose)
+            (lib, compose)
         };
 
         assert_eq!(
@@ -1036,7 +1037,7 @@ mod tests {
         assert!(compose.contains("- \"5432:5432\""), "{compose}");
         assert!(compose.contains("# <rbs:services>"), "{compose}");
         assert!(compose.contains("# </rbs:services>"), "{compose}");
-        assert_eq!(project.files, 17);
+        assert_eq!(project.files, 18);
     }
 
     /// Le port publié est celui du .env, non 5432 en dur : sans quoi `cargo run` sur
@@ -1104,7 +1105,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 16);
+        assert_eq!(project.files, 17);
     }
 
     #[test]
@@ -1124,7 +1125,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 16);
+        assert_eq!(project.files, 17);
     }
 
     /// Une URL sans identifiants est valide et acceptée par `parse` : sans cette
@@ -1149,6 +1150,6 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 16);
+        assert_eq!(project.files, 17);
     }
 }

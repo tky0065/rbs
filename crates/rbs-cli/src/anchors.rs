@@ -5,6 +5,7 @@
 
 use std::borrow::Cow;
 use std::fmt;
+use std::path::Path;
 
 /// Un point d'insertion, et le fichier du projet qui le porte.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -188,6 +189,21 @@ pub(crate) const ANCRES: [Anchor; 10] = [
     SEEDS,
     SERVICES,
 ];
+
+/// Résout l'ancre `<rbs:features>` par repli, entre `src/lib.rs` et `src/main.rs`.
+///
+/// Elle vise `src/lib.rs`, que porte tout projet engendré depuis ce jalon : le binaire
+/// principal et celui des seeds y puisent les modules de feature par un chemin de crate,
+/// et non plus par `#[path]`. Un projet engendré plus tôt n'a pas de bibliothèque, et
+/// l'ancre y reste dans `src/main.rs`, où elle a toujours vécu — sans ce repli, `generate`
+/// et `doctor` cesseraient de fonctionner sur l'ensemble du parc existant.
+pub(crate) fn resolve_features(root: &Path) -> Anchor {
+    if root.join("src/lib.rs").exists() {
+        FEATURES.in_file("src/lib.rs")
+    } else {
+        FEATURES
+    }
+}
 
 /// Une ancre attendue que le fichier ne porte pas.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -725,5 +741,27 @@ struct AppState {
             assert_ne!(anchor.name, "relations", "{:?}", anchor);
             assert_ne!(anchor.name, "related", "{:?}", anchor);
         }
+    }
+
+    #[test]
+    fn the_features_anchor_resolves_to_the_library_when_it_exists() {
+        let project = tempfile::TempDir::new().expect("répertoire temporaire créable");
+        std::fs::create_dir_all(project.path().join("src")).expect("le répertoire se crée");
+        std::fs::write(project.path().join("src/lib.rs"), "// bibliothèque")
+            .expect("l'écriture aboutit");
+
+        let anchor = resolve_features(project.path());
+
+        assert_eq!(anchor.file, "src/lib.rs");
+        assert_eq!(anchor.name, FEATURES.name);
+    }
+
+    #[test]
+    fn the_features_anchor_falls_back_to_main_without_a_library() {
+        let project = tempfile::TempDir::new().expect("répertoire temporaire créable");
+
+        let anchor = resolve_features(project.path());
+
+        assert_eq!(anchor.file, "src/main.rs");
     }
 }

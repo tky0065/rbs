@@ -158,12 +158,17 @@ impl Project {
             fs::write(directory.join(name), content).expect("fichier de feature écrivable");
         }
 
-        self.mount(&mount::pour(module), &[anchors::FEATURES]);
+        let features = anchors::resolve_features(&self.root);
+        self.mount(&mount::pour(module, features.clone()), &[features]);
     }
 
     /// Monte les routes de `module` et ses handlers dans le document OpenAPI.
     pub(crate) fn mount_feature(&self, module: &str) {
-        self.mount(&mount::pour(module), &[anchors::ROUTES, anchors::OPENAPI]);
+        let features = anchors::resolve_features(&self.root);
+        self.mount(
+            &mount::pour(module, features),
+            &[anchors::ROUTES, anchors::OPENAPI],
+        );
     }
 
     /// Écrit dans les ancres `visees` par le moteur du CLI, et non à la main.

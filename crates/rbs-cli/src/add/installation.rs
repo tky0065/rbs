@@ -115,7 +115,7 @@ pub(crate) fn actions(
     }
 
     for insertion in &fragment.manifest.anchors {
-        let anchor = anchor(fragment, &insertion.anchor)?;
+        let anchor = anchor(fragment, &insertion.anchor, builder)?;
         // Une ancre reçoit du contenu de manifeste, pas une template : sans ce rendu,
         // une variable comme `{@ database_url_compose @}` atterrirait littéralement dans
         // le fichier plutôt que sa valeur.
@@ -168,8 +168,11 @@ pub(crate) fn actions(
 ///
 /// Un nom inconnu est une faute du manifeste : l'ignorer installerait une feature dont
 /// le montage manquerait, ce que seule la compilation du projet révélerait.
-fn anchor(fragment: &Fragment, name: &str) -> Result<Anchor, Error> {
-    anchors::ANCRES
+///
+/// L'ancre des features est résolue par repli, comme `generate` le fait : `src/lib.rs`
+/// si le projet visé en porte une, `src/main.rs` sinon.
+fn anchor(fragment: &Fragment, name: &str, builder: &plan::Builder) -> Result<Anchor, Error> {
+    let anchor = anchors::ANCRES
         .into_iter()
         .find(|anchor| anchor.name == name)
         .ok_or_else(|| Error::AncreInconnue {
@@ -180,7 +183,13 @@ fn anchor(fragment: &Fragment, name: &str) -> Result<Anchor, Error> {
                 .map(|anchor| anchor.name)
                 .collect::<Vec<_>>()
                 .join(", "),
-        })
+        })?;
+
+    if anchor.name == anchors::FEATURES.name && builder.exists("src/lib.rs")? {
+        Ok(anchor.in_file("src/lib.rs"))
+    } else {
+        Ok(anchor)
+    }
 }
 
 /// Découpe le contenu déclaré en lignes à insérer.

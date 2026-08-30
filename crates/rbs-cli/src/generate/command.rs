@@ -9,6 +9,7 @@ use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::anchors;
 use crate::git;
 use crate::metadata;
 use crate::plan;
@@ -112,6 +113,10 @@ pub(crate) enum Error {
     /// Le plan n'a pu être appliqué au projet.
     #[error("{0}")]
     Application(#[from] plan::application::Error),
+
+    /// Le manifeste du projet n'a pu être lu.
+    #[error("{0}")]
+    Metadata(#[from] metadata::Error),
 
     /// Une ou plusieurs cibles de relation sont introuvables dans le projet.
     #[error("{}", .0.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n"))]
@@ -217,12 +222,16 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         });
     }
 
+    // Le seed rejoint l'entité par la bibliothèque du projet, nommée d'après son paquet :
+    // Cargo remplace les tirets par des soulignés pour en faire un identifiant Rust.
+    let crate_name = metadata::package_name(&root.join("Cargo.toml"))?.replace('-', "_");
+
     // Une référence requise rend l'entité non semable : un seed engendré échouerait à
     // chaque lancement sur la contrainte de clé étrangère, faute de ligne cible connue.
     let seedable = seed::is_seedable(&feature);
     let seed_skipped = (options.complete && !seedable).then(|| unseedable_reference(&feature));
 
-    let (mut files, migration) = render(&feature, options.complete, seedable)?;
+    let (mut files, migration) = render(&feature, options.complete, seedable, &crate_name)?;
 
     // Après le rendu et avant le plan : le plan porte le contenu exact qui sera écrit,
     // et c'est lui que `--dry-run` montre.
@@ -241,12 +250,16 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         }
     }
 
+    // Résolue avant le builder, qui prend `root` par valeur : sur un projet antérieur à
+    // ce jalon, dépourvu de bibliothèque, l'ancre reste dans `src/main.rs`.
+    let features_anchor = anchors::resolve_features(&root);
+
     let mut builder = plan::Builder::new(root);
     for (path, content) in &files {
         builder.create(path, content)?;
     }
 
-    let mut montages = mount::pour(&module);
+    let mut montages = mount::pour(&module, features_anchor);
     if let Some(migration) = &migration {
         montages.extend(mount::for_migration(migration));
     }
@@ -374,6 +387,7 @@ fn render(
     feature: &Feature,
     complete: bool,
     seedable: bool,
+    crate_name: &str,
 ) -> Result<(Vec<File>, Option<String>), Error> {
     let module = feature.module();
     let dans = |name: &str| format!("src/{module}/{name}");
@@ -394,7 +408,10 @@ fn render(
     if complete && seedable {
         // Hors du répertoire de la feature : le seed appartient au binaire qui l'applique,
         // et non au module que le routeur monte.
-        files.push((format!("src/seeds/{module}.rs"), seed::render(feature)));
+        files.push((
+            format!("src/seeds/{module}.rs"),
+            seed::render(feature, crate_name),
+        ));
     }
 
     let mut rendus = Vec::with_capacity(files.len() + 1);
@@ -662,7 +679,7 @@ mod tests {
         run(&options(&root, "articles", Some("title:string"), true))
             .expect("la génération doit aboutir");
 
-        assert!(read(&root.join("src/main.rs")).contains("mod articles;"));
+        assert!(read(&root.join("src/lib.rs")).contains("pub mod articles;"));
         assert!(read(&root.join("src/router.rs")).contains(".merge(crate::articles::routes())"));
         assert!(read(&root.join("src/openapi.rs")).contains("crate::articles::controller::list,"));
 
@@ -974,7 +991,7 @@ mod tests {
             !root.join("src/articles").is_dir(),
             "des fichiers ont été écrits malgré l'ancre absente"
         );
-        assert!(!read(&root.join("src/main.rs")).contains("mod articles;"));
+        assert!(!read(&root.join("src/lib.rs")).contains("mod articles;"));
     }
 
     /// Ce que rbs écrit doit rester défaisable par un `git checkout` : il ne peut donc pas
@@ -1049,6 +1066,33 @@ mod tests {
             cible.contains("impl Related<crate::posts::model::Entity> for Entity {"),
             "{cible}"
         );
+    }
+
+    /// Garde-fou contre la rechute : le binaire des seeds rejoignait autrefois l'entité
+    /// par `#[path = "../<feature>/model.rs"]`, une racine de crate distincte qui ne
+    /// voyait pas le côté inverse qu'une relation écrit dans le modèle d'une autre
+    /// feature — la cause exacte du défaut que la bibliothèque du projet corrige. Une
+    /// relation entre deux entités semables est le cas qui le déclenchait.
+    #[test]
+    fn no_generated_file_reaches_another_module_through_a_path_attribute() {
+        let (_parent, root) = project();
+        run(&options(&root, "users", Some("email:string:unique"), true))
+            .expect("users doit se générer");
+        run(&options(
+            &root,
+            "posts",
+            Some("title:string,author:references:users"),
+            true,
+        ))
+        .expect("posts doit se générer");
+
+        for (path, content) in fingerprint(&root) {
+            assert!(
+                !content.contains("#[path"),
+                "{} rejoint un module par `#[path]` :\n{content}",
+                path.display()
+            );
+        }
     }
 
     /// Le trou trouvé en relecture d'une tâche antérieure : `generate feature` écrit un
@@ -1228,6 +1272,43 @@ mod tests {
                 "carnets",
                 "--fields",
                 "title:string,email:string:unique,views:int,published:bool,published_at:datetime",
+            ],
+        ] {
+            Command::cargo_bin("rbs")
+                .expect("le binaire rbs doit être compilé")
+                .current_dir(project.root())
+                .args(&arguments)
+                .assert()
+                .success();
+        }
+
+        project.compile();
+    }
+
+    /// Le critère qui manquait au lot précédent : un projet portant une relation compile
+    /// réellement. Le binaire des seeds rejoignait autrefois l'entité par `#[path]`, une
+    /// racine de crate distincte qui ne voit pas le côté inverse qu'une relation écrit
+    /// dans le modèle de sa cible — `cargo build` échouait sur `bin "seed"` dès qu'une
+    /// relation existait. La bibliothèque du projet supprime cette racine séparée.
+    #[test]
+    #[ignore = "compile un projet Axum + SeaORM complet"]
+    fn a_project_with_a_relation_compiles_its_two_binaries() {
+        let project = bench::Project::fresh();
+
+        for arguments in [
+            vec![
+                "generate",
+                "crud",
+                "users",
+                "--fields",
+                "email:string:unique",
+            ],
+            vec![
+                "generate",
+                "crud",
+                "posts",
+                "--fields",
+                "title:string,author:references:users",
             ],
         ] {
             Command::cargo_bin("rbs")

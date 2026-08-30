@@ -283,7 +283,7 @@ mod tests {
     ///
     /// `docker-compose.yml` en fait partie : la source les rend tous, et c'est `rbs new`
     /// qui l'écarte pour un projet qui n'a rien à monter.
-    const DESTINATIONS: [&str; 17] = [
+    const DESTINATIONS: [&str; 18] = [
         ".env",
         ".env.example",
         ".gitignore",
@@ -296,6 +296,7 @@ mod tests {
         "migration/src/main.rs",
         "src/health/controller.rs",
         "src/health/mod.rs",
+        "src/lib.rs",
         "src/main.rs",
         "src/openapi.rs",
         "src/router.rs",
@@ -375,15 +376,15 @@ mod tests {
     }
 
     #[test]
-    fn the_features_anchor_follows_the_skeleton_modules_in_main() {
-        let source = read(&Path::new(RACINE).join("src/main.rs.jinja"));
+    fn the_features_anchor_follows_the_skeleton_modules_in_the_library() {
+        let source = read(&Path::new(RACINE).join("src/lib.rs.jinja"));
 
         let modules = source
-            .find("mod state;")
+            .find("pub mod state;")
             .expect("les modules du squelette doivent être déclarés");
         let anchor = source
             .find("// <rbs:features>")
-            .expect("main.rs doit porter l'ancre des features");
+            .expect("lib.rs doit porter l'ancre des features");
 
         assert!(
             modules < anchor,
@@ -394,6 +395,14 @@ mod tests {
     #[test]
     fn each_anchor_is_opened_then_closed_in_its_file() {
         for anchor in crate::anchors::ANCRES {
+            // L'ancre des features vise `src/lib.rs` depuis ce jalon : c'est là que le
+            // squelette la rend, `src/main.rs` n'étant qu'un repli pour un projet plus
+            // ancien, sans bibliothèque.
+            let anchor = if anchor.name == crate::anchors::FEATURES.name {
+                anchor.in_file("src/lib.rs")
+            } else {
+                anchor
+            };
             let relatif = format!("{}.jinja", anchor.file);
             let chemin = Path::new(RACINE).join(&relatif);
 
