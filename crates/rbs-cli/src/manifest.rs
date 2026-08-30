@@ -110,6 +110,12 @@ pub(crate) struct DeclaredVariable {
     pub key: String,
     pub value: String,
     pub comment: Option<String>,
+    /// La variable porte un secret propre à chaque installation.
+    ///
+    /// `value` reste l'exemple versionné, que `doctor` compare au `.env` pour dire si le
+    /// développeur l'a remplacé ; c'est le `.env`, gitignoré, qui reçoit la valeur tirée.
+    #[serde(default)]
+    pub secret: bool,
 }
 
 /// Ce qui peut empêcher de lire un manifeste.

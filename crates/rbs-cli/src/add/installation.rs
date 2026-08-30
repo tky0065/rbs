@@ -13,14 +13,21 @@ use crate::generate::mount;
 use crate::manifest::Manifest;
 use crate::metadata;
 use crate::plan;
+use crate::secret;
 use crate::template::Renderer;
 use crate::templates;
 
 /// Où les variables d'environnement d'un fragment sont déclarées.
 ///
-/// C'est `.env.example` et non `.env` : le second porte les secrets réels du développeur,
-/// que rbs n'a pas à toucher.
-const FICHIER_ENV: &str = ".env.example";
+/// Versionné, il ne porte que des valeurs à remplacer : c'est la référence à laquelle
+/// `doctor` compare le `.env` du développeur.
+const FICHIER_EXEMPLE: &str = ".env.example";
+
+/// Le fichier d'environnement du projet, gitignoré.
+///
+/// Seule une variable déclarée `secret` y descend, et avec une valeur tirée au hasard :
+/// un secret qu'un exemple publié suffirait à deviner n'en est pas un.
+const FICHIER_ENV: &str = ".env";
 
 /// Le fragment tel que l'installation le voit.
 pub(crate) struct Fragment<'a> {
@@ -154,9 +161,26 @@ pub(crate) fn actions(
 
     for variable in &fragment.manifest.env {
         builder.add_variable(
-            FICHIER_ENV,
+            FICHIER_EXEMPLE,
             &variable.key,
             &variable.value,
+            variable.comment.as_deref(),
+        )?;
+
+        if !variable.secret {
+            continue;
+        }
+
+        // Un projet dont le `.env` a été supprimé n'a pas à voir `add` échouer : le
+        // fichier est gitignoré, le reposer ne coûte rien et ne perd rien.
+        if !builder.exists(FICHIER_ENV)? {
+            builder.create(FICHIER_ENV, "")?;
+        }
+
+        builder.add_variable(
+            FICHIER_ENV,
+            &variable.key,
+            &secret::tire_au_hasard(),
             variable.comment.as_deref(),
         )?;
     }
@@ -374,6 +398,11 @@ axum = \"0.8\"
          [[env]]\nkey = \"RBS_AUTH__SECRET\"\nvalue = \"changez-moi\"\n\
          comment = \"Secret de signature HS256, au moins 32 octets\"\n";
 
+    /// Le même fragment, sa variable marquée comme portant un secret.
+    const PATCHS_SECRET: &str = "[feature]\ndescription = \"auth\"\n\n\
+         [[env]]\nkey = \"RBS_AUTH__SECRET\"\nvalue = \"changez-moi\"\nsecret = true\n\
+         comment = \"Secret de signature HS256, au moins 32 octets\"\n";
+
     /// Pose les fichiers du projet que les patchs viseront.
     fn avec(root: &Path, files: &[(&str, &str)]) {
         for (path, content) in files {
@@ -511,6 +540,82 @@ axum = \"0.8\"
                 file.after
             );
         }
+    }
+
+    /// Le critère de la tâche : l'exemple versionné garde son placeholder, le `.env` reçoit
+    /// une valeur qui n'est pas celle-là.
+    #[test]
+    fn a_secret_variable_reaches_the_env_with_a_drawn_value() {
+        let project = TempDir::new().expect("répertoire temporaire créable");
+        avec(
+            project.path(),
+            &[
+                (".env", "RBS_ENV=development\n"),
+                (".env.example", "RBS_ENV=development\n"),
+            ],
+        );
+
+        let (_, plan) =
+            plan_for(project.path(), PATCHS_SECRET, &[]).expect("le plan doit se calculer");
+
+        let exemple = projected(&plan, ".env.example");
+        assert!(
+            exemple.contains("RBS_AUTH__SECRET=changez-moi"),
+            "l'exemple versionné doit garder son placeholder :\n{exemple}"
+        );
+
+        let env = projected(&plan, ".env");
+        let paires = crate::dotenv::parse(env);
+        let tire = crate::dotenv::value(&paires, "RBS_AUTH__SECRET")
+            .expect("le .env doit porter la variable");
+        assert_eq!(tire.len(), 64, "{env}");
+        assert_ne!(tire, "changez-moi", "{env}");
+    }
+
+    /// Le critère de la tâche : un secret déjà en place n'est jamais écrasé.
+    #[test]
+    fn an_existing_secret_is_left_untouched() {
+        let project = TempDir::new().expect("répertoire temporaire créable");
+        avec(
+            project.path(),
+            &[
+                (".env", "RBS_AUTH__SECRET=le-mien\n"),
+                (".env.example", "RBS_ENV=development\n"),
+            ],
+        );
+
+        let (_, plan) =
+            plan_for(project.path(), PATCHS_SECRET, &[]).expect("le plan doit se calculer");
+
+        let env = projected(&plan, ".env");
+        assert_eq!(
+            crate::dotenv::value(&crate::dotenv::parse(env), "RBS_AUTH__SECRET"),
+            Some("le-mien"),
+            "{env}"
+        );
+    }
+
+    /// Sans le marqueur, rien ne change pour les six autres fragments.
+    #[test]
+    fn a_plain_variable_never_reaches_the_env() {
+        let project = TempDir::new().expect("répertoire temporaire créable");
+        avec(
+            project.path(),
+            &[
+                ("Cargo.toml", CARGO),
+                ("config/default.toml", "[server]\nport = 8080\n"),
+                (".env", "RBS_ENV=development\n"),
+                (".env.example", "RBS_DATABASE__URL=postgres://\n"),
+            ],
+        );
+
+        let (_, plan) = plan_for(project.path(), PATCHS, &[]).expect("le plan doit se calculer");
+
+        assert!(
+            !plan.files().iter().any(|file| file.path == ".env"),
+            "le .env n'a pas à être touché : {:?}",
+            plan.files().iter().map(|f| &f.path).collect::<Vec<_>>()
+        );
     }
 
     /// Un fragment qui n'apporte que des crates tierces, versions figées comme le veut le
