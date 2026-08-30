@@ -63,12 +63,22 @@ fn parse_line(line: &str) -> Option<(String, String)> {
 /// Le `#` ne coupe que précédé d'un blanc, ou en tête de valeur : un mot de passe
 /// `s3#cret` se ferait sinon tronquer en silence. Entre guillemets il est littéral, et
 /// seul ce qui suit le guillemet fermant tombe — c'est `unquote` qui dénude ensuite.
+///
+/// Un guillemet précédé d'un `\` ne ferme pas la valeur, sans quoi une variable portant
+/// du JSON se tronquerait à son premier `\"`. La réserve ne compte pas les backslashes :
+/// après un backslash lui-même échappé (`\\"`), le guillemet est tenu à tort pour échappé
+/// et la valeur court jusqu'au bout de la ligne, commentaire compris.
 fn strip_comment(value: &str) -> &str {
     if let Some(quote) = value.chars().next().filter(|c| *c == '"' || *c == '\'') {
-        return match value[1..].find(quote) {
-            Some(fin) => &value[..fin + 2],
-            None => value,
-        };
+        let mut precedent = None;
+        for (index, caractere) in value.char_indices().skip(1) {
+            if caractere == quote && precedent != Some('\\') {
+                return &value[..index + caractere.len_utf8()];
+            }
+            precedent = Some(caractere);
+        }
+
+        return value;
     }
 
     let mut precedent = None;
@@ -212,6 +222,15 @@ mod tests {
         let paires = parse("PASSWORD=  # à remplir\n");
 
         assert_eq!(value(&paires, "PASSWORD"), Some(""));
+    }
+
+    /// Un guillemet échappé n'est pas le guillemet fermant : sans cette réserve, toute
+    /// valeur portant du JSON se ferait tronquer au premier `\"`.
+    #[test]
+    fn an_escaped_quote_does_not_close_the_value() {
+        let paires = parse("A=\"{\\\"k\\\":1}\" # une configuration\n");
+
+        assert_eq!(value(&paires, "A"), Some("{\\\"k\\\":1}"));
     }
 
     /// Un guillemet ouvert et jamais fermé ne fait pas disparaître la valeur.
