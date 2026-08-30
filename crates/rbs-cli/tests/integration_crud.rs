@@ -8,7 +8,7 @@
 use assert_cmd::Command;
 use tempfile::TempDir;
 use testcontainers::core::wait::LogWaitStrategy;
-use testcontainers::core::{IntoContainerPort, WaitFor};
+use testcontainers::core::{ExecCommand, IntoContainerPort, WaitFor};
 use testcontainers::runners::SyncRunner;
 use testcontainers::{GenericImage, ImageExt};
 
@@ -113,6 +113,89 @@ fn a_generated_crud_migrates_and_passes_its_tests_against_postgresql() {
         .args(["doctor"])
         .assert()
         .success();
+}
+
+/// L'ordre d'application ne s'éprouve que contre une vraie base : un `cargo build` ne dit
+/// rien d'une clé étrangère qui référencerait une table pas encore créée. `users` est
+/// générée avant `posts`, comme l'inverse écrit dans son modèle l'exige — et c'est cet
+/// ordre-là, celui des migrations, que ce test met à l'épreuve.
+#[test]
+#[ignore = "démarre PostgreSQL et compile la crate migration d'un projet Axum + SeaORM complet"]
+fn a_relation_migrates_its_foreign_key_in_the_right_order() {
+    let postgres = common::start_postgres();
+    let url = common::url_of(&postgres);
+
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+
+    rbs(parent.path())
+        .args([
+            "new",
+            "demo-api",
+            "--database-url",
+            &url,
+            "--core-path",
+            common::noyau()
+                .to_str()
+                .expect("chemin du noyau représentable"),
+            "--yes",
+        ])
+        .assert()
+        .success();
+
+    let projet = parent.path().join("demo-api");
+
+    rbs(&projet)
+        .args([
+            "generate",
+            "crud",
+            "users",
+            "--fields",
+            "email:string:unique",
+        ])
+        .assert()
+        .success();
+
+    rbs(&projet)
+        .args([
+            "generate",
+            "crud",
+            "posts",
+            "--fields",
+            "title:string,author:references:users",
+        ])
+        .assert()
+        .success();
+
+    rbs(&projet)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .args(["migrate", "up"])
+        .assert()
+        .success();
+
+    // Le nom de la contrainte est celui que le gabarit de migration lui donne,
+    // déterministe (`fk_<table>_<colonne>`, et la colonne d'une référence est son nom
+    // suffixé de `_id`) : sa seule présence en base prouve à la fois que la migration de
+    // `posts` s'est appliquée et que celle de `users`, qu'elle référence, l'a précédée —
+    // une base qui l'aurait refusée n'aurait laissé aucune contrainte à trouver.
+    let mut resultat = postgres
+        .exec(ExecCommand::new([
+            "psql",
+            "-U",
+            common::UTILISATEUR,
+            "-d",
+            common::BASE,
+            "-tAc",
+            "select 1 from pg_constraint where conname = 'fk_posts_author_id'",
+        ]))
+        .expect("psql doit pouvoir s'exécuter dans le conteneur");
+    let sortie = String::from_utf8(resultat.stdout_to_vec().expect("la sortie de psql se lit"))
+        .expect("psql rend de l'utf-8");
+
+    assert_eq!(
+        sortie.trim(),
+        "1",
+        "la contrainte fk_posts_author est absente de la base :\n{sortie}"
+    );
 }
 
 /// Le binaire livré, lancé depuis `repertoire`.
