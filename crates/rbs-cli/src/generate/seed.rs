@@ -24,7 +24,13 @@ const LIGNES: usize = 2;
 ///
 /// `crate_name` est celui de la bibliothèque du projet : le seed est un binaire distinct
 /// de celui de l'application, et rejoint l'entité par ce chemin plutôt que par `#[path]`.
-pub(crate) fn render(feature: &Feature, crate_name: &str) -> Result<String, minijinja::Error> {
+/// Il vaut `None` sur un projet engendré avant que le squelette ne porte une bibliothèque,
+/// où ce chemin ne mène nulle part : le seed y reprend alors la forme `#[path]`, seule que
+/// le projet puisse compiler.
+pub(crate) fn render(
+    feature: &Feature,
+    crate_name: Option<&str>,
+) -> Result<String, minijinja::Error> {
     let lignes: Vec<Vec<SeedField>> = (1..=LIGNES)
         .map(|rang| {
             feature
@@ -126,6 +132,10 @@ mod tests {
                           note:float,published:bool,auteur_id:uuid,published_at:datetime";
 
     fn seed(name: &str, fields: &str) -> String {
+        seed_of(name, fields, Some("demo_api"))
+    }
+
+    fn seed_of(name: &str, fields: &str, crate_name: Option<&str>) -> String {
         let entities = [crate::generate::entities::Entity {
             table: "users".to_string(),
             module_path: "crate::auth::model::user".to_string(),
@@ -134,7 +144,7 @@ mod tests {
         let mut parsed = fields::parse(fields).expect("les champs du test doivent être valides");
         crate::generate::relations::resolve(&mut parsed, &entities, name)
             .expect("les cibles du test doivent se résoudre");
-        render(&Feature::fresh(name, parsed), "demo_api").expect("le seed doit se rendre")
+        render(&Feature::fresh(name, parsed), crate_name).expect("le seed doit se rendre")
     }
 
     #[test]
@@ -144,6 +154,24 @@ mod tests {
         assert!(
             rendered.contains("use demo_api::articles::model;"),
             "l'entité doit être rejointe par la bibliothèque du projet :\n{rendered}"
+        );
+        assert!(!rendered.contains("#[path"), "{rendered}");
+    }
+
+    /// Un projet engendré avant que le squelette ne porte une bibliothèque : le chemin de
+    /// crate n'y mène nulle part, et le seed ne compilerait pas. `#[path]` y reste la
+    /// seule façon d'atteindre l'entité depuis le binaire des seeds.
+    #[test]
+    fn without_a_library_the_entity_is_reached_by_a_path_attribute() {
+        let rendered = seed_of("articles", CHAMPS, None);
+
+        assert!(
+            rendered.contains("#[path = \"../articles/model.rs\"]\nmod model;"),
+            "{rendered}"
+        );
+        assert!(
+            !rendered.contains("use demo_api::"),
+            "aucune bibliothèque à rejoindre :\n{rendered}"
         );
     }
 

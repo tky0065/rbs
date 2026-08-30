@@ -201,6 +201,14 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let context = context! {
         project_name => nom_projet.clone(),
         crate_name => crate_name.clone(),
+        // Par où le binaire principal atteint un module de feature : la bibliothèque du
+        // projet, ou `crate::` sur un projet engendré avant qu'elle n'existe, où ces
+        // modules vivent dans le binaire lui-même.
+        crate_path => if root.join("src/lib.rs").exists() {
+            crate_name.clone()
+        } else {
+            "crate".to_string()
+        },
         database => database.name(),
         database_a_un_serveur => database.a_un_serveur(),
         database_url_compose => match connexion.as_ref() {

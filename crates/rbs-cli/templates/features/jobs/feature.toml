@@ -36,9 +36,13 @@ content = "pub mod jobs;"
 # Le worker vit dans le processus de l'API, et non dans un binaire à part : c'est ce qui
 # donne à un job l'`AppState` du projet, donc le mailer, le cache et le stockage que les
 # autres fragments y déposent.
+#
+# `crate_path` et non `crate_name` : `src/main.rs` atteint la feature par la bibliothèque
+# du projet quand il y en a une, et par `crate::` sur un projet engendré avant qu'elle
+# n'existe, où les modules de feature vivent dans le binaire lui-même.
 [[anchors]]
 anchor  = "startup"
-content = "{@ crate_name @}::jobs::worker::spawn(state.clone());"
+content = "{@ crate_path @}::jobs::worker::spawn(state.clone());"
 
 [migration]
 source = "migration.rs.jinja"

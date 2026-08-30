@@ -223,15 +223,23 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     }
 
     // Le seed rejoint l'entité par la bibliothèque du projet, nommée d'après son paquet :
-    // Cargo remplace les tirets par des soulignés pour en faire un identifiant Rust.
-    let crate_name = metadata::package_name(&root.join("Cargo.toml"))?.replace('-', "_");
+    // Cargo remplace les tirets par des soulignés pour en faire un identifiant Rust. Un
+    // projet antérieur à ce jalon n'en a pas, et le seed y reprend la forme `#[path]`.
+    let crate_name = root
+        .join("src/lib.rs")
+        .exists()
+        .then(|| {
+            metadata::package_name(&root.join("Cargo.toml")).map(|name| name.replace('-', "_"))
+        })
+        .transpose()?;
 
     // Une référence requise rend l'entité non semable : un seed engendré échouerait à
     // chaque lancement sur la contrainte de clé étrangère, faute de ligne cible connue.
     let seedable = seed::is_seedable(&feature);
     let seed_skipped = (options.complete && !seedable).then(|| unseedable_reference(&feature));
 
-    let (mut files, migration) = render(&feature, options.complete, seedable, &crate_name)?;
+    let (mut files, migration) =
+        render(&feature, options.complete, seedable, crate_name.as_deref())?;
 
     // Après le rendu et avant le plan : le plan porte le contenu exact qui sera écrit,
     // et c'est lui que `--dry-run` montre.
@@ -388,7 +396,7 @@ fn render(
     feature: &Feature,
     complete: bool,
     seedable: bool,
-    crate_name: &str,
+    crate_name: Option<&str>,
 ) -> Result<(Vec<File>, Option<String>), Error> {
     let module = feature.module();
     let dans = |name: &str| format!("src/{module}/{name}");
@@ -1074,9 +1082,18 @@ mod tests {
     /// voyait pas le côté inverse qu'une relation écrit dans le modèle d'une autre
     /// feature — la cause exacte du défaut que la bibliothèque du projet corrige. Une
     /// relation entre deux entités semables est le cas qui le déclenchait.
+    ///
+    /// L'interdit ne vaut que pour un projet **portant** une bibliothèque : sans elle, le
+    /// chemin de crate ne mène nulle part, et `#[path]` redevient la seule façon pour le
+    /// binaire des seeds d'atteindre l'entité. Un tel projet n'a de toute façon pas de
+    /// relation à voir — c'est précisément pourquoi il n'a pas de bibliothèque.
     #[test]
-    fn no_generated_file_reaches_another_module_through_a_path_attribute() {
+    fn a_project_with_a_library_reaches_no_module_through_a_path_attribute() {
         let (_parent, root) = project();
+        assert!(
+            root.join("src/lib.rs").exists(),
+            "le garde-fou ne vaut que sur un projet qui porte une bibliothèque"
+        );
         run(&options(&root, "users", Some("email:string:unique"), true))
             .expect("users doit se générer");
         run(&options(
@@ -1440,5 +1457,57 @@ mod tests {
         );
 
         project.compile();
+    }
+
+    /// Le parc engendré avant que le squelette ne porte une bibliothèque : une commande
+    /// lancée aujourd'hui dans un tel projet doit continuer à produire du code qui
+    /// compile. Le seed y visait `<crate>::<feature>::model`, un chemin qui ne mène nulle
+    /// part, et le fragment `jobs` détachait son worker par le même chemin.
+    #[test]
+    #[ignore = "compile un projet Axum + SeaORM complet"]
+    fn a_project_without_a_library_still_gets_code_that_compiles() {
+        let project = bench::Project::fresh();
+        drop_the_library(project.root());
+
+        project.rbs_ok(&["add", "jobs", "--yes"]);
+        project.rbs_ok(&["generate", "crud", "labels", "--fields", "caption:string"]);
+
+        let seed = read(&project.root().join("src/seeds/labels.rs"));
+        assert!(
+            seed.contains(r#"#[path = "../labels/model.rs"]"#),
+            "sans bibliothèque, le seed rejoint l'entité par son chemin :\n{seed}"
+        );
+
+        let main = read(&project.root().join("src/main.rs"));
+        assert!(
+            main.contains("crate::jobs::worker::spawn(state.clone());"),
+            "le worker se détache par `crate::`, faute de bibliothèque :\n{main}"
+        );
+
+        project.compile();
+    }
+
+    /// Ramène le projet à la forme qu'il avait avant que le squelette ne porte une
+    /// bibliothèque : les modules de feature vivaient dans le binaire, déclarés sous
+    /// l'ancre `<rbs:features>` de `src/main.rs`.
+    fn drop_the_library(root: &Path) {
+        fs::remove_file(root.join("src/lib.rs")).expect("la bibliothèque s'efface");
+
+        let crate_name = crate::metadata::package_name(&root.join("Cargo.toml"))
+            .expect("le manifeste se lit")
+            .replace('-', "_");
+        let main = root.join("src/main.rs");
+        let source = read(&main);
+        let rewritten = source.replace(
+            &format!("use {crate_name}::{{router, state}};\n"),
+            "mod health;\nmod openapi;\nmod router;\nmod state;\n\
+             // <rbs:features>\n// </rbs:features>\n",
+        );
+
+        assert_ne!(
+            rewritten, source,
+            "le préambule du binaire doit avoir été réécrit"
+        );
+        fs::write(&main, rewritten).expect("l'écriture aboutit");
     }
 }
