@@ -10,6 +10,12 @@
 // arrivent aux tâches suivantes, qui appelleront ces fonctions.
 #![allow(dead_code)]
 
+use std::path::Path;
+
+use crate::anchors;
+use crate::lang::Lang;
+use crate::metadata;
+
 /// Zone du mode d'emploi, propriété de rbs, versionnée.
 pub(crate) const GUIDE: &str = "guide";
 
@@ -132,9 +138,211 @@ fn splice(
     )
 }
 
+/// Le module du squelette, qui n'est pas une entité engendrée.
+const SQUELETTE: &str = "health";
+
+/// L'état du projet, tel que la zone `rbs:inventory` le porte.
+///
+/// Les fragments et les entités partagent une seule liste dans le manifeste : c'est le
+/// catalogue des fragments qui les sépare, et non une marque dans les métadonnées — un
+/// projet dont le CLI apprendrait un nouveau fragment doit reclasser les anciens sans
+/// qu'on ait à réécrire son manifeste.
+pub(crate) fn inventory(root: &Path, lang: Lang) -> Result<String, metadata::Error> {
+    let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
+    let catalogue = crate::templates::feature_names(None);
+
+    let (fragments, entites): (Vec<&String>, Vec<&String>) = metadonnees
+        .features
+        .iter()
+        .filter(|feature| feature.as_str() != SQUELETTE)
+        // `partition` sur un itérateur de `&String` passe un `&&String` : le
+        // déréférencement est ce que `Vec::contains` attend.
+        .partition(|feature| catalogue.contains(*feature));
+
+    let ancres = present_anchors(root);
+
+    Ok(match lang {
+        Lang::Fr => format!(
+            "- rbs {} · base {}\n\
+             - Fragments installés : {}\n\
+             - Entités engendrées : {}\n\
+             - Ancres du projet : {}",
+            metadonnees.version,
+            metadonnees.database.name(),
+            enumerate(&fragments, "aucun"),
+            enumerate(&entites, "aucune"),
+            ancres.join(", "),
+        ),
+        Lang::En => format!(
+            "- rbs {} · {} database\n\
+             - Fragments installed: {}\n\
+             - Generated entities: {}\n\
+             - Project anchors: {}",
+            metadonnees.version,
+            metadonnees.database.name(),
+            enumerate(&fragments, "none"),
+            enumerate(&entites, "none"),
+            ancres.join(", "),
+        ),
+    })
+}
+
+/// Les ancres que le projet porte réellement, chacune avec son fichier.
+///
+/// L'ancre des features se résout par repli — `src/lib.rs` ou `src/main.rs` selon l'âge du
+/// projet — et une ancre optionnelle dont le fichier est absent n'est pas listée : un
+/// projet SQLite n'a pas de compose, et n'a pas à passer pour incomplet.
+fn present_anchors(root: &Path) -> Vec<String> {
+    anchors::ANCRES
+        .iter()
+        .map(|anchor| {
+            if anchor.name == anchors::FEATURES.name {
+                anchors::resolve_features(root)
+            } else {
+                anchor.clone()
+            }
+        })
+        .filter(|anchor| !anchor.optional || root.join(anchor.file.as_ref()).exists())
+        .map(|anchor| format!("{} ({})", anchor.name, anchor.file))
+        .collect()
+}
+
+/// Une liste, ou le mot qui dit qu'elle est vide.
+fn enumerate(noms: &[&String], vide: &str) -> String {
+    if noms.is_empty() {
+        return vide.to_string();
+    }
+
+    noms.iter()
+        .map(|nom| nom.as_str())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::lang::Lang;
+    use std::path::PathBuf;
+    use tempfile::TempDir;
+
+    /// Un projet neuf, créé sans passer par le binaire.
+    fn project(features: Vec<String>) -> (TempDir, PathBuf) {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = crate::new::create(
+            &crate::new::Options {
+                name: "demo-api".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
+                database: Default::default(),
+                features,
+                core_path: None,
+                template_dir: None,
+                lang: Lang::Fr,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        (parent, project.root)
+    }
+
+    #[test]
+    fn the_inventory_names_the_version_and_the_database() {
+        let (_parent, root) = project(Vec::new());
+
+        let rendu = inventory(&root, Lang::Fr).expect("le projet est lisible");
+
+        assert!(rendu.contains(env!("CARGO_PKG_VERSION")), "{rendu}");
+        assert!(rendu.contains("postgres"), "{rendu}");
+    }
+
+    /// Un fragment et une entité se distinguent par le catalogue des fragments : le
+    /// manifeste, lui, les met dans une seule liste.
+    #[test]
+    fn a_fragment_and_an_entity_are_told_apart() {
+        let (_parent, root) = project(vec!["redis".to_string()]);
+        let manifest = root.join("Cargo.toml");
+        let source = std::fs::read_to_string(&manifest).expect("manifeste lisible");
+        let patched = crate::metadata::record_feature(&source, "articles", "Cargo.toml")
+            .expect("le manifeste accepte la feature")
+            .expect("la feature n'y est pas encore");
+        std::fs::write(&manifest, patched).expect("manifeste réécrit");
+
+        let rendu = inventory(&root, Lang::Fr).expect("le projet est lisible");
+
+        let fragments = rendu
+            .lines()
+            .find(|line| line.contains("Fragments"))
+            .expect("la ligne des fragments est rendue");
+        let entites = rendu
+            .lines()
+            .find(|line| line.contains("Entités"))
+            .expect("la ligne des entités est rendue");
+
+        assert!(
+            fragments.contains("redis") && !fragments.contains("articles"),
+            "{fragments}"
+        );
+        assert!(
+            entites.contains("articles") && !entites.contains("redis"),
+            "{entites}"
+        );
+    }
+
+    /// `health` est le module du squelette, non une entité engendrée : le compter parmi
+    /// elles ferait croire à un CRUD que personne n'a demandé.
+    #[test]
+    fn the_health_module_is_not_counted_as_an_entity() {
+        let (_parent, root) = project(Vec::new());
+
+        let rendu = inventory(&root, Lang::Fr).expect("le projet est lisible");
+
+        assert!(!rendu.contains("health"), "{rendu}");
+    }
+
+    /// Une liste vide se dit, elle ne se tait pas : une ligne absente se lit comme une
+    /// information manquante.
+    #[test]
+    fn an_empty_list_is_said_rather_than_omitted() {
+        let (_parent, root) = project(Vec::new());
+
+        let rendu = inventory(&root, Lang::Fr).expect("le projet est lisible");
+
+        assert!(rendu.contains("aucun"), "{rendu}");
+    }
+
+    /// L'ancre des features vit dans `src/lib.rs` depuis que le projet engendré porte une
+    /// bibliothèque : l'inventaire doit nommer le fichier réel, non celui du registre.
+    #[test]
+    fn the_features_anchor_is_named_where_the_project_actually_carries_it() {
+        let (_parent, root) = project(Vec::new());
+
+        let rendu = inventory(&root, Lang::Fr).expect("le projet est lisible");
+
+        assert!(rendu.contains("features (src/lib.rs)"), "{rendu}");
+    }
+
+    /// Un projet SQLite n'a pas de compose : réclamer l'ancre `services` le ferait passer
+    /// pour incomplet.
+    #[test]
+    fn an_optional_anchor_whose_file_is_absent_is_not_listed() {
+        let (_parent, root) = project(Vec::new());
+        std::fs::remove_file(root.join("docker-compose.yml")).ok();
+
+        let rendu = inventory(&root, Lang::Fr).expect("le projet est lisible");
+
+        assert!(!rendu.contains("services"), "{rendu}");
+    }
+
+    #[test]
+    fn the_english_inventory_uses_english_labels() {
+        let (_parent, root) = project(Vec::new());
+
+        let rendu = inventory(&root, Lang::En).expect("le projet est lisible");
+
+        assert!(rendu.contains("Fragments installed"), "{rendu}");
+        assert!(!rendu.contains("Fragments installés"), "{rendu}");
+    }
 
     const DOCUMENT: &str = "# blog\n\n\
         <!-- rbs:guide 1.1.0 -->\nancien guide\n<!-- /rbs:guide -->\n\n\
