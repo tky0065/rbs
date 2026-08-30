@@ -17,6 +17,7 @@ mod new;
 mod notes;
 mod plan;
 mod prompts;
+mod secret;
 mod seed;
 mod template;
 mod templates;

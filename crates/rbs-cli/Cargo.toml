@@ -19,6 +19,7 @@ console.workspace = true
 include_dir.workspace = true
 inquire.workspace = true
 minijinja.workspace = true
+rand.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
