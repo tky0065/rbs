@@ -77,7 +77,7 @@ l'utilisateur tout ce qu'il voudra lire ou modifier. Avant d'ajouter quoi que ce
 **Architecture par feature, avec dépendance unidirectionnelle stricte :**
 
 ```
-features/<nom>/  mod · model · dto · repository · service · controller
+src/<nom>/  mod · model · dto · repository · service · controller
 controller → service → repository → model
 ```
 
