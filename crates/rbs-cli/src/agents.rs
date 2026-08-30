@@ -336,15 +336,12 @@ pub(crate) fn inventory_of(
 pub(crate) fn refresh(
     builder: &mut crate::plan::Builder,
     root: &Path,
+    metadonnees: &metadata::Metadata,
     ajoutee: Option<&str>,
 ) -> Result<Option<MissingZone>, crate::plan::Error> {
-    let Ok(metadonnees) = metadata::read(&root.join("Cargo.toml")) else {
-        return Ok(None);
-    };
-
     let mut features = metadonnees.features.clone();
     if let Some(ajoutee) = ajoutee {
-        if !features.iter().any(|feature| feature == ajoutee) {
+        if !features.iter().any(|feature| feature.as_str() == ajoutee) {
             features.push(ajoutee.to_string());
         }
     }

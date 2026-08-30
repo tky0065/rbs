@@ -144,11 +144,16 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         .map_err(|source| access(&options.directory, source))?;
     let root = metadata::project_root(&start).ok_or(Error::PasUnProjet)?;
 
+    // Une seule lecture pour toute la fonction : son erreur se propage par `?` plutôt
+    // que d'être ré-tentée, et `agents::refresh` reçoit ces métadonnées au lieu de les
+    // relire elle-même.
+    let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
+
     // L'idempotence se juge sur `[package.metadata.rbs]`, et non sur la présence des
     // fichiers installés : la migration d'un fragment est horodatée, et un projet dont
     // le développeur a supprimé un fichier en recevrait une seconde, datée d'un autre
     // instant. Ce que `rbs add` a posé lui appartient ensuite.
-    if metadata::read(&root.join("Cargo.toml"))?
+    if metadonnees
         .features
         .iter()
         .any(|installee| installee == &options.feature)
@@ -182,7 +187,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let crate_name = nom_projet.replace('-', "_");
     // Le moteur vient du manifeste, seul endroit où le choix de `rbs new` a survécu : un
     // fragment posé six mois plus tard n'a plus les flags de la création.
-    let database = metadata::read(&root.join("Cargo.toml"))?.database;
+    let database = metadonnees.database;
 
     // L'URL du projet, non une valeur par défaut : le compose que le fragment engendre
     // doit se connecter à la base que le projet interroge, avec ses identifiants.
@@ -241,7 +246,8 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     // L'inventaire décrit le projet tel que ce plan le laissera : la feature vient d'y
     // être inscrite, et le manifeste du disque l'ignore encore.
-    let zone_manquante = crate::agents::refresh(&mut builder, &root, Some(&options.feature))?;
+    let zone_manquante =
+        crate::agents::refresh(&mut builder, &root, &metadonnees, Some(&options.feature))?;
 
     Ok(Planned {
         plan: builder.finir(),
