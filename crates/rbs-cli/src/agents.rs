@@ -304,6 +304,21 @@ pub(crate) fn inventory_of(
     root: &Path,
     lang: Lang,
 ) -> String {
+    let ancres = present_anchors(root, |file| root.join(file).exists());
+
+    inventory_with(features, version, database, lang, &ancres)
+}
+
+/// Le même, la liste des ancres déjà résolue.
+///
+/// Séparée pour `refresh`, dont les ancres se lisent dans le plan et non sur le disque.
+fn inventory_with(
+    features: &[String],
+    version: &str,
+    database: crate::database::Database,
+    lang: Lang,
+    ancres: &[String],
+) -> String {
     let catalogue = crate::templates::feature_names(None);
 
     let (fragments, entites): (Vec<&String>, Vec<&String>) = features
@@ -312,8 +327,6 @@ pub(crate) fn inventory_of(
         // `partition` sur un itérateur de `&String` passe un `&&String` : le
         // déréférencement est ce que `Vec::contains` attend.
         .partition(|feature| catalogue.contains(*feature));
-
-    let ancres = present_anchors(root);
 
     match lang {
         Lang::Fr => format!(
@@ -361,12 +374,18 @@ pub(crate) fn refresh(
         }
     }
 
-    let content = inventory_of(
+    // Les ancres se lisent dans le plan et non sur le disque : `rbs add docker` écrit le
+    // `docker-compose.yml` d'un projet qui n'en avait pas, et l'inventaire doit nommer
+    // l'ancre `services` que ce fichier apportera. Interrogé sur le disque, il l'omettait,
+    // et `rbs doctor` — qui relit le disque après écriture — la réclamait aussitôt.
+    let ancres = present_anchors(root, |file| builder.exists(file).unwrap_or(false));
+
+    let content = inventory_with(
         &features,
         &metadonnees.version,
         metadonnees.database,
-        root,
         metadonnees.lang,
+        &ancres,
     );
 
     match builder.replace_zone(FICHIER, INVENTORY, &content, None) {
@@ -384,7 +403,10 @@ pub(crate) fn refresh(
 /// L'ancre des features se résout par repli — `src/lib.rs` ou `src/main.rs` selon l'âge du
 /// projet — et une ancre optionnelle dont le fichier est absent n'est pas listée : un
 /// projet SQLite n'a pas de compose, et n'a pas à passer pour incomplet.
-fn present_anchors(root: &Path) -> Vec<String> {
+///
+/// `porte` dit si le projet a le fichier voulu : le disque pour un inventaire constaté,
+/// le plan pour celui qu'une commande s'apprête à écrire.
+fn present_anchors(root: &Path, porte: impl Fn(&str) -> bool) -> Vec<String> {
     anchors::ANCRES
         .iter()
         .map(|anchor| {
@@ -394,7 +416,7 @@ fn present_anchors(root: &Path) -> Vec<String> {
                 anchor.clone()
             }
         })
-        .filter(|anchor| !anchor.optional || root.join(anchor.file.as_ref()).exists())
+        .filter(|anchor| !anchor.optional || porte(anchor.file.as_ref()))
         .map(|anchor| format!("{} ({})", anchor.name, anchor.file))
         .collect()
 }

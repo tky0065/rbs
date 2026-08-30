@@ -517,6 +517,26 @@ mod tests {
         );
     }
 
+    /// L'inventaire décrit le projet tel que le plan le laissera, ancres comprises.
+    ///
+    /// Le fragment `docker` écrit le compose d'un projet qui n'en a pas, et c'est ce
+    /// fichier qui porte l'ancre `services`. Interrogé sur le disque, l'inventaire
+    /// l'omettait, quand `rbs doctor` — qui relit le disque après écriture — l'y attendait
+    /// aussitôt : la commande suivant `rbs new` rendait déjà un rapport rouge.
+    #[test]
+    fn installing_docker_on_a_project_without_a_compose_names_the_services_anchor() {
+        let (_parent, root) = project();
+        std::fs::remove_file(root.join("docker-compose.yml")).expect("le compose existe");
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let agents = projected(&planned, "AGENTS.md");
+
+        assert!(
+            agents.contains("services (docker-compose.yml)"),
+            "l'inventaire ignore l'ancre que ce plan apporte :\n{agents}"
+        );
+    }
+
     /// Un fichier de documentation supprimé ne doit pas empêcher d'installer une feature.
     #[test]
     fn a_missing_agents_file_does_not_stop_the_installation() {
