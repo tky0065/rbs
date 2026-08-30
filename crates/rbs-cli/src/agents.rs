@@ -186,7 +186,7 @@ pub(crate) fn guide(
             &template.source,
             minijinja::context! {
                 project_name => project,
-                ancres => anchor_list(),
+                ancres => anchor_list(lang),
             },
         )
         .map(|rendu| rendu.trim_matches('\n').to_string())
@@ -222,18 +222,33 @@ pub(crate) fn document(
 /// La liste des ancres du registre, rendue en markdown pour la template.
 ///
 /// Calculée et non recopiée : une ancre ajoutée au registre doit apparaître dans le guide
-/// sans que personne ait à y penser.
-fn anchor_list() -> String {
+/// sans que personne ait à y penser. Seuls les mots de liaison varient avec `lang` : un
+/// guide anglais truffé de « dans » et de « chaque entité » ferait douter de tout le
+/// reste du document.
+fn anchor_list(lang: Lang) -> String {
+    let relie = |anchor: &anchors::Anchor| match lang {
+        Lang::Fr => format!("- `<rbs:{}>` dans `{}`", anchor.name, anchor.file),
+        Lang::En => format!("- `<rbs:{}>` in `{}`", anchor.name, anchor.file),
+    };
+
     let registre = anchors::ANCRES
         .iter()
-        .map(|anchor| format!("- `<rbs:{}>` dans `{}`", anchor.name, anchor.file))
+        .map(relie)
         .collect::<Vec<_>>()
         .join("\n");
 
-    format!(
-        "{registre}\n- `<rbs:relations:<table>>` et `<rbs:related:<table>>` dans le modèle \
-         de chaque entité"
-    )
+    let relations = match lang {
+        Lang::Fr => {
+            "- `<rbs:relations:<table>>` et `<rbs:related:<table>>` dans le modèle de \
+             chaque entité"
+        }
+        Lang::En => {
+            "- `<rbs:relations:<table>>` and `<rbs:related:<table>>` in each entity's \
+             model"
+        }
+    };
+
+    format!("{registre}\n{relations}")
 }
 
 /// Le module du squelette, qui n'est pas une entité engendrée.
@@ -614,5 +629,19 @@ mod tests {
             rendu.ends_with('\n') && !rendu.ends_with("\n\n"),
             "{rendu:?}"
         );
+    }
+
+    /// Un guide à moitié traduit fait douter de tout le reste du document : la section
+    /// des ancres est calculée, et c'est par là que le français s'y était glissé.
+    #[test]
+    fn the_english_guide_carries_no_french_in_its_anchor_list() {
+        let rendu = guide(Lang::En, None, "demo-api").expect("le guide se rend");
+
+        for francais in [" dans `", " et `", "de chaque entité"] {
+            assert!(
+                !rendu.contains(francais),
+                "« {francais} » subsiste dans le guide anglais :\n{rendu}"
+            );
+        }
     }
 }
