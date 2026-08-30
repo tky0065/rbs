@@ -24,9 +24,11 @@ pub(crate) struct UnknownTarget {
 
 impl fmt::Display for UnknownTarget {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Le préfixe « erreur : » appartient à la couche d'affichage, qui le pose déjà :
+        // le porter ici aussi le double aux yeux de l'utilisateur.
         write!(
             f,
-            "erreur : relation « {} » — « {} » est introuvable dans ce projet\n        \
+            "relation « {} » — « {} » est introuvable dans ce projet\n        \
              → entités connues : {}",
             self.relation,
             self.target,
