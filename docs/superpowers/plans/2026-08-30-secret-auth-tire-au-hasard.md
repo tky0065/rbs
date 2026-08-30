@@ -30,7 +30,7 @@
 **Interfaces:**
 - Produces: `pub(crate) fn secret::tire_au_hasard() -> String` — 32 octets tirés du générateur système, rendus en 64 caractères hexadécimaux minuscules.
 
-- [ ] **Step 1: écrire le test qui échoue**
+- [x] **Step 1: écrire le test qui échoue**
 
 Dans `crates/rbs-cli/src/secret.rs`, sous le module d'implémentation :
 
@@ -58,12 +58,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: lancer le test et le voir échouer**
+- [x] **Step 2: lancer le test et le voir échouer**
 
 Run: `cargo test -p rbs-cli secret::`
 Expected: FAIL — le module `secret` n'existe pas encore / `tire_au_hasard` introuvable.
 
-- [ ] **Step 3: ajouter la dépendance**
+- [x] **Step 3: ajouter la dépendance**
 
 Dans `crates/rbs-cli/Cargo.toml`, `[dependencies]`, en gardant l'ordre alphabétique existant (`minijinja`, puis `rand`, puis `serde`) :
 
@@ -71,7 +71,7 @@ Dans `crates/rbs-cli/Cargo.toml`, `[dependencies]`, en gardant l'ordre alphabét
 rand.workspace = true
 ```
 
-- [ ] **Step 4: écrire l'implémentation minimale**
+- [x] **Step 4: écrire l'implémentation minimale**
 
 `crates/rbs-cli/src/secret.rs` :
 
@@ -110,12 +110,12 @@ pub(crate) fn tire_au_hasard() -> String {
 
 Puis dans `crates/rbs-cli/src/lib.rs`, déclarer `mod secret;` à sa place alphabétique parmi les autres `mod`.
 
-- [ ] **Step 5: lancer le test et le voir passer**
+- [x] **Step 5: lancer le test et le voir passer**
 
 Run: `cargo test -p rbs-cli secret::`
 Expected: PASS, 2 tests.
 
-- [ ] **Step 6: commit**
+- [x] **Step 6: commit**
 
 ```bash
 git add crates/rbs-cli/src/secret.rs crates/rbs-cli/src/lib.rs crates/rbs-cli/Cargo.toml Cargo.lock
@@ -135,7 +135,7 @@ git commit -m "feat(cli): tire un secret hexadécimal du générateur du systèm
 - Consumes: `secret::tire_au_hasard()` de la Task 1.
 - Produces: `manifest::DeclaredVariable.secret: bool` — `false` par défaut, donc les six autres fragments sont inchangés.
 
-- [ ] **Step 1: écrire les trois tests qui échouent**
+- [x] **Step 1: écrire les trois tests qui échouent**
 
 Dans le module `tests` d'`installation.rs`, ajouter à côté de `PATCHS` un second manifeste, puis les tests. Noter que `plan_for(root, manifeste, templates)` et les helpers `avec` / `projected` existent déjà dans ce module.
 
@@ -221,12 +221,12 @@ fn a_plain_variable_never_reaches_the_env() {
 }
 ```
 
-- [ ] **Step 2: lancer les tests et les voir échouer**
+- [x] **Step 2: lancer les tests et les voir échouer**
 
 Run: `cargo test -p rbs-cli add::installation::tests`
 Expected: FAIL — `unknown field 'secret'` refusé par `#[serde(deny_unknown_fields)]` sur `DeclaredVariable` (les deux premiers tests), le troisième passant déjà.
 
-- [ ] **Step 3: ajouter le champ au manifeste**
+- [x] **Step 3: ajouter le champ au manifeste**
 
 `crates/rbs-cli/src/manifest.rs`, dans `DeclaredVariable` :
 
@@ -244,7 +244,7 @@ pub(crate) struct DeclaredVariable {
 }
 ```
 
-- [ ] **Step 4: écrire dans le `.env`**
+- [x] **Step 4: écrire dans le `.env`**
 
 `crates/rbs-cli/src/add/installation.rs`. Remplacer les constantes `:19-23` :
 
@@ -294,12 +294,12 @@ for variable in &fragment.manifest.env {
 
 Ajouter `use crate::secret;` aux `use` du fichier, à sa place alphabétique.
 
-- [ ] **Step 5: lancer les tests et les voir passer**
+- [x] **Step 5: lancer les tests et les voir passer**
 
 Run: `cargo test -p rbs-cli add::installation::tests`
 Expected: PASS — y compris les tests préexistants `the_configuration_section_and_the_environment_variable_are_added` et `the_three_patches_are_no_ops_the_second_time`, que la constante `FICHIER_EXEMPLE` renommée ne doit pas avoir cassés.
 
-- [ ] **Step 6: commit**
+- [x] **Step 6: commit**
 
 ```bash
 git add crates/rbs-cli/src/manifest.rs crates/rbs-cli/src/add/installation.rs
@@ -320,7 +320,7 @@ git commit -m "feat(add): dépose la valeur des variables marquées secrètes da
 **Interfaces:**
 - Consumes: le champ `secret` de la Task 2.
 
-- [ ] **Step 1: marquer la variable du fragment**
+- [x] **Step 1: marquer la variable du fragment**
 
 `crates/rbs-cli/templates/features/auth/feature.toml` :
 
@@ -332,7 +332,7 @@ secret  = true
 comment = "Secret de signature HS256. 32 octets au moins, sans quoi le démarrage échoue."
 ```
 
-- [ ] **Step 2: adapter le conseil de fin d'installation**
+- [x] **Step 2: adapter le conseil de fin d'installation**
 
 `crates/rbs-cli/src/lib.rs`, bras `"auth"` de `fn suite` — l'ancien commentaire et l'ancien texte sont tous deux faux désormais :
 
@@ -342,22 +342,22 @@ comment = "Secret de signature HS256. 32 octets au moins, sans quoi le démarrag
 "auth" => Some("rbs migrate up"),
 ```
 
-- [ ] **Step 3: relire les deux commentaires devenus faux**
+- [x] **Step 3: relire les deux commentaires devenus faux**
 
 `crates/rbs-cli/src/lib.rs:608-612` et l'en-tête de module de `crates/rbs-cli/src/doctor/auth.rs:1-6` affirment tous deux qu'`add auth` n'écrit que dans `.env.example`. Les réécrire pour dire ce qui est vrai : le `.env` reçoit un secret tiré, l'exemple versionné garde son placeholder, et le contrôle de `doctor` sert désormais aux projets antérieurs à ce changement et aux `.env` recopiés à la main.
 
 **Ne pas toucher à la logique de `doctor/auth.rs`** : sa comparaison `.env` vs `.env.example` (`:68`) reste exactement le bon test, elle passe simplement au vert sur un projet neuf.
 
-- [ ] **Step 4: étendre le test d'`add/mod.rs`**
+- [x] **Step 4: étendre le test d'`add/mod.rs`**
 
 `crates/rbs-cli/src/add/mod.rs:698-713` vérifie que le secret est bien déclaré dans `.env.example`. Ce test reste vrai : le garder tel quel, et ajouter à sa suite l'assertion symétrique — le `.env` projeté porte `RBS_AUTH__SECRET` avec une valeur de 64 caractères différente de celle de l'exemple. Reprendre le helper `projected` du module.
 
-- [ ] **Step 5: lancer les tests**
+- [x] **Step 5: lancer les tests**
 
 Run: `cargo test -p rbs-cli`
 Expected: PASS. Si un test d'intégration `assert_cmd` capture la ligne « recopiez RBS_AUTH__SECRET… », mettre à jour son attendu — c'est la sortie réelle qui a changé, pas le test qui a tort.
 
-- [ ] **Step 6: commit**
+- [x] **Step 6: commit**
 
 ```bash
 git add crates/rbs-cli/templates/features/auth/feature.toml crates/rbs-cli/src/lib.rs crates/rbs-cli/src/doctor/auth.rs crates/rbs-cli/src/add/mod.rs
@@ -372,14 +372,14 @@ git commit -m "fix(auth): tire le secret de signature à l'installation au lieu 
 - Modify: `docs/docs/cli/new.md:264,281`, `docs/docs/cli/add.md:159,163`, `docs/docs/guides/auth.md:47,65`
 - Modify: les trois mêmes sous `docs/i18n/fr/docusaurus-plugin-content-docs/current/`
 
-- [ ] **Step 1: recenser ce qui ment**
+- [x] **Step 1: recenser ce qui ment**
 
 Run: `rg -n "RBS_AUTH__SECRET|recopiez RBS_AUTH__SECRET" docs/docs docs/i18n`
 Deux familles à corriger :
 1. les blocs de sortie capturés, qui affichent encore la ligne `recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up` ;
 2. le paragraphe de `guides/auth.md:65` — « The fragment writes `RBS_AUTH__SECRET` into `.env.example` — never into your `.env` » et son équivalent français — qui affirme maintenant l'inverse du binaire, ainsi que l'extrait de `.env` qui le suit.
 
-- [ ] **Step 2: régénérer la sortie plutôt que l'inventer**
+- [x] **Step 2: régénérer la sortie plutôt que l'inventer**
 
 Les blocs annoncent être capturés en lançant la commande. Bâtir le binaire puis lancer réellement `rbs new` / `rbs add auth` dans un répertoire temporaire, et recopier la sortie obtenue :
 
@@ -388,16 +388,16 @@ cargo build -p rbs-cli
 cd "$(mktemp -d)" && /chemin/vers/rs/target/debug/rbs new blog --with auth --yes
 ```
 
-- [ ] **Step 3: réécrire le paragraphe du guide**
+- [x] **Step 3: réécrire le paragraphe du guide**
 
 Dans `docs/docs/guides/auth.md` et sa version française, dire ce qui se passe : `add auth` tire le secret et l'écrit dans le `.env`, gitignoré ; `.env.example` garde un placeholder pour que le fichier versionné documente la variable sans la livrer ; un déploiement fournit sa propre valeur par l'environnement, et `rbs doctor` refuse un `.env` resté sur le placeholder. Garder la section « rotating the secret » (`:187`), qui reste juste.
 
-- [ ] **Step 4: vérifier la parité**
+- [x] **Step 4: vérifier la parité**
 
 Run: `node docs/parite.mjs` si le script existe, sinon comparer à la main que chaque fichier anglais modifié a son pendant français modifié.
 Expected: aucun écart nouveau.
 
-- [ ] **Step 5: commit**
+- [x] **Step 5: commit**
 
 ```bash
 git add docs/docs docs/i18n
@@ -408,7 +408,25 @@ git commit -m "docs: décrit le secret d'auth tiré à l'installation, en anglai
 
 ### Vérification finale (avant de rendre la main)
 
-- [ ] `cargo test --workspace` — lire la sortie, pas la supposer
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings`
-- [ ] `cargo fmt --all --check`
-- [ ] `rg -n "recopiez RBS_AUTH__SECRET" crates docs/docs docs/i18n` → aucun résultat
+- [x] `cargo test --workspace` — lire la sortie, pas la supposer
+- [x] `cargo clippy --workspace --all-targets -- -D warnings`
+- [x] `cargo fmt --all --check`
+- [x] `rg -n "recopiez RBS_AUTH__SECRET" crates docs/docs docs/i18n` → aucun résultat
+
+---
+
+### Écarts relevés à l'exécution
+
+- **Task 2, Step 1.** Le test `a_secret_variable_reaches_the_env_with_a_drawn_value` tel
+  qu'écrit ici ne compile pas : `dotenv::value` emprunte le `Vec` que `dotenv::parse`
+  rend, et le temporaire meurt en fin d'instruction (E0716). La paire est liée à un `let`
+  avant l'appel.
+- **Task 3, Step 4.** `add/mod.rs:698-713` est le test du mot de passe SMTP de `mail`, non
+  celui du secret d'`auth` — aucun test d'`add/mod.rs` ne portait sur `auth`. L'assertion
+  demandée a donc été écrite comme un test neuf,
+  `adding_auth_draws_the_signing_secret_into_the_env`.
+- **Une cinquième tâche, non prévue.** `tests/integration_examples.rs` compare
+  `examples/blog-auth` à une génération fraîche, fichier par fichier : le secret étant
+  tiré, aucun `.env` versionné ne pouvait plus correspondre. La comparaison masque
+  désormais la seule forme tirée — soixante-quatre hexadécimaux — et laisse le placeholder
+  de `.env.example` comparé caractère par caractère.
