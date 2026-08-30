@@ -188,6 +188,11 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         .map_err(|source| access(&options.directory, source))?;
     let root = metadata::project_root(&start).ok_or(Error::PasUnProjet)?;
 
+    // Une seule lecture pour toute la fonction : son erreur se propage par `?` plutôt que
+    // d'être ré-tentée, et `agents::refresh` reçoit ces métadonnées au lieu de les relire
+    // elle-même.
+    let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
+
     if !options.force {
         let modifies = git::modified_files(&root);
         if !modifies.is_empty() {
@@ -202,7 +207,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // `--has-many` ne génère rien : il répare le côté inverse d'une feature déjà
     // présente, et suit donc un chemin entièrement séparé du reste de la fonction.
     if !options.has_many.is_empty() {
-        return plan_repair(options, &root);
+        return plan_repair(options, &root, &metadonnees);
     }
 
     let mut fields =
@@ -285,9 +290,8 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     builder.patch(plan::PatchToml::InscrireFeature(module.clone()))?;
 
-    // Lue après le patch, jamais avant : l'inventaire doit nommer la feature que ce plan
-    // vient d'inscrire, que le manifeste du disque ignore encore.
-    let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
+    // L'inventaire décrit le projet tel que ce plan le laissera : c'est le `Some(&module)`
+    // qui l'y fait nommer la feature, le manifeste du disque l'ignorant encore.
     let zone_manquante = crate::agents::refresh(&mut builder, &root, &metadonnees, Some(&module))?;
 
     Ok(Planned {
@@ -310,7 +314,11 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 /// La feature réparée se cherche dans l'inventaire et non dans l'arborescence : une entité
 /// peut vivre ailleurs que sous le répertoire de son nom — `users` est nichée dans
 /// `src/auth/model.rs` — et la réclamer sous `src/users/` la déclarerait absente.
-fn plan_repair(options: &Options, root: &Path) -> Result<Planned, Error> {
+fn plan_repair(
+    options: &Options,
+    root: &Path,
+    metadonnees: &metadata::Metadata,
+) -> Result<Planned, Error> {
     let module = options.name.clone();
     let entities = entities::scan(root);
 
@@ -377,8 +385,7 @@ fn plan_repair(options: &Options, root: &Path) -> Result<Planned, Error> {
     // La réparation n'inscrit aucune feature nouvelle : l'inventaire est régénéré à
     // l'identique, et son action prend le statut « déjà fait » plutôt que de réécrire un
     // fichier conforme.
-    let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
-    let zone_manquante = crate::agents::refresh(&mut builder, root, &metadonnees, None)?;
+    let zone_manquante = crate::agents::refresh(&mut builder, root, metadonnees, None)?;
 
     Ok(Planned {
         plan: builder.finir(),
