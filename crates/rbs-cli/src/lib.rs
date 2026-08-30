@@ -434,6 +434,11 @@ fn upgrade(force: bool) -> Result<(), upgrade::Error> {
     ui::info(&format!("rbs {} → {}\n", planned.depuis, planned.vers));
     println!("{}", plan::render::plan(&planned.plan));
 
+    if let Some(zone) = &planned.zone_manquante {
+        ui::warn(&format!("{zone} — collez ce bloc pour la rétablir :"));
+        ui::info(&format!("\n{}", zone.block()));
+    }
+
     plan::application::apply(&planned.plan, force)?;
 
     ui::success(&format!("manifeste aligné sur rbs {}", planned.vers));

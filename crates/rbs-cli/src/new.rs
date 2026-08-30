@@ -207,12 +207,15 @@ pub fn create(options: &Options, parent: &Path) -> Result<Project, Error> {
     }
 
     // Après les features, non avant : l'inventaire lit le manifeste que chaque
-    // installation complète.
-    let agents = crate::agents::document(&root, options.lang, &options.name).inspect_err(|_| {
-        // Le répertoire n'existait pas avant la commande : le retirer entièrement ne peut
-        // rien emporter qui lui préexistait.
-        let _ = fs::remove_dir_all(&root);
-    })?;
+    // installation complète. Pour un projet neuf, la version qui écrit le guide est celle
+    // du CLI lui-même.
+    let agents =
+        crate::agents::document(&root, options.lang, &options.name, crate::agents::VERSION)
+            .inspect_err(|_| {
+                // Le répertoire n'existait pas avant la commande : le retirer entièrement
+                // ne peut rien emporter qui lui préexistait.
+                let _ = fs::remove_dir_all(&root);
+            })?;
 
     fs::write(root.join(crate::agents::FICHIER), agents).map_err(|source| {
         let path = root.join(crate::agents::FICHIER).display().to_string();

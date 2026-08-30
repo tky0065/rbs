@@ -1,8 +1,8 @@
 //! `rbs upgrade` joué par le binaire livré, sur un projet réel.
 //!
-//! Ni conteneur ni compilation du projet engendré : la commande ne lit et n'écrit qu'un
-//! `Cargo.toml`, et c'est précisément ce que ces tests vérifient — que rien d'autre du
-//! projet n'a bougé.
+//! Ni conteneur ni compilation du projet engendré : la commande ne lit et n'écrit que le
+//! `Cargo.toml` et les deux zones réservées de `AGENTS.md`, et c'est précisément ce que ces
+//! tests vérifient — que rien d'autre du projet n'a bougé.
 
 use std::fs;
 use std::path::Path;
@@ -142,6 +142,34 @@ fn the_note_of_the_jump_follows_the_alignment_or_says_it_is_missing() {
     } else {
         assert!(rendu.contains("aucune note de migration"), "{rendu}");
     }
+}
+
+/// Un projet mis à niveau reçoit le mode d'emploi de sa nouvelle version : sans cela,
+/// tout agent qui le lit travaille sur une documentation périmée.
+#[test]
+fn upgrading_rewrites_the_agents_guide() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+    dater(&projet, "0.0.1");
+
+    let agents = projet.join("AGENTS.md");
+    let vieilli = fs::read_to_string(&agents)
+        .expect("AGENTS.md est écrit")
+        .replace(
+            &format!("<!-- rbs:guide {CLI} -->"),
+            "<!-- rbs:guide 0.0.1 -->",
+        );
+    fs::write(&agents, vieilli).expect("l'écriture aboutit");
+    common::commiter(&projet, "initial");
+
+    rbs(&projet).arg("upgrade").assert().success();
+
+    let rendu = fs::read_to_string(&agents).expect("AGENTS.md est écrit");
+
+    assert!(
+        rendu.contains(&format!("<!-- rbs:guide {CLI} -->")),
+        "{rendu}"
+    );
 }
 
 /// Réécrit la version que `[package.metadata.rbs]` garde de la génération.

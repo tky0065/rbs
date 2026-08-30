@@ -193,22 +193,41 @@ pub(crate) fn guide(lang: Lang, root: &Path) -> Result<String, Error> {
 }
 
 /// Le fichier complet, prêt à être écrit : titre, guide, inventaire, place du développeur.
-pub(crate) fn document(root: &Path, lang: Lang, project: &str) -> Result<String, Error> {
+///
+/// `version` est celle à inscrire dans les deux zones — celle du CLI pour un projet neuf
+/// ([`new`](crate::new::create)), celle visée par la mise à niveau pour
+/// [`upgrade`](crate::upgrade) : jamais celle que le manifeste porte encore sur le disque,
+/// qui resterait celle d'avant la mise à niveau le temps d'une seconde passe.
+pub(crate) fn document(
+    root: &Path,
+    lang: Lang,
+    project: &str,
+    version: &str,
+) -> Result<String, Error> {
     let (mode_d_emploi, notes) = match lang {
         Lang::Fr => ("mode d'emploi pour agents", "## Notes du projet"),
         Lang::En => ("agent handbook", "## Project notes"),
     };
+
+    let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
+    let inventaire = inventory_of(
+        &metadonnees.features,
+        version,
+        metadonnees.database,
+        root,
+        lang,
+    );
 
     Ok(format!(
         "# {project} — {mode_d_emploi}\n\n\
          {}\n{}\n{}\n\n\
          {}\n{}\n{}\n\n\
          {notes}\n",
-        opening(GUIDE, Some(VERSION)),
+        opening(GUIDE, Some(version)),
         guide(lang, root)?,
         closing(GUIDE),
         opening(INVENTORY, None),
-        inventory(root, lang)?,
+        inventaire,
         closing(INVENTORY),
     ))
 }
@@ -717,7 +736,7 @@ mod tests {
     fn the_document_carries_both_zones_and_a_place_for_the_developer() {
         let (_parent, root) = project(Vec::new());
 
-        let rendu = document(&root, Lang::Fr, "demo-api").expect("le document se rend");
+        let rendu = document(&root, Lang::Fr, "demo-api", VERSION).expect("le document se rend");
 
         assert!(rendu.contains(&opening(GUIDE, Some(VERSION))), "{rendu}");
         assert!(rendu.contains(&closing(GUIDE)), "{rendu}");
@@ -736,7 +755,7 @@ mod tests {
     fn the_guide_and_the_inventory_agree_on_the_features_anchor_file() {
         let (_parent, root) = project(Vec::new());
 
-        let rendu = document(&root, Lang::Fr, "demo-api").expect("le document se rend");
+        let rendu = document(&root, Lang::Fr, "demo-api", VERSION).expect("le document se rend");
 
         let dans_le_guide = fichier_apres(&rendu, "<rbs:features>` dans `", '`');
         let dans_linventaire = fichier_apres(&rendu, "features (", ')');
@@ -767,7 +786,7 @@ mod tests {
     fn the_document_ends_with_a_single_newline() {
         let (_parent, root) = project(Vec::new());
 
-        let rendu = document(&root, Lang::Fr, "demo-api").expect("le document se rend");
+        let rendu = document(&root, Lang::Fr, "demo-api", VERSION).expect("le document se rend");
 
         assert!(
             rendu.ends_with('\n') && !rendu.ends_with("\n\n"),

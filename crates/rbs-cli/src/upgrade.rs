@@ -1,9 +1,12 @@
 //! `rbs upgrade` : le projet aligné sur la version du CLI, et rien d'autre.
 //!
-//! La commande n'écrit que dans `Cargo.toml`. Le reste du projet — contrôleurs,
-//! configuration, migrations — appartient au développeur dès que `rbs new` l'a posé : le
-//! re-rendre sur une version plus récente effacerait son travail sans qu'il l'ait demandé
-//! nommément.
+//! La commande n'écrit que dans `Cargo.toml` et dans les deux zones réservées de
+//! `AGENTS.md`. Le reste du projet — contrôleurs, configuration, migrations, et tout ce
+//! que le développeur écrit hors de ces zones — appartient au développeur dès que
+//! `rbs new` l'a posé : le re-rendre sur une version plus récente effacerait son travail
+//! sans qu'il l'ait demandé nommément. Le guide, lui, est du texte que rbs produit et
+//! versionne : un projet mis à niveau doit recevoir le mode d'emploi de sa nouvelle
+//! version, sans quoi tout agent qui le lit travaille sur une documentation périmée.
 //!
 //! La séquence est celle du projet — lire → planifier → vérifier → afficher → appliquer.
 //! La garde Git vient après le plan, et non avant : un projet déjà à jour n'a rien à
@@ -41,6 +44,8 @@ pub(crate) struct Planned {
     pub vers: String,
     /// Le projet porte déjà cette version : le plan n'écrit rien.
     pub deja_a_jour: bool,
+    /// La zone de l'`AGENTS.md` que le plan n'a pas pu réécrire, faute de la trouver.
+    pub zone_manquante: Option<crate::agents::MissingZone>,
 }
 
 /// Ce qui peut empêcher de mettre un projet à niveau.
@@ -93,6 +98,10 @@ pub(crate) enum Error {
     /// Le plan n'a pu être appliqué au projet.
     #[error("{0}")]
     Application(#[from] plan::application::Error),
+
+    /// Le guide n'a pas pu être rendu.
+    #[error(transparent)]
+    Agents(#[from] crate::agents::Error),
 }
 
 /// Calcule ce que la mise à niveau ferait au projet, sans rien écrire.
@@ -114,7 +123,8 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
         })?;
     let root = metadata::project_root(&start).ok_or(Error::PasUnProjet)?;
 
-    let depuis = metadata::read(&root.join("Cargo.toml"))?.version;
+    let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
+    let depuis = metadonnees.version.clone();
 
     if posterieure(&depuis, cli) {
         return Err(Error::CliAnterieur {
@@ -123,11 +133,54 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
         });
     }
 
+    let package = metadata::package_name(&root.join("Cargo.toml"))?;
+
     let mut builder = plan::Builder::new(root.clone());
     builder.patch(plan::PatchToml::AlignerSurVersion {
         dependency: NOYAU.to_string(),
         version: cli.to_string(),
     })?;
+
+    // `upgrade` est la seule commande qui recrée le fichier : sa mission est d'aligner le
+    // projet, et un guide absent est précisément ce qu'elle doit rétablir.
+    let zone_manquante = if builder.exists(crate::agents::FICHIER)? {
+        let corps = crate::agents::guide(metadonnees.lang, &root)?;
+        // L'inventaire porte la version *visée*, non celle que le manifeste porte encore
+        // sur le disque : la lire depuis là écrirait dans le guide la version d'avant la
+        // mise à niveau, et `rbs doctor` la déclarerait aussitôt périmée.
+        let inventaire = crate::agents::inventory_of(
+            &metadonnees.features,
+            cli,
+            metadonnees.database,
+            &root,
+            metadonnees.lang,
+        );
+
+        // Deux appels successifs, et non un chaînage : `builder.replace_zone(..).and_then(
+        // |_| builder.replace_zone(..))` prendrait deux emprunts mutables du builder dans
+        // une même expression, ce que le compilateur refuse.
+        let mut manquante = None;
+        for (zone, contenu, version) in [
+            (crate::agents::GUIDE, corps, Some(cli)),
+            (crate::agents::INVENTORY, inventaire, None),
+        ] {
+            match builder.replace_zone(crate::agents::FICHIER, zone, &contenu, version) {
+                Ok(()) => {}
+                Err(plan::Error::ZoneAbsente { zone: absente, .. }) => {
+                    manquante = Some(absente);
+                    break;
+                }
+                Err(autre) => return Err(autre.into()),
+            }
+        }
+
+        manquante
+    } else {
+        let document = crate::agents::document(&root, metadonnees.lang, &package, cli)?;
+        builder.create(crate::agents::FICHIER, &document)?;
+        None
+    };
+
     let plan = builder.finir();
 
     let deja_a_jour = plan
@@ -149,6 +202,7 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
         depuis,
         vers: cli.to_string(),
         deja_a_jour,
+        zone_manquante,
     })
 }
 
@@ -379,13 +433,19 @@ mod tests {
     }
 
     #[test]
-    fn nothing_but_the_manifest_is_touched() {
+    fn nothing_but_the_manifest_and_the_agents_zones_is_touched() {
         let (_parent, root) = project(None);
         commit(&root);
 
+        // `futur()` diffère de la version que le guide du projet porte déjà : contrairement
+        // au cas où le CLI met à niveau vers sa propre version, l'AGENTS.md a ici
+        // légitimement quelque chose à changer, en plus du manifeste.
         upgrade(&root, futur());
 
-        assert_eq!(git(&root, &["status", "--porcelain"]), " M Cargo.toml\n");
+        assert_eq!(
+            git(&root, &["status", "--porcelain"]),
+            " M AGENTS.md\n M Cargo.toml\n"
+        );
     }
 
     #[test]
@@ -441,5 +501,123 @@ mod tests {
         assert!(!posterieure("0.4.0", "1.0.0"));
         // Un numéro qu'on ne sait pas lire ne doit pas se déguiser en refus.
         assert!(!posterieure("maison", "1.0.0"));
+    }
+
+    /// Un projet mis à niveau doit recevoir le mode d'emploi de sa nouvelle version :
+    /// sinon tout agent qui le lit travaille sur une documentation périmée.
+    #[test]
+    fn upgrading_rewrites_the_guide_with_the_version_of_the_cli() {
+        let (_parent, root) = project(None);
+        let agents = root.join("AGENTS.md");
+        let vieilli = fs::read_to_string(&agents)
+            .expect("AGENTS.md est écrit")
+            .replace(
+                &crate::agents::opening(crate::agents::GUIDE, Some(crate::agents::VERSION)),
+                &crate::agents::opening(crate::agents::GUIDE, Some("0.9.0")),
+            );
+        fs::write(&agents, vieilli).expect("l'écriture aboutit");
+
+        let planned = plan_for_with(
+            &Options {
+                directory: root.clone(),
+                force: true,
+            },
+            "2.0.0",
+        )
+        .expect("le plan doit se calculer");
+
+        let projete = planned
+            .plan
+            .files()
+            .iter()
+            .find(|file| file.path == "AGENTS.md")
+            .expect("AGENTS.md est visé par le plan");
+
+        assert!(
+            projete.after.contains("<!-- rbs:guide 2.0.0 -->"),
+            "{}",
+            projete.after
+        );
+        assert!(!projete.after.contains("0.9.0"), "{}", projete.after);
+    }
+
+    /// Ce que le développeur écrit hors des zones lui appartient, mise à niveau comprise.
+    #[test]
+    fn upgrading_keeps_what_the_developer_wrote_outside_the_zones() {
+        let (_parent, root) = project(None);
+        let agents = root.join("AGENTS.md");
+        let augmente = format!(
+            "{}\n## Nos conventions à nous\n\nne jamais toucher au module facturation\n",
+            fs::read_to_string(&agents).expect("AGENTS.md est écrit")
+        );
+        fs::write(&agents, augmente).expect("l'écriture aboutit");
+
+        let planned = plan_for_with(
+            &Options {
+                directory: root.clone(),
+                force: true,
+            },
+            "2.0.0",
+        )
+        .expect("le plan doit se calculer");
+
+        let projete = planned
+            .plan
+            .files()
+            .iter()
+            .find(|file| file.path == "AGENTS.md")
+            .expect("AGENTS.md est visé par le plan");
+
+        assert!(
+            projete
+                .after
+                .contains("ne jamais toucher au module facturation"),
+            "{}",
+            projete.after
+        );
+    }
+
+    /// `upgrade` a mandat d'aligner le projet : un fichier supprimé se recrée, là où
+    /// `add` et `generate` passent leur chemin.
+    #[test]
+    fn upgrading_recreates_a_deleted_agents_file() {
+        let (_parent, root) = project(None);
+        fs::remove_file(root.join("AGENTS.md")).expect("le fichier existe");
+
+        let planned = plan_for_with(
+            &Options {
+                directory: root.clone(),
+                force: true,
+            },
+            "2.0.0",
+        )
+        .expect("le plan doit se calculer");
+
+        assert!(
+            planned
+                .plan
+                .files()
+                .iter()
+                .any(|file| file.path == "AGENTS.md"),
+            "le plan ne recrée pas AGENTS.md"
+        );
+    }
+
+    /// Un projet déjà à jour ne doit rien écrire : c'est ce qui fait dire « rien à faire »
+    /// à la commande.
+    #[test]
+    fn a_project_already_up_to_date_plans_nothing_on_the_agents_file() {
+        let (_parent, root) = project(None);
+
+        let planned = plan_for_with(
+            &Options {
+                directory: root,
+                force: true,
+            },
+            crate::agents::VERSION,
+        )
+        .expect("le plan doit se calculer");
+
+        assert!(planned.deja_a_jour, "{:?}", planned.plan.files());
     }
 }
