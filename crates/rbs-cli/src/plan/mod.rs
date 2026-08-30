@@ -123,6 +123,15 @@ pub(crate) enum Error {
         /// Chemin du manifeste, relatif à la racine.
         path: String,
     },
+    /// Le fichier ne porte pas la zone que l'action visait.
+    #[allow(dead_code)] // Sans appelant avant `add`, `generate` et `upgrade`.
+    #[error("{path} : {zone}")]
+    ZoneAbsente {
+        /// Chemin du fichier visé.
+        path: String,
+        /// La zone manquante, et le bloc qui la rétablit.
+        zone: crate::agents::MissingZone,
+    },
 }
 
 /// Accumule les actions d'un plan en calculant, pour chaque fichier, son contenu final.
@@ -194,6 +203,50 @@ impl Builder {
             effet: Effect::Inserer {
                 anchor,
                 lines: lines.to_vec(),
+            },
+            statut,
+        });
+
+        Ok(())
+    }
+
+    /// Planifie le remplacement du corps de `zone` dans `path`.
+    ///
+    /// `version` réécrit le marqueur d'ouverture : c'est ainsi que le guide porte la
+    /// version du CLI qui l'a produit.
+    ///
+    /// Comme une insertion, l'action compose avec ce qu'elle trouve : elle ne remplace
+    /// pas le fichier, et n'entre donc jamais en conflit.
+    #[allow(dead_code)] // Sans appelant avant `add`, `generate` et `upgrade`.
+    pub fn replace_zone(
+        &mut self,
+        path: &str,
+        zone: &str,
+        content: &str,
+        version: Option<&str>,
+    ) -> Result<(), Error> {
+        let states = self.states(path)?;
+        let courant = states.courant.ok_or_else(|| Error::FichierAbsent {
+            path: path.to_string(),
+        })?;
+
+        let after = match version {
+            Some(version) => crate::agents::replace_versioned(&courant, zone, content, version),
+            None => crate::agents::replace(&courant, zone, content),
+        }
+        .map_err(|zone| Error::ZoneAbsente {
+            path: path.to_string(),
+            zone,
+        })?;
+
+        let statut = combined_status(states.origin.as_deref(), &after);
+
+        self.project_onto(path, states.origin, after, statut);
+        self.actions.push(Action {
+            path: path.to_string(),
+            effet: Effect::RemplacerZone {
+                zone: zone.to_string(),
+                content: content.to_string(),
             },
             statut,
         });
@@ -1077,6 +1130,121 @@ mod tests {
             Some(second.files()[0].after.as_str()),
             "la seconde planification réécrirait le fichier"
         );
+    }
+
+    const AGENTS: &str = "# blog\n\n<!-- rbs:inventory -->\nvieux\n<!-- /rbs:inventory -->\n\n\
+                          ## Notes du projet\n\nà moi\n";
+
+    fn with_agents(project: &TempDir, source: &str) {
+        fs::write(project.path().join("AGENTS.md"), source).expect("AGENTS.md écrit");
+    }
+
+    #[test]
+    fn replacing_a_zone_is_todo_and_leaves_the_rest_intact() {
+        let project = project();
+        with_agents(&project, AGENTS);
+        let mut builder = Builder::new(project.path());
+
+        builder
+            .replace_zone("AGENTS.md", "inventory", "neuf", None)
+            .expect("la zone est présente");
+
+        let plan = builder.finir();
+        let file = plan.files().first().expect("une action a visé le fichier");
+
+        assert_eq!(file.statut, Status::AFaire);
+        assert!(file.after.contains("neuf"));
+        assert!(file.after.contains("## Notes du projet\n\nà moi\n"));
+    }
+
+    /// Le statut est ce qui permet à `upgrade` de dire « rien à faire » : une zone déjà
+    /// conforme ne doit pas se compter parmi les fichiers à écrire.
+    #[test]
+    fn replacing_a_zone_by_its_own_content_is_done() {
+        let project = project();
+        with_agents(&project, AGENTS);
+        let mut builder = Builder::new(project.path());
+
+        builder
+            .replace_zone("AGENTS.md", "inventory", "vieux", None)
+            .expect("la zone est présente");
+
+        assert_eq!(
+            builder
+                .finir()
+                .files()
+                .first()
+                .expect("un fichier visé")
+                .statut,
+            Status::DejaFait
+        );
+    }
+
+    /// Une zone remplacée ne remplace pas un fichier : elle ne peut pas entrer en
+    /// conflit, et ne doit donc jamais réclamer `--force`.
+    #[test]
+    fn replacing_a_zone_never_conflicts() {
+        let project = project();
+        with_agents(&project, AGENTS);
+        let mut builder = Builder::new(project.path());
+
+        builder
+            .replace_zone("AGENTS.md", "inventory", "neuf", None)
+            .expect("la zone est présente");
+
+        assert_ne!(
+            builder
+                .finir()
+                .files()
+                .first()
+                .expect("un fichier visé")
+                .statut,
+            Status::Conflit
+        );
+    }
+
+    #[test]
+    fn replacing_a_versioned_zone_rewrites_its_version() {
+        let project = project();
+        with_agents(
+            &project,
+            "# blog\n<!-- rbs:guide 1.0.0 -->\nvieux\n<!-- /rbs:guide -->\n",
+        );
+        let mut builder = Builder::new(project.path());
+
+        builder
+            .replace_zone("AGENTS.md", "guide", "neuf", Some("1.2.0"))
+            .expect("la zone est présente");
+
+        let plan = builder.finir();
+        let after = &plan.files().first().expect("un fichier visé").after;
+
+        assert!(after.contains("<!-- rbs:guide 1.2.0 -->"), "{after}");
+    }
+
+    #[test]
+    fn a_missing_zone_stops_the_planning_and_names_the_block_to_paste() {
+        let project = project();
+        with_agents(&project, "# blog\n");
+        let mut builder = Builder::new(project.path());
+
+        let error = builder
+            .replace_zone("AGENTS.md", "inventory", "neuf", None)
+            .expect_err("la zone manque");
+
+        assert!(error.to_string().contains("inventory"), "{error}");
+    }
+
+    #[test]
+    fn replacing_a_zone_of_a_missing_file_names_the_file() {
+        let project = project();
+        let mut builder = Builder::new(project.path());
+
+        let error = builder
+            .replace_zone("AGENTS.md", "inventory", "neuf", None)
+            .expect_err("le fichier manque");
+
+        assert!(error.to_string().contains("AGENTS.md"), "{error}");
     }
 
     #[test]

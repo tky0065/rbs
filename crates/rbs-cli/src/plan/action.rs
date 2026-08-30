@@ -41,6 +41,14 @@ pub(crate) enum Effect {
         /// Ce que la variable attend, en commentaire au-dessus d'elle.
         comment: Option<String>,
     },
+    /// Remplace le corps d'une zone délimitée, le reste du fichier intact.
+    #[allow(dead_code)] // Sans appelant avant `add`, `generate` et `upgrade`.
+    RemplacerZone {
+        /// Nom de la zone, tel qu'il paraît dans les marqueurs.
+        zone: String,
+        /// Nouveau corps.
+        content: String,
+    },
 }
 
 /// Les modifications qu'un plan sait faire à un `Cargo.toml`.
