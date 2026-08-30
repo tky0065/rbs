@@ -226,9 +226,14 @@ impl std::error::Error for Missing {}
 
 /// Insère `lines` dans `anchor`, juste avant sa balise fermante.
 ///
-/// Une ligne déjà présente dans l'ancre n'est pas réécrite, et le contenu qui s'y trouve
-/// déjà traverse l'insertion tel quel : le développeur a pu l'ordonner ou l'indenter à sa
-/// façon, et rien ici ne le sait mieux que lui.
+/// L'insertion est tout ou rien : `lines` forme une unité — la variante d'une relation et
+/// son attribut, les trois lignes d'un `impl Related`, le bloc d'un service compose — et
+/// n'est écrite que si l'ancre ne la porte pas déjà en entier, dans cet ordre et d'un
+/// seul tenant. Dédupliquer ligne à ligne amputait un bloc de celles qu'un bloc voisin
+/// avait déjà déposées : une accolade fermante, un `#[allow(…)]`, une clé `ports:`.
+///
+/// Le contenu déjà présent traverse l'insertion tel quel : le développeur a pu l'ordonner
+/// ou l'indenter à sa façon, et rien ici ne le sait mieux que lui.
 pub(crate) fn insert(source: &str, anchor: Anchor, lines: &[String]) -> Result<String, Missing> {
     // Fermeture appelée jusqu'à deux fois : sans le `.clone()`, `Missing { anchor }`
     // consommerait `anchor` dès le premier appel, empêchant le second.
@@ -243,11 +248,12 @@ pub(crate) fn insert(source: &str, anchor: Anchor, lines: &[String]) -> Result<S
         return Err(absente());
     }
 
-    let dedans = &source[opening..closing];
-    let ajouts: String = groups(lines)
-        .into_iter()
-        .filter(|groupe| !groupe.iter().all(|line| contains(dedans, line)))
-        .flatten()
+    if contains(&source[opening..closing], lines) {
+        return Ok(source.to_string());
+    }
+
+    let ajouts: String = lines
+        .iter()
         .map(|line| format!("{indentation}{line}\n"))
         .collect();
 
@@ -275,56 +281,6 @@ pub(crate) fn body(source: &str, anchor: Anchor) -> Option<&str> {
     Some(&source[apres_ouverture.min(closing)..closing])
 }
 
-/// Découpe les lignes à insérer en groupes indivisibles.
-///
-/// Une ligne d'attribut ou de commentaire ne vaut pas pour elle-même : elle qualifie la
-/// ligne qui la suit. Dédupliquer sans elle amputait un champ de son `#[allow(…)]` dès
-/// qu'un autre fragment en avait posé un, et laissait le champ orphelin.
-///
-/// Une clé YAML nue (`ports:`, sans valeur sur la ligne) qualifie de la même façon : deux
-/// fragments distincts sous l'ancre `services` peuvent tous deux ouvrir un `ports:`, et
-/// dérouler cette seule ligne comme groupe la ferait disparaître dès le second fragment,
-/// la trouvant déjà dans le bloc — orphelinant sa liste de ports comme du texte libre.
-///
-/// Les lignes autonomes — les chemins OpenAPI d'une feature — forment chacune leur
-/// groupe, et restent donc dédupliquées une à une.
-///
-/// **Limite à connaître avant d'y toucher** : la déduplication qui suit (`insert`, via
-/// `contains`) compare chaque ligne au texte déjà présent sous l'ancre, sans aucune notion
-/// de bloc ni de service porteur — un groupe d'une seule ligne autonome identique ailleurs
-/// dans l'ancre est vu comme déjà posé, où qu'il se trouve. Un futur fragment dont le
-/// healthcheck réutilise une valeur générique qu'un fragment antérieur a déjà déposée dans
-/// l'ancre — `interval: 2s`, `retries: 30` — la perdrait donc en silence : la ligne ne
-/// serait pas réinsérée dans le bloc du nouveau service, qui s'en trouverait incomplet
-/// sans qu'aucune commande n'échoue. Ne pas corriger ce prédicat pour cette raison seule :
-/// il documente une limite connue, pas un bogue à combler à l'aveugle.
-fn groups(lines: &[String]) -> Vec<Vec<&String>> {
-    let mut groups = Vec::new();
-    let mut courant = Vec::new();
-
-    for line in lines {
-        // `# ` : un commentaire YAML. `#[` et `//` : leurs homologues Rust. Une ligne qui
-        // ne porte qu'une clé (`ports:`) : son unique caractère de fin trahit l'absence de
-        // valeur inline. Les quatre qualifient la ligne suivante et ne valent pas pour
-        // elles-mêmes.
-        let qualifie = matches!(
-            line.trim_start().get(..2),
-            Some("#[") | Some("//") | Some("# ")
-        ) || line.trim_end().ends_with(':');
-        courant.push(line);
-
-        if !qualifie {
-            groups.push(std::mem::take(&mut courant));
-        }
-    }
-
-    if !courant.is_empty() {
-        groups.push(courant);
-    }
-
-    groups
-}
-
 /// Début de la ligne ne portant que `balise`, et l'indentation de cette ligne.
 ///
 /// La ligne doit ne porter qu'elle : une balise citée dans une chaîne — le bloc à recoller
@@ -343,11 +299,23 @@ fn line_of(source: &str, balise: &str) -> Option<(usize, String)> {
     None
 }
 
-/// `line` figure-t-elle déjà dans le bloc, à l'indentation près ?
-fn contains(block: &str, line: &str) -> bool {
-    block
-        .lines()
-        .any(|existante| existante.trim() == line.trim())
+/// `lines` figure-t-elle déjà dans le bloc, d'un seul tenant et à l'indentation près ?
+///
+/// La contiguïté est ce qui rend le prédicat sûr sur un bloc multiligne : deux blocs
+/// voisins partagent volontiers une ligne — une accolade fermante, un `#[allow(…)]`, une
+/// clé `ports:` — et chercher ces lignes séparément conclurait que le bloc entier est
+/// déjà posé.
+fn contains(block: &str, lines: &[String]) -> bool {
+    if lines.is_empty() {
+        return true;
+    }
+
+    let present: Vec<&str> = block.lines().map(str::trim).collect();
+    let cherchees: Vec<&str> = lines.iter().map(|line| line.trim()).collect();
+
+    present
+        .windows(cherchees.len())
+        .any(|fenetre| fenetre == cherchees.as_slice())
 }
 
 #[cfg(test)]
@@ -451,15 +419,61 @@ pub fn router(state: AppState) -> Router {
         assert_eq!(deux_fois, une_fois, "la seconde insertion a réécrit");
     }
 
+    /// Le cœur de la règle : une séquence n'est réputée posée que si l'ancre la porte en
+    /// entier. Une ligne commune à deux blocs ne suffit pas à tenir le second pour écrit.
     #[test]
-    fn only_the_missing_lines_are_added() {
+    fn a_sequence_only_partly_present_is_written_whole() {
         let une_fois = insert(ROUTEUR, ROUTES, &lines(&["deja()"])).expect("l'ancre est présente");
 
         let rendered = insert(&une_fois, ROUTES, &lines(&["deja()", "nouvelle()"]))
             .expect("l'ancre est présente");
 
-        assert_eq!(rendered.matches("deja()").count(), 1, "{rendered}");
+        assert_eq!(rendered.matches("deja()").count(), 2, "{rendered}");
         assert_eq!(rendered.matches("nouvelle()").count(), 1, "{rendered}");
+    }
+
+    /// Le défaut que la déduplication ligne à ligne laissait passer : les trois lignes
+    /// d'un `impl Related` n'en qualifient aucune, et l'accolade fermante du premier bloc
+    /// faisait passer celle du second pour déjà écrite — le fichier sortait avec un
+    /// délimiteur non refermé.
+    #[test]
+    fn a_second_block_sharing_a_closing_brace_keeps_its_own() {
+        let source = "\
+// <rbs:related>
+// </rbs:related>
+";
+        let premier = insert(
+            source,
+            RELATED,
+            &lines(&[
+                "impl Related<crate::profiles::model::Entity> for Entity {",
+                "    fn to() -> RelationDef {",
+                "        Relation::Profiles.def()",
+                "    }",
+                "}",
+            ]),
+        )
+        .expect("l'ancre est présente");
+
+        let second = insert(
+            &premier,
+            RELATED,
+            &lines(&[
+                "impl Related<crate::notes::model::Entity> for Entity {",
+                "    fn to() -> RelationDef {",
+                "        Relation::Notes.def()",
+                "    }",
+                "}",
+            ]),
+        )
+        .expect("l'ancre est présente");
+
+        assert_eq!(
+            second.matches('{').count(),
+            second.matches('}').count(),
+            "les délimiteurs ne s'équilibrent plus :\n{second}"
+        );
+        assert_eq!(second.matches("impl Related").count(), 2, "{second}");
     }
 
     /// Deux services YAML qui ouvrent chacun un `ports:` : le second ne doit pas perdre

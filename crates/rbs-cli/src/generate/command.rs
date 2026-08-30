@@ -1321,4 +1321,48 @@ mod tests {
 
         project.compile();
     }
+
+    /// Deux features distinctes visant une même cible : la seconde y pose un second `impl
+    /// Related`, dont l'accolade fermante passait pour déjà écrite — le modèle sortait
+    /// avec un délimiteur non refermé, et le projet ne compilait plus.
+    #[test]
+    #[ignore = "compile un projet Axum + SeaORM complet"]
+    fn two_features_pointing_at_one_target_leave_it_a_model_that_compiles() {
+        let project = bench::Project::fresh();
+        project.rbs_ok(&[
+            "generate",
+            "crud",
+            "owners",
+            "--fields",
+            "email:string:unique",
+        ]);
+        project.rbs_ok(&[
+            "generate",
+            "crud",
+            "badges",
+            "--fields",
+            "holder:references:owners:unique",
+        ]);
+        project.rbs_ok(&[
+            "generate",
+            "crud",
+            "stamps",
+            "--fields",
+            "issuer:references:owners:optional:nullify",
+        ]);
+
+        let model = read(&project.root().join("src/owners/model.rs"));
+        assert_eq!(
+            model.matches("impl Related<").count(),
+            2,
+            "les deux côtés inverses doivent être écrits :\n{model}"
+        );
+        assert_eq!(
+            model.matches('{').count(),
+            model.matches('}').count(),
+            "les délimiteurs du modèle ne s'équilibrent plus :\n{model}"
+        );
+
+        project.compile();
+    }
 }
