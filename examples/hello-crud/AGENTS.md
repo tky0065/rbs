@@ -51,7 +51,7 @@ Le CLI ne réécrit jamais d'AST : il insère dans des ancres en commentaires. N
 retirer, ne pas les réordonner, ne pas écrire à leur place quand une commande peut le
 faire.
 
-- `<rbs:features>` dans `src/main.rs`
+- `<rbs:features>` dans `src/lib.rs`
 - `<rbs:routes>` dans `src/router.rs`
 - `<rbs:openapi>` dans `src/openapi.rs`
 - `<rbs:migration_modules>` dans `migration/src/lib.rs`

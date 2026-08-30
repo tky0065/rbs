@@ -160,11 +160,12 @@ fn splice(
     )
 }
 
-/// Rend le corps de la zone du guide, dans la langue du projet.
+/// Rend le corps de la zone du guide, dans la langue et pour le projet donnés.
 ///
-/// Ne prend pas le nom du projet : aucun des deux gabarits ne l'emploie, seul le titre
-/// que compose `document` en a besoin.
-pub(crate) fn guide(lang: Lang) -> Result<String, Error> {
+/// `root` ne sert qu'à résoudre l'ancre des features par
+/// [`anchors::resolve_features`] : aucun gabarit n'emploie le nom du projet, seul le
+/// titre que compose `document` en a besoin.
+pub(crate) fn guide(lang: Lang, root: &Path) -> Result<String, Error> {
     let attendue = format!("{}.md", lang.name());
     let files = crate::templates::Source::agents()
         .files()
@@ -184,7 +185,7 @@ pub(crate) fn guide(lang: Lang) -> Result<String, Error> {
         .render(
             &template.source,
             minijinja::context! {
-                ancres => anchor_list(lang),
+                ancres => anchor_list(lang, root),
             },
         )
         .map(|rendu| rendu.trim_matches('\n').to_string())
@@ -204,7 +205,7 @@ pub(crate) fn document(root: &Path, lang: Lang, project: &str) -> Result<String,
          {}\n{}\n{}\n\n\
          {notes}\n",
         opening(GUIDE, Some(VERSION)),
-        guide(lang)?,
+        guide(lang, root)?,
         closing(GUIDE),
         opening(INVENTORY, None),
         inventory(root, lang)?,
@@ -218,7 +219,12 @@ pub(crate) fn document(root: &Path, lang: Lang, project: &str) -> Result<String,
 /// sans que personne ait à y penser. Seuls les mots de liaison varient avec `lang` : un
 /// guide anglais truffé de « dans » et de « chaque entité » ferait douter de tout le
 /// reste du document.
-fn anchor_list(lang: Lang) -> String {
+///
+/// L'ancre des features est résolue par [`anchors::resolve_features`], comme le fait déjà
+/// `present_anchors` pour l'inventaire : la prendre telle quelle dans le registre citerait
+/// `src/main.rs` sur un projet qui porte une bibliothèque, en contradiction avec
+/// l'inventaire du même document, qui lui dit vrai.
+fn anchor_list(lang: Lang, root: &Path) -> String {
     let relie = |anchor: &anchors::Anchor| match lang {
         Lang::Fr => format!("- `<rbs:{}>` dans `{}`", anchor.name, anchor.file),
         Lang::En => format!("- `<rbs:{}>` in `{}`", anchor.name, anchor.file),
@@ -226,7 +232,14 @@ fn anchor_list(lang: Lang) -> String {
 
     let registre = anchors::ANCRES
         .iter()
-        .map(relie)
+        .map(|anchor| {
+            if anchor.name == anchors::FEATURES.name {
+                anchors::resolve_features(root)
+            } else {
+                anchor.clone()
+            }
+        })
+        .map(|anchor| relie(&anchor))
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -545,8 +558,10 @@ mod tests {
     fn the_guide_names_every_subcommand_of_the_cli() {
         use clap::CommandFactory;
 
+        let racine = Path::new("/aucun-projet-ici");
+
         for lang in [Lang::Fr, Lang::En] {
-            let rendu = guide(lang).expect("le guide se rend");
+            let rendu = guide(lang, racine).expect("le guide se rend");
 
             for sous_commande in crate::cli::Cli::command().get_subcommands() {
                 // `help` est engendrée par clap lui-même : aucun guide n'a à la documenter.
@@ -567,8 +582,10 @@ mod tests {
     /// registre sans être écrite ici laisserait l'agent la piétiner.
     #[test]
     fn the_guide_names_every_anchor_of_the_registry() {
+        let racine = Path::new("/aucun-projet-ici");
+
         for lang in [Lang::Fr, Lang::En] {
-            let rendu = guide(lang).expect("le guide se rend");
+            let rendu = guide(lang, racine).expect("le guide se rend");
 
             for anchor in crate::anchors::ANCRES.iter() {
                 assert!(
@@ -584,8 +601,9 @@ mod tests {
     /// une section renommée ou déplacée d'une seule langue.
     #[test]
     fn each_language_carries_its_sections_in_order() {
+        let racine = Path::new("/aucun-projet-ici");
         let titres = |lang| {
-            guide(lang)
+            guide(lang, racine)
                 .expect("le guide se rend")
                 .lines()
                 .filter(|line| line.starts_with("## "))
@@ -633,6 +651,40 @@ mod tests {
         assert!(rendu.starts_with("# demo-api"), "{rendu}");
     }
 
+    /// Le guide décrit l'ancre `features` par son propre calcul, l'inventaire par
+    /// `present_anchors` : deux chemins vers la même information, qui doivent s'accorder.
+    /// Un projet engendré depuis le jalon de la bibliothèque porte `src/lib.rs`, et c'est
+    /// ce nom que les deux moitiés du document doivent citer — jamais `src/main.rs`, où
+    /// l'ancre a vécu avant ce jalon.
+    #[test]
+    fn the_guide_and_the_inventory_agree_on_the_features_anchor_file() {
+        let (_parent, root) = project(Vec::new());
+
+        let rendu = document(&root, Lang::Fr, "demo-api").expect("le document se rend");
+
+        let dans_le_guide = fichier_apres(&rendu, "<rbs:features>` dans `", '`');
+        let dans_linventaire = fichier_apres(&rendu, "features (", ')');
+
+        assert_eq!(
+            dans_le_guide, dans_linventaire,
+            "le guide et l'inventaire ne s'accordent pas sur l'ancre features :\n{rendu}"
+        );
+        assert_eq!(dans_le_guide, "src/lib.rs", "{rendu}");
+    }
+
+    /// Le chemin cité juste après `motif`, jusqu'au prochain `fin`.
+    fn fichier_apres<'a>(texte: &'a str, motif: &str, fin: char) -> &'a str {
+        let debut = texte
+            .find(motif)
+            .unwrap_or_else(|| panic!("`{motif}` absent du document :\n{texte}"))
+            + motif.len();
+        let longueur = texte[debut..]
+            .find(fin)
+            .unwrap_or_else(|| panic!("`{fin}` ne referme pas `{motif}` :\n{texte}"));
+
+        &texte[debut..debut + longueur]
+    }
+
     /// Le fichier est du markdown lu par des humains autant que par des agents : un
     /// document qui ne finit pas par une ligne vide fâche Git et les éditeurs.
     #[test]
@@ -651,7 +703,7 @@ mod tests {
     /// des ancres est calculée, et c'est par là que le français s'y était glissé.
     #[test]
     fn the_english_guide_carries_no_french_in_its_anchor_list() {
-        let rendu = guide(Lang::En).expect("le guide se rend");
+        let rendu = guide(Lang::En, Path::new("/aucun-projet-ici")).expect("le guide se rend");
 
         for francais in [" dans `", " et `", "de chaque entité"] {
             assert!(
