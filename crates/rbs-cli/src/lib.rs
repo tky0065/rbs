@@ -42,6 +42,7 @@ pub fn run() {
             database,
             with,
             core_path,
+            lang,
         } => {
             let resultat = create_project(
                 name,
@@ -51,6 +52,7 @@ pub fn run() {
                 core_path,
                 cli.template_dir,
                 cli.yes,
+                lang,
             );
 
             if let Err(error) = resultat {
@@ -152,6 +154,10 @@ pub fn run() {
     }
 }
 
+// Chaque paramètre est un flag de `rbs new` répercuté tel quel ; les regrouper en
+// structure déplacerait la question sans la résoudre, `new::Options` la portant déjà
+// deux lignes plus bas.
+#[allow(clippy::too_many_arguments)]
 fn create_project(
     name: String,
     database_url: Option<String>,
@@ -160,6 +166,7 @@ fn create_project(
     core_path: Option<PathBuf>,
     template_dir: Option<PathBuf>,
     yes: bool,
+    lang: Option<lang::Lang>,
 ) -> Result<(), Box<dyn Error>> {
     // Un `--with` absent laisse la question ouverte ; un `--with` vide n'existe pas.
     let features = (!with.is_empty()).then_some(with);
@@ -181,7 +188,7 @@ fn create_project(
             features: options.features,
             core_path,
             template_dir,
-            lang: crate::lang::Lang::Fr,
+            lang: lang.unwrap_or_else(|| lang::Lang::from_locale(locale().as_deref())),
         },
         &std::env::current_dir()?,
     )?;
@@ -219,6 +226,25 @@ fn create_project(
     ui::info(&format!("\n  cd {name}{demarrage}"));
 
     Ok(())
+}
+
+/// La locale de l'environnement, `LC_ALL` d'abord.
+fn locale() -> Option<String> {
+    locale_from(
+        std::env::var("LC_ALL").ok().as_deref(),
+        std::env::var("LANG").ok().as_deref(),
+    )
+}
+
+/// La même, les deux variables passées en paramètre.
+///
+/// Séparée pour que la précédence soit exerçable sans écrire dans l'environnement du
+/// processus de test, que les autres tests partagent.
+fn locale_from(lc_all: Option<&str>, lang: Option<&str>) -> Option<String> {
+    lc_all
+        .or(lang)
+        .filter(|locale| !locale.is_empty())
+        .map(str::to_owned)
 }
 
 /// Installe une feature dans le projet courant, plan affiché avant écriture.
@@ -558,5 +584,27 @@ mod tests {
             suite.contains("RBS_AUTH__SECRET") && suite.contains(".env"),
             "la suite ne dit pas où recopier le secret : {suite}"
         );
+    }
+
+    /// `LC_ALL` l'emporte sur `LANG`, comme partout ailleurs sous POSIX.
+    #[test]
+    fn lc_all_wins_over_lang() {
+        assert_eq!(
+            locale_from(Some("en_US.UTF-8"), Some("fr_FR.UTF-8")),
+            Some("en_US.UTF-8".to_string())
+        );
+    }
+
+    #[test]
+    fn lang_is_read_when_lc_all_is_absent() {
+        assert_eq!(
+            locale_from(None, Some("fr_FR.UTF-8")),
+            Some("fr_FR.UTF-8".to_string())
+        );
+    }
+
+    #[test]
+    fn an_environment_without_locale_gives_nothing() {
+        assert_eq!(locale_from(None, None), None);
     }
 }

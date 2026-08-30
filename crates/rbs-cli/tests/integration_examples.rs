@@ -175,6 +175,10 @@ fn generate(parent: &Path, example: &Exemple) -> PathBuf {
             example.database_url,
             "--core-path",
             noyau.to_str().expect("chemin du noyau représentable"),
+            // Les exemples commités portent `lang = "fr"` : sans ce flag, la comparaison
+            // dériverait selon la locale de la machine qui régénère la fixture.
+            "--lang",
+            "fr",
             "--yes",
         ])
         .assert()

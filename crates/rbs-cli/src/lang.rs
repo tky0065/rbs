@@ -38,7 +38,6 @@ impl Lang {
     ///
     /// Seul le préfixe est lu : une locale porte son territoire et son encodage
     /// (`fr_FR.UTF-8`), qu'une comparaison stricte manquerait.
-    #[allow(dead_code)]
     pub fn from_locale(locale: Option<&str>) -> Self {
         match locale {
             Some(locale) if locale.starts_with("fr") => Self::Fr,

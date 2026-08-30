@@ -46,6 +46,10 @@ pub enum Commands {
         /// Crate `rbs-core` locale à utiliser au lieu de la version publiée.
         #[arg(long, value_name = "CHEMIN")]
         core_path: Option<PathBuf>,
+
+        /// Langue de l'`AGENTS.md` engendré. À défaut, celle de l'environnement.
+        #[arg(long, value_name = "LANGUE")]
+        lang: Option<crate::lang::Lang>,
     },
 
     /// Ajoute une feature : auth, ci, docker, jobs, mail, redis, storage.
@@ -224,5 +228,28 @@ mod tests {
         let long = Cli::try_parse_from(["rbs", "generate", "crud", "users"]).unwrap();
 
         assert_eq!(court, long);
+    }
+
+    /// Le flag doit accepter les deux langues et rester absent par défaut : c'est cette
+    /// absence qui laisse la détection décider.
+    #[test]
+    fn the_language_flag_accepts_both_languages_and_defaults_to_none() {
+        let sans = Cli::try_parse_from(["rbs", "new", "blog"]).expect("commande valide");
+        let Commands::New { lang, .. } = sans.command else {
+            panic!("`new` attendue");
+        };
+        assert_eq!(lang, None);
+
+        let avec =
+            Cli::try_parse_from(["rbs", "new", "blog", "--lang", "en"]).expect("commande valide");
+        let Commands::New { lang, .. } = avec.command else {
+            panic!("`new` attendue");
+        };
+        assert_eq!(lang, Some(crate::lang::Lang::En));
+    }
+
+    #[test]
+    fn an_unknown_language_is_refused_by_the_parser() {
+        assert!(Cli::try_parse_from(["rbs", "new", "blog", "--lang", "de"]).is_err());
     }
 }

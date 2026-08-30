@@ -363,6 +363,36 @@ fn a_project_created_with_two_features_compiles() {
         .success();
 }
 
+/// Ce test n'ignore rien et ne compile pas le projet : `rbs new` écrit des fichiers, et
+/// c'est tout ce qu'il y a à regarder ici.
+#[test]
+fn the_manifest_records_the_language_asked_for() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+
+    Command::cargo_bin("rbs")
+        .expect("le binaire rbs doit être compilé")
+        .current_dir(parent.path())
+        .args([
+            "new",
+            "demo-api",
+            "--database-url",
+            "postgres://rbs:rbs@localhost:5432/demo_api",
+            "--lang",
+            "en",
+            "--yes",
+        ])
+        .assert()
+        .success();
+
+    let manifeste = fs::read_to_string(parent.path().join("demo-api/Cargo.toml"))
+        .expect("le manifeste est écrit");
+
+    assert!(
+        manifeste.contains(r#"lang = "en""#),
+        "le manifeste ne garde pas la langue demandée :\n{manifeste}"
+    );
+}
+
 /// Le binaire livré, lancé depuis `repertoire`.
 fn rbs(repertoire: impl AsRef<Path>) -> Command {
     let mut commande = Command::cargo_bin("rbs").expect("le binaire rbs doit être compilé");

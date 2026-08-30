@@ -24,7 +24,8 @@ Two commands, from the repository root:
 ```bash
 cargo run -p rbs-cli --bin rbs -- new hello-crud --yes \
   --core-path ./crates/rbs-core \
-  --database-url 'postgres://rbs:rbs@localhost:5432/hello_crud'
+  --database-url 'postgres://rbs:rbs@localhost:5432/hello_crud' \
+  --lang fr
 mv hello-crud examples/hello-crud
 cd examples/hello-crud && cargo run --manifest-path ../../Cargo.toml -p rbs-cli --bin rbs -- \
   generate crud articles --fields 'title:string,body:text,published:bool' --yes --force
@@ -38,7 +39,8 @@ without committing — hence the commit in the middle:
 ```bash
 cargo run -p rbs-cli --bin rbs -- new blog-auth --yes \
   --core-path ./crates/rbs-core \
-  --database-url 'postgres://rbs:rbs@localhost:5432/blog_auth'
+  --database-url 'postgres://rbs:rbs@localhost:5432/blog_auth' \
+  --lang fr
 cd blog-auth && git add -A && git commit -q -m 'projet neuf'
 cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add auth --yes
 cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
@@ -59,7 +61,8 @@ taken before **each** of them, not once for all three.
 ```bash
 cargo run -p rbs-cli --bin rbs -- new file-drop --yes \
   --core-path ./crates/rbs-core \
-  --database-url 'postgres://rbs:rbs@localhost:5432/file_drop'
+  --database-url 'postgres://rbs:rbs@localhost:5432/file_drop' \
+  --lang fr
 cd file-drop
 for f in redis mail storage; do
   git add -A && git commit -q -m "before $f"
@@ -87,7 +90,8 @@ earns the DTO's validation constraint; the rule matches the exact name as well a
 ```bash
 cargo run -p rbs-cli --bin rbs -- new newsletter-queue --yes \
   --core-path ./crates/rbs-core \
-  --database-url 'postgres://rbs:rbs@localhost:5432/newsletter_queue'
+  --database-url 'postgres://rbs:rbs@localhost:5432/newsletter_queue' \
+  --lang fr
 cd newsletter-queue
 for f in jobs mail; do
   git add -A && git commit -q -m "before $f"
