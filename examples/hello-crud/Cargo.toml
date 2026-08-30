@@ -13,6 +13,7 @@ default-run = "hello-crud"
 version = "1.1.0"
 features = ["health", "articles"]
 database = "postgres"
+lang = "fr"
 
 [[bin]]
 name = "hello-crud"
