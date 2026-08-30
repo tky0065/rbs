@@ -28,7 +28,7 @@
 **Interfaces:**
 - Produces: `fn strip_comment(value: &str) -> &str`, privée au module. Aucune API publique ne change : `parse`, `read` et `value` gardent leur signature.
 
-- [ ] **Step 1: écrire les tests qui échouent**
+- [x] **Step 1: écrire les tests qui échouent**
 
 Dans le module `tests` de `dotenv.rs`, à la suite des tests existants :
 
@@ -73,14 +73,14 @@ fn an_unclosed_quote_keeps_the_rest_of_the_line() {
 }
 ```
 
-- [ ] **Step 2: lancer les tests et les voir échouer**
+- [x] **Step 2: lancer les tests et les voir échouer**
 
 Run: `cargo test -p rbs-cli dotenv::`
 Expected: FAIL sur `a_trailing_comment_is_cut_from_the_value` (`"production # ne jamais semer"` au lieu de `"production"`), `a_quoted_value_keeps_its_hash_and_loses_what_follows` et `a_value_reduced_to_a_comment_is_empty`. Les deux autres passent déjà — c'est voulu : ils gardent le comportement qui doit survivre.
 
 **Lire la sortie et vérifier que l'échec est bien celui-là** avant d'écrire la moindre ligne d'implémentation.
 
-- [ ] **Step 3: écrire l'implémentation**
+- [x] **Step 3: écrire l'implémentation**
 
 Dans `crates/rbs-cli/src/dotenv.rs`, `parse_line` (`:55`) devient :
 
@@ -121,24 +121,24 @@ fn strip_comment(value: &str) -> &str {
 
 Note sur les indices : `fin` est un décalage en octets dans `value[1..]`, et un guillemet fait un octet — d'où `fin + 2` pour inclure le guillemet fermant. `char_indices` rend directement des décalages en octets valides.
 
-- [ ] **Step 4: lancer les tests et les voir passer**
+- [x] **Step 4: lancer les tests et les voir passer**
 
 Run: `cargo test -p rbs-cli dotenv::`
 Expected: PASS, tous les tests du module — dont les préexistants `the_surrounding_quotes_are_stripped` (`A="info,api=debug"`) et `only_the_first_equals_separates_the_key_from_the_value` (une URL avec `?opt=1`), qui prouvent qu'aucune valeur légitime n'a été rognée.
 
-- [ ] **Step 5: vérifier les consommateurs du parseur**
+- [x] **Step 5: vérifier les consommateurs du parseur**
 
 Run: `cargo test -p rbs-cli`
 Expected: PASS. `plan::text::add_variable` (`plan/text.rs:51`), `doctor::auth` (`:68`), `doctor::env` et `migrate::project_variables` lisent tous par ce parseur ; aucun ne doit régresser.
 
-- [ ] **Step 6: prouver le garde-fou de bout en bout**
+- [x] **Step 6: prouver le garde-fou de bout en bout**
 
 Ajouter au module `tests` de `crates/rbs-cli/src/seed.rs` un test qui pose un `.env` portant `RBS_ENV=production # ne jamais semer` et vérifie que `production(root, |_| None)` rend `true` — reprendre la fixture du module, `fn production` prend déjà l'environnement en paramètre pour être testable.
 
 Run: `cargo test -p rbs-cli seed::`
 Expected: PASS.
 
-- [ ] **Step 7: commit**
+- [x] **Step 7: commit**
 
 ```bash
 git add crates/rbs-cli/src/dotenv.rs crates/rbs-cli/src/seed.rs
@@ -149,6 +149,6 @@ git commit -m "fix(dotenv): coupe le commentaire de fin de ligne d'une valeur"
 
 ### Vérification finale (avant de rendre la main)
 
-- [ ] `cargo test --workspace` — lire la sortie, pas la supposer
-- [ ] `cargo clippy --workspace --all-targets -- -D warnings`
-- [ ] `cargo fmt --all --check`
+- [x] `cargo test --workspace` — lire la sortie, pas la supposer
+- [x] `cargo clippy --workspace --all-targets -- -D warnings`
+- [x] `cargo fmt --all --check`

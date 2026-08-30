@@ -52,7 +52,44 @@ fn parse_line(line: &str) -> Option<(String, String)> {
         return None;
     }
 
-    Some((key.to_string(), unquote(value.trim()).to_string()))
+    Some((
+        key.to_string(),
+        unquote(strip_comment(value.trim())).to_string(),
+    ))
+}
+
+/// Retire le commentaire qui suit une valeur, selon la règle de `dotenvy`.
+///
+/// Le `#` ne coupe que précédé d'un blanc, ou en tête de valeur : un mot de passe
+/// `s3#cret` se ferait sinon tronquer en silence. Entre guillemets il est littéral, et
+/// seul ce qui suit le guillemet fermant tombe — c'est `unquote` qui dénude ensuite.
+///
+/// Un guillemet précédé d'un `\` ne ferme pas la valeur, sans quoi une variable portant
+/// du JSON se tronquerait à son premier `\"`. La réserve ne compte pas les backslashes :
+/// après un backslash lui-même échappé (`\\"`), le guillemet est tenu à tort pour échappé
+/// et la valeur court jusqu'au bout de la ligne, commentaire compris.
+fn strip_comment(value: &str) -> &str {
+    if let Some(quote) = value.chars().next().filter(|c| *c == '"' || *c == '\'') {
+        let mut precedent = None;
+        for (index, caractere) in value.char_indices().skip(1) {
+            if caractere == quote && precedent != Some('\\') {
+                return &value[..index + caractere.len_utf8()];
+            }
+            precedent = Some(caractere);
+        }
+
+        return value;
+    }
+
+    let mut precedent = None;
+    for (index, caractere) in value.char_indices() {
+        if caractere == '#' && precedent.is_none_or(char::is_whitespace) {
+            return value[..index].trim_end();
+        }
+        precedent = Some(caractere);
+    }
+
+    value
 }
 
 fn unquote(value: &str) -> &str {
@@ -154,5 +191,53 @@ mod tests {
             value(&paires, "DATABASE_URL"),
             Some("postgres://u@localhost/db")
         );
+    }
+
+    /// Le critère de la tâche : c'est ce cas qui désarmait le refus de semer en production.
+    #[test]
+    fn a_trailing_comment_is_cut_from_the_value() {
+        let paires = parse("RBS_ENV=production # ne jamais semer\n");
+
+        assert_eq!(value(&paires, "RBS_ENV"), Some("production"));
+    }
+
+    /// Un `#` collé à la valeur en fait partie : sans cette réserve, tout mot de passe qui
+    /// en porte un se ferait tronquer en silence.
+    #[test]
+    fn a_hash_without_a_leading_blank_belongs_to_the_value() {
+        let paires = parse("PASSWORD=s3#cret\n");
+
+        assert_eq!(value(&paires, "PASSWORD"), Some("s3#cret"));
+    }
+
+    #[test]
+    fn a_quoted_value_keeps_its_hash_and_loses_what_follows() {
+        let paires = parse("PASSWORD=\"a # b\" # commentaire\n");
+
+        assert_eq!(value(&paires, "PASSWORD"), Some("a # b"));
+    }
+
+    #[test]
+    fn a_value_reduced_to_a_comment_is_empty() {
+        let paires = parse("PASSWORD=  # à remplir\n");
+
+        assert_eq!(value(&paires, "PASSWORD"), Some(""));
+    }
+
+    /// Un guillemet échappé n'est pas le guillemet fermant : sans cette réserve, toute
+    /// valeur portant du JSON se ferait tronquer au premier `\"`.
+    #[test]
+    fn an_escaped_quote_does_not_close_the_value() {
+        let paires = parse("A=\"{\\\"k\\\":1}\" # une configuration\n");
+
+        assert_eq!(value(&paires, "A"), Some("{\\\"k\\\":1}"));
+    }
+
+    /// Un guillemet ouvert et jamais fermé ne fait pas disparaître la valeur.
+    #[test]
+    fn an_unclosed_quote_keeps_the_rest_of_the_line() {
+        let paires = parse("A=\"non fermé\n");
+
+        assert_eq!(value(&paires, "A"), Some("\"non fermé"));
     }
 }
