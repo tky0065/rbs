@@ -137,13 +137,15 @@ failure does that.
 
 ```text
 $ rbs doctor
-  ✓ ancres     les 10 points d'insertion sont en place
-  ! agents     écrit hors du CLI : webhooks
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
+     Running `target/debug/migration version`
+  ✓ ancres      les 10 points d'insertion sont en place
+  ! agents      écrit hors du CLI : webhooks
       légitime si rbs ne couvre pas ce code ; sinon, rbs generate le reprend
-  ✓ relations  les modèles portent leurs ancres de relation
-  ✓ .env       les 4 variables de .env.example sont renseignées
-  ✓ versions   projet et rbs-core 1.1.0 alignés sur le CLI 1.1.0
-  ✓ base       postgres 17.10 répond sur localhost:55446
+  ✓ relations   les modèles portent leurs ancres de relation
+  ✓ .env        les 4 variables de .env.example sont renseignées
+  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
+  ✓ base        postgres 18.6 répond sur localhost:55502
 ✓ le projet est sain
 ```
 

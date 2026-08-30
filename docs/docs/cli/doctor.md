@@ -53,7 +53,7 @@ when the driver compiled into your binary cannot speak its protocol, and probing
 first would charge three seconds to a diagnosis that fits in two file reads:
 
 ```text
-  ✗ base       le manifeste compile `sqlx-postgres` et RBS_DATABASE__URL est une URL `mysql://`
+  ✗ base        le manifeste compile `sqlx-postgres` et RBS_DATABASE__URL est une URL `mysql://`
       alignez les deux : la feature `sqlx-mysql` de sea-orm au manifeste, ou une URL `postgres://` dans le .env
 ```
 
@@ -86,7 +86,7 @@ Each feature that carries configuration adds a line of its own, and the line onl
 on a project that declared the feature. `jobs` is the one this milestone added:
 
 ```text
-  ✗ jobs       config/default.toml ne porte pas de section `[jobs]`
+  ✗ jobs        config/default.toml ne porte pas de section `[jobs]`
       ajoutez à config/default.toml :
       [jobs]
       max_attempts = 5
@@ -102,15 +102,15 @@ cold, before you start it. A section commented out does not count as a section.
 
 ```text
 $ rbs doctor
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s
      Running `target/debug/migration version`
-  ✓ ancres     les 10 points d'insertion sont en place
-  ✓ agents     guide et inventaire à jour
-  ✓ relations  les modèles portent leurs ancres de relation
-  ✓ .env       les 4 variables de .env.example sont renseignées
-  ✓ versions   projet et rbs-core 1.1.0 alignés sur le CLI 1.1.0
-  ✓ base       postgres 17.10 répond sur localhost:55446
-  ✓ jobs       la configuration de la file est en place
+  ✓ ancres      les 10 points d'insertion sont en place
+  ✓ agents      guide et inventaire à jour
+  ✓ relations   les modèles portent leurs ancres de relation
+  ✓ .env        les 4 variables de .env.example sont renseignées
+  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
+  ✓ base        postgres 18.6 répond sur localhost:55501
+  ✓ jobs        la configuration de la file est en place
 ✓ le projet est sain
 ```
 
@@ -123,19 +123,19 @@ Below, the same project with `// <rbs:openapi>` deleted from `src/openapi.rs`,
 
 ```text
 $ rbs doctor
-  ✗ ancres     openapi manque dans src/openapi.rs
+  ✗ ancres      openapi manque dans src/openapi.rs
       dans src/openapi.rs :
       // <rbs:openapi>
       // </rbs:openapi>
-  ✓ agents     guide et inventaire à jour
-  ✓ relations  les modèles portent leurs ancres de relation
-  ✗ .env       RBS_LOG_FORMAT absente du .env
+  ✓ agents      guide et inventaire à jour
+  ✓ relations   les modèles portent leurs ancres de relation
+  ✗ .env        RBS_LOG_FORMAT absente du .env
       ajoutez au .env :
       RBS_LOG_FORMAT=pretty
-  ✓ versions   projet et rbs-core 1.1.0 alignés sur le CLI 1.1.0
-  ✗ base       rien ne répond sur localhost:55446
+  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
+  ✗ base        rien ne répond sur localhost:55501
       lancez `docker compose up -d` à la racine du projet, ou corrigez l'URL du .env
-  ✓ jobs       la configuration de la file est en place
+  ✓ jobs        la configuration de la file est en place
 attention : le projet demande votre attention
 ```
 
@@ -153,23 +153,23 @@ names the command to run by hand:
 
 ```text
 $ rbs doctor
-   Compiling migration v0.1.0 (…/demo/migration)
+   Compiling migration v0.1.0 (/private/tmp/rbs-demo/demo/migration)
 error[E0425]: cannot find value `url_de_la_base` in this scope
-  --> migration/src/main.rs:70:13
+  --> migration/src/main.rs:33:13
    |
-70 |     let _ = url_de_la_base;
+33 |     let _ = url_de_la_base;
    |             ^^^^^^^^^^^^^^ not found in this scope
 
 For more information about this error, try `rustc --explain E0425`.
 error: could not compile `migration` (bin "migration") due to 1 previous error
-  ✓ ancres     les 10 points d'insertion sont en place
-  ✓ agents     guide et inventaire à jour
-  ✓ relations  les modèles portent leurs ancres de relation
-  ✓ .env       les 4 variables de .env.example sont renseignées
-  ✓ versions   projet et rbs-core 1.1.0 alignés sur le CLI 1.1.0
-  ✗ base       localhost:55446 répond, mais sa version reste inconnue : la crate migration a échoué (code 101)
+  ✓ ancres      les 10 points d'insertion sont en place
+  ✓ agents      guide et inventaire à jour
+  ✓ relations   les modèles portent leurs ancres de relation
+  ✓ .env        les 4 variables de .env.example sont renseignées
+  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
+  ✗ base        localhost:55501 répond, mais sa version reste inconnue : la crate migration a échoué (code 101)
       vérifiez que `cargo run -p migration -- version` aboutit
-  ✓ jobs       la configuration de la file est en place
+  ✓ jobs        la configuration de la file est en place
 attention : le projet demande votre attention
 ```
 
