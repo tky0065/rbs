@@ -393,6 +393,40 @@ fn the_manifest_records_the_language_asked_for() {
     );
 }
 
+/// À défaut de `--lang`, la langue vient de la locale de l'environnement.
+///
+/// `locale_from` et `Lang::from_locale` sont éprouvées chacune de leur côté ; ce qui ne
+/// l'était pas, c'est le câblage — le `unwrap_or_else` qui les enchaîne, et qu'une
+/// signature changée aurait pu court-circuiter sans qu'aucun test ne bouge. D'où le
+/// binaire, seul endroit où l'environnement du processus se pose sans être partagé avec
+/// les autres tests.
+#[test]
+fn without_the_flag_the_language_is_taken_from_the_environment() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+
+    Command::cargo_bin("rbs")
+        .expect("le binaire rbs doit être compilé")
+        .current_dir(parent.path())
+        .env("LC_ALL", "fr_FR.UTF-8")
+        .args([
+            "new",
+            "demo-api",
+            "--database-url",
+            "postgres://rbs:rbs@localhost:5432/demo_api",
+            "--yes",
+        ])
+        .assert()
+        .success();
+
+    let manifeste = fs::read_to_string(parent.path().join("demo-api/Cargo.toml"))
+        .expect("le manifeste est écrit");
+
+    assert!(
+        manifeste.contains(r#"lang = "fr""#),
+        "la locale de l'environnement n'a pas été suivie :\n{manifeste}"
+    );
+}
+
 #[test]
 fn the_created_project_carries_an_agents_file_naming_the_cli() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
