@@ -597,8 +597,9 @@ fn blog_auth_on(url: &str, parent: &TempDir) -> PathBuf {
     )
     .expect("le manifeste de la copie est inscriptible");
 
-    // `add auth` n'écrit `RBS_AUTH__SECRET` que dans `.env.example` : sans cette ligne, le
-    // binaire s'arrête au démarrage plutôt que de répondre 500.
+    // Le `.env` est réécrit en entier : la base est celle du conteneur, et le secret que
+    // l'installation a tiré est remplacé par une valeur connue, sans quoi les jetons que
+    // le test forge lui-même ne seraient plus vérifiables.
     fs::write(
         racine.join(".env"),
         format!("RBS_ENV=development\nRBS_DATABASE__URL={url}\nRBS_AUTH__SECRET={SECRET}\n"),

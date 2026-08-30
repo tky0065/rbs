@@ -69,4 +69,5 @@ refresh_ttl_secs = 2592000
 [[env]]
 key     = "RBS_AUTH__SECRET"
 value   = "changez-moi-par-un-secret-tire-au-hasard-de-32-octets-au-moins"
+secret  = true
 comment = "Secret de signature HS256. 32 octets au moins, sans quoi le démarrage échoue."

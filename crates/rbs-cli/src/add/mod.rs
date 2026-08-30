@@ -745,6 +745,34 @@ mod tests {
         }
     }
 
+    /// Le critère de la tâche : `add auth` ne publie pas le secret qu'il installe.
+    ///
+    /// L'exemple versionné garde son placeholder — c'est à lui que `doctor` compare le
+    /// `.env` — pendant que le `.env`, gitignoré, reçoit une valeur propre au projet.
+    #[test]
+    fn adding_auth_draws_the_signing_secret_into_the_env() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "auth")).expect("le plan doit se calculer");
+
+        let exemple = projected(&planned, ".env.example");
+        assert!(
+            exemple.contains("RBS_AUTH__SECRET="),
+            "le secret n'est pas déclaré dans .env.example :\n{exemple}"
+        );
+
+        let env = projected(&planned, ".env");
+        let paires = crate::dotenv::parse(env);
+        let tire = crate::dotenv::value(&paires, "RBS_AUTH__SECRET")
+            .expect("le .env doit porter le secret");
+
+        assert_eq!(tire.len(), 64, "{env}");
+        assert!(
+            !exemple.contains(tire),
+            "la valeur du .env est celle que l'exemple versionné publie :\n{exemple}"
+        );
+    }
+
     /// Le fragment annonçait redis://127.0.0.1:6379 dans config/default.toml sans que
     /// rien y réponde. Le service le sert, et sans profil : c'est une dépendance de
     /// développement, que `rbs dev` doit monter.

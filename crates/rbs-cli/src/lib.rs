@@ -325,11 +325,10 @@ fn suite(feature: &str) -> Option<&'static str> {
         // périmètre par défaut, celui que `rbs dev` monte.
         "docker" => Some("docker compose --profile app up --build"),
         "ci" => Some("git push : le workflow s'exécute à la prochaine poussée"),
-        // Le secret n'est écrit que dans `.env.example` : le `.env` du projet, lui, est
-        // hors du fragment, et sans la variable le serveur refuse de démarrer.
-        "auth" => {
-            Some("recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up")
-        }
+        // Le secret est tiré à l'installation et déposé dans le `.env` : il ne reste que
+        // la migration, sans quoi les tables d'authentification manqueraient au premier
+        // login.
+        "auth" => Some("rbs migrate up"),
         // Le fragment dépose lui-même un service `redis` dans le compose du projet : le
         // pool est paresseux, mais rien à fournir séparément une fois ce service monté.
         "redis" => Some(
@@ -538,8 +537,8 @@ mod tests {
     }
 
     /// `rbs new --with auth` pose la feature mais avalait le conseil qu'`add auth` aurait
-    /// affiché : sans lui, `RBS_AUTH__SECRET` manque au `.env` et `cargo run` échoue,
-    /// sans que rien ne l'ait dit avant.
+    /// affiché : sans lui, la migration reste à lancer et le premier login échoue sur des
+    /// tables absentes, sans que rien ne l'ait dit avant.
     #[test]
     fn new_names_the_suite_of_each_installed_feature() {
         let installed = vec![
@@ -604,15 +603,19 @@ mod tests {
         );
     }
 
+    /// `add auth` dépose désormais le secret lui-même : renvoyer le lecteur vers
+    /// `.env.example` lui ferait recopier un placeholder par-dessus sa propre valeur.
     #[test]
-    fn the_auth_suite_names_the_secret_missing_at_startup() {
+    fn the_auth_suite_names_the_migration_and_no_longer_the_secret() {
         let suite = suite("auth").expect("`auth` doit dire ce qu'il reste à faire");
 
-        // `add auth` n'écrit la variable que dans `.env.example` : le lecteur qui ne la
-        // recopie pas obtient un serveur qui refuse de démarrer.
         assert!(
-            suite.contains("RBS_AUTH__SECRET") && suite.contains(".env"),
-            "la suite ne dit pas où recopier le secret : {suite}"
+            suite.contains("rbs migrate up"),
+            "la suite ne renvoie pas vers la migration : {suite}"
+        );
+        assert!(
+            !suite.contains("RBS_AUTH__SECRET"),
+            "la suite demande encore de recopier un secret déjà écrit : {suite}"
         );
     }
 

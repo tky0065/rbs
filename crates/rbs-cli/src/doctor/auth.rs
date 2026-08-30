@@ -1,9 +1,11 @@
 //! Contrôle de la feature `auth`.
 //!
-//! `add auth` n'écrit `RBS_AUTH__SECRET` que dans `.env.example` : ce fichier est
-//! versionné, et un secret réel n'a rien à y faire. Un projet fraîchement doté d'auth ne
-//! démarre donc pas tant que l'utilisateur ne l'a pas recopié — et le message qu'il lit
-//! alors vient du noyau, au boot. Ce contrôle le lui dit avant.
+//! `add auth` tire `RBS_AUTH__SECRET` et le dépose dans le `.env`, gitignoré ;
+//! `.env.example`, versionné, garde un placeholder pour documenter la variable sans la
+//! livrer. Un projet neuf passe donc ce contrôle : il reste pour les projets antérieurs à
+//! ce changement et pour les `.env` recopiés à la main de l'exemple, où le secret publié
+//! dans Git ferait office de clé de signature. Le message que l'utilisateur lirait sinon
+//! vient du noyau, au boot ; ce contrôle le lui dit avant.
 
 use std::path::Path;
 
