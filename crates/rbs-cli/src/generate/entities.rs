@@ -18,9 +18,6 @@ pub(crate) struct Entity {
 }
 
 /// Parcourt `src/*/model.rs` et relève toute entité déclarée.
-// Rien n'appelle encore `scan` hors des tests : c'est la commande de génération,
-// à une tâche suivante, qui construira l'inventaire réel qu'elle scanne.
-#[allow(dead_code)]
 pub(crate) fn scan(root: &Path) -> Vec<Entity> {
     let mut found = Vec::new();
 
@@ -148,6 +145,20 @@ pub(crate) fn tables(entities: &[Entity]) -> Vec<String> {
     names
 }
 
+/// `table` a-t-elle une migration inscrite dans le projet ?
+///
+/// `rbs generate feature` écrit un `model.rs` sans migration : une entité qu'`scan` trouve
+/// n'a donc pas forcément de table en base. Une migration s'inscrit dans
+/// `migration/src/lib.rs` sous `mod m..._create_<table>;` — c'est ce texte qu'on cherche,
+/// plutôt que de rouvrir chaque fichier de migration pour y lire la table qu'il crée.
+pub(crate) fn has_migration(root: &Path, table: &str) -> bool {
+    let Ok(source) = fs::read_to_string(root.join("migration/src/lib.rs")) else {
+        return false;
+    };
+
+    source.contains(&format!("_create_{table};"))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -222,6 +233,41 @@ pub mod refresh_token {
         let root = TempDir::new().expect("le répertoire temporaire se crée");
 
         assert!(scan(root.path()).is_empty());
+    }
+
+    #[test]
+    fn a_table_created_by_a_migration_is_recognized() {
+        let root = TempDir::new().expect("le répertoire temporaire se crée");
+        fs::create_dir_all(root.path().join("migration/src")).expect("le répertoire se crée");
+        fs::write(
+            root.path().join("migration/src/lib.rs"),
+            "mod m20260826_143000_create_users;\n",
+        )
+        .expect("l'écriture aboutit");
+
+        assert!(has_migration(root.path(), "users"));
+    }
+
+    // Le trou que le scan laissait ouvert : un `model.rs` sans migration existe pour de
+    // vrai, `rbs generate feature` en écrit un.
+    #[test]
+    fn a_table_without_a_migration_is_not_recognized() {
+        let root = TempDir::new().expect("le répertoire temporaire se crée");
+        fs::create_dir_all(root.path().join("migration/src")).expect("le répertoire se crée");
+        fs::write(
+            root.path().join("migration/src/lib.rs"),
+            "mod m20260826_143000_create_tags;\n",
+        )
+        .expect("l'écriture aboutit");
+
+        assert!(!has_migration(root.path(), "users"));
+    }
+
+    #[test]
+    fn a_project_without_a_migration_crate_has_no_migration_for_any_table() {
+        let root = TempDir::new().expect("le répertoire temporaire se crée");
+
+        assert!(!has_migration(root.path(), "users"));
     }
 
     #[test]

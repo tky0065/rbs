@@ -4,15 +4,14 @@
 //! juge que contre un inventaire.
 
 use std::fmt;
+use std::fs;
+use std::path::Path;
 
 use super::entities::{self, Entity};
-use super::feature::to_singular;
+use super::feature::{Feature, to_singular};
 use super::fields::{Field, RelationView, to_pascal_case};
 
 /// Une cible qu'aucune entité du projet ne porte.
-// Rien n'appelle encore `resolve` hors des tests : la commande qui l'invoquera, avec
-// l'inventaire réellement scanné, arrive à une tâche suivante.
-#[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct UnknownTarget {
     /// Nom de la relation fautive : `author`.
@@ -42,7 +41,6 @@ impl std::error::Error for UnknownTarget {}
 ///
 /// `generated_table` rejoint les cibles admises : elle n'est pas encore sur le disque,
 /// et une entité qui se référence elle-même — un arbre — est légitime.
-#[allow(dead_code)]
 pub(crate) fn resolve(
     fields: &mut [Field],
     entities: &[Entity],
@@ -104,8 +102,158 @@ pub(crate) fn resolve(
     }
 }
 
+/// Une cible existe dans le projet, mais aucune migration n'y crée sa table.
+///
+/// Distincte d'`UnknownTarget` : ici l'entité est réelle, seule sa table manque. Une clé
+/// étrangère qui la viserait échouerait à l'application des migrations, loin de la
+/// commande qui l'a posée.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct TargetWithoutMigration {
+    /// Nom de la relation fautive : `author`.
+    pub relation: String,
+    /// Cible dépourvue de migration : `users`.
+    pub target: String,
+}
+
+impl fmt::Display for TargetWithoutMigration {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "erreur : relation « {} » — « {} » n'a pas de migration dans ce projet\n        \
+             → une clé étrangère la viserait avant qu'aucune migration ne crée sa table : \
+             écrivez sa migration avec `rbs migrate new`",
+            self.relation, self.target,
+        )
+    }
+}
+
+impl std::error::Error for TargetWithoutMigration {}
+
+/// Vérifie que chaque cible résolue a réellement une table en projet.
+///
+/// `entities::scan` reconnaît une cible à la présence de son `model.rs`, pas de sa
+/// migration : `rbs generate feature` écrit l'un sans l'autre. Sans ce second passage,
+/// une référence vers une telle cible produirait une contrainte de clé étrangère qu'aucune
+/// migration ne satisferait.
+///
+/// Une auto-référence n'est jamais concernée : sa migration s'écrit dans le même plan, pas
+/// encore sur le disque au moment de cette vérification.
+pub(crate) fn ensure_migrations_exist(
+    fields: &[Field],
+    root: &Path,
+) -> Result<(), Vec<TargetWithoutMigration>> {
+    let errors: Vec<TargetWithoutMigration> = fields
+        .iter()
+        .filter_map(|field| field.relation())
+        .filter(|view| view.entity_path != "Entity")
+        .filter(|view| !entities::has_migration(root, &view.target))
+        .map(|view| TargetWithoutMigration {
+            relation: view.name.clone(),
+            target: view.target.clone(),
+        })
+        .collect();
+
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
+/// Ce que le côté inverse d'une relation ajoute au modèle de sa cible.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Inverse {
+    /// Fichier du modèle cible, relatif à la racine : `src/auth/model.rs`.
+    pub file: String,
+    /// Lignes de la variante, à insérer dans `<rbs:relations>`.
+    pub variant: Vec<String>,
+    /// Lignes de l'`impl Related`, à insérer dans `<rbs:related>`.
+    pub related: Vec<String>,
+}
+
+/// Calcule, pour chaque référence, ce qu'il faut écrire dans le modèle de sa cible.
+///
+/// Déclarer `author:references:users` sur `posts` implique que `users` a des `posts` :
+/// la relation n'est écrite qu'une fois, et son inverse en découle. Une auto-référence
+/// est exclue — ses deux côtés vivent déjà dans le même fichier.
+pub(crate) fn inverses(fields: &[Field], feature: &Feature, entities: &[Entity]) -> Vec<Inverse> {
+    let own_entity = format!("crate::{}::model::Entity", feature.module());
+    let variant = to_pascal_case(feature.module());
+
+    fields
+        .iter()
+        .filter_map(|field| {
+            let view = field.relation()?;
+            if view.target == feature.module() {
+                return None;
+            }
+            let target = entities::find(entities, &view.target)?;
+
+            Some(Inverse {
+                file: target.file.clone(),
+                // Sans indentation propre : l'ancre `<rbs:relations>` vit dans le corps de
+                // l'énumération, et `anchors::insert` préfixe déjà chaque ligne de celle de
+                // sa balise fermante. L'ajouter ici la doublerait.
+                variant: vec![
+                    format!(r#"#[sea_orm(has_many = "{own_entity}")]"#),
+                    format!("{variant},"),
+                ],
+                related: vec![
+                    format!("impl Related<{own_entity}> for Entity {{"),
+                    format!("    fn to() -> RelationDef {{ Relation::{variant}.def() }}"),
+                    "}".to_string(),
+                ],
+            })
+        })
+        .collect()
+}
+
+/// Une variante déjà présente dans le fichier cible, mais visant une autre entité.
+///
+/// `anchors::insert` ne dédoublonne qu'un groupe identique dans son entier : deux
+/// relations distinctes qui produiraient la même variante s'y inséreraient donc toutes
+/// deux, ce que `rustc` refuse comme identifiant dupliqué (`E0428`). C'est ce cas précis
+/// que ce contrôle referme, avant qu'aucune écriture n'ait lieu.
+///
+/// La comparaison ignore l'indentation, comme `anchors::insert` le fait lui-même pour
+/// décider si un groupe est déjà posé : sans quoi une relation déjà écrite, retrouvée
+/// indentée par l'ancre, ne serait plus reconnue comme identique et se verrait refusée à
+/// tort au second passage.
+pub(crate) fn homonymous_conflict(existing: &str, inverse: &Inverse) -> bool {
+    let Some(variant_line) = inverse.variant.last() else {
+        return false;
+    };
+    let already_written = inverse.variant.iter().all(|line| {
+        existing
+            .lines()
+            .any(|existing_line| existing_line.trim() == line.trim())
+    });
+
+    !already_written
+        && existing
+            .lines()
+            .any(|line| line.trim() == variant_line.trim())
+}
+
+/// Vérifie que l'entité nommée porte bien une colonne référençant `table`.
+///
+/// Sans cette vérification, `--has-many` écrirait une variante que SeaORM rejetterait
+/// quarante secondes plus tard, à la compilation.
+pub(crate) fn child_references(child: &Entity, table: &str, root: &Path) -> bool {
+    let Ok(source) = fs::read_to_string(root.join(&child.file)) else {
+        return false;
+    };
+    let expected = format!(r#"belongs_to = "crate::{table}::model::Entity""#);
+
+    source.contains(&expected)
+}
+
 #[cfg(test)]
 mod tests {
+    use std::fs;
+
+    use tempfile::TempDir;
+
     use super::*;
     use crate::generate::entities::Entity;
     use crate::generate::fields;
@@ -197,5 +345,206 @@ mod tests {
         let fields = resolved("title:string", "posts");
 
         assert!(fields[0].relation().is_none());
+    }
+
+    #[test]
+    fn a_reference_produces_the_has_many_side_in_the_target_model() {
+        let mut fields = fields::parse("author:references:users").expect("acceptée");
+        resolve(&mut fields, &inventory(), "posts").expect("cibles résolues");
+        let feature = Feature::fresh("posts", fields.clone());
+        let produced = inverses(&fields, &feature, &inventory());
+
+        assert_eq!(produced.len(), 1);
+        assert_eq!(produced[0].file, "src/auth/model.rs");
+        assert!(
+            produced[0]
+                .variant
+                .join("\n")
+                .contains(r#"#[sea_orm(has_many = "crate::posts::model::Entity")]"#),
+            "{:?}",
+            produced[0].variant
+        );
+        assert!(
+            produced[0].variant.join("\n").contains("Posts,"),
+            "{:?}",
+            produced[0].variant
+        );
+        assert!(
+            produced[0]
+                .related
+                .join("\n")
+                .contains("impl Related<crate::posts::model::Entity> for Entity {"),
+            "{:?}",
+            produced[0].related
+        );
+    }
+
+    // Une auto-référence a déjà ses deux côtés dans le même fichier : l'inverse y serait
+    // une seconde variante homonyme.
+    #[test]
+    fn a_self_reference_produces_no_inverse() {
+        let mut fields = fields::parse("parent:references:posts:optional").expect("acceptée");
+        resolve(&mut fields, &[], "posts").expect("cibles résolues");
+        let feature = Feature::fresh("posts", fields.clone());
+
+        assert!(inverses(&fields, &feature, &[]).is_empty());
+    }
+
+    #[test]
+    fn two_references_to_the_same_target_produce_two_inverses_in_one_file() {
+        let mut fields =
+            fields::parse("author:references:users,reviewer:references:users").expect("acceptée");
+        resolve(&mut fields, &inventory(), "posts").expect("cibles résolues");
+        let feature = Feature::fresh("posts", fields.clone());
+        let produced = inverses(&fields, &feature, &inventory());
+
+        assert_eq!(produced.len(), 2, "{produced:?}");
+        assert!(
+            produced.iter().all(|i| i.file == "src/auth/model.rs"),
+            "{produced:?}"
+        );
+    }
+
+    /// Le trou trouvé en relecture d'une tâche antérieure : `entities::scan` reconnaît
+    /// une cible à son `model.rs`, pas à sa migration.
+    #[test]
+    fn a_target_without_a_migration_is_refused() {
+        let root = TempDir::new().expect("le répertoire temporaire se crée");
+        fs::create_dir_all(root.path().join("migration/src")).expect("le répertoire se crée");
+        fs::write(
+            root.path().join("migration/src/lib.rs"),
+            "mod m20260826_143000_create_tags;\n",
+        )
+        .expect("l'écriture aboutit");
+
+        let fields = resolved("author:references:users", "posts");
+        let errors =
+            ensure_migrations_exist(&fields, root.path()).expect_err("users n'a pas de migration");
+
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        assert_eq!(errors[0].target, "users");
+        assert_eq!(errors[0].relation, "author");
+    }
+
+    #[test]
+    fn a_target_with_its_migration_is_accepted() {
+        let root = TempDir::new().expect("le répertoire temporaire se crée");
+        fs::create_dir_all(root.path().join("migration/src")).expect("le répertoire se crée");
+        fs::write(
+            root.path().join("migration/src/lib.rs"),
+            "mod m20260826_143000_create_users;\n",
+        )
+        .expect("l'écriture aboutit");
+
+        let fields = resolved("author:references:users", "posts");
+
+        assert!(ensure_migrations_exist(&fields, root.path()).is_ok());
+    }
+
+    // L'auto-référence vise l'entité en cours de génération : sa migration n'est pas
+    // encore sur le disque au moment de cette vérification, et ne doit pas être exigée.
+    #[test]
+    fn a_self_reference_does_not_need_an_existing_migration() {
+        let root = TempDir::new().expect("le répertoire temporaire se crée");
+
+        let fields = resolved("parent:references:posts:optional", "posts");
+
+        assert!(ensure_migrations_exist(&fields, root.path()).is_ok());
+    }
+
+    #[test]
+    fn a_scalar_field_needs_no_migration_check() {
+        let root = TempDir::new().expect("le répertoire temporaire se crée");
+
+        let fields = resolved("title:string", "posts");
+
+        assert!(ensure_migrations_exist(&fields, root.path()).is_ok());
+    }
+
+    #[test]
+    fn a_variant_absent_from_the_target_is_not_a_conflict() {
+        let inverse = Inverse {
+            file: "src/users/model.rs".to_string(),
+            variant: vec![
+                r#"    #[sea_orm(has_many = "crate::posts::model::Entity")]"#.to_string(),
+                "    Posts,".to_string(),
+            ],
+            related: Vec::new(),
+        };
+
+        assert!(!homonymous_conflict("    // <rbs:relations>\n", &inverse));
+    }
+
+    #[test]
+    fn the_exact_same_block_already_written_is_not_a_conflict() {
+        let inverse = Inverse {
+            file: "src/users/model.rs".to_string(),
+            variant: vec![
+                r#"    #[sea_orm(has_many = "crate::posts::model::Entity")]"#.to_string(),
+                "    Posts,".to_string(),
+            ],
+            related: Vec::new(),
+        };
+        let existing = format!(
+            "    // <rbs:relations>\n{}\n    // </rbs:relations>\n",
+            inverse.variant.join("\n")
+        );
+
+        assert!(!homonymous_conflict(&existing, &inverse));
+    }
+
+    // Le cas que `anchors::insert` ne voit pas : le nom de la variante est déjà pris,
+    // mais par une relation qui vise une autre entité.
+    #[test]
+    fn a_variant_already_taken_by_another_target_is_a_conflict() {
+        let inverse = Inverse {
+            file: "src/users/model.rs".to_string(),
+            variant: vec![
+                r#"    #[sea_orm(has_many = "crate::posts::model::Entity")]"#.to_string(),
+                "    Posts,".to_string(),
+            ],
+            related: Vec::new(),
+        };
+        let existing = "    // <rbs:relations>\n    \
+             #[sea_orm(has_many = \"crate::somewhere::model::Entity\")]\n    Posts,\n    \
+             // </rbs:relations>\n";
+
+        assert!(homonymous_conflict(existing, &inverse));
+    }
+
+    #[test]
+    fn a_child_referencing_the_table_is_a_valid_has_many() {
+        let root = TempDir::new().expect("le répertoire se crée");
+        fs::create_dir_all(root.path().join("src/comments")).expect("le répertoire se crée");
+        fs::write(
+            root.path().join("src/comments/model.rs"),
+            "#[sea_orm(belongs_to = \"crate::posts::model::Entity\", from = \"Column::PostId\", to = \"crate::posts::model::Column::Id\")]\npub struct Model {}\n",
+        )
+        .expect("l'écriture aboutit");
+        let child = Entity {
+            table: "comments".to_string(),
+            module_path: "crate::comments::model".to_string(),
+            file: "src/comments/model.rs".to_string(),
+        };
+
+        assert!(child_references(&child, "posts", root.path()));
+    }
+
+    #[test]
+    fn a_child_without_a_key_towards_us_is_not_a_valid_has_many() {
+        let root = TempDir::new().expect("le répertoire se crée");
+        fs::create_dir_all(root.path().join("src/comments")).expect("le répertoire se crée");
+        fs::write(
+            root.path().join("src/comments/model.rs"),
+            "pub struct Model {}\n",
+        )
+        .expect("l'écriture aboutit");
+        let child = Entity {
+            table: "comments".to_string(),
+            module_path: "crate::comments::model".to_string(),
+            file: "src/comments/model.rs".to_string(),
+        };
+
+        assert!(!child_references(&child, "posts", root.path()));
     }
 }

@@ -5,6 +5,7 @@
 //! entièrement, et le premier fichier n'est écrit qu'ensuite. Un nom refusé, une ancre
 //! disparue ou une feature déjà présente laissent le disque tel qu'ils l'ont trouvé.
 
+use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -13,9 +14,10 @@ use crate::metadata;
 use crate::plan;
 
 use super::feature::Feature;
+use super::fields::to_pascal_case;
 use super::{
-    controller, dto, entity, fields, format, migration, mount, name, repository, seed, service,
-    tests_http,
+    controller, dto, entities, entity, fields, format, migration, mount, name, relations,
+    repository, seed, service, tests_http,
 };
 
 /// Ce qu'il faut savoir pour générer une feature.
@@ -30,6 +32,9 @@ pub(crate) struct Options {
     pub directory: PathBuf,
     /// Génère même si le projet porte des modifications non commitées.
     pub force: bool,
+    /// Entités enfant dont ce modèle doit recevoir la variante inverse, sans rien générer
+    /// d'autre : la réparation d'une relation posée avant que ce côté n'existe.
+    pub has_many: Vec<String>,
 }
 
 /// Un fichier à écrire : son chemin, relatif à la racine du projet, et son contenu.
@@ -107,6 +112,48 @@ pub(crate) enum Error {
     /// Le plan n'a pu être appliqué au projet.
     #[error("{0}")]
     Application(#[from] plan::application::Error),
+
+    /// Une ou plusieurs cibles de relation sont introuvables dans le projet.
+    #[error("{}", .0.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n"))]
+    Targets(Vec<relations::UnknownTarget>),
+
+    /// Une ou plusieurs cibles résolues n'ont pas de migration dans le projet.
+    #[error("{}", .0.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n"))]
+    MigrationsAbsentes(Vec<relations::TargetWithoutMigration>),
+
+    /// Le modèle cible porte déjà, sous ce nom, une variante visant une autre entité.
+    #[error(
+        "{file} porte déjà une variante `{variant}` visant une autre cible : retirez-la, ou \
+         renommez la relation, avant de régénérer"
+    )]
+    Homonyme {
+        /// Fichier fautif, relatif à la racine.
+        file: String,
+        /// Nom de la variante en conflit.
+        variant: String,
+    },
+
+    /// `--has-many` répare une feature déjà générée : elle doit d'abord exister.
+    #[error(
+        "{path} n'existe pas : `--has-many` répare une feature déjà générée, qui doit d'abord exister"
+    )]
+    Absente {
+        /// Chemin attendu, relatif à la racine.
+        path: String,
+        /// Feature demandée.
+        feature: String,
+    },
+
+    /// `--has-many` nomme une entité enfant qui ne porte pas la clé attendue.
+    #[error(
+        "{child} ne porte aucune colonne référençant `{table}` : ajoutez-la avant de relancer `--has-many {child}`"
+    )]
+    EnfantSansCle {
+        /// Entité enfant nommée par le flag.
+        child: String,
+        /// Table de la feature réparée.
+        table: String,
+    },
 }
 
 impl Error {
@@ -144,8 +191,21 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     }
 
     name::validate(&options.name).map_err(Error::Nom)?;
-    let fields =
+
+    // `--has-many` ne génère rien : il répare le côté inverse d'une feature déjà
+    // présente, et suit donc un chemin entièrement séparé du reste de la fonction.
+    if !options.has_many.is_empty() {
+        return plan_repair(options, &root);
+    }
+
+    let mut fields =
         fields::parse(options.fields.as_deref().unwrap_or_default()).map_err(Error::Fields)?;
+
+    // Lu une fois, avant que le nom ne soit tranché : la même inventaire sert à
+    // résoudre les cibles des références et à écrire leur côté inverse.
+    let entities = entities::scan(&root);
+    relations::resolve(&mut fields, &entities, &options.name).map_err(Error::Targets)?;
+    relations::ensure_migrations_exist(&fields, &root).map_err(Error::MigrationsAbsentes)?;
 
     let feature = Feature::fresh(&options.name, fields);
     let module = feature.module().to_string();
@@ -168,6 +228,19 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // et c'est lui que `--dry-run` montre.
     let avertissement = format::format_batch(files.iter_mut().map(|(_, content)| content));
 
+    // Calculé avant le builder, qui prend `root` par valeur : le contenu actuel du
+    // fichier cible sert à détecter une variante homonyme visant une autre entité.
+    let inverses = relations::inverses(&feature.fields, &feature, &entities);
+    for inverse in &inverses {
+        let existing = fs::read_to_string(root.join(&inverse.file)).unwrap_or_default();
+        if relations::homonymous_conflict(&existing, inverse) {
+            return Err(Error::Homonyme {
+                file: inverse.file.clone(),
+                variant: inverse.variant.last().cloned().unwrap_or_default(),
+            });
+        }
+    }
+
     let mut builder = plan::Builder::new(root);
     for (path, content) in &files {
         builder.create(path, content)?;
@@ -179,6 +252,9 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     }
     if options.complete && seedable {
         montages.extend(mount::for_seed(&module));
+    }
+    for inverse in &inverses {
+        montages.extend(mount::for_inverse(inverse));
     }
     for mount in montages {
         builder.insert(mount.anchor, &mount.lines)?;
@@ -192,6 +268,88 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         migration,
         avertissement,
         seed_skipped,
+    })
+}
+
+/// Calcule ce que `--has-many` écrirait dans le modèle de la feature déjà présente.
+///
+/// Une réparation, non une génération : la feature nommée doit déjà exister, et chaque
+/// entité enfant nommée doit déjà porter, dans son propre modèle, la clé qui la rattache
+/// à elle — sans quoi la variante posée décrirait une relation que SeaORM refuserait à la
+/// compilation.
+fn plan_repair(options: &Options, root: &Path) -> Result<Planned, Error> {
+    let module = options.name.clone();
+
+    if !root.join("src").join(&module).exists() {
+        return Err(Error::Absente {
+            path: format!("src/{module}"),
+            feature: module,
+        });
+    }
+
+    let entities = entities::scan(root);
+    let own_file = format!("src/{module}/model.rs");
+
+    let mut inverses = Vec::with_capacity(options.has_many.len());
+    for child_name in &options.has_many {
+        let Some(child) = entities::find(&entities, child_name) else {
+            return Err(Error::Targets(vec![relations::UnknownTarget {
+                relation: "has-many".to_string(),
+                target: child_name.clone(),
+                known: entities::tables(&entities),
+            }]));
+        };
+
+        if !relations::child_references(child, &module, root) {
+            return Err(Error::EnfantSansCle {
+                child: child_name.clone(),
+                table: module.clone(),
+            });
+        }
+
+        let variant = to_pascal_case(&child.table);
+        let target_entity = format!("{}::Entity", child.module_path);
+        // Sans indentation propre sur `variant` : voir le commentaire de
+        // `relations::inverses`, qui vaut ici à l'identique.
+        inverses.push(relations::Inverse {
+            file: own_file.clone(),
+            variant: vec![
+                format!(r#"#[sea_orm(has_many = "{target_entity}")]"#),
+                format!("{variant},"),
+            ],
+            related: vec![
+                format!("impl Related<{target_entity}> for Entity {{"),
+                format!("    fn to() -> RelationDef {{ Relation::{variant}.def() }}"),
+                "}".to_string(),
+            ],
+        });
+    }
+
+    // Toutes les cibles avant la première écriture : un enfant fautif au milieu de la
+    // liste ne doit pas laisser les précédents à moitié montés.
+    let existing = fs::read_to_string(root.join(&own_file)).unwrap_or_default();
+    for inverse in &inverses {
+        if relations::homonymous_conflict(&existing, inverse) {
+            return Err(Error::Homonyme {
+                file: inverse.file.clone(),
+                variant: inverse.variant.last().cloned().unwrap_or_default(),
+            });
+        }
+    }
+
+    let mut builder = plan::Builder::new(root);
+    for inverse in &inverses {
+        for mount in mount::for_inverse(inverse) {
+            builder.insert(mount.anchor, &mount.lines)?;
+        }
+    }
+
+    Ok(Planned {
+        plan: builder.finir(),
+        files: Vec::new(),
+        migration: None,
+        avertissement: None,
+        seed_skipped: None,
     })
 }
 
@@ -346,6 +504,7 @@ mod tests {
             complete,
             directory: root.to_path_buf(),
             force: false,
+            has_many: Vec::new(),
         }
     }
 
@@ -561,6 +720,8 @@ mod tests {
     #[test]
     fn a_required_reference_writes_no_seed_and_names_the_relation() {
         let (_parent, root) = project();
+        run(&options(&root, "users", Some("email:string:unique"), true))
+            .expect("users doit se générer");
 
         let planned = run(&options(
             &root,
@@ -578,9 +739,8 @@ mod tests {
         let binaire = read(&root.join("src/seeds/main.rs"));
         let ancre = crate::anchors::body(&binaire, crate::anchors::SEEDS)
             .expect("l'ancre des seeds est présente");
-        assert_eq!(
-            ancre.trim(),
-            "",
+        assert!(
+            !ancre.contains("posts,"),
             "le seed écarté ne doit pas être monté :\n{binaire}"
         );
 
@@ -591,6 +751,8 @@ mod tests {
     #[test]
     fn an_optional_reference_still_writes_its_seed() {
         let (_parent, root) = project();
+        run(&options(&root, "users", Some("email:string:unique"), true))
+            .expect("users doit se générer");
 
         let planned = run(&options(
             &root,
@@ -860,6 +1022,192 @@ mod tests {
         run(&options(&root, "notes", None, false)).expect("hors dépôt, il n'y a rien à protéger");
 
         assert!(root.join("src/notes/controller.rs").exists());
+    }
+
+    /// La tâche du lot : une référence écrit le côté inverse dans le modèle de sa cible.
+    #[test]
+    fn a_reference_writes_the_inverse_side_into_the_target_model() {
+        let (_parent, root) = project();
+        run(&options(&root, "users", Some("email:string:unique"), true))
+            .expect("users doit se générer");
+
+        run(&options(
+            &root,
+            "posts",
+            Some("title:string,author:references:users"),
+            true,
+        ))
+        .expect("posts doit se générer");
+
+        let cible = read(&root.join("src/users/model.rs"));
+        assert!(
+            cible.contains(r#"has_many = "crate::posts::model::Entity""#),
+            "{cible}"
+        );
+        assert!(cible.contains("    Posts,"), "{cible}");
+        assert!(
+            cible.contains("impl Related<crate::posts::model::Entity> for Entity {"),
+            "{cible}"
+        );
+    }
+
+    /// Le trou trouvé en relecture d'une tâche antérieure : `generate feature` écrit un
+    /// modèle sans migration, et une relation qui le viserait poserait une clé étrangère
+    /// vers une table qu'aucune migration ne crée.
+    #[test]
+    fn a_reference_to_a_model_without_a_migration_is_refused() {
+        let (_parent, root) = project();
+        run(&options(&root, "users", None, false)).expect("la feature vide doit se générer");
+
+        let error = run(&options(
+            &root,
+            "posts",
+            Some("author:references:users"),
+            true,
+        ))
+        .expect_err("users n'a pas de migration");
+
+        assert!(error.to_string().contains("users"), "{error}");
+        assert!(
+            !root.join("src/posts").is_dir(),
+            "des fichiers ont été écrits malgré la migration absente"
+        );
+    }
+
+    /// Le point de vigilance de la tâche : une variante déjà présente sous ce nom, mais
+    /// visant une autre cible, refuse plutôt que de laisser deux relations homonymes dans
+    /// la même énumération.
+    #[test]
+    fn a_homonymous_variant_towards_another_target_is_refused() {
+        let (_parent, root) = project();
+        run(&options(&root, "users", Some("email:string:unique"), true))
+            .expect("users doit se générer");
+
+        let modele = root.join("src/users/model.rs");
+        let source = read(&modele);
+        let pollue = source.replace(
+            "    // <rbs:relations>",
+            "    // <rbs:relations>\n    \
+             #[sea_orm(has_many = \"crate::somewhere::model::Entity\")]\n    Posts,",
+        );
+        fs::write(&modele, pollue).expect("l'écriture aboutit");
+        let avant = fingerprint(&root);
+
+        let error = run(&options(
+            &root,
+            "posts",
+            Some("title:string,author:references:users"),
+            true,
+        ))
+        .expect_err("la variante Posts est déjà prise par une autre cible");
+
+        assert!(error.to_string().contains("users"), "{error}");
+        assert!(error.to_string().contains("Posts"), "{error}");
+        assert_eq!(
+            fingerprint(&root),
+            avant,
+            "rien ne doit être écrit quand l'inverse est en conflit"
+        );
+    }
+
+    /// `--has-many` répare une feature déjà là : rien à créer, seul le modèle de la
+    /// feature réparée reçoit le côté inverse.
+    #[test]
+    fn has_many_writes_the_inverse_into_an_already_generated_feature() {
+        let (_parent, root) = project();
+        run(&options(&root, "posts", Some("title:string"), true)).expect("posts doit se générer");
+        run(&options(
+            &root,
+            "comments",
+            Some("body:string,post:references:posts"),
+            true,
+        ))
+        .expect("comments doit se générer");
+
+        // Retire le côté inverse que la génération de `comments` venait d'écrire, pour
+        // rejouer précisément ce que `--has-many` doit réparer.
+        let modele = root.join("src/posts/model.rs");
+        let variant_block = "    #[sea_orm(has_many = \"crate::comments::model::Entity\")]\n    \
+             Comments,\n";
+        let related_block = "impl Related<crate::comments::model::Entity> for Entity {\n    \
+             fn to() -> RelationDef { Relation::Comments.def() }\n}\n";
+        let sans_inverse = read(&modele)
+            .replace(variant_block, "")
+            .replace(related_block, "");
+        fs::write(&modele, &sans_inverse).expect("l'écriture aboutit");
+        assert!(
+            !sans_inverse.contains("Comments"),
+            "l'inverse doit être retiré avant le test : {sans_inverse}"
+        );
+
+        let avant = fingerprint(&root);
+
+        run(&Options {
+            has_many: vec!["comments".to_string()],
+            ..options(&root, "posts", None, false)
+        })
+        .expect("la réparation doit aboutir");
+
+        let repare = read(&modele);
+        assert!(
+            repare.contains(r#"has_many = "crate::comments::model::Entity""#),
+            "{repare}"
+        );
+        assert!(repare.contains("    Comments,"), "{repare}");
+        assert!(
+            repare.contains("impl Related<crate::comments::model::Entity> for Entity {"),
+            "{repare}"
+        );
+
+        let apres = fingerprint(&root);
+        assert_eq!(
+            apres.keys().collect::<Vec<_>>(),
+            avant.keys().collect::<Vec<_>>(),
+            "la réparation ne doit créer ni supprimer aucun fichier"
+        );
+        let touches: Vec<&PathBuf> = avant
+            .iter()
+            .filter(|(chemin, contenu)| apres.get(*chemin) != Some(contenu))
+            .map(|(chemin, _)| chemin)
+            .collect();
+        assert_eq!(
+            touches,
+            vec![&PathBuf::from("src/posts/model.rs")],
+            "la réparation ne doit toucher que le modèle réparé"
+        );
+    }
+
+    /// `--has-many` répare une feature déjà là : elle refuse quand cette feature n'existe
+    /// pas encore.
+    #[test]
+    fn has_many_on_a_feature_that_does_not_exist_is_refused() {
+        let (_parent, root) = project();
+
+        let error = run(&Options {
+            has_many: vec!["comments".to_string()],
+            ..options(&root, "posts", None, false)
+        })
+        .expect_err("posts n'existe pas encore");
+
+        assert!(error.to_string().contains("posts"), "{error}");
+    }
+
+    /// `--has-many` refuse une entité enfant qui ne porte pas la clé attendue : sans ce
+    /// contrôle, SeaORM refuserait la variante posée, mais à la compilation seulement.
+    #[test]
+    fn has_many_on_a_child_without_the_expected_key_is_refused() {
+        let (_parent, root) = project();
+        run(&options(&root, "posts", Some("title:string"), true)).expect("posts doit se générer");
+        run(&options(&root, "comments", Some("body:string"), true))
+            .expect("comments doit se générer");
+
+        let error = run(&Options {
+            has_many: vec!["comments".to_string()],
+            ..options(&root, "posts", None, false)
+        })
+        .expect_err("comments ne référence pas posts");
+
+        assert!(error.to_string().contains("comments"), "{error}");
     }
 
     /// Le critère du lot : le projet compile après génération d'une feature vide.

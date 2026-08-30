@@ -110,6 +110,10 @@ pub enum GenerateCommands {
         /// Affiche le plan sans rien écrire.
         #[arg(long)]
         dry_run: bool,
+
+        /// Entité enfant dont ce modèle doit porter la variante inverse, répétable.
+        #[arg(long = "has-many", value_name = "ENTITE")]
+        has_many: Vec<String>,
     },
 
     /// Génère une feature vide : six fichiers, aucun champ.

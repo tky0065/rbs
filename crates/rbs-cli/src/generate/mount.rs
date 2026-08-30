@@ -6,6 +6,8 @@
 
 use crate::anchors::{self, Anchor};
 
+use super::relations;
+
 /// Les handlers que le controller généré expose, dans l'ordre où ils y sont écrits.
 const HANDLERS: [&str; 5] = ["list", "create", "find", "update", "delete"];
 
@@ -50,6 +52,23 @@ pub(crate) fn for_migration(module: &str) -> Vec<Mount> {
         Mount {
             anchor: anchors::MIGRATIONS,
             lines: vec![format!("Box::new({module}::Migration),")],
+        },
+    ]
+}
+
+/// Ce que le côté inverse d'une relation ajoute au modèle de sa cible.
+///
+/// Deux ancres et non une : la variante vit dans les accolades de l'énumération, l'`impl
+/// Related` ne le peut pas.
+pub(crate) fn for_inverse(inverse: &relations::Inverse) -> Vec<Mount> {
+    vec![
+        Mount {
+            anchor: anchors::RELATIONS.in_file(&inverse.file),
+            lines: inverse.variant.clone(),
+        },
+        Mount {
+            anchor: anchors::RELATED.in_file(&inverse.file),
+            lines: inverse.related.clone(),
         },
     ]
 }
@@ -111,6 +130,33 @@ mod tests {
                 "crate::users::controller::delete,",
             ]
         );
+    }
+
+    #[test]
+    fn the_inverse_targets_the_two_anchors_of_the_computed_file() {
+        let inverse = relations::Inverse {
+            file: "src/auth/model.rs".to_string(),
+            variant: vec![
+                r#"    #[sea_orm(has_many = "crate::posts::model::Entity")]"#.to_string(),
+                "    Posts,".to_string(),
+            ],
+            related: vec![
+                "impl Related<crate::posts::model::Entity> for Entity {".to_string(),
+                "    fn to() -> RelationDef { Relation::Posts.def() }".to_string(),
+                "}".to_string(),
+            ],
+        };
+
+        let montages = for_inverse(&inverse);
+
+        assert_eq!(montages.len(), 2, "{montages:?}");
+        let relations_anchor = anchors::RELATIONS.in_file("src/auth/model.rs");
+        let related_anchor = anchors::RELATED.in_file("src/auth/model.rs");
+        assert_eq!(
+            lines(&montages, relations_anchor),
+            inverse.variant.as_slice()
+        );
+        assert_eq!(lines(&montages, related_anchor), inverse.related.as_slice());
     }
 
     #[test]

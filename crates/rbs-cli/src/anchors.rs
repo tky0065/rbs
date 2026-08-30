@@ -45,9 +45,6 @@ impl Anchor {
     ///
     /// Sert aux ancres du modèle d'une feature : leur fichier n'est connu qu'à
     /// l'exécution, une fois le nom de la feature en main.
-    // Rien ne l'appelle encore hors des tests : la commande qui écrira dans
-    // `src/<feature>/model.rs` arrive à une tâche suivante.
-    #[allow(dead_code)]
     pub(crate) fn in_file(&self, path: &str) -> Anchor {
         Anchor {
             file: Cow::Owned(path.to_string()),
@@ -158,9 +155,6 @@ pub(crate) const SERVICES: Anchor = Anchor {
 ///
 /// Hors du registre statique : son fichier dépend de la feature visée, et se fixe par
 /// [`Anchor::in_file`] une fois ce nom connu.
-// Rien ne la monte encore hors des tests : la tâche suivante l'inscrit dans le modèle
-// généré.
-#[allow(dead_code)]
 pub(crate) const RELATIONS: Anchor = Anchor {
     name: "relations",
     file: Cow::Borrowed("src/{feature}/model.rs"),
@@ -171,7 +165,6 @@ pub(crate) const RELATIONS: Anchor = Anchor {
 /// Implémentations de `Related` d'un modèle de feature.
 ///
 /// Hors du registre statique, pour la même raison que [`RELATIONS`].
-#[allow(dead_code)]
 pub(crate) const RELATED: Anchor = Anchor {
     name: "related",
     file: Cow::Borrowed("src/{feature}/model.rs"),

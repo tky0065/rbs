@@ -171,9 +171,6 @@ impl Field {
         }
     }
 
-    // Rien n'appelle encore `relation` hors des tests : les templates de relation, à
-    // une tâche suivante, la liront pour rendre le code SeaORM d'une référence.
-    #[allow(dead_code)]
     pub(crate) fn relation(&self) -> Option<&RelationView> {
         self.relation.as_ref()
     }

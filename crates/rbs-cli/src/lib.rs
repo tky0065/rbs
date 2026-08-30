@@ -69,21 +69,22 @@ pub fn run() {
         }
 
         Commands::Generate { command } => {
-            let (name, fields, complete, force, dry_run) = match command {
+            let (name, fields, complete, force, dry_run, has_many) = match command {
                 GenerateCommands::Crud {
                     name,
                     fields,
                     force,
                     dry_run,
-                } => (name, fields, true, force, dry_run),
+                    has_many,
+                } => (name, fields, true, force, dry_run, has_many),
                 GenerateCommands::Feature {
                     name,
                     force,
                     dry_run,
-                } => (name, None, false, force, dry_run),
+                } => (name, None, false, force, dry_run, Vec::new()),
             };
 
-            if let Err(error) = generate(name, fields, complete, force, dry_run) {
+            if let Err(error) = generate(name, fields, complete, force, dry_run, has_many) {
                 ui::error(&error.to_string());
                 if let Some(remedy) = error.remedy() {
                     ui::info(&format!("\n{remedy}"));
@@ -307,8 +308,12 @@ fn generate(
     complete: bool,
     force: bool,
     dry_run: bool,
+    has_many: Vec<String>,
 ) -> Result<(), generate::command::Error> {
     let feature = name.clone();
+    // `--has-many` répare une feature déjà là : rien à générer, donc rien à annoncer sous
+    // ce nom-là une fois l'écriture faite.
+    let repare = !has_many.is_empty();
     let directory = std::env::current_dir().map_err(|source| generate::command::Error::Acces {
         path: ".".to_string(),
         source,
@@ -319,6 +324,7 @@ fn generate(
         complete,
         directory,
         force,
+        has_many,
     })?;
 
     // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande
@@ -346,10 +352,14 @@ fn generate(
 
     plan::application::apply(&planned.plan, force)?;
 
-    ui::success(&format!(
-        "{feature} générée — {}",
-        ui::files(planned.files.len())
-    ));
+    if repare {
+        ui::success(&format!("{feature} : côté inverse écrit"));
+    } else {
+        ui::success(&format!(
+            "{feature} générée — {}",
+            ui::files(planned.files.len())
+        ));
+    }
 
     if let Some(migration) = &planned.migration {
         ui::info(&format!(
