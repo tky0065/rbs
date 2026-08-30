@@ -409,6 +409,19 @@ mod tests {
         );
     }
 
+    /// Une migration qui crée `iden`, dans un fichier dont le nom ne la nomme pas.
+    fn migration(root: &Path, iden: &str) {
+        fs::create_dir_all(root.join("migration/src")).expect("le répertoire se crée");
+        fs::write(
+            root.join("migration/src/m20260826_143000_create_tables.rs"),
+            format!(
+                "manager.create_table(Table::create().table({iden}::Table).to_owned());\n\
+                 \n#[derive(DeriveIden)]\nenum {iden} {{\n    Table,\n}}\n"
+            ),
+        )
+        .expect("l'écriture aboutit");
+    }
+
     /// Le trou trouvé en relecture d'une tâche antérieure : `entities::scan` reconnaît
     /// une cible à son `model.rs`, pas à sa migration.
     #[test]
@@ -433,12 +446,7 @@ mod tests {
     #[test]
     fn a_target_with_its_migration_is_accepted() {
         let root = TempDir::new().expect("le répertoire temporaire se crée");
-        fs::create_dir_all(root.path().join("migration/src")).expect("le répertoire se crée");
-        fs::write(
-            root.path().join("migration/src/lib.rs"),
-            "mod m20260826_143000_create_users;\n",
-        )
-        .expect("l'écriture aboutit");
+        migration(root.path(), "Users");
 
         let fields = resolved("author:references:users", "posts");
 

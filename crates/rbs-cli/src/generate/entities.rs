@@ -6,6 +6,8 @@
 use std::fs;
 use std::path::Path;
 
+use super::fields::to_pascal_case;
+
 /// Une entité trouvée dans le projet.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Entity {
@@ -104,14 +106,17 @@ fn collect(source: &str, module_path: &str, file: &str, found: &mut Vec<Entity>)
 /// module valides, et ignorer les trois premières laisserait leurs entités
 /// silencieusement rattachées à la racine du fichier.
 fn strip_module_declaration(trimmed: &str) -> Option<&str> {
+    strip_visibility(trimmed).strip_prefix("mod ")
+}
+
+/// Retire le préfixe de visibilité d'une déclaration, s'il y en a un.
+fn strip_visibility(trimmed: &str) -> &str {
     const VISIBILITIES: [&str; 3] = ["pub(crate) ", "pub(super) ", "pub "];
 
-    let after_visibility = VISIBILITIES
+    VISIBILITIES
         .iter()
         .find_map(|prefix| trimmed.strip_prefix(prefix))
-        .unwrap_or(trimmed);
-
-    after_visibility.strip_prefix("mod ")
+        .unwrap_or(trimmed)
 }
 
 /// Extrait `users` de `#[sea_orm(table_name = "users")]`.
@@ -145,18 +150,61 @@ pub(crate) fn tables(entities: &[Entity]) -> Vec<String> {
     names
 }
 
-/// `table` a-t-elle une migration inscrite dans le projet ?
+/// `table` a-t-elle une migration dans le projet ?
 ///
 /// `rbs generate feature` écrit un `model.rs` sans migration : une entité qu'`scan` trouve
-/// n'a donc pas forcément de table en base. Une migration s'inscrit dans
-/// `migration/src/lib.rs` sous `mod m..._create_<table>;` — c'est ce texte qu'on cherche,
-/// plutôt que de rouvrir chaque fichier de migration pour y lire la table qu'il crée.
+/// n'a donc pas forcément de table en base.
+///
+/// La recherche porte sur le **contenu** des migrations, non sur leur nom : celui-ci est
+/// libre, et une migration qui crée plusieurs tables n'en nomme aucune — le fragment
+/// `auth` crée `users` et `refresh_tokens` sous `create_auth_tables`. Ce qu'une migration
+/// créant une table écrit toujours, en revanche, est le couple `.table(<Iden>::Table)` et
+/// `enum <Iden>`, avec `<Iden>` le nom de la table en PascalCase.
+///
+/// Textuel comme le scan, et faillible du même côté : une migration écrite autrement — du
+/// SQL brut, un identifiant renommé — n'est pas reconnue, et la relation qui la visait est
+/// refusée. C'est le sens du refus qu'il faut préserver en y touchant : mieux vaut
+/// redemander une migration qui existe que poser une clé étrangère vers une table absente.
 pub(crate) fn has_migration(root: &Path, table: &str) -> bool {
-    let Ok(source) = fs::read_to_string(root.join("migration/src/lib.rs")) else {
+    let iden = to_pascal_case(table);
+
+    let Ok(entries) = fs::read_dir(root.join("migration/src")) else {
         return false;
     };
 
-    source.contains(&format!("_create_{table};"))
+    entries
+        .flatten()
+        .map(|entry| entry.path())
+        .filter(|path| path.extension().is_some_and(|suffixe| suffixe == "rs"))
+        .filter_map(|path| fs::read_to_string(path).ok())
+        .any(|source| creates_table(&source, &iden))
+}
+
+/// Cette source de migration crée-t-elle la table dont l'identifiant SeaORM est `iden` ?
+fn creates_table(source: &str, iden: &str) -> bool {
+    source.contains(&format!(".table({iden}::Table)")) && declares_iden(source, iden)
+}
+
+/// La source déclare-t-elle `enum <iden>`, sous n'importe quelle visibilité ?
+///
+/// Le nom est comparé en entier, et non par préfixe : `enum Users` et `enum UserSessions`
+/// commencent pareil, et les confondre déclarerait `users` créée par une migration qui ne
+/// la touche pas.
+fn declares_iden(source: &str, iden: &str) -> bool {
+    source.lines().any(|line| {
+        let trimmed = line.trim_start();
+        let declaration = strip_visibility(trimmed);
+
+        declaration.strip_prefix("enum ").is_some_and(|rest| {
+            let name = rest
+                .trim_start()
+                .split(|letter: char| !letter.is_alphanumeric() && letter != '_')
+                .next()
+                .unwrap_or_default();
+
+            name == iden
+        })
+    })
 }
 
 #[cfg(test)]
@@ -235,17 +283,45 @@ pub mod refresh_token {
         assert!(scan(root.path()).is_empty());
     }
 
+    /// Une migration, telle que le CLI et les fragments l'écrivent : la table se nomme
+    /// dans le corps, jamais dans le nom du fichier.
+    fn migration(root: &Path, module: &str, idens: &[&str]) {
+        fs::create_dir_all(root.join("migration/src")).expect("le répertoire se crée");
+
+        let mut source = String::from("use sea_orm_migration::prelude::*;\n");
+        for iden in idens {
+            source.push_str(&format!(
+                "\nmanager.create_table(Table::create().table({iden}::Table).to_owned()).await?;\n\
+                 \n#[derive(DeriveIden)]\nenum {iden} {{\n    Table,\n    Id,\n}}\n"
+            ));
+        }
+
+        fs::write(root.join(format!("migration/src/{module}.rs")), source)
+            .expect("l'écriture aboutit");
+    }
+
     #[test]
     fn a_table_created_by_a_migration_is_recognized() {
         let root = TempDir::new().expect("le répertoire temporaire se crée");
-        fs::create_dir_all(root.path().join("migration/src")).expect("le répertoire se crée");
-        fs::write(
-            root.path().join("migration/src/lib.rs"),
-            "mod m20260826_143000_create_users;\n",
-        )
-        .expect("l'écriture aboutit");
+        migration(root.path(), "m20260826_143000_create_users", &["Users"]);
 
         assert!(has_migration(root.path(), "users"));
+    }
+
+    /// Le défaut que le nom de fichier laissait passer : le fragment `auth` crée `users`
+    /// et `refresh_tokens` sous une migration qu'il nomme `create_auth_tables`. Toute
+    /// relation vers `users` s'y voyait refusée, migration à l'appui.
+    #[test]
+    fn a_migration_creating_several_tables_is_recognized_for_each_of_them() {
+        let root = TempDir::new().expect("le répertoire temporaire se crée");
+        migration(
+            root.path(),
+            "m20260826_143000_create_auth_tables",
+            &["Users", "RefreshTokens"],
+        );
+
+        assert!(has_migration(root.path(), "users"));
+        assert!(has_migration(root.path(), "refresh_tokens"));
     }
 
     // Le trou que le scan laissait ouvert : un `model.rs` sans migration existe pour de
@@ -253,13 +329,41 @@ pub mod refresh_token {
     #[test]
     fn a_table_without_a_migration_is_not_recognized() {
         let root = TempDir::new().expect("le répertoire temporaire se crée");
+        migration(root.path(), "m20260826_143000_create_tags", &["Tags"]);
+
+        assert!(!has_migration(root.path(), "users"));
+    }
+
+    /// Deux identifiants dont l'un préfixe l'autre : les confondre déclarerait `users`
+    /// créée par une migration qui ne la touche pas.
+    #[test]
+    fn a_table_whose_iden_merely_prefixes_another_is_not_recognized() {
+        let root = TempDir::new().expect("le répertoire temporaire se crée");
+        migration(
+            root.path(),
+            "m20260826_143000_create_user_sessions",
+            &["UserSessions"],
+        );
+
+        assert!(!has_migration(root.path(), "users"));
+    }
+
+    /// Une table nommée dans le corps d'une migration qui ne la crée pas — une clé
+    /// étrangère la vise — ne suffit pas : sans son `enum`, elle n'est pas créée ici.
+    #[test]
+    fn a_table_merely_referenced_by_a_migration_is_not_recognized() {
+        let root = TempDir::new().expect("le répertoire temporaire se crée");
         fs::create_dir_all(root.path().join("migration/src")).expect("le répertoire se crée");
         fs::write(
-            root.path().join("migration/src/lib.rs"),
-            "mod m20260826_143000_create_tags;\n",
+            root.path()
+                .join("migration/src/m20260826_143000_create_posts.rs"),
+            "manager.create_table(Table::create().table(Posts::Table)\n\
+             .foreign_key(ForeignKey::create().to(Users::Table, Users::Id)).to_owned());\n\
+             \n#[derive(DeriveIden)]\nenum Posts {\n    Table,\n}\n",
         )
         .expect("l'écriture aboutit");
 
+        assert!(has_migration(root.path(), "posts"));
         assert!(!has_migration(root.path(), "users"));
     }
 
