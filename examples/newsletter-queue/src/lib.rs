@@ -4,7 +4,7 @@
 //! qu'elles doivent lire en commun, `AppState` comme le modèle de chaque feature.
 
 mod health;
-mod openapi;
+pub mod openapi;
 pub mod router;
 pub mod state;
 // <rbs:features>
