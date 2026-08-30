@@ -314,6 +314,16 @@ mod tests {
         assert!(!lance, "le binaire du projet a été lancé malgré le refus");
     }
 
+    /// Un `.env` annoté à la main reste un `.env` : le commentaire ne doit pas désarmer
+    /// le refus en rendant la valeur différente de `production`.
+    #[test]
+    fn a_commented_production_line_still_refuses() {
+        let (_parent, root) = project();
+        declare(&root, "production # ne jamais semer");
+
+        assert!(production(&root, sans_env));
+    }
+
     /// L'environnement de l'appelant l'emporte, comme pour `rbs migrate`.
     #[test]
     fn the_callers_environment_overrides_the_projects_dotenv() {
