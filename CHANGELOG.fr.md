@@ -31,6 +31,17 @@ dépréciation.
 - `rbs dev` monte la pile du compose dès que le projet en porte un, que `docker` soit
   installée ou non — le compose est celui du squelette depuis `rbs new`, pas une marque
   du fragment ci-dessus.
+- `rbs new` écrit un `AGENTS.md` à la racine du projet : le mode d'emploi de rbs, écrit
+  pour un agent plutôt que pour un lecteur. Deux zones y appartiennent à rbs — le guide,
+  qui porte la version du CLI l'ayant écrit, et un inventaire du projet — et tout ce qui
+  est hors d'elles vous appartient et n'est jamais réécrit. `rbs add` et `rbs generate`
+  rafraîchissent l'inventaire ; `rbs upgrade` rafraîchit les deux zones et réécrit le
+  fichier s'il manque. La langue suit `rbs new --lang fr|en`, ou la locale à défaut de
+  flag, et s'inscrit dans `[package.metadata.rbs].lang`.
+- `rbs doctor` contrôle ce fichier — présent, entier, à jour — et nomme, **en
+  avertissement**, tout répertoire de `src/` que rien ne déclare. Écrire à la main ce que
+  rbs ne couvre pas reste légitime : l'avertissement le dit, et ne change jamais le code
+  de sortie de la commande.
 
 ### Modifié
 

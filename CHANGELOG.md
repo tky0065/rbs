@@ -30,6 +30,16 @@ between minor versions with no deprecation cycle.
 - `rbs dev` mounts the compose stack whenever the project has one, regardless of whether
   `docker` is installed — the compose is the skeleton's since `rbs new`, not a mark of the
   fragment above.
+- `rbs new` writes an `AGENTS.md` at the project root: the rbs handbook, written for an
+  agent rather than for a reader. Two zones belong to rbs — the guide, which carries the
+  version of the CLI that wrote it, and an inventory of the project — and everything
+  outside them belongs to you and is never rewritten. `rbs add` and `rbs generate` refresh
+  the inventory; `rbs upgrade` refreshes both zones and writes the file back if it is
+  missing. The language follows `rbs new --lang fr|en`, or the locale when the flag is
+  absent, and is recorded in `[package.metadata.rbs].lang`.
+- `rbs doctor` checks that file — present, whole, current — and names, as a **warning**,
+  any directory of `src/` that nothing declares. Writing by hand what rbs does not cover
+  stays legitimate: the warning says so, and never changes the command's exit code.
 
 ### Changed
 
