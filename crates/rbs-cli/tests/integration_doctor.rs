@@ -71,10 +71,14 @@ fn a_deleted_agents_file_is_diagnosed() {
     assert!(rendu.contains("rbs upgrade"), "{rendu}");
 }
 
-/// Le contrôle « le CLI d'abord » : il nomme le module écrit à la main sans faire échouer
-/// la commande, ce qu'un projet légitime doit pouvoir garder en CI.
+/// Le contrôle « le CLI d'abord » nomme le module écrit à la main sur une ligne
+/// d'avertissement, non d'échec — ce qu'un projet légitime doit pouvoir garder en CI.
+///
+/// L'assertion porte sur le marqueur de la ligne `agents`, et non sur le code de sortie :
+/// celui-ci vaut 1 par le contrôle `base`, dont la base est injoignable ici, et ne dirait
+/// donc rien de ce contrôle-ci.
 #[test]
-fn a_module_written_by_hand_is_reported_without_failing_the_command() {
+fn a_module_written_by_hand_is_reported_as_a_warning_not_a_failure() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let projet = common::projet(parent.path());
     viser(&projet, INJOIGNABLE);
@@ -82,8 +86,14 @@ fn a_module_written_by_hand_is_reported_without_failing_the_command() {
     fs::write(projet.join("src/webhooks/mod.rs"), "// à la main\n").expect("l'écriture aboutit");
 
     let rendu = diagnostic(&projet);
+    let ligne = ligne(&rendu, "agents");
 
-    assert!(rendu.contains("webhooks"), "{rendu}");
+    assert!(ligne.contains('!'), "{ligne}\n\n{rendu}");
+    assert!(!ligne.contains('✗'), "{ligne}\n\n{rendu}");
+    assert!(
+        ligne.contains("webhooks"),
+        "le constat doit nommer le module : {ligne}"
+    );
 }
 
 /// Le `.env` du projet, réécrit pour viser `url`.

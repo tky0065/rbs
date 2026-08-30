@@ -667,6 +667,13 @@ mod tests {
     /// Un guide périmé n'induit pas un développeur en erreur : il induit tous les agents
     /// en erreur. `add` fut livrée avec une description qui ne nommait pas `auth` — même
     /// piège, en plus coûteux.
+    ///
+    /// L'assertion porte sur la ligne du tableau des commandes, jamais sur le nom nu : sur
+    /// des noms de trois lettres, un `contains` cru se satisfait de n'importe quoi —
+    /// `add_index_on_slug` répondait pour `add`, `rbs migrate new` pour `new`, et une
+    /// simple mention en prose pour le reste. Retirer la ligne `| rbs add <feature> | … |`
+    /// du tableau ne faisait alors rougir personne, ce qui est pourtant le seul défaut que
+    /// ce test existe pour attraper.
     #[test]
     fn the_guide_names_every_subcommand_of_the_cli() {
         use clap::CommandFactory;
@@ -682,10 +689,17 @@ mod tests {
                     continue;
                 }
 
+                let nom = sous_commande.get_name();
+                // `| `rbs seed` |` se clôt par l'accent grave, `| `rbs generate crud …` |`
+                // par l'espace qui précède son premier argument : ce qui suit le nom
+                // départage une commande citée d'une autre qui la préfixe.
+                let cellule = format!("| `rbs {nom}");
+
                 assert!(
-                    rendu.contains(sous_commande.get_name()),
-                    "`{}` absente du guide {lang}",
-                    sous_commande.get_name()
+                    rendu.lines().any(|ligne| ligne
+                        .strip_prefix(&cellule)
+                        .is_some_and(|reste| reste.starts_with(['`', ' ']))),
+                    "`rbs {nom}` absente du tableau des commandes du guide {lang} :\n{rendu}"
                 );
             }
         }

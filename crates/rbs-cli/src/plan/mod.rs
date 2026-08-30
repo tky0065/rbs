@@ -1231,6 +1231,16 @@ mod tests {
             .expect_err("la zone manque");
 
         assert!(error.to_string().contains("inventory"), "{error}");
+
+        // Le nom seul ne répare rien : ce que le développeur colle, c'est le bloc, et
+        // c'est donc lui que l'erreur doit porter jusqu'à l'affichage.
+        let Error::ZoneAbsente { zone, .. } = &error else {
+            panic!("une zone absente doit se dire comme telle : {error:?}");
+        };
+        assert_eq!(
+            zone.block(),
+            "<!-- rbs:inventory -->\n<!-- /rbs:inventory -->"
+        );
     }
 
     #[test]
