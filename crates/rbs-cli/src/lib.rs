@@ -1,4 +1,5 @@
 mod add;
+mod agents;
 mod anchors;
 mod cargo;
 mod cli;
