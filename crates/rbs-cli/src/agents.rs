@@ -688,7 +688,7 @@ mod tests {
         }
     }
 
-    /// Sept sections, dans cet ordre, de chaque côté : un compte seul laisserait passer
+    /// Huit sections, dans cet ordre, de chaque côté : un compte seul laisserait passer
     /// une section renommée ou déplacée d'une seule langue.
     #[test]
     fn each_language_carries_its_sections_in_order() {
@@ -706,6 +706,7 @@ mod tests {
             titres(Lang::Fr),
             [
                 "## Le CLI d'abord",
+                "## Ce fichier",
                 "## Les commandes",
                 "## Recettes",
                 "## Architecture imposée",
@@ -718,6 +719,7 @@ mod tests {
             titres(Lang::En),
             [
                 "## CLI first",
+                "## This file",
                 "## Commands",
                 "## Recipes",
                 "## Enforced architecture",

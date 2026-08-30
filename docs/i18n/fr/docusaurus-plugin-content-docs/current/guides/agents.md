@@ -35,11 +35,11 @@ commentaire HTML :
 ## Notes du projet
 ```
 
-`rbs:guide` est le mode d'emploi proprement dit — la règle du CLI d'abord, le tableau des
-commandes, des recettes, l'architecture imposée, la liste des ancres, ce que rbs ne
-couvre pas, et les commandes à lancer avant de conclure. Son marqueur d'ouverture porte la
-version du CLI qui l'a écrit, et c'est ce numéro que [`rbs upgrade`](../cli/upgrade.md)
-compare et réécrit.
+`rbs:guide` est le mode d'emploi proprement dit — la règle du CLI d'abord, un mot sur les
+zones de ce fichier, le tableau des commandes, des recettes, l'architecture imposée, la
+liste des ancres, ce que rbs ne couvre pas, et les commandes à lancer avant de conclure.
+Son marqueur d'ouverture porte la version du CLI qui l'a écrit, et c'est ce numéro que
+[`rbs upgrade`](../cli/upgrade.md) compare et réécrit.
 
 `rbs:inventory` est l'état du projet lui-même, recalculé en entier à chaque écriture : la
 version de rbs et le moteur de base, les fragments installés, les entités engendrées, et
@@ -59,6 +59,7 @@ Les zones d'un vrai projet, engendré en français, se lisent ainsi :
 
 <!-- rbs:guide 1.1.0 -->
 ## Le CLI d'abord
+## Ce fichier
 ## Les commandes
 ## Recettes
 ## Architecture imposée

@@ -33,10 +33,11 @@ Only two parts of `AGENTS.md` belong to rbs, each delimited by an HTML comment:
 ## Project notes
 ```
 
-`rbs:guide` is the handbook itself — the CLI-first rule, the command table, recipes,
-the enforced architecture, the anchor list, what rbs does not cover, and the commands to
-run before concluding. Its opening marker carries the version of the CLI that wrote it,
-which is what [`rbs upgrade`](../cli/upgrade.md) compares and rewrites.
+`rbs:guide` is the handbook itself — the CLI-first rule, a note on this file's own zones,
+the command table, recipes, the enforced architecture, the anchor list, what rbs does not
+cover, and the commands to run before concluding. Its opening marker carries the version
+of the CLI that wrote it, which is what [`rbs upgrade`](../cli/upgrade.md) compares and
+rewrites.
 
 `rbs:inventory` is the project's own state, recomputed from scratch on every write: the
 rbs version and database engine, the fragments installed, the entities generated, and the
@@ -55,6 +56,7 @@ A real project's zones, generated in English, read like this:
 
 <!-- rbs:guide 1.1.0 -->
 ## CLI first
+## This file
 ## Commands
 ## Recipes
 ## Enforced architecture

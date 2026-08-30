@@ -2,16 +2,25 @@
 
 Ce projet est engendré par rbs. **Toute fonctionnalité que rbs couvre passe par le CLI**,
 jamais par l'écriture à la main des fichiers : le CLI pose la migration, câble les ancres,
-inscrit la feature dans `[package.metadata.rbs]` et respecte l'architecture. Six fichiers
-écrits à la main donnent un projet que `rbs doctor` déclare incomplet.
+inscrit la feature dans `[package.metadata.rbs]` et respecte l'architecture. Le même CRUD
+écrit à la main, ce sont sept fichiers, une migration et toutes les ancres à tenir
+soi-même, pour un module que `[package.metadata.rbs]` continuera d'ignorer.
+
+## Ce fichier
+
+Deux zones de ce fichier appartiennent à rbs et sont régénérées en entier : `rbs:guide`,
+le mode d'emploi que vous lisez, et `rbs:inventory`, l'état du projet. Ce qui est écrit
+entre leurs marqueurs disparaît au prochain `rbs upgrade`, `rbs add` ou `rbs generate`,
+sans avertissement. Tout le reste du fichier appartient au projet, et la section « Notes
+du projet », en bas, est faite pour l'accueillir.
 
 ## Les commandes
 
 | Commande | Ce qu'elle fait | Ce qu'elle dispense d'écrire |
 |---|---|---|
-| `rbs new <nom>` | crée un projet | tout le squelette |
+| `rbs new <nom>` | crée un projet ; `--lang fr\|en` fixe la langue de ce fichier | tout le squelette |
 | `rbs add <feature>` | installe auth, ci, docker, jobs, mail, redis, storage | le câblage de la feature |
-| `rbs generate crud <nom> --fields "..."` | une feature CRUD complète | six fichiers, l'entité et sa migration |
+| `rbs generate crud <nom> --fields "..."` | une feature CRUD complète | sept fichiers, le seed et la migration |
 | `rbs generate feature <nom>` | une feature vide | six fichiers |
 | `rbs migrate up\|down\|status` | pilote les migrations | — |
 | `rbs migrate new <nom>` | un fichier de migration vide | le squelette de la migration |
@@ -34,13 +43,15 @@ inscrit la feature dans `[package.metadata.rbs]` et respecte l'architecture. Six
 ## Architecture imposée
 
 ```
-features/<nom>/  mod · model · dto · repository · service · controller
+src/<nom>/  mod · model · dto · repository · service · controller
 controller → service → repository → model
 ```
 
 La dépendance est unidirectionnelle et stricte : un `service` n'accède jamais à
-`DatabaseConnection`, un `controller` ne construit jamais de requête SeaORM. Un fichier de
-feature au-delà de ~200 lignes signale une feature à scinder.
+`DatabaseConnection`, un `controller` ne construit jamais de requête SeaORM. `rbs generate
+crud` ajoute à ces six fichiers un `tests.rs` et, quand l'entité est semable, le seed
+`src/seeds/<nom>.rs`. Un fichier de feature au-delà de ~200 lignes signale une feature à
+scinder.
 
 ## Les ancres
 
@@ -60,8 +71,8 @@ engendre pas, et il est légitime de les écrire à la main. Alors :
   repository ;
 - si le code ajoute une route, l'inscrire dans `<rbs:routes>` et `<rbs:openapi>` à la
   main ;
-- `rbs doctor` signalera un module écrit hors du CLI en avertissement. C'est un constat,
-  pas une erreur.
+- `rbs doctor` signale un module écrit hors du CLI par un avertissement `!`, jamais par un
+  échec : c'est un constat, et la commande reste bonne.
 
 ## Vérifier avant de conclure
 
