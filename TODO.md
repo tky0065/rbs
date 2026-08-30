@@ -932,3 +932,69 @@ jalon v0.1, et deux `V1` dans ce fichier rendraient ambiguë chaque référence 
       `rbs upgrade`, dont `cargo test` est vert après.
       ✓ `cargo semver-checks` de 1.0.0 contre 0.4.0 → verdict cohérent avec le numéro publié.
       ✓ Le `README` annonce la promesse de compatibilité, et non plus son absence.
+
+### Lot Z — L'AGENTS.md du projet engendré
+
+- [x] **Z1** · Le type `Lang` — vérifié 2026-08-30 · `cargo test -p rbs-cli lang::` → 7 passed ; `fmt`/`clippy -D warnings` silencieux · commit `51c6e35`
+      ✓ `fr`/`en` analysés et rendus, `Display` aligné sur le nom du manifeste.
+      ✓ Une locale POSIX complète (`fr_FR.UTF-8`) reconnue ; toute autre valeur donne l'anglais, l'absence le français.
+
+- [x] **Z2** · `lang` dans les métadonnées — vérifié 2026-08-30 · `cargo test -p rbs-cli --lib` → 711 passed ; `integration_examples` → 16 passed après réalignement des quatre manifestes · commits `af6425b`, `d4740fe`
+      ✓ Clé absente ou valeur inconnue → `Fr`, jamais une erreur : un projet engendré avant ce jalon reste utilisable.
+      ✓ Le gabarit écrit `lang` dans `[package.metadata.rbs]`, à la place exacte où les exemples la portent.
+
+- [x] **Z3** · `rbs new --lang` — vérifié 2026-08-30 · `cargo test -p rbs-cli --lib` → 717 passed ; `integration_new` → 2 passed · commits `daa0105`, `7f6757c`
+      ✓ Flag absent → détection ; `LC_ALL` puis `LANG`, **une variable posée mais vide cède la main à la suivante** — défaut trouvé en revue, corrigé et couvert.
+      ✓ Les exemples épinglent `--lang fr` : leur régénération ne dépend plus de la locale de la machine.
+
+- [x] **Z4** · Les zones réservées — vérifié 2026-08-30 · `cargo test -p rbs-cli agents::` → 9 passed · commit `6f7cb46`
+      ✓ Le hors-zone survit intact au remplacement ; deux remplacements successifs rendent un document identique.
+      ✓ Une ouverture sans fermeture n'est pas une zone : elle est refusée au lieu d'emporter la fin du fichier.
+
+- [x] **Z5** · L'inventaire — vérifié 2026-08-30 · `cargo test -p rbs-cli --lib` → 733 passed · commit `fba4fea`
+      ✓ Fragments et entités séparés par le catalogue embarqué, non par une liste écrite en dur.
+      ✓ L'ancre des features nomme le fichier réel du projet ; une ancre optionnelle absente n'est pas listée.
+
+- [x] **Z6** · Les deux guides, et le test qui les empêche de mentir — vérifié 2026-08-30 · `cargo test -p rbs-cli --lib` → 739 passed · commits `34f822d`, `91a9cbd`, `20458dd`
+      ✓ Chaque sous-commande de clap et chaque ancre du registre sont nommées dans les deux guides, la liste étant **calculée** et non recopiée.
+      ✓ Sept sections de chaque côté, comparées par leurs titres dans l'ordre — un compte seul laissait passer une section renommée.
+      ✓ Aucun reste de français dans le guide anglais, y compris dans les parties calculées.
+
+- [x] **Z7** · `rbs new` pose le fichier — vérifié 2026-08-30 · `cargo test -p rbs-cli --lib` → 744 passed ; `integration_examples` → 16 passed · commits `9e3f194`, `7359ec1`, `23f7c58`
+      ✓ Écrit **après** l'installation des features de `--with` : l'inventaire décrit le projet livré.
+      ✓ `--template-dir` continue de fonctionner — les guides ne font pas partie du squelette substituable (régression trouvée en revue).
+      ✓ Le guide et l'inventaire s'accordent sur le fichier de l'ancre des features.
+
+- [x] **Z8** · Le plan sait remplacer une zone — vérifié 2026-08-30 · `cargo test -p rbs-cli plan::` → 59 passed · commit `6b6314e`
+      ✓ L'action compose avec l'existant : jamais de conflit, jamais de `--force` réclamé pour une ligne de documentation.
+      ✓ Ni `application.rs` ni `render.rs` touchés — `apply` écrit les contenus finaux, pas les effets.
+
+- [x] **Z9** · `rbs add` tient l'inventaire — vérifié 2026-08-30 · `cargo test -p rbs-cli --lib` → 753 passed · commits `4449919`, `a439be9`
+      ✓ Un `AGENTS.md` ou une zone supprimés n'empêchent pas d'installer une feature ; le bloc à recoller s'affiche.
+      ✓ `refresh` ne lit plus le disque et n'avale plus aucune erreur de manifeste (défaut trouvé en revue).
+
+- [x] **Z10** · `rbs generate` tient l'inventaire — vérifié 2026-08-30 · `cargo test -p rbs-cli --lib` → 756 passed ; `integration_examples` → **16 passed** · commits `55bfd10`, `57f5bd2`
+      ✓ L'entité engendrée est nommée ; la zone est régénérée, jamais complétée.
+      ✓ Les quatre exemples versionnés disent enfin la vérité sur eux-mêmes, sans qu'aucune retouche manuelle ait bougé.
+
+- [x] **Z11** · `rbs upgrade` rafraîchit le guide — vérifié 2026-08-30 · `cargo test -p rbs-cli --lib` → 760 passed ; `integration_upgrade` → 6 passed · commit `9c2c1c5`
+      ✓ L'inventaire porte la version **visée** : la commande converge en une passe.
+      ✓ Le fichier disparu est recréé ; le doc-comment du module ne prétend plus n'écrire que dans `Cargo.toml`.
+
+- [x] **Z12** · Le troisième verdict de `doctor` — vérifié 2026-08-30 · `cargo test -p rbs-cli doctor::` → 92 passed · commit `367eebf`
+      ✓ Un avertissement s'affiche sans changer le code de sortie : `succeeded` compare à « pas un échec », non à « bon ».
+      ✓ Marqueur distinguable sans couleur, `NO_COLOR` respecté par la bibliothèque et non réimplémenté.
+
+- [x] **Z13** · `doctor` contrôle le fichier et nomme le code hors CLI — vérifié 2026-08-30 · `cargo test -p rbs-cli doctor::` → 101 passed ; `--lib` → 772 passed · commit `7ea27ae`
+      ✓ Le code écrit à la main est un **avertissement**, jamais un échec : la règle reste contrôlable sans faire rougir un projet sain.
+      ✓ `redis` s'installant en `src/cache/`, ce répertoire ne déclenche aucun avertissement — éprouvé par une installation réelle.
+      ✓ Les deux dérogations au code mort posées en chemin ont disparu, sans réapparaître ailleurs.
+
+- [x] **Z14** · La documentation, dans les deux langues — vérifié 2026-08-30 · `npm run build` vert sur les deux locales ; `node scripts/parite.mjs` → **0 écart**, 26/26 paires · commits `a17c8ad`, `07ecd28`, `6de483e`, `8d81f8e`
+      ✓ Une page « Développer avec un agent » dans les deux langues, plus `cli/new`, `cli/upgrade` et `cli/doctor` mis à jour.
+      ✓ **Les blocs de terminal sont recapturés, pas recomposés** : la page promettait une capture verbatim que son espacement démentait.
+      ✓ Le balayage du site a trouvé **neuf paires de pages** dont un plan ou un compte était périmé par le fichier ajouté — toutes corrigées.
+
+- [x] **Z15** · Le suivi — vérifié 2026-08-30 · ce lot et le jalon `v1.2` de `ROADMAP.md`
+      ✓ Un lot dont chaque case porte la preuve exécutée qui la coche.
+      ✓ Le jalon énonce son critère de sortie, qui reste à éprouver sur un agent réel.
