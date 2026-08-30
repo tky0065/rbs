@@ -84,10 +84,12 @@ l'authentification (`rbs add auth`), une migration à écrire soi-même (`rbs mi
 Un service ne touche jamais `DatabaseConnection` ; un controller ne construit jamais de
 requête SeaORM. Une feature au-delà de ~200 lignes se scinde.
 
-**Les ancres.** `<rbs:features>`, `<rbs:routes>`, `<rbs:openapi>`, `<rbs:migrations>`,
-`<rbs:services>`, `<rbs:seeds>`, `<rbs:startup>`, et les ancres de relation
-`<rbs:relations>` et `<rbs:related>` : ce que le CLI alimente et qu'on ne réordonne pas à
-la main. La liste est tirée du moteur d'ancres, non recopiée : un test la contrôle (§8).
+**Les ancres.** Les dix ancres du registre `anchors::ANCRES` — `features`, `routes`,
+`openapi`, `migration_modules`, `migrations`, `state_champs`, `state_init`, `startup`,
+`seeds`, `services` — plus les deux ancres d'entité `relations:<table>` et
+`related:<table>`, qui vivent hors du registre parce que leur fichier dépend de l'entité.
+Ce que le CLI alimente et qu'on ne réordonne pas à la main. La liste est tirée du registre,
+non recopiée à la main : un test la contrôle (§8).
 
 **Ce que rbs ne couvre pas.** La partie qui évite le pire. Pour un endpoint qui n'est pas
 un CRUD, un client HTTP externe, une règle métier : où poser le code (dans la feature
