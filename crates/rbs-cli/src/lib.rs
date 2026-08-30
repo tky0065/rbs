@@ -239,11 +239,16 @@ fn locale() -> Option<String> {
 /// La même, les deux variables passées en paramètre.
 ///
 /// Séparée pour que la précédence soit exerçable sans écrire dans l'environnement du
-/// processus de test, que les autres tests partagent.
+/// processus de test, que les autres tests partagent. Le filtre porte sur chaque valeur
+/// avant que la précédence ne choisisse : une variable posée mais vide n'est pas
+/// autoritaire en POSIX, et `LC_ALL=""` se rencontre en intégration continue — un filtre
+/// posé après aurait figé le choix sur cette valeur vide plutôt que de laisser `LANG`
+/// trancher.
 fn locale_from(lc_all: Option<&str>, lang: Option<&str>) -> Option<String> {
-    lc_all
-        .or(lang)
-        .filter(|locale| !locale.is_empty())
+    [lc_all, lang]
+        .into_iter()
+        .flatten()
+        .find(|locale| !locale.is_empty())
         .map(str::to_owned)
 }
 
@@ -606,5 +611,15 @@ mod tests {
     #[test]
     fn an_environment_without_locale_gives_nothing() {
         assert_eq!(locale_from(None, None), None);
+    }
+
+    /// Une variable posée mais vide n'est pas autoritaire : POSIX veut qu'elle laisse la
+    /// main à la suivante, et certains environnements d'intégration posent `LC_ALL=""`.
+    #[test]
+    fn an_empty_lc_all_gives_way_to_lang() {
+        assert_eq!(
+            locale_from(Some(""), Some("en_US.UTF-8")),
+            Some("en_US.UTF-8".to_string())
+        );
     }
 }
