@@ -393,6 +393,18 @@ fn the_manifest_records_the_language_asked_for() {
     );
 }
 
+#[test]
+fn the_created_project_carries_an_agents_file_naming_the_cli() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+
+    let agents = fs::read_to_string(projet.join("AGENTS.md")).expect("AGENTS.md est écrit");
+
+    assert!(agents.contains("rbs generate crud"), "{agents}");
+    assert!(agents.contains("<!-- rbs:inventory -->"), "{agents}");
+    assert!(agents.contains("postgres"), "{agents}");
+}
+
 /// Le binaire livré, lancé depuis `repertoire`.
 fn rbs(repertoire: impl AsRef<Path>) -> Command {
     let mut commande = Command::cargo_bin("rbs").expect("le binaire rbs doit être compilé");

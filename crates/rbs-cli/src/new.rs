@@ -145,6 +145,10 @@ pub enum Error {
         /// Cause système.
         source: io::Error,
     },
+
+    /// Le guide de l'agent n'a pas pu être rendu.
+    #[error("AGENTS.md n'a pas pu être écrit : {0}")]
+    Agents(#[from] crate::agents::Error),
 }
 
 /// Crée le projet décrit par `options` dans `parent`.
@@ -202,9 +206,29 @@ pub fn create(options: &Options, parent: &Path) -> Result<Project, Error> {
         }
     }
 
+    // Après les features, non avant : l'inventaire lit le manifeste que chaque
+    // installation complète.
+    let agents = crate::agents::document(
+        &root,
+        options.lang,
+        options.template_dir.as_deref(),
+        &options.name,
+    )
+    .inspect_err(|_| {
+        // Le répertoire n'existait pas avant la commande : le retirer entièrement ne peut
+        // rien emporter qui lui préexistait.
+        let _ = fs::remove_dir_all(&root);
+    })?;
+
+    fs::write(root.join(crate::agents::FICHIER), agents).map_err(|source| {
+        let path = root.join(crate::agents::FICHIER).display().to_string();
+        let _ = fs::remove_dir_all(&root);
+        Error::Ecriture { path, source }
+    })?;
+
     Ok(Project {
         depot_git: git_init(&root),
-        files: rendus.len(),
+        files: rendus.len() + 1,
         installed,
         root,
     })
@@ -425,10 +449,11 @@ mod tests {
 
     use super::*;
 
-    /// Les templates du dépôt, pour que les tests portent sur le squelette réel plutôt
-    /// que sur une copie embarquée au moment de leur compilation.
-    const SQUELETTE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/project");
-
+    // `Source::fresh` et `Source::agents` lisent toutes deux `template_dir` tel quel, sans
+    // sous-répertoire : un même `--template-dir` ne peut donc porter à la fois le squelette
+    // et les guides sans que l'un pollue le rendu de l'autre. Faute d'un répertoire qui
+    // satisferait les deux, ces tests — qui ne portent pas sur `--template-dir` — se fient
+    // aux templates embarquées, rafraîchies à chaque recompilation de la crate.
     fn options(name: &str) -> Options {
         Options {
             name: name.to_owned(),
@@ -436,7 +461,7 @@ mod tests {
             database: Database::Postgres,
             features: Vec::new(),
             core_path: None,
-            template_dir: Some(PathBuf::from(SQUELETTE)),
+            template_dir: None,
             lang: crate::lang::Lang::Fr,
         }
     }
@@ -1047,7 +1072,7 @@ mod tests {
         assert!(compose.contains("- \"5432:5432\""), "{compose}");
         assert!(compose.contains("# <rbs:services>"), "{compose}");
         assert!(compose.contains("# </rbs:services>"), "{compose}");
-        assert_eq!(project.files, 18);
+        assert_eq!(project.files, 19);
     }
 
     /// Le port publié est celui du .env, non 5432 en dur : sans quoi `cargo run` sur
@@ -1118,7 +1143,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 17);
+        assert_eq!(project.files, 18);
     }
 
     #[test]
@@ -1139,7 +1164,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 17);
+        assert_eq!(project.files, 18);
     }
 
     /// Une URL sans identifiants est valide et acceptée par `parse` : sans cette
@@ -1165,6 +1190,82 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 17);
+        assert_eq!(project.files, 18);
+    }
+
+    #[test]
+    fn a_new_project_carries_its_agents_file() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+
+        let project = create(
+            &Options {
+                name: "demo-api".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
+                database: Default::default(),
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+                lang: crate::lang::Lang::Fr,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        let agents =
+            std::fs::read_to_string(project.root.join("AGENTS.md")).expect("AGENTS.md est écrit");
+
+        assert!(agents.contains("<!-- rbs:guide"), "{agents}");
+        assert!(agents.contains("rbs generate crud"), "{agents}");
+    }
+
+    /// L'inventaire lit le manifeste, que l'installation des features complète : écrit
+    /// avant elle, il annoncerait un projet sans `auth` sur un projet qui vient de
+    /// l'installer.
+    #[test]
+    fn the_inventory_of_a_new_project_names_the_features_installed_at_creation() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+
+        let project = create(
+            &Options {
+                name: "demo-api".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
+                database: Default::default(),
+                features: vec!["redis".to_string()],
+                core_path: None,
+                template_dir: None,
+                lang: crate::lang::Lang::Fr,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        let agents =
+            std::fs::read_to_string(project.root.join("AGENTS.md")).expect("AGENTS.md est écrit");
+
+        assert!(agents.contains("redis"), "{agents}");
+    }
+
+    #[test]
+    fn an_english_project_carries_an_english_guide() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+
+        let project = create(
+            &Options {
+                name: "demo-api".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
+                database: Default::default(),
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+                lang: crate::lang::Lang::En,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        let agents =
+            std::fs::read_to_string(project.root.join("AGENTS.md")).expect("AGENTS.md est écrit");
+
+        assert!(agents.contains("## CLI first"), "{agents}");
     }
 }
