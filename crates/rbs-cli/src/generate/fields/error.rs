@@ -89,7 +89,14 @@ impl ErrorKind {
             Self::DuplicateName { .. } => {
                 Some("un nom de champ ne peut apparaître qu'une fois".to_string())
             }
-            Self::UnknownType { .. } => Some(FieldType::NAMES.join(", ")),
+            // `references` n'est pas de `FieldType::NAMES` : c'est un `FieldKind` à
+            // part, qui attend une cible — l'énumérer nu laisserait croire à un type
+            // sans argument, comme les sept autres.
+            Self::UnknownType { .. } => {
+                let mut names = FieldType::NAMES.join(", ");
+                names.push_str(", references:<table>");
+                Some(names)
+            }
             Self::UnknownModifier { .. } => {
                 Some("unique, optional, index — sur une référence : cascade, nullify".to_string())
             }
@@ -303,6 +310,23 @@ mod tests {
         for word in FieldType::NAMES {
             assert!(text.contains(word), "« {word} » absent de : {text}");
         }
+    }
+
+    // `references` n'est pas dans `FieldType::NAMES` — c'est le seul type absent de
+    // cette liste — donc la boucle ci-dessus ne le mord jamais : sans l'ajout manuel
+    // dans `hint`, ce test échoue là où le précédent resterait vert.
+    #[test]
+    fn an_unknown_type_also_mentions_references_with_its_target() {
+        let text = rendered(
+            ErrorKind::UnknownType {
+                name: "decimal".to_string(),
+            },
+            "price",
+        );
+        assert!(
+            text.contains("references:<table>"),
+            "« references » absent de : {text}"
+        );
     }
 
     #[test]
