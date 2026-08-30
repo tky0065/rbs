@@ -22,6 +22,28 @@ pub(crate) const GUIDE: &str = "guide";
 /// Zone de l'état du projet, recalculée à chaque écriture.
 pub(crate) const INVENTORY: &str = "inventory";
 
+/// Nom du fichier, à la racine du projet.
+pub(crate) const FICHIER: &str = "AGENTS.md";
+
+/// Version du CLI qui écrit le guide.
+pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+/// Ce qui peut empêcher de rendre l'`AGENTS.md` d'un projet.
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum Error {
+    /// Les templates du guide n'ont pas pu être lues.
+    #[error("les guides AGENTS.md sont illisibles : {0}")]
+    Templates(#[source] std::io::Error),
+
+    /// Une template ne s'est pas rendue.
+    #[error("le guide AGENTS.md ne se rend pas : {0}")]
+    Rendu(#[source] minijinja::Error),
+
+    /// Le manifeste du projet n'a pas pu être lu.
+    #[error(transparent)]
+    Metadonnees(#[from] metadata::Error),
+}
+
 /// Une zone que le document ne porte pas.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[error("AGENTS.md ne porte pas la zone `rbs:{zone}`")]
@@ -135,6 +157,82 @@ fn splice(
         content.trim_matches('\n'),
         closing(zone),
         &source[fin..]
+    )
+}
+
+/// Rend le corps de la zone du guide, dans la langue du projet.
+pub(crate) fn guide(
+    lang: Lang,
+    template_dir: Option<&Path>,
+    project: &str,
+) -> Result<String, Error> {
+    let attendue = format!("{}.md", lang.name());
+    let files = crate::templates::Source::agents(template_dir)
+        .files()
+        .map_err(Error::Templates)?;
+
+    let template = files
+        .iter()
+        .find(|file| file.destination == Path::new(&attendue))
+        .ok_or_else(|| {
+            Error::Templates(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("{attendue} manque aux guides"),
+            ))
+        })?;
+
+    crate::template::Renderer::new()
+        .render(
+            &template.source,
+            minijinja::context! {
+                project_name => project,
+                ancres => anchor_list(),
+            },
+        )
+        .map(|rendu| rendu.trim_matches('\n').to_string())
+        .map_err(Error::Rendu)
+}
+
+/// Le fichier complet, prêt à être écrit : titre, guide, inventaire, place du développeur.
+pub(crate) fn document(
+    root: &Path,
+    lang: Lang,
+    template_dir: Option<&Path>,
+    project: &str,
+) -> Result<String, Error> {
+    let (mode_d_emploi, notes) = match lang {
+        Lang::Fr => ("mode d'emploi pour agents", "## Notes du projet"),
+        Lang::En => ("agent handbook", "## Project notes"),
+    };
+
+    Ok(format!(
+        "# {project} — {mode_d_emploi}\n\n\
+         {}\n{}\n{}\n\n\
+         {}\n{}\n{}\n\n\
+         {notes}\n",
+        opening(GUIDE, Some(VERSION)),
+        guide(lang, template_dir, project)?,
+        closing(GUIDE),
+        opening(INVENTORY, None),
+        inventory(root, lang)?,
+        closing(INVENTORY),
+    ))
+}
+
+/// La liste des ancres du registre, rendue en markdown pour la template.
+///
+/// Calculée et non recopiée : une ancre ajoutée au registre doit apparaître dans le guide
+/// sans que personne ait à y penser.
+fn anchor_list() -> String {
+    let registre = anchors::ANCRES
+        .iter()
+        .map(|anchor| format!("- `<rbs:{}>` dans `{}`", anchor.name, anchor.file))
+        .collect::<Vec<_>>()
+        .join("\n");
+
+    format!(
+        "{registre}\n- `<rbs:relations:<table>>` et `<rbs:related:<table>>` dans le modèle \
+         de chaque entité"
     )
 }
 
@@ -430,5 +528,91 @@ mod tests {
     fn the_version_of_the_guide_is_read_from_its_opening_marker() {
         assert_eq!(version(DOCUMENT, GUIDE).as_deref(), Some("1.1.0"));
         assert_eq!(version(DOCUMENT, INVENTORY), None);
+    }
+
+    /// Un guide périmé n'induit pas un développeur en erreur : il induit tous les agents
+    /// en erreur. `add` fut livrée avec une description qui ne nommait pas `auth` — même
+    /// piège, en plus coûteux.
+    #[test]
+    fn the_guide_names_every_subcommand_of_the_cli() {
+        use clap::CommandFactory;
+
+        for lang in [Lang::Fr, Lang::En] {
+            let rendu = guide(lang, None, "demo-api").expect("le guide se rend");
+
+            for sous_commande in crate::cli::Cli::command().get_subcommands() {
+                // `help` est engendrée par clap lui-même : aucun guide n'a à la documenter.
+                if sous_commande.get_name() == "help" {
+                    continue;
+                }
+
+                assert!(
+                    rendu.contains(sous_commande.get_name()),
+                    "`{}` absente du guide {lang}",
+                    sous_commande.get_name()
+                );
+            }
+        }
+    }
+
+    /// La liste des ancres se calcule, elle ne se recopie pas : une ancre ajoutée au
+    /// registre sans être écrite ici laisserait l'agent la piétiner.
+    #[test]
+    fn the_guide_names_every_anchor_of_the_registry() {
+        for lang in [Lang::Fr, Lang::En] {
+            let rendu = guide(lang, None, "demo-api").expect("le guide se rend");
+
+            for anchor in crate::anchors::ANCRES.iter() {
+                assert!(
+                    rendu.contains(anchor.name.as_ref()),
+                    "l'ancre `{}` est absente du guide {lang}",
+                    anchor.name
+                );
+            }
+        }
+    }
+
+    /// Les deux langues doivent rester une seule documentation : une section ajoutée d'un
+    /// côté et pas de l'autre donne deux guides qui divergent en silence.
+    #[test]
+    fn both_languages_carry_the_same_number_of_sections() {
+        let titres = |lang| {
+            guide(lang, None, "demo-api")
+                .expect("le guide se rend")
+                .lines()
+                .filter(|line| line.starts_with("## "))
+                .count()
+        };
+
+        assert_eq!(titres(Lang::Fr), titres(Lang::En));
+        assert_eq!(titres(Lang::Fr), 7);
+    }
+
+    #[test]
+    fn the_document_carries_both_zones_and_a_place_for_the_developer() {
+        let (_parent, root) = project(Vec::new());
+
+        let rendu = document(&root, Lang::Fr, None, "demo-api").expect("le document se rend");
+
+        assert!(rendu.contains(&opening(GUIDE, Some(VERSION))), "{rendu}");
+        assert!(rendu.contains(&closing(GUIDE)), "{rendu}");
+        assert!(rendu.contains(&opening(INVENTORY, None)), "{rendu}");
+        assert!(rendu.contains(&closing(INVENTORY)), "{rendu}");
+        assert!(rendu.contains("## Notes du projet"), "{rendu}");
+        assert!(rendu.starts_with("# demo-api"), "{rendu}");
+    }
+
+    /// Le fichier est du markdown lu par des humains autant que par des agents : un
+    /// document qui ne finit pas par une ligne vide fâche Git et les éditeurs.
+    #[test]
+    fn the_document_ends_with_a_single_newline() {
+        let (_parent, root) = project(Vec::new());
+
+        let rendu = document(&root, Lang::Fr, None, "demo-api").expect("le document se rend");
+
+        assert!(
+            rendu.ends_with('\n') && !rendu.ends_with("\n\n"),
+            "{rendu:?}"
+        );
     }
 }

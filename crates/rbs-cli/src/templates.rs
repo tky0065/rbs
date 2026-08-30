@@ -23,6 +23,9 @@ static PROJET: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/templates/projec
 /// Les fragments de feature, un sous-répertoire par feature installable.
 static FEATURES: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/templates/features");
 
+/// Les guides `AGENTS.md`, une template par langue.
+static AGENTS: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/templates/agents");
+
 /// Provenance des templates.
 #[derive(Debug)]
 pub enum Source {
@@ -62,6 +65,14 @@ impl Source {
         match directory {
             Some(path) => Self::Repertoire(path.to_path_buf()),
             None => Self::Embarquees(&PROJET),
+        }
+    }
+
+    /// S'ouvre sur les guides `AGENTS.md`, sous le répertoire donné ou dans l'embarqué.
+    pub fn agents(directory: Option<&Path>) -> Self {
+        match directory {
+            Some(path) => Self::Repertoire(path.to_path_buf()),
+            None => Self::Embarquees(&AGENTS),
         }
     }
 
