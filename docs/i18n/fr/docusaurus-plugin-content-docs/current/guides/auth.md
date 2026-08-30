@@ -39,12 +39,13 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                             modifié
   ~ config/default.toml                                    modifié
   ~ .env.example                                           modifié
+  ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  17 fichiers à écrire
+  18 fichiers à écrire
 ✓ auth installée — 9 fichiers
 
-  recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up
+  rbs migrate up
 ```
 
 Cinq routes viennent avec :
@@ -61,28 +62,31 @@ La migration crée `users` et `refresh_tokens`, avec une contrainte d'unicité s
 courriel. `rbs migrate down` les remporte toutes deux : les tables arrivent et repartent
 avec la feature.
 
-## Le secret, et pourquoi le projet ne démarre pas
+## Le secret, et où il vit
 
-Le fragment écrit `RBS_AUTH__SECRET` dans `.env.example` — jamais dans votre `.env` :
+`add auth` tire `RBS_AUTH__SECRET` à l'installation et l'écrit dans votre `.env`, qui est
+gitignoré : chaque projet signe ses jetons avec une valeur que personne d'autre ne détient,
+et il n'y a rien à recopier avant le premier lancement. Ce qui atterrit dans
+`.env.example`, versionné, est un placeholder — le fichier documente la variable sans en
+livrer une clé utilisable :
 
 ```bash file=examples/blog-auth/.env.example
 ```
 
-**C'est la seule étape manuelle.** Un projet qui vient de recevoir `auth` ne démarre pas
-tant que vous n'avez pas recopié cette ligne et mis une vraie valeur dedans. `Config::load`
-refuse un secret de moins de 32 octets plutôt que de signer des jetons avec une clé faible,
-et l'échec a lieu au démarrage plutôt qu'à la première connexion.
+Un déploiement fournit sa propre valeur par l'environnement plutôt que par un fichier.
+`Config::load` refuse un secret de moins de 32 octets plutôt que de signer des jetons avec
+une clé faible, et l'échec a lieu au démarrage plutôt qu'à la première connexion.
 
-Si vous ne savez pas ce qui manque, demandez :
+Si vous ne savez pas ce que porte votre `.env`, demandez :
 
 ```bash
 rbs doctor
 ```
 
 Il signale le secret absent, trop court, ou portant encore la valeur d'exemple publiée —
-ce dernier cas compte, car le remède suggéré est justement de recopier la ligne
-de `.env.example`, et un projet qui signe ses jetons avec une valeur commitée dans Git est
-plus mal loti qu'un projet qui ne démarre pas. Voir [`rbs doctor`](../cli/doctor.md).
+ce dernier cas est celui d'un `.env` recopié à la main depuis `.env.example`, et un projet
+qui signe ses jetons avec une valeur commitée dans Git est plus mal loti qu'un projet qui
+ne démarre pas. Voir [`rbs doctor`](../cli/doctor.md).
 
 Les durées de vie vivent dans la configuration, où elles se lisent et se changent sans
 toucher au code :

@@ -44,7 +44,7 @@ Options:
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, and its `api`/`migrate` services inserted into the project's compose — a whole `docker-compose.yml` when there is none | `docker compose --profile app up --build` |
 | `ci` | `.github/workflows/ci.yml` | `git push` |
-| `auth` | eight files under `src/auth/`, one migration, and edits to four project files | copy the secret, then `rbs migrate up` |
+| `auth` | eight files under `src/auth/`, one migration, and edits to four project files | `rbs migrate up` |
 | `jobs` | seven files under `src/jobs/`, one migration, and a `[jobs]` config section | `rbs migrate up`, then register your jobs in `src/jobs/mod.rs` |
 | `redis` | three files under `src/cache/`, and a `redis` service inserted into the project's compose | the compose already carries it — `docker compose up -d` starts it |
 | `mail` | five files under `src/mail/`, a sample template, and a `mailpit` service inserted into the project's compose | set `[mail]` in `config/default.toml` — a local SMTP by default |
@@ -151,17 +151,19 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                             modifié
   ~ config/default.toml                                    modifié
   ~ .env.example                                           modifié
+  ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  17 fichiers à écrire
+  18 fichiers à écrire
 ✓ auth installée — 9 fichiers
 
-  recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up
+  rbs migrate up
 ```
 
-`auth` is the one feature whose next step is not optional: the fragment writes
-`RBS_AUTH__SECRET` into `.env.example` only, and a project whose `.env` does not carry
-it refuses to start. The [authentication guide](../guides/auth.md) picks up there.
+`auth` is the one feature that touches your `.env`: the signing secret is drawn at install
+time and written there, while `.env.example`, versioned, keeps a placeholder. Nothing is
+left to copy, and the migration is the only step remaining. The
+[authentication guide](../guides/auth.md) picks up there.
 
 In each plan the `Cargo.toml` line is where the installation is recorded:
 

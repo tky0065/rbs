@@ -262,7 +262,7 @@ $ rbs new site --with auth --yes
 ✓ site créé — 19 fichiers
   + auth     9 fichiers, 1 migration
 
-  recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up
+  rbs migrate up
 
   cd site
   docker compose up -d   # la base du .env, montée
@@ -279,7 +279,7 @@ $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_dem
   + docker   2 fichiers
   + storage  4 fichiers
 
-  recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up
+  rbs migrate up
 
   docker compose --profile app up --build
 

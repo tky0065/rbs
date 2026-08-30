@@ -45,7 +45,7 @@ Options:
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, et ses services `api`/`migrate` insérés dans le compose du projet — un `docker-compose.yml` entier s'il n'y en a pas | `docker compose --profile app up --build` |
 | `ci` | `.github/workflows/ci.yml` | `git push` |
-| `auth` | huit fichiers sous `src/auth/`, une migration, et quatre fichiers du projet modifiés | recopier le secret, puis `rbs migrate up` |
+| `auth` | huit fichiers sous `src/auth/`, une migration, et quatre fichiers du projet modifiés | `rbs migrate up` |
 | `jobs` | sept fichiers sous `src/jobs/`, une migration, et une section `[jobs]` de configuration | `rbs migrate up`, puis inscrire vos jobs dans `src/jobs/mod.rs` |
 | `redis` | trois fichiers sous `src/cache/`, et un service `redis` inséré dans le compose du projet | le compose le porte déjà — `docker compose up -d` le démarre |
 | `mail` | cinq fichiers sous `src/mail/`, un gabarit d'exemple, et un service `mailpit` inséré dans le compose du projet | régler `[mail]` dans `config/default.toml` — un SMTP local par défaut |
@@ -151,18 +151,19 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                             modifié
   ~ config/default.toml                                    modifié
   ~ .env.example                                           modifié
+  ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  17 fichiers à écrire
+  18 fichiers à écrire
 ✓ auth installée — 9 fichiers
 
-  recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up
+  rbs migrate up
 ```
 
-`auth` est la seule feature dont l'étape suivante n'est pas facultative : le fragment
-n'écrit `RBS_AUTH__SECRET` que dans `.env.example`, et un projet dont le `.env` ne la
-porte pas refuse de démarrer. Le [guide de l'authentification](../guides/auth.md) prend
-la suite.
+`auth` est la seule feature qui touche à votre `.env` : le secret de signature y est tiré
+et écrit à l'installation, pendant que `.env.example`, versionné, garde un placeholder.
+Il n'y a rien à recopier, et la migration est la seule étape qui reste. Le
+[guide de l'authentification](../guides/auth.md) prend la suite.
 
 Dans chaque plan, la ligne `Cargo.toml` est l'endroit où l'installation s'inscrit :
 

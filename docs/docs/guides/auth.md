@@ -39,12 +39,13 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                             modifié
   ~ config/default.toml                                    modifié
   ~ .env.example                                           modifié
+  ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  17 fichiers à écrire
+  18 fichiers à écrire
 ✓ auth installée — 9 fichiers
 
-  recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up
+  rbs migrate up
 ```
 
 Five routes come with it:
@@ -60,28 +61,30 @@ Five routes come with it:
 The migration creates `users` and `refresh_tokens`, with a unique constraint on the email
 address. `rbs migrate down` takes both away: the tables arrive and leave with the feature.
 
-## The secret, and why the project will not start
+## The secret, and where it lives
 
-The fragment writes `RBS_AUTH__SECRET` into `.env.example` — never into your `.env`:
+`add auth` draws `RBS_AUTH__SECRET` at install time and writes it into your `.env`, which
+is gitignored: every project signs its tokens with a value no one else holds, and there is
+nothing to copy before the first run. What lands in `.env.example`, versioned, is a
+placeholder — the file documents the variable without shipping a usable key:
 
 ```bash file=examples/blog-auth/.env.example
 ```
 
-**This is the one manual step.** A project that has just been given `auth` does not start
-until you copy that line over and put a real value in it. `Config::load` refuses a secret
-shorter than 32 bytes rather than signing tokens with a weak key, and the failure happens
-at startup rather than at the first login.
+A deployment supplies its own value through the environment rather than through a file.
+`Config::load` refuses a secret shorter than 32 bytes rather than signing tokens with a
+weak key, and the failure happens at startup rather than at the first login.
 
-If you are not sure what is missing, ask:
+If you are not sure what your `.env` holds, ask:
 
 ```bash
 rbs doctor
 ```
 
 It reports the secret absent, too short, or still holding the published example value —
-that last one matters, because the suggested remedy is to copy the line from
-`.env.example`, and a project that signs its tokens with a value committed to Git is
-worse off than one that does not start. See [`rbs doctor`](../cli/doctor.md).
+that last case is what a `.env` copied by hand from `.env.example` looks like, and a
+project that signs its tokens with a value committed to Git is worse off than one that
+does not start. See [`rbs doctor`](../cli/doctor.md).
 
 Lifetimes live in the configuration, where they can be read and changed without touching
 code:
