@@ -133,8 +133,6 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
         });
     }
 
-    let package = metadata::package_name(&root.join("Cargo.toml"))?;
-
     let mut builder = plan::Builder::new(root.clone());
     builder.patch(plan::PatchToml::AlignerSurVersion {
         dependency: NOYAU.to_string(),
@@ -159,6 +157,11 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
         // Deux appels successifs, et non un chaînage : `builder.replace_zone(..).and_then(
         // |_| builder.replace_zone(..))` prendrait deux emprunts mutables du builder dans
         // une même expression, ce que le compilateur refuse.
+        //
+        // Une zone absente n'arrête pas la seconde : les deux sont indépendantes, et un
+        // guide supprimé n'a aucune raison d'empêcher l'inventaire de suivre la version
+        // visée. Seule la première manquante est retenue — c'est celle dont le bloc
+        // s'affiche.
         let mut manquante = None;
         for (zone, contenu, version) in [
             (crate::agents::GUIDE, corps, Some(cli)),
@@ -167,8 +170,7 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
             match builder.replace_zone(crate::agents::FICHIER, zone, &contenu, version) {
                 Ok(()) => {}
                 Err(plan::Error::ZoneAbsente { zone: absente, .. }) => {
-                    manquante = Some(absente);
-                    break;
+                    manquante.get_or_insert(absente);
                 }
                 Err(autre) => return Err(autre.into()),
             }
@@ -176,6 +178,10 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
 
         manquante
     } else {
+        // Lu ici seulement : le nom du paquet ne sert qu'au titre du document recréé, et
+        // un `[package] name` illisible faisait échouer une mise à niveau qui n'en avait
+        // pas besoin.
+        let package = metadata::package_name(&root.join("Cargo.toml"))?;
         let document = crate::agents::document(&root, metadonnees.lang, &package, cli)?;
         builder.create(crate::agents::FICHIER, &document)?;
         None
@@ -600,6 +606,54 @@ mod tests {
                 .iter()
                 .any(|file| file.path == "AGENTS.md"),
             "le plan ne recrée pas AGENTS.md"
+        );
+    }
+
+    /// Les deux zones sont indépendantes : un guide supprimé n'empêche pas l'inventaire de
+    /// suivre la version visée. La boucle rompait sur la première absente, et une zone
+    /// retirée en emportait donc une autre, intacte.
+    #[test]
+    fn a_deleted_guide_does_not_stop_the_inventory_from_being_refreshed() {
+        let (_parent, root) = project(None);
+        let agents = root.join("AGENTS.md");
+        let ampute: String = fs::read_to_string(&agents)
+            .expect("AGENTS.md est écrit")
+            .lines()
+            .filter(|ligne| !ligne.starts_with("<!-- rbs:guide"))
+            .filter(|ligne| *ligne != crate::agents::closing(crate::agents::GUIDE))
+            .map(|ligne| format!("{ligne}\n"))
+            .collect();
+        fs::write(&agents, ampute).expect("l'écriture aboutit");
+
+        let planned = plan_for_with(
+            &Options {
+                directory: root.clone(),
+                force: true,
+            },
+            "2.0.0",
+        )
+        .expect("le plan doit se calculer");
+
+        assert_eq!(
+            planned
+                .zone_manquante
+                .as_ref()
+                .map(|zone| zone.zone.as_str()),
+            Some(crate::agents::GUIDE),
+            "la zone absente doit rester nommée"
+        );
+
+        let projete = planned
+            .plan
+            .files()
+            .iter()
+            .find(|file| file.path == "AGENTS.md")
+            .expect("l'inventaire reste à réécrire, guide ou non");
+
+        assert!(
+            projete.after.contains("- rbs 2.0.0 ·"),
+            "l'inventaire n'a pas suivi la version visée :\n{}",
+            projete.after
         );
     }
 

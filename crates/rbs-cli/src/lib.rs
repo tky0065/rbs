@@ -253,6 +253,19 @@ fn locale_from(lc_all: Option<&str>, lang: Option<&str>) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// Signale la zone de l'`AGENTS.md` qu'une commande n'a pas pu réécrire, et donne le bloc
+/// à recoller.
+///
+/// Une seule fonction pour les trois commandes qui touchent au fichier : `rbs doctor`
+/// renvoie vers elles pour rétablir une zone, et une des trois qui se tairait laisserait
+/// l'utilisateur tourner en rond entre les deux commandes.
+fn signaler_zone_manquante(zone: Option<&agents::MissingZone>) {
+    if let Some(zone) = zone {
+        ui::warn(&format!("{zone} — collez ce bloc pour la rétablir :"));
+        ui::info(&format!("\n{}", zone.block()));
+    }
+}
+
 /// Installe une feature dans le projet courant, plan affiché avant écriture.
 fn add(feature: String, force: bool, template_dir: Option<PathBuf>) -> Result<(), add::Error> {
     let directory = std::env::current_dir().map_err(|source| add::Error::Acces {
@@ -274,10 +287,7 @@ fn add(feature: String, force: bool, template_dir: Option<PathBuf>) -> Result<()
     ui::info(&format!("{feature} : {}\n", planned.description));
     println!("{}", plan::render::plan(&planned.plan));
 
-    if let Some(zone) = &planned.zone_manquante {
-        ui::warn(&format!("{zone} — collez ce bloc pour la rétablir :"));
-        ui::info(&format!("\n{}", zone.block()));
-    }
+    signaler_zone_manquante(planned.zone_manquante.as_ref());
 
     plan::application::apply(&planned.plan, force)?;
 
@@ -370,10 +380,7 @@ fn generate(
     // s'apprête à faire ne doit pas se découvrir après coup.
     println!("{}", plan::render::plan(&planned.plan));
 
-    if let Some(zone) = &planned.zone_manquante {
-        ui::warn(&format!("{zone} — collez ce bloc pour la rétablir :"));
-        ui::info(&format!("\n{}", zone.block()));
-    }
+    signaler_zone_manquante(planned.zone_manquante.as_ref());
 
     // Avant le plan, l'avertissement se perdrait au-dessus de sept lignes de fichiers.
     if let Some(avertissement) = &planned.avertissement {
@@ -428,16 +435,17 @@ fn upgrade(force: bool) -> Result<(), upgrade::Error> {
             "le projet est déjà en rbs {} — rien à faire",
             planned.vers
         ));
+        // Le retour anticipé avalait ce bloc : un projet par ailleurs à jour dont une zone
+        // a disparu n'a rien à aligner, et c'est exactement le cas où `rbs doctor` renvoie
+        // ici. Sans cette ligne, les deux commandes se renvoyaient l'une à l'autre.
+        signaler_zone_manquante(planned.zone_manquante.as_ref());
         return Ok(());
     }
 
     ui::info(&format!("rbs {} → {}\n", planned.depuis, planned.vers));
     println!("{}", plan::render::plan(&planned.plan));
 
-    if let Some(zone) = &planned.zone_manquante {
-        ui::warn(&format!("{zone} — collez ce bloc pour la rétablir :"));
-        ui::info(&format!("\n{}", zone.block()));
-    }
+    signaler_zone_manquante(planned.zone_manquante.as_ref());
 
     plan::application::apply(&planned.plan, force)?;
 

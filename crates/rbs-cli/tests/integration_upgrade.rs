@@ -172,6 +172,51 @@ fn upgrading_rewrites_the_agents_guide() {
     );
 }
 
+/// Un projet par ailleurs à jour dont une zone a disparu doit recevoir son bloc.
+///
+/// C'est `rbs doctor` qui renvoie ici pour la rétablir : le retour anticipé sur « rien à
+/// faire » avalait l'avertissement, et les deux commandes se renvoyaient l'une à l'autre
+/// sans que rien ne soit jamais dit ni écrit.
+#[test]
+fn an_up_to_date_project_missing_a_zone_is_shown_the_block_to_paste() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+    amputer(&projet, "inventory");
+    common::commiter(&projet, "initial");
+
+    let sortie = rbs(&projet)
+        .args(["upgrade", "--force"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+
+    let stdout = String::from_utf8(sortie.stdout).expect("la sortie est de l'UTF-8");
+    let stderr = String::from_utf8(sortie.stderr).expect("la sortie est de l'UTF-8");
+
+    assert!(stderr.contains("rbs:inventory"), "{stderr}\n\n{stdout}");
+    assert!(
+        stdout.contains("<!-- rbs:inventory -->\n<!-- /rbs:inventory -->"),
+        "le bloc à recoller doit être affiché :\n{stdout}"
+    );
+}
+
+/// Retire les deux marqueurs d'une zone de l'`AGENTS.md`, son corps laissé en place.
+fn amputer(projet: &Path, zone: &str) {
+    let agents = projet.join("AGENTS.md");
+    let source = fs::read_to_string(&agents).expect("AGENTS.md est écrit");
+
+    let ampute: String = source
+        .lines()
+        .filter(|ligne| !ligne.starts_with(&format!("<!-- rbs:{zone}")))
+        .filter(|ligne| *ligne != format!("<!-- /rbs:{zone} -->"))
+        .map(|ligne| format!("{ligne}\n"))
+        .collect();
+
+    assert_ne!(ampute, source, "la zone {zone} n'a pas été retirée");
+    fs::write(&agents, ampute).expect("AGENTS.md est réécrivable");
+}
+
 /// Réécrit la version que `[package.metadata.rbs]` garde de la génération.
 fn dater(projet: &Path, version: &str) {
     let manifeste = manifeste(projet);
