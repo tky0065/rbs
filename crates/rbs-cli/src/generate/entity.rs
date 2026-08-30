@@ -290,11 +290,11 @@ mod tests {
         let rendered = entity("posts", "title:string");
 
         assert!(
-            rendered.contains("    // <rbs:relations>\n    // </rbs:relations>"),
-            "{rendered}"
+            rendered.contains("    // <rbs:relations:posts>\n    // </rbs:relations:posts>"),
+            "les ancres portent le nom de l'entité :\n{rendered}"
         );
         assert!(
-            rendered.contains("// <rbs:related>\n// </rbs:related>"),
+            rendered.contains("// <rbs:related:posts>\n// </rbs:related:posts>"),
             "{rendered}"
         );
     }

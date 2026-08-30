@@ -16,12 +16,12 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    // <rbs:relations>
-    // </rbs:relations>
+    // <rbs:relations:uploads>
+    // </rbs:relations:uploads>
 }
 
-// <rbs:related>
-// </rbs:related>
+// <rbs:related:uploads>
+// </rbs:related:uploads>
 
 /// L'identifiant est posé ici, et non par un défaut de colonne : `uuidv7()` n'a
 /// d'équivalent à écrire ni en MySQL ni en SQLite.

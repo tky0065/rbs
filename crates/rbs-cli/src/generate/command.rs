@@ -326,6 +326,7 @@ fn plan_repair(options: &Options, root: &Path) -> Result<Planned, Error> {
         // `relations::inverses`, qui vaut ici à l'identique.
         inverses.push(relations::Inverse {
             file: own_file.clone(),
+            entity: module.clone(),
             variant: vec![
                 format!(r#"#[sea_orm(has_many = "{target_entity}")]"#),
                 format!("{variant},"),
@@ -1130,9 +1131,9 @@ mod tests {
         let modele = root.join("src/users/model.rs");
         let source = read(&modele);
         let pollue = source.replace(
-            "    // <rbs:relations>",
-            "    // <rbs:relations>\n    \
-             #[sea_orm(has_many = \"crate::somewhere::model::Entity\")]\n    Posts,",
+            "    // <rbs:relations:users>\n",
+            "    // <rbs:relations:users>\n    \
+             #[sea_orm(has_many = \"crate::somewhere::model::Entity\")]\n    Posts,\n",
         );
         fs::write(&modele, pollue).expect("l'écriture aboutit");
         let avant = fingerprint(&root);
@@ -1318,6 +1319,45 @@ mod tests {
                 .assert()
                 .success();
         }
+
+        project.compile();
+    }
+
+    /// Une relation vers les deux entités du fragment `auth`, qui vivent nichées dans un
+    /// même `src/auth/model.rs` sous une migration nommée `create_auth_tables`.
+    ///
+    /// Deux défauts qu'aucun test n'attrapait, faute d'un projet qui les porte : la
+    /// migration de `users` était cherchée par le nom du fichier, et toute relation vers
+    /// une table du fragment se voyait refusée ; et le côté inverse allait dans la
+    /// première paire d'ancres du fichier, quelle que soit l'entité visée — `refresh_tokens`
+    /// recevait sa variante dans le module `user`, où `rustc` ne la relie à rien.
+    #[test]
+    #[ignore = "compile un projet Axum + SeaORM complet"]
+    fn a_relation_towards_each_auth_entity_lands_in_its_own_module_and_compiles() {
+        let project = bench::Project::fresh();
+        project.rbs_ok(&["add", "auth", "--yes"]);
+        project.rbs_ok(&[
+            "generate",
+            "crud",
+            "tickets",
+            "--fields",
+            "label:string,reporter:references:users:optional:nullify,\
+             token:references:refresh_tokens:optional:nullify",
+        ]);
+
+        let model = read(&project.root().join("src/auth/model.rs"));
+        let (users, refresh_tokens) = model
+            .split_once("pub mod refresh_token {")
+            .expect("le fragment auth déclare ses deux entités");
+
+        assert!(
+            users.contains(r#"has_many = "crate::tickets::model::Entity""#),
+            "l'entité `users` doit recevoir son côté inverse :\n{users}"
+        );
+        assert!(
+            refresh_tokens.contains(r#"has_many = "crate::tickets::model::Entity""#),
+            "l'entité `refresh_tokens` doit recevoir le sien :\n{refresh_tokens}"
+        );
 
         project.compile();
     }

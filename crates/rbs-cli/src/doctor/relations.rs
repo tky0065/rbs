@@ -15,8 +15,8 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use crate::anchors::{RELATED, RELATIONS};
-use crate::generate::entities;
+use crate::anchors::{Anchor, RELATED, RELATIONS};
+use crate::generate::entities::{self, Entity};
 
 use super::Check;
 
@@ -24,55 +24,68 @@ const TITLE: &str = "relations";
 
 /// Vérifie qu'aucun modèle ne porte déjà une relation sans porter ses deux ancres.
 pub(crate) fn check(root: &Path) -> Check {
-    // Un même fichier peut porter plusieurs entités — `auth` en porte deux : le
-    // dédoublonner évite de nommer deux fois le même modèle incomplet.
-    let files: BTreeSet<String> = entities::scan(root)
-        .into_iter()
-        .map(|entity| entity.file)
-        .collect();
+    // Un fichier sans relation n'a rien à prouver : ses ancres se réclameront le jour où
+    // `rbs generate` voudra y écrire. Le contrôle est donc lu par fichier, et les entités
+    // qu'il porte n'y sont examinées que si l'une d'elles a déjà une relation.
+    let mut incomplete: Vec<Entity> = Vec::new();
 
-    let incomplete: Vec<String> = files
-        .into_iter()
-        .filter(|file| {
-            let Ok(source) = fs::read_to_string(root.join(file)) else {
-                return false;
-            };
+    for entity in entities::scan(root) {
+        let Ok(source) = fs::read_to_string(root.join(&entity.file)) else {
+            continue;
+        };
 
-            let both_anchors_present = [&RELATIONS, &RELATED].iter().all(|anchor| {
-                source.contains(&anchor.opening()) && source.contains(&anchor.closing())
-            });
+        if !(source.contains("belongs_to") || source.contains("has_many")) {
+            continue;
+        }
 
-            // Un modèle sans relation n'a rien à perdre à ne pas avoir ses ancres : le
-            // CLI les réclamera le jour où `rbs generate` en écrira une. Ce qui justifie
-            // le rouge est un modèle qui porte déjà une relation sans pouvoir en recevoir
-            // une seconde.
-            !both_anchors_present && (source.contains("belongs_to") || source.contains("has_many"))
-        })
-        .collect();
+        let both_anchors_present = [&RELATIONS, &RELATED]
+            .iter()
+            .map(|anchor| anchor.for_entity(&entity.file, &entity.table))
+            .all(|anchor| carries(&source, &anchor));
+
+        if !both_anchors_present {
+            incomplete.push(entity);
+        }
+    }
 
     if incomplete.is_empty() {
         return Check::ok(TITLE, "les modèles portent leurs ancres de relation");
     }
 
-    let detail = incomplete
+    // Les fichiers dédoublonnés et triés : `src/auth/model.rs` porte deux entités, et
+    // nommer deux fois le même fichier dans le résumé n'apprendrait rien de plus.
+    let files: BTreeSet<&str> = incomplete
+        .iter()
+        .map(|entity| entity.file.as_str())
+        .collect();
+    let detail = files
         .iter()
         .map(|file| format!("relations manquent dans {file}"))
         .collect::<Vec<_>>()
         .join(", ");
 
+    // Le remède, lui, se donne par entité : les deux blocs à coller portent son nom, et
+    // un fichier à deux entités en attend deux paires distinctes.
     let remedy = incomplete
         .iter()
-        .map(|file| {
+        .map(|entity| {
             format!(
-                "dans {file} :\n{}\n\n{}",
-                RELATIONS.block(),
-                RELATED.block()
+                "dans {}, pour `{}` :\n{}\n\n{}",
+                entity.file,
+                entity.table,
+                RELATIONS.for_entity(&entity.file, &entity.table).block(),
+                RELATED.for_entity(&entity.file, &entity.table).block()
             )
         })
         .collect::<Vec<_>>()
         .join("\n\n");
 
     Check::failed(TITLE, detail, remedy)
+}
+
+/// Le fichier porte-t-il les deux balises de `anchor` ?
+fn carries(source: &str, anchor: &Anchor) -> bool {
+    source.contains(&anchor.opening()) && source.contains(&anchor.closing())
 }
 
 #[cfg(test)]
@@ -92,13 +105,13 @@ pub struct Model { pub id: Uuid }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    // <rbs:relations>
+    // <rbs:relations:posts>
     #[sea_orm(has_many = "crate::comments::model::Entity")]
     Comments,
-    // </rbs:relations>
+    // </rbs:relations:posts>
 }
-// <rbs:related>
-// </rbs:related>
+// <rbs:related:posts>
+// </rbs:related:posts>
 "#;
 
     // Ni ancres, ni relation : le cas de la grande majorité des projets CRUD, qui
@@ -112,8 +125,12 @@ pub enum Relation {}
 "#;
 
     fn project(source: &str) -> TempDir {
+        project_of("posts", source)
+    }
+
+    fn project_of(module: &str, source: &str) -> TempDir {
         let root = TempDir::new().expect("le répertoire se crée");
-        let directory = root.path().join("src/posts");
+        let directory = root.path().join("src").join(module);
         fs::create_dir_all(&directory).expect("le répertoire se crée");
         fs::write(directory.join("model.rs"), source).expect("l'écriture aboutit");
         root
@@ -129,7 +146,7 @@ pub enum Relation {}
     // incohérent, vraisemblablement issu d'une retouche à la main.
     #[test]
     fn a_model_carrying_a_relation_but_missing_one_anchor_fails_by_naming_its_file() {
-        let amputated = MODEL.replace("    // </rbs:relations>\n", "");
+        let amputated = MODEL.replace("    // </rbs:relations:posts>\n", "");
         let result = check(project(&amputated).path());
 
         assert_eq!(result.state, State::Echec);
@@ -139,7 +156,7 @@ pub enum Relation {}
             result
                 .remedy
                 .expect("un remède")
-                .contains("<rbs:relations>"),
+                .contains("<rbs:relations:posts>"),
             "le bloc à coller doit être donné"
         );
     }
@@ -149,10 +166,10 @@ pub enum Relation {}
     #[test]
     fn a_model_carrying_a_relation_but_missing_both_anchors_is_reported_once() {
         let without_anchors = MODEL
-            .replace("    // <rbs:relations>\n", "")
-            .replace("    // </rbs:relations>\n", "")
-            .replace("// <rbs:related>\n", "")
-            .replace("// </rbs:related>\n", "");
+            .replace("    // <rbs:relations:posts>\n", "")
+            .replace("    // </rbs:relations:posts>\n", "")
+            .replace("// <rbs:related:posts>\n", "")
+            .replace("// </rbs:related:posts>\n", "");
         let result = check(project(&without_anchors).path());
 
         assert_eq!(result.state, State::Echec, "{result:?}");
@@ -178,5 +195,63 @@ pub enum Relation {}
         let root = TempDir::new().expect("le répertoire se crée");
 
         assert_eq!(check(root.path()).state, State::Bon);
+    }
+
+    // Deux entités dans un même fichier : les ancres de la première ne valent pas pour
+    // la seconde, qui ne peut pas recevoir de relation sans les siennes.
+    const TWO_ENTITIES: &str = r#"
+pub mod user {
+    #[sea_orm(table_name = "users")]
+    pub struct Model { pub id: Uuid }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {
+        // <rbs:relations:users>
+        #[sea_orm(has_many = "crate::posts::model::Entity")]
+        Posts,
+        // </rbs:relations:users>
+    }
+
+    // <rbs:related:users>
+    // </rbs:related:users>
+}
+
+pub mod refresh_token {
+    #[sea_orm(table_name = "refresh_tokens")]
+    pub struct Model { pub id: Uuid }
+
+    #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
+    pub enum Relation {
+        // <rbs:relations:refresh_tokens>
+        // </rbs:relations:refresh_tokens>
+    }
+
+    // <rbs:related:refresh_tokens>
+    // </rbs:related:refresh_tokens>
+}
+"#;
+
+    #[test]
+    fn a_file_carrying_two_entities_passes_when_each_has_its_own_pair() {
+        assert_eq!(
+            check(project_of("auth", TWO_ENTITIES).path()).state,
+            State::Bon
+        );
+    }
+
+    #[test]
+    fn a_second_entity_deprived_of_its_own_pair_is_reported_by_name() {
+        let amputated = TWO_ENTITIES
+            .replace("        // <rbs:relations:refresh_tokens>\n", "")
+            .replace("        // </rbs:relations:refresh_tokens>\n", "");
+        let result = check(project_of("auth", &amputated).path());
+
+        assert_eq!(result.state, State::Echec, "{result:?}");
+        let remedy = result.remedy.expect("un remède");
+        assert!(remedy.contains("refresh_tokens"), "{remedy}");
+        assert!(
+            !remedy.contains("pour `users`"),
+            "l'entité complète n'a rien à recoller : {remedy}"
+        );
     }
 }

@@ -169,9 +169,16 @@ pub(crate) fn ensure_migrations_exist(
 pub(crate) struct Inverse {
     /// Fichier du modèle cible, relatif à la racine : `src/auth/model.rs`.
     pub file: String,
-    /// Lignes de la variante, à insérer dans `<rbs:relations>`.
+    /// Table de l'entité visée : `users`.
+    ///
+    /// Elle qualifie les deux ancres du modèle — un fichier peut en porter plusieurs, et
+    /// `src/auth/model.rs` en porte deux.
+    pub entity: String,
+    /// Lignes à insérer dans `<rbs:relations:…>` : la variante `has_many`, ou le
+    /// commentaire qui dit pourquoi elle n'y est pas.
     pub variant: Vec<String>,
-    /// Lignes de l'`impl Related`, à insérer dans `<rbs:related>`.
+    /// Lignes de l'`impl Related`, à insérer dans `<rbs:related:…>`. Vides quand la cible
+    /// est visée plusieurs fois : la variante `has_many` ne s'écrit pas non plus.
     pub related: Vec<String>,
 }
 
@@ -195,7 +202,8 @@ pub(crate) fn inverses(fields: &[Field], feature: &Feature, entities: &[Entity])
 
             Some(Inverse {
                 file: target.file.clone(),
-                // Sans indentation propre : l'ancre `<rbs:relations>` vit dans le corps de
+                entity: target.table.clone(),
+                // Sans indentation propre : l'ancre `<rbs:relations:…>` vit dans le corps de
                 // l'énumération, et `anchors::insert` préfixe déjà chaque ligne de celle de
                 // sa balise fermante. L'ajouter ici la doublerait.
                 variant: vec![
@@ -404,7 +412,9 @@ mod tests {
 
         assert_eq!(produced.len(), 2, "{produced:?}");
         assert!(
-            produced.iter().all(|i| i.file == "src/auth/model.rs"),
+            produced
+                .iter()
+                .all(|i| i.file == "src/auth/model.rs" && i.entity == "users"),
             "{produced:?}"
         );
     }
@@ -477,6 +487,7 @@ mod tests {
     fn a_variant_absent_from_the_target_is_not_a_conflict() {
         let inverse = Inverse {
             file: "src/users/model.rs".to_string(),
+            entity: "users".to_string(),
             variant: vec![
                 r#"    #[sea_orm(has_many = "crate::posts::model::Entity")]"#.to_string(),
                 "    Posts,".to_string(),
@@ -484,13 +495,17 @@ mod tests {
             related: Vec::new(),
         };
 
-        assert!(!homonymous_conflict("    // <rbs:relations>\n", &inverse));
+        assert!(!homonymous_conflict(
+            "    // <rbs:relations:users>\n",
+            &inverse
+        ));
     }
 
     #[test]
     fn the_exact_same_block_already_written_is_not_a_conflict() {
         let inverse = Inverse {
             file: "src/users/model.rs".to_string(),
+            entity: "users".to_string(),
             variant: vec![
                 r#"    #[sea_orm(has_many = "crate::posts::model::Entity")]"#.to_string(),
                 "    Posts,".to_string(),
@@ -498,7 +513,7 @@ mod tests {
             related: Vec::new(),
         };
         let existing = format!(
-            "    // <rbs:relations>\n{}\n    // </rbs:relations>\n",
+            "    // <rbs:relations:users>\n{}\n    // </rbs:relations:users>\n",
             inverse.variant.join("\n")
         );
 
@@ -511,15 +526,16 @@ mod tests {
     fn a_variant_already_taken_by_another_target_is_a_conflict() {
         let inverse = Inverse {
             file: "src/users/model.rs".to_string(),
+            entity: "users".to_string(),
             variant: vec![
                 r#"    #[sea_orm(has_many = "crate::posts::model::Entity")]"#.to_string(),
                 "    Posts,".to_string(),
             ],
             related: Vec::new(),
         };
-        let existing = "    // <rbs:relations>\n    \
+        let existing = "    // <rbs:relations:users>\n    \
              #[sea_orm(has_many = \"crate::somewhere::model::Entity\")]\n    Posts,\n    \
-             // </rbs:relations>\n";
+             // </rbs:relations:users>\n";
 
         assert!(homonymous_conflict(existing, &inverse));
     }

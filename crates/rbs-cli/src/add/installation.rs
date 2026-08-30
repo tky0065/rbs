@@ -180,7 +180,7 @@ fn anchor(fragment: &Fragment, name: &str, builder: &plan::Builder) -> Result<An
             anchor: name.to_string(),
             known: anchors::ANCRES
                 .iter()
-                .map(|anchor| anchor.name)
+                .map(|anchor| anchor.name.as_ref())
                 .collect::<Vec<_>>()
                 .join(", "),
         })?;

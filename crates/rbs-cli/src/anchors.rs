@@ -11,7 +11,10 @@ use std::path::Path;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Anchor {
     /// Nom tel qu'il paraît entre les chevrons : `features` pour `// <rbs:features>`.
-    pub name: &'static str,
+    ///
+    /// Emprunté pour les ancres du registre ; possédé pour celles du modèle d'une entité,
+    /// dont le nom porte celui de l'entité — `relations:users`.
+    pub name: Cow<'static, str>,
     /// Chemin du fichier porteur, relatif à la racine du projet.
     ///
     /// Emprunté pour les ancres du registre, dont le fichier est fixe ; possédé pour
@@ -52,11 +55,25 @@ impl Anchor {
             ..self.clone()
         }
     }
+
+    /// La même ancre, dans le modèle de l'entité `table` et pour elle seule.
+    ///
+    /// Un fichier de modèle peut porter plusieurs entités — `src/auth/model.rs` en porte
+    /// deux, nichées dans leurs modules — et l'ancre s'y répète autant de fois. Le nom de
+    /// l'entité l'accompagne donc entre les chevrons, sans quoi une relation vers la
+    /// seconde irait s'écrire dans la première, seule que le fichier rencontre.
+    pub(crate) fn for_entity(&self, path: &str, table: &str) -> Anchor {
+        Anchor {
+            name: Cow::Owned(format!("{}:{table}", self.name)),
+            file: Cow::Owned(path.to_string()),
+            ..self.clone()
+        }
+    }
 }
 
 /// Déclaration des modules de feature, en tête de `main.rs`.
 pub(crate) const FEATURES: Anchor = Anchor {
-    name: "features",
+    name: Cow::Borrowed("features"),
     file: Cow::Borrowed("src/main.rs"),
     comment: "//",
     optional: false,
@@ -64,7 +81,7 @@ pub(crate) const FEATURES: Anchor = Anchor {
 
 /// Montage des routes d'une feature dans le routeur.
 pub(crate) const ROUTES: Anchor = Anchor {
-    name: "routes",
+    name: Cow::Borrowed("routes"),
     file: Cow::Borrowed("src/router.rs"),
     comment: "//",
     optional: false,
@@ -72,7 +89,7 @@ pub(crate) const ROUTES: Anchor = Anchor {
 
 /// Enregistrement des chemins d'une feature dans le document OpenAPI.
 pub(crate) const OPENAPI: Anchor = Anchor {
-    name: "openapi",
+    name: Cow::Borrowed("openapi"),
     file: Cow::Borrowed("src/openapi.rs"),
     comment: "//",
     optional: false,
@@ -83,7 +100,7 @@ pub(crate) const OPENAPI: Anchor = Anchor {
 /// Distincte de [`MIGRATIONS`] : Rust interdit un `mod` non-inline dans un bloc, et la
 /// déclaration ne peut donc pas tenir dans le `vec!` du `Migrator`.
 pub(crate) const MIGRATION_MODULES: Anchor = Anchor {
-    name: "migration_modules",
+    name: Cow::Borrowed("migration_modules"),
     file: Cow::Borrowed("migration/src/lib.rs"),
     comment: "//",
     optional: false,
@@ -91,7 +108,7 @@ pub(crate) const MIGRATION_MODULES: Anchor = Anchor {
 
 /// Inscription des migrations dans le `Migrator`.
 pub(crate) const MIGRATIONS: Anchor = Anchor {
-    name: "migrations",
+    name: Cow::Borrowed("migrations"),
     file: Cow::Borrowed("migration/src/lib.rs"),
     comment: "//",
     optional: false,
@@ -99,7 +116,7 @@ pub(crate) const MIGRATIONS: Anchor = Anchor {
 
 /// Déclaration d'un champ partagé dans la struct `AppState`.
 pub(crate) const STATE_CHAMPS: Anchor = Anchor {
-    name: "state_champs",
+    name: Cow::Borrowed("state_champs"),
     file: Cow::Borrowed("src/state.rs"),
     comment: "//",
     optional: false,
@@ -110,7 +127,7 @@ pub(crate) const STATE_CHAMPS: Anchor = Anchor {
 /// Distincte de [`STATE_CHAMPS`] : un champ se déclare à un endroit et se construit à un
 /// autre, et une ancre unique ne pourrait pas viser les deux.
 pub(crate) const STATE_INIT: Anchor = Anchor {
-    name: "state_init",
+    name: Cow::Borrowed("state_init"),
     file: Cow::Borrowed("src/state.rs"),
     comment: "//",
     optional: false,
@@ -121,7 +138,7 @@ pub(crate) const STATE_INIT: Anchor = Anchor {
 /// Distincte de [`STATE_INIT`] : ce qui vit dans l'état est une valeur, ce qui vit ici est
 /// une tâche, et une valeur ne peut pas se détacher elle-même.
 pub(crate) const STARTUP: Anchor = Anchor {
-    name: "startup",
+    name: Cow::Borrowed("startup"),
     file: Cow::Borrowed("src/main.rs"),
     comment: "//",
     optional: false,
@@ -134,7 +151,7 @@ pub(crate) const STARTUP: Anchor = Anchor {
 /// inline ne s'écrit pas dans un bloc — c'est ce qui vaut deux ancres à la crate
 /// `migration` — et la macro évite ici d'en poser une seconde.
 pub(crate) const SEEDS: Anchor = Anchor {
-    name: "seeds",
+    name: Cow::Borrowed("seeds"),
     file: Cow::Borrowed("src/seeds/main.rs"),
     comment: "//",
     optional: false,
@@ -146,28 +163,29 @@ pub(crate) const SEEDS: Anchor = Anchor {
 /// l'URL ne porte pas d'identifiants et tout projet créé avant la 1.1.0 n'ont pas de
 /// compose, et n'ont donc pas cette ancre à porter.
 pub(crate) const SERVICES: Anchor = Anchor {
-    name: "services",
+    name: Cow::Borrowed("services"),
     file: Cow::Borrowed("docker-compose.yml"),
     comment: "#",
     optional: true,
 };
 
-/// Variantes de l'énumération `Relation` d'un modèle de feature.
+/// Variantes de l'énumération `Relation` du modèle d'une entité.
 ///
-/// Hors du registre statique : son fichier dépend de la feature visée, et se fixe par
-/// [`Anchor::in_file`] une fois ce nom connu.
+/// Hors du registre statique : son fichier et son nom dépendent tous deux de l'entité
+/// visée, et se fixent par [`Anchor::for_entity`] une fois celle-ci connue — l'ancre
+/// écrite est `<rbs:relations:users>`, non `<rbs:relations>`.
 pub(crate) const RELATIONS: Anchor = Anchor {
-    name: "relations",
+    name: Cow::Borrowed("relations"),
     file: Cow::Borrowed("src/{feature}/model.rs"),
     comment: "//",
     optional: false,
 };
 
-/// Implémentations de `Related` d'un modèle de feature.
+/// Implémentations de `Related` du modèle d'une entité.
 ///
 /// Hors du registre statique, pour la même raison que [`RELATIONS`].
 pub(crate) const RELATED: Anchor = Anchor {
-    name: "related",
+    name: Cow::Borrowed("related"),
     file: Cow::Borrowed("src/{feature}/model.rs"),
     comment: "//",
     optional: false,
@@ -636,7 +654,7 @@ struct AppState {
     #[test]
     fn a_yaml_anchor_is_written_with_a_hash() {
         let compose = Anchor {
-            name: "services",
+            name: Cow::Borrowed("services"),
             file: Cow::Borrowed("docker-compose.yml"),
             comment: "#",
             optional: true,
@@ -662,7 +680,7 @@ struct AppState {
     #[test]
     fn a_yaml_comment_stays_attached_to_the_line_below_it() {
         let compose = Anchor {
-            name: "services",
+            name: Cow::Borrowed("services"),
             file: Cow::Borrowed("docker-compose.yml"),
             comment: "#",
             optional: true,
@@ -692,7 +710,7 @@ struct AppState {
     #[test]
     fn a_yaml_comment_already_present_does_not_orphan_the_line_it_qualifies() {
         let compose = Anchor {
-            name: "services",
+            name: Cow::Borrowed("services"),
             file: Cow::Borrowed("docker-compose.yml"),
             comment: "#",
             optional: true,
@@ -732,7 +750,7 @@ struct AppState {
         let optionnelles: Vec<&str> = ANCRES
             .iter()
             .filter(|anchor| anchor.optional)
-            .map(|anchor| anchor.name)
+            .map(|anchor| anchor.name.as_ref())
             .collect();
 
         assert_eq!(optionnelles, ["services"]);
@@ -745,6 +763,26 @@ struct AppState {
         assert_eq!(anchor.file, "src/posts/model.rs");
         assert_eq!(anchor.name, RELATIONS.name);
         assert_eq!(anchor.opening(), "// <rbs:relations>");
+    }
+
+    /// Le nom de l'entité rejoint celui de l'ancre : `src/auth/model.rs` porte deux
+    /// paires, et une relation vers la seconde entité n'a que ce nom pour la viser.
+    #[test]
+    fn a_model_anchor_carries_the_name_of_its_entity() {
+        let anchor = RELATIONS.for_entity("src/auth/model.rs", "refresh_tokens");
+
+        assert_eq!(anchor.file, "src/auth/model.rs");
+        assert_eq!(anchor.opening(), "// <rbs:relations:refresh_tokens>");
+        assert_eq!(anchor.closing(), "// </rbs:relations:refresh_tokens>");
+    }
+
+    #[test]
+    fn two_entities_of_one_file_get_two_distinct_anchors() {
+        let users = RELATED.for_entity("src/auth/model.rs", "users");
+        let tokens = RELATED.for_entity("src/auth/model.rs", "refresh_tokens");
+
+        assert_eq!(users.file, tokens.file);
+        assert_ne!(users.name, tokens.name);
     }
 
     // Les deux ancres du modèle ne rejoignent pas le registre statique : leur fichier

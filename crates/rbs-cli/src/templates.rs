@@ -780,21 +780,20 @@ mod tests {
     fn the_auth_fragment_carries_both_anchors_on_each_of_its_two_entities() {
         let source = read(&Path::new(RACINE_FEATURES).join("auth/model.rs.jinja"));
 
-        assert_eq!(
-            source
-                .matches("        // <rbs:relations>\n        // </rbs:relations>")
-                .count(),
-            2,
-            "les deux entités (`user`, `refresh_token`) doivent porter l'ancre des \
-             variantes :\n{source}"
-        );
-        assert_eq!(
-            source
-                .matches("    // <rbs:related>\n    // </rbs:related>")
-                .count(),
-            2,
-            "les deux entités doivent porter l'ancre des `impl Related` :\n{source}"
-        );
+        for table in ["users", "refresh_tokens"] {
+            assert!(
+                source.contains(&format!(
+                    "        // <rbs:relations:{table}>\n        // </rbs:relations:{table}>"
+                )),
+                "`{table}` doit porter l'ancre des variantes à son nom :\n{source}"
+            );
+            assert!(
+                source.contains(&format!(
+                    "    // <rbs:related:{table}>\n    // </rbs:related:{table}>"
+                )),
+                "`{table}` doit porter l'ancre des `impl Related` à son nom :\n{source}"
+            );
+        }
     }
 
     #[test]
@@ -803,12 +802,12 @@ mod tests {
 
         assert!(
             source.contains(
-                "pub enum Relation {\n    // <rbs:relations>\n    // </rbs:relations>\n}"
+                "pub enum Relation {\n    // <rbs:relations:jobs>\n    // </rbs:relations:jobs>\n}"
             ),
             "{source}"
         );
         assert!(
-            source.contains("\n// <rbs:related>\n// </rbs:related>\n"),
+            source.contains("\n// <rbs:related:jobs>\n// </rbs:related:jobs>\n"),
             "{source}"
         );
     }

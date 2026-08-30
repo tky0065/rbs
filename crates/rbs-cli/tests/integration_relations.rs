@@ -116,7 +116,8 @@ fn a_missing_anchor_in_the_target_writes_nothing_and_shows_the_block() {
 
     let model = root.join("src/users/model.rs");
     let source = fs::read_to_string(&model).expect("le modèle se lit");
-    fs::write(&model, source.replace("    // <rbs:relations>\n", "")).expect("l'écriture aboutit");
+    fs::write(&model, source.replace("    // <rbs:relations:users>\n", ""))
+        .expect("l'écriture aboutit");
 
     let before = common::empreinte(&root);
     let output = rbs(
@@ -141,7 +142,7 @@ fn a_missing_anchor_in_the_target_writes_nothing_and_shows_the_block() {
         "la génération devait refuser :\n{output_text}"
     );
     assert!(
-        output_text.contains("<rbs:relations>") && output_text.contains("src/users/model.rs"),
+        output_text.contains("<rbs:relations:users>") && output_text.contains("src/users/model.rs"),
         "le bloc à coller et son fichier doivent être affichés :\n{output_text}"
     );
     common::assert_intact(&before, &root, "une ancre absente laisse le projet intact");

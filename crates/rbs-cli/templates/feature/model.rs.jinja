@@ -32,8 +32,8 @@ pub enum Relation {
     )]
     {@ field.relation.variant @},
 {%- endfor %}
-    // <rbs:relations>
-    // </rbs:relations>
+    // <rbs:relations:{@ table @}>
+    // </rbs:relations:{@ table @}>
 }
 {%- for relation in unique_relations %}
 
@@ -48,8 +48,8 @@ impl Related<{@ relation.entity_path @}> for Entity {
 {@ ambiguous.comment @}
 {%- endfor %}
 
-// <rbs:related>
-// </rbs:related>
+// <rbs:related:{@ table @}>
+// </rbs:related:{@ table @}>
 
 /// L'identifiant est posé ici, et non par un défaut de colonne : `uuidv7()` n'a
 /// d'équivalent à écrire ni en MySQL ni en SQLite.

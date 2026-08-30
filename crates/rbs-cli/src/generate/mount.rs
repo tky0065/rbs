@@ -70,15 +70,16 @@ pub(crate) fn for_migration(module: &str) -> Vec<Mount> {
 /// Ce que le côté inverse d'une relation ajoute au modèle de sa cible.
 ///
 /// Deux ancres et non une : la variante vit dans les accolades de l'énumération, l'`impl
-/// Related` ne le peut pas.
+/// Related` ne le peut pas. Toutes deux portent le nom de l'entité visée : un fichier de
+/// modèle peut en décrire plusieurs.
 pub(crate) fn for_inverse(inverse: &relations::Inverse) -> Vec<Mount> {
     vec![
         Mount {
-            anchor: anchors::RELATIONS.in_file(&inverse.file),
+            anchor: anchors::RELATIONS.for_entity(&inverse.file, &inverse.entity),
             lines: inverse.variant.clone(),
         },
         Mount {
-            anchor: anchors::RELATED.in_file(&inverse.file),
+            anchor: anchors::RELATED.for_entity(&inverse.file, &inverse.entity),
             lines: inverse.related.clone(),
         },
     ]
@@ -151,10 +152,13 @@ mod tests {
         );
     }
 
+    /// Les deux ancres visées portent le nom de l'entité, et non celui du seul fichier :
+    /// `src/auth/model.rs` en porte deux paires, une par entité nichée.
     #[test]
-    fn the_inverse_targets_the_two_anchors_of_the_computed_file() {
+    fn the_inverse_targets_the_two_anchors_of_its_entity() {
         let inverse = relations::Inverse {
             file: "src/auth/model.rs".to_string(),
+            entity: "users".to_string(),
             variant: vec![
                 r#"    #[sea_orm(has_many = "crate::posts::model::Entity")]"#.to_string(),
                 "    Posts,".to_string(),
@@ -169,8 +173,8 @@ mod tests {
         let montages = for_inverse(&inverse);
 
         assert_eq!(montages.len(), 2, "{montages:?}");
-        let relations_anchor = anchors::RELATIONS.in_file("src/auth/model.rs");
-        let related_anchor = anchors::RELATED.in_file("src/auth/model.rs");
+        let relations_anchor = anchors::RELATIONS.for_entity("src/auth/model.rs", "users");
+        let related_anchor = anchors::RELATED.for_entity("src/auth/model.rs", "users");
         assert_eq!(
             lines(&montages, relations_anchor),
             inverse.variant.as_slice()
