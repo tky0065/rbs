@@ -384,21 +384,23 @@ rbs doctor
 ```
 
 ```text
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.38s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
      Running `target/debug/migration version`
-  ✓ ancres     les 10 points d'insertion sont en place
-  ✓ relations  les modèles portent leurs ancres de relation
-  ✓ .env       les 4 variables de .env.example sont renseignées
-  ✓ versions   projet et rbs-core 1.0.1 alignés sur le CLI 1.0.1
-  ✓ base       postgres 18.6 répond sur localhost:5432
+  ✓ ancres      les 10 points d'insertion sont en place
+  ✓ agents      guide et inventaire à jour
+  ✓ relations   les modèles portent leurs ancres de relation
+  ✓ .env        les 4 variables de .env.example sont renseignées
+  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
+  ✓ base        postgres 18.6 répond sur localhost:5432
 ✓ le projet est sain
 ```
 
-Cinq vérifications : les ancres sont toujours en place — dix ici, neuf du squelette
-plus celle du compose, qui sort du compte pour un projet sans `docker-compose.yml` —
-aucun modèle ne porte de relation sans les deux ancres qu'il lui faudrait pour en
-recevoir une, `.env` porte chaque clé que déclare `.env.example`, le projet et `rbs-core`
-s'accordent avec la version du CLI, et la base répond.
+Six vérifications : les ancres sont toujours en place — dix ici, neuf du squelette
+plus celle du compose, qui sort du compte pour un projet sans `docker-compose.yml` — le
+guide et l'inventaire d'[`AGENTS.md`](./guides/agents.md) s'accordent toujours avec ce que
+porte le projet, aucun modèle ne porte de relation sans les deux ancres qu'il lui
+faudrait pour en recevoir une, `.env` porte chaque clé que déclare `.env.example`, le
+projet et `rbs-core` s'accordent avec la version du CLI, et la base répond.
 
 ## Pour aller plus loin
 

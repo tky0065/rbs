@@ -376,19 +376,21 @@ rbs doctor
 ```
 
 ```text
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.38s
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
      Running `target/debug/migration version`
-  ✓ ancres     les 10 points d'insertion sont en place
-  ✓ relations  les modèles portent leurs ancres de relation
-  ✓ .env       les 4 variables de .env.example sont renseignées
-  ✓ versions   projet et rbs-core 1.0.1 alignés sur le CLI 1.0.1
-  ✓ base       postgres 18.6 répond sur localhost:5432
+  ✓ ancres      les 10 points d'insertion sont en place
+  ✓ agents      guide et inventaire à jour
+  ✓ relations   les modèles portent leurs ancres de relation
+  ✓ .env        les 4 variables de .env.example sont renseignées
+  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
+  ✓ base        postgres 18.6 répond sur localhost:5432
 ✓ le projet est sain
 ```
 
-Five checks: the anchors are still in place — ten of them here, nine from the skeleton
+Six checks: the anchors are still in place — ten of them here, nine from the skeleton
 plus the compose's, which drops out of the count for a project with no
-`docker-compose.yml` — no model has a relation without the two anchors it would need to
+`docker-compose.yml` — [`AGENTS.md`](./guides/agents.md)'s guide and inventory still match
+what the project carries, no model has a relation without the two anchors it would need to
 receive one, `.env` holds every key `.env.example` declares, the project and `rbs-core`
 agree with the CLI's version, and the database answers.
 
