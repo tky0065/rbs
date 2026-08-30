@@ -234,8 +234,9 @@ plan pour /private/tmp/rbs-demo/blog
   ~ migration/src/lib.rs                                modifié
   ~ src/seeds/main.rs                                   modifié
   ~ Cargo.toml                                          modifié
+  ~ AGENTS.md                                           modifié
 
-  15 fichiers à écrire
+  16 fichiers à écrire
 
   rien n'a été écrit (--dry-run)
 ```
@@ -261,14 +262,15 @@ plan pour /private/tmp/rbs-demo/blog
   ~ migration/src/lib.rs                                modifié
   ~ src/seeds/main.rs                                   modifié
   ~ Cargo.toml                                          modifié
+  ~ AGENTS.md                                           modifié
 
-  15 fichiers à écrire
+  16 fichiers à écrire
 ✓ articles générée — 9 fichiers
 
   la migration m20260830_110925_create_articles reste à appliquer avant de lancer le projet
 ```
 
-Nine files created, six modified through their anchors. The feature is then recorded in
+Nine files created, seven modified through their anchors. The feature is then recorded in
 the manifest, which is what makes the command idempotent:
 
 ```text
@@ -296,8 +298,9 @@ plan pour /private/tmp/rbs-demo/blog
   ~ src/router.rs                modifié
   ~ src/openapi.rs               modifié
   ~ Cargo.toml                   modifié
+  ~ AGENTS.md                    modifié
 
-  10 fichiers à écrire
+  11 fichiers à écrire
 ✓ comments générée — 6 fichiers
 ```
 

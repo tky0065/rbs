@@ -11,7 +11,7 @@ si votre terminal affiche la même chose, vous n'avez pas dévié — aux durée
 identifiants et aux dates près, qui sont les vôtres. Une seule chose a été retirée des
 blocs : le chemin absolu du répertoire où l'exécution a eu lieu, noté `…/demo`.
 
-Le CLI parle français : `✓ demo créé — 18 fichiers` est une ligne de succès. Les
+Le CLI parle français : `✓ demo créé — 19 fichiers` est une ligne de succès. Les
 options, les noms de fichiers et le code généré, eux, sont les mêmes quelle que soit la
 langue.
 
@@ -73,7 +73,7 @@ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 ```
 
 ```text
-✓ demo créé — 18 fichiers
+✓ demo créé — 19 fichiers
 
   cd demo
   docker compose up -d   # la base du .env, montée
@@ -95,7 +95,7 @@ terminal où poser ses questions : c'est pourquoi un script ou un job de CI a be
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
 ```
 
-Dix-huit fichiers, et aucun n'est une boîte noire :
+Dix-neuf fichiers, et aucun n'est une boîte noire :
 
 - `src/main.rs`, `src/router.rs`, `src/state.rs`, `src/openapi.rs` — le montage.
 - `src/lib.rs` — la bibliothèque sur laquelle s'appuient `src/main.rs` et
@@ -230,8 +230,9 @@ plan pour …/demo
   ~ migration/src/lib.rs                                modifié
   ~ src/seeds/main.rs                                   modifié
   ~ Cargo.toml                                          modifié
+  ~ AGENTS.md                                           modifié
 
-  15 fichiers à écrire
+  16 fichiers à écrire
 ✓ articles générée — 9 fichiers
 
   la migration m20260830_110245_create_articles reste à appliquer avant de lancer le projet

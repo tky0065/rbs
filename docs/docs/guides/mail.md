@@ -35,8 +35,9 @@ plan pour /private/tmp/rbs-demo/depot
   ~ Cargo.toml                      modifié
   ~ config/default.toml             modifié
   ~ .env.example                    modifié
+  ~ AGENTS.md                       modifié
 
-  12 fichiers à écrire
+  13 fichiers à écrire
 ✓ mail installée — 6 fichiers
 
   réglez [mail] dans config/default.toml — un SMTP local par défaut

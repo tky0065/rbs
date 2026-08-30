@@ -36,8 +36,9 @@ plan pour /private/tmp/rbs-demo/demo
   ~ src/main.rs                                     modifié
   ~ Cargo.toml                                      modifié
   ~ config/default.toml                             modifié
+  ~ AGENTS.md                                       modifié
 
-  13 fichiers à écrire
+  14 fichiers à écrire
 ✓ jobs installée — 8 fichiers
 
   rbs migrate up, puis inscrivez vos jobs dans src/jobs/mod.rs

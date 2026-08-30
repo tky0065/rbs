@@ -30,8 +30,9 @@ plan pour /private/tmp/rbs-demo/depot
   ~ docker-compose.yml    modifié
   ~ Cargo.toml            modifié
   ~ config/default.toml   modifié
+  ~ AGENTS.md             modifié
 
-  8 fichiers à écrire
+  9 fichiers à écrire
 ✓ redis installée — 3 fichiers
 
   le compose du projet porte déjà un service redis — docker compose up -d le démarre ; sans compose, faites écouter un Redis à l'URL de [cache] de config/default.toml

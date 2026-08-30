@@ -39,8 +39,9 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                             modifié
   ~ config/default.toml                                    modifié
   ~ .env.example                                           modifié
+  ~ AGENTS.md                                              modifié
 
-  16 fichiers à écrire
+  17 fichiers à écrire
 ✓ auth installée — 9 fichiers
 
   recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up

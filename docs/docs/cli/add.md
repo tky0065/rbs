@@ -68,8 +68,9 @@ plan pour /private/tmp/rbs-demo/blog
   + .dockerignore        créé
   ~ docker-compose.yml   modifié
   ~ Cargo.toml           modifié
+  ~ AGENTS.md            modifié
 
-  4 fichiers à écrire
+  5 fichiers à écrire
 ✓ docker installée — 2 fichiers
 
   docker compose --profile app up --build
@@ -92,8 +93,9 @@ plan pour /private/tmp/rbs-demo/depot
   + .dockerignore        créé
   + docker-compose.yml   créé
   ~ Cargo.toml           modifié
+  ~ AGENTS.md            modifié
 
-  4 fichiers à écrire
+  5 fichiers à écrire
 ✓ docker installée — 3 fichiers
 
   docker compose --profile app up --build
@@ -119,8 +121,9 @@ plan pour /private/tmp/rbs-demo/blog
 
   + .github/workflows/ci.yml   créé
   ~ Cargo.toml                 modifié
+  ~ AGENTS.md                  modifié
 
-  2 fichiers à écrire
+  3 fichiers à écrire
 ✓ ci installée — 1 fichier
 
   git push : le workflow s'exécute à la prochaine poussée
@@ -148,8 +151,9 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                             modifié
   ~ config/default.toml                                    modifié
   ~ .env.example                                           modifié
+  ~ AGENTS.md                                              modifié
 
-  16 fichiers à écrire
+  17 fichiers à écrire
 ✓ auth installée — 9 fichiers
 
   recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up
@@ -200,8 +204,9 @@ plan pour /private/tmp/rbs-demo/blog
   · .dockerignore        inchangé
   · docker-compose.yml   inchangé
   ~ Cargo.toml           modifié
+  ~ AGENTS.md            modifié
 
-  1 fichier à écrire, 3 inchangés
+  2 fichiers à écrire, 3 inchangés
 ✓ docker installée — 2 fichiers
 
   docker compose --profile app up --build
@@ -235,8 +240,9 @@ plan pour /private/tmp/rbs-demo/blog
 
   ! Dockerfile   conflit — relancer avec --force
   ~ Cargo.toml   modifié
+  ~ AGENTS.md    modifié
 
-  1 fichier à écrire, 1 en conflit
+  2 fichiers à écrire, 1 en conflit
 erreur : Dockerfile — relancer avec --force pour les écraser
 ```
 
@@ -253,8 +259,9 @@ plan pour /private/tmp/rbs-demo/blog
 
   ! Dockerfile   conflit — relancer avec --force
   ~ Cargo.toml   modifié
+  ~ AGENTS.md    modifié
 
-  1 fichier à écrire, 1 en conflit
+  2 fichiers à écrire, 1 en conflit
 ✓ docker installée — 1 fichier
 
   docker compose --profile app up --build

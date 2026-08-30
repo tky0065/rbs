@@ -239,8 +239,9 @@ plan pour /private/tmp/rbs-demo/blog
   ~ migration/src/lib.rs                                modifié
   ~ src/seeds/main.rs                                   modifié
   ~ Cargo.toml                                          modifié
+  ~ AGENTS.md                                           modifié
 
-  15 fichiers à écrire
+  16 fichiers à écrire
 
   rien n'a été écrit (--dry-run)
 ```
@@ -266,14 +267,15 @@ plan pour /private/tmp/rbs-demo/blog
   ~ migration/src/lib.rs                                modifié
   ~ src/seeds/main.rs                                   modifié
   ~ Cargo.toml                                          modifié
+  ~ AGENTS.md                                           modifié
 
-  15 fichiers à écrire
+  16 fichiers à écrire
 ✓ articles générée — 9 fichiers
 
   la migration m20260830_110925_create_articles reste à appliquer avant de lancer le projet
 ```
 
-Neuf fichiers créés, six modifiés par leurs ancres. La feature est ensuite inscrite dans le
+Neuf fichiers créés, sept modifiés par leurs ancres. La feature est ensuite inscrite dans le
 manifeste, ce qui rend la commande idempotente :
 
 ```text
@@ -301,8 +303,9 @@ plan pour /private/tmp/rbs-demo/blog
   ~ src/router.rs                modifié
   ~ src/openapi.rs               modifié
   ~ Cargo.toml                   modifié
+  ~ AGENTS.md                    modifié
 
-  10 fichiers à écrire
+  11 fichiers à écrire
 ✓ comments générée — 6 fichiers
 ```
 

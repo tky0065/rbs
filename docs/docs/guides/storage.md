@@ -32,8 +32,9 @@ plan pour /private/tmp/rbs-demo/depot
   ~ Cargo.toml             modifié
   ~ config/default.toml    modifié
   ~ .env.example           modifié
+  ~ AGENTS.md              modifié
 
-  9 fichiers à écrire
+  10 fichiers à écrire
 ✓ storage installée — 4 fichiers
 
   les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example

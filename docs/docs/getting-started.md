@@ -11,7 +11,7 @@ your terminal prints matches, you have not drifted — timings, identifiers and 
 excepted, which are yours. Only one thing was edited out of the blocks: the absolute
 path of the directory the run happened in, written `…/demo` below.
 
-The CLI speaks French: `✓ demo créé — 18 fichiers` is a success line, not an error.
+The CLI speaks French: `✓ demo créé — 19 fichiers` is a success line, not an error.
 Only the messages are translated-in-waiting; the flags, the file names and the generated
 code are the same in every locale.
 
@@ -70,7 +70,7 @@ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 ```
 
 ```text
-✓ demo créé — 18 fichiers
+✓ demo créé — 19 fichiers
 
   cd demo
   docker compose up -d   # la base du .env, montée
@@ -91,7 +91,7 @@ run without a terminal to ask in, so `--yes` is what a script or a CI job needs:
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
 ```
 
-Eighteen files, and none of them a black box:
+Nineteen files, and none of them a black box:
 
 - `src/main.rs`, `src/router.rs`, `src/state.rs`, `src/openapi.rs` — the wiring.
 - `src/lib.rs` — the library `src/main.rs` and `src/seeds/main.rs` both build on. They are
@@ -225,8 +225,9 @@ plan pour …/demo
   ~ migration/src/lib.rs                                modifié
   ~ src/seeds/main.rs                                   modifié
   ~ Cargo.toml                                          modifié
+  ~ AGENTS.md                                           modifié
 
-  15 fichiers à écrire
+  16 fichiers à écrire
 ✓ articles générée — 9 fichiers
 
   la migration m20260830_110245_create_articles reste à appliquer avant de lancer le projet
