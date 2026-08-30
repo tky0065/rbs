@@ -11,6 +11,7 @@ pub mod env;
 pub mod jobs;
 pub mod mail;
 pub mod redis;
+pub mod relations;
 pub mod render;
 pub mod storage;
 pub mod versions;
@@ -97,6 +98,7 @@ pub(crate) fn run(directory: &Path) -> Result<Report, Error> {
 
     let mut checks = vec![
         anchors::check(&root),
+        relations::check(&root),
         env::check(&root),
         versions::check(&root),
         base::check(&root),
