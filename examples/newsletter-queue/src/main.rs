@@ -1,14 +1,5 @@
-mod health;
-mod openapi;
-mod router;
-mod state;
-// <rbs:features>
-mod jobs;
-mod mail;
-mod subscribers;
-// </rbs:features>
-
 use anyhow::Context;
+use newsletter_queue::{router, state};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -21,7 +12,7 @@ async fn main() -> anyhow::Result<()> {
     let state = state::AppState::new(db, config)?;
 
     // <rbs:startup>
-    crate::jobs::worker::spawn(state.clone());
+    newsletter_queue::jobs::worker::spawn(state.clone());
     // </rbs:startup>
 
     let app = router::router(state);

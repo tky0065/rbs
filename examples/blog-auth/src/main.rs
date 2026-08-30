@@ -1,13 +1,5 @@
-mod health;
-mod openapi;
-mod router;
-mod state;
-// <rbs:features>
-mod auth;
-mod posts;
-// </rbs:features>
-
 use anyhow::Context;
+use blog_auth::{router, state};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

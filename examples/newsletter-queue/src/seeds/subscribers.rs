@@ -3,10 +3,7 @@
 use sea_orm::ActiveValue::Set;
 use sea_orm::{ActiveModelTrait, DatabaseConnection, DbErr};
 
-// Le binaire des seeds est une racine de crate distincte de celle de l'application : il
-// rejoint l'entité par son chemin, et n'en appelle qu'une part.
-#[path = "../subscribers/model.rs"]
-mod model;
+use newsletter_queue::subscribers::model;
 
 // region: seed
 /// Insère les abonnés de démonstration.

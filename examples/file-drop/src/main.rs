@@ -1,15 +1,5 @@
-mod health;
-mod openapi;
-mod router;
-mod state;
-// <rbs:features>
-mod cache;
-mod mail;
-mod storage;
-mod uploads;
-// </rbs:features>
-
 use anyhow::Context;
+use file_drop::{router, state};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {

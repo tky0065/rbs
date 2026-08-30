@@ -1,12 +1,5 @@
-mod health;
-mod openapi;
-mod router;
-mod state;
-// <rbs:features>
-mod articles;
-// </rbs:features>
-
 use anyhow::Context;
+use hello_crud::{router, state};
 
 // region: demarrage
 #[tokio::main]
