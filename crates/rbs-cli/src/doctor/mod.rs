@@ -25,6 +25,8 @@ use crate::metadata;
 pub(crate) enum State {
     /// Rien à signaler.
     Bon,
+    /// Ce qui mérite d'être su sans empêcher le projet de fonctionner.
+    Avertissement,
     /// Ce qui empêche le projet de fonctionner.
     Echec,
 }
@@ -66,6 +68,24 @@ impl Check {
             remedy: Some(remedy.into()),
         }
     }
+
+    /// Un constat qui n'empêche rien, et ce qu'on peut en faire.
+    ///
+    /// Sans appelant hors tests avant la tâche suivante, qui l'invoquera pour le contrôle
+    /// du code écrit à la main hors du CLI.
+    #[allow(dead_code)]
+    pub(crate) fn warned(
+        title: &'static str,
+        detail: impl Into<String>,
+        remedy: impl Into<String>,
+    ) -> Self {
+        Self {
+            title,
+            state: State::Avertissement,
+            detail: detail.into(),
+            remedy: Some(remedy.into()),
+        }
+    }
 }
 
 /// L'ensemble des constats, dans l'ordre où ils ont été faits.
@@ -76,9 +96,9 @@ pub(crate) struct Report {
 }
 
 impl Report {
-    /// Vrai si aucun contrôle n'a échoué.
+    /// Vrai si aucun contrôle n'a échoué : un avertissement n'y fait pas obstacle.
     pub(crate) fn succeeded(&self) -> bool {
-        self.checks.iter().all(|c| c.state == State::Bon)
+        self.checks.iter().all(|c| c.state != State::Echec)
     }
 }
 
@@ -308,6 +328,29 @@ mod tests {
             checks: vec![
                 Check::ok("ancres", "les 5 sont en place"),
                 Check::failed(".env", "RBS_ENV manque", "ajoutez RBS_ENV"),
+            ],
+        };
+
+        assert!(!report.succeeded());
+    }
+
+    /// Un avertissement s'affiche sans faire échouer la commande : `rbs doctor` sort en 0
+    /// sur un projet qui porte du code écrit à la main, ce que le guide autorise.
+    #[test]
+    fn a_warning_does_not_make_the_report_fail() {
+        let report = Report {
+            checks: vec![Check::warned("cli", "1 module hors CLI", "rien à faire")],
+        };
+
+        assert!(report.succeeded());
+    }
+
+    #[test]
+    fn a_failure_still_makes_the_report_fail() {
+        let report = Report {
+            checks: vec![
+                Check::warned("cli", "1 module hors CLI", "rien à faire"),
+                Check::failed(".env", "RBS_ENV manque", "ajoutez-la"),
             ],
         };
 

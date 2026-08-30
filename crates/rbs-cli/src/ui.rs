@@ -36,6 +36,11 @@ pub fn red(text: &str) -> String {
     style(text).red().to_string()
 }
 
+/// Colore un fragment en jaune, pour ce qui mérite un regard sans être une erreur.
+pub fn yellow(text: &str) -> String {
+    style(text).yellow().to_string()
+}
+
 /// Accorde un décompte de fichiers : « 1 fichier », « 3 fichiers ».
 pub fn files(compte: usize) -> String {
     let pluriel = if compte > 1 { "s" } else { "" };

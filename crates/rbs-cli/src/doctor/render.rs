@@ -26,6 +26,7 @@ pub(crate) fn report(report: &Report) -> String {
 
         lines.push(match check.state {
             State::Bon => format!("  {} {title}   {}", ui::green("✓"), check.detail),
+            State::Avertissement => format!("  {} {title}   {}", ui::yellow("!"), check.detail),
             State::Echec => format!("  {} {title}   {}", ui::red("✗"), check.detail),
         });
 
@@ -64,6 +65,24 @@ mod tests {
         assert!(ok.contains('✓') && ok.contains("ancres"));
         assert!(failed.contains('✗') && failed.contains(".env"));
         assert!(!ok.contains('✗'));
+    }
+
+    /// Le rapport se lit aussi sans couleur — journaux de CI, terminaux monochromes.
+    #[test]
+    fn the_three_verdicts_carry_distinct_markers_without_colour() {
+        let rendered = report(&report_of(vec![
+            Check::ok("ancres", "les 10 sont en place"),
+            Check::warned("cli", "1 module hors CLI", "rbs generate, ou rien"),
+            Check::failed(".env", "RBS_ENV manque", "ajoutez RBS_ENV=development"),
+        ]));
+        let mut lines = rendered.lines();
+
+        let ok = lines.next().expect("le premier contrôle est rendu");
+        let warned = lines.next().expect("le deuxième contrôle est rendu");
+
+        assert!(ok.contains('✓'));
+        assert!(warned.contains('!') && warned.contains("cli"));
+        assert!(!warned.contains('✓') && !warned.contains('✗'));
     }
 
     #[test]
