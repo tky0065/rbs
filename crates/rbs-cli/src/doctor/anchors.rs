@@ -18,7 +18,7 @@ pub(crate) fn check(root: &Path) -> Check {
     // réclamer ferait passer pour incomplet un projet qui ne l'est pas.
     let applicables: Vec<&Anchor> = ANCRES
         .iter()
-        .filter(|anchor| !anchor.optional || root.join(anchor.file).exists())
+        .filter(|anchor| !anchor.optional || root.join(anchor.file.as_ref()).exists())
         .collect();
 
     let absentes: Vec<&&Anchor> = applicables.iter().filter(|a| !present(root, a)).collect();
@@ -50,7 +50,7 @@ pub(crate) fn check(root: &Path) -> Check {
 /// Un fichier illisible vaut ancre absente : le diagnostic le signale par le nom du
 /// fichier plutôt que de s'interrompre.
 fn present(root: &Path, anchor: &Anchor) -> bool {
-    fs::read_to_string(root.join(anchor.file)).is_ok_and(|source| {
+    fs::read_to_string(root.join(anchor.file.as_ref())).is_ok_and(|source| {
         source.contains(&anchor.opening()) && source.contains(&anchor.closing())
     })
 }

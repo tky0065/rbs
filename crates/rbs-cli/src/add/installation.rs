@@ -119,7 +119,12 @@ pub(crate) fn actions(
         // Une ancre reçoit du contenu de manifeste, pas une template : sans ce rendu,
         // une variable comme `{@ database_url_compose @}` atterrirait littéralement dans
         // le fichier plutôt que sa valeur.
-        let content = render(&renderer, fragment, &insertion.content, anchor.file)?;
+        let content = render(
+            &renderer,
+            fragment,
+            &insertion.content,
+            anchor.file.as_ref(),
+        )?;
         builder.insert(anchor, &lines(&content))?;
     }
 

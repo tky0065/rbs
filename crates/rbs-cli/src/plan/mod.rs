@@ -177,17 +177,18 @@ impl Builder {
     ///
     /// Le fichier visé est celui que l'ancre désigne : une ancre ne se déplace pas.
     pub fn insert(&mut self, anchor: Anchor, lines: &[String]) -> Result<(), Error> {
-        let path = anchor.file;
+        let path = anchor.file.to_string();
 
-        let states = self.states(path)?;
+        let states = self.states(&path)?;
         let courant = states.courant.ok_or_else(|| Error::FichierAbsent {
             path: path.to_string(),
         })?;
 
-        let after = crate::anchors::insert(&courant, anchor, lines).map_err(Error::Anchor)?;
+        let after =
+            crate::anchors::insert(&courant, anchor.clone(), lines).map_err(Error::Anchor)?;
         let statut = combined_status(states.origin.as_deref(), &after);
 
-        self.project_onto(path, states.origin, after, statut);
+        self.project_onto(&path, states.origin, after, statut);
         self.actions.push(Action {
             path: path.to_string(),
             effet: Effect::Inserer {

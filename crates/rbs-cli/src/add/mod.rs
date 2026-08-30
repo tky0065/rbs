@@ -819,9 +819,9 @@ mod tests {
     }
 
     /// La ligne qui précède immédiatement la balise fermante de `anchor`.
-    fn last_line_of(root: &Path, anchor: crate::anchors::Anchor) -> String {
-        let source =
-            fs::read_to_string(root.join(anchor.file)).expect("le fichier de l'ancre se lit");
+    fn last_line_of(root: &Path, anchor: &crate::anchors::Anchor) -> String {
+        let source = fs::read_to_string(root.join(anchor.file.as_ref()))
+            .expect("le fichier de l'ancre se lit");
         let closing = anchor.closing();
 
         source
@@ -855,7 +855,7 @@ mod tests {
             (crate::anchors::MIGRATIONS, "Box::new(m0_essai::Migration),"),
         ] {
             assert_eq!(
-                last_line_of(&root, anchor),
+                last_line_of(&root, &anchor),
                 expected,
                 "l'ancre `{}` ne porte pas la ligne déclarée",
                 anchor.name
@@ -968,11 +968,11 @@ mod tests {
 
         let module = written_migration(&root).replace(".rs", "");
         assert_eq!(
-            last_line_of(&root, crate::anchors::MIGRATION_MODULES),
+            last_line_of(&root, &crate::anchors::MIGRATION_MODULES),
             format!("mod {module};")
         );
         assert_eq!(
-            last_line_of(&root, crate::anchors::MIGRATIONS),
+            last_line_of(&root, &crate::anchors::MIGRATIONS),
             format!("Box::new({module}::Migration),")
         );
     }

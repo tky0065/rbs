@@ -172,11 +172,11 @@ impl Project {
     /// preuve que le moteur d'ancres produit du Rust valide est un projet qui compile.
     fn mount(&self, montages: &[Mount], visees: &[Anchor]) {
         for mount in montages.iter().filter(|m| visees.contains(&m.anchor)) {
-            let path = self.root.join(mount.anchor.file);
+            let path = self.root.join(mount.anchor.file.as_ref());
             let source = fs::read_to_string(&path)
                 .unwrap_or_else(|error| panic!("{} illisible : {error}", path.display()));
 
-            let rendered = anchors::insert(&source, mount.anchor, &mount.lines)
+            let rendered = anchors::insert(&source, mount.anchor.clone(), &mount.lines)
                 .unwrap_or_else(|error| panic!("{error}"));
 
             fs::write(&path, rendered)

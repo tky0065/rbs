@@ -3,15 +3,19 @@
 //! Le CLI ne réécrit jamais d'AST : il insère dans des ancres en commentaires. Ce module
 //! ne connaît que des chaînes — l'écriture sur disque appartient à ses appelants.
 
+use std::borrow::Cow;
 use std::fmt;
 
 /// Un point d'insertion, et le fichier du projet qui le porte.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Anchor {
     /// Nom tel qu'il paraît entre les chevrons : `features` pour `// <rbs:features>`.
     pub name: &'static str,
     /// Chemin du fichier porteur, relatif à la racine du projet.
-    pub file: &'static str,
+    ///
+    /// Emprunté pour les ancres du registre, dont le fichier est fixe ; possédé pour
+    /// celles du modèle d'une feature, dont il dépend du nom de cette feature.
+    pub file: Cow<'static, str>,
     /// Marqueur de commentaire du langage porteur : `//` en Rust, `#` en YAML.
     pub comment: &'static str,
     /// L'ancre peut légitimement manquer, son fichier porteur étant lui-même facultatif.
@@ -36,12 +40,26 @@ impl Anchor {
     pub(crate) fn block(&self) -> String {
         format!("{}\n{}", self.opening(), self.closing())
     }
+
+    /// La même ancre, dans un autre fichier.
+    ///
+    /// Sert aux ancres du modèle d'une feature : leur fichier n'est connu qu'à
+    /// l'exécution, une fois le nom de la feature en main.
+    // Rien ne l'appelle encore hors des tests : la commande qui écrira dans
+    // `src/<feature>/model.rs` arrive à une tâche suivante.
+    #[allow(dead_code)]
+    pub(crate) fn in_file(&self, path: &str) -> Anchor {
+        Anchor {
+            file: Cow::Owned(path.to_string()),
+            ..self.clone()
+        }
+    }
 }
 
 /// Déclaration des modules de feature, en tête de `main.rs`.
 pub(crate) const FEATURES: Anchor = Anchor {
     name: "features",
-    file: "src/main.rs",
+    file: Cow::Borrowed("src/main.rs"),
     comment: "//",
     optional: false,
 };
@@ -49,7 +67,7 @@ pub(crate) const FEATURES: Anchor = Anchor {
 /// Montage des routes d'une feature dans le routeur.
 pub(crate) const ROUTES: Anchor = Anchor {
     name: "routes",
-    file: "src/router.rs",
+    file: Cow::Borrowed("src/router.rs"),
     comment: "//",
     optional: false,
 };
@@ -57,7 +75,7 @@ pub(crate) const ROUTES: Anchor = Anchor {
 /// Enregistrement des chemins d'une feature dans le document OpenAPI.
 pub(crate) const OPENAPI: Anchor = Anchor {
     name: "openapi",
-    file: "src/openapi.rs",
+    file: Cow::Borrowed("src/openapi.rs"),
     comment: "//",
     optional: false,
 };
@@ -68,7 +86,7 @@ pub(crate) const OPENAPI: Anchor = Anchor {
 /// déclaration ne peut donc pas tenir dans le `vec!` du `Migrator`.
 pub(crate) const MIGRATION_MODULES: Anchor = Anchor {
     name: "migration_modules",
-    file: "migration/src/lib.rs",
+    file: Cow::Borrowed("migration/src/lib.rs"),
     comment: "//",
     optional: false,
 };
@@ -76,7 +94,7 @@ pub(crate) const MIGRATION_MODULES: Anchor = Anchor {
 /// Inscription des migrations dans le `Migrator`.
 pub(crate) const MIGRATIONS: Anchor = Anchor {
     name: "migrations",
-    file: "migration/src/lib.rs",
+    file: Cow::Borrowed("migration/src/lib.rs"),
     comment: "//",
     optional: false,
 };
@@ -84,7 +102,7 @@ pub(crate) const MIGRATIONS: Anchor = Anchor {
 /// Déclaration d'un champ partagé dans la struct `AppState`.
 pub(crate) const STATE_CHAMPS: Anchor = Anchor {
     name: "state_champs",
-    file: "src/state.rs",
+    file: Cow::Borrowed("src/state.rs"),
     comment: "//",
     optional: false,
 };
@@ -95,7 +113,7 @@ pub(crate) const STATE_CHAMPS: Anchor = Anchor {
 /// autre, et une ancre unique ne pourrait pas viser les deux.
 pub(crate) const STATE_INIT: Anchor = Anchor {
     name: "state_init",
-    file: "src/state.rs",
+    file: Cow::Borrowed("src/state.rs"),
     comment: "//",
     optional: false,
 };
@@ -106,7 +124,7 @@ pub(crate) const STATE_INIT: Anchor = Anchor {
 /// une tâche, et une valeur ne peut pas se détacher elle-même.
 pub(crate) const STARTUP: Anchor = Anchor {
     name: "startup",
-    file: "src/main.rs",
+    file: Cow::Borrowed("src/main.rs"),
     comment: "//",
     optional: false,
 };
@@ -119,7 +137,7 @@ pub(crate) const STARTUP: Anchor = Anchor {
 /// `migration` — et la macro évite ici d'en poser une seconde.
 pub(crate) const SEEDS: Anchor = Anchor {
     name: "seeds",
-    file: "src/seeds/main.rs",
+    file: Cow::Borrowed("src/seeds/main.rs"),
     comment: "//",
     optional: false,
 };
@@ -131,9 +149,34 @@ pub(crate) const SEEDS: Anchor = Anchor {
 /// compose, et n'ont donc pas cette ancre à porter.
 pub(crate) const SERVICES: Anchor = Anchor {
     name: "services",
-    file: "docker-compose.yml",
+    file: Cow::Borrowed("docker-compose.yml"),
     comment: "#",
     optional: true,
+};
+
+/// Variantes de l'énumération `Relation` d'un modèle de feature.
+///
+/// Hors du registre statique : son fichier dépend de la feature visée, et se fixe par
+/// [`Anchor::in_file`] une fois ce nom connu.
+// Rien ne la monte encore hors des tests : la tâche suivante l'inscrit dans le modèle
+// généré.
+#[allow(dead_code)]
+pub(crate) const RELATIONS: Anchor = Anchor {
+    name: "relations",
+    file: Cow::Borrowed("src/{feature}/model.rs"),
+    comment: "//",
+    optional: false,
+};
+
+/// Implémentations de `Related` d'un modèle de feature.
+///
+/// Hors du registre statique, pour la même raison que [`RELATIONS`].
+#[allow(dead_code)]
+pub(crate) const RELATED: Anchor = Anchor {
+    name: "related",
+    file: Cow::Borrowed("src/{feature}/model.rs"),
+    comment: "//",
+    optional: false,
 };
 
 /// Les points d'insertion du squelette.
@@ -178,7 +221,11 @@ impl std::error::Error for Missing {}
 /// déjà traverse l'insertion tel quel : le développeur a pu l'ordonner ou l'indenter à sa
 /// façon, et rien ici ne le sait mieux que lui.
 pub(crate) fn insert(source: &str, anchor: Anchor, lines: &[String]) -> Result<String, Missing> {
-    let absente = || Missing { anchor };
+    // Fermeture appelée jusqu'à deux fois : sans le `.clone()`, `Missing { anchor }`
+    // consommerait `anchor` dès le premier appel, empêchant le second.
+    let absente = || Missing {
+        anchor: anchor.clone(),
+    };
 
     let (opening, _) = line_of(source, &anchor.opening()).ok_or_else(absente)?;
     let (closing, indentation) = line_of(source, &anchor.closing()).ok_or_else(absente)?;
@@ -567,7 +614,7 @@ struct AppState {
     fn a_yaml_anchor_is_written_with_a_hash() {
         let compose = Anchor {
             name: "services",
-            file: "docker-compose.yml",
+            file: Cow::Borrowed("docker-compose.yml"),
             comment: "#",
             optional: true,
         };
@@ -593,14 +640,14 @@ struct AppState {
     fn a_yaml_comment_stays_attached_to_the_line_below_it() {
         let compose = Anchor {
             name: "services",
-            file: "docker-compose.yml",
+            file: Cow::Borrowed("docker-compose.yml"),
             comment: "#",
             optional: true,
         };
         let source = "services:\n  # <rbs:services>\n  # </rbs:services>\n";
         let lines = vec!["# le cache du projet".to_string(), "redis:".to_string()];
 
-        let apres = insert(source, compose, &lines).expect("l'ancre est présente");
+        let apres = insert(source, compose.clone(), &lines).expect("l'ancre est présente");
 
         assert!(
             apres.contains("  # le cache du projet\n  redis:\n"),
@@ -623,7 +670,7 @@ struct AppState {
     fn a_yaml_comment_already_present_does_not_orphan_the_line_it_qualifies() {
         let compose = Anchor {
             name: "services",
-            file: "docker-compose.yml",
+            file: Cow::Borrowed("docker-compose.yml"),
             comment: "#",
             optional: true,
         };
@@ -666,5 +713,24 @@ struct AppState {
             .collect();
 
         assert_eq!(optionnelles, ["services"]);
+    }
+
+    #[test]
+    fn an_anchor_can_be_rebound_to_a_computed_file() {
+        let anchor = RELATIONS.in_file("src/posts/model.rs");
+
+        assert_eq!(anchor.file, "src/posts/model.rs");
+        assert_eq!(anchor.name, RELATIONS.name);
+        assert_eq!(anchor.opening(), "// <rbs:relations>");
+    }
+
+    // Les deux ancres du modèle ne rejoignent pas le registre statique : leur fichier
+    // dépend des features du projet, que `doctor` énumère autrement.
+    #[test]
+    fn the_model_anchors_are_absent_from_the_static_registry() {
+        for anchor in ANCRES {
+            assert_ne!(anchor.name, "relations", "{:?}", anchor);
+            assert_ne!(anchor.name, "related", "{:?}", anchor);
+        }
     }
 }
