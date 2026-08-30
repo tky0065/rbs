@@ -181,6 +181,7 @@ fn create_project(
             features: options.features,
             core_path,
             template_dir,
+            lang: crate::lang::Lang::Fr,
         },
         &std::env::current_dir()?,
     )?;

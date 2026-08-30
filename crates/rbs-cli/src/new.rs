@@ -35,6 +35,8 @@ pub struct Options {
     pub core_path: Option<PathBuf>,
     /// Templates du disque remplaçant celles embarquées.
     pub template_dir: Option<PathBuf>,
+    /// Langue du guide `AGENTS.md`.
+    pub lang: crate::lang::Lang,
 }
 
 /// Ce qu'un projet créé rapporte à son appelant.
@@ -348,6 +350,7 @@ fn render(options: &Options, dependency: &str) -> Result<Vec<(PathBuf, String)>,
             .filter(|base| !base.is_empty())
             .unwrap_or_else(|| crate_name(&options.name)),
         database_port => connexion.as_ref().map(|c| c.port).unwrap_or_default(),
+        lang => options.lang.name(),
     };
 
     files
@@ -434,6 +437,7 @@ mod tests {
             features: Vec::new(),
             core_path: None,
             template_dir: Some(PathBuf::from(SQUELETTE)),
+            lang: crate::lang::Lang::Fr,
         }
     }
 
@@ -795,6 +799,7 @@ mod tests {
                 features: vec!["graphql".to_string()],
                 core_path: None,
                 template_dir: None,
+                lang: crate::lang::Lang::Fr,
             },
             parent.path(),
         )
@@ -827,6 +832,7 @@ mod tests {
                     features: vec![feature.clone()],
                     core_path: None,
                     template_dir: None,
+                    lang: crate::lang::Lang::Fr,
                 },
                 parent.path(),
             )
@@ -845,6 +851,7 @@ mod tests {
                 features: vec!["auth".to_string()],
                 core_path: None,
                 template_dir: None,
+                lang: crate::lang::Lang::Fr,
             },
             parent.path(),
         )
@@ -877,6 +884,7 @@ mod tests {
                     features,
                     core_path: None,
                     template_dir: None,
+                    lang: crate::lang::Lang::Fr,
                 },
                 parent.path(),
             )
@@ -914,6 +922,7 @@ mod tests {
                 features: vec!["cassee".to_string()],
                 core_path: None,
                 template_dir: Some(directory.path().to_path_buf()),
+                lang: crate::lang::Lang::Fr,
             },
             parent.path(),
         )
@@ -1023,6 +1032,7 @@ mod tests {
                 features: Vec::new(),
                 core_path: None,
                 template_dir: None,
+                lang: crate::lang::Lang::Fr,
             },
             parent.path(),
         )
@@ -1053,6 +1063,7 @@ mod tests {
                 features: Vec::new(),
                 core_path: None,
                 template_dir: None,
+                lang: crate::lang::Lang::Fr,
             },
             parent.path(),
         )
@@ -1077,6 +1088,7 @@ mod tests {
                 features: Vec::new(),
                 core_path: None,
                 template_dir: None,
+                lang: crate::lang::Lang::Fr,
             },
             parent.path(),
         )
@@ -1099,6 +1111,7 @@ mod tests {
                 features: Vec::new(),
                 core_path: None,
                 template_dir: None,
+                lang: crate::lang::Lang::Fr,
             },
             parent.path(),
         )
@@ -1119,6 +1132,7 @@ mod tests {
                 features: Vec::new(),
                 core_path: None,
                 template_dir: None,
+                lang: crate::lang::Lang::Fr,
             },
             parent.path(),
         )
@@ -1144,6 +1158,7 @@ mod tests {
                 features: Vec::new(),
                 core_path: None,
                 template_dir: None,
+                lang: crate::lang::Lang::Fr,
             },
             parent.path(),
         )

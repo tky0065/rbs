@@ -26,7 +26,6 @@ impl Lang {
     }
 
     /// La langue que ce nom désigne, ou `None` s'il n'en désigne aucune.
-    #[allow(dead_code)]
     pub fn parse(name: &str) -> Option<Self> {
         match name {
             "fr" => Some(Self::Fr),

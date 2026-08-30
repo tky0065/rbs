@@ -326,6 +326,7 @@ mod tests {
             database_password => "postgres",
             database_name => "mon_api",
             database_port => 5432,
+            lang => "fr",
         }
     }
 

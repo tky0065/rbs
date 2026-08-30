@@ -93,6 +93,7 @@ mod tests {
                 features: Vec::new(),
                 core_path: None,
                 template_dir: None,
+                lang: crate::lang::Lang::Fr,
             },
             parent.path(),
         )

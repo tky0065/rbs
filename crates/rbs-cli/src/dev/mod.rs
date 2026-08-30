@@ -296,6 +296,7 @@ mod tests {
                 features: features.iter().map(|f| (*f).to_string()).collect(),
                 core_path: None,
                 template_dir: None,
+                lang: crate::lang::Lang::Fr,
             },
             parent.path(),
         )

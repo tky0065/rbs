@@ -31,6 +31,8 @@ pub struct Metadata {
     pub features: Vec<String>,
     /// Moteur de base sur lequel le projet a été créé.
     pub database: Database,
+    /// Langue du guide `AGENTS.md` du projet.
+    pub lang: crate::lang::Lang,
 }
 
 /// Une dépendance telle qu'un patch de manifeste la réclame.
@@ -148,6 +150,7 @@ pub fn read(cargo_toml: &Path) -> Result<Metadata, Error> {
         version: version(rbs, cargo_toml)?,
         features: features(rbs, cargo_toml)?,
         database: database(rbs, cargo_toml)?,
+        lang: lang(rbs),
     })
 }
 
@@ -561,6 +564,18 @@ fn database(rbs: &Item, cargo_toml: &Path) -> Result<Database, Error> {
     })
 }
 
+/// Langue du guide déclarée par le manifeste, le français à défaut.
+///
+/// Ni l'absence de la clé — les projets antérieurs à ce jalon n'en portent pas — ni une
+/// valeur inconnue ne sont des erreurs : elles immobiliseraient toutes les commandes d'un
+/// projet par ailleurs sain.
+fn lang(rbs: &Item) -> crate::lang::Lang {
+    rbs.get("lang")
+        .and_then(Item::as_str)
+        .and_then(crate::lang::Lang::parse)
+        .unwrap_or_default()
+}
+
 fn features(rbs: &Item, cargo_toml: &Path) -> Result<Vec<String>, Error> {
     let manquant = || Error::Field {
         path: name_of(cargo_toml),
@@ -616,6 +631,7 @@ mod tests {
                     rbs_version => "0.1.0",
                     database => Database::default().name(),
                     sea_orm_feature => Database::default().sea_orm_feature(),
+                    lang => crate::lang::Lang::default().name(),
                 },
             )
             .expect("le manifeste doit se rendre");
@@ -700,6 +716,7 @@ mod tests {
         assert_eq!(metadonnees.version, "0.1.0");
         assert_eq!(metadonnees.features, vec!["health".to_string()]);
         assert_eq!(metadonnees.database, Database::Postgres);
+        assert_eq!(metadonnees.lang, crate::lang::Lang::Fr);
     }
 
     // Le critère de S1 : aucun projet existant ne change. Les manifestes créés avant que
@@ -1200,5 +1217,60 @@ features = ["health"]
             .expect_err("la section manque");
 
         assert!(matches!(error, Error::PasUnProjet { .. }));
+    }
+
+    /// La clé porte la langue du guide : sans elle, `add` et `upgrade` réécriraient un
+    /// guide dans la langue de celui qui les lance, non dans celle du projet.
+    #[test]
+    fn the_language_is_read_from_the_manifest() {
+        let directory = tempfile::tempdir().expect("répertoire temporaire");
+        let manifest = directory.path().join("Cargo.toml");
+        std::fs::write(
+            &manifest,
+            "[package]\nname = \"blog\"\n\n[package.metadata.rbs]\nversion = \"1.1.0\"\n\
+             features = [\"health\"]\ndatabase = \"postgres\"\nlang = \"en\"\n",
+        )
+        .expect("manifeste écrit");
+
+        let metadonnees = read(&manifest).expect("le manifeste est lisible");
+
+        assert_eq!(metadonnees.lang, crate::lang::Lang::En);
+    }
+
+    /// Tout projet engendré avant ce jalon est dépourvu de la clé. Le refuser rendrait
+    /// `doctor` et `upgrade` inutilisables sur le parc existant.
+    #[test]
+    fn a_manifest_without_the_key_is_read_as_french() {
+        let directory = tempfile::tempdir().expect("répertoire temporaire");
+        let manifest = directory.path().join("Cargo.toml");
+        std::fs::write(
+            &manifest,
+            "[package]\nname = \"blog\"\n\n[package.metadata.rbs]\nversion = \"1.0.0\"\n\
+             features = [\"health\"]\ndatabase = \"postgres\"\n",
+        )
+        .expect("manifeste écrit");
+
+        let metadonnees = read(&manifest).expect("le manifeste est lisible");
+
+        assert_eq!(metadonnees.lang, crate::lang::Lang::Fr);
+    }
+
+    /// Une valeur inconnue vient forcément d'une édition à la main : la traiter comme le
+    /// défaut vaut mieux que d'immobiliser toutes les commandes du projet.
+    #[test]
+    fn an_unknown_language_is_read_as_french() {
+        let directory = tempfile::tempdir().expect("répertoire temporaire");
+        let manifest = directory.path().join("Cargo.toml");
+        std::fs::write(
+            &manifest,
+            "[package]\nname = \"blog\"\n\n[package.metadata.rbs]\nversion = \"1.1.0\"\n\
+             features = [\"health\"]\ndatabase = \"postgres\"\nlang = \"kl\"\n",
+        )
+        .expect("manifeste écrit");
+
+        assert_eq!(
+            read(&manifest).expect("le manifeste est lisible").lang,
+            crate::lang::Lang::Fr
+        );
     }
 }
