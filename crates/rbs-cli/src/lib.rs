@@ -370,6 +370,11 @@ fn generate(
     // s'apprête à faire ne doit pas se découvrir après coup.
     println!("{}", plan::render::plan(&planned.plan));
 
+    if let Some(zone) = &planned.zone_manquante {
+        ui::warn(&format!("{zone} — collez ce bloc pour la rétablir :"));
+        ui::info(&format!("\n{}", zone.block()));
+    }
+
     // Avant le plan, l'avertissement se perdrait au-dessus de sept lignes de fichiers.
     if let Some(avertissement) = &planned.avertissement {
         ui::warn(avertissement);

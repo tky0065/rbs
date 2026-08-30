@@ -54,6 +54,8 @@ pub(crate) struct Planned {
     pub avertissement: Option<format::Avertissement>,
     /// Nom de la relation qui a écarté le seed, si l'entité en porte une requise.
     pub seed_skipped: Option<String>,
+    /// La zone de l'`AGENTS.md` que le projet ne porte pas, s'il en manque une.
+    pub zone_manquante: Option<crate::agents::MissingZone>,
 }
 
 /// Ce qui peut empêcher de générer une feature.
@@ -262,7 +264,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // ce jalon, dépourvu de bibliothèque, l'ancre reste dans `src/main.rs`.
     let features_anchor = anchors::resolve_features(&root);
 
-    let mut builder = plan::Builder::new(root);
+    let mut builder = plan::Builder::new(root.clone());
     for (path, content) in &files {
         builder.create(path, content)?;
     }
@@ -281,7 +283,12 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         builder.insert(mount.anchor, &mount.lines)?;
     }
 
-    builder.patch(plan::PatchToml::InscrireFeature(module))?;
+    builder.patch(plan::PatchToml::InscrireFeature(module.clone()))?;
+
+    // Lue après le patch, jamais avant : l'inventaire doit nommer la feature que ce plan
+    // vient d'inscrire, que le manifeste du disque ignore encore.
+    let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
+    let zone_manquante = crate::agents::refresh(&mut builder, &root, &metadonnees, Some(&module))?;
 
     Ok(Planned {
         plan: builder.finir(),
@@ -289,6 +296,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         migration,
         avertissement,
         seed_skipped,
+        zone_manquante,
     })
 }
 
@@ -366,12 +374,19 @@ fn plan_repair(options: &Options, root: &Path) -> Result<Planned, Error> {
         }
     }
 
+    // La réparation n'inscrit aucune feature nouvelle : l'inventaire est régénéré à
+    // l'identique, et son action prend le statut « déjà fait » plutôt que de réécrire un
+    // fichier conforme.
+    let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
+    let zone_manquante = crate::agents::refresh(&mut builder, root, &metadonnees, None)?;
+
     Ok(Planned {
         plan: builder.finir(),
         files: Vec::new(),
         migration: None,
         avertissement: None,
         seed_skipped: None,
+        zone_manquante,
     })
 }
 
@@ -569,6 +584,56 @@ mod tests {
     fn read(path: &Path) -> String {
         fs::read_to_string(path)
             .unwrap_or_else(|error| panic!("{} illisible : {error}", path.display()))
+    }
+
+    /// L'inventaire est ce que l'agent lit pour savoir ce que le projet porte : une
+    /// entité engendrée qui n'y figure pas le renvoie explorer le disque.
+    #[test]
+    fn generating_a_crud_names_the_entity_in_the_agents_inventory() {
+        let (_parent, root) = project();
+
+        run(&options(&root, "articles", Some("title:string"), true))
+            .expect("articles doit se générer");
+
+        let agents = read(&root.join("AGENTS.md"));
+
+        assert!(agents.contains("articles"), "{agents}");
+        assert!(
+            agents.contains("## Notes du projet"),
+            "l'écriture a débordé de la zone : {agents}"
+        );
+    }
+
+    /// Un fichier de documentation supprimé ne doit pas empêcher d'engendrer une feature.
+    #[test]
+    fn a_missing_agents_file_does_not_stop_the_generation() {
+        let (_parent, root) = project();
+        fs::remove_file(root.join("AGENTS.md")).expect("le fichier existe");
+
+        let genere = run(&options(&root, "articles", Some("title:string"), true));
+
+        assert!(genere.is_ok(), "{:?}", genere.err());
+    }
+
+    /// La zone est régénérée, non complétée : deux générations successives laissent une
+    /// seule mention de chaque entité.
+    #[test]
+    fn the_inventory_names_each_entity_once() {
+        let (_parent, root) = project();
+
+        run(&options(&root, "articles", Some("title:string"), true))
+            .expect("articles doit se générer");
+        run(&options(&root, "comments", Some("body:string"), true))
+            .expect("comments doit se générer");
+
+        let agents = read(&root.join("AGENTS.md"));
+        let entites = agents
+            .lines()
+            .find(|line| line.contains("Entités"))
+            .expect("la ligne des entités est rendue");
+
+        assert_eq!(entites.matches("articles").count(), 1, "{entites}");
+        assert!(entites.contains("comments"), "{entites}");
     }
 
     #[test]
