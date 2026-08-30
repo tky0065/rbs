@@ -11,11 +11,11 @@ use tempfile::TempDir;
 
 mod common;
 
-/// Lance `rbs` dans `racine` et rend sa sortie, sans exiger qu'elle aboutisse.
-fn rbs(racine: &Path, arguments: &[&str]) -> std::process::Output {
+/// Lance `rbs` dans `root` et rend sa sortie, sans exiger qu'elle aboutisse.
+fn rbs(root: &Path, arguments: &[&str]) -> std::process::Output {
     Command::cargo_bin("rbs")
         .expect("le binaire rbs doit être compilé")
-        .current_dir(racine)
+        .current_dir(root)
         .args(arguments)
         .output()
         .expect("le binaire doit être lançable")
@@ -23,9 +23,9 @@ fn rbs(racine: &Path, arguments: &[&str]) -> std::process::Output {
 
 /// Un projet portant déjà `users`, cible de toutes les relations de ce fichier.
 fn project_with_users(parent: &Path) -> std::path::PathBuf {
-    let racine = common::projet(parent);
+    let root = common::projet(parent);
     let output = rbs(
-        &racine,
+        &root,
         &["g", "crud", "users", "--fields", "email:string:unique"],
     );
     assert!(
@@ -34,16 +34,16 @@ fn project_with_users(parent: &Path) -> std::path::PathBuf {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    racine
+    root
 }
 
 #[test]
 fn a_reference_writes_the_inverse_into_the_target_model() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = project_with_users(parent.path());
+    let root = project_with_users(parent.path());
 
     let output = rbs(
-        &racine,
+        &root,
         &[
             "g",
             "crud",
@@ -58,19 +58,19 @@ fn a_reference_writes_the_inverse_into_the_target_model() {
         String::from_utf8_lossy(&output.stderr)
     );
 
-    let cible = fs::read_to_string(racine.join("src/users/model.rs")).expect("le modèle se lit");
+    let target = fs::read_to_string(root.join("src/users/model.rs")).expect("le modèle se lit");
     assert!(
-        cible.contains(r#"has_many = "crate::posts::model::Entity""#),
-        "la variante inverse est absente :\n{cible}"
+        target.contains(r#"has_many = "crate::posts::model::Entity""#),
+        "la variante inverse est absente :\n{target}"
     );
     assert_eq!(
-        cible.matches("    Posts,").count(),
+        target.matches("    Posts,").count(),
         1,
-        "la variante inverse est écrite plus d'une fois :\n{cible}"
+        "la variante inverse est écrite plus d'une fois :\n{target}"
     );
 
-    let porteur = fs::read_to_string(racine.join("src/posts/model.rs")).expect("le modèle se lit");
-    assert!(porteur.contains("    Author,"), "{porteur}");
+    let carrier = fs::read_to_string(root.join("src/posts/model.rs")).expect("le modèle se lit");
+    assert!(carrier.contains("    Author,"), "{carrier}");
 }
 
 /// Le §4.4 impose l'idempotence : une seconde génération identique n'écrit pas une
@@ -78,7 +78,7 @@ fn a_reference_writes_the_inverse_into_the_target_model() {
 #[test]
 fn generating_the_same_relation_twice_leaves_a_single_inverse() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = project_with_users(parent.path());
+    let root = project_with_users(parent.path());
     let arguments = [
         "g",
         "crud",
@@ -87,18 +87,18 @@ fn generating_the_same_relation_twice_leaves_a_single_inverse() {
         "title:string,author:references:users",
     ];
 
-    rbs(&racine, &arguments);
-    let apres_la_premiere =
-        fs::read_to_string(racine.join("src/users/model.rs")).expect("le modèle se lit");
+    rbs(&root, &arguments);
+    let after_the_first =
+        fs::read_to_string(root.join("src/users/model.rs")).expect("le modèle se lit");
 
-    let seconde = rbs(&racine, &arguments);
+    let second = rbs(&root, &arguments);
     assert!(
-        !seconde.status.success(),
+        !second.status.success(),
         "la seconde génération doit échouer : la feature est déjà là"
     );
     assert_eq!(
-        fs::read_to_string(racine.join("src/users/model.rs")).expect("le modèle se lit"),
-        apres_la_premiere,
+        fs::read_to_string(root.join("src/users/model.rs")).expect("le modèle se lit"),
+        after_the_first,
         "la seconde génération a retouché le modèle de la cible"
     );
 }
@@ -111,16 +111,16 @@ fn generating_the_same_relation_twice_leaves_a_single_inverse() {
 #[test]
 fn a_missing_anchor_in_the_target_writes_nothing_and_shows_the_block() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = project_with_users(parent.path());
-    common::commiter(&racine, "projet et users");
+    let root = project_with_users(parent.path());
+    common::commiter(&root, "projet et users");
 
-    let modele = racine.join("src/users/model.rs");
-    let source = fs::read_to_string(&modele).expect("le modèle se lit");
-    fs::write(&modele, source.replace("    // <rbs:relations>\n", "")).expect("l'écriture aboutit");
+    let model = root.join("src/users/model.rs");
+    let source = fs::read_to_string(&model).expect("le modèle se lit");
+    fs::write(&model, source.replace("    // <rbs:relations>\n", "")).expect("l'écriture aboutit");
 
-    let avant = common::empreinte(&racine);
+    let before = common::empreinte(&root);
     let output = rbs(
-        &racine,
+        &root,
         &[
             "g",
             "crud",
@@ -131,20 +131,20 @@ fn a_missing_anchor_in_the_target_writes_nothing_and_shows_the_block() {
         ],
     );
 
-    let sortie = format!(
+    let output_text = format!(
         "{}{}",
         String::from_utf8_lossy(&output.stdout),
         String::from_utf8_lossy(&output.stderr)
     );
     assert!(
         !output.status.success(),
-        "la génération devait refuser :\n{sortie}"
+        "la génération devait refuser :\n{output_text}"
     );
     assert!(
-        sortie.contains("<rbs:relations>") && sortie.contains("src/users/model.rs"),
-        "le bloc à coller et son fichier doivent être affichés :\n{sortie}"
+        output_text.contains("<rbs:relations>") && output_text.contains("src/users/model.rs"),
+        "le bloc à coller et son fichier doivent être affichés :\n{output_text}"
     );
-    common::assert_intact(&avant, &racine, "une ancre absente laisse le projet intact");
+    common::assert_intact(&before, &root, "une ancre absente laisse le projet intact");
 }
 
 /// Le trou trouvé en relecture d'une tâche antérieure : `entities::scan` reconnaît une
@@ -154,17 +154,17 @@ fn a_missing_anchor_in_the_target_writes_nothing_and_shows_the_block() {
 #[test]
 fn a_reference_to_a_feature_without_a_migration_is_refused() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
-    let racine = common::projet(parent.path());
+    let root = common::projet(parent.path());
 
-    let sans_migration = rbs(&racine, &["g", "feature", "users"]);
+    let without_migration = rbs(&root, &["g", "feature", "users"]);
     assert!(
-        sans_migration.status.success(),
+        without_migration.status.success(),
         "la feature vide doit se générer :\n{}",
-        String::from_utf8_lossy(&sans_migration.stderr)
+        String::from_utf8_lossy(&without_migration.stderr)
     );
 
     let output = rbs(
-        &racine,
+        &root,
         &["g", "crud", "posts", "--fields", "author:references:users"],
     );
     let stderr = String::from_utf8_lossy(&output.stderr);
@@ -174,7 +174,7 @@ fn a_reference_to_a_feature_without_a_migration_is_refused() {
     );
     assert!(stderr.contains("users"), "{stderr}");
     assert!(
-        !racine.join("src/posts").is_dir(),
+        !root.join("src/posts").is_dir(),
         "des fichiers ont été écrits malgré la migration absente"
     );
 }

@@ -313,7 +313,7 @@ fn generate(
     let feature = name.clone();
     // `--has-many` répare une feature déjà là : rien à générer, donc rien à annoncer sous
     // ce nom-là une fois l'écriture faite.
-    let repare = !has_many.is_empty();
+    let repairing = !has_many.is_empty();
     let directory = std::env::current_dir().map_err(|source| generate::command::Error::Acces {
         path: ".".to_string(),
         source,
@@ -352,7 +352,7 @@ fn generate(
 
     plan::application::apply(&planned.plan, force)?;
 
-    if repare {
+    if repairing {
         ui::success(&format!("{feature} : côté inverse écrit"));
     } else {
         ui::success(&format!(
