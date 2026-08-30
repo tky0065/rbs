@@ -164,9 +164,9 @@ fn splice(
 ///
 /// Ne prend pas le nom du projet : aucun des deux gabarits ne l'emploie, seul le titre
 /// que compose `document` en a besoin.
-pub(crate) fn guide(lang: Lang, template_dir: Option<&Path>) -> Result<String, Error> {
+pub(crate) fn guide(lang: Lang) -> Result<String, Error> {
     let attendue = format!("{}.md", lang.name());
-    let files = crate::templates::Source::agents(template_dir)
+    let files = crate::templates::Source::agents()
         .files()
         .map_err(Error::Templates)?;
 
@@ -192,12 +192,7 @@ pub(crate) fn guide(lang: Lang, template_dir: Option<&Path>) -> Result<String, E
 }
 
 /// Le fichier complet, prêt à être écrit : titre, guide, inventaire, place du développeur.
-pub(crate) fn document(
-    root: &Path,
-    lang: Lang,
-    template_dir: Option<&Path>,
-    project: &str,
-) -> Result<String, Error> {
+pub(crate) fn document(root: &Path, lang: Lang, project: &str) -> Result<String, Error> {
     let (mode_d_emploi, notes) = match lang {
         Lang::Fr => ("mode d'emploi pour agents", "## Notes du projet"),
         Lang::En => ("agent handbook", "## Project notes"),
@@ -209,7 +204,7 @@ pub(crate) fn document(
          {}\n{}\n{}\n\n\
          {notes}\n",
         opening(GUIDE, Some(VERSION)),
-        guide(lang, template_dir)?,
+        guide(lang)?,
         closing(GUIDE),
         opening(INVENTORY, None),
         inventory(root, lang)?,
@@ -551,7 +546,7 @@ mod tests {
         use clap::CommandFactory;
 
         for lang in [Lang::Fr, Lang::En] {
-            let rendu = guide(lang, None).expect("le guide se rend");
+            let rendu = guide(lang).expect("le guide se rend");
 
             for sous_commande in crate::cli::Cli::command().get_subcommands() {
                 // `help` est engendrée par clap lui-même : aucun guide n'a à la documenter.
@@ -573,7 +568,7 @@ mod tests {
     #[test]
     fn the_guide_names_every_anchor_of_the_registry() {
         for lang in [Lang::Fr, Lang::En] {
-            let rendu = guide(lang, None).expect("le guide se rend");
+            let rendu = guide(lang).expect("le guide se rend");
 
             for anchor in crate::anchors::ANCRES.iter() {
                 assert!(
@@ -590,7 +585,7 @@ mod tests {
     #[test]
     fn each_language_carries_its_sections_in_order() {
         let titres = |lang| {
-            guide(lang, None)
+            guide(lang)
                 .expect("le guide se rend")
                 .lines()
                 .filter(|line| line.starts_with("## "))
@@ -628,7 +623,7 @@ mod tests {
     fn the_document_carries_both_zones_and_a_place_for_the_developer() {
         let (_parent, root) = project(Vec::new());
 
-        let rendu = document(&root, Lang::Fr, None, "demo-api").expect("le document se rend");
+        let rendu = document(&root, Lang::Fr, "demo-api").expect("le document se rend");
 
         assert!(rendu.contains(&opening(GUIDE, Some(VERSION))), "{rendu}");
         assert!(rendu.contains(&closing(GUIDE)), "{rendu}");
@@ -644,7 +639,7 @@ mod tests {
     fn the_document_ends_with_a_single_newline() {
         let (_parent, root) = project(Vec::new());
 
-        let rendu = document(&root, Lang::Fr, None, "demo-api").expect("le document se rend");
+        let rendu = document(&root, Lang::Fr, "demo-api").expect("le document se rend");
 
         assert!(
             rendu.ends_with('\n') && !rendu.ends_with("\n\n"),
@@ -656,7 +651,7 @@ mod tests {
     /// des ancres est calculée, et c'est par là que le français s'y était glissé.
     #[test]
     fn the_english_guide_carries_no_french_in_its_anchor_list() {
-        let rendu = guide(Lang::En, None).expect("le guide se rend");
+        let rendu = guide(Lang::En).expect("le guide se rend");
 
         for francais in [" dans `", " et `", "de chaque entité"] {
             assert!(

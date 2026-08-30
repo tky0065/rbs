@@ -208,13 +208,7 @@ pub fn create(options: &Options, parent: &Path) -> Result<Project, Error> {
 
     // Après les features, non avant : l'inventaire lit le manifeste que chaque
     // installation complète.
-    let agents = crate::agents::document(
-        &root,
-        options.lang,
-        options.template_dir.as_deref(),
-        &options.name,
-    )
-    .inspect_err(|_| {
+    let agents = crate::agents::document(&root, options.lang, &options.name).inspect_err(|_| {
         // Le répertoire n'existait pas avant la commande : le retirer entièrement ne peut
         // rien emporter qui lui préexistait.
         let _ = fs::remove_dir_all(&root);
@@ -449,11 +443,10 @@ mod tests {
 
     use super::*;
 
-    // `Source::fresh` et `Source::agents` lisent toutes deux `template_dir` tel quel, sans
-    // sous-répertoire : un même `--template-dir` ne peut donc porter à la fois le squelette
-    // et les guides sans que l'un pollue le rendu de l'autre. Faute d'un répertoire qui
-    // satisferait les deux, ces tests — qui ne portent pas sur `--template-dir` — se fient
-    // aux templates embarquées, rafraîchies à chaque recompilation de la crate.
+    /// Les templates du dépôt, pour que les tests portent sur le squelette réel plutôt
+    /// que sur une copie embarquée au moment de leur compilation.
+    const SQUELETTE: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/project");
+
     fn options(name: &str) -> Options {
         Options {
             name: name.to_owned(),
@@ -461,7 +454,7 @@ mod tests {
             database: Database::Postgres,
             features: Vec::new(),
             core_path: None,
-            template_dir: None,
+            template_dir: Some(PathBuf::from(SQUELETTE)),
             lang: crate::lang::Lang::Fr,
         }
     }
@@ -1267,5 +1260,35 @@ mod tests {
             std::fs::read_to_string(project.root.join("AGENTS.md")).expect("AGENTS.md est écrit");
 
         assert!(agents.contains("## CLI first"), "{agents}");
+    }
+
+    /// `--template-dir` ne remplace que le squelette de projet : les guides `AGENTS.md`
+    /// n'en font pas partie, et rien n'oblige un répertoire de substitution à les fournir.
+    /// Sans ce test, une régression qui referait lire `template_dir` par
+    /// `crate::templates::Source::agents` casserait tout `rbs new --template-dir`
+    /// pointant sur un squelette seul — exactement le cas documenté — sans qu'aucun test
+    /// existant ne s'en aperçoive.
+    #[test]
+    fn a_template_dir_holding_only_the_skeleton_still_gets_its_agents_file() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+
+        let project = create(
+            &Options {
+                name: "demo-api".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
+                database: Default::default(),
+                features: Vec::new(),
+                core_path: None,
+                template_dir: Some(PathBuf::from(SQUELETTE)),
+                lang: crate::lang::Lang::Fr,
+            },
+            parent.path(),
+        )
+        .expect("un `--template-dir` qui ne porte que le squelette doit suffire à créer le projet");
+
+        let agents = std::fs::read_to_string(project.root.join("AGENTS.md"))
+            .expect("AGENTS.md est écrit même quand `--template-dir` ne porte pas les guides");
+
+        assert!(agents.contains("<!-- rbs:guide"), "{agents}");
     }
 }

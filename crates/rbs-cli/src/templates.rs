@@ -68,12 +68,15 @@ impl Source {
         }
     }
 
-    /// S'ouvre sur les guides `AGENTS.md`, sous le répertoire donné ou dans l'embarqué.
-    pub fn agents(directory: Option<&Path>) -> Self {
-        match directory {
-            Some(path) => Self::Repertoire(path.to_path_buf()),
-            None => Self::Embarquees(&AGENTS),
-        }
+    /// S'ouvre sur les guides `AGENTS.md`, toujours dans l'embarqué.
+    ///
+    /// Les guides ne font pas partie du squelette substituable par `--template-dir` : ils
+    /// ne sont pas rendus dans l'arborescence que `Source::fresh` produit, ils composent un
+    /// fichier à part. Un utilisateur qui fournit son propre squelette n'a aucune raison
+    /// d'y ajouter des guides d'agent, et les lire dans son répertoire ferait échouer
+    /// `rbs new --template-dir` sur un squelette par ailleurs valide.
+    pub fn agents() -> Self {
+        Self::Embarquees(&AGENTS)
     }
 
     /// S'ouvre sur le fragment d'une feature, sous le répertoire donné ou dans l'embarqué.
