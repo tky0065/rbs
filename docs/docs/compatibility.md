@@ -65,6 +65,20 @@ anchors — nine Rust ones, `// <rbs:features>`, `// <rbs:routes>`, `// <rbs:ope
 the project, the features installed in it, and the database it targets. Neither is a Rust
 API. A compatibility promise written for Rust APIs alone would step straight over both.
 
+`// <rbs:features>` is where the promise shows what it is for. It moved to `src/lib.rs`
+once projects gained a library — the file two separate binaries, the app and its seeds,
+both reach into — but a project generated before that library existed has none, and on it
+the anchor stays exactly where it always lived, in `src/main.rs`. `rbs generate` and `rbs
+doctor` resolve to whichever file the project actually has, so the move breaks nothing
+generated under an earlier version: it is the promise holding, not an exception to it.
+
+A model can also carry two anchors of its own once it has a relation —
+`// <rbs:relations:table>`, inside its `Relation` enum, and `// <rbs:related:table>`
+beside it — the table's name standing in for the fixed name the ten above have, since a
+file can hold more than one entity. They sit outside the count of ten because which file
+carries them depends on the project's own features, not on the skeleton every project
+shares; their comment syntax and their naming convention are frozen exactly the same way.
+
 It must not, because they are the whole channel through which a later CLI recognises a
 project an earlier one created. [`rbs add`](./cli/add.md) reads `[package.metadata.rbs]` to
 know what is already installed, which is what makes it idempotent;

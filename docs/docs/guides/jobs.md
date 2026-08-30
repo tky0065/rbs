@@ -30,13 +30,14 @@ plan pour /private/tmp/rbs-demo/demo
   + src/jobs/worker.rs                              créé
   + src/jobs/demo.rs                                créé
   + src/jobs/tests.rs                               créé
-  + migration/src/m20260828_201637_create_jobs.rs   créé
+  + migration/src/m20260830_111505_create_jobs.rs   créé
   ~ migration/src/lib.rs                            modifié
+  ~ src/lib.rs                                      modifié
   ~ src/main.rs                                     modifié
   ~ Cargo.toml                                      modifié
   ~ config/default.toml                             modifié
 
-  12 fichiers à écrire
+  13 fichiers à écrire
 ✓ jobs installée — 8 fichiers
 
   rbs migrate up, puis inscrivez vos jobs dans src/jobs/mod.rs

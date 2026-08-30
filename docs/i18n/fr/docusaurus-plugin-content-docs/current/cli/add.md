@@ -140,9 +140,9 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/controller.rs                                 créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests.rs                                      créé
-  + migration/src/m20260827_152039_create_auth_tables.rs   créé
+  + migration/src/m20260830_110856_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
-  ~ src/main.rs                                            modifié
+  ~ src/lib.rs                                             modifié
   ~ src/router.rs                                          modifié
   ~ src/openapi.rs                                         modifié
   ~ Cargo.toml                                             modifié
@@ -286,9 +286,10 @@ sinon un plan vide, donc une commande qui réussit sans rien faire.
 
 `rbs add` écrit surtout des fichiers entiers et modifie le manifeste ; c'est [`rbs
 generate`](./generate.md#les-ancres) qui insère dans les neuf ancres en commentaires Rust
-du projet — `// <rbs:features>`, `// <rbs:routes>`, `// <rbs:openapi>`,
-`// <rbs:migration_modules>`, `// <rbs:migrations>`, `// <rbs:state_champs>`,
-`// <rbs:state_init>`, `// <rbs:startup>` et `// <rbs:seeds>`.
+du projet — `// <rbs:features>` (dans `src/lib.rs`, ou dans `src/main.rs` sur un projet
+sans bibliothèque — voir [plus bas](./generate.md#les-ancres)), `// <rbs:routes>`,
+`// <rbs:openapi>`, `// <rbs:migration_modules>`, `// <rbs:migrations>`,
+`// <rbs:state_champs>`, `// <rbs:state_init>`, `// <rbs:startup>` et `// <rbs:seeds>`.
 
 `docker` est le seul fragment que `rbs add` installe à faire lui-même exception : ses
 services `api` et `migrate` vont dans `# <rbs:services>`, l'ancre YAML que porte un

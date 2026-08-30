@@ -27,7 +27,7 @@ plan pour /private/tmp/rbs-demo/depot
   + src/storage/files.rs   créé
   + src/storage/s3.rs      créé
   + src/storage/tests.rs   créé
-  ~ src/main.rs            modifié
+  ~ src/lib.rs             modifié
   ~ src/state.rs           modifié
   ~ Cargo.toml             modifié
   ~ config/default.toml    modifié

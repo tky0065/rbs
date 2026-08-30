@@ -11,7 +11,7 @@ your terminal prints matches, you have not drifted — timings, identifiers and 
 excepted, which are yours. Only one thing was edited out of the blocks: the absolute
 path of the directory the run happened in, written `…/demo` below.
 
-The CLI speaks French: `✓ demo créé — 17 fichiers` is a success line, not an error.
+The CLI speaks French: `✓ demo créé — 18 fichiers` is a success line, not an error.
 Only the messages are translated-in-waiting; the flags, the file names and the generated
 code are the same in every locale.
 
@@ -70,7 +70,7 @@ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 ```
 
 ```text
-✓ demo créé — 17 fichiers
+✓ demo créé — 18 fichiers
 
   cd demo
   docker compose up -d   # la base du .env, montée
@@ -91,9 +91,12 @@ run without a terminal to ask in, so `--yes` is what a script or a CI job needs:
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
 ```
 
-Seventeen files, and none of them a black box:
+Eighteen files, and none of them a black box:
 
 - `src/main.rs`, `src/router.rs`, `src/state.rs`, `src/openapi.rs` — the wiring.
+- `src/lib.rs` — the library `src/main.rs` and `src/seeds/main.rs` both build on. They are
+  two separate binaries, so neither can reach into the other's modules directly; the
+  library is what they share.
 - `src/health/` — a first feature, so the shape is visible before you generate one.
 - `src/seeds/` — a second binary, `seed`, which `rbs seed` runs.
 - `migration/` — a second crate, holding the migrations.
@@ -215,8 +218,8 @@ plan pour …/demo
   + src/articles/controller.rs                          créé
   + src/articles/tests.rs                               créé
   + src/seeds/articles.rs                               créé
-  + migration/src/m20260829_100554_create_articles.rs   créé
-  ~ src/main.rs                                         modifié
+  + migration/src/m20260830_110245_create_articles.rs   créé
+  ~ src/lib.rs                                          modifié
   ~ src/router.rs                                       modifié
   ~ src/openapi.rs                                      modifié
   ~ migration/src/lib.rs                                modifié
@@ -226,7 +229,7 @@ plan pour …/demo
   15 fichiers à écrire
 ✓ articles générée — 9 fichiers
 
-  la migration m20260829_100554_create_articles reste à appliquer avant de lancer le projet
+  la migration m20260830_110245_create_articles reste à appliquer avant de lancer le projet
 ```
 
 Your migration file will carry a different timestamp: the name is built from the moment
@@ -235,9 +238,9 @@ you ran the command. Everything else matches.
 Two things to notice. The entity and its migration both came from `--fields`, with no
 database running and no introspection — the schema is declared once, in the command.
 And the `~` lines are edits to files you own: the CLI inserted into comment anchors
-(`// <rbs:features>`, `<rbs:routes>`, `<rbs:openapi>`, `<rbs:seeds>`, `<rbs:migrations>`)
-rather than rewriting your code. Delete an anchor and the CLI stops writing there,
-printing the block for you to paste instead.
+(`// <rbs:features>` in `src/lib.rs`, `<rbs:routes>`, `<rbs:openapi>`, `<rbs:seeds>`,
+`<rbs:migrations>`) rather than rewriting your code. Delete an anchor and the CLI stops
+writing there, printing the block for you to paste instead.
 
 Apply the new migration:
 
@@ -376,16 +379,18 @@ rbs doctor
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.38s
      Running `target/debug/migration version`
   ✓ ancres     les 10 points d'insertion sont en place
+  ✓ relations  les modèles portent leurs ancres de relation
   ✓ .env       les 4 variables de .env.example sont renseignées
   ✓ versions   projet et rbs-core 1.0.1 alignés sur le CLI 1.0.1
   ✓ base       postgres 18.6 répond sur localhost:5432
 ✓ le projet est sain
 ```
 
-Four checks: the anchors are still in place — ten of them here, nine from the skeleton
+Five checks: the anchors are still in place — ten of them here, nine from the skeleton
 plus the compose's, which drops out of the count for a project with no
-`docker-compose.yml` — `.env` holds every key `.env.example` declares, the project and
-`rbs-core` agree with the CLI's version, and the database answers.
+`docker-compose.yml` — no model has a relation without the two anchors it would need to
+receive one, `.env` holds every key `.env.example` declares, the project and `rbs-core`
+agree with the CLI's version, and the database answers.
 
 ## Where to go next
 

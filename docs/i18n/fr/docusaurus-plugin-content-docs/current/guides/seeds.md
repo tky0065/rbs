@@ -29,9 +29,10 @@ donc `..Default::default()` que vous écrivez au lieu de les choisir. Cette seul
 importe au-delà du confort : c'est l'unique point d'écriture par entité, et c'est là que
 l'identifiant v7 est posé.
 
-Notez l'attribut `#[path]`. Le binaire des seeds est une racine de crate distincte de celle
-de l'application : il rejoint l'entité par son chemin plutôt que par une arborescence de
-modules qu'il ne partage pas.
+Notez `use newsletter_queue::subscribers::model;`. Le binaire des seeds est une racine de
+crate distincte de celle de l'application : il ne peut pas rejoindre l'entité par une
+arborescence de modules qu'il ne partage pas — il la rejoint par la bibliothèque du
+projet, celle-là même sur laquelle s'appuie `src/main.rs`.
 
 ## L'ancre
 

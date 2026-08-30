@@ -5,9 +5,10 @@ title: rbs doctor
 
 # `rbs doctor`
 
-Diagnoses a generated project through four checks: the anchors, the `.env`, the versions
-and the database. Each is independent and returns its verdict without stopping the others —
-a diagnosis that halts on the first problem has to be re-run once per problem.
+Diagnoses a generated project through five checks: the anchors, the relations already
+written into its models, the `.env`, the versions and the database. Each is independent
+and returns its verdict without stopping the others — a diagnosis that halts on the first
+problem has to be re-run once per problem.
 
 :::note
 rbs speaks French in its help screens and in its output. Every terminal block on this page
@@ -32,11 +33,12 @@ Options:
 No flag of its own. The two global options are accepted because clap propagates them, and
 neither does anything here.
 
-## The four checks
+## The five checks
 
 | Check | What it looks at |
 |---|---|
-| `ancres` | The nine Rust comment anchors: `// <rbs:features>` in `src/main.rs`, `// <rbs:routes>` in `src/router.rs`, `// <rbs:openapi>` in `src/openapi.rs`, `// <rbs:migration_modules>` and `// <rbs:migrations>` in `migration/src/lib.rs`, `// <rbs:state_champs>` and `// <rbs:state_init>` in `src/state.rs`, `// <rbs:startup>` in `src/main.rs`, `// <rbs:seeds>` in `src/seeds/main.rs` — plus the YAML `# <rbs:services>` in `docker-compose.yml`, tenth and optional: a project with no compose has none to carry it. |
+| `ancres` | The nine Rust comment anchors: `// <rbs:features>` in `src/lib.rs` — or in `src/main.rs`, on a project generated before that library existed — `// <rbs:routes>` in `src/router.rs`, `// <rbs:openapi>` in `src/openapi.rs`, `// <rbs:migration_modules>` and `// <rbs:migrations>` in `migration/src/lib.rs`, `// <rbs:state_champs>` and `// <rbs:state_init>` in `src/state.rs`, `// <rbs:startup>` in `src/main.rs`, `// <rbs:seeds>` in `src/seeds/main.rs` — plus the YAML `# <rbs:services>` in `docker-compose.yml`, tenth and optional: a project with no compose has none to carry it. |
+| `relations` | The two anchors a model needs to receive a relation — `// <rbs:relations:table>` and `// <rbs:related:table>`, one pair per entity. Outside the anchor registry above, since which file carries them depends on the project's own features. It only turns red on a model that already has a `belongs_to` or `has_many` but is missing one of its two anchors — a state a hand edit is the likely cause of, since [`rbs generate`](./generate.md) never leaves that behind. |
 | `.env` | Every variable declared by `.env.example` is set in `.env`. `.env.example` is the reference because it is versioned and generated alongside the skeleton — a list kept inside the CLI would have been a second truth to keep in sync. |
 | `versions` | The rbs recorded in `[package.metadata.rbs]`, the `rbs-core` dependency, and the CLI running the diagnosis. |
 | `base` | The driver compiled into the manifest against the URL's scheme, then a TCP connection within three seconds, then the server version — asked of the `migration` crate's binary, since rbs embeds no SQL client. Each engine has its own floor, and each floor has a reason: PostgreSQL 14, the oldest still maintained; MySQL 8.0, for `FOR UPDATE SKIP LOCKED`; SQLite 3.35, for `UPDATE … RETURNING`. |
@@ -81,6 +83,7 @@ $ rbs doctor
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
      Running `target/debug/migration version`
   ✓ ancres     les 10 points d'insertion sont en place
+  ✓ relations  les modèles portent leurs ancres de relation
   ✓ .env       les 4 variables de .env.example sont renseignées
   ✓ versions   projet et rbs-core 1.1.0 alignés sur le CLI 1.1.0
   ✓ base       postgres 17.10 répond sur localhost:55446
@@ -101,6 +104,7 @@ $ rbs doctor
       dans src/openapi.rs :
       // <rbs:openapi>
       // </rbs:openapi>
+  ✓ relations  les modèles portent leurs ancres de relation
   ✗ .env       RBS_LOG_FORMAT absente du .env
       ajoutez au .env :
       RBS_LOG_FORMAT=pretty
@@ -111,8 +115,8 @@ $ rbs doctor
 attention : le projet demande votre attention
 ```
 
-Three failures, one check still green, and every failing line carries what to do about it —
-the anchor block to paste back, the `.env` line to add, the server to start.
+Three failures, three checks still green, and every failing line carries what to do about
+it — the anchor block to paste back, the `.env` line to add, the server to start.
 
 Exit status 1. A diagnosis that finds something is not a failure of the command, but a
 script has to be able to tell it apart from a healthy project, so the status differs.
@@ -135,6 +139,7 @@ error[E0425]: cannot find value `url_de_la_base` in this scope
 For more information about this error, try `rustc --explain E0425`.
 error: could not compile `migration` (bin "migration") due to 1 previous error
   ✓ ancres     les 10 points d'insertion sont en place
+  ✓ relations  les modèles portent leurs ancres de relation
   ✓ .env       les 4 variables de .env.example sont renseignées
   ✓ versions   projet et rbs-core 1.1.0 alignés sur le CLI 1.1.0
   ✗ base       localhost:55446 répond, mais sa version reste inconnue : la crate migration a échoué (code 101)

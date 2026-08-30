@@ -31,9 +31,9 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/controller.rs                                 créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests.rs                                      créé
-  + migration/src/m20260827_152039_create_auth_tables.rs   créé
+  + migration/src/m20260830_111428_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
-  ~ src/main.rs                                            modifié
+  ~ src/lib.rs                                             modifié
   ~ src/router.rs                                          modifié
   ~ src/openapi.rs                                         modifié
   ~ Cargo.toml                                             modifié

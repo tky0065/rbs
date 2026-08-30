@@ -25,7 +25,7 @@ plan pour /private/tmp/rbs-demo/depot
   + src/cache/mod.rs      créé
   + src/cache/config.rs   créé
   + src/cache/tests.rs    créé
-  ~ src/main.rs           modifié
+  ~ src/lib.rs            modifié
   ~ src/state.rs          modifié
   ~ docker-compose.yml    modifié
   ~ Cargo.toml            modifié

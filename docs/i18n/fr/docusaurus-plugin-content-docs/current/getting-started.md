@@ -11,7 +11,7 @@ si votre terminal affiche la même chose, vous n'avez pas dévié — aux durée
 identifiants et aux dates près, qui sont les vôtres. Une seule chose a été retirée des
 blocs : le chemin absolu du répertoire où l'exécution a eu lieu, noté `…/demo`.
 
-Le CLI parle français : `✓ demo créé — 17 fichiers` est une ligne de succès. Les
+Le CLI parle français : `✓ demo créé — 18 fichiers` est une ligne de succès. Les
 options, les noms de fichiers et le code généré, eux, sont les mêmes quelle que soit la
 langue.
 
@@ -73,7 +73,7 @@ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 ```
 
 ```text
-✓ demo créé — 17 fichiers
+✓ demo créé — 18 fichiers
 
   cd demo
   docker compose up -d   # la base du .env, montée
@@ -95,9 +95,12 @@ terminal où poser ses questions : c'est pourquoi un script ou un job de CI a be
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
 ```
 
-Dix-sept fichiers, et aucun n'est une boîte noire :
+Dix-huit fichiers, et aucun n'est une boîte noire :
 
 - `src/main.rs`, `src/router.rs`, `src/state.rs`, `src/openapi.rs` — le montage.
+- `src/lib.rs` — la bibliothèque sur laquelle s'appuient `src/main.rs` et
+  `src/seeds/main.rs`. Ce sont deux binaires distincts, et aucun ne peut atteindre les
+  modules de l'autre directement ; la bibliothèque est ce qu'ils partagent.
 - `src/health/` — une première feature, pour que la forme soit visible avant d'en
   générer une.
 - `src/seeds/` — un second binaire, `seed`, que `rbs seed` lance.
@@ -220,8 +223,8 @@ plan pour …/demo
   + src/articles/controller.rs                          créé
   + src/articles/tests.rs                               créé
   + src/seeds/articles.rs                               créé
-  + migration/src/m20260829_100554_create_articles.rs   créé
-  ~ src/main.rs                                         modifié
+  + migration/src/m20260830_110245_create_articles.rs   créé
+  ~ src/lib.rs                                          modifié
   ~ src/router.rs                                       modifié
   ~ src/openapi.rs                                      modifié
   ~ migration/src/lib.rs                                modifié
@@ -231,7 +234,7 @@ plan pour …/demo
   15 fichiers à écrire
 ✓ articles générée — 9 fichiers
 
-  la migration m20260829_100554_create_articles reste à appliquer avant de lancer le projet
+  la migration m20260830_110245_create_articles reste à appliquer avant de lancer le projet
 ```
 
 Votre fichier de migration portera un autre horodatage : le nom est construit à l'instant
@@ -240,9 +243,9 @@ où vous lancez la commande. Le reste est identique.
 Deux choses à remarquer. L'entité et sa migration viennent toutes deux de `--fields`,
 sans base démarrée et sans introspection — le schéma est déclaré une fois, dans la
 commande. Et les lignes `~` sont des modifications de fichiers qui vous appartiennent :
-le CLI a inséré dans des ancres en commentaires (`// <rbs:features>`, `<rbs:routes>`,
-`<rbs:openapi>`, `<rbs:seeds>`, `<rbs:migrations>`) plutôt que de réécrire votre code.
-Supprimez une ancre et le CLI cesse d'y écrire : il affiche le bloc à coller.
+le CLI a inséré dans des ancres en commentaires (`// <rbs:features>` dans `src/lib.rs`,
+`<rbs:routes>`, `<rbs:openapi>`, `<rbs:seeds>`, `<rbs:migrations>`) plutôt que de réécrire
+votre code. Supprimez une ancre et le CLI cesse d'y écrire : il affiche le bloc à coller.
 
 Appliquez la nouvelle migration :
 
@@ -384,16 +387,18 @@ rbs doctor
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.38s
      Running `target/debug/migration version`
   ✓ ancres     les 10 points d'insertion sont en place
+  ✓ relations  les modèles portent leurs ancres de relation
   ✓ .env       les 4 variables de .env.example sont renseignées
   ✓ versions   projet et rbs-core 1.0.1 alignés sur le CLI 1.0.1
   ✓ base       postgres 18.6 répond sur localhost:5432
 ✓ le projet est sain
 ```
 
-Quatre vérifications : les ancres sont toujours en place — dix ici, neuf du squelette
+Cinq vérifications : les ancres sont toujours en place — dix ici, neuf du squelette
 plus celle du compose, qui sort du compte pour un projet sans `docker-compose.yml` —
-`.env` porte chaque clé que déclare `.env.example`, le projet et `rbs-core` s'accordent
-avec la version du CLI, et la base répond.
+aucun modèle ne porte de relation sans les deux ancres qu'il lui faudrait pour en
+recevoir une, `.env` porte chaque clé que déclare `.env.example`, le projet et `rbs-core`
+s'accordent avec la version du CLI, et la base répond.
 
 ## Pour aller plus loin
 

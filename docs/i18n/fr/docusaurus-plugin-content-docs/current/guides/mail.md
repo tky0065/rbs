@@ -30,7 +30,7 @@ plan pour /private/tmp/rbs-demo/depot
   + src/mail/service.rs             créé
   + src/mail/tests.rs               créé
   + templates/mail/bienvenue.html   créé
-  ~ src/main.rs                     modifié
+  ~ src/lib.rs                      modifié
   ~ src/state.rs                    modifié
   ~ docker-compose.yml              modifié
   ~ Cargo.toml                      modifié

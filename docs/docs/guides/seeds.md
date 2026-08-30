@@ -29,9 +29,10 @@ is what you write instead of choosing them. That single spelling matters beyond
 convenience: it is the one write path per entity, and it is where the v7 identifier is
 minted.
 
-Note the `#[path]` attribute. The seeds binary is a crate root of its own, separate from
-the application's, so it reaches the entity by its path rather than through a module tree
-it does not share.
+Note the `use newsletter_queue::subscribers::model;`. The seeds binary is a crate root of
+its own, separate from the application's, so it cannot reach the entity through a module
+tree it does not share — it reaches it through the project's library instead, the same one
+`src/main.rs` builds on.
 
 ## The anchor
 

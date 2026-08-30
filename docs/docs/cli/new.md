@@ -95,14 +95,14 @@ nor port.
 
 ```text
 $ rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes
-✓ blog créé — 17 fichiers
+✓ blog créé — 18 fichiers
 
   cd blog
   docker compose up -d   # la base du .env, montée
   cargo run              # ou `rbs dev`, qui enchaîne les deux
 ```
 
-The seventeen files:
+The eighteen files:
 
 ```text
 blog/.env
@@ -117,12 +117,21 @@ blog/migration/src/lib.rs
 blog/migration/src/main.rs
 blog/src/health/controller.rs
 blog/src/health/mod.rs
+blog/src/lib.rs
 blog/src/main.rs
 blog/src/openapi.rs
 blog/src/router.rs
 blog/src/seeds/main.rs
 blog/src/state.rs
 ```
+
+`src/lib.rs` and `src/main.rs` split what used to be one file, and the split is there for a
+reason: `src/main.rs` and `src/seeds/main.rs` are two separate crate roots, so one cannot
+reach the other's modules directly. `src/lib.rs` is what both share — `AppState`, the
+router, and, once [`rbs generate`](./generate.md) has run, every feature's model — so the
+seeds binary reaches an entity through the library rather than through a `#[path]`
+attribute of its own. `src/main.rs` keeps only startup: build the state, mount the router,
+bind the listener.
 
 `docker-compose.yml` is the generated compose, covered below — its port here is `55432`,
 taken from the URL rather than the engine's own `5432`.
@@ -176,7 +185,7 @@ of the crate:
 
 ```text
 $ rbs new blog --core-path /private/tmp/rbs-core --yes
-✓ blog créé — 17 fichiers
+✓ blog créé — 18 fichiers
 
   cd blog
   docker compose up -d   # la base du .env, montée
@@ -204,7 +213,7 @@ skeleton with one line appended to its `.env.jinja`:
 
 ```text
 $ rbs new maison --template-dir /private/tmp/rbs-demo/mes-templates --yes
-✓ maison créé — 17 fichiers
+✓ maison créé — 18 fichiers
 
   cd maison
   docker compose up -d   # la base du .env, montée
@@ -223,8 +232,10 @@ named, in the same pass that writes the project:
 
 ```text
 $ rbs new site --with auth --yes
-✓ site créé — 17 fichiers
+✓ site créé — 18 fichiers
   + auth     9 fichiers, 1 migration
+
+  recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up
 
   cd site
   docker compose up -d   # la base du .env, montée
@@ -236,10 +247,16 @@ in — alphabetical, the same order [`rbs add`](./add.md) lists the seven in:
 
 ```text
 $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes
-✓ with-demo créé — 17 fichiers
+✓ with-demo créé — 18 fichiers
   + auth     9 fichiers, 1 migration
   + docker   2 fichiers
   + storage  4 fichiers
+
+  recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up
+
+  docker compose --profile app up --build
+
+  les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example
 
   cd with-demo
   docker compose up -d   # la base du .env, montée
@@ -315,13 +332,13 @@ Four cases write nothing:
 
 ```text
 $ rbs new sqlite-demo --database sqlite --yes
-✓ sqlite-demo créé — 16 fichiers
+✓ sqlite-demo créé — 17 fichiers
 
   cd sqlite-demo
   cargo run          # la base visée est dans .env
 ```
 
-Sixteen files, not seventeen: the count is how you tell, since nothing in the output names
+Seventeen files, not eighteen: the count is how you tell, since nothing in the output names
 the compose by absence.
 
 A project created before rbs 1.1.0 has no compose either, and running

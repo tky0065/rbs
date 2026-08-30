@@ -140,9 +140,9 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/controller.rs                                 créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests.rs                                      créé
-  + migration/src/m20260827_152039_create_auth_tables.rs   créé
+  + migration/src/m20260830_110856_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
-  ~ src/main.rs                                            modifié
+  ~ src/lib.rs                                             modifié
   ~ src/router.rs                                          modifié
   ~ src/openapi.rs                                         modifié
   ~ Cargo.toml                                             modifié
@@ -285,7 +285,8 @@ otherwise produce an empty plan, and a command that succeeds without doing anyth
 
 `rbs add` mostly writes whole files and edits the manifest; it is [`rbs
 generate`](./generate.md#anchors) that inserts into the project's nine Rust comment
-anchors — `// <rbs:features>`, `// <rbs:routes>`, `// <rbs:openapi>`,
+anchors — `// <rbs:features>` (in `src/lib.rs`, or in `src/main.rs` on a project with no
+library — see [below](./generate.md#anchors)), `// <rbs:routes>`, `// <rbs:openapi>`,
 `// <rbs:migration_modules>`, `// <rbs:migrations>`, `// <rbs:state_champs>`,
 `// <rbs:state_init>`, `// <rbs:startup>` and `// <rbs:seeds>`.
 

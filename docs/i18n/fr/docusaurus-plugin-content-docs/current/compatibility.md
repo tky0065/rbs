@@ -69,6 +69,23 @@ le projet, les features qui y sont installées et la base qu'il vise. Ni l'une n
 n'est une API Rust. Une promesse de compatibilité écrite pour les seules API Rust
 enjamberait les deux sans les voir.
 
+`// <rbs:features>` est là où la promesse montre à quoi elle sert. Elle a déménagé dans
+`src/lib.rs` le jour où les projets ont gagné une bibliothèque — le fichier que deux
+binaires distincts, l'appli et ses seeds, atteignent tous les deux — mais un projet
+engendré avant que cette bibliothèque existe n'en a pas, et sur lui l'ancre reste
+exactement là où elle a toujours vécu, dans `src/main.rs`. `rbs generate` et `rbs doctor`
+se résolvent vers le fichier que le projet porte réellement, si bien que ce déménagement
+ne casse rien de ce qui a été engendré sous une version antérieure : c'est la promesse qui
+tient, non une exception à celle-ci.
+
+Un modèle peut aussi porter deux ancres qui lui sont propres dès qu'il a une relation —
+`// <rbs:relations:table>`, dans son énumération `Relation`, et `// <rbs:related:table>`
+juste à côté — le nom de la table tenant lieu du nom fixe que portent les dix ci-dessus,
+puisqu'un même fichier peut porter plusieurs entités. Elles sortent du compte des dix
+parce que le fichier qui les porte dépend des features du projet, non du squelette que
+tout projet partage ; leur syntaxe de commentaire et leur convention de nommage sont
+gelées de la même façon.
+
 Elle ne le doit pas, car elles sont tout le canal par lequel un CLI plus récent reconnaît
 un projet créé par un plus ancien. [`rbs add`](./cli/add.md) lit `[package.metadata.rbs]`
 pour savoir ce qui est déjà installé, ce qui fait son idempotence ;

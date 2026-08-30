@@ -227,8 +227,8 @@ plan pour /private/tmp/rbs-demo/blog
   + src/articles/controller.rs                          créé
   + src/articles/tests.rs                               créé
   + src/seeds/articles.rs                               créé
-  + migration/src/m20260826_213608_create_articles.rs   créé
-  ~ src/main.rs                                         modifié
+  + migration/src/m20260830_110925_create_articles.rs   créé
+  ~ src/lib.rs                                          modifié
   ~ src/router.rs                                       modifié
   ~ src/openapi.rs                                      modifié
   ~ migration/src/lib.rs                                modifié
@@ -254,8 +254,8 @@ plan pour /private/tmp/rbs-demo/blog
   + src/articles/controller.rs                          créé
   + src/articles/tests.rs                               créé
   + src/seeds/articles.rs                               créé
-  + migration/src/m20260826_213608_create_articles.rs   créé
-  ~ src/main.rs                                         modifié
+  + migration/src/m20260830_110925_create_articles.rs   créé
+  ~ src/lib.rs                                          modifié
   ~ src/router.rs                                       modifié
   ~ src/openapi.rs                                      modifié
   ~ migration/src/lib.rs                                modifié
@@ -265,7 +265,7 @@ plan pour /private/tmp/rbs-demo/blog
   15 fichiers à écrire
 ✓ articles générée — 9 fichiers
 
-  la migration m20260826_213608_create_articles reste à appliquer avant de lancer le projet
+  la migration m20260830_110925_create_articles reste à appliquer avant de lancer le projet
 ```
 
 Nine files created, six modified through their anchors. The feature is then recorded in
@@ -292,7 +292,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/comments/repository.rs   créé
   + src/comments/service.rs      créé
   + src/comments/controller.rs   créé
-  ~ src/main.rs                  modifié
+  ~ src/lib.rs                   modifié
   ~ src/router.rs                modifié
   ~ src/openapi.rs               modifié
   ~ Cargo.toml                   modifié
@@ -309,7 +309,7 @@ the check happens while planning:
 
 ```text
 $ rbs generate feature comments
-erreur : le working tree n'est pas propre : Cargo.toml, migration/src/lib.rs, src/main.rs, src/openapi.rs, src/router.rs — commitez, ou relancez avec --force
+erreur : le working tree n'est pas propre : Cargo.toml, src/lib.rs, src/openapi.rs, src/router.rs — commitez, ou relancez avec --force
 ```
 
 Untracked files are not counted: they are exactly what the command is about to create. Past
@@ -324,12 +324,19 @@ carries, and it uses six of the nine — the two in `src/state.rs` and `// <rbs:
 
 | Anchor | File |
 |---|---|
-| `// <rbs:features>` | `src/main.rs` |
+| `// <rbs:features>` | `src/lib.rs` |
 | `// <rbs:routes>` | `src/router.rs` |
 | `// <rbs:openapi>` | `src/openapi.rs` |
 | `// <rbs:migration_modules>` | `migration/src/lib.rs` |
 | `// <rbs:migrations>` | `migration/src/lib.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
+
+`src/lib.rs` is the library every generated project carries: `src/main.rs` and
+`src/seeds/main.rs` are two separate crate roots, and the library is what lets both reach a
+feature's modules — models included, now that a relation can name one from another. A
+project generated before this library existed has none, and on it `// <rbs:features>`
+stays where it always lived, in `src/main.rs` — `rbs generate` and `rbs doctor` resolve the
+anchor to whichever file is actually present, so an older project keeps working unchanged.
 
 Remove one and the command writes nothing at all — not the feature files either — and
 prints the block to paste back:

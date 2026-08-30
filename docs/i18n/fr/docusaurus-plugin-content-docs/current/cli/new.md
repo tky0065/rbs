@@ -95,14 +95,14 @@ attente de la base dans [`rbs dev`](./dev.md), et une URL sans hôte ni port.
 
 ```text
 $ rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes
-✓ blog créé — 17 fichiers
+✓ blog créé — 18 fichiers
 
   cd blog
   docker compose up -d   # la base du .env, montée
   cargo run              # ou `rbs dev`, qui enchaîne les deux
 ```
 
-Les dix-sept fichiers :
+Les dix-huit fichiers :
 
 ```text
 blog/.env
@@ -117,12 +117,22 @@ blog/migration/src/lib.rs
 blog/migration/src/main.rs
 blog/src/health/controller.rs
 blog/src/health/mod.rs
+blog/src/lib.rs
 blog/src/main.rs
 blog/src/openapi.rs
 blog/src/router.rs
 blog/src/seeds/main.rs
 blog/src/state.rs
 ```
+
+`src/lib.rs` et `src/main.rs` séparent ce qui n'était qu'un seul fichier, et la séparation
+a une raison d'être : `src/main.rs` et `src/seeds/main.rs` sont deux racines de crate
+distinctes, si bien qu'aucune ne peut atteindre directement les modules de l'autre.
+`src/lib.rs` est ce que les deux partagent — `AppState`, le routeur, et, une fois
+[`rbs generate`](./generate.md) passé, le modèle de chaque feature — si bien que le binaire
+des seeds atteint une entité par la bibliothèque plutôt que par un attribut `#[path]` qui
+lui serait propre. `src/main.rs` ne garde que le démarrage : construire l'état, monter le
+routeur, lier l'écouteur.
 
 `docker-compose.yml` est le compose engendré, couvert plus bas — son port ici est
 `55432`, pris dans l'URL plutôt que le `5432` propre au moteur.
@@ -176,7 +186,7 @@ crate :
 
 ```text
 $ rbs new blog --core-path /private/tmp/rbs-core --yes
-✓ blog créé — 17 fichiers
+✓ blog créé — 18 fichiers
 
   cd blog
   docker compose up -d   # la base du .env, montée
@@ -204,7 +214,7 @@ du squelette dont le `.env.jinja` porte une ligne de plus :
 
 ```text
 $ rbs new maison --template-dir /private/tmp/rbs-demo/mes-templates --yes
-✓ maison créé — 17 fichiers
+✓ maison créé — 18 fichiers
 
   cd maison
   docker compose up -d   # la base du .env, montée
@@ -223,8 +233,10 @@ chacune des nommées, dans la même passe qui écrit le projet :
 
 ```text
 $ rbs new site --with auth --yes
-✓ site créé — 17 fichiers
+✓ site créé — 18 fichiers
   + auth     9 fichiers, 1 migration
+
+  recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up
 
   cd site
   docker compose up -d   # la base du .env, montée
@@ -236,10 +248,16 @@ alphabétique, le même ordre dans lequel [`rbs add`](./add.md) énumère les se
 
 ```text
 $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes
-✓ with-demo créé — 17 fichiers
+✓ with-demo créé — 18 fichiers
   + auth     9 fichiers, 1 migration
   + docker   2 fichiers
   + storage  4 fichiers
+
+  recopiez RBS_AUTH__SECRET de .env.example vers votre .env, puis rbs migrate up
+
+  docker compose --profile app up --build
+
+  les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example
 
   cd with-demo
   docker compose up -d   # la base du .env, montée
@@ -317,13 +335,13 @@ Quatre cas n'écrivent rien :
 
 ```text
 $ rbs new sqlite-demo --database sqlite --yes
-✓ sqlite-demo créé — 16 fichiers
+✓ sqlite-demo créé — 17 fichiers
 
   cd sqlite-demo
   cargo run          # la base visée est dans .env
 ```
 
-Seize fichiers, et non dix-sept : c'est au compte que ça se voit, rien dans la sortie ne
+Dix-sept fichiers, et non dix-huit : c'est au compte que ça se voit, rien dans la sortie ne
 nommant le compose par son absence.
 
 Un projet créé avant rbs 1.1.0 n'a pas non plus de compose, et lancer [`rbs
