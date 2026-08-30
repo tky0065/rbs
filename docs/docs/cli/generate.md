@@ -105,9 +105,9 @@ unique "` and `"titre:string,email:string:unique"` describe the same two fields.
 `--fields` declares no field at all. Fields keep their declaration order in the entity and
 in the migration.
 
-### The seven types
+### The eight types
 
-There is no eighth, and no `email` type: a string format is not a column type.
+There is no ninth, and no `email` type: a string format is not a column type.
 
 | Type | Rust | Migration |
 |---|---|---|
@@ -122,16 +122,35 @@ There is no eighth, and no `email` type: a string format is not a column type.
 `string` and `text` share a Rust type, so `text` is the only one that also carries an
 explicit column type on the entity — without it SeaORM would infer `varchar`.
 
-### The three modifiers
+The eighth, `references`, is not a scalar at all: it points the column at another entity
+instead of giving it a type of its own.
+
+```text
+author:references:users
+```
+
+The name declared is the *relation*'s, `author`; the column is derived from it, `author_id`
+— which is what lets the SeaORM variant, the foreign key and the DTO field agree on a name
+without anyone repeating it. The third segment is the target table, as it exists in the
+project; a table the CLI cannot find is refused, by name, alongside the ones it does know.
+What a reference writes on both ends of the relation, its own two modifiers, and the shape
+of its refusals belong to [Relations](../guides/relations.md), not to this page.
+
+### The five modifiers
 
 | Modifier | Effect |
 |---|---|
-| `unique` | Unique constraint on the column. |
+| `unique` | Unique constraint on the column — on a reference, this is what makes the relation one-to-one. |
 | `optional` | The column is nullable and the Rust type becomes `Option<T>`. |
 | `index` | Plain index on the column. |
+| `cascade` | Reference only. `ON DELETE CASCADE`. |
+| `nullify` | Reference only. `ON DELETE SET NULL` — requires `optional`. |
 
 Their order is free and each may appear at most once. `unique` and `index` together are
-refused as redundant — a unique constraint already lays down an index.
+refused as redundant — a unique constraint already lays down an index — and so is `index`
+alone on a reference, whose foreign key is indexed without being asked. `cascade` and
+`nullify` contradict each other and are refused together; [Relations](../guides/relations.md)
+has the rest of a reference's grammar, including why the index is never optional.
 
 ### What a name may be
 
@@ -158,12 +177,12 @@ than one fault per run. A field carrying two faults reports only the first.
 
 ```text
 $ rbs generate crud tags --fields "Title:string,type:text,prix:decimal,slug:string:unique:index,email:string,email:int" --dry-run
-erreur : erreur : champ 1 « Title » — le nom doit être en snake_case : minuscules ASCII, chiffres et souligné
+erreur : champ 1 « Title » — le nom doit être en snake_case : minuscules ASCII, chiffres et souligné
         → essayez « title »
 erreur : champ 2 « type » — « type » est un mot-clé Rust
         → essayez « kind » ou « type_ »
 erreur : champ 3 « prix » — type inconnu « decimal »
-        → string, int, float, bool, uuid, datetime, text
+        → string, int, float, bool, uuid, datetime, text, references:<table>
 erreur : champ 4 « slug » — « index » redondant : « unique » pose déjà un index
         → retirez « index »
 erreur : champ 6 « email » — « email » est déjà déclaré au champ 5
@@ -175,7 +194,7 @@ accepted.
 
 ```text
 $ rbs generate crud tags --fields "id:string,table:string,bio:text:optional:optional" --dry-run
-erreur : erreur : champ 1 « id » — « id » ne se déclare pas
+erreur : champ 1 « id » — « id » ne se déclare pas
         → id, created_at et updated_at sont posés sur toute entité
 erreur : champ 2 « table » — « table » entrerait en collision avec l'identifiant de la table dans la migration
         → essayez « table_ »
@@ -187,7 +206,7 @@ is a shape error rather than an unknown type:
 
 ```text
 $ rbs generate crud tags --fields "titre" --dry-run
-erreur : erreur : champ 1 « titre » — forme attendue : « nom:type[:modificateur…] »
+erreur : champ 1 « titre » — forme attendue : « nom:type[:modificateur…] »
         → exemple : « email:string:unique »
 ```
 

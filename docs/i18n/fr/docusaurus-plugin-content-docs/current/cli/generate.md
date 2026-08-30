@@ -107,9 +107,9 @@ unique "` et `"titre:string,email:string:unique"` décrivent les deux mêmes cha
 `--fields` vide ne déclare aucun champ. Les champs gardent leur ordre de déclaration dans
 l'entité comme dans la migration.
 
-### Les sept types
+### Les huit types
 
-Il n'y en a pas un huitième, ni de type `email` : un format de chaîne n'est pas un type de
+Il n'y en a pas un neuvième, ni de type `email` : un format de chaîne n'est pas un type de
 colonne.
 
 | Type | Rust | Migration |
@@ -125,16 +125,37 @@ colonne.
 `string` et `text` partagent leur type Rust : `text` est donc le seul à porter en plus un
 type de colonne explicite sur l'entité, sans quoi SeaORM déduirait un `varchar`.
 
-### Les trois modificateurs
+Le huitième, `references`, n'est pas un scalaire du tout : il pointe la colonne vers une
+autre entité plutôt que de lui donner un type propre.
+
+```text
+author:references:users
+```
+
+Le nom déclaré est celui de la *relation*, `author` ; la colonne s'en dérive, `author_id` —
+ce qui permet à la variante SeaORM, à la clé étrangère et au champ du DTO de s'accorder sur
+un nom sans que personne ne le répète. Le troisième segment est la table cible, telle qu'elle
+existe dans le projet ; une table que le CLI ne trouve pas est refusée, nommément, aux côtés
+de celles qu'il connaît. Ce qu'une référence écrit des deux côtés de la relation, ses deux
+modificateurs propres et la forme de ses refus relèvent de
+[Relations](../guides/relations.md), pas de cette page.
+
+### Les cinq modificateurs
 
 | Modificateur | Effet |
 |---|---|
-| `unique` | Contrainte d'unicité sur la colonne. |
+| `unique` | Contrainte d'unicité sur la colonne — sur une référence, c'est ce qui rend la relation un-à-un. |
 | `optional` | La colonne devient nullable et le type Rust devient `Option<T>`. |
 | `index` | Index simple sur la colonne. |
+| `cascade` | Réservé aux références. `ON DELETE CASCADE`. |
+| `nullify` | Réservé aux références. `ON DELETE SET NULL` — exige `optional`. |
 
 Leur ordre est libre et chacun ne peut apparaître qu'une fois. `unique` et `index` ensemble
-sont refusés comme redondants : une contrainte d'unicité pose déjà un index.
+sont refusés comme redondants : une contrainte d'unicité pose déjà un index — et `index` seul
+sur une référence l'est tout autant, sa clé étrangère étant indexée sans qu'on le demande.
+`cascade` et `nullify` se contredisent et sont refusés ensemble ; le reste de la grammaire
+d'une référence, et pourquoi son index n'est jamais optionnel, vit dans
+[Relations](../guides/relations.md).
 
 ### Ce qu'un nom peut être
 
@@ -161,12 +182,12 @@ plutôt qu'une faute par exécution. Un champ qui en porte deux ne remonte que l
 
 ```text
 $ rbs generate crud tags --fields "Title:string,type:text,prix:decimal,slug:string:unique:index,email:string,email:int" --dry-run
-erreur : erreur : champ 1 « Title » — le nom doit être en snake_case : minuscules ASCII, chiffres et souligné
+erreur : champ 1 « Title » — le nom doit être en snake_case : minuscules ASCII, chiffres et souligné
         → essayez « title »
 erreur : champ 2 « type » — « type » est un mot-clé Rust
         → essayez « kind » ou « type_ »
 erreur : champ 3 « prix » — type inconnu « decimal »
-        → string, int, float, bool, uuid, datetime, text
+        → string, int, float, bool, uuid, datetime, text, references:<table>
 erreur : champ 4 « slug » — « index » redondant : « unique » pose déjà un index
         → retirez « index »
 erreur : champ 6 « email » — « email » est déjà déclaré au champ 5
@@ -178,7 +199,7 @@ est accepté.
 
 ```text
 $ rbs generate crud tags --fields "id:string,table:string,bio:text:optional:optional" --dry-run
-erreur : erreur : champ 1 « id » — « id » ne se déclare pas
+erreur : champ 1 « id » — « id » ne se déclare pas
         → id, created_at et updated_at sont posés sur toute entité
 erreur : champ 2 « table » — « table » entrerait en collision avec l'identifiant de la table dans la migration
         → essayez « table_ »
@@ -190,7 +211,7 @@ est une faute de forme, et non un type inconnu :
 
 ```text
 $ rbs generate crud tags --fields "titre" --dry-run
-erreur : erreur : champ 1 « titre » — forme attendue : « nom:type[:modificateur…] »
+erreur : champ 1 « titre » — forme attendue : « nom:type[:modificateur…] »
         → exemple : « email:string:unique »
 ```
 
