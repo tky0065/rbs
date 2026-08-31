@@ -122,9 +122,16 @@ fn a_required_reference_leaves_no_seed_and_names_it_in_the_output() {
         "la génération doit aboutir malgré la référence requise :\n{stdout}\n{}",
         String::from_utf8_lossy(&output.stderr)
     );
+    // La référence requise coûte deux choses, et l'utilisateur doit lire les deux : le
+    // seed, qu'aucun fichier indépendant ne saurait écrire, et les scénarios des tests
+    // qui créent une ligne.
     assert!(
-        stdout.contains("aucun seed pour posts") && stdout.contains("« author »"),
+        stdout.contains("« author »"),
         "la sortie doit nommer la relation en cause :\n{stdout}"
+    );
+    assert!(
+        stdout.contains("n'est pas engendré") && stdout.contains("les tests s'arrêtent"),
+        "la sortie doit dire ce qui manque, seed et scénarios :\n{stdout}"
     );
 
     assert!(
