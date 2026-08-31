@@ -73,7 +73,7 @@ dit si le schéma n'est pas là.
 ## Comment rbs se teste lui-même
 
 Les tests d'intégration du cadre ne supposent rien de démarré. Ils lancent un conteneur
-PostgreSQL 17 avec `testcontainers`, génèrent un projet dans un répertoire temporaire,
+PostgreSQL avec `testcontainers`, génèrent un projet dans un répertoire temporaire,
 appliquent ses migrations et exécutent ses tests — le binaire `rbs` étant invoqué
 exactement comme vous l'invoqueriez.
 
@@ -88,8 +88,30 @@ cargo test -p rbs-cli --test integration_crud -- --ignored
 Lent qu'il soit, c'est le seul test qui prouve que rbs fonctionne réellement. Tout le
 reste vérifie une chaîne de caractères.
 
-Que le conteneur tourne en 17 est un test en soi. Pour la raison donnée dans le
+### Quelle version de PostgreSQL le harnais démarre
+
+Deux versions comptent, et la CI joue la suite sur les deux.
+
+**La 18 est ce qui est livré.** C'est ce que le `docker-compose.yml` engendré épingle, donc
+ce qu'un projet rencontre réellement. C'est le défaut ici : un harnais qui démarre autre
+chose que ce qui est livré ne prouve rien de ce qui est livré.
+
+**La 14 est le plancher.** C'est ce que `rbs doctor` fait respecter — la plus ancienne
+version encore corrigée côté sécurité — et un plancher que rien n'exerce est une promesse
+que personne ne tient. Pour la raison donnée dans le
 [guide des migrations](./migrations.md), les clés primaires engendrées sont posées par le
 modèle et non par un défaut de colonne : rien de ce qu'exécute un projet engendré ne réclame
-le `uuidv7()` arrivé avec PostgreSQL 18. Le plancher que `rbs doctor` fait respecter est la
-14, la plus ancienne version encore corrigée côté sécurité.
+le `uuidv7()` arrivé avec PostgreSQL 18. Cette affirmation est désormais éprouvée plutôt
+qu'avancée.
+
+`RBS_TEST_PG` choisit la version, la 18 s'appliquant en son absence :
+
+```bash
+RBS_TEST_PG=14 cargo test -p rbs-cli --no-fail-fast -- --ignored
+```
+
+La variable est lue au démarrage du conteneur et non à la compilation : les deux branches
+de la matrice partagent une seule construction et ne diffèrent que par ce que Docker
+télécharge. Tous les démarreurs du dépôt — les trois des tests d'intégration, celui du banc
+des générateurs — résolvent leur image par la même fonction, si bien qu'aucune version ne
+peut être épinglée dans le dos de la matrice.

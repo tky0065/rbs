@@ -18,9 +18,10 @@ env:
 jobs:
   # Les contrôles de dépôt — format, exemples, dry-run de publication — ne dépendent pas
   # de la plateforme. Les tripler coûterait des minutes de runner sans rien démontrer de
-  # plus, et c'est ici que vivent les seules étapes qui exigent Docker.
+  # plus. Les étapes qui exigent Docker vivent dans `integration`, qui les joue sur deux
+  # versions de PostgreSQL pendant que celui-ci tourne.
   linux:
-    name: fmt · clippy · test · intégration
+    name: fmt · clippy · test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -57,9 +58,6 @@ jobs:
         with:
           package: rbs-core
           feature-group: all-features
-
-      - name: cargo test (intégration)
-        run: cargo test --workspace --all-features -- --ignored
 
       # La documentation ne contient aucun bloc de code écrit à la main : ses extraits
       # sont lus dans `examples/`. Un exemple qui ne compile plus fait donc mentir des
@@ -99,6 +97,79 @@ jobs:
         run: |
           cargo publish --dry-run --locked -p rbs-core
           cargo publish --dry-run --locked -p rbs-cli
+
+  # Deux versions, et non la seule livrée : `postgres:18-alpine` est ce que le
+  # `docker-compose.yml` engendré épingle, mais le plancher que `rbs doctor` fait respecter
+  # est la 14. N'éprouver que la 18 laissait ce plancher promis sans être tenu — une
+  # régression qui exigerait la 18 passait verte et ne se découvrait que chez l'utilisateur.
+  #
+  # `RBS_TEST_PG` est lue au démarrage du conteneur : les deux branches partagent le même
+  # code compilé et ne diffèrent que par ce que Docker télécharge.
+  #
+  # Les deux branches tournent en parallèle : la durée d'horloge de la CI ne bouge pas, seul
+  # le nombre de minutes de runner double. C'est le prix de la promesse.
+  integration:
+    name: intégration · PostgreSQL ${{ matrix.postgres }}
+    runs-on: ubuntu-latest
+    strategy:
+      # Un échec sur le plancher ne doit pas masquer la version livrée, ni l'inverse : ce
+      # sont deux verdicts distincts, et n'en obtenir qu'un obligerait à deux allers-retours.
+      fail-fast: false
+      matrix:
+        postgres: ["18", "14"]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo test (intégration)
+        env:
+          RBS_TEST_PG: ${{ matrix.postgres }}
+        run: cargo test --workspace --all-features --no-fail-fast -- --ignored
+
+  # Un audit ne compile rien : le tenir hors du job `linux` le rend en quelques secondes,
+  # et son verdict ne se perd pas derrière vingt minutes de compilation.
+  #
+  # `cargo audit` nu plutôt qu'une action qui l'enveloppe : c'est la commande que le
+  # développeur lance chez lui, et elle lit le même `.cargo/audit.toml`, où chaque advisory
+  # tolérée dit ce qui la lèverait. Deux verdicts divergents seraient exactement le genre de
+  # mensonge que ce job existe pour interdire.
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: cargo audit
+        run: cargo audit
+
+  # `rust-version` est une promesse faite à qui installe, et rien ne la tenait : tous les
+  # autres jobs tournent sur `stable`, qui satisfait n'importe quel plancher. Une dépendance
+  # qui monte sa MSRV cassait donc les installations sans que la CI le voie.
+  #
+  # Un `check` et non la suite de tests : la question posée est « ce plancher compile-t-il ? »,
+  # à quoi le typage répond en entier. `--locked` en plus, pour que le job échoue sur la
+  # résolution versionnée plutôt que d'en inventer silencieusement une autre.
+  msrv:
+    name: MSRV 1.94
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@1.94
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo check
+        run: cargo check --workspace --all-features --all-targets --locked
 
   # Ce que ces deux plateformes prouvent, c'est que rbs manipule les chemins sans
   # supposer `/` — la faute que ce projet commettrait, puisqu'il écrit des arborescences.

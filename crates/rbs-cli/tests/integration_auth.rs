@@ -23,10 +23,6 @@ use testcontainers::{Container, GenericImage, ImageExt};
 
 mod common;
 
-/// PostgreSQL **17** et non 18 : c'est ce qui prouve que l'exigence de la 18 est tombée
-/// avec le défaut `uuidv7()`, désormais posé par le modèle.
-const IMAGE: (&str, &str) = ("postgres", "17");
-
 const UTILISATEUR: &str = "rbs";
 const MOT_DE_PASSE: &str = "rbs";
 const BASE: &str = "demo";
@@ -668,7 +664,8 @@ fn copy(source: &Path, destination: &Path) {
 
 /// Un PostgreSQL neuf, prêt à recevoir le schéma d'un projet généré.
 fn start_postgres() -> Container<GenericImage> {
-    GenericImage::new(IMAGE.0, IMAGE.1)
+    let (nom, version) = common::postgres_image();
+    GenericImage::new(nom, version)
         .with_wait_for(WaitFor::log(
             // PostgreSQL annonce une première fois qu'il accepte les connexions pendant
             // son initialisation, où il n'écoute que sur son socket local : attendre la

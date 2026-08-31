@@ -23,7 +23,7 @@ not — it is yours from the moment it is written, and no rbs release rewrites i
 
 ## Installation
 
-Rust 1.85 or later. A generated project runs on PostgreSQL 14 or later, MySQL 8.0 or later,
+Rust 1.94 or later. A generated project runs on PostgreSQL 14 or later, MySQL 8.0 or later,
 or SQLite 3.35 or later.
 
 ```bash

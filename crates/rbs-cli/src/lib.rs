@@ -20,7 +20,10 @@ mod prompts;
 mod secret;
 mod seed;
 mod template;
+// Partagé avec `tests/common` par `#[path]` : voir l'en-tête du fichier.
 mod templates;
+#[cfg(test)]
+mod test_postgres;
 mod ui;
 mod upgrade;
 mod url;

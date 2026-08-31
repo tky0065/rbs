@@ -14,10 +14,6 @@ use testcontainers::{GenericImage, ImageExt};
 
 mod common;
 
-/// PostgreSQL **17** et non 18 : c'est ce qui prouve que l'exigence de la 18 est tombée
-/// avec le défaut `uuidv7()`, désormais posé par le modèle.
-const IMAGE: (&str, &str) = ("postgres", "17");
-
 const UTILISATEUR: &str = "rbs";
 const MOT_DE_PASSE: &str = "rbs";
 const BASE: &str = "demo";
@@ -27,7 +23,8 @@ const BASE: &str = "demo";
 fn a_generated_crud_migrates_and_passes_its_tests_against_postgresql() {
     // Le conteneur d'abord : son port détermine l'URL que le projet portera dans son
     // `.env`. Créer le projet avant obligerait à réécrire ce fichier après coup.
-    let postgres = GenericImage::new(IMAGE.0, IMAGE.1)
+    let (nom, version) = common::postgres_image();
+    let postgres = GenericImage::new(nom, version)
         .with_wait_for(WaitFor::log(
             // PostgreSQL annonce une première fois qu'il accepte les connexions pendant
             // son initialisation, où il n'écoute que sur son socket local : attendre la

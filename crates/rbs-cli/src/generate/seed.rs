@@ -328,7 +328,7 @@ async fn les_semis_sont_rendus_par_l_api() {
     /// Le second critère du lot, et le seul que rien d'autre ne prouve : les lignes du
     /// seed traversent la base puis l'API.
     #[test]
-    #[ignore = "démarre PostgreSQL 18 en conteneur et compile un projet complet"]
+    #[ignore = "démarre PostgreSQL en conteneur et compile un projet complet"]
     fn the_seeded_rows_come_back_from_the_api() {
         let base = bench::TestDatabase::start();
         let project = bench::Project::fresh_on(base.url());

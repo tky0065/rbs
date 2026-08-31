@@ -35,6 +35,10 @@ dépréciation.
 
 ### Modifié
 
+- **La version minimale de Rust passe de 1.85 à 1.94.** La 1.85 ne résolvait déjà plus :
+  `sea-orm` 2.0.2 et `sqlx` 0.9.0 exigent la 1.94.0, et Cargo refuse de compiler en
+  dessous. Le plancher déclaré décrivait une chaîne d'outils qu'aucune installation ne
+  pouvait employer. Un job de CI épinglé sur la 1.94 tient désormais la promesse.
 - Le CRUD engendré rend **409** au lieu de 500 sur une violation de contrainte `unique`,
   sur `create` comme sur `update`, et son contrat OpenAPI déclare le statut. Le fragment
   `auth` le faisait déjà ; le gabarit générique faisait l'inverse.

@@ -22,10 +22,8 @@ use super::mount::{self, Mount};
 
 /// PostgreSQL en conteneur, et l'URL de connexion qui y mène.
 ///
-/// La version tenue ici est délibérément au-dessus du plancher que `doctor` fait
-/// respecter, sans l'être de beaucoup : l'identifiant v7 étant posé par le modèle, aucun
-/// moteur n'a plus à connaître `uuidv7()`, et le banc gagne à tourner sur une version que
-/// les projets rencontrent.
+/// La version démarrée est celle que `test_postgres::image` désigne : la 18 livrée par
+/// défaut, ou le plancher 14 quand `RBS_TEST_PG` le demande.
 pub(crate) struct TestDatabase {
     _conteneur: Container<GenericImage>,
     url: String,
@@ -38,14 +36,17 @@ impl TestDatabase {
         // occurrence donne un refus, ou pire, une base qui disparaît sous le test.
         let opening = || WaitFor::message_on_stderr("ready to accept connections");
 
-        let container = GenericImage::new("postgres", "17")
+        let (nom, version) = crate::test_postgres::image();
+        let container = GenericImage::new(nom, version.clone())
             .with_wait_for(opening())
             .with_wait_for(opening())
             .with_env_var("POSTGRES_USER", "rbs")
             .with_env_var("POSTGRES_PASSWORD", "rbs")
             .with_env_var("POSTGRES_DB", "demo_api")
             .start()
-            .expect("PostgreSQL 18 doit démarrer — Docker requis");
+            .unwrap_or_else(|erreur| {
+                panic!("PostgreSQL {version} doit démarrer — Docker requis : {erreur}")
+            });
         let port = container
             .get_host_port_ipv4(5432.tcp())
             .expect("port de la base exposé");

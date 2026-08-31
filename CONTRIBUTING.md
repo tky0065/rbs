@@ -19,7 +19,7 @@ toolchain.
 
 | | |
 |---|---|
-| Rust | 1.85 or later — the MSRV is declared in `Cargo.toml` and enforced by CI |
+| Rust | 1.94 or later — the MSRV is declared in `Cargo.toml` and enforced by CI |
 | Docker | integration tests only; they start a PostgreSQL container |
 | Node | documentation site only — see above |
 

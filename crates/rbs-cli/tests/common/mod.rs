@@ -155,9 +155,13 @@ fn collect(racine: &Path, repertoire: &Path, fichiers: &mut Empreinte) {
 // file, et `integration_new`, qui y joue la suite d'un projet engendré par moteur. Les
 // démarreurs vivent donc ici plutôt que dans l'un des deux.
 
-/// PostgreSQL **17** et non 18 : c'est ce qui prouve que l'exigence de la 18 est tombée
-/// avec le défaut `uuidv7()`, désormais posé par le modèle.
-pub const IMAGE: (&str, &str) = ("postgres", "17");
+// Le même fichier que celui qu'emploie le banc des générateurs : trois constantes
+// éparpillées, c'est trois occasions qu'une branche de la matrice n'aille pas où elle dit.
+#[path = "../../src/test_postgres.rs"]
+mod test_postgres;
+
+/// L'image PostgreSQL du harnais : la 18 livrée, ou le plancher 14 sous `RBS_TEST_PG`.
+pub use test_postgres::image as postgres_image;
 
 pub const UTILISATEUR: &str = "rbs";
 pub const MOT_DE_PASSE: &str = "rbs";
@@ -165,7 +169,8 @@ pub const BASE: &str = "demo";
 
 /// Un PostgreSQL neuf, prêt à recevoir le schéma d'un projet généré.
 pub fn start_postgres() -> Container<GenericImage> {
-    GenericImage::new(IMAGE.0, IMAGE.1)
+    let (nom, version) = postgres_image();
+    GenericImage::new(nom, version)
         .with_wait_for(WaitFor::log(
             // PostgreSQL annonce une première fois qu'il accepte les connexions pendant
             // son initialisation, où il n'écoute que sur son socket local : attendre la

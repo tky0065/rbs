@@ -20,7 +20,7 @@ toolchain Rust.
 
 | | |
 |---|---|
-| Rust | 1.85 ou plus — la MSRV est déclarée dans `Cargo.toml` et tenue par la CI |
+| Rust | 1.94 ou plus — la MSRV est déclarée dans `Cargo.toml` et tenue par la CI |
 | Docker | tests d'intégration seulement ; ils démarrent un conteneur PostgreSQL |
 | Node | site de documentation seulement — voir ci-dessus |
 
