@@ -285,7 +285,18 @@ fn add(feature: String, force: bool, template_dir: Option<PathBuf>) -> Result<()
         return Ok(());
     }
 
-    ui::info(&format!("{feature} : {}\n", planned.description));
+    ui::info(&format!("{feature} : {}", planned.description));
+
+    // Annoncé avant le plan et non après : ce que l'utilisateur n'a pas nommé, il doit le
+    // lire au moment où il décide d'appliquer, pas une fois les fichiers écrits.
+    if !planned.entrainees.is_empty() {
+        ui::info(&format!(
+            "{feature} exige {} : posée avec elle",
+            planned.entrainees.join(", ")
+        ));
+    }
+
+    println!();
     println!("{}", plan::render::plan(&planned.plan));
 
     signaler_zone_manquante(planned.zone_manquante.as_ref());

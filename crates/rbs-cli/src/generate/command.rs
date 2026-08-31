@@ -290,9 +290,14 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     builder.patch(plan::PatchToml::InscrireFeature(module.clone()))?;
 
-    // L'inventaire décrit le projet tel que ce plan le laissera : c'est le `Some(&module)`
-    // qui l'y fait nommer la feature, le manifeste du disque l'ignorant encore.
-    let zone_manquante = crate::agents::refresh(&mut builder, &root, &metadonnees, Some(&module))?;
+    // L'inventaire décrit le projet tel que ce plan le laissera : c'est `module` qui l'y
+    // fait nommer la feature, le manifeste du disque l'ignorant encore.
+    let zone_manquante = crate::agents::refresh(
+        &mut builder,
+        &root,
+        &metadonnees,
+        std::slice::from_ref(&module),
+    )?;
 
     Ok(Planned {
         plan: builder.finir(),
@@ -385,7 +390,7 @@ fn plan_repair(
     // La réparation n'inscrit aucune feature nouvelle : l'inventaire est régénéré à
     // l'identique, et son action prend le statut « déjà fait » plutôt que de réécrire un
     // fichier conforme.
-    let zone_manquante = crate::agents::refresh(&mut builder, root, metadonnees, None)?;
+    let zone_manquante = crate::agents::refresh(&mut builder, root, metadonnees, &[])?;
 
     Ok(Planned {
         plan: builder.finir(),

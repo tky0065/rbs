@@ -354,8 +354,8 @@ fn inventory_with(
     }
 }
 
-/// Réécrit la zone d'inventaire de l'`AGENTS.md`, la feature ou l'entité qu'`ajoutee`
-/// nomme comprise.
+/// Réécrit la zone d'inventaire de l'`AGENTS.md`, les features ou entités qu'`ajoutees`
+/// nomme comprises.
 ///
 /// Une zone ou un fichier absents ne sont pas une erreur : le développeur a pu retirer
 /// l'un ou l'autre, et une installation ne se refuse pas pour un fichier de
@@ -365,12 +365,12 @@ pub(crate) fn refresh(
     builder: &mut crate::plan::Builder,
     root: &Path,
     metadonnees: &metadata::Metadata,
-    ajoutee: Option<&str>,
+    ajoutees: &[String],
 ) -> Result<Option<MissingZone>, crate::plan::Error> {
     let mut features = metadonnees.features.clone();
-    if let Some(ajoutee) = ajoutee {
-        if !features.iter().any(|feature| feature.as_str() == ajoutee) {
-            features.push(ajoutee.to_string());
+    for ajoutee in ajoutees {
+        if !features.contains(ajoutee) {
+            features.push(ajoutee.clone());
         }
     }
 

@@ -193,7 +193,11 @@ pub fn create(options: &Options, parent: &Path) -> Result<Project, Error> {
     let mut installed = Vec::new();
     for feature in demandees {
         match install(&root, feature, options.template_dir.as_deref()) {
-            Ok(pose) => installed.push(pose),
+            Ok(Some(pose)) => installed.push(pose),
+            // Une feature qu'une autre vient d'entraîner est déjà posée : l'annoncer une
+            // seconde fois, et pour zéro fichier, ferait passer une pose réussie pour un
+            // raté.
+            Ok(None) => {}
             Err(source) => {
                 // Le répertoire n'existait pas avant la commande : le retirer entièrement
                 // ne peut rien emporter qui lui préexistait.
@@ -236,13 +240,17 @@ fn install(
     root: &Path,
     feature: &str,
     template_dir: Option<&Path>,
-) -> Result<InstalledFeature, crate::add::Error> {
+) -> Result<Option<InstalledFeature>, crate::add::Error> {
     let planned = crate::add::plan_for(&crate::add::Options {
         directory: root.to_path_buf(),
         feature: feature.to_string(),
         force: false,
         template_dir: template_dir.map(Path::to_path_buf),
     })?;
+
+    if planned.deja_installee {
+        return Ok(None);
+    }
 
     let migration = planned
         .files
@@ -252,11 +260,11 @@ fn install(
 
     crate::plan::application::apply(&planned.plan, false)?;
 
-    Ok(InstalledFeature {
+    Ok(Some(InstalledFeature {
         name: feature.to_string(),
         files,
         migration,
-    })
+    }))
 }
 
 /// Le nom devient un `name` de manifeste et un nom de répertoire : ce qui n'est pas
