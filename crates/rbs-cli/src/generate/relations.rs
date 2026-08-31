@@ -40,6 +40,53 @@ impl fmt::Display for UnknownTarget {
 
 impl std::error::Error for UnknownTarget {}
 
+/// Deux relations dont le nom se singularise en une seule variante.
+///
+/// Le modèle émet une variante `Relation` par référence : deux relations qui en visent
+/// la même donnent un `enum` que rustc refuse, loin de la commande qui l'a écrit.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) struct DuplicateVariant {
+    /// La variante que les deux relations réclament : `Author`.
+    pub variant: String,
+    /// La relation qui l'a réservée la première : `author`.
+    pub first: String,
+    /// Celle qui la réclame ensuite : `authors`.
+    pub second: String,
+}
+
+impl fmt::Display for DuplicateVariant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Le préfixe « erreur : » appartient à la couche d'affichage, qui le pose déjà :
+        // le porter ici aussi le double aux yeux de l'utilisateur.
+        write!(
+            f,
+            "relations « {} » et « {} » — toutes deux nommeraient la variante `{}`\n        \
+             → `enum Relation` ne peut pas la déclarer deux fois : renommez l'une des deux",
+            self.first, self.second, self.variant
+        )
+    }
+}
+
+impl std::error::Error for DuplicateVariant {}
+
+/// Ce que la résolution des références peut relever, toutes fautes confondues.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum ResolveError {
+    UnknownTarget(UnknownTarget),
+    DuplicateVariant(DuplicateVariant),
+}
+
+impl fmt::Display for ResolveError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::UnknownTarget(error) => error.fmt(f),
+            Self::DuplicateVariant(error) => error.fmt(f),
+        }
+    }
+}
+
+impl std::error::Error for ResolveError {}
+
 /// Résout chaque référence contre l'inventaire, et pose sa vue pour les templates.
 ///
 /// `generated_table` rejoint les cibles admises : elle n'est pas encore sur le disque,
@@ -48,7 +95,7 @@ pub(crate) fn resolve(
     fields: &mut [Field],
     entities: &[Entity],
     generated_table: &str,
-) -> Result<(), Vec<UnknownTarget>> {
+) -> Result<(), Vec<ResolveError>> {
     let mut known = entities::tables(entities);
     if !known.iter().any(|table| table == generated_table) {
         known.push(generated_table.to_string());
@@ -56,11 +103,25 @@ pub(crate) fn resolve(
     }
 
     let mut errors = Vec::new();
+    let mut variants: Vec<(String, String)> = Vec::new();
 
     for field in fields.iter_mut() {
         let Some(reference) = field.reference().cloned() else {
             continue;
         };
+
+        // La variante se réserve avant la résolution de la cible : la collision tient au
+        // seul nom de la relation, et se signale même si la cible est par ailleurs bonne.
+        let variant = to_pascal_case(&to_singular(field.relation_name()));
+        if let Some((_, first)) = variants.iter().find(|(seen, _)| *seen == variant) {
+            errors.push(ResolveError::DuplicateVariant(DuplicateVariant {
+                variant,
+                first: first.clone(),
+                second: field.relation_name().to_string(),
+            }));
+            continue;
+        }
+        variants.push((variant.clone(), field.relation_name().to_string()));
 
         let entity_path = if reference.target == generated_table {
             // L'entité se référence elle-même : son module n'existe pas encore, et
@@ -70,11 +131,11 @@ pub(crate) fn resolve(
             match entities::find(entities, &reference.target) {
                 Some(entity) => format!("{}::Entity", entity.module_path),
                 None => {
-                    errors.push(UnknownTarget {
+                    errors.push(ResolveError::UnknownTarget(UnknownTarget {
                         relation: field.relation_name().to_string(),
                         target: reference.target.clone(),
                         known: known.clone(),
-                    });
+                    }));
                     continue;
                 }
             }
@@ -89,7 +150,7 @@ pub(crate) fn resolve(
 
         field.set_relation(RelationView {
             name: field.relation_name().to_string(),
-            variant: to_pascal_case(&to_singular(field.relation_name())),
+            variant,
             target: reference.target.clone(),
             entity_path,
             target_column_path,
@@ -373,6 +434,13 @@ mod tests {
         assert_eq!(view.target_iden, "Posts");
     }
 
+    fn unknown_target(error: &ResolveError) -> &UnknownTarget {
+        match error {
+            ResolveError::UnknownTarget(target) => target,
+            other => panic!("cible inconnue attendue : {other:?}"),
+        }
+    }
+
     #[test]
     fn an_unknown_target_is_rejected_and_names_the_known_tables() {
         let mut parsed = fields::parse("author:references:writers").expect("acceptée");
@@ -380,9 +448,10 @@ mod tests {
             .expect_err("une cible inconnue doit être refusée");
 
         assert_eq!(errors.len(), 1);
-        assert_eq!(errors[0].target, "writers");
-        assert_eq!(errors[0].relation, "author");
-        assert_eq!(errors[0].known, ["posts", "tags", "users"]);
+        let error = unknown_target(&errors[0]);
+        assert_eq!(error.target, "writers");
+        assert_eq!(error.relation, "author");
+        assert_eq!(error.known, ["posts", "tags", "users"]);
     }
 
     #[test]
@@ -405,6 +474,48 @@ mod tests {
         assert!(text.contains("« writers » est introuvable"), "{text}");
         assert!(text.contains("author"), "{text}");
         assert!(text.contains("posts, users"), "{text}");
+    }
+
+    /// `to_singular` retire le `s` final : `author` et `authors` visent la même variante
+    /// `Author`, que le modèle déclarerait deux fois.
+    #[test]
+    fn two_relations_singularising_alike_are_rejected() {
+        let mut parsed =
+            fields::parse("author:references:users,authors:references:users").expect("acceptée");
+        let errors =
+            resolve(&mut parsed, &inventory(), "posts").expect_err("la variante en double");
+
+        assert_eq!(errors.len(), 1, "{errors:?}");
+        let ResolveError::DuplicateVariant(collision) = &errors[0] else {
+            panic!("collision de variante attendue : {errors:?}");
+        };
+        assert_eq!(collision.variant, "Author");
+        assert_eq!(collision.first, "author");
+        assert_eq!(collision.second, "authors");
+    }
+
+    #[test]
+    fn the_variant_collision_names_both_relations_and_the_variant() {
+        let text = DuplicateVariant {
+            variant: "Author".to_string(),
+            first: "author".to_string(),
+            second: "authors".to_string(),
+        }
+        .to_string();
+
+        assert!(text.contains("« author »"), "{text}");
+        assert!(text.contains("« authors »"), "{text}");
+        assert!(text.contains("`Author`"), "{text}");
+    }
+
+    /// Deux relations vers la même table restent légitimes tant que leurs variantes
+    /// diffèrent : c'est le cas que `ambiguous_targets` sait déjà traiter.
+    #[test]
+    fn two_relations_to_one_table_with_distinct_variants_pass() {
+        let fields = resolved("author:references:users,reviewer:references:users", "posts");
+
+        assert_eq!(fields[0].relation().expect("posée").variant, "Author");
+        assert_eq!(fields[1].relation().expect("posée").variant, "Reviewer");
     }
 
     #[test]

@@ -120,9 +120,10 @@ pub(crate) enum Error {
     #[error("{0}")]
     Metadata(#[from] metadata::Error),
 
-    /// Une ou plusieurs cibles de relation sont introuvables dans le projet.
+    /// Une ou plusieurs références n'ont pu être résolues : cible introuvable, ou deux
+    /// relations réclamant la même variante.
     #[error("{}", .0.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n"))]
-    Targets(Vec<relations::UnknownTarget>),
+    Relations(Vec<relations::ResolveError>),
 
     /// Une ou plusieurs cibles résolues n'ont pas de migration dans le projet.
     #[error("{}", .0.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n"))]
@@ -216,7 +217,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // Lu une fois, avant que le nom ne soit tranché : la même inventaire sert à
     // résoudre les cibles des références et à écrire leur côté inverse.
     let entities = entities::scan(&root);
-    relations::resolve(&mut fields, &entities, &options.name).map_err(Error::Targets)?;
+    relations::resolve(&mut fields, &entities, &options.name).map_err(Error::Relations)?;
     relations::ensure_migrations_exist(&fields, &root).map_err(Error::MigrationsAbsentes)?;
 
     let feature = Feature::fresh(&options.name, fields);
@@ -334,11 +335,13 @@ fn plan_repair(
     let mut inverses = Vec::with_capacity(options.has_many.len());
     for child_name in &options.has_many {
         let Some(child) = entities::find(&entities, child_name) else {
-            return Err(Error::Targets(vec![relations::UnknownTarget {
-                relation: "has-many".to_string(),
-                target: child_name.clone(),
-                known: entities::tables(&entities),
-            }]));
+            return Err(Error::Relations(vec![
+                relations::ResolveError::UnknownTarget(relations::UnknownTarget {
+                    relation: "has-many".to_string(),
+                    target: child_name.clone(),
+                    known: entities::tables(&entities),
+                }),
+            ]));
         };
 
         if !relations::child_references(child, &parent, root) {
@@ -1206,6 +1209,32 @@ mod tests {
         assert!(
             !root.join("src/posts").is_dir(),
             "des fichiers ont été écrits malgré la migration absente"
+        );
+    }
+
+    /// Deux relations du même plan qui se singularisent pareil : la génération s'arrête
+    /// avant d'écrire un `enum Relation` que rustc refuserait.
+    #[test]
+    fn two_relations_singularising_alike_are_refused_before_any_write() {
+        let (_parent, root) = project();
+        run(&options(&root, "users", Some("email:string:unique"), true))
+            .expect("users doit se générer");
+        let avant = fingerprint(&root);
+
+        let error = run(&options(
+            &root,
+            "posts",
+            Some("author:references:users,authors:references:users"),
+            true,
+        ))
+        .expect_err("les deux relations réclament la variante Author");
+
+        assert!(error.to_string().contains("Author"), "{error}");
+        assert!(error.to_string().contains("authors"), "{error}");
+        assert_eq!(
+            fingerprint(&root),
+            avant,
+            "rien ne doit être écrit quand deux relations se heurtent"
         );
     }
 
