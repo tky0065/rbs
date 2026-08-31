@@ -51,6 +51,8 @@ pub fn run() {
             with,
             core_path,
             lang,
+            template_dir,
+            yes,
         } => {
             let resultat = create_project(
                 name,
@@ -58,8 +60,8 @@ pub fn run() {
                 database,
                 with,
                 core_path,
-                cli.template_dir,
-                cli.yes,
+                template_dir,
+                yes,
                 lang,
             );
 
@@ -73,8 +75,9 @@ pub fn run() {
             feature,
             force,
             dry_run,
+            template_dir,
         } => {
-            if let Err(error) = add(feature, force, dry_run, cli.template_dir) {
+            if let Err(error) = add(feature, force, dry_run, template_dir) {
                 ui::error(&error.to_string());
                 if let Some(remedy) = error.remedy() {
                     ui::info(&format!("\n{remedy}"));
