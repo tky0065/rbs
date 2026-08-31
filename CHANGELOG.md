@@ -34,6 +34,10 @@ between minor versions with no deprecation cycle.
 
 ### Changed
 
+- **The minimum supported Rust version goes from 1.85 to 1.94.** 1.85 had already stopped
+  resolving: `sea-orm` 2.0.2 and `sqlx` 0.9.0 require 1.94.0, and Cargo refuses to build
+  below that. The declared floor was describing a toolchain no installation could have
+  used. A CI job pinned to 1.94 now holds the promise.
 - The generated CRUD answers **409** instead of 500 when a `unique` constraint is
   violated, on `create` and on `update`, and its OpenAPI contract declares the status.
   The `auth` fragment already did this; the generic template did the opposite.

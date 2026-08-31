@@ -57,7 +57,7 @@ given another meaning, and `cargo-semver-checks` fails the build rather than let
 The site is at <https://tky0065.github.io/rbs/> — architecture, guides, CLI reference. A French
 version lives at <https://tky0065.github.io/rbs/fr/>.
 
-Requires Rust 1.85 or later.
+Requires Rust 1.94 or later.
 
 ## License
 

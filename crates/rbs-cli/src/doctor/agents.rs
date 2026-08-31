@@ -82,13 +82,13 @@ pub(crate) fn check(root: &Path) -> Check {
     // cause à un développeur qui vient de corriger la première.
     let mut echecs: Vec<(String, String)> = Vec::new();
 
-    if let Ok(attendu) = agents::inventory(root, metadonnees.lang) {
-        if agents::body(&present, agents::INVENTORY) != Some(attendu.as_str()) {
-            echecs.push((
-                "l'inventaire ne décrit plus le projet".to_string(),
-                "rbs upgrade le recalcule".to_string(),
-            ));
-        }
+    if let Ok(attendu) = agents::inventory(root, metadonnees.lang)
+        && agents::body(&present, agents::INVENTORY) != Some(attendu.as_str())
+    {
+        echecs.push((
+            "l'inventaire ne décrit plus le projet".to_string(),
+            "rbs upgrade le recalcule".to_string(),
+        ));
     }
 
     if let Some(declaree) = declared_without_directory(root, &metadonnees.features) {

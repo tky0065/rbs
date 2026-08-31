@@ -71,13 +71,12 @@ fn collect(source: &str, module_path: &str, file: &str, found: &mut Vec<Entity>)
     for line in source.lines() {
         let trimmed = line.trim();
 
-        if closes_at.is_none() {
-            if let Some(rest) = strip_module_declaration(trimmed) {
-                if let Some(name) = rest.split(['{', ';', ' ']).next().filter(|n| !n.is_empty()) {
-                    current = format!("{module_path}::{name}");
-                    closes_at = Some(depth);
-                }
-            }
+        if closes_at.is_none()
+            && let Some(rest) = strip_module_declaration(trimmed)
+            && let Some(name) = rest.split(['{', ';', ' ']).next().filter(|n| !n.is_empty())
+        {
+            current = format!("{module_path}::{name}");
+            closes_at = Some(depth);
         }
 
         if let Some(table) = table_name(trimmed) {

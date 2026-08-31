@@ -24,7 +24,7 @@ rbs ne le réécrit. La [page de compatibilité](https://tky0065.github.io/rbs/f
 
 ## Installation
 
-Rust 1.85 ou plus. Un projet généré tourne sur PostgreSQL 14 ou plus, MySQL 8.0 ou plus, ou
+Rust 1.94 ou plus. Un projet généré tourne sur PostgreSQL 14 ou plus, MySQL 8.0 ou plus, ou
 SQLite 3.35 ou plus.
 
 ```bash

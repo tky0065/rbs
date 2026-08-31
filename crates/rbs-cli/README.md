@@ -19,7 +19,7 @@ an unrelated tool also called `rbs`, and package managers often place it ahead o
 `~/.cargo/bin`. If `rbs --version` prints something like `rbs 3.10.0`, that one is winning on
 your `PATH` — use `rbs-cli`, which nobody else claims.
 
-Requires Rust 1.85 or later. A generated project runs on PostgreSQL 14+, MySQL 8.0+ or
+Requires Rust 1.94 or later. A generated project runs on PostgreSQL 14+, MySQL 8.0+ or
 SQLite 3.35+.
 
 ## Commands
