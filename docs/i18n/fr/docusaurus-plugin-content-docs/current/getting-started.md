@@ -387,7 +387,7 @@ rbs doctor
 ```text
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
      Running `target/debug/migration version`
-  ✓ ancres      les 10 points d'insertion sont en place
+  ✓ ancres      les 11 points d'insertion sont en place
   ✓ agents      guide et inventaire à jour
   ✓ relations   les modèles portent leurs ancres de relation
   ✓ .env        les 4 variables de .env.example sont renseignées

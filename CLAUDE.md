@@ -97,9 +97,30 @@ Chaque couche ne voit que la suivante. Un `service` n'accède jamais *directemen
 requête SeaORM ; un `controller` n'en construit jamais. Cette règle rend chaque fichier
 lisible isolément.
 
-**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires
-(`// <rbs:features>`, `<rbs:routes>`, `<rbs:openapi>`, `<rbs:migrations>`). Ancre absente →
-le CLI n'écrit rien et affiche le bloc à coller. Toute commande modifiant un projet
+**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires, onze au
+total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est cette liste que
+`rbs doctor` parcourt, et non celle-ci :
+
+| Ancre | Fichier |
+|---|---|
+| `// <rbs:features>` | `src/lib.rs`, ou `src/main.rs` sur un projet sans bibliothèque |
+| `// <rbs:routes>` | `src/router.rs` |
+| `// <rbs:layers>` | `src/router.rs` |
+| `// <rbs:openapi>` | `src/openapi.rs` |
+| `// <rbs:migration_modules>` | `migration/src/lib.rs` |
+| `// <rbs:migrations>` | `migration/src/lib.rs` |
+| `// <rbs:state_champs>` | `src/state.rs` |
+| `// <rbs:state_init>` | `src/state.rs` |
+| `// <rbs:startup>` | `src/main.rs` |
+| `// <rbs:seeds>` | `src/seeds/main.rs` |
+| `# <rbs:services>` | `docker-compose.yml` — la seule en YAML, et la seule optionnelle |
+
+`generate` en emploie six ; les autres appartiennent aux fragments qu'installe `add`. Une
+ancre insérée dans `<rbs:layers>` est *intérieure* à `trace` et `request_id` : un `.layer()`
+enveloppe ce qui le précède, si bien qu'un middleware posé là voit le `request_id` et que
+ses propres réponses courtes — un 429, un préflight refusé — restent dans la trace.
+
+Ancre absente → le CLI n'écrit rien et affiche le bloc à coller. Toute commande modifiant un projet
 existant suit la séquence lire → planifier → vérifier → afficher → appliquer, avec
 idempotence (via `[package.metadata.rbs]`) et restauration en cas d'échec partiel.
 
