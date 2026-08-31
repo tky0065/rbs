@@ -297,7 +297,10 @@ pub(crate) fn parse(input: &str) -> Result<Vec<Field>, FieldsError> {
 
     let mut fields = Vec::new();
     let mut errors = Vec::new();
-    let mut ranks_by_name: Vec<(String, usize)> = Vec::new();
+    // Indexé par colonne et non par nom déclaré : `author_id:uuid` et
+    // `author:references:users` portent deux noms distincts pour une seule colonne, et
+    // se dédoubleraient dans le modèle comme dans la migration.
+    let mut seen: Vec<(String, String, usize)> = Vec::new();
 
     for (rank, chunk) in input.split(',').enumerate() {
         let rank = rank + 1;
@@ -305,17 +308,34 @@ pub(crate) fn parse(input: &str) -> Result<Vec<Field>, FieldsError> {
         // L'homonymie se contrôle après la validation du champ lui-même : un champ
         // fautif par ailleurs signale sa propre faute, pas le doublon.
         match parse_field(rank, chunk.trim()) {
-            Ok(field) => match ranks_by_name.iter().find(|(name, _)| *name == field.name) {
-                Some(&(_, previous_rank)) => errors.push(FieldError {
-                    rank,
-                    label: field.name,
-                    kind: ErrorKind::DuplicateName { previous_rank },
-                }),
-                None => {
-                    ranks_by_name.push((field.name.clone(), rank));
-                    fields.push(field);
+            Ok(field) => {
+                let column = field.column_name();
+                match seen.iter().find(|(seen, _, _)| *seen == column) {
+                    Some((_, previous_label, previous_rank)) => {
+                        let kind = if *previous_label == field.name {
+                            ErrorKind::DuplicateName {
+                                previous_rank: *previous_rank,
+                            }
+                        } else {
+                            ErrorKind::DuplicateColumn {
+                                previous_rank: *previous_rank,
+                                previous_label: previous_label.clone(),
+                                column,
+                            }
+                        };
+
+                        errors.push(FieldError {
+                            rank,
+                            label: field.name,
+                            kind,
+                        });
+                    }
+                    None => {
+                        seen.push((column, field.name.clone(), rank));
+                        fields.push(field);
+                    }
                 }
-            },
+            }
             Err(error) => errors.push(error),
         }
     }
@@ -837,6 +857,58 @@ mod tests {
         assert_eq!(
             error.errors[1].kind,
             ErrorKind::DuplicateName { previous_rank: 2 }
+        );
+    }
+
+    /// Deux noms distincts, une seule colonne : la référence dérive la sienne en `_id`,
+    /// et le modèle porterait deux fois `pub author_id`.
+    #[test]
+    fn a_scalar_and_a_reference_sharing_a_column_are_rejected() {
+        let error = parse("author_id:uuid,author:references:users")
+            .expect_err("la colonne en double est refusée");
+
+        assert_eq!(error.errors.len(), 1);
+        assert_eq!(error.errors[0].rank, 2);
+        assert_eq!(error.errors[0].label, "author");
+        assert_eq!(
+            error.errors[0].kind,
+            ErrorKind::DuplicateColumn {
+                previous_rank: 1,
+                previous_label: "author_id".to_string(),
+                column: "author_id".to_string(),
+            }
+        );
+    }
+
+    /// Dans l'autre ordre, c'est le scalaire qui arrive en second : le rang cité et le
+    /// nom cité changent, la colonne non.
+    #[test]
+    fn the_column_collision_names_whichever_field_comes_second() {
+        let error = parse("author:references:users,author_id:uuid")
+            .expect_err("la colonne en double est refusée");
+
+        assert_eq!(error.errors.len(), 1);
+        assert_eq!(error.errors[0].rank, 2);
+        assert_eq!(error.errors[0].label, "author_id");
+        assert_eq!(
+            error.errors[0].kind,
+            ErrorKind::DuplicateColumn {
+                previous_rank: 1,
+                previous_label: "author".to_string(),
+                column: "author_id".to_string(),
+            }
+        );
+    }
+
+    /// L'homonymie franche garde son message : elle se lit sans détour par la colonne.
+    #[test]
+    fn two_identical_names_stay_a_duplicate_name() {
+        let error = parse("author:references:users,author:references:posts")
+            .expect_err("l'homonyme est refusé");
+
+        assert_eq!(
+            error.errors[0].kind,
+            ErrorKind::DuplicateName { previous_rank: 1 }
         );
     }
 
