@@ -48,12 +48,13 @@ pub struct ProblemDetails {
 pub struct CommonResponses;
 
 /// Réponses enregistrées sous `components/responses`, avec leur description.
-const NAMED: [(&str, &str); 5] = [
+const NAMED: [(&str, &str); 6] = [
     ("BadRequest", "requête mal formée"),
     ("Unauthorized", "authentification requise"),
     ("Forbidden", "accès interdit"),
     ("NotFound", "ressource introuvable"),
     ("Conflict", "conflit avec l'état courant de la ressource"),
+    ("TooManyRequests", "trop de requêtes"),
 ];
 
 /// Nom du schéma de sécurité, tel que les handlers le référencent dans `security(...)`.
@@ -238,6 +239,7 @@ mod tests {
             "Forbidden",
             "NotFound",
             "Conflict",
+            "TooManyRequests",
         ] {
             assert!(
                 common.get(name).is_some(),
