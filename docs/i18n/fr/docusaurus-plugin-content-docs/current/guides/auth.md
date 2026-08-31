@@ -203,8 +203,10 @@ premiers se confondre :
 ```
 
 Le `src/auth/tests.rs` généré couvre les routes de la feature elle-même — l'inscription,
-les 401 identiques, la rotation, la révocation. Ils passent par HTTP contre une vraie base,
-comme tous les tests que rbs génère ; voir le [guide des tests](./testing.md).
+les 401 identiques, la rotation, la révocation. Tous passent par HTTP contre une vraie
+base, et tous portent donc `#[ignore]` : le `cargo test` d'un projet neuf réussit sans
+serveur démarré, et `cargo test -- --ignored` les lance contre la base que nomme votre
+`.env`, migrations appliquées. Voir le [guide des tests](./testing.md).
 
 ## Ce qu'elle vous laisse
 
@@ -212,7 +214,8 @@ Tout ce qui est propre à votre domaine :
 
 - **qui a le droit de quoi** — la garde compare un rôle à une route ; tout ce qui est plus
   fin, tel un propriétaire modifiant sa propre ressource, est à écrire dans le service ;
-- **la politique de mot de passe** — le DTO valide une longueur minimale, rien de plus ;
+- **la politique de mot de passe** — le DTO valide une longueur de 12 à 128 caractères,
+  rien de plus ;
 - **vérification d'adresse, réinitialisation, fournisseurs tiers** — hors de cette feature ;
 - **la rotation du secret** — changer `RBS_AUTH__SECRET` invalide tous les jetons d'accès
   en circulation, ce qui est une fonctionnalité le jour où vous en avez besoin, et une

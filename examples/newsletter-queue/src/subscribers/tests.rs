@@ -133,7 +133,7 @@ async fn the_full_lifecycle_goes_through_the_api() {
     );
 
     let sent = modification();
-    let mise_a_jour = request("PUT", &resource, sent.clone());
+    let mise_a_jour = request("PATCH", &resource, sent.clone());
     let (status, updated) = call(&api, mise_a_jour).await;
     assert_eq!(status, StatusCode::OK, "mise à jour refusée : {updated}");
     compare(&updated, &sent, "email");
@@ -168,12 +168,63 @@ async fn two_creations_in_a_row_carry_increasing_ids() {
     };
     let (premier, second) = (lire(&premier), lire(&second));
 
+    // Les tests jouent sur la base du `.env`, hors transaction : sans ces suppressions, la
+    // table enfle de deux lignes à chaque exécution.
+    for identifiant in [premier, second] {
+        let resource = format!("{collection}/{identifiant}");
+        let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+        assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
+    }
+
     assert_eq!(
         premier.get_version_num(),
         7,
         "{premier} n'est pas un UUIDv7"
     );
     assert!(second > premier, "{second} ne suit pas {premier}");
+}
+
+/// Un corps lisible mais non conforme rend 422, et non le 400 du corps illisible.
+///
+/// C'est le chemin qu'ouvre `ValidatedJson` : il désérialise, puis valide, et le refus
+/// nomme le champ fautif.
+#[tokio::test]
+async fn an_invalid_email_returns_422() {
+    let api = application().await;
+    let mut sent = creation();
+    sent["email"] = Value::from("pas-une-adresse");
+
+    let (status, body) = call(&api, request("POST", "/subscribers", sent)).await;
+
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body["status"], 422, "{body}");
+    assert!(
+        body["errors"]["email"].is_array(),
+        "le refus doit nommer le champ fautif : {body}"
+    );
+}
+
+/// Une valeur déjà prise sur une colonne `unique` est une faute du client, pas une panne.
+///
+/// Sans la traduction que pose le repository, le doublon remonterait en 500.
+#[tokio::test]
+async fn a_replayed_unique_value_returns_409() {
+    let api = application().await;
+    let collection = "/subscribers";
+    let sent = creation();
+
+    let (status, created) = call(&api, request("POST", collection, sent.clone())).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {created}");
+
+    let (status, body) = call(&api, request("POST", collection, sent)).await;
+
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(body["status"], 409, "{body}");
+
+    let id = created["id"].as_str().expect("identifiant rendu");
+    let resource = format!("{collection}/{id}");
+    let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
 }
 
 #[tokio::test]

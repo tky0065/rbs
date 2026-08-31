@@ -136,7 +136,7 @@ async fn the_full_lifecycle_goes_through_the_api() {
     );
 
     let sent = modification();
-    let mise_a_jour = request("PUT", &resource, sent.clone());
+    let mise_a_jour = request("PATCH", &resource, sent.clone());
     let (status, updated) = call(&api, mise_a_jour).await;
     assert_eq!(status, StatusCode::OK, "mise à jour refusée : {updated}");
     compare(&updated, &sent, "title");
@@ -171,6 +171,14 @@ async fn two_creations_in_a_row_carry_increasing_ids() {
             .expect("identifiant lisible")
     };
     let (premier, second) = (lire(&premier), lire(&second));
+
+    // Les tests jouent sur la base du `.env`, hors transaction : sans ces suppressions, la
+    // table enfle de deux lignes à chaque exécution.
+    for identifiant in [premier, second] {
+        let resource = format!("{collection}/{identifiant}");
+        let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+        assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
+    }
 
     assert_eq!(
         premier.get_version_num(),

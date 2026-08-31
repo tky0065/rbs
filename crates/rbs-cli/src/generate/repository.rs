@@ -170,7 +170,7 @@ mod tests {
         assert!(!rendered.contains("inscrite"), "{rendered}");
     }
 
-    /// Les deux écritures passent par la même porte : sans cela, `PUT` rendrait 500 là où
+    /// Les deux écritures passent par la même porte : sans cela, `PATCH` rendrait 500 là où
     /// `POST` rend 409, pour la même contrainte.
     #[test]
     fn the_creation_and_the_update_share_the_same_translation() {

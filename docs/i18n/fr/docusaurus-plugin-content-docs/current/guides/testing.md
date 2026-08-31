@@ -33,12 +33,17 @@ mise à jour, suppression, puis relecture pour confirmer qu'elle a disparu :
 ```rust file=examples/hello-crud/src/articles/tests.rs region=cycle_de_vie
 ```
 
-Deux autres éprouvent les chemins d'erreur que le runtime traite tout seul : un
-identifiant inconnu rend 404, un corps illisible rend 400. Les deux figurent dans le
-[guide des erreurs](./errors.md).
+D'autres éprouvent les chemins d'erreur que le runtime traite tout seul. Deux sont
+toujours écrits : un identifiant inconnu rend 404, un corps illisible rend 400. Deux de
+plus dépendent de ce que vous avez demandé à `--fields`, faute de quoi rien ne les
+atteindrait : un champ portant la contrainte d'e-mail vaut un corps lisible mais non
+conforme, qui rend 422 ; une colonne `unique` vaut un rejeu de valeur, qui rend 409.
+Chacun de ces quatre statuts est décrit dans le [guide des erreurs](./errors.md).
 
-Les valeurs textuelles portent un suffixe tiré au sort. Sans lui, un champ `unique` ferait
-échouer la seconde exécution de la suite sur la ligne laissée par la première.
+Les valeurs textuelles portent un suffixe tiré au sort, et chaque test supprime les lignes
+qu'il a créées. Sans l'un ou l'autre, un champ `unique` ferait échouer la seconde exécution
+de la suite sur ce que la première a laissé — les tests partagent la base que nomme votre
+`.env`, et aucune transaction ne les annule.
 
 ## Ce qu'il vous laisse
 

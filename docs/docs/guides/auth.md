@@ -198,8 +198,10 @@ collapse into each other:
 ```
 
 The generated `src/auth/tests.rs` covers the feature's own routes — registration, the
-identical 401s, rotation, revocation. Those go through HTTP against a real database, like
-every test rbs generates; see the [testing guide](./testing.md).
+identical 401s, rotation, revocation. Every one of them goes through HTTP against a real
+database, so every one is marked `#[ignore]`: `cargo test` on a fresh project passes with
+no server running, and `cargo test -- --ignored` runs them against the database your
+`.env` names, migrations applied. See the [testing guide](./testing.md).
 
 ## What it leaves to you
 
@@ -207,7 +209,8 @@ Everything specific to your domain:
 
 - **who may do what** — the guard checks one role against one route; anything finer, such
   as an owner editing their own resource, is yours to write in the service;
-- **password policy** — the DTO validates a minimum length, nothing more;
+- **password policy** — the DTO validates a length between 12 and 128 characters, nothing
+  more;
 - **email verification, password reset, third-party providers** — not in this feature;
 - **rotating the secret** — changing `RBS_AUTH__SECRET` invalidates every access token in
   circulation, which is a feature the day you need it, and an outage the day you do not

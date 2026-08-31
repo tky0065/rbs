@@ -49,8 +49,9 @@ pub async fn update(
         .ok_or(Error::NotFound("{@ singular @}"))?
         .into();
 
-    // Un champ absent du corps garde sa valeur : cette route ne peut donc pas remettre un
-    // champ optionnel à NULL. Ajoutez-y le cas si votre API en a besoin.
+    // `Option` ne distingue pas un champ absent d'un `null` explicite : cette route ne
+    // peut donc pas remettre un champ optionnel à NULL. Ajoutez-y le cas si votre API en
+    // a besoin.
 {%- for field in fields %}
     if let Some({@ field.name @}) = input.{@ field.name @} {
         {@ singular @}.{@ field.name @} = Set({@ ("Some(" ~ field.name ~ ")") if field.optional else field.name @});

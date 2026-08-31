@@ -351,7 +351,7 @@ curl http://127.0.0.1:8080/articles
 ```
 
 Collections are paginated by default, under `data` and `meta`. `?page=` and `?per_page=`
-move through them. The three remaining routes — `GET`, `PUT` and `DELETE` on
+move through them. The three remaining routes — `GET`, `PATCH` and `DELETE` on
 `/articles/{id}` — were generated at the same time.
 
 Meanwhile, the server's terminal has been printing one line per request:

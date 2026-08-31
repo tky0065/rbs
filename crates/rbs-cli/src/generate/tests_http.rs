@@ -45,6 +45,11 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
             compared => names(sent, |champ| !timestamp(champ)),
             timestamped => names(sent, timestamp),
             suffix => sent.iter().any(textual),
+            // Les deux scénarios ci-dessous n'ont de sens que si `--fields` les rend
+            // atteignables : sans contrainte d'e-mail rien ne rend 422, sans colonne
+            // unique rien ne rend 409, et le test échouerait faute de refus à observer.
+            email_field => sent.iter().find(|champ| champ.validates_email()).map(Field::column_name),
+            unique_field => sent.iter().any(|champ| champ.unique),
         },
     )
 }
@@ -135,14 +140,18 @@ mod tests {
     }
 
     #[test]
-    fn the_four_scenarios_are_declared() {
+    fn the_scenarios_are_declared() {
         let rendered = trials("articles", CHAMPS);
 
+        // `CHAMPS` porte `email:string:unique` : les deux scénarios conditionnels y sont
+        // donc attendus, avec les quatre que toute feature créable emporte.
         let scenarios = [
             "async fn the_full_lifecycle_goes_through_the_api()",
             // L'identifiant est posé par le modèle depuis que `uuidv7()` a quitté la
             // migration : la croissance des identifiants se prouve dans le projet.
             "async fn two_creations_in_a_row_carry_increasing_ids()",
+            "async fn an_invalid_email_returns_422()",
+            "async fn a_replayed_unique_value_returns_409()",
             "async fn an_unknown_id_returns_404()",
             "async fn an_unreadable_body_returns_400()",
         ];
@@ -157,6 +166,94 @@ mod tests {
             rendered.matches("#[tokio::test]").count(),
             scenarios.len(),
             "chaque scénario est un test asynchrone :\n{rendered}"
+        );
+    }
+
+    /// `ValidatedJson` existe pour ce chemin : un corps lisible mais non conforme rend
+    /// 422, là où un corps illisible rend 400. Rien ne l'éprouvait.
+    #[test]
+    fn an_email_field_earns_a_422_scenario() {
+        let rendered = trials("articles", CHAMPS);
+
+        assert!(
+            rendered.contains("async fn an_invalid_email_returns_422()"),
+            "le scénario 422 est absent :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("StatusCode::UNPROCESSABLE_ENTITY"),
+            "le statut attendu doit être 422 :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(r#"body["errors"]["email"]"#),
+            "le refus doit nommer le champ fautif :\n{rendered}"
+        );
+    }
+
+    /// Sans champ `unique`, un rejeu ne provoque aucun conflit : le scénario n'aurait
+    /// rien à observer et échouerait.
+    #[test]
+    fn a_unique_field_earns_a_409_scenario() {
+        let rendered = trials("articles", CHAMPS);
+
+        assert!(
+            rendered.contains("async fn a_replayed_unique_value_returns_409()"),
+            "le scénario 409 est absent :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("StatusCode::CONFLICT"),
+            "le statut attendu doit être 409 :\n{rendered}"
+        );
+    }
+
+    /// Les deux scénarios sont conditionnés par ce que `--fields` demande.
+    #[test]
+    fn a_feature_without_email_or_unique_carries_neither_scenario() {
+        let rendered = trials("articles", "title:string,body:text,published:bool");
+
+        assert!(
+            !rendered.contains("an_invalid_email_returns_422"),
+            "aucun champ ne porte de contrainte d'e-mail :\n{rendered}"
+        );
+        assert!(
+            !rendered.contains("a_replayed_unique_value_returns_409"),
+            "aucun champ n'est unique :\n{rendered}"
+        );
+    }
+
+    /// Sans création possible, les deux scénarios tombent avec les autres.
+    #[test]
+    fn a_required_reference_also_drops_the_422_and_409_scenarios() {
+        let rendered = trials("posts", "email:string:unique,author:references:users");
+
+        assert!(
+            !rendered.contains("an_invalid_email_returns_422"),
+            "{rendered}"
+        );
+        assert!(
+            !rendered.contains("a_replayed_unique_value_returns_409"),
+            "{rendered}"
+        );
+    }
+
+    /// Les tests tournent sur la base de développement, sans transaction : ce qu'ils
+    /// créent, ils le suppriment, faute de quoi la table enfle à chaque `cargo test`.
+    #[test]
+    fn the_uuid_scenario_deletes_what_it_created() {
+        let rendered = trials("articles", CHAMPS);
+
+        let scenario = rendered
+            .split("async fn two_creations_in_a_row_carry_increasing_ids()")
+            .nth(1)
+            .and_then(|reste| reste.split("\n#[tokio::test]").next())
+            .expect("le scénario doit être rendu");
+
+        assert!(
+            scenario.contains("for identifiant in [premier, second]"),
+            "les deux lignes créées doivent être parcourues :\n{scenario}"
+        );
+        assert!(
+            scenario.contains(r#"without_body("DELETE", &resource)"#),
+            "les deux lignes créées doivent être supprimées :\n{scenario}"
         );
     }
 
@@ -188,7 +285,7 @@ mod tests {
             r#"let resource = format!("{collection}/{id}");"#,
             r#"without_body("GET", &resource)"#,
             r#"let premiere = format!("{collection}?per_page=50");"#,
-            r#"request("PUT", &resource, sent.clone())"#,
+            r#"request("PATCH", &resource, sent.clone())"#,
             r#"without_body("DELETE", &resource)"#,
         ] {
             assert!(rendered.contains(appel), "« {appel} » absent :\n{rendered}");

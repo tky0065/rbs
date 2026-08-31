@@ -358,7 +358,7 @@ curl http://127.0.0.1:8080/articles
 ```
 
 Les collections sont paginées par défaut, sous `data` et `meta`. `?page=` et `?per_page=`
-s'y déplacent. Les trois routes restantes — `GET`, `PUT` et `DELETE` sur
+s'y déplacent. Les trois routes restantes — `GET`, `PATCH` et `DELETE` sur
 `/articles/{id}` — ont été générées en même temps.
 
 Pendant ce temps, le terminal du serveur affiche une ligne par requête :

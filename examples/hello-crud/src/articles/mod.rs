@@ -19,7 +19,7 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/articles/{id}",
             get(controller::find)
-                .put(controller::update)
+                .patch(controller::update)
                 .delete(controller::delete),
         )
 }
