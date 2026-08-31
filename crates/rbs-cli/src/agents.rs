@@ -245,16 +245,9 @@ fn anchor_list(lang: Lang, root: &Path) -> String {
         Lang::En => format!("- `<rbs:{}>` in `{}`", anchor.name, anchor.file),
     };
 
-    let registre = anchors::ANCRES
+    let registre = anchors::resolved(root)
         .iter()
-        .map(|anchor| {
-            if anchor.name == anchors::FEATURES.name {
-                anchors::resolve_features(root)
-            } else {
-                anchor.clone()
-            }
-        })
-        .map(|anchor| relie(&anchor))
+        .map(relie)
         .collect::<Vec<_>>()
         .join("\n");
 
@@ -407,15 +400,8 @@ pub(crate) fn refresh(
 /// `porte` dit si le projet a le fichier voulu : le disque pour un inventaire constaté,
 /// le plan pour celui qu'une commande s'apprête à écrire.
 fn present_anchors(root: &Path, porte: impl Fn(&str) -> bool) -> Vec<String> {
-    anchors::ANCRES
-        .iter()
-        .map(|anchor| {
-            if anchor.name == anchors::FEATURES.name {
-                anchors::resolve_features(root)
-            } else {
-                anchor.clone()
-            }
-        })
+    anchors::resolved(root)
+        .into_iter()
         .filter(|anchor| !anchor.optional || porte(anchor.file.as_ref()))
         .map(|anchor| format!("{} ({})", anchor.name, anchor.file))
         .collect()

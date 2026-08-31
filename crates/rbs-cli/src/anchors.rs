@@ -251,11 +251,37 @@ pub(crate) const ANCRES: [Anchor; 11] = [
 /// l'ancre y reste dans `src/main.rs`, où elle a toujours vécu — sans ce repli, `generate`
 /// et `doctor` cesseraient de fonctionner sur l'ensemble du parc existant.
 pub(crate) fn resolve_features(root: &Path) -> Anchor {
-    if root.join("src/lib.rs").exists() {
-        FEATURES.in_file("src/lib.rs")
+    resolve(FEATURES, has_library(root))
+}
+
+/// La même ancre, celle des features visant la bibliothèque quand le projet en porte une.
+///
+/// La règle n'existe qu'ici : quatre appelants la réécrivaient, et une ancre ajoutée au
+/// registre demandait de les visiter tous.
+pub(crate) fn resolve(anchor: Anchor, with_library: bool) -> Anchor {
+    if with_library && anchor.name == FEATURES.name {
+        anchor.in_file("src/lib.rs")
     } else {
-        FEATURES
+        anchor
     }
+}
+
+/// Les ancres du registre, celle des features résolue pour `root`.
+///
+/// Le disque n'est interrogé qu'une fois pour les onze, et non une fois par ancre.
+pub(crate) fn resolved(root: &Path) -> Vec<Anchor> {
+    let with_library = has_library(root);
+
+    ANCRES
+        .into_iter()
+        .map(|anchor| resolve(anchor, with_library))
+        .collect()
+}
+
+/// Vrai si le projet porte une bibliothèque, seule question que la résolution pose au
+/// disque.
+fn has_library(root: &Path) -> bool {
+    root.join("src/lib.rs").exists()
 }
 
 /// Une ancre attendue que le fichier ne porte pas.
@@ -945,5 +971,38 @@ struct AppState {
         let anchor = resolve_features(project.path());
 
         assert_eq!(anchor.file, "src/main.rs");
+    }
+
+    /// Une ancre ajoutée au registre paraît dans la liste résolue sans que personne ait à
+    /// toucher les appelants : c'est ce que la liste unique achète.
+    #[test]
+    fn the_resolved_registry_carries_every_anchor_of_the_registry() {
+        let project = tempfile::TempDir::new().expect("répertoire temporaire créable");
+
+        let resolues = resolved(project.path());
+
+        assert_eq!(resolues.len(), ANCRES.len());
+        for anchor in ANCRES {
+            assert!(
+                resolues.iter().any(|autre| autre.name == anchor.name),
+                "`{}` manque à la liste résolue",
+                anchor.name
+            );
+        }
+    }
+
+    #[test]
+    fn the_resolved_registry_follows_the_fallback_of_the_features_anchor() {
+        let project = tempfile::TempDir::new().expect("répertoire temporaire créable");
+        std::fs::create_dir_all(project.path().join("src")).expect("le répertoire se crée");
+        std::fs::write(project.path().join("src/lib.rs"), "// bibliothèque")
+            .expect("l'écriture aboutit");
+
+        let features = resolved(project.path())
+            .into_iter()
+            .find(|anchor| anchor.name == FEATURES.name)
+            .expect("l'ancre des features est au registre");
+
+        assert_eq!(features.file, "src/lib.rs");
     }
 }

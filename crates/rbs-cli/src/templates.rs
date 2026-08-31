@@ -418,11 +418,7 @@ mod tests {
             // L'ancre des features vise `src/lib.rs` depuis ce jalon : c'est là que le
             // squelette la rend, `src/main.rs` n'étant qu'un repli pour un projet plus
             // ancien, sans bibliothèque.
-            let anchor = if anchor.name == crate::anchors::FEATURES.name {
-                anchor.in_file("src/lib.rs")
-            } else {
-                anchor
-            };
+            let anchor = crate::anchors::resolve(anchor, true);
             let relatif = format!("{}.jinja", anchor.file);
             let chemin = Path::new(RACINE).join(&relatif);
 
