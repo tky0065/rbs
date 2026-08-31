@@ -6,7 +6,8 @@
 
 use super::{Check, Config};
 
-const TITRE: &str = "redis";
+/// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
+pub(crate) const TITRE: &str = "redis";
 const SECTION: &str = "cache";
 
 /// Vérifie ce dont la feature `redis` a besoin pour démarrer.

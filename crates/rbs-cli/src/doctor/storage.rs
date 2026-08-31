@@ -11,7 +11,8 @@ use crate::dotenv;
 
 use super::{Check, Config};
 
-const TITRE: &str = "storage";
+/// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
+pub(crate) const TITRE: &str = "storage";
 const FICHIER: &str = ".env";
 const EXEMPLE: &str = ".env.example";
 const CONFIG: &str = "config/default.toml";

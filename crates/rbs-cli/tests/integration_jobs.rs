@@ -127,11 +127,13 @@ fn the_dequeue_never_hands_the_same_job_twice_on_the_three_engines() {
         let rendu = String::from_utf8_lossy(&diagnostic.stdout).into_owned();
 
         // `rbs doctor` sort en 0 même quand un contrôle échoue : c'est la ligne rendue
-        // qui tranche, non le code de sortie.
+        // qui tranche, non le code de sortie. Le contrôle `base` annonce d'abord la
+        // compilation de la crate migration, sous son titre et sans verdict : c'est le
+        // marqueur qui distingue cette annonce du constat.
         let ligne = rendu
             .lines()
-            .find(|ligne| ligne.contains("base"))
-            .unwrap_or_else(|| panic!("`doctor` ne rend aucune ligne « base » :\n{rendu}"));
+            .find(|ligne| ligne.contains("base") && ligne.contains(['✓', '!', '✗']))
+            .unwrap_or_else(|| panic!("`doctor` ne rend aucun constat « base » :\n{rendu}"));
 
         assert!(
             ligne.contains('✓'),

@@ -10,7 +10,8 @@ use crate::dotenv;
 
 use super::Check;
 
-const TITRE: &str = ".env";
+/// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
+pub(crate) const TITRE: &str = ".env";
 const FICHIER: &str = ".env";
 const EXEMPLE: &str = ".env.example";
 

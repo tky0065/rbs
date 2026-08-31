@@ -15,7 +15,8 @@ use std::path::Path;
 
 use super::Check;
 
-const TITRE: &str = "gardes";
+/// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
+pub(crate) const TITRE: &str = "gardes";
 
 /// Signatures des trois handlers qui écrivent, telles que la template les rend.
 const ECRITURES: [&str; 3] = [

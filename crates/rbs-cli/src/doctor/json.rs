@@ -20,10 +20,6 @@ struct Document<'a> {
 }
 
 /// Rend le rapport en JSON, seul document de la sortie standard.
-///
-/// Le drapeau qui l'appelle depuis `rbs doctor` se câble dans une tâche ultérieure ; d'ici
-/// là, seuls les tests l'atteignent.
-#[allow(dead_code)]
 pub(crate) fn report(report: &Report) -> String {
     let document = Document {
         sain: report.succeeded(),
@@ -33,6 +29,20 @@ pub(crate) fn report(report: &Report) -> String {
     // Ni carte à clés non textuelles ni flottant : la sérialisation ne peut échouer que
     // sur un défaut de programmation, qu'il vaut mieux voir tomber ici.
     serde_json::to_string_pretty(&document).expect("le rapport se sérialise")
+}
+
+/// Le puits du mode `--json`, qui ne dit rien pendant le diagnostic.
+///
+/// La sortie standard ne doit porter que le document : une ligne de rapport ou une
+/// annonce d'attente y ferait échouer le premier `jq` venu.
+pub(crate) struct Muette;
+
+impl super::Sortie for Muette {
+    fn debut(&mut self, _titres: &[&'static str]) {}
+
+    fn annonce(&mut self, _titre: &'static str, _raison: &str) {}
+
+    fn constat(&mut self, _check: &Check) {}
 }
 
 #[cfg(test)]

@@ -95,7 +95,11 @@ pub enum Commands {
     Dev,
 
     /// Diagnostique le projet : ancres, .env, base joignable, versions.
-    Doctor,
+    Doctor {
+        /// Rend le rapport en JSON sur la sortie standard, pour un script ou une CI.
+        #[arg(long)]
+        json: bool,
+    },
 
     /// Aligne le manifeste du projet sur la version du CLI : rbs-core et les métadonnées.
     Upgrade {
