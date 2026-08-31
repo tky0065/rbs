@@ -347,6 +347,12 @@ fn suite(feature: &str) -> Option<&'static str> {
         // La table n'existe pas encore, et le worker démarre avec l'API : sans la
         // migration, chaque tour de boucle échoue sur une relation absente.
         "jobs" => Some("rbs migrate up, puis inscrivez vos jobs dans src/jobs/mod.rs"),
+        // La liste est vide à l'installation : sans ce rappel, le développeur croirait
+        // avoir monté du CORS alors qu'aucune origine n'est encore autorisée.
+        "cors" => Some(
+            "énumérez vos origines dans [cors] de config/default.toml — la liste est vide, \
+             donc aucune requête d'origine croisée ne passe",
+        ),
         _ => None,
     }
 }

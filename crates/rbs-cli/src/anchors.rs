@@ -87,6 +87,18 @@ pub(crate) const ROUTES: Anchor = Anchor {
     optional: false,
 };
 
+/// Middlewares qu'une feature empile sur le routeur.
+///
+/// Distincte de [`ROUTES`], bien qu'elles partagent leur fichier : une route se monte sur
+/// le routeur, une couche l'enveloppe, et l'endroit où l'une se déclare est précisément
+/// celui où l'autre n'aurait aucun effet.
+pub(crate) const LAYERS: Anchor = Anchor {
+    name: Cow::Borrowed("layers"),
+    file: Cow::Borrowed("src/router.rs"),
+    comment: "//",
+    optional: false,
+};
+
 /// Enregistrement des chemins d'une feature dans le document OpenAPI.
 pub(crate) const OPENAPI: Anchor = Anchor {
     name: Cow::Borrowed("openapi"),
@@ -195,9 +207,10 @@ pub(crate) const RELATED: Anchor = Anchor {
 ///
 /// La génération vise chaque ancre nommément ; `rbs doctor` parcourt cette liste pour
 /// vérifier qu'un projet les porte toutes.
-pub(crate) const ANCRES: [Anchor; 10] = [
+pub(crate) const ANCRES: [Anchor; 11] = [
     FEATURES,
     ROUTES,
+    LAYERS,
     OPENAPI,
     MIGRATION_MODULES,
     MIGRATIONS,
@@ -741,6 +754,17 @@ struct AppState {
         assert_eq!(SERVICES.comment, "#");
         assert!(SERVICES.optional);
         assert!(ANCRES.contains(&SERVICES));
+    }
+
+    /// Les deux ancres du routeur partagent leur fichier et ne se confondent pas : une
+    /// ligne montée dans `routes` n'enveloppe rien, une couche posée dans `layers`
+    /// n'expose aucune route.
+    #[test]
+    fn the_router_carries_the_routes_and_the_layers_anchors_apart() {
+        assert_eq!(LAYERS.file, ROUTES.file);
+        assert_ne!(LAYERS.name, ROUTES.name);
+        assert_eq!(LAYERS.opening(), "// <rbs:layers>");
+        assert!(ANCRES.contains(&LAYERS));
     }
 
     /// Une ancre optionnelle est l'exception : toutes les autres décrivent un fichier que

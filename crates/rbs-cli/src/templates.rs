@@ -727,7 +727,7 @@ mod tests {
         );
         // Énumérées une à une plutôt qu'en un bloc : la liste s'allonge à chaque fragment
         // livré, et l'ordre alphabétique intercale les nouveaux venus.
-        for installable in ["auth", "ci", "docker", "mail", "redis", "storage"] {
+        for installable in ["auth", "ci", "cors", "docker", "mail", "redis", "storage"] {
             assert!(
                 error.to_string().contains(installable),
                 "le message n'énumère pas `{installable}` : {error}"

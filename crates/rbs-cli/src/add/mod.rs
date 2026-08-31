@@ -831,6 +831,87 @@ mod tests {
         assert!(compose.contains("- \"1025:1025\""), "{compose}");
     }
 
+    /// Le corps d'une ancre dans le contenu que le plan projette pour son fichier.
+    fn anchor_body<'plan>(planned: &'plan Planned, anchor: &crate::anchors::Anchor) -> &'plan str {
+        let source = projected(planned, anchor.file.as_ref());
+
+        source
+            .split_once(&anchor.opening())
+            .and_then(|(_, apres)| apres.split_once(&anchor.closing()))
+            .map(|(dedans, _)| dedans)
+            .unwrap_or_else(|| panic!("{} ne porte pas {}", anchor.file, anchor.name))
+    }
+
+    /// Une couche se pose dans `layers`, jamais dans `routes` : montée parmi les routes,
+    /// elle n'envelopperait rien.
+    #[test]
+    fn the_cors_plan_lands_its_layer_in_the_layers_anchor() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "cors")).expect("le plan doit se calculer");
+
+        assert_eq!(
+            planned.files,
+            ["src/cors/mod.rs", "src/cors/config.rs", "src/cors/tests.rs"]
+        );
+        assert!(
+            anchor_body(&planned, &crate::anchors::LAYERS).contains(".layer(crate::cors::layer())"),
+            "{}",
+            projected(&planned, "src/router.rs")
+        );
+        assert!(
+            !anchor_body(&planned, &crate::anchors::ROUTES).contains("cors"),
+            "la couche s'est montée parmi les routes"
+        );
+
+        let manifeste = projected(&planned, "Cargo.toml");
+        assert!(
+            manifeste.contains("tower-http = { version = \"0.7\", features = [\"cors\"] }"),
+            "{manifeste}"
+        );
+    }
+
+    /// Le critère de la tâche : le défaut n'ouvre l'API à personne. Un `Any` en dur serait
+    /// le pendant exact du trou que la limite de débit vient boucher.
+    #[test]
+    fn the_cors_plan_authorises_no_origin_by_default() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "cors")).expect("le plan doit se calculer");
+        let configuration = projected(&planned, "config/default.toml");
+
+        assert!(configuration.contains("origins = []"), "{configuration}");
+        assert!(
+            configuration.contains("credentials = false"),
+            "{configuration}"
+        );
+    }
+
+    /// Le critère du lot : une ancre absente n'est pas contournée, et le bloc à recoller
+    /// s'affiche. `layers` est neuve, et tout projet antérieur en est dépourvu.
+    #[test]
+    fn a_project_without_the_layers_anchor_refuses_and_shows_the_block() {
+        let (_parent, root) = project();
+        let router = root.join("src/router.rs");
+        let ampute: String = fs::read_to_string(&router)
+            .expect("router.rs lisible")
+            .lines()
+            .filter(|line| !line.contains("rbs:layers"))
+            .map(|line| format!("{line}\n"))
+            .collect();
+        fs::write(&router, ampute).expect("router.rs inscriptible");
+        let before = fingerprint(&root);
+
+        let error = run(&options(&root, "cors")).expect_err("l'ancre manque : refuser");
+
+        let remedy = error
+            .remedy()
+            .unwrap_or_else(|| panic!("aucun bloc à coller pour : {error}"));
+        assert!(remedy.contains("// <rbs:layers>"), "{remedy}");
+        assert!(remedy.contains("src/router.rs"), "{remedy}");
+        assert_eq!(fingerprint(&root), before, "rien ne devait s'écrire");
+    }
+
     #[test]
     fn planning_does_not_modify_the_project_directory() {
         let (_parent, root) = project();

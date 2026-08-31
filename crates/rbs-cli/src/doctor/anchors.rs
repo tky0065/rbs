@@ -158,6 +158,32 @@ mod tests {
         );
     }
 
+    /// Les deux ancres du routeur se contrôlent séparément : une couche insérée dans
+    /// `routes` n'envelopperait rien, et le diagnostic doit nommer celle qui manque.
+    #[test]
+    fn the_layers_anchor_is_claimed_on_its_own() {
+        let (_parent, root) = project();
+        remove(&root, "src/router.rs", "<rbs:layers>");
+        remove(&root, "src/router.rs", "</rbs:layers>");
+
+        let check = check(&root);
+
+        assert_eq!(check.state, State::Echec);
+        assert!(
+            check.detail.contains("layers manque dans src/router.rs"),
+            "{}",
+            check.detail
+        );
+        assert!(
+            !check.detail.contains("routes manque"),
+            "l'autre ancre du fichier est intacte : {}",
+            check.detail
+        );
+
+        let remedy = check.remedy.expect("un échec porte son remède");
+        assert!(remedy.contains("// <rbs:layers>"), "{remedy}");
+    }
+
     #[test]
     fn an_anchor_missing_its_closing_counts_as_absent() {
         let (_parent, root) = project();
@@ -205,8 +231,8 @@ mod tests {
 
         assert_eq!(check.state, State::Bon, "{check:?}");
         assert!(
-            check.detail.contains('9'),
-            "seules les neuf ancres applicables comptent : {}",
+            check.detail.contains(&(ANCRES.len() - 1).to_string()),
+            "l'ancre du compose ne compte pas parmi les applicables : {}",
             check.detail
         );
     }
