@@ -9,7 +9,7 @@ use sea_orm::DatabaseConnection;
 use sea_orm::prelude::Uuid;
 
 use super::dto::{LoginRequest, RefreshRequest, RegisterRequest, TokenPair, UserResponse};
-use super::repository::{self, Model};
+use super::repository::{self, ADRESSE_PRISE, Model};
 
 /// Le hash vérifié quand l'adresse est inconnue.
 ///
@@ -23,10 +23,7 @@ static HASH_DE_COMPARAISON: LazyLock<String> = LazyLock::new(|| {
 
 pub async fn register(db: &DatabaseConnection, input: RegisterRequest) -> Result<UserResponse> {
     if repository::find_by_email(db, &input.email).await?.is_some() {
-        return Err(Error::Conflict(format!(
-            "l'adresse {} est déjà inscrite",
-            input.email
-        )));
+        return Err(Error::Conflict(ADRESSE_PRISE.to_owned()));
     }
 
     let hash = hash::hash_password(&input.password)?;
@@ -78,6 +75,20 @@ pub async fn refresh(
     // Rien ici ne relit `revoked_at` : c'est `consume` qui porte la condition, et elle
     // seule peut la porter sans laisser passer deux rafraîchissements concurrents.
     if !repository::consume(db, session.id).await? {
+        // La ligne existe et était déjà fermée : ce jeton a servi deux fois. L'un de ses
+        // deux porteurs n'est pas le titulaire du compte, et rien ne dit lequel — un
+        // jeton volé et joué avant la rotation légitime laisserait sinon le voleur avec
+        // une paire valide, renouvelée indéfiniment. Tout le compte se reconnecte.
+        let fermees = repository::revoke_sessions_of(db, session.user_id).await?;
+
+        // Ni l'adresse ni le jeton : le journal ne porte pas ce que la réponse tait, et
+        // l'identifiant du compte suffit à retrouver ce qui s'est passé.
+        tracing::warn!(
+            user_id = %session.user_id,
+            sessions_revoquees = fermees,
+            "jeton de rafraîchissement rejoué : les sessions du compte sont révoquées"
+        );
+
         return Err(Error::Unauthorized);
     }
 
@@ -96,7 +107,9 @@ pub async fn logout(db: &DatabaseConnection, input: RefreshRequest) -> Result<()
         .ok_or(Error::Unauthorized)?;
 
     // La session ferme la ligne présentée, et elle seule : les autres appareils du même
-    // compte gardent la leur. Un jeton déjà fermé ne l'est pas deux fois.
+    // compte gardent la leur. Un jeton déjà fermé ne l'est pas deux fois, et ne fait pas
+    // tomber le compte comme un rafraîchissement rejoué : redemander une déconnexion est
+    // le fait d'un client qui réessaie, non celui d'un jeton qui circule.
     if !repository::consume(db, session.id).await? {
         return Err(Error::Unauthorized);
     }

@@ -17,17 +17,29 @@ const TESTS: &str = include_str!(concat!(
 ));
 
 /// Rend les tests d'intégration HTTP de `feature`.
+///
+/// Une référence requise écarte les scénarios qui créent : ils POSTeraient un identifiant
+/// inventé dans une colonne sous contrainte de clé étrangère, et rendraient 500 dès la
+/// première exécution. Le fichier garde ce qui ne crée rien, et dit ce qui manque — le
+/// seed s'écarte entièrement pour la même raison.
 pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
-    let fields: Vec<TestField> = feature.fields.iter().map(TestField::from).collect();
+    let blocking = feature.required_reference();
+    let creatable = blocking.is_none();
+    // Sans création, aucun champ n'est envoyé ni comparé : les aides qui les servent
+    // resteraient inutilisées, et le projet engendré ne compile pas sous `-D warnings`.
+    let sent: &[Field] = if creatable { &feature.fields } else { &[] };
+    let fields: Vec<TestField> = sent.iter().map(TestField::from).collect();
 
     Renderer::new().render(
         TESTS,
         context! {
             module => feature.module(),
+            creatable,
+            blocking_reference => blocking.map(|field| field.relation_name()),
             fields => fields,
-            compared => names(&feature.fields, |champ| !timestamp(champ)),
-            timestamped => names(&feature.fields, timestamp),
-            suffix => feature.fields.iter().any(textual),
+            compared => names(sent, |champ| !timestamp(champ)),
+            timestamped => names(sent, timestamp),
+            suffix => sent.iter().any(textual),
         },
     )
 }
@@ -55,6 +67,13 @@ impl TestField {
 /// Les valeurs textuelles portent un suffixe tiré au sort : sans lui, un champ `unique`
 /// ferait échouer la seconde exécution des tests sur la première ligne restée en base.
 fn value(champ: &Field, mark: &str) -> String {
+    // Une référence optionnelle part à `null` : un identifiant tiré au hasard ne désigne
+    // aucune ligne de la table visée, et la clé étrangère refuserait la création. Une
+    // référence requise n'arrive jamais ici — elle a déjà écarté les scénarios qui créent.
+    if champ.reference().is_some() {
+        return "Value::Null".to_string();
+    }
+
     match champ.column_type() {
         FieldType::String | FieldType::Text if champ.validates_email() => {
             format!("format!(\"{}-{mark}{{suffix}}@example.com\")", champ.name)
@@ -291,10 +310,10 @@ mod tests {
     /// de champ `author`, seulement `author_id`.
     #[test]
     fn a_reference_is_named_by_its_column_not_its_relation_name() {
-        let rendered = trials("posts", "author:references:users");
+        let rendered = trials("posts", "author:references:users:optional");
 
         assert!(
-            rendered.contains(r#""author_id": Uuid::new_v4().to_string(),"#),
+            rendered.contains(r#""author_id": Value::Null,"#),
             "la colonne doit être nommée « author_id » :\n{rendered}"
         );
         assert!(
@@ -304,6 +323,87 @@ mod tests {
         assert!(
             !rendered.contains(r#""author":"#),
             "le nom déclaré ne doit pas fuir :\n{rendered}"
+        );
+    }
+
+    /// Un identifiant tiré au hasard ne désigne aucune ligne de la table visée : la clé
+    /// étrangère refuserait la création, et le test rendrait 500 au lieu de 201.
+    #[test]
+    fn an_optional_reference_is_sent_null_rather_than_at_random() {
+        let rendered = trials("posts", "title:string,author:references:users:optional");
+
+        assert!(
+            !rendered.contains(r#""author_id": Uuid::new_v4()"#),
+            "un identifiant inventé violerait la clé étrangère :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(r#""author_id": Value::Null,"#),
+            "la référence optionnelle part à null :\n{rendered}"
+        );
+    }
+
+    /// Une référence requise ne peut pas partir à `null` : les scénarios qui créent sont
+    /// écartés, et le fichier dit lequel des champs les a écartés.
+    #[test]
+    fn a_required_reference_drops_the_scenarios_that_create() {
+        let rendered = trials("posts", "title:string,author:references:users");
+
+        for absent in [
+            "async fn the_full_lifecycle_goes_through_the_api()",
+            "async fn two_creations_in_a_row_carry_increasing_ids()",
+            "fn creation()",
+            "fn modification()",
+            "fn request(",
+            "fn compare(",
+        ] {
+            assert!(
+                !rendered.contains(absent),
+                "« {absent} » suppose une création :\n{rendered}"
+            );
+        }
+
+        for present in [
+            "async fn an_unknown_id_returns_404()",
+            "async fn an_unreadable_body_returns_400()",
+        ] {
+            assert!(
+                rendered.contains(present),
+                "« {present} » ne crée rien et doit rester :\n{rendered}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_required_reference_says_in_the_file_what_is_missing() {
+        let rendered = trials("posts", "title:string,author:references:users");
+
+        assert!(
+            rendered.contains("« author »"),
+            "la référence qui bloque doit être nommée :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("// "),
+            "l'explication doit tenir en commentaire :\n{rendered}"
+        );
+    }
+
+    /// Le fichier réduit reste compilable : `json!` n'y sert plus, et un import inutilisé
+    /// ferait échouer le `cargo test` du projet engendré sous `-D warnings`.
+    #[test]
+    fn the_reduced_file_imports_only_what_it_uses() {
+        let rendered = trials("posts", "title:string,author:references:users");
+
+        assert!(
+            !rendered.contains("json!"),
+            "plus aucun corps n'est construit :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("use serde_json::Value;"),
+            "`Value` sert encore au retour de `call` :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("use uuid::Uuid;"),
+            "`Uuid` sert encore au scénario 404 :\n{rendered}"
         );
     }
 

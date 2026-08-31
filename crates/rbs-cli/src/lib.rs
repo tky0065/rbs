@@ -208,7 +208,7 @@ fn create_project(
     for pose in &project.installed {
         let migration = if pose.migration { ", 1 migration" } else { "" };
         ui::info(&format!(
-            "  + {:<8} {}{migration}",
+            "  + {:<10} {}{migration}",
             pose.name,
             ui::files(pose.files)
         ));
@@ -285,7 +285,18 @@ fn add(feature: String, force: bool, template_dir: Option<PathBuf>) -> Result<()
         return Ok(());
     }
 
-    ui::info(&format!("{feature} : {}\n", planned.description));
+    ui::info(&format!("{feature} : {}", planned.description));
+
+    // Annoncé avant le plan et non après : ce que l'utilisateur n'a pas nommé, il doit le
+    // lire au moment où il décide d'appliquer, pas une fois les fichiers écrits.
+    if !planned.entrainees.is_empty() {
+        ui::info(&format!(
+            "{feature} exige {} : posée avec elle",
+            planned.entrainees.join(", ")
+        ));
+    }
+
+    println!();
     println!("{}", plan::render::plan(&planned.plan));
 
     signaler_zone_manquante(planned.zone_manquante.as_ref());
@@ -347,6 +358,19 @@ fn suite(feature: &str) -> Option<&'static str> {
         // La table n'existe pas encore, et le worker démarre avec l'API : sans la
         // migration, chaque tour de boucle échoue sur une relation absente.
         "jobs" => Some("rbs migrate up, puis inscrivez vos jobs dans src/jobs/mod.rs"),
+        // La liste est vide à l'installation : sans ce rappel, le développeur croirait
+        // avoir monté du CORS alors qu'aucune origine n'est encore autorisée.
+        "cors" => Some(
+            "énumérez vos origines dans [cors] de config/default.toml — la liste est vide, \
+             donc aucune requête d'origine croisée ne passe",
+        ),
+        // Le compteur ne voit un client que si le serveur lui donne son adresse : un
+        // projet derrière un proxy compte tout le monde ensemble tant que le drapeau
+        // n'est pas levé.
+        "rate-limit" => Some(
+            "derrière un reverse proxy, passez rate_limit.trust_forwarded_for à true — \
+             sinon tous les clients partagent l'adresse du proxy",
+        ),
         _ => None,
     }
 }
@@ -387,12 +411,14 @@ fn generate(
         ui::warn(avertissement);
     }
 
-    // Un fichier qui n'apparaît pas dans le plan doit se justifier : sans cette ligne,
-    // l'absence du seed se découvrirait en cherchant un fichier qui n'a jamais existé.
-    if let Some(relation) = &planned.seed_skipped {
+    // Ce qui n'apparaît pas dans le plan doit se justifier : sans cette ligne, l'absence
+    // du seed se découvrirait en cherchant un fichier qui n'a jamais existé, et celle des
+    // scénarios de création en lisant les tests.
+    if let Some(relation) = &planned.required_reference {
         ui::info(&format!(
-            "\n  aucun seed pour {feature} : la référence « {relation} » est requise, et un \
-             seed ne peut pas deviner vers quelle ligne pointer"
+            "\n  la référence « {relation} » est requise : ni le seed de {feature} ni ses \
+             scénarios de création ne peuvent deviner vers quelle ligne pointer — le seed \
+             n'est pas engendré, et les tests s'arrêtent aux cas qui ne créent rien"
         ));
     }
 

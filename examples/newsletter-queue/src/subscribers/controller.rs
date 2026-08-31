@@ -34,7 +34,8 @@ pub async fn list(
     request_body = CreateSubscriber,
     responses(
         (status = 201, description = "subscriber créé", body = SubscriberResponse),
-        (status = 400, description = "corps illisible", body = ProblemDetails, content_type = "application/problem+json")
+        (status = 400, description = "corps illisible", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 409, description = "valeur déjà prise sur une colonne unique", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn create(
@@ -96,7 +97,8 @@ pub async fn find(
     request_body = UpdateSubscriber,
     responses(
         (status = 200, description = "subscriber mis à jour", body = SubscriberResponse),
-        (status = 404, description = "subscriber introuvable", body = ProblemDetails, content_type = "application/problem+json")
+        (status = 404, description = "subscriber introuvable", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 409, description = "valeur déjà prise sur une colonne unique", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn update(

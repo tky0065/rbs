@@ -1,7 +1,9 @@
-use rbs_core::{Pagination, Result};
+use rbs_core::{Error, Pagination, Result};
+use sea_orm::error::SqlErr;
 use sea_orm::prelude::Uuid;
 use sea_orm::{
-    ActiveModelTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryOrder, QuerySelect,
+    ActiveModelTrait, DatabaseConnection, DbErr, EntityTrait, PaginatorTrait, QueryOrder,
+    QuerySelect,
 };
 
 use super::model::{Column, Entity};
@@ -11,9 +13,12 @@ use super::model::{Column, Entity};
 pub use super::model::{ActiveModel, Model};
 
 pub async fn list(db: &DatabaseConnection, pagination: &Pagination) -> Result<(Vec<Model>, u64)> {
-    let total = Entity::find().count(db).await?;
+    // Le total compte toute la table : l'attendre avant la page ferait deux allers-retours
+    // en série à chaque appel. Les deux partent donc ensemble — `max_connections` vaut 10
+    // dans config/default.toml, le pool en sert bien deux à la fois.
+    let total = async { Entity::find().count(db).await.map_err(Error::from) };
 
-    Ok((page(db, pagination).await?, total))
+    Ok(tokio::try_join!(page(db, pagination), total)?)
 }
 
 // La page sans son total : l'appelant qui tient déjà le compte — du cache, par exemple —
@@ -34,15 +39,29 @@ pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>> {
 }
 
 pub async fn create(db: &DatabaseConnection, upload: ActiveModel) -> Result<Model> {
-    Ok(upload.insert(db).await?)
+    upload.insert(db).await.map_err(conflict_on_duplicate)
 }
 
 pub async fn update(db: &DatabaseConnection, upload: ActiveModel) -> Result<Model> {
-    Ok(upload.update(db).await?)
+    upload.update(db).await.map_err(conflict_on_duplicate)
 }
 
 pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
     let effet = Entity::delete_by_id(id).exec(db).await?;
 
     Ok(effet.rows_affected > 0)
+}
+
+/// Une valeur déjà prise sur une colonne `unique` est une faute du client, pas une panne :
+/// sans cette traduction, le doublon remonterait en erreur interne, donc en 500.
+///
+/// Le message reste générique — la base nomme la contrainte, pas la colonne. Précisez-le
+/// si votre API doit dire laquelle.
+fn conflict_on_duplicate(error: DbErr) -> Error {
+    match error.sql_err() {
+        Some(SqlErr::UniqueConstraintViolation(_)) => {
+            Error::Conflict("cette valeur est déjà prise".to_owned())
+        }
+        _ => Error::from(error),
+    }
 }

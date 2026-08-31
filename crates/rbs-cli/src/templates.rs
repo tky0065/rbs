@@ -297,13 +297,14 @@ mod tests {
     ///
     /// `docker-compose.yml` en fait partie : la source les rend tous, et c'est `rbs new`
     /// qui l'écarte pour un projet qui n'a rien à monter.
-    const DESTINATIONS: [&str; 18] = [
+    const DESTINATIONS: [&str; 19] = [
         ".env",
         ".env.example",
         ".gitignore",
         "Cargo.toml",
         "config/default.toml",
         "config/development.toml",
+        "config/production.toml",
         "docker-compose.yml",
         "migration/Cargo.toml",
         "migration/src/lib.rs",
@@ -633,16 +634,22 @@ mod tests {
     const RACINE_FEATURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/features");
 
     /// Les chemins de sortie attendus de `docker`, tels que `rbs add docker` les écrira.
-    const DESTINATIONS_DOCKER: [&str; 3] = [".dockerignore", "Dockerfile", "docker-compose.yml"];
+    const DESTINATIONS_DOCKER: [&str; 4] = [
+        ".dockerignore",
+        "Dockerfile",
+        "config/production.toml",
+        "docker-compose.yml",
+    ];
 
     /// Contexte de rendu d'un fragment : les deux variables qu'un projet existant fournit.
     /// Le contexte que `add::plan_for` construit, recopié ici.
-    fn feature_context() -> Value {
+    fn feature_context(installees: &[&str]) -> Value {
         let database = Database::default();
 
         context! {
             project_name => "mon-api",
             crate_name => "mon_api",
+            features => installees,
             database => database.name(),
             database_a_un_serveur => database.a_un_serveur(),
             database_url_compose => database.compose_url("mon_api"),
@@ -727,7 +734,16 @@ mod tests {
         );
         // Énumérées une à une plutôt qu'en un bloc : la liste s'allonge à chaque fragment
         // livré, et l'ordre alphabétique intercale les nouveaux venus.
-        for installable in ["auth", "ci", "docker", "mail", "redis", "storage"] {
+        for installable in [
+            "auth",
+            "ci",
+            "cors",
+            "docker",
+            "mail",
+            "rate-limit",
+            "redis",
+            "storage",
+        ] {
             assert!(
                 error.to_string().contains(installable),
                 "le message n'énumère pas `{installable}` : {error}"
@@ -771,17 +787,25 @@ mod tests {
         }
     }
 
+    /// Deux projets, non un : une template qui se branche sur les features déjà posées —
+    /// le compteur de `rate-limit`, distribué ou en mémoire — a deux rendus, et celui
+    /// qu'on n'exerce pas est celui qui casse.
     #[test]
     fn each_feature_template_renders_with_its_context() {
         let renderer = Renderer::new();
 
-        for path in feature_templates() {
-            let source = read(&path);
-            renderer
-                .render(&source, feature_context())
-                .unwrap_or_else(|error| {
-                    panic!("{} ne se rend pas : {error}", path.display());
-                });
+        for installees in [&[][..], &["redis"][..]] {
+            for path in feature_templates() {
+                let source = read(&path);
+                renderer
+                    .render(&source, feature_context(installees))
+                    .unwrap_or_else(|error| {
+                        panic!(
+                            "{} ne se rend pas sur {installees:?} : {error}",
+                            path.display()
+                        );
+                    });
+            }
         }
     }
 
@@ -811,6 +835,83 @@ mod tests {
         }
     }
 
+    /// L'appel qui commence à `debut`, refermé sur sa parenthèse ouvrante.
+    ///
+    /// Une fenêtre d'un nombre fixe de caractères déborderait sur le code d'après, où
+    /// l'adresse a toute sa place.
+    fn call_at(source: &str, debut: usize) -> String {
+        let mut profondeur = 0_usize;
+        let mut appel = String::new();
+
+        for caractere in source[debut..].chars() {
+            appel.push(caractere);
+
+            match caractere {
+                '(' => profondeur += 1,
+                ')' if profondeur <= 1 => break,
+                ')' => profondeur -= 1,
+                _ => {}
+            }
+        }
+
+        appel
+    }
+
+    /// Un 409 qui cite l'adresse la confirme à qui l'a soumise, dans la réponse comme
+    /// dans le journal : l'inscription devient l'oracle d'énumération que le hash témoin
+    /// de `login` écarte de l'autre côté.
+    #[test]
+    fn no_conflict_of_the_auth_fragment_echoes_the_address_it_refuses() {
+        for fichier in ["service.rs.jinja", "repository.rs.jinja"] {
+            let source = read(&Path::new(RACINE_FEATURES).join("auth").join(fichier));
+
+            for (debut, _) in source.match_indices("Error::Conflict") {
+                let construction = call_at(&source, debut);
+
+                assert!(
+                    !construction.contains("email"),
+                    "{fichier} répète l'adresse refusée dans son 409 :\n{construction}"
+                );
+            }
+        }
+    }
+
+    /// Un jeton rejoué a fuité : révoquer la seule ligne présentée laisse celui qui a
+    /// devancé la rotation légitime avec une paire valide, renouvelée indéfiniment.
+    #[test]
+    fn a_replayed_refresh_closes_every_session_of_the_account() {
+        let repository = read(&Path::new(RACINE_FEATURES).join("auth/repository.rs.jinja"));
+        let service = read(&Path::new(RACINE_FEATURES).join("auth/service.rs.jinja"));
+
+        assert!(
+            repository.contains("pub async fn revoke_sessions_of("),
+            "le repository n'offre aucun moyen de fermer les sessions d'un compte :\n{repository}"
+        );
+        assert!(
+            service.contains("repository::revoke_sessions_of("),
+            "le service laisse les sessions sœurs ouvertes après un rejeu :\n{service}"
+        );
+    }
+
+    /// La réutilisation détectée est un signal de sécurité, pas un incident muet — et le
+    /// journal ne porte pas ce que la réponse tait.
+    #[test]
+    fn the_replay_is_logged_without_the_address_nor_the_token() {
+        let service = read(&Path::new(RACINE_FEATURES).join("auth/service.rs.jinja"));
+
+        let debut = service
+            .find("tracing::warn!")
+            .expect("un jeton rejoué doit laisser une trace");
+        let alerte = call_at(&service, debut);
+
+        for interdit in ["email", "refresh_token"] {
+            assert!(
+                !alerte.contains(interdit),
+                "l'alerte de rejeu porte `{interdit}` :\n{alerte}"
+            );
+        }
+    }
+
     #[test]
     fn the_jobs_fragment_carries_both_anchors() {
         let source = read(&Path::new(RACINE_FEATURES).join("jobs/model.rs.jinja"));
@@ -830,6 +931,40 @@ mod tests {
     /// Renversement assumé de la décision inverse : le compose ne publiait pas 5432
     /// parce que l'API l'atteignait par le réseau du compose. Le compose du squelette
     /// sert `cargo run` sur l'hôte, qui ne l'atteint que par un port publié.
+    /// Les docs sont exposées par défaut, ce qu'un projet en cours d'écriture veut ; un
+    /// déploiement, non. Sans ce profil, la décision n'a nulle part où s'écrire, et tout
+    /// `docker compose --profile app up` publie `/docs` et le document.
+    #[test]
+    fn the_production_profile_closes_the_docs() {
+        let source = read(&Path::new(RACINE).join("config/production.toml.jinja"));
+
+        assert!(
+            source.contains("[docs]"),
+            "le profil de production ne dit rien des docs :\n{source}"
+        );
+        for reglage in ["swagger_ui = false", "openapi_json = false"] {
+            assert!(
+                source.contains(reglage),
+                "`{reglage}` manque au profil de production :\n{source}"
+            );
+        }
+    }
+
+    /// Le profil existe en deux exemplaires qui doivent rester identiques : celui du
+    /// squelette, et celui que le fragment `docker` dépose sur un projet créé avant lui —
+    /// sans quoi le `RBS_ENV=production` du compose désignerait un fichier absent, et
+    /// l'API publierait la documentation que ce profil coupe.
+    #[test]
+    fn the_production_profile_of_the_docker_fragment_matches_the_skeleton() {
+        let squelette = read(&Path::new(RACINE).join("config/production.toml.jinja"));
+        let repli = read(&Path::new(RACINE_FEATURES).join("docker/config/production.toml.jinja"));
+
+        assert_eq!(
+            squelette, repli,
+            "le profil du fragment docker diverge de celui du squelette"
+        );
+    }
+
     #[test]
     fn the_project_compose_publishes_the_database_port() {
         let source = read(&Path::new(RACINE).join("docker-compose.yml.jinja"));

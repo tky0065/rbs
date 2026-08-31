@@ -1,0 +1,45 @@
+[feature]
+description = "CORS : origines, méthodes et en-têtes autorisés, énumérés par la configuration"
+
+[[files]]
+source      = "mod.rs.jinja"
+destination = "src/cors/mod.rs"
+
+[[files]]
+source      = "config.rs.jinja"
+destination = "src/cors/config.rs"
+
+[[files]]
+source      = "tests.rs.jinja"
+destination = "src/cors/tests.rs"
+
+[[anchors]]
+anchor  = "features"
+content = "pub mod cors;"
+
+[[anchors]]
+anchor  = "layers"
+content = ".layer(crate::cors::layer())"
+
+[[dependencies]]
+name     = "tower-http"
+version  = "0.7"
+features = ["cors"]
+
+[[dependencies]]
+name    = "thiserror"
+version = "2.0"
+
+# Liste vide et non `Any` : une API qui n'énumère pas ses clients n'a aucune raison
+# d'en autoriser un. Le développeur y écrit les origines de son front, et lui seul
+# décide d'y mettre `"*"` — que le code refuse alors de combiner avec `credentials`.
+[[config]]
+file    = "config/default.toml"
+section = "cors"
+content = """
+origins = []
+methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+headers = ["authorization", "content-type"]
+credentials = false
+max_age_secs = 3600
+"""

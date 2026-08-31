@@ -152,7 +152,7 @@ rbs keeps state about a project:
 
 ```text
 [package.metadata.rbs]
-version = "1.0.0"
+version = "1.1.0"
 features = ["health"]
 database = "postgres"
 lang = "fr"
@@ -340,7 +340,7 @@ volumes:
 ```
 
 `docker compose up -d` starts it. The `# <rbs:services>` anchor is where [`rbs
-add`](./add.md) inserts the services `docker` brings, and it is one of the ten anchors
+add`](./add.md) inserts the services `docker` brings, and it is one of the eleven anchors
 [`rbs doctor`](./doctor.md) checks — nine on a project with no compose to carry a tenth.
 
 Four cases write nothing:

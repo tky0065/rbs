@@ -52,7 +52,7 @@ pub enum Commands {
         lang: Option<crate::lang::Lang>,
     },
 
-    /// Ajoute une feature : auth, ci, docker, jobs, mail, redis, storage.
+    /// Ajoute une feature : auth, ci, cors, docker, jobs, mail, rate-limit, redis, storage.
     Add {
         /// Feature à installer.
         feature: String,

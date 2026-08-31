@@ -47,8 +47,9 @@ src/<name>/  mod · model · dto · repository · service · controller
 controller → service → repository → model
 ```
 
-The dependency is one-directional and strict: a `service` never touches
-`DatabaseConnection`, a `controller` never builds a SeaORM query. `rbs generate crud` adds
+The dependency is one-directional and strict: a `service` never reaches for
+`DatabaseConnection` *itself* — it receives it and hands it to the `repository`, the only
+layer that builds a SeaORM query; a `controller` never builds one. `rbs generate crud` adds
 a `tests.rs` to those six files and, when the entity can be seeded, the seed
 `src/seeds/<name>.rs`. A feature file past ~200 lines is a sign that the feature should be
 split.

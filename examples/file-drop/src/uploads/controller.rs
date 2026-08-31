@@ -36,7 +36,8 @@ pub async fn list(
     request_body = CreateUpload,
     responses(
         (status = 201, description = "upload créé", body = UploadResponse),
-        (status = 400, description = "corps illisible", body = ProblemDetails, content_type = "application/problem+json")
+        (status = 400, description = "corps illisible", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 409, description = "valeur déjà prise sur une colonne unique", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn create(
@@ -75,7 +76,8 @@ pub async fn find(
     request_body = UpdateUpload,
     responses(
         (status = 200, description = "upload mis à jour", body = UploadResponse),
-        (status = 404, description = "upload introuvable", body = ProblemDetails, content_type = "application/problem+json")
+        (status = 404, description = "upload introuvable", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 409, description = "valeur déjà prise sur une colonne unique", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn update(

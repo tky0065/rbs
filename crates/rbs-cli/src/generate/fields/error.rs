@@ -20,17 +20,36 @@ pub(crate) struct FieldError {
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) enum ErrorKind {
     InvalidForm,
-    NotSnakeCase { suggestion: Option<String> },
-    RustKeyword { suggestions: Vec<String> },
+    NotSnakeCase {
+        suggestion: Option<String>,
+    },
+    RustKeyword {
+        suggestions: Vec<String>,
+    },
     ReservedName,
     MigrationNameCollision,
-    DuplicateName { previous_rank: usize },
-    UnknownType { name: String },
-    UnknownModifier { name: String },
-    DuplicateModifier { name: String },
+    DuplicateName {
+        previous_rank: usize,
+    },
+    DuplicateColumn {
+        previous_rank: usize,
+        previous_label: String,
+        column: String,
+    },
+    UnknownType {
+        name: String,
+    },
+    UnknownModifier {
+        name: String,
+    },
+    DuplicateModifier {
+        name: String,
+    },
     RedundantIndex,
     MissingTarget,
-    DerivedColumnName { suggestion: String },
+    DerivedColumnName {
+        suggestion: String,
+    },
     NullifyWithoutOptional,
     ConflictingOnDelete,
     RedundantIndexOnReference,
@@ -52,6 +71,14 @@ impl ErrorKind {
             Self::DuplicateName { previous_rank } => {
                 format!("« {label} » est déjà déclaré au champ {previous_rank}")
             }
+            Self::DuplicateColumn {
+                previous_rank,
+                previous_label,
+                column,
+            } => format!(
+                "« {label} » et « {previous_label} » (champ {previous_rank}) donnent la même \
+                 colonne « {column} »"
+            ),
             Self::UnknownType { name } => format!("type inconnu « {name} »"),
             Self::UnknownModifier { name } => format!("modificateur inconnu « {name} »"),
             Self::DuplicateModifier { name } => {
@@ -89,6 +116,13 @@ impl ErrorKind {
             Self::DuplicateName { .. } => {
                 Some("un nom de champ ne peut apparaître qu'une fois".to_string())
             }
+            // Deux noms distincts qui se heurtent : sans la règle de dérivation, la
+            // collision est incompréhensible — rien dans la ligne écrite ne la montre.
+            Self::DuplicateColumn { .. } => Some(
+                "une référence nomme sa colonne d'après le nom déclaré, suffixé de « _id » : \
+                 renommez l'un des deux champs"
+                    .to_string(),
+            ),
             // `references` n'est pas de `FieldType::NAMES` : c'est un `FieldKind` à
             // part, qui attend une cible — l'énumérer nu laisserait croire à un type
             // sans argument, comme les sept autres.
@@ -294,6 +328,29 @@ mod tests {
         );
         assert!(
             text.contains("→ un nom de champ ne peut apparaître qu'une fois"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_duplicated_column_names_the_two_fields_and_the_derivation() {
+        let text = rendered(
+            ErrorKind::DuplicateColumn {
+                previous_rank: 1,
+                previous_label: "author_id".to_string(),
+                column: "author_id".to_string(),
+            },
+            "author",
+        );
+        assert!(
+            text.contains("« author » et « author_id » (champ 1) donnent la même colonne"),
+            "{text}"
+        );
+        assert!(text.contains("« author_id »"), "{text}");
+        assert!(
+            text.contains(
+                "une référence nomme sa colonne d'après le nom déclaré, suffixé de « _id »"
+            ),
             "{text}"
         );
     }

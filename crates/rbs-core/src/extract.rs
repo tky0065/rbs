@@ -145,7 +145,7 @@ mod tests {
         let status = response.status();
         let bytes = to_bytes(response.into_body(), usize::MAX)
             .await
-            .expect("body lisible");
+            .expect("corps lisible");
         let body = serde_json::from_slice(&bytes)
             .unwrap_or_else(|_| Value::String(String::from_utf8_lossy(&bytes).into_owned()));
 
@@ -212,7 +212,7 @@ mod tests {
         use sea_orm::DatabaseConnection;
         use tower::ServiceExt;
 
-        const SECRET: &str = "un secret de test qui porte au moins trente-deux bytes";
+        const SECRET: &str = "un secret de test qui porte au moins trente-deux octets";
 
         /// Expiration lointaine, pour les cas où la validité temporelle n'est pas le sujet.
         const LATER: i64 = 4_102_444_800;
@@ -303,7 +303,7 @@ mod tests {
                 .map(|value| value.to_str().expect("content-type ASCII").to_owned());
             let bytes = to_bytes(response.into_body(), usize::MAX)
                 .await
-                .expect("body lisible");
+                .expect("corps lisible");
 
             (
                 status,

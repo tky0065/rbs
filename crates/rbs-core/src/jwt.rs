@@ -90,7 +90,7 @@ pub fn verify(token: &str, secret: &str) -> Result<Claims, JwtError> {
 mod tests {
     use super::*;
 
-    const SECRET: &str = "un secret de test qui porte au moins trente-deux bytes";
+    const SECRET: &str = "un secret de test qui porte au moins trente-deux octets";
 
     /// Un jeu de claims complet, dont seule l'expiration varie d'un test à l'autre.
     fn claims(exp: i64) -> Claims {
@@ -159,7 +159,7 @@ mod tests {
 
         assert!(
             verify(&token, SECRET).is_err(),
-            "l'algorithme expected doit être imposé, pas lu dans l'en-tête"
+            "l'algorithme attendu doit être imposé, pas lu dans l'en-tête"
         );
     }
 }

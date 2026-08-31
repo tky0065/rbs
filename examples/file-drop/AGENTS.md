@@ -50,8 +50,9 @@ src/<nom>/  mod · model · dto · repository · service · controller
 controller → service → repository → model
 ```
 
-La dépendance est unidirectionnelle et stricte : un `service` n'accède jamais à
-`DatabaseConnection`, un `controller` ne construit jamais de requête SeaORM. `rbs generate
+La dépendance est unidirectionnelle et stricte : un `service` n'accède jamais
+*directement* à `DatabaseConnection` — il la reçoit et la passe au `repository`, seul à
+construire une requête SeaORM ; un `controller` n'en construit jamais. `rbs generate
 crud` ajoute à ces six fichiers un `tests.rs` et, quand l'entité est semable, le seed
 `src/seeds/<nom>.rs`. Un fichier de feature au-delà de ~200 lignes signale une feature à
 scinder.
@@ -64,6 +65,7 @@ faire.
 
 - `<rbs:features>` dans `src/lib.rs`
 - `<rbs:routes>` dans `src/router.rs`
+- `<rbs:layers>` dans `src/router.rs`
 - `<rbs:openapi>` dans `src/openapi.rs`
 - `<rbs:migration_modules>` dans `migration/src/lib.rs`
 - `<rbs:migrations>` dans `migration/src/lib.rs`
@@ -104,7 +106,7 @@ l'enchaîne.
 - rbs 1.1.0 · base postgres
 - Fragments installés : redis, mail, storage
 - Entités engendrées : uploads
-- Ancres du projet : features (src/lib.rs), routes (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml)
+- Ancres du projet : features (src/lib.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml)
 <!-- /rbs:inventory -->
 
 ## Notes du projet

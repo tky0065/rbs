@@ -9,8 +9,8 @@ modifier.
 
 ## Statut
 
-Version 1.0.0. Les cinq jalons de la feuille de route sont livrés — le socle,
-l'authentification, les intégrations, le confort, la stabilité — et
+Version 1.1.0. Les six jalons de la feuille de route sont livrés — le socle,
+l'authentification, les intégrations, le confort, la stabilité, les agents — et
 [`CHANGELOG.fr.md`](CHANGELOG.fr.md) dit ce que chacun apporte.
 
 **rbs suit le versionnage sémantique à partir de la 1.0.** L'API publique de `rbs-core` est

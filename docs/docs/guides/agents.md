@@ -141,7 +141,7 @@ failure does that.
 $ rbs doctor
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
      Running `target/debug/migration version`
-  ✓ ancres      les 10 points d'insertion sont en place
+  ✓ ancres      les 11 points d'insertion sont en place
   ! agents      écrit hors du CLI : webhooks
       légitime si rbs ne couvre pas ce code ; sinon, rbs generate le reprend
   ✓ relations   les modèles portent leurs ancres de relation

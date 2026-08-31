@@ -33,7 +33,8 @@ pub async fn list(
     request_body = CreateArticle,
     responses(
         (status = 201, description = "article créé", body = ArticleResponse),
-        (status = 400, description = "corps illisible", body = ProblemDetails, content_type = "application/problem+json")
+        (status = 400, description = "corps illisible", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 409, description = "valeur déjà prise sur une colonne unique", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn create(
@@ -73,7 +74,8 @@ pub async fn find(
     request_body = UpdateArticle,
     responses(
         (status = 200, description = "article mis à jour", body = ArticleResponse),
-        (status = 404, description = "article introuvable", body = ProblemDetails, content_type = "application/problem+json")
+        (status = 404, description = "article introuvable", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 409, description = "valeur déjà prise sur une colonne unique", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn update(

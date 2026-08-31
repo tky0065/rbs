@@ -17,6 +17,14 @@ source      = "docker-compose.yml.jinja"
 destination = "docker-compose.yml"
 if_absent   = true
 
+# Le service `api` retient le profil de production : un projet créé avant que le squelette
+# écrive ce fichier le recevrait sinon vide, et publierait la documentation que le profil
+# est justement là pour couper. Un projet qui a déjà le sien le garde.
+[[files]]
+source      = "config/production.toml.jinja"
+destination = "config/production.toml"
+if_absent   = true
+
 [[anchors]]
 anchor  = "services"
 content = """
@@ -42,6 +50,9 @@ api:
     # config/default.toml écoute sur 127.0.0.1, ce qui rend le conteneur injoignable
     # depuis l'hôte. L'environnement l'emporte sur le TOML.
     RBS_SERVER__HOST: 0.0.0.0
+    # Le profil retenu désigne config/production.toml, qui coupe `/docs` et le document
+    # OpenAPI : ce compose est le déploiement, et non le poste de travail.
+    RBS_ENV: production
     RBS_DATABASE__URL: {@ database_url_compose @}
     RBS_LOG_FORMAT: json
     RUST_LOG: info

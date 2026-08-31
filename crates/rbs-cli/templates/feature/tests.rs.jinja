@@ -1,7 +1,18 @@
+{%- if not creatable -%}
+// La création n'est pas exercée ici : « {@ blocking_reference @} » est une référence requise,
+// et ce fichier ne sait pas quelle ligne de la table visée désigner — un identifiant
+// inventé ferait refuser le POST par la clé étrangère. Créez la ligne cible, puis
+// écrivez la création et la mise à jour avec son identifiant.
+
+{% endif -%}
 use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
+{%- if creatable %}
 use serde_json::{Value, json};
+{%- else %}
+use serde_json::Value;
+{%- endif %}
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -38,6 +49,7 @@ async fn call(api: &Router, request: Request<Body>) -> (StatusCode, Value) {
     (status, body)
 }
 
+{% if creatable -%}
 fn request(method: &str, path: &str, body: Value) -> Request<Body> {
     Request::builder()
         .method(method)
@@ -47,6 +59,7 @@ fn request(method: &str, path: &str, body: Value) -> Request<Body> {
         .expect("requête bien formée")
 }
 
+{% endif -%}
 fn without_body(method: &str, path: &str) -> Request<Body> {
     Request::builder()
         .method(method)
@@ -69,6 +82,7 @@ fn filled(rendered: &Value, champ: &str) {
     assert!(!rendered[champ].is_null(), "« {champ} » absent de la réponse");
 }
 {% endif %}
+{%- if creatable %}
 {%- if suffix %}
 /// Corps de création dont les valeurs textuelles portent un suffixe tiré au sort.
 ///
@@ -195,7 +209,7 @@ async fn two_creations_in_a_row_carry_increasing_ids() {
     assert_eq!(premier.get_version_num(), 7, "{premier} n'est pas un UUIDv7");
     assert!(second > premier, "{second} ne suit pas {premier}");
 }
-
+{% endif %}
 #[tokio::test]
 async fn an_unknown_id_returns_404() {
     let api = application().await;

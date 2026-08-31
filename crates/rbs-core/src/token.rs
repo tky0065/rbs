@@ -55,7 +55,7 @@ mod tests {
             .decode(random())
             .expect("base64url sans remplissage");
 
-        assert!(bytes.len() >= 32, "obtenu : {} bytes", bytes.len());
+        assert!(bytes.len() >= 32, "obtenu : {} octets", bytes.len());
     }
 
     #[test]

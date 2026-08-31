@@ -38,7 +38,8 @@ pub async fn list(
         (status = 201, description = "post créé", body = PostResponse),
         (status = 400, description = "corps illisible", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
-        (status = 403, description = "réservé aux administrateurs", body = ProblemDetails, content_type = "application/problem+json")
+        (status = 403, description = "réservé aux administrateurs", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 409, description = "valeur déjà prise sur une colonne unique", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn create(
@@ -84,7 +85,8 @@ pub async fn find(
         (status = 200, description = "post mis à jour", body = PostResponse),
         (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "réservé aux administrateurs", body = ProblemDetails, content_type = "application/problem+json"),
-        (status = 404, description = "post introuvable", body = ProblemDetails, content_type = "application/problem+json")
+        (status = 404, description = "post introuvable", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 409, description = "valeur déjà prise sur une colonne unique", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn update(
