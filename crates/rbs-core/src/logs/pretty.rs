@@ -217,13 +217,13 @@ mod tests {
         let message = output
             .find("pool proche de la saturation")
             .expect("message absent");
-        let fields = output.find("actives=18").expect("fields absents");
+        let fields = output.find("actives=18").expect("champs absents");
 
         assert!(
             level < target && target < message && message < fields,
             "ordre inattendu : {output:?}"
         );
-        assert!(output.contains("max=20"), "field manquant : {output:?}");
+        assert!(output.contains("max=20"), "champ manquant : {output:?}");
     }
 
     #[test]
@@ -234,10 +234,10 @@ mod tests {
             tracing::error!(status = 422, "requête refusée");
         });
 
-        let champ_evenement = output.find("status=422").expect("field d'événement absent");
+        let champ_evenement = output.find("status=422").expect("champ d'événement absent");
         let champ_span = output
             .find("request_id=01JQ3F8K2P")
-            .expect("field de span absent");
+            .expect("champ de span absent");
 
         assert!(champ_evenement < champ_span, "ordre inattendu : {output:?}");
         assert!(

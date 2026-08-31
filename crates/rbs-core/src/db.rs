@@ -140,7 +140,7 @@ mod tests {
         let message = error.to_string();
         assert!(
             message.contains("database.url"),
-            "le message doit nommer le field à corriger, obtenu : {message}"
+            "le message doit nommer le champ à corriger, obtenu : {message}"
         );
     }
 
@@ -196,7 +196,7 @@ mod tests {
         let message = format!("{error} {error:?}");
         assert!(
             !message.contains("s3cr3t"),
-            "mot de passe divulgué dans l'error : {message}"
+            "mot de passe divulgué dans l'erreur : {message}"
         );
         assert!(
             message.contains("localhost"),

@@ -179,7 +179,7 @@ mod tests {
         assert_eq!(lines.len(), 3, "trois lines attendues : {output:?}");
         for line in lines {
             let objet: serde_json::Value = serde_json::from_str(line)
-                .unwrap_or_else(|e| panic!("line non JSON ({e}) : {line}"));
+                .unwrap_or_else(|e| panic!("ligne non JSON ({e}) : {line}"));
             for cle in ["ts", "level", "msg"] {
                 assert!(objet.get(cle).is_some(), "clé {cle} absente : {line}");
             }
@@ -191,7 +191,7 @@ mod tests {
         let output =
             render(|| tracing::error!(status = 422, latency_ms = 12.4, actif = true, "refus"));
 
-        let objet: serde_json::Value = serde_json::from_str(output.trim()).expect("line non JSON");
+        let objet: serde_json::Value = serde_json::from_str(output.trim()).expect("ligne non JSON");
         assert_eq!(objet["status"], serde_json::json!(422));
         assert_eq!(objet["latency_ms"], serde_json::json!(12.4));
         assert_eq!(objet["actif"], serde_json::json!(true));
@@ -206,7 +206,7 @@ mod tests {
             tracing::error!(status = 422, "requête refusée");
         });
 
-        let objet: serde_json::Value = serde_json::from_str(output.trim()).expect("line non JSON");
+        let objet: serde_json::Value = serde_json::from_str(output.trim()).expect("ligne non JSON");
         assert_eq!(objet["request_id"], serde_json::json!("01JQ3F8K2P"));
         assert_eq!(objet["status"], serde_json::json!(422));
     }

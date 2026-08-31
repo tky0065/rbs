@@ -157,9 +157,9 @@ mod tests {
         let status = response.status();
         let bytes = to_bytes(response.into_body(), usize::MAX)
             .await
-            .expect("body lisible");
+            .expect("corps lisible");
 
-        (status, serde_json::from_slice(&bytes).expect("body JSON"))
+        (status, serde_json::from_slice(&bytes).expect("corps JSON"))
     }
 
     #[tokio::test]

@@ -27,7 +27,7 @@ const NIVEAU_PAR_DEFAUT: &str = "info";
 #[non_exhaustive]
 pub enum LogError {
     /// Valeur de [`VARIABLE_FORMAT`] hors des formats connus.
-    #[error("`{VARIABLE_FORMAT}` porte une value invalide : `{0}` (expected `pretty` ou `json`)")]
+    #[error("`{VARIABLE_FORMAT}` porte une valeur invalide : `{0}` (attendu `pretty` ou `json`)")]
     FormatInconnu(String),
     /// Un abonné global est déjà posé.
     #[error("abonné de journalisation déjà posé : {0}")]
@@ -120,7 +120,7 @@ mod tests {
             error.contains("RBS_LOG_FORMAT"),
             "variable non nommée : {error}"
         );
-        assert!(error.contains("text"), "value fautive absente : {error}");
+        assert!(error.contains("text"), "valeur fautive absente : {error}");
         assert!(
             error.contains("pretty") && error.contains("json"),
             "valeurs admises absentes : {error}"

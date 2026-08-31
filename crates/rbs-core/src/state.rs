@@ -127,7 +127,7 @@ mod tests {
             },
             #[cfg(feature = "auth")]
             auth: crate::config::AuthConfig {
-                secret: "un secret de test qui porte au moins trente-deux bytes".to_owned(),
+                secret: "un secret de test qui porte au moins trente-deux octets".to_owned(),
                 access_ttl_secs: 900,
                 refresh_ttl_secs: 2_592_000,
             },
@@ -161,7 +161,7 @@ mod tests {
         assert_eq!(response.status(), StatusCode::OK);
         let body = to_bytes(response.into_body(), usize::MAX)
             .await
-            .expect("body lisible");
+            .expect("corps lisible");
         assert_eq!(&body[..], b"bonjour development");
     }
 
