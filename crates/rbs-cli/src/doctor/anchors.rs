@@ -64,7 +64,7 @@ pub(crate) fn check(root: &Path) -> Check {
 /// fichier plutôt que de s'interrompre.
 fn present(root: &Path, anchor: &Anchor) -> bool {
     fs::read_to_string(root.join(anchor.file.as_ref())).is_ok_and(|source| {
-        source.contains(&anchor.opening()) && source.contains(&anchor.closing())
+        anchors::marks(&source, &anchor.opening()) && anchors::marks(&source, &anchor.closing())
     })
 }
 
@@ -233,6 +233,29 @@ mod tests {
         assert!(
             check.detail.contains(&(ANCRES.len() - 1).to_string()),
             "l'ancre du compose ne compte pas parmi les applicables : {}",
+            check.detail
+        );
+    }
+
+    /// Une balise citée dans une chaîne n'est pas un point d'insertion : `doctor` doit
+    /// la voir absente, exactement comme `generate`, faute de quoi il annonce sain un
+    /// projet où l'insertion échouera.
+    #[test]
+    fn an_anchor_quoted_inside_a_string_does_not_count_as_present() {
+        let (_parent, root) = project();
+        let router = root.join("src/router.rs");
+        let source = fs::read_to_string(&router).expect("le routeur est lisible");
+        let cite = source
+            .replace("// <rbs:routes>", "let doc = \"// <rbs:routes>\";")
+            .replace("// </rbs:routes>", "let fin = \"// </rbs:routes>\";");
+        fs::write(&router, cite).expect("routeur réécrivable");
+
+        let check = check(&root);
+
+        assert_eq!(check.state, State::Echec, "{check:?}");
+        assert!(
+            check.detail.contains("routes manque dans src/router.rs"),
+            "{}",
             check.detail
         );
     }
