@@ -195,7 +195,7 @@ fn generate(parent: &Path, example: &Exemple) -> PathBuf {
         assert_cmd::Command::cargo_bin("rbs")
             .expect("le binaire rbs doit être compilé")
             .current_dir(&racine)
-            .args(["add", feature, "--yes"])
+            .args(["add", feature])
             .assert()
             .success();
     }
@@ -209,7 +209,6 @@ fn generate(parent: &Path, example: &Exemple) -> PathBuf {
             example.crud,
             "--fields",
             example.champs,
-            "--yes",
             "--force",
         ])
         .assert()
