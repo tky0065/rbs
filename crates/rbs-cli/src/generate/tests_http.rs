@@ -22,9 +22,13 @@ const TESTS: &str = include_str!(concat!(
 /// inventé dans une colonne sous contrainte de clé étrangère, et rendraient 500 dès la
 /// première exécution. Le fichier garde ce qui ne crée rien, et dit ce qui manque — le
 /// seed s'écarte entièrement pour la même raison.
+///
+/// Un garde de rôle les écarte de même : ces scénarios n'émettent aucun jeton, et le
+/// projet neuf échouerait à son propre `cargo test`. Le fichier éprouve alors le refus
+/// d'une écriture anonyme, qui est ce que le garde promet.
 pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
     let blocking = feature.required_reference();
-    let creatable = blocking.is_none();
+    let creatable = blocking.is_none() && feature.role.is_none();
     // Sans création, aucun champ n'est envoyé ni comparé : les aides qui les servent
     // resteraient inutilisées, et le projet engendré ne compile pas sous `-D warnings`.
     let sent: &[Field] = if creatable { &feature.fields } else { &[] };
@@ -35,6 +39,7 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
         context! {
             module => feature.module(),
             creatable,
+            role => feature.role,
             blocking_reference => blocking.map(|field| field.relation_name()),
             fields => fields,
             compared => names(sent, |champ| !timestamp(champ)),

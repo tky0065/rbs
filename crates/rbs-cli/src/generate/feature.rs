@@ -18,6 +18,8 @@ pub(crate) struct Feature {
     pub name: String,
     /// Champs déclarés dans `--fields`, sans `id` ni les horodatages.
     pub fields: Vec<Field>,
+    /// Variante de l'enum `Role` que les routes d'écriture exigeront, s'il y en a une.
+    pub role: Option<String>,
 }
 
 impl Feature {
@@ -25,7 +27,17 @@ impl Feature {
         Self {
             name: name.to_string(),
             fields,
+            role: None,
         }
+    }
+
+    /// La même feature, ses écritures réservées au rôle `role`.
+    ///
+    /// Le rôle est saisi comme il s'écrit en base — `admin`, `super_admin` — et rangé ici
+    /// sous la forme que porte l'enum du projet : c'est elle que la template écrit.
+    pub(crate) fn guarded(mut self, role: &str) -> Self {
+        self.role = Some(to_pascal_case(role));
+        self
     }
 
     /// Nom du module et de la table : le nom donné, inchangé.
@@ -209,7 +221,7 @@ fn named(variants: &[String]) -> String {
 /// templates lisent `entity` comme elles lisent `module`.
 impl Serialize for Feature {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("Feature", 9)?;
+        let mut state = serializer.serialize_struct("Feature", 10)?;
         state.serialize_field("module", self.module())?;
         state.serialize_field("table", self.module())?;
         state.serialize_field("entity", &self.entity())?;
@@ -219,6 +231,7 @@ impl Serialize for Feature {
         state.serialize_field("unique_relations", &self.unique_relations())?;
         state.serialize_field("ambiguous_targets", &self.ambiguous_targets())?;
         state.serialize_field("target_idens", &self.target_idens())?;
+        state.serialize_field("role", &self.role)?;
         state.end()
     }
 }

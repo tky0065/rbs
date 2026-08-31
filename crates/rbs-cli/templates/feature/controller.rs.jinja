@@ -2,11 +2,19 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+{%- if role %}
+use rbs_core::{HasCoreState, Identity, Page, Pagination, ProblemDetails, Result, ValidatedJson};
+{%- else %}
 use rbs_core::{HasCoreState, Page, Pagination, ProblemDetails, Result, ValidatedJson};
+{%- endif %}
 use sea_orm::prelude::Uuid;
 
 use super::dto::{{@ dto | join(", ") @}};
 use super::service;
+{%- if role %}
+use crate::auth::guard::RequireRole;
+use crate::auth::model::Role;
+{%- endif %}
 use crate::state::AppState;
 
 #[utoipa::path(
@@ -30,17 +38,30 @@ pub async fn list(
     post,
     path = "/{@ module @}",
     tag = "{@ module @}",
+{%- if role %}
+    security(("bearer" = [])),
+{%- endif %}
     request_body = Create{@ entity @},
     responses(
         (status = 201, description = "{@ singular @} créé", body = {@ entity @}Response),
         (status = 400, description = "corps illisible", body = ProblemDetails, content_type = "application/problem+json"),
+{%- if role %}
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
+{%- endif %}
         (status = 409, description = "valeur déjà prise sur une colonne unique", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn create(
     State(state): State<AppState>,
+{%- if role %}
+    identite: Identity,
+{%- endif %}
     ValidatedJson(input): ValidatedJson<Create{@ entity @}>,
 ) -> Result<(StatusCode, Json<{@ entity @}Response>)> {
+{%- if role %}
+    identite.require_role(Role::{@ role @})?;
+{% endif %}
     let {@ singular @} = service::create(state.core().db(), input).await?;
 
     Ok((StatusCode::CREATED, Json({@ singular @})))
@@ -69,19 +90,32 @@ pub async fn find(
     put,
     path = "/{@ module @}/{id}",
     tag = "{@ module @}",
+{%- if role %}
+    security(("bearer" = [])),
+{%- endif %}
     params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
     request_body = Update{@ entity @},
     responses(
         (status = 200, description = "{@ singular @} mis à jour", body = {@ entity @}Response),
+{%- if role %}
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
+{%- endif %}
         (status = 404, description = "{@ singular @} introuvable", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 409, description = "valeur déjà prise sur une colonne unique", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn update(
     State(state): State<AppState>,
+{%- if role %}
+    identite: Identity,
+{%- endif %}
     Path(id): Path<Uuid>,
     ValidatedJson(input): ValidatedJson<Update{@ entity @}>,
 ) -> Result<Json<{@ entity @}Response>> {
+{%- if role %}
+    identite.require_role(Role::{@ role @})?;
+{% endif %}
     Ok(Json(service::update(state.core().db(), id, input).await?))
 }
 
@@ -89,13 +123,29 @@ pub async fn update(
     delete,
     path = "/{@ module @}/{id}",
     tag = "{@ module @}",
+{%- if role %}
+    security(("bearer" = [])),
+{%- endif %}
     params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
     responses(
         (status = 204, description = "{@ singular @} supprimé"),
+{%- if role %}
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
+{%- endif %}
         (status = 404, description = "{@ singular @} introuvable", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
+{% if role -%}
+pub async fn delete(
+    State(state): State<AppState>,
+    identite: Identity,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode> {
+    identite.require_role(Role::{@ role @})?;
+{% else -%}
 pub async fn delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<StatusCode> {
+{%- endif %}
     service::delete(state.core().db(), id).await?;
 
     Ok(StatusCode::NO_CONTENT)

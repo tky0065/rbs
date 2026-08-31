@@ -74,22 +74,23 @@ pub fn run() {
         }
 
         Commands::Generate { command } => {
-            let (name, fields, complete, force, dry_run, has_many) = match command {
+            let (name, fields, complete, force, dry_run, has_many, role) = match command {
                 GenerateCommands::Crud {
                     name,
                     fields,
                     force,
                     dry_run,
                     has_many,
-                } => (name, fields, true, force, dry_run, has_many),
+                    role,
+                } => (name, fields, true, force, dry_run, has_many, role),
                 GenerateCommands::Feature {
                     name,
                     force,
                     dry_run,
-                } => (name, None, false, force, dry_run, Vec::new()),
+                } => (name, None, false, force, dry_run, Vec::new(), None),
             };
 
-            if let Err(error) = generate(name, fields, complete, force, dry_run, has_many) {
+            if let Err(error) = generate(name, fields, complete, force, dry_run, has_many, role) {
                 ui::error(&error.to_string());
                 if let Some(remedy) = error.remedy() {
                     ui::info(&format!("\n{remedy}"));
@@ -382,6 +383,7 @@ fn generate(
     force: bool,
     dry_run: bool,
     has_many: Vec<String>,
+    role: Option<String>,
 ) -> Result<(), generate::command::Error> {
     let feature = name.clone();
     // `--has-many` répare une feature déjà là : rien à générer, donc rien à annoncer sous
@@ -398,6 +400,7 @@ fn generate(
         directory,
         force,
         has_many,
+        role,
     })?;
 
     // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande

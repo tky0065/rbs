@@ -143,6 +143,28 @@ told to identify, not that they lack rights. And the `security(("bearer" = []))`
 what puts the padlock on this operation in `/api-docs/openapi.json`; a route left
 unprotected must not carry it.
 
+### Laying the guard at generation time
+
+[`rbs generate crud`](../cli/generate.md) writes that line for you:
+
+```bash
+rbs generate crud articles --fields title:string --role admin
+```
+
+`create`, `update` and `delete` then take an `Identity`, call `require_role`, and declare
+both refusals in their `#[utoipa::path]` — the 401 the extractor answers, the 403
+`require_role` answers. `list` and `find` stay open: reading is the part a public API
+usually keeps public, and a `--role` that closed everything would leave nothing to choose.
+
+The option refuses, before writing anything, on a project without `auth` — the controller
+would import a module that does not exist — and on a role `src/auth/model.rs` does not
+declare. The generated `tests.rs` follows suit: holding no token, it exercises no write,
+and checks instead that an anonymous one is refused.
+
+[`rbs doctor`](../cli/doctor.md) reports in orange, on a project carrying `auth`, any
+feature whose `create`, `update` or `delete` calls no guard. A warning and not a failure: a
+public catalogue is a legitimate design, and the command still exits 0.
+
 ## Roles
 
 `Role` is a Rust enum stored as a string:

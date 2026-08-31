@@ -43,6 +43,11 @@ mod tests {
         render(&Feature::fresh(name, fields)).expect("le controller doit se rendre")
     }
 
+    fn guarded(name: &str, role: &str) -> String {
+        let fields = fields::parse("title:string").expect("champs valides");
+        render(&Feature::fresh(name, fields).guarded(role)).expect("le controller doit se rendre")
+    }
+
     fn module(name: &str) -> String {
         let fields = fields::parse("title:string").expect("champs valides");
         render_mod(&Feature::fresh(name, fields), false).expect("le mod.rs doit se rendre")
@@ -185,6 +190,104 @@ mod tests {
             !rendered.contains("super::repository") && !rendered.contains("super::model"),
             "le controller ne connaît que service.rs :\n{rendered}"
         );
+    }
+
+    /// Le bloc d'un handler : son annotation et sa fonction, isolées du reste du fichier.
+    ///
+    /// Ce que le garde doit prouver est distributif — trois routes le portent, deux ne le
+    /// portent pas — et une recherche sur le fichier entier ne dirait pas laquelle.
+    fn handler<'a>(rendered: &'a str, name: &str) -> &'a str {
+        rendered
+            .split("#[utoipa::path(")
+            .find(|bloc| bloc.contains(&format!("pub async fn {name}(")))
+            .unwrap_or_else(|| panic!("handler `{name}` absent :\n{rendered}"))
+    }
+
+    #[test]
+    fn the_guard_protects_the_three_writes_and_spares_the_two_reads() {
+        let rendered = guarded("articles", "admin");
+
+        for name in ["create", "update", "delete"] {
+            let bloc = handler(&rendered, name);
+
+            assert!(
+                bloc.contains("identite: Identity,"),
+                "`{name}` doit extraire l'identité :\n{bloc}"
+            );
+            assert!(
+                bloc.contains("identite.require_role(Role::Admin)?;"),
+                "`{name}` doit exiger le rôle :\n{bloc}"
+            );
+        }
+
+        for name in ["list", "find"] {
+            let bloc = handler(&rendered, name);
+
+            assert!(
+                !bloc.contains("Identity") && !bloc.contains("require_role"),
+                "`{name}` reste publique :\n{bloc}"
+            );
+        }
+    }
+
+    /// Le contrat OpenAPI n'annonce que les deux refus que le garde produit réellement :
+    /// 401 de l'extracteur d'identité, 403 de `require_role`.
+    #[test]
+    fn the_guarded_routes_declare_the_bearer_and_the_two_refusals() {
+        let rendered = guarded("articles", "admin");
+
+        for annotation in [
+            r#"security(("bearer" = []))"#,
+            "status = 401",
+            "status = 403",
+        ] {
+            assert_eq!(
+                rendered.matches(annotation).count(),
+                3,
+                "« {annotation} » doit figurer sur les trois routes protégées :\n{rendered}"
+            );
+        }
+    }
+
+    #[test]
+    fn the_guard_names_the_role_in_pascal_case() {
+        let rendered = guarded("articles", "super_admin");
+
+        assert!(
+            rendered.contains("identite.require_role(Role::SuperAdmin)?;"),
+            "le rôle doit se traduire en variante de l'enum :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn without_a_role_the_controller_carries_nothing_of_the_guard() {
+        let rendered = controller("articles");
+
+        assert!(
+            !rendered.contains("Identity")
+                && !rendered.contains("require_role")
+                && !rendered.contains("status = 401"),
+            "sans `--role`, le rendu est inchangé :\n{rendered}"
+        );
+    }
+
+    /// Le garde allonge trois signatures, et celle de `delete` franchit les 100 colonnes
+    /// où rustfmt bascule : la template doit l'écrire déjà éclatée.
+    ///
+    /// Les noms exercés sont ceux dont le rendu sans garde traverse déjà rustfmt sans
+    /// diff — au-delà, c'est la ligne `use super::dto::{…}` qui déborde, indépendamment du
+    /// garde, et `format::format_batch` s'en charge à l'écriture.
+    #[test]
+    fn the_guarded_render_is_already_what_rustfmt_would_write() {
+        for name in ["tag", "articles"] {
+            let rendered = guarded(name, "admin");
+
+            assert_eq!(
+                bench::formatted(&rendered),
+                rendered,
+                "le rendu de `{name}` diverge de rustfmt"
+            );
+        }
     }
 
     #[test]
