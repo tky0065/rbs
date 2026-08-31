@@ -152,6 +152,11 @@ alone on a reference, whose foreign key is indexed without being asked. `cascade
 `nullify` contradict each other and are refused together; [Relations](../guides/relations.md)
 has the rest of a reference's grammar, including why the index is never optional.
 
+Neither `unique` nor `index` applies to a `text` field: MySQL refuses an index on a `TEXT`
+column without a prefix length (error 1170). The refusal holds on every engine, PostgreSQL
+included — a generated migration is meant to run anywhere, and one rule is one rule. An
+indexed column of text is a `string`, that is a `varchar(255)`.
+
 ### What a name may be
 
 A field name is `snake_case`: it starts with an ASCII lowercase letter and holds only

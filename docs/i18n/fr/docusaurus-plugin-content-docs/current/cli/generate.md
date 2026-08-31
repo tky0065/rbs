@@ -157,6 +157,12 @@ sur une référence l'est tout autant, sa clé étrangère étant indexée sans 
 d'une référence, et pourquoi son index n'est jamais optionnel, vit dans
 [Relations](../guides/relations.md).
 
+Ni `unique` ni `index` ne s'applique à un champ `text` : MySQL refuse un index sur une
+colonne `TEXT` sans longueur de préfixe (erreur 1170). Le refus vaut pour tous les moteurs,
+PostgreSQL compris — une migration engendrée est faite pour tourner partout, et une règle
+est une règle. Une colonne de texte qu'on indexe est un `string`, c'est-à-dire un
+`varchar(255)`.
+
 ### Ce qu'un nom peut être
 
 Un nom de champ est en `snake_case` : il commence par une minuscule ASCII et ne porte que
