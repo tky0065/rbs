@@ -280,7 +280,7 @@ manifeste, ce qui rend la commande idempotente :
 
 ```text
 [package.metadata.rbs]
-version = "1.0.0"
+version = "1.1.0"
 features = ["health", "articles"]
 database = "postgres"
 ```

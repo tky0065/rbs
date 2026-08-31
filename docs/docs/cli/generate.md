@@ -275,7 +275,7 @@ the manifest, which is what makes the command idempotent:
 
 ```text
 [package.metadata.rbs]
-version = "1.0.0"
+version = "1.1.0"
 features = ["health", "articles"]
 database = "postgres"
 ```

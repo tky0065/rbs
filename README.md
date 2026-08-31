@@ -9,8 +9,8 @@ read it and change it.
 
 ## Status
 
-Version 1.0.0. The five milestones of the roadmap are delivered — the foundation,
-authentication, integrations, comfort, stability — and [`CHANGELOG.md`](CHANGELOG.md) says
+Version 1.1.0. The six milestones of the roadmap are delivered — the foundation,
+authentication, integrations, comfort, stability, agents — and [`CHANGELOG.md`](CHANGELOG.md) says
 what each one gives you.
 
 **rbs follows semantic versioning from 1.0 on.** The public API of `rbs-core` is frozen:

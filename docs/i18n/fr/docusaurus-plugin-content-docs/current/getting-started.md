@@ -46,7 +46,7 @@ rbs --version
 ```
 
 ```text
-rbs 1.0.0
+rbs 1.1.0
 ```
 
 :::note

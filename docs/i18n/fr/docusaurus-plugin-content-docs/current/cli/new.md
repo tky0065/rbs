@@ -153,7 +153,7 @@ garde un état sur le projet :
 
 ```text
 [package.metadata.rbs]
-version = "1.0.0"
+version = "1.1.0"
 features = ["health"]
 database = "postgres"
 lang = "fr"
