@@ -341,6 +341,10 @@ mod tests {
             database_password => "postgres",
             database_name => "mon_api",
             database_port => 5432,
+            compose => true,
+            database_user_par_defaut => "postgres",
+            database_password_par_defaut => "postgres",
+            database_name_par_defaut => "mon_api",
             lang => "fr",
         }
     }

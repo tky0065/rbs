@@ -306,7 +306,9 @@ erreur : `graphql` n'est pas une feature rbs — disponibles : auth, ci, docker,
 
 Sauf dans les deux cas ci-dessous, `rbs new` écrit un `docker-compose.yml` à côté du
 projet, portant la base que décrit son URL — identifiants, nom de base et port publié, le
-tout lu depuis elle, rien de retapé :
+tout lu depuis elle, rien de retapé. Le compose est versionné et `.env` ne l'est pas : il
+nomme donc les trois valeurs plutôt qu'il ne les écrit, et Compose les interpole depuis le
+`.env` posé à côté :
 
 ```yaml
 name: blog
@@ -315,9 +317,9 @@ services:
   db:
     image: postgres:18-alpine
     environment:
-      POSTGRES_USER: rbs
-      POSTGRES_PASSWORD: rbs
-      POSTGRES_DB: blog
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
     # Le port publié est celui du .env : c'est ce qui rend `docker compose up -d` suivi
     # de `cargo run` vrai sans recopier une valeur d'un fichier à l'autre. Le conflit
     # avec un PostgreSQL déjà installé sur la machine se règle en changeant les deux.
@@ -329,7 +331,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rbs -d blog"]
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 2s
       timeout: 3s
       retries: 30

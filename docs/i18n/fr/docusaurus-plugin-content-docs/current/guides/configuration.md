@@ -43,7 +43,8 @@ Et le fichier de profil, qui ne porte que ce qui diffère :
 ```toml file=examples/hello-crud/config/development.toml
 ```
 
-`.env` est l'endroit où vit l'URL de la base, à côté des deux variables de log :
+`.env` est l'endroit où vit l'URL de la base, à côté des deux variables de log et — sur
+un projet dont le compose porte une base — des identifiants que celui-ci interpole :
 
 ```bash file=examples/hello-crud/.env.example
 ```

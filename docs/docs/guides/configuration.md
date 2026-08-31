@@ -41,7 +41,8 @@ And the profile file, which only carries what differs:
 ```toml file=examples/hello-crud/config/development.toml
 ```
 
-`.env` is where the database URL lives, next to the two logging variables:
+`.env` is where the database URL lives, next to the two logging variables and — on a
+project whose compose carries a database — the identifiers that compose interpolates:
 
 ```bash file=examples/hello-crud/.env.example
 ```

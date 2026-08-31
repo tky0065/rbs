@@ -6,9 +6,9 @@ services:
 {%- if database == "postgres" %}
     image: postgres:18-alpine
     environment:
-      POSTGRES_USER: {@ database_user @}
-      POSTGRES_PASSWORD: {@ database_password @}
-      POSTGRES_DB: {@ database_name @}
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
     # Le port publié est celui du .env : c'est ce qui rend `docker compose up -d` suivi
     # de `cargo run` vrai sans recopier une valeur d'un fichier à l'autre. Le conflit
     # avec un PostgreSQL déjà installé sur la machine se règle en changeant les deux.
@@ -20,15 +20,15 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U {@ database_user @} -d {@ database_name @}"]
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
 {%- else %}
     image: mysql:8
     environment:
-      MYSQL_ROOT_PASSWORD: {@ database_password @}
-      MYSQL_DATABASE: {@ database_name @}
+      MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}"
+      MYSQL_DATABASE: "${MYSQL_DATABASE}"
 {%- if database_user != "root" %}
-      MYSQL_USER: {@ database_user @}
-      MYSQL_PASSWORD: {@ database_password @}
+      MYSQL_USER: "${MYSQL_USER}"
+      MYSQL_PASSWORD: "${MYSQL_PASSWORD}"
 {%- endif %}
     ports:
       - "{@ database_port @}:3306"
@@ -38,7 +38,7 @@ services:
     # interroge donc le schéma, faute de quoi `migrate` démarrerait trop tôt.
     healthcheck:
       test:
-        ["CMD-SHELL", "mysql -uroot -p{@ database_password @} -e 'use {@ database_name @}' 2>/dev/null"]
+        ["CMD-SHELL", 'mysql -uroot -p"$$MYSQL_ROOT_PASSWORD" -e "use $$MYSQL_DATABASE" 2>/dev/null']
 {%- endif %}
       interval: 2s
       timeout: 3s

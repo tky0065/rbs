@@ -1532,7 +1532,7 @@ mod tests {
             "le compose n'ouvre pas l'hôte :\n{compose}"
         );
         assert!(
-            compose.contains("POSTGRES_DB: demo_api"),
+            compose.contains("RBS_DATABASE__URL: postgres://rbs:rbs@db:5432/demo_api"),
             "le compose ne nomme pas la base du projet :\n{compose}"
         );
     }
@@ -1591,8 +1591,8 @@ mod tests {
         let compose = projected(&planned, "docker-compose.yml");
 
         assert!(
-            compose.contains("POSTGRES_DB: demo_api"),
-            "le compose laisse POSTGRES_DB vide :\n{compose}"
+            compose.contains("RBS_DATABASE__URL: postgres://rbs:rbs@db:5432/demo_api"),
+            "l'URL interne ne reprend pas le repli du nom de base :\n{compose}"
         );
         assert!(
             !compose.contains("RBS_DATABASE__URL: postgres://rbs:rbs@db:5432/\n"),
