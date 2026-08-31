@@ -37,6 +37,13 @@ pub(crate) struct Manifest {
 #[serde(deny_unknown_fields)]
 pub(crate) struct Description {
     pub description: String,
+    /// Les fragments sans lesquels celui-ci n'installe qu'une moitié de ce qu'il promet.
+    ///
+    /// `auth` exige `rate-limit` : sa route de connexion hache un Argon2 même pour un
+    /// email inconnu, et sans limite de débit cette protection contre l'énumération
+    /// devient un déni de service à la portée de n'importe qui.
+    #[serde(default)]
+    pub requires: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -186,12 +193,27 @@ value      = "changez-moi"
 comment = "Secret de signature HS256, au moins 32 octets"
 "#;
 
+    /// Un fragment qui n'installe qu'une moitié de ce qu'il promet sans un autre le dit
+    /// dans son `[feature]`, et le CLI n'a pas à connaître la paire par son nom.
+    #[test]
+    fn a_fragment_can_declare_what_it_requires() {
+        let manifest = read(
+            "[feature]\ndescription = \"auth\"\nrequires = [\"rate-limit\"]\n",
+            "features/auth/feature.toml",
+        )
+        .expect("le manifeste est valide");
+
+        assert_eq!(manifest.feature.requires, ["rate-limit"]);
+    }
+
     #[test]
     fn a_valid_manifest_deserialises() {
         let manifest =
             read(COMPLET, "features/auth/feature.toml").expect("le manifeste est valide");
 
         assert_eq!(manifest.feature.description, "JWT, Argon2, rôles");
+        // Le défaut, qui vaut pour tous les fragments sauf `auth` : rien n'est entraîné.
+        assert!(manifest.feature.requires.is_empty());
 
         assert_eq!(manifest.files.len(), 1);
         assert_eq!(manifest.files[0].source, "model.rs.jinja");

@@ -1,5 +1,10 @@
 [feature]
 description = "authentification JWT : Argon2, jetons d'accès et de rafraîchissement, rôles"
+# `/auth/login` hache un Argon2 même pour un email inconnu — c'est ce qui empêche
+# d'énumérer les comptes, et c'est aussi 19 Mio par requête anonyme. Sans limite de débit,
+# la protection contre l'énumération est un déni de service offert au premier venu : le
+# fragment vient donc avec, et le plan de `rbs add auth` le montre.
+requires = ["rate-limit"]
 
 [[files]]
 source      = "mod.rs.jinja"

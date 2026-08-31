@@ -5,8 +5,8 @@ title: rbs add
 
 # `rbs add`
 
-Installe une feature dans un projet existant. Elle en livre sept : `auth`, `ci`, `jobs`,
-`docker`, `mail`, `redis` et `storage`.
+Installe une feature dans un projet existant. Elle en livre neuf : `auth`, `ci`, `cors`,
+`docker`, `jobs`, `mail`, `rate-limit`, `redis` et `storage`.
 
 :::note
 Les blocs de terminal de cette page sont des sorties réelles, capturées en lançant la
@@ -18,7 +18,7 @@ sortie de terminal ne se traduit pas.
 
 ```text
 $ rbs add --help
-Ajoute une feature : auth, ci, docker, jobs, mail, redis, storage
+Ajoute une feature : auth, ci, cors, docker, jobs, mail, rate-limit, redis, storage
 
 Usage: rbs add [OPTIONS] <FEATURE>
 
@@ -39,19 +39,25 @@ Options:
 | `--template-dir <CHEMIN>` | Lit les fragments dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire. |
 | `-y`, `--yes` | Global, et sans effet ici : `rbs add` ne demande rien. |
 
-## Les sept features
+## Les neuf features
 
 | Feature | Fichiers | Suite |
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, et ses services `api`/`migrate` insérés dans le compose du projet — un `docker-compose.yml` entier s'il n'y en a pas | `docker compose --profile app up --build` |
 | `ci` | `.github/workflows/ci.yml` | `git push` |
-| `auth` | huit fichiers sous `src/auth/`, une migration, et quatre fichiers du projet modifiés | `rbs migrate up` |
+| `auth` | huit fichiers sous `src/auth/`, une migration, quatre fichiers du projet modifiés — et `rate-limit`, qu'elle exige | `rbs migrate up` |
 | `jobs` | sept fichiers sous `src/jobs/`, une migration, et une section `[jobs]` de configuration | `rbs migrate up`, puis inscrire vos jobs dans `src/jobs/mod.rs` |
 | `redis` | trois fichiers sous `src/cache/`, et un service `redis` inséré dans le compose du projet | le compose le porte déjà — `docker compose up -d` le démarre |
 | `mail` | cinq fichiers sous `src/mail/`, un gabarit d'exemple, et un service `mailpit` inséré dans le compose du projet | régler `[mail]` dans `config/default.toml` — un SMTP local par défaut |
 | `storage` | quatre fichiers sous `src/storage/` | ignorer `./storage`, ou passer le backend à `s3` |
+| `cors` | trois fichiers sous `src/cors/`, une section `[cors]` de configuration, et une couche dans `// <rbs:layers>` | énumérer vos origines dans `[cors]` — vide, donc rien d'origine croisée ne passe |
+| `rate-limit` | quatre fichiers sous `src/rate_limit/`, une section `[rate_limit]`, un champ sur `AppState`, et une couche dans `// <rbs:layers>` | derrière un reverse proxy, régler `rate_limit.trust_forwarded_for` |
 
-Les trois dernières sont les briques des guides [cache](../guides/cache.md),
+`cors` et `rate-limit` sont les deux qui empilent un middleware au lieu de monter une
+route : leur couche va dans `// <rbs:layers>`, à l'intérieur de `trace` et de
+`request_id` — voir [Les ancres](#les-ancres).
+
+Les trois qui les précèdent sont les briques des guides [cache](../guides/cache.md),
 [courriel](../guides/mail.md) et [stockage](../guides/storage.md). Aucune ne monte de
 route : elles arrivent sur votre `AppState`, et ce qui les appelle vous revient.
 
@@ -130,8 +136,76 @@ plan pour /private/tmp/rbs-demo/blog
 ```
 
 ```text
+$ rbs add cors
+cors : CORS : origines, méthodes et en-têtes autorisés, énumérés par la configuration
+
+plan pour /private/tmp/rbs-demo/blog
+
+  + src/cors/mod.rs       créé
+  + src/cors/config.rs    créé
+  + src/cors/tests.rs     créé
+  ~ src/lib.rs            modifié
+  ~ src/router.rs         modifié
+  ~ Cargo.toml            modifié
+  ~ config/default.toml   modifié
+  ~ AGENTS.md             modifié
+
+  8 fichiers à écrire
+✓ cors installée — 3 fichiers
+
+  énumérez vos origines dans [cors] de config/default.toml — la liste est vide, donc aucune requête d'origine croisée ne passe
+```
+
+La section `[cors]` qu'elle écrit commence par `origins = []` : rien d'origine croisée
+n'est autorisé tant que le projet n'a pas nommé ses clients. Y inscrire `"*"` ouvre l'API
+à toutes les origines, et est refusé avec `credentials = true` — un navigateur ignore les
+identifiants envoyés à une origine joker, et croire le contraire est le vrai danger. Une
+section illisible rend une couche qui n'autorise rien, et le journal dit pourquoi.
+
+```text
+$ rbs add rate-limit
+rate-limit : limite de débit : un compteur par adresse cliente, plus strict sur les routes qui coûtent cher
+
+plan pour /private/tmp/rbs-demo/depot
+
+  + src/rate_limit/mod.rs       créé
+  + src/rate_limit/config.rs    créé
+  + src/rate_limit/counter.rs   créé
+  + src/rate_limit/tests.rs     créé
+  ~ src/lib.rs                  modifié
+  ~ src/state.rs                modifié
+  ~ src/router.rs               modifié
+  ~ Cargo.toml                  modifié
+  ~ config/default.toml         modifié
+  ~ AGENTS.md                   modifié
+
+  10 fichiers à écrire
+✓ rate-limit installée — 4 fichiers
+
+  derrière un reverse proxy, passez rate_limit.trust_forwarded_for à true — sinon tous les clients partagent l'adresse du proxy
+```
+
+Une fenêtre fixe par adresse cliente : `limit` requêtes par `window_secs`, puis un 429
+`application/problem+json` portant un `Retry-After`. Les entrées `[[rate_limit.routes]]`
+tiennent des limites plus serrées sur un préfixe de chemin, la première qui correspond
+l'emportant.
+
+`src/rate_limit/counter.rs` s'écrit de deux façons, décidées à la pose du fragment. Avec
+`redis` installé, le compteur vit sur le serveur du cache — deux instances derrière un
+répartiteur doivent compter ensemble. Sans lui, le compteur vit dans le processus, et la
+limite effective est multipliée par le nombre d'instances. `rbs add redis` avant `rbs add
+rate-limit` est ce qui choisit la première.
+
+Une requête dont l'adresse cliente est inconnue n'est pas comptée : un compteur unique
+pour tout le monde ferait payer à chacun ce qu'un seul consomme. `axum::serve` fournit
+cette adresse ; derrière un reverse proxy c'est celle du proxy, ce à quoi sert
+`rate_limit.trust_forwarded_for = true` — à ne jamais lever sur une API exposée en direct,
+où n'importe quel client pourrait alors se choisir une identité par requête.
+
+```text
 $ rbs add auth
 auth : authentification JWT : Argon2, jetons d'accès et de rafraîchissement, rôles
+auth exige rate-limit : posée avec elle
 
 plan pour /private/tmp/rbs-demo/blog
 
@@ -143,7 +217,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/controller.rs                                 créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests.rs                                      créé
-  + migration/src/m20260830_110856_create_auth_tables.rs   créé
+  + migration/src/m20260831_095328_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
   ~ src/lib.rs                                             modifié
   ~ src/router.rs                                          modifié
@@ -152,13 +226,29 @@ plan pour /private/tmp/rbs-demo/blog
   ~ config/default.toml                                    modifié
   ~ .env.example                                           modifié
   ~ .env                                                   modifié
+  + src/rate_limit/mod.rs                                  créé
+  + src/rate_limit/config.rs                               créé
+  + src/rate_limit/counter.rs                              créé
+  + src/rate_limit/tests.rs                                créé
+  ~ src/state.rs                                           modifié
   ~ AGENTS.md                                              modifié
 
-  18 fichiers à écrire
-✓ auth installée — 9 fichiers
+  23 fichiers à écrire
+✓ auth installée — 13 fichiers
 
   rbs migrate up
 ```
+
+`auth` est le seul fragment qui en exige un autre. `POST /auth/login` hache un Argon2 même
+pour un email inconnu — c'est ce qui empêche d'énumérer les comptes — et chaque requête
+anonyme y coûte donc 19 Mio. Sans limite de débit, la protection contre l'énumération est
+un déni de service offert au premier venu : le fragment arrive donc avec `rate-limit`, le
+plan le nomme avant que rien ne s'écrive, et la section `[rate_limit]` qu'il pose tient
+`/auth/login` à cinq requêtes par minute contre 120 en global.
+
+Les deux features s'inscrivent dans `[package.metadata.rbs]` : `rbs add rate-limit` après
+coup est sans effet. L'avoir installée avant ne l'est pas davantage — le plan dresse alors
+`auth` seule.
 
 `auth` est la seule feature qui touche à votre `.env` : le secret de signature y est tiré
 et écrit à l'installation, pendant que `.env.example`, versionné, garde un placeholder.
@@ -170,7 +260,7 @@ Dans chaque plan, la ligne `Cargo.toml` est l'endroit où l'installation s'inscr
 ```text
 [package.metadata.rbs]
 version = "1.0.0"
-features = ["health", "docker", "ci", "auth"]
+features = ["health", "docker", "ci", "auth", "rate-limit"]
 database = "postgres"
 ```
 
@@ -178,7 +268,7 @@ Tout autre nom est refusé avec la liste de ce qui est installable :
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : auth, ci, docker, jobs, mail, redis, storage
+erreur : `graphql` n'est pas une feature installable : auth, ci, cors, docker, jobs, mail, rate-limit, redis, storage
 ```
 
 ## L'idempotence
@@ -293,18 +383,31 @@ sinon un plan vide, donc une commande qui réussit sans rien faire.
 ## Les ancres
 
 `rbs add` écrit surtout des fichiers entiers et modifie le manifeste ; c'est [`rbs
-generate`](./generate.md#les-ancres) qui insère dans les neuf ancres en commentaires Rust
+generate`](./generate.md#les-ancres) qui insère dans les dix ancres en commentaires Rust
 du projet — `// <rbs:features>` (dans `src/lib.rs`, ou dans `src/main.rs` sur un projet
 sans bibliothèque — voir [plus bas](./generate.md#les-ancres)), `// <rbs:routes>`,
-`// <rbs:openapi>`, `// <rbs:migration_modules>`, `// <rbs:migrations>`,
+`// <rbs:layers>`, `// <rbs:openapi>`, `// <rbs:migration_modules>`, `// <rbs:migrations>`,
 `// <rbs:state_champs>`, `// <rbs:state_init>`, `// <rbs:startup>` et `// <rbs:seeds>`.
+
+`// <rbs:layers>` est l'endroit où un fragment empile un middleware, et elle ne
+s'interchange pas avec `// <rbs:routes>` qui la précède de quelques lignes : un `.layer()`
+enveloppe ceux qui le précèdent, donc une couche insérée là s'exécute *après* `request_id`
+et `trace`, jamais avant. C'est la seule position qui lui donne l'identifiant de la requête
+et qui fait entrer ses propres réponses — un 429, un préflight refusé — dans le journal
+comme n'importe quelle autre. `cors` et `rate-limit` s'en servent toutes deux.
 
 `docker` est le seul fragment que `rbs add` installe à faire lui-même exception : ses
 services `api` et `migrate` vont dans `# <rbs:services>`, l'ancre YAML que porte un
-compose — voir [plus haut](#les-sept-features). La règle est la même partout : aucun AST
+compose — voir [plus haut](#les-neuf-features). La règle est la même partout : aucun AST
 n'est jamais réécrit, et une ancre absente fait que la commande n'écrit rien et affiche le
-bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les dix — neuf sur un
-projet sans compose pour en porter une dixième.
+bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les onze — dix sur un
+projet sans compose pour en porter une onzième.
+
+Un projet engendré avant l'existence de `// <rbs:layers>` ne la porte pas, et `rbs upgrade`
+ne l'ajoute pas : cette commande aligne le manifeste et les zones de l'`AGENTS.md`, et ne
+touche à aucun fichier source qui appartient au développeur. `rbs doctor` signale l'ancre
+absente avec le bloc à coller, et `rbs add cors` refuse de la même façon — rien d'écrit,
+le bloc affiché.
 
 ## Les échecs
 

@@ -43,6 +43,11 @@ pub(crate) struct Planned {
     pub files: Vec<String>,
     /// Ce que le fragment annonce installer, tel que son manifeste le décrit.
     pub description: String,
+    /// Les fragments que celui demandé entraîne, et que ce plan pose avec lui.
+    ///
+    /// Dans l'ordre où ils seront posés, la feature demandée exclue : ce que l'utilisateur
+    /// n'a pas nommé, il doit le lire avant que le plan ne s'applique.
+    pub entrainees: Vec<String>,
     /// Le projet inscrit déjà cette feature : le plan est vide et rien ne sera écrit.
     pub deja_installee: bool,
     /// La zone de l'`AGENTS.md` que le projet ne porte pas, s'il en manque une.
@@ -162,6 +167,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
             plan: plan::Builder::new(root).finir(),
             files: Vec::new(),
             description: String::new(),
+            entrainees: Vec::new(),
             deja_installee: true,
             zone_manquante: None,
         });
@@ -176,12 +182,14 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         }
     }
 
-    let source = Source::feature(options.template_dir.as_deref(), &options.feature)?;
-    let manifest = read_manifest(&source, &options.feature)?;
-    let templates = source.files().map_err(|source| Error::Acces {
-        path: options.feature.clone(),
-        source,
-    })?;
+    // La feature demandée et celles qu'elle entraîne partagent un seul plan :
+    // l'utilisateur voit ce qui s'écrira, y compris ce qu'il n'a pas nommé, avant que
+    // quoi que ce soit ne s'écrive.
+    let a_poser = resoudre(
+        options.template_dir.as_deref(),
+        &options.feature,
+        &metadonnees.features,
+    )?;
 
     let nom_projet = metadata::package_name(&root.join("Cargo.toml"))?;
     let crate_name = nom_projet.replace('-', "_");
@@ -209,6 +217,10 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let context = context! {
         project_name => nom_projet.clone(),
         crate_name => crate_name.clone(),
+        // Ce que le projet porte déjà, tel que `[package.metadata.rbs]` l'inscrit : un
+        // fragment qui sait qu'un autre est là s'appuie dessus — la limite de débit
+        // compte dans Redis quand le cache existe, dans sa mémoire sinon.
+        features => metadonnees.features.clone(),
         // Par où le binaire principal atteint un module de feature : la bibliothèque du
         // projet, ou `crate::` sur un projet engendré avant qu'elle n'existe, où ces
         // modules vivent dans le binaire lui-même.
@@ -231,31 +243,131 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     };
 
     let mut builder = plan::Builder::new(root.clone());
-    let files = installation::actions(
-        &installation::Fragment {
-            name: &options.feature,
-            manifest: &manifest,
-            templates: &templates,
-            context,
-            timestamp: &crate::generate::migration::current_timestamp(),
-        },
-        &mut builder,
-    )?;
+    let timestamp = crate::generate::migration::current_timestamp();
+    let mut files = Vec::new();
 
-    builder.patch(plan::PatchToml::InscrireFeature(options.feature.clone()))?;
+    for fragment in &a_poser {
+        files.extend(installation::actions(
+            &installation::Fragment {
+                name: &fragment.name,
+                manifest: &fragment.manifest,
+                templates: &fragment.templates,
+                context: context.clone(),
+                timestamp: &timestamp,
+            },
+            &mut builder,
+        )?);
 
-    // L'inventaire décrit le projet tel que ce plan le laissera : la feature vient d'y
-    // être inscrite, et le manifeste du disque l'ignore encore.
-    let zone_manquante =
-        crate::agents::refresh(&mut builder, &root, &metadonnees, Some(&options.feature))?;
+        builder.patch(plan::PatchToml::InscrireFeature(fragment.name.clone()))?;
+    }
+
+    let posees: Vec<String> = a_poser.iter().map(|f| f.name.clone()).collect();
+
+    // L'inventaire décrit le projet tel que ce plan le laissera : les features viennent
+    // d'y être inscrites, et le manifeste du disque les ignore encore.
+    let zone_manquante = crate::agents::refresh(&mut builder, &root, &metadonnees, &posees)?;
+
+    let description = a_poser
+        .iter()
+        .find(|fragment| fragment.name == options.feature)
+        .map_or_else(String::new, |fragment| {
+            fragment.manifest.feature.description.clone()
+        });
 
     Ok(Planned {
         plan: builder.finir(),
         files,
-        description: manifest.feature.description,
+        description,
+        entrainees: posees
+            .into_iter()
+            .filter(|name| name != &options.feature)
+            .collect(),
         deja_installee: false,
         zone_manquante,
     })
+}
+
+/// Un fragment lu, prêt à être planifié.
+struct Prevu {
+    /// Nom de la feature, tel que son répertoire la nomme.
+    name: String,
+    /// Ce que son manifeste déclare.
+    manifest: manifest::Manifest,
+    /// Ses templates, telles que la source les a lues.
+    templates: Vec<templates::File>,
+}
+
+/// Les fragments à poser pour honorer `feature` : elle, et ceux qu'elle entraîne.
+///
+/// Ils sont rendus par ordre alphabétique, celui que `rbs new --with` suit déjà : deux
+/// chemins d'installation équivalents doivent laisser le même projet, et rien dans un
+/// fragment déclaratif ne dépend de l'ordre où ses voisins ont écrit. C'est aussi ce qui
+/// garde les `pub mod` du squelette dans l'ordre où rustfmt les veut.
+///
+/// Un fragment que `[package.metadata.rbs]` inscrit déjà n'est pas reposé : l'entraînement
+/// obéit à la même idempotence que l'installation directe.
+fn resoudre(
+    template_dir: Option<&Path>,
+    feature: &str,
+    installees: &[String],
+) -> Result<Vec<Prevu>, Error> {
+    let mut resolution = Resolution {
+        template_dir,
+        installees,
+        poses: Vec::new(),
+        en_cours: Vec::new(),
+    };
+    resolution.resoudre(feature)?;
+
+    let mut poses = resolution.poses;
+    poses.sort_by(|gauche, droite| gauche.name.cmp(&droite.name));
+
+    Ok(poses)
+}
+
+/// L'état d'un parcours des `requires`, du fragment demandé vers ceux qu'il entraîne.
+struct Resolution<'a> {
+    template_dir: Option<&'a Path>,
+    installees: &'a [String],
+    poses: Vec<Prevu>,
+    /// Les fragments dont les exigences sont en cours d'exploration.
+    ///
+    /// Deux fragments qui s'exigent l'un l'autre feraient sinon descendre la récursion
+    /// jusqu'au débordement de pile — un manifeste de `--template-dir` peut l'écrire.
+    en_cours: Vec<String>,
+}
+
+impl Resolution<'_> {
+    fn resoudre(&mut self, feature: &str) -> Result<(), Error> {
+        let connu = self.installees.iter().chain(self.en_cours.iter());
+        if connu
+            .chain(self.poses.iter().map(|pose| &pose.name))
+            .any(|nom| nom == feature)
+        {
+            return Ok(());
+        }
+
+        let source = Source::feature(self.template_dir, feature)?;
+        let manifest = read_manifest(&source, feature)?;
+        let templates = source.files().map_err(|source| Error::Acces {
+            path: feature.to_string(),
+            source,
+        })?;
+
+        self.en_cours.push(feature.to_string());
+        for requise in manifest.feature.requires.clone() {
+            self.resoudre(&requise)?;
+        }
+        self.en_cours.pop();
+
+        self.poses.push(Prevu {
+            name: feature.to_string(),
+            manifest,
+            templates,
+        });
+
+        Ok(())
+    }
 }
 
 /// Lit le manifeste du fragment, qui dit ce que son installation fait au projet.
@@ -829,6 +941,250 @@ mod tests {
             "un des trois services a perdu son en-tête ports: :\n{compose}"
         );
         assert!(compose.contains("- \"1025:1025\""), "{compose}");
+    }
+
+    /// Le corps d'une ancre dans le contenu que le plan projette pour son fichier.
+    fn anchor_body<'plan>(planned: &'plan Planned, anchor: &crate::anchors::Anchor) -> &'plan str {
+        let source = projected(planned, anchor.file.as_ref());
+
+        source
+            .split_once(&anchor.opening())
+            .and_then(|(_, apres)| apres.split_once(&anchor.closing()))
+            .map(|(dedans, _)| dedans)
+            .unwrap_or_else(|| panic!("{} ne porte pas {}", anchor.file, anchor.name))
+    }
+
+    /// Une couche se pose dans `layers`, jamais dans `routes` : montée parmi les routes,
+    /// elle n'envelopperait rien.
+    #[test]
+    fn the_cors_plan_lands_its_layer_in_the_layers_anchor() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "cors")).expect("le plan doit se calculer");
+
+        assert_eq!(
+            planned.files,
+            ["src/cors/mod.rs", "src/cors/config.rs", "src/cors/tests.rs"]
+        );
+        assert!(
+            anchor_body(&planned, &crate::anchors::LAYERS).contains(".layer(crate::cors::layer())"),
+            "{}",
+            projected(&planned, "src/router.rs")
+        );
+        assert!(
+            !anchor_body(&planned, &crate::anchors::ROUTES).contains("cors"),
+            "la couche s'est montée parmi les routes"
+        );
+
+        let manifeste = projected(&planned, "Cargo.toml");
+        assert!(
+            manifeste.contains("tower-http = { version = \"0.7\", features = [\"cors\"] }"),
+            "{manifeste}"
+        );
+    }
+
+    /// Le critère de la tâche : le défaut n'ouvre l'API à personne. Un `Any` en dur serait
+    /// le pendant exact du trou que la limite de débit vient boucher.
+    #[test]
+    fn the_cors_plan_authorises_no_origin_by_default() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "cors")).expect("le plan doit se calculer");
+        let configuration = projected(&planned, "config/default.toml");
+
+        assert!(configuration.contains("origins = []"), "{configuration}");
+        assert!(
+            configuration.contains("credentials = false"),
+            "{configuration}"
+        );
+    }
+
+    /// Le fragment apporte son état, sa couche et sa section : trois points d'entrée
+    /// distincts, qu'un manifeste incomplet laisserait passer sans que rien ne compile
+    /// de travers.
+    #[test]
+    fn the_rate_limit_plan_lands_its_layer_its_state_and_its_section() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "rate-limit")).expect("le plan doit se calculer");
+
+        assert_eq!(
+            planned.files,
+            [
+                "src/rate_limit/mod.rs",
+                "src/rate_limit/config.rs",
+                "src/rate_limit/counter.rs",
+                "src/rate_limit/tests.rs",
+            ]
+        );
+
+        assert!(
+            anchor_body(&planned, &crate::anchors::LAYERS)
+                .contains("crate::rate_limit::middleware"),
+            "{}",
+            projected(&planned, "src/router.rs")
+        );
+        assert!(
+            anchor_body(&planned, &crate::anchors::STATE_INIT)
+                .contains("RateLimiter::from_config()?"),
+            "{}",
+            projected(&planned, "src/state.rs")
+        );
+
+        let configuration = projected(&planned, "config/default.toml");
+        assert!(configuration.contains("[rate_limit]"), "{configuration}");
+        assert!(
+            configuration.contains("trust_forwarded_for"),
+            "{configuration}"
+        );
+    }
+
+    /// Le critère de la tâche 12 : la route qui hache un Argon2 par requête anonyme est
+    /// limitée bien plus serré que le reste de l'API.
+    #[test]
+    fn the_rate_limit_plan_holds_the_login_route_stricter_than_the_global_limit() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "rate-limit")).expect("le plan doit se calculer");
+        let configuration = projected(&planned, "config/default.toml");
+
+        assert!(
+            configuration.contains("{ path = \"/auth/login\", limit = 5, window_secs = 60 }"),
+            "{configuration}"
+        );
+        assert!(
+            configuration.contains("limit = 120"),
+            "la limite globale doit rester bien plus large :\n{configuration}"
+        );
+    }
+
+    /// Sans le fragment `redis`, le compteur vit dans le processus : rien à joindre, et
+    /// aucune crate de plus.
+    #[test]
+    fn without_redis_the_counter_is_the_in_memory_one() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "rate-limit")).expect("le plan doit se calculer");
+        let counter = projected(&planned, "src/rate_limit/counter.rs");
+
+        assert!(counter.contains("HashMap"), "{counter}");
+        assert!(!counter.contains("deadpool_redis"), "{counter}");
+    }
+
+    /// Le fragment `redis` installé, le compteur passe sur son serveur : deux instances
+    /// derrière un répartiteur doivent compter ensemble.
+    #[test]
+    fn with_redis_the_counter_becomes_the_shared_one() {
+        let (_parent, root) = project();
+        run(&options(&root, "redis")).expect("la pose du cache doit aboutir");
+
+        let planned = plan_for(&options(&root, "rate-limit")).expect("le plan doit se calculer");
+        let counter = projected(&planned, "src/rate_limit/counter.rs");
+
+        assert!(counter.contains("deadpool_redis"), "{counter}");
+        assert!(
+            counter.contains("crate::cache::Config::load()"),
+            "{counter}"
+        );
+        assert!(!counter.contains("HashMap"), "{counter}");
+    }
+
+    /// Le critère de la tâche 12 : `rbs add auth` ne laisse pas `/auth/login` sans limite,
+    /// et l'utilisateur le lit avant que quoi que ce soit ne s'écrive.
+    #[test]
+    fn adding_auth_announces_and_lays_down_the_rate_limit_fragment() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "auth")).expect("le plan doit se calculer");
+
+        assert_eq!(planned.entrainees, ["rate-limit"]);
+        assert!(
+            planned
+                .files
+                .iter()
+                .any(|file| file == "src/rate_limit/mod.rs"),
+            "{:?}",
+            planned.files
+        );
+
+        let manifeste = projected(&planned, "Cargo.toml");
+        assert!(
+            manifeste.contains("features = [\"health\", \"auth\", \"rate-limit\"]"),
+            "les deux features doivent être inscrites :\n{manifeste}"
+        );
+        assert!(
+            projected(&planned, "config/default.toml").contains("/auth/login"),
+            "la règle stricte de la route de connexion manque"
+        );
+    }
+
+    /// Un fragment entraîné que le projet porte déjà n'est pas reposé : l'entraînement
+    /// obéit à la même idempotence que l'installation directe.
+    #[test]
+    fn an_already_installed_requirement_is_not_laid_down_twice() {
+        let (_parent, root) = project();
+        run(&options(&root, "rate-limit")).expect("la première pose doit aboutir");
+
+        let planned = plan_for(&options(&root, "auth")).expect("le plan doit se calculer");
+
+        assert!(planned.entrainees.is_empty(), "{:?}", planned.entrainees);
+        assert!(
+            !planned
+                .files
+                .iter()
+                .any(|file| file.starts_with("src/rate_limit/")),
+            "{:?}",
+            planned.files
+        );
+    }
+
+    /// Deux fragments qui s'exigent l'un l'autre — ce qu'un `--template-dir` peut écrire —
+    /// ne doivent pas faire descendre la résolution jusqu'au débordement de pile.
+    #[test]
+    fn two_fragments_requiring_each_other_do_not_loop() {
+        let (_parent, root) = project();
+        let fragments = TempDir::new().expect("répertoire temporaire créable");
+        for (nom, exige) in [("essai", "autre"), ("autre", "essai")] {
+            fs::create_dir(fragments.path().join(nom)).expect("le fragment se crée");
+            fs::write(
+                fragments.path().join(nom).join("feature.toml"),
+                format!(
+                    "[feature]\ndescription = \"{nom}\"\nrequires = [\"{exige}\"]\n\n\
+                     [[anchors]]\nanchor = \"features\"\ncontent = \"pub mod {nom};\"\n"
+                ),
+            )
+            .expect("le manifeste s'écrit");
+        }
+
+        let planned =
+            plan_for(&fragment_options(&root, &fragments)).expect("le plan doit se calculer");
+
+        assert_eq!(planned.entrainees, ["autre"]);
+    }
+
+    /// Le critère du lot : une ancre absente n'est pas contournée, et le bloc à recoller
+    /// s'affiche. `layers` est neuve, et tout projet antérieur en est dépourvu.
+    #[test]
+    fn a_project_without_the_layers_anchor_refuses_and_shows_the_block() {
+        let (_parent, root) = project();
+        let router = root.join("src/router.rs");
+        let ampute: String = fs::read_to_string(&router)
+            .expect("router.rs lisible")
+            .lines()
+            .filter(|line| !line.contains("rbs:layers"))
+            .map(|line| format!("{line}\n"))
+            .collect();
+        fs::write(&router, ampute).expect("router.rs inscriptible");
+        let before = fingerprint(&root);
+
+        let error = run(&options(&root, "cors")).expect_err("l'ancre manque : refuser");
+
+        let remedy = error
+            .remedy()
+            .unwrap_or_else(|| panic!("aucun bloc à coller pour : {error}"));
+        assert!(remedy.contains("// <rbs:layers>"), "{remedy}");
+        assert!(remedy.contains("src/router.rs"), "{remedy}");
+        assert_eq!(fingerprint(&root), before, "rien ne devait s'écrire");
     }
 
     #[test]
