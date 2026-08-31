@@ -51,6 +51,17 @@ impl Feature {
         to_singular(&self.name)
     }
 
+    /// La première référence requise de la feature, s'il y en a une.
+    ///
+    /// Une telle référence interdit d'inventer une valeur : un identifiant tiré au hasard
+    /// ne désigne aucune ligne de la table visée, et la clé étrangère refuse l'insertion.
+    /// Le seed et les tests HTTP s'y heurtent l'un comme l'autre.
+    pub(crate) fn required_reference(&self) -> Option<&Field> {
+        self.fields
+            .iter()
+            .find(|field| field.reference().is_some() && !field.optional)
+    }
+
     /// Relations dont la cible n'est visée qu'une fois : `impl Related` y a une réponse
     /// juste. Deux relations vers la même table s'excluent l'une l'autre, quel que soit
     /// leur nombre — `Related` prend un type pour clé, pas une paire (type, relation).

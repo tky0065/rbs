@@ -117,10 +117,7 @@ fn value(champ: &Field, rang: usize) -> String {
 /// la contrainte, ce qu'un fichier indépendant ne peut pas savoir. Ne rien engendrer vaut
 /// mieux qu'engendrer un fichier qui échoue à chaque lancement.
 pub(crate) fn is_seedable(feature: &Feature) -> bool {
-    !feature
-        .fields
-        .iter()
-        .any(|field| field.reference().is_some() && !field.optional)
+    feature.required_reference().is_none()
 }
 
 #[cfg(test)]

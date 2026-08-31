@@ -52,8 +52,9 @@ pub(crate) struct Planned {
     pub migration: Option<String>,
     /// Ce que rustfmt n'a pas pu faire sur le rendu, s'il y a lieu.
     pub avertissement: Option<format::Avertissement>,
-    /// Nom de la relation qui a écarté le seed, si l'entité en porte une requise.
-    pub seed_skipped: Option<String>,
+    /// Nom de la référence requise que porte l'entité, s'il y en a une : elle écarte le
+    /// seed, et prive les tests engendrés de leurs scénarios de création.
+    pub required_reference: Option<String>,
     /// La zone de l'`AGENTS.md` que le projet ne porte pas, s'il en manque une.
     pub zone_manquante: Option<crate::agents::MissingZone>,
 }
@@ -120,9 +121,10 @@ pub(crate) enum Error {
     #[error("{0}")]
     Metadata(#[from] metadata::Error),
 
-    /// Une ou plusieurs cibles de relation sont introuvables dans le projet.
+    /// Une ou plusieurs références n'ont pu être résolues : cible introuvable, ou deux
+    /// relations réclamant la même variante.
     #[error("{}", .0.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n"))]
-    Targets(Vec<relations::UnknownTarget>),
+    Relations(Vec<relations::ResolveError>),
 
     /// Une ou plusieurs cibles résolues n'ont pas de migration dans le projet.
     #[error("{}", .0.iter().map(ToString::to_string).collect::<Vec<_>>().join("\n"))]
@@ -216,7 +218,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // Lu une fois, avant que le nom ne soit tranché : la même inventaire sert à
     // résoudre les cibles des références et à écrire leur côté inverse.
     let entities = entities::scan(&root);
-    relations::resolve(&mut fields, &entities, &options.name).map_err(Error::Targets)?;
+    relations::resolve(&mut fields, &entities, &options.name).map_err(Error::Relations)?;
     relations::ensure_migrations_exist(&fields, &root).map_err(Error::MigrationsAbsentes)?;
 
     let feature = Feature::fresh(&options.name, fields);
@@ -242,8 +244,15 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     // Une référence requise rend l'entité non semable : un seed engendré échouerait à
     // chaque lancement sur la contrainte de clé étrangère, faute de ligne cible connue.
+    // Les tests engendrés y perdent, pour la même raison, leurs scénarios de création.
     let seedable = seed::is_seedable(&feature);
-    let seed_skipped = (options.complete && !seedable).then(|| unseedable_reference(&feature));
+    let required_reference = (options.complete && !seedable).then(|| {
+        feature
+            .required_reference()
+            .expect("is_seedable a déjà établi qu'une référence requise existe")
+            .relation_name()
+            .to_string()
+    });
 
     let (mut files, migration) =
         render(&feature, options.complete, seedable, crate_name.as_deref())?;
@@ -299,7 +308,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         files: files.into_iter().map(|(path, _)| path).collect(),
         migration,
         avertissement,
-        seed_skipped,
+        required_reference,
         zone_manquante,
     })
 }
@@ -334,11 +343,13 @@ fn plan_repair(
     let mut inverses = Vec::with_capacity(options.has_many.len());
     for child_name in &options.has_many {
         let Some(child) = entities::find(&entities, child_name) else {
-            return Err(Error::Targets(vec![relations::UnknownTarget {
-                relation: "has-many".to_string(),
-                target: child_name.clone(),
-                known: entities::tables(&entities),
-            }]));
+            return Err(Error::Relations(vec![
+                relations::ResolveError::UnknownTarget(relations::UnknownTarget {
+                    relation: "has-many".to_string(),
+                    target: child_name.clone(),
+                    known: entities::tables(&entities),
+                }),
+            ]));
         };
 
         if !relations::child_references(child, &parent, root) {
@@ -392,23 +403,9 @@ fn plan_repair(
         files: Vec::new(),
         migration: None,
         avertissement: None,
-        seed_skipped: None,
+        required_reference: None,
         zone_manquante,
     })
-}
-
-/// Nom de la relation dont la référence requise rend `feature` non semable.
-///
-/// N'est appelée que quand `is_seedable` a déjà répondu non : une référence bloquante
-/// existe forcément.
-fn unseedable_reference(feature: &Feature) -> String {
-    feature
-        .fields
-        .iter()
-        .find(|field| field.reference().is_some() && !field.optional)
-        .expect("is_seedable a déjà établi qu'une référence requise existe")
-        .relation_name()
-        .to_string()
 }
 
 /// Rend les fichiers de la feature, et sa migration si elle est complète.
@@ -843,7 +840,17 @@ mod tests {
             "le seed écarté ne doit pas être monté :\n{binaire}"
         );
 
-        assert_eq!(planned.seed_skipped.as_deref(), Some("author"));
+        assert_eq!(planned.required_reference.as_deref(), Some("author"));
+
+        let engendres = read(&root.join("src/posts/tests.rs"));
+        assert!(
+            !engendres.contains("the_full_lifecycle_goes_through_the_api"),
+            "le scénario qui crée violerait la clé étrangère :\n{engendres}"
+        );
+        assert!(
+            engendres.contains("« author »"),
+            "le fichier doit dire ce qui manque et pourquoi :\n{engendres}"
+        );
     }
 
     /// Une référence optionnelle, elle, ne bloque rien : le seed se sème à `None`.
@@ -862,7 +869,7 @@ mod tests {
         .expect("la génération doit aboutir");
 
         assert!(root.join("src/seeds/posts.rs").exists(), "le seed manque");
-        assert_eq!(planned.seed_skipped, None);
+        assert_eq!(planned.required_reference, None);
     }
 
     /// Une feature écrite à la main n'a pas d'entité : rien à semer.
@@ -1206,6 +1213,32 @@ mod tests {
         assert!(
             !root.join("src/posts").is_dir(),
             "des fichiers ont été écrits malgré la migration absente"
+        );
+    }
+
+    /// Deux relations du même plan qui se singularisent pareil : la génération s'arrête
+    /// avant d'écrire un `enum Relation` que rustc refuserait.
+    #[test]
+    fn two_relations_singularising_alike_are_refused_before_any_write() {
+        let (_parent, root) = project();
+        run(&options(&root, "users", Some("email:string:unique"), true))
+            .expect("users doit se générer");
+        let avant = fingerprint(&root);
+
+        let error = run(&options(
+            &root,
+            "posts",
+            Some("author:references:users,authors:references:users"),
+            true,
+        ))
+        .expect_err("les deux relations réclament la variante Author");
+
+        assert!(error.to_string().contains("Author"), "{error}");
+        assert!(error.to_string().contains("authors"), "{error}");
+        assert_eq!(
+            fingerprint(&root),
+            avant,
+            "rien ne doit être écrit quand deux relations se heurtent"
         );
     }
 
