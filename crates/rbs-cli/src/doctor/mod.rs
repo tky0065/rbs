@@ -168,6 +168,35 @@ const FEATURE_CHECKS: [FeatureCheck; 6] = [
     ("jobs", jobs::check),
 ];
 
+/// Le fichier de configuration que les contrôles de feature interrogent.
+const CONFIG: &str = "config/default.toml";
+
+/// Le contrôle d'une feature dont tout le diagnostic tient à sa section de configuration.
+///
+/// Seul `config/default.toml` est lu : le CLI ne sait pas quel `RBS_ENV` l'utilisateur
+/// emploiera, et une section posée dans le seul `config/production.toml` échapperait donc
+/// au diagnostic comme elle échappe au défaut du projet.
+///
+/// `present` est le constat du succès, propre à chaque feature : le cache et la file ne
+/// se nomment pas de la même façon dans un rapport.
+fn section_check(
+    root: &Path,
+    titre: &'static str,
+    section: &str,
+    present: &str,
+    reglages: &str,
+) -> Check {
+    if self::section(root, section) {
+        return Check::ok(titre, present);
+    }
+
+    Check::failed(
+        titre,
+        format!("{CONFIG} ne porte pas de section `[{section}]`"),
+        format!("ajoutez à {CONFIG} :\n[{section}]\n{reglages}"),
+    )
+}
+
 /// Vrai si `config/default.toml` porte une section `[name]`.
 ///
 /// Lu par `toml_edit` et non par recherche de texte : une section en commentaire n'est

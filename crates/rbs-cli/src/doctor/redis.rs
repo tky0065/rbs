@@ -9,25 +9,16 @@ use std::path::Path;
 use super::Check;
 
 const TITRE: &str = "redis";
-const CONFIG: &str = "config/default.toml";
 const SECTION: &str = "cache";
 
 /// Vérifie ce dont la feature `redis` a besoin pour démarrer.
-///
-/// Seul `config/default.toml` est lu : le CLI ne sait pas quel `RBS_ENV` l'utilisateur
-/// emploiera, et une section posée dans le seul `config/production.toml` échapperait donc
-/// au diagnostic comme elle échappe au défaut du projet.
 pub(crate) fn check(root: &Path) -> Check {
-    if super::section(root, SECTION) {
-        return Check::ok(TITRE, "la configuration du cache est en place");
-    }
-
-    Check::failed(
+    super::section_check(
+        root,
         TITRE,
-        format!("{CONFIG} ne porte pas de section `[{SECTION}]`"),
-        format!(
-            "ajoutez à {CONFIG} :\n[{SECTION}]\nurl = \"redis://127.0.0.1:6379\"\nttl_secs = 300"
-        ),
+        SECTION,
+        "la configuration du cache est en place",
+        "url = \"redis://127.0.0.1:6379\"\nttl_secs = 300",
     )
 }
 
@@ -38,7 +29,7 @@ mod tests {
 
     use tempfile::TempDir;
 
-    use super::super::State;
+    use super::super::{CONFIG, State};
     use super::*;
 
     /// Un projet neuf, doté à la main de ce que `add redis` y dépose.

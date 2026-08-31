@@ -10,25 +10,16 @@ use std::path::Path;
 use super::Check;
 
 const TITRE: &str = "jobs";
-const CONFIG: &str = "config/default.toml";
 const SECTION: &str = "jobs";
 
 /// Vérifie que la file a les réglages sous lesquels le fragment a été installé.
-///
-/// Seul `config/default.toml` est lu : le CLI ne sait pas quel `RBS_ENV` l'utilisateur
-/// emploiera, et une section posée dans le seul `config/production.toml` échapperait donc
-/// au diagnostic comme elle échappe au défaut du projet.
 pub(crate) fn check(root: &Path) -> Check {
-    if super::section(root, SECTION) {
-        return Check::ok(TITRE, "la configuration de la file est en place");
-    }
-
-    Check::failed(
+    super::section_check(
+        root,
         TITRE,
-        format!("{CONFIG} ne porte pas de section `[{SECTION}]`"),
-        format!(
-            "ajoutez à {CONFIG} :\n[{SECTION}]\nmax_attempts = 5\nretry_delay_secs = 30\npoll_interval_secs = 1"
-        ),
+        SECTION,
+        "la configuration de la file est en place",
+        "max_attempts = 5\nretry_delay_secs = 30\npoll_interval_secs = 1",
     )
 }
 
@@ -39,7 +30,7 @@ mod tests {
 
     use tempfile::TempDir;
 
-    use super::super::State;
+    use super::super::{CONFIG, State};
     use super::*;
 
     /// Un projet neuf, doté à la main de ce que `add jobs` y dépose.
