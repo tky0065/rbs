@@ -124,6 +124,52 @@ mod tests {
         );
     }
 
+    /// Sans cette traduction, un second POST sur une colonne `unique` rend 500 : une
+    /// faute du client servie comme une panne du serveur.
+    #[test]
+    fn a_unique_violation_becomes_a_conflict_rather_than_a_500() {
+        let rendered = repository("articles", "email:string:unique");
+
+        assert!(
+            rendered.contains("Some(SqlErr::UniqueConstraintViolation(_)) => {"),
+            "la violation d'unicité doit être reconnue :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(r#"Error::Conflict("cette valeur est déjà prise".to_owned())"#),
+            "elle doit devenir un conflit :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("use sea_orm::error::SqlErr;"),
+            "`SqlErr` doit être importé :\n{rendered}"
+        );
+    }
+
+    /// Le gabarit ne sait pas quelle colonne a fauté : le message ne peut pas la nommer,
+    /// et surtout pas recopier celui, propre à l'email, du fragment `auth`.
+    #[test]
+    fn the_conflict_message_stays_generic() {
+        let rendered = repository("articles", "email:string:unique");
+
+        assert!(!rendered.contains("adresse"), "{rendered}");
+        assert!(!rendered.contains("inscrite"), "{rendered}");
+    }
+
+    /// Les deux écritures passent par la même porte : sans cela, `PUT` rendrait 500 là où
+    /// `POST` rend 409, pour la même contrainte.
+    #[test]
+    fn the_creation_and_the_update_share_the_same_translation() {
+        let rendered = repository("articles", "email:string:unique");
+
+        assert!(
+            rendered.contains(".insert(db).await.map_err(conflict_on_duplicate)"),
+            "la création doit traduire :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(".update(db).await.map_err(conflict_on_duplicate)"),
+            "la mise à jour doit traduire :\n{rendered}"
+        );
+    }
+
     #[test]
     fn the_render_depends_only_on_the_feature_name() {
         let sans_champ = repository("articles", "");
