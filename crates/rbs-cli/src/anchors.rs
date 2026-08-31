@@ -278,8 +278,7 @@ pub(crate) fn resolved(root: &Path) -> Vec<Anchor> {
         .collect()
 }
 
-/// Vrai si le projet porte une bibliothèque, seule question que la résolution pose au
-/// disque.
+/// La seule question que la résolution des ancres pose au disque.
 fn has_library(root: &Path) -> bool {
     root.join("src/lib.rs").exists()
 }

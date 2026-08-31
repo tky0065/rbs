@@ -14,8 +14,6 @@ const TITRE: &str = "ancres";
 
 /// Vérifie que le projet porte toutes ses ancres, et dit comment recoller les absentes.
 pub(crate) fn check(root: &Path) -> Check {
-    // L'ancre des features se résout par repli : `src/lib.rs` sur un projet engendré
-    // depuis ce jalon, `src/main.rs` sur un projet plus ancien, dépourvu de bibliothèque.
     let anchors = anchors::resolved(root);
 
     // Une ancre optionnelle dont le fichier n'existe pas n'est pas applicable : la

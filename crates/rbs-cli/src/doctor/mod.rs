@@ -267,10 +267,10 @@ mod tests {
         assert!(report.succeeded());
     }
 
-    /// Un projet neuf, dont les features sont celles passées.
+    /// Le projet de `crate::fixtures::project`, dont le manifeste est réécrit pour ne
+    /// déclarer que les `features` passées.
     ///
-    /// `pub(super)` pour que les contrôles la réemploient : chaque module de `doctor/` qui
-    /// s'en écrirait une copie ferait diverger la sienne du projet que `rbs new` produit.
+    /// `pub(super)` : `doctor/guards.rs` est son seul réemploi hors de ce module.
     pub(super) fn project(features: &[&str]) -> (TempDir, std::path::PathBuf) {
         let (parent, root) = crate::fixtures::project();
 

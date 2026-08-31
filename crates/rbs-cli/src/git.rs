@@ -60,7 +60,7 @@ fn path(line: &str) -> Option<String> {
 ///
 /// Un working tree sale peut compter des centaines de fichiers : les nommer tous noie le
 /// message dans ce qu'il est censé rendre lisible.
-pub(crate) fn enumerate(files: &[String]) -> String {
+fn enumerate(files: &[String]) -> String {
     const NOMMES: usize = 5;
 
     let debut = files
