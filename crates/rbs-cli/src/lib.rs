@@ -387,12 +387,14 @@ fn generate(
         ui::warn(avertissement);
     }
 
-    // Un fichier qui n'apparaît pas dans le plan doit se justifier : sans cette ligne,
-    // l'absence du seed se découvrirait en cherchant un fichier qui n'a jamais existé.
-    if let Some(relation) = &planned.seed_skipped {
+    // Ce qui n'apparaît pas dans le plan doit se justifier : sans cette ligne, l'absence
+    // du seed se découvrirait en cherchant un fichier qui n'a jamais existé, et celle des
+    // scénarios de création en lisant les tests.
+    if let Some(relation) = &planned.required_reference {
         ui::info(&format!(
-            "\n  aucun seed pour {feature} : la référence « {relation} » est requise, et un \
-             seed ne peut pas deviner vers quelle ligne pointer"
+            "\n  la référence « {relation} » est requise : ni le seed de {feature} ni ses \
+             scénarios de création ne peuvent deviner vers quelle ligne pointer — le seed \
+             n'est pas engendré, et les tests s'arrêtent aux cas qui ne créent rien"
         ));
     }
 

@@ -52,8 +52,9 @@ pub(crate) struct Planned {
     pub migration: Option<String>,
     /// Ce que rustfmt n'a pas pu faire sur le rendu, s'il y a lieu.
     pub avertissement: Option<format::Avertissement>,
-    /// Nom de la relation qui a écarté le seed, si l'entité en porte une requise.
-    pub seed_skipped: Option<String>,
+    /// Nom de la référence requise que porte l'entité, s'il y en a une : elle écarte le
+    /// seed, et prive les tests engendrés de leurs scénarios de création.
+    pub required_reference: Option<String>,
     /// La zone de l'`AGENTS.md` que le projet ne porte pas, s'il en manque une.
     pub zone_manquante: Option<crate::agents::MissingZone>,
 }
@@ -243,8 +244,15 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     // Une référence requise rend l'entité non semable : un seed engendré échouerait à
     // chaque lancement sur la contrainte de clé étrangère, faute de ligne cible connue.
+    // Les tests engendrés y perdent, pour la même raison, leurs scénarios de création.
     let seedable = seed::is_seedable(&feature);
-    let seed_skipped = (options.complete && !seedable).then(|| unseedable_reference(&feature));
+    let required_reference = (options.complete && !seedable).then(|| {
+        feature
+            .required_reference()
+            .expect("is_seedable a déjà établi qu'une référence requise existe")
+            .relation_name()
+            .to_string()
+    });
 
     let (mut files, migration) =
         render(&feature, options.complete, seedable, crate_name.as_deref())?;
@@ -300,7 +308,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         files: files.into_iter().map(|(path, _)| path).collect(),
         migration,
         avertissement,
-        seed_skipped,
+        required_reference,
         zone_manquante,
     })
 }
@@ -395,23 +403,9 @@ fn plan_repair(
         files: Vec::new(),
         migration: None,
         avertissement: None,
-        seed_skipped: None,
+        required_reference: None,
         zone_manquante,
     })
-}
-
-/// Nom de la relation dont la référence requise rend `feature` non semable.
-///
-/// N'est appelée que quand `is_seedable` a déjà répondu non : une référence bloquante
-/// existe forcément.
-fn unseedable_reference(feature: &Feature) -> String {
-    feature
-        .fields
-        .iter()
-        .find(|field| field.reference().is_some() && !field.optional)
-        .expect("is_seedable a déjà établi qu'une référence requise existe")
-        .relation_name()
-        .to_string()
 }
 
 /// Rend les fichiers de la feature, et sa migration si elle est complète.
@@ -846,7 +840,17 @@ mod tests {
             "le seed écarté ne doit pas être monté :\n{binaire}"
         );
 
-        assert_eq!(planned.seed_skipped.as_deref(), Some("author"));
+        assert_eq!(planned.required_reference.as_deref(), Some("author"));
+
+        let engendres = read(&root.join("src/posts/tests.rs"));
+        assert!(
+            !engendres.contains("the_full_lifecycle_goes_through_the_api"),
+            "le scénario qui crée violerait la clé étrangère :\n{engendres}"
+        );
+        assert!(
+            engendres.contains("« author »"),
+            "le fichier doit dire ce qui manque et pourquoi :\n{engendres}"
+        );
     }
 
     /// Une référence optionnelle, elle, ne bloque rien : le seed se sème à `None`.
@@ -865,7 +869,7 @@ mod tests {
         .expect("la génération doit aboutir");
 
         assert!(root.join("src/seeds/posts.rs").exists(), "le seed manque");
-        assert_eq!(planned.seed_skipped, None);
+        assert_eq!(planned.required_reference, None);
     }
 
     /// Une feature écrite à la main n'a pas d'entité : rien à semer.
