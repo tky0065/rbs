@@ -88,6 +88,22 @@ mod tests {
         );
     }
 
+    /// Le total est un `COUNT` sur toute la table : l'attendre avant la page faisait deux
+    /// allers-retours en série à chaque `GET` de collection.
+    #[test]
+    fn the_page_and_its_total_leave_together() {
+        let rendered = repository("articles", "title:string");
+
+        assert!(
+            rendered.contains("tokio::try_join!("),
+            "les deux requêtes doivent partir ensemble :\n{rendered}"
+        );
+        assert!(
+            !rendered.contains("let total = Entity::find().count(db).await?;"),
+            "le total ne doit plus précéder la page :\n{rendered}"
+        );
+    }
+
     #[test]
     fn the_ordering_follows_the_descending_id() {
         let rendered = repository("articles", "title:string");
