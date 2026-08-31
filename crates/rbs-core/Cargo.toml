@@ -43,7 +43,7 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2 = { workspace = true, optional = true }
 thiserror.workspace = true
-tokio = { workspace = true, features = ["rt"] }
+tokio = { workspace = true, features = ["rt", "time"] }
 tracing.workspace = true
 tracing-subscriber = { workspace = true, features = ["fmt", "ansi", "chrono", "env-filter"] }
 ulid.workspace = true
@@ -52,5 +52,5 @@ validator.workspace = true
 
 [dev-dependencies]
 figment = { workspace = true, features = ["test"] }
-tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "rt", "rt-multi-thread", "test-util"] }
 tower = { workspace = true, features = ["util"] }

@@ -111,14 +111,21 @@ The `.env` the command wrote carries the URL you passed:
 RBS_ENV=development
 RBS_DATABASE__URL=postgres://rbs:secret@localhost:5432/demo
 
+# Le service `db` de docker-compose.yml interpole ces clés depuis ce fichier : le compose
+# est versionné, celui-ci est ignoré par git.
+POSTGRES_USER=rbs
+POSTGRES_PASSWORD=secret
+POSTGRES_DB=demo
+
 RBS_LOG_FORMAT=pretty
 RUST_LOG=info,demo=debug
 ```
 
 ## Starting the database
 
-`docker-compose.yml` carries the identifiers, the database name and the published port —
-all read from the URL above, none of them retyped:
+`docker-compose.yml` names the identifiers and the database rather than spelling them out:
+the file is committed, `.env` is not, so the values stay on the one side of the line Git
+does not cross. The published port is read from the same URL, none of it retyped:
 
 ```yaml
 name: demo
@@ -127,9 +134,9 @@ services:
   db:
     image: postgres:18-alpine
     environment:
-      POSTGRES_USER: rbs
-      POSTGRES_PASSWORD: secret
-      POSTGRES_DB: demo
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
     # Le port publié est celui du .env : c'est ce qui rend `docker compose up -d` suivi
     # de `cargo run` vrai sans recopier une valeur d'un fichier à l'autre. Le conflit
     # avec un PostgreSQL déjà installé sur la machine se règle en changeant les deux.
@@ -141,7 +148,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U rbs -d demo"]
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 2s
       timeout: 3s
       retries: 30

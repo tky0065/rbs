@@ -354,9 +354,16 @@ fn render(options: &Options, dependency: &str) -> Result<Vec<(PathBuf, String)>,
         .map_err(Error::Templates)?;
 
     let connexion = crate::url::parse(&options.database_url);
-    if !compose_utile(options, connexion.as_ref()) {
+    let compose = compose_utile(options, connexion.as_ref());
+    if !compose {
         files.retain(|file| file.destination != Path::new(COMPOSE));
     }
+
+    // Les identifiants du service `db` ne vivent que dans les deux fichiers
+    // d'environnement, et l'exemple versionné porte ceux de l'URL de démonstration :
+    // les recopier à la main dans la template les ferait diverger de `default_url`.
+    let demonstration =
+        crate::url::parse(&options.database.default_url(&crate_name(&options.name)));
 
     let renderer = Renderer::new();
     let context = context! {
@@ -379,6 +386,12 @@ fn render(options: &Options, dependency: &str) -> Result<Vec<(PathBuf, String)>,
             .filter(|base| !base.is_empty())
             .unwrap_or_else(|| crate_name(&options.name)),
         database_port => connexion.as_ref().map(|c| c.port).unwrap_or_default(),
+        // Les deux fichiers d'environnement ne portent les clés du service `db` que
+        // lorsqu'un compose les lit : ailleurs, elles ne désigneraient rien.
+        compose => compose,
+        database_user_par_defaut => demonstration.as_ref().map(|c| c.user.clone()).unwrap_or_default(),
+        database_password_par_defaut => demonstration.as_ref().map(|c| c.password.clone()).unwrap_or_default(),
+        database_name_par_defaut => demonstration.as_ref().map(|c| c.database.clone()).unwrap_or_default(),
         lang => options.lang.name(),
     };
 
@@ -1071,13 +1084,104 @@ mod tests {
         let compose = fs::read_to_string(project.root.join("docker-compose.yml"))
             .expect("le compose doit être écrit");
 
-        assert!(compose.contains("POSTGRES_USER: rbs"), "{compose}");
-        assert!(compose.contains("POSTGRES_PASSWORD: secret"), "{compose}");
-        assert!(compose.contains("POSTGRES_DB: demo"), "{compose}");
+        assert!(
+            compose.contains("POSTGRES_USER: \"${POSTGRES_USER}\""),
+            "{compose}"
+        );
+        assert!(
+            compose.contains("POSTGRES_DB: \"${POSTGRES_DB}\""),
+            "{compose}"
+        );
         assert!(compose.contains("- \"5432:5432\""), "{compose}");
         assert!(compose.contains("# <rbs:services>"), "{compose}");
         assert!(compose.contains("# </rbs:services>"), "{compose}");
         assert_eq!(project.files, 20);
+    }
+
+    /// Le compose est versionné, le `.env` ne l'est pas : les identifiants vivent dans
+    /// le second, et le premier ne fait que les nommer.
+    #[test]
+    fn the_database_password_stays_out_of_the_versioned_compose() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://u:s3cr3t-Pa$$@localhost:5432/db".to_string(),
+                database: Database::Postgres,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+                lang: crate::lang::Lang::Fr,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        let compose = fs::read_to_string(project.root.join("docker-compose.yml"))
+            .expect("le compose doit être écrit");
+        assert!(
+            !compose.contains("s3cr3t"),
+            "le compose versionné porte le mot de passe :\n{compose}"
+        );
+
+        let env = fs::read_to_string(project.root.join(".env")).expect("le .env doit être écrit");
+        assert!(
+            env.contains("POSTGRES_USER=u")
+                && env.contains("POSTGRES_PASSWORD=s3cr3t-Pa$$")
+                && env.contains("POSTGRES_DB=db"),
+            "le .env ne porte pas les identifiants que le compose interpole :\n{env}"
+        );
+
+        let exemple =
+            fs::read_to_string(project.root.join(".env.example")).expect("l'exemple doit exister");
+        assert!(
+            !exemple.contains("s3cr3t") && exemple.contains("POSTGRES_PASSWORD="),
+            "l'exemple versionné doit documenter la clé sans porter le secret :\n{exemple}"
+        );
+    }
+
+    /// Un mot de passe portant `'`, `:` ou `$(` cassait le YAML ou s'exécutait dans le
+    /// shell du healthcheck : ni sa valeur ni aucun de ses caractères n'atteignent plus
+    /// le fichier, et le healthcheck lit l'environnement du conteneur.
+    #[test]
+    fn a_password_with_yaml_and_shell_metacharacters_never_reaches_the_compose() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "postgres://u:a'b:c$(id)@localhost:5432/db".to_string(),
+                database: Database::Postgres,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+                lang: crate::lang::Lang::Fr,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        let compose = fs::read_to_string(project.root.join("docker-compose.yml"))
+            .expect("le compose doit être écrit");
+        assert!(
+            !compose.contains("a'b:c$(id)"),
+            "le mot de passe atteint le compose :\n{compose}"
+        );
+        assert!(
+            compose.contains("POSTGRES_PASSWORD: \"${POSTGRES_PASSWORD}\""),
+            "le scalaire n'est pas une référence citée :\n{compose}"
+        );
+        // `$$` est le `$` littéral de compose : la substitution est celle du shell du
+        // conteneur, qui ne réanalyse pas la valeur.
+        assert!(
+            compose.contains("pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""),
+            "le healthcheck interpole encore les identifiants :\n{compose}"
+        );
+
+        let env = fs::read_to_string(project.root.join(".env")).expect("le .env doit être écrit");
+        assert!(
+            env.contains("POSTGRES_PASSWORD=a'b:c$(id)"),
+            "le .env ne porte pas le mot de passe réel :\n{env}"
+        );
     }
 
     /// Le port publié est celui du .env, non 5432 en dur : sans quoi `cargo run` sur
@@ -1105,7 +1209,7 @@ mod tests {
         assert!(compose.contains("- \"15432:5432\""), "{compose}");
     }
 
-    /// Une URL sans nom de base laisse `POSTGRES_DB:` vide, donc un service que le
+    /// Une URL sans nom de base laisse `POSTGRES_DB` vide, donc un service que le
     /// healthcheck ne déclare jamais sain : le nom du projet prend le relais.
     #[test]
     fn a_url_without_a_database_names_the_one_the_project_will_open() {
@@ -1124,10 +1228,13 @@ mod tests {
         )
         .expect("le projet doit se créer");
 
-        let compose = fs::read_to_string(project.root.join("docker-compose.yml"))
-            .expect("le compose doit être écrit");
+        assert!(
+            project.root.join("docker-compose.yml").is_file(),
+            "le compose doit être écrit"
+        );
+        let env = fs::read_to_string(project.root.join(".env")).expect("le .env doit être écrit");
 
-        assert!(compose.contains("POSTGRES_DB: mon_api"), "{compose}");
+        assert!(env.contains("POSTGRES_DB=mon_api"), "{env}");
     }
 
     #[test]
