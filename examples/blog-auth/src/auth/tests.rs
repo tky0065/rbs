@@ -171,8 +171,12 @@ async fn the_hash_does_not_appear_in_the_response() {
     );
 }
 
+/// Le 409 dit qu'il refuse, sans redire quoi.
+///
+/// Une réponse qui cite l'adresse la confirme à qui la soumet : l'inscription
+/// deviendrait l'oracle d'énumération que la connexion s'applique à ne pas être.
 #[tokio::test]
-async fn an_email_already_taken_returns_409() {
+async fn an_email_already_taken_returns_409_without_repeating_it() {
     let api = application().await;
     let email = fresh_email();
 
@@ -182,6 +186,10 @@ async fn an_email_already_taken_returns_409() {
     let (second, body) = register(&api, &email).await;
 
     assert_eq!(second, StatusCode::CONFLICT, "{body}");
+    assert!(
+        !body.to_string().contains(&email),
+        "le refus répète l'adresse soumise : {body}"
+    );
 }
 
 /// Les deux échecs sont indiscernables : un corps qui différerait dirait à un attaquant
@@ -308,6 +316,44 @@ async fn a_valid_refresh_returns_a_new_pair() {
     assert_ne!(
         nouvelle["access_token"], paire["access_token"],
         "le jeton d'accès doit être réémis"
+    );
+}
+
+/// Un jeton rejoué ferme le compte, et non la seule ligne qu'il présente.
+///
+/// Sans cela, un jeton volé et joué avant la rotation légitime laisse son porteur avec
+/// une paire valide, qu'il renouvelle indéfiniment et sans bruit : c'est la détection de
+/// réutilisation, et elle n'a de sens que si toute la famille tombe.
+#[tokio::test]
+async fn replaying_a_refresh_closes_the_other_sessions_of_the_account() {
+    let api = application().await;
+    let email = fresh_email();
+    register(&api, &email).await;
+
+    let (_, premiere) = authenticate(&api, &email, PASSWORD).await;
+    let (_, seconde) = authenticate(&api, &email, PASSWORD).await;
+
+    let ancien = refresh_for(&premiere);
+    let (status, tournee) = refresh(&api, &ancien).await;
+    assert_eq!(status, StatusCode::OK, "{tournee}");
+
+    let (rejeu, body) = refresh(&api, &ancien).await;
+    assert_eq!(rejeu, StatusCode::UNAUTHORIZED, "{body}");
+
+    // La paire née de la rotation légitime tombe elle aussi : rien ne dit lequel des deux
+    // porteurs du jeton rejoué la détient.
+    let (status, body) = refresh(&api, &refresh_for(&tournee)).await;
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "la paire issue de la rotation survit au rejeu : {body}"
+    );
+
+    let (status, body) = refresh(&api, &refresh_for(&seconde)).await;
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "la session sœur survit au rejeu : {body}"
     );
 }
 

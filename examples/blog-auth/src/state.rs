@@ -6,6 +6,7 @@ use sea_orm::DatabaseConnection;
 pub struct AppState {
     core: CoreState,
     // <rbs:state_champs>
+    pub rate_limit: crate::rate_limit::RateLimiter,
     // </rbs:state_champs>
 }
 
@@ -14,6 +15,7 @@ impl AppState {
         Ok(Self {
             core: CoreState::new(db, config),
             // <rbs:state_init>
+            rate_limit: crate::rate_limit::RateLimiter::from_config()?,
             // </rbs:state_init>
         })
     }

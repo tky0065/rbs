@@ -21,7 +21,15 @@ async fn main() -> anyhow::Result<()> {
         .with_context(|| format!("impossible d'écouter sur {adresse}"))?;
 
     tracing::info!(%adresse, "démarrage");
-    axum::serve(listener, app).await?;
+
+    // Le routeur est servi avec l'adresse du pair, et non nu : c'est le seul endroit d'où
+    // elle peut entrer dans la requête, et une couche qui distingue ses clients — une
+    // limite de débit — n'a pas d'autre source.
+    axum::serve(
+        listener,
+        app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await?;
 
     Ok(())
 }

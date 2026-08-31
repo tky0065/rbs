@@ -10,4 +10,5 @@ pub mod state;
 // <rbs:features>
 pub mod auth;
 pub mod posts;
+pub mod rate_limit;
 // </rbs:features>

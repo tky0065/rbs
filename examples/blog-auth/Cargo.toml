@@ -11,7 +11,7 @@ default-run = "blog-auth"
 
 [package.metadata.rbs]
 version = "1.1.0"
-features = ["health", "auth", "posts"]
+features = ["health", "auth", "rate-limit", "posts"]
 database = "postgres"
 lang = "fr"
 
@@ -31,7 +31,7 @@ chrono = "0.4"
 sea-orm = { version = "2.0", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-tokio = { version = "1.53", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.53", features = ["macros", "rt-multi-thread", "time"] }
 tracing = "0.1"
 utoipa = { version = "5.5", features = ["axum_extras", "chrono", "uuid"] }
 utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
