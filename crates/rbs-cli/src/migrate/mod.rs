@@ -50,9 +50,7 @@ pub(crate) enum Output {
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     /// La commande n'a pas été lancée depuis un projet rbs.
-    #[error(
-        "cette commande attend un projet rbs : aucun Cargo.toml portant [package.metadata.rbs] au-dessus d'ici"
-    )]
+    #[error("{}", crate::errors::PAS_UN_PROJET)]
     PasUnProjet,
 
     /// Le `.env` du projet est absent ou illisible.
@@ -87,15 +85,8 @@ pub(crate) enum Error {
     Metadata(#[from] metadata::Error),
 }
 
-/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
-impl From<metadata::RootError> for Error {
-    fn from(faute: metadata::RootError) -> Self {
-        match faute {
-            metadata::RootError::Absent => Self::PasUnProjet,
-            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
-        }
-    }
-}
+// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+crate::errors::depuis_la_racine!(Error);
 
 /// Exécute `action` dans le projet qui contient `directory`.
 pub(crate) fn run(action: Action, directory: &Path) -> Result<Output, Error> {
@@ -181,31 +172,10 @@ pub(crate) fn launch(
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
     use tempfile::TempDir;
 
     use super::*;
-
-    /// Un projet déroulé par `rbs new`, sans passer par le binaire ni par cargo.
-    fn project() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
-    }
+    use crate::fixtures::project;
 
     #[test]
     fn outside_an_rbs_project_nothing_is_launched() {

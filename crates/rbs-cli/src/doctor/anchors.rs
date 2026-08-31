@@ -6,7 +6,7 @@
 use std::fs;
 use std::path::Path;
 
-use crate::anchors::{self, ANCRES, Anchor};
+use crate::anchors::{self, Anchor};
 
 use super::Check;
 
@@ -14,18 +14,7 @@ const TITRE: &str = "ancres";
 
 /// Vérifie que le projet porte toutes ses ancres, et dit comment recoller les absentes.
 pub(crate) fn check(root: &Path) -> Check {
-    // L'ancre des features se résout par repli : `src/lib.rs` sur un projet engendré
-    // depuis ce jalon, `src/main.rs` sur un projet plus ancien, dépourvu de bibliothèque.
-    let anchors: Vec<Anchor> = ANCRES
-        .into_iter()
-        .map(|anchor| {
-            if anchor.name == anchors::FEATURES.name {
-                anchors::resolve_features(root)
-            } else {
-                anchor
-            }
-        })
-        .collect();
+    let anchors = anchors::resolved(root);
 
     // Une ancre optionnelle dont le fichier n'existe pas n'est pas applicable : la
     // réclamer ferait passer pour incomplet un projet qui ne l'est pas.
@@ -70,31 +59,11 @@ fn present(root: &Path, anchor: &Anchor) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
-    use tempfile::TempDir;
+    use crate::anchors::ANCRES;
+    use crate::fixtures::project;
 
     use super::super::State;
     use super::*;
-
-    fn project() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
-    }
 
     /// Retire du projet la ligne portant `motif`.
     fn remove(root: &Path, file: &str, motif: &str) {

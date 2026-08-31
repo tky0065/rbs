@@ -104,9 +104,7 @@ impl Report {
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     /// La commande n'a pas été lancée depuis un projet rbs.
-    #[error(
-        "cette commande attend un projet rbs : aucun Cargo.toml portant [package.metadata.rbs] au-dessus d'ici"
-    )]
+    #[error("{}", crate::errors::PAS_UN_PROJET)]
     PasUnProjet,
 
     /// Le manifeste du projet n'a pu être lu.
@@ -114,15 +112,8 @@ pub(crate) enum Error {
     Metadata(#[from] metadata::Error),
 }
 
-/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
-impl From<metadata::RootError> for Error {
-    fn from(faute: metadata::RootError) -> Self {
-        match faute {
-            metadata::RootError::Absent => Self::PasUnProjet,
-            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
-        }
-    }
-}
+// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+crate::errors::depuis_la_racine!(Error);
 
 /// Diagnostique le projet qui contient `directory`.
 pub(crate) fn run(directory: &Path) -> Result<Report, Error> {
@@ -137,11 +128,19 @@ pub(crate) fn run(directory: &Path) -> Result<Report, Error> {
         base::check(&root),
     ];
 
+    // Une seule lecture pour toute la boucle : le manifeste était réanalysé en entier à
+    // chaque entrée du tableau, et la configuration relue par chaque contrôle pour une
+    // question d'une ligne.
+    let installees = metadata::read(&root.join("Cargo.toml"))
+        .map(|metadonnees| metadonnees.features)
+        .unwrap_or_default();
+    let config = Config::read(&root);
+
     // Un projet qui n'a pas installé une feature n'a pas à lire une ligne à son sujet :
     // le rapport ne porte que des contrôles dont le verdict le concerne.
     for (feature, check) in FEATURE_CHECKS {
-        if installed_feature(&root, feature) {
-            checks.push(check(&root));
+        if installees.iter().any(|installee| installee == feature) {
+            checks.push(check(&root, &config));
         }
     }
 
@@ -149,7 +148,7 @@ pub(crate) fn run(directory: &Path) -> Result<Report, Error> {
 }
 
 /// Une feature, sous le nom qu'elle porte dans le manifeste, et le contrôle qui la juge.
-type FeatureCheck = (&'static str, fn(&Path) -> Check);
+type FeatureCheck = (&'static str, fn(&Path, &Config) -> Check);
 
 /// Le contrôle propre à chaque feature, sous le nom qu'elle porte dans le manifeste.
 ///
@@ -159,48 +158,89 @@ type FeatureCheck = (&'static str, fn(&Path) -> Check);
 ///
 /// Une feature peut y figurer deux fois : `auth` amène de quoi vérifier son secret, et de
 /// quoi juger les routes que les rôles qu'elle installe pourraient protéger.
+///
+/// Un contrôle qui n'interroge pas la configuration, ou qui n'interroge qu'elle, le dit
+/// par une fermeture : lui imposer un paramètre qu'il n'emploie pas se lirait comme une
+/// dépendance qu'il n'a pas.
 const FEATURE_CHECKS: [FeatureCheck; 6] = [
     ("auth", auth::check),
-    ("auth", guards::check),
-    ("redis", redis::check),
+    ("auth", |root, _| guards::check(root)),
+    ("redis", |_, config| redis::check(config)),
     ("mail", mail::check),
     ("storage", storage::check),
-    ("jobs", jobs::check),
+    ("jobs", |_, config| jobs::check(config)),
 ];
 
-/// Vrai si `config/default.toml` porte une section `[name]`.
+/// Le fichier de configuration que les contrôles de feature interrogent.
+const CONFIG: &str = "config/default.toml";
+
+/// Le contrôle d'une feature dont tout le diagnostic tient à sa section de configuration.
 ///
-/// Lu par `toml_edit` et non par recherche de texte : une section en commentaire n'est
-/// pas une section.
-fn section(root: &Path, name: &str) -> bool {
-    std::fs::read_to_string(root.join("config/default.toml"))
-        .ok()
-        .and_then(|source| source.parse::<toml_edit::DocumentMut>().ok())
-        .is_some_and(|document| document.get(name).is_some())
+/// Seul `config/default.toml` est lu : le CLI ne sait pas quel `RBS_ENV` l'utilisateur
+/// emploiera, et une section posée dans le seul `config/production.toml` échapperait donc
+/// au diagnostic comme elle échappe au défaut du projet.
+///
+/// `present` est le constat du succès, propre à chaque feature : le cache et la file ne
+/// se nomment pas de la même façon dans un rapport.
+fn section_check(
+    config: &Config,
+    titre: &'static str,
+    section: &str,
+    present: &str,
+    reglages: &str,
+) -> Check {
+    if config.section(section) {
+        return Check::ok(titre, present);
+    }
+
+    Check::failed(
+        titre,
+        format!("{CONFIG} ne porte pas de section `[{section}]`"),
+        format!("ajoutez à {CONFIG} :\n[{section}]\n{reglages}"),
+    )
 }
 
-/// Valeur d'un champ de `config/default.toml`, s'il est renseigné.
+/// `config/default.toml` du projet, lu et analysé une seule fois.
 ///
-/// Rend `None` aussi bien pour une section absente que pour un champ absent : ce qui
-/// intéresse un contrôle est de disposer ou non de la valeur, jamais laquelle des deux
-/// couches manque.
-fn field(root: &Path, section: &str, key: &str) -> Option<String> {
-    std::fs::read_to_string(root.join("config/default.toml"))
-        .ok()
-        .and_then(|source| source.parse::<toml_edit::DocumentMut>().ok())
-        .and_then(|document| {
+/// Un diagnostic complet interrogeait ce fichier jusqu'à huit fois, chaque contrôle le
+/// relisant et le réanalysant pour une question d'une ligne — `storage` en enchaînait
+/// trois d'affilée.
+pub(crate) struct Config(Option<toml_edit::DocumentMut>);
+
+impl Config {
+    /// Lit la configuration du projet.
+    ///
+    /// Un fichier absent ou illisible se comporte comme un fichier vide : ce qui
+    /// intéresse un contrôle est de disposer ou non de la valeur, jamais laquelle des
+    /// couches manque.
+    pub(crate) fn read(root: &Path) -> Self {
+        Self(
+            std::fs::read_to_string(root.join(CONFIG))
+                .ok()
+                .and_then(|source| source.parse::<toml_edit::DocumentMut>().ok()),
+        )
+    }
+
+    /// Vrai si la configuration porte une section `[name]`.
+    ///
+    /// Analysé par `toml_edit` et non cherché en texte : une section en commentaire n'est
+    /// pas une section.
+    pub(crate) fn section(&self, name: &str) -> bool {
+        self.0
+            .as_ref()
+            .is_some_and(|document| document.get(name).is_some())
+    }
+
+    /// Valeur d'un champ, s'il est renseigné.
+    pub(crate) fn field(&self, section: &str, key: &str) -> Option<String> {
+        self.0.as_ref().and_then(|document| {
             document
                 .get(section)
                 .and_then(|table| table.get(key))
                 .and_then(|value| value.as_str())
                 .map(str::to_owned)
         })
-}
-
-/// Vrai si `name` figure dans `[package.metadata.rbs].features`.
-fn installed_feature(root: &Path, name: &str) -> bool {
-    metadata::read(&root.join("Cargo.toml"))
-        .is_ok_and(|metadonnees| metadonnees.features.iter().any(|feature| feature == name))
+    }
 }
 
 #[cfg(test)]
@@ -227,27 +267,14 @@ mod tests {
         assert!(report.succeeded());
     }
 
-    /// Un projet neuf, dont les features sont celles passées.
+    /// Le projet de `crate::fixtures::project`, dont le manifeste est réécrit pour ne
+    /// déclarer que les `features` passées.
     ///
-    /// `pub(super)` pour que les contrôles la réemploient : chaque module de `doctor/` qui
-    /// s'en écrirait une copie ferait diverger la sienne du projet que `rbs new` produit.
+    /// `pub(super)` : `doctor/guards.rs` est son seul réemploi hors de ce module.
     pub(super) fn project(features: &[&str]) -> (TempDir, std::path::PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
+        let (parent, root) = crate::fixtures::project();
 
-        let manifest = project.root.join("Cargo.toml");
+        let manifest = root.join("Cargo.toml");
         let source = std::fs::read_to_string(&manifest).expect("manifeste lisible");
         let declarees = features
             .iter()
@@ -263,7 +290,7 @@ mod tests {
         )
         .expect("manifeste inscriptible");
 
-        (parent, project.root)
+        (parent, root)
     }
 
     fn titles(report: &Report) -> Vec<&'static str> {

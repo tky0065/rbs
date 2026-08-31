@@ -31,6 +31,22 @@ pub(crate) fn modified_files(root: &Path) -> Vec<String> {
         .collect()
 }
 
+/// Refuse d'écrire dans un working tree qui porte des modifications non commitées.
+///
+/// Ce qu'une commande écrirait s'y mêlerait à ce que le développeur n'a pas encore
+/// enregistré, et `git diff` ne les distinguerait plus.
+pub(crate) fn garde(root: &Path) -> Result<(), crate::errors::WorkingTreeSale> {
+    let modifies = modified_files(root);
+
+    if modifies.is_empty() {
+        return Ok(());
+    }
+
+    Err(crate::errors::WorkingTreeSale {
+        files: enumerate(&modifies),
+    })
+}
+
 /// Le chemin d'une ligne `XY path`, ou sa destination pour un renommage
 /// `R  ancien -> new`.
 fn path(line: &str) -> Option<String> {
@@ -44,7 +60,7 @@ fn path(line: &str) -> Option<String> {
 ///
 /// Un working tree sale peut compter des centaines de fichiers : les nommer tous noie le
 /// message dans ce qu'il est censé rendre lisible.
-pub(crate) fn enumerate(files: &[String]) -> String {
+fn enumerate(files: &[String]) -> String {
     const NOMMES: usize = 5;
 
     let debut = files

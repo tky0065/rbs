@@ -55,9 +55,7 @@ pub(crate) enum Step {
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     /// La commande n'a pas été lancée depuis un projet rbs.
-    #[error(
-        "cette commande attend un projet rbs : aucun Cargo.toml portant [package.metadata.rbs] au-dessus d'ici"
-    )]
+    #[error("{}", crate::errors::PAS_UN_PROJET)]
     PasUnProjet,
 
     /// Le `.env` du projet est absent, illisible, ou muet sur la base.
@@ -101,15 +99,8 @@ pub(crate) enum Error {
     Metadata(#[from] metadata::Error),
 }
 
-/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
-impl From<metadata::RootError> for Error {
-    fn from(faute: metadata::RootError) -> Self {
-        match faute {
-            metadata::RootError::Absent => Self::PasUnProjet,
-            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
-        }
-    }
-}
+// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+crate::errors::depuis_la_racine!(Error);
 
 impl Error {
     /// Ce qu'il y a à faire, quand il y a quelque chose à faire.
@@ -350,22 +341,11 @@ mod tests {
 
     /// Le même, sur le moteur demandé.
     fn project_on(database: Database, features: &[&str], url: &str) -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: url.to_string(),
-                database,
-                features: features.iter().map(|f| (*f).to_string()).collect(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
+        crate::fixtures::Project::new()
+            .database(database)
+            .features(features)
+            .url(url)
+            .create()
     }
 
     // SQLite n'a pas de serveur : attendre qu'un port réponde ferait échouer `rbs dev`

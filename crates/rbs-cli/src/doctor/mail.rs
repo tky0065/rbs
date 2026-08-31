@@ -11,7 +11,7 @@ use std::path::Path;
 
 use crate::dotenv;
 
-use super::Check;
+use super::{Check, Config};
 
 const TITRE: &str = "mail";
 const CLE: &str = "RBS_MAIL__SMTP_PASSWORD";
@@ -21,19 +21,19 @@ const SECTION: &str = "mail";
 const UTILISATEUR: &str = "smtp_user";
 
 /// Vérifie ce dont la feature `mail` a besoin pour envoyer.
-pub(crate) fn check(root: &Path) -> Check {
-    check_with(root, |key| std::env::var(key).ok())
+pub(crate) fn check(root: &Path, config: &Config) -> Check {
+    check_with(root, config, |key| std::env::var(key).ok())
 }
 
 /// Le contrôle, l'environnement passé en paramètre.
 ///
 /// L'environnement l'emporte sur le `.env`, comme dans `auth::check_with` : crier au mot
 /// de passe manquant alors qu'il est exporté serait faux.
-fn check_with(root: &Path, env: impl Fn(&str) -> Option<String>) -> Check {
+fn check_with(root: &Path, config: &Config, env: impl Fn(&str) -> Option<String>) -> Check {
     let du_fichier = dotenv::read(&root.join(FICHIER)).unwrap_or_default();
 
     let mot_de_passe = env(CLE).or_else(|| dotenv::value(&du_fichier, CLE).map(str::to_owned));
-    let compte = super::field(root, SECTION, UTILISATEUR).unwrap_or_default();
+    let compte = config.field(SECTION, UTILISATEUR).unwrap_or_default();
 
     let mut defauts = Vec::new();
     let mut remedes = Vec::new();
@@ -62,7 +62,7 @@ fn check_with(root: &Path, env: impl Fn(&str) -> Option<String>) -> Check {
         Some(_) => {}
     }
 
-    if !super::section(root, SECTION) {
+    if !config.section(SECTION) {
         defauts.push(format!("{CONFIG} ne porte pas de section `[{SECTION}]`"));
         remedes.push(format!(
             "ajoutez à {CONFIG} :\n[{SECTION}]\nsmtp_host = \"localhost\"\nsmtp_port = 1025\n\
@@ -85,27 +85,12 @@ mod tests {
 
     use tempfile::TempDir;
 
-    use super::super::State;
+    use super::super::{Config, State};
     use super::*;
 
     /// Un projet neuf, doté à la main de ce que `add mail` y dépose.
     fn project_with_mail() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        let root = project.root;
+        let (parent, root) = crate::fixtures::project();
 
         // Ce que le `[[config]]` du fragment inscrit, `smtp_user` vide compris.
         add(
@@ -142,7 +127,7 @@ mod tests {
         let (_parent, root) = project_with_mail();
         rewrite(&root, FICHIER, &format!("{CLE}=\n"), "");
 
-        let check = check_with(&root, bare);
+        let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(
@@ -164,7 +149,7 @@ mod tests {
             "smtp_user = \"envoi@exemple.fr\"",
         );
 
-        let check = check_with(&root, bare);
+        let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(
@@ -180,7 +165,7 @@ mod tests {
     fn a_local_server_without_authentication_reports_nothing() {
         let (_parent, root) = project_with_mail();
 
-        let check = check_with(&root, bare);
+        let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(check.state, State::Bon, "{}", check.detail);
     }
@@ -190,7 +175,7 @@ mod tests {
         let (_parent, root) = project_with_mail();
         rewrite(&root, CONFIG, "[mail]", "# section retirée par le test");
 
-        let check = check_with(&root, bare);
+        let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(
@@ -211,7 +196,7 @@ mod tests {
             "smtp_user = \"envoi@exemple.fr\"",
         );
 
-        let check = check_with(&root, |key| {
+        let check = check_with(&root, &Config::read(&root), |key| {
             (key == CLE).then(|| "un-mot-de-passe".to_string())
         });
 

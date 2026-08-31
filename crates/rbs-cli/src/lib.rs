@@ -7,6 +7,9 @@ mod database;
 mod dev;
 mod doctor;
 mod dotenv;
+mod errors;
+#[cfg(test)]
+mod fixtures;
 mod generate;
 mod git;
 mod lang;
@@ -268,6 +271,25 @@ fn signaler_zone_manquante(zone: Option<&agents::MissingZone>) {
     }
 }
 
+/// Applique le plan, ou dit que `--dry-run` l'a laissé sur le papier.
+///
+/// Rend `false` quand rien n'a été écrit : l'appelant sort alors sans annoncer une
+/// écriture qui n'a pas eu lieu.
+fn appliquer(
+    plan: &plan::Plan,
+    force: bool,
+    dry_run: bool,
+) -> Result<bool, plan::application::Error> {
+    if dry_run {
+        ui::info("\n  rien n'a été écrit (--dry-run)");
+        return Ok(false);
+    }
+
+    plan::application::apply(plan, force)?;
+
+    Ok(true)
+}
+
 /// Installe une feature dans le projet courant, plan affiché avant écriture.
 fn add(
     feature: String,
@@ -275,10 +297,8 @@ fn add(
     dry_run: bool,
     template_dir: Option<PathBuf>,
 ) -> Result<(), add::Error> {
-    let directory = std::env::current_dir().map_err(|source| add::Error::Acces {
-        path: ".".to_string(),
-        source,
-    })?;
+    let directory = std::env::current_dir()
+        .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
 
     add_in(directory, feature, force, dry_run, template_dir)
 }
@@ -323,12 +343,9 @@ fn add_in(
 
     signaler_zone_manquante(planned.zone_manquante.as_ref());
 
-    if dry_run {
-        ui::info("\n  rien n'a été écrit (--dry-run)");
+    if !appliquer(&planned.plan, force, dry_run)? {
         return Ok(());
     }
-
-    plan::application::apply(&planned.plan, force)?;
 
     ui::success(&format!(
         "{feature} installée — {}",
@@ -415,10 +432,8 @@ fn generate(
     // `--has-many` répare une feature déjà là : rien à générer, donc rien à annoncer sous
     // ce nom-là une fois l'écriture faite.
     let repairing = !has_many.is_empty();
-    let directory = std::env::current_dir().map_err(|source| generate::command::Error::Acces {
-        path: ".".to_string(),
-        source,
-    })?;
+    let directory = std::env::current_dir()
+        .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
     let planned = generate::command::plan_for(&generate::command::Options {
         name,
         fields,
@@ -451,12 +466,9 @@ fn generate(
         ));
     }
 
-    if dry_run {
-        ui::info("\n  rien n'a été écrit (--dry-run)");
+    if !appliquer(&planned.plan, force, dry_run)? {
         return Ok(());
     }
-
-    plan::application::apply(&planned.plan, force)?;
 
     if repairing {
         ui::success(&format!("{feature} : côté inverse écrit"));
@@ -479,10 +491,8 @@ fn generate(
 /// Aligne le manifeste du projet courant sur la version du CLI, plan affiché avant
 /// écriture.
 fn upgrade(force: bool, dry_run: bool) -> Result<(), upgrade::Error> {
-    let directory = std::env::current_dir().map_err(|source| upgrade::Error::Acces {
-        path: ".".to_string(),
-        source,
-    })?;
+    let directory = std::env::current_dir()
+        .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
 
     upgrade_in(directory, force, dry_run)
 }
@@ -508,12 +518,9 @@ fn upgrade_in(directory: PathBuf, force: bool, dry_run: bool) -> Result<(), upgr
 
     signaler_zone_manquante(planned.zone_manquante.as_ref());
 
-    if dry_run {
-        ui::info("\n  rien n'a été écrit (--dry-run)");
+    if !appliquer(&planned.plan, force, dry_run)? {
         return Ok(());
     }
-
-    plan::application::apply(&planned.plan, force)?;
 
     ui::success(&format!("manifeste aligné sur rbs {}", planned.vers));
 
@@ -554,10 +561,8 @@ fn migrate(action: migrate::Action) -> Result<(), Box<dyn Error>> {
 
 /// Insère les données de démonstration du projet courant.
 fn seed(force: bool) -> Result<(), seed::Error> {
-    let directory = std::env::current_dir().map_err(|source| seed::Error::Acces {
-        path: ".".to_string(),
-        source,
-    })?;
+    let directory = std::env::current_dir()
+        .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
 
     match seed::run(&seed::Options { directory, force })? {
         seed::Output::Insere => ui::success("seeds insérés"),
@@ -588,29 +593,8 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    use tempfile::TempDir;
-
     use super::*;
-
-    /// Un projet neuf, tel que `rbs new` l'écrit.
-    fn projet() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = new::create(
-            &new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Database::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
-    }
+    use crate::fixtures::project as projet;
 
     /// Chemin et octets de chaque fichier du projet, triés : deux empreintes égales
     /// valent projets identiques.

@@ -67,13 +67,8 @@ pub(crate) enum Error {
     Unknown(#[from] templates::Unknown),
 
     /// Un fichier du projet ou une template n'a pu être lu.
-    #[error("{path} est inaccessible : {source}")]
-    Acces {
-        /// Chemin fautif.
-        path: String,
-        /// Cause système.
-        source: io::Error,
-    },
+    #[error(transparent)]
+    Acces(#[from] crate::errors::Acces),
 
     /// Le fragment ne porte pas de manifeste.
     ///
@@ -95,11 +90,8 @@ pub(crate) enum Error {
 
     /// Le projet porte des modifications non commitées, qu'une installation rendrait
     /// indiscernables des siennes.
-    #[error("le working tree n'est pas propre : {files} — commitez, ou relancez avec --force")]
-    WorkingTreeSale {
-        /// Fichiers suivis modifiés, énumérés.
-        files: String,
-    },
+    #[error(transparent)]
+    WorkingTreeSale(#[from] crate::errors::WorkingTreeSale),
 
     /// Le manifeste du projet n'a pu être lu.
     #[error("{0}")]
@@ -121,15 +113,8 @@ pub(crate) enum Error {
     Application(#[from] plan::application::Error),
 }
 
-/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
-impl From<metadata::RootError> for Error {
-    fn from(faute: metadata::RootError) -> Self {
-        match faute {
-            metadata::RootError::Absent => Self::PasUnProjet,
-            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
-        }
-    }
-}
+// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+crate::errors::depuis_la_racine!(Error);
 
 impl Error {
     /// Ce que le développeur peut coller pour réparer, quand la panne se répare ainsi.
@@ -161,16 +146,10 @@ impl Error {
 
 /// Calcule ce que l'installation de `options` ferait au projet, sans rien écrire.
 pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
-    let start = options
-        .directory
-        .canonicalize()
-        .map_err(|source| access(&options.directory, source))?;
-    let root = metadata::project_root(&start)?;
-
     // Une seule lecture pour toute la fonction : son erreur se propage par `?` plutôt
     // que d'être ré-tentée, et `agents::refresh` reçoit ces métadonnées au lieu de les
     // relire elle-même.
-    let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
+    let metadata::Cible { root, metadonnees } = metadata::cible::<Error>(&options.directory)?;
 
     // L'idempotence se juge sur `[package.metadata.rbs]`, et non sur la présence des
     // fichiers installés : la migration d'un fragment est horodatée, et un projet dont
@@ -192,12 +171,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     }
 
     if !options.force {
-        let modifies = git::modified_files(&root);
-        if !modifies.is_empty() {
-            return Err(Error::WorkingTreeSale {
-                files: git::enumerate(&modifies),
-            });
-        }
+        git::garde(&root)?;
     }
 
     // La feature demandée et celles qu'elle entraîne partagent un seul plan :
@@ -209,7 +183,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         &metadonnees.features,
     )?;
 
-    let nom_projet = metadata::package_name(&root.join("Cargo.toml"))?;
+    let nom_projet = metadonnees.package_name(&root.join("Cargo.toml"))?;
     let crate_name = nom_projet.replace('-', "_");
     // Le moteur vient du manifeste, seul endroit où le choix de `rbs new` a survécu : un
     // fragment posé six mois plus tard n'a plus les flags de la création.
@@ -223,8 +197,8 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let url = match migrate::project_variables(&root) {
         Ok(variables) => dotenv::value(&variables, migrate::URL).map(str::to_string),
         Err(migrate::Error::SansUrl) => None,
-        Err(migrate::Error::Env(dotenv::Error::Acces { source, .. }))
-            if source.kind() == io::ErrorKind::NotFound =>
+        Err(migrate::Error::Env(dotenv::Error::Acces(faute)))
+            if faute.source.kind() == io::ErrorKind::NotFound =>
         {
             None
         }
@@ -390,10 +364,9 @@ impl Resolution<'_> {
 
         let source = Source::feature(self.template_dir, feature)?;
         let manifest = read_manifest(&source, feature)?;
-        let templates = source.files().map_err(|source| Error::Acces {
-            path: feature.to_string(),
-            source,
-        })?;
+        let templates = source
+            .files()
+            .map_err(|source| crate::errors::Acces::new(Path::new(feature), source))?;
 
         self.en_cours.push(feature.to_string());
         for requise in manifest.feature.requires.clone() {
@@ -415,22 +388,12 @@ impl Resolution<'_> {
 fn read_manifest(source: &Source, feature: &str) -> Result<manifest::Manifest, Error> {
     let text = source
         .manifest()
-        .map_err(|source| Error::Acces {
-            path: feature.to_string(),
-            source,
-        })?
+        .map_err(|source| crate::errors::Acces::new(Path::new(feature), source))?
         .ok_or_else(|| Error::SansManifeste {
             feature: feature.to_string(),
         })?;
 
     Ok(manifest::read(&text, &format!("{feature}/feature.toml"))?)
-}
-
-fn access(path: &Path, source: io::Error) -> Error {
-    Error::Acces {
-        path: path.display().to_string(),
-        source,
-    }
 }
 
 #[cfg(test)]
@@ -490,22 +453,10 @@ mod tests {
     /// Le même, sur l'URL demandée : les identifiants du projet sont ce que le fragment
     /// `docker` doit retrouver, et un test qui les choisit peut les reconnaître ailleurs.
     fn project_with(database: Database, database_url: &str) -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: database_url.to_string(),
-                database,
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
+        crate::fixtures::Project::new()
+            .database(database)
+            .url(database_url)
+            .create()
     }
 
     /// Ramène le projet à ce qu'était un projet créé avant la 1.1.0 : ni compose, ni
@@ -1540,7 +1491,7 @@ mod tests {
 
         let error = plan_for(&options(&root, "docker"))
             .expect_err("un projet sale ne se modifie pas en silence");
-        assert!(matches!(error, Error::WorkingTreeSale { .. }), "{error}");
+        assert!(matches!(error, Error::WorkingTreeSale(_)), "{error}");
 
         let mut forcees = options(&root, "docker");
         forcees.force = true;

@@ -4,41 +4,30 @@
 //! `[cache]` : c'est le nom de la crate d'un côté, celui du service rendu de l'autre. Le
 //! contrôle porte le nom déclaré, comme les autres, et nomme la section dans son détail.
 
-use std::path::Path;
-
-use super::Check;
+use super::{Check, Config};
 
 const TITRE: &str = "redis";
-const CONFIG: &str = "config/default.toml";
 const SECTION: &str = "cache";
 
 /// Vérifie ce dont la feature `redis` a besoin pour démarrer.
-///
-/// Seul `config/default.toml` est lu : le CLI ne sait pas quel `RBS_ENV` l'utilisateur
-/// emploiera, et une section posée dans le seul `config/production.toml` échapperait donc
-/// au diagnostic comme elle échappe au défaut du projet.
-pub(crate) fn check(root: &Path) -> Check {
-    if super::section(root, SECTION) {
-        return Check::ok(TITRE, "la configuration du cache est en place");
-    }
-
-    Check::failed(
+pub(crate) fn check(config: &Config) -> Check {
+    super::section_check(
+        config,
         TITRE,
-        format!("{CONFIG} ne porte pas de section `[{SECTION}]`"),
-        format!(
-            "ajoutez à {CONFIG} :\n[{SECTION}]\nurl = \"redis://127.0.0.1:6379\"\nttl_secs = 300"
-        ),
+        SECTION,
+        "la configuration du cache est en place",
+        "url = \"redis://127.0.0.1:6379\"\nttl_secs = 300",
     )
 }
 
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use tempfile::TempDir;
 
-    use super::super::State;
+    use super::super::{CONFIG, State};
     use super::*;
 
     /// Un projet neuf, doté à la main de ce que `add redis` y dépose.
@@ -46,22 +35,7 @@ mod tests {
     /// La commande n'est pas appelée : ce contrôle ne lit qu'un fichier, et le poser
     /// directement garde le test à la seconde plutôt qu'à la minute.
     fn project_with_redis() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        let root = project.root;
+        let (parent, root) = crate::fixtures::project();
         let config = root.join(CONFIG);
         let source = fs::read_to_string(&config).expect("config lisible");
         fs::write(
@@ -85,7 +59,7 @@ mod tests {
         let (_parent, root) = project_with_redis();
         rewrite(&root, "[cache]", "# section retirée par le test");
 
-        let check = check(&root);
+        let check = check(&Config::read(&root));
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(
@@ -101,7 +75,7 @@ mod tests {
         let (_parent, root) = project_with_redis();
         rewrite(&root, "[cache]", "# [cache]");
 
-        let check = check(&root);
+        let check = check(&Config::read(&root));
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
     }
@@ -110,7 +84,7 @@ mod tests {
     fn a_properly_configured_project_reports_nothing() {
         let (_parent, root) = project_with_redis();
 
-        let check = check(&root);
+        let check = check(&Config::read(&root));
 
         assert_eq!(check.state, State::Bon, "{}", check.detail);
     }

@@ -6,7 +6,6 @@
 //! disparue ou une feature déjà présente laissent le disque tel qu'ils l'ont trouvé.
 
 use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::anchors;
@@ -95,21 +94,13 @@ pub(crate) enum Error {
     },
 
     /// Un fichier du projet n'a pu être lu ou écrit.
-    #[error("{path} est inaccessible : {source}")]
-    Acces {
-        /// Chemin fautif.
-        path: String,
-        /// Cause système.
-        source: io::Error,
-    },
+    #[error(transparent)]
+    Acces(#[from] crate::errors::Acces),
 
     /// Le projet porte des modifications non commitées, qu'une génération rendrait
     /// indiscernables des siennes.
-    #[error("le working tree n'est pas propre : {files} — commitez, ou relancez avec --force")]
-    WorkingTreeSale {
-        /// Fichiers suivis modifiés, énumérés.
-        files: String,
-    },
+    #[error(transparent)]
+    WorkingTreeSale(#[from] crate::errors::WorkingTreeSale),
 
     /// Le plan de la génération n'a pu être calculé.
     #[error("{0}")]
@@ -189,15 +180,8 @@ pub(crate) enum Error {
     },
 }
 
-/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
-impl From<metadata::RootError> for Error {
-    fn from(faute: metadata::RootError) -> Self {
-        match faute {
-            metadata::RootError::Absent => Self::PasUnProjet,
-            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
-        }
-    }
-}
+// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+crate::errors::depuis_la_racine!(Error);
 
 impl Error {
     /// Ce que le développeur peut coller pour réparer, quand la panne se répare ainsi.
@@ -218,24 +202,13 @@ impl Error {
 
 /// Calcule ce que la génération de `options` ferait au projet, sans rien écrire.
 pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
-    let start = options
-        .directory
-        .canonicalize()
-        .map_err(|source| access(&options.directory, source))?;
-    let root = metadata::project_root(&start)?;
-
     // Une seule lecture pour toute la fonction : son erreur se propage par `?` plutôt que
     // d'être ré-tentée, et `agents::refresh` reçoit ces métadonnées au lieu de les relire
     // elle-même.
-    let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
+    let metadata::Cible { root, metadonnees } = metadata::cible::<Error>(&options.directory)?;
 
     if !options.force {
-        let modifies = git::modified_files(&root);
-        if !modifies.is_empty() {
-            return Err(Error::WorkingTreeSale {
-                files: git::enumerate(&modifies),
-            });
-        }
+        git::garde(&root)?;
     }
 
     name::validate(&options.name).map_err(Error::Nom)?;
@@ -281,7 +254,9 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         .join("src/lib.rs")
         .exists()
         .then(|| {
-            metadata::package_name(&root.join("Cargo.toml")).map(|name| name.replace('-', "_"))
+            metadonnees
+                .package_name(&root.join("Cargo.toml"))
+                .map(|name| name.replace('-', "_"))
         })
         .transpose()?;
 
@@ -563,13 +538,6 @@ fn render(
     Ok((rendus, Some(rendue.module)))
 }
 
-fn access(path: &Path, source: io::Error) -> Error {
-    Error::Acces {
-        path: path.display().to_string(),
-        source,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -578,6 +546,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::fixtures::{Project, project};
     use crate::generate::bench;
 
     /// Empreinte récursive d'un répertoire : chemin relatif -> contenu.
@@ -616,44 +585,9 @@ mod tests {
         Ok(planned)
     }
 
-    /// Un projet déroulé par `rbs new`, sans passer par le binaire ni par cargo.
-    fn project() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
-    }
-
     /// Le même projet, l'authentification installée : `--role` l'exige.
     fn project_with_auth() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: vec!["auth".to_string()],
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
+        Project::new().features(&["auth"]).create()
     }
 
     fn options(root: &Path, name: &str, fields: Option<&str>, complete: bool) -> Options {
@@ -1284,7 +1218,7 @@ mod tests {
         let error = run(&options(&root, "notes", None, false))
             .expect_err("le working tree n'est pas propre");
 
-        assert!(matches!(error, Error::WorkingTreeSale { .. }), "{error}");
+        assert!(matches!(error, Error::WorkingTreeSale(_)), "{error}");
         assert!(
             error.to_string().contains("src/main.rs"),
             "le fichier en cause doit être nommé : {error}"
@@ -1789,8 +1723,10 @@ mod tests {
     fn drop_the_library(root: &Path) {
         fs::remove_file(root.join("src/lib.rs")).expect("la bibliothèque s'efface");
 
-        let crate_name = crate::metadata::package_name(&root.join("Cargo.toml"))
+        let crate_name = crate::metadata::read(&root.join("Cargo.toml"))
             .expect("le manifeste se lit")
+            .package_name(&root.join("Cargo.toml"))
+            .expect("le manifeste nomme son paquet")
             .replace('-', "_");
         let main = root.join("src/main.rs");
         let source = read(&main);

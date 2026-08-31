@@ -12,7 +12,6 @@
 //! La garde Git vient après le plan, et non avant : un projet déjà à jour n'a rien à
 //! protéger, et doit pouvoir répondre « rien à faire » depuis un working tree sale.
 
-use std::io;
 use std::path::PathBuf;
 
 use crate::git;
@@ -56,13 +55,8 @@ pub(crate) enum Error {
     PasUnProjet,
 
     /// Le répertoire visé n'a pas pu être résolu.
-    #[error("{path} est inaccessible : {source}")]
-    Acces {
-        /// Chemin fautif.
-        path: String,
-        /// Cause système.
-        source: io::Error,
-    },
+    #[error(transparent)]
+    Acces(#[from] crate::errors::Acces),
 
     /// Le projet a été généré par un rbs postérieur au CLI qui le lit.
     ///
@@ -81,11 +75,8 @@ pub(crate) enum Error {
 
     /// Le projet porte des modifications non commitées, qu'une mise à niveau rendrait
     /// indiscernables des siennes.
-    #[error("le working tree n'est pas propre : {files} — commitez, ou relancez avec --force")]
-    WorkingTreeSale {
-        /// Fichiers suivis modifiés, énumérés.
-        files: String,
-    },
+    #[error(transparent)]
+    WorkingTreeSale(#[from] crate::errors::WorkingTreeSale),
 
     /// Le manifeste du projet n'a pu être lu ou patché.
     #[error("{0}")]
@@ -104,15 +95,8 @@ pub(crate) enum Error {
     Agents(#[from] crate::agents::Error),
 }
 
-/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
-impl From<metadata::RootError> for Error {
-    fn from(faute: metadata::RootError) -> Self {
-        match faute {
-            metadata::RootError::Absent => Self::PasUnProjet,
-            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
-        }
-    }
-}
+// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+crate::errors::depuis_la_racine!(Error);
 
 /// Calcule ce que la mise à niveau ferait au projet, sans rien écrire.
 pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
@@ -124,16 +108,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 /// C'est ce qui rend les deux chemins — mise à niveau et refus — exerçables de part et
 /// d'autre d'une publication, sans attendre qu'elle ait eu lieu.
 pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Error> {
-    let start = options
-        .directory
-        .canonicalize()
-        .map_err(|source| Error::Acces {
-            path: options.directory.display().to_string(),
-            source,
-        })?;
-    let root = metadata::project_root(&start)?;
-
-    let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
+    let metadata::Cible { root, metadonnees } = metadata::cible::<Error>(&options.directory)?;
     let depuis = metadonnees.version.clone();
 
     if posterieure(&depuis, cli) {
@@ -188,10 +163,10 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
 
         manquante
     } else {
-        // Lu ici seulement : le nom du paquet ne sert qu'au titre du document recréé, et
-        // un `[package] name` illisible faisait échouer une mise à niveau qui n'en avait
-        // pas besoin.
-        let package = metadata::package_name(&root.join("Cargo.toml"))?;
+        // La faute ne se lève qu'ici : le nom du paquet ne sert qu'au titre du document
+        // recréé, et un `[package] name` illisible n'a pas à faire échouer une mise à
+        // niveau qui n'en a pas besoin.
+        let package = metadonnees.package_name(&root.join("Cargo.toml"))?;
         let document = crate::agents::document(&root, metadonnees.lang, &package, cli)?;
         builder.create(crate::agents::FICHIER, &document)?;
         None
@@ -205,12 +180,7 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
         .all(|file| file.statut == plan::Status::DejaFait);
 
     if !deja_a_jour && !options.force {
-        let modifies = git::modified_files(&root);
-        if !modifies.is_empty() {
-            return Err(Error::WorkingTreeSale {
-                files: git::enumerate(&modifies),
-            });
-        }
+        git::garde(&root)?;
     }
 
     Ok(Planned {
@@ -279,22 +249,9 @@ mod tests {
 
     /// Un projet neuf, tel que `rbs new` l'écrit, dans son dépôt Git.
     fn project(core_path: Option<PathBuf>) -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
+        crate::fixtures::Project::new()
+            .core_path(core_path)
+            .create()
     }
 
     fn options(root: &Path) -> Options {

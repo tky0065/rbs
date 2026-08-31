@@ -5,41 +5,30 @@
 //! du fragment sont dans son `Config` — mais le worker démarre sur des réglages que
 //! personne ne voit plus.
 
-use std::path::Path;
-
-use super::Check;
+use super::{Check, Config};
 
 const TITRE: &str = "jobs";
-const CONFIG: &str = "config/default.toml";
 const SECTION: &str = "jobs";
 
 /// Vérifie que la file a les réglages sous lesquels le fragment a été installé.
-///
-/// Seul `config/default.toml` est lu : le CLI ne sait pas quel `RBS_ENV` l'utilisateur
-/// emploiera, et une section posée dans le seul `config/production.toml` échapperait donc
-/// au diagnostic comme elle échappe au défaut du projet.
-pub(crate) fn check(root: &Path) -> Check {
-    if super::section(root, SECTION) {
-        return Check::ok(TITRE, "la configuration de la file est en place");
-    }
-
-    Check::failed(
+pub(crate) fn check(config: &Config) -> Check {
+    super::section_check(
+        config,
         TITRE,
-        format!("{CONFIG} ne porte pas de section `[{SECTION}]`"),
-        format!(
-            "ajoutez à {CONFIG} :\n[{SECTION}]\nmax_attempts = 5\nretry_delay_secs = 30\npoll_interval_secs = 1"
-        ),
+        SECTION,
+        "la configuration de la file est en place",
+        "max_attempts = 5\nretry_delay_secs = 30\npoll_interval_secs = 1",
     )
 }
 
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use tempfile::TempDir;
 
-    use super::super::State;
+    use super::super::{CONFIG, State};
     use super::*;
 
     /// Un projet neuf, doté à la main de ce que `add jobs` y dépose.
@@ -47,22 +36,7 @@ mod tests {
     /// La commande n'est pas appelée : ce contrôle ne lit qu'un fichier, et le poser
     /// directement garde le test à la seconde plutôt qu'à la minute.
     fn project_with_jobs() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        let root = project.root;
+        let (parent, root) = crate::fixtures::project();
         let config = root.join(CONFIG);
         let source = fs::read_to_string(&config).expect("config lisible");
         fs::write(
@@ -88,7 +62,7 @@ mod tests {
         let (_parent, root) = project_with_jobs();
         rewrite(&root, "[jobs]", "# section retirée par le test");
 
-        let check = check(&root);
+        let check = check(&Config::read(&root));
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(
@@ -104,7 +78,7 @@ mod tests {
         let (_parent, root) = project_with_jobs();
         rewrite(&root, "[jobs]", "# [jobs]");
 
-        let check = check(&root);
+        let check = check(&Config::read(&root));
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
     }
@@ -115,7 +89,9 @@ mod tests {
         let (_parent, root) = project_with_jobs();
         rewrite(&root, "[jobs]", "# [jobs]");
 
-        let remedy = check(&root).remedy.expect("un échec porte son remède");
+        let remedy = check(&Config::read(&root))
+            .remedy
+            .expect("un échec porte son remède");
 
         for key in ["max_attempts", "retry_delay_secs", "poll_interval_secs"] {
             assert!(remedy.contains(key), "`{key}` manque au remède : {remedy}");
@@ -126,7 +102,7 @@ mod tests {
     fn a_properly_configured_project_reports_nothing() {
         let (_parent, root) = project_with_jobs();
 
-        let check = check(&root);
+        let check = check(&Config::read(&root));
 
         assert_eq!(check.state, State::Bon, "{}", check.detail);
     }

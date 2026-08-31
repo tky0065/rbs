@@ -38,7 +38,7 @@ pub fn project_root(start: &Path) -> Result<PathBuf, RootError> {
             // Ces deux-là sont le régime ordinaire d'un ancêtre traversé : un répertoire
             // sans manifeste, ou celui d'une crate étrangère à rbs comme `migration`.
             Err(Error::PasUnProjet { .. }) => continue,
-            Err(Error::Acces { source, .. }) if source.kind() == std::io::ErrorKind::NotFound => {
+            Err(Error::Acces(faute)) if faute.source.kind() == std::io::ErrorKind::NotFound => {
                 continue;
             }
             Err(faute) => return Err(RootError::Illisible(faute)),
@@ -59,6 +59,26 @@ pub struct Metadata {
     pub database: Database,
     /// Langue du guide `AGENTS.md` du projet.
     pub lang: crate::lang::Lang,
+    /// Nom du paquet que le manifeste déclare.
+    ///
+    /// Optionnel parce que la faute ne se lève qu'à l'usage : `upgrade` n'a besoin du nom
+    /// que pour recréer un guide absent, et un `[package] name` illisible n'a pas à faire
+    /// échouer une mise à niveau qui s'en passe.
+    pub package: Option<String>,
+}
+
+impl Metadata {
+    /// Le nom du paquet, ou la faute qui le dit absent.
+    ///
+    /// C'est le nom du binaire du projet, et la racine de celui de sa base : les fragments
+    /// de feature en ont besoin là où `rbs new` disposait encore du nom saisi.
+    /// `cargo_toml` ne sert qu'à nommer le fichier fautif — rien n'est relu ici.
+    pub fn package_name(&self, cargo_toml: &Path) -> Result<String, Error> {
+        self.package.clone().ok_or_else(|| Error::Field {
+            path: name_of(cargo_toml),
+            key: "name",
+        })
+    }
 }
 
 /// Une dépendance telle qu'un patch de manifeste la réclame.
@@ -78,13 +98,8 @@ pub struct Dependency {
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Le manifeste n'a pas pu être lu ou réécrit.
-    #[error("{path} est inaccessible : {source}")]
-    Acces {
-        /// Chemin du manifeste.
-        path: String,
-        /// Cause système.
-        source: std::io::Error,
-    },
+    #[error(transparent)]
+    Acces(#[from] crate::errors::Acces),
 
     /// Le manifeste n'est pas du TOML valide.
     #[error("{path} n'est pas un TOML valide : {source}")]
@@ -177,25 +192,38 @@ pub fn read(cargo_toml: &Path) -> Result<Metadata, Error> {
         features: features(rbs, cargo_toml)?,
         database: database(rbs, cargo_toml)?,
         lang: lang(rbs),
+        package: document
+            .get("package")
+            .and_then(|package| package.get("name"))
+            .and_then(Item::as_str)
+            .map(str::to_owned),
     })
 }
 
-/// Lit le nom du paquet que le manifeste déclare.
-///
-/// C'est le nom du binaire du projet, et la racine de celui de sa base : les fragments de
-/// feature en ont besoin là où `rbs new` disposait encore du nom saisi.
-pub fn package_name(cargo_toml: &Path) -> Result<String, Error> {
-    let document = load(cargo_toml)?;
+/// Le projet visé depuis un répertoire de lancement, et son manifeste.
+pub struct Cible {
+    /// Racine du projet.
+    pub root: PathBuf,
+    /// Métadonnées rbs, lues une seule fois.
+    pub metadonnees: Metadata,
+}
 
-    document
-        .get("package")
-        .and_then(|package| package.get("name"))
-        .and_then(Item::as_str)
-        .map(str::to_owned)
-        .ok_or_else(|| Error::Field {
-            path: name_of(cargo_toml),
-            key: "name",
-        })
+/// Désigne le projet que `directory` habite, et lit son manifeste.
+///
+/// Le préambule des trois commandes qui modifient un projet existant. Générique sur
+/// l'erreur de l'appelant : chacune garde son énumération et ses messages, qui nomment la
+/// commande — c'est `?` qui convertit, et rien du texte rendu ne dépend d'ici.
+pub fn cible<E>(directory: &Path) -> Result<Cible, E>
+where
+    E: From<crate::errors::Acces> + From<RootError> + From<Error>,
+{
+    let start = directory
+        .canonicalize()
+        .map_err(|source| crate::errors::Acces::new(directory, source))?;
+    let root = project_root(&start)?;
+    let metadonnees = read(&root.join("Cargo.toml"))?;
+
+    Ok(Cible { root, metadonnees })
 }
 
 /// Rend le manifeste avec `feature` inscrite, ou `None` si elle y est déjà.
@@ -551,10 +579,8 @@ fn parse(text: &str, name: &str) -> Result<DocumentMut, Error> {
 
 /// Analyse le manifeste en préservant sa mise en forme et ses commentaires.
 fn load(cargo_toml: &Path) -> Result<DocumentMut, Error> {
-    let source = fs::read_to_string(cargo_toml).map_err(|source| Error::Acces {
-        path: name_of(cargo_toml),
-        source,
-    })?;
+    let source = fs::read_to_string(cargo_toml)
+        .map_err(|source| crate::errors::Acces::new(cargo_toml, source))?;
 
     parse(&source, &name_of(cargo_toml))
 }

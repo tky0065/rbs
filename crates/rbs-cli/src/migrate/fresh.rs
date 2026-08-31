@@ -120,33 +120,11 @@ fn validate(name: &str) -> Result<(), Error> {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
-
-    use tempfile::TempDir;
 
     use super::*;
+    use crate::fixtures::project;
 
     const HORODATAGE: &str = "20260826_143000";
-
-    /// Un projet déroulé par `rbs new`, sans passer par le binaire ni par cargo.
-    fn project() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
-    }
 
     fn read(path: &Path) -> String {
         fs::read_to_string(path)
