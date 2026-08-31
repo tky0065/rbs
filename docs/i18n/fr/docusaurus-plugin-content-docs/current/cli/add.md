@@ -76,10 +76,12 @@ plan pour /private/tmp/rbs-demo/blog
   + Dockerfile           créé
   + .dockerignore        créé
   ~ docker-compose.yml   modifié
+  · .env.example         inchangé
+  · .env                 inchangé
   ~ Cargo.toml           modifié
   ~ AGENTS.md            modifié
 
-  5 fichiers à écrire
+  5 fichiers à écrire, 2 inchangés
 ✓ docker installée — 2 fichiers
 
   docker compose --profile app up --build
@@ -100,14 +102,24 @@ plan pour /private/tmp/rbs-demo/depot
   + Dockerfile           créé
   + .dockerignore        créé
   + docker-compose.yml   créé
+  ~ .env.example         modifié
+  ~ .env                 modifié
   ~ Cargo.toml           modifié
   ~ AGENTS.md            modifié
 
-  5 fichiers à écrire
+  7 fichiers à écrire
 ✓ docker installée — 3 fichiers
 
   docker compose --profile app up --build
 ```
+
+Le compose est versionné : il nomme les identifiants de la base au lieu de les porter —
+`POSTGRES_USER`, `POSTGRES_PASSWORD` et `POSTGRES_DB`, ou leurs équivalents MySQL, que
+Compose interpole depuis `.env` au démarrage du service. Un projet créé avant rbs 1.1.0
+n'en déclare aucun : `add docker` les écrit donc dans son `.env`, avec les valeurs de
+l'URL de base du projet, et donne à `.env.example` les mêmes clés sur les valeurs de
+démonstration du moteur. Une clé déjà déclarée est laissée telle quelle — d'où les deux
+lignes `inchangé` du premier plan ci-dessus, sur un projet que `rbs new` a déjà équipé.
 
 Un compose réécrit à la main qui a perdu son ancre `# <rbs:services>` n'est pas touché :
 la commande n'écrit rien et affiche le bloc à recoller :

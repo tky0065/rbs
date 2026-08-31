@@ -115,6 +115,8 @@ pub(crate) struct DeclaredSection {
 #[serde(deny_unknown_fields)]
 pub(crate) struct DeclaredVariable {
     pub key: String,
+    /// Ce que reçoit `.env.example`, versionné : une valeur de démonstration, jamais une
+    /// vraie. Rendue dans le contexte du fragment, comme `project_value`.
     pub value: String,
     pub comment: Option<String>,
     /// La variable porte un secret propre à chaque installation.
@@ -123,6 +125,18 @@ pub(crate) struct DeclaredVariable {
     /// développeur l'a remplacé ; c'est le `.env`, gitignoré, qui reçoit la valeur tirée.
     #[serde(default)]
     pub secret: bool,
+    /// Ce que reçoit le `.env` du projet, quand la valeur se déduit du projet lui-même.
+    ///
+    /// Le service `db` d'un compose interpole les identifiants de la base : ce sont ceux
+    /// de l'URL du projet, et non un tirage. `secret` répond à l'autre besoin — une valeur
+    /// qu'aucun exemple publié ne doit permettre de deviner ; déclarer les deux n'a pas de
+    /// sens, et `project_value` l'emporte alors.
+    pub project_value: Option<String>,
+    /// L'expression Jinja sous laquelle la variable est déclarée, ou rien pour toujours.
+    ///
+    /// Les clés du service `db` dépendent du moteur, et `MYSQL_USER` du compte : une image
+    /// MySQL à qui l'on redemande `root` refuse de s'initialiser.
+    pub when: Option<String>,
 }
 
 /// Ce qui peut empêcher de lire un manifeste.
@@ -258,6 +272,30 @@ comment = "Secret de signature HS256, au moins 32 octets"
         assert_eq!(
             manifest.env[0].comment.as_deref(),
             Some("Secret de signature HS256, au moins 32 octets")
+        );
+        assert_eq!(manifest.env[0].project_value, None);
+        assert_eq!(manifest.env[0].when, None);
+    }
+
+    /// Une variable dont la valeur se déduit du projet, sous la condition qui la déclare.
+    #[test]
+    fn a_variable_can_declare_a_project_value_under_a_condition() {
+        let manifest = read(
+            "[feature]\ndescription = \"docker\"\n\n\
+             [[env]]\nkey = \"POSTGRES_PASSWORD\"\nvalue = \"postgres\"\n\
+             project_value = \"{@ database_password @}\"\n\
+             when = \"database == 'postgres'\"\n",
+            "docker/feature.toml",
+        )
+        .expect("le manifeste doit être valide");
+
+        assert_eq!(
+            manifest.env[0].project_value.as_deref(),
+            Some("{@ database_password @}")
+        );
+        assert_eq!(
+            manifest.env[0].when.as_deref(),
+            Some("database == 'postgres'")
         );
     }
 

@@ -39,6 +39,20 @@ impl Renderer {
     pub fn render<S: Serialize>(&self, source: &str, context: S) -> Result<String, Error> {
         self.environnement.render_str(source, context)
     }
+
+    /// Évalue `expression` comme une condition Jinja : `database == "postgres"`.
+    ///
+    /// C'est ce qui permet à un manifeste de fragment de ne déclarer une variable que sur
+    /// le moteur qui la connaît. Une expression et non une template : `{% if %}` autour
+    /// d'un `[[env]]` supposerait de rendre le manifeste avant de l'analyser, et un mot de
+    /// passe rendu dans un document TOML en casserait la syntaxe au premier guillemet.
+    pub fn condition<S: Serialize>(&self, expression: &str, context: S) -> Result<bool, Error> {
+        Ok(self
+            .environnement
+            .compile_expression(expression)?
+            .eval(context)?
+            .is_true())
+    }
 }
 
 impl Default for Renderer {
@@ -102,6 +116,35 @@ mod tests {
             .expect("le rendu doit réussir");
 
         assert_eq!(rendered, "T: Into<String> & Clone");
+    }
+
+    #[test]
+    fn a_condition_reads_the_context_it_is_given() {
+        let renderer = Renderer::new();
+        let context = context! { database => "postgres", database_user => "rbs" };
+
+        assert!(
+            renderer
+                .condition("database == \"postgres\"", &context)
+                .expect("l'expression doit s'évaluer")
+        );
+        assert!(
+            !renderer
+                .condition(
+                    "database == \"mysql\" and database_user != \"root\"",
+                    &context
+                )
+                .expect("l'expression doit s'évaluer")
+        );
+    }
+
+    /// Une condition qui ne s'analyse pas est une faute de manifeste, et non un `false`
+    /// silencieux : une variable d'environnement disparaîtrait sans que rien ne le dise.
+    #[test]
+    fn a_malformed_condition_is_an_error_rather_than_a_false() {
+        Renderer::new()
+            .condition("database ==", context! {})
+            .expect_err("l'expression ne s'analyse pas");
     }
 
     #[test]

@@ -35,7 +35,7 @@ migrate:
   build: .
   command: ["migration", "up"]
   environment:
-    RBS_DATABASE__URL: {@ database_url_compose @}
+    RBS_DATABASE__URL: "{@ database_url_compose @}"
   restart: "no"
 {%- if not database_a_un_serveur %}
   # Le fichier de base est partagé avec `api` : sans ce volume, chaque conteneur
@@ -53,7 +53,7 @@ api:
     # Le profil retenu désigne config/production.toml, qui coupe `/docs` et le document
     # OpenAPI : ce compose est le déploiement, et non le poste de travail.
     RBS_ENV: production
-    RBS_DATABASE__URL: {@ database_url_compose @}
+    RBS_DATABASE__URL: "{@ database_url_compose @}"
     RBS_LOG_FORMAT: json
     RUST_LOG: info
   ports:
@@ -66,3 +66,54 @@ api:
     - sqlitedata:/data
 {%- endif %}
 """
+
+# Le service `db` interpole ces clés depuis le `.env` du projet, que git ignore ; le
+# compose, lui, est versionné et ne fait que les nommer. Un projet créé avant que le
+# squelette les y écrive n'en porte aucune : sans cet ajout, Compose y substituerait une
+# chaîne vide et la base monterait sans mot de passe — ou refuserait de monter.
+[[env]]
+key           = "POSTGRES_USER"
+value         = "{@ database_user_par_defaut @}"
+project_value = "{@ database_user @}"
+comment       = "Identifiants que le service `db` de docker-compose.yml interpole"
+when          = "database == 'postgres'"
+
+[[env]]
+key           = "POSTGRES_PASSWORD"
+value         = "{@ database_password_par_defaut @}"
+project_value = "{@ database_password @}"
+when          = "database == 'postgres'"
+
+[[env]]
+key           = "POSTGRES_DB"
+value         = "{@ database_name_par_defaut @}"
+project_value = "{@ database_name @}"
+when          = "database == 'postgres'"
+
+# L'image MySQL exige le mot de passe d'administration, et ne crée le second compte que
+# si le projet se connecte sous un autre nom que `root` : lui redemander `root` par
+# `MYSQL_USER` la fait refuser de s'initialiser.
+[[env]]
+key           = "MYSQL_ROOT_PASSWORD"
+value         = "{@ database_password_par_defaut @}"
+project_value = "{@ database_password @}"
+comment       = "Identifiants que le service `db` de docker-compose.yml interpole"
+when          = "database == 'mysql'"
+
+[[env]]
+key           = "MYSQL_DATABASE"
+value         = "{@ database_name_par_defaut @}"
+project_value = "{@ database_name @}"
+when          = "database == 'mysql'"
+
+[[env]]
+key           = "MYSQL_USER"
+value         = "{@ database_user_par_defaut @}"
+project_value = "{@ database_user @}"
+when          = "database == 'mysql' and database_user != 'root'"
+
+[[env]]
+key           = "MYSQL_PASSWORD"
+value         = "{@ database_password_par_defaut @}"
+project_value = "{@ database_password @}"
+when          = "database == 'mysql' and database_user != 'root'"

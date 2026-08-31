@@ -241,6 +241,15 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         .map(|c| c.database.clone())
         .filter(|base| !base.is_empty())
         .unwrap_or_else(|| crate_name.clone());
+    let utilisateur = connexion
+        .as_ref()
+        .map(|c| c.user.clone())
+        .unwrap_or_default();
+
+    // Les identifiants que `.env.example` documente sont ceux de l'URL de démonstration
+    // du moteur, comme le squelette les écrit : les recopier à la main dans le fragment
+    // les ferait diverger de `default_url`.
+    let demonstration = crate::url::parse(&database.default_url(&crate_name));
 
     let context = context! {
         project_name => nom_projet.clone(),
@@ -259,15 +268,19 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         },
         database => database.name(),
         database_a_un_serveur => database.a_un_serveur(),
-        database_url_compose => match connexion.as_ref() {
-            Some(connexion) => crate::url::interne(connexion, database, &nom_base),
-            None => database.compose_url(&crate_name),
-        },
+        // Le moteur décide, et non la lecture de l'URL : une URL que rien ne décompose
+        // ferait sinon tomber un moteur à serveur sur `compose_url`, dont les identifiants
+        // en dur partiraient dans un fichier versionné.
+        database_url_compose => crate::url::interne(database, &utilisateur)
+            .unwrap_or_else(|| database.compose_url(&crate_name)),
         database_url_par_defaut => database.default_url(&crate_name),
-        database_user => connexion.as_ref().map(|c| c.user.clone()).unwrap_or_default(),
+        database_user => utilisateur.clone(),
         database_password => connexion.as_ref().map(|c| c.password.clone()).unwrap_or_default(),
         database_name => nom_base,
         database_port => connexion.as_ref().map(|c| c.port).unwrap_or_default(),
+        database_user_par_defaut => demonstration.as_ref().map(|c| c.user.clone()).unwrap_or_default(),
+        database_password_par_defaut => demonstration.as_ref().map(|c| c.password.clone()).unwrap_or_default(),
+        database_name_par_defaut => demonstration.as_ref().map(|c| c.database.clone()).unwrap_or_default(),
     };
 
     let mut builder = plan::Builder::new(root.clone());
@@ -463,12 +476,26 @@ mod tests {
     /// qu'utilise `doctor/anchors.rs` — pour que le compose interne ne puisse pas passer
     /// pour correct en confondant les deux.
     fn project() -> (TempDir, PathBuf) {
+        project_with(
+            Database::default(),
+            "postgres://rbs:rbs@localhost:5432/demo_api",
+        )
+    }
+
+    /// Le même, sur le moteur demandé — ce que `rbs new --database` produit.
+    fn project_on(database: Database) -> (TempDir, PathBuf) {
+        project_with(database, &database.default_url("demo_api"))
+    }
+
+    /// Le même, sur l'URL demandée : les identifiants du projet sont ce que le fragment
+    /// `docker` doit retrouver, et un test qui les choisit peut les reconnaître ailleurs.
+    fn project_with(database: Database, database_url: &str) -> (TempDir, PathBuf) {
         let parent = TempDir::new().expect("répertoire temporaire créable");
         let project = crate::new::create(
             &crate::new::Options {
                 name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Database::default(),
+                database_url: database_url.to_string(),
+                database,
                 features: Vec::new(),
                 core_path: None,
                 template_dir: None,
@@ -481,24 +508,21 @@ mod tests {
         (parent, project.root)
     }
 
-    /// Le même, sur le moteur demandé — ce que `rbs new --database` produit.
-    fn project_on(database: Database) -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: database.default_url("demo_api"),
-                database,
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
+    /// Ramène le projet à ce qu'était un projet créé avant la 1.1.0 : ni compose, ni
+    /// clés du service `db` dans son `.env`.
+    ///
+    /// C'est l'état sur lequel `rbs add docker` doit encore rendre un compose qui démarre :
+    /// les clés qu'il interpole, personne ne les y a écrites.
+    fn avant_les_cles_du_compose(root: &Path) {
+        let env = fs::read_to_string(root.join(".env")).expect("le .env doit exister");
+        let ancien: String = env
+            .lines()
+            .filter(|ligne| !ligne.starts_with("POSTGRES_") && !ligne.starts_with("MYSQL_"))
+            .map(|ligne| format!("{ligne}\n"))
+            .collect();
 
-        (parent, project.root)
+        fs::write(root.join(".env"), ancien).expect("le .env doit se réécrire");
+        let _ = fs::remove_file(root.join("docker-compose.yml"));
     }
 
     fn options(root: &Path, feature: &str) -> Options {
@@ -790,19 +814,268 @@ mod tests {
         );
     }
 
-    /// Le compose interne ne peut pas garder `postgres:postgres` en dur : la base du
-    /// projet a les identifiants de son .env, et `migrate` ne s'y connecterait pas.
+    /// L'URL que `migrate` et `api` reçoivent nomme les identifiants au lieu de les
+    /// écrire : le compose est versionné, et Compose les substitue à l'exécution depuis le
+    /// `.env`, qui ne l'est pas. Les mêmes clés que celles du service `db`, et pas d'autres.
     #[test]
-    fn the_internal_url_carries_the_credentials_of_the_project() {
+    fn the_internal_url_names_the_credentials_rather_than_carrying_them() {
         let (_parent, root) = project();
 
         let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
         let compose = projected(&planned, "docker-compose.yml");
 
+        assert_eq!(
+            compose
+                .matches(
+                    "RBS_DATABASE__URL: \
+                     \"postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}\""
+                )
+                .count(),
+            2,
+            "migrate et api, une fois chacun :\n{compose}"
+        );
         assert!(
-            compose.contains("postgres://rbs:rbs@db:5432/demo_api"),
+            !compose.contains("postgres://rbs:rbs@db"),
+            "l'URL interne porte encore les identifiants du projet :\n{compose}"
+        );
+    }
+
+    /// Le compose que le fragment écrit en entier — celui d'un projet qui n'en a pas —
+    /// porte la même URL que celui qu'il complète par l'ancre : ce sont deux textes
+    /// distincts, et le mot de passe ne doit sortir par aucun des deux.
+    #[test]
+    fn the_whole_compose_names_the_credentials_too() {
+        let (_parent, root) = project();
+        avant_les_cles_du_compose(&root);
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert_eq!(
+            compose
+                .matches(
+                    "RBS_DATABASE__URL: \
+                     \"postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}\""
+                )
+                .count(),
+            2,
+            "migrate et api, une fois chacun :\n{compose}"
+        );
+    }
+
+    /// Le trou que ce fragment laissait : un projet créé avant que `rbs new` écrive les
+    /// clés du service `db` n'en porte aucune. Le compose les interpole ; sans cet ajout,
+    /// Compose y substitue une chaîne vide et la base monte sans mot de passe.
+    #[test]
+    fn installing_docker_writes_the_compose_credentials_into_an_older_env() {
+        let (_parent, root) = project();
+        avant_les_cles_du_compose(&root);
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let env = projected(&planned, ".env");
+        let paires = crate::dotenv::parse(env);
+
+        assert_eq!(
+            crate::dotenv::value(&paires, "POSTGRES_USER"),
+            Some("rbs"),
+            "{env}"
+        );
+        assert_eq!(
+            crate::dotenv::value(&paires, "POSTGRES_PASSWORD"),
+            Some("rbs"),
+            "{env}"
+        );
+        assert_eq!(
+            crate::dotenv::value(&paires, "POSTGRES_DB"),
+            Some("demo_api"),
+            "{env}"
+        );
+    }
+
+    /// L'exemple versionné documente les mêmes clés — `doctor` compare l'un à l'autre —
+    /// avec les valeurs de démonstration du moteur, jamais celles du projet.
+    #[test]
+    fn the_versioned_example_documents_the_keys_with_demonstration_values() {
+        let (_parent, root) = project();
+        avant_les_cles_du_compose(&root);
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let exemple = projected(&planned, ".env.example");
+        let paires = crate::dotenv::parse(exemple);
+
+        assert_eq!(
+            crate::dotenv::value(&paires, "POSTGRES_USER"),
+            Some("postgres"),
+            "{exemple}"
+        );
+        assert_eq!(
+            crate::dotenv::value(&paires, "POSTGRES_PASSWORD"),
+            Some("postgres"),
+            "{exemple}"
+        );
+        assert_eq!(
+            crate::dotenv::value(&paires, "POSTGRES_DB"),
+            Some("demo_api"),
+            "{exemple}"
+        );
+    }
+
+    /// Une clé que le `.env` porte déjà n'est ni redéclarée ni réécrite : deux
+    /// `POSTGRES_PASSWORD` dans un même fichier, et c'est la dernière ligne qui gagne —
+    /// l'installation écraserait le mot de passe que le développeur y a mis.
+    #[test]
+    fn credentials_already_in_the_env_are_neither_duplicated_nor_overwritten() {
+        let (_parent, root) = project();
+        let env = fs::read_to_string(root.join(".env")).expect("le .env doit exister");
+        fs::write(
+            root.join(".env"),
+            env.replace("POSTGRES_PASSWORD=rbs", "POSTGRES_PASSWORD=le-mien"),
+        )
+        .expect("le .env doit se réécrire");
+        fs::remove_file(root.join("docker-compose.yml")).expect("le compose doit exister");
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let after = projected(&planned, ".env");
+
+        assert_eq!(
+            after.matches("POSTGRES_PASSWORD=").count(),
+            1,
+            "la clé est déclarée deux fois :\n{after}"
+        );
+        assert_eq!(
+            crate::dotenv::value(&crate::dotenv::parse(after), "POSTGRES_PASSWORD"),
+            Some("le-mien"),
+            "{after}"
+        );
+    }
+
+    /// Le mot de passe du projet ne doit ressortir par aucune porte : ni les variables du
+    /// service `db`, ni l'URL de `migrate` et d'`api`, ni l'exemple. Le seul fichier qui a
+    /// le droit de le porter est le `.env`, que le `.gitignore` du projet couvre.
+    #[test]
+    fn the_project_password_reaches_no_versioned_file() {
+        let (_parent, root) = project_with(
+            Database::Postgres,
+            "postgres://u:a'b:c$(id)@localhost:5432/demo_api",
+        );
+        avant_les_cles_du_compose(&root);
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+
+        for file in planned.plan.files() {
+            if file.path == ".env" {
+                continue;
+            }
+            assert!(
+                !file.after.contains("a'b:c$(id)"),
+                "{} porte le mot de passe du projet :\n{}",
+                file.path,
+                file.after
+            );
+        }
+
+        let env = projected(&planned, ".env");
+        assert_eq!(
+            crate::dotenv::value(&crate::dotenv::parse(env), "POSTGRES_PASSWORD"),
+            Some("a'b:c$(id)"),
+            "le .env doit porter le mot de passe réel :\n{env}"
+        );
+    }
+
+    /// MySQL ne nomme pas ses clés comme PostgreSQL, et son image ne crée `MYSQL_USER`
+    /// que pour un compte autre que `root` : en déclarer un ici ferait échouer l'image,
+    /// qui refuse qu'on lui redemande le compte d'administration.
+    #[test]
+    fn a_mysql_project_on_root_gets_the_root_password_and_no_second_account() {
+        let (_parent, root) = project_on(Database::Mysql);
+        avant_les_cles_du_compose(&root);
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let env = projected(&planned, ".env");
+        let paires = crate::dotenv::parse(env);
+
+        assert_eq!(
+            crate::dotenv::value(&paires, "MYSQL_ROOT_PASSWORD"),
+            Some("root"),
+            "{env}"
+        );
+        assert_eq!(
+            crate::dotenv::value(&paires, "MYSQL_DATABASE"),
+            Some("demo_api"),
+            "{env}"
+        );
+        assert_eq!(crate::dotenv::value(&paires, "MYSQL_USER"), None, "{env}");
+
+        let compose = projected(&planned, "docker-compose.yml");
+        assert!(
+            compose.contains(
+                "RBS_DATABASE__URL: \"mysql://root:${MYSQL_ROOT_PASSWORD}@db:3306/${MYSQL_DATABASE}\""
+            ),
             "{compose}"
         );
+    }
+
+    /// Un projet MySQL qui se connecte sous un autre compte : c'est celui-là que l'image
+    /// doit créer, et celui-là que l'URL interne nomme.
+    #[test]
+    fn a_mysql_project_on_another_account_gets_that_account_created() {
+        let (_parent, root) = project_with(
+            Database::Mysql,
+            "mysql://app:s3cr3t@localhost:3306/demo_api",
+        );
+        avant_les_cles_du_compose(&root);
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let env = projected(&planned, ".env");
+        let paires = crate::dotenv::parse(env);
+
+        assert_eq!(
+            crate::dotenv::value(&paires, "MYSQL_USER"),
+            Some("app"),
+            "{env}"
+        );
+        assert_eq!(
+            crate::dotenv::value(&paires, "MYSQL_PASSWORD"),
+            Some("s3cr3t"),
+            "{env}"
+        );
+        assert_eq!(
+            crate::dotenv::value(&paires, "MYSQL_ROOT_PASSWORD"),
+            Some("s3cr3t"),
+            "l'image refuse de s'initialiser sans mot de passe root :\n{env}"
+        );
+
+        let compose = projected(&planned, "docker-compose.yml");
+        assert!(
+            compose.contains(
+                "RBS_DATABASE__URL: \"mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}\""
+            ),
+            "{compose}"
+        );
+        assert!(
+            !compose.contains("s3cr3t"),
+            "le compose versionné porte le mot de passe :\n{compose}"
+        );
+    }
+
+    /// SQLite n'a pas de serveur : aucune clé d'identifiants n'a de sens, et en écrire
+    /// une ferait croire à un service que le compose ne monte pas.
+    #[test]
+    fn a_sqlite_project_gets_no_database_credentials() {
+        let (_parent, root) = project_on(Database::Sqlite);
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+
+        for file in planned.plan.files() {
+            for cle in ["POSTGRES_", "MYSQL_"] {
+                assert!(
+                    !file.after.contains(cle),
+                    "{} porte une clé `{cle}` sur un projet SQLite :\n{}",
+                    file.path,
+                    file.after
+                );
+            }
+        }
     }
 
     /// Le worker de la file ne peut se détacher que d'un endroit du squelette, et le
@@ -1534,9 +1807,18 @@ mod tests {
             compose.contains("RBS_SERVER__HOST: 0.0.0.0"),
             "le compose n'ouvre pas l'hôte :\n{compose}"
         );
+
+        // La base que `migrate` et `api` ouvrent est celle du projet : le compose la
+        // nomme par la clé que Compose interpole, et le `.env` porte sa valeur.
         assert!(
-            compose.contains("RBS_DATABASE__URL: postgres://rbs:rbs@db:5432/demo_api"),
+            compose.contains("@db:5432/${POSTGRES_DB}"),
             "le compose ne nomme pas la base du projet :\n{compose}"
+        );
+        let env = projected(&planned, ".env");
+        assert_eq!(
+            crate::dotenv::value(&crate::dotenv::parse(env), "POSTGRES_DB"),
+            Some("demo_api"),
+            "{env}"
         );
     }
 
@@ -1573,12 +1855,12 @@ mod tests {
         );
     }
 
-    /// Le même repli que `new.rs` sur une URL sans nom de base : sans lui, `POSTGRES_DB:`
-    /// reste vide et `RBS_DATABASE__URL` s'arrête à `/`, ce que l'image officielle refuse
-    /// au démarrage.
+    /// Le même repli que `new.rs` sur une URL sans nom de base : sans lui, `POSTGRES_DB`
+    /// reste vide, et l'image officielle refuse de s'initialiser sur une base sans nom.
     #[test]
     fn an_empty_database_name_in_the_project_env_falls_back_to_the_crate_name() {
         let (_parent, root) = project();
+        avant_les_cles_du_compose(&root);
         let env = fs::read_to_string(root.join(".env")).expect("le .env doit exister");
         let sans_nom_de_base = env.replace(
             "RBS_DATABASE__URL=postgres://rbs:rbs@localhost:5432/demo_api",
@@ -1591,15 +1873,12 @@ mod tests {
         fs::write(root.join(".env"), sans_nom_de_base).expect("le .env doit se réécrire");
 
         let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
-        let compose = projected(&planned, "docker-compose.yml");
+        let after = projected(&planned, ".env");
 
-        assert!(
-            compose.contains("RBS_DATABASE__URL: postgres://rbs:rbs@db:5432/demo_api"),
-            "l'URL interne ne reprend pas le repli du nom de base :\n{compose}"
-        );
-        assert!(
-            !compose.contains("RBS_DATABASE__URL: postgres://rbs:rbs@db:5432/\n"),
-            "l'URL interne s'arrête sur un nom de base vide :\n{compose}"
+        assert_eq!(
+            crate::dotenv::value(&crate::dotenv::parse(after), "POSTGRES_DB"),
+            Some("demo_api"),
+            "le repli du nom de base n'atteint pas la clé que le compose interpole :\n{after}"
         );
     }
 
@@ -1632,11 +1911,23 @@ mod tests {
         fs::remove_file(root.join(".env")).expect("le squelette écrit un .env");
 
         let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
-        let compose = projected(&planned, "docker-compose.yml");
+        let env = projected(&planned, ".env");
+        let paires = crate::dotenv::parse(env);
 
-        assert!(
-            compose.contains("postgres://postgres:postgres@db:5432/demo_api"),
-            "le compose ne porte pas les identifiants par défaut :\n{compose}"
+        assert_eq!(
+            crate::dotenv::value(&paires, "POSTGRES_USER"),
+            Some("postgres"),
+            "le .env reposé ne porte pas les identifiants par défaut :\n{env}"
+        );
+        assert_eq!(
+            crate::dotenv::value(&paires, "POSTGRES_PASSWORD"),
+            Some("postgres"),
+            "{env}"
+        );
+        assert_eq!(
+            crate::dotenv::value(&paires, "POSTGRES_DB"),
+            Some("demo_api"),
+            "{env}"
         );
     }
 }
