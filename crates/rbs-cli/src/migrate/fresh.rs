@@ -4,12 +4,10 @@
 //! son moteur d'ancres, et une migration écrite à la main n'a pas besoin d'une base
 //! démarrée pour exister.
 
-use std::fs;
-use std::io;
 use std::path::Path;
 
-use crate::anchors;
 use crate::generate::mount;
+use crate::plan;
 use crate::template::Renderer;
 
 const TEMPLATE: &str = include_str!(concat!(
@@ -45,18 +43,15 @@ pub(crate) enum Error {
         file: String,
     },
 
-    /// Une ancre manque dans la crate `migration`.
-    #[error(transparent)]
-    Anchor(#[from] anchors::Missing),
+    /// Ce que la création aurait écrit n'a pas pu être calculé.
+    ///
+    /// Une ancre disparue de la crate `migration` se dit ici.
+    #[error("{0}")]
+    Plan(#[from] plan::Error),
 
-    /// Un fichier du projet n'a pas pu être lu ou écrit.
-    #[error("{path} est inaccessible : {source}")]
-    Acces {
-        /// Chemin concerné.
-        path: String,
-        /// Cause système.
-        source: io::Error,
-    },
+    /// Le plan n'a pas pu être écrit sur le disque.
+    #[error("{0}")]
+    Application(#[from] plan::application::Error),
 
     /// La template de migration vide n'a pas pu être rendue.
     #[error("la migration n'a pas pu être rendue : {0}")]
@@ -71,24 +66,23 @@ pub(crate) fn run(root: &Path, name: &str, timestamp: &str) -> Result<Fresh, Err
 
     let module = format!("m{timestamp}_{name}");
     let file = format!("migration/src/{module}.rs");
-    let path = root.join(&file);
 
-    if path.exists() {
+    if root.join(&file).exists() {
         return Err(Error::DejaLa { file });
     }
 
     let content = Renderer::new().render(TEMPLATE, minijinja::context! {})?;
 
-    // Le lib.rs est monté avant la première écriture : une ancre absente ne doit pas
-    // laisser un fichier de migration orphelin derrière elle.
-    let lib = root.join("migration/src/lib.rs");
-    let mut source = read(&lib)?;
+    // Les deux fichiers s'écrivent ensemble ou pas du tout : une migration que le `lib.rs`
+    // ne déclare pas est un module que `cargo` refuse, et le projet ne compilerait plus
+    // pour une commande qui a pourtant échoué.
+    let mut builder = plan::Builder::new(root);
+    builder.create(&file, &content)?;
     for mount in mount::for_migration(&module) {
-        source = anchors::insert(&source, mount.anchor, &mount.lines)?;
+        builder.insert(mount.anchor, &mount.lines)?;
     }
 
-    write(&path, &content)?;
-    write(&lib, &source)?;
+    plan::application::apply(&builder.finir(), false)?;
 
     Ok(Fresh { file })
 }
@@ -123,22 +117,9 @@ fn validate(name: &str) -> Result<(), Error> {
     Ok(())
 }
 
-fn read(path: &Path) -> Result<String, Error> {
-    fs::read_to_string(path).map_err(|source| Error::Acces {
-        path: path.display().to_string(),
-        source,
-    })
-}
-
-fn write(path: &Path, content: &str) -> Result<(), Error> {
-    fs::write(path, content).map_err(|source| Error::Acces {
-        path: path.display().to_string(),
-        source,
-    })
-}
-
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::path::PathBuf;
 
     use tempfile::TempDir;
@@ -238,5 +219,31 @@ mod tests {
         let error = run(&root, "ajout_index", HORODATAGE).expect_err("la seconde est refusée");
 
         assert!(error.to_string().contains("existe déjà"));
+    }
+
+    /// Une migration que le `lib.rs` ne déclare pas est un module que rien n'appelle et
+    /// que `cargo` refuse : le projet ne compilerait plus, pour une commande qui a
+    /// pourtant échoué.
+    #[cfg(unix)]
+    #[test]
+    fn a_mount_that_cannot_be_written_leaves_no_orphan_migration() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (_parent, root) = project();
+        let lib = root.join("migration/src/lib.rs");
+        let avant = read(&lib);
+        fs::set_permissions(&lib, fs::Permissions::from_mode(0o444))
+            .expect("les droits doivent se poser");
+
+        let error =
+            run(&root, "ajout_index", HORODATAGE).expect_err("le lib.rs n'est pas inscriptible");
+
+        assert!(
+            !root
+                .join("migration/src/m20260826_143000_ajout_index.rs")
+                .exists(),
+            "la migration orpheline subsiste : {error}"
+        );
+        assert_eq!(read(&lib), avant);
     }
 }
