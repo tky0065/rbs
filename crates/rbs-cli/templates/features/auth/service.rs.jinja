@@ -9,7 +9,7 @@ use sea_orm::DatabaseConnection;
 use sea_orm::prelude::Uuid;
 
 use super::dto::{LoginRequest, RefreshRequest, RegisterRequest, TokenPair, UserResponse};
-use super::repository::{self, Model};
+use super::repository::{self, ADRESSE_PRISE, Model};
 
 /// Le hash vérifié quand l'adresse est inconnue.
 ///
@@ -23,10 +23,7 @@ static HASH_DE_COMPARAISON: LazyLock<String> = LazyLock::new(|| {
 
 pub async fn register(db: &DatabaseConnection, input: RegisterRequest) -> Result<UserResponse> {
     if repository::find_by_email(db, &input.email).await?.is_some() {
-        return Err(Error::Conflict(format!(
-            "l'adresse {} est déjà inscrite",
-            input.email
-        )));
+        return Err(Error::Conflict(ADRESSE_PRISE.to_owned()));
     }
 
     let hash = hash::hash_password(&input.password)?;

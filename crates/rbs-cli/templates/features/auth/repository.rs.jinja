@@ -21,6 +21,13 @@ pub async fn find_by_email(db: &DatabaseConnection, email: &str) -> Result<Optio
         .await?)
 }
 
+/// Le refus d'une adresse déjà prise, dit sans la répéter.
+///
+/// Citer l'adresse la confirme à qui la soumet, dans la réponse comme dans le journal :
+/// l'inscription deviendrait l'oracle d'énumération que le hash témoin de `login` écarte
+/// de l'autre côté.
+pub const ADRESSE_PRISE: &str = "cette adresse est déjà inscrite";
+
 /// Inscrit un utilisateur, le rôle et les horodatages venant des défauts de la table.
 ///
 /// La violation de la contrainte d'unicité devient un conflit plutôt qu'une erreur
@@ -37,9 +44,7 @@ pub async fn create(db: &DatabaseConnection, email: &str, password_hash: &str) -
         .insert(db)
         .await
         .map_err(|error| match error.sql_err() {
-            Some(SqlErr::UniqueConstraintViolation(_)) => {
-                Error::Conflict(format!("l'adresse {email} est déjà inscrite"))
-            }
+            Some(SqlErr::UniqueConstraintViolation(_)) => Error::Conflict(ADRESSE_PRISE.to_owned()),
             _ => Error::from(error),
         })
 }

@@ -171,8 +171,12 @@ async fn the_hash_does_not_appear_in_the_response() {
     );
 }
 
+/// Le 409 dit qu'il refuse, sans redire quoi.
+///
+/// Une réponse qui cite l'adresse la confirme à qui la soumet : l'inscription
+/// deviendrait l'oracle d'énumération que la connexion s'applique à ne pas être.
 #[tokio::test]
-async fn an_email_already_taken_returns_409() {
+async fn an_email_already_taken_returns_409_without_repeating_it() {
     let api = application().await;
     let email = fresh_email();
 
@@ -182,6 +186,10 @@ async fn an_email_already_taken_returns_409() {
     let (second, body) = register(&api, &email).await;
 
     assert_eq!(second, StatusCode::CONFLICT, "{body}");
+    assert!(
+        !body.to_string().contains(&email),
+        "le refus répète l'adresse soumise : {body}"
+    );
 }
 
 /// Les deux échecs sont indiscernables : un corps qui différerait dirait à un attaquant

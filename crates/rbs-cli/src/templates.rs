@@ -811,6 +811,47 @@ mod tests {
         }
     }
 
+    /// L'appel qui commence à `debut`, refermé sur sa parenthèse ouvrante.
+    ///
+    /// Une fenêtre d'un nombre fixe de caractères déborderait sur le code d'après, où
+    /// l'adresse a toute sa place.
+    fn call_at(source: &str, debut: usize) -> String {
+        let mut profondeur = 0_usize;
+        let mut appel = String::new();
+
+        for caractere in source[debut..].chars() {
+            appel.push(caractere);
+
+            match caractere {
+                '(' => profondeur += 1,
+                ')' if profondeur <= 1 => break,
+                ')' => profondeur -= 1,
+                _ => {}
+            }
+        }
+
+        appel
+    }
+
+    /// Un 409 qui cite l'adresse la confirme à qui l'a soumise, dans la réponse comme
+    /// dans le journal : l'inscription devient l'oracle d'énumération que le hash témoin
+    /// de `login` écarte de l'autre côté.
+    #[test]
+    fn no_conflict_of_the_auth_fragment_echoes_the_address_it_refuses() {
+        for fichier in ["service.rs.jinja", "repository.rs.jinja"] {
+            let source = read(&Path::new(RACINE_FEATURES).join("auth").join(fichier));
+
+            for (debut, _) in source.match_indices("Error::Conflict") {
+                let construction = call_at(&source, debut);
+
+                assert!(
+                    !construction.contains("email"),
+                    "{fichier} répète l'adresse refusée dans son 409 :\n{construction}"
+                );
+            }
+        }
+    }
+
     #[test]
     fn the_jobs_fragment_carries_both_anchors() {
         let source = read(&Path::new(RACINE_FEATURES).join("jobs/model.rs.jinja"));
