@@ -195,7 +195,13 @@ fn start(root: &Path, steps: &[Step], attente: Duration) -> Result<(), Error> {
         match step {
             Step::Compose(file) => compose(root, file)?,
             Step::Database { host, port } => {
-                wait_for(host, *port, attente, base::reachable)?;
+                wait_for(host, *port, attente, base::reachable, |etape| match etape {
+                    Attente::Debut => {
+                        crate::ui::waiting(&format!("en attente de la base ({host}:{port})"));
+                    }
+                    Attente::Seconde => crate::ui::tick(),
+                    Attente::Fin => crate::ui::end_of_line(),
+                })?;
             }
             Step::Migrations => {
                 migrate::launch(root, "up", &variables, false)?;
@@ -226,28 +232,71 @@ fn compose(root: &Path, file: &Path) -> Result<(), Error> {
     Ok(())
 }
 
+/// Ce que l'attente d'une base donne à voir.
+///
+/// L'affichage est laissé à l'appelant : `wait_for` reste vérifiable sans détourner la
+/// sortie standard, et le plan reste le seul endroit du module qui sache écrire.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Attente {
+    /// La base n'a pas répondu du premier coup : l'attente commence.
+    Debut,
+    /// Une seconde de plus s'est écoulée.
+    Seconde,
+    /// La base a répondu, ou le délai est écoulé.
+    Fin,
+}
+
 /// Sonde `host:port` jusqu'à ce qu'il réponde, ou que `attente` soit écoulée.
+///
+/// `montre` reçoit le déroulé de l'attente. Rien ne lui est remis quand la base répond
+/// du premier coup : trente secondes de silence n'ont besoin d'être expliquées que
+/// lorsqu'elles ont lieu.
 fn wait_for(
     host: &str,
     port: u16,
     attente: Duration,
     reachable: impl Fn(&str, u16) -> bool,
+    mut montre: impl FnMut(Attente),
 ) -> Result<(), Error> {
-    let echeance = Instant::now() + attente;
+    let depart = Instant::now();
+    let echeance = depart + attente;
+    let mut annoncee = false;
+    let mut secondes = 0;
 
     loop {
         if reachable(host, port) {
+            if annoncee {
+                montre(Attente::Fin);
+            }
+
             return Ok(());
         }
 
         if Instant::now() >= echeance {
+            if annoncee {
+                montre(Attente::Fin);
+            }
+
             return Err(Error::Injoignable {
                 host: host.to_string(),
                 port,
             });
         }
 
+        if !annoncee {
+            montre(Attente::Debut);
+            annoncee = true;
+        }
+
         std::thread::sleep(INTERVALLE.min(attente));
+
+        // Le décompte suit l'horloge et non les tours de boucle : l'intervalle de sonde
+        // peut changer sans que le rythme affiché suive.
+        let ecoulees = depart.elapsed().as_secs();
+        if ecoulees > secondes {
+            secondes = ecoulees;
+            montre(Attente::Seconde);
+        }
     }
 }
 
@@ -423,8 +472,14 @@ mod tests {
 
     #[test]
     fn an_unreachable_database_is_named_rather_than_panicked_on() {
-        let error = wait_for("localhost", 5432, Duration::from_millis(10), |_, _| false)
-            .expect_err("rien ne répond");
+        let error = wait_for(
+            "localhost",
+            5432,
+            Duration::from_millis(10),
+            |_, _| false,
+            |_| {},
+        )
+        .expect_err("rien ne répond");
 
         let message = error.to_string();
         assert!(
@@ -475,8 +530,68 @@ mod tests {
 
     #[test]
     fn a_reachable_database_lets_the_startup_go_on() {
-        wait_for("localhost", 5432, Duration::from_millis(10), |_, _| true)
-            .expect("la sonde répond");
+        wait_for(
+            "localhost",
+            5432,
+            Duration::from_millis(10),
+            |_, _| true,
+            |_| {},
+        )
+        .expect("la sonde répond");
+    }
+
+    /// Une base qui répond du premier coup n'a fait attendre personne : annoncer une
+    /// attente qui n'a pas eu lieu ferait du bruit sur le chemin normal.
+    #[test]
+    fn a_database_answering_at_once_announces_nothing() {
+        let mut vues = Vec::new();
+
+        wait_for(
+            "localhost",
+            5432,
+            Duration::from_millis(10),
+            |_, _| true,
+            |etape| vues.push(etape),
+        )
+        .expect("la sonde répond");
+
+        assert!(
+            vues.is_empty(),
+            "l'attente s'annonce sans attendre : {vues:?}"
+        );
+    }
+
+    /// Trente secondes de silence ne disent pas si `rbs dev` attend PostgreSQL ou s'il
+    /// s'est planté : l'attente s'annonce dès qu'elle commence, puis se compte.
+    #[test]
+    fn a_wait_announces_itself_then_counts_the_seconds() {
+        let mut vues = Vec::new();
+
+        // Un peu plus d'une seconde : le délai réel est le seul moyen d'observer le
+        // rythme, `wait_for` n'ayant pas d'horloge à lui substituer.
+        wait_for(
+            "localhost",
+            5432,
+            Duration::from_millis(1_050),
+            |_, _| false,
+            |etape| vues.push(etape),
+        )
+        .expect_err("rien ne répond");
+
+        assert_eq!(
+            vues.first(),
+            Some(&Attente::Debut),
+            "l'attente ne s'annonce pas : {vues:?}"
+        );
+        assert!(
+            vues.contains(&Attente::Seconde),
+            "la seconde écoulée ne se compte pas : {vues:?}"
+        );
+        assert_eq!(
+            vues.last(),
+            Some(&Attente::Fin),
+            "la ligne d'attente reste ouverte : {vues:?}"
+        );
     }
 
     #[test]

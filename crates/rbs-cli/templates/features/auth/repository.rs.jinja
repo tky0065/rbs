@@ -21,6 +21,13 @@ pub async fn find_by_email(db: &DatabaseConnection, email: &str) -> Result<Optio
         .await?)
 }
 
+/// Le refus d'une adresse déjà prise, dit sans la répéter.
+///
+/// Citer l'adresse la confirme à qui la soumet, dans la réponse comme dans le journal :
+/// l'inscription deviendrait l'oracle d'énumération que le hash témoin de `login` écarte
+/// de l'autre côté.
+pub const ADRESSE_PRISE: &str = "cette adresse est déjà inscrite";
+
 /// Inscrit un utilisateur, le rôle et les horodatages venant des défauts de la table.
 ///
 /// La violation de la contrainte d'unicité devient un conflit plutôt qu'une erreur
@@ -37,9 +44,7 @@ pub async fn create(db: &DatabaseConnection, email: &str, password_hash: &str) -
         .insert(db)
         .await
         .map_err(|error| match error.sql_err() {
-            Some(SqlErr::UniqueConstraintViolation(_)) => {
-                Error::Conflict(format!("l'adresse {email} est déjà inscrite"))
-            }
+            Some(SqlErr::UniqueConstraintViolation(_)) => Error::Conflict(ADRESSE_PRISE.to_owned()),
             _ => Error::from(error),
         })
 }
@@ -90,4 +95,21 @@ pub async fn consume(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
         .await?;
 
     Ok(touchees.rows_affected == 1)
+}
+
+/// Ferme toutes les sessions encore ouvertes d'un compte, et dit combien l'étaient.
+///
+/// La granularité est le compte et non la chaîne de rotation : distinguer les chaînes
+/// demanderait à la table une colonne de famille, qu'un projet déjà migré ne recevrait
+/// jamais. Fermer trop large coûte une reconnexion ; fermer trop étroit laisse une paire
+/// volée en circulation.
+pub async fn revoke_sessions_of(db: &DatabaseConnection, user_id: Uuid) -> Result<u64> {
+    let touchees = refresh_token::Entity::update_many()
+        .col_expr(refresh_token::Column::RevokedAt, Expr::current_timestamp())
+        .filter(refresh_token::Column::UserId.eq(user_id))
+        .filter(refresh_token::Column::RevokedAt.is_null())
+        .exec(db)
+        .await?;
+
+    Ok(touchees.rows_affected)
 }

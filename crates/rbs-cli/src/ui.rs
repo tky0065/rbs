@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use console::style;
 
 /// Seul point du CLI qui connaît `console` : la détection du TTY et le respect de
@@ -19,6 +21,26 @@ pub fn success(message: &str) {
 /// Indique la suite, en retrait de ce qui précède.
 pub fn info(message: &str) {
     println!("{}", style(message).dim());
+}
+
+/// Ouvre une ligne d'attente, laissée ouverte pour que `tick` la prolonge.
+///
+/// La sortie est vidée à chaque écriture : sans fin de ligne, rien ne s'afficherait avant
+/// que l'attente soit finie, c'est-à-dire trop tard pour renseigner qui attend.
+pub fn waiting(message: &str) {
+    print!("{} ", style(message).dim());
+    let _ = std::io::stdout().flush();
+}
+
+/// Marque une seconde de plus sur la ligne ouverte par [`waiting`].
+pub fn tick() {
+    print!("{}", style(".").dim());
+    let _ = std::io::stdout().flush();
+}
+
+/// Referme la ligne ouverte par [`waiting`].
+pub fn end_of_line() {
+    println!();
 }
 
 /// Colore un fragment en vert, pour ce qui est acquis.

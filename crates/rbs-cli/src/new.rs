@@ -611,6 +611,7 @@ mod tests {
             "Cargo.toml",
             "config/default.toml",
             "config/development.toml",
+            "config/production.toml",
             "migration/Cargo.toml",
             "migration/src/lib.rs",
             "migration/src/main.rs",
@@ -1068,7 +1069,7 @@ mod tests {
         assert!(compose.contains("- \"5432:5432\""), "{compose}");
         assert!(compose.contains("# <rbs:services>"), "{compose}");
         assert!(compose.contains("# </rbs:services>"), "{compose}");
-        assert_eq!(project.files, 19);
+        assert_eq!(project.files, 20);
     }
 
     /// Le port publié est celui du .env, non 5432 en dur : sans quoi `cargo run` sur
@@ -1139,7 +1140,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 18);
+        assert_eq!(project.files, 19);
     }
 
     #[test]
@@ -1160,7 +1161,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 18);
+        assert_eq!(project.files, 19);
     }
 
     /// Une URL sans identifiants est valide et acceptée par `parse` : sans cette
@@ -1186,7 +1187,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 18);
+        assert_eq!(project.files, 19);
     }
 
     #[test]

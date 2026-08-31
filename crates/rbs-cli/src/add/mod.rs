@@ -1153,6 +1153,39 @@ mod tests {
         );
     }
 
+    /// Un projet déroulé avant que le squelette écrive ce profil ne le recevrait jamais,
+    /// et le `RBS_ENV=production` que le compose pose désignerait un fichier absent : la
+    /// documentation resterait publiée par le défaut.
+    #[test]
+    fn the_docker_fragment_writes_the_production_profile_a_project_lacks() {
+        let (_parent, root) = project();
+        fs::remove_file(root.join("config/production.toml")).expect("le squelette l'écrit");
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let profil = projected(&planned, "config/production.toml");
+
+        assert!(
+            profil.contains("swagger_ui = false") && profil.contains("openapi_json = false"),
+            "le profil déposé ne coupe pas la documentation :\n{profil}"
+        );
+    }
+
+    /// Le compose est le seul déploiement que rbs livre : l'API qu'il monte n'a aucune
+    /// raison de publier `/docs` et le document, que `config/default.toml` expose pour
+    /// le développement.
+    #[test]
+    fn the_projected_compose_runs_the_api_on_the_production_profile() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(
+            compose.contains("RBS_ENV: production"),
+            "le compose laisse l'API sur le profil de développement :\n{compose}"
+        );
+    }
+
     /// Le même repli que `new.rs` sur une URL sans nom de base : sans lui, `POSTGRES_DB:`
     /// reste vide et `RBS_DATABASE__URL` s'arrête à `/`, ce que l'image officielle refuse
     /// au démarrage.

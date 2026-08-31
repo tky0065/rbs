@@ -68,6 +68,9 @@ services:
       # config/default.toml écoute sur 127.0.0.1, ce qui rend le conteneur injoignable
       # depuis l'hôte. L'environnement l'emporte sur le TOML.
       RBS_SERVER__HOST: 0.0.0.0
+      # Le profil retenu désigne config/production.toml, qui coupe `/docs` et le document
+      # OpenAPI : ce compose est le déploiement, et non le poste de travail.
+      RBS_ENV: production
       RBS_DATABASE__URL: {@ database_url_compose @}
       RBS_LOG_FORMAT: json
       RUST_LOG: info
