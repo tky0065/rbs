@@ -53,7 +53,7 @@ services:
     build: .
     command: ["migration", "up"]
     environment:
-      RBS_DATABASE__URL: {@ database_url_compose @}
+      RBS_DATABASE__URL: "{@ database_url_compose @}"
     restart: "no"
 {%- if not database_a_un_serveur %}
     # Le fichier de base est partagé avec `api` : sans ce volume, chaque conteneur
@@ -71,7 +71,7 @@ services:
       # Le profil retenu désigne config/production.toml, qui coupe `/docs` et le document
       # OpenAPI : ce compose est le déploiement, et non le poste de travail.
       RBS_ENV: production
-      RBS_DATABASE__URL: {@ database_url_compose @}
+      RBS_DATABASE__URL: "{@ database_url_compose @}"
       RBS_LOG_FORMAT: json
       RUST_LOG: info
     ports:
