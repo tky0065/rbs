@@ -1,0 +1,18 @@
+# `cargo audit` lit `Cargo.lock`, qui ignore les features : il voit des dépendances
+# optionnelles que rien n'active. Chaque entrée ci-dessous dit ce qui la lèverait, par une
+# commande et non par un jugement — une exception muette redeviendrait vite une exception
+# oubliée.
+
+[advisories]
+ignore = [
+    # rsa 0.9.10, Marvin Attack — tirée par `jsonwebtoken`. L'advisory dit « No fixed
+    # upgrade is available! » : il n'y a rien à mettre à jour. À retirer le jour où `rsa`
+    # publie un correctif, que `cargo audit` signalera de lui-même.
+    "RUSTSEC-2023-0071",
+
+    # rkyv 0.7.46 — dépendance optionnelle de `rust_decimal`, jamais compilée :
+    # `cargo tree --workspace --all-features -i rkyv` rend « nothing to print ». Le
+    # correctif demande rkyv >= 0.8.17, hors de portée d'un `cargo update` : `rust_decimal`
+    # 1.42.1, dernière version parue, épingle `^0.7.46`. À retirer quand elle passera à 0.8.
+    "RUSTSEC-2026-0235",
+]

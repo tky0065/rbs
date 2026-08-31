@@ -100,6 +100,48 @@ jobs:
           cargo publish --dry-run --locked -p rbs-core
           cargo publish --dry-run --locked -p rbs-cli
 
+  # Un audit ne compile rien : le tenir hors du job `linux` le rend en quelques secondes,
+  # et son verdict ne se perd pas derrière vingt minutes de compilation.
+  #
+  # `cargo audit` nu plutôt qu'une action qui l'enveloppe : c'est la commande que le
+  # développeur lance chez lui, et elle lit le même `.cargo/audit.toml`, où chaque advisory
+  # tolérée dit ce qui la lèverait. Deux verdicts divergents seraient exactement le genre de
+  # mensonge que ce job existe pour interdire.
+  audit:
+    name: cargo audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-audit
+
+      - name: cargo audit
+        run: cargo audit
+
+  # `rust-version` est une promesse faite à qui installe, et rien ne la tenait : tous les
+  # autres jobs tournent sur `stable`, qui satisfait n'importe quel plancher. Une dépendance
+  # qui monte sa MSRV cassait donc les installations sans que la CI le voie.
+  #
+  # Un `check` et non la suite de tests : la question posée est « ce plancher compile-t-il ? »,
+  # à quoi le typage répond en entier. `--locked` en plus, pour que le job échoue sur la
+  # résolution versionnée plutôt que d'en inventer silencieusement une autre.
+  msrv:
+    name: MSRV 1.94
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@1.94
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: cargo check
+        run: cargo check --workspace --all-features --all-targets --locked
+
   # Ce que ces deux plateformes prouvent, c'est que rbs manipule les chemins sans
   # supposer `/` — la faute que ce projet commettrait, puisqu'il écrit des arborescences.
   #
