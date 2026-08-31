@@ -60,7 +60,7 @@ first would charge three seconds to a diagnosis that fits in two file reads:
 That is the contradiction [`rbs new`](./new.md) refuses outright, met here after the fact —
 on a project whose `.env` was edited later.
 
-## The one warning
+## The two warnings
 
 Every other verdict above is pass or fail. `agents` can also warn, on one condition only:
 a directory under `src/` that no installed fragment and no feature declared in
@@ -80,10 +80,25 @@ kind of code, which would make the check useless in CI. A warning changes neithe
 status nor the overall verdict: a project with nothing but a warning still exits 0 and is
 still reported as healthy — only an actual failure does that.
 
+The second warning belongs to `gardes`, and only exists on a project carrying
+[`auth`](../guides/auth.md): a feature whose `create`, `update` or `delete` calls no
+`require_role`.
+
+```text
+  ! gardes      écritures anonymes : articles, comments
+      réservez-les à un rôle : `rbs generate crud <nom> --fields … --role admin` pose le garde à la génération, et `identite.require_role(Role::Admin)?` le pose à la main — voir le guide de l'authentification
+```
+
+Same reasoning, twice over. An API that writes without asking who is calling is a
+legitimate design — a public catalogue, a service behind a gateway that already
+authenticates — so the finding cannot be a failure. And the guard is recognised by that one
+call, so a project protecting its writes some other way is named here too.
+
 ## Installed features
 
 Each feature that carries configuration adds a line of its own, and the line only exists
-on a project that declared the feature. `jobs` is the one this milestone added:
+on a project that declared the feature. `auth` adds two — its secret, and the `gardes`
+check above. `jobs` is the one this milestone added:
 
 ```text
   ✗ jobs        config/default.toml ne porte pas de section `[jobs]`

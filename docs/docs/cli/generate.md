@@ -47,15 +47,17 @@ rather than read from `--template-dir`.
 $ rbs generate crud --help
 Génère une feature CRUD complète, entité et migration comprises
 
-Usage: rbs generate crud [OPTIONS] <NOM>
+Usage: rbs generate crud [OPTIONS] <NAME>
 
 Arguments:
-  <NOM>  Nom de la feature, au pluriel
+  <NAME>  Nom de la feature, au pluriel
 
 Options:
       --fields <CHAMPS>        Champs de l'entité, ex. "name:string,email:string:unique"
       --force                  Écrit même si le working tree Git est sale
       --dry-run                Affiche le plan sans rien écrire
+      --has-many <ENTITE>      Entité enfant dont ce modèle doit porter la variante inverse, répétable
+      --role <ROLE>            Réserve create, update et delete à ce rôle ; exige la feature auth
       --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
   -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
   -h, --help                   Print help
@@ -67,6 +69,8 @@ Options:
 | `--fields <CHAMPS>` | The entity's columns, in the grammar below. Omitted, the feature is generated with no column of its own. |
 | `--force` | Writes even though the Git working tree is dirty, and overwrites files reported as conflicting. |
 | `--dry-run` | Prints the plan and stops. Nothing is written. |
+| `--has-many <ENTITE>` | Repairs the far side of a relation: writes into the model of an already generated feature the `has_many` variant pointing at the named child, and nothing else. Repeatable. [The relations guide](../guides/relations.md) covers when it is needed. |
+| `--role <ROLE>` | Reserves `create`, `update` and `delete` to that role: they take an `Identity` and call `require_role`, while `list` and `find` stay open. Requires the [`auth`](../guides/auth.md) feature, and a role its `Role` enum declares — both are checked before anything is written. |
 
 ## `rbs generate feature`
 
@@ -74,10 +78,10 @@ Options:
 $ rbs generate feature --help
 Génère une feature vide : six fichiers, aucun champ
 
-Usage: rbs generate feature [OPTIONS] <NOM>
+Usage: rbs generate feature [OPTIONS] <NAME>
 
 Arguments:
-  <NOM>  Nom de la feature
+  <NAME>  Nom de la feature
 
 Options:
       --force                  Écrit même si le working tree Git est sale
@@ -88,8 +92,9 @@ Options:
   -V, --version                Print version
 ```
 
-Same flags minus `--fields`: an empty feature has no columns, so it gets neither an entity
-worth the name nor a migration.
+Same flags minus `--fields`, `--has-many` and `--role`: an empty feature has no columns, so
+it gets neither an entity worth the name, nor a migration, nor a relation to repair; and it
+carries no handler for a guard to protect.
 
 ## The `--fields` grammar
 

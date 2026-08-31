@@ -54,7 +54,8 @@ rbs migrate up
 ```
 
 This is the shape of the thing, not a transcript to paste: it needs a database answering,
-and `rbs new` will ask you two questions the commands above do not carry. The
+and `rbs new` will ask you two questions the commands above do not carry — three if you
+leave the name out too. The
 [getting started guide](https://tky0065.github.io/rbs/getting-started) has the runnable
 version, with the output of every command.
 

@@ -100,22 +100,34 @@ pub(crate) fn parse(url: &str) -> Option<Connection> {
     })
 }
 
-/// L'URL de la même base, vue de l'intérieur du compose.
+/// L'URL de la même base, vue de l'intérieur du compose — identifiants non substitués.
 ///
 /// L'hôte y est le service `db`, et le port celui que le conteneur écoute : celui que le
 /// compose a publié ne concerne que la machine hôte.
 ///
-/// `nom_base` prévaut sur `connexion.database` : l'appelant y porte le repli sur le nom
-/// du projet quand l'URL ne nomme aucune base, faute de quoi l'URL interne s'arrêterait
-/// sur un `/` vide alors que le compose, lui, nomme la base par ce repli.
-pub(crate) fn interne(connexion: &Connection, database: Database, nom_base: &str) -> String {
+/// Les identifiants y sont *nommés* et non écrits : ce sont les mêmes clés que celles du
+/// service `db`, et c'est Compose qui les substitue depuis le `.env` du projet. Le compose
+/// est versionné ; une URL complète y publierait le mot de passe de la base, que les
+/// variables du service ont justement cessé de porter.
+///
+/// `user` ne sert qu'à MySQL, dont l'image ne crée `MYSQL_USER` que pour un compte autre
+/// que `root`. SQLite n'a pas d'identifiants à nommer : l'appelant garde son URL de volume.
+pub(crate) fn interne(database: Database, user: &str) -> Option<String> {
     let scheme = database.name();
-    let port = database.default_port().unwrap_or(connexion.port);
+    let port = database.default_port()?;
 
-    format!(
-        "{scheme}://{}:{}@db:{port}/{nom_base}",
-        connexion.user, connexion.password
-    )
+    Some(match database {
+        Database::Postgres => format!(
+            "{scheme}://${{POSTGRES_USER}}:${{POSTGRES_PASSWORD}}@db:{port}/${{POSTGRES_DB}}"
+        ),
+        Database::Mysql if user == "root" => {
+            format!("{scheme}://root:${{MYSQL_ROOT_PASSWORD}}@db:{port}/${{MYSQL_DATABASE}}")
+        }
+        Database::Mysql => {
+            format!("{scheme}://${{MYSQL_USER}}:${{MYSQL_PASSWORD}}@db:{port}/${{MYSQL_DATABASE}}")
+        }
+        Database::Sqlite => return None,
+    })
 }
 
 #[cfg(test)]
@@ -204,28 +216,48 @@ mod tests {
     }
 
     /// Vue du compose, la base n'est plus sur l'hôte mais sur le service `db`, et le port
-    /// est celui que le conteneur écoute — non celui qui a été publié.
+    /// est celui que le conteneur écoute — non celui qui a été publié. Les identifiants,
+    /// eux, sont ceux que Compose interpole depuis le `.env`.
     #[test]
     fn the_internal_url_targets_the_db_service_on_its_container_port() {
-        let connexion = parse("postgres://rbs:secret@localhost:15432/demo").expect("URL valide");
-
         assert_eq!(
-            interne(&connexion, Database::Postgres, &connexion.database),
-            "postgres://rbs:secret@db:5432/demo"
+            interne(Database::Postgres, "rbs").as_deref(),
+            Some("postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}")
         );
     }
 
-    /// Le repli du nom de base l'emporte sur celui de la connexion, vide : c'est le
-    /// mécanisme dont `add::plan_for` se sert pour ne jamais engendrer un compose dont
-    /// `RBS_DATABASE__URL` s'arrête sur un `/` sans rien après.
+    /// Le mot de passe du projet ne traverse pas cette URL : elle part dans un compose
+    /// versionné, où il serait publié avec lui.
     #[test]
-    fn the_internal_url_uses_the_given_fallback_name_over_an_empty_one() {
-        let connexion = parse("postgres://rbs:secret@localhost:5432").expect("URL valide");
+    fn the_internal_url_never_carries_a_password() {
+        for (database, user) in [
+            (Database::Postgres, "rbs"),
+            (Database::Mysql, "root"),
+            (Database::Mysql, "app"),
+        ] {
+            let url = interne(database, user).expect("le moteur a un serveur");
+            assert!(!url.contains("secret"), "{url}");
+        }
+    }
 
+    /// L'image MySQL ne crée `MYSQL_USER` que pour un compte autre que `root` : sous
+    /// `root`, l'URL doit nommer `MYSQL_ROOT_PASSWORD`, seule clé que le `.env` porte.
+    #[test]
+    fn a_mysql_url_names_the_account_the_image_will_have_created() {
         assert_eq!(
-            interne(&connexion, Database::Postgres, "demo_api"),
-            "postgres://rbs:secret@db:5432/demo_api"
+            interne(Database::Mysql, "root").as_deref(),
+            Some("mysql://root:${MYSQL_ROOT_PASSWORD}@db:3306/${MYSQL_DATABASE}")
         );
+        assert_eq!(
+            interne(Database::Mysql, "app").as_deref(),
+            Some("mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@db:3306/${MYSQL_DATABASE}")
+        );
+    }
+
+    /// SQLite n'a ni identifiants ni service à nommer : l'appelant garde son URL de volume.
+    #[test]
+    fn a_serverless_engine_has_no_credentials_to_name() {
+        assert_eq!(interne(Database::Sqlite, ""), None);
     }
 
     /// Un nom de base portant un `@` faisait couper l'URL entière au dernier `@` :

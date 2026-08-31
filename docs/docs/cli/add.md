@@ -26,6 +26,7 @@ Arguments:
 
 Options:
       --force                  Applique les modifications même si le working tree Git est sale
+      --dry-run                Affiche le plan sans rien écrire
       --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
   -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
   -h, --help                   Print help
@@ -35,6 +36,7 @@ Options:
 | Flag | Effect |
 |---|---|
 | `--force` | Applies even though the Git working tree is dirty, and overwrites files reported as conflicting. |
+| `--dry-run` | Prints the plan and stops. Nothing is written. |
 | `--template-dir <CHEMIN>` | Reads the fragments from a directory holding one subdirectory per feature, instead of the ones embedded in the binary. |
 | `-y`, `--yes` | Global, and inert here: `rbs add` asks nothing. |
 
@@ -73,10 +75,12 @@ plan pour /private/tmp/rbs-demo/blog
   + Dockerfile           créé
   + .dockerignore        créé
   ~ docker-compose.yml   modifié
+  · .env.example         inchangé
+  · .env                 inchangé
   ~ Cargo.toml           modifié
   ~ AGENTS.md            modifié
 
-  5 fichiers à écrire
+  5 fichiers à écrire, 2 inchangés
 ✓ docker installée — 2 fichiers
 
   docker compose --profile app up --build
@@ -98,14 +102,25 @@ plan pour /private/tmp/rbs-demo/depot
   + Dockerfile           créé
   + .dockerignore        créé
   + docker-compose.yml   créé
+  ~ .env.example         modifié
+  ~ .env                 modifié
   ~ Cargo.toml           modifié
   ~ AGENTS.md            modifié
 
-  5 fichiers à écrire
+  7 fichiers à écrire
 ✓ docker installée — 3 fichiers
 
   docker compose --profile app up --build
 ```
+
+The compose is versioned, so it names the database credentials rather than carrying
+them — `POSTGRES_USER`, `POSTGRES_PASSWORD` and `POSTGRES_DB`, or their MySQL
+counterparts, which Compose interpolates from `.env` when it starts the service. A project
+created before rbs 1.1.0 declares none of them, so `add docker` writes them into its
+`.env`, reading the values from the project's own database URL, and gives `.env.example`
+the same keys on the engine's demonstration values. A key already declared is left exactly
+as it is — hence the two `inchangé` lines in the first plan above, on a project `rbs new`
+has already equipped.
 
 A compose edited by hand that has lost its `# <rbs:services>` anchor is not touched — the
 command writes nothing and prints the block to paste back:

@@ -4,7 +4,7 @@ use inquire::{InquireError, MultiSelect, Text};
 
 use crate::database::Database;
 
-/// Nom retenu quand ni le flag ni la question ne l'ont fixé.
+/// Nom proposé par la question, que l'utilisateur valide ou remplace.
 const NOM_DEFAUT: &str = "mon-api";
 
 /// Les réponses aux trois questions de `rbs new`, d'où qu'elles viennent.
@@ -23,6 +23,8 @@ pub struct ProjectOptions {
 pub enum PromptError {
     /// Aucun terminal interactif : seuls les flags peuvent encore fournir les réponses.
     SansTerminal,
+    /// `--yes` a été donné sans nom de projet : il n'y a ni question ni défaut.
+    NomRequis,
     /// L'utilisateur a coupé court (Ctrl-C ou Échap).
     Interrompu,
     /// Tout autre échec remonté par `inquire`.
@@ -34,8 +36,13 @@ impl fmt::Display for PromptError {
         match self {
             Self::SansTerminal => f.write_str(
                 "aucun terminal interactif pour poser les questions : relancez avec `--yes` \
-                 pour prendre les défauts, ou donnez les réponses en flags — le name en \
+                 pour prendre les défauts, ou donnez les réponses en flags — le nom en \
                  argument, `--database-url` et `--with`",
+            ),
+            Self::NomRequis => f.write_str(
+                "le nom du projet manque : `--yes` ne pose aucune question, et aucun nom \
+                 par défaut ne vaudrait celui que vous n'avez pas donné — nommez le projet \
+                 en argument, `rbs new mon-api --yes`",
             ),
             Self::Interrompu => f.write_str("questions interrompues : aucun projet n'a été créé"),
             Self::Autre(message) => f.write_str(message),
@@ -149,7 +156,7 @@ fn resolve_with<Q: Questions>(
 ) -> Result<ProjectOptions, PromptError> {
     let name = match name {
         Some(name) => name,
-        None if yes => NOM_DEFAUT.to_string(),
+        None if yes => return Err(PromptError::NomRequis),
         None => questions.name(NOM_DEFAUT)?,
     };
 
@@ -251,7 +258,7 @@ mod tests {
 
         let options = resolve_with(
             &espion,
-            None,
+            Some("mon-api".to_string()),
             None,
             Database::default(),
             None,
@@ -265,12 +272,43 @@ mod tests {
             "des questions ont été posées : {:?}",
             espion.written()
         );
-        assert_eq!(options.name, NOM_DEFAUT);
+        assert_eq!(options.name, "mon-api");
         assert_eq!(
             options.database_url,
             "postgres://postgres:postgres@localhost:5432/mon_api"
         );
         assert!(options.features.is_empty());
+    }
+
+    /// `--yes` promet de ne poser aucune question ; il n'existe pas pour autant de nom de
+    /// projet par défaut acceptable — un répertoire nommé au hasard ne se renomme pas
+    /// après coup. Il ne reste qu'à nommer le manque.
+    #[test]
+    fn with_yes_a_missing_name_is_refused_rather_than_invented() {
+        let espion = Spy::default();
+
+        let error = resolve_with(
+            &espion,
+            None,
+            None,
+            Database::default(),
+            None,
+            &disponibles(),
+            true,
+        )
+        .expect_err("`--yes` sans nom ne doit pas inventer de nom");
+
+        assert!(
+            espion.written().is_empty(),
+            "une question a été posée malgré `--yes` : {:?}",
+            espion.written()
+        );
+
+        let message = error.to_string();
+        assert!(
+            message.contains("nom") && message.contains("--yes"),
+            "l'erreur ne nomme pas le manque :\n{message}"
+        );
     }
 
     #[test]
@@ -303,7 +341,7 @@ mod tests {
 
         let options = resolve_with(
             &espion,
-            None,
+            Some("mon-api".to_string()),
             Some("postgres://ailleurs:5432/db".to_string()),
             Database::default(),
             None,
@@ -322,7 +360,7 @@ mod tests {
 
         let options = resolve_with(
             &espion,
-            None,
+            Some("mon-api".to_string()),
             None,
             Database::default(),
             Some(vec!["docker".to_string(), "ci".to_string()]),

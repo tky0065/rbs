@@ -43,7 +43,8 @@ Et le fichier de profil, qui ne porte que ce qui diffère :
 ```toml file=examples/hello-crud/config/development.toml
 ```
 
-`.env` est l'endroit où vit l'URL de la base, à côté des deux variables de log :
+`.env` est l'endroit où vit l'URL de la base, à côté des deux variables de log et — sur
+un projet dont le compose porte une base — des identifiants que celui-ci interpole :
 
 ```bash file=examples/hello-crud/.env.example
 ```
@@ -55,6 +56,7 @@ Et le fichier de profil, qui ne porte que ce qui diffère :
 | `env` | `RBS_ENV` | `development` |
 | `server.host` | `RBS_SERVER__HOST` | `127.0.0.1` |
 | `server.port` | `RBS_SERVER__PORT` | `8080` |
+| `server.timeout_secs` | `RBS_SERVER__TIMEOUT_SECS` | `30` |
 | `database.url` | `RBS_DATABASE__URL` | **aucun — requis** |
 | `database.max_connections` | `RBS_DATABASE__MAX_CONNECTIONS` | `10` |
 | `database.min_connections` | `RBS_DATABASE__MIN_CONNECTIONS` | `0` |

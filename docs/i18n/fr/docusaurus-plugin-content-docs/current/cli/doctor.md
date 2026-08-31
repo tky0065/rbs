@@ -62,7 +62,7 @@ fichier :
 C'est la contradiction que [`rbs new`](./new.md) refuse d'emblée, rencontrée ici après coup
 — sur un projet dont le `.env` a été édité plus tard.
 
-## L'unique avertissement
+## Les deux avertissements
 
 Tout autre verdict ci-dessus est un succès ou un échec. `agents` peut aussi avertir, à une
 seule condition : un répertoire de `src/` qu'aucun fragment installé et qu'aucune feature
@@ -83,11 +83,25 @@ CI. Un avertissement ne change ni le code de sortie ni le verdict d'ensemble : u
 qui ne porte qu'un avertissement continue de sortir en 0 et d'être rapporté comme sain —
 seul un échec véritable change cela.
 
+Le second appartient à `gardes`, et n'existe que sur un projet portant
+[`auth`](../guides/auth.md) : une feature dont `create`, `update` ou `delete` n'appelle
+aucune `require_role`.
+
+```text
+  ! gardes      écritures anonymes : articles, comments
+      réservez-les à un rôle : `rbs generate crud <nom> --fields … --role admin` pose le garde à la génération, et `identite.require_role(Role::Admin)?` le pose à la main — voir le guide de l'authentification
+```
+
+Le même raisonnement, deux fois. Une API qui écrit sans demander qui appelle est un choix
+légitime — un catalogue public, un service derrière une passerelle qui authentifie déjà —
+et le constat ne peut donc pas être un échec. Et la garde se reconnaît à ce seul appel : un
+projet qui protège ses écritures autrement est nommé ici aussi.
+
 ## Les features installées
 
 Chaque feature qui porte de la configuration ajoute une ligne à elle, et cette ligne
-n'existe que sur un projet qui a déclaré la feature. `jobs` est celle que ce jalon a
-ajoutée :
+n'existe que sur un projet qui a déclaré la feature. `auth` en ajoute deux — son secret, et
+le contrôle `gardes` ci-dessus. `jobs` est celle que ce jalon a ajoutée :
 
 ```text
   ✗ jobs        config/default.toml ne porte pas de section `[jobs]`

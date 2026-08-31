@@ -341,6 +341,10 @@ mod tests {
             database_password => "postgres",
             database_name => "mon_api",
             database_port => 5432,
+            compose => true,
+            database_user_par_defaut => "postgres",
+            database_password_par_defaut => "postgres",
+            database_name_par_defaut => "mon_api",
             lang => "fr",
         }
     }
@@ -658,6 +662,9 @@ mod tests {
             database_password => "rbs",
             database_name => "mon_api",
             database_port => 5432u16,
+            database_user_par_defaut => "postgres",
+            database_password_par_defaut => "postgres",
+            database_name_par_defaut => "mon_api",
         }
     }
 
@@ -962,6 +969,27 @@ mod tests {
         assert_eq!(
             squelette, repli,
             "le profil du fragment docker diverge de celui du squelette"
+        );
+    }
+
+    /// Un `.layer()` enveloppe ceux qui le précèdent : posée dans l'ancre des couches, la
+    /// borne de durée reste intérieure à `trace` et `request_id`, et le 408 qu'elle rend
+    /// porte donc son identifiant de requête et entre dans le journal. Placée après,
+    /// elle répondrait hors de toute trace.
+    #[test]
+    fn the_request_timeout_layer_sits_inside_the_layers_anchor() {
+        let source = read(&Path::new(RACINE).join("src/router.rs.jinja"));
+
+        let ouverture = source
+            .find("// <rbs:layers>")
+            .expect("le routeur porte l'ancre des couches");
+        let fermeture = source
+            .find("// </rbs:layers>")
+            .expect("le routeur porte la balise fermante");
+
+        assert!(
+            source[ouverture..fermeture].contains("TimeoutLayer::with_status_code"),
+            "la borne de durée n'est pas dans l'ancre des couches :\n{source}"
         );
     }
 

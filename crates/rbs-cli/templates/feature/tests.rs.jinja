@@ -1,8 +1,13 @@
-{%- if not creatable -%}
+{%- if blocking_reference -%}
 // La création n'est pas exercée ici : « {@ blocking_reference @} » est une référence requise,
 // et ce fichier ne sait pas quelle ligne de la table visée désigner — un identifiant
 // inventé ferait refuser le POST par la clé étrangère. Créez la ligne cible, puis
 // écrivez la création et la mise à jour avec son identifiant.
+
+{% elif role -%}
+// Les écritures ne sont pas exercées ici : `create`, `update` et `delete` exigent un jeton
+// portant `Role::{@ role @}`, et ce fichier n'en émet aucun. Obtenez-en un par
+// `POST /auth/login`, puis écrivez le cycle complet en le posant en en-tête.
 
 {% endif -%}
 use axum::Router;
@@ -221,6 +226,25 @@ async fn an_unknown_id_returns_404() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["status"], 404, "{body}");
 }
+{%- if role %}
+
+/// Sans jeton, l'écriture est refusée avant même que le corps ne soit lu.
+#[tokio::test]
+async fn an_anonymous_write_returns_401() {
+    let api = application().await;
+    let anonyme = Request::builder()
+        .method("POST")
+        .uri("/{@ module @}")
+        .header("content-type", "application/json")
+        .body(Body::from("{}"))
+        .expect("requête bien formée");
+
+    let (status, body) = call(&api, anonyme).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["status"], 401, "{body}");
+}
+{%- else %}
 
 #[tokio::test]
 async fn an_unreadable_body_returns_400() {
@@ -237,3 +261,4 @@ async fn an_unreadable_body_returns_400() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["status"], 400, "{body}");
 }
+{%- endif %}

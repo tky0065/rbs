@@ -49,15 +49,17 @@ compilées dans le binaire plutôt que lues depuis `--template-dir`.
 $ rbs generate crud --help
 Génère une feature CRUD complète, entité et migration comprises
 
-Usage: rbs generate crud [OPTIONS] <NOM>
+Usage: rbs generate crud [OPTIONS] <NAME>
 
 Arguments:
-  <NOM>  Nom de la feature, au pluriel
+  <NAME>  Nom de la feature, au pluriel
 
 Options:
       --fields <CHAMPS>        Champs de l'entité, ex. "name:string,email:string:unique"
       --force                  Écrit même si le working tree Git est sale
       --dry-run                Affiche le plan sans rien écrire
+      --has-many <ENTITE>      Entité enfant dont ce modèle doit porter la variante inverse, répétable
+      --role <ROLE>            Réserve create, update et delete à ce rôle ; exige la feature auth
       --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
   -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
   -h, --help                   Print help
@@ -69,6 +71,8 @@ Options:
 | `--fields <CHAMPS>` | Les colonnes de l'entité, dans la grammaire décrite plus bas. Omis, la feature est générée sans colonne propre. |
 | `--force` | Écrit même si le working tree Git est sale, et écrase les fichiers signalés en conflit. |
 | `--dry-run` | Affiche le plan et s'arrête. Rien n'est écrit. |
+| `--has-many <ENTITE>` | Répare le côté lointain d'une relation : écrit dans le modèle d'une feature déjà générée la variante `has_many` qui vise l'enfant nommé, et rien d'autre. Répétable. [Le guide des relations](../guides/relations.md) dit quand c'est nécessaire. |
+| `--role <ROLE>` | Réserve `create`, `update` et `delete` à ce rôle : elles prennent une `Identity` et appellent `require_role`, tandis que `list` et `find` restent ouvertes. Exige la feature [`auth`](../guides/auth.md), et un rôle que son enum `Role` déclare — les deux sont vérifiés avant toute écriture. |
 
 ## `rbs generate feature`
 
@@ -76,10 +80,10 @@ Options:
 $ rbs generate feature --help
 Génère une feature vide : six fichiers, aucun champ
 
-Usage: rbs generate feature [OPTIONS] <NOM>
+Usage: rbs generate feature [OPTIONS] <NAME>
 
 Arguments:
-  <NOM>  Nom de la feature
+  <NAME>  Nom de la feature
 
 Options:
       --force                  Écrit même si le working tree Git est sale
@@ -90,8 +94,9 @@ Options:
   -V, --version                Print version
 ```
 
-Les mêmes flags moins `--fields` : une feature vide n'a pas de colonne, donc ni entité digne
-de ce nom ni migration.
+Les mêmes flags moins `--fields`, `--has-many` et `--role` : une feature vide n'a pas de
+colonne, donc ni entité digne de ce nom, ni migration, ni relation à réparer ; et elle ne
+porte aucun handler qu'une garde protégerait.
 
 ## La grammaire de `--fields`
 

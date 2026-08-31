@@ -25,8 +25,10 @@ const FICHIER_EXEMPLE: &str = ".env.example";
 
 /// Le fichier d'environnement du projet, gitignoré.
 ///
-/// Seule une variable déclarée `secret` y descend, et avec une valeur tirée au hasard :
-/// un secret qu'un exemple publié suffirait à deviner n'en est pas un.
+/// Deux sortes de variables y descendent, et aucune autre : celle que le manifeste déclare
+/// `secret`, avec une valeur tirée au hasard — un secret qu'un exemple publié suffirait à
+/// deviner n'en est pas un — et celle dont il donne un `project_value`, avec la valeur que
+/// le projet lui-même dicte.
 const FICHIER_ENV: &str = ".env";
 
 /// Le fragment tel que l'installation le voit.
@@ -160,16 +162,27 @@ pub(crate) fn actions(
     }
 
     for variable in &fragment.manifest.env {
+        if !declaree(&renderer, fragment, variable)? {
+            continue;
+        }
+
+        let exemple = render(&renderer, fragment, &variable.value, FICHIER_EXEMPLE)?;
         builder.add_variable(
             FICHIER_EXEMPLE,
             &variable.key,
-            &variable.value,
+            &exemple,
             variable.comment.as_deref(),
         )?;
 
-        if !variable.secret {
+        // Une valeur déduite du projet l'emporte sur un tirage : le mot de passe que le
+        // compose interpole est celui de la base, et non un secret que le fragment invente.
+        let propre = match &variable.project_value {
+            Some(source) => Some(render(&renderer, fragment, source, FICHIER_ENV)?),
+            None => variable.secret.then(secret::tire_au_hasard),
+        };
+        let Some(propre) = propre else {
             continue;
-        }
+        };
 
         // Un projet dont le `.env` a été supprimé n'a pas à voir `add` échouer : le
         // fichier est gitignoré, le reposer ne coûte rien et ne perd rien.
@@ -180,7 +193,7 @@ pub(crate) fn actions(
         builder.add_variable(
             FICHIER_ENV,
             &variable.key,
-            &secret::tire_au_hasard(),
+            &propre,
             variable.comment.as_deref(),
         )?;
     }
@@ -226,6 +239,26 @@ fn lines(content: &str) -> Vec<String> {
         .filter(|line| !line.trim().is_empty())
         .map(|line| line.trim_end().to_string())
         .collect()
+}
+
+/// La variable est-elle déclarée sur ce projet ?
+///
+/// Sans `when`, toujours : c'est le cas des six fragments qui ne dépendent pas du moteur.
+fn declaree(
+    renderer: &Renderer,
+    fragment: &Fragment,
+    variable: &crate::manifest::DeclaredVariable,
+) -> Result<bool, Error> {
+    let Some(condition) = &variable.when else {
+        return Ok(true);
+    };
+
+    renderer
+        .condition(condition, fragment.context.clone())
+        .map_err(|source| Error::Rendu {
+            file: format!("{}/feature.toml ({})", fragment.name, variable.key),
+            source,
+        })
 }
 
 /// Rend `source` dans le contexte du fragment, en nommant `destination` si elle échoue.
