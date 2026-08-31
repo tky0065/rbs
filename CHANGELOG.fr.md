@@ -11,6 +11,66 @@ dépréciation.
 
 *[English version](CHANGELOG.md).*
 
+## [Non publié]
+
+### Ajouté
+
+- `rbs add cors` installe une couche CORS dont les origines autorisées se lisent dans la
+  configuration du projet, et qui n'est jamais grande ouverte par défaut.
+- `rbs add rate-limit` installe une limite de débit. Le compteur est un pipeline Redis
+  quand le fragment `redis` est là — atomique entre processus — et une fenêtre fixe en
+  mémoire sinon ; le fichier engendré dit lequel il porte et pourquoi. Le 429 qu'il rend
+  suit le format d'erreur du projet et porte un `Retry-After`.
+- `rbs add auth` installe désormais `rate-limit` avec lui, et l'annonce dans le plan avant
+  d'écrire quoi que ce soit. `/auth/login` hache un Argon2 même pour une adresse inconnue,
+  délibérément : sans limite, cette protection est aussi un moyen d'épuiser la mémoire du
+  serveur. La connexion est bornée à 5 tentatives par minute contre 120 en global.
+- Une ancre `// <rbs:layers>` dans `src/router.rs`, où un fragment empile un middleware.
+  Elle est intérieure à `trace` et `request_id` : une couche ajoutée voit l'identifiant de
+  la requête, et ses propres réponses courtes restent dans la trace.
+- `rbs new` écrit un `config/production.toml` qui coupe Swagger UI et le document OpenAPI,
+  et le service `api` du compose pose `RBS_ENV=production`. Tout déploiement Docker
+  publiait les deux jusqu'ici.
+- `rbs-core` enregistre une réponse `TooManyRequests` sous `components/responses`.
+
+### Modifié
+
+- Le CRUD engendré rend **409** au lieu de 500 sur une violation de contrainte `unique`,
+  sur `create` comme sur `update`, et son contrat OpenAPI déclare le statut. Le fragment
+  `auth` le faisait déjà ; le gabarit générique faisait l'inverse.
+- Le `list` engendré lance sa page et son `COUNT(*)` ensemble par `tokio::try_join!`,
+  plutôt que l'un après l'autre.
+- `POST /auth/register` ne répète plus l'adresse soumise dans son 409. Le statut dit
+  toujours que l'adresse est prise, mais le corps ne la renvoie plus dans les journaux et
+  les réponses.
+- Un jeton de rafraîchissement présenté deux fois révoque désormais toutes les sessions du
+  compte et journalise un avertissement sans donnée personnelle. Jusqu'ici le rejeu se
+  contentait d'un 401, laissant une paire volée valide indéfiniment et en silence.
+- `rbs dev` annonce l'attente de la base — « en attente de la base (host:port) » — puis un
+  point par seconde, au lieu de rester muet jusqu'à trente secondes. Rien ne s'affiche
+  quand la base répond du premier coup.
+- L'ancre `features` maintient son bloc trié au lieu d'empiler dans l'ordre d'arrivée : un
+  projet dont la CI lance `cargo fmt --check` n'échoue plus sur une ligne qu'il n'a pas
+  écrite.
+
+### Corrigé
+
+- `--fields "author_id:uuid,author:references:users"` est refusé au lieu d'engendrer un
+  projet qui ne compile pas : les deux champs donnent la même colonne `author_id`, et la
+  déduplication porte désormais sur le nom de colonne et non sur le nom déclaré.
+- Deux références qui se singularisent pareil — `author` et `authors` — n'émettent plus
+  deux fois la même variante `Relation`.
+- Un mot de passe de base contenant un `/` est masqué dans l'erreur de connexion.
+  L'autorité était coupée au premier `/`, ce qui mettait l'arobase hors d'atteinte et
+  laissait le secret dans les journaux.
+- Le test engendré pour un champ `references` requis ne viole plus la clé étrangère à sa
+  première exécution. Les scénarios qui créent ne sont pas engendrés, un bandeau nomme la
+  référence bloquante, et une référence optionnelle part en `null` plutôt qu'en UUID tiré
+  au hasard.
+- Les corps d'erreur des 500, les descriptions OpenAPI et plusieurs messages de
+  configuration sont de nouveau en français : un renommage vers des identifiants anglais
+  avait atteint les littéraux.
+
 ## [1.1.0] — 2026-08-29
 
 ### Ajouté

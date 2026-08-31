@@ -10,6 +10,62 @@ between minor versions with no deprecation cycle.
 
 *[Version française](CHANGELOG.fr.md).*
 
+## [Unreleased]
+
+### Added
+
+- `rbs add cors` installs a CORS layer whose allowed origins are read from the project's
+  configuration, never wide open by default.
+- `rbs add rate-limit` installs a rate limiter. The counter is a Redis pipeline when the
+  `redis` fragment is there — atomic across processes — and a fixed in-memory window
+  otherwise; the generated file says which one it carries and why. The 429 it returns
+  follows the project's error format and carries a `Retry-After`.
+- `rbs add auth` now installs `rate-limit` along with it, and says so in the plan before
+  writing anything. `/auth/login` hashes an Argon2 even for an unknown address, on
+  purpose: without a limit, that protection is also a way to exhaust the server's memory.
+  Login is capped at 5 attempts a minute against 120 globally.
+- A `// <rbs:layers>` anchor in `src/router.rs`, where a fragment stacks a middleware. It
+  sits inside `trace` and `request_id`, so an added layer sees the request id and its own
+  short-circuit responses stay in the trace.
+- `rbs new` writes a `config/production.toml` that closes Swagger UI and the OpenAPI
+  document, and the compose's `api` service sets `RBS_ENV=production`. Every Docker
+  deployment used to publish both.
+- `rbs-core` registers a `TooManyRequests` response under `components/responses`.
+
+### Changed
+
+- The generated CRUD answers **409** instead of 500 when a `unique` constraint is
+  violated, on `create` and on `update`, and its OpenAPI contract declares the status.
+  The `auth` fragment already did this; the generic template did the opposite.
+- The generated `list` runs its page and its `COUNT(*)` together through
+  `tokio::try_join!` rather than one after the other.
+- `POST /auth/register` no longer repeats the submitted address in its 409. The status
+  still tells that the address is taken, but the body no longer echoes it into logs and
+  responses.
+- A refresh token presented twice now revokes every session of the account and logs a
+  warning carrying no personal data. Until now the replay only returned 401, leaving a
+  stolen pair valid indefinitely and in silence.
+- `rbs dev` announces the wait for the database — `en attente de la base (host:port)` —
+  then one dot per second, instead of staying silent for up to thirty seconds. Nothing is
+  printed when the database answers straight away.
+- The `features` anchor keeps its block sorted instead of stacking in arrival order, so a
+  project whose `cargo fmt --check` runs in CI is not failed by a line it did not write.
+
+### Fixed
+
+- `--fields "author_id:uuid,author:references:users"` is refused instead of generating a
+  project that does not compile: both fields resolve to the same `author_id` column, and
+  deduplication now happens on the column name rather than on the declared name.
+- Two references that singularise alike — `author` and `authors` — no longer emit the
+  same `Relation` variant twice.
+- A database password containing a `/` is masked in the connection error. The authority
+  was cut at the first `/`, which left the `@` out of reach and the secret in the logs.
+- The test generated for a required `references` field no longer violates the foreign key
+  on its first run. Scenarios that create are not generated, a banner names the blocking
+  reference, and an optional reference is sent as `null` instead of a random UUID.
+- The error bodies of 500s, the OpenAPI descriptions and several configuration messages
+  read French again: a rename toward English identifiers had reached the string literals.
+
 ## [1.1.0] — 2026-08-29
 
 ### Added
