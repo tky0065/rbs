@@ -297,13 +297,14 @@ mod tests {
     ///
     /// `docker-compose.yml` en fait partie : la source les rend tous, et c'est `rbs new`
     /// qui l'écarte pour un projet qui n'a rien à monter.
-    const DESTINATIONS: [&str; 18] = [
+    const DESTINATIONS: [&str; 19] = [
         ".env",
         ".env.example",
         ".gitignore",
         "Cargo.toml",
         "config/default.toml",
         "config/development.toml",
+        "config/production.toml",
         "docker-compose.yml",
         "migration/Cargo.toml",
         "migration/src/lib.rs",
@@ -633,7 +634,12 @@ mod tests {
     const RACINE_FEATURES: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/templates/features");
 
     /// Les chemins de sortie attendus de `docker`, tels que `rbs add docker` les écrira.
-    const DESTINATIONS_DOCKER: [&str; 3] = [".dockerignore", "Dockerfile", "docker-compose.yml"];
+    const DESTINATIONS_DOCKER: [&str; 4] = [
+        ".dockerignore",
+        "Dockerfile",
+        "config/production.toml",
+        "docker-compose.yml",
+    ];
 
     /// Contexte de rendu d'un fragment : les deux variables qu'un projet existant fournit.
     /// Le contexte que `add::plan_for` construit, recopié ici.
@@ -907,6 +913,40 @@ mod tests {
     /// Renversement assumé de la décision inverse : le compose ne publiait pas 5432
     /// parce que l'API l'atteignait par le réseau du compose. Le compose du squelette
     /// sert `cargo run` sur l'hôte, qui ne l'atteint que par un port publié.
+    /// Les docs sont exposées par défaut, ce qu'un projet en cours d'écriture veut ; un
+    /// déploiement, non. Sans ce profil, la décision n'a nulle part où s'écrire, et tout
+    /// `docker compose --profile app up` publie `/docs` et le document.
+    #[test]
+    fn the_production_profile_closes_the_docs() {
+        let source = read(&Path::new(RACINE).join("config/production.toml.jinja"));
+
+        assert!(
+            source.contains("[docs]"),
+            "le profil de production ne dit rien des docs :\n{source}"
+        );
+        for reglage in ["swagger_ui = false", "openapi_json = false"] {
+            assert!(
+                source.contains(reglage),
+                "`{reglage}` manque au profil de production :\n{source}"
+            );
+        }
+    }
+
+    /// Le profil existe en deux exemplaires qui doivent rester identiques : celui du
+    /// squelette, et celui que le fragment `docker` dépose sur un projet créé avant lui —
+    /// sans quoi le `RBS_ENV=production` du compose désignerait un fichier absent, et
+    /// l'API publierait la documentation que ce profil coupe.
+    #[test]
+    fn the_production_profile_of_the_docker_fragment_matches_the_skeleton() {
+        let squelette = read(&Path::new(RACINE).join("config/production.toml.jinja"));
+        let repli = read(&Path::new(RACINE_FEATURES).join("docker/config/production.toml.jinja"));
+
+        assert_eq!(
+            squelette, repli,
+            "le profil du fragment docker diverge de celui du squelette"
+        );
+    }
+
     #[test]
     fn the_project_compose_publishes_the_database_port() {
         let source = read(&Path::new(RACINE).join("docker-compose.yml.jinja"));
