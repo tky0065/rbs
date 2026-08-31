@@ -435,8 +435,12 @@ pub fn router(state: AppState) -> Router {
     fn an_unsorted_anchor_still_stacks_in_arrival_order() {
         let source = "// <rbs:migrations>\nBox::new(m2_b::Migration),\n// </rbs:migrations>\n";
 
-        let obtenu = insert(source, MIGRATIONS, &["Box::new(m1_a::Migration),".to_string()])
-            .expect("l'ancre est présente");
+        let obtenu = insert(
+            source,
+            MIGRATIONS,
+            &["Box::new(m1_a::Migration),".to_string()],
+        )
+        .expect("l'ancre est présente");
 
         assert!(
             obtenu.contains("Box::new(m2_b::Migration),\nBox::new(m1_a::Migration),"),

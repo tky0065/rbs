@@ -466,18 +466,6 @@ fn the_auth_journey_plays_end_to_end() {
         "la paire rendue par `refresh` doit être utilisable : {corps}"
     );
 
-    let (statut, corps) = request(
-        port,
-        "POST",
-        "/auth/refresh",
-        None,
-        Some(&renewal(&premiere)),
-    );
-    assert_eq!(
-        statut, 401,
-        "le refresh déjà consommé doit être refusé : {corps}"
-    );
-
     let (statut, corps) = request(port, "POST", "/auth/logout", None, Some(&renewal(&seconde)));
     assert_eq!(statut, 204, "la déconnexion doit aboutir : {corps}");
 
@@ -489,6 +477,53 @@ fn the_auth_journey_plays_end_to_end() {
         Some(&renewal(&seconde)),
     );
     assert_eq!(statut, 401, "le refresh révoqué doit être refusé : {corps}");
+
+    // Le rejeu se joue sur un second compte de sessions, et en dernier : il emporte
+    // désormais les sessions sœurs, et le tester plus tôt tuerait celles que les étapes
+    // suivantes utilisent.
+    let (statut, troisieme) = request(port, "POST", "/auth/login", None, Some(&credentials(EMAIL)));
+    assert_eq!(
+        statut, 200,
+        "la reconnexion doit rendre une paire : {troisieme}"
+    );
+
+    let (statut, quatrieme) = request(
+        port,
+        "POST",
+        "/auth/refresh",
+        None,
+        Some(&renewal(&troisieme)),
+    );
+    assert_eq!(
+        statut, 200,
+        "le rafraîchissement doit rendre une paire : {quatrieme}"
+    );
+
+    let (statut, corps) = request(
+        port,
+        "POST",
+        "/auth/refresh",
+        None,
+        Some(&renewal(&troisieme)),
+    );
+    assert_eq!(
+        statut, 401,
+        "le refresh déjà consommé doit être refusé : {corps}"
+    );
+
+    // Ce que le rejeu vient de déclencher : un jeton volé et rejoué ferme toute la
+    // famille, faute de quoi l'attaquant garderait une paire valide indéfiniment.
+    let (statut, corps) = request(
+        port,
+        "POST",
+        "/auth/refresh",
+        None,
+        Some(&renewal(&quatrieme)),
+    );
+    assert_eq!(
+        statut, 401,
+        "un rejeu détecté doit emporter les sessions sœurs : {corps}"
+    );
 }
 
 /// Le corps d'inscription et de connexion d'un compte.
