@@ -15,6 +15,7 @@ use std::path::{Path, PathBuf};
 
 use minijinja::context;
 
+use crate::dotenv;
 use crate::git;
 use crate::manifest;
 use crate::metadata;
@@ -103,6 +104,13 @@ pub(crate) enum Error {
     /// Le manifeste du projet n'a pu être lu.
     #[error("{0}")]
     Metadata(#[from] metadata::Error),
+
+    /// Le `.env` du projet est là, mais illisible.
+    ///
+    /// Le fragment se pose sur les identifiants du projet : les inventer plutôt que de
+    /// dire la panne engendrerait un compose qui n'atteint pas sa base.
+    #[error("{0}")]
+    Env(#[from] migrate::Error),
 
     /// Le plan de l'installation n'a pu être calculé.
     #[error("{0}")]
@@ -198,11 +206,21 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let database = metadonnees.database;
 
     // L'URL du projet, non une valeur par défaut : le compose que le fragment engendre
-    // doit se connecter à la base que le projet interroge, avec ses identifiants.
-    let url = migrate::project_variables(&root)
-        .ok()
-        .and_then(|variables| crate::dotenv::value(&variables, migrate::URL).map(str::to_string))
-        .unwrap_or_else(|| database.default_url(&crate_name));
+    // doit se connecter à la base que le projet interroge, avec ses identifiants. Un
+    // `.env` qu'on ne sait pas ouvrir en porte peut-être d'autres, et les remplacer en
+    // silence poserait un compose qui ne se connecte à rien : seule l'absence se replie,
+    // parce qu'un projet neuf n'a rien encore à contredire.
+    let url = match migrate::project_variables(&root) {
+        Ok(variables) => dotenv::value(&variables, migrate::URL).map(str::to_string),
+        Err(migrate::Error::SansUrl) => None,
+        Err(migrate::Error::Env(dotenv::Error::Acces { source, .. }))
+            if source.kind() == io::ErrorKind::NotFound =>
+        {
+            None
+        }
+        Err(faute) => return Err(Error::Env(faute)),
+    }
+    .unwrap_or_else(|| database.default_url(&crate_name));
     let connexion = crate::url::parse(&url);
 
     // Une URL sans chemin rend un nom de base vide, que le repli ne rattraperait pas
@@ -1569,6 +1587,43 @@ mod tests {
         assert!(
             !compose.contains("RBS_DATABASE__URL: postgres://rbs:rbs@db:5432/\n"),
             "l'URL interne s'arrête sur un nom de base vide :\n{compose}"
+        );
+    }
+
+    /// Un `.env` qui existe mais que rbs ne peut pas ouvrir porte peut-être d'autres
+    /// identifiants que ceux du moteur : les remplacer en silence poserait un compose
+    /// qui ne se connecte à rien.
+    #[cfg(unix)]
+    #[test]
+    fn an_unreadable_env_stops_the_installation_instead_of_inventing_credentials() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let (_parent, root) = project();
+        let env = root.join(".env");
+        fs::set_permissions(&env, fs::Permissions::from_mode(0o000))
+            .expect("les droits doivent se poser");
+
+        let error = plan_for(&options(&root, "docker")).expect_err("le .env est illisible");
+
+        assert!(
+            error.to_string().contains(".env"),
+            "le message ne nomme pas le fichier fautif : {error}"
+        );
+    }
+
+    /// Un projet fraîchement créé qui n'a pas encore de `.env` s'installe : l'absence
+    /// n'est pas une faute, et le fragment se pose sur les identifiants par défaut.
+    #[test]
+    fn a_missing_env_falls_back_to_the_default_credentials() {
+        let (_parent, root) = project();
+        fs::remove_file(root.join(".env")).expect("le squelette écrit un .env");
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+        let compose = projected(&planned, "docker-compose.yml");
+
+        assert!(
+            compose.contains("postgres://postgres:postgres@db:5432/demo_api"),
+            "le compose ne porte pas les identifiants par défaut :\n{compose}"
         );
     }
 }
