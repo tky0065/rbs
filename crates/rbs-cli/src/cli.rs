@@ -61,6 +61,10 @@ pub enum Commands {
         /// Applique les modifications même si le working tree Git est sale.
         #[arg(long)]
         force: bool,
+
+        /// Affiche le plan sans rien écrire.
+        #[arg(long)]
+        dry_run: bool,
     },
 
     /// Génère une feature dans un projet existant.
@@ -94,6 +98,10 @@ pub enum Commands {
         /// Met à niveau même si le working tree Git est sale.
         #[arg(long)]
         force: bool,
+
+        /// Affiche le plan sans rien écrire.
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -263,6 +271,25 @@ mod tests {
             panic!("`new` attendue");
         };
         assert_eq!(name.as_deref(), Some("blog"));
+    }
+
+    /// Les deux commandes qui modifient un projet existant doivent pouvoir n'en montrer
+    /// que le plan, comme `generate` le fait déjà.
+    #[test]
+    fn add_and_upgrade_accept_dry_run() {
+        let ajout =
+            Cli::try_parse_from(["rbs", "add", "cors", "--dry-run"]).expect("commande valide");
+        let Commands::Add { dry_run, .. } = ajout.command else {
+            panic!("`add` attendue");
+        };
+        assert!(dry_run);
+
+        let mise_a_niveau =
+            Cli::try_parse_from(["rbs", "upgrade", "--dry-run"]).expect("commande valide");
+        let Commands::Upgrade { dry_run, .. } = mise_a_niveau.command else {
+            panic!("`upgrade` attendue");
+        };
+        assert!(dry_run);
     }
 
     #[test]

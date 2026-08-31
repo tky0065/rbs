@@ -35,14 +35,16 @@ Usage: rbs upgrade [OPTIONS]
 
 Options:
       --force                  Met à niveau même si le working tree Git est sale
+      --dry-run                Affiche le plan sans rien écrire
       --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
   -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
   -h, --help                   Print help
   -V, --version                Print version
 ```
 
-`--force` est son seul flag propre. Les deux options globales sont acceptées parce que clap
-les propage, et aucune n'a d'effet ici.
+`--force` et `--dry-run` sont ses flags propres ; `--dry-run` affiche le plan et s'arrête,
+ce qui donne à lire ce qu'un saut toucherait avant qu'il n'y touche. Les deux options
+globales sont acceptées parce que clap les propage, et aucune n'a d'effet ici.
 
 ## Un saut qui porte une note
 
