@@ -19,6 +19,10 @@ use crate::state::AppState;
 /// Un mot de passe qui satisfait la validation du DTO, partagé par les tests.
 const PASSWORD: &str = "un mot de passe assez long";
 
+// Les tests de ce fichier joignent la base que décrit `.env`, et sont donc `#[ignore]` :
+// `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre la base du
+// projet, migrations appliquées.
+
 /// Monte l'application sur la base décrite par `.env`, sans écouter sur le réseau.
 ///
 /// Les migrations sont supposées appliquées : elles précèdent `cargo test`.
@@ -110,6 +114,7 @@ async fn authenticate(api: &Router, email: &str, mot_de_passe: &str) -> (StatusC
 /// La garde tient avant même que le service existe : `Identity` refuse la requête sans
 /// jamais atteindre le controller.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn me_without_a_token_returns_401() {
     let api = application().await;
 
@@ -121,6 +126,7 @@ async fn me_without_a_token_returns_401() {
 
 /// Un jeton que le service n'a pas signé ne vaut pas mieux qu'aucun jeton.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn me_with_an_unreadable_token_returns_401() {
     let api = application().await;
     let requete = Request::builder()
@@ -137,6 +143,7 @@ async fn me_with_an_unreadable_token_returns_401() {
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn registration_returns_201_and_the_created_profile() {
     let api = application().await;
     let email = fresh_email();
@@ -151,6 +158,7 @@ async fn registration_returns_201_and_the_created_profile() {
 
 /// Ni le hash ni le mot de passe reçu ne repartent vers le client.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn the_hash_does_not_appear_in_the_response() {
     let api = application().await;
 
@@ -176,6 +184,7 @@ async fn the_hash_does_not_appear_in_the_response() {
 /// Une réponse qui cite l'adresse la confirme à qui la soumet : l'inscription
 /// deviendrait l'oracle d'énumération que la connexion s'applique à ne pas être.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_email_already_taken_returns_409_without_repeating_it() {
     let api = application().await;
     let email = fresh_email();
@@ -199,6 +208,7 @@ async fn an_email_already_taken_returns_409_without_repeating_it() {
 /// construction, et corréler une réponse à une ligne de journal ne renseigne personne sur
 /// l'existence d'un compte.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn a_wrong_password_and_an_unknown_email_return_the_same_401() {
     let api = application().await;
     let inscrit = fresh_email();
@@ -230,6 +240,7 @@ async fn a_wrong_password_and_an_unknown_email_return_the_same_401() {
 /// comptes. Le rapport toléré est large — il sépare l'absence de vérification, d'un ordre
 /// de grandeur, d'un hachage à vide, qui coûte le même temps.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_unknown_email_costs_the_same_time_as_a_wrong_password() {
     let api = application().await;
     let inscrit = fresh_email();
@@ -301,6 +312,7 @@ async fn session_row(db: &DatabaseConnection, user_id: Uuid) -> refresh_token::M
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn a_valid_refresh_returns_a_new_pair() {
     let api = application().await;
     let (_, paire) = login_as(&api).await;
@@ -325,6 +337,7 @@ async fn a_valid_refresh_returns_a_new_pair() {
 /// une paire valide, qu'il renouvelle indéfiniment et sans bruit : c'est la détection de
 /// réutilisation, et elle n'a de sens que si toute la famille tombe.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn replaying_a_refresh_closes_the_other_sessions_of_the_account() {
     let api = application().await;
     let email = fresh_email();
@@ -358,6 +371,7 @@ async fn replaying_a_refresh_closes_the_other_sessions_of_the_account() {
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn the_old_refresh_is_then_rejected() {
     let api = application().await;
     let ancien = refresh_for(&login_as(&api).await.1);
@@ -373,6 +387,7 @@ async fn the_old_refresh_is_then_rejected() {
 /// La ligne est reculée dans le passé plutôt que forgée : elle garde ainsi tout ce que
 /// `login` y a mis, et seule son expiration la disqualifie.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_expired_refresh_returns_401() {
     let api = application().await;
     let db = connection().await;
@@ -390,6 +405,7 @@ async fn an_expired_refresh_returns_401() {
 
 /// Une base lue par un tiers ne lui donne aucune session utilisable.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn the_table_carries_the_fingerprint_and_never_the_token() {
     let api = application().await;
     let db = connection().await;
@@ -426,6 +442,7 @@ async fn logout(api: &Router, token: &str) -> (StatusCode, Value) {
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn logout_returns_204() {
     let api = application().await;
     let (_, paire) = login_as(&api).await;
@@ -437,6 +454,7 @@ async fn logout_returns_204() {
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn a_revoked_refresh_returns_401() {
     let api = application().await;
     let (_, paire) = login_as(&api).await;
@@ -455,6 +473,7 @@ async fn a_revoked_refresh_returns_401() {
 /// C'est la garantie que ce lot ajoute : la révocation porte sur la ligne présentée, et
 /// non sur le compte qui la détient.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn the_other_sessions_of_the_same_account_stay_valid() {
     let api = application().await;
     let email = fresh_email();
@@ -548,6 +567,7 @@ async fn login_as_admin(api: &Router, db: &DatabaseConnection) -> Value {
 /// Les deux se confondent aisément : ici c'est l'extractor `Identity` qui tranche, avant
 /// que le corps du handler — et donc la garde — s'exécute.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn without_a_token_the_admin_route_returns_401() {
     let api = admin_only_route().await;
 
@@ -558,6 +578,7 @@ async fn without_a_token_the_admin_route_returns_401() {
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn a_user_on_an_admin_route_returns_403() {
     let api = application().await;
     let restricted = admin_only_route().await;
@@ -573,6 +594,7 @@ async fn a_user_on_an_admin_route_returns_403() {
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_admin_on_the_same_route_returns_200() {
     let api = application().await;
     let db = connection().await;
@@ -589,6 +611,7 @@ async fn an_admin_on_the_same_route_returns_200() {
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn me_returns_the_callers_profile() {
     let api = application().await;
     let email = fresh_email();
@@ -613,6 +636,7 @@ async fn openapi_document(api: &Router) -> Value {
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn the_openapi_document_carries_the_five_auth_paths() {
     let api = application().await;
 
@@ -635,6 +659,7 @@ async fn the_openapi_document_carries_the_five_auth_paths() {
 /// Un client généré depuis ce document doit savoir comment s'authentifier, et sur quelles
 /// routes le faire.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn the_bearer_scheme_is_declared_and_me_carries_it() {
     let api = application().await;
 
@@ -659,6 +684,7 @@ async fn the_bearer_scheme_is_declared_and_me_carries_it() {
 /// `refresh` et `logout` s'authentifient par leur corps : leur apposer le schéma
 /// décrirait une exigence que le serveur ne pose pas.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn the_routes_without_a_header_do_not_declare_the_scheme() {
     let api = application().await;
 

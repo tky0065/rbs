@@ -7,7 +7,7 @@ use validator::Validate;
 pub struct RegisterRequest {
     #[validate(email)]
     pub email: String,
-    #[validate(length(min = 8))]
+    #[validate(length(min = 12, max = 128))]
     pub password: String,
 }
 
@@ -15,6 +15,9 @@ pub struct RegisterRequest {
 pub struct LoginRequest {
     #[validate(email)]
     pub email: String,
+    // La borne haute vaut autant ici : sans elle, `/auth/login` hache en Argon2 tout ce
+    // qu'on lui poste, sans qu'aucun compte n'ait à exister.
+    #[validate(length(min = 12, max = 128))]
     pub password: String,
 }
 

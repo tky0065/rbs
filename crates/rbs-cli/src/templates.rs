@@ -685,6 +685,54 @@ mod tests {
         trouvees
     }
 
+    /// Le texte d'une template de fragment, telle qu'elle est embarquée.
+    fn fragment_source(feature: &str, destination: &str) -> String {
+        Source::feature(None, feature)
+            .expect("le fragment doit exister")
+            .files()
+            .expect("les templates embarquées doivent se lire")
+            .into_iter()
+            .find(|file| file.destination == Path::new(destination))
+            .unwrap_or_else(|| panic!("`{destination}` absente du fragment `{feature}`"))
+            .source
+    }
+
+    /// Un mot de passe sans borne haute fait hacher en Argon2 un corps de plusieurs
+    /// mégaoctets : la borne est ce qui sépare une API d'un amplificateur.
+    #[test]
+    fn the_two_password_fields_carry_a_lower_and_an_upper_bound() {
+        let dto = fragment_source("auth", "dto.rs");
+
+        assert_eq!(
+            dto.matches("#[validate(length(min = 12, max = 128))]")
+                .count(),
+            2,
+            "les deux mots de passe doivent être bornés :\n{dto}"
+        );
+        assert!(
+            !dto.contains("length(min = 8)"),
+            "la borne à 8 sans maximum subsiste :\n{dto}"
+        );
+    }
+
+    /// Chaque test du fragment monte l'application ou ouvre une connexion : aucun n'est
+    /// unitaire, et tous prennent le marqueur, comme dans `jobs`, `redis` et `storage`.
+    ///
+    /// Sans lui, `rbs new --with auth && cargo test` échoue tant que PostgreSQL n'est pas
+    /// démarré *et* migré, là où `--with jobs` passe.
+    #[test]
+    fn every_auth_test_joining_the_database_is_ignored() {
+        let tests = fragment_source("auth", "tests.rs");
+
+        assert_eq!(
+            tests.matches("#[tokio::test]").count(),
+            tests
+                .matches(r#"#[ignore = "joint la base du projet"]"#)
+                .count(),
+            "chaque test joint la base et doit porter le marqueur :\n{tests}"
+        );
+    }
+
     /// Le manifeste décrit l'installation ; il n'a rien à faire dans le projet installé.
     #[test]
     fn the_fragment_manifest_is_not_copied_into_the_project() {
