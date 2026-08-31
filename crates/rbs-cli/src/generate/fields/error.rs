@@ -46,6 +46,9 @@ pub(crate) enum ErrorKind {
         name: String,
     },
     RedundantIndex,
+    IndexOnText {
+        modifier: String,
+    },
     MissingTarget,
     DerivedColumnName {
         suggestion: String,
@@ -87,6 +90,10 @@ impl ErrorKind {
             Self::RedundantIndex => {
                 "« index » redondant : « unique » pose déjà un index".to_string()
             }
+            Self::IndexOnText { modifier } => format!(
+                "« {modifier} » ne s'applique pas à un champ « text » : MySQL refuse un index \
+                 sur une colonne TEXT sans longueur de préfixe (erreur 1170)"
+            ),
             Self::MissingTarget => "« references » attend une entité cible".to_string(),
             Self::DerivedColumnName { .. } => {
                 format!("la colonne « {label} » est dérivée du nom de la relation")
@@ -136,6 +143,9 @@ impl ErrorKind {
             }
             Self::DuplicateModifier { .. } => None,
             Self::RedundantIndex => Some("retirez « index »".to_string()),
+            Self::IndexOnText { modifier } => Some(format!(
+                "essayez « {label}:string:{modifier} » — un varchar(255) s'indexe"
+            )),
             Self::MissingTarget => Some("exemple : « author:references:users »".to_string()),
             Self::DerivedColumnName { suggestion } => Some(format!("essayez « {suggestion} »")),
             Self::NullifyWithoutOptional => {
@@ -420,6 +430,22 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("→ retirez « index »"), "{text}");
+    }
+
+    #[test]
+    fn an_index_on_a_text_field_names_the_engine_that_refuses_it() {
+        let text = rendered(
+            ErrorKind::IndexOnText {
+                modifier: "unique".to_string(),
+            },
+            "bio",
+        );
+        assert!(
+            text.contains("« unique » ne s'applique pas à un champ « text »"),
+            "{text}"
+        );
+        assert!(text.contains("erreur 1170"), "{text}");
+        assert!(text.contains("→ essayez « bio:string:unique »"), "{text}");
     }
 
     #[test]

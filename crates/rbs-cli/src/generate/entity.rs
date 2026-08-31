@@ -155,13 +155,17 @@ mod tests {
         );
     }
 
+    // `text` était le seul type à cumuler un attribut de colonne avec un `indexed` ;
+    // maintenant qu'il refuse « unique » et « index », plus aucune ligne de `--fields`
+    // n'en pose deux. Ce qui reste à prouver, c'est qu'aucun ne s'y glisse.
     #[test]
-    fn stacked_modifiers_fit_in_a_single_attribute() {
-        let rendered = entity("articles", "summary:text:index");
+    fn a_text_field_carries_its_column_type_alone() {
+        let rendered = entity("articles", "summary:text:optional");
 
         assert!(
-            rendered.contains(r#"#[sea_orm(column_type = "Text", indexed)]"#),
-            "modificateurs non cumulés :\n{rendered}"
+            rendered
+                .contains("#[sea_orm(column_type = \"Text\")]\n    pub summary: Option<String>,"),
+            "attribut inattendu sur la colonne :\n{rendered}"
         );
     }
 

@@ -11,15 +11,41 @@ use toml_edit::{Array, DocumentMut, InlineTable, Item, Value};
 
 use crate::database::Database;
 
+/// Ce qui peut empêcher de désigner la racine d'un projet rbs.
+#[derive(Debug, thiserror::Error)]
+pub enum RootError {
+    /// Aucun manifeste rbs entre le point de départ et la racine du système.
+    #[error("aucun projet rbs ici : aucun `Cargo.toml` portant `[package.metadata.rbs]`")]
+    Absent,
+
+    /// Un manifeste a été trouvé, mais n'a pas pu être lu.
+    #[error(transparent)]
+    Illisible(#[from] Error),
+}
+
 /// Remonte de `start` jusqu'au projet rbs qui le contient.
 ///
 /// Le manifeste seul ne suffit pas à trancher : la crate `migration` en porte un, et une
 /// commande lancée depuis `migration/src` viserait sinon la mauvaise racine.
-pub fn project_root(start: &Path) -> Option<PathBuf> {
-    start
-        .ancestors()
-        .find(|candidat| read(&candidat.join("Cargo.toml")).is_ok())
-        .map(Path::to_path_buf)
+///
+/// Une faute autre que l'absence arrête la remontée : un manifeste que le développeur
+/// vient de casser désigne le projet qu'il visait, et le taire ferait viser un projet
+/// englobant — celui du dépôt, voire celui d'un répertoire parent sans rapport.
+pub fn project_root(start: &Path) -> Result<PathBuf, RootError> {
+    for candidat in start.ancestors() {
+        match read(&candidat.join("Cargo.toml")) {
+            Ok(_) => return Ok(candidat.to_path_buf()),
+            // Ces deux-là sont le régime ordinaire d'un ancêtre traversé : un répertoire
+            // sans manifeste, ou celui d'une crate étrangère à rbs comme `migration`.
+            Err(Error::PasUnProjet { .. }) => continue,
+            Err(Error::Acces { source, .. }) if source.kind() == std::io::ErrorKind::NotFound => {
+                continue;
+            }
+            Err(faute) => return Err(RootError::Illisible(faute)),
+        }
+    }
+
+    Err(RootError::Absent)
 }
 
 /// Métadonnées rbs d'un projet, telles que portées par son `Cargo.toml`.
@@ -1272,5 +1298,46 @@ features = ["health"]
             read(&manifest).expect("le manifeste est lisible").lang,
             crate::lang::Lang::Fr
         );
+    }
+
+    /// Une virgule oubliée dans le manifeste du projet doit se dire, et non faire viser
+    /// un projet situé plus haut dans l'arborescence.
+    #[test]
+    fn an_invalid_manifest_names_the_fault_instead_of_climbing_past_it() {
+        let dir = TempDir::new().expect("répertoire temporaire");
+        let projet = dir.path().join("api");
+        fs::create_dir_all(projet.join("src")).expect("arborescence");
+        fs::write(
+            projet.join("Cargo.toml"),
+            "[package]\nname = \"api\"\n[package.metadata.rbs]\nversion = \"1.1.0\",\n",
+        )
+        .expect("manifeste cassé");
+
+        let error = project_root(&projet.join("src")).expect_err("la faute doit se dire");
+
+        assert!(matches!(error, RootError::Illisible(Error::Syntaxe { .. })));
+    }
+
+    /// Le manifeste de la crate `migration` ne porte pas de section rbs : la remontée le
+    /// traverse, comme avant.
+    #[test]
+    fn the_migration_crate_manifest_does_not_stop_the_climb() {
+        let dir = TempDir::new().expect("répertoire temporaire");
+        let projet = dir.path().join("api");
+        fs::create_dir_all(projet.join("migration/src")).expect("arborescence");
+        fs::write(
+            projet.join("Cargo.toml"),
+            "[package]\nname = \"api\"\n\n[package.metadata.rbs]\nversion = \"1.1.0\"\nfeatures = []\ndatabase = \"postgres\"\n",
+        )
+        .expect("manifeste du projet");
+        fs::write(
+            projet.join("migration/Cargo.toml"),
+            "[package]\nname = \"migration\"\n",
+        )
+        .expect("manifeste de migration");
+
+        let root = project_root(&projet.join("migration/src")).expect("la racine est trouvée");
+
+        assert_eq!(root, projet);
     }
 }

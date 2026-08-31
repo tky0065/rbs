@@ -15,7 +15,7 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
 
-use crate::anchors::{Anchor, RELATED, RELATIONS};
+use crate::anchors::{self, Anchor, RELATED, RELATIONS};
 use crate::generate::entities::{self, Entity};
 
 use super::Check;
@@ -85,7 +85,7 @@ pub(crate) fn check(root: &Path) -> Check {
 
 /// Le fichier porte-t-il les deux balises de `anchor` ?
 fn carries(source: &str, anchor: &Anchor) -> bool {
-    source.contains(&anchor.opening()) && source.contains(&anchor.closing())
+    anchors::marks(source, &anchor.opening()) && anchors::marks(source, &anchor.closing())
 }
 
 #[cfg(test)]
@@ -178,6 +178,20 @@ pub enum Relation {}
             1,
             "{result:?}"
         );
+    }
+
+    // Une balise citée dans une chaîne n'est pas un point d'insertion : le contrôle doit
+    // la voir absente, comme l'insertion elle-même.
+    #[test]
+    fn a_relation_anchor_quoted_inside_a_string_does_not_count_as_present() {
+        let quoted = MODEL.replace(
+            "// <rbs:related:posts>",
+            "let aide = \"// <rbs:related:posts>\";",
+        );
+        let result = check(project(&quoted).path());
+
+        assert_eq!(result.state, State::Echec, "{result:?}");
+        assert!(result.detail.contains("src/posts/model.rs"), "{result:?}");
     }
 
     // Ligne 3 : aucune relation, aucune ancre — rien n'est cassé, le CLI préviendra le

@@ -81,11 +81,25 @@ pub(crate) enum Error {
     /// La migration n'a pas pu être créée.
     #[error("{0}")]
     Fresh(#[from] fresh::Error),
+
+    /// Le manifeste du projet n'a pu être lu.
+    #[error("{0}")]
+    Metadata(#[from] metadata::Error),
+}
+
+/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+impl From<metadata::RootError> for Error {
+    fn from(faute: metadata::RootError) -> Self {
+        match faute {
+            metadata::RootError::Absent => Self::PasUnProjet,
+            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
+        }
+    }
 }
 
 /// Exécute `action` dans le projet qui contient `directory`.
 pub(crate) fn run(action: Action, directory: &Path) -> Result<Output, Error> {
-    let root = metadata::project_root(directory).ok_or(Error::PasUnProjet)?;
+    let root = metadata::project_root(directory)?;
 
     if let Action::Fresh(name) = action {
         return Ok(Output::Creee(fresh::run(

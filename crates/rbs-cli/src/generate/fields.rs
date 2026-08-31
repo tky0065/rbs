@@ -493,8 +493,23 @@ fn parse_field(rank: usize, chunk: &str) -> Result<Field, FieldError> {
         // L'index n'est pas demandé : il est la condition pour que la vérification de
         // la contrainte ne parcoure pas la table entière.
         field.index = !field.unique;
-    } else if field.unique && field.index {
-        return Err(error(name, ErrorKind::RedundantIndex));
+    } else {
+        // La règle vaut pour tous les moteurs, PostgreSQL compris : une migration
+        // engendrée doit pouvoir tourner partout, et MySQL y refuserait l'index faute
+        // de longueur de préfixe — au `migrate up`, longtemps après la commande.
+        if matches!(field.kind, FieldKind::Scalar(FieldType::Text)) && (field.unique || field.index)
+        {
+            let modifier = if field.unique { "unique" } else { "index" };
+            return Err(error(
+                name,
+                ErrorKind::IndexOnText {
+                    modifier: modifier.to_string(),
+                },
+            ));
+        }
+        if field.unique && field.index {
+            return Err(error(name, ErrorKind::RedundantIndex));
+        }
     }
 
     Ok(field)
@@ -928,9 +943,36 @@ mod tests {
         assert_eq!(kind("slug:string:index:unique"), ErrorKind::RedundantIndex);
     }
 
+    /// MySQL refuse un index sur une colonne TEXT sans longueur de préfixe (erreur 1170),
+    /// et la faute ne se verrait qu'au `rbs migrate up`, longtemps après la commande.
     #[test]
-    fn a_unique_on_text_passes_without_comment() {
-        assert!(fields("bio:text:unique")[0].unique);
+    fn unique_on_a_text_field_is_rejected() {
+        let error = parse("bio:text:unique").expect_err("`unique` sur `text` est refusé");
+
+        assert_eq!(error.errors.len(), 1);
+        assert_eq!(error.errors[0].label, "bio");
+        assert_eq!(
+            error.errors[0].kind,
+            ErrorKind::IndexOnText {
+                modifier: "unique".to_string()
+            }
+        );
+    }
+
+    /// `index` tombe sous la même contrainte que `unique`.
+    #[test]
+    fn index_on_a_text_field_is_rejected() {
+        assert_eq!(
+            kind("bio:text:index"),
+            ErrorKind::IndexOnText {
+                modifier: "index".to_string()
+            }
+        );
+    }
+
+    /// Le refus porte sur le type, non sur le modificateur : `index` reste bon ailleurs.
+    #[test]
+    fn an_index_on_another_type_passes_without_comment() {
         assert!(fields("active:bool:index")[0].index);
     }
 
