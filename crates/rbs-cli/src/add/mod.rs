@@ -146,16 +146,10 @@ impl Error {
 
 /// Calcule ce que l'installation de `options` ferait au projet, sans rien écrire.
 pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
-    let start = options
-        .directory
-        .canonicalize()
-        .map_err(|source| crate::errors::Acces::new(&options.directory, source))?;
-    let root = metadata::project_root(&start)?;
-
     // Une seule lecture pour toute la fonction : son erreur se propage par `?` plutôt
     // que d'être ré-tentée, et `agents::refresh` reçoit ces métadonnées au lieu de les
     // relire elle-même.
-    let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
+    let metadata::Cible { root, metadonnees } = metadata::cible::<Error>(&options.directory)?;
 
     // L'idempotence se juge sur `[package.metadata.rbs]`, et non sur la présence des
     // fichiers installés : la migration d'un fragment est horodatée, et un projet dont
@@ -177,13 +171,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     }
 
     if !options.force {
-        let modifies = git::modified_files(&root);
-        if !modifies.is_empty() {
-            return Err(crate::errors::WorkingTreeSale {
-                files: git::enumerate(&modifies),
-            }
-            .into());
-        }
+        git::garde(&root)?;
     }
 
     // La feature demandée et celles qu'elle entraîne partagent un seul plan :

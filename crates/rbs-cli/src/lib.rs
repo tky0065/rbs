@@ -268,6 +268,25 @@ fn signaler_zone_manquante(zone: Option<&agents::MissingZone>) {
     }
 }
 
+/// Applique le plan, ou dit que `--dry-run` l'a laissé sur le papier.
+///
+/// Rend `false` quand rien n'a été écrit : l'appelant sort alors sans annoncer une
+/// écriture qui n'a pas eu lieu.
+fn appliquer(
+    plan: &plan::Plan,
+    force: bool,
+    dry_run: bool,
+) -> Result<bool, plan::application::Error> {
+    if dry_run {
+        ui::info("\n  rien n'a été écrit (--dry-run)");
+        return Ok(false);
+    }
+
+    plan::application::apply(plan, force)?;
+
+    Ok(true)
+}
+
 /// Installe une feature dans le projet courant, plan affiché avant écriture.
 fn add(
     feature: String,
@@ -321,12 +340,9 @@ fn add_in(
 
     signaler_zone_manquante(planned.zone_manquante.as_ref());
 
-    if dry_run {
-        ui::info("\n  rien n'a été écrit (--dry-run)");
+    if !appliquer(&planned.plan, force, dry_run)? {
         return Ok(());
     }
-
-    plan::application::apply(&planned.plan, force)?;
 
     ui::success(&format!(
         "{feature} installée — {}",
@@ -447,12 +463,9 @@ fn generate(
         ));
     }
 
-    if dry_run {
-        ui::info("\n  rien n'a été écrit (--dry-run)");
+    if !appliquer(&planned.plan, force, dry_run)? {
         return Ok(());
     }
-
-    plan::application::apply(&planned.plan, force)?;
 
     if repairing {
         ui::success(&format!("{feature} : côté inverse écrit"));
@@ -502,12 +515,9 @@ fn upgrade_in(directory: PathBuf, force: bool, dry_run: bool) -> Result<(), upgr
 
     signaler_zone_manquante(planned.zone_manquante.as_ref());
 
-    if dry_run {
-        ui::info("\n  rien n'a été écrit (--dry-run)");
+    if !appliquer(&planned.plan, force, dry_run)? {
         return Ok(());
     }
-
-    plan::application::apply(&planned.plan, force)?;
 
     ui::success(&format!("manifeste aligné sur rbs {}", planned.vers));
 

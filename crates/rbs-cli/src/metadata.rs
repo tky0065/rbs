@@ -200,6 +200,32 @@ pub fn read(cargo_toml: &Path) -> Result<Metadata, Error> {
     })
 }
 
+/// Le projet visé depuis un répertoire de lancement, et son manifeste.
+pub struct Cible {
+    /// Racine du projet.
+    pub root: PathBuf,
+    /// Métadonnées rbs, lues une seule fois.
+    pub metadonnees: Metadata,
+}
+
+/// Désigne le projet que `directory` habite, et lit son manifeste.
+///
+/// Le préambule des trois commandes qui modifient un projet existant. Générique sur
+/// l'erreur de l'appelant : chacune garde son énumération et ses messages, qui nomment la
+/// commande — c'est `?` qui convertit, et rien du texte rendu ne dépend d'ici.
+pub fn cible<E>(directory: &Path) -> Result<Cible, E>
+where
+    E: From<crate::errors::Acces> + From<RootError> + From<Error>,
+{
+    let start = directory
+        .canonicalize()
+        .map_err(|source| crate::errors::Acces::new(directory, source))?;
+    let root = project_root(&start)?;
+    let metadonnees = read(&root.join("Cargo.toml"))?;
+
+    Ok(Cible { root, metadonnees })
+}
+
 /// Rend le manifeste avec `feature` inscrite, ou `None` si elle y est déjà.
 ///
 /// `name` ne désigne le fichier que dans les messages d'erreur : rien n'est lu ni écrit ici.

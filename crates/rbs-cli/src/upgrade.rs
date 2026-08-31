@@ -108,13 +108,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 /// C'est ce qui rend les deux chemins — mise à niveau et refus — exerçables de part et
 /// d'autre d'une publication, sans attendre qu'elle ait eu lieu.
 pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Error> {
-    let start = options
-        .directory
-        .canonicalize()
-        .map_err(|source| crate::errors::Acces::new(&options.directory, source))?;
-    let root = metadata::project_root(&start)?;
-
-    let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
+    let metadata::Cible { root, metadonnees } = metadata::cible::<Error>(&options.directory)?;
     let depuis = metadonnees.version.clone();
 
     if posterieure(&depuis, cli) {
@@ -186,13 +180,7 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
         .all(|file| file.statut == plan::Status::DejaFait);
 
     if !deja_a_jour && !options.force {
-        let modifies = git::modified_files(&root);
-        if !modifies.is_empty() {
-            return Err(crate::errors::WorkingTreeSale {
-                files: git::enumerate(&modifies),
-            }
-            .into());
-        }
+        git::garde(&root)?;
     }
 
     Ok(Planned {
