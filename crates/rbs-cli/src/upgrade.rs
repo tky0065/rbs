@@ -104,6 +104,16 @@ pub(crate) enum Error {
     Agents(#[from] crate::agents::Error),
 }
 
+/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+impl From<metadata::RootError> for Error {
+    fn from(faute: metadata::RootError) -> Self {
+        match faute {
+            metadata::RootError::Absent => Self::PasUnProjet,
+            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
+        }
+    }
+}
+
 /// Calcule ce que la mise à niveau ferait au projet, sans rien écrire.
 pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     plan_for_with(options, CLI)
@@ -121,7 +131,7 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
             path: options.directory.display().to_string(),
             source,
         })?;
-    let root = metadata::project_root(&start).ok_or(Error::PasUnProjet)?;
+    let root = metadata::project_root(&start)?;
 
     let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
     let depuis = metadonnees.version.clone();

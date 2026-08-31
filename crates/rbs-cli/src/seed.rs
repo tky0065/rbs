@@ -89,6 +89,20 @@ pub(crate) enum Error {
         /// Code de sortie du sous-processus.
         code: i32,
     },
+
+    /// Le manifeste du projet n'a pu être lu.
+    #[error("{0}")]
+    Metadata(#[from] metadata::Error),
+}
+
+/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+impl From<metadata::RootError> for Error {
+    fn from(faute: metadata::RootError) -> Self {
+        match faute {
+            metadata::RootError::Absent => Self::PasUnProjet,
+            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
+        }
+    }
 }
 
 impl Error {
@@ -110,7 +124,7 @@ impl Error {
 
 /// Insère les seeds du projet qui contient `options.directory`.
 pub(crate) fn run(options: &Options) -> Result<Output, Error> {
-    let root = metadata::project_root(&options.directory).ok_or(Error::PasUnProjet)?;
+    let root = metadata::project_root(&options.directory)?;
 
     execute(&root, options.force, |key| std::env::var(key).ok(), launch)
 }

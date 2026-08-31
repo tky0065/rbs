@@ -165,6 +165,16 @@ pub(crate) enum Error {
     },
 }
 
+/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+impl From<metadata::RootError> for Error {
+    fn from(faute: metadata::RootError) -> Self {
+        match faute {
+            metadata::RootError::Absent => Self::PasUnProjet,
+            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
+        }
+    }
+}
+
 impl Error {
     /// Ce que le développeur peut coller pour réparer, quand la panne se répare ainsi.
     ///
@@ -188,7 +198,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         .directory
         .canonicalize()
         .map_err(|source| access(&options.directory, source))?;
-    let root = metadata::project_root(&start).ok_or(Error::PasUnProjet)?;
+    let root = metadata::project_root(&start)?;
 
     // Une seule lecture pour toute la fonction : son erreur se propage par `?` plutôt que
     // d'être ré-tentée, et `agents::refresh` reçoit ces métadonnées au lieu de les relire
