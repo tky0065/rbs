@@ -637,12 +637,13 @@ mod tests {
 
     /// Contexte de rendu d'un fragment : les deux variables qu'un projet existant fournit.
     /// Le contexte que `add::plan_for` construit, recopié ici.
-    fn feature_context() -> Value {
+    fn feature_context(installees: &[&str]) -> Value {
         let database = Database::default();
 
         context! {
             project_name => "mon-api",
             crate_name => "mon_api",
+            features => installees,
             database => database.name(),
             database_a_un_serveur => database.a_un_serveur(),
             database_url_compose => database.compose_url("mon_api"),
@@ -727,7 +728,16 @@ mod tests {
         );
         // Énumérées une à une plutôt qu'en un bloc : la liste s'allonge à chaque fragment
         // livré, et l'ordre alphabétique intercale les nouveaux venus.
-        for installable in ["auth", "ci", "cors", "docker", "mail", "redis", "storage"] {
+        for installable in [
+            "auth",
+            "ci",
+            "cors",
+            "docker",
+            "mail",
+            "rate-limit",
+            "redis",
+            "storage",
+        ] {
             assert!(
                 error.to_string().contains(installable),
                 "le message n'énumère pas `{installable}` : {error}"
@@ -771,17 +781,25 @@ mod tests {
         }
     }
 
+    /// Deux projets, non un : une template qui se branche sur les features déjà posées —
+    /// le compteur de `rate-limit`, distribué ou en mémoire — a deux rendus, et celui
+    /// qu'on n'exerce pas est celui qui casse.
     #[test]
     fn each_feature_template_renders_with_its_context() {
         let renderer = Renderer::new();
 
-        for path in feature_templates() {
-            let source = read(&path);
-            renderer
-                .render(&source, feature_context())
-                .unwrap_or_else(|error| {
-                    panic!("{} ne se rend pas : {error}", path.display());
-                });
+        for installees in [&[][..], &["redis"][..]] {
+            for path in feature_templates() {
+                let source = read(&path);
+                renderer
+                    .render(&source, feature_context(installees))
+                    .unwrap_or_else(|error| {
+                        panic!(
+                            "{} ne se rend pas sur {installees:?} : {error}",
+                            path.display()
+                        );
+                    });
+            }
         }
     }
 

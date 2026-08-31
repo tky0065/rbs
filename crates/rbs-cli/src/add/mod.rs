@@ -209,6 +209,10 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let context = context! {
         project_name => nom_projet.clone(),
         crate_name => crate_name.clone(),
+        // Ce que le projet porte déjà, tel que `[package.metadata.rbs]` l'inscrit : un
+        // fragment qui sait qu'un autre est là s'appuie dessus — la limite de débit
+        // compte dans Redis quand le cache existe, dans sa mémoire sinon.
+        features => metadonnees.features.clone(),
         // Par où le binaire principal atteint un module de feature : la bibliothèque du
         // projet, ou `crate::` sur un projet engendré avant qu'elle n'existe, où ces
         // modules vivent dans le binaire lui-même.
@@ -885,6 +889,96 @@ mod tests {
             configuration.contains("credentials = false"),
             "{configuration}"
         );
+    }
+
+    /// Le fragment apporte son état, sa couche et sa section : trois points d'entrée
+    /// distincts, qu'un manifeste incomplet laisserait passer sans que rien ne compile
+    /// de travers.
+    #[test]
+    fn the_rate_limit_plan_lands_its_layer_its_state_and_its_section() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "rate-limit")).expect("le plan doit se calculer");
+
+        assert_eq!(
+            planned.files,
+            [
+                "src/rate_limit/mod.rs",
+                "src/rate_limit/config.rs",
+                "src/rate_limit/counter.rs",
+                "src/rate_limit/tests.rs",
+            ]
+        );
+
+        assert!(
+            anchor_body(&planned, &crate::anchors::LAYERS)
+                .contains("crate::rate_limit::middleware"),
+            "{}",
+            projected(&planned, "src/router.rs")
+        );
+        assert!(
+            anchor_body(&planned, &crate::anchors::STATE_INIT)
+                .contains("RateLimiter::from_config()?"),
+            "{}",
+            projected(&planned, "src/state.rs")
+        );
+
+        let configuration = projected(&planned, "config/default.toml");
+        assert!(configuration.contains("[rate_limit]"), "{configuration}");
+        assert!(
+            configuration.contains("trust_forwarded_for"),
+            "{configuration}"
+        );
+    }
+
+    /// Le critère de la tâche 12 : la route qui hache un Argon2 par requête anonyme est
+    /// limitée bien plus serré que le reste de l'API.
+    #[test]
+    fn the_rate_limit_plan_holds_the_login_route_stricter_than_the_global_limit() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "rate-limit")).expect("le plan doit se calculer");
+        let configuration = projected(&planned, "config/default.toml");
+
+        assert!(
+            configuration.contains("{ path = \"/auth/login\", limit = 5, window_secs = 60 }"),
+            "{configuration}"
+        );
+        assert!(
+            configuration.contains("limit = 120"),
+            "la limite globale doit rester bien plus large :\n{configuration}"
+        );
+    }
+
+    /// Sans le fragment `redis`, le compteur vit dans le processus : rien à joindre, et
+    /// aucune crate de plus.
+    #[test]
+    fn without_redis_the_counter_is_the_in_memory_one() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "rate-limit")).expect("le plan doit se calculer");
+        let counter = projected(&planned, "src/rate_limit/counter.rs");
+
+        assert!(counter.contains("HashMap"), "{counter}");
+        assert!(!counter.contains("deadpool_redis"), "{counter}");
+    }
+
+    /// Le fragment `redis` installé, le compteur passe sur son serveur : deux instances
+    /// derrière un répartiteur doivent compter ensemble.
+    #[test]
+    fn with_redis_the_counter_becomes_the_shared_one() {
+        let (_parent, root) = project();
+        run(&options(&root, "redis")).expect("la pose du cache doit aboutir");
+
+        let planned = plan_for(&options(&root, "rate-limit")).expect("le plan doit se calculer");
+        let counter = projected(&planned, "src/rate_limit/counter.rs");
+
+        assert!(counter.contains("deadpool_redis"), "{counter}");
+        assert!(
+            counter.contains("crate::cache::Config::load()"),
+            "{counter}"
+        );
+        assert!(!counter.contains("HashMap"), "{counter}");
     }
 
     /// Le critère du lot : une ancre absente n'est pas contournée, et le bloc à recoller

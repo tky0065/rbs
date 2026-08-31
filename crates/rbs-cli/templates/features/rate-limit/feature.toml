@@ -1,0 +1,71 @@
+[feature]
+description = "limite de débit : un compteur par adresse cliente, plus strict sur les routes qui coûtent cher"
+
+[[files]]
+source      = "mod.rs.jinja"
+destination = "src/rate_limit/mod.rs"
+
+[[files]]
+source      = "config.rs.jinja"
+destination = "src/rate_limit/config.rs"
+
+[[files]]
+source      = "counter.rs.jinja"
+destination = "src/rate_limit/counter.rs"
+
+[[files]]
+source      = "tests.rs.jinja"
+destination = "src/rate_limit/tests.rs"
+
+[[anchors]]
+anchor  = "features"
+content = "pub mod rate_limit;"
+
+[[anchors]]
+anchor  = "state_champs"
+content = "pub rate_limit: crate::rate_limit::RateLimiter,"
+
+[[anchors]]
+anchor  = "state_init"
+content = "rate_limit: crate::rate_limit::RateLimiter::from_config()?,"
+
+# Dans `layers` et non dans `routes` : une route se monte, une couche enveloppe. Posée
+# là, elle est interne à `trace` et à `request_id` — le 429 qu'elle rend porte donc
+# l'identifiant de la requête et paraît dans le journal comme n'importe quelle réponse.
+[[anchors]]
+anchor  = "layers"
+content = """
+.layer(axum::middleware::from_fn_with_state(
+    state.clone(),
+    crate::rate_limit::middleware,
+))
+"""
+
+# Les tests livrés laissent une fenêtre s'échoir : sans `time`, `tokio::time::sleep`
+# n'existe pas et le fragment ne compile pas ses propres tests.
+[cargo.tokio]
+features = ["time"]
+
+[[config]]
+file    = "config/default.toml"
+section = "rate_limit"
+content = """
+# Limite globale, comptée par adresse cliente : `limit` requêtes par fenêtre de
+# `window_secs` secondes. Au-delà, un 429 `application/problem+json` avec un `Retry-After`.
+limit = 120
+window_secs = 60
+
+# Derrière un reverse proxy, l'adresse du pair est celle du proxy : sans ce drapeau tous
+# les clients partagent un même compteur, et le garde-fou devient le déni de service.
+# Ne le lever qu'avec un proxy devant, qui réécrit l'en-tête : exposée en direct, une API
+# qui le croit laisse n'importe quel client se choisir une identité par requête.
+trust_forwarded_for = false
+
+# Limites plus strictes, par préfixe de chemin ; la première qui correspond l'emporte.
+# `/auth/login` hache un Argon2 même pour un email inconnu — c'est ce qui empêche
+# d'énumérer les comptes — et chaque requête anonyme y coûte donc 19 Mio : sans cette
+# ligne, une seule adresse épuise la mémoire du serveur.
+routes = [
+  { path = "/auth/login", limit = 5, window_secs = 60 },
+]
+"""

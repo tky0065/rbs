@@ -208,7 +208,7 @@ fn create_project(
     for pose in &project.installed {
         let migration = if pose.migration { ", 1 migration" } else { "" };
         ui::info(&format!(
-            "  + {:<8} {}{migration}",
+            "  + {:<10} {}{migration}",
             pose.name,
             ui::files(pose.files)
         ));
@@ -352,6 +352,13 @@ fn suite(feature: &str) -> Option<&'static str> {
         "cors" => Some(
             "énumérez vos origines dans [cors] de config/default.toml — la liste est vide, \
              donc aucune requête d'origine croisée ne passe",
+        ),
+        // Le compteur ne voit un client que si le serveur lui donne son adresse : un
+        // projet derrière un proxy compte tout le monde ensemble tant que le drapeau
+        // n'est pas levé.
+        "rate-limit" => Some(
+            "derrière un reverse proxy, passez rate_limit.trust_forwarded_for à true — \
+             sinon tous les clients partagent l'adresse du proxy",
         ),
         _ => None,
     }
