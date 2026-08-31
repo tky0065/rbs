@@ -65,7 +65,7 @@ schema is not there.
 ## How rbs tests itself
 
 The framework's own integration tests do not assume anything is running. They start a
-PostgreSQL 17 container with `testcontainers`, generate a project into a temporary
+PostgreSQL 18 container with `testcontainers`, generate a project into a temporary
 directory, apply its migrations and run its tests — the `rbs` binary invoked exactly as
 you would invoke it.
 
@@ -80,8 +80,10 @@ cargo test -p rbs-cli --test integration_crud -- --ignored
 Slow as it is, this is the only test that proves rbs actually works. Everything else
 checks a string.
 
-That the container runs 17 is a test in itself. For the reason given in the
+The container runs 18 because that is what the generated `docker-compose.yml` pins: a
+harness that starts something other than what ships proves nothing about what ships. That
+is a default, not a floor. For the reason given in the
 [migrations guide](./migrations.md), generated primary keys are set by the model rather
 than by a column default, so nothing a generated project runs needs the `uuidv7()` that
 arrived with PostgreSQL 18. The floor `rbs doctor` enforces is 14, the oldest release still
-receiving security fixes.
+receiving security fixes — no test exercises it.

@@ -14,9 +14,10 @@ use testcontainers::{GenericImage, ImageExt};
 
 mod common;
 
-/// PostgreSQL **17** et non 18 : c'est ce qui prouve que l'exigence de la 18 est tombée
-/// avec le défaut `uuidv7()`, désormais posé par le modèle.
-const IMAGE: (&str, &str) = ("postgres", "17");
+/// PostgreSQL **18**, la version que le `docker-compose.yml` engendré épingle : un harnais
+/// qui démarre autre chose que ce qui est livré ne prouve rien de ce qui est livré. Le
+/// plancher que `rbs doctor` fait respecter reste la 14, qu'aucun test n'exerce.
+const IMAGE: (&str, &str) = ("postgres", "18");
 
 const UTILISATEUR: &str = "rbs";
 const MOT_DE_PASSE: &str = "rbs";

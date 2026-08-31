@@ -38,7 +38,7 @@ impl TestDatabase {
         // occurrence donne un refus, ou pire, une base qui disparaît sous le test.
         let opening = || WaitFor::message_on_stderr("ready to accept connections");
 
-        let container = GenericImage::new("postgres", "17")
+        let container = GenericImage::new("postgres", "18")
             .with_wait_for(opening())
             .with_wait_for(opening())
             .with_env_var("POSTGRES_USER", "rbs")

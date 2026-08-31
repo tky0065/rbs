@@ -155,9 +155,10 @@ fn collect(racine: &Path, repertoire: &Path, fichiers: &mut Empreinte) {
 // file, et `integration_new`, qui y joue la suite d'un projet engendré par moteur. Les
 // démarreurs vivent donc ici plutôt que dans l'un des deux.
 
-/// PostgreSQL **17** et non 18 : c'est ce qui prouve que l'exigence de la 18 est tombée
-/// avec le défaut `uuidv7()`, désormais posé par le modèle.
-pub const IMAGE: (&str, &str) = ("postgres", "17");
+/// PostgreSQL **18**, la version que le `docker-compose.yml` engendré épingle : un harnais
+/// qui démarre autre chose que ce qui est livré ne prouve rien de ce qui est livré. Le
+/// plancher que `rbs doctor` fait respecter reste la 14, qu'aucun test n'exerce.
+pub const IMAGE: (&str, &str) = ("postgres", "18");
 
 pub const UTILISATEUR: &str = "rbs";
 pub const MOT_DE_PASSE: &str = "rbs";
