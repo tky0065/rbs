@@ -418,7 +418,7 @@ mod tests {
     /// interroger une route qui n'existe pas, ou comparer une valeur que PostgreSQL rend
     /// autrement. Seul le projet compilé contre une vraie base tranche.
     #[test]
-    #[ignore = "démarre PostgreSQL 18 en conteneur et compile un projet complet"]
+    #[ignore = "démarre PostgreSQL en conteneur et compile un projet complet"]
     fn the_generated_tests_pass_untouched() {
         const HORODATAGE: &str = "20260826_090000";
 

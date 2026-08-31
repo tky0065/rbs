@@ -23,11 +23,6 @@ use testcontainers::{Container, GenericImage, ImageExt};
 
 mod common;
 
-/// PostgreSQL **18**, la version que le `docker-compose.yml` engendré épingle : un harnais
-/// qui démarre autre chose que ce qui est livré ne prouve rien de ce qui est livré. Le
-/// plancher que `rbs doctor` fait respecter reste la 14, qu'aucun test n'exerce.
-const IMAGE: (&str, &str) = ("postgres", "18");
-
 const UTILISATEUR: &str = "rbs";
 const MOT_DE_PASSE: &str = "rbs";
 const BASE: &str = "demo";
@@ -669,7 +664,8 @@ fn copy(source: &Path, destination: &Path) {
 
 /// Un PostgreSQL neuf, prêt à recevoir le schéma d'un projet généré.
 fn start_postgres() -> Container<GenericImage> {
-    GenericImage::new(IMAGE.0, IMAGE.1)
+    let (nom, version) = common::postgres_image();
+    GenericImage::new(nom, version)
         .with_wait_for(WaitFor::log(
             // PostgreSQL annonce une première fois qu'il accepte les connexions pendant
             // son initialisation, où il n'écoute que sur son socket local : attendre la

@@ -65,7 +65,7 @@ schema is not there.
 ## How rbs tests itself
 
 The framework's own integration tests do not assume anything is running. They start a
-PostgreSQL 18 container with `testcontainers`, generate a project into a temporary
+PostgreSQL container with `testcontainers`, generate a project into a temporary
 directory, apply its migrations and run its tests — the `rbs` binary invoked exactly as
 you would invoke it.
 
@@ -80,10 +80,27 @@ cargo test -p rbs-cli --test integration_crud -- --ignored
 Slow as it is, this is the only test that proves rbs actually works. Everything else
 checks a string.
 
-The container runs 18 because that is what the generated `docker-compose.yml` pins: a
-harness that starts something other than what ships proves nothing about what ships. That
-is a default, not a floor. For the reason given in the
-[migrations guide](./migrations.md), generated primary keys are set by the model rather
-than by a column default, so nothing a generated project runs needs the `uuidv7()` that
-arrived with PostgreSQL 18. The floor `rbs doctor` enforces is 14, the oldest release still
-receiving security fixes — no test exercises it.
+### Which PostgreSQL the harness starts
+
+Two versions matter, and CI runs the suite against both.
+
+**18 is what ships.** It is what the generated `docker-compose.yml` pins, so it is what a
+project actually meets. It is the default here: a harness that starts something other than
+what ships proves nothing about what ships.
+
+**14 is the floor.** It is what `rbs doctor` enforces — the oldest release still receiving
+security fixes — and a floor nothing exercises is a promise nobody keeps. For the reason
+given in the [migrations guide](./migrations.md), generated primary keys are set by the
+model rather than by a column default, so nothing a generated project runs needs the
+`uuidv7()` that arrived with PostgreSQL 18. That claim is now tested rather than asserted.
+
+`RBS_TEST_PG` picks the version, and 18 applies when it is unset:
+
+```bash
+RBS_TEST_PG=14 cargo test -p rbs-cli --no-fail-fast -- --ignored
+```
+
+The variable is read when the container starts, not at compile time, so both branches of
+the matrix share one build and differ only in what Docker pulls. Every starter in the
+repository — the three in the integration tests, the one in the generator bench — resolves
+its image through the same function, so no version can be pinned behind the matrix's back.

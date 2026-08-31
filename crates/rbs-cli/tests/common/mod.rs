@@ -155,10 +155,13 @@ fn collect(racine: &Path, repertoire: &Path, fichiers: &mut Empreinte) {
 // file, et `integration_new`, qui y joue la suite d'un projet engendré par moteur. Les
 // démarreurs vivent donc ici plutôt que dans l'un des deux.
 
-/// PostgreSQL **18**, la version que le `docker-compose.yml` engendré épingle : un harnais
-/// qui démarre autre chose que ce qui est livré ne prouve rien de ce qui est livré. Le
-/// plancher que `rbs doctor` fait respecter reste la 14, qu'aucun test n'exerce.
-pub const IMAGE: (&str, &str) = ("postgres", "18");
+// Le même fichier que celui qu'emploie le banc des générateurs : trois constantes
+// éparpillées, c'est trois occasions qu'une branche de la matrice n'aille pas où elle dit.
+#[path = "../../src/test_postgres.rs"]
+mod test_postgres;
+
+/// L'image PostgreSQL du harnais : la 18 livrée, ou le plancher 14 sous `RBS_TEST_PG`.
+pub use test_postgres::image as postgres_image;
 
 pub const UTILISATEUR: &str = "rbs";
 pub const MOT_DE_PASSE: &str = "rbs";
@@ -166,7 +169,8 @@ pub const BASE: &str = "demo";
 
 /// Un PostgreSQL neuf, prêt à recevoir le schéma d'un projet généré.
 pub fn start_postgres() -> Container<GenericImage> {
-    GenericImage::new(IMAGE.0, IMAGE.1)
+    let (nom, version) = postgres_image();
+    GenericImage::new(nom, version)
         .with_wait_for(WaitFor::log(
             // PostgreSQL annonce une première fois qu'il accepte les connexions pendant
             // son initialisation, où il n'écoute que sur son socket local : attendre la
