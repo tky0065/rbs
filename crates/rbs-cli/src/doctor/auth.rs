@@ -11,7 +11,7 @@ use std::path::Path;
 
 use crate::dotenv;
 
-use super::Check;
+use super::{Check, Config};
 
 const TITRE: &str = "auth";
 const SECRET: &str = "RBS_AUTH__SECRET";
@@ -27,15 +27,15 @@ const CONFIG: &str = "config/default.toml";
 const MINIMUM: usize = 32;
 
 /// Vérifie ce dont la feature `auth` a besoin pour démarrer.
-pub(crate) fn check(root: &Path) -> Check {
-    check_with(root, |key| std::env::var(key).ok())
+pub(crate) fn check(root: &Path, config: &Config) -> Check {
+    check_with(root, config, |key| std::env::var(key).ok())
 }
 
 /// Le contrôle, l'environnement passé en paramètre.
 ///
 /// L'environnement l'emporte sur le `.env`, comme dans `migrate::project_variables` :
 /// un diagnostic qui crierait au secret manquant alors qu'il est exporté serait faux.
-fn check_with(root: &Path, env: impl Fn(&str) -> Option<String>) -> Check {
+fn check_with(root: &Path, config: &Config, env: impl Fn(&str) -> Option<String>) -> Check {
     let du_fichier = dotenv::read(&root.join(FICHIER)).unwrap_or_default();
     let de_l_exemple = dotenv::read(&root.join(EXEMPLE)).unwrap_or_default();
 
@@ -78,7 +78,7 @@ fn check_with(root: &Path, env: impl Fn(&str) -> Option<String>) -> Check {
         }
     }
 
-    if !super::section(root, "auth") {
+    if !config.section("auth") {
         defauts.push(format!("{CONFIG} ne porte pas de section `[auth]`"));
         remedes.push(format!(
             "ajoutez à {CONFIG} :\n[auth]\naccess_ttl_secs = 900\nrefresh_ttl_secs = 2592000"
@@ -99,7 +99,7 @@ mod tests {
 
     use tempfile::TempDir;
 
-    use super::super::State;
+    use super::super::{Config, State};
     use super::*;
 
     /// Un projet neuf, doté à la main de ce que `add auth` y dépose.
@@ -156,7 +156,7 @@ mod tests {
     fn without_a_secret_the_diagnosis_names_the_variable() {
         let (_parent, root) = project_with_auth();
 
-        let check = check_with(&root, bare);
+        let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(
@@ -172,7 +172,7 @@ mod tests {
         let court = "a".repeat(MINIMUM - 1);
         add(&root, FICHIER, &format!("{SECRET}={court}\n"));
 
-        let check = check_with(&root, bare);
+        let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(
@@ -187,7 +187,7 @@ mod tests {
         let (_parent, root) = project_with_auth();
         add(&root, FICHIER, &format!("{SECRET}={EXEMPLE_DU_SECRET}\n"));
 
-        let check = check_with(&root, bare);
+        let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(
             check.state,
@@ -214,7 +214,7 @@ mod tests {
         )
         .expect("config inscriptible");
 
-        let check = check_with(&root, bare);
+        let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(
@@ -229,7 +229,7 @@ mod tests {
         let (_parent, root) = project_with_auth();
         add(&root, FICHIER, &format!("{SECRET}={SECRET_VALIDE}\n"));
 
-        let check = check_with(&root, bare);
+        let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(check.state, State::Bon, "{}", check.detail);
     }
@@ -239,7 +239,7 @@ mod tests {
         let (_parent, root) = project_with_auth();
 
         // Le `.env` ne porte rien : seul l'environnement répond.
-        let check = check_with(&root, |key| {
+        let check = check_with(&root, &Config::read(&root), |key| {
             (key == SECRET).then(|| SECRET_VALIDE.to_string())
         });
 
@@ -260,7 +260,7 @@ mod tests {
         let source = fs::read_to_string(&config).expect("config lisible");
         fs::write(&config, source.replace("[auth]", "# [auth]")).expect("config inscriptible");
 
-        let check = check_with(&root, bare);
+        let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
     }

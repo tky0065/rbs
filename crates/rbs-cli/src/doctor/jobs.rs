@@ -5,17 +5,15 @@
 //! du fragment sont dans son `Config` — mais le worker démarre sur des réglages que
 //! personne ne voit plus.
 
-use std::path::Path;
-
-use super::Check;
+use super::{Check, Config};
 
 const TITRE: &str = "jobs";
 const SECTION: &str = "jobs";
 
 /// Vérifie que la file a les réglages sous lesquels le fragment a été installé.
-pub(crate) fn check(root: &Path) -> Check {
+pub(crate) fn check(config: &Config) -> Check {
     super::section_check(
-        root,
+        config,
         TITRE,
         SECTION,
         "la configuration de la file est en place",
@@ -26,7 +24,7 @@ pub(crate) fn check(root: &Path) -> Check {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use tempfile::TempDir;
 
@@ -79,7 +77,7 @@ mod tests {
         let (_parent, root) = project_with_jobs();
         rewrite(&root, "[jobs]", "# section retirée par le test");
 
-        let check = check(&root);
+        let check = check(&Config::read(&root));
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(
@@ -95,7 +93,7 @@ mod tests {
         let (_parent, root) = project_with_jobs();
         rewrite(&root, "[jobs]", "# [jobs]");
 
-        let check = check(&root);
+        let check = check(&Config::read(&root));
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
     }
@@ -106,7 +104,9 @@ mod tests {
         let (_parent, root) = project_with_jobs();
         rewrite(&root, "[jobs]", "# [jobs]");
 
-        let remedy = check(&root).remedy.expect("un échec porte son remède");
+        let remedy = check(&Config::read(&root))
+            .remedy
+            .expect("un échec porte son remède");
 
         for key in ["max_attempts", "retry_delay_secs", "poll_interval_secs"] {
             assert!(remedy.contains(key), "`{key}` manque au remède : {remedy}");
@@ -117,7 +117,7 @@ mod tests {
     fn a_properly_configured_project_reports_nothing() {
         let (_parent, root) = project_with_jobs();
 
-        let check = check(&root);
+        let check = check(&Config::read(&root));
 
         assert_eq!(check.state, State::Bon, "{}", check.detail);
     }

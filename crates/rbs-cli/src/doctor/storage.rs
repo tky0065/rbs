@@ -9,7 +9,7 @@ use std::path::Path;
 
 use crate::dotenv;
 
-use super::Check;
+use super::{Check, Config};
 
 const TITRE: &str = "storage";
 const FICHIER: &str = ".env";
@@ -27,14 +27,14 @@ const IDENTIFIANTS: [&str; 2] = [
 ];
 
 /// Vérifie ce dont la feature `storage` a besoin pour déposer.
-pub(crate) fn check(root: &Path) -> Check {
-    check_with(root, |key| std::env::var(key).ok())
+pub(crate) fn check(root: &Path, config: &Config) -> Check {
+    check_with(root, config, |key| std::env::var(key).ok())
 }
 
 /// Le contrôle, l'environnement passé en paramètre.
 ///
 /// L'environnement l'emporte sur le `.env`, comme dans `auth::check_with`.
-fn check_with(root: &Path, env: impl Fn(&str) -> Option<String>) -> Check {
+fn check_with(root: &Path, config: &Config, env: impl Fn(&str) -> Option<String>) -> Check {
     let du_fichier = dotenv::read(&root.join(FICHIER)).unwrap_or_default();
     let de_l_exemple = dotenv::read(&root.join(EXEMPLE)).unwrap_or_default();
 
@@ -47,7 +47,7 @@ fn check_with(root: &Path, env: impl Fn(&str) -> Option<String>) -> Check {
     let mut defauts = Vec::new();
     let mut remedes = Vec::new();
 
-    if !super::section(root, SECTION) {
+    if !config.section(SECTION) {
         defauts.push(format!("{CONFIG} ne porte pas de section `[{SECTION}]`"));
         remedes.push(format!(
             "ajoutez à {CONFIG} :\n[{SECTION}]\nbackend = \"fs\"\nroot = \"./storage\""
@@ -55,8 +55,9 @@ fn check_with(root: &Path, env: impl Fn(&str) -> Option<String>) -> Check {
     }
 
     // Le backend fichiers se passe de tout réglage : rien de ce qui suit ne le concerne.
-    if super::field(root, SECTION, BACKEND).as_deref() == Some(S3) {
-        if super::field(root, SECTION, "bucket")
+    if config.field(SECTION, BACKEND).as_deref() == Some(S3) {
+        if config
+            .field(SECTION, "bucket")
             .filter(|value| !value.is_empty())
             .is_none()
             && lire(BUCKET).is_none()
@@ -109,7 +110,7 @@ mod tests {
 
     use tempfile::TempDir;
 
-    use super::super::State;
+    use super::super::{Config, State};
     use super::*;
 
     /// La valeur que `add storage` écrit dans `.env.example` pour les deux identifiants.
@@ -186,7 +187,7 @@ mod tests {
         switch_to_s3(&root);
         rewrite(&root, FICHIER, &format!("{BUCKET}=demo\n"), "");
 
-        let check = check_with(&root, bare);
+        let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(
@@ -203,7 +204,9 @@ mod tests {
         switch_to_s3(&root);
         rewrite(&root, FICHIER, &format!("{BUCKET}=demo\n"), "");
 
-        let check = check_with(&root, |key| (key == BUCKET).then(|| "depots".to_string()));
+        let check = check_with(&root, &Config::read(&root), |key| {
+            (key == BUCKET).then(|| "depots".to_string())
+        });
 
         assert_eq!(check.state, State::Bon, "{}", check.detail);
     }
@@ -214,7 +217,7 @@ mod tests {
         let (_parent, root) = project_with_storage();
         rewrite(&root, FICHIER, &format!("{BUCKET}=demo\n"), "");
 
-        let check = check_with(&root, bare);
+        let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(check.state, State::Bon, "{}", check.detail);
     }
@@ -224,7 +227,7 @@ mod tests {
         let (_parent, root) = project_with_storage();
         rewrite(&root, CONFIG, "backend = \"fs\"", "backend = \"s3\"");
 
-        let check = check_with(&root, bare);
+        let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(
             check.state,
@@ -244,7 +247,7 @@ mod tests {
         let (_parent, root) = project_with_storage();
         rewrite(&root, CONFIG, "[storage]", "# section retirée par le test");
 
-        let check = check_with(&root, bare);
+        let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(
@@ -259,7 +262,7 @@ mod tests {
         let (_parent, root) = project_with_storage();
         switch_to_s3(&root);
 
-        let check = check_with(&root, bare);
+        let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(check.state, State::Bon, "{}", check.detail);
     }

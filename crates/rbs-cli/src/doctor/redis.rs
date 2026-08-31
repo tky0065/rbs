@@ -4,17 +4,15 @@
 //! `[cache]` : c'est le nom de la crate d'un côté, celui du service rendu de l'autre. Le
 //! contrôle porte le nom déclaré, comme les autres, et nomme la section dans son détail.
 
-use std::path::Path;
-
-use super::Check;
+use super::{Check, Config};
 
 const TITRE: &str = "redis";
 const SECTION: &str = "cache";
 
 /// Vérifie ce dont la feature `redis` a besoin pour démarrer.
-pub(crate) fn check(root: &Path) -> Check {
+pub(crate) fn check(config: &Config) -> Check {
     super::section_check(
-        root,
+        config,
         TITRE,
         SECTION,
         "la configuration du cache est en place",
@@ -25,7 +23,7 @@ pub(crate) fn check(root: &Path) -> Check {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
 
     use tempfile::TempDir;
 
@@ -76,7 +74,7 @@ mod tests {
         let (_parent, root) = project_with_redis();
         rewrite(&root, "[cache]", "# section retirée par le test");
 
-        let check = check(&root);
+        let check = check(&Config::read(&root));
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(
@@ -92,7 +90,7 @@ mod tests {
         let (_parent, root) = project_with_redis();
         rewrite(&root, "[cache]", "# [cache]");
 
-        let check = check(&root);
+        let check = check(&Config::read(&root));
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
     }
@@ -101,7 +99,7 @@ mod tests {
     fn a_properly_configured_project_reports_nothing() {
         let (_parent, root) = project_with_redis();
 
-        let check = check(&root);
+        let check = check(&Config::read(&root));
 
         assert_eq!(check.state, State::Bon, "{}", check.detail);
     }
