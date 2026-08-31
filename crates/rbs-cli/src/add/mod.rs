@@ -209,7 +209,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         &metadonnees.features,
     )?;
 
-    let nom_projet = metadata::package_name(&root.join("Cargo.toml"))?;
+    let nom_projet = metadonnees.package_name(&root.join("Cargo.toml"))?;
     let crate_name = nom_projet.replace('-', "_");
     // Le moteur vient du manifeste, seul endroit où le choix de `rbs new` a survécu : un
     // fragment posé six mois plus tard n'a plus les flags de la création.

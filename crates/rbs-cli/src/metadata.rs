@@ -59,6 +59,26 @@ pub struct Metadata {
     pub database: Database,
     /// Langue du guide `AGENTS.md` du projet.
     pub lang: crate::lang::Lang,
+    /// Nom du paquet que le manifeste déclare.
+    ///
+    /// Optionnel parce que la faute ne se lève qu'à l'usage : `upgrade` n'a besoin du nom
+    /// que pour recréer un guide absent, et un `[package] name` illisible n'a pas à faire
+    /// échouer une mise à niveau qui s'en passe.
+    pub package: Option<String>,
+}
+
+impl Metadata {
+    /// Le nom du paquet, ou la faute qui le dit absent.
+    ///
+    /// C'est le nom du binaire du projet, et la racine de celui de sa base : les fragments
+    /// de feature en ont besoin là où `rbs new` disposait encore du nom saisi.
+    /// `cargo_toml` ne sert qu'à nommer le fichier fautif — rien n'est relu ici.
+    pub fn package_name(&self, cargo_toml: &Path) -> Result<String, Error> {
+        self.package.clone().ok_or_else(|| Error::Field {
+            path: name_of(cargo_toml),
+            key: "name",
+        })
+    }
 }
 
 /// Une dépendance telle qu'un patch de manifeste la réclame.
@@ -177,25 +197,12 @@ pub fn read(cargo_toml: &Path) -> Result<Metadata, Error> {
         features: features(rbs, cargo_toml)?,
         database: database(rbs, cargo_toml)?,
         lang: lang(rbs),
+        package: document
+            .get("package")
+            .and_then(|package| package.get("name"))
+            .and_then(Item::as_str)
+            .map(str::to_owned),
     })
-}
-
-/// Lit le nom du paquet que le manifeste déclare.
-///
-/// C'est le nom du binaire du projet, et la racine de celui de sa base : les fragments de
-/// feature en ont besoin là où `rbs new` disposait encore du nom saisi.
-pub fn package_name(cargo_toml: &Path) -> Result<String, Error> {
-    let document = load(cargo_toml)?;
-
-    document
-        .get("package")
-        .and_then(|package| package.get("name"))
-        .and_then(Item::as_str)
-        .map(str::to_owned)
-        .ok_or_else(|| Error::Field {
-            path: name_of(cargo_toml),
-            key: "name",
-        })
 }
 
 /// Rend le manifeste avec `feature` inscrite, ou `None` si elle y est déjà.

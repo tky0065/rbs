@@ -188,10 +188,10 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
 
         manquante
     } else {
-        // Lu ici seulement : le nom du paquet ne sert qu'au titre du document recréé, et
-        // un `[package] name` illisible faisait échouer une mise à niveau qui n'en avait
-        // pas besoin.
-        let package = metadata::package_name(&root.join("Cargo.toml"))?;
+        // La faute ne se lève qu'ici : le nom du paquet ne sert qu'au titre du document
+        // recréé, et un `[package] name` illisible n'a pas à faire échouer une mise à
+        // niveau qui n'en a pas besoin.
+        let package = metadonnees.package_name(&root.join("Cargo.toml"))?;
         let document = crate::agents::document(&root, metadonnees.lang, &package, cli)?;
         builder.create(crate::agents::FICHIER, &document)?;
         None

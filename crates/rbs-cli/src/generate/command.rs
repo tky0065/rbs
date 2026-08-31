@@ -281,7 +281,9 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         .join("src/lib.rs")
         .exists()
         .then(|| {
-            metadata::package_name(&root.join("Cargo.toml")).map(|name| name.replace('-', "_"))
+            metadonnees
+                .package_name(&root.join("Cargo.toml"))
+                .map(|name| name.replace('-', "_"))
         })
         .transpose()?;
 
@@ -1789,8 +1791,10 @@ mod tests {
     fn drop_the_library(root: &Path) {
         fs::remove_file(root.join("src/lib.rs")).expect("la bibliothèque s'efface");
 
-        let crate_name = crate::metadata::package_name(&root.join("Cargo.toml"))
+        let crate_name = crate::metadata::read(&root.join("Cargo.toml"))
             .expect("le manifeste se lit")
+            .package_name(&root.join("Cargo.toml"))
+            .expect("le manifeste nomme son paquet")
             .replace('-', "_");
         let main = root.join("src/main.rs");
         let source = read(&main);
