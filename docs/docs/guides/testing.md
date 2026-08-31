@@ -30,12 +30,17 @@ then read again to confirm the resource is gone:
 ```rust file=examples/hello-crud/src/articles/tests.rs region=cycle_de_vie
 ```
 
-Two more check the error paths that the runtime handles on its own: an unknown identifier
-returns 404, and an unparsable body returns 400. Both are shown in the
-[errors guide](./errors.md).
+Others check the error paths that the runtime handles on its own. Two are always written:
+an unknown identifier returns 404, and an unparsable body returns 400. Two more depend on
+what you asked `--fields` for, because nothing else could reach them: a field carrying the
+email constraint earns a body that parses but does not validate, which returns 422; a
+`unique` column earns a replayed value, which returns 409. Each of those four statuses is
+described in the [errors guide](./errors.md).
 
-Text values carry a random suffix. Without it, a `unique` field would make the second run
-of the suite fail on the row the first one left behind.
+Text values carry a random suffix, and every test deletes the rows it created. Without
+either, a `unique` field would make the second run of the suite fail on what the first one
+left behind — the tests share the database your `.env` names, and no transaction rolls
+them back.
 
 ## What it leaves to you
 
