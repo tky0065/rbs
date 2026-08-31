@@ -360,6 +360,15 @@ pub(crate) fn body(source: &str, anchor: Anchor) -> Option<&str> {
     Some(&source[apres_ouverture.min(closing)..closing])
 }
 
+/// `source` porte-t-elle une ligne ne portant que `balise` ?
+///
+/// Seule définition de « la balise est là ». `doctor` l'interroge pour annoncer une ancre
+/// présente, `line_of` pour la situer et y écrire : les deux réponses divergeraient
+/// autrement, et un projet où l'insertion échoue passerait pour sain.
+pub(crate) fn marks(source: &str, balise: &str) -> bool {
+    source.lines().any(|line| line.trim() == balise)
+}
+
 /// Début de la ligne ne portant que `balise`, et l'indentation de cette ligne.
 ///
 /// La ligne doit ne porter qu'elle : une balise citée dans une chaîne — le bloc à recoller
@@ -368,7 +377,7 @@ fn line_of(source: &str, balise: &str) -> Option<(usize, String)> {
     let mut debut = 0;
 
     for line in source.split_inclusive('\n') {
-        if line.trim() == balise {
+        if marks(line, balise) {
             let indentation = line[..line.len() - line.trim_start().len()].to_string();
             return Some((debut, indentation));
         }
@@ -666,6 +675,19 @@ services:
         let error = insert(cite, ROUTES, &lines(&["peu importe"])).expect_err("aucune ancre");
 
         assert_eq!(error.anchor, ROUTES);
+    }
+
+    /// Le prédicat qu'interroge `doctor` répond comme l'insertion : indentation tolérée,
+    /// citation refusée.
+    #[test]
+    fn marks_accepts_an_indented_tag_and_refuses_a_quoted_one() {
+        assert!(marks("    // <rbs:routes>\n", "// <rbs:routes>"));
+        assert!(marks(ROUTEUR, "// <rbs:routes>"));
+        assert!(!marks(
+            "let aide = \"// <rbs:routes>\";\n",
+            "// <rbs:routes>"
+        ));
+        assert!(!marks("", "// <rbs:routes>"));
     }
 
     #[test]
