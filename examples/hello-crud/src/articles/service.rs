@@ -52,8 +52,9 @@ pub async fn update(
         .ok_or(Error::NotFound("article"))?
         .into();
 
-    // Un champ absent du corps garde sa valeur : cette route ne peut donc pas remettre un
-    // champ optionnel à NULL. Ajoutez-y le cas si votre API en a besoin.
+    // `Option` ne distingue pas un champ absent d'un `null` explicite : cette route ne
+    // peut donc pas remettre un champ optionnel à NULL. Ajoutez-y le cas si votre API en
+    // a besoin.
     if let Some(title) = input.title {
         article.title = Set(title);
     }

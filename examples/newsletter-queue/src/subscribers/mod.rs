@@ -27,7 +27,7 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/subscribers/{id}",
             get(controller::find)
-                .put(controller::update)
+                .patch(controller::update)
                 .delete(controller::delete),
         )
 }

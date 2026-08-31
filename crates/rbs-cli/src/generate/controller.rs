@@ -58,6 +58,38 @@ mod tests {
         render_mod(&Feature::fresh(name, fields), true).expect("le mod.rs doit se rendre")
     }
 
+    /// `per_page=abc` rend 400 : un document qui ne l'annonce pas fait débugger au client
+    /// une pagination qui « ne marche pas », sans rien pour l'aider.
+    #[test]
+    fn the_list_declares_the_400_of_the_pagination() {
+        let rendered = controller("articles");
+
+        let liste = rendered
+            .split("pub async fn list(")
+            .next()
+            .expect("l'annotation précède le handler");
+
+        assert!(
+            liste.contains(r#"(status = 400, description = "pagination illisible""#),
+            "le 400 de la pagination n'est pas déclaré :\n{liste}"
+        );
+    }
+
+    /// Le service fusionne : un champ absent du corps garde sa valeur. `PUT` promettrait
+    /// un remplacement que ce code ne fait pas ; `PATCH` dit exactement ce qu'il fait.
+    #[test]
+    fn the_update_is_a_patch_and_no_put_survives() {
+        let rendered = controller("articles");
+        let module = module("articles");
+
+        assert!(rendered.contains("    patch,"), "{rendered}");
+        assert!(!rendered.contains("    put,"), "{rendered}");
+        assert!(
+            !module.contains(".put("),
+            "aucun alias `put` ne survit :\n{module}"
+        );
+    }
+
     #[test]
     fn the_five_handlers_are_declared() {
         let rendered = controller("articles");
@@ -95,7 +127,7 @@ mod tests {
             "    get,\n    path = \"/blog_posts\",",
             "    post,\n    path = \"/blog_posts\",",
             "    get,\n    path = \"/blog_posts/{id}\",",
-            "    put,\n    path = \"/blog_posts/{id}\",",
+            "    patch,\n    path = \"/blog_posts/{id}\",",
             "    delete,\n    path = \"/blog_posts/{id}\",",
         ] {
             assert!(
@@ -302,7 +334,7 @@ mod tests {
         assert!(
             rendered.contains("\"/articles/{id}\"")
                 && rendered.contains("get(controller::find)")
-                && rendered.contains(".put(controller::update)")
+                && rendered.contains(".patch(controller::update)")
                 && rendered.contains(".delete(controller::delete)"),
             "routes unitaires absentes :\n{rendered}"
         );
@@ -371,7 +403,7 @@ fn the_five_routes_of_the_feature_are_documented() {
         .get("/articles/{id}")
         .expect("chemin unitaire absent du document");
     assert!(unit.get.is_some(), "GET unitaire absent");
-    assert!(unit.put.is_some(), "PUT unitaire absent");
+    assert!(unit.patch.is_some(), "PATCH unitaire absent");
     assert!(unit.delete.is_some(), "DELETE unitaire absent");
 }
 

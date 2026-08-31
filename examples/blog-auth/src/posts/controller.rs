@@ -18,7 +18,10 @@ use crate::state::AppState;
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
     ),
-    responses((status = 200, description = "page de posts", body = Page<PostResponse>))
+    responses(
+        (status = 200, description = "page de posts", body = Page<PostResponse>),
+        (status = 400, description = "pagination illisible", body = ProblemDetails, content_type = "application/problem+json")
+    )
 )]
 pub async fn list(
     State(state): State<AppState>,
@@ -72,10 +75,8 @@ pub async fn find(
     Ok(Json(service::find(state.core().db(), id).await?))
 }
 
-// Un champ absent du corps garde sa valeur : la mise à jour est une fusion, non un
-// remplacement, malgré le verbe `PUT` qu'attend un client de CRUD.
 #[utoipa::path(
-    put,
+    patch,
     path = "/posts/{id}",
     tag = "posts",
     security(("bearer" = [])),

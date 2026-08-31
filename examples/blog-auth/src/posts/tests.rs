@@ -238,7 +238,7 @@ async fn le_cycle_de_vie_complet_passe_par_l_api() {
     );
 
     let envoye = modification();
-    let mise_a_jour = signee(requete("PUT", &ressource, envoye.clone()), &jeton);
+    let mise_a_jour = signee(requete("PATCH", &ressource, envoye.clone()), &jeton);
     let (statut, modifie) = appeler(&api, mise_a_jour).await;
     assert_eq!(statut, StatusCode::OK, "mise à jour refusée : {modifie}");
     comparer(&modifie, &envoye, "title");
