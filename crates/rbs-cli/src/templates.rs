@@ -969,6 +969,27 @@ mod tests {
         );
     }
 
+    /// Un `.layer()` enveloppe ceux qui le précèdent : posée dans l'ancre des couches, la
+    /// borne de durée reste intérieure à `trace` et `request_id`, et le 408 qu'elle rend
+    /// porte donc son identifiant de requête et entre dans le journal. Placée après,
+    /// elle répondrait hors de toute trace.
+    #[test]
+    fn the_request_timeout_layer_sits_inside_the_layers_anchor() {
+        let source = read(&Path::new(RACINE).join("src/router.rs.jinja"));
+
+        let ouverture = source
+            .find("// <rbs:layers>")
+            .expect("le routeur porte l'ancre des couches");
+        let fermeture = source
+            .find("// </rbs:layers>")
+            .expect("le routeur porte la balise fermante");
+
+        assert!(
+            source[ouverture..fermeture].contains("TimeoutLayer::with_status_code"),
+            "la borne de durée n'est pas dans l'ancre des couches :\n{source}"
+        );
+    }
+
     #[test]
     fn the_project_compose_publishes_the_database_port() {
         let source = read(&Path::new(RACINE).join("docker-compose.yml.jinja"));

@@ -61,6 +61,8 @@ pub struct ServerConfig {
     pub host: String,
     /// Port d'écoute.
     pub port: u16,
+    /// Délai au terme duquel une requête est abandonnée, en secondes.
+    pub timeout_secs: u64,
 }
 
 /// Accès à la base de données.
@@ -194,6 +196,9 @@ fn figment() -> Result<Figment, ConfigError> {
         .merge(Serialized::default("env", PROFIL_PAR_DEFAUT))
         .merge(Serialized::default("server.host", "127.0.0.1"))
         .merge(Serialized::default("server.port", 8080))
+        // Trente secondes : au-delà, une requête qui n'a pas rendu la main ne le fera
+        // plus, et la connexion qu'elle retient manque au reste du trafic.
+        .merge(Serialized::default("server.timeout_secs", 30))
         .merge(Serialized::default("database.max_connections", 10))
         .merge(Serialized::default("database.min_connections", 0))
         .merge(Serialized::default("database.connect_timeout_secs", 5))
@@ -391,6 +396,35 @@ mod tests {
             assert_eq!(database.acquire_timeout_secs, 5);
             assert_eq!(database.idle_timeout_secs, 600);
             assert_eq!(database.max_lifetime_secs, 1800);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn the_request_timeout_has_a_default_without_configuration() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            test_secret(jail);
+            jail.set_env("RBS_DATABASE__URL", "postgres://localhost/app");
+
+            let config = Config::load().expect("la configuration doit se charger");
+
+            assert_eq!(config.server.timeout_secs, 30);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn the_request_timeout_is_overridden_by_the_environment() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            test_secret(jail);
+            jail.set_env("RBS_DATABASE__URL", "postgres://localhost/app");
+            jail.set_env("RBS_SERVER__TIMEOUT_SECS", "5");
+
+            let config = Config::load().expect("la configuration doit se charger");
+
+            assert_eq!(config.server.timeout_secs, 5);
             Ok(())
         });
     }

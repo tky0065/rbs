@@ -56,6 +56,7 @@ un projet dont le compose porte une base — des identifiants que celui-ci inter
 | `env` | `RBS_ENV` | `development` |
 | `server.host` | `RBS_SERVER__HOST` | `127.0.0.1` |
 | `server.port` | `RBS_SERVER__PORT` | `8080` |
+| `server.timeout_secs` | `RBS_SERVER__TIMEOUT_SECS` | `30` |
 | `database.url` | `RBS_DATABASE__URL` | **aucun — requis** |
 | `database.max_connections` | `RBS_DATABASE__MAX_CONNECTIONS` | `10` |
 | `database.min_connections` | `RBS_DATABASE__MIN_CONNECTIONS` | `0` |

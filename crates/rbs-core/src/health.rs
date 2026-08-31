@@ -5,16 +5,26 @@
 //! bien avec l'`AppState` d'un projet qu'avec un [`CoreState`](crate::state::CoreState)
 //! nu.
 
+use std::future::Future;
+use std::time::Duration;
+
 use axum::Router;
 use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use sea_orm::DbErr;
+use sea_orm::{DbErr, RuntimeErr};
 use serde::Serialize;
 use utoipa::ToSchema;
 
 use crate::state::HasCoreState;
+
+/// Délai au terme duquel le ping de la base est abandonné.
+///
+/// Bien plus court que la borne des requêtes ordinaires : un contrôle de santé qui pend
+/// laisse l'orchestrateur décider à la place du service, et un 503 rendu vite vaut mieux
+/// qu'un verdict juste rendu trop tard.
+const PING_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Santé de l'application et de ses dépendances.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
@@ -72,9 +82,28 @@ pub async fn handler<S>(State(state): State<S>) -> Response
 where
     S: HasCoreState,
 {
-    let (status, health) = verdict(state.core().db().ping().await);
+    let (status, health) = verdict(bounded_ping(state.core().db().ping()).await);
 
     (status, axum::Json(health)).into_response()
+}
+
+/// Borne le ping dans le temps.
+///
+/// L'expiration prend la forme d'une erreur de connexion plutôt qu'un troisième cas :
+/// une base qui ne répond pas dans le délai est injoignable, et [`verdict`] reste seul
+/// juge du statut.
+async fn bounded_ping<F>(ping: F) -> Result<(), DbErr>
+where
+    F: Future<Output = Result<(), DbErr>>,
+{
+    tokio::time::timeout(PING_TIMEOUT, ping)
+        .await
+        .unwrap_or_else(|_| {
+            Err(DbErr::Conn(RuntimeErr::Internal(format!(
+                "aucune réponse au ping en {} s",
+                PING_TIMEOUT.as_secs()
+            ))))
+        })
 }
 
 /// Traduit le résultat du ping en verdict.
@@ -126,6 +155,7 @@ mod tests {
             server: ServerConfig {
                 host: "127.0.0.1".to_owned(),
                 port: 8080,
+                timeout_secs: 30,
             },
             database: DatabaseConfig {
                 url: "postgres://localhost/app".to_owned(),
@@ -197,6 +227,36 @@ mod tests {
 
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(health.checks.database, Check::Unreachable);
+    }
+
+    /// Un `/health` qui pend est pire qu'un `/health` qui répond 503 : l'orchestrateur
+    /// qui l'interroge attend, et son propre délai décide à la place du service.
+    ///
+    /// La borne est éprouvée sur le futur du ping, et non à travers une requête :
+    /// `DatabaseConnection` ne sait rendre qu'un pool connecté ou déconnecté, dont le
+    /// ping répond immédiatement dans les deux cas.
+    #[tokio::test(start_paused = true)]
+    async fn a_ping_that_never_answers_becomes_a_503_rather_than_a_wait() {
+        let depart = tokio::time::Instant::now();
+
+        let (status, health) = verdict(bounded_ping(std::future::pending()).await);
+
+        assert!(
+            depart.elapsed() >= PING_TIMEOUT,
+            "le ping a été abandonné avant sa borne : {:?}",
+            depart.elapsed()
+        );
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(health.checks.database, Check::Unreachable);
+    }
+
+    /// Un ping qui répond dans la borne passe intact : l'enveloppe ne doit pas
+    /// transformer le cas courant.
+    #[tokio::test(start_paused = true)]
+    async fn a_ping_that_answers_within_the_bound_keeps_its_verdict() {
+        let (status, _) = verdict(bounded_ping(std::future::ready(Ok(()))).await);
+
+        assert_eq!(status, StatusCode::OK);
     }
 
     #[test]
