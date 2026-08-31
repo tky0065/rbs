@@ -57,7 +57,7 @@ rbs migrate up
 
 C'est la silhouette de la chose, pas une transcription à coller : il y faut une base de
 données qui répond, et `rbs new` vous posera deux questions que les commandes ci-dessus ne
-portent pas. Le
+portent pas — trois si vous omettez aussi le nom. Le
 [guide de démarrage](https://tky0065.github.io/rbs/fr/getting-started) en donne la version
 exécutable, avec la sortie de chaque commande.
 

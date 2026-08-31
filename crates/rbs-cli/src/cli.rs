@@ -28,8 +28,9 @@ pub struct Cli {
 pub enum Commands {
     /// Crée un projet prêt à démarrer, avec sa base, ses migrations et sa route /health.
     New {
-        /// Nom du projet, qui est aussi celui du répertoire créé.
-        name: String,
+        /// Nom du projet, qui est aussi celui du répertoire créé, à défaut de quoi la
+        /// question est posée.
+        name: Option<String>,
 
         /// URL de connexion, à défaut de quoi la question est posée.
         #[arg(long, value_name = "URL")]
@@ -60,6 +61,10 @@ pub enum Commands {
         /// Applique les modifications même si le working tree Git est sale.
         #[arg(long)]
         force: bool,
+
+        /// Affiche le plan sans rien écrire.
+        #[arg(long)]
+        dry_run: bool,
     },
 
     /// Génère une feature dans un projet existant.
@@ -93,6 +98,10 @@ pub enum Commands {
         /// Met à niveau même si le working tree Git est sale.
         #[arg(long)]
         force: bool,
+
+        /// Affiche le plan sans rien écrire.
+        #[arg(long)]
+        dry_run: bool,
     },
 }
 
@@ -246,6 +255,41 @@ mod tests {
             panic!("`new` attendue");
         };
         assert_eq!(lang, Some(crate::lang::Lang::En));
+    }
+
+    /// Le nom absent n'est pas une faute de frappe : c'est ce qui déclenche la question.
+    #[test]
+    fn new_parses_without_a_name_so_the_question_can_be_asked() {
+        let sans = Cli::try_parse_from(["rbs", "new"]).expect("commande valide");
+        let Commands::New { name, .. } = sans.command else {
+            panic!("`new` attendue");
+        };
+        assert_eq!(name, None);
+
+        let avec = Cli::try_parse_from(["rbs", "new", "blog"]).expect("commande valide");
+        let Commands::New { name, .. } = avec.command else {
+            panic!("`new` attendue");
+        };
+        assert_eq!(name.as_deref(), Some("blog"));
+    }
+
+    /// Les deux commandes qui modifient un projet existant doivent pouvoir n'en montrer
+    /// que le plan, comme `generate` le fait déjà.
+    #[test]
+    fn add_and_upgrade_accept_dry_run() {
+        let ajout =
+            Cli::try_parse_from(["rbs", "add", "cors", "--dry-run"]).expect("commande valide");
+        let Commands::Add { dry_run, .. } = ajout.command else {
+            panic!("`add` attendue");
+        };
+        assert!(dry_run);
+
+        let mise_a_niveau =
+            Cli::try_parse_from(["rbs", "upgrade", "--dry-run"]).expect("commande valide");
+        let Commands::Upgrade { dry_run, .. } = mise_a_niveau.command else {
+            panic!("`upgrade` attendue");
+        };
+        assert!(dry_run);
     }
 
     #[test]

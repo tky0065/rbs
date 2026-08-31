@@ -63,8 +63,12 @@ pub fn run() {
             }
         }
 
-        Commands::Add { feature, force } => {
-            if let Err(error) = add(feature, force, cli.template_dir) {
+        Commands::Add {
+            feature,
+            force,
+            dry_run,
+        } => {
+            if let Err(error) = add(feature, force, dry_run, cli.template_dir) {
                 ui::error(&error.to_string());
                 if let Some(remedy) = error.remedy() {
                     ui::info(&format!("\n{remedy}"));
@@ -136,8 +140,8 @@ pub fn run() {
             }
         }
 
-        Commands::Upgrade { force } => {
-            if let Err(error) = upgrade(force) {
+        Commands::Upgrade { force, dry_run } => {
+            if let Err(error) = upgrade(force, dry_run) {
                 ui::error(&error.to_string());
                 std::process::exit(1);
             }
@@ -161,7 +165,7 @@ pub fn run() {
 // deux lignes plus bas.
 #[allow(clippy::too_many_arguments)]
 fn create_project(
-    name: String,
+    name: Option<String>,
     database_url: Option<String>,
     database: Database,
     with: Vec<String>,
@@ -173,14 +177,7 @@ fn create_project(
     // Un `--with` absent laisse la question ouverte ; un `--with` vide n'existe pas.
     let features = (!with.is_empty()).then_some(with);
     let disponibles = templates::feature_names(template_dir.as_deref());
-    let options = prompts::resolve(
-        Some(name),
-        database_url,
-        database,
-        features,
-        &disponibles,
-        yes,
-    )?;
+    let options = prompts::resolve(name, database_url, database, features, &disponibles, yes)?;
 
     let project = new::create(
         &new::Options {
@@ -268,11 +265,32 @@ fn signaler_zone_manquante(zone: Option<&agents::MissingZone>) {
 }
 
 /// Installe une feature dans le projet courant, plan affiché avant écriture.
-fn add(feature: String, force: bool, template_dir: Option<PathBuf>) -> Result<(), add::Error> {
+fn add(
+    feature: String,
+    force: bool,
+    dry_run: bool,
+    template_dir: Option<PathBuf>,
+) -> Result<(), add::Error> {
     let directory = std::env::current_dir().map_err(|source| add::Error::Acces {
         path: ".".to_string(),
         source,
     })?;
+
+    add_in(directory, feature, force, dry_run, template_dir)
+}
+
+/// La même, le projet visé donné en paramètre.
+///
+/// Ce qu'un `--dry-run` promet — ne rien écrire — ne se prouve qu'en comparant le projet
+/// avant et après, et un test ne peut pas déplacer le répertoire courant qu'il partage
+/// avec tous les autres.
+fn add_in(
+    directory: PathBuf,
+    feature: String,
+    force: bool,
+    dry_run: bool,
+    template_dir: Option<PathBuf>,
+) -> Result<(), add::Error> {
     let planned = add::plan_for(&add::Options {
         feature: feature.clone(),
         directory,
@@ -300,6 +318,11 @@ fn add(feature: String, force: bool, template_dir: Option<PathBuf>) -> Result<()
     println!("{}", plan::render::plan(&planned.plan));
 
     signaler_zone_manquante(planned.zone_manquante.as_ref());
+
+    if dry_run {
+        ui::info("\n  rien n'a été écrit (--dry-run)");
+        return Ok(());
+    }
 
     plan::application::apply(&planned.plan, force)?;
 
@@ -449,11 +472,17 @@ fn generate(
 
 /// Aligne le manifeste du projet courant sur la version du CLI, plan affiché avant
 /// écriture.
-fn upgrade(force: bool) -> Result<(), upgrade::Error> {
+fn upgrade(force: bool, dry_run: bool) -> Result<(), upgrade::Error> {
     let directory = std::env::current_dir().map_err(|source| upgrade::Error::Acces {
         path: ".".to_string(),
         source,
     })?;
+
+    upgrade_in(directory, force, dry_run)
+}
+
+/// La même, le projet visé donné en paramètre — pour la raison dite sur `add_in`.
+fn upgrade_in(directory: PathBuf, force: bool, dry_run: bool) -> Result<(), upgrade::Error> {
     let planned = upgrade::plan_for(&upgrade::Options { directory, force })?;
 
     if planned.deja_a_jour {
@@ -472,6 +501,11 @@ fn upgrade(force: bool) -> Result<(), upgrade::Error> {
     println!("{}", plan::render::plan(&planned.plan));
 
     signaler_zone_manquante(planned.zone_manquante.as_ref());
+
+    if dry_run {
+        ui::info("\n  rien n'a été écrit (--dry-run)");
+        return Ok(());
+    }
 
     plan::application::apply(&planned.plan, force)?;
 
@@ -544,7 +578,135 @@ fn diagnose() -> Result<bool, Box<dyn Error>> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::BTreeMap;
+    use std::fs;
+    use std::path::Path;
+
+    use tempfile::TempDir;
+
     use super::*;
+
+    /// Un projet neuf, tel que `rbs new` l'écrit.
+    fn projet() -> (TempDir, PathBuf) {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = new::create(
+            &new::Options {
+                name: "demo-api".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
+                database: Database::default(),
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+                lang: lang::Lang::Fr,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        (parent, project.root)
+    }
+
+    /// Chemin et octets de chaque fichier du projet, triés : deux empreintes égales
+    /// valent projets identiques.
+    ///
+    /// `.git` reste dehors — lire l'état du working tree rafraîchit l'index, et cette
+    /// écriture-là n'est pas celle que `--dry-run` promet d'éviter.
+    fn empreinte(root: &Path) -> BTreeMap<PathBuf, Vec<u8>> {
+        let mut vus = BTreeMap::new();
+        let mut a_parcourir = vec![root.to_path_buf()];
+
+        while let Some(directory) = a_parcourir.pop() {
+            for entree in fs::read_dir(&directory).expect("le répertoire se lit") {
+                let path = entree.expect("l'entrée se lit").path();
+
+                if path.file_name().is_some_and(|name| name == ".git") {
+                    continue;
+                }
+
+                if path.is_dir() {
+                    a_parcourir.push(path);
+                    continue;
+                }
+
+                let relatif = path
+                    .strip_prefix(root)
+                    .expect("le chemin est sous la racine")
+                    .to_path_buf();
+                vus.insert(relatif, fs::read(&path).expect("le fichier se lit"));
+            }
+        }
+
+        vus
+    }
+
+    /// Les fichiers dont le contenu a bougé, apparu ou disparu.
+    ///
+    /// Comparer les deux empreintes directement dirait « elles diffèrent » en déversant
+    /// les octets des cinquante fichiers du projet ; ce qui aide est la liste courte de
+    /// ceux qui ont bougé.
+    fn ecarts(
+        avant: &BTreeMap<PathBuf, Vec<u8>>,
+        apres: &BTreeMap<PathBuf, Vec<u8>>,
+    ) -> Vec<PathBuf> {
+        avant
+            .keys()
+            .chain(apres.keys())
+            .filter(|path| avant.get(*path) != apres.get(*path))
+            .cloned()
+            .collect()
+    }
+
+    /// La seule promesse de `--dry-run` est que le projet ne bouge pas : elle se vérifie
+    /// à l'octet près, et la même commande sans le flag prouve que le test n'est pas
+    /// vide de sens.
+    #[test]
+    fn add_dry_run_leaves_the_project_untouched_while_the_real_run_writes() {
+        let (_parent, root) = projet();
+        let avant = empreinte(&root);
+
+        add_in(root.clone(), "cors".to_string(), false, true, None)
+            .expect("le plan doit se calculer");
+
+        assert_eq!(
+            ecarts(&avant, &empreinte(&root)),
+            Vec::<PathBuf>::new(),
+            "`--dry-run` a écrit dans le projet"
+        );
+
+        add_in(root.clone(), "cors".to_string(), false, false, None)
+            .expect("l'installation doit aboutir");
+
+        assert!(
+            !ecarts(&avant, &empreinte(&root)).is_empty(),
+            "sans `--dry-run`, la feature n'a rien posé : le test ne prouve rien"
+        );
+    }
+
+    /// Le guide supprimé est ce qu'`upgrade` a toujours à rétablir, même sur un projet
+    /// par ailleurs à jour : sans lui, le plan serait vide et le test ne prouverait rien.
+    #[test]
+    fn upgrade_dry_run_leaves_the_project_untouched_while_the_real_run_writes() {
+        let (_parent, root) = projet();
+        let guide = root.join(agents::FICHIER);
+        fs::remove_file(&guide).expect("le guide est là");
+        let avant = empreinte(&root);
+
+        upgrade_in(root.clone(), false, true).expect("la mise à niveau doit se planifier");
+
+        assert_eq!(
+            ecarts(&avant, &empreinte(&root)),
+            Vec::<PathBuf>::new(),
+            "`--dry-run` a écrit dans le projet"
+        );
+        assert!(!guide.exists(), "`--dry-run` a recréé le guide");
+
+        upgrade_in(root.clone(), false, false).expect("la mise à niveau doit aboutir");
+
+        assert!(
+            guide.exists(),
+            "le guide n'a pas été rétabli : le test ne prouve rien"
+        );
+    }
 
     #[test]
     fn every_installable_feature_says_what_is_left_to_do() {
