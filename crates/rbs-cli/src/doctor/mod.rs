@@ -9,6 +9,7 @@ pub mod anchors;
 pub mod auth;
 pub mod base;
 pub mod env;
+pub mod guards;
 pub mod jobs;
 pub mod mail;
 pub mod redis;
@@ -155,8 +156,12 @@ type FeatureCheck = (&'static str, fn(&Path) -> Check);
 /// `redis` s'installe en `src/cache/` sous une section `[cache]` : c'est le nom de la
 /// crate d'un côté, celui du service rendu de l'autre. Le tableau porte le nom déclaré,
 /// seul commun aux quatre.
-const FEATURE_CHECKS: [FeatureCheck; 5] = [
+///
+/// Une feature peut y figurer deux fois : `auth` amène de quoi vérifier son secret, et de
+/// quoi juger les routes que les rôles qu'elle installe pourraient protéger.
+const FEATURE_CHECKS: [FeatureCheck; 6] = [
     ("auth", auth::check),
+    ("auth", guards::check),
     ("redis", redis::check),
     ("mail", mail::check),
     ("storage", storage::check),
@@ -223,7 +228,10 @@ mod tests {
     }
 
     /// Un projet neuf, dont les features sont celles passées.
-    fn project(features: &[&str]) -> (TempDir, std::path::PathBuf) {
+    ///
+    /// `pub(super)` pour que les contrôles la réemploient : chaque module de `doctor/` qui
+    /// s'en écrirait une copie ferait diverger la sienne du projet que `rbs new` produit.
+    pub(super) fn project(features: &[&str]) -> (TempDir, std::path::PathBuf) {
         let parent = TempDir::new().expect("répertoire temporaire créable");
         let project = crate::new::create(
             &crate::new::Options {
@@ -268,11 +276,13 @@ mod tests {
 
         let report = run(&root).expect("c'est un projet rbs");
 
-        assert!(
-            !titles(&report).contains(&"auth"),
-            "un projet sans auth n'a pas à lire une ligne à son sujet : {:?}",
-            titles(&report)
-        );
+        for title in ["auth", "gardes"] {
+            assert!(
+                !titles(&report).contains(&title),
+                "un projet sans auth n'a pas à lire une ligne à son sujet : {:?}",
+                titles(&report)
+            );
+        }
     }
 
     #[test]
@@ -281,11 +291,13 @@ mod tests {
 
         let report = run(&root).expect("c'est un projet rbs");
 
-        assert!(
-            titles(&report).contains(&"auth"),
-            "la feature est déclarée, son contrôle doit figurer : {:?}",
-            titles(&report)
-        );
+        for title in ["auth", "gardes"] {
+            assert!(
+                titles(&report).contains(&title),
+                "la feature est déclarée, ses contrôles doivent figurer : {:?}",
+                titles(&report)
+            );
+        }
     }
 
     #[test]

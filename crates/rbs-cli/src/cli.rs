@@ -127,6 +127,10 @@ pub enum GenerateCommands {
         /// Entité enfant dont ce modèle doit porter la variante inverse, répétable.
         #[arg(long = "has-many", value_name = "ENTITE")]
         has_many: Vec<String>,
+
+        /// Réserve create, update et delete à ce rôle ; exige la feature auth.
+        #[arg(long, value_name = "ROLE")]
+        role: Option<String>,
     },
 
     /// Génère une feature vide : six fichiers, aucun champ.

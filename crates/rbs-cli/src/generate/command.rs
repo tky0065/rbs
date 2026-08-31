@@ -36,6 +36,8 @@ pub(crate) struct Options {
     /// Entités enfant dont ce modèle doit recevoir la variante inverse, sans rien générer
     /// d'autre : la réparation d'une relation posée avant que ce côté n'existe.
     pub has_many: Vec<String>,
+    /// Rôle exigé des routes d'écriture, tel qu'il s'écrit en base : `admin`.
+    pub role: Option<String>,
 }
 
 /// Un fichier à écrire : son chemin, relatif à la racine du projet, et son contenu.
@@ -153,6 +155,28 @@ pub(crate) enum Error {
         feature: String,
     },
 
+    /// `--role` réclamé sur un projet dépourvu de la feature qui porte les rôles.
+    #[error(
+        "`--role {role}` exige la feature `auth`, absente de ce projet : lancez `rbs add auth`, \
+         puis relancez la génération"
+    )]
+    RoleSansAuth {
+        /// Rôle demandé en ligne de commande.
+        role: String,
+    },
+
+    /// `--role` nomme un rôle que l'enum du projet ne déclare pas.
+    #[error(
+        "`--role {role}` ne désigne aucun rôle de src/auth/model.rs — connus : {known} ; \
+         ajoutez-y la variante, ou reprenez l'une de celles-là"
+    )]
+    RoleInconnu {
+        /// Rôle demandé en ligne de commande.
+        role: String,
+        /// Rôles que le modèle déclare, énumérés.
+        known: String,
+    },
+
     /// `--has-many` nomme une entité enfant qui ne porte pas la clé attendue.
     #[error(
         "{child} ne porte aucune colonne référençant `{table}` : ajoutez-la avant de relancer `--has-many {child}`"
@@ -216,6 +240,12 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     name::validate(&options.name).map_err(Error::Nom)?;
 
+    // Avant tout rendu : un garde posé sur un projet sans `auth` produirait un contrôleur
+    // qui importe `crate::auth::guard`, et le projet ne compilerait plus.
+    if let Some(role) = &options.role {
+        validate_role(role, &metadonnees, &root)?;
+    }
+
     // `--has-many` ne génère rien : il répare le côté inverse d'une feature déjà
     // présente, et suit donc un chemin entièrement séparé du reste de la fonction.
     if !options.has_many.is_empty() {
@@ -231,7 +261,10 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     relations::resolve(&mut fields, &entities, &options.name).map_err(Error::Relations)?;
     relations::ensure_migrations_exist(&fields, &root).map_err(Error::MigrationsAbsentes)?;
 
-    let feature = Feature::fresh(&options.name, fields);
+    let feature = match &options.role {
+        Some(role) => Feature::fresh(&options.name, fields).guarded(role),
+        None => Feature::fresh(&options.name, fields),
+    };
     let module = feature.module().to_string();
 
     if root.join("src").join(&module).exists() {
@@ -326,6 +359,51 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         required_reference,
         zone_manquante,
     })
+}
+
+/// Vérifie que `role` est posable sur ce projet.
+///
+/// Deux conditions, dans l'ordre où elles se réparent : la feature qui porte l'enum `Role`
+/// doit être installée, et le rôle demandé doit y figurer. Un rôle absent de l'enum
+/// produirait une variante que `rustc` ne connaît pas — le refuser ici évite de rendre au
+/// développeur un projet qui ne compile plus.
+fn validate_role(role: &str, metadonnees: &metadata::Metadata, root: &Path) -> Result<(), Error> {
+    if !metadonnees.features.iter().any(|feature| feature == "auth") {
+        return Err(Error::RoleSansAuth {
+            role: role.to_string(),
+        });
+    }
+
+    let known = declared_roles(root);
+
+    // Un modèle qu'aucune variante ne fait reconnaître a vraisemblablement été déplacé ou
+    // réécrit : le CLI ne sait alors rien qui justifie un refus, et laisse passer.
+    if !known.is_empty() && !known.iter().any(|declare| declare == role) {
+        return Err(Error::RoleInconnu {
+            role: role.to_string(),
+            known: known.join(", "),
+        });
+    }
+
+    Ok(())
+}
+
+/// Les rôles que `src/auth/model.rs` déclare, lus à la valeur qu'ils portent en base.
+///
+/// La lecture est textuelle : `string_value` n'apparaît que sur l'enum des rôles dans le
+/// fragment `auth`, et analyser le fichier pour cette question coûterait un parseur de
+/// Rust.
+fn declared_roles(root: &Path) -> Vec<String> {
+    let Ok(source) = fs::read_to_string(root.join("src/auth/model.rs")) else {
+        return Vec::new();
+    };
+
+    source
+        .split(r#"string_value = ""#)
+        .skip(1)
+        .filter_map(|reste| reste.split('"').next())
+        .map(str::to_owned)
+        .collect()
 }
 
 /// Calcule ce que `--has-many` écrirait dans le modèle de la feature déjà présente.
@@ -558,6 +636,26 @@ mod tests {
         (parent, project.root)
     }
 
+    /// Le même projet, l'authentification installée : `--role` l'exige.
+    fn project_with_auth() -> (TempDir, PathBuf) {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = crate::new::create(
+            &crate::new::Options {
+                name: "demo-api".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
+                database: Default::default(),
+                features: vec!["auth".to_string()],
+                core_path: None,
+                template_dir: None,
+                lang: crate::lang::Lang::Fr,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        (parent, project.root)
+    }
+
     fn options(root: &Path, name: &str, fields: Option<&str>, complete: bool) -> Options {
         Options {
             name: name.to_string(),
@@ -566,6 +664,15 @@ mod tests {
             directory: root.to_path_buf(),
             force: false,
             has_many: Vec::new(),
+            role: None,
+        }
+    }
+
+    /// Les mêmes options, les écritures de la feature réservées à `role`.
+    fn guarded(root: &Path, name: &str, role: &str) -> Options {
+        Options {
+            role: Some(role.to_string()),
+            ..options(root, name, Some("title:string"), true)
         }
     }
 
@@ -653,6 +760,74 @@ mod tests {
 
         assert_eq!(entites.matches("articles").count(), 1, "{entites}");
         assert!(entites.contains("comments"), "{entites}");
+    }
+
+    /// Le refus est prononcé avant le rendu : un contrôleur qui appellerait
+    /// `crate::auth::guard` sur un projet sans `auth` ne compilerait pas.
+    #[test]
+    fn a_role_without_the_auth_feature_is_refused_and_names_the_command_that_installs_it() {
+        let (_parent, root) = project();
+        let avant = fingerprint(&root);
+
+        let error = run(&guarded(&root, "articles", "admin")).expect_err("`auth` manque");
+
+        assert!(
+            error.to_string().contains("rbs add auth"),
+            "le message doit nommer la commande qui installe la feature : {error}"
+        );
+        assert_eq!(fingerprint(&root), avant, "rien ne doit avoir été écrit");
+    }
+
+    #[test]
+    fn a_role_the_project_does_not_declare_is_refused_and_names_those_it_knows() {
+        let (_parent, root) = project_with_auth();
+        let avant = fingerprint(&root);
+
+        let error = run(&guarded(&root, "articles", "moderator")).expect_err("rôle inconnu");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("moderator") && message.contains("admin"),
+            "le message doit nommer le rôle refusé et ceux que le projet déclare : {message}"
+        );
+        assert_eq!(fingerprint(&root), avant, "rien ne doit avoir été écrit");
+    }
+
+    #[test]
+    fn a_role_guards_the_three_writes_of_the_generated_controller() {
+        let (_parent, root) = project_with_auth();
+
+        run(&guarded(&root, "articles", "admin")).expect("la génération doit aboutir");
+
+        let controller = read(&root.join("src/articles/controller.rs"));
+
+        assert_eq!(
+            controller
+                .matches("identite.require_role(Role::Admin)?;")
+                .count(),
+            3,
+            "create, update et delete doivent porter le garde :\n{controller}"
+        );
+    }
+
+    /// Les tests engendrés s'exécutent sans jeton : ceux qui écrivent ne peuvent pas
+    /// rester tels quels sous un garde, sans quoi `cargo test` échoue sur le projet neuf.
+    #[test]
+    fn the_generated_tests_stop_writing_once_the_feature_is_guarded() {
+        let (_parent, root) = project_with_auth();
+
+        run(&guarded(&root, "articles", "admin")).expect("la génération doit aboutir");
+
+        let tests = read(&root.join("src/articles/tests.rs"));
+
+        assert!(
+            !tests.contains("the_full_lifecycle_goes_through_the_api"),
+            "le cycle complet POSTe sans jeton :\n{tests}"
+        );
+        assert!(
+            tests.contains("StatusCode::UNAUTHORIZED"),
+            "le refus d'une écriture anonyme doit être éprouvé à la place :\n{tests}"
+        );
     }
 
     #[test]

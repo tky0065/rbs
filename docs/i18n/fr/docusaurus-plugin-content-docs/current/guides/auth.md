@@ -147,6 +147,29 @@ l'appelant de s'identifier, non qu'il manque de droits. Et c'est la ligne
 `security(("bearer" = []))` qui pose le cadenas sur cette opération dans
 `/api-docs/openapi.json` ; une route laissée ouverte ne doit pas la porter.
 
+### Poser la garde à la génération
+
+[`rbs generate crud`](../cli/generate.md) écrit cette ligne pour vous :
+
+```bash
+rbs generate crud articles --fields title:string --role admin
+```
+
+`create`, `update` et `delete` prennent alors une `Identity`, appellent `require_role`, et
+déclarent les deux refus dans leur `#[utoipa::path]` — la 401 que rend l'extracteur, la 403
+que rend `require_role`. `list` et `find` restent ouvertes : la lecture est ce qu'une API
+publique garde d'ordinaire publique, et un `--role` qui fermerait tout ne laisserait rien à
+choisir.
+
+L'option refuse, avant toute écriture, sur un projet sans `auth` — le contrôleur
+importerait un module qui n'existe pas — et sur un rôle que `src/auth/model.rs` ne déclare
+pas. Le `tests.rs` engendré suit : n'ayant aucun jeton, il n'exerce aucune écriture, et
+vérifie à la place qu'une écriture anonyme est refusée.
+
+[`rbs doctor`](../cli/doctor.md) signale en orange, sur un projet portant `auth`, toute
+feature dont `create`, `update` ou `delete` n'appelle aucune garde. Un avertissement et non
+un échec : un catalogue public est un choix légitime, et la commande sort toujours en 0.
+
 ## Les rôles
 
 `Role` est une enum Rust stockée en chaîne :
