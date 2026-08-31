@@ -118,22 +118,7 @@ mod tests {
 
     /// Un projet neuf, doté à la main de ce que `add storage` y dépose.
     fn project_with_storage() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        let root = project.root;
+        let (parent, root) = crate::fixtures::project();
 
         add(
             &root,

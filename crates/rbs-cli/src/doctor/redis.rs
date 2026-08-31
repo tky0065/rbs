@@ -35,22 +35,7 @@ mod tests {
     /// La commande n'est pas appelée : ce contrôle ne lit qu'un fichier, et le poser
     /// directement garde le test à la seconde plutôt qu'à la minute.
     fn project_with_redis() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        let root = project.root;
+        let (parent, root) = crate::fixtures::project();
         let config = root.join(CONFIG);
         let source = fs::read_to_string(&config).expect("config lisible");
         fs::write(

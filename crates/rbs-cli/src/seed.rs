@@ -208,26 +208,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
-
-    /// Un projet déroulé par `rbs new`, sans passer par le binaire ni par cargo.
-    fn project() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
-    }
+    use crate::fixtures::project;
 
     /// Le même projet, un seed déclaré dans son ancre : il y a quelque chose à insérer.
     fn seeded() -> (TempDir, PathBuf) {

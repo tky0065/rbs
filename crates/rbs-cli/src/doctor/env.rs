@@ -76,31 +76,10 @@ pub(crate) fn check(root: &Path) -> Check {
 #[cfg(test)]
 mod tests {
     use std::fs;
-    use std::path::PathBuf;
-
-    use tempfile::TempDir;
 
     use super::super::State;
     use super::*;
-
-    fn project() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
-    }
+    use crate::fixtures::project;
 
     /// Retire du `.env` la ligne portant `key`.
     fn remove(root: &Path, key: &str) {

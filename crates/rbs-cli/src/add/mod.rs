@@ -490,22 +490,10 @@ mod tests {
     /// Le même, sur l'URL demandée : les identifiants du projet sont ce que le fragment
     /// `docker` doit retrouver, et un test qui les choisit peut les reconnaître ailleurs.
     fn project_with(database: Database, database_url: &str) -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: database_url.to_string(),
-                database,
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
+        crate::fixtures::Project::new()
+            .database(database)
+            .url(database_url)
+            .create()
     }
 
     /// Ramène le projet à ce qu'était un projet créé avant la 1.1.0 : ni compose, ni

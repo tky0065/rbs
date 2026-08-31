@@ -7,6 +7,8 @@ mod database;
 mod dev;
 mod doctor;
 mod dotenv;
+#[cfg(test)]
+mod fixtures;
 mod generate;
 mod git;
 mod lang;
@@ -585,29 +587,8 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    use tempfile::TempDir;
-
     use super::*;
-
-    /// Un projet neuf, tel que `rbs new` l'écrit.
-    fn projet() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = new::create(
-            &new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Database::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
-    }
+    use crate::fixtures::project as projet;
 
     /// Chemin et octets de chaque fichier du projet, triés : deux empreintes égales
     /// valent projets identiques.

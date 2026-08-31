@@ -350,22 +350,11 @@ mod tests {
 
     /// Le même, sur le moteur demandé.
     fn project_on(database: Database, features: &[&str], url: &str) -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: url.to_string(),
-                database,
-                features: features.iter().map(|f| (*f).to_string()).collect(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
+        crate::fixtures::Project::new()
+            .database(database)
+            .features(features)
+            .url(url)
+            .create()
     }
 
     // SQLite n'a pas de serveur : attendre qu'un port réponde ferait échouer `rbs dev`

@@ -428,22 +428,8 @@ mod tests {
 
     /// Un projet neuf, créé sans passer par le binaire.
     fn project(features: Vec<String>) -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features,
-                core_path: None,
-                template_dir: None,
-                lang: Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
+        let noms: Vec<&str> = features.iter().map(String::as_str).collect();
+        crate::fixtures::Project::new().features(&noms).create()
     }
 
     #[test]

@@ -61,33 +61,11 @@ fn present(root: &Path, anchor: &Anchor) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use std::path::PathBuf;
-
-    use tempfile::TempDir;
-
     use crate::anchors::ANCRES;
+    use crate::fixtures::project;
 
     use super::super::State;
     use super::*;
-
-    fn project() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
-    }
 
     /// Retire du projet la ligne portant `motif`.
     fn remove(root: &Path, file: &str, motif: &str) {

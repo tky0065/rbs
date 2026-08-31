@@ -281,22 +281,9 @@ mod tests {
     /// `pub(super)` pour que les contrôles la réemploient : chaque module de `doctor/` qui
     /// s'en écrirait une copie ferait diverger la sienne du projet que `rbs new` produit.
     pub(super) fn project(features: &[&str]) -> (TempDir, std::path::PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
+        let (parent, root) = crate::fixtures::project();
 
-        let manifest = project.root.join("Cargo.toml");
+        let manifest = root.join("Cargo.toml");
         let source = std::fs::read_to_string(&manifest).expect("manifeste lisible");
         let declarees = features
             .iter()
@@ -312,7 +299,7 @@ mod tests {
         )
         .expect("manifeste inscriptible");
 
-        (parent, project.root)
+        (parent, root)
     }
 
     fn titles(report: &Report) -> Vec<&'static str> {

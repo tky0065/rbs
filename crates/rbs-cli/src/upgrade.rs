@@ -279,22 +279,9 @@ mod tests {
 
     /// Un projet neuf, tel que `rbs new` l'écrit, dans son dépôt Git.
     fn project(core_path: Option<PathBuf>) -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
+        crate::fixtures::Project::new()
+            .core_path(core_path)
+            .create()
     }
 
     fn options(root: &Path) -> Options {

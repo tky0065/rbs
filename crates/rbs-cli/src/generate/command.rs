@@ -580,6 +580,7 @@ mod tests {
     use tempfile::TempDir;
 
     use super::*;
+    use crate::fixtures::{Project, project};
     use crate::generate::bench;
 
     /// Empreinte récursive d'un répertoire : chemin relatif -> contenu.
@@ -618,44 +619,9 @@ mod tests {
         Ok(planned)
     }
 
-    /// Un projet déroulé par `rbs new`, sans passer par le binaire ni par cargo.
-    fn project() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: Vec::new(),
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
-    }
-
     /// Le même projet, l'authentification installée : `--role` l'exige.
     fn project_with_auth() -> (TempDir, PathBuf) {
-        let parent = TempDir::new().expect("répertoire temporaire créable");
-        let project = crate::new::create(
-            &crate::new::Options {
-                name: "demo-api".to_string(),
-                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
-                database: Default::default(),
-                features: vec!["auth".to_string()],
-                core_path: None,
-                template_dir: None,
-                lang: crate::lang::Lang::Fr,
-            },
-            parent.path(),
-        )
-        .expect("le projet doit se créer");
-
-        (parent, project.root)
+        Project::new().features(&["auth"]).create()
     }
 
     fn options(root: &Path, name: &str, fields: Option<&str>, complete: bool) -> Options {
