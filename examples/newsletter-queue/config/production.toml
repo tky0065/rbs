@@ -1,0 +1,8 @@
+# Le profil que `RBS_ENV=production` retient, par-dessus config/default.toml.
+#
+# La documentation décrit toute la surface de l'API, corps de requête et champs compris :
+# c'est un plan de la maison, utile tant qu'on la construit, moins une fois qu'on y vit.
+# Un client généré depuis le document se produit avant le déploiement, pas depuis lui.
+[docs]
+swagger_ui = false
+openapi_json = false

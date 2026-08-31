@@ -22,6 +22,15 @@ pub(crate) struct Anchor {
     pub file: Cow<'static, str>,
     /// Marqueur de commentaire du langage porteur : `//` en Rust, `#` en YAML.
     pub comment: &'static str,
+    /// Le bloc se maintient trié, au lieu d'empiler dans l'ordre d'arrivée.
+    ///
+    /// Réservé aux blocs dont le contenu est une liste que rustfmt ordonne lui-même —
+    /// les `pub mod` des features. Un projet qui installe `auth`, lequel entraîne
+    /// `rate-limit`, puis engendre un CRUD nommé entre les deux, verrait sinon son
+    /// propre `cargo fmt --check` échouer sur une ligne qu'il n'a pas écrite. Les
+    /// autres ancres gardent l'ordre d'arrivée, qui y porte du sens : les migrations
+    /// s'appliquent dans l'ordre où elles sont nées.
+    pub sorted: bool,
     /// L'ancre peut légitimement manquer, son fichier porteur étant lui-même facultatif.
     ///
     /// `doctor` ne réclame pas une ancre optionnelle dont le fichier est absent : un
@@ -76,6 +85,7 @@ pub(crate) const FEATURES: Anchor = Anchor {
     name: Cow::Borrowed("features"),
     file: Cow::Borrowed("src/main.rs"),
     comment: "//",
+    sorted: true,
     optional: false,
 };
 
@@ -84,6 +94,7 @@ pub(crate) const ROUTES: Anchor = Anchor {
     name: Cow::Borrowed("routes"),
     file: Cow::Borrowed("src/router.rs"),
     comment: "//",
+    sorted: false,
     optional: false,
 };
 
@@ -96,6 +107,7 @@ pub(crate) const LAYERS: Anchor = Anchor {
     name: Cow::Borrowed("layers"),
     file: Cow::Borrowed("src/router.rs"),
     comment: "//",
+    sorted: false,
     optional: false,
 };
 
@@ -104,6 +116,7 @@ pub(crate) const OPENAPI: Anchor = Anchor {
     name: Cow::Borrowed("openapi"),
     file: Cow::Borrowed("src/openapi.rs"),
     comment: "//",
+    sorted: false,
     optional: false,
 };
 
@@ -115,6 +128,7 @@ pub(crate) const MIGRATION_MODULES: Anchor = Anchor {
     name: Cow::Borrowed("migration_modules"),
     file: Cow::Borrowed("migration/src/lib.rs"),
     comment: "//",
+    sorted: false,
     optional: false,
 };
 
@@ -123,6 +137,7 @@ pub(crate) const MIGRATIONS: Anchor = Anchor {
     name: Cow::Borrowed("migrations"),
     file: Cow::Borrowed("migration/src/lib.rs"),
     comment: "//",
+    sorted: false,
     optional: false,
 };
 
@@ -131,6 +146,7 @@ pub(crate) const STATE_CHAMPS: Anchor = Anchor {
     name: Cow::Borrowed("state_champs"),
     file: Cow::Borrowed("src/state.rs"),
     comment: "//",
+    sorted: false,
     optional: false,
 };
 
@@ -142,6 +158,7 @@ pub(crate) const STATE_INIT: Anchor = Anchor {
     name: Cow::Borrowed("state_init"),
     file: Cow::Borrowed("src/state.rs"),
     comment: "//",
+    sorted: false,
     optional: false,
 };
 
@@ -153,6 +170,7 @@ pub(crate) const STARTUP: Anchor = Anchor {
     name: Cow::Borrowed("startup"),
     file: Cow::Borrowed("src/main.rs"),
     comment: "//",
+    sorted: false,
     optional: false,
 };
 
@@ -166,6 +184,7 @@ pub(crate) const SEEDS: Anchor = Anchor {
     name: Cow::Borrowed("seeds"),
     file: Cow::Borrowed("src/seeds/main.rs"),
     comment: "//",
+    sorted: false,
     optional: false,
 };
 
@@ -178,6 +197,7 @@ pub(crate) const SERVICES: Anchor = Anchor {
     name: Cow::Borrowed("services"),
     file: Cow::Borrowed("docker-compose.yml"),
     comment: "#",
+    sorted: false,
     optional: true,
 };
 
@@ -190,6 +210,7 @@ pub(crate) const RELATIONS: Anchor = Anchor {
     name: Cow::Borrowed("relations"),
     file: Cow::Borrowed("src/{feature}/model.rs"),
     comment: "//",
+    sorted: false,
     optional: false,
 };
 
@@ -200,6 +221,7 @@ pub(crate) const RELATED: Anchor = Anchor {
     name: Cow::Borrowed("related"),
     file: Cow::Borrowed("src/{feature}/model.rs"),
     comment: "//",
+    sorted: false,
     optional: false,
 };
 
@@ -281,6 +303,32 @@ pub(crate) fn insert(source: &str, anchor: Anchor, lines: &[String]) -> Result<S
 
     if contains(&source[opening..closing], lines) {
         return Ok(source.to_string());
+    }
+
+    if anchor.sorted {
+        // Le bloc est réécrit entier plutôt que complété : la ligne nouvelle doit pouvoir
+        // se glisser entre deux anciennes, ce qu'une insertion avant la balise fermante ne
+        // permet pas.
+        // `opening` et `closing` sont les débuts des deux lignes de balise : le corps
+        // commence après le saut de ligne de la première.
+        let debut = source[opening..closing]
+            .find('\n')
+            .map_or(closing, |fin| opening + fin + 1);
+        let mut corps: Vec<&str> = source[debut..closing]
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+            .chain(lines.iter().map(String::as_str))
+            .collect();
+        corps.sort_unstable();
+        corps.dedup();
+
+        let bloc: String = corps
+            .iter()
+            .map(|line| format!("{indentation}{line}\n"))
+            .collect();
+
+        return Ok(format!("{}{bloc}{}", &source[..debut], &source[closing..]));
     }
 
     let ajouts: String = lines
@@ -365,6 +413,35 @@ pub fn router(state: AppState) -> Router {
 
     fn lines(sources: &[&str]) -> Vec<String> {
         sources.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    /// Le cas qui a motivé le tri : `add auth` entraîne `rate-limit`, et le CRUD
+    /// engendré ensuite s'intercale alphabétiquement entre les deux.
+    #[test]
+    fn a_sorted_anchor_keeps_its_block_in_order() {
+        let source = "// <rbs:features>\npub mod auth;\npub mod rate_limit;\n// </rbs:features>\n";
+
+        let obtenu = insert(source, FEATURES, &["pub mod posts;".to_string()])
+            .expect("l'ancre est présente");
+
+        assert_eq!(
+            obtenu,
+            "// <rbs:features>\npub mod auth;\npub mod posts;\npub mod rate_limit;\n// </rbs:features>\n",
+            "le bloc doit rester dans l'ordre que rustfmt impose : {obtenu}"
+        );
+    }
+
+    #[test]
+    fn an_unsorted_anchor_still_stacks_in_arrival_order() {
+        let source = "// <rbs:migrations>\nBox::new(m2_b::Migration),\n// </rbs:migrations>\n";
+
+        let obtenu = insert(source, MIGRATIONS, &["Box::new(m1_a::Migration),".to_string()])
+            .expect("l'ancre est présente");
+
+        assert!(
+            obtenu.contains("Box::new(m2_b::Migration),\nBox::new(m1_a::Migration),"),
+            "l'ordre des migrations est chronologique, pas alphabétique : {obtenu}"
+        );
     }
 
     #[test]
@@ -670,6 +747,7 @@ struct AppState {
             name: Cow::Borrowed("services"),
             file: Cow::Borrowed("docker-compose.yml"),
             comment: "#",
+            sorted: false,
             optional: true,
         };
 
@@ -696,6 +774,7 @@ struct AppState {
             name: Cow::Borrowed("services"),
             file: Cow::Borrowed("docker-compose.yml"),
             comment: "#",
+            sorted: false,
             optional: true,
         };
         let source = "services:\n  # <rbs:services>\n  # </rbs:services>\n";
@@ -726,6 +805,7 @@ struct AppState {
             name: Cow::Borrowed("services"),
             file: Cow::Borrowed("docker-compose.yml"),
             comment: "#",
+            sorted: false,
             optional: true,
         };
         // Une autre feature a posé ce commentaire, et un service qui l'en sépare.
