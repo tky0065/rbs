@@ -148,6 +148,18 @@ mod tests {
     }
 
     #[test]
+    fn the_conflict_the_repository_can_raise_is_documented() {
+        let rendered = controller("articles");
+
+        assert_eq!(
+            rendered.matches("status = 409").count(),
+            2,
+            "create et update traduisent un doublon en conflit, le contrat doit le \
+             dire :\n{rendered}"
+        );
+    }
+
+    #[test]
     fn incoming_bodies_go_through_the_core_validation() {
         let rendered = controller("articles");
 
