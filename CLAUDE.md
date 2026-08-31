@@ -4,35 +4,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## État du dépôt
 
-**Aucun code applicatif n'existe encore.** La racine contient le squelette `cargo new`
-d'origine (paquet `rs`, `src/main.rs` avec un `Hello, world!`) — la tâche `A1` du backlog
-le supprime pour le remplacer par un workspace. Ne pas supposer l'existence de
-`crates/`, de `rbs-core` ou d'un binaire `rbs` : les vérifier avant d'y référer.
+Le workspace est en place et les cinq jalons de la feuille de route, de la v0.1 à la v1.1,
+sont livrés. La racine porte deux crates publiables — `crates/rbs-core` et `crates/rbs-cli`,
+publiées séparément sur crates.io — quatre projets d'exemple compilés en CI, et le site
+Docusaurus sous `docs/`. Le nom `rbs` étant déjà pris sur crates.io, le binaire s'installe
+par `cargo install rbs-cli`.
 
-Le projet est aujourd'hui à l'état de conception, entièrement décrit dans trois fichiers :
+Quatre fichiers portent la décision :
 
 | Fichier | Rôle |
 |---|---|
 | `docs/superpowers/specs/2026-08-25-rbs-design.md` | La spec. Autorité sur toute décision d'architecture. |
-| `TODO.md` | Les 52 tâches de la v0.1, avec ordre et critères de validation. Source de vérité de l'avancement. |
+| `IMPROVE.md` | Le backlog ouvert. Les tâches restantes, force-rankées de `P0` à `P3`, chacune avec le `fichier:ligne` qui l'atteste. |
+| `TODO.md` | Journal clos : les 147 tâches des cinq jalons livrés, chacune avec sa preuve datée. Ce n'est plus un backlog, on n'y coche plus rien — et il n'est pas déprécié pour autant. |
 | `ROADMAP.md` | Les jalons et le hors-périmètre. |
 
 ## Exécuter une tâche du backlog
 
-**Utiliser le skill `rbs-task`** (`.claude/skills/rbs-task/SKILL.md`) dès qu'il s'agit
-d'implémenter une tâche de `TODO.md`. Il encode trois règles que des agents ont violées
-en test, malgré des rapports honnêtes :
+Le backlog ouvert est `IMPROVE.md`. **Utiliser le skill `improve-execute`** pour en
+implémenter une tâche. `TODO.md` étant clos, le skill `rbs-task`
+(`.claude/skills/rbs-task/SKILL.md`) ne sert plus qu'à relire comment un jalon a été mené.
 
-1. **L'ordre des lots `A → B → C → D → E` est contraignant.** Une tâche dont l'amont est
-   incomplet ne se commence pas. Le contournement « je mets le code à la racine en
-   attendant que `A1` soit fait » produit du code que `A1` supprimera.
+Trois règles, que des agents ont violées en test malgré des rapports honnêtes :
+
+1. **L'ordre des priorités est contraignant** : pas de `P2` tant qu'un `P1` sélectionné
+   reste ouvert, sauf demande explicite. Le contournement « je pose ça en attendant » écrit
+   du code que la tâche amont supprimera.
 2. **Une case se coche sur une preuve exécutée**, consignée sur la ligne, pas parce que
    le fichier est écrit.
-3. Un critère `✓` non prouvé → la case reste `- [ ]` avec une annotation `PARTIEL`.
+3. Un critère non prouvé → la case reste `- [ ]` avec une annotation `PARTIEL` ou
+   `BLOQUÉ : [raison]`.
 
 ## Commandes
-
-Le workspace n'existant pas encore, ces commandes ne fonctionneront qu'une fois `A1` faite :
 
 ```bash
 cargo build --workspace
@@ -40,15 +43,23 @@ cargo test --workspace
 cargo test -p rbs-core                      # tests d'une crate
 cargo test -p rbs-core error::tests         # un module de tests
 cargo test -p rbs-core -- --exact <chemin::du::test>   # un test précis
+cargo test -p rbs-cli --lib                 # les tests de rendu, sans Docker
 cargo clippy --workspace --all-targets -- -D warnings  # bloquant en CI
 cargo fmt --all --check                                # bloquant en CI
 ```
 
-Le CLI se lance par `cargo run -p rbs-cli -- <commande>` pendant le développement.
+Le CLI se lance par `cargo run -p rbs-cli --bin rbs -- <commande>` pendant le développement.
 
-Les tests d'intégration du CLI (`assert_cmd`) génèrent un projet dans un répertoire
-temporaire **puis le compilent** : ils sont lents et nécessitent Docker (`testcontainers`
-lance un PostgreSQL). C'est le seul test qui prouve réellement que rbs fonctionne.
+Les tests d'intégration du CLI (`assert_cmd`, `crates/rbs-cli/tests/integration_*.rs`)
+génèrent un projet dans un répertoire temporaire **puis le compilent** : ils sont lents et
+nécessitent Docker (`testcontainers` lance un PostgreSQL). C'est le seul test qui prouve
+réellement que rbs fonctionne.
+
+`integration_examples.rs` est à part : il régénère les quatre projets d'`examples/` et les
+compare octet à octet à ce qui est versionné. Toute template modifiée le fait échouer tant
+que les exemples n'ont pas suivi — `examples/README.md` donne, projet par projet, les
+commandes exactes qui les reconstruisent. Un exemple périmé fait mentir la documentation,
+qui n'en cite aucune ligne écrite à la main.
 
 ## Architecture
 
@@ -56,7 +67,7 @@ Deux crates publiables, plus des templates embarquées dans le binaire :
 
 ```
 crates/rbs-core/            runtime : Error/Result, config, logs, AppState, middlewares, helpers OpenAPI
-crates/rbs-cli/             binaire `rbs` : new, add, generate, migrate, doctor
+crates/rbs-cli/             binaire `rbs` : new, add, generate, migrate, seed, dev, doctor, upgrade
 crates/rbs-cli/templates/   squelette de projet et fragments de features (include_dir)
 examples/                   projets réels compilés en CI, source des extraits de documentation
 docs/                       site Docusaurus (toolchain Node isolée ici)
@@ -81,8 +92,10 @@ src/<nom>/  mod · model · dto · repository · service · controller
 controller → service → repository → model
 ```
 
-Un `service` n'accède jamais à `DatabaseConnection` ; un `controller` ne construit jamais
-de requête SeaORM. Cette règle rend chaque fichier lisible isolément.
+Chaque couche ne voit que la suivante. Un `service` n'accède jamais *directement* à
+`DatabaseConnection` — il la reçoit et la passe au `repository`, seul à construire une
+requête SeaORM ; un `controller` n'en construit jamais. Cette règle rend chaque fichier
+lisible isolément.
 
 **Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires
 (`// <rbs:features>`, `<rbs:routes>`, `<rbs:openapi>`, `<rbs:migrations>`). Ancre absente →
