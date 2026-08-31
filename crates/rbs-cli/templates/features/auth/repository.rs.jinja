@@ -96,3 +96,20 @@ pub async fn consume(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
 
     Ok(touchees.rows_affected == 1)
 }
+
+/// Ferme toutes les sessions encore ouvertes d'un compte, et dit combien l'étaient.
+///
+/// La granularité est le compte et non la chaîne de rotation : distinguer les chaînes
+/// demanderait à la table une colonne de famille, qu'un projet déjà migré ne recevrait
+/// jamais. Fermer trop large coûte une reconnexion ; fermer trop étroit laisse une paire
+/// volée en circulation.
+pub async fn revoke_sessions_of(db: &DatabaseConnection, user_id: Uuid) -> Result<u64> {
+    let touchees = refresh_token::Entity::update_many()
+        .col_expr(refresh_token::Column::RevokedAt, Expr::current_timestamp())
+        .filter(refresh_token::Column::UserId.eq(user_id))
+        .filter(refresh_token::Column::RevokedAt.is_null())
+        .exec(db)
+        .await?;
+
+    Ok(touchees.rows_affected)
+}

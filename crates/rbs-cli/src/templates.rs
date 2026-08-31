@@ -852,6 +852,42 @@ mod tests {
         }
     }
 
+    /// Un jeton rejoué a fuité : révoquer la seule ligne présentée laisse celui qui a
+    /// devancé la rotation légitime avec une paire valide, renouvelée indéfiniment.
+    #[test]
+    fn a_replayed_refresh_closes_every_session_of_the_account() {
+        let repository = read(&Path::new(RACINE_FEATURES).join("auth/repository.rs.jinja"));
+        let service = read(&Path::new(RACINE_FEATURES).join("auth/service.rs.jinja"));
+
+        assert!(
+            repository.contains("pub async fn revoke_sessions_of("),
+            "le repository n'offre aucun moyen de fermer les sessions d'un compte :\n{repository}"
+        );
+        assert!(
+            service.contains("repository::revoke_sessions_of("),
+            "le service laisse les sessions sœurs ouvertes après un rejeu :\n{service}"
+        );
+    }
+
+    /// La réutilisation détectée est un signal de sécurité, pas un incident muet — et le
+    /// journal ne porte pas ce que la réponse tait.
+    #[test]
+    fn the_replay_is_logged_without_the_address_nor_the_token() {
+        let service = read(&Path::new(RACINE_FEATURES).join("auth/service.rs.jinja"));
+
+        let debut = service
+            .find("tracing::warn!")
+            .expect("un jeton rejoué doit laisser une trace");
+        let alerte = call_at(&service, debut);
+
+        for interdit in ["email", "refresh_token"] {
+            assert!(
+                !alerte.contains(interdit),
+                "l'alerte de rejeu porte `{interdit}` :\n{alerte}"
+            );
+        }
+    }
+
     #[test]
     fn the_jobs_fragment_carries_both_anchors() {
         let source = read(&Path::new(RACINE_FEATURES).join("jobs/model.rs.jinja"));

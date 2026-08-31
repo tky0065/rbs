@@ -319,6 +319,44 @@ async fn a_valid_refresh_returns_a_new_pair() {
     );
 }
 
+/// Un jeton rejoué ferme le compte, et non la seule ligne qu'il présente.
+///
+/// Sans cela, un jeton volé et joué avant la rotation légitime laisse son porteur avec
+/// une paire valide, qu'il renouvelle indéfiniment et sans bruit : c'est la détection de
+/// réutilisation, et elle n'a de sens que si toute la famille tombe.
+#[tokio::test]
+async fn replaying_a_refresh_closes_the_other_sessions_of_the_account() {
+    let api = application().await;
+    let email = fresh_email();
+    register(&api, &email).await;
+
+    let (_, premiere) = authenticate(&api, &email, PASSWORD).await;
+    let (_, seconde) = authenticate(&api, &email, PASSWORD).await;
+
+    let ancien = refresh_for(&premiere);
+    let (status, tournee) = refresh(&api, &ancien).await;
+    assert_eq!(status, StatusCode::OK, "{tournee}");
+
+    let (rejeu, body) = refresh(&api, &ancien).await;
+    assert_eq!(rejeu, StatusCode::UNAUTHORIZED, "{body}");
+
+    // La paire née de la rotation légitime tombe elle aussi : rien ne dit lequel des deux
+    // porteurs du jeton rejoué la détient.
+    let (status, body) = refresh(&api, &refresh_for(&tournee)).await;
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "la paire issue de la rotation survit au rejeu : {body}"
+    );
+
+    let (status, body) = refresh(&api, &refresh_for(&seconde)).await;
+    assert_eq!(
+        status,
+        StatusCode::UNAUTHORIZED,
+        "la session sœur survit au rejeu : {body}"
+    );
+}
+
 #[tokio::test]
 async fn the_old_refresh_is_then_rejected() {
     let api = application().await;
