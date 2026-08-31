@@ -11,21 +11,14 @@ use std::path::Path;
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Le fichier n'existe pas ou n'a pas pu être lu.
-    #[error("{path} est inaccessible : {source}")]
-    Acces {
-        /// Chemin du fichier.
-        path: String,
-        /// Cause système.
-        source: std::io::Error,
-    },
+    #[error(transparent)]
+    Acces(#[from] crate::errors::Acces),
 }
 
 /// Lit un `.env` et rend ses paires dans l'ordre du fichier.
 pub fn read(path: &Path) -> Result<Vec<(String, String)>, Error> {
-    let content = fs::read_to_string(path).map_err(|source| Error::Acces {
-        path: path.display().to_string(),
-        source,
-    })?;
+    let content =
+        fs::read_to_string(path).map_err(|source| crate::errors::Acces::new(path, source))?;
 
     Ok(parse(&content))
 }

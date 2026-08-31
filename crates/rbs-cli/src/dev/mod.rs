@@ -55,9 +55,7 @@ pub(crate) enum Step {
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     /// La commande n'a pas été lancée depuis un projet rbs.
-    #[error(
-        "cette commande attend un projet rbs : aucun Cargo.toml portant [package.metadata.rbs] au-dessus d'ici"
-    )]
+    #[error("{}", crate::errors::PAS_UN_PROJET)]
     PasUnProjet,
 
     /// Le `.env` du projet est absent, illisible, ou muet sur la base.
@@ -101,15 +99,8 @@ pub(crate) enum Error {
     Metadata(#[from] metadata::Error),
 }
 
-/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
-impl From<metadata::RootError> for Error {
-    fn from(faute: metadata::RootError) -> Self {
-        match faute {
-            metadata::RootError::Absent => Self::PasUnProjet,
-            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
-        }
-    }
-}
+// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+crate::errors::depuis_la_racine!(Error);
 
 impl Error {
     /// Ce qu'il y a à faire, quand il y a quelque chose à faire.

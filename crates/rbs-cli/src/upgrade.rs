@@ -12,7 +12,6 @@
 //! La garde Git vient après le plan, et non avant : un projet déjà à jour n'a rien à
 //! protéger, et doit pouvoir répondre « rien à faire » depuis un working tree sale.
 
-use std::io;
 use std::path::PathBuf;
 
 use crate::git;
@@ -56,13 +55,8 @@ pub(crate) enum Error {
     PasUnProjet,
 
     /// Le répertoire visé n'a pas pu être résolu.
-    #[error("{path} est inaccessible : {source}")]
-    Acces {
-        /// Chemin fautif.
-        path: String,
-        /// Cause système.
-        source: io::Error,
-    },
+    #[error(transparent)]
+    Acces(#[from] crate::errors::Acces),
 
     /// Le projet a été généré par un rbs postérieur au CLI qui le lit.
     ///
@@ -81,11 +75,8 @@ pub(crate) enum Error {
 
     /// Le projet porte des modifications non commitées, qu'une mise à niveau rendrait
     /// indiscernables des siennes.
-    #[error("le working tree n'est pas propre : {files} — commitez, ou relancez avec --force")]
-    WorkingTreeSale {
-        /// Fichiers suivis modifiés, énumérés.
-        files: String,
-    },
+    #[error(transparent)]
+    WorkingTreeSale(#[from] crate::errors::WorkingTreeSale),
 
     /// Le manifeste du projet n'a pu être lu ou patché.
     #[error("{0}")]
@@ -104,15 +95,8 @@ pub(crate) enum Error {
     Agents(#[from] crate::agents::Error),
 }
 
-/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
-impl From<metadata::RootError> for Error {
-    fn from(faute: metadata::RootError) -> Self {
-        match faute {
-            metadata::RootError::Absent => Self::PasUnProjet,
-            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
-        }
-    }
-}
+// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+crate::errors::depuis_la_racine!(Error);
 
 /// Calcule ce que la mise à niveau ferait au projet, sans rien écrire.
 pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
@@ -127,10 +111,7 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
     let start = options
         .directory
         .canonicalize()
-        .map_err(|source| Error::Acces {
-            path: options.directory.display().to_string(),
-            source,
-        })?;
+        .map_err(|source| crate::errors::Acces::new(&options.directory, source))?;
     let root = metadata::project_root(&start)?;
 
     let metadonnees = metadata::read(&root.join("Cargo.toml"))?;
@@ -207,9 +188,10 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
     if !deja_a_jour && !options.force {
         let modifies = git::modified_files(&root);
         if !modifies.is_empty() {
-            return Err(Error::WorkingTreeSale {
+            return Err(crate::errors::WorkingTreeSale {
                 files: git::enumerate(&modifies),
-            });
+            }
+            .into());
         }
     }
 

@@ -67,13 +67,8 @@ pub(crate) enum Error {
     Unknown(#[from] templates::Unknown),
 
     /// Un fichier du projet ou une template n'a pu être lu.
-    #[error("{path} est inaccessible : {source}")]
-    Acces {
-        /// Chemin fautif.
-        path: String,
-        /// Cause système.
-        source: io::Error,
-    },
+    #[error(transparent)]
+    Acces(#[from] crate::errors::Acces),
 
     /// Le fragment ne porte pas de manifeste.
     ///
@@ -95,11 +90,8 @@ pub(crate) enum Error {
 
     /// Le projet porte des modifications non commitées, qu'une installation rendrait
     /// indiscernables des siennes.
-    #[error("le working tree n'est pas propre : {files} — commitez, ou relancez avec --force")]
-    WorkingTreeSale {
-        /// Fichiers suivis modifiés, énumérés.
-        files: String,
-    },
+    #[error(transparent)]
+    WorkingTreeSale(#[from] crate::errors::WorkingTreeSale),
 
     /// Le manifeste du projet n'a pu être lu.
     #[error("{0}")]
@@ -121,15 +113,8 @@ pub(crate) enum Error {
     Application(#[from] plan::application::Error),
 }
 
-/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
-impl From<metadata::RootError> for Error {
-    fn from(faute: metadata::RootError) -> Self {
-        match faute {
-            metadata::RootError::Absent => Self::PasUnProjet,
-            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
-        }
-    }
-}
+// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+crate::errors::depuis_la_racine!(Error);
 
 impl Error {
     /// Ce que le développeur peut coller pour réparer, quand la panne se répare ainsi.
@@ -164,7 +149,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let start = options
         .directory
         .canonicalize()
-        .map_err(|source| access(&options.directory, source))?;
+        .map_err(|source| crate::errors::Acces::new(&options.directory, source))?;
     let root = metadata::project_root(&start)?;
 
     // Une seule lecture pour toute la fonction : son erreur se propage par `?` plutôt
@@ -194,9 +179,10 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     if !options.force {
         let modifies = git::modified_files(&root);
         if !modifies.is_empty() {
-            return Err(Error::WorkingTreeSale {
+            return Err(crate::errors::WorkingTreeSale {
                 files: git::enumerate(&modifies),
-            });
+            }
+            .into());
         }
     }
 
@@ -223,8 +209,8 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let url = match migrate::project_variables(&root) {
         Ok(variables) => dotenv::value(&variables, migrate::URL).map(str::to_string),
         Err(migrate::Error::SansUrl) => None,
-        Err(migrate::Error::Env(dotenv::Error::Acces { source, .. }))
-            if source.kind() == io::ErrorKind::NotFound =>
+        Err(migrate::Error::Env(dotenv::Error::Acces(faute)))
+            if faute.source.kind() == io::ErrorKind::NotFound =>
         {
             None
         }
@@ -390,10 +376,9 @@ impl Resolution<'_> {
 
         let source = Source::feature(self.template_dir, feature)?;
         let manifest = read_manifest(&source, feature)?;
-        let templates = source.files().map_err(|source| Error::Acces {
-            path: feature.to_string(),
-            source,
-        })?;
+        let templates = source
+            .files()
+            .map_err(|source| crate::errors::Acces::new(Path::new(feature), source))?;
 
         self.en_cours.push(feature.to_string());
         for requise in manifest.feature.requires.clone() {
@@ -415,22 +400,12 @@ impl Resolution<'_> {
 fn read_manifest(source: &Source, feature: &str) -> Result<manifest::Manifest, Error> {
     let text = source
         .manifest()
-        .map_err(|source| Error::Acces {
-            path: feature.to_string(),
-            source,
-        })?
+        .map_err(|source| crate::errors::Acces::new(Path::new(feature), source))?
         .ok_or_else(|| Error::SansManifeste {
             feature: feature.to_string(),
         })?;
 
     Ok(manifest::read(&text, &format!("{feature}/feature.toml"))?)
-}
-
-fn access(path: &Path, source: io::Error) -> Error {
-    Error::Acces {
-        path: path.display().to_string(),
-        source,
-    }
 }
 
 #[cfg(test)]
@@ -1528,7 +1503,7 @@ mod tests {
 
         let error = plan_for(&options(&root, "docker"))
             .expect_err("un projet sale ne se modifie pas en silence");
-        assert!(matches!(error, Error::WorkingTreeSale { .. }), "{error}");
+        assert!(matches!(error, Error::WorkingTreeSale(_)), "{error}");
 
         let mut forcees = options(&root, "docker");
         forcees.force = true;

@@ -104,9 +104,7 @@ impl Report {
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     /// La commande n'a pas été lancée depuis un projet rbs.
-    #[error(
-        "cette commande attend un projet rbs : aucun Cargo.toml portant [package.metadata.rbs] au-dessus d'ici"
-    )]
+    #[error("{}", crate::errors::PAS_UN_PROJET)]
     PasUnProjet,
 
     /// Le manifeste du projet n'a pu être lu.
@@ -114,15 +112,8 @@ pub(crate) enum Error {
     Metadata(#[from] metadata::Error),
 }
 
-/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
-impl From<metadata::RootError> for Error {
-    fn from(faute: metadata::RootError) -> Self {
-        match faute {
-            metadata::RootError::Absent => Self::PasUnProjet,
-            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
-        }
-    }
-}
+// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+crate::errors::depuis_la_racine!(Error);
 
 /// Diagnostique le projet qui contient `directory`.
 pub(crate) fn run(directory: &Path) -> Result<Report, Error> {

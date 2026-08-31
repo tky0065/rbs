@@ -7,6 +7,7 @@ mod database;
 mod dev;
 mod doctor;
 mod dotenv;
+mod errors;
 #[cfg(test)]
 mod fixtures;
 mod generate;
@@ -274,10 +275,8 @@ fn add(
     dry_run: bool,
     template_dir: Option<PathBuf>,
 ) -> Result<(), add::Error> {
-    let directory = std::env::current_dir().map_err(|source| add::Error::Acces {
-        path: ".".to_string(),
-        source,
-    })?;
+    let directory = std::env::current_dir()
+        .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
 
     add_in(directory, feature, force, dry_run, template_dir)
 }
@@ -414,10 +413,8 @@ fn generate(
     // `--has-many` répare une feature déjà là : rien à générer, donc rien à annoncer sous
     // ce nom-là une fois l'écriture faite.
     let repairing = !has_many.is_empty();
-    let directory = std::env::current_dir().map_err(|source| generate::command::Error::Acces {
-        path: ".".to_string(),
-        source,
-    })?;
+    let directory = std::env::current_dir()
+        .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
     let planned = generate::command::plan_for(&generate::command::Options {
         name,
         fields,
@@ -478,10 +475,8 @@ fn generate(
 /// Aligne le manifeste du projet courant sur la version du CLI, plan affiché avant
 /// écriture.
 fn upgrade(force: bool, dry_run: bool) -> Result<(), upgrade::Error> {
-    let directory = std::env::current_dir().map_err(|source| upgrade::Error::Acces {
-        path: ".".to_string(),
-        source,
-    })?;
+    let directory = std::env::current_dir()
+        .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
 
     upgrade_in(directory, force, dry_run)
 }
@@ -553,10 +548,8 @@ fn migrate(action: migrate::Action) -> Result<(), Box<dyn Error>> {
 
 /// Insère les données de démonstration du projet courant.
 fn seed(force: bool) -> Result<(), seed::Error> {
-    let directory = std::env::current_dir().map_err(|source| seed::Error::Acces {
-        path: ".".to_string(),
-        source,
-    })?;
+    let directory = std::env::current_dir()
+        .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
 
     match seed::run(&seed::Options { directory, force })? {
         seed::Output::Insere => ui::success("seeds insérés"),

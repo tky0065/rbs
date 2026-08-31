@@ -38,7 +38,7 @@ pub fn project_root(start: &Path) -> Result<PathBuf, RootError> {
             // Ces deux-là sont le régime ordinaire d'un ancêtre traversé : un répertoire
             // sans manifeste, ou celui d'une crate étrangère à rbs comme `migration`.
             Err(Error::PasUnProjet { .. }) => continue,
-            Err(Error::Acces { source, .. }) if source.kind() == std::io::ErrorKind::NotFound => {
+            Err(Error::Acces(faute)) if faute.source.kind() == std::io::ErrorKind::NotFound => {
                 continue;
             }
             Err(faute) => return Err(RootError::Illisible(faute)),
@@ -98,13 +98,8 @@ pub struct Dependency {
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// Le manifeste n'a pas pu être lu ou réécrit.
-    #[error("{path} est inaccessible : {source}")]
-    Acces {
-        /// Chemin du manifeste.
-        path: String,
-        /// Cause système.
-        source: std::io::Error,
-    },
+    #[error(transparent)]
+    Acces(#[from] crate::errors::Acces),
 
     /// Le manifeste n'est pas du TOML valide.
     #[error("{path} n'est pas un TOML valide : {source}")]
@@ -558,10 +553,8 @@ fn parse(text: &str, name: &str) -> Result<DocumentMut, Error> {
 
 /// Analyse le manifeste en préservant sa mise en forme et ses commentaires.
 fn load(cargo_toml: &Path) -> Result<DocumentMut, Error> {
-    let source = fs::read_to_string(cargo_toml).map_err(|source| Error::Acces {
-        path: name_of(cargo_toml),
-        source,
-    })?;
+    let source = fs::read_to_string(cargo_toml)
+        .map_err(|source| crate::errors::Acces::new(cargo_toml, source))?;
 
     parse(&source, &name_of(cargo_toml))
 }

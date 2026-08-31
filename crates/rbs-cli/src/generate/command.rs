@@ -6,7 +6,6 @@
 //! disparue ou une feature déjà présente laissent le disque tel qu'ils l'ont trouvé.
 
 use std::fs;
-use std::io;
 use std::path::{Path, PathBuf};
 
 use crate::anchors;
@@ -95,21 +94,13 @@ pub(crate) enum Error {
     },
 
     /// Un fichier du projet n'a pu être lu ou écrit.
-    #[error("{path} est inaccessible : {source}")]
-    Acces {
-        /// Chemin fautif.
-        path: String,
-        /// Cause système.
-        source: io::Error,
-    },
+    #[error(transparent)]
+    Acces(#[from] crate::errors::Acces),
 
     /// Le projet porte des modifications non commitées, qu'une génération rendrait
     /// indiscernables des siennes.
-    #[error("le working tree n'est pas propre : {files} — commitez, ou relancez avec --force")]
-    WorkingTreeSale {
-        /// Fichiers suivis modifiés, énumérés.
-        files: String,
-    },
+    #[error(transparent)]
+    WorkingTreeSale(#[from] crate::errors::WorkingTreeSale),
 
     /// Le plan de la génération n'a pu être calculé.
     #[error("{0}")]
@@ -189,15 +180,8 @@ pub(crate) enum Error {
     },
 }
 
-/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
-impl From<metadata::RootError> for Error {
-    fn from(faute: metadata::RootError) -> Self {
-        match faute {
-            metadata::RootError::Absent => Self::PasUnProjet,
-            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
-        }
-    }
-}
+// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+crate::errors::depuis_la_racine!(Error);
 
 impl Error {
     /// Ce que le développeur peut coller pour réparer, quand la panne se répare ainsi.
@@ -221,7 +205,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let start = options
         .directory
         .canonicalize()
-        .map_err(|source| access(&options.directory, source))?;
+        .map_err(|source| crate::errors::Acces::new(&options.directory, source))?;
     let root = metadata::project_root(&start)?;
 
     // Une seule lecture pour toute la fonction : son erreur se propage par `?` plutôt que
@@ -232,9 +216,10 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     if !options.force {
         let modifies = git::modified_files(&root);
         if !modifies.is_empty() {
-            return Err(Error::WorkingTreeSale {
+            return Err(crate::errors::WorkingTreeSale {
                 files: git::enumerate(&modifies),
-            });
+            }
+            .into());
         }
     }
 
@@ -563,13 +548,6 @@ fn render(
     ));
 
     Ok((rendus, Some(rendue.module)))
-}
-
-fn access(path: &Path, source: io::Error) -> Error {
-    Error::Acces {
-        path: path.display().to_string(),
-        source,
-    }
 }
 
 #[cfg(test)]
@@ -1252,7 +1230,7 @@ mod tests {
         let error = run(&options(&root, "notes", None, false))
             .expect_err("le working tree n'est pas propre");
 
-        assert!(matches!(error, Error::WorkingTreeSale { .. }), "{error}");
+        assert!(matches!(error, Error::WorkingTreeSale(_)), "{error}");
         assert!(
             error.to_string().contains("src/main.rs"),
             "le fichier en cause doit être nommé : {error}"

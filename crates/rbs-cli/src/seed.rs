@@ -43,9 +43,7 @@ pub(crate) enum Output {
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     /// La commande n'a pas été lancée depuis un projet rbs.
-    #[error(
-        "cette commande attend un projet rbs : aucun Cargo.toml portant [package.metadata.rbs] au-dessus d'ici"
-    )]
+    #[error("{}", crate::errors::PAS_UN_PROJET)]
     PasUnProjet,
 
     /// L'environnement visé est la production.
@@ -60,13 +58,8 @@ pub(crate) enum Error {
     SansSeeds,
 
     /// Le binaire des seeds n'a pas pu être lu.
-    #[error("{path} est inaccessible : {source}")]
-    Acces {
-        /// Chemin fautif.
-        path: String,
-        /// Cause système.
-        source: io::Error,
-    },
+    #[error(transparent)]
+    Acces(#[from] crate::errors::Acces),
 
     /// Le `.env` du projet est absent ou illisible.
     #[error("{0}")]
@@ -95,15 +88,8 @@ pub(crate) enum Error {
     Metadata(#[from] metadata::Error),
 }
 
-/// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
-impl From<metadata::RootError> for Error {
-    fn from(faute: metadata::RootError) -> Self {
-        match faute {
-            metadata::RootError::Absent => Self::PasUnProjet,
-            metadata::RootError::Illisible(faute) => Self::Metadata(faute),
-        }
-    }
-}
+// Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
+crate::errors::depuis_la_racine!(Error);
 
 impl Error {
     /// Ce que le développeur peut coller pour réparer, quand la panne se répare ainsi.
@@ -164,10 +150,7 @@ fn read_binary(root: &Path) -> Result<String, Error> {
     match fs::read_to_string(root.join(BINAIRE)) {
         Ok(source) => Ok(source),
         Err(source) if source.kind() == io::ErrorKind::NotFound => Err(Error::SansSeeds),
-        Err(source) => Err(Error::Acces {
-            path: BINAIRE.to_string(),
-            source,
-        }),
+        Err(source) => Err(crate::errors::Acces::new(Path::new(BINAIRE), source).into()),
     }
 }
 

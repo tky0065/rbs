@@ -71,13 +71,8 @@ impl Plan {
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     /// Un fichier du projet n'a pas pu être lu.
-    #[error("{path} est inaccessible : {source}")]
-    Acces {
-        /// Chemin fautif, relatif à la racine.
-        path: String,
-        /// Cause système.
-        source: io::Error,
-    },
+    #[error(transparent)]
+    Acces(#[from] crate::errors::Acces),
     /// Deux actions du plan prétendent écrire le même fichier de bout en bout.
     ///
     /// Erreur de programmation de l'appelant : deux contenus complets ne se composent
@@ -396,10 +391,9 @@ impl Builder {
         match fs::read_to_string(self.root.join(path)) {
             Ok(content) => Ok(Some(content)),
             Err(source) if source.kind() == io::ErrorKind::NotFound => Ok(None),
-            Err(source) => Err(Error::Acces {
-                path: path.to_string(),
-                source,
-            }),
+            Err(source) => {
+                Err(crate::errors::Acces::new(std::path::Path::new(path), source).into())
+            }
         }
     }
 
@@ -663,7 +657,7 @@ mod tests {
             .insert(anchors::ROUTES, &["peu importe".to_string()])
             .expect_err("le fichier ne se lit pas");
 
-        assert!(matches!(error, Error::Acces { .. }), "{error:?}");
+        assert!(matches!(error, Error::Acces(_)), "{error:?}");
     }
 
     #[test]
