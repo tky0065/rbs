@@ -125,14 +125,14 @@ pub enum ConfigError {
     #[error("configuration invalide : {0}")]
     Invalide(Box<figment::Error>),
     /// Fichier `.env` présent mais illisible.
-    #[error("file `.env` illisible : {0}")]
+    #[error("fichier `.env` illisible : {0}")]
     Dotenv(#[from] dotenvy::Error),
     /// Section demandée absente de toutes les couches de la cascade.
     #[error("configuration invalide : la section `{0}` est absente")]
     SectionAbsente(String),
     /// Secret de signature trop court pour HS256.
     #[cfg(feature = "auth")]
-    #[error("configuration invalide : `auth.secret` doit porter au moins 32 bytes, {0} fournis")]
+    #[error("configuration invalide : `auth.secret` doit porter au moins 32 octets, {0} fournis")]
     SecretTropCourt(usize),
 }
 
@@ -263,7 +263,7 @@ mod tests {
 
     /// Secret satisfaisant la longueur minimale, pour les cas qui ne portent pas sur lui.
     #[cfg(feature = "auth")]
-    const SECRET_DE_TEST: &str = "un secret de test qui porte au moins trente-deux bytes";
+    const SECRET_DE_TEST: &str = "un secret de test qui porte au moins trente-deux octets";
 
     /// Le flag `auth` rend `auth.secret` requis. Les cas qui portent sur autre chose le
     /// fournissent par l'environnement plutôt que d'alourdir chaque fixture TOML.
@@ -299,7 +299,7 @@ mod tests {
             let message = error.to_string();
             assert!(
                 message.contains("url"),
-                "le message doit nommer le field fautif, obtenu : {message}"
+                "le message doit nommer le champ fautif, obtenu : {message}"
             );
             Ok(())
         });
@@ -333,7 +333,7 @@ mod tests {
 
             let config = Config::load().expect("la configuration doit se charger");
 
-            assert_eq!(config.server.host, "0.0.0.0", "value lue depuis `.env`");
+            assert_eq!(config.server.host, "0.0.0.0", "valeur lue depuis `.env`");
             assert_eq!(config.server.port, 9999, "l'environnement l'emporte");
             Ok(())
         });
@@ -493,7 +493,7 @@ mod tests {
             let message = error.to_string();
             assert!(
                 message.contains("`secret`") && message.contains("auth"),
-                "le message doit nommer le field fautif, obtenu : {message}"
+                "le message doit nommer le champ fautif, obtenu : {message}"
             );
             Ok(())
         });
@@ -510,7 +510,7 @@ mod tests {
                 &format!("{DEFAULT_TOML}\n[auth]\nsecret = \"trop court\"\n"),
             )?;
 
-            let error = Config::load().expect_err("un secret de 10 bytes doit être refusé");
+            let error = Config::load().expect_err("un secret de 10 octets doit être refusé");
 
             assert!(
                 matches!(error, ConfigError::SecretTropCourt(10)),
@@ -529,7 +529,7 @@ mod tests {
             jail.create_file(
                 "config/default.toml",
                 &format!(
-                    "{DEFAULT_TOML}\n[auth]\nsecret = \"un secret de test qui porte trente-deux bytes\"\n"
+                    "{DEFAULT_TOML}\n[auth]\nsecret = \"un secret de test qui porte trente-deux octets\"\n"
                 ),
             )?;
 
@@ -572,7 +572,7 @@ mod tests {
             // passerait sans la garde, et ne prouverait donc rien d'elle.
             assert!(
                 matches!(&error, ConfigError::SectionAbsente(section) if section == "externe"),
-                "expected SectionAbsente(\"externe\"), obtenu : {error:?}"
+                "SectionAbsente(\"externe\") attendu, obtenu : {error:?}"
             );
             Ok(())
         });
@@ -599,7 +599,7 @@ mod tests {
 
             assert_eq!(
                 externe.url, "depuis-le-profile",
-                "le file du profile doit écraser le file par défaut"
+                "le fichier du profil doit écraser le fichier par défaut"
             );
             assert_eq!(
                 externe.ttl_secs, 3,

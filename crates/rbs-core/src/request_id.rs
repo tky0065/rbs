@@ -111,11 +111,11 @@ mod tests {
             .to_owned();
         let body = to_bytes(response.into_body(), usize::MAX)
             .await
-            .expect("body lisible");
+            .expect("corps lisible");
 
         (
             header,
-            String::from_utf8(body.to_vec()).expect("body UTF-8"),
+            String::from_utf8(body.to_vec()).expect("corps UTF-8"),
         )
     }
 
@@ -159,7 +159,7 @@ mod tests {
             let (header, _) = call(Some(&aberrant)).await;
 
             assert_ne!(header, aberrant, "en-tête aberrant repris : {aberrant:?}");
-            assert_eq!(header.len(), 26, "un ULID était expected : {header}");
+            assert_eq!(header.len(), 26, "un ULID était attendu : {header}");
         }
     }
 

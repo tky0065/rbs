@@ -142,7 +142,7 @@ mod tests {
             },
             #[cfg(feature = "auth")]
             auth: crate::config::AuthConfig {
-                secret: "un secret de test qui porte au moins trente-deux bytes".to_owned(),
+                secret: "un secret de test qui porte au moins trente-deux octets".to_owned(),
                 access_ttl_secs: 900,
                 refresh_ttl_secs: 2_592_000,
             },
@@ -170,8 +170,8 @@ mod tests {
 
         let bytes = to_bytes(response.into_body(), usize::MAX)
             .await
-            .expect("body lisible");
-        let body: Value = serde_json::from_slice(&bytes).expect("body JSON");
+            .expect("corps lisible");
+        let body: Value = serde_json::from_slice(&bytes).expect("corps JSON");
         assert_eq!(
             body,
             json!({ "status": "unavailable", "checks": { "database": "unreachable" } })
@@ -209,7 +209,7 @@ mod tests {
 
         assert!(
             !rendered.contains("s3cr3t") && !rendered.contains("injoignable"),
-            "le détail de l'error ne doit pas atteindre le client : {rendered}"
+            "le détail de l'erreur ne doit pas atteindre le client : {rendered}"
         );
     }
 }

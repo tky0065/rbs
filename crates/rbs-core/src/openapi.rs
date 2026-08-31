@@ -62,8 +62,8 @@ pub const SCHEME_NAME: &str = "bearer";
 
 /// Réponses ajoutées d'office à chaque opération.
 const UNIVERSAL: [(&str, &str); 2] = [
-    ("422", "échec de validation, détaillé par field"),
-    ("500", "error interne"),
+    ("422", "échec de validation, détaillé par champ"),
+    ("500", "erreur interne"),
 ];
 
 impl Modify for CommonResponses {
@@ -160,7 +160,7 @@ mod tests {
         path = "/things",
         responses(
             (status = 201, description = "créé"),
-            (status = 422, description = "le name est déjà pris"),
+            (status = 422, description = "le nom est déjà pris"),
         )
     )]
     #[allow(dead_code)]
@@ -195,10 +195,10 @@ mod tests {
 
         let responses = &doc["paths"]["/things"]["post"]["responses"];
         assert_eq!(
-            responses["422"]["description"], "le name est déjà pris",
+            responses["422"]["description"], "le nom est déjà pris",
             "le handler qui documente son 422 doit garder le sien : {responses}"
         );
-        assert!(responses.get("500").is_some(), "500 expected : {responses}");
+        assert!(responses.get("500").is_some(), "500 attendu : {responses}");
     }
 
     /// Le document annonce 401 et 403 : sans ce schéma, il ne dit nulle part comment s'y
@@ -254,7 +254,7 @@ mod tests {
         for field in ["type", "title", "status", "detail", "errors", "request_id"] {
             assert!(
                 properties.get(field).is_some(),
-                "field `{field}` absent du schéma : {properties}"
+                "champ `{field}` absent du schéma : {properties}"
             );
         }
     }

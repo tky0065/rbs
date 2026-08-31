@@ -63,11 +63,11 @@ pub enum Error {
     },
 
     /// Échec d'accès à la base de données.
-    #[error("error base de données : {0}")]
+    #[error("erreur base de données : {0}")]
     Database(#[from] DbErr),
 
     /// Toute autre défaillance inattendue.
-    #[error("error interne : {0}")]
+    #[error("erreur interne : {0}")]
     Internal(#[from] anyhow::Error),
 }
 
@@ -136,12 +136,12 @@ impl IntoResponse for Error {
                 tracing::error!(
                     request_id = request_id.as_deref().unwrap_or("-"),
                     error = %self,
-                    "error interne"
+                    "erreur interne"
                 );
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "Internal Server Error",
-                    Some("une error interne est survenue".to_string()),
+                    Some("une erreur interne est survenue".to_string()),
                     None,
                 )
             }
@@ -186,12 +186,12 @@ mod tests {
             .to_string();
         let body = to_bytes(res.into_body(), usize::MAX)
             .await
-            .expect("body illisible");
+            .expect("corps illisible");
 
         (
             status,
             content_type,
-            serde_json::from_slice(&body).expect("body non JSON"),
+            serde_json::from_slice(&body).expect("corps non JSON"),
         )
     }
 
@@ -222,7 +222,7 @@ mod tests {
         let err: Error = validation_errors().into();
 
         let Error::Validation(errors) = err else {
-            panic!("expected Error::Validation");
+            panic!("Error::Validation attendu");
         };
         assert!(errors.field_errors().contains_key("email"));
     }
@@ -241,7 +241,7 @@ mod tests {
             message,
         } = err
         else {
-            panic!("expected Error::Domain");
+            panic!("Error::Domain attendu");
         };
         assert_eq!(status, StatusCode::PAYMENT_REQUIRED);
         assert_eq!(code, "quota_depasse");
@@ -270,9 +270,9 @@ mod tests {
         let brut = body.to_string();
         assert!(
             !brut.contains("connexion refusée"),
-            "body divulgué : {brut}"
+            "corps divulgué : {brut}"
         );
-        assert!(!brut.contains("10.0.0.3"), "body divulgué : {brut}");
+        assert!(!brut.contains("10.0.0.3"), "corps divulgué : {brut}");
     }
 
     #[tokio::test]
@@ -284,7 +284,7 @@ mod tests {
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
         assert!(
             !body.to_string().contains("secret JWT"),
-            "body divulgué : {body}"
+            "corps divulgué : {body}"
         );
     }
 
