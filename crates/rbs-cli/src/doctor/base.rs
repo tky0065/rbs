@@ -52,7 +52,17 @@ pub(crate) fn check(root: &Path) -> Check {
         return ecart;
     }
 
-    let database = database_of(root);
+    let database = match database_of(root) {
+        Ok(database) => database,
+        Err(faute) => {
+            return Check::failed(
+                TITRE,
+                faute.to_string(),
+                "corrigez le Cargo.toml du projet : le moteur qu'il déclare commande \
+                 tout le reste du diagnostic",
+            );
+        }
+    };
 
     let ou = match joignable(root, database, &url) {
         Ok(ou) => ou,
@@ -148,11 +158,13 @@ fn pilote(root: &Path) -> Option<Database> {
         })
 }
 
-/// Moteur que le manifeste déclare, PostgreSQL à défaut de manifeste lisible.
-fn database_of(root: &Path) -> Database {
-    crate::metadata::read(&root.join("Cargo.toml"))
-        .map(|metadata| metadata.database)
-        .unwrap_or_default()
+/// Moteur que le manifeste déclare.
+///
+/// Un manifeste illisible ne se remplace pas par le moteur par défaut : le plancher de
+/// version, la forme d'URL attendue et le remède en découlent tous, et un projet MySQL
+/// recevrait alors un diagnostic PostgreSQL qui ne dit rien de sa panne.
+fn database_of(root: &Path) -> Result<Database, crate::metadata::Error> {
+    crate::metadata::read(&root.join("Cargo.toml")).map(|metadata| metadata.database)
 }
 
 /// Dit où la base se trouve, ou pourquoi on ne l'atteint pas.
@@ -320,12 +332,17 @@ mod tests {
 
     /// Un projet visant `url`, sans passer par le binaire ni par cargo.
     fn project(url: &str) -> (TempDir, PathBuf) {
+        project_on(Database::default(), url)
+    }
+
+    /// Le même, sur le moteur demandé.
+    fn project_on(database: Database, url: &str) -> (TempDir, PathBuf) {
         let parent = TempDir::new().expect("répertoire temporaire créable");
         let project = crate::new::create(
             &crate::new::Options {
                 name: "demo-api".to_string(),
                 database_url: url.to_string(),
-                database: Default::default(),
+                database,
                 features: Vec::new(),
                 core_path: None,
                 template_dir: None,
@@ -523,6 +540,21 @@ mod tests {
 
         assert!(!remedy.contains("docker compose"), "{remedy}");
         assert!(remedy.contains("démarrez"), "{remedy}");
+    }
+
+    /// Un manifeste illisible se nomme : le supposer PostgreSQL ferait rendre à ce projet
+    /// MySQL un plancher de version et un diagnostic qui ne sont pas les siens.
+    #[test]
+    fn an_unreadable_manifest_is_named_instead_of_being_read_as_the_default_engine() {
+        let (_parent, root) = project_on(Database::Mysql, "mysql://root:root@127.0.0.1:1/demo");
+        std::fs::write(root.join("Cargo.toml"), "[package\nname = \"demo-api\"\n")
+            .expect("manifeste cassé");
+
+        let check = check(&root);
+
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
+        assert!(check.detail.contains("Cargo.toml"), "{}", check.detail);
+        assert!(check.remedy.is_some());
     }
 
     #[test]
