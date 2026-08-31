@@ -90,12 +90,39 @@ pub async fn connect(config: &DatabaseConfig) -> Result<DatabaseConnection, Conn
 /// que le parseur rejette — ce sont précisément celles qui finissent dans un message
 /// d'erreur.
 fn password(url: &str) -> Option<&str> {
-    let autorite = &url[url.find("://")? + 3..];
-    let fin = autorite.find('/').unwrap_or(autorite.len());
-    let arobase = autorite[..fin].rfind('@')?;
-    let deux_points = autorite[..arobase].find(':')?;
+    let reste = &url[url.find("://")? + 3..];
+    let arobase = fin_du_userinfo(reste)?;
+    let deux_points = reste[..arobase].find(':')?;
 
-    Some(&autorite[deux_points + 1..arobase])
+    Some(&reste[deux_points + 1..arobase])
+}
+
+/// Position de l'arobase qui sépare le userinfo de l'hôte, s'il y en a une.
+///
+/// L'autorité ne s'arrête pas au premier `/` de la chaîne : un mot de passe non encodé
+/// peut en porter un — un secret encodé en base64 en porte un caractère sur soixante-quatre
+/// — et couper là laisse l'arobase de côté, donc le secret hors du masque. Elle ne va pas
+/// non plus jusqu'à la dernière arobase de la chaîne : une arobase dans le nom de la base
+/// ferait alors passer l'hôte et son port pour un mot de passe.
+///
+/// Le segment qui précède le premier `/` tranche entre les deux lectures : il porte
+/// l'arobase quand l'autorité s'y termine ; sinon, son `:` introduit un port — un nombre —
+/// si l'autorité est close, un mot de passe coupé en deux si elle continue au-delà du `/`.
+fn fin_du_userinfo(reste: &str) -> Option<usize> {
+    let premier_segment = &reste[..reste.find('/').unwrap_or(reste.len())];
+    if let Some(arobase) = premier_segment.rfind('@') {
+        return Some(arobase);
+    }
+
+    let mot_de_passe_coupe = premier_segment
+        .split_once(':')
+        .is_some_and(|(_, apres)| !apres.is_empty() && !apres.bytes().all(|b| b.is_ascii_digit()));
+
+    if mot_de_passe_coupe {
+        reste.rfind('@')
+    } else {
+        None
+    }
 }
 
 /// Remplace `secret` par [`MASQUE`] partout dans `text`.
@@ -204,6 +231,19 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn a_password_carrying_a_slash_does_not_appear_either() {
+        let error = connect(&config("postgres://alice:s3c/r3t@localhost:99999/app"))
+            .await
+            .expect_err("le port 99999 est hors bornes");
+
+        let message = format!("{error} {error:?}");
+        assert!(
+            !message.contains("s3c/r3t"),
+            "mot de passe divulgué dans l'erreur : {message}"
+        );
+    }
+
     #[test]
     fn masking_replaces_the_password_and_preserves_the_rest() {
         assert_eq!(
@@ -212,11 +252,54 @@ mod tests {
         );
     }
 
+    // Un mot de passe non encodé porte souvent un `/` : un secret tiré au hasard puis
+    // encodé en base64 en porte un caractère sur soixante-quatre. Arrêter l'autorité au
+    // premier `/` de la chaîne coupait alors avant l'arobase, et le secret partait en
+    // clair dans le message et dans les journaux.
+    #[test]
+    fn masking_replaces_a_password_carrying_a_slash() {
+        for (url, attendu) in [
+            (
+                "postgres://alice:s3c/r3t@host/app",
+                "postgres://alice:***@host/app",
+            ),
+            ("postgres://alice:s3c/r3t@host", "postgres://alice:***@host"),
+            (
+                "postgres://alice:s3c/r3t@host:5432/app?sslmode=require",
+                "postgres://alice:***@host:5432/app?sslmode=require",
+            ),
+        ] {
+            assert_eq!(mask(url), attendu, "mot de passe divulgué : {url}");
+        }
+    }
+
+    // L'arobase que l'encodage aurait dû rendre en `%40` ne doit pas couper l'autorité
+    // trop tôt : c'est la dernière qui sépare le userinfo de l'hôte.
+    #[test]
+    fn masking_replaces_a_password_carrying_an_at_sign() {
+        for (url, attendu) in [
+            (
+                "postgres://alice:p@ss@host/app",
+                "postgres://alice:***@host/app",
+            ),
+            (
+                "postgres://alice:p%40ss@host/app",
+                "postgres://alice:***@host/app",
+            ),
+        ] {
+            assert_eq!(mask(url), attendu, "mot de passe divulgué : {url}");
+        }
+    }
+
     #[test]
     fn masking_leaves_urls_without_a_password_intact() {
         for url in [
             "postgres://alice@localhost/app",
             "postgres://localhost/app",
+            // Une arobase dans le chemin ne fait pas de l'hôte un mot de passe.
+            "postgres://localhost:5432/app@v2",
+            "sqlite://app.db",
+            "sqlite:///introuvable/app.db",
             "pas-une-url",
             "",
         ] {
