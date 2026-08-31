@@ -11,6 +11,7 @@ pub mod base;
 pub mod env;
 pub mod guards;
 pub mod jobs;
+pub mod json;
 pub mod mail;
 pub mod redis;
 pub mod relations;
@@ -20,12 +21,20 @@ pub mod versions;
 
 use std::path::Path;
 
+use serde::Serialize;
+
 use crate::metadata;
 
 /// Verdict d'un contrôle.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+///
+/// Les noms rendus en JSON sont ceux du dépôt, en ASCII : `ok` est déjà celui du
+/// constructeur `Check::ok`, et les deux autres ceux des variantes ci-dessous. Un
+/// troisième vocabulaire serait un de plus à tenir à jour.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "lowercase")]
 pub(crate) enum State {
     /// Rien à signaler.
+    #[serde(rename = "ok")]
     Bon,
     /// Ce qui mérite d'être su sans empêcher le projet de fonctionner.
     Avertissement,
@@ -34,15 +43,21 @@ pub(crate) enum State {
 }
 
 /// Ce qu'un contrôle a constaté.
-#[derive(Debug, Clone, PartialEq, Eq)]
+///
+/// Les noms des champs en JSON suivent la seule autre sortie structurée du dépôt, le
+/// corps de `GET /health` de `rbs-core` : `status` y désigne déjà un verdict.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub(crate) struct Check {
     /// Ce qui est vérifié, en un mot : `anchors`, `.env`, `versions`, `base`.
+    #[serde(rename = "name")]
     pub title: &'static str,
     /// Verdict.
+    #[serde(rename = "status")]
     pub state: State,
     /// Ce qui a été constaté, en une ligne.
     pub detail: String,
     /// Quoi faire, quand il y a quelque chose à faire.
+    #[serde(rename = "remede", skip_serializing_if = "Option::is_none")]
     pub remedy: Option<String>,
 }
 
