@@ -21,10 +21,10 @@ sortie de terminal ne se traduit pas.
 $ rbs new -h
 Crée un projet prêt à démarrer, avec sa base, ses migrations et sa route /health
 
-Usage: rbs new [OPTIONS] <NAME>
+Usage: rbs new [OPTIONS] [NAME]
 
 Arguments:
-  <NAME>  Nom du projet, qui est aussi celui du répertoire créé
+  [NAME]  Nom du projet, qui est aussi celui du répertoire créé, à défaut de quoi la question est posée
 
 Options:
       --database-url <URL>     URL de connexion, à défaut de quoi la question est posée
@@ -38,8 +38,9 @@ Options:
   -V, --version                Print version
 ```
 
-`<NAME>` est à la fois le nom du paquet Cargo et celui du répertoire. Il commence par une
-lettre ASCII et ne porte que des lettres, des chiffres, `-` et `_`.
+`[NAME]` est à la fois le nom du paquet Cargo et celui du répertoire. Il commence par une
+lettre ASCII et ne porte que des lettres, des chiffres, `-` et `_`. Omis, il devient la
+première des [trois questions](#les-trois-questions).
 
 ## Les flags
 
@@ -51,7 +52,7 @@ lettre ASCII et ne porte que des lettres, des chiffres, `-` et `_`.
 | `--core-path <CHEMIN>` | Fait pointer le manifeste généré vers une crate `rbs-core` locale plutôt que vers la version publiée — le mode dans lequel rbs se développe, décrit [plus bas](#construire-contre-un-noyau-local). |
 | `--lang <LANGUE>` | Langue de l'[`AGENTS.md`](../guides/agents.md) engendré : `fr` ou `en`. Absent, déduite de `LC_ALL`, puis de `LANG`. |
 | `--template-dir <CHEMIN>` | Rend le projet depuis un répertoire de templates, au lieu de celles embarquées dans le binaire. |
-| `-y`, `--yes` | Ne demande rien : prend les valeurs par défaut et exécute. |
+| `-y`, `--yes` | Ne demande rien : prend les valeurs par défaut et exécute. Le nom du projet doit alors être donné en argument — c'est la seule réponse sans valeur par défaut. |
 
 `--template-dir` et `--yes` sont globaux — toutes les commandes les acceptent — mais `--yes`
 n'est lu que par `rbs new`, seule commande qui pose des questions, et `--template-dir` par
@@ -196,8 +197,15 @@ projet, l'URL PostgreSQL — par défaut `postgres://postgres:postgres@localhost
 les tirets devenant des soulignés — et les features à installer.
 
 `--yes` court-circuite avant que la première question ne s'affiche, ce qui garde la commande
-utilisable en CI. Sans terminal et sans `--yes`, elle nomme les flags qui auraient remplacé
-les questions :
+utilisable en CI. Le nom est la seule réponse qu'il ne peut pas fournir : aucun défaut ne
+vaudrait un répertoire qu'il faudrait ensuite renommer.
+
+```text
+$ rbs new --yes
+erreur : le nom du projet manque : `--yes` ne pose aucune question, et aucun nom par défaut ne vaudrait celui que vous n'avez pas donné — nommez le projet en argument, `rbs new mon-api --yes`
+```
+
+Sans terminal et sans `--yes`, elle nomme les flags qui auraient remplacé les questions :
 
 ```text
 $ rbs new sans-tty < /dev/null

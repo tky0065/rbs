@@ -161,7 +161,7 @@ pub fn run() {
 // deux lignes plus bas.
 #[allow(clippy::too_many_arguments)]
 fn create_project(
-    name: String,
+    name: Option<String>,
     database_url: Option<String>,
     database: Database,
     with: Vec<String>,
@@ -173,14 +173,7 @@ fn create_project(
     // Un `--with` absent laisse la question ouverte ; un `--with` vide n'existe pas.
     let features = (!with.is_empty()).then_some(with);
     let disponibles = templates::feature_names(template_dir.as_deref());
-    let options = prompts::resolve(
-        Some(name),
-        database_url,
-        database,
-        features,
-        &disponibles,
-        yes,
-    )?;
+    let options = prompts::resolve(name, database_url, database, features, &disponibles, yes)?;
 
     let project = new::create(
         &new::Options {
