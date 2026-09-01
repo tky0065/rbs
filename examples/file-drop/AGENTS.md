@@ -74,6 +74,7 @@ faire.
 - `<rbs:startup>` dans `src/main.rs`
 - `<rbs:seeds>` dans `src/seeds/main.rs`
 - `<rbs:services>` dans `docker-compose.yml`
+- `<rbs:health_probes>` dans `src/health/controller.rs`
 - `<rbs:relations:<table>>` et `<rbs:related:<table>>` dans le modèle de chaque entité
 
 ## Ce que rbs ne couvre pas
@@ -106,7 +107,7 @@ l'enchaîne.
 - rbs 1.1.0 · base postgres
 - Fragments installés : redis, mail, storage
 - Entités engendrées : uploads
-- Ancres du projet : features (src/lib.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml)
+- Ancres du projet : features (src/lib.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), health_probes (src/health/controller.rs)
 <!-- /rbs:inventory -->
 
 ## Notes du projet

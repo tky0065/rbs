@@ -97,7 +97,7 @@ Chaque couche ne voit que la suivante. Un `service` n'accède jamais *directemen
 requête SeaORM ; un `controller` n'en construit jamais. Cette règle rend chaque fichier
 lisible isolément.
 
-**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires, onze au
+**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires, douze au
 total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est cette liste que
 `rbs doctor` parcourt, et non celle-ci :
 
@@ -114,6 +114,7 @@ total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est 
 | `// <rbs:startup>` | `src/main.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
 | `# <rbs:services>` | `docker-compose.yml` — la seule en YAML, et la seule optionnelle |
+| `// <rbs:health_probes>` | `src/health/controller.rs` |
 
 `generate` en emploie six ; les autres appartiennent aux fragments qu'installe `add`. Une
 ancre insérée dans `<rbs:layers>` est *intérieure* à `trace` et `request_id` : un `.layer()`

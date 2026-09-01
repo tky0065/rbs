@@ -319,9 +319,12 @@ date: Sat, 29 Aug 2026 10:06:30 GMT
 {"status":"ok","checks":{"database":"ok"}}
 ```
 
-`/health` came with the project and checks the database, not just the process. The
-`x-request-id` header is on every response, and the same value appears in the log line
-for that request.
+`/health` came with the project and checks the database, not just the process. Every
+fragment that brings a dependency of its own adds a probe beside it — `rbs add redis` puts
+a `cache` key into `checks`, `rbs add storage` a `storage` one — and one silent dependency
+is enough to turn the whole answer into a `503`, which is what takes the pod out of
+rotation instead of routing to a service whose cache has gone. The `x-request-id` header
+is on every response, and the same value appears in the log line for that request.
 
 ```bash
 curl -i -X POST http://127.0.0.1:8080/articles \

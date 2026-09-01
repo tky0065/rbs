@@ -22,17 +22,18 @@ redis : cache Redis : pool paresseux partagé par l'état, valeurs typées par s
 
 plan pour /private/tmp/rbs-demo/depot
 
-  + src/cache/mod.rs      créé
-  + src/cache/config.rs   créé
-  + src/cache/tests.rs    créé
-  ~ src/lib.rs            modifié
-  ~ src/state.rs          modifié
-  ~ docker-compose.yml    modifié
-  ~ Cargo.toml            modifié
-  ~ config/default.toml   modifié
-  ~ AGENTS.md             modifié
+  + src/cache/mod.rs           créé
+  + src/cache/config.rs        créé
+  + src/cache/tests.rs         créé
+  ~ src/lib.rs                 modifié
+  ~ src/state.rs               modifié
+  ~ src/health/controller.rs   modifié
+  ~ docker-compose.yml         modifié
+  ~ Cargo.toml                 modifié
+  ~ config/default.toml        modifié
+  ~ AGENTS.md                  modifié
 
-  9 fichiers à écrire
+  10 fichiers à écrire
 ✓ redis installée — 3 fichiers
 
   le compose du projet porte déjà un service redis — docker compose up -d le démarre ; sans compose, faites écouter un Redis à l'URL de [cache] de config/default.toml

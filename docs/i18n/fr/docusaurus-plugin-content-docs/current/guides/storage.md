@@ -19,22 +19,23 @@ documentation.
 
 ```text
 $ rbs add storage
-storage : stockage d'objets : un trait à quatre méthodes, deux backends — fichiers et S3
+storage : stockage d'objets : un trait à cinq méthodes, deux backends — fichiers et S3
 
 plan pour /private/tmp/rbs-demo/depot
 
-  + src/storage/mod.rs     créé
-  + src/storage/files.rs   créé
-  + src/storage/s3.rs      créé
-  + src/storage/tests.rs   créé
-  ~ src/lib.rs             modifié
-  ~ src/state.rs           modifié
-  ~ Cargo.toml             modifié
-  ~ config/default.toml    modifié
-  ~ .env.example           modifié
-  ~ AGENTS.md              modifié
+  + src/storage/mod.rs         créé
+  + src/storage/files.rs       créé
+  + src/storage/s3.rs          créé
+  + src/storage/tests.rs       créé
+  ~ src/lib.rs                 modifié
+  ~ src/state.rs               modifié
+  ~ src/health/controller.rs   modifié
+  ~ Cargo.toml                 modifié
+  ~ config/default.toml        modifié
+  ~ .env.example               modifié
+  ~ AGENTS.md                  modifié
 
-  10 fichiers à écrire
+  11 fichiers à écrire
 ✓ storage installée — 4 fichiers
 
   les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example
@@ -43,14 +44,16 @@ plan pour /private/tmp/rbs-demo/depot
 L'étape suivante n'est pas décorative : avec le backend `fs` par défaut, les objets déposés
 atterrissent dans `./storage`, au cœur de votre arborescence, et `git status` les montrera.
 
-## Quatre méthodes
+## Cinq méthodes
 
 ```rust file=examples/file-drop/src/storage/mod.rs region=trait
 ```
 
 Voilà tout le contrat. Délibérément absents : le listage, la copie, les URL signées, les
 métadonnées, le flux. Quatre méthodes, c'est ce que deux backends peuvent honorer à
-l'identique, et l'abstraction ne vaut ni plus ni moins que cette identité.
+l'identique, et l'abstraction ne vaut ni plus ni moins que cette identité. La cinquième ne
+transporte rien et ne répond qu'à `GET /health` : c'est elle qui empêche la route de dire
+`ok` sur un stockage que votre projet ne joint plus.
 
 Les échecs tiennent en une énumération, ce qui permet à l'appelant de distinguer une erreur
 du client d'une panne :

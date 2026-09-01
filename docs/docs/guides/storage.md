@@ -19,22 +19,23 @@ documentation.
 
 ```text
 $ rbs add storage
-storage : stockage d'objets : un trait à quatre méthodes, deux backends — fichiers et S3
+storage : stockage d'objets : un trait à cinq méthodes, deux backends — fichiers et S3
 
 plan pour /private/tmp/rbs-demo/depot
 
-  + src/storage/mod.rs     créé
-  + src/storage/files.rs   créé
-  + src/storage/s3.rs      créé
-  + src/storage/tests.rs   créé
-  ~ src/lib.rs             modifié
-  ~ src/state.rs           modifié
-  ~ Cargo.toml             modifié
-  ~ config/default.toml    modifié
-  ~ .env.example           modifié
-  ~ AGENTS.md              modifié
+  + src/storage/mod.rs         créé
+  + src/storage/files.rs       créé
+  + src/storage/s3.rs          créé
+  + src/storage/tests.rs       créé
+  ~ src/lib.rs                 modifié
+  ~ src/state.rs               modifié
+  ~ src/health/controller.rs   modifié
+  ~ Cargo.toml                 modifié
+  ~ config/default.toml        modifié
+  ~ .env.example               modifié
+  ~ AGENTS.md                  modifié
 
-  10 fichiers à écrire
+  11 fichiers à écrire
 ✓ storage installée — 4 fichiers
 
   les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example
@@ -43,14 +44,16 @@ plan pour /private/tmp/rbs-demo/depot
 The next step is not decoration: with the default `fs` backend, deposited objects land in
 `./storage` inside your working tree, and `git status` will show them.
 
-## Four methods
+## Five methods
 
 ```rust file=examples/file-drop/src/storage/mod.rs region=trait
 ```
 
 That is the whole contract. Deliberately not in it: listing, copying, signed URLs,
 metadata, streaming. Four methods are what two backends can honour identically, and the
-abstraction is worth exactly as much as that identity.
+abstraction is worth exactly as much as that identity. The fifth carries nothing and
+answers only `GET /health`: it is what stops the route replying `ok` on a store your
+project can no longer reach.
 
 Failures are one enum, which is what lets a caller tell a client error from an outage:
 

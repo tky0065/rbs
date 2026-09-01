@@ -362,6 +362,69 @@ fn a_project_created_with_two_features_compiles() {
         .success();
 }
 
+/// La sonde qu'un fragment inscrit dans `<rbs:health_probes>` doit compiler.
+///
+/// Aucun test de rendu ne le prouve : l'ancre reçoit une ligne de texte, et seul le
+/// compilateur dit si elle nomme des types qui existent, si le futur qu'elle construit est
+/// `Send`, et si les deux emprunts de `state` — celui de la base et celui de la
+/// dépendance — tiennent ensemble le temps de la réponse.
+#[test]
+#[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn the_probes_installed_by_two_fragments_compile_into_the_health_route() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let noyau = common::noyau();
+
+    rbs(parent.path())
+        .args([
+            "new",
+            "demo-with-probes",
+            "--yes",
+            "--with",
+            "redis,storage",
+        ])
+        .args([
+            "--database-url",
+            "postgres://rbs:secret@localhost:5432/demo",
+        ])
+        .args([
+            "--core-path",
+            noyau.to_str().expect("chemin du noyau représentable"),
+        ])
+        .assert()
+        .success();
+
+    let root = parent.path().join("demo-with-probes");
+
+    let controleur =
+        fs::read_to_string(root.join("src/health/controller.rs")).expect("contrôleur lisible");
+    for sonde in [
+        r#"rbs_core::health::Probe::new("cache", state.cache().ping()),"#,
+        r#"rbs_core::health::Probe::new("storage", crate::storage::probe(&state.storage)),"#,
+    ] {
+        assert!(
+            controleur.contains(sonde),
+            "la sonde `{sonde}` manque au contrôleur :\n{controleur}"
+        );
+    }
+
+    // `clippy -D warnings` plutôt que `build` : la sonde du stockage passe par une
+    // fonction que rien d'autre n'appelle, et un `#[allow(dead_code)]` mal placé la
+    // laisserait passer pour morte.
+    Command::new("cargo")
+        .current_dir(&root)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .args([
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+        ])
+        .assert()
+        .success();
+}
+
 /// Ce test n'ignore rien et ne compile pas le projet : `rbs new` écrit des fichiers, et
 /// c'est tout ce qu'il y a à regarder ici.
 #[test]

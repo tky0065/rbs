@@ -326,9 +326,12 @@ date: Sat, 29 Aug 2026 10:06:30 GMT
 {"status":"ok","checks":{"database":"ok"}}
 ```
 
-`/health` est venu avec le projet et vérifie la base, pas seulement le processus.
-L'en-tête `x-request-id` figure sur chaque réponse, et la même valeur se retrouve dans la
-ligne de log de la requête.
+`/health` est venu avec le projet et vérifie la base, pas seulement le processus. Chaque
+fragment qui apporte une dépendance y ajoute sa sonde — `rbs add redis` met une clé
+`cache` dans `checks`, `rbs add storage` une clé `storage` — et il suffit qu'une seule se
+taise pour que la réponse entière devienne un `503`, ce qui sort le pod de la rotation au
+lieu d'y router un service dont le cache a disparu. L'en-tête `x-request-id` figure sur
+chaque réponse, et la même valeur se retrouve dans la ligne de log de la requête.
 
 ```bash
 curl -i -X POST http://127.0.0.1:8080/articles \

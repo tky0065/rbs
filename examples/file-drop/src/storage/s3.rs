@@ -112,4 +112,15 @@ impl Storage for S3Storage {
             Err(error) => Err(unavailable(error)),
         }
     }
+
+    // `head_bucket` plutôt qu'une lecture d'objet : la requête ne transporte rien, et
+    // elle éprouve à la fois le réseau, les identifiants et l'existence du bucket.
+    async fn available(&self) -> bool {
+        self.client
+            .head_bucket()
+            .bucket(&self.bucket)
+            .send()
+            .await
+            .is_ok()
+    }
 }
