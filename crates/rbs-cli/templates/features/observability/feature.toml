@@ -1,0 +1,77 @@
+[feature]
+description = "observabilité : traces OTLP vers un collecteur, et un /metrics Prometheus sur son propre port"
+
+[[files]]
+source      = "mod.rs.jinja"
+destination = "src/observability/mod.rs"
+
+[[files]]
+source      = "config.rs.jinja"
+destination = "src/observability/config.rs"
+
+[[files]]
+source      = "metrics.rs.jinja"
+destination = "src/observability/metrics.rs"
+
+[[files]]
+source      = "tests.rs.jinja"
+destination = "src/observability/tests.rs"
+
+[[anchors]]
+anchor  = "features"
+content = "pub mod observability;"
+
+# Dans `layers`, donc à l'intérieur de `trace` et de `request_id` : le middleware voit
+# l'identifiant de la requête, et les réponses courtes des couches posées avant lui — un
+# 429 de `rate-limit`, un préflight refusé par `cors` — entrent dans ses compteurs. Une
+# couche posée plus bas les manquerait, et le taux d'erreur publié serait faux.
+[[anchors]]
+anchor  = "layers"
+content = """
+.layer(axum::middleware::from_fn(
+    crate::observability::metrics::middleware,
+))
+"""
+
+# Avant que le routeur ne se construise : un middleware qui compterait dans un registre
+# pas encore installé perdrait les premières requêtes. `await` et non `tokio::spawn` nu —
+# le `bind` se fait ici, et un port déjà pris arrête le démarrage en le nommant plutôt que
+# de laisser l'API tourner sans métriques.
+#
+# `crate_path` et non `crate_name` : `src/main.rs` atteint la feature par la bibliothèque
+# du projet quand il y en a une, et par `crate::` sur un projet engendré avant qu'elle
+# n'existe.
+[[anchors]]
+anchor  = "startup"
+content = "{@ crate_path @}::observability::serve(&state).await?;"
+
+# La façade et son exportateur, séparés à dessein : les métriques métier du projet
+# s'inscrivent par macro depuis n'importe quelle couche, sans qu'un registre ait à
+# traverser `AppState`.
+[[dependencies]]
+name    = "metrics"
+version = "0.24"
+
+# Sans ses défauts : `http-listener` et `push-gateway` apportent hyper et rustls pour
+# servir `/metrics`, que le fragment sert lui-même sur le routeur axum du projet.
+[[dependencies]]
+name             = "metrics-exporter-prometheus"
+version          = "0.18"
+default_features = false
+
+# La greffe OTLP est dans le noyau : `logs::init()` pose l'abonné global lui-même, et
+# `set_global_default` ne s'appelle qu'une fois — rien d'ajouté ici, à l'ancre `startup`,
+# ne pourrait plus y composer une couche.
+[cargo.rbs-core]
+features = ["observability"]
+
+[[config]]
+file    = "config/default.toml"
+section = "observability"
+content = """
+# Port du second listener, celui qui sert `/metrics`. Il diffère de `server.port` à
+# dessein : les métriques publient la topologie interne du service — routes, volumétrie,
+# versions — et les exposer sur le port de l'API demanderait à chaque déploiement une
+# règle de reverse-proxy pour les cacher.
+metrics_port = 9090
+"""

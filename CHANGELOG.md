@@ -14,6 +14,15 @@ between minor versions with no deprecation cycle.
 
 ### Added
 
+- `rbs add observability` installs OTLP traces and a Prometheus `/metrics`. Traces leave
+  through `rbs-core`, behind its new `observability` cargo feature: `logs::init()` posts
+  the global subscriber itself, and nothing added at the `// <rbs:startup>` anchor could
+  graft an export layer onto it afterwards. `OTEL_EXPORTER_OTLP_ENDPOINT` names the
+  collector — absent, nothing is exported — and `rbs_core::logs::shutdown()` flushes the
+  last batch. Metrics count under the route template taken from axum's `MatchedPath`, and
+  never under the requested URL, and they are served on a listener of their own so that no
+  deployment has to hide them behind a reverse-proxy rule. `rbs doctor` refuses a
+  configuration where that port equals `server.port`.
 - `rbs add cors` installs a CORS layer whose allowed origins are read from the project's
   configuration, never wide open by default.
 - `rbs add rate-limit` installs a rate limiter. The counter is a Redis pipeline when the

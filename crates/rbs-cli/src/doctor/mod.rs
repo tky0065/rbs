@@ -13,6 +13,7 @@ pub mod guards;
 pub mod jobs;
 pub mod json;
 pub mod mail;
+pub mod observability;
 pub mod redis;
 pub mod relations;
 pub mod render;
@@ -250,7 +251,7 @@ fn plan(root: &Path) -> Vec<Controle> {
 ///
 /// Une feature peut y figurer deux fois : `auth` amène de quoi vérifier son secret, et de
 /// quoi juger les routes que les rôles qu'elle installe pourraient protéger.
-const FEATURE_CHECKS: [(&str, Controle); 6] = [
+const FEATURE_CHECKS: [(&str, Controle); 7] = [
     (
         "auth",
         Controle {
@@ -291,6 +292,13 @@ const FEATURE_CHECKS: [(&str, Controle); 6] = [
         Controle {
             titre: jobs::TITRE,
             executer: |_, config, _| jobs::check(config),
+        },
+    ),
+    (
+        "observability",
+        Controle {
+            titre: observability::TITRE,
+            executer: |_, config, _| observability::check(config),
         },
     ),
 ];
@@ -353,6 +361,20 @@ impl Config {
         self.0
             .as_ref()
             .is_some_and(|document| document.get(name).is_some())
+    }
+
+    /// Valeur entière d'un champ, s'il est renseigné et qu'il en porte une.
+    ///
+    /// Un port écrit entre guillemets n'en est pas un : la cascade de configuration le
+    /// refuserait au démarrage, et le contrôle qui le lirait comme un entier jugerait
+    /// une valeur que le projet n'a jamais eue.
+    pub(crate) fn integer(&self, section: &str, key: &str) -> Option<i64> {
+        self.0.as_ref().and_then(|document| {
+            document
+                .get(section)
+                .and_then(|table| table.get(key))
+                .and_then(toml_edit::Item::as_integer)
+        })
     }
 
     /// Valeur d'un champ, s'il est renseigné.

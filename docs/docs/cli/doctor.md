@@ -113,6 +113,19 @@ A feature declared in `[package.metadata.rbs]` whose section has vanished from t
 configuration is a project that compiles and fails at startup — which `doctor` can say
 cold, before you start it. A section commented out does not count as a section.
 
+[`observability`](../guides/observability.md) reads one value rather than merely looking
+for its section: the port its second listener binds may not be the one the API listens on.
+
+```text
+  ✗ observability `observability.metrics_port` et `server.port` valent tous deux 8080
+      donnez aux métriques un port à elles dans config/default.toml :
+      [observability]
+      metrics_port = 9090
+```
+
+The OTLP endpoint is not checked. Its absence is a legitimate mode — a development
+machine has no collector — and not a fault.
+
 ## A machine-readable report
 
 `--json` writes the same findings as a single document on standard output — nothing else

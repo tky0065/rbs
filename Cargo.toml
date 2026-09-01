@@ -28,6 +28,13 @@ inquire = "0.9.4"
 jsonwebtoken = { version = "10.3.0", default-features = false, features = ["rust_crypto"] }
 minijinja = { version = "2.24.0", features = ["custom_syntax"] }
 nu-ansi-term = "0.50.3"
+opentelemetry = "0.32.0"
+# Ni `logs` ni `metrics` : le noyau n'exporte que des spans, et les métriques du projet
+# sortent en Prometheus. Le transport est gRPC, celui que tout collecteur écoute sur 4317
+# sans configuration — `reqwest-blocking-client`, actif par défaut, bloquerait de surcroît
+# un fil du runtime à chaque lot.
+opentelemetry-otlp = { version = "0.32.0", default-features = false, features = ["grpc-tonic", "trace"] }
+opentelemetry_sdk = "0.32.1"
 rand = "0.10.2"
 # Aucun pilote ici : `rbs-core` les expose en features, et le projet engendré choisit
 # le sien. Un pilote épinglé au workspace ferait compiler PostgreSQL à un projet MySQL,
@@ -41,6 +48,7 @@ tokio = "1.53.1"
 toml_edit = "0.25.13"
 tower = "0.5.3"
 tracing = "0.1.44"
+tracing-opentelemetry = "0.33.0"
 tracing-subscriber = "0.3.23"
 ulid = "3.0.0"
 utoipa = "5.5.0"

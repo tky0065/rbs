@@ -117,6 +117,20 @@ configuration est un projet qui compile et échoue au démarrage — ce que `doc
 à froid, avant que vous ne le lanciez. Une section mise en commentaire ne compte pas pour
 une section.
 
+[`observability`](../guides/observability.md) lit une valeur plutôt que de se contenter de
+chercher sa section : le port sur lequel son second listener se pose ne peut pas être celui
+que l'API écoute.
+
+```text
+  ✗ observability `observability.metrics_port` et `server.port` valent tous deux 8080
+      donnez aux métriques un port à elles dans config/default.toml :
+      [observability]
+      metrics_port = 9090
+```
+
+L'endpoint OTLP, lui, n'est pas contrôlé. Son absence est un mode de fonctionnement
+légitime — un poste de développement n'a pas de collecteur — et non une faute.
+
 ## Un rapport machine-lisible
 
 `--json` écrit les mêmes constats en un seul document sur la sortie standard — rien d'autre
