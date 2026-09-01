@@ -146,6 +146,12 @@ priorité est portée sur la ligne, ce bloc étant hors des sections.
 - [ ] **95. [Dette] `P3` — `examples/blog-auth/src/posts/tests.rs` est écrit à la main en français quand le gabarit rend des noms anglais** — `appeler`, `requete`, `sans_corps` contre `call`, `request`, `without_body` → qui compare l'exemple au code engendré voit deux styles là où la documentation affirme que les exemples sont ce que le CLI produit. *(Easy)*
 - [ ] **96. [Dette] `P3` — Les tests d'exclusion des drapeaux n'assertent que `is_err()`** — `crates/rbs-cli/src/cli.rs:369-381` : `yes_is_accepted_only_by_new` et sa voisine vérifient qu'une commande est refusée, sans vérifier *pourquoi* → une faute de frappe dans le nom de la sous-commande ferait passer le test pour la mauvaise raison. *(Easy)*
 
+- [x] **97. [Doc] `P3` — L'`AGENTS.md` engendré annonce une liste de fragments arrêtée à sept** — `crates/rbs-cli/templates/agents/{en,fr}.md.jinja:22` énumérait « auth, ci, docker, jobs, mail, redis, storage », sans `cors` ni `rate-limit` depuis les tâches 53 et 54 → le guide écrit *pour un agent* lui cachait les fragments qu'il pourrait poser. *(Easy)* — Fait le 2026-09-01 : les dix noms énumérés, la ligne `rbs doctor` dit son `--fix`, les quatre `examples/AGENTS.md` suivent ; `integration_examples` 17 passés, 0 échec.
+
+- [ ] **98. [Doc] `P3` — `docs/docs/compatibility.md` annonce dix ancres et en décrit une de moins que le projet n'en porte** — la page (et sa jumelle française) a été écrite quand le registre en comptait dix ; `layers` lui a échappé à la tâche 53 et `health_probes` à la tâche 55, si bien qu'`ANCRES` en porte douze quand la page en nomme dix. Une page de compatibilité fausse sur le compte des points d'insertion se lit pourtant comme un contrat. *(Easy)*
+
+- [ ] **99. [Doc] `P3` — Les deux guides d'observabilité citent des blocs écrits à la main** — `docs/docs/guides/observability.md` et sa jumelle, quand `CLAUDE.md` pose que la documentation ne cite aucune ligne écrite à la main et tire ses extraits d'`examples/`. Aucun des quatre projets ne porte la feature : la fermer suppose un cinquième exemple, avec son étape de CI, son `README` et son test de non-dérive — d'où le report plutôt que le contournement. *(Medium)*
+
 ## Écarté / obsolète
 
 **Vérifié sain, avec son témoin** — ces points ont été contrôlés et n'ont donné aucune tâche :

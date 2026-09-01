@@ -19,14 +19,14 @@ written between their markers is lost, without warning, on the next `rbs upgrade
 | Command | What it does | What it saves you from writing |
 |---|---|---|
 | `rbs new <name>` | creates a project; `--lang fr\|en` sets this file's language | the whole skeleton |
-| `rbs add <feature>` | installs auth, ci, docker, jobs, mail, redis, storage | the feature's wiring |
+| `rbs add <feature>` | installs auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage | the feature's wiring |
 | `rbs generate crud <name> --fields "..."` | a full CRUD feature | seven files, the seed and the migration |
 | `rbs generate feature <name>` | an empty feature | six files |
 | `rbs migrate up\|down\|status` | drives migrations | — |
 | `rbs migrate new <name>` | an empty migration file | the migration's skeleton |
 | `rbs seed` | inserts demo data | — |
 | `rbs dev` | services, migrations, a reloaded server | — |
-| `rbs doctor` | diagnoses the project | — |
+| `rbs doctor` | diagnoses the project; `--fix` puts missing anchors back | — |
 | `rbs upgrade` | aligns the project with the CLI's version | — |
 | `rbs completions <shell>` | writes the shell's completion script | — |
 

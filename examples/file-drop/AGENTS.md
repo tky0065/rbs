@@ -22,14 +22,14 @@ du projet », en bas, est faite pour l'accueillir.
 | Commande | Ce qu'elle fait | Ce qu'elle dispense d'écrire |
 |---|---|---|
 | `rbs new <nom>` | crée un projet ; `--lang fr\|en` fixe la langue de ce fichier | tout le squelette |
-| `rbs add <feature>` | installe auth, ci, docker, jobs, mail, redis, storage | le câblage de la feature |
+| `rbs add <feature>` | installe auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage | le câblage de la feature |
 | `rbs generate crud <nom> --fields "..."` | une feature CRUD complète | sept fichiers, le seed et la migration |
 | `rbs generate feature <nom>` | une feature vide | six fichiers |
 | `rbs migrate up\|down\|status` | pilote les migrations | — |
 | `rbs migrate new <nom>` | un fichier de migration vide | le squelette de la migration |
 | `rbs seed` | insère les données de démonstration | — |
 | `rbs dev` | services, migrations, serveur rechargé | — |
-| `rbs doctor` | diagnostique le projet | — |
+| `rbs doctor` | diagnostique le projet ; `--fix` repose les ancres absentes | — |
 | `rbs upgrade` | aligne le projet sur la version du CLI | — |
 | `rbs completions <shell>` | écrit le script de complétion du shell | — |
 
