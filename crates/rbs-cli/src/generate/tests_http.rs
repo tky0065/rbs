@@ -284,6 +284,22 @@ mod tests {
         );
     }
 
+    /// Tout scénario de ce fichier monte l'application sur la base du `.env` : sans
+    /// `#[ignore]`, `cargo test` échouerait sur un projet neuf dont la base n'est pas
+    /// démarrée, là où les fragments installés par `add` s'en gardent tous.
+    #[test]
+    fn every_scenario_is_ignored() {
+        let rendered = trials("articles", CHAMPS);
+
+        assert_eq!(
+            rendered
+                .matches(r#"#[ignore = "joint la base du projet"]"#)
+                .count(),
+            rendered.matches("#[tokio::test]").count(),
+            "chaque scénario doit être ignoré sans base :\n{rendered}"
+        );
+    }
+
     /// Le doc-commentaire de `value` promet qu'un champ `unique` ne fera pas échouer une
     /// exécution sur ce qu'une autre a laissé. Une valeur en dur ne le tient pas : les
     /// scénarios de ce fichier créent en parallèle sur la même base, et se refuseraient

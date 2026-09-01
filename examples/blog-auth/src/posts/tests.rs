@@ -11,6 +11,10 @@ use crate::router::router;
 use crate::state::AppState;
 
 // region: harnais
+// Les tests de ce fichier joignent la base que décrit `.env`, et sont donc `#[ignore]` :
+// `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre la base du
+// projet, migrations appliquées.
+
 /// Monte l'application sur la base décrite par `.env`, sans écouter sur le réseau.
 ///
 /// Les migrations sont supposées appliquées : elles précèdent `cargo test`.
@@ -203,6 +207,7 @@ async fn jeton_admin(api: &Router, db: &DatabaseConnection) -> String {
 
 // region: cycle_de_vie
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn le_cycle_de_vie_complet_passe_par_l_api() {
     let api = application().await;
     let db = connexion().await;
@@ -260,6 +265,7 @@ async fn le_cycle_de_vie_complet_passe_par_l_api() {
 /// Les deux se confondent aisément. Ici c'est l'extracteur `Identity` qui tranche, avant
 /// que le corps du handler — et donc `require_role` — s'exécute.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn sans_jeton_la_creation_rend_401() {
     let api = application().await;
 
@@ -271,6 +277,7 @@ async fn sans_jeton_la_creation_rend_401() {
 
 /// Identifié, mais pas administrateur : c'est la garde qui répond, et elle rend 403.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn un_user_ne_peut_pas_creer_403() {
     let api = application().await;
     let jeton = jeton_utilisateur(&api).await;
@@ -283,6 +290,7 @@ async fn un_user_ne_peut_pas_creer_403() {
 
 /// La lecture reste ouverte à qui n'a pas de compte : c'est ce qui fait un blog.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn la_liste_est_publique() {
     let api = application().await;
 
@@ -294,6 +302,7 @@ async fn la_liste_est_publique() {
 
 // region: erreur_404
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn un_identifiant_inconnu_rend_404() {
     let api = application().await;
     let inconnu = Uuid::new_v4();
@@ -310,6 +319,7 @@ async fn un_identifiant_inconnu_rend_404() {
 /// La requête est signée : l'ordre des extracteurs veut que `Identity` passe avant le
 /// corps, et sans jeton c'est 401 qui reviendrait — le 400 resterait invérifié.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn un_corps_illisible_rend_400() {
     let api = application().await;
     let db = connexion().await;

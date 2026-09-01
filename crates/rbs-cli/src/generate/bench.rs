@@ -313,8 +313,12 @@ async fn apply() {
     }
 
     /// Lance les tests du projet, et rapporte leur sortie.
+    ///
+    /// `--include-ignored` plutôt que `test` seul : les tests engendrés joignent la base
+    /// du projet et sont `#[ignore]` pour cette raison. Sans lui, la commande sortirait
+    /// verte sans avoir rien exécuté, et le garde-fou ci-dessous serait le seul à le voir.
     pub(crate) fn test_of(&self) {
-        let output = self.cargo(&["test"], &[]);
+        let output = self.cargo(&["test", "--", "--include-ignored"], &[]);
         let journal = String::from_utf8_lossy(&output.stdout);
 
         assert!(

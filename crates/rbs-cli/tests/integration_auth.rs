@@ -330,12 +330,30 @@ fn the_auth_tests_of_the_generated_project_pass() {
 
     migrate(&racine);
 
-    Command::new("cargo")
+    // `--include-ignored` : les tests du fragment joignent la base et sont `#[ignore]`.
+    // Sans lui, `cargo test` sortait en 0 sans en jouer un seul, et ce test passait au
+    // vert sans rien prouver de ce que reçoit l'utilisateur.
+    let sortie = Command::new("cargo")
         .current_dir(&racine)
         .env("CARGO_TARGET_DIR", common::cible())
-        .args(["test", "--workspace"])
-        .assert()
-        .success();
+        .args(["test", "--workspace", "--", "--include-ignored"])
+        .output()
+        .expect("cargo doit être lançable");
+
+    let rendu = format!(
+        "{}{}",
+        String::from_utf8_lossy(&sortie.stdout),
+        String::from_utf8_lossy(&sortie.stderr)
+    );
+
+    assert!(
+        sortie.status.success(),
+        "la suite du projet engendré échoue :\n{rendu}"
+    );
+    assert!(
+        rendu.contains("auth::tests::") && rendu.contains(" ... ok"),
+        "aucun test du fragment auth n'a tourné :\n{rendu}"
+    );
 }
 
 /// Le mot de passe traverse le serveur, son hash y est calculé, et le journal n'en garde

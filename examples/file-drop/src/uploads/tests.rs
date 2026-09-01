@@ -8,6 +8,10 @@ use uuid::Uuid;
 use crate::router::router;
 use crate::state::AppState;
 
+// Les tests de ce fichier joignent la base que décrit `.env`, et sont donc `#[ignore]` :
+// `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre la base du
+// projet, migrations appliquées.
+
 /// Monte l'application sur la base décrite par `.env`, sans écouter sur le réseau.
 ///
 /// Les migrations sont supposées appliquées : elles précèdent `cargo test`.
@@ -87,6 +91,7 @@ fn modification() -> Value {
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn the_full_lifecycle_goes_through_the_api() {
     let api = application().await;
     let collection = "/uploads";
@@ -157,6 +162,7 @@ async fn the_full_lifecycle_goes_through_the_api() {
 /// l'`id` pour rendre le plus récent en tête. Un test qui se contenterait de constater
 /// la présence d'un UUID laisserait passer la régression.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn two_creations_in_a_row_carry_increasing_ids() {
     let api = application().await;
     let collection = "/uploads";
@@ -193,6 +199,7 @@ async fn two_creations_in_a_row_carry_increasing_ids() {
 /// C'est le chemin qu'ouvre `ValidatedJson` : il désérialise, puis valide, et le refus
 /// nomme le champ fautif.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_invalid_email_returns_422() {
     let api = application().await;
     let mut sent = creation();
@@ -209,6 +216,7 @@ async fn an_invalid_email_returns_422() {
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_unknown_id_returns_404() {
     let api = application().await;
     let inconnu = Uuid::new_v4();
@@ -221,6 +229,7 @@ async fn an_unknown_id_returns_404() {
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_unreadable_body_returns_400() {
     let api = application().await;
     let truncated = Request::builder()

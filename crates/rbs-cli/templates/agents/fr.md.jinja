@@ -82,8 +82,10 @@ engendre pas, et il est légitime de les écrire à la main. Alors :
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+cargo test --workspace -- --ignored
 rbs doctor
 ```
 
-Les tests demandent la base du `.env` démarrée — `docker compose up -d`, ou `rbs dev` qui
-l'enchaîne.
+La seconde ligne est celle qui compte : les tests qui joignent la base sont `#[ignore]`,
+et `cargo test` seul ne les lance pas. Ils demandent la base du `.env` démarrée —
+`docker compose up -d`, ou `rbs dev` qui l'enchaîne.

@@ -81,11 +81,12 @@ fn a_generated_crud_migrates_and_passes_its_tests_against_postgresql() {
         .success();
 
     // Les tests générés montent l'application sur la base décrite par le `.env` : ils ne
-    // passent que si la migration a bien été appliquée juste avant.
+    // passent que si la migration a bien été appliquée juste avant, et sont `#[ignore]`
+    // pour cette raison — sans `--include-ignored`, cette étape ne lancerait plus rien.
     let sortie = Command::new("cargo")
         .current_dir(&projet)
         .env("CARGO_TARGET_DIR", common::cible())
-        .args(["test", "--workspace"])
+        .args(["test", "--workspace", "--", "--include-ignored"])
         .assert()
         .success()
         .get_output()

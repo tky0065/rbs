@@ -81,8 +81,10 @@ generate these, and writing them by hand is legitimate. When you do:
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+cargo test --workspace -- --ignored
 rbs doctor
 ```
 
-The tests need the `.env` database running — `docker compose up -d`, or `rbs dev`, which
-chains it.
+The second line is the one that matters: the tests that reach the database are `#[ignore]`,
+and `cargo test` alone does not run them. They need the `.env` database running —
+`docker compose up -d`, or `rbs dev`, which chains it.

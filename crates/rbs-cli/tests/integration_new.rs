@@ -197,10 +197,13 @@ fn each_engine_produces_a_project_whose_tests_pass() {
             .assert()
             .success();
 
+        // `--include-ignored` : les tests engendrés joignent la base du projet et sont
+        // `#[ignore]` pour cette raison. La migration vient d'être appliquée ci-dessus,
+        // ils ont donc de quoi tourner.
         let sortie = Command::new("cargo")
             .current_dir(&projet)
             .env("CARGO_TARGET_DIR", &cible)
-            .args(["test", "--workspace"])
+            .args(["test", "--workspace", "--", "--include-ignored"])
             .output()
             .expect("cargo doit être lançable");
 
