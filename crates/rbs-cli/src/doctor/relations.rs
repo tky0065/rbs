@@ -11,8 +11,9 @@
 //! ou `has_many`) sans avoir les ancres qui permettraient d'en écrire une seconde — un état
 //! incohérent, vraisemblablement issu d'une retouche à la main.
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::io;
 use std::path::Path;
 
 use crate::anchors::{self, Anchor, RELATED, RELATIONS};
@@ -25,13 +26,36 @@ pub(crate) const TITRE: &str = "relations";
 
 /// Vérifie qu'aucun modèle ne porte déjà une relation sans porter ses deux ancres.
 pub(crate) fn check(root: &Path) -> Check {
+    // La fermeture plutôt que la fonction : `fs::read_to_string` est générique sur
+    // `AsRef<Path>`, et sa durée de vie s'y fige au lieu de valoir pour toutes.
+    check_reading(root, |chemin| fs::read_to_string(chemin))
+}
+
+/// Le même, la lecture des fichiers passée en paramètre.
+///
+/// Elle l'est pour que le test puisse compter les lectures : c'est la seule façon de
+/// prouver qu'un fichier n'est lu qu'une fois, et non une fois par entité qu'il porte.
+fn check_reading(root: &Path, mut lire: impl FnMut(&Path) -> io::Result<String>) -> Check {
     // Un fichier sans relation n'a rien à prouver : ses ancres se réclameront le jour où
     // `rbs generate` voudra y écrire. Le contrôle est donc lu par fichier, et les entités
     // qu'il porte n'y sont examinées que si l'une d'elles a déjà une relation.
+    //
+    // Les entités sont donc regroupées avant d'être lues. `entities::scan` a déjà lu
+    // chaque fichier une fois ; lui faire rendre les sources épargnerait cette
+    // lecture-là, mais ses deux autres appelants n'en ont aucun usage et en porteraient
+    // la mémoire pour rien.
+    let mut par_fichier: BTreeMap<String, Vec<Entity>> = BTreeMap::new();
+    for entity in entities::scan(root) {
+        par_fichier
+            .entry(entity.file.clone())
+            .or_default()
+            .push(entity);
+    }
+
     let mut incomplete: Vec<Entity> = Vec::new();
 
-    for entity in entities::scan(root) {
-        let Ok(source) = fs::read_to_string(root.join(&entity.file)) else {
+    for (file, portees) in par_fichier {
+        let Ok(source) = lire(&root.join(&file)) else {
             continue;
         };
 
@@ -39,13 +63,15 @@ pub(crate) fn check(root: &Path) -> Check {
             continue;
         }
 
-        let both_anchors_present = [&RELATIONS, &RELATED]
-            .iter()
-            .map(|anchor| anchor.for_entity(&entity.file, &entity.table))
-            .all(|anchor| carries(&source, &anchor));
+        for entity in portees {
+            let both_anchors_present = [&RELATIONS, &RELATED]
+                .iter()
+                .map(|anchor| anchor.for_entity(&entity.file, &entity.table))
+                .all(|anchor| carries(&source, &anchor));
 
-        if !both_anchors_present {
-            incomplete.push(entity);
+            if !both_anchors_present {
+                incomplete.push(entity);
+            }
         }
     }
 
@@ -245,6 +271,24 @@ pub mod refresh_token {
     // </rbs:related:refresh_tokens>
 }
 "#;
+
+    /// Le fichier est lu une fois, quel que soit le nombre d'entités qu'il porte.
+    ///
+    /// Le contrôle se dit « lu par fichier » depuis toujours ; il bouclait pourtant par
+    /// entité, et relisait le même `model.rs` autant de fois qu'il en portait.
+    #[test]
+    fn a_file_is_read_once_however_many_entities_it_carries() {
+        let root = project_of("auth", TWO_ENTITIES);
+        let mut lectures = 0_usize;
+
+        let check = check_reading(root.path(), |chemin| {
+            lectures += 1;
+            fs::read_to_string(chemin)
+        });
+
+        assert_eq!(lectures, 1, "le fichier a été lu {lectures} fois");
+        assert_eq!(check.state, State::Bon, "chaque entité porte sa paire");
+    }
 
     #[test]
     fn a_file_carrying_two_entities_passes_when_each_has_its_own_pair() {
