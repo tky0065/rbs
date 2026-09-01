@@ -392,13 +392,15 @@ rbs doctor
 ```
 
 ```text
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
-     Running `target/debug/migration version`
   ✓ ancres      les 11 points d'insertion sont en place
   ✓ agents      guide et inventaire à jour
   ✓ relations   les modèles portent leurs ancres de relation
   ✓ .env        les 4 variables de .env.example sont renseignées
   ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
+  … base        compilation de la crate migration, peut prendre
+                une minute au premier lancement…
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
+     Running `target/debug/migration version`
   ✓ base        postgres 18.6 répond sur localhost:5432
 ✓ le projet est sain
 ```

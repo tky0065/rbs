@@ -36,8 +36,9 @@ SQLite 3.35+.
 | `rbs doctor` | Diagnoses the project: anchors, `.env`, database reachable, versions |
 | `rbs upgrade` | Aligns the project's manifest on the CLI version |
 
-`generate` answers to `g`. `--yes` takes the defaults without asking, so the CLI stays
-scriptable, and `--template-dir` swaps the templates embedded in the binary for your own.
+`generate` answers to `g`. `rbs new` takes `--yes`, which accepts the defaults without
+asking so the CLI stays scriptable; `rbs new` and `rbs add` take `--template-dir`, which
+swaps the templates embedded in the binary for your own. No other command accepts either.
 
 ## What it writes
 

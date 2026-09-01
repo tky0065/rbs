@@ -173,13 +173,15 @@ The announcement is a line of the text rendering only; `--json` never carries it
 
 ```text
 $ rbs doctor
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s
-     Running `target/debug/migration version`
   ✓ ancres      les 11 points d'insertion sont en place
   ✓ agents      guide et inventaire à jour
   ✓ relations   les modèles portent leurs ancres de relation
-  ✓ .env        les 4 variables de .env.example sont renseignées
+  ✓ .env        les 7 variables de .env.example sont renseignées
   ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
+  … base        compilation de la crate migration, peut prendre
+                une minute au premier lancement…
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.30s
+     Running `target/debug/migration version`
   ✓ base        postgres 18.6 répond sur localhost:55501
   ✓ jobs        la configuration de la file est en place
 ✓ le projet est sain
@@ -224,20 +226,22 @@ names the command to run by hand:
 
 ```text
 $ rbs doctor
+  ✓ ancres      les 11 points d'insertion sont en place
+  ✓ agents      guide et inventaire à jour
+  ✓ relations   les modèles portent leurs ancres de relation
+  ✓ .env        les 7 variables de .env.example sont renseignées
+  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
+  … base        compilation de la crate migration, peut prendre
+                une minute au premier lancement…
    Compiling migration v0.1.0 (/private/tmp/rbs-demo/demo/migration)
 error[E0425]: cannot find value `url_de_la_base` in this scope
-  --> migration/src/main.rs:33:13
+  --> migration/src/main.rs:16:13
    |
-33 |     let _ = url_de_la_base;
+16 |     let _ = url_de_la_base;
    |             ^^^^^^^^^^^^^^ not found in this scope
 
 For more information about this error, try `rustc --explain E0425`.
 error: could not compile `migration` (bin "migration") due to 1 previous error
-  ✓ ancres      les 11 points d'insertion sont en place
-  ✓ agents      guide et inventaire à jour
-  ✓ relations   les modèles portent leurs ancres de relation
-  ✓ .env        les 4 variables de .env.example sont renseignées
-  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
   ✗ base        localhost:55501 répond, mais sa version reste inconnue : la crate migration a échoué (code 101)
       vérifiez que `cargo run -p migration -- version` aboutit
   ✓ jobs        la configuration de la file est en place

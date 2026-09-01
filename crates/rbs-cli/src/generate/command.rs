@@ -1582,7 +1582,7 @@ mod tests {
     #[ignore = "compile un projet Axum + SeaORM complet"]
     fn a_relation_towards_each_auth_entity_lands_in_its_own_module_and_compiles() {
         let project = bench::Project::fresh();
-        project.rbs_ok(&["add", "auth", "--yes"]);
+        project.rbs_ok(&["add", "auth"]);
         project.rbs_ok(&[
             "generate",
             "crud",
@@ -1699,7 +1699,7 @@ mod tests {
         let project = bench::Project::fresh();
         drop_the_library(project.root());
 
-        project.rbs_ok(&["add", "jobs", "--yes"]);
+        project.rbs_ok(&["add", "jobs"]);
         project.rbs_ok(&["generate", "crud", "labels", "--fields", "caption:string"]);
 
         let seed = read(&project.root().join("src/seeds/labels.rs"));
