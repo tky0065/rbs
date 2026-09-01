@@ -19,6 +19,16 @@ sqlite = ["sea-orm/sqlx-sqlite"]
 
 auth = ["dep:argon2", "dep:base64", "dep:jsonwebtoken", "dep:rand", "dep:sha2"]
 
+# La greffe OTLP est ici et non dans le fragment engendré : `logs::init()` pose l'abonné
+# global lui-même, et `set_global_default` ne s'appelle qu'une fois. Aucun code ajouté à
+# l'ancre `startup`, qui s'exécute après, ne peut plus y composer une couche.
+observability = [
+    "dep:opentelemetry",
+    "dep:opentelemetry-otlp",
+    "dep:opentelemetry_sdk",
+    "dep:tracing-opentelemetry",
+]
+
 # Vides et sans dépendances : les nommer réserve le nom sans figer, un an à l'avance,
 # les crates que leur implémentation utilisera.
 redis = []
@@ -27,6 +37,15 @@ storage = []
 
 [package.metadata.docs.rs]
 all-features = true
+
+# `Health` et `Checks` ont cessé de dériver `Copy` en accueillant les sondes des features
+# installées, dont le nombre varie et qui demandent donc une allocation. La rupture est
+# formelle : les deux types sont `#[non_exhaustive]`, et aucune fonction publique de la
+# crate n'en rend ni n'en prend — `verdict` est privée, `handler` et `report` rendent une
+# `Response`. Personne, hors de la crate, ne peut détenir la valeur dont la copie
+# disparaît. À rétablir en `deny` le jour où un type public devient réellement obtenable.
+[package.metadata.cargo-semver-checks.lints]
+derive_trait_impl_removed = "allow"
 
 [dependencies]
 anyhow.workspace = true
@@ -37,6 +56,9 @@ dotenvy.workspace = true
 figment.workspace = true
 jsonwebtoken = { workspace = true, optional = true }
 nu-ansi-term.workspace = true
+opentelemetry = { workspace = true, optional = true }
+opentelemetry-otlp = { workspace = true, optional = true }
+opentelemetry_sdk = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
 sea-orm.workspace = true
 serde = { workspace = true, features = ["derive"] }
@@ -45,6 +67,7 @@ sha2 = { workspace = true, optional = true }
 thiserror.workspace = true
 tokio = { workspace = true, features = ["rt", "time"] }
 tracing.workspace = true
+tracing-opentelemetry = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, features = ["fmt", "ansi", "chrono", "env-filter"] }
 ulid.workspace = true
 utoipa.workspace = true

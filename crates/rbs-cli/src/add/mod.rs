@@ -1206,6 +1206,54 @@ mod tests {
             .unwrap_or_else(|| panic!("{} ne porte pas {}", anchor.file, anchor.name))
     }
 
+    /// Une dépendance installée doit être contrôlée : sans sa sonde, `GET /health`
+    /// répondrait `ok` sur un cache ou un bucket injoignable, et l'orchestrateur
+    /// garderait le pod en rotation.
+    #[test]
+    fn the_redis_and_storage_plans_land_their_probe_in_the_health_anchor() {
+        for (fragment, sonde) in [
+            (
+                "redis",
+                r#"rbs_core::health::Probe::new("cache", state.cache().ping()),"#,
+            ),
+            (
+                "storage",
+                r#"rbs_core::health::Probe::new("storage", crate::storage::probe(&state.storage)),"#,
+            ),
+        ] {
+            let (_parent, root) = project();
+
+            let planned = plan_for(&options(&root, fragment)).expect("le plan doit se calculer");
+
+            assert!(
+                anchor_body(&planned, &crate::anchors::HEALTH_PROBES).contains(sonde),
+                "{}",
+                projected(&planned, "src/health/controller.rs")
+            );
+        }
+    }
+
+    /// La file de `jobs` est une table de la base, et sonder un relais SMTP à chaque
+    /// contrôle coûterait cher pour un envoi que rien ne rend synchrone : ni l'un ni
+    /// l'autre n'a de sonde, et l'absence se teste comme la présence.
+    #[test]
+    fn the_jobs_and_mail_fragments_declare_no_probe() {
+        for fragment in ["jobs", "mail"] {
+            let (_parent, root) = project();
+
+            let planned = plan_for(&options(&root, fragment)).expect("le plan doit se calculer");
+
+            assert!(
+                !planned
+                    .plan
+                    .files()
+                    .iter()
+                    .any(|file| file.path == crate::anchors::HEALTH_PROBES.file),
+                "`{fragment}` a touché au contrôle de santé"
+            );
+        }
+    }
+
     /// Une couche se pose dans `layers`, jamais dans `routes` : montée parmi les routes,
     /// elle n'envelopperait rien.
     #[test]
@@ -1310,6 +1358,87 @@ mod tests {
         assert!(
             configuration.contains("limit = 120"),
             "la limite globale doit rester bien plus large :\n{configuration}"
+        );
+    }
+
+    /// Le fragment a trois points d'entrée distincts — un module, une couche, un second
+    /// listener — plus sa section. Un manifeste incomplet en laisserait passer un sans
+    /// que rien ne compile de travers : la feature s'installerait et ne compterait rien.
+    #[test]
+    fn the_observability_plan_lands_its_layer_its_listener_and_its_section() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "observability")).expect("le plan doit se calculer");
+
+        assert_eq!(
+            planned.files,
+            [
+                "src/observability/mod.rs",
+                "src/observability/config.rs",
+                "src/observability/metrics.rs",
+                "src/observability/tests.rs",
+            ]
+        );
+
+        let bibliotheque = projected(&planned, "src/lib.rs");
+        assert!(
+            bibliotheque.contains("pub mod observability;"),
+            "{bibliotheque}"
+        );
+        assert!(
+            anchor_body(&planned, &crate::anchors::LAYERS)
+                .contains("crate::observability::metrics::middleware"),
+            "{}",
+            projected(&planned, "src/router.rs")
+        );
+        assert!(
+            anchor_body(&planned, &crate::anchors::STARTUP)
+                .contains("demo_api::observability::serve(&state).await?;"),
+            "{}",
+            projected(&planned, "src/main.rs")
+        );
+
+        let configuration = projected(&planned, "config/default.toml");
+        assert!(configuration.contains("[observability]"), "{configuration}");
+        assert!(
+            configuration.contains("metrics_port = 9090"),
+            "{configuration}"
+        );
+    }
+
+    /// `/metrics` publie la topologie du service : monté sur le routeur public, chaque
+    /// déploiement devrait le cacher par une règle de reverse-proxy, et celui qui
+    /// l'oublie fuit sans le savoir.
+    #[test]
+    fn the_metrics_route_is_never_mounted_on_the_public_router() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "observability")).expect("le plan doit se calculer");
+
+        let routeur = projected(&planned, "src/router.rs");
+        assert!(!routeur.contains("/metrics"), "{routeur}");
+    }
+
+    /// Le test qui garde la cardinalité du collecteur : le compteur prend le gabarit de
+    /// route et jamais l'URL demandée. Une série par article ferait tomber le collecteur
+    /// en quelques heures, et la feature deviendrait nuisible en production.
+    #[test]
+    fn the_observability_middleware_labels_requests_with_the_route_template() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "observability")).expect("le plan doit se calculer");
+        let metriques = projected(&planned, "src/observability/metrics.rs");
+
+        assert!(metriques.contains("MatchedPath"), "{metriques}");
+        assert!(
+            !metriques.contains("uri().path()"),
+            "le chemin demandé sert d'étiquette :\n{metriques}"
+        );
+
+        let tests = projected(&planned, "src/observability/tests.rs");
+        assert!(
+            tests.contains("path=\\\"/articles/{id}\\\""),
+            "les tests engendrés ne gardent pas la cardinalité :\n{tests}"
         );
     }
 

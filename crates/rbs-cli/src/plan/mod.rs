@@ -204,6 +204,34 @@ impl Builder {
         Ok(())
     }
 
+    /// Planifie la remise en place de `anchor`, disparue de son fichier.
+    ///
+    /// Rend ce qu'elle a fait plutôt qu'une erreur : une ancre dont l'accroche ne se
+    /// retrouve pas laisse le plan intact, et le diagnostic la nomme comme avant.
+    pub fn repose(&mut self, anchor: Anchor) -> Result<Repose, Error> {
+        let path = anchor.file.to_string();
+
+        let states = self.states(&path)?;
+        let Some(courant) = states.courant else {
+            return Ok(Repose::Laissee(crate::anchors::Cause::FichierAbsent));
+        };
+
+        let after = match crate::anchors::repose(&courant, &anchor) {
+            Ok(after) => after,
+            Err(cause) => return Ok(Repose::Laissee(cause)),
+        };
+        let statut = combined_status(states.origin.as_deref(), &after);
+
+        self.project_onto(&path, states.origin, after, statut);
+        self.actions.push(Action {
+            path,
+            effet: Effect::ReposerAncre { anchor },
+            statut,
+        });
+
+        Ok(Repose::Reposee)
+    }
+
     /// Planifie le remplacement du corps de `zone` dans `path`.
     ///
     /// `version` réécrit le marqueur d'ouverture : c'est ainsi que le guide porte la
@@ -413,6 +441,15 @@ impl Builder {
             }),
         }
     }
+}
+
+/// Ce qu'une remise en place d'ancre a pu faire.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Repose {
+    /// L'ancre est reposée : le plan porte le fichier réécrit.
+    Reposee,
+    /// L'ancre est laissée où elle n'est pas, et voici pourquoi.
+    Laissee(crate::anchors::Cause),
 }
 
 /// Les deux lectures dont une action a besoin pour se planifier.

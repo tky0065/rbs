@@ -5,8 +5,8 @@ title: rbs add
 
 # `rbs add`
 
-Installe une feature dans un projet existant. Elle en livre neuf : `auth`, `ci`, `cors`,
-`docker`, `jobs`, `mail`, `rate-limit`, `redis` et `storage`.
+Installe une feature dans un projet existant. Elle en livre dix : `auth`, `ci`, `cors`,
+`docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis` et `storage`.
 
 :::note
 Les blocs de terminal de cette page sont des sorties réelles, capturées en lançant la
@@ -18,7 +18,7 @@ sortie de terminal ne se traduit pas.
 
 ```text
 $ rbs add --help
-Ajoute une feature : auth, ci, cors, docker, jobs, mail, rate-limit, redis, storage
+Ajoute une feature : auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage
 
 Usage: rbs add [OPTIONS] <FEATURE>
 
@@ -39,7 +39,7 @@ Options:
 | `--dry-run` | Affiche le plan et s'arrête. Rien n'est écrit. |
 | `--template-dir <CHEMIN>` | Lit les fragments dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire. |
 
-## Les neuf features
+## Les dix features
 
 | Feature | Fichiers | Suite |
 |---|---|---|
@@ -52,10 +52,11 @@ Options:
 | `storage` | quatre fichiers sous `src/storage/` | ignorer `./storage`, ou passer le backend à `s3` |
 | `cors` | trois fichiers sous `src/cors/`, une section `[cors]` de configuration, et une couche dans `// <rbs:layers>` | énumérer vos origines dans `[cors]` — vide, donc rien d'origine croisée ne passe |
 | `rate-limit` | quatre fichiers sous `src/rate_limit/`, une section `[rate_limit]`, un champ sur `AppState`, et une couche dans `// <rbs:layers>` | derrière un reverse proxy, régler `rate_limit.trust_forwarded_for` |
+| `observability` | quatre fichiers sous `src/observability/`, une section `[observability]`, une couche dans `// <rbs:layers>`, et un second listener dans `// <rbs:startup>` | nommer un collecteur dans `OTEL_EXPORTER_OTLP_ENDPOINT` — sans lui rien n'est exporté |
 
-`cors` et `rate-limit` sont les deux qui empilent un middleware au lieu de monter une
-route : leur couche va dans `// <rbs:layers>`, à l'intérieur de `trace` et de
-`request_id` — voir [Les ancres](#les-ancres).
+`cors`, `rate-limit` et `observability` sont les trois qui empilent un middleware au lieu
+de monter une route : leur couche va dans `// <rbs:layers>`, à l'intérieur de `trace` et
+de `request_id` — voir [Les ancres](#les-ancres).
 
 Les trois qui les précèdent sont les briques des guides [cache](../guides/cache.md),
 [courriel](../guides/mail.md) et [stockage](../guides/storage.md). Aucune ne monte de
@@ -280,7 +281,7 @@ Tout autre nom est refusé avec la liste de ce qui est installable :
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : auth, ci, cors, docker, jobs, mail, rate-limit, redis, storage
+erreur : `graphql` n'est pas une feature installable : auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage
 ```
 
 ## L'idempotence
@@ -406,11 +407,12 @@ s'interchange pas avec `// <rbs:routes>` qui la précède de quelques lignes : u
 enveloppe ceux qui le précèdent, donc une couche insérée là s'exécute *après* `request_id`
 et `trace`, jamais avant. C'est la seule position qui lui donne l'identifiant de la requête
 et qui fait entrer ses propres réponses — un 429, un préflight refusé — dans le journal
-comme n'importe quelle autre. `cors` et `rate-limit` s'en servent toutes deux.
+comme n'importe quelle autre. `cors`, `rate-limit` et `observability` s'en servent
+toutes les trois.
 
 `docker` est le seul fragment que `rbs add` installe à faire lui-même exception : ses
 services `api` et `migrate` vont dans `# <rbs:services>`, l'ancre YAML que porte un
-compose — voir [plus haut](#les-neuf-features). La règle est la même partout : aucun AST
+compose — voir [plus haut](#les-dix-features). La règle est la même partout : aucun AST
 n'est jamais réécrit, et une ancre absente fait que la commande n'écrit rien et affiche le
 bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les onze — dix sur un
 projet sans compose pour en porter une onzième.

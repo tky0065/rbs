@@ -23,6 +23,8 @@ pub(crate) enum Effect {
     Creer { content: String },
     /// Ajoute des lignes dans une ancre, juste avant sa balise fermante.
     Inserer { anchor: Anchor, lines: Vec<String> },
+    /// Repose une ancre disparue, sous la ligne d'accroche qu'elle déclare.
+    ReposerAncre { anchor: Anchor },
     /// Modifie un manifeste TOML en préservant sa mise en forme.
     PatcherToml { patch: PatchToml },
     /// Ajoute une section à un document TOML qui n'est pas un manifeste Cargo.

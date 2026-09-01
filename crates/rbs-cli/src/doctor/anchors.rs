@@ -15,21 +15,12 @@ pub(crate) const TITRE: &str = "ancres";
 
 /// Vérifie que le projet porte toutes ses ancres, et dit comment recoller les absentes.
 pub(crate) fn check(root: &Path) -> Check {
-    let anchors = anchors::resolved(root);
-
-    // Une ancre optionnelle dont le fichier n'existe pas n'est pas applicable : la
-    // réclamer ferait passer pour incomplet un projet qui ne l'est pas.
-    let applicables: Vec<&Anchor> = anchors
-        .iter()
-        .filter(|anchor| !anchor.optional || root.join(anchor.file.as_ref()).exists())
-        .collect();
-
-    let absentes: Vec<&&Anchor> = applicables.iter().filter(|a| !present(root, a)).collect();
+    let (applicables, absentes) = inventaire(root);
 
     if absentes.is_empty() {
         return Check::ok(
             TITRE,
-            format!("les {} points d'insertion sont en place", applicables.len()),
+            format!("les {applicables} points d'insertion sont en place"),
         );
     }
 
@@ -48,6 +39,73 @@ pub(crate) fn check(root: &Path) -> Check {
     Check::failed(TITRE, detail, remedy)
 }
 
+/// Les ancres que le projet devrait porter, comptées, et celles qui lui manquent.
+///
+/// Une ancre optionnelle dont le fichier n'existe pas n'est pas applicable : la réclamer
+/// ferait passer pour incomplet un projet qui ne l'est pas.
+fn inventaire(root: &Path) -> (usize, Vec<Anchor>) {
+    let applicables: Vec<Anchor> = anchors::resolved(root)
+        .into_iter()
+        .filter(|anchor| !anchor.optional || root.join(anchor.file.as_ref()).exists())
+        .collect();
+
+    let absentes = applicables
+        .iter()
+        .filter(|anchor| !present(root, anchor))
+        .cloned()
+        .collect();
+
+    (applicables.len(), absentes)
+}
+
+/// Une ancre que la réparation n'a pas reposée, et la raison qu'elle en donne.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub(crate) struct Laissee {
+    /// Nom de l'ancre, tel qu'il paraît entre les chevrons.
+    #[serde(rename = "ancre")]
+    pub anchor: String,
+    /// Pourquoi elle n'a pas été reposée.
+    pub raison: String,
+}
+
+/// Ce qu'une réparation fera au projet, et ce qu'elle n'y fera pas.
+#[derive(Debug)]
+pub(crate) struct Repair {
+    /// Les écritures, calculées et rien d'écrit.
+    pub plan: crate::plan::Plan,
+    /// Les ancres que le plan repose, dans l'ordre du registre.
+    pub reposees: Vec<String>,
+    /// Les ancres qu'il laisse absentes, et pourquoi.
+    pub laissees: Vec<Laissee>,
+}
+
+/// Planifie la remise en place des ancres absentes du projet.
+///
+/// Rien n'est écrit ici : le plan s'affiche avant de s'appliquer, comme celui de toute
+/// commande qui touche un projet existant.
+pub(crate) fn repair(root: &Path) -> Result<Repair, crate::plan::Error> {
+    let (_, absentes) = inventaire(root);
+    let mut builder = crate::plan::Builder::new(root);
+    let mut reposees = Vec::new();
+    let mut laissees = Vec::new();
+
+    for anchor in absentes {
+        match builder.repose(anchor.clone())? {
+            crate::plan::Repose::Reposee => reposees.push(anchor.name.to_string()),
+            crate::plan::Repose::Laissee(cause) => laissees.push(Laissee {
+                anchor: anchor.name.to_string(),
+                raison: cause.raison(&anchor),
+            }),
+        }
+    }
+
+    Ok(Repair {
+        plan: builder.finir(),
+        reposees,
+        laissees,
+    })
+}
+
 /// Vrai si le fichier porteur existe et contient les deux balises de l'ancre.
 ///
 /// Un fichier illisible vaut ancre absente : le diagnostic le signale par le nom du
@@ -60,7 +118,7 @@ fn present(root: &Path, anchor: &Anchor) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::anchors::ANCRES;
+    use crate::anchors::{self, ANCRES};
     use crate::fixtures::project;
 
     use super::super::State;
@@ -228,6 +286,152 @@ mod tests {
             "{}",
             check.detail
         );
+    }
+
+    /// L'indentation de la ligne portant `balise`, dans `source`.
+    fn indentation(source: &str, balise: &str) -> String {
+        let ligne = source
+            .lines()
+            .find(|ligne| ligne.trim() == balise)
+            .unwrap_or_else(|| panic!("`{balise}` absente :\n{source}"));
+
+        ligne[..ligne.len() - ligne.trim_start().len()].to_string()
+    }
+
+    /// La réparation repose l'ancre là où la template l'avait posée, et le diagnostic
+    /// relancé repasse au vert.
+    #[test]
+    fn a_deleted_anchor_is_put_back_and_turns_the_diagnosis_green() {
+        let (_parent, root) = project();
+        let avant = fs::read_to_string(root.join("src/router.rs")).expect("le routeur est lisible");
+        remove(&root, "src/router.rs", "<rbs:routes>");
+        remove(&root, "src/router.rs", "</rbs:routes>");
+        assert_eq!(
+            check(&root).state,
+            State::Echec,
+            "le test ne prouverait rien"
+        );
+
+        let repair = repair(&root).expect("la réparation se planifie");
+        crate::plan::application::apply(&repair.plan, false).expect("le plan s'applique");
+
+        assert_eq!(repair.reposees, vec!["routes".to_string()]);
+        assert!(repair.laissees.is_empty(), "{:?}", repair.laissees);
+        assert_eq!(check(&root).state, State::Bon);
+
+        let apres = fs::read_to_string(root.join("src/router.rs")).expect("le routeur est lisible");
+        assert_eq!(
+            indentation(&apres, "// <rbs:routes>"),
+            indentation(&avant, "// <rbs:routes>")
+        );
+    }
+
+    /// Chaque ancre du registre déclare une accroche, et cette accroche doit reposer le
+    /// bloc à l'indentation qu'il avait : une ancre YAML remise deux colonnes à côté
+    /// ferait insérer un service hors de `services:`, et le compose ne s'analyserait plus.
+    #[test]
+    fn every_anchor_of_the_registry_is_put_back_at_its_own_indentation() {
+        let (_parent, root) = project();
+
+        for anchor in anchors::resolved(&root) {
+            let path = root.join(anchor.file.as_ref());
+            let avant = fs::read_to_string(&path).expect("le fichier porteur est lisible");
+
+            remove(&root, &anchor.file, &anchor.opening());
+            remove(&root, &anchor.file, &anchor.closing());
+
+            let repair = repair(&root).expect("la réparation se planifie");
+            crate::plan::application::apply(&repair.plan, false).expect("le plan s'applique");
+
+            assert_eq!(
+                repair.reposees,
+                vec![anchor.name.to_string()],
+                "{} n'a pas été reposée : {:?}",
+                anchor.name,
+                repair.laissees
+            );
+
+            let apres = fs::read_to_string(&path).expect("le fichier porteur est lisible");
+            assert_eq!(
+                indentation(&apres, &anchor.opening()),
+                indentation(&avant, &anchor.opening()),
+                "{} est reposée à une autre colonne",
+                anchor.name
+            );
+
+            fs::write(&path, &avant).expect("le fichier se rétablit");
+        }
+    }
+
+    /// Une accroche que le fichier ne porte pas, ou qu'il porte deux fois, ne dit plus où
+    /// reposer le bloc : une ancre posée au hasard coûte plus cher qu'une ancre absente,
+    /// et `<rbs:layers>` mise au mauvais endroit ne verrait plus le `request_id`.
+    #[test]
+    fn an_ambiguous_or_missing_hook_leaves_the_anchor_alone() {
+        // L'accroche de `layers` est `.merge(docs)` : réécrite, plus rien ne la porte ;
+        // doublée, rien ne désigne celle des deux qui va recevoir le bloc.
+        for reecriture in [
+            ".merge(openapi::routes(state.core().config()))",
+            ".merge(docs)\n        .merge(docs)",
+        ] {
+            let (_parent, root) = project();
+            let path = root.join("src/router.rs");
+            remove(&root, "src/router.rs", "<rbs:layers>");
+            remove(&root, "src/router.rs", "</rbs:layers>");
+
+            let source = fs::read_to_string(&path).expect("le routeur est lisible");
+            fs::write(&path, source.replace(".merge(docs)", reecriture))
+                .expect("le routeur est réécrivable");
+
+            let repair = repair(&root).expect("la réparation se planifie");
+
+            assert!(repair.reposees.is_empty(), "{:?}", repair.reposees);
+            assert_eq!(repair.laissees.len(), 1, "{:?}", repair.laissees);
+            assert_eq!(repair.laissees[0].anchor, "layers");
+            assert!(
+                repair.laissees[0].raison.contains(".merge(docs)"),
+                "la raison nomme l'accroche en cause : {}",
+                repair.laissees[0].raison
+            );
+            assert!(
+                repair.plan.files().is_empty(),
+                "une abstention n'écrit rien : {:?}",
+                repair.plan.files()
+            );
+        }
+    }
+
+    /// Une ancre à demi effacée ne se répare pas : reposer le bloc entier doublerait la
+    /// balise restante, et l'endroit de celle qui manque ne se déduit pas de l'autre —
+    /// entre les deux, il y a tout ce que l'ancre portait.
+    #[test]
+    fn a_half_deleted_anchor_is_named_rather_than_doubled() {
+        let (_parent, root) = project();
+        remove(&root, "src/router.rs", "</rbs:routes>");
+
+        let repair = repair(&root).expect("la réparation se planifie");
+
+        assert!(repair.reposees.is_empty(), "{:?}", repair.reposees);
+        assert_eq!(repair.laissees.len(), 1, "{:?}", repair.laissees);
+        assert_eq!(repair.laissees[0].anchor, "routes");
+        assert!(
+            repair.laissees[0].raison.contains("</rbs:routes>"),
+            "la raison nomme la balise restée : {}",
+            repair.laissees[0].raison
+        );
+        assert!(repair.plan.files().is_empty());
+    }
+
+    /// Sur un projet sain, la réparation n'a rien à reposer et rien à écrire.
+    #[test]
+    fn a_healthy_project_gets_an_empty_repair() {
+        let (_parent, root) = project();
+
+        let repair = repair(&root).expect("la réparation se planifie");
+
+        assert!(repair.reposees.is_empty());
+        assert!(repair.laissees.is_empty());
+        assert!(repair.plan.files().is_empty(), "{:?}", repair.plan.files());
     }
 
     #[test]

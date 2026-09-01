@@ -53,7 +53,7 @@ pub enum Commands {
         yes: bool,
     },
 
-    /// Ajoute une feature : auth, ci, cors, docker, jobs, mail, rate-limit, redis, storage.
+    /// Ajoute une feature : auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage.
     Add {
         /// Feature à installer.
         feature: String,
@@ -99,6 +99,23 @@ pub enum Commands {
         /// Rend le rapport en JSON sur la sortie standard, pour un script ou une CI.
         #[arg(long)]
         json: bool,
+
+        /// Repose les ancres absentes avant de diagnostiquer.
+        #[arg(long)]
+        fix: bool,
+
+        // `requires` : seul `--fix` écrit, et hors de lui ce drapeau serait pris puis
+        // ignoré — ce que `--template-dir` faisait sur les commandes qui ne le lisent pas.
+        /// Repose les ancres même si le working tree Git est sale.
+        #[arg(long, requires = "fix")]
+        force: bool,
+    },
+
+    /// Écrit sur la sortie standard le script de complétion du shell donné.
+    Completions {
+        /// Shell visé.
+        #[arg(value_name = "SHELL")]
+        shell: clap_complete::Shell,
     },
 
     /// Aligne le manifeste du projet sur la version du CLI : rbs-core et les métadonnées.
@@ -190,7 +207,15 @@ mod tests {
         let help = command.clone().render_long_help().to_string();
 
         for expected in [
-            "new", "add", "generate", "migrate", "seed", "dev", "doctor", "upgrade",
+            "new",
+            "add",
+            "generate",
+            "migrate",
+            "seed",
+            "dev",
+            "doctor",
+            "upgrade",
+            "completions",
         ] {
             let sous_commande = command
                 .get_subcommands()
@@ -353,6 +378,29 @@ mod tests {
             panic!("`add` attendue");
         };
         assert_eq!(template_dir, Some(PathBuf::from("/tmp/t")));
+    }
+
+    /// `--force` ne lève que la garde Git de `--fix`, seul geste de `doctor` qui écrive :
+    /// accepté seul, il serait pris puis ignoré.
+    #[test]
+    fn doctor_force_is_refused_without_fix() {
+        let reparation =
+            Cli::try_parse_from(["rbs", "doctor", "--fix", "--force"]).expect("commande valide");
+        let Commands::Doctor { fix, force, .. } = reparation.command else {
+            panic!("`doctor` attendue");
+        };
+        assert!(fix && force);
+
+        // Le motif du refus est asserté, et pas seulement le refus : sans lui, une faute
+        // de frappe dans `doctor` ferait passer le test pour la mauvaise raison.
+        let refus = Cli::try_parse_from(["rbs", "doctor", "--force"])
+            .expect_err("`--force` seul doit être refusé : rien n'écrirait");
+
+        assert_eq!(
+            refus.kind(),
+            clap::error::ErrorKind::MissingRequiredArgument
+        );
+        assert!(refus.to_string().contains("--fix"), "{refus}");
     }
 
     /// `prompts.rs` est le seul module qui pose des questions, et `rbs new` la seule

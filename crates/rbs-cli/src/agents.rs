@@ -495,13 +495,23 @@ mod tests {
 
     /// `health` est le module du squelette, non une entité engendrée : le compter parmi
     /// elles ferait croire à un CRUD que personne n'a demandé.
+    ///
+    /// L'assertion vise les deux lignes de l'inventaire et non le rendu entier : celui-ci
+    /// nomme aussi l'ancre `health_probes`, qui décrit un point d'insertion et non une
+    /// entité.
     #[test]
     fn the_health_module_is_not_counted_as_an_entity() {
         let (_parent, root) = project(Vec::new());
 
         let rendu = inventory(&root, Lang::Fr).expect("le projet est lisible");
 
-        assert!(!rendu.contains("health"), "{rendu}");
+        for etiquette in ["Fragments", "Entités"] {
+            let ligne = rendu
+                .lines()
+                .find(|line| line.contains(etiquette))
+                .expect("la ligne est rendue");
+            assert!(!ligne.contains("health"), "{ligne}");
+        }
     }
 
     /// Une liste vide se dit, elle ne se tait pas : une ligne absente se lit comme une

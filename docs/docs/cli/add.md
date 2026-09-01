@@ -5,8 +5,8 @@ title: rbs add
 
 # `rbs add`
 
-Installs a feature into an existing project. Nine are shipped: `auth`, `ci`, `cors`,
-`docker`, `jobs`, `mail`, `rate-limit`, `redis` and `storage`.
+Installs a feature into an existing project. Ten are shipped: `auth`, `ci`, `cors`,
+`docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis` and `storage`.
 
 :::note
 rbs speaks French in its help screens and in its output. Every terminal block on this page
@@ -17,7 +17,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ```text
 $ rbs add --help
-Ajoute une feature : auth, ci, cors, docker, jobs, mail, rate-limit, redis, storage
+Ajoute une feature : auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage
 
 Usage: rbs add [OPTIONS] <FEATURE>
 
@@ -38,7 +38,7 @@ Options:
 | `--dry-run` | Prints the plan and stops. Nothing is written. |
 | `--template-dir <CHEMIN>` | Reads the fragments from a directory holding one subdirectory per feature, instead of the ones embedded in the binary. |
 
-## The nine features
+## The ten features
 
 | Feature | Files | Next step |
 |---|---|---|
@@ -51,10 +51,11 @@ Options:
 | `storage` | four files under `src/storage/` | ignore `./storage`, or switch the backend to `s3` |
 | `cors` | three files under `src/cors/`, a `[cors]` config section, and a layer in `// <rbs:layers>` | list your origins in `[cors]` — empty, so nothing cross-origin passes |
 | `rate-limit` | four files under `src/rate_limit/`, a `[rate_limit]` config section, a field on `AppState`, and a layer in `// <rbs:layers>` | behind a reverse proxy, set `rate_limit.trust_forwarded_for` |
+| `observability` | four files under `src/observability/`, an `[observability]` config section, a layer in `// <rbs:layers>`, and a second listener in `// <rbs:startup>` | name a collector in `OTEL_EXPORTER_OTLP_ENDPOINT` — without it nothing is exported |
 
-`cors` and `rate-limit` are the two that stack a middleware rather than mount a route:
-their layer goes into `// <rbs:layers>`, inside `trace` and `request_id` — see
-[Anchors](#anchors).
+`cors`, `rate-limit` and `observability` are the three that stack a middleware rather
+than mount a route: their layer goes into `// <rbs:layers>`, inside `trace` and
+`request_id` — see [Anchors](#anchors).
 
 The three before them are the bricks of the [cache](../guides/cache.md),
 [mail](../guides/mail.md) and [storage](../guides/storage.md) guides. Each mounts no
@@ -279,7 +280,7 @@ Anything else is refused with the list of what is installable:
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : auth, ci, cors, docker, jobs, mail, rate-limit, redis, storage
+erreur : `graphql` n'est pas une feature installable : auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage
 ```
 
 ## Idempotence
@@ -404,11 +405,12 @@ library — see [below](./generate.md#anchors)), `// <rbs:routes>`, `// <rbs:lay
 with `// <rbs:routes>` a few lines above: a `.layer()` wraps those that precede it, so a
 layer inserted there runs *after* `request_id` and `trace`, never before. That is the only
 position that hands it the request id and lets its own responses — a 429, a refused
-preflight — reach the log like any other. `cors` and `rate-limit` both use it.
+preflight — reach the log like any other. `cors`, `rate-limit` and `observability` all
+three use it.
 
 `docker` is the one fragment `rbs add` installs that is itself an exception: its `api` and
 `migrate` services go into `# <rbs:services>`, the YAML anchor a compose carries — see
-[above](#the-nine-features). The rule is the same everywhere: no AST is ever rewritten,
+[above](#the-ten-features). The rule is the same everywhere: no AST is ever rewritten,
 and a missing anchor makes the command write nothing and print the block to paste back.
 [`rbs doctor`](./doctor.md) checks all eleven — ten on a project with no compose to carry
 an eleventh.

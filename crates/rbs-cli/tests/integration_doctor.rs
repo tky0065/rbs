@@ -134,6 +134,50 @@ fn the_json_report_is_the_only_thing_on_stdout() {
     }
 }
 
+/// `--fix` repose l'ancre puis diagnostique, et le document dit ce qu'il a reposé : un
+/// contrôle `ancres` devenu vert ne dirait pas qu'un octet a été écrit.
+#[test]
+fn the_fix_flag_puts_an_anchor_back_and_says_so_in_the_document() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+    viser(&projet, INJOIGNABLE);
+
+    let router = projet.join("src/router.rs");
+    let avant = fs::read_to_string(&router).expect("le routeur est lisible");
+    let ampute: String = avant
+        .lines()
+        .filter(|ligne| !ligne.contains("rbs:routes>"))
+        .map(|ligne| format!("{ligne}\n"))
+        .collect();
+    fs::write(&router, ampute).expect("le routeur est réécrivable");
+
+    let sortie = rbs(&projet)
+        .args(["doctor", "--fix", "--json"])
+        .assert()
+        .get_output()
+        .clone();
+    let stdout = String::from_utf8_lossy(&sortie.stdout).into_owned();
+
+    let document: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|faute| panic!("stdout doit être un JSON valide ({faute}) :\n{stdout}"));
+
+    assert_eq!(document["reparation"]["reposees"][0], "routes", "{stdout}");
+    let ancres = document["checks"]
+        .as_array()
+        .expect("checks est un tableau")
+        .iter()
+        .find(|check| check["name"] == "ancres")
+        .expect("le contrôle ancres figure au rapport");
+    assert_eq!(ancres["status"], "ok", "{stdout}");
+
+    // Le fichier reposé doit être celui qu'`rbs new` avait écrit, à l'octet près : c'est
+    // la seule preuve que le bloc est revenu à sa colonne et entre les bonnes lignes.
+    assert_eq!(
+        fs::read_to_string(&router).expect("le routeur est lisible"),
+        avant
+    );
+}
+
 /// L'annonce n'a de valeur que si elle atteint le terminal *avant* la compilation
 /// qu'elle annonce : sa ligne doit précéder le constat du même contrôle.
 #[test]

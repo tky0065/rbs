@@ -42,6 +42,22 @@ pub trait Storage: std::fmt::Debug + Send + Sync {
 
     /// Un objet est-il déposé sous `key` ?
     async fn exists(&self, key: &str) -> Result<bool, StorageError>;
+
+    /// Le backend répond-il ? La sonde que `GET /health` interroge.
+    ///
+    /// Rend un booléen et non un `Result` : un contrôle de santé ne distingue pas les
+    /// raisons d'une panne, et le détail d'une erreur n'a rien à faire dans une réponse
+    /// souvent exposée sans authentification.
+    async fn available(&self) -> bool;
+}
+
+/// Le stockage du projet répond-il ?
+///
+/// Une fonction plutôt qu'un appel direct à [`Storage::available`] : la sonde s'inscrit
+/// dans `src/health/controller.rs`, où le trait n'est pas importé, et une ligne qui
+/// qualifierait le trait au complet dépasserait la largeur que rustfmt admet.
+pub async fn probe(storage: &Arc<dyn Storage>) -> bool {
+    storage.available().await
 }
 
 /// Section `[storage]` de la configuration.

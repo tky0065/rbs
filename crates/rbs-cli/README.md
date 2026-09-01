@@ -27,7 +27,7 @@ SQLite 3.35+.
 | Command | What it does |
 |---|---|
 | `rbs new <name>` | Creates a project ready to start: database, migrations, `/health` route |
-| `rbs add <feature>` | Installs a feature: `auth`, `ci`, `docker`, `jobs`, `mail`, `redis`, `storage` |
+| `rbs add <feature>` | Installs a feature: `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`, `storage` |
 | `rbs generate crud <name>` | Generates a full CRUD feature — entity and migration included |
 | `rbs generate feature <name>` | Generates an empty feature: six files, no fields |
 | `rbs migrate up\|down\|status\|new` | Drives the project's migrations |
@@ -35,6 +35,7 @@ SQLite 3.35+.
 | `rbs dev` | Starts services and migrations, and restarts the server on every change |
 | `rbs doctor` | Diagnoses the project: anchors, `.env`, database reachable, versions |
 | `rbs upgrade` | Aligns the project's manifest on the CLI version |
+| `rbs completions <shell>` | Writes the shell's completion script to standard output |
 
 `generate` answers to `g`. `rbs new` takes `--yes`, which accepts the defaults without
 asking so the CLI stays scriptable; `rbs new` and `rbs add` take `--template-dir`, which

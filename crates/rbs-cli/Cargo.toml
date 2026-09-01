@@ -15,6 +15,7 @@ repository.workspace = true
 [dependencies]
 chrono.workspace = true
 clap.workspace = true
+clap_complete.workspace = true
 console.workspace = true
 include_dir.workspace = true
 inquire.workspace = true

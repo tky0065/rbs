@@ -791,6 +791,7 @@ mod tests {
             "cors",
             "docker",
             "mail",
+            "observability",
             "rate-limit",
             "redis",
             "storage",
