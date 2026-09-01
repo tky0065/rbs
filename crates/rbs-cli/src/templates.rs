@@ -115,20 +115,24 @@ impl Source {
     /// Le manifeste d'un fragment est écarté : il déclare ce que l'installation fait au
     /// projet, il n'est pas un des fichiers qu'elle y dépose.
     pub fn files(&self) -> io::Result<Vec<File>> {
-        let mut files = self.all()?;
-
-        files.retain(|file| file.destination != Path::new(MANIFESTE));
-
-        Ok(files)
+        Ok(self.manifest_and_files()?.1)
     }
 
-    /// Source du manifeste du fragment, ou `None` s'il n'en porte pas.
-    pub fn manifest(&self) -> io::Result<Option<String>> {
-        Ok(self
-            .all()?
-            .into_iter()
-            .find(|file| file.destination == Path::new(MANIFESTE))
-            .map(|file| file.source))
+    /// Le manifeste du fragment et les fichiers que son installation dépose, en une passe.
+    ///
+    /// L'installation a besoin des deux, et les lire séparément parcourait l'arborescence
+    /// deux fois en copiant chaque source en `String` autant de fois. Les deux
+    /// [`Source::files`] s'y ramène : la règle disant que le manifeste n'est pas un
+    /// fichier déposé n'est ainsi écrite qu'ici.
+    pub fn manifest_and_files(&self) -> io::Result<(Option<String>, Vec<File>)> {
+        let mut files = self.all()?;
+
+        let manifest = files
+            .iter()
+            .position(|file| file.destination == Path::new(MANIFESTE))
+            .map(|rang| files.remove(rang).source);
+
+        Ok((manifest, files))
     }
 
     /// Toutes les entrées du répertoire, manifeste compris.
@@ -885,6 +889,41 @@ mod tests {
                 "`{table}` doit porter l'ancre des `impl Related` à son nom :\n{source}"
             );
         }
+    }
+
+    /// Le manifeste et les fichiers d'un fragment se lisent en une seule passe.
+    ///
+    /// L'installation a besoin des deux : les lire séparément parcourt l'arborescence deux
+    /// fois et copie chaque source en `String` deux fois, pour le fragment entier.
+    #[test]
+    fn the_manifest_and_the_files_come_out_of_one_reading() {
+        let source = Source::feature(None, "auth").expect("le fragment auth est embarqué");
+
+        let (manifeste, fichiers) = source
+            .manifest_and_files()
+            .expect("le fragment se lit d'un coup");
+
+        assert!(
+            manifeste.is_some_and(|texte| texte.contains("[feature]")),
+            "le manifeste doit sortir de la même lecture"
+        );
+        assert!(
+            fichiers
+                .iter()
+                .all(|file| file.destination != Path::new(MANIFESTE)),
+            "le manifeste n'est pas un fichier que l'installation dépose"
+        );
+        let empreinte = |files: &[File]| -> Vec<(PathBuf, usize)> {
+            files
+                .iter()
+                .map(|file| (file.destination.clone(), file.source.len()))
+                .collect()
+        };
+        assert_eq!(
+            empreinte(&fichiers),
+            empreinte(&source.files().expect("les fichiers se lisent")),
+            "la lecture d'un coup doit rendre exactement ce que `files` rend"
+        );
     }
 
     /// Une réponse portant des jetons ne se met pas en cache — RFC 6749 §5.1.
