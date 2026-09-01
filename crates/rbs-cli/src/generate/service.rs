@@ -195,14 +195,4 @@ mod tests {
         );
         project.compile();
     }
-
-    /// Rendu complet imprimé pour la revue de lecture qu'exige le lot.
-    #[test]
-    #[ignore = "affichage pour revue humaine"]
-    fn preview() {
-        println!(
-            "{}",
-            service("articles", "title:string,summary:text:optional,views:int")
-        );
-    }
 }

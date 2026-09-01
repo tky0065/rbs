@@ -559,15 +559,4 @@ fn chaque_route_annonce_le_schema_qu_elle_rend() {
 
         println!("{}", project.keep().display());
     }
-
-    /// Rendu complet imprimé pour la revue de lecture qu'exige le lot.
-    #[test]
-    #[ignore = "affichage pour revue humaine"]
-    fn preview() {
-        println!(
-            "{}\n// ---- mod.rs ----\n{}",
-            controller("articles"),
-            module("articles")
-        );
-    }
 }
