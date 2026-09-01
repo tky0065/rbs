@@ -11,7 +11,7 @@ use newsletter_queue::subscribers::model;
 /// Le dernier n'a pas confirmé : `POST /subscribers/broadcast` enfile trois lettres et
 /// non quatre, ce qui est la seule façon de voir que le filtre existe.
 pub async fn seed(db: &DatabaseConnection) -> Result<(), DbErr> {
-    // `id`, `created_at` et `updated_at` tiennent leur valeur du défaut de la colonne.
+    // `id` vient d'`ActiveModelBehavior::new()`, `created_at` et `updated_at` du défaut de colonne.
     for (email, name, confirmed) in [
         ("ada@example.com", "Ada", true),
         ("grace@example.com", "Grace", true),

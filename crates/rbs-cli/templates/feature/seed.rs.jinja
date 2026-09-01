@@ -18,7 +18,7 @@ mod model;
 
 /// Insère les {@ module @} de démonstration.
 pub async fn seed(db: &DatabaseConnection) -> Result<(), DbErr> {
-    // `id`, `created_at` et `updated_at` tiennent leur valeur du défaut de la colonne.
+    // `id` vient d'`ActiveModelBehavior::new()`, `created_at` et `updated_at` du défaut de colonne.
 {%- for ligne in lignes %}
     model::ActiveModel {
 {%- for field in ligne %}

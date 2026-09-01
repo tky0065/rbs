@@ -1,2 +1,6 @@
 [feature]
 description = "workflow GitHub Actions : fmt, clippy et tests sur PostgreSQL"
+
+[[files]]
+source      = ".github/workflows/ci.yml.jinja"
+destination = ".github/workflows/ci.yml"
