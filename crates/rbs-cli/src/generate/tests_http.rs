@@ -45,6 +45,7 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
             compared => names(sent, |champ| !timestamp(champ)),
             timestamped => names(sent, timestamp),
             suffix => sent.iter().any(textual),
+            unique_number => sent.iter().any(drawn_number),
             // Les deux scénarios ci-dessous n'ont de sens que si `--fields` les rend
             // atteignables : sans contrainte d'e-mail rien ne rend 422, sans colonne
             // unique rien ne rend 409, et le test échouerait faute de refus à observer.
@@ -84,6 +85,19 @@ fn value(champ: &Field, mark: &str) -> String {
         return "Value::Null".to_string();
     }
 
+    // Une colonne `unique` non textuelle ne peut pas porter de valeur écrite : les
+    // scénarios de ce fichier créent en parallèle sur la même base, et se refuseraient
+    // l'un l'autre par un 409 dès la première exécution. Les textes tiennent déjà
+    // l'invariant par leur suffixe, et un UUID se tire déjà à chaque appel.
+    if drawn_number(champ) {
+        return match champ.column_type() {
+            FieldType::Int => "unique_number() as i32".to_string(),
+            FieldType::Float => "unique_number() as f64 / 10.0".to_string(),
+            _ => "(chrono::Utc::now() + chrono::Duration::microseconds(unique_number()))\n            .to_rfc3339()"
+                .to_string(),
+        };
+    }
+
     match champ.column_type() {
         FieldType::String | FieldType::Text if champ.validates_email() => {
             format!("format!(\"{}-{mark}{{suffix}}@example.com\")", champ.name)
@@ -112,6 +126,19 @@ fn if_modified(mark: &str, creation: &str, modification: &str) -> String {
 /// ne se compare pas, seule sa présence se vérifie.
 fn timestamp(champ: &Field) -> bool {
     champ.column_type() == FieldType::Datetime
+}
+
+/// Un scalaire `unique` dont la valeur d'exemple se tire au lieu de s'écrire.
+///
+/// Un booléen n'y figure pas : `--fields` refuse d'y poser « unique », faute de pouvoir
+/// tenir plus de deux lignes dans la table.
+fn drawn_number(champ: &Field) -> bool {
+    champ.unique
+        && champ.reference().is_none()
+        && matches!(
+            champ.column_type(),
+            FieldType::Int | FieldType::Float | FieldType::Datetime
+        )
 }
 
 fn textual(champ: &Field) -> bool {
@@ -254,6 +281,56 @@ mod tests {
         assert!(
             scenario.contains(r#"without_body("DELETE", &resource)"#),
             "les deux lignes créées doivent être supprimées :\n{scenario}"
+        );
+    }
+
+    /// Le doc-commentaire de `value` promet qu'un champ `unique` ne fera pas échouer une
+    /// exécution sur ce qu'une autre a laissé. Une valeur en dur ne le tient pas : les
+    /// scénarios de ce fichier créent en parallèle sur la même base, et se refuseraient
+    /// l'un l'autre par un 409 dès la première exécution.
+    #[test]
+    fn a_unique_number_is_drawn_at_each_call() {
+        let rendered = trials(
+            "articles",
+            "views:int:unique,note:float:unique,vu_le:datetime:unique",
+        );
+
+        assert!(
+            rendered.contains("fn unique_number() -> i64"),
+            "l'aide qui tire le nombre est absente :\n{rendered}"
+        );
+        for valeur in [
+            r#""views": unique_number() as i32"#,
+            r#""note": unique_number() as f64 / 10.0"#,
+        ] {
+            assert!(
+                rendered.contains(valeur),
+                "« {valeur} » absent :\n{rendered}"
+            );
+        }
+        assert!(
+            rendered.contains("chrono::Duration::microseconds(unique_number())"),
+            "l'horodatage unique doit se décaler :\n{rendered}"
+        );
+        for en_dur in ["\"views\": 42", "\"views\": 43", "\"note\": 4.2"] {
+            assert!(
+                !rendered.contains(en_dur),
+                "« {en_dur} » se rejouerait d'une exécution à l'autre :\n{rendered}"
+            );
+        }
+    }
+
+    /// Un scalaire qui n'est pas `unique` garde une valeur lisible : le code engendré est
+    /// fait pour être lu et modifié.
+    #[test]
+    fn an_ordinary_number_keeps_its_readable_value() {
+        let rendered = trials("articles", CHAMPS);
+
+        assert!(rendered.contains(r#""views": 42"#), "{rendered}");
+        assert!(rendered.contains(r#""views": 43"#), "{rendered}");
+        assert!(
+            !rendered.contains("unique_number()"),
+            "aucun champ numérique n'est unique ici :\n{rendered}"
         );
     }
 

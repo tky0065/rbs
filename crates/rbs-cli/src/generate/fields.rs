@@ -507,6 +507,12 @@ fn parse_field(rank: usize, chunk: &str) -> Result<Field, FieldError> {
                 },
             ));
         }
+        // Deux valeurs possibles, donc deux lignes au plus dans toute la table : la
+        // contrainte est presque sûrement une faute de frappe, et les tests engendrés
+        // n'auraient aucune valeur d'exemple à rejouer.
+        if matches!(field.kind, FieldKind::Scalar(FieldType::Bool)) && field.unique {
+            return Err(error(name, ErrorKind::UniqueOnBool));
+        }
         if field.unique && field.index {
             return Err(error(name, ErrorKind::RedundantIndex));
         }
@@ -935,6 +941,14 @@ mod tests {
                 name: "unique".to_string()
             }
         );
+    }
+
+    /// Une colonne booléenne sous contrainte d'unicité n'admet que deux lignes dans
+    /// toute la table : la troisième création est refusée, et aucune valeur d'exemple ne
+    /// peut sauver les tests engendrés.
+    #[test]
+    fn unique_on_a_bool_field_is_rejected() {
+        assert_eq!(kind("actif:bool:unique"), ErrorKind::UniqueOnBool);
     }
 
     #[test]

@@ -46,6 +46,7 @@ pub(crate) enum ErrorKind {
         name: String,
     },
     RedundantIndex,
+    UniqueOnBool,
     IndexOnText {
         modifier: String,
     },
@@ -89,6 +90,9 @@ impl ErrorKind {
             }
             Self::RedundantIndex => {
                 "« index » redondant : « unique » pose déjà un index".to_string()
+            }
+            Self::UniqueOnBool => {
+                "« unique » sur un booléen : la colonne n'admettrait que deux lignes".to_string()
             }
             Self::IndexOnText { modifier } => format!(
                 "« {modifier} » ne s'applique pas à un champ « text » : MySQL refuse un index \
@@ -143,6 +147,7 @@ impl ErrorKind {
             }
             Self::DuplicateModifier { .. } => None,
             Self::RedundantIndex => Some("retirez « index »".to_string()),
+            Self::UniqueOnBool => Some("retirez « unique »".to_string()),
             Self::IndexOnText { modifier } => Some(format!(
                 "essayez « {label}:string:{modifier} » — un varchar(255) s'indexe"
             )),

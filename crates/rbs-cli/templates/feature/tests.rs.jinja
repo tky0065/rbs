@@ -88,6 +88,15 @@ fn filled(rendered: &Value, champ: &str) {
 }
 {% endif %}
 {%- if creatable %}
+{%- if unique_number %}
+/// Un nombre différent à chaque appel.
+///
+/// Une colonne `unique` non textuelle interdit de rejouer une valeur, et les scénarios de
+/// ce fichier créent en parallèle sur la même base.
+fn unique_number() -> i64 {
+    (Uuid::new_v4().as_u128() % 1_000_000) as i64
+}
+{% endif %}
 {%- if suffix %}
 /// Corps de création dont les valeurs textuelles portent un suffixe tiré au sort.
 ///
