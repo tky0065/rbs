@@ -224,14 +224,15 @@ pub(crate) const SERVICES: Anchor = Anchor {
 /// Le noyau porte la mécanique du contrôle, jamais la façon de joindre un cache ou un
 /// stockage : ces clients-là vivent dans le projet, et leur sonde s'inscrit ici.
 ///
-/// Elle manque à tout projet engendré avant son arrivée : `doctor` la nomme alors et
-/// affiche son bloc, comme pour n'importe quelle autre ancre absente.
+/// Elle manque à tout projet engendré avant son arrivée : `doctor` la nomme alors, affiche
+/// son bloc, et `--fix` la repose sous le `vec![` des sondes.
 pub(crate) const HEALTH_PROBES: Anchor = Anchor {
     name: Cow::Borrowed("health_probes"),
     file: Cow::Borrowed("src/health/controller.rs"),
     comment: "//",
     sorted: false,
     optional: false,
+    after: "vec![",
 };
 
 /// Variantes de l'énumération `Relation` du modèle d'une entité.
