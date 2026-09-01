@@ -46,6 +46,10 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
             timestamped => names(sent, timestamp),
             suffix => sent.iter().any(textual),
             unique_number => sent.iter().any(drawn_number),
+            // Le critère du scénario de filtrage : un champ dont la valeur envoyée se
+            // rejoue telle quelle. Un horodatage en est écarté — PostgreSQL le rend dans
+            // un autre format que la chaîne envoyée, et l'égalité porterait à faux.
+            filterable => sent.iter().find(|champ| filterable(champ)).map(Field::column_name),
             // Les deux scénarios ci-dessous n'ont de sens que si `--fields` les rend
             // atteignables : sans contrainte d'e-mail rien ne rend 422, sans colonne
             // unique rien ne rend 409, et le test échouerait faute de refus à observer.
@@ -128,6 +132,14 @@ fn timestamp(champ: &Field) -> bool {
     champ.column_type() == FieldType::Datetime
 }
 
+/// Un champ sur lequel le scénario de filtrage peut porter.
+///
+/// La référence en est écartée : elle part à `null`, et un filtre d'égalité sur `null` ne
+/// retiendrait rien. L'horodatage aussi : sa valeur revient dans un autre format.
+fn filterable(champ: &Field) -> bool {
+    champ.reference().is_none() && !timestamp(champ)
+}
+
 /// Un scalaire `unique` dont la valeur d'exemple se tire au lieu de s'écrire.
 ///
 /// Un booléen n'y figure pas : `--fields` refuse d'y poser « unique », faute de pouvoir
@@ -156,7 +168,9 @@ fn names(fields: &[Field], retenu: impl Fn(&Field) -> bool) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generate::{bench, controller, dto, entity, fields, migration, repository, service};
+    use crate::generate::{
+        bench, controller, dto, entity, fields, filter, migration, repository, service,
+    };
 
     const CHAMPS: &str = "title:string,email:string:unique,summary:text:optional,views:int,\
                           note:float,published:bool,auteur_id:uuid,published_at:datetime";
@@ -170,14 +184,17 @@ mod tests {
     fn the_scenarios_are_declared() {
         let rendered = trials("articles", CHAMPS);
 
-        // `CHAMPS` porte `email:string:unique` : les deux scénarios conditionnels y sont
-        // donc attendus, avec les quatre que toute feature créable emporte.
+        // `CHAMPS` porte `email:string:unique` et des champs filtrables : les quatre
+        // scénarios conditionnels y sont donc attendus, avec les quatre que toute feature
+        // créable emporte.
         let scenarios = [
             "async fn the_full_lifecycle_goes_through_the_api()",
             // L'identifiant est posé par le modèle depuis que `uuidv7()` a quitté la
             // migration : la croissance des identifiants se prouve dans le projet.
             "async fn two_creations_in_a_row_carry_increasing_ids()",
             "async fn an_invalid_email_returns_422()",
+            "async fn the_filter_narrows_the_list()",
+            "async fn an_unknown_sort_column_returns_400()",
             "async fn a_replayed_unique_value_returns_409()",
             "async fn an_unknown_id_returns_404()",
             "async fn an_unreadable_body_returns_400()",
@@ -347,6 +364,38 @@ mod tests {
         assert!(
             !rendered.contains("unique_number()"),
             "aucun champ numérique n'est unique ici :\n{rendered}"
+        );
+    }
+
+    /// Le filtre se prouve par la route, et non par le rendu : une condition mal traduite
+    /// rend une page vide, ce qu'aucune comparaison de chaînes ne verrait.
+    #[test]
+    fn a_filter_scenario_is_generated_when_a_field_can_carry_one() {
+        let rendered = trials("articles", CHAMPS);
+
+        assert!(
+            rendered.contains("async fn the_filter_narrows_the_list()"),
+            "le scénario de filtre est absent :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(r#"let chemin = format!("{collection}/filter");"#),
+            "le scénario doit appeler la route de filtre :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("async fn an_unknown_sort_column_returns_400()"),
+            "le refus d'une colonne de tri inconnue n'est pas éprouvé :\n{rendered}"
+        );
+    }
+
+    /// Sans champ dont la valeur se rejoue, le scénario n'aurait pas de critère : une
+    /// référence part à `null` et un horodatage revient dans un autre format.
+    #[test]
+    fn a_feature_without_a_usable_criterion_carries_no_filter_scenario() {
+        let rendered = trials("articles", "vu_le:datetime");
+
+        assert!(
+            !rendered.contains("the_filter_narrows_the_list"),
+            "aucun champ ne peut porter le critère :\n{rendered}"
         );
     }
 
@@ -629,6 +678,10 @@ mod tests {
                     &entity::render(&feature).expect("entité rendue"),
                 ),
                 ("dto.rs", &dto::render(&feature).expect("DTO rendus")),
+                (
+                    "filter.rs",
+                    &filter::render(&feature).expect("filtre rendu"),
+                ),
                 (
                     "repository.rs",
                     &repository::render(&feature).expect("repository rendu"),

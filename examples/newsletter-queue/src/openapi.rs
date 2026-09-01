@@ -13,6 +13,7 @@ use crate::state::AppState;
         crate::health::controller::health,
         // <rbs:openapi>
         crate::subscribers::controller::list,
+        crate::subscribers::controller::filter,
         crate::subscribers::controller::create,
         crate::subscribers::controller::broadcast,
         crate::subscribers::controller::find,

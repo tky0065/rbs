@@ -36,7 +36,7 @@ pub(crate) fn render_mod(feature: &Feature, with_tests: bool) -> Result<String, 
 mod tests {
     use super::*;
     use crate::generate::feature::Feature;
-    use crate::generate::{bench, dto, entity, fields, repository, service};
+    use crate::generate::{bench, dto, entity, fields, filter, repository, service};
 
     fn controller(name: &str) -> String {
         let fields = fields::parse("title:string").expect("champs valides");
@@ -114,8 +114,8 @@ mod tests {
 
         assert_eq!(
             rendered.matches("#[utoipa::path(").count(),
-            5,
-            "les cinq handlers doivent être documentés :\n{rendered}"
+            6,
+            "les six handlers doivent être documentés :\n{rendered}"
         );
     }
 
@@ -340,6 +340,39 @@ mod tests {
         );
     }
 
+    /// La route littérale se monte avant `/{id}`, sans quoi `filter` serait lu comme un
+    /// identifiant — c'est ce que fait déjà `broadcast` dans `examples/newsletter-queue`.
+    #[test]
+    fn the_filter_route_is_mounted_before_the_id_route() {
+        let rendered = module("articles");
+
+        // Les chemins sont cherchés entre guillemets : le commentaire qui précède la
+        // route nomme `/articles/{id}` sans les siens, et serait trouvé le premier.
+        let filtre = rendered
+            .find(r#""/articles/filter""#)
+            .expect("route de filtre montée");
+        let id = rendered
+            .find(r#""/articles/{id}""#)
+            .expect("route d'identifiant montée");
+
+        assert!(
+            filtre < id,
+            "`filter` doit précéder l'identifiant :\n{rendered}"
+        );
+    }
+
+    /// Filtrer est une lecture : le garde de rôle ne la protège pas, comme il ne protège
+    /// ni `list` ni `find`.
+    #[test]
+    fn the_filter_route_stays_open_under_a_role() {
+        let rendered = guarded("articles", "admin");
+
+        assert!(
+            !handler(&rendered, "filter").contains("require_role"),
+            "filtrer est une lecture :\n{rendered}"
+        );
+    }
+
     #[test]
     fn the_module_declares_the_six_files_of_the_feature() {
         let rendered = module("articles");
@@ -405,6 +438,13 @@ fn the_five_routes_of_the_feature_are_documented() {
     assert!(unit.get.is_some(), "GET unitaire absent");
     assert!(unit.patch.is_some(), "PATCH unitaire absent");
     assert!(unit.delete.is_some(), "DELETE unitaire absent");
+
+    let filtre = doc
+        .paths
+        .paths
+        .get("/articles/filter")
+        .expect("la route de filtrage doit etre documentee");
+    assert!(filtre.post.is_some(), "POST de filtrage absent");
 }
 
 #[test]
@@ -413,7 +453,12 @@ fn chaque_route_annonce_le_schema_qu_elle_rend() {
     let composants = doc.components.expect("composants absents du document");
     let names: Vec<&str> = composants.schemas.keys().map(String::as_str).collect();
 
-    for expected in ["ArticleResponse", "CreateArticle", "UpdateArticle"] {
+    for expected in [
+        "ArticleResponse",
+        "CreateArticle",
+        "UpdateArticle",
+        "ArticleFilter",
+    ] {
         assert!(
             names.contains(&expected),
             "schema {expected} absent, present : {names:?}"
@@ -447,6 +492,10 @@ fn chaque_route_annonce_le_schema_qu_elle_rend() {
                     &entity::render(&feature).expect("entité rendue"),
                 ),
                 ("dto.rs", &dto::render(&feature).expect("DTO rendus")),
+                (
+                    "filter.rs",
+                    &filter::render(&feature).expect("filtre rendu"),
+                ),
                 (
                     "repository.rs",
                     &repository::render(&feature).expect("repository rendu"),
@@ -488,6 +537,10 @@ fn chaque_route_annonce_le_schema_qu_elle_rend() {
                     &entity::render(&feature).expect("entité rendue"),
                 ),
                 ("dto.rs", &dto::render(&feature).expect("DTO rendus")),
+                (
+                    "filter.rs",
+                    &filter::render(&feature).expect("filtre rendu"),
+                ),
                 (
                     "repository.rs",
                     &repository::render(&feature).expect("repository rendu"),

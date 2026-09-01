@@ -24,7 +24,6 @@ async fn application() -> Router {
 
     router(AppState::new(db, config).expect("état partagé constructible"))
 }
-// endregion: harnais
 
 /// Fait traverser le routeur à `request`, et rend son statut avec son corps.
 async fn call(api: &Router, request: Request<Body>) -> (StatusCode, Value) {
@@ -60,6 +59,7 @@ fn without_body(method: &str, path: &str) -> Request<Body> {
         .body(Body::empty())
         .expect("requête bien formée")
 }
+// endregion: harnais
 
 /// Compare à la réponse la valeur envoyée pour `champ`.
 fn compare(rendered: &Value, sent: &Value, champ: &str) {
@@ -192,6 +192,57 @@ async fn two_creations_in_a_row_carry_increasing_ids() {
         "{premier} n'est pas un UUIDv7"
     );
     assert!(second > premier, "{second} ne suit pas {premier}");
+}
+
+/// La route de filtrage retient la ligne qui satisfait son propre critère.
+///
+/// Le rendu du filtre ne prouve rien : une condition mal traduite rend une page vide, et
+/// seule une requête jouée contre la base le montre.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn the_filter_narrows_the_list() {
+    let api = application().await;
+    let collection = "/articles";
+    let sent = creation();
+
+    let (status, created) = call(&api, request("POST", collection, sent.clone())).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {created}");
+
+    let critere = json!({ "title": sent["title"] });
+    let chemin = format!("{collection}/filter");
+    let (status, page) = call(&api, request("POST", &chemin, critere)).await;
+    assert_eq!(status, StatusCode::OK, "filtre refusé : {page}");
+
+    let ids: Vec<&str> = page["data"]
+        .as_array()
+        .expect("la liste rend un tableau")
+        .iter()
+        .map(|ligne| ligne["id"].as_str().expect("identifiant rendu"))
+        .collect();
+
+    let id = created["id"].as_str().expect("identifiant rendu");
+    assert!(
+        ids.contains(&id),
+        "la ligne créée doit satisfaire son propre critère : {page}"
+    );
+
+    let resource = format!("{collection}/{id}");
+    let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
+}
+
+/// Une colonne de tri inconnue est une faute du client, et le refus la nomme.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_unknown_sort_column_returns_400() {
+    let api = application().await;
+    let chemin = format!("/articles/filter");
+    let critere = json!({ "sort": ["-inconnue"] });
+
+    let (status, body) = call(&api, request("POST", &chemin, critere)).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["status"], 400, "{body}");
 }
 
 // region: erreur_404

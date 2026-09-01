@@ -5,6 +5,7 @@ use sea_orm::DatabaseConnection;
 use sea_orm::prelude::Uuid;
 
 use super::dto::{{@ dto | join(", ") @}};
+use super::filter::{@ entity @}Filter;
 use super::repository::{self, ActiveModel};
 
 pub async fn list(
@@ -12,6 +13,20 @@ pub async fn list(
     pagination: &Pagination,
 ) -> Result<Page<{@ entity @}Response>> {
     let ({@ module @}, total) = repository::list(db, pagination).await?;
+
+    Ok(Page::new(
+        {@ module @}.into_iter().map(Into::into).collect(),
+        pagination,
+        total,
+    ))
+}
+
+pub async fn filter(
+    db: &DatabaseConnection,
+    filtre: &{@ entity @}Filter,
+    pagination: &Pagination,
+) -> Result<Page<{@ entity @}Response>> {
+    let ({@ module @}, total) = repository::filter(db, filtre, pagination).await?;
 
     Ok(Page::new(
         {@ module @}.into_iter().map(Into::into).collect(),

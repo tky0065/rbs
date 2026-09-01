@@ -25,6 +25,44 @@ mod tests {
         render(&Feature::fresh(name, fields)).expect("le repository doit se rendre")
     }
 
+    /// Un seul chemin de tri : `list` est le filtre vide. Deux `order_by` en dur
+    /// divergeraient au premier changement, et la liste non filtrée est celle que personne
+    /// ne pense à rejouer.
+    ///
+    /// L'ordre déterministe qu'éprouvait `the_ordering_follows_the_descending_id` est
+    /// désormais celui de `filter.rs`, où
+    /// `generate::filter::the_default_order_stays_the_descending_id` le garde.
+    #[test]
+    fn the_list_is_the_empty_filter() {
+        let rendered = repository("articles", "title:string");
+
+        assert!(
+            rendered.contains("filter(db, &ArticleFilter::default(), pagination).await"),
+            "`list` doit déléguer à `filter` :\n{rendered}"
+        );
+        assert_eq!(
+            rendered.matches("order_by_desc").count(),
+            0,
+            "le tri appartient désormais à `filter.rs` :\n{rendered}"
+        );
+    }
+
+    /// Le total compte ce que le filtre retient, et non toute la table : sans cela, la
+    /// dernière page d'une liste filtrée serait vide.
+    #[test]
+    fn the_total_counts_the_filtered_rows() {
+        let rendered = repository("articles", "title:string");
+
+        assert!(
+            rendered.contains("requete.count(db)"),
+            "le total doit porter sur la requête filtrée :\n{rendered}"
+        );
+        assert!(
+            !rendered.contains("Entity::find().count(db)"),
+            "le total ne doit plus compter toute la table :\n{rendered}"
+        );
+    }
+
     #[test]
     fn the_repository_exposes_the_five_crud_operations() {
         let rendered = repository("articles", "title:string");
@@ -101,16 +139,6 @@ mod tests {
         assert!(
             !rendered.contains("let total = Entity::find().count(db).await?;"),
             "le total ne doit plus précéder la page :\n{rendered}"
-        );
-    }
-
-    #[test]
-    fn the_ordering_follows_the_descending_id() {
-        let rendered = repository("articles", "title:string");
-
-        assert!(
-            rendered.contains(".order_by_desc(Column::Id)"),
-            "l'ordre de la liste n'est pas déterministe :\n{rendered}"
         );
     }
 

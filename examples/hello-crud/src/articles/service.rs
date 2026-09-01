@@ -5,6 +5,7 @@ use sea_orm::DatabaseConnection;
 use sea_orm::prelude::Uuid;
 
 use super::dto::{ArticleResponse, CreateArticle, UpdateArticle};
+use super::filter::ArticleFilter;
 use super::repository::{self, ActiveModel};
 // endregion: imports
 
@@ -13,6 +14,20 @@ pub async fn list(
     pagination: &Pagination,
 ) -> Result<Page<ArticleResponse>> {
     let (articles, total) = repository::list(db, pagination).await?;
+
+    Ok(Page::new(
+        articles.into_iter().map(Into::into).collect(),
+        pagination,
+        total,
+    ))
+}
+
+pub async fn filter(
+    db: &DatabaseConnection,
+    filtre: &ArticleFilter,
+    pagination: &Pagination,
+) -> Result<Page<ArticleResponse>> {
+    let (articles, total) = repository::filter(db, filtre, pagination).await?;
 
     Ok(Page::new(
         articles.into_iter().map(Into::into).collect(),

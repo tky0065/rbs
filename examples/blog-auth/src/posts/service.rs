@@ -4,10 +4,25 @@ use sea_orm::DatabaseConnection;
 use sea_orm::prelude::Uuid;
 
 use super::dto::{CreatePost, PostResponse, UpdatePost};
+use super::filter::PostFilter;
 use super::repository::{self, ActiveModel};
 
 pub async fn list(db: &DatabaseConnection, pagination: &Pagination) -> Result<Page<PostResponse>> {
     let (posts, total) = repository::list(db, pagination).await?;
+
+    Ok(Page::new(
+        posts.into_iter().map(Into::into).collect(),
+        pagination,
+        total,
+    ))
+}
+
+pub async fn filter(
+    db: &DatabaseConnection,
+    filtre: &PostFilter,
+    pagination: &Pagination,
+) -> Result<Page<PostResponse>> {
+    let (posts, total) = repository::filter(db, filtre, pagination).await?;
 
     Ok(Page::new(
         posts.into_iter().map(Into::into).collect(),

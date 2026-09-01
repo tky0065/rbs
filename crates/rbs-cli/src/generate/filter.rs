@@ -252,6 +252,50 @@ mod tests {
         );
     }
 
+    /// Le projet engendré compile sous `-D warnings` : un `use` que le fichier n'emploie
+    /// pas y est une erreur, et ne se verrait qu'à la compilation d'un exemple.
+    #[test]
+    fn the_render_imports_only_what_it_uses() {
+        let rendered = filtre("articles", CHAMPS);
+
+        let (imports, corps) = rendered
+            .split_once("\n\n")
+            .expect("le bloc d'imports précède le corps");
+
+        // Les traits sont importés pour leurs méthodes : `.eq`, `.contains`, `.filter` et
+        // `.order_by_*` ne nomment jamais celui qui les porte.
+        const TRAITS: [&str; 3] = ["ColumnTrait", "QueryFilter", "QueryOrder"];
+
+        for import in imports.lines().flat_map(decompose) {
+            if TRAITS.contains(&import.as_str()) {
+                continue;
+            }
+            assert!(
+                corps.contains(&import),
+                "« {import} » est importé sans servir :\n{rendered}"
+            );
+        }
+    }
+
+    /// Les noms d'un `use` groupé, un par un.
+    fn decompose(ligne: &str) -> Vec<String> {
+        let Some((_, groupe)) = ligne.split_once('{') else {
+            return ligne
+                .trim_end_matches(';')
+                .rsplit("::")
+                .next()
+                .map(|nom| vec![nom.to_owned()])
+                .unwrap_or_default();
+        };
+
+        groupe
+            .trim_end_matches("};")
+            .split(',')
+            .map(|nom| nom.trim().to_owned())
+            .filter(|nom| !nom.is_empty() && *nom != "self")
+            .collect()
+    }
+
     /// Le rendu est écrit tel que rustfmt l'écrirait : sans quoi le `cargo fmt --check` du
     /// projet engendré échouerait sur ce que le CLI vient de produire.
     #[test]

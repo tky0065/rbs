@@ -4,6 +4,7 @@ use sea_orm::prelude::Uuid;
 use sea_orm::{DatabaseConnection, TransactionTrait};
 
 use super::dto::{Broadcast, CreateSubscriber, SubscriberResponse, UpdateSubscriber};
+use super::filter::SubscriberFilter;
 use super::repository::{self, ActiveModel};
 use crate::jobs;
 use crate::jobs::newsletter::SendNewsletter;
@@ -46,6 +47,20 @@ pub async fn list(
     pagination: &Pagination,
 ) -> Result<Page<SubscriberResponse>> {
     let (subscribers, total) = repository::list(db, pagination).await?;
+
+    Ok(Page::new(
+        subscribers.into_iter().map(Into::into).collect(),
+        pagination,
+        total,
+    ))
+}
+
+pub async fn filter(
+    db: &DatabaseConnection,
+    filtre: &SubscriberFilter,
+    pagination: &Pagination,
+) -> Result<Page<SubscriberResponse>> {
+    let (subscribers, total) = repository::filter(db, filtre, pagination).await?;
 
     Ok(Page::new(
         subscribers.into_iter().map(Into::into).collect(),

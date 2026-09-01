@@ -6,6 +6,7 @@ use sea_orm::{
     PaginatorTrait, QueryFilter, QueryOrder, QuerySelect,
 };
 
+use super::filter::{self, SubscriberFilter};
 use super::model::{Column, Entity};
 
 // Le service passe par cette porte plutôt que par `model.rs` : la couche qui parle à la
@@ -13,18 +14,28 @@ use super::model::{Column, Entity};
 pub use super::model::{ActiveModel, Model};
 
 pub async fn list(db: &DatabaseConnection, pagination: &Pagination) -> Result<(Vec<Model>, u64)> {
-    // L'`id` est un UUIDv7 : son ordre est celui des insertions. Trier dessus donne une
-    // liste du plus récent au plus ancien, et une pagination stable, sans colonne de plus.
-    let page = Entity::find()
-        .order_by_desc(Column::Id)
+    // Un seul chemin de lecture : la liste est le filtre vide, qui trie sur l'`id`
+    // décroissant. Deux chemins divergeraient au premier tri ajouté.
+    filter(db, &SubscriberFilter::default(), pagination).await
+}
+
+pub async fn filter(
+    db: &DatabaseConnection,
+    filtre: &SubscriberFilter,
+    pagination: &Pagination,
+) -> Result<(Vec<Model>, u64)> {
+    let requete = filter::apply(Entity::find(), filtre)?;
+
+    let page = requete
+        .clone()
         .offset(pagination.offset())
         .limit(pagination.per_page())
         .all(db);
 
-    // Le total compte toute la table : l'attendre avant la page ferait deux allers-retours
-    // en série à chaque appel. Les deux partent donc ensemble — `max_connections` vaut 10
-    // dans config/default.toml, le pool en sert bien deux à la fois.
-    let (subscribers, total) = tokio::try_join!(page, Entity::find().count(db))?;
+    // Le total compte les lignes que le filtre retient : l'attendre avant la page ferait
+    // deux allers-retours en série à chaque appel. Les deux partent donc ensemble —
+    // `max_connections` vaut 10 dans config/default.toml, le pool en sert bien deux.
+    let (subscribers, total) = tokio::try_join!(page, requete.count(db))?;
 
     Ok((subscribers, total))
 }

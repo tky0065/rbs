@@ -13,6 +13,7 @@ use crate::state::AppState;
         crate::health::controller::health,
         // <rbs:openapi>
         crate::uploads::controller::list,
+        crate::uploads::controller::filter,
         crate::uploads::controller::create,
         crate::uploads::controller::find,
         crate::uploads::controller::update,

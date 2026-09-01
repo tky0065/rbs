@@ -3,15 +3,20 @@
 //! Les types de ce module ne nomment aucune colonne et n'en valident aucune : c'est le
 //! `filter.rs` que le CLI engendre par feature qui les compose en un type dont chaque
 //! champ vient de `--fields`, et qui seul sait traduire un nom en `Column`.
+//!
+//! Aucun d'eux ne porte `ToSchema`. Le dériver sur `Comparison<T>` exigerait `T: ToSchema`,
+//! que ni `DateTimeUtc` ni `Uuid` ne satisfont — la feature `chrono` d'utoipa agit dans la
+//! macro, qui reconnaît ces types par leur nom dans un champ, et n'implémente aucun trait.
+//! Le filtre engendré décrit donc lui-même ses champs par `#[schema(value_type = ...)]`,
+//! ce qui laisse la documentation au projet, où elle se lit et se modifie.
 
 use serde::{Deserialize, Deserializer};
-use utoipa::ToSchema;
 
 /// Conditions portées sur une colonne scalaire ordonnée.
 ///
 /// Se lit d'une valeur nue, qui vaut `eq`, ou d'un objet nommant ses opérateurs :
 /// `{ "views": 10 }` et `{ "views": { "eq": 10 } }` disent la même chose.
-#[derive(Debug, Clone, Default, PartialEq, Eq, ToSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Comparison<T> {
     /// Égalité stricte.
     pub eq: Option<T>,
@@ -30,7 +35,7 @@ pub struct Comparison<T> {
 /// Conditions portées sur une colonne textuelle.
 ///
 /// Se lit d'une chaîne nue, qui vaut `eq`, ou d'un objet nommant ses opérateurs.
-#[derive(Debug, Clone, Default, PartialEq, Eq, ToSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct TextMatch {
     /// Égalité stricte.
     pub eq: Option<String>,
@@ -45,7 +50,7 @@ pub struct TextMatch {
 }
 
 /// Une colonne de tri et son sens.
-#[derive(Debug, Clone, PartialEq, Eq, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SortKey {
     /// Nom de la colonne, préfixe retiré.
     pub column: String,
@@ -57,7 +62,7 @@ pub struct SortKey {
 ///
 /// Aucun nom n'est validé ici : seul le `filter.rs` engendré connaît les colonnes de son
 /// entité, et c'est lui qui refuse celles qu'il ne sait pas traduire.
-#[derive(Debug, Clone, Default, PartialEq, Eq, ToSchema)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Sort(Vec<SortKey>);
 
 impl Sort {

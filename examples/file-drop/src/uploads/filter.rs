@@ -9,7 +9,7 @@ use super::model::{Column, Entity};
 // Toute colonne est filtrable, indexée ou non : un filtre sur une colonne sans index
 // parcourt la table. Ajoutez « index » au champ dans `--fields` si la table grandit.
 #[derive(Debug, Default, Deserialize, ToSchema)]
-pub struct {@ entity @}Filter {
+pub struct UploadFilter {
     // `value_type = Object` sur chaque condition : le schéma d'une comparaison ne dépend
     // pas du type comparé, et utoipa ne sait pas décrire un générique dont le paramètre
     // n'implémente pas `ToSchema`. Les opérateurs acceptés sont `eq`, `gt`, `gte`, `lt`,
@@ -20,10 +20,14 @@ pub struct {@ entity @}Filter {
     pub created_at: Option<Comparison<DateTimeUtc>>,
     #[schema(value_type = Object)]
     pub updated_at: Option<Comparison<DateTimeUtc>>,
-{%- for field in fields %}
     #[schema(value_type = Object)]
-    pub {@ field.name @}: Option<{@ field.operator @}>,
-{%- endfor %}
+    pub title: Option<TextMatch>,
+    #[schema(value_type = Object)]
+    pub owner_email: Option<TextMatch>,
+    #[schema(value_type = Object)]
+    pub content_type: Option<TextMatch>,
+    #[schema(value_type = Object)]
+    pub size: Option<Comparison<i32>>,
     /// Colonnes de tri, préfixées de `-` pour l'ordre décroissant.
     #[schema(value_type = Vec<String>)]
     pub sort: Option<Sort>,
@@ -38,12 +42,13 @@ fn column_of(name: &str) -> Result<Column> {
         "id" => Column::Id,
         "created_at" => Column::CreatedAt,
         "updated_at" => Column::UpdatedAt,
-{%- for field in fields %}
-        "{@ field.name @}" => Column::{@ field.pascal_name @},
-{%- endfor %}
+        "title" => Column::Title,
+        "owner_email" => Column::OwnerEmail,
+        "content_type" => Column::ContentType,
+        "size" => Column::Size,
         inconnue => {
             return Err(Error::BadRequest(format!(
-                "colonne de tri inconnue « {inconnue} » — {@ colonnes @}"
+                "colonne de tri inconnue « {inconnue} » — id, created_at, updated_at, title, owner_email, content_type, size"
             )));
         }
     })
@@ -53,18 +58,15 @@ fn column_of(name: &str) -> Result<Column> {
 ///
 /// Le tri par défaut reste l'`id` décroissant : c'est un UUIDv7, et la pagination en
 /// dépend.
-pub(super) fn apply(select: Select<Entity>, filtre: &{@ entity @}Filter) -> Result<Select<Entity>> {
+pub(super) fn apply(select: Select<Entity>, filtre: &UploadFilter) -> Result<Select<Entity>> {
     let conditions = Condition::all()
         .add(compare(Column::Id, filtre.id.as_ref()))
         .add(compare(Column::CreatedAt, filtre.created_at.as_ref()))
         .add(compare(Column::UpdatedAt, filtre.updated_at.as_ref()))
-{%- for field in fields %}
-{%- if field.textual %}
-        .add(matches(Column::{@ field.pascal_name @}, filtre.{@ field.name @}.as_ref()))
-{%- else %}
-        .add(compare(Column::{@ field.pascal_name @}, filtre.{@ field.name @}.as_ref()))
-{%- endif %}
-{%- endfor %};
+        .add(matches(Column::Title, filtre.title.as_ref()))
+        .add(matches(Column::OwnerEmail, filtre.owner_email.as_ref()))
+        .add(matches(Column::ContentType, filtre.content_type.as_ref()))
+        .add(compare(Column::Size, filtre.size.as_ref()));
 
     let select = select.filter(conditions);
 

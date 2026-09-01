@@ -106,6 +106,17 @@ fn a_generated_crud_migrates_and_passes_its_tests_against_postgresql() {
         "le test des identifiants croissants n'a pas été joué :\n{joues}"
     );
 
+    // Le filtre s'exige de même : une condition mal traduite en SQL ne se voit qu'ici, la
+    // requête étant construite à la génération et jouée contre une vraie base.
+    assert!(
+        joues.contains("test articles::tests::the_filter_narrows_the_list ... ok"),
+        "le scénario de filtrage n'a pas été joué :\n{joues}"
+    );
+    assert!(
+        joues.contains("test articles::tests::an_unknown_sort_column_returns_400 ... ok"),
+        "le refus d'une colonne de tri inconnue n'a pas été joué :\n{joues}"
+    );
+
     rbs(&projet)
         .env("CARGO_TARGET_DIR", common::cible())
         .args(["doctor"])

@@ -7,6 +7,7 @@ use rbs_core::{HasCoreState, Page, Pagination, ProblemDetails, Result, Validated
 use sea_orm::prelude::Uuid;
 
 use super::dto::{CreateUpload, UpdateUpload, UploadResponse};
+use super::filter::UploadFilter;
 use super::service;
 use crate::state::AppState;
 
@@ -29,6 +30,32 @@ pub async fn list(
 ) -> Result<Json<Page<UploadResponse>>> {
     Ok(Json(
         service::list(state.core().db(), state.cache(), &pagination).await?,
+    ))
+}
+
+/// Filtrer est une lecture : le corps porte les conditions, que l'URL rendrait illisibles.
+/// Le garde de rôle ne s'y applique donc pas, pas plus qu'à `list` ou `find`.
+#[utoipa::path(
+    post,
+    path = "/uploads/filter",
+    tag = "uploads",
+    params(
+        ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
+        ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
+    ),
+    request_body = UploadFilter,
+    responses(
+        (status = 200, description = "page de uploads filtrés", body = Page<UploadResponse>),
+        (status = 400, description = "filtre, tri ou pagination illisible", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn filter(
+    State(state): State<AppState>,
+    pagination: Pagination,
+    Json(filtre): Json<UploadFilter>,
+) -> Result<Json<Page<UploadResponse>>> {
+    Ok(Json(
+        service::filter(state.core().db(), &filtre, &pagination).await?,
     ))
 }
 

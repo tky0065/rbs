@@ -9,7 +9,7 @@ use crate::anchors::{self, Anchor};
 use super::relations;
 
 /// Les handlers que le controller généré expose, dans l'ordre où ils y sont écrits.
-const HANDLERS: [&str; 5] = ["list", "create", "find", "update", "delete"];
+const HANDLERS: [&str; 6] = ["list", "filter", "create", "find", "update", "delete"];
 
 /// Une insertion à faire : l'ancre visée, et les lignes à y ajouter.
 #[derive(Debug, PartialEq, Eq)]
@@ -143,13 +143,14 @@ mod tests {
     }
 
     #[test]
-    fn the_five_handlers_enter_the_openapi_document() {
+    fn the_six_handlers_enter_the_openapi_document() {
         let montages = pour("users", anchors::FEATURES);
 
         assert_eq!(
             lines(&montages, anchors::OPENAPI),
             [
                 "crate::users::controller::list,",
+                "crate::users::controller::filter,",
                 "crate::users::controller::create,",
                 "crate::users::controller::find,",
                 "crate::users::controller::update,",
