@@ -35,6 +35,7 @@ SQLite 3.35+.
 | `rbs dev` | Starts services and migrations, and restarts the server on every change |
 | `rbs doctor` | Diagnoses the project: anchors, `.env`, database reachable, versions |
 | `rbs upgrade` | Aligns the project's manifest on the CLI version |
+| `rbs completions <shell>` | Writes the shell's completion script to standard output |
 
 `generate` answers to `g`. `rbs new` takes `--yes`, which accepts the defaults without
 asking so the CLI stays scriptable; `rbs new` and `rbs add` take `--template-dir`, which

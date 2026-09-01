@@ -31,6 +31,7 @@ du projet », en bas, est faite pour l'accueillir.
 | `rbs dev` | services, migrations, serveur rechargé | — |
 | `rbs doctor` | diagnostique le projet | — |
 | `rbs upgrade` | aligne le projet sur la version du CLI | — |
+| `rbs completions <shell>` | écrit le script de complétion du shell | — |
 
 `rbs generate`, `rbs add` et `rbs upgrade` acceptent `--dry-run` : le plan s'affiche, rien ne s'écrit.
 

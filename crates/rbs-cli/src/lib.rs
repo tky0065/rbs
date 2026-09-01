@@ -3,6 +3,7 @@ mod agents;
 mod anchors;
 mod cargo;
 mod cli;
+mod completions;
 mod database;
 mod dev;
 mod doctor;
@@ -155,6 +156,12 @@ pub fn run() {
                 ui::error(&error.to_string());
                 std::process::exit(1);
             }
+        }
+
+        // Rien d'autre ne part sur la sortie standard : le script est destiné à un `eval`,
+        // et une ligne de courtoisie y deviendrait une commande à exécuter.
+        Commands::Completions { shell } => {
+            completions::render(shell, &mut std::io::stdout());
         }
 
         Commands::Doctor { json } => match diagnose(json) {

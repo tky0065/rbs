@@ -101,6 +101,13 @@ pub enum Commands {
         json: bool,
     },
 
+    /// Écrit sur la sortie standard le script de complétion du shell donné.
+    Completions {
+        /// Shell visé.
+        #[arg(value_name = "SHELL")]
+        shell: clap_complete::Shell,
+    },
+
     /// Aligne le manifeste du projet sur la version du CLI : rbs-core et les métadonnées.
     Upgrade {
         /// Met à niveau même si le working tree Git est sale.
@@ -190,7 +197,15 @@ mod tests {
         let help = command.clone().render_long_help().to_string();
 
         for expected in [
-            "new", "add", "generate", "migrate", "seed", "dev", "doctor", "upgrade",
+            "new",
+            "add",
+            "generate",
+            "migrate",
+            "seed",
+            "dev",
+            "doctor",
+            "upgrade",
+            "completions",
         ] {
             let sous_commande = command
                 .get_subcommands()
