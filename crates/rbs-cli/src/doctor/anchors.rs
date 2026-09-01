@@ -10,7 +10,8 @@ use crate::anchors::{self, Anchor};
 
 use super::Check;
 
-const TITRE: &str = "ancres";
+/// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
+pub(crate) const TITRE: &str = "ancres";
 
 /// Vérifie que le projet porte toutes ses ancres, et dit comment recoller les absentes.
 pub(crate) fn check(root: &Path) -> Check {

@@ -14,13 +14,22 @@ use crate::migrate;
 
 use super::Check;
 
-const TITRE: &str = "base";
+/// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
+pub(crate) const TITRE: &str = "base";
 
 /// Délai au-delà duquel l'hôte est tenu pour injoignable.
 const DELAI: Duration = Duration::from_secs(3);
 
+/// Ce que le contrôle s'apprête à faire, dit avant de le faire.
+///
+/// La version se demande au binaire de la crate `migration`, que cargo bâtit au premier
+/// appel : un diagnostic présumé instantané bloquait alors le temps d'une compilation,
+/// sans que rien ne l'annonce.
+const ANNONCE: &str =
+    "compilation de la crate migration, peut prendre\nune minute au premier lancement…";
+
 /// Vérifie que la base répond et qu'elle est assez récente.
-pub(crate) fn check(root: &Path) -> Check {
+pub(crate) fn check(root: &Path, annonce: &mut dyn FnMut(&str)) -> Check {
     let variables = match migrate::project_variables(root) {
         Ok(variables) => variables,
         Err(error) => {
@@ -70,6 +79,10 @@ pub(crate) fn check(root: &Path) -> Check {
     };
 
     let (minimum, cause) = plancher(database);
+
+    // Les cinq sorties ci-dessus n'ont rien compilé : annoncer plus haut promettrait une
+    // attente qui n'a pas lieu sur un projet dont la base est arrêtée.
+    annonce(ANNONCE);
 
     match version(root, &variables) {
         Ok(brut) => match parse_version(database, &brut) {
@@ -467,7 +480,7 @@ mod tests {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
         viser(&root, "mysql://root:root@127.0.0.1:1/demo");
 
-        let check = check(&root);
+        let check = check(&root, &mut |_: &str| {});
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(check.detail.contains("sqlx-postgres"), "{}", check.detail);
@@ -480,7 +493,9 @@ mod tests {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
         viser(&root, "mysql://root:root@127.0.0.1:1/demo");
 
-        let remedy = check(&root).remedy.expect("un échec porte son remède");
+        let remedy = check(&root, &mut |_: &str| {})
+            .remedy
+            .expect("un échec porte son remède");
 
         assert!(remedy.contains("sqlx-mysql"), "{remedy}");
         assert!(remedy.contains("postgres://"), "{remedy}");
@@ -499,7 +514,7 @@ mod tests {
         // Port 1 : réservé, rien n'y écoute — le refus est immédiat et déterministe.
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
 
-        let check = check(&root);
+        let check = check(&root, &mut |_: &str| {});
 
         assert_eq!(check.state, State::Echec);
         assert!(check.detail.contains("127.0.0.1:1"));
@@ -512,7 +527,9 @@ mod tests {
     fn the_remedy_names_the_project_compose_when_it_has_one() {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
 
-        let remedy = check(&root).remedy.expect("un échec porte son remède");
+        let remedy = check(&root, &mut |_: &str| {})
+            .remedy
+            .expect("un échec porte son remède");
 
         assert!(remedy.contains("docker compose up -d"), "{remedy}");
     }
@@ -524,7 +541,9 @@ mod tests {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
         std::fs::remove_file(root.join("docker-compose.yml")).expect("le compose doit exister");
 
-        let remedy = check(&root).remedy.expect("un échec porte son remède");
+        let remedy = check(&root, &mut |_: &str| {})
+            .remedy
+            .expect("un échec porte son remède");
 
         assert!(!remedy.contains("docker compose"), "{remedy}");
         assert!(remedy.contains("démarrez"), "{remedy}");
@@ -538,7 +557,7 @@ mod tests {
         std::fs::write(root.join("Cargo.toml"), "[package\nname = \"demo-api\"\n")
             .expect("manifeste cassé");
 
-        let check = check(&root);
+        let check = check(&root, &mut |_: &str| {});
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(check.detail.contains("Cargo.toml"), "{}", check.detail);
@@ -550,7 +569,7 @@ mod tests {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
         std::fs::write(root.join(".env"), "RBS_ENV=development\n").expect("écriture du .env");
 
-        let check = check(&root);
+        let check = check(&root, &mut |_: &str| {});
 
         assert_eq!(check.state, State::Echec);
         assert!(check.detail.contains(migrate::URL));

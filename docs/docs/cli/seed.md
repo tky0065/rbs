@@ -23,11 +23,9 @@ Insère les données de démonstration du projet
 Usage: rbs seed [OPTIONS]
 
 Options:
-      --force                  Insère même sous RBS_ENV=production
-      --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
-  -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
-  -h, --help                   Print help
-  -V, --version                Print version
+      --force    Insère même sous RBS_ENV=production
+  -h, --help     Print help
+  -V, --version  Print version
 ```
 
 Like [`rbs migrate`](./migrate.md), the command wraps a binary of the project rather than

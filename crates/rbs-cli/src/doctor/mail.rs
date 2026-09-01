@@ -13,7 +13,8 @@ use crate::dotenv;
 
 use super::{Check, Config};
 
-const TITRE: &str = "mail";
+/// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
+pub(crate) const TITRE: &str = "mail";
 const CLE: &str = "RBS_MAIL__SMTP_PASSWORD";
 const FICHIER: &str = ".env";
 const CONFIG: &str = "config/default.toml";

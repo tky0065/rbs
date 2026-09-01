@@ -7,7 +7,8 @@
 
 use super::{Check, Config};
 
-const TITRE: &str = "jobs";
+/// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
+pub(crate) const TITRE: &str = "jobs";
 const SECTION: &str = "jobs";
 
 /// Vérifie que la file a les réglages sous lesquels le fragment a été installé.

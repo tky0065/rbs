@@ -20,7 +20,8 @@ use crate::generate::entities::{self, Entity};
 
 use super::Check;
 
-const TITLE: &str = "relations";
+/// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
+pub(crate) const TITRE: &str = "relations";
 
 /// Vérifie qu'aucun modèle ne porte déjà une relation sans porter ses deux ancres.
 pub(crate) fn check(root: &Path) -> Check {
@@ -49,7 +50,7 @@ pub(crate) fn check(root: &Path) -> Check {
     }
 
     if incomplete.is_empty() {
-        return Check::ok(TITLE, "les modèles portent leurs ancres de relation");
+        return Check::ok(TITRE, "les modèles portent leurs ancres de relation");
     }
 
     // Les fichiers dédoublonnés et triés : `src/auth/model.rs` porte deux entités, et
@@ -80,7 +81,7 @@ pub(crate) fn check(root: &Path) -> Check {
         .collect::<Vec<_>>()
         .join("\n\n");
 
-    Check::failed(TITLE, detail, remedy)
+    Check::failed(TITRE, detail, remedy)
 }
 
 /// Le fichier porte-t-il les deux balises de `anchor` ?

@@ -12,7 +12,8 @@ use crate::metadata;
 
 use super::Check;
 
-const TITRE: &str = "agents";
+/// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
+pub(crate) const TITRE: &str = "agents";
 
 /// Répertoires de `src/` qui ne sont pas des features engendrées.
 ///

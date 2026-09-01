@@ -14,14 +14,6 @@ use crate::database::Database;
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
-
-    /// Répertoire de templates remplaçant celles embarquées dans le binaire.
-    #[arg(long, global = true, value_name = "CHEMIN")]
-    pub template_dir: Option<PathBuf>,
-
-    /// Prend les valeurs par défaut sans rien demander : le CLI reste scriptable.
-    #[arg(long, short = 'y', global = true)]
-    pub yes: bool,
 }
 
 #[derive(Debug, PartialEq, Subcommand)]
@@ -51,6 +43,14 @@ pub enum Commands {
         /// Langue de l'`AGENTS.md` engendré. À défaut, celle de l'environnement.
         #[arg(long, value_name = "LANGUE")]
         lang: Option<crate::lang::Lang>,
+
+        /// Répertoire de templates remplaçant celles embarquées dans le binaire.
+        #[arg(long, value_name = "CHEMIN")]
+        template_dir: Option<PathBuf>,
+
+        /// Prend les valeurs par défaut sans rien demander : le CLI reste scriptable.
+        #[arg(long, short = 'y')]
+        yes: bool,
     },
 
     /// Ajoute une feature : auth, ci, cors, docker, jobs, mail, rate-limit, redis, storage.
@@ -65,6 +65,10 @@ pub enum Commands {
         /// Affiche le plan sans rien écrire.
         #[arg(long)]
         dry_run: bool,
+
+        /// Répertoire de templates remplaçant celles embarquées dans le binaire.
+        #[arg(long, value_name = "CHEMIN")]
+        template_dir: Option<PathBuf>,
     },
 
     /// Génère une feature dans un projet existant.
@@ -91,7 +95,11 @@ pub enum Commands {
     Dev,
 
     /// Diagnostique le projet : ancres, .env, base joignable, versions.
-    Doctor,
+    Doctor {
+        /// Rend le rapport en JSON sur la sortie standard, pour un script ou une CI.
+        #[arg(long)]
+        json: bool,
+    },
 
     /// Aligne le manifeste du projet sur la version du CLI : rbs-core et les métadonnées.
     Upgrade {
@@ -299,5 +307,78 @@ mod tests {
     #[test]
     fn an_unknown_language_is_refused_by_the_parser() {
         assert!(Cli::try_parse_from(["rbs", "new", "blog", "--lang", "de"]).is_err());
+    }
+
+    /// Le drapeau ne descend que sur les deux commandes qui le lisent. Ailleurs, clap
+    /// doit le refuser : `rbs generate crud --template-dir ./mes-templates` l'acceptait
+    /// et rendait le projet depuis les templates embarquées, sans un mot.
+    #[test]
+    fn template_dir_is_refused_by_the_commands_that_ignore_it() {
+        for commande in [
+            vec![
+                "rbs",
+                "generate",
+                "crud",
+                "users",
+                "--template-dir",
+                "/tmp/t",
+            ],
+            vec!["rbs", "migrate", "up", "--template-dir", "/tmp/t"],
+            vec!["rbs", "seed", "--template-dir", "/tmp/t"],
+            vec!["rbs", "dev", "--template-dir", "/tmp/t"],
+            vec!["rbs", "doctor", "--template-dir", "/tmp/t"],
+            vec!["rbs", "upgrade", "--template-dir", "/tmp/t"],
+        ] {
+            assert!(
+                Cli::try_parse_from(&commande).is_err(),
+                "{commande:?} doit être refusée : le drapeau n'y ferait rien"
+            );
+        }
+    }
+
+    /// `new` rend le projet depuis ce répertoire, `add` y prend ses fragments : les deux
+    /// gardent le drapeau.
+    #[test]
+    fn template_dir_stays_on_the_two_commands_that_honour_it() {
+        let creation = Cli::try_parse_from(["rbs", "new", "blog", "--template-dir", "/tmp/t"])
+            .expect("commande valide");
+        let Commands::New { template_dir, .. } = creation.command else {
+            panic!("`new` attendue");
+        };
+        assert_eq!(template_dir, Some(PathBuf::from("/tmp/t")));
+
+        let ajout = Cli::try_parse_from(["rbs", "add", "cors", "--template-dir", "/tmp/t"])
+            .expect("commande valide");
+        let Commands::Add { template_dir, .. } = ajout.command else {
+            panic!("`add` attendue");
+        };
+        assert_eq!(template_dir, Some(PathBuf::from("/tmp/t")));
+    }
+
+    /// `prompts.rs` est le seul module qui pose des questions, et `rbs new` la seule
+    /// commande qui l'appelle : `--yes` n'a rien à faire ailleurs.
+    #[test]
+    fn yes_is_accepted_only_by_new() {
+        let creation =
+            Cli::try_parse_from(["rbs", "new", "blog", "--yes"]).expect("commande valide");
+        let Commands::New { yes, .. } = creation.command else {
+            panic!("`new` attendue");
+        };
+        assert!(yes);
+
+        for commande in [
+            vec!["rbs", "add", "cors", "--yes"],
+            vec!["rbs", "generate", "crud", "users", "--yes"],
+            vec!["rbs", "migrate", "up", "--yes"],
+            vec!["rbs", "seed", "--yes"],
+            vec!["rbs", "dev", "--yes"],
+            vec!["rbs", "doctor", "--yes"],
+            vec!["rbs", "upgrade", "--yes"],
+        ] {
+            assert!(
+                Cli::try_parse_from(&commande).is_err(),
+                "{commande:?} doit être refusée : le drapeau n'y ferait rien"
+            );
+        }
     }
 }

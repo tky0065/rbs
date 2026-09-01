@@ -51,6 +51,8 @@ pub fn run() {
             with,
             core_path,
             lang,
+            template_dir,
+            yes,
         } => {
             let resultat = create_project(
                 name,
@@ -58,8 +60,8 @@ pub fn run() {
                 database,
                 with,
                 core_path,
-                cli.template_dir,
-                cli.yes,
+                template_dir,
+                yes,
                 lang,
             );
 
@@ -73,8 +75,9 @@ pub fn run() {
             feature,
             force,
             dry_run,
+            template_dir,
         } => {
-            if let Err(error) = add(feature, force, dry_run, cli.template_dir) {
+            if let Err(error) = add(feature, force, dry_run, template_dir) {
                 ui::error(&error.to_string());
                 if let Some(remedy) = error.remedy() {
                     ui::info(&format!("\n{remedy}"));
@@ -154,7 +157,7 @@ pub fn run() {
             }
         }
 
-        Commands::Doctor => match diagnose() {
+        Commands::Doctor { json } => match diagnose(json) {
             Ok(true) => {}
             // Un diagnostic qui trouve quelque chose n'est pas un échec de la commande,
             // mais un script doit pouvoir le distinguer d'un projet sain.
@@ -573,10 +576,22 @@ fn seed(force: bool) -> Result<(), seed::Error> {
 }
 
 /// Rend le rapport et dit si le projet est sain.
-fn diagnose() -> Result<bool, Box<dyn Error>> {
-    let report = doctor::run(&std::env::current_dir()?)?;
+fn diagnose(json: bool) -> Result<bool, Box<dyn Error>> {
+    let directory = std::env::current_dir()?;
 
-    println!("{}", doctor::render::report(&report));
+    // En JSON, la sortie standard ne porte que le document : ni les deux lignes de
+    // conclusion, que `sain` remplace, ni l'annonce d'attente du contrôle `base`.
+    if json {
+        let report = doctor::run(&directory, &mut doctor::json::Muette)?;
+        println!("{}", doctor::json::report(&report));
+
+        return Ok(report.succeeded());
+    }
+
+    let report = doctor::run(
+        &directory,
+        &mut doctor::render::Texte::new(std::io::stdout()),
+    )?;
 
     if report.succeeded() {
         ui::success("le projet est sain");

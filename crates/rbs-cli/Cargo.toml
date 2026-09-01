@@ -21,6 +21,7 @@ inquire.workspace = true
 minijinja.workspace = true
 rand.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 toml_edit = { workspace = true, features = ["serde"] }
@@ -30,6 +31,5 @@ watchexec-signals.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true
-serde_json.workspace = true
 tempfile.workspace = true
 testcontainers.workspace = true

@@ -13,7 +13,8 @@ use std::path::Path;
 
 use super::Check;
 
-const TITRE: &str = "versions";
+/// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
+pub(crate) const TITRE: &str = "versions";
 
 /// Version du CLI en train de diagnostiquer.
 const CLI: &str = env!("CARGO_PKG_VERSION");

@@ -29,7 +29,6 @@ Options:
       --force                  Applique les modifications même si le working tree Git est sale
       --dry-run                Affiche le plan sans rien écrire
       --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
-  -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
   -h, --help                   Print help
   -V, --version                Print version
 ```
@@ -39,7 +38,6 @@ Options:
 | `--force` | Applique même si le working tree Git est sale, et écrase les fichiers signalés en conflit. |
 | `--dry-run` | Affiche le plan et s'arrête. Rien n'est écrit. |
 | `--template-dir <CHEMIN>` | Lit les fragments dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire. |
-| `-y`, `--yes` | Global, et sans effet ici : `rbs add` ne demande rien. |
 
 ## Les neuf features
 

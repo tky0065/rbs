@@ -20,7 +20,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 $ rbs generate --help
 Génère une feature dans un projet existant
 
-Usage: rbs generate [OPTIONS] <COMMAND>
+Usage: rbs generate <COMMAND>
 
 Commands:
   crud     Génère une feature CRUD complète, entité et migration comprises
@@ -28,18 +28,16 @@ Commands:
   help     Print this message or the help of the given subcommand(s)
 
 Options:
-      --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
-  -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
-  -h, --help                   Print help
-  -V, --version                Print version
+  -h, --help     Print help
+  -V, --version  Print version
 ```
 
 `g` is an alias for `generate`: `rbs g crud users` and `rbs generate crud users` parse to
 the same thing.
 
-The two global options are accepted here because clap propagates them, but neither changes
-anything: `rbs generate` asks no questions, and its templates are compiled into the binary
-rather than read from `--template-dir`.
+`rbs generate` takes neither `--template-dir` nor `--yes`: it asks no questions, and its
+templates are compiled into the binary rather than read from a directory. Passing either is
+a clap error rather than a flag that is taken and ignored.
 
 ## `rbs generate crud`
 
@@ -53,15 +51,13 @@ Arguments:
   <NAME>  Nom de la feature, au pluriel
 
 Options:
-      --fields <CHAMPS>        Champs de l'entité, ex. "name:string,email:string:unique"
-      --force                  Écrit même si le working tree Git est sale
-      --dry-run                Affiche le plan sans rien écrire
-      --has-many <ENTITE>      Entité enfant dont ce modèle doit porter la variante inverse, répétable
-      --role <ROLE>            Réserve create, update et delete à ce rôle ; exige la feature auth
-      --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
-  -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
-  -h, --help                   Print help
-  -V, --version                Print version
+      --fields <CHAMPS>    Champs de l'entité, ex. "name:string,email:string:unique"
+      --force              Écrit même si le working tree Git est sale
+      --dry-run            Affiche le plan sans rien écrire
+      --has-many <ENTITE>  Entité enfant dont ce modèle doit porter la variante inverse, répétable
+      --role <ROLE>        Réserve create, update et delete à ce rôle ; exige la feature auth
+  -h, --help               Print help
+  -V, --version            Print version
 ```
 
 | Flag | Effect |
@@ -84,12 +80,10 @@ Arguments:
   <NAME>  Nom de la feature
 
 Options:
-      --force                  Écrit même si le working tree Git est sale
-      --dry-run                Affiche le plan sans rien écrire
-      --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
-  -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
-  -h, --help                   Print help
-  -V, --version                Print version
+      --force    Écrit même si le working tree Git est sale
+      --dry-run  Affiche le plan sans rien écrire
+  -h, --help     Print help
+  -V, --version  Print version
 ```
 
 Same flags minus `--fields`, `--has-many` and `--role`: an empty feature has no columns, so

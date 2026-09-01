@@ -183,7 +183,6 @@ fn each_engine_produces_a_project_whose_tests_pass() {
                 "articles",
                 "--fields",
                 "title:string,body:text,published:bool",
-                "--yes",
             ])
             .assert()
             .success();

@@ -28,7 +28,7 @@ cargo run -p rbs-cli --bin rbs -- new hello-crud --yes \
   --lang fr
 mv hello-crud examples/hello-crud
 cd examples/hello-crud && cargo run --manifest-path ../../Cargo.toml -p rbs-cli --bin rbs -- \
-  generate crud articles --fields 'title:string,body:text,published:bool' --yes --force
+  generate crud articles --fields 'title:string,body:text,published:bool' --force
 ```
 
 ### `blog-auth`
@@ -42,9 +42,9 @@ cargo run -p rbs-cli --bin rbs -- new blog-auth --yes \
   --database-url 'postgres://rbs:rbs@localhost:5432/blog_auth' \
   --lang fr
 cd blog-auth && git add -A && git commit -q -m 'projet neuf'
-cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add auth --yes
+cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add auth
 cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
-  generate crud posts --fields 'title:string,body:text,published:bool' --yes --force
+  generate crud posts --fields 'title:string,body:text,published:bool' --force
 cd .. && mv blog-auth examples/blog-auth
 ```
 
@@ -66,11 +66,11 @@ cargo run -p rbs-cli --bin rbs -- new file-drop --yes \
 cd file-drop
 for f in redis mail storage; do
   git add -A && git commit -q -m "before $f"
-  cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add "$f" --yes
+  cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add "$f"
 done
 cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
   generate crud uploads \
-  --fields 'title:string,owner_email:string,content_type:string,size:int' --yes --force
+  --fields 'title:string,owner_email:string,content_type:string,size:int' --force
 cd .. && mv file-drop examples/file-drop
 ```
 
@@ -95,10 +95,10 @@ cargo run -p rbs-cli --bin rbs -- new newsletter-queue --yes \
 cd newsletter-queue
 for f in jobs mail; do
   git add -A && git commit -q -m "before $f"
-  cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add "$f" --yes
+  cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add "$f"
 done
 cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
-  generate crud subscribers --fields 'email:string:unique,name:string,confirmed:bool' --yes --force
+  generate crud subscribers --fields 'email:string:unique,name:string,confirmed:bool' --force
 cd .. && mv newsletter-queue examples/newsletter-queue
 ```
 

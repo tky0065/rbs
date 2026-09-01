@@ -259,9 +259,9 @@ fn fragment_has_code() -> TempDir {
 fn add_trial(racine: &Path, fragments: &TempDir, arguments: &[&str]) -> Sortie {
     let mut commande = rbs(racine);
     commande
+        .args(["add", "essai"])
         .arg("--template-dir")
         .arg(fragments.path())
-        .args(["add", "essai"])
         .args(arguments);
 
     Sortie::de(&mut commande)
