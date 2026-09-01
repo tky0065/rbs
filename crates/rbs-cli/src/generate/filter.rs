@@ -200,6 +200,58 @@ mod tests {
         );
     }
 
+    /// `apply` est le seul point où le filtre touche une requête, et il vit du côté du
+    /// repository : le service et le controller ne font que transporter le type.
+    #[test]
+    fn the_filter_translates_into_seaorm_conditions() {
+        let rendered = filtre("articles", CHAMPS);
+
+        assert!(
+            rendered.contains(
+                "pub(super) fn apply(select: Select<Entity>, filtre: &ArticleFilter) \
+                 -> Result<Select<Entity>>"
+            ),
+            "`apply` est absent :\n{rendered}"
+        );
+        for condition in [
+            ".add(compare(Column::Views, filtre.views.as_ref()))",
+            ".add(matches(Column::Title, filtre.title.as_ref()))",
+            "colonne.contains(v)",
+            "colonne.is_not_null()",
+            ".order_by_desc(",
+            ".order_by_asc(",
+        ] {
+            assert!(
+                rendered.contains(condition),
+                "« {condition} » absent :\n{rendered}"
+            );
+        }
+    }
+
+    /// Sans `sort`, l'ordre reste celui de la liste : l'`id` est un UUIDv7, et c'est lui
+    /// qui rend la pagination stable.
+    #[test]
+    fn the_default_order_stays_the_descending_id() {
+        let rendered = filtre("articles", CHAMPS);
+
+        assert!(
+            rendered.contains("order_by_desc(Column::Id)"),
+            "le tri par défaut doit rester `-id` :\n{rendered}"
+        );
+    }
+
+    /// Une référence se compare, jamais ne se cherche par sous-chaîne : c'est un
+    /// identifiant.
+    #[test]
+    fn a_reference_goes_through_the_comparison_helper() {
+        let rendered = filtre("posts", "author:references:users");
+
+        assert!(
+            rendered.contains(".add(compare(Column::AuthorId, filtre.author_id.as_ref()))"),
+            "la référence doit se comparer :\n{rendered}"
+        );
+    }
+
     /// Le rendu est écrit tel que rustfmt l'écrirait : sans quoi le `cargo fmt --check` du
     /// projet engendré échouerait sur ce que le CLI vient de produire.
     #[test]

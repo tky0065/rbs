@@ -34,7 +34,11 @@ pub struct Comparison<T> {
 pub struct TextMatch {
     /// Égalité stricte.
     pub eq: Option<String>,
-    /// Sous-chaîne, insensible à la casse.
+    /// Sous-chaîne, cherchée par `LIKE '%…%'`.
+    ///
+    /// La casse suit la collation du moteur : PostgreSQL la distingue, MySQL l'ignore avec
+    /// sa collation par défaut. `ILIKE` l'uniformiserait, mais il n'existe que sur
+    /// PostgreSQL, et le CLI engendre aussi pour MySQL et SQLite.
     pub contains: Option<String>,
     /// `true` exige une colonne nulle, `false` une colonne renseignée.
     pub is_null: Option<bool>,

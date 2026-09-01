@@ -41,7 +41,7 @@ Trois types, dont aucun ne connaît de colonne ni d'entité :
 | Type | Rôle |
 |---|---|
 | `Comparison<T>` | `eq`, `gt`, `gte`, `lt`, `lte`, `is_null` sur un scalaire ordonné |
-| `TextMatch` | `eq`, `contains`, `is_null` — `contains` rend un `LIKE` insensible à la casse |
+| `TextMatch` | `eq`, `contains`, `is_null` — `contains` rend un `LIKE '%…%'`, dont la casse suit la collation du moteur |
 | `Sort` | une liste de colonnes préfixées, `-` pour décroissant |
 
 Tous trois sont `Deserialize` et `ToSchema`. `Sort` ne fait qu'analyser la syntaxe du
