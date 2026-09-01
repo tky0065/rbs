@@ -99,6 +99,16 @@ pub enum Commands {
         /// Rend le rapport en JSON sur la sortie standard, pour un script ou une CI.
         #[arg(long)]
         json: bool,
+
+        /// Repose les ancres absentes avant de diagnostiquer.
+        #[arg(long)]
+        fix: bool,
+
+        // `requires` : seul `--fix` écrit, et hors de lui ce drapeau serait pris puis
+        // ignoré — ce que `--template-dir` faisait sur les commandes qui ne le lisent pas.
+        /// Repose les ancres même si le working tree Git est sale.
+        #[arg(long, requires = "fix")]
+        force: bool,
     },
 
     /// Écrit sur la sortie standard le script de complétion du shell donné.
@@ -368,6 +378,23 @@ mod tests {
             panic!("`add` attendue");
         };
         assert_eq!(template_dir, Some(PathBuf::from("/tmp/t")));
+    }
+
+    /// `--force` ne lève que la garde Git de `--fix`, seul geste de `doctor` qui écrive :
+    /// accepté seul, il serait pris puis ignoré.
+    #[test]
+    fn doctor_force_is_refused_without_fix() {
+        let reparation =
+            Cli::try_parse_from(["rbs", "doctor", "--fix", "--force"]).expect("commande valide");
+        let Commands::Doctor { fix, force, .. } = reparation.command else {
+            panic!("`doctor` attendue");
+        };
+        assert!(fix && force);
+
+        assert!(
+            Cli::try_parse_from(["rbs", "doctor", "--force"]).is_err(),
+            "`--force` seul doit être refusé : rien n'écrirait"
+        );
     }
 
     /// `prompts.rs` est le seul module qui pose des questions, et `rbs new` la seule

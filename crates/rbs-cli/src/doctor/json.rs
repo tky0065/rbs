@@ -5,6 +5,7 @@
 
 use serde::Serialize;
 
+use super::anchors::{Laissee, Repair};
 use super::{Check, Report};
 
 /// Le rapport tel qu'un script le lit.
@@ -15,14 +16,34 @@ struct Document<'a> {
     /// Sans lui, un lecteur devrait le recalculer sur le tableau, en sachant qu'un
     /// avertissement n'y fait pas obstacle — règle qu'aucun champ du document n'énonce.
     sain: bool,
+    /// Ce que `--fix` a reposé, et ce qu'il a laissé. Absent sans `--fix`.
+    ///
+    /// Séparé du tableau des contrôles : `ancres` y dit l'état du projet *après* la
+    /// réparation, et un script qui veut savoir si quelque chose a été écrit n'a pas à le
+    /// déduire d'un verdict devenu vert.
+    #[serde(rename = "reparation", skip_serializing_if = "Option::is_none")]
+    repair: Option<Reparation<'a>>,
     /// Les constats, dans l'ordre où ils ont été faits.
     checks: &'a [Check],
 }
 
+/// Ce qu'une réparation a fait, tel qu'un script le lit.
+#[derive(Serialize)]
+struct Reparation<'a> {
+    /// Les noms des ancres reposées.
+    reposees: &'a [String],
+    /// Les ancres laissées absentes, et pourquoi.
+    laissees: &'a [Laissee],
+}
+
 /// Rend le rapport en JSON, seul document de la sortie standard.
-pub(crate) fn report(report: &Report) -> String {
+pub(crate) fn report(report: &Report, repair: Option<&Repair>) -> String {
     let document = Document {
         sain: report.succeeded(),
+        repair: repair.map(|repair| Reparation {
+            reposees: &repair.reposees,
+            laissees: &repair.laissees,
+        }),
         checks: &report.checks,
     };
 
@@ -52,10 +73,51 @@ mod tests {
 
     /// Le document, analysé comme un script l'analyserait.
     fn document(checks: Vec<Check>) -> serde_json::Value {
-        let rendu = report(&Report { checks });
+        let rendu = report(&Report { checks }, None);
 
         serde_json::from_str(&rendu)
             .unwrap_or_else(|faute| panic!("le rendu doit être un JSON valide ({faute}) : {rendu}"))
+    }
+
+    /// Sans `--fix`, aucun objet de réparation : un lecteur aurait à le filtrer alors
+    /// qu'aucune réparation n'a été demandée.
+    #[test]
+    fn a_report_without_a_repair_carries_no_repair_object() {
+        let document = document(vec![Check::ok("ancres", "les 11 sont en place")]);
+
+        assert!(document.get("reparation").is_none(), "{document}");
+    }
+
+    /// Avec `--fix`, le document dit ce qui a été reposé et ce qui ne l'a pas été : le
+    /// tableau des contrôles, lui, décrit le projet *après* la réparation, et un `ancres`
+    /// devenu vert ne dirait pas qu'un octet a été écrit.
+    #[test]
+    fn a_repair_names_what_it_put_back_and_what_it_left() {
+        let repair = Repair {
+            plan: crate::plan::Builder::new("/aucun-projet-ici").finir(),
+            reposees: vec!["routes".to_string()],
+            laissees: vec![Laissee {
+                anchor: "services".to_string(),
+                raison: "la ligne d'accroche `services:` est introuvable".to_string(),
+            }],
+        };
+        let rendu = report(
+            &Report {
+                checks: vec![Check::ok("ancres", "les 11 sont en place")],
+            },
+            Some(&repair),
+        );
+        let document: serde_json::Value =
+            serde_json::from_str(&rendu).expect("le rendu doit être un JSON valide");
+
+        assert_eq!(document["reparation"]["reposees"][0], "routes");
+        assert_eq!(document["reparation"]["laissees"][0]["ancre"], "services");
+        assert!(
+            document["reparation"]["laissees"][0]["raison"]
+                .as_str()
+                .is_some_and(|raison| raison.contains("services:")),
+            "{document}"
+        );
     }
 
     /// Les trois verdicts doivent se distinguer : un script qui ne voit que « pas ok »

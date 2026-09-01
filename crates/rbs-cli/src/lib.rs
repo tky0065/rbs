@@ -164,7 +164,7 @@ pub fn run() {
             completions::render(shell, &mut std::io::stdout());
         }
 
-        Commands::Doctor { json } => match diagnose(json) {
+        Commands::Doctor { json, fix, force } => match diagnose(json, fix, force) {
             Ok(true) => {}
             // Un diagnostic qui trouve quelque chose n'est pas un échec de la commande,
             // mais un script doit pouvoir le distinguer d'un projet sain.
@@ -582,15 +582,84 @@ fn seed(force: bool) -> Result<(), seed::Error> {
     Ok(())
 }
 
+/// Repose les ancres absentes du projet, plan affiché avant écriture.
+///
+/// En JSON, rien n'est dit ici : la sortie standard ne porte que le document, et ce que
+/// la réparation a fait y a son propre objet.
+fn repair_anchors(
+    directory: &std::path::Path,
+    force: bool,
+    json: bool,
+) -> Result<doctor::anchors::Repair, Box<dyn Error>> {
+    let root = metadata::project_root(directory).map_err(doctor::Error::from)?;
+    let repair = doctor::anchors::repair(&root)?;
+
+    // La garde Git vient après le plan, comme pour `upgrade` : un projet qui n'a rien à
+    // écrire n'a rien à protéger, et doit pouvoir répondre depuis un arbre de travail
+    // plein de travail en cours.
+    if !repair.plan.files().is_empty() {
+        if !force {
+            git::garde(&root)?;
+        }
+
+        if !json {
+            println!("{}\n", plan::render::plan(&repair.plan));
+        }
+
+        plan::application::apply(&repair.plan, force)?;
+    }
+
+    if !json {
+        annoncer_reparation(&repair);
+    }
+
+    Ok(repair)
+}
+
+/// Dit ce que la réparation a reposé, et ce qu'elle a laissé.
+fn annoncer_reparation(repair: &doctor::anchors::Repair) {
+    if repair.reposees.is_empty() && repair.laissees.is_empty() {
+        ui::success("aucune ancre à reposer");
+    } else if !repair.reposees.is_empty() {
+        let pluriel = if repair.reposees.len() > 1 { "s" } else { "" };
+        ui::success(&format!(
+            "{} ancre{pluriel} reposée{pluriel} : {}",
+            repair.reposees.len(),
+            repair.reposees.join(", ")
+        ));
+    }
+
+    // Chacune sur sa ligne : la raison d'une abstention est une phrase, et les enfiler
+    // rendrait illisible celle qui compte.
+    for laissee in &repair.laissees {
+        ui::warn(&format!(
+            "{} n'a pas été reposée — {}",
+            laissee.anchor, laissee.raison
+        ));
+    }
+
+    println!();
+}
+
 /// Rend le rapport et dit si le projet est sain.
-fn diagnose(json: bool) -> Result<bool, Box<dyn Error>> {
+///
+/// La réparation passe avant le diagnostic : ce que `--fix` repose doit être compté par
+/// le contrôle `ancres` du même rapport, faute de quoi la commande annoncerait rouge un
+/// projet qu'elle vient de remettre d'aplomb.
+fn diagnose(json: bool, fix: bool, force: bool) -> Result<bool, Box<dyn Error>> {
     let directory = std::env::current_dir()?;
+
+    let repair = if fix {
+        Some(repair_anchors(&directory, force, json)?)
+    } else {
+        None
+    };
 
     // En JSON, la sortie standard ne porte que le document : ni les deux lignes de
     // conclusion, que `sain` remplace, ni l'annonce d'attente du contrôle `base`.
     if json {
         let report = doctor::run(&directory, &mut doctor::json::Muette)?;
-        println!("{}", doctor::json::report(&report));
+        println!("{}", doctor::json::report(&report, repair.as_ref()));
 
         return Ok(report.succeeded());
     }
@@ -666,6 +735,73 @@ mod tests {
             .filter(|path| avant.get(*path) != apres.get(*path))
             .cloned()
             .collect()
+    }
+
+    /// Fait du projet un dépôt dont tout est commité.
+    fn commit(root: &Path) {
+        for arguments in [
+            vec!["config", "user.email", "rbs@example.test"],
+            vec!["config", "user.name", "rbs"],
+            vec!["add", "-A"],
+            vec!["commit", "--quiet", "-m", "projet neuf"],
+        ] {
+            let output = std::process::Command::new("git")
+                .args(&arguments)
+                .current_dir(root)
+                .output()
+                .expect("git doit être lançable");
+
+            assert!(
+                output.status.success(),
+                "git {arguments:?} a échoué :\n{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+
+    /// Retire du projet la ligne portant `motif`.
+    fn amputer(root: &Path, file: &str, motif: &str) {
+        let path = root.join(file);
+        let source = fs::read_to_string(&path).expect("le fichier est lisible");
+        let ampute: Vec<&str> = source.lines().filter(|l| !l.contains(motif)).collect();
+        fs::write(&path, ampute.join("\n")).expect("le fichier est réécrivable");
+    }
+
+    /// Un projet sain n'a rien à réparer : `--fix` doit pouvoir se mettre dans un script
+    /// qui le lance à chaque checkout sans jamais toucher un octet.
+    #[test]
+    fn doctor_fix_leaves_a_healthy_project_untouched() {
+        let (_parent, root) = projet();
+        let avant = empreinte(&root);
+
+        let repair = repair_anchors(&root, false, true).expect("la réparation aboutit");
+
+        assert!(repair.reposees.is_empty(), "{:?}", repair.reposees);
+        assert!(repair.laissees.is_empty(), "{:?}", repair.laissees);
+        assert_eq!(
+            ecarts(&avant, &empreinte(&root)),
+            Vec::<PathBuf>::new(),
+            "`--fix` a écrit dans un projet sain"
+        );
+    }
+
+    /// La garde Git est celle des autres commandes qui écrivent : ce que `--fix` repose
+    /// doit rester discernable du travail en cours au prochain `git diff`.
+    #[test]
+    fn doctor_fix_refuses_a_dirty_working_tree_unless_forced() {
+        let (_parent, root) = projet();
+        commit(&root);
+        amputer(&root, "src/router.rs", "<rbs:routes>");
+        amputer(&root, "src/router.rs", "</rbs:routes>");
+
+        let refus = repair_anchors(&root, false, true).expect_err("l'arbre est sale");
+        assert!(
+            refus.to_string().contains("src/router.rs"),
+            "le refus doit nommer ce qui n'est pas commité : {refus}"
+        );
+
+        let repair = repair_anchors(&root, true, true).expect("`--force` passe outre");
+        assert_eq!(repair.reposees, vec!["routes".to_string()]);
     }
 
     /// La seule promesse de `--dry-run` est que le projet ne bouge pas : elle se vérifie

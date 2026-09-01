@@ -26,13 +26,17 @@ Usage: rbs doctor [OPTIONS]
 
 Options:
       --json     Rend le rapport en JSON sur la sortie standard, pour un script ou une CI
+      --fix      Repose les ancres absentes avant de diagnostiquer
+      --force    Repose les ancres même si le working tree Git est sale
   -h, --help     Print help
   -V, --version  Print version
 ```
 
-`--json` is its only flag. `--template-dir` and `--yes` are not accepted here: each is
-declared on the commands that read it, so passing one is a clap error rather than a flag
-that is taken and ignored.
+Three flags, and only three. `--json` renders the report as a document; `--fix` puts the
+missing anchors back before diagnosing, and `--force` lets it write on a dirty working
+tree. `--force` only lifts that one guard, and is therefore refused on its own: nothing
+else in `doctor` writes, so alone it would be taken and ignored. `--template-dir` and `--yes` are not accepted here: each is declared on the commands
+that read it, so passing one is a clap error rather than a flag that is taken and ignored.
 
 ## The six checks
 
@@ -217,6 +221,142 @@ it — the anchor block to paste back, the `.env` line to add, the server to sta
 
 Exit status 1. A diagnosis that finds something is not a failure of the command, but a
 script has to be able to tell it apart from a healthy project, so the status differs.
+
+## Putting the anchors back
+
+An anchor is two comment lines, and nothing tells you where they used to be once they are
+gone. `--fix` puts them back: each anchor declares the line it sits under — `.merge(docs)`
+for `// <rbs:layers>`, `core: CoreState::new(db, config),` for `// <rbs:state_init>` — and
+the block goes back beneath that line, in the column it had.
+
+Repairing comes before diagnosing, so the `ancres` check of the same report counts what
+has just been put back rather than reporting red on a project the command has just set
+straight.
+
+Below, a project whose `// <rbs:openapi>` and `// <rbs:state_init>` were deleted:
+
+```text
+$ rbs doctor --fix --force
+plan pour /private/tmp/rbs-demo/demo
+
+  ~ src/openapi.rs   modifié
+  ~ src/state.rs     modifié
+
+  2 fichiers à écrire
+
+✓ 2 ancres reposées : openapi, state_init
+
+  ✓ ancres      les 10 points d'insertion sont en place
+  ✓ agents      guide et inventaire à jour
+  ✓ relations   les modèles portent leurs ancres de relation
+  ✓ .env        les 4 variables de .env.example sont renseignées
+  ✓ versions    projet et rbs-core 1.1.0 alignés sur le CLI 1.1.0
+  … base        compilation de la crate migration, peut prendre
+                une minute au premier lancement…
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running `target/debug/migration version`
+  ✓ base        sqlite 3.51 répond sur demo.db
+✓ le projet est sain
+```
+
+Exit status 0. The plan is shown before a byte is written, like every other command that
+touches an existing project, and the write goes through the same journal: should one of
+the two files fail, the other is put back as it was.
+
+How exact the placement is can be read straight off Git, on a project whose anchors were
+deleted after the commit:
+
+```text
+$ git diff --stat
+```
+
+Nothing. The two blocks came back to the byte where the skeleton had put them.
+
+## A dirty working tree
+
+```text
+$ rbs doctor --fix
+erreur : le working tree n'est pas propre : src/openapi.rs, src/state.rs — commitez, ou relancez avec --force
+```
+
+Exit status 1. Same guard as [`rbs add`](./add.md), [`rbs generate`](./generate.md) and
+[`rbs upgrade`](./upgrade.md): what the repair writes has to stay distinguishable from your
+own work in the next `git diff`. Commit, or pass `--force`.
+
+The guard comes after the plan, not before it: a project with no anchor to put back has
+nothing to protect, and `rbs doctor --fix` on a healthy project must be able to answer from
+a working tree full of work in progress.
+
+```text
+$ rbs doctor --fix
+✓ aucune ancre à reposer
+```
+
+## When it declines
+
+A hook line that the file does not carry — or carries twice — no longer says where the
+block goes. `--fix` then leaves the anchor where it is not, names it, and the check below
+prints the block to paste, exactly as it did before:
+
+```text
+$ rbs doctor --fix --force
+plan pour /private/tmp/rbs-demo/demo
+
+  ~ src/seeds/main.rs   modifié
+
+  1 fichier à écrire
+
+✓ 1 ancre reposée : seeds
+attention : layers n'a pas été reposée — la ligne d'accroche `.merge(docs)` est introuvable dans src/router.rs
+
+  ✗ ancres      layers manque dans src/router.rs
+      dans src/router.rs :
+      // <rbs:layers>
+      // </rbs:layers>
+```
+
+Exit status 1, since a check failed. The other anchor was still put back: an abstention is
+per anchor, not for the whole run.
+
+Declining is the point, not a shortcoming. `// <rbs:layers>` sits *inside* `trace` and
+`request_id` — a `.layer()` wraps what precedes it — so a layer added at that anchor sees
+the request id and its own short answers, a 429 or a refused preflight, stay in the trace.
+Put the same anchor back two lines lower and none of that holds any more, and nothing would
+say so until someone reads a log. An anchor put back in the wrong place costs more than an
+anchor left missing.
+
+The same applies to an anchor whose two tags did not disappear together: the tag left
+behind does not say where the other one was — between them was everything the anchor held.
+
+Under `--json`, the repair has its own object, so a script does not have to deduce from a
+verdict turned green that something was written:
+
+```text
+$ rbs doctor --fix --force --json
+{
+  "sain": false,
+  "reparation": {
+    "reposees": [],
+    "laissees": [
+      {
+        "ancre": "layers",
+        "raison": "la ligne d'accroche `.merge(docs)` est introuvable dans src/router.rs"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "name": "ancres",
+      "status": "erreur",
+      "detail": "layers manque dans src/router.rs",
+      "remede": "dans src/router.rs :\n// <rbs:layers>\n// </rbs:layers>"
+    }
+  ]
+}
+```
+
+`reparation` is absent without `--fix`, and the plan is never printed under `--json`:
+standard output carries the document and nothing else.
 
 ## Reachable but unreadable
 

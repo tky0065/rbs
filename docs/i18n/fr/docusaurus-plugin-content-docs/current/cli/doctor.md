@@ -27,13 +27,18 @@ Usage: rbs doctor [OPTIONS]
 
 Options:
       --json     Rend le rapport en JSON sur la sortie standard, pour un script ou une CI
+      --fix      Repose les ancres absentes avant de diagnostiquer
+      --force    Repose les ancres même si le working tree Git est sale
   -h, --help     Print help
   -V, --version  Print version
 ```
 
-`--json` est son seul flag. `--template-dir` et `--yes` ne sont pas acceptés ici : chacun
-est déclaré sur les commandes qui le lisent, si bien qu'en passer un est une erreur de clap
-plutôt qu'un flag pris puis ignoré.
+Trois flags, et trois seulement. `--json` rend le rapport en document ; `--fix` repose les
+ancres absentes avant de diagnostiquer, et `--force` le laisse écrire sur un working tree
+sale. `--force` ne lève que cette garde-là, et est donc refusé seul : rien d'autre n'écrit
+dans `doctor`, si bien qu'isolé il serait pris puis ignoré. `--template-dir` et `--yes` ne sont pas acceptés ici : chacun est déclaré sur les
+commandes qui le lisent, si bien qu'en passer un est une erreur de clap plutôt qu'un flag
+pris puis ignoré.
 
 ## Les six contrôles
 
@@ -222,6 +227,145 @@ démarrer.
 
 Code de sortie 1. Un diagnostic qui trouve quelque chose n'est pas un échec de la commande,
 mais un script doit pouvoir le distinguer d'un projet sain : le code diffère.
+
+## Reposer les ancres
+
+Une ancre, ce sont deux lignes de commentaire, et rien ne dit où elles vivaient une fois
+qu'elles ont disparu. `--fix` les repose : chaque ancre déclare la ligne sous laquelle elle
+se tient — `.merge(docs)` pour `// <rbs:layers>`, `core: CoreState::new(db, config),` pour
+`// <rbs:state_init>` — et le bloc revient sous cette ligne, à la colonne qui était la
+sienne.
+
+La réparation passe avant le diagnostic, pour que le contrôle `ancres` du même rapport
+compte ce qui vient d'être reposé plutôt que d'annoncer rouge un projet que la commande
+vient de remettre d'aplomb.
+
+Ci-dessous, un projet dont `// <rbs:openapi>` et `// <rbs:state_init>` ont été supprimées :
+
+```text
+$ rbs doctor --fix --force
+plan pour /private/tmp/rbs-demo/demo
+
+  ~ src/openapi.rs   modifié
+  ~ src/state.rs     modifié
+
+  2 fichiers à écrire
+
+✓ 2 ancres reposées : openapi, state_init
+
+  ✓ ancres      les 10 points d'insertion sont en place
+  ✓ agents      guide et inventaire à jour
+  ✓ relations   les modèles portent leurs ancres de relation
+  ✓ .env        les 4 variables de .env.example sont renseignées
+  ✓ versions    projet et rbs-core 1.1.0 alignés sur le CLI 1.1.0
+  … base        compilation de la crate migration, peut prendre
+                une minute au premier lancement…
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.09s
+     Running `target/debug/migration version`
+  ✓ base        sqlite 3.51 répond sur demo.db
+✓ le projet est sain
+```
+
+Code de sortie 0. Le plan est affiché avant qu'un octet ne soit écrit, comme pour toute
+commande qui touche un projet existant, et l'écriture passe par le même journal : si l'un
+des deux fichiers échouait, l'autre serait remis dans l'état où il était.
+
+L'exactitude de la pose se lit directement dans Git, sur un projet dont les ancres ont été
+supprimées après le commit :
+
+```text
+$ git diff --stat
+```
+
+Rien. Les deux blocs sont revenus à l'octet où le squelette les avait posés.
+
+## Un working tree sale
+
+```text
+$ rbs doctor --fix
+erreur : le working tree n'est pas propre : src/openapi.rs, src/state.rs — commitez, ou relancez avec --force
+```
+
+Code de sortie 1. C'est la garde d'[`rbs add`](./add.md), d'[`rbs
+generate`](./generate.md) et d'[`rbs upgrade`](./upgrade.md) : ce que la réparation écrit
+doit rester discernable de votre propre travail au prochain `git diff`. Commitez, ou passez
+`--force`.
+
+La garde vient après le plan et non avant : un projet qui n'a aucune ancre à reposer n'a
+rien à protéger, et `rbs doctor --fix` doit pouvoir y répondre depuis un working tree plein
+de travail en cours.
+
+```text
+$ rbs doctor --fix
+✓ aucune ancre à reposer
+```
+
+## Quand elle s'abstient
+
+Une ligne d'accroche que le fichier ne porte pas — ou qu'il porte deux fois — ne dit plus
+où va le bloc. `--fix` laisse alors l'ancre où elle n'est pas, la nomme, et le contrôle qui
+suit affiche le bloc à coller, exactement comme avant :
+
+```text
+$ rbs doctor --fix --force
+plan pour /private/tmp/rbs-demo/demo
+
+  ~ src/seeds/main.rs   modifié
+
+  1 fichier à écrire
+
+✓ 1 ancre reposée : seeds
+attention : layers n'a pas été reposée — la ligne d'accroche `.merge(docs)` est introuvable dans src/router.rs
+
+  ✗ ancres      layers manque dans src/router.rs
+      dans src/router.rs :
+      // <rbs:layers>
+      // </rbs:layers>
+```
+
+Code de sortie 1, un contrôle ayant échoué. L'autre ancre a bien été reposée : une
+abstention vaut pour une ancre, non pour toute l'exécution.
+
+S'abstenir est le but, non un défaut. `// <rbs:layers>` se tient *à l'intérieur* de `trace`
+et de `request_id` — un `.layer()` enveloppe ce qui le précède — si bien qu'une couche
+ajoutée à cette ancre voit l'identifiant de la requête, et que ses propres réponses
+courtes, un 429 ou un préflight refusé, restent dans la trace. Reposez la même ancre deux
+lignes plus bas et plus rien de tout cela ne tient, sans que rien ne le dise avant la
+lecture d'un journal. Une ancre reposée au mauvais endroit coûte plus cher qu'une ancre
+laissée absente.
+
+Il en va de même d'une ancre dont les deux balises n'ont pas disparu ensemble : celle qui
+reste ne dit pas où était l'autre — entre les deux, il y avait tout ce que l'ancre portait.
+
+Sous `--json`, la réparation a son propre objet, pour qu'un script n'ait pas à déduire d'un
+verdict devenu vert que quelque chose a été écrit :
+
+```text
+$ rbs doctor --fix --force --json
+{
+  "sain": false,
+  "reparation": {
+    "reposees": [],
+    "laissees": [
+      {
+        "ancre": "layers",
+        "raison": "la ligne d'accroche `.merge(docs)` est introuvable dans src/router.rs"
+      }
+    ]
+  },
+  "checks": [
+    {
+      "name": "ancres",
+      "status": "erreur",
+      "detail": "layers manque dans src/router.rs",
+      "remede": "dans src/router.rs :\n// <rbs:layers>\n// </rbs:layers>"
+    }
+  ]
+}
+```
+
+`reparation` est absent sans `--fix`, et le plan n'est jamais affiché sous `--json` : la
+sortie standard porte le document, et rien d'autre.
 
 ## Joignable mais illisible
 

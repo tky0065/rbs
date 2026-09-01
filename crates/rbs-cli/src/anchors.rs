@@ -36,6 +36,13 @@ pub(crate) struct Anchor {
     /// `doctor` ne réclame pas une ancre optionnelle dont le fichier est absent : un
     /// projet SQLite n'a pas de compose, et n'a donc pas à passer pour incomplet.
     pub optional: bool,
+    /// Motif de la ligne après laquelle le bloc se repose, quand l'ancre a disparu.
+    ///
+    /// Une ancre effacée ne laisse rien derrière elle : `rbs doctor --fix` n'a pas d'autre
+    /// moyen de savoir où elle vivait que cette ligne d'accroche, déclarée ici et vérifiée
+    /// contre la template qui la porte. Vide pour les ancres dont l'accroche dépend du
+    /// contenu engendré, et que le diagnostic ne réclame pas.
+    pub after: &'static str,
 }
 
 impl Anchor {
@@ -87,6 +94,7 @@ pub(crate) const FEATURES: Anchor = Anchor {
     comment: "//",
     sorted: true,
     optional: false,
+    after: "pub mod state;",
 };
 
 /// Montage des routes d'une feature dans le routeur.
@@ -96,6 +104,7 @@ pub(crate) const ROUTES: Anchor = Anchor {
     comment: "//",
     sorted: false,
     optional: false,
+    after: ".merge(health::routes())",
 };
 
 /// Middlewares qu'une feature empile sur le routeur.
@@ -109,6 +118,7 @@ pub(crate) const LAYERS: Anchor = Anchor {
     comment: "//",
     sorted: false,
     optional: false,
+    after: ".merge(docs)",
 };
 
 /// Enregistrement des chemins d'une feature dans le document OpenAPI.
@@ -118,6 +128,7 @@ pub(crate) const OPENAPI: Anchor = Anchor {
     comment: "//",
     sorted: false,
     optional: false,
+    after: "crate::health::controller::health,",
 };
 
 /// Déclaration des fichiers de migration.
@@ -130,6 +141,7 @@ pub(crate) const MIGRATION_MODULES: Anchor = Anchor {
     comment: "//",
     sorted: false,
     optional: false,
+    after: "pub use sea_orm_migration::prelude::*;",
 };
 
 /// Inscription des migrations dans le `Migrator`.
@@ -139,6 +151,7 @@ pub(crate) const MIGRATIONS: Anchor = Anchor {
     comment: "//",
     sorted: false,
     optional: false,
+    after: "vec![",
 };
 
 /// Déclaration d'un champ partagé dans la struct `AppState`.
@@ -148,6 +161,7 @@ pub(crate) const STATE_CHAMPS: Anchor = Anchor {
     comment: "//",
     sorted: false,
     optional: false,
+    after: "core: CoreState,",
 };
 
 /// Initialisation de ce champ dans `AppState::new`.
@@ -160,6 +174,7 @@ pub(crate) const STATE_INIT: Anchor = Anchor {
     comment: "//",
     sorted: false,
     optional: false,
+    after: "core: CoreState::new(db, config),",
 };
 
 /// Tâches de fond lancées au démarrage, l'état construit et le serveur pas encore lié.
@@ -172,6 +187,7 @@ pub(crate) const STARTUP: Anchor = Anchor {
     comment: "//",
     sorted: false,
     optional: false,
+    after: "let state = state::AppState::new(db, config)?;",
 };
 
 /// Déclaration des seeds dans le binaire qui les applique.
@@ -186,6 +202,7 @@ pub(crate) const SEEDS: Anchor = Anchor {
     comment: "//",
     sorted: false,
     optional: false,
+    after: "seeds! {",
 };
 
 /// Services que les fragments ajoutent au compose du projet.
@@ -199,6 +216,7 @@ pub(crate) const SERVICES: Anchor = Anchor {
     comment: "#",
     sorted: false,
     optional: true,
+    after: "services:",
 };
 
 /// Variantes de l'énumération `Relation` du modèle d'une entité.
@@ -212,6 +230,7 @@ pub(crate) const RELATIONS: Anchor = Anchor {
     comment: "//",
     sorted: false,
     optional: false,
+    after: "",
 };
 
 /// Implémentations de `Related` du modèle d'une entité.
@@ -223,6 +242,7 @@ pub(crate) const RELATED: Anchor = Anchor {
     comment: "//",
     sorted: false,
     optional: false,
+    after: "",
 };
 
 /// Les points d'insertion du squelette.
@@ -301,6 +321,118 @@ impl fmt::Display for Missing {
 }
 
 impl std::error::Error for Missing {}
+
+/// Ce qui empêche de reposer une ancre disparue.
+///
+/// Chaque variante est une raison de s'abstenir, jamais un échec de la commande : une
+/// ancre reposée au mauvais endroit coûte plus cher qu'une ancre laissée absente — un
+/// `<rbs:layers>` glissé sous `request_id` cesserait de voir l'identifiant de la requête,
+/// et rien ne le dirait avant la lecture d'un journal.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Cause {
+    /// Le fichier porteur n'existe pas : il n'y a pas de ligne où s'accrocher.
+    FichierAbsent,
+    /// L'ancre ne déclare pas d'accroche, sa position dépendant du contenu engendré.
+    SansAccroche,
+    /// Une des deux balises est encore là.
+    ///
+    /// Reposer le bloc entier doublerait celle qui reste, et l'endroit d'une balise seule
+    /// ne se déduit pas de l'autre : entre les deux, il y a le corps de l'ancre.
+    Partielle,
+    /// Aucune ligne du fichier ne porte l'accroche.
+    Introuvable,
+    /// Plusieurs lignes la portent, et rien ne désigne la bonne.
+    Ambigue(usize),
+}
+
+impl Cause {
+    /// Ce qui est dit à l'utilisateur, l'ancre en cause en main.
+    pub(crate) fn raison(&self, anchor: &Anchor) -> String {
+        match self {
+            Self::FichierAbsent => format!("{} est introuvable", anchor.file),
+            Self::SansAccroche => {
+                format!(
+                    "aucune ligne d'accroche n'est déclarée pour {}",
+                    anchor.name
+                )
+            }
+            Self::Partielle => format!(
+                "{} ou {} est encore là : la balise restante ne dit pas où reposer l'autre",
+                anchor.opening(),
+                anchor.closing()
+            ),
+            Self::Introuvable => format!(
+                "la ligne d'accroche `{}` est introuvable dans {}",
+                anchor.after, anchor.file
+            ),
+            Self::Ambigue(fois) => format!(
+                "la ligne d'accroche `{}` paraît {fois} fois dans {}",
+                anchor.after, anchor.file
+            ),
+        }
+    }
+}
+
+/// Repose le bloc de `anchor` dans `source`, sous la ligne d'accroche que l'ancre déclare.
+///
+/// Le bloc est vide : la réparation rend au projet un point d'insertion, elle ne devine
+/// pas ce qu'il portait.
+pub(crate) fn repose(source: &str, anchor: &Anchor) -> Result<String, Cause> {
+    if marks(source, &anchor.opening()) || marks(source, &anchor.closing()) {
+        return Err(Cause::Partielle);
+    }
+
+    if anchor.after.is_empty() {
+        return Err(Cause::SansAccroche);
+    }
+
+    let accroches: Vec<usize> = source
+        .lines()
+        .enumerate()
+        .filter(|(_, line)| line.trim() == anchor.after)
+        .map(|(index, _)| index)
+        .collect();
+
+    let [accroche] = accroches[..] else {
+        return Err(match accroches.len() {
+            0 => Cause::Introuvable,
+            fois => Cause::Ambigue(fois),
+        });
+    };
+
+    let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
+    let indentation = indentation(&lines[accroche], anchor.comment);
+
+    lines.insert(accroche + 1, format!("{indentation}{}", anchor.closing()));
+    lines.insert(accroche + 1, format!("{indentation}{}", anchor.opening()));
+
+    let mut rendu = lines.join("\n");
+    // `lines()` mange le saut final : le rendre au fichier qui en portait un évite un
+    // diff d'une ligne sur un fichier que la réparation n'a fait qu'ouvrir.
+    if source.ends_with('\n') {
+        rendu.push('\n');
+    }
+
+    Ok(rendu)
+}
+
+/// L'indentation que prend le bloc reposé sous sa ligne d'accroche.
+///
+/// Une ligne qui ouvre un bloc — `vec![`, `seeds! {`, `services:` — indente d'un cran ce
+/// qui la suit ; les autres la partagent. Le pas est celui du langage porteur, que le
+/// marqueur de commentaire désigne : quatre colonnes en Rust, deux en YAML, où poser le
+/// bloc à côté ferait insérer un service hors de `services:`.
+fn indentation(accroche: &str, comment: &str) -> String {
+    let propre = accroche.trim();
+    let courante = &accroche[..accroche.len() - accroche.trim_start().len()];
+
+    if propre.ends_with(['[', '{', '(', ':']) {
+        let pas = if comment == "#" { "  " } else { "    " };
+        format!("{courante}{pas}")
+    } else {
+        courante.to_string()
+    }
+}
 
 /// Insère `lines` dans `anchor`, juste avant sa balise fermante.
 ///
@@ -800,6 +932,7 @@ struct AppState {
             comment: "#",
             sorted: false,
             optional: true,
+            after: "services:",
         };
 
         assert_eq!(compose.opening(), "# <rbs:services>");
@@ -827,6 +960,7 @@ struct AppState {
             comment: "#",
             sorted: false,
             optional: true,
+            after: "services:",
         };
         let source = "services:\n  # <rbs:services>\n  # </rbs:services>\n";
         let lines = vec!["# le cache du projet".to_string(), "redis:".to_string()];
@@ -858,6 +992,7 @@ struct AppState {
             comment: "#",
             sorted: false,
             optional: true,
+            after: "services:",
         };
         // Une autre feature a posé ce commentaire, et un service qui l'en sépare.
         let source = "services:\n  # <rbs:services>\n  # le cache du projet\n  memcached:\n  # </rbs:services>\n";
