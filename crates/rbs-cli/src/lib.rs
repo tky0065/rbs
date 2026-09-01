@@ -418,6 +418,14 @@ fn suite(feature: &str) -> Option<&'static str> {
             "énumérez vos origines dans [cors] de config/default.toml — la liste est vide, \
              donc aucune requête d'origine croisée ne passe",
         ),
+        // Les métriques sortent d'elles-mêmes ; les traces attendent qu'un collecteur
+        // soit nommé, et l'absence de cette variable est le seul écart entre une feature
+        // installée et une feature qui sert.
+        "observability" => Some(
+            "les métriques sont sur http://localhost:9090/metrics ; pour les traces, \
+             nommez un collecteur dans OTEL_EXPORTER_OTLP_ENDPOINT et videz le dernier \
+             lot par rbs_core::logs::shutdown() avant la fin du processus",
+        ),
         // Le compteur ne voit un client que si le serveur lui donne son adresse : un
         // projet derrière un proxy compte tout le monde ensemble tant que le drapeau
         // n'est pas levé.

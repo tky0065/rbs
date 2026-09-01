@@ -38,6 +38,11 @@ the crate is designed as the runtime half of a generated project — start with
 `auth` adds Argon2 password hashing, JWT signing and verification, opaque tokens, and an
 `Identity` extractor.
 
+`observability` grafts an OTLP export layer onto the subscriber `logs::init()` posts, when
+`OTEL_EXPORTER_OTLP_ENDPOINT` names a collector. It lives here rather than in generated
+code because `set_global_default` is called once, and that call is the first line of a
+generated `main`.
+
 `redis`, `mail` and `storage` are declared but **empty**: they reserve the names for planned
 extensions and activate nothing today.
 
