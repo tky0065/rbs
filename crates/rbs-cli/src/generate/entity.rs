@@ -347,35 +347,6 @@ mod tests {
         project.compile();
     }
 
-    /// Rendu complet imprimé pour la revue de lecture qu'exige le lot.
-    #[test]
-    #[ignore = "affichage pour revue humaine"]
-    fn preview() {
-        println!(
-            "{}",
-            entity_with(
-                "articles",
-                "title:string,slug:string:unique,summary:text:optional,views:int,published:bool,\
-                 author:references:users",
-                &users_entity()
-            )
-        );
-    }
-
-    /// Rendu d'un modèle à deux relations vers la même cible, pour la revue de lecture.
-    #[test]
-    #[ignore = "affichage pour revue humaine"]
-    fn preview_two_relations_to_the_same_target() {
-        println!(
-            "{}",
-            entity_with(
-                "posts",
-                "title:string,author:references:users,reviewer:references:users",
-                &users_entity()
-            )
-        );
-    }
-
     #[test]
     fn the_render_ends_with_a_single_newline() {
         let rendered = entity("users", "name:string");

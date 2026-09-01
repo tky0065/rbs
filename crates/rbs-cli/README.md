@@ -3,6 +3,8 @@
 The `rbs` command: it generates and maintains web API projects in Rust, built on Axum and
 SeaORM. Part of [rbs](https://github.com/tky0065/rbs).
 
+*[Version française](README.fr.md).*
+
 ## Install
 
 ```bash

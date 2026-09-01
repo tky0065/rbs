@@ -7,10 +7,7 @@ pub struct AppState {
     core: CoreState,
     // <rbs:state_champs>
     pub cache: crate::cache::Cache,
-    // Le transport n'a pas encore de lecteur : ce sont les handlers du projet qui en seront.
-    #[allow(dead_code)]
     pub mail: crate::mail::Mailer,
-    #[allow(dead_code)]
     pub storage: std::sync::Arc<dyn crate::storage::Storage>,
     // </rbs:state_champs>
 }

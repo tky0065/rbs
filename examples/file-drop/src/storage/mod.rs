@@ -10,6 +10,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use serde::Deserialize;
 
+use crate::state::AppState;
+
 // region: erreurs
 /// Ce qu'un stockage refuse, ne trouve pas, ou ne peut pas faire.
 #[derive(Debug, thiserror::Error)]
@@ -155,3 +157,12 @@ pub fn normalize(key: &str) -> Result<String, StorageError> {
     Ok(segments.join("/"))
 }
 // endregion: normalize
+
+// L'accesseur vit ici et non dans `state.rs` : il arrive avec la feature, et repart
+// avec elle.
+impl AppState {
+    /// Le stockage partagé, tel qu'un handler le lit depuis l'état.
+    pub fn storage(&self) -> &Arc<dyn Storage> {
+        &self.storage
+    }
+}

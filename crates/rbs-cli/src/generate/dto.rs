@@ -249,19 +249,6 @@ mod tests {
         project.compile();
     }
 
-    /// Rendu complet imprimé pour la revue de lecture qu'exige le lot.
-    #[test]
-    #[ignore = "affichage pour revue humaine"]
-    fn preview() {
-        println!(
-            "{}",
-            dto(
-                "articles",
-                "title:string,email:string,summary:text:optional,views:int"
-            )
-        );
-    }
-
     /// Isole une struct du rendu, de son en-tête à son accolade fermante.
     fn extract<'a>(rendered: &'a str, entete: &str) -> &'a str {
         let debut = rendered

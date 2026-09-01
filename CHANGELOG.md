@@ -69,6 +69,12 @@ between minor versions with no deprecation cycle.
   printed when the database answers straight away.
 - The `features` anchor keeps its block sorted instead of stacking in arrival order, so a
   project whose `cargo fmt --check` runs in CI is not failed by a line it did not write.
+- The generated feature modules no longer carry a module-wide `#![allow(dead_code)]`. A
+  project generated today has a `src/lib.rs`, and a public item of a public module stays
+  reachable from outside the crate: the permission masked nothing but a forgotten call.
+- The mailer and the object store are reached through `state.mail()` and `state.storage()`,
+  as the cache already was through `state.cache()`. Their field drops the
+  `#[allow(dead_code)]` that stood in for the accessor.
 
 ### Fixed
 

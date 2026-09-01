@@ -37,6 +37,10 @@ pub(crate) struct File {
 #[derive(Debug, Clone)]
 pub(crate) struct Plan {
     root: PathBuf,
+    /// La production ne lit que `files` ; cette trace n'existe que pour les tests, d'où
+    /// l'exemption portée sur le champ et bornée à `not(test)` : sur l'accesseur, elle
+    /// vaudrait aussi en tests et n'y signalerait plus rien.
+    #[cfg_attr(not(test), expect(dead_code))]
     actions: Vec<Action>,
     files: Vec<File>,
 }
@@ -47,7 +51,7 @@ impl Plan {
     /// Trace du calcul des statuts, action par action, que les tests du modèle vérifient.
     /// L'affichage et l'application travaillent par fichier : un fichier peut recevoir
     /// plusieurs actions, et seul son statut agrégé décide de ce qui lui arrivera.
-    #[allow(dead_code)]
+    #[cfg(test)]
     pub fn actions(&self) -> &[Action] {
         &self.actions
     }

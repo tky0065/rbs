@@ -446,19 +446,4 @@ async fn la_migration_monte_insere_et_redescend() {
 
         project.compile();
     }
-
-    /// Rendu complet imprimé pour la revue de lecture qu'exige le lot.
-    #[test]
-    #[ignore = "affichage pour revue humaine"]
-    fn preview() {
-        println!(
-            "{}",
-            migration(
-                "articles",
-                "title:string,slug:string:unique,summary:text:optional,views:int,\
-                 published_at:datetime,auteur:uuid:index"
-            )
-            .content
-        );
-    }
 }

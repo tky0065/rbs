@@ -698,6 +698,17 @@ mod tests {
         );
     }
 
+    /// Le manifeste de `ci` désigne sa template par son chemin dans le fragment, répertoire
+    /// caché compris : une déclaration fautive rendrait `TemplateAbsente` au lieu du plan.
+    #[test]
+    fn the_ci_plan_creates_the_workflow_its_manifest_declares() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "ci")).expect("le plan doit se calculer");
+
+        assert_eq!(planned.files, [".github/workflows/ci.yml"]);
+    }
+
     /// Trois états, trois comportements. Le premier : le projet a son compose, `add
     /// docker` n'y ajoute que ce qui manque.
     #[test]
@@ -1220,7 +1231,7 @@ mod tests {
             ),
             (
                 "storage",
-                r#"rbs_core::health::Probe::new("storage", crate::storage::probe(&state.storage)),"#,
+                r#"rbs_core::health::Probe::new("storage", crate::storage::probe(state.storage())),"#,
             ),
         ] {
             let (_parent, root) = project();

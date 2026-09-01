@@ -402,7 +402,7 @@ fn the_probes_installed_by_two_fragments_compile_into_the_health_route() {
         fs::read_to_string(root.join("src/health/controller.rs")).expect("contrôleur lisible");
     for sonde in [
         r#"rbs_core::health::Probe::new("cache", state.cache().ping()),"#,
-        r#"rbs_core::health::Probe::new("storage", crate::storage::probe(&state.storage)),"#,
+        r#"rbs_core::health::Probe::new("storage", crate::storage::probe(state.storage())),"#,
     ] {
         assert!(
             controleur.contains(sonde),

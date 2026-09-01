@@ -7,7 +7,7 @@ use file_drop::uploads::model;
 
 /// Insère les uploads de démonstration.
 pub async fn seed(db: &DatabaseConnection) -> Result<(), DbErr> {
-    // `id`, `created_at` et `updated_at` tiennent leur valeur du défaut de la colonne.
+    // `id` vient d'`ActiveModelBehavior::new()`, `created_at` et `updated_at` du défaut de colonne.
     model::ActiveModel {
         title: Set("title-1".to_owned()),
         owner_email: Set("owner_email-1@example.com".to_owned()),
