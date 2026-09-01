@@ -1,0 +1,40 @@
+use rbs_core::{Comparison, Error, Result, Sort, TextMatch};
+use sea_orm::prelude::{DateTimeUtc, Uuid};
+use serde::Deserialize;
+use utoipa::ToSchema;
+
+use super::model::Column;
+
+// Toute colonne est filtrable, indexée ou non : un filtre sur une colonne sans index
+// parcourt la table. Ajoutez « index » au champ dans `--fields` si la table grandit.
+#[derive(Debug, Default, Deserialize, ToSchema)]
+#[serde(default)]
+pub struct {@ entity @}Filter {
+    pub id: Option<Comparison<Uuid>>,
+    pub created_at: Option<Comparison<DateTimeUtc>>,
+    pub updated_at: Option<Comparison<DateTimeUtc>>,
+{%- for field in fields %}
+    pub {@ field.name @}: Option<{@ field.operator @}>,
+{%- endfor %}
+    pub sort: Option<Sort>,
+}
+
+/// Traduit un nom de colonne reçu du client en `Column`.
+///
+/// Le `match` est écrit à la génération : aucun nom venu de la requête n'atteint la base,
+/// et un nom inconnu est refusé en nommant ceux qui sont acceptés.
+fn column_of(name: &str) -> Result<Column> {
+    Ok(match name {
+        "id" => Column::Id,
+        "created_at" => Column::CreatedAt,
+        "updated_at" => Column::UpdatedAt,
+{%- for field in fields %}
+        "{@ field.name @}" => Column::{@ field.pascal_name @},
+{%- endfor %}
+        inconnue => {
+            return Err(Error::BadRequest(format!(
+                "colonne de tri inconnue « {inconnue} » — {@ colonnes @}"
+            )));
+        }
+    })
+}

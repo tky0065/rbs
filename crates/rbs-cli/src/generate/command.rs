@@ -16,7 +16,7 @@ use crate::plan;
 use super::feature::Feature;
 use super::fields::to_pascal_case;
 use super::{
-    controller, dto, entities, entity, fields, format, migration, mount, name, relations,
+    controller, dto, entities, entity, fields, filter, format, migration, mount, name, relations,
     repository, seed, service, tests_http,
 };
 
@@ -492,6 +492,7 @@ fn render(
         (dans("mod.rs"), controller::render_mod(feature, complete)),
         (dans("model.rs"), entity::render(feature)),
         (dans("dto.rs"), dto::render(feature)),
+        (dans("filter.rs"), filter::render(feature)),
         (dans("repository.rs"), repository::render(feature)),
         (dans("service.rs"), service::render(feature)),
         (dans("controller.rs"), controller::render(feature)),
@@ -775,6 +776,7 @@ mod tests {
             "mod.rs",
             "model.rs",
             "dto.rs",
+            "filter.rs",
             "repository.rs",
             "service.rs",
             "controller.rs",

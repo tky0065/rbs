@@ -1,0 +1,217 @@
+//! Rendu de `<name>/filter.rs` : le filtre typé par les colonnes de `--fields`.
+
+use minijinja::context;
+use serde::Serialize;
+
+use crate::template::Renderer;
+
+use super::feature::Feature;
+use super::fields::{Field, FieldType};
+
+const FILTER: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/feature/filter.rs.jinja"
+));
+
+/// Les trois colonnes que toute entité engendrée porte, filtrables sans `--fields`.
+const COLONNES_DE_BASE: [&str; 3] = ["id", "created_at", "updated_at"];
+
+/// Un champ vu par le filtre : sa colonne, sa variante de `Column`, son opérateur.
+#[derive(Serialize)]
+struct FilterField {
+    name: String,
+    pascal_name: String,
+    operator: String,
+    textual: bool,
+}
+
+/// Rend le filtre de `feature`.
+pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
+    let fields: Vec<FilterField> = feature.fields.iter().map(champ).collect();
+    let colonnes = COLONNES_DE_BASE
+        .iter()
+        .map(|nom| (*nom).to_owned())
+        .chain(feature.fields.iter().map(Field::column_name))
+        .collect::<Vec<_>>()
+        .join(", ");
+
+    Renderer::new().render(
+        FILTER,
+        context! {
+            entity => feature.entity(),
+            fields => fields,
+            colonnes => colonnes,
+        },
+    )
+}
+
+fn champ(field: &Field) -> FilterField {
+    let textual = textual(field);
+
+    FilterField {
+        name: field.column_name(),
+        pascal_name: field.pascal_name(),
+        operator: match textual {
+            true => "TextMatch".to_owned(),
+            false => format!("Comparison<{}>", scalar_type(field)),
+        },
+        textual,
+    }
+}
+
+/// Un texte se cherche par sous-chaîne, tout le reste se compare.
+///
+/// Une référence n'en est jamais une : elle porte un identifiant, que l'on compare.
+fn textual(field: &Field) -> bool {
+    field.reference().is_none()
+        && matches!(field.column_type(), FieldType::String | FieldType::Text)
+}
+
+/// Le type comparé, sans l'`Option` d'un champ `optional` : le filtre porte déjà la
+/// sienne, et une comparaison sur `Option<T>` n'aurait pas de sens.
+fn scalar_type(field: &Field) -> &'static str {
+    if field.reference().is_some() {
+        return "Uuid";
+    }
+
+    match field.column_type() {
+        FieldType::Datetime => "DateTimeUtc",
+        FieldType::Uuid => "Uuid",
+        autre => autre.rust_type(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::generate::bench;
+    use crate::generate::feature::Feature;
+    use crate::generate::fields;
+
+    const CHAMPS: &str = "title:string,body:text:optional,views:int,published:bool,\
+                          author_id:uuid,published_at:datetime";
+
+    fn filtre(name: &str, champs: &str) -> String {
+        let fields = fields::parse(champs).expect("champs valides");
+        render(&Feature::fresh(name, fields)).expect("le filtre doit se rendre")
+    }
+
+    /// Chaque champ de `--fields` devient un champ du filtre, avec l'opérateur de son
+    /// type : un texte se cherche par sous-chaîne, un scalaire se compare.
+    #[test]
+    fn each_field_earns_the_operator_of_its_type() {
+        let rendered = filtre("articles", CHAMPS);
+
+        for champ in [
+            "pub title: Option<TextMatch>,",
+            "pub body: Option<TextMatch>,",
+            "pub views: Option<Comparison<i32>>,",
+            "pub published: Option<Comparison<bool>>,",
+            "pub author_id: Option<Comparison<Uuid>>,",
+            "pub published_at: Option<Comparison<DateTimeUtc>>,",
+        ] {
+            assert!(rendered.contains(champ), "« {champ} » absent :\n{rendered}");
+        }
+    }
+
+    /// Les trois colonnes que toute entité porte sont filtrables sans figurer dans
+    /// `--fields` : elles existent dans chaque modèle engendré.
+    #[test]
+    fn the_three_columns_of_every_entity_are_filterable() {
+        let rendered = filtre("articles", CHAMPS);
+
+        for champ in [
+            "pub id: Option<Comparison<Uuid>>,",
+            "pub created_at: Option<Comparison<DateTimeUtc>>,",
+            "pub updated_at: Option<Comparison<DateTimeUtc>>,",
+        ] {
+            assert!(rendered.contains(champ), "« {champ} » absent :\n{rendered}");
+        }
+    }
+
+    /// Un champ `optional` porte déjà l'`Option` du filtre : comparer un `Option<i32>`
+    /// n'aurait pas de sens, et `body` est ici la colonne nullable.
+    #[test]
+    fn an_optional_field_is_compared_on_its_bare_type() {
+        let rendered = filtre("articles", "views:int:optional");
+
+        assert!(
+            rendered.contains("pub views: Option<Comparison<i32>>,"),
+            "le type comparé doit être nu :\n{rendered}"
+        );
+        assert!(
+            !rendered.contains("Comparison<Option<"),
+            "l'`Option` du champ ne doit pas se cumuler :\n{rendered}"
+        );
+    }
+
+    /// Aucun nom de colonne ne vient de la requête : le tri passe par un `match` écrit à
+    /// la génération, et un nom inconnu est refusé en nommant ceux qui sont acceptés.
+    #[test]
+    fn an_unknown_sort_column_is_refused_by_name() {
+        let rendered = filtre("articles", CHAMPS);
+
+        assert!(
+            rendered.contains("fn column_of(name: &str) -> Result<Column>"),
+            "la traduction du nom de colonne est absente :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(r#""title" => Column::Title,"#),
+            "la colonne connue doit se traduire :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("Error::BadRequest"),
+            "un nom inconnu doit rendre 400 :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(
+                "id, created_at, updated_at, title, body, views, published, author_id, \
+                 published_at"
+            ),
+            "le refus doit nommer les colonnes acceptées :\n{rendered}"
+        );
+    }
+
+    /// Une référence porte le nom de sa colonne, et non celui de la relation : c'est
+    /// `author_id` que le client envoie.
+    #[test]
+    fn a_reference_is_filtered_on_its_column() {
+        let rendered = filtre("posts", "author:references:users");
+
+        assert!(
+            rendered.contains("pub author_id: Option<Comparison<Uuid>>,"),
+            "la référence se filtre sur sa colonne :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(r#""author_id" => Column::AuthorId,"#),
+            "la colonne de la référence doit se traduire :\n{rendered}"
+        );
+    }
+
+    /// Le coût n'est pas caché : filtrer une colonne sans index parcourt la table, et le
+    /// fichier est fait pour être lu.
+    #[test]
+    fn the_cost_of_an_unindexed_column_is_written_down() {
+        let rendered = filtre("articles", CHAMPS);
+
+        assert!(
+            rendered.contains("parcourt la table"),
+            "le coût doit être énoncé :\n{rendered}"
+        );
+    }
+
+    /// Le rendu est écrit tel que rustfmt l'écrirait : sans quoi le `cargo fmt --check` du
+    /// projet engendré échouerait sur ce que le CLI vient de produire.
+    #[test]
+    fn the_render_is_already_what_rustfmt_would_write() {
+        for name in ["tag", "articles"] {
+            let rendered = filtre(name, CHAMPS);
+
+            assert_eq!(
+                bench::formatted(&rendered),
+                rendered,
+                "le rendu de `{name}` diverge de rustfmt"
+            );
+        }
+    }
+}

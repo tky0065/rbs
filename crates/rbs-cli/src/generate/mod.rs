@@ -7,6 +7,7 @@ pub(crate) mod entities;
 pub(crate) mod entity;
 pub(crate) mod feature;
 pub(crate) mod fields;
+pub(crate) mod filter;
 pub(crate) mod format;
 pub(crate) mod migration;
 pub(crate) mod mount;
