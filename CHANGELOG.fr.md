@@ -24,6 +24,8 @@ dépréciation.
   d'axum, et jamais sous l'URL demandée ; elles sont servies sur un listener à elles, pour
   qu'aucun déploiement n'ait à les cacher derrière une règle de reverse-proxy. `rbs
   doctor` refuse une configuration où ce port égale `server.port`.
+- `--fields` accepte un modificateur `max=<n>`, qui borne la longueur d'un champ textuel
+  dans les DTO engendrés. Il est refusé sur tout autre type.
 - `rbs add cors` installe une couche CORS dont les origines autorisées se lisent dans la
   configuration du projet, et qui n'est jamais grande ouverte par défaut.
 - `rbs add rate-limit` installe une limite de débit. Le compteur est un pipeline Redis
@@ -44,6 +46,11 @@ dépréciation.
 
 ### Modifié
 
+- Un champ `string` est borné à 255 caractères dans les DTO engendrés, sans qu'on le
+  demande. Rien d'autre ne le bornait — `ColumnDef::string()` rend un `varchar` sans
+  longueur sur PostgreSQL — si bien que chaque route publique acceptait une chaîne de
+  longueur arbitraire. `text` n'en reçoit aucune par défaut : c'est le type qu'on choisit
+  pour dépasser cette borne.
 - **La version minimale de Rust passe de 1.85 à 1.94.** La 1.85 ne résolvait déjà plus :
   `sea-orm` 2.0.2 et `sqlx` 0.9.0 exigent la 1.94.0, et Cargo refuse de compiler en
   dessous. Le plancher déclaré décrivait une chaîne d'outils qu'aucune installation ne
@@ -68,6 +75,17 @@ dépréciation.
 
 ### Corrigé
 
+- L'écriture dans une ancre suit les fins de ligne du fichier hôte. Sur un dépôt en
+  `core.autocrlf=true`, le CLI posait des lignes LF au milieu d'un fichier CRLF, ce que le
+  `cargo fmt --check` du workflow `ci` engendré pouvait ensuite refuser. La réparation
+  d'une ancre, elle, réécrivait le fichier entier en LF.
+- Une zone de l'`AGENTS.md` ne s'ouvre que sur un marqueur seul sur sa ligne. Citer
+  `<!-- rbs:inventory -->` dans sa propre prose faisait effacer par `rbs upgrade` tout ce
+  qui séparait la citation du vrai marqueur de fermeture.
+- L'inventaire des entités ne compte plus les accolades des chaînes et des commentaires.
+  Un `format!("{{")` décalait la profondeur et rattachait les entités suivantes au mauvais
+  module, et une entité mise au rebut en commentaire de bloc était inventoriée comme
+  réelle — l'un et l'autre finissant en `belongs_to` faux.
 - `--fields "author_id:uuid,author:references:users"` est refusé au lieu d'engendrer un
   projet qui ne compile pas : les deux champs donnent la même colonne `author_id`, et la
   déduplication porte désormais sur le nom de colonne et non sur le nom déclaré.

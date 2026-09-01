@@ -135,13 +135,14 @@ project; a table the CLI cannot find is refused, by name, alongside the ones it 
 What a reference writes on both ends of the relation, its own two modifiers, and the shape
 of its refusals belong to [Relations](../guides/relations.md), not to this page.
 
-### The five modifiers
+### The six modifiers
 
 | Modifier | Effect |
 |---|---|
 | `unique` | Unique constraint on the column — on a reference, this is what makes the relation one-to-one. |
 | `optional` | The column is nullable and the Rust type becomes `Option<T>`. |
 | `index` | Plain index on the column. |
+| `max=<n>` | Textual field only. Length bound in the generated DTOs, overriding the default. |
 | `cascade` | Reference only. `ON DELETE CASCADE`. |
 | `nullify` | Reference only. `ON DELETE SET NULL` — requires `optional`. |
 
@@ -173,6 +174,25 @@ schema that is wrong:
 A field named `email`, or ending in `_email`, and typed `string` or `text` gets an email
 constraint in the generated DTOs. That is deduced from the name because the name is the
 only thing available.
+
+### The length bound
+
+A `string` field is bounded at 255 characters in the generated DTOs, without anyone asking:
+`#[validate(length(max = 255))]`. Nothing else bounds it — `ColumnDef::string()` renders a
+`varchar` with no length on PostgreSQL — so without that line every public route of a
+generated project accepts a string of arbitrary length. The value is the one of the
+traditional `varchar(255)`, wide enough for a name, a title or an address.
+
+`text` is the type one picks *to* exceed that bound, so it gets none by default. Write
+`max=<n>` to set a bound on either type, or to widen or narrow the default one:
+
+```bash
+rbs generate crud articles --fields "title:string:max=200,summary:text:max=5000"
+```
+
+`max=` bounds a length of text, and is refused on any other type; `<n>` is a strictly
+positive integer. A constraint written by hand in the generated DTO survives, like every
+other edit: this code is meant to be modified.
 
 ### Errors
 
