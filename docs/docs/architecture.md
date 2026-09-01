@@ -192,15 +192,18 @@ grep -l sea_orm examples/hello-crud/src/articles/*.rs
 ```text
 examples/hello-crud/src/articles/controller.rs
 examples/hello-crud/src/articles/dto.rs
+examples/hello-crud/src/articles/filter.rs
 examples/hello-crud/src/articles/model.rs
 examples/hello-crud/src/articles/repository.rs
 examples/hello-crud/src/articles/service.rs
 ```
 
-Five files out of six — so "only the repository imports SeaORM" would be false, and it is
-worth saying why. Those four other files name `sea_orm` for its scalar types, `Uuid` and
+Six files out of seven — so "only the repository imports SeaORM" would be false, and it is
+worth saying why. Four of those other files name `sea_orm` for its scalar types, `Uuid` and
 `DateTimeWithTimeZone`, which cross every layer; the service adds `ActiveValue::Set` to
-build the active model it hands over. None of them names a query trait. The narrower probe
+build the active model it hands over. `filter.rs` is the exception, and a deliberate one:
+it names the query traits, because it translates a body into conditions. It belongs to the
+repository layer, which `repository.rs` being its only caller enforces. The narrower probe
 is the honest one:
 
 ```bash
@@ -211,8 +214,10 @@ grep -l 'Entity::' examples/hello-crud/src/articles/*.rs
 examples/hello-crud/src/articles/repository.rs
 ```
 
-One file. `Entity::find`, `EntityTrait`, `QueryOrder`, `PaginatorTrait` — the whole query
-vocabulary lives in `repository.rs` and stops there.
+One file. `Entity::find` is called in `repository.rs` and nowhere else — `filter.rs`
+receives the `Select` already opened and returns it narrowed, without ever reaching for the
+entity itself. The whole query vocabulary stops at those two files, and the three layers
+above them never see it.
 
 **A service never holds a connection.** `DatabaseConnection` appears in the service's
 imports, and the `find` snippet above shows why: the service receives a

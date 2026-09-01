@@ -6,6 +6,7 @@ use utoipa::ToSchema;
 
 use super::model::{Column, Entity};
 
+// region: champs
 // Toute colonne est filtrable, indexée ou non : un filtre sur une colonne sans index
 // parcourt la table. Ajoutez « index » au champ dans `--fields` si la table grandit.
 #[derive(Debug, Default, Deserialize, ToSchema)]
@@ -30,7 +31,9 @@ pub struct ArticleFilter {
     #[schema(value_type = Vec<String>)]
     pub sort: Option<Sort>,
 }
+// endregion: champs
 
+// region: colonnes
 /// Traduit un nom de colonne reçu du client en `Column`.
 ///
 /// Le `match` est écrit à la génération : aucun nom venu de la requête n'atteint la base,
@@ -50,7 +53,9 @@ fn column_of(name: &str) -> Result<Column> {
         }
     })
 }
+// endregion: colonnes
 
+// region: conditions
 /// Applique le filtre à la requête de liste.
 ///
 /// Le tri par défaut reste l'`id` décroissant : c'est un UUIDv7, et la pagination en
@@ -79,6 +84,7 @@ pub(super) fn apply(select: Select<Entity>, filtre: &ArticleFilter) -> Result<Se
         })
     })
 }
+// endregion: conditions
 
 /// Les conditions portées sur une colonne comparable, en ET entre elles.
 fn compare<T: Into<Value> + Clone>(colonne: Column, compare: Option<&Comparison<T>>) -> Condition {

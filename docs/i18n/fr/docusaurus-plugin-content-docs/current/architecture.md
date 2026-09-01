@@ -193,16 +193,19 @@ grep -l sea_orm examples/hello-crud/src/articles/*.rs
 ```text
 examples/hello-crud/src/articles/controller.rs
 examples/hello-crud/src/articles/dto.rs
+examples/hello-crud/src/articles/filter.rs
 examples/hello-crud/src/articles/model.rs
 examples/hello-crud/src/articles/repository.rs
 examples/hello-crud/src/articles/service.rs
 ```
 
-Cinq fichiers sur six — « seul le dépôt importe SeaORM » serait donc faux, et il vaut la
-peine de dire pourquoi. Ces quatre autres fichiers nomment `sea_orm` pour ses types
-scalaires, `Uuid` et `DateTimeWithTimeZone`, qui traversent toutes les couches ; le
-service y ajoute `ActiveValue::Set` pour bâtir le modèle actif qu'il transmet. Aucun d'eux
-ne nomme un trait de requête. La sonde plus étroite est la sonde honnête :
+Six fichiers sur sept — « seul le dépôt importe SeaORM » serait donc faux, et il vaut la
+peine de dire pourquoi. Quatre de ces autres fichiers nomment `sea_orm` pour ses types
+scalaires, `Uuid` et `DateTimeWithTimeZone`, qui traversent toutes les couches ; le service
+y ajoute `ActiveValue::Set` pour bâtir le modèle actif qu'il transmet. `filter.rs` fait
+exception, et délibérément : il nomme les traits de requête, puisqu'il traduit un corps en
+conditions. Il appartient à la couche du dépôt, ce que garantit le fait que `repository.rs`
+en soit le seul appelant. La sonde plus étroite est la sonde honnête :
 
 ```bash
 grep -l 'Entity::' examples/hello-crud/src/articles/*.rs
@@ -212,8 +215,10 @@ grep -l 'Entity::' examples/hello-crud/src/articles/*.rs
 examples/hello-crud/src/articles/repository.rs
 ```
 
-Un seul fichier. `Entity::find`, `EntityTrait`, `QueryOrder`, `PaginatorTrait` — tout le
-vocabulaire de requête vit dans `repository.rs` et s'y arrête.
+Un seul fichier. `Entity::find` est appelé dans `repository.rs` et nulle part ailleurs —
+`filter.rs` reçoit le `Select` déjà ouvert et le rend restreint, sans jamais atteindre
+l'entité lui-même. Tout le vocabulaire de requête s'arrête à ces deux fichiers, et les
+trois couches au-dessus ne le voient jamais.
 
 **Un service ne détient jamais de connexion.** `DatabaseConnection` figure bien dans ses
 imports, et l'extrait `find` ci-dessus dit pourquoi : le service reçoit un
