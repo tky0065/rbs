@@ -96,6 +96,69 @@ fn a_module_written_by_hand_is_reported_as_a_warning_not_a_failure() {
     );
 }
 
+/// Un script ne peut pas lire des glyphes colorés : `--json` doit rendre un document,
+/// seul et valide sur la sortie standard, et nommer le contrôle qui a échoué.
+#[test]
+fn the_json_report_is_the_only_thing_on_stdout() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+    viser(&projet, INJOIGNABLE);
+
+    let sortie = rbs(&projet)
+        .args(["doctor", "--json"])
+        .assert()
+        .get_output()
+        .clone();
+    let stdout = String::from_utf8_lossy(&sortie.stdout).into_owned();
+
+    let document: serde_json::Value = serde_json::from_str(&stdout)
+        .unwrap_or_else(|faute| panic!("stdout doit être un JSON valide ({faute}) :\n{stdout}"));
+
+    assert_eq!(document["sain"], false, "{stdout}");
+    let base = document["checks"]
+        .as_array()
+        .expect("checks est un tableau")
+        .iter()
+        .find(|check| check["name"] == "base")
+        .expect("le contrôle base figure au rapport");
+    assert_eq!(base["status"], "echec", "{stdout}");
+    assert!(base["remede"].is_string(), "{stdout}");
+
+    // Ni glyphe du rendu texte, ni séquence ANSI : ce sont elles qui feraient échouer
+    // l'analyse d'un script.
+    for parasite in ['✓', '✗', '!', '…', '\u{1b}'] {
+        assert!(
+            !stdout.contains(parasite),
+            "`{parasite}` sur la sortie standard :\n{stdout}"
+        );
+    }
+}
+
+/// L'annonce n'a de valeur que si elle atteint le terminal *avant* la compilation
+/// qu'elle annonce : sa ligne doit précéder le constat du même contrôle.
+#[test]
+#[ignore = "démarre PostgreSQL et compile la crate migration d'un projet complet : plusieurs minutes"]
+fn the_slow_check_announces_itself_before_the_finding() {
+    let postgres = common::start_postgres();
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+    viser(&projet, &common::url_of(&postgres));
+
+    let rendu = diagnostic(&projet);
+    let lignes: Vec<&str> = rendu.lines().collect();
+
+    let annonce = lignes
+        .iter()
+        .position(|ligne| ligne.contains("compilation de la crate migration"))
+        .unwrap_or_else(|| panic!("aucune annonce dans :\n{rendu}"));
+    let constat = lignes
+        .iter()
+        .position(|ligne| ligne.contains("répond sur"))
+        .unwrap_or_else(|| panic!("aucun constat de base dans :\n{rendu}"));
+
+    assert!(annonce < constat, "{rendu}");
+}
+
 /// Le `.env` du projet, réécrit pour viser `url`.
 fn viser(projet: &Path, url: &str) {
     let env = projet.join(".env");
@@ -133,11 +196,14 @@ fn diagnostic(projet: &Path) -> String {
 }
 
 /// La ligne du rapport que rend le contrôle `titre`.
+///
+/// Le contrôle `base` annonce d'abord la compilation de la crate migration, sous son
+/// titre et sans verdict : c'est le marqueur qui distingue cette annonce du constat.
 fn ligne(rendu: &str, titre: &str) -> String {
     rendu
         .lines()
-        .find(|ligne| ligne.contains(titre))
-        .unwrap_or_else(|| panic!("aucune ligne « {titre} » dans :\n{rendu}"))
+        .find(|ligne| ligne.contains(titre) && ligne.contains(['✓', '!', '✗']))
+        .unwrap_or_else(|| panic!("aucun constat « {titre} » dans :\n{rendu}"))
         .to_owned()
 }
 
