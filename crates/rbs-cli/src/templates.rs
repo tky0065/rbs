@@ -887,6 +887,33 @@ mod tests {
         }
     }
 
+    /// Une réponse portant des jetons ne se met pas en cache — RFC 6749 §5.1.
+    ///
+    /// L'en-tête est posé par le type et non par les deux handlers : un troisième, ajouté
+    /// plus tard dans le projet de l'utilisateur, rendrait sinon la paire sans lui, et
+    /// rien ne le signalerait.
+    #[test]
+    fn the_token_pair_forbids_its_own_caching() {
+        let dto = read(&Path::new(RACINE_FEATURES).join("auth/dto.rs.jinja"));
+
+        assert!(
+            dto.contains("impl IntoResponse for TokenPair"),
+            "la paire doit porter sa propre réponse :\n{dto}"
+        );
+        for entete in ["CACHE_CONTROL, \"no-store\"", "PRAGMA, \"no-cache\""] {
+            assert!(
+                dto.contains(entete),
+                "`{entete}` doit être posé par la paire :\n{dto}"
+            );
+        }
+
+        let controller = read(&Path::new(RACINE_FEATURES).join("auth/controller.rs.jinja"));
+        assert!(
+            !controller.contains("Json<TokenPair>"),
+            "un handler qui enveloppe la paire dans un `Json` nu contourne l'en-tête :\n{controller}"
+        );
+    }
+
     /// L'appel qui commence à `debut`, refermé sur sa parenthèse ouvrante.
     ///
     /// Une fenêtre d'un nombre fixe de caractères déborderait sur le code d'après, où

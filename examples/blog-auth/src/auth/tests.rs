@@ -331,6 +331,68 @@ async fn a_valid_refresh_returns_a_new_pair() {
     );
 }
 
+/// Une réponse portant des jetons ne se met pas en cache — RFC 6749 §5.1.
+///
+/// La garantie tient au type `TokenPair`, qui porte sa propre réponse : un handler ajouté
+/// ici plus tard la reçoit sans y penser. C'est cette propriété que le test éprouve, en
+/// interrogeant les deux routes qui rendent la paire.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_response_carrying_tokens_forbids_its_own_caching() {
+    let api = application().await;
+    let email = fresh_email();
+    register(&api, &email).await;
+
+    let connexion = post_json(
+        "/auth/login",
+        json!({ "email": email, "password": PASSWORD }),
+    );
+    let response = api
+        .clone()
+        .oneshot(connexion)
+        .await
+        .expect("l'application doit répondre");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    // Les en-têtes sont relevés avant que la lecture du corps ne consomme la réponse.
+    let entetes = response.headers().clone();
+    assert_eq!(
+        entetes.get("cache-control").and_then(|v| v.to_str().ok()),
+        Some("no-store"),
+        "la paire de `login` doit refuser le cache"
+    );
+    assert_eq!(
+        entetes.get("pragma").and_then(|v| v.to_str().ok()),
+        Some("no-cache"),
+        "la paire de `login` doit refuser le cache des intermédiaires HTTP/1.0"
+    );
+
+    let octets = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("corps de réponse lisible");
+    let paire: Value = serde_json::from_slice(&octets).expect("la paire est du JSON");
+
+    let renouvellement = post_json(
+        "/auth/refresh",
+        json!({ "refresh_token": refresh_for(&paire) }),
+    );
+    let response = api
+        .clone()
+        .oneshot(renouvellement)
+        .await
+        .expect("l'application doit répondre");
+
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        response
+            .headers()
+            .get("cache-control")
+            .and_then(|v| v.to_str().ok()),
+        Some("no-store"),
+        "la paire de `refresh` doit refuser le cache"
+    );
+}
+
 /// Un jeton rejoué ferme le compte, et non la seule ligne qu'il présente.
 ///
 /// Sans cela, un jeton volé et joué avant la rotation légitime laisse son porteur avec

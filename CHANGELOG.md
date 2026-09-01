@@ -72,6 +72,10 @@ between minor versions with no deprecation cycle.
 
 ### Fixed
 
+- `POST /auth/login` and `POST /auth/refresh` answer with `Cache-Control: no-store` and
+  `Pragma: no-cache`, as RFC 6749 §5.1 requires of a response carrying tokens. The header
+  is carried by the `TokenPair` type rather than by the two handlers, so a third one added
+  later gets it without thinking about it.
 - Writing into an anchor follows the line endings of the host file. On a repository with
   `core.autocrlf=true`, the CLI laid LF lines down in the middle of a CRLF file, which the
   `cargo fmt --check` of the generated `ci` workflow could then refuse. Repairing an

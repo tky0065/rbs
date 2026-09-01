@@ -75,6 +75,10 @@ dépréciation.
 
 ### Corrigé
 
+- `POST /auth/login` et `POST /auth/refresh` répondent avec `Cache-Control: no-store` et
+  `Pragma: no-cache`, comme la RFC 6749 §5.1 l'exige d'une réponse portant des jetons.
+  L'en-tête tient au type `TokenPair` et non aux deux handlers : un troisième, ajouté plus
+  tard, le reçoit sans y penser.
 - L'écriture dans une ancre suit les fins de ligne du fichier hôte. Sur un dépôt en
   `core.autocrlf=true`, le CLI posait des lignes LF au milieu d'un fichier CRLF, ce que le
   `cargo fmt --check` du workflow `ci` engendré pouvait ensuite refuser. La réparation
