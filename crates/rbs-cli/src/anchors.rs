@@ -390,6 +390,24 @@ impl Cause {
     }
 }
 
+/// La fin de ligne du fichier hôte, que tout ce qui s'y écrit reprend.
+///
+/// Le premier saut de ligne décide, et lui seul : la lecture — `marks`, `line_of`,
+/// `contains` — passe partout par `trim()`, qui absorbe le `\r`, si bien qu'un fichier
+/// CRLF traverse l'insertion sans que rien ne s'en aperçoive. Sur un dépôt en
+/// `core.autocrlf=true`, les lignes LF ainsi posées font échouer le `cargo fmt --check`
+/// du workflow que le CLI vient lui-même d'engendrer.
+///
+/// Un fichier aux fins de ligne mélangées n'est pas normalisé : rbs suit la convention
+/// qu'il trouve en tête, il n'en impose pas une.
+fn eol(source: &str) -> &'static str {
+    match source.find('\n') {
+        Some(0) | None => "\n",
+        Some(rang) if source.as_bytes()[rang - 1] == b'\r' => "\r\n",
+        Some(_) => "\n",
+    }
+}
+
 /// Repose le bloc de `anchor` dans `source`, sous la ligne d'accroche que l'ancre déclare.
 ///
 /// Le bloc est vide : la réparation rend au projet un point d'insertion, elle ne devine
@@ -423,11 +441,14 @@ pub(crate) fn repose(source: &str, anchor: &Anchor) -> Result<String, Cause> {
     lines.insert(accroche + 1, format!("{indentation}{}", anchor.closing()));
     lines.insert(accroche + 1, format!("{indentation}{}", anchor.opening()));
 
-    let mut rendu = lines.join("\n");
+    // `lines()` a mangé les `\r` avec les `\n` : les rejoindre par la fin de ligne du
+    // fichier la lui rend telle qu'elle était, au lieu de le convertir en LF entier.
+    let saut = eol(source);
+    let mut rendu = lines.join(saut);
     // `lines()` mange le saut final : le rendre au fichier qui en portait un évite un
     // diff d'une ligne sur un fichier que la réparation n'a fait qu'ouvrir.
     if source.ends_with('\n') {
-        rendu.push('\n');
+        rendu.push_str(saut);
     }
 
     Ok(rendu)
@@ -479,6 +500,8 @@ pub(crate) fn insert(source: &str, anchor: Anchor, lines: &[String]) -> Result<S
         return Ok(source.to_string());
     }
 
+    let saut = eol(source);
+
     if anchor.sorted {
         // Le bloc est réécrit entier plutôt que complété : la ligne nouvelle doit pouvoir
         // se glisser entre deux anciennes, ce qu'une insertion avant la balise fermante ne
@@ -499,7 +522,7 @@ pub(crate) fn insert(source: &str, anchor: Anchor, lines: &[String]) -> Result<S
 
         let bloc: String = corps
             .iter()
-            .map(|line| format!("{indentation}{line}\n"))
+            .map(|line| format!("{indentation}{line}{saut}"))
             .collect();
 
         return Ok(format!("{}{bloc}{}", &source[..debut], &source[closing..]));
@@ -507,7 +530,7 @@ pub(crate) fn insert(source: &str, anchor: Anchor, lines: &[String]) -> Result<S
 
     let ajouts: String = lines
         .iter()
-        .map(|line| format!("{indentation}{line}\n"))
+        .map(|line| format!("{indentation}{line}{saut}"))
         .collect();
 
     Ok(format!(
@@ -584,6 +607,13 @@ fn contains(block: &str, lines: &[String]) -> bool {
 mod tests {
     use super::*;
 
+    const BIBLIOTHEQUE: &str = "\
+pub mod state;
+// <rbs:features>
+pub mod articles;
+// </rbs:features>
+";
+
     const ROUTEUR: &str = "\
 pub fn router(state: AppState) -> Router {
     Router::new()
@@ -596,6 +626,14 @@ pub fn router(state: AppState) -> Router {
 
     fn lines(sources: &[&str]) -> Vec<String> {
         sources.iter().map(|s| (*s).to_string()).collect()
+    }
+
+    /// Rang du premier `\n` que ne précède pas un `\r`, ou `None` si le rendu est tout CRLF.
+    fn lf_orphelin(rendu: &str) -> Option<usize> {
+        rendu
+            .match_indices('\n')
+            .map(|(rang, _)| rang)
+            .find(|&rang| rang == 0 || rendu.as_bytes()[rang - 1] != b'\r')
     }
 
     /// Le cas qui a motivé le tri : `add auth` entraîne `rate-limit`, et le CRUD
@@ -697,6 +735,56 @@ pub fn router(state: AppState) -> Router {
             "        .merge(crate::users::routes())\n        // </rbs:routes>",
         );
         assert_eq!(rendered, expected, "le contenu existant a bougé");
+    }
+
+    /// Le fichier hôte décide de la fin de ligne, pas le CLI.
+    ///
+    /// Sur un dépôt en `core.autocrlf=true`, une ligne LF posée au milieu d'un fichier
+    /// CRLF fait échouer le `cargo fmt --check` du workflow que le CLI vient d'engendrer.
+    #[test]
+    fn the_insertion_follows_the_line_endings_of_the_host_file() {
+        let hote = ROUTEUR.replace('\n', "\r\n");
+
+        let rendered = insert(&hote, ROUTES, &lines(&[".merge(crate::users::routes())"]))
+            .expect("l'ancre est présente");
+
+        assert!(
+            lf_orphelin(&rendered).is_none(),
+            "fin de ligne LF au rang {:?} d'un fichier CRLF :\n{rendered:?}",
+            lf_orphelin(&rendered)
+        );
+    }
+
+    /// Le même contrat sur la branche triée, qui réécrit le bloc au lieu de le compléter.
+    #[test]
+    fn the_sorted_insertion_follows_the_line_endings_of_the_host_file() {
+        let hote = BIBLIOTHEQUE.replace('\n', "\r\n");
+
+        let rendered =
+            insert(&hote, FEATURES, &lines(&["pub mod users;"])).expect("l'ancre est présente");
+
+        assert!(
+            lf_orphelin(&rendered).is_none(),
+            "fin de ligne LF au rang {:?} d'un fichier CRLF :\n{rendered:?}",
+            lf_orphelin(&rendered)
+        );
+    }
+
+    /// `repose` reconstruit le fichier entier : sans la règle, il le convertit en LF.
+    #[test]
+    fn reposing_an_anchor_follows_the_line_endings_of_the_host_file() {
+        let hote = ROUTEUR
+            .replace("        // <rbs:routes>\n", "")
+            .replace("        // </rbs:routes>\n", "")
+            .replace('\n', "\r\n");
+
+        let rendered = repose(&hote, &ROUTES).expect("la ligne d'accroche est là");
+
+        assert!(
+            lf_orphelin(&rendered).is_none(),
+            "fin de ligne LF au rang {:?} d'un fichier CRLF :\n{rendered:?}",
+            lf_orphelin(&rendered)
+        );
     }
 
     #[test]

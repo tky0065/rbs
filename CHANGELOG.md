@@ -23,6 +23,8 @@ between minor versions with no deprecation cycle.
   never under the requested URL, and they are served on a listener of their own so that no
   deployment has to hide them behind a reverse-proxy rule. `rbs doctor` refuses a
   configuration where that port equals `server.port`.
+- `--fields` takes a `max=<n>` modifier, which bounds the length of a textual field in the
+  generated DTOs. It is refused on any other type.
 - `rbs add cors` installs a CORS layer whose allowed origins are read from the project's
   configuration, never wide open by default.
 - `rbs add rate-limit` installs a rate limiter. The counter is a Redis pipeline when the
@@ -43,6 +45,10 @@ between minor versions with no deprecation cycle.
 
 ### Changed
 
+- A `string` field is bounded at 255 characters in the generated DTOs, without anyone
+  asking. Nothing else bounded it — `ColumnDef::string()` renders a `varchar` with no
+  length on PostgreSQL — so every public route accepted a string of arbitrary length.
+  `text` keeps none by default: it is the type one picks to exceed that bound.
 - **The minimum supported Rust version goes from 1.85 to 1.94.** 1.85 had already stopped
   resolving: `sea-orm` 2.0.2 and `sqlx` 0.9.0 require 1.94.0, and Cargo refuses to build
   below that. The declared floor was describing a toolchain no installation could have
@@ -66,6 +72,23 @@ between minor versions with no deprecation cycle.
 
 ### Fixed
 
+- `rbs dev` names the file that triggered a restart. Nothing on screen told a wanted
+  restart from a server that had just died on its own.
+- `POST /auth/login` and `POST /auth/refresh` answer with `Cache-Control: no-store` and
+  `Pragma: no-cache`, as RFC 6749 §5.1 requires of a response carrying tokens. The header
+  is carried by the `TokenPair` type rather than by the two handlers, so a third one added
+  later gets it without thinking about it.
+- Writing into an anchor follows the line endings of the host file. On a repository with
+  `core.autocrlf=true`, the CLI laid LF lines down in the middle of a CRLF file, which the
+  `cargo fmt --check` of the generated `ci` workflow could then refuse. Repairing an
+  anchor rewrote the whole file in LF.
+- A zone of `AGENTS.md` only opens on a marker alone on its line. Quoting
+  `<!-- rbs:inventory -->` in one's own prose made `rbs upgrade` erase everything between
+  that quotation and the real closing marker.
+- The entity inventory no longer counts the braces of strings and comments. A
+  `format!("{{")` shifted the depth and attached the following entities to the wrong
+  module, and an entity commented out in a block was inventoried as a real one — both
+  ending in a wrong `belongs_to`.
 - `--fields "author_id:uuid,author:references:users"` is refused instead of generating a
   project that does not compile: both fields resolve to the same `author_id` column, and
   deduplication now happens on the column name rather than on the declared name.

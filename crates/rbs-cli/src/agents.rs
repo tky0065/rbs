@@ -118,6 +118,28 @@ pub(crate) fn version(source: &str, zone: &str) -> Option<String> {
 /// Position d'un marqueur dans le document, en octets : `(début, fin)`.
 type Span = (usize, usize);
 
+/// Bornes de la ligne ne portant que le marqueur qu'accepte `reconnait`.
+///
+/// Un marqueur doit être seul sur sa ligne, aux blancs près — la règle qu'`anchors::marks`
+/// porte déjà pour les ancres du code. L'`AGENTS.md` est le fichier où le développeur
+/// documente son projet, et où il peut donc *citer* les marqueurs que rbs y écrit : sans
+/// cette règle, la citation ouvre la zone et `replace` efface tout ce qui la sépare de la
+/// vraie fermeture, dans un fichier décrit comme le sien.
+fn marker_line(source: &str, reconnait: impl Fn(&str) -> bool) -> Option<Span> {
+    let mut debut = 0;
+
+    for line in source.split_inclusive('\n') {
+        let propre = line.trim();
+        if !propre.is_empty() && reconnait(propre) {
+            let avant = line.len() - line.trim_start().len();
+            return Some((debut + avant, debut + avant + propre.len()));
+        }
+        debut += line.len();
+    }
+
+    None
+}
+
 /// Bornes des deux marqueurs d'une zone : celles de l'ouverture, puis celles de la
 /// fermeture.
 ///
@@ -128,14 +150,22 @@ fn bounds(source: &str, zone: &str) -> Result<(Span, Span), MissingZone> {
         zone: zone.to_string(),
     };
 
+    // Le nom de la zone doit finir là où le marqueur le dit : sans quoi `inventory`
+    // reconnaîtrait l'ouverture d'une zone `inventory-extra`.
     let prefixe = format!("<!-- rbs:{zone}");
-    let debut = source.find(&prefixe).ok_or_else(manquante)?;
-    let apres = source[debut..].find("-->").ok_or_else(manquante)? + debut + "-->".len();
+    let ouverture = marker_line(source, |propre| {
+        propre.strip_prefix(&prefixe).is_some_and(|reste| {
+            reste == "-->" || (reste.starts_with(char::is_whitespace) && reste.ends_with("-->"))
+        })
+    })
+    .ok_or_else(manquante)?;
 
     let fermeture = closing(zone);
-    let fin = source[apres..].find(&fermeture).ok_or_else(manquante)? + apres;
+    let fin = marker_line(&source[ouverture.1..], |propre| propre == fermeture)
+        .map(|(debut, fin)| (debut + ouverture.1, fin + ouverture.1))
+        .ok_or_else(manquante)?;
 
-    Ok(((debut, apres), (fin, fin + fermeture.len())))
+    Ok((ouverture, fin))
 }
 
 /// Recompose le document autour d'une zone réécrite.
@@ -612,6 +642,71 @@ mod tests {
 
         assert!(rendu.contains("<!-- rbs:guide 1.2.0 -->"));
         assert!(!rendu.contains("1.1.0"));
+    }
+
+    /// Le développeur cite les marqueurs dans sa propre prose — c'est le fichier où il
+    /// documente son projet, et rbs y a écrit deux zones dont il peut vouloir parler.
+    /// Une citation n'ouvre pas une zone : la prendre pour telle fait effacer par
+    /// `replace` tout le texte qui la sépare de la vraie fermeture.
+    #[test]
+    fn a_marker_quoted_in_the_prose_does_not_open_a_zone() {
+        let cite = "# blog\n\n\
+            La zone <!-- rbs:inventory --> est engendrée par `rbs upgrade`.\n\n\
+            à moi\n\n\
+            <!-- rbs:inventory -->\nancien inventaire\n<!-- /rbs:inventory -->\n";
+
+        let rendu = replace(cite, INVENTORY, "nouvel inventaire").expect("la zone est présente");
+
+        assert!(
+            rendu.contains("est engendrée par `rbs upgrade`."),
+            "la phrase du développeur a été emportée :\n{rendu}"
+        );
+        assert!(
+            rendu.contains("à moi"),
+            "le texte intermédiaire a sauté :\n{rendu}"
+        );
+        assert!(
+            !rendu.contains("ancien inventaire"),
+            "la vraie zone n'a pas été réécrite"
+        );
+    }
+
+    /// La symétrique : une fermeture citée avant la vraie ne doit pas borner la zone,
+    /// faute de quoi `replace` tronque le corps qu'elle prétend remplacer.
+    #[test]
+    fn a_closing_marker_quoted_in_the_prose_does_not_close_a_zone() {
+        let cite = "# blog\n\n\
+            <!-- rbs:inventory -->\n\
+            on ferme par <!-- /rbs:inventory --> en fin de zone.\n\
+            ancien inventaire\n\
+            <!-- /rbs:inventory -->\n\n\
+            à moi\n";
+
+        let rendu = replace(cite, INVENTORY, "nouvel inventaire").expect("la zone est présente");
+
+        assert!(
+            !rendu.contains("on ferme par"),
+            "la zone s'est arrêtée à la citation :\n{rendu}"
+        );
+        assert!(
+            rendu.contains("à moi"),
+            "le texte d'après a sauté :\n{rendu}"
+        );
+        assert_eq!(
+            rendu.matches("<!-- /rbs:inventory -->").count(),
+            1,
+            "{rendu}"
+        );
+    }
+
+    /// Le corps lu doit être celui de la zone, pas celui qu'une citation délimite.
+    #[test]
+    fn the_body_ignores_a_quoted_marker() {
+        let cite = "# blog\n\n\
+            citation : <!-- rbs:inventory -->\n\n\
+            <!-- rbs:inventory -->\nancien inventaire\n<!-- /rbs:inventory -->\n";
+
+        assert_eq!(body(cite, INVENTORY), Some("ancien inventaire"));
     }
 
     #[test]

@@ -7,6 +7,7 @@ use super::model::Model;
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct CreatePost {
+    #[validate(length(max = 255))]
     pub title: String,
     pub body: String,
     pub published: bool,
@@ -14,6 +15,7 @@ pub struct CreatePost {
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct UpdatePost {
+    #[validate(length(max = 255))]
     pub title: Option<String>,
     pub body: Option<String>,
     pub published: Option<bool>,

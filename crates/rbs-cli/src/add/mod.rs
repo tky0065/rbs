@@ -363,10 +363,12 @@ impl Resolution<'_> {
         }
 
         let source = Source::feature(self.template_dir, feature)?;
-        let manifest = read_manifest(&source, feature)?;
-        let templates = source
-            .files()
+        // Le fragment est lu une fois pour ses deux usages : son manifeste dit ce que
+        // l'installation fait au projet, ses fichiers sont ce qu'elle y dépose.
+        let (manifeste, templates) = source
+            .manifest_and_files()
             .map_err(|source| crate::errors::Acces::new(Path::new(feature), source))?;
+        let manifest = read_manifest(manifeste, feature)?;
 
         self.en_cours.push(feature.to_string());
         for requise in manifest.feature.requires.clone() {
@@ -384,14 +386,14 @@ impl Resolution<'_> {
     }
 }
 
-/// Lit le manifeste du fragment, qui dit ce que son installation fait au projet.
-fn read_manifest(source: &Source, feature: &str) -> Result<manifest::Manifest, Error> {
-    let text = source
-        .manifest()
-        .map_err(|source| crate::errors::Acces::new(Path::new(feature), source))?
-        .ok_or_else(|| Error::SansManifeste {
-            feature: feature.to_string(),
-        })?;
+/// Analyse le manifeste du fragment, qui dit ce que son installation fait au projet.
+///
+/// La source lui est passée plutôt que relue : elle sort de la même lecture que les
+/// fichiers du fragment.
+fn read_manifest(source: Option<String>, feature: &str) -> Result<manifest::Manifest, Error> {
+    let text = source.ok_or_else(|| Error::SansManifeste {
+        feature: feature.to_string(),
+    })?;
 
     Ok(manifest::read(&text, &format!("{feature}/feature.toml"))?)
 }

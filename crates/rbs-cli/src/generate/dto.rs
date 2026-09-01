@@ -24,26 +24,67 @@ mod tests {
         render(&Feature::fresh(name, fields)).expect("les DTO doivent se rendre")
     }
 
+    /// Les contraintes d'un champ tiennent en un seul attribut : `validator` n'en lit
+    /// qu'un par champ, et deux attributs empilés engendreraient un projet qui ne
+    /// compile pas.
     #[test]
     fn an_email_field_produces_an_email_validation_constraint() {
         let rendered = dto("users", "email:string,nom:string");
 
         assert!(
-            rendered.contains("#[validate(email)]\n    pub email: String,"),
+            rendered.contains("#[validate(email, length(max = 255))]\n    pub email: String,"),
             "contrainte d'email absente de Create :\n{rendered}"
         );
         assert!(
-            rendered.contains("#[validate(email)]\n    pub email: Option<String>,"),
+            rendered
+                .contains("#[validate(email, length(max = 255))]\n    pub email: Option<String>,"),
             "contrainte d'email absente d'Update :\n{rendered}"
+        );
+        assert_eq!(
+            rendered.matches("#[validate(").count(),
+            4,
+            "un champ porte plus d'un attribut de validation :\n{rendered}"
+        );
+    }
+
+    /// La borne par défaut : sans elle, chaque route publique accepte une chaîne de
+    /// longueur arbitraire, que la colonne n'arrête pas non plus.
+    #[test]
+    fn a_string_field_is_bounded_in_both_dtos() {
+        let rendered = dto("users", "nom:string");
+
+        assert!(
+            rendered.contains("#[validate(length(max = 255))]\n    pub nom: String,"),
+            "borne absente de Create :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("#[validate(length(max = 255))]\n    pub nom: Option<String>,"),
+            "borne absente d'Update :\n{rendered}"
         );
     }
 
     #[test]
-    fn an_ordinary_field_carries_no_constraint() {
-        let rendered = dto("users", "nom:string");
+    fn the_max_modifier_is_carried_into_the_dtos() {
+        let rendered = dto("articles", "titre:string:max=200,resume:text:max=5000");
 
         assert!(
-            !rendered.contains("#[validate(email)]"),
+            rendered.contains("#[validate(length(max = 200))]\n    pub titre: String,"),
+            "borne écrite non reprise :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("#[validate(length(max = 5000))]\n    pub resume: String,"),
+            "borne écrite non reprise sur un text :\n{rendered}"
+        );
+    }
+
+    /// `text` porte du texte long : c'est le type qu'on choisit pour dépasser la borne,
+    /// et il ne la reçoit que si on la lui écrit.
+    #[test]
+    fn a_field_that_bounds_nothing_carries_no_constraint() {
+        let rendered = dto("articles", "resume:text,vues:int,publie:bool");
+
+        assert!(
+            !rendered.contains("#[validate("),
             "contrainte posée à tort :\n{rendered}"
         );
     }

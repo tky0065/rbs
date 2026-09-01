@@ -1,3 +1,6 @@
+use axum::Json;
+use axum::http::header;
+use axum::response::{IntoResponse, Response};
 use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -36,6 +39,23 @@ pub struct TokenPair {
     pub refresh_token: String,
     pub token_type: String,
     pub expires_in: u64,
+}
+
+/// La paire porte sa propre réponse pour n'être jamais mise en cache — RFC 6749 §5.1.
+///
+/// L'en-tête tient au type et non aux deux handlers : un troisième, ajouté ici plus tard,
+/// rendrait sinon la paire sans lui, et rien ne le signalerait.
+impl IntoResponse for TokenPair {
+    fn into_response(self) -> Response {
+        (
+            [
+                (header::CACHE_CONTROL, "no-store"),
+                (header::PRAGMA, "no-cache"),
+            ],
+            Json(self),
+        )
+            .into_response()
+    }
 }
 
 #[derive(Debug, Serialize, ToSchema)]

@@ -57,6 +57,12 @@ pub(crate) enum ErrorKind {
     NullifyWithoutOptional,
     ConflictingOnDelete,
     RedundantIndexOnReference,
+    MaxLengthOnNonTextual {
+        type_: String,
+    },
+    InvalidMaxLength {
+        value: String,
+    },
 }
 
 impl ErrorKind {
@@ -107,6 +113,13 @@ impl ErrorKind {
             Self::RedundantIndexOnReference => {
                 "« index » redondant : une clé étrangère est déjà indexée".to_string()
             }
+            Self::MaxLengthOnNonTextual { type_ } => format!(
+                "« max » borne une longueur de texte et ne s'applique pas à un champ \
+                 « {type_} »"
+            ),
+            Self::InvalidMaxLength { value } => {
+                format!("« max » attend un entier strictement positif, et non « {value} »")
+            }
         }
     }
 
@@ -142,9 +155,10 @@ impl ErrorKind {
                 names.push_str(", references:<table>");
                 Some(names)
             }
-            Self::UnknownModifier { .. } => {
-                Some("unique, optional, index — sur une référence : cascade, nullify".to_string())
-            }
+            Self::UnknownModifier { .. } => Some(
+                "unique, optional, index, max=<n> — sur une référence : cascade, nullify"
+                    .to_string(),
+            ),
             Self::DuplicateModifier { .. } => None,
             Self::RedundantIndex => Some("retirez « index »".to_string()),
             Self::UniqueOnBool => Some("retirez « unique »".to_string()),
@@ -158,6 +172,10 @@ impl ErrorKind {
             }
             Self::ConflictingOnDelete => Some("gardez l'un des deux".to_string()),
             Self::RedundantIndexOnReference => Some("retirez « index »".to_string()),
+            Self::MaxLengthOnNonTextual { .. } => {
+                Some("« max » s'écrit sur un champ « string » ou « text »".to_string())
+            }
+            Self::InvalidMaxLength { .. } => Some(format!("exemple : « {label}:string:max=200 »")),
         }
     }
 }
@@ -411,7 +429,9 @@ mod tests {
         );
         assert!(text.contains("modificateur inconnu « uniq »"), "{text}");
         assert!(
-            text.contains("unique, optional, index — sur une référence : cascade, nullify"),
+            text.contains(
+                "unique, optional, index, max=<n> — sur une référence : cascade, nullify"
+            ),
             "{text}"
         );
     }

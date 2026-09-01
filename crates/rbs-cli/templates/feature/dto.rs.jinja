@@ -13,8 +13,8 @@
 {% if fields %} {
 {%- for field in fields %}
 {@- schema_datetime(field, all_optional or field.optional) @}
-{%- if field.valide_email %}
-    #[validate(email)]
+{%- if field.validations %}
+    #[validate({@ field.validations | join(", ") @})]
 {%- endif %}
     pub {@ field.name @}: {@ "Option<" ~ field.bare_rust_type ~ ">" if all_optional else field.rust_type @},
 {%- endfor %}

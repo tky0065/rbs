@@ -43,10 +43,8 @@ pub async fn register(
 pub async fn login(
     State(state): State<AppState>,
     ValidatedJson(input): ValidatedJson<LoginRequest>,
-) -> Result<Json<TokenPair>> {
-    Ok(Json(
-        service::login(state.core().db(), state.auth(), input).await?,
-    ))
+) -> Result<TokenPair> {
+    service::login(state.core().db(), state.auth(), input).await
 }
 
 #[utoipa::path(
@@ -62,10 +60,8 @@ pub async fn login(
 pub async fn refresh(
     State(state): State<AppState>,
     ValidatedJson(input): ValidatedJson<RefreshRequest>,
-) -> Result<Json<TokenPair>> {
-    Ok(Json(
-        service::refresh(state.core().db(), state.auth(), input).await?,
-    ))
+) -> Result<TokenPair> {
+    service::refresh(state.core().db(), state.auth(), input).await
 }
 
 #[utoipa::path(
