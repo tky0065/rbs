@@ -75,6 +75,8 @@ dépréciation.
 
 ### Corrigé
 
+- `rbs dev` nomme le fichier qui a déclenché un redémarrage. Rien à l'écran ne
+  distinguait un redémarrage voulu d'un serveur qui venait de mourir de lui-même.
 - `POST /auth/login` et `POST /auth/refresh` répondent avec `Cache-Control: no-store` et
   `Pragma: no-cache`, comme la RFC 6749 §5.1 l'exige d'une réponse portant des jetons.
   L'en-tête tient au type `TokenPair` et non aux deux handlers : un troisième, ajouté plus

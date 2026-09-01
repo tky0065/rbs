@@ -139,10 +139,12 @@ async fn supervise(root: PathBuf, variables: Vec<(String, String)>) -> Result<()
             }
         });
 
-        if action.paths().next().is_some() {
-            job.restart_with_signal(Signal::Terminate, GRACE);
-        } else {
+        let touches: Vec<PathBuf> = action.paths().map(|(path, _)| path.to_path_buf()).collect();
+        if touches.is_empty() {
             job.start();
+        } else {
+            crate::ui::info(&cause(&touches, &racine));
+            job.restart_with_signal(Signal::Terminate, GRACE);
         }
 
         action
@@ -188,6 +190,36 @@ impl Filterer for Sources {
     }
 }
 
+/// La ligne qui annonce un redémarrage, d'après les chemins qui l'ont déclenché.
+///
+/// Sans elle, rien à l'écran ne distingue un redémarrage voulu d'un serveur qui vient de
+/// mourir de lui-même : le serveur se taisait, repartait, et l'utilisateur ne savait pas
+/// lequel des deux il regardait.
+///
+/// Le regroupement rend plusieurs chemins d'un coup — un `cargo fmt` en touche vingt — et
+/// seul le premier est nommé, les autres comptés.
+fn cause(touches: &[PathBuf], racine: &Path) -> String {
+    let Some(premier) = touches.first() else {
+        return "redémarrage".to_string();
+    };
+
+    // Le chemin relatif si la racine le porte, entier sinon : un chemin hors du projet
+    // est assez inattendu pour mériter d'être lu en entier.
+    let nom = premier
+        .strip_prefix(racine)
+        .unwrap_or(premier)
+        .display()
+        .to_string();
+
+    match touches.len() {
+        1 => format!("redémarrage : {nom}"),
+        compte => {
+            let pluriel = if compte > 2 { "s" } else { "" };
+            format!("redémarrage : {nom} et {} autre{pluriel}", compte - 1)
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::io::Write;
@@ -198,6 +230,49 @@ mod tests {
     use watchexec::job::start_job;
 
     use super::*;
+
+    /// Un redémarrage doit dire ce qui l'a causé.
+    ///
+    /// Sans cela, rien ne distingue à l'écran un redémarrage voulu d'un serveur qui
+    /// vient de mourir tout seul.
+    #[test]
+    fn the_restart_names_the_file_that_caused_it() {
+        let racine = Path::new("/projets/demo");
+
+        assert_eq!(
+            cause(&[racine.join("src/main.rs")], racine),
+            "redémarrage : src/main.rs"
+        );
+    }
+
+    /// Le regroupement rend plusieurs chemins d'un coup : le premier est nommé, les
+    /// autres comptés — les énumérer tous noierait la ligne à chaque `cargo fmt`.
+    #[test]
+    fn several_files_are_counted_after_the_first() {
+        let racine = Path::new("/projets/demo");
+        let touches = [
+            racine.join("src/main.rs"),
+            racine.join("src/router.rs"),
+            racine.join("src/state.rs"),
+        ];
+
+        assert_eq!(
+            cause(&touches, racine),
+            "redémarrage : src/main.rs et 2 autres"
+        );
+    }
+
+    /// Un chemin hors de la racine se dit en entier plutôt que d'être tu.
+    #[test]
+    fn a_path_outside_the_root_keeps_its_whole_form() {
+        assert_eq!(
+            cause(
+                &[PathBuf::from("/ailleurs/x.rs")],
+                Path::new("/projets/demo")
+            ),
+            "redémarrage : /ailleurs/x.rs"
+        );
+    }
 
     /// Rôle que ce binaire de test tient quand il se relance lui-même.
     const ROLE: &str = "RBS_DEV_ROLE";

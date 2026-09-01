@@ -72,6 +72,8 @@ between minor versions with no deprecation cycle.
 
 ### Fixed
 
+- `rbs dev` names the file that triggered a restart. Nothing on screen told a wanted
+  restart from a server that had just died on its own.
 - `POST /auth/login` and `POST /auth/refresh` answer with `Cache-Control: no-store` and
   `Pragma: no-cache`, as RFC 6749 §5.1 requires of a response carrying tokens. The header
   is carried by the `TokenPair` type rather than by the two handlers, so a third one added
