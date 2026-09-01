@@ -53,9 +53,9 @@ letter and hold only letters, digits, `-` and `_`. Left out, it becomes the firs
 | `--template-dir <CHEMIN>` | Renders the project from a directory of templates instead of the ones embedded in the binary. |
 | `-y`, `--yes` | Asks nothing: takes the defaults and runs. The project name must then be given as an argument — it is the one answer with no default. |
 
-`--template-dir` and `--yes` are global — every command accepts them — but `--yes` is read
-only by `rbs new`, the one command that asks anything, and `--template-dir` only by
-`rbs new` and [`rbs add`](./add.md).
+`--yes` is declared on `rbs new` alone, the one command that asks anything, and
+`--template-dir` on `rbs new` and [`rbs add`](./add.md). No other command accepts either:
+a stray `--template-dir` is a clap error rather than a flag with no effect.
 
 ## Choosing the engine
 

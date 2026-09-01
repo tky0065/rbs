@@ -20,7 +20,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 $ rbs migrate --help
 Pilote les migrations du projet
 
-Usage: rbs migrate [OPTIONS] <COMMAND>
+Usage: rbs migrate <COMMAND>
 
 Commands:
   up      Applique les migrations en attente
@@ -30,26 +30,22 @@ Commands:
   help    Print this message or the help of the given subcommand(s)
 
 Options:
-      --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
-  -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
-  -h, --help                   Print help
-  -V, --version                Print version
+  -h, --help     Print help
+  -V, --version  Print version
 ```
 
-No subcommand takes a flag of its own. The two global options are accepted because clap
-propagates them, and neither does anything here.
+No subcommand takes a flag of its own, and neither `--template-dir` nor `--yes` is
+accepted: each is declared on the commands that read it.
 
 ```text
 $ rbs migrate up --help
 Applique les migrations en attente
 
-Usage: rbs migrate up [OPTIONS]
+Usage: rbs migrate up
 
 Options:
-      --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
-  -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
-  -h, --help                   Print help
-  -V, --version                Print version
+  -h, --help     Print help
+  -V, --version  Print version
 ```
 
 `down` and `status` are declared the same way. `new` alone takes an argument:
@@ -58,16 +54,14 @@ Options:
 $ rbs migrate new --help
 Crée un fichier de migration vide
 
-Usage: rbs migrate new [OPTIONS] <NOM>
+Usage: rbs migrate new <NAME>
 
 Arguments:
-  <NOM>  Nom de la migration
+  <NAME>  Nom de la migration
 
 Options:
-      --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
-  -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
-  -h, --help                   Print help
-  -V, --version                Print version
+  -h, --help     Print help
+  -V, --version  Print version
 ```
 
 ## Which database

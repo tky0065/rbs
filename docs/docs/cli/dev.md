@@ -19,13 +19,11 @@ is verbatim, captured by running the command; only the prose around it is transl
 $ rbs dev --help
 Démarre le projet : services, migrations, serveur relancé à chaque changement
 
-Usage: rbs dev [OPTIONS]
+Usage: rbs dev
 
 Options:
-      --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
-  -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
-  -h, --help                   Print help
-  -V, --version                Print version
+  -h, --help     Print help
+  -V, --version  Print version
 ```
 
 No flags of its own. What it does depends entirely on what the project declares.

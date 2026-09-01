@@ -54,9 +54,9 @@ première des [trois questions](#les-trois-questions).
 | `--template-dir <CHEMIN>` | Rend le projet depuis un répertoire de templates, au lieu de celles embarquées dans le binaire. |
 | `-y`, `--yes` | Ne demande rien : prend les valeurs par défaut et exécute. Le nom du projet doit alors être donné en argument — c'est la seule réponse sans valeur par défaut. |
 
-`--template-dir` et `--yes` sont globaux — toutes les commandes les acceptent — mais `--yes`
-n'est lu que par `rbs new`, seule commande qui pose des questions, et `--template-dir` par
-`rbs new` et [`rbs add`](./add.md).
+`--yes` n'est déclaré que sur `rbs new`, seule commande qui pose des questions, et
+`--template-dir` sur `rbs new` et [`rbs add`](./add.md). Aucune autre ne les accepte : un
+`--template-dir` égaré est une erreur de clap plutôt qu'un flag sans effet.
 
 ## Choisir le moteur
 

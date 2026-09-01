@@ -31,17 +31,15 @@ Aligne le manifeste du projet sur la version du CLI : rbs-core et les métadonn�
 Usage: rbs upgrade [OPTIONS]
 
 Options:
-      --force                  Met à niveau même si le working tree Git est sale
-      --dry-run                Affiche le plan sans rien écrire
-      --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
-  -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
-  -h, --help                   Print help
-  -V, --version                Print version
+      --force    Met à niveau même si le working tree Git est sale
+      --dry-run  Affiche le plan sans rien écrire
+  -h, --help     Print help
+  -V, --version  Print version
 ```
 
 `--force` and `--dry-run` are its own; `--dry-run` prints the plan and stops, which is how
-you read what a jump would touch before it touches it. The two global options are accepted
-because clap propagates them, and neither does anything here.
+you read what a jump would touch before it touches it. Neither `--template-dir` nor `--yes` is accepted
+here: each is declared on the commands that read it.
 
 ## A jump that carries a note
 

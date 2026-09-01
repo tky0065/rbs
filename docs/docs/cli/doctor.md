@@ -25,14 +25,14 @@ Diagnostique le projet : ancres, .env, base joignable, versions
 Usage: rbs doctor [OPTIONS]
 
 Options:
-      --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
-  -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
-  -h, --help                   Print help
-  -V, --version                Print version
+      --json     Rend le rapport en JSON sur la sortie standard, pour un script ou une CI
+  -h, --help     Print help
+  -V, --version  Print version
 ```
 
-No flag of its own. The two global options are accepted because clap propagates them, and
-neither does anything here.
+`--json` is its only flag. `--template-dir` and `--yes` are not accepted here: each is
+declared on the commands that read it, so passing one is a clap error rather than a flag
+that is taken and ignored.
 
 ## The six checks
 
@@ -112,6 +112,62 @@ check above. `jobs` is the one this milestone added:
 A feature declared in `[package.metadata.rbs]` whose section has vanished from the
 configuration is a project that compiles and fails at startup — which `doctor` can say
 cold, before you start it. A section commented out does not count as a section.
+
+## A machine-readable report
+
+`--json` writes the same findings as a single document on standard output — nothing else
+goes there, no colour, no glyphs — so a CI step can name the check that failed instead of
+grepping for a cross. The exit code keeps the meaning it already had: 0 when the project is
+healthy, 1 when a check failed.
+
+```text
+$ rbs doctor --json
+{
+  "sain": false,
+  "checks": [
+    {
+      "name": "ancres",
+      "status": "ok",
+      "detail": "les 11 points d'insertion sont en place"
+    },
+    {
+      "name": "base",
+      "status": "echec",
+      "detail": "rien ne répond sur 127.0.0.1:5499",
+      "remede": "lancez `docker compose up -d` à la racine du projet, ou corrigez l'URL du .env"
+    }
+  ]
+}
+```
+
+`status` is `ok`, `avertissement` or `echec` — the three states the text rendering draws as
+`✓`, `!` and `✗`. `remede` is present only on the checks that carry one. `sain` is false as
+soon as one check failed, which is the same condition as exit code 1.
+
+```bash
+rbs doctor --json | jq -r '.checks[] | select(.status != "ok") | "\(.name): \(.detail)"'
+```
+
+## Why it sometimes takes a minute
+
+The `base` check runs the project's own migration binary, which means cargo builds the
+`migration` crate first — a minute or more on a cold target directory. `doctor` announces
+that line before it blocks rather than after, so a silent wait is never mistaken for a
+hang:
+
+```text
+  ✓ .env        les 7 variables de .env.example sont renseignées
+  ✓ versions    projet et rbs-core alignés sur le CLI 1.1.0
+  … base        compilation de la crate migration, peut prendre
+                une minute au premier lancement…
+   Compiling sea-orm v2.0.2
+   Compiling migration v0.1.0 (/tmp/demo/migration)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 31.57s
+  ✓ base        postgres 18.6 répond sur 127.0.0.1:5432
+✓ le projet est sain
+```
+
+The announcement is a line of the text rendering only; `--json` never carries it.
 
 ## A healthy project
 
