@@ -67,9 +67,15 @@ fn collect(source: &str, module_path: &str, file: &str, found: &mut Vec<Entity>)
     // racine du fichier.
     let mut closes_at: Option<usize> = None;
     let mut depth: usize = 0;
+    let mut lecture = Reading::default();
 
     for line in source.lines() {
-        let trimmed = line.trim();
+        let Line {
+            code,
+            opens,
+            closes,
+        } = lecture.read(line);
+        let trimmed = code.trim();
 
         if closes_at.is_none()
             && let Some(rest) = strip_module_declaration(trimmed)
@@ -87,14 +93,181 @@ fn collect(source: &str, module_path: &str, file: &str, found: &mut Vec<Entity>)
             });
         }
 
-        depth += line.matches('{').count();
-        depth = depth.saturating_sub(line.matches('}').count());
+        depth += opens;
+        depth = depth.saturating_sub(closes);
 
         if closes_at == Some(depth) {
             current = module_path.to_string();
             closes_at = None;
         }
     }
+}
+
+/// Ce qu'une ligne apporte au scan, une fois son texte mis de côté.
+struct Line {
+    /// La ligne privée de ses commentaires, chaînes conservées.
+    ///
+    /// `table_name` lit le contenu d'une chaîne — c'est là que vit le nom de la table —
+    /// et ne peut donc pas travailler sur un code dont les chaînes auraient été retirées.
+    code: String,
+    /// Accolades ouvrantes de la ligne, hors chaîne et hors commentaire.
+    opens: usize,
+    /// Ses fermantes, à la même condition.
+    closes: usize,
+}
+
+/// L'état lexical du scan, qui se poursuit d'une ligne à la suivante.
+///
+/// Un commentaire de bloc et une chaîne peuvent tous deux franchir une fin de ligne : le
+/// suivi ne peut pas se faire ligne par ligne.
+#[derive(Default)]
+enum Reading {
+    /// Du code.
+    #[default]
+    Code,
+    /// Dans une `"chaîne"`, où `\"` n'en sort pas.
+    Text,
+    /// Dans une chaîne brute `r#"…"#`, que ferme un guillemet suivi d'autant de dièses.
+    Raw(usize),
+    /// Dans un `/* commentaire */`, dont Rust autorise l'imbrication.
+    Block(usize),
+}
+
+impl Reading {
+    /// Lit une ligne et rend ce que le scan doit en retenir, l'état reporté à la suivante.
+    ///
+    /// Sans cette lecture, le scan comptait les accolades des chaînes et des
+    /// commentaires : un `format!("{{")` décalait la profondeur et rattachait les entités
+    /// suivantes au mauvais module, quand le fichier promet de refuser une cible plutôt
+    /// que d'écrire une relation fausse.
+    fn read(&mut self, line: &str) -> Line {
+        let mut code = String::with_capacity(line.len());
+        let (mut opens, mut closes) = (0, 0);
+        let octets: Vec<char> = line.chars().collect();
+        let mut rang = 0;
+
+        while rang < octets.len() {
+            let caractere = octets[rang];
+
+            match self {
+                Self::Block(niveau) => {
+                    if caractere == '*' && octets.get(rang + 1) == Some(&'/') {
+                        *niveau -= 1;
+                        if *niveau == 0 {
+                            *self = Self::Code;
+                        }
+                        rang += 2;
+                        continue;
+                    }
+                    if caractere == '/' && octets.get(rang + 1) == Some(&'*') {
+                        *niveau += 1;
+                        rang += 2;
+                        continue;
+                    }
+                }
+                Self::Text => {
+                    code.push(caractere);
+                    if caractere == '\\' {
+                        // L'échappement emporte le caractère suivant, guillemet compris.
+                        if let Some(suivant) = octets.get(rang + 1) {
+                            code.push(*suivant);
+                        }
+                        rang += 2;
+                        continue;
+                    }
+                    if caractere == '"' {
+                        *self = Self::Code;
+                    }
+                }
+                Self::Raw(dieses) => {
+                    code.push(caractere);
+                    // La chaîne ne se ferme que sur un guillemet suivi d'autant de dièses
+                    // qu'elle en a ouvert : moins n'y suffit pas.
+                    let suivants = &octets[rang + 1..];
+                    if caractere == '"'
+                        && suivants.len() >= *dieses
+                        && suivants[..*dieses].iter().all(|c| *c == '#')
+                    {
+                        *self = Self::Code;
+                    }
+                }
+                Self::Code => {
+                    if caractere == '/' && octets.get(rang + 1) == Some(&'/') {
+                        // Le reste de la ligne est du commentaire : rien n'en est retenu.
+                        break;
+                    }
+                    if caractere == '/' && octets.get(rang + 1) == Some(&'*') {
+                        *self = Self::Block(1);
+                        rang += 2;
+                        continue;
+                    }
+                    if let Some(dieses) = raw_string_at(&octets, rang) {
+                        // `r#"` ouvre la chaîne : le préfixe et ses dièses sont du code.
+                        for c in &octets[rang..=rang + dieses + 1] {
+                            code.push(*c);
+                        }
+                        *self = Self::Raw(dieses);
+                        rang += dieses + 2;
+                        continue;
+                    }
+
+                    code.push(caractere);
+
+                    match caractere {
+                        '"' => *self = Self::Text,
+                        '{' => opens += 1,
+                        '}' => closes += 1,
+                        // Un caractère littéral peut porter une accolade — `'{'` — ou un
+                        // guillemet, et sa quote ne doit pas ouvrir de chaîne. La forme
+                        // est bornée, donc reconnue ici plutôt que suivie par un état.
+                        '\'' => {
+                            if let Some(saut) = char_literal_at(&octets, rang) {
+                                for c in &octets[rang + 1..rang + saut] {
+                                    code.push(*c);
+                                }
+                                rang += saut;
+                                continue;
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+
+            rang += 1;
+        }
+
+        Line {
+            code,
+            opens,
+            closes,
+        }
+    }
+}
+
+/// Nombre de dièses d'une chaîne brute ouvrant au rang donné, ou `None` si ce n'en est pas
+/// une. `r"…"` en compte zéro, `r#"…"#` un.
+fn raw_string_at(octets: &[char], rang: usize) -> Option<usize> {
+    if octets[rang] != 'r' {
+        return None;
+    }
+    // `r` n'ouvre une chaîne brute que s'il n'est pas la fin d'un identifiant.
+    if rang > 0 && (octets[rang - 1].is_alphanumeric() || octets[rang - 1] == '_') {
+        return None;
+    }
+
+    let dieses = octets[rang + 1..].iter().take_while(|c| **c == '#').count();
+
+    (octets.get(rang + 1 + dieses) == Some(&'"')).then_some(dieses)
+}
+
+/// Longueur d'un caractère littéral ouvrant au rang donné, quote fermante comprise, ou
+/// `None` si la quote est en fait celle d'une durée de vie — `&'a str`.
+fn char_literal_at(octets: &[char], rang: usize) -> Option<usize> {
+    let echappe = octets.get(rang + 1) == Some(&'\\');
+    let fin = if echappe { rang + 3 } else { rang + 2 };
+
+    (octets.get(fin) == Some(&'\'')).then_some(fin - rang)
 }
 
 /// Reconnaît `mod nom`, sous n'importe laquelle de ses visibilités, et rend ce qui
@@ -242,6 +415,125 @@ pub mod refresh_token {
     pub struct Model { pub id: Uuid }
 }
 "#;
+
+    /// Le défaut que le module promet de ne pas avoir : une accolade qui n'ouvre rien.
+    ///
+    /// `format!("{{")` est du texte, pas un bloc ; la compter décale la profondeur et
+    /// referme le module courant une entité trop tôt.
+    const BRACE_IN_A_STRING: &str = r#"
+pub mod user {
+    #[sea_orm(table_name = "users")]
+    pub struct Model { pub id: Uuid }
+
+    impl Model {
+        /// Une accolade ouvrante en prose, que rien ne referme : `{`.
+        pub fn label(&self) -> String {
+            format!("{{")
+        }
+    }
+}
+
+pub mod refresh_token {
+    #[sea_orm(table_name = "refresh_tokens")]
+    pub struct Model { pub id: Uuid }
+}
+"#;
+
+    /// Une entité et un module mis au rebut en commentaire de bloc, comme on le fait en
+    /// retouchant un modèle à la main.
+    const COMMENTED_OUT: &str = r#"
+/*
+pub mod ancien {
+    #[sea_orm(table_name = "anciennes_tables")]
+    pub struct Model { pub id: Uuid }
+}
+*/
+
+pub mod user {
+    // #[sea_orm(table_name = "commentee")]
+    #[sea_orm(table_name = "users")]
+    pub struct Model { pub id: Uuid }
+}
+"#;
+
+    #[test]
+    fn a_brace_inside_a_string_does_not_close_the_module() {
+        let root = project(&[("auth", BRACE_IN_A_STRING)]);
+        let found = scan(root.path());
+
+        let jeton = find(&found, "refresh_tokens").expect("les deux entités sont relevées");
+        assert_eq!(
+            jeton.module_path, "crate::auth::model::refresh_token",
+            "l'accolade d'une chaîne a refermé le module trop tôt : {found:?}"
+        );
+    }
+
+    #[test]
+    fn an_entity_commented_out_is_not_inventoried() {
+        let root = project(&[("auth", COMMENTED_OUT)]);
+        let found = scan(root.path());
+
+        assert_eq!(
+            tables(&found),
+            vec!["users".to_string()],
+            "une entité en commentaire a été relevée : {found:?}"
+        );
+        assert_eq!(
+            found[0].module_path, "crate::auth::model::user",
+            "le module en commentaire a été suivi : {found:?}"
+        );
+    }
+
+    /// Une chaîne brute ne s'échappe pas : ses accolades et ses guillemets sont du texte.
+    #[test]
+    fn a_raw_string_is_read_as_text() {
+        let source = r###"
+pub mod user {
+    pub const REQUETE: &str = r#"select "{" from t"#;
+    #[sea_orm(table_name = "users")]
+    pub struct Model { pub id: Uuid }
+}
+
+pub mod session {
+    #[sea_orm(table_name = "sessions")]
+    pub struct Model { pub id: Uuid }
+}
+"###;
+        let root = project(&[("auth", source)]);
+        let found = scan(root.path());
+
+        let session = find(&found, "sessions").expect("les deux entités sont relevées");
+        assert_eq!(
+            session.module_path, "crate::auth::model::session",
+            "la chaîne brute a déréglé la profondeur : {found:?}"
+        );
+    }
+
+    /// Un caractère littéral peut porter une accolade, et sa quote ne doit pas être prise
+    /// pour l'ouverture d'une chaîne — une durée de vie en porte une aussi.
+    #[test]
+    fn a_char_literal_and_a_lifetime_are_not_strings() {
+        let source = r#"
+pub mod user {
+    pub fn ouvre<'a>(t: &'a str) -> bool { t.starts_with('{') }
+    #[sea_orm(table_name = "users")]
+    pub struct Model { pub id: Uuid }
+}
+
+pub mod session {
+    #[sea_orm(table_name = "sessions")]
+    pub struct Model { pub id: Uuid }
+}
+"#;
+        let root = project(&[("auth", source)]);
+        let found = scan(root.path());
+
+        let session = find(&found, "sessions").expect("les deux entités sont relevées");
+        assert_eq!(
+            session.module_path, "crate::auth::model::session",
+            "l'accolade d'un caractère littéral a été comptée : {found:?}"
+        );
+    }
 
     #[test]
     fn a_flat_feature_yields_one_entity_at_its_module_root() {
