@@ -391,10 +391,13 @@ mod tests {
         };
         assert!(fix && force);
 
-        assert!(
-            Cli::try_parse_from(["rbs", "doctor", "--force"]).is_err(),
-            "`--force` seul doit être refusé : rien n'écrirait"
-        );
+        // Le motif du refus est asserté, et pas seulement le refus : sans lui, une faute
+        // de frappe dans `doctor` ferait passer le test pour la mauvaise raison.
+        let refus = Cli::try_parse_from(["rbs", "doctor", "--force"])
+            .expect_err("`--force` seul doit être refusé : rien n'écrirait");
+
+        assert_eq!(refus.kind(), clap::error::ErrorKind::MissingRequiredArgument);
+        assert!(refus.to_string().contains("--fix"), "{refus}");
     }
 
     /// `prompts.rs` est le seul module qui pose des questions, et `rbs new` la seule
