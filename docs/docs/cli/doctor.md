@@ -132,7 +132,7 @@ $ rbs doctor --json
     },
     {
       "name": "base",
-      "status": "echec",
+      "status": "erreur",
       "detail": "rien ne répond sur 127.0.0.1:5499",
       "remede": "lancez `docker compose up -d` à la racine du projet, ou corrigez l'URL du .env"
     }
@@ -140,7 +140,7 @@ $ rbs doctor --json
 }
 ```
 
-`status` is `ok`, `avertissement` or `echec` — the three states the text rendering draws as
+`status` is `ok`, `avertissement` or `erreur` — the three states the text rendering draws as
 `✓`, `!` and `✗`. `remede` is present only on the checks that carry one. `sain` is false as
 soon as one check failed, which is the same condition as exit code 1.
 

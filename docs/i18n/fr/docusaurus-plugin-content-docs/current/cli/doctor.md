@@ -136,7 +136,7 @@ $ rbs doctor --json
     },
     {
       "name": "base",
-      "status": "echec",
+      "status": "erreur",
       "detail": "rien ne répond sur 127.0.0.1:5499",
       "remede": "lancez `docker compose up -d` à la racine du projet, ou corrigez l'URL du .env"
     }
@@ -144,7 +144,7 @@ $ rbs doctor --json
 }
 ```
 
-`status` vaut `ok`, `avertissement` ou `echec` — les trois états que le rendu texte dessine
+`status` vaut `ok`, `avertissement` ou `erreur` — les trois états que le rendu texte dessine
 `✓`, `!` et `✗`. `remede` n'est présent que sur les contrôles qui en portent un. `sain` est
 faux dès qu'un contrôle a échoué, soit la condition même du code de sortie 1.
 

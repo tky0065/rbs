@@ -75,7 +75,7 @@ mod tests {
             .map(|check| check["status"].as_str().expect("un statut textuel"))
             .collect();
 
-        assert_eq!(statuts, vec!["ok", "avertissement", "echec"]);
+        assert_eq!(statuts, vec!["ok", "avertissement", "erreur"]);
     }
 
     /// Le nom et le détail sont ce qui permet de savoir *quel* contrôle a échoué.

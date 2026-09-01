@@ -121,7 +121,7 @@ fn the_json_report_is_the_only_thing_on_stdout() {
         .iter()
         .find(|check| check["name"] == "base")
         .expect("le contrôle base figure au rapport");
-    assert_eq!(base["status"], "echec", "{stdout}");
+    assert_eq!(base["status"], "erreur", "{stdout}");
     assert!(base["remede"].is_string(), "{stdout}");
 
     // Ni glyphe du rendu texte, ni séquence ANSI : ce sont elles qui feraient échouer

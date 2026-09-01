@@ -27,9 +27,10 @@ use crate::metadata;
 
 /// Verdict d'un contrôle.
 ///
-/// Les noms rendus en JSON sont ceux du dépôt, en ASCII : `ok` est déjà celui du
-/// constructeur `Check::ok`, et les deux autres ceux des variantes ci-dessous. Un
-/// troisième vocabulaire serait un de plus à tenir à jour.
+/// Les noms rendus en JSON sont en ASCII, et sont ceux qu'un script lit : `ok`,
+/// `avertissement`, `erreur`. Le dernier ne reprend pas le nom de sa variante — un échec
+/// de contrôle *est* une erreur du point de vue de qui exploite le document, et c'est le
+/// mot que porte le contrat publié.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "lowercase")]
 pub(crate) enum State {
@@ -39,6 +40,7 @@ pub(crate) enum State {
     /// Ce qui mérite d'être su sans empêcher le projet de fonctionner.
     Avertissement,
     /// Ce qui empêche le projet de fonctionner.
+    #[serde(rename = "erreur")]
     Echec,
 }
 
