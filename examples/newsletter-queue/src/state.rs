@@ -6,8 +6,6 @@ use sea_orm::DatabaseConnection;
 pub struct AppState {
     core: CoreState,
     // <rbs:state_champs>
-    // Le transport n'a pas encore de lecteur : ce sont les handlers du projet qui en seront.
-    #[allow(dead_code)]
     pub mail: crate::mail::Mailer,
     // </rbs:state_champs>
 }

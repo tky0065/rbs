@@ -13,3 +13,14 @@ pub mod template;
 mod tests;
 
 pub use service::Mailer;
+
+use crate::state::AppState;
+
+// L'accesseur vit ici et non dans `state.rs` : il arrive avec la feature, et repart
+// avec elle.
+impl AppState {
+    /// Le transport partagé, tel qu'un handler le lit depuis l'état.
+    pub fn mail(&self) -> &Mailer {
+        &self.mail
+    }
+}
