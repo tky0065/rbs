@@ -72,6 +72,13 @@ dépréciation.
 - L'ancre `features` maintient son bloc trié au lieu d'empiler dans l'ordre d'arrivée : un
   projet dont la CI lance `cargo fmt --check` n'échoue plus sur une ligne qu'il n'a pas
   écrite.
+- Les modules de feature engendrés ne portent plus de `#![allow(dead_code)]` sur le module
+  entier. Un projet engendré aujourd'hui a un `src/lib.rs`, et un item public d'un module
+  public reste joignable de l'extérieur du crate : la permission ne masquait plus qu'un
+  appel oublié.
+- Le courrielleur et le stockage d'objets s'atteignent par `state.mail()` et
+  `state.storage()`, comme le cache par `state.cache()`. Leur champ abandonne le
+  `#[allow(dead_code)]` qui tenait lieu d'accesseur.
 
 ### Corrigé
 
