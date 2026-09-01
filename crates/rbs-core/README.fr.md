@@ -3,6 +3,8 @@
 Le runtime partagé des projets engendrés par [rbs](https://github.com/tky0065/rbs), un cadre
 de travail Rust pour les API web bâti sur Axum et SeaORM.
 
+*[English version](README.md).*
+
 Cette crate porte ce qui n'a aucune raison de différer d'une API à l'autre. Tout ce qu'un
 développeur voudra lire ou modifier est engendré dans ses propres sources par la commande
 `rbs`, et non caché ici.

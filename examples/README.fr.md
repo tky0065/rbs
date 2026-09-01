@@ -4,6 +4,8 @@ Ces projets sont la source de chaque bloc de code de la documentation. Docusauru
 pas le code qu'il affiche ; la compensation est que rien n'y est écrit à la main : le site
 lit ces fichiers, et la CI les compile.
 
+*[English version](README.md).*
+
 | Projet | Ce qu'il montre |
 |---|---|
 | `hello-crud` | Un projet créé par `rbs new`, avec une feature CRUD engendrée par `rbs generate crud`. |
@@ -128,9 +130,8 @@ l'exemple — aucune commande ne câble un garde sur une route que vous avez eng
   avec un `user` → 403.
 
 `file-drop` en porte neuf de plus, et elles sont tout l'intérêt de l'exemple — les trois
-fragments livrent une brique et aucune route, et chacun le dit en commentaire. Retirer les
-trois `#![allow(dead_code)]` est ce qui fait de `clippy -D warnings` la preuve du câblage :
-un appel oublié ne compile plus.
+fragments livrent une brique et aucune route, et une brique que rien n'appelle ne prouve
+rien du câblage.
 
 - `src/uploads/service.rs` : le service orchestre les trois briques. Le stockage reçoit le
   contenu sous `uploads/{id}` ; le courriel part dans sa propre tâche, en rendant
@@ -143,9 +144,10 @@ un appel oublié ne compile plus.
 - `src/uploads/repository.rs` : `page` se détache de `list`, pour qu'un appelant qui tient
   déjà le compte ne refasse pas le `COUNT(*)`.
 - `src/uploads/mod.rs` : la route de contenu est montée.
-- `src/{cache,mail,storage}/mod.rs` : l'`allow(dead_code)` posé sur le module entier a
-  disparu. `src/mail/service.rs` et `src/cache/mod.rs` en gardent un, ciblé, sur
-  `send_detached` et `invalidate`, qu'aucun projet n'est tenu d'appeler.
+- `src/{cache,storage}/mod.rs` et `src/mail/service.rs` : `src/storage/mod.rs` abandonne
+  l'`allow(dead_code)` que le fragment pose sur le trait `Storage`, dont ce projet appelle
+  les cinq méthodes. `src/cache/mod.rs` et `src/mail/service.rs` en gardent un, ciblé, sur
+  `invalidate` et `send_detached`, qu'aucun projet n'est tenu d'appeler.
 - `templates/mail/depot.html` : une seconde template, ajoutée à la main — celle que le
   fragment livre dit « votre compte est ouvert », ce qu'aucun dépôt de fichier ne réutilise.
 
@@ -174,9 +176,9 @@ file.
   handler qui répond `202` (les lettres sont enfilées, pas envoyées), la route montée avant
   `/subscribers/{id}` pour que `broadcast` ne soit pas lu comme un id, et le chemin déclaré
   à OpenAPI.
-- `src/{jobs,mail}/mod.rs` : l'`allow(dead_code)` posé sur le module entier a disparu.
-  `send_detached` en garde un, ciblé, dans `src/mail/service.rs` : la fonction est
-  conservée, un message dont la perte ne coûte rien n'ayant pas besoin d'une ligne en base.
+- `src/mail/service.rs` : `send_detached` garde un `allow(dead_code)` ciblé — la fonction
+  est conservée, un message dont la perte ne coûte rien n'ayant pas besoin d'une ligne en
+  base.
 - `src/seeds/subscribers.rs` : quatre abonnés, dont un qui n'a jamais confirmé — sans eux,
   le filtre de `confirmed` ne se verrait pas.
 - `templates/mail/newsletter.html` : la template que le fragment livre annonce un compte

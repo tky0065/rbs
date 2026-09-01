@@ -3,6 +3,8 @@
 La commande `rbs` : elle engendre et entretient des projets d'API web en Rust, bâtis sur Axum
 et SeaORM. Elle fait partie de [rbs](https://github.com/tky0065/rbs).
 
+*[English version](README.md).*
+
 ## Installation
 
 ```bash
