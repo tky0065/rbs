@@ -43,7 +43,12 @@ rand = "0.10.2"
 # Aucun pilote ici : `rbs-core` les expose en features, et le projet engendré choisit
 # le sien. Un pilote épinglé au workspace ferait compiler PostgreSQL à un projet MySQL,
 # les features de Cargo s'unifiant sur toute la dépendance.
-sea-orm = { version = "2.0.2", features = ["runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] }
+#
+# Ni `with-chrono` ni `with-uuid` : `rbs-core` ne nomme aucun de ces deux types, et cargo
+# inline les features du workspace dans le manifeste publié — les y laisser les imposerait
+# à tout consommateur de la crate. Le projet engendré les déclare pour son propre compte,
+# lui qui en a besoin.
+sea-orm = { version = "2.0.2", features = ["runtime-tokio-rustls", "macros"] }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha2 = "0.11.0"
