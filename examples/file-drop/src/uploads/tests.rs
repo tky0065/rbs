@@ -257,10 +257,9 @@ async fn the_filter_narrows_the_list() {
 #[ignore = "joint la base du projet"]
 async fn an_unknown_sort_column_returns_400() {
     let api = application().await;
-    let chemin = format!("/uploads/filter");
     let critere = json!({ "sort": ["-inconnue"] });
 
-    let (status, body) = call(&api, request("POST", &chemin, critere)).await;
+    let (status, body) = call(&api, request("POST", "/uploads/filter", critere)).await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
     assert_eq!(body["status"], 400, "{body}");

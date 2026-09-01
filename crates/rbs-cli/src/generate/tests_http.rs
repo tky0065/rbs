@@ -385,6 +385,12 @@ mod tests {
             rendered.contains("async fn an_unknown_sort_column_returns_400()"),
             "le refus d'une colonne de tri inconnue n'est pas éprouvé :\n{rendered}"
         );
+        // `clippy::useless_format` refuse un `format!` sans interpolation, et le projet
+        // engendré compile sous `-D warnings`.
+        assert!(
+            !rendered.contains(r#"format!("/articles/filter")"#),
+            "un chemin constant s'écrit sans `format!` :\n{rendered}"
+        );
     }
 
     /// Sans champ dont la valeur se rejoue, le scénario n'aurait pas de critère : une

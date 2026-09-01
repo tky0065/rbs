@@ -18,7 +18,7 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
 mod tests {
     use super::*;
     use crate::generate::feature::Feature;
-    use crate::generate::{bench, dto, entity, fields, repository};
+    use crate::generate::{bench, dto, entity, fields, filter, repository};
 
     fn service(name: &str, fields: &str) -> String {
         let fields = fields::parse(fields).expect("les champs du test doivent être valides");
@@ -180,6 +180,10 @@ mod tests {
                 (
                     "model.rs",
                     &entity::render(&feature).expect("entité rendue"),
+                ),
+                (
+                    "filter.rs",
+                    &filter::render(&feature).expect("filtre rendu"),
                 ),
                 ("dto.rs", &dto::render(&feature).expect("DTO rendus")),
                 (
