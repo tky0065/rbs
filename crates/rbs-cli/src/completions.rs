@@ -20,8 +20,8 @@ pub(crate) fn render(shell: Shell, buffer: &mut impl io::Write) {
 ///
 /// Le catalogue des fragments ne descend pas dans le parseur réel : posé là, il ferait
 /// refuser `rbs add ma-feature --template-dir ./mes-templates`, dont le nom ne vient
-/// justement pas du binaire. Proposer les neuf noms embarqués reste juste, puisque
-/// c'est ce qu'un shell ne peut pas deviner ; les refuser ne le serait pas.
+/// justement pas du binaire. Proposer les noms embarqués reste juste, puisque c'est ce
+/// qu'un shell ne peut pas deviner ; les refuser ne le serait pas.
 fn command() -> clap::Command {
     let fragments = PossibleValuesParser::new(crate::templates::embedded_names());
 
@@ -57,16 +57,20 @@ mod tests {
     }
 
     /// Compléter `rbs add ` sans proposer de feature laisserait l'utilisateur retaper de
-    /// mémoire les neuf noms que le binaire est seul à connaître.
+    /// mémoire les noms que le binaire est seul à connaître.
     ///
     /// L'assertion porte sur la `Command` et non sur les scripts : des quatre
     /// générateurs, seuls ceux de bash et de zsh écrivent les valeurs d'un argument
-    /// positionnel — chercher les neuf noms dans un script fish se satisferait de la
+    /// positionnel — chercher ces noms dans un script fish se satisferait de la
     /// description d'`add`, qui les énumère déjà en prose.
     #[test]
     fn the_command_rendered_proposes_the_embedded_fragments_after_add() {
         let fragments = crate::templates::embedded_names();
-        assert_eq!(fragments.len(), 9, "le catalogue embarqué a changé");
+        assert_eq!(fragments.len(), 10, "le catalogue embarqué a changé");
+        assert!(
+            fragments.contains(&"observability".to_string()),
+            "{fragments:?}"
+        );
 
         let proposees: Vec<String> = command()
             .find_subcommand_mut("add")

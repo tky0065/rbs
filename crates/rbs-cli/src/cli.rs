@@ -396,7 +396,10 @@ mod tests {
         let refus = Cli::try_parse_from(["rbs", "doctor", "--force"])
             .expect_err("`--force` seul doit être refusé : rien n'écrirait");
 
-        assert_eq!(refus.kind(), clap::error::ErrorKind::MissingRequiredArgument);
+        assert_eq!(
+            refus.kind(),
+            clap::error::ErrorKind::MissingRequiredArgument
+        );
         assert!(refus.to_string().contains("--fix"), "{refus}");
     }
 

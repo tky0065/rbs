@@ -1,6 +1,6 @@
 # newsletter-queue — mode d'emploi pour agents
 
-<!-- rbs:guide 1.1.0 -->
+<!-- rbs:guide 1.2.0 -->
 ## Le CLI d'abord
 
 Ce projet est engendré par rbs. **Toute fonctionnalité que rbs couvre passe par le CLI**,
@@ -105,7 +105,7 @@ l'enchaîne.
 <!-- /rbs:guide -->
 
 <!-- rbs:inventory -->
-- rbs 1.1.0 · base postgres
+- rbs 1.2.0 · base postgres
 - Fragments installés : jobs, mail
 - Entités engendrées : subscribers
 - Ancres du projet : features (src/lib.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), health_probes (src/health/controller.rs)
