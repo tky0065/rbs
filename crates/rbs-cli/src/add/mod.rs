@@ -1220,7 +1220,7 @@ mod tests {
             ),
             (
                 "storage",
-                r#"rbs_core::health::Probe::new("storage", crate::storage::probe(&state.storage)),"#,
+                r#"rbs_core::health::Probe::new("storage", crate::storage::probe(state.storage())),"#,
             ),
         ] {
             let (_parent, root) = project();

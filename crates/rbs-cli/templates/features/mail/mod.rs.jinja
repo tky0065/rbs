@@ -5,11 +5,6 @@
 //!
 //! Aucune route n'est montée ici. Le module est la brique ; l'usage appartient au projet.
 
-// Rien dans le projet n'appelle encore ces fonctions : leurs appelants sont les handlers
-// à écrire. Sans cette permission, `clippy -D warnings` refuserait un module dont tout
-// est un point d'extension.
-#![allow(dead_code)]
-
 pub mod config;
 mod service;
 pub mod template;
@@ -18,3 +13,14 @@ pub mod template;
 mod tests;
 
 pub use service::Mailer;
+
+use crate::state::AppState;
+
+// L'accesseur vit ici et non dans `state.rs` : il arrive avec la feature, et repart
+// avec elle.
+impl AppState {
+    /// Le transport partagé, tel qu'un handler le lit depuis l'état.
+    pub fn mail(&self) -> &Mailer {
+        &self.mail
+    }
+}

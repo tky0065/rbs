@@ -23,10 +23,7 @@ content = "pub mod storage;"
 
 [[anchors]]
 anchor  = "state_champs"
-content = """
-#[allow(dead_code)]
-pub storage: std::sync::Arc<dyn crate::storage::Storage>,
-"""
+content = "pub storage: std::sync::Arc<dyn crate::storage::Storage>,"
 
 [[anchors]]
 anchor  = "state_init"
@@ -36,7 +33,7 @@ content = "storage: crate::storage::from_config()?,"
 # garderait le pod en rotation.
 [[anchors]]
 anchor  = "health_probes"
-content = 'rbs_core::health::Probe::new("storage", crate::storage::probe(&state.storage)),'
+content = 'rbs_core::health::Probe::new("storage", crate::storage::probe(state.storage())),'
 
 [[dependencies]]
 name    = "async-trait"

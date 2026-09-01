@@ -33,11 +33,7 @@ content = "pub mod mail;"
 
 [[anchors]]
 anchor  = "state_champs"
-content = """
-// Le transport n'a pas encore de lecteur : ce sont les handlers du projet qui en seront.
-#[allow(dead_code)]
-pub mail: crate::mail::Mailer,
-"""
+content = "pub mail: crate::mail::Mailer,"
 
 [[anchors]]
 anchor  = "state_init"

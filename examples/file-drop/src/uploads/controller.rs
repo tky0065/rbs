@@ -74,7 +74,7 @@ pub async fn create(
     State(state): State<AppState>,
     ValidatedJson(input): ValidatedJson<CreateUpload>,
 ) -> Result<(StatusCode, Json<UploadResponse>)> {
-    let upload = service::create(state.core().db(), state.cache(), &state.mail, input).await?;
+    let upload = service::create(state.core().db(), state.cache(), state.mail(), input).await?;
 
     Ok((StatusCode::CREATED, Json(upload)))
 }
@@ -129,7 +129,13 @@ pub async fn update(
     )
 )]
 pub async fn delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<StatusCode> {
-    service::delete(state.core().db(), state.cache(), state.storage.as_ref(), id).await?;
+    service::delete(
+        state.core().db(),
+        state.cache(),
+        state.storage().as_ref(),
+        id,
+    )
+    .await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -155,7 +161,7 @@ pub async fn put_content(
 ) -> Result<StatusCode> {
     service::put_content(
         state.core().db(),
-        state.storage.as_ref(),
+        state.storage().as_ref(),
         id,
         content.to_vec(),
     )
@@ -179,7 +185,7 @@ pub async fn get_content(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
-    let content = service::get_content(state.storage.as_ref(), id).await?;
+    let content = service::get_content(state.storage().as_ref(), id).await?;
 
     Ok(([("content-type", "application/octet-stream")], content))
 }
@@ -199,7 +205,7 @@ pub async fn head_content(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode> {
-    if service::has_content(state.storage.as_ref(), id).await? {
+    if service::has_content(state.storage().as_ref(), id).await? {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(rbs_core::Error::NotFound("contenu"))

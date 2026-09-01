@@ -34,7 +34,7 @@ impl Job for SendNewsletter {
             .ok_or_else(|| anyhow::anyhow!("l'abonné {} n'existe plus", self.subscriber))?;
 
         state
-            .mail
+            .mail()
             .send_template(
                 &subscriber.email,
                 &self.subject,

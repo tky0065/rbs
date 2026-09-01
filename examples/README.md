@@ -128,9 +128,7 @@ command wires a guard onto a route you generated:
   a `user` → 403.
 
 `file-drop` carries nine more, and they are the point of the example — the three fragments
-ship a brick and no route, and each says so in a comment. Removing the three
-`#![allow(dead_code)]` is what turns `clippy -D warnings` into the proof of the wiring: a
-forgotten call no longer compiles.
+ship a brick and no route, and a brick nothing calls proves nothing about the wiring.
 
 - `src/uploads/service.rs`: the service orchestrates the three bricks. Storage receives
   the content under `uploads/{id}`; the mail goes out in its own task, rendering
@@ -143,9 +141,10 @@ forgotten call no longer compiles.
 - `src/uploads/repository.rs`: `page` splits off from `list`, so a caller who already
   holds the count does not redo the `COUNT(*)`.
 - `src/uploads/mod.rs`: the content route is mounted.
-- `src/{cache,mail,storage}/mod.rs`: the module-wide `allow(dead_code)` is gone.
-  `src/mail/service.rs` and `src/cache/mod.rs` keep a targeted one on `send_detached` and
-  `invalidate`, which no project is obliged to call.
+- `src/{cache,storage}/mod.rs` and `src/mail/service.rs`: `src/storage/mod.rs` drops the
+  `allow(dead_code)` the fragment puts on the `Storage` trait, whose five methods this
+  project calls. `src/cache/mod.rs` and `src/mail/service.rs` keep a targeted one on
+  `invalidate` and `send_detached`, which no project is obliged to call.
 - `templates/mail/depot.html`: a second template, added by hand — the one the fragment
   ships says "your account is open", which no file upload can reuse.
 
@@ -173,9 +172,9 @@ the queue.
   the handler answering `202` (the letters are enqueued, not sent), the route mounted
   before `/subscribers/{id}` so that `broadcast` is not read as an id, and the path
   declared to OpenAPI.
-- `src/{jobs,mail}/mod.rs`: the module-wide `allow(dead_code)` is gone. `send_detached`
-  keeps a targeted one in `src/mail/service.rs`: the function is kept, a message whose
-  loss costs nothing having no need of a row in the database.
+- `src/mail/service.rs`: `send_detached` keeps a targeted `allow(dead_code)` — the
+  function is kept, a message whose loss costs nothing having no need of a row in the
+  database.
 - `src/seeds/subscribers.rs`: four subscribers, one of whom never confirmed — without them
   the filter in `confirmed` would not be visible.
 - `templates/mail/newsletter.html`: the template the fragment ships announces an opened
