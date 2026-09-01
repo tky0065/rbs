@@ -8,14 +8,16 @@
 // langue à l'autre est ce que la traduction ne touche pas : la charpente des titres, la
 // langue et la méta des blocs de code, le type des encarts, la cible des liens relatifs.
 //
-// Deux jeux de fichiers passent sous la même comparaison :
+// Trois jeux de fichiers passent sous la même comparaison :
 //
 //   · les pages du site, « docs/<chemin>.md » contre « i18n/fr/…/current/<chemin>.md » ;
-//   · les fichiers racine du dépôt, « X.md » contre « X.fr.md ».
+//   · les fichiers racine du dépôt, « X.md » contre « X.fr.md » ;
+//   · les « README » hors de la racine, sous la même convention « X.fr.md ».
 //
-// Le dernier commit n'est comparé que sur les pages du site. À la racine, les deux
-// moitiés d'une paire n'ont pas toujours été écrites ensemble — « CODE_OF_CONDUCT.fr.md »
-// est né bien après son homologue — et cette histoire ne se réécrit pas.
+// Le dernier commit n'est comparé que sur les pages du site. Ailleurs, les deux moitiés
+// d'une paire n'ont pas toujours été écrites ensemble — « CODE_OF_CONDUCT.fr.md » est né
+// bien après son homologue, et les trois « README » hors racine après le leur — et cette
+// histoire ne se réécrit pas.
 
 import {execFileSync} from 'node:child_process';
 import fs from 'node:fs';
@@ -31,7 +33,20 @@ const RACINE = path.join(DOCS, '..');
 // d'homologue anglais et n'en attendent pas. Tout autre « .md » de la racine s'adresse à
 // qui installe rbs, et la liste étant close, un fichier neuf y est réclamé dans les deux
 // langues plutôt que laissé à l'appréciation d'une revue.
-const RACINE_MONOLINGUE = new Set(['CLAUDE.md', 'ROADMAP.md', 'TODO.md']);
+const RACINE_MONOLINGUE = new Set(['CLAUDE.md', 'IMPROVE.md', 'ROADMAP.md', 'TODO.md']);
+
+// Les « README » hors de la racine : celui d'« examples/ » et celui de chaque crate
+// publiée, que crates.io affiche. La liste est close, et c'est le raisonnement de
+// RACINE_MONOLINGUE pris dans l'autre sens : le balayage ne réclame les deux langues que
+// là où tout « .md » s'adresse à qui lit rbs, ce qui vaut de la racine et non d'ailleurs —
+// « examples/*/AGENTS.md » est tenu octet à octet tel que le CLI l'écrit, et
+// « crates/rbs-cli/notes/ » archive des notes de version déjà publiées. Un README neuf
+// s'inscrit donc ici à la main.
+const PAIRES_HORS_RACINE = [
+  'examples/README.md',
+  'crates/rbs-cli/README.md',
+  'crates/rbs-core/README.md',
+];
 
 function pages(racine, prefixe = '') {
   return fs
@@ -186,15 +201,16 @@ for (const nom of racineTous) {
   else ecarts.push(`${nom} : aucune version française`);
 }
 
-let liensRacine = 0;
+/// Une paire « X.md » / « X.fr.md », nommée par son chemin depuis la racine du dépôt. Les
+/// liens relatifs s'y résolvent depuis le répertoire du fichier qui les porte, ce qui vaut
+/// pour un fichier racine comme pour le README d'une crate.
+function comparerPaire(cheminEn, cheminFr) {
+  const ecarts = [];
+  const en = profil(fs.readFileSync(path.join(RACINE, cheminEn), 'utf8'));
+  const fr = profil(fs.readFileSync(path.join(RACINE, cheminFr), 'utf8'));
 
-for (const [nomEn, nomFr] of pairesRacine) {
-  const en = profil(fs.readFileSync(path.join(RACINE, nomEn), 'utf8'));
-  const fr = profil(fs.readFileSync(path.join(RACINE, nomFr), 'utf8'));
-  liensRacine += en.liens.length + fr.liens.length;
-
-  for (const [nom, page] of [[nomEn, en], [nomFr, fr]]) {
-    if (page.cloture !== null) ecarts.push(`${nom} : un bloc de code n'est pas refermé`);
+  for (const [chemin, page] of [[cheminEn, en], [cheminFr, fr]]) {
+    if (page.cloture !== null) ecarts.push(`${chemin} : un bloc de code n'est pas refermé`);
   }
 
   const differences = [
@@ -203,25 +219,57 @@ for (const [nomEn, nomFr] of pairesRacine) {
     ...comparer('encart', en.encarts, fr.encarts),
     ...comparer('lien relatif', en.liens.map(sansLangue), fr.liens.map(sansLangue)),
   ];
-  ecarts.push(...differences.map((difference) => `${nomEn} ↔ ${nomFr} : ${difference}`));
+  ecarts.push(...differences.map((difference) => `${cheminEn} ↔ ${cheminFr} : ${difference}`));
 
   // Le nom commun rapproche « CODE_OF_CONDUCT.md » et « CODE_OF_CONDUCT.fr.md », donc la
   // comparaison ci-dessus ne voit pas un fichier français qui renverrait vers l'anglais.
   // Seule exception, l'autre moitié de sa propre paire : c'est le sélecteur de langue.
+  const dossierFr = path.dirname(path.join(RACINE, cheminFr));
   for (const lien of fr.liens) {
-    if (lien === nomEn || lien.endsWith('.fr.md')) continue;
-    if (racineTous.includes(lien.replace(/\.md$/, '.fr.md'))) {
-      ecarts.push(`${nomFr} : « ${lien} » renvoie vers la version anglaise`);
+    if (path.resolve(dossierFr, lien) === path.join(RACINE, cheminEn)) continue;
+    if (lien.endsWith('.fr.md')) continue;
+    if (fs.existsSync(path.resolve(dossierFr, lien.replace(/\.md$/, '.fr.md')))) {
+      ecarts.push(`${cheminFr} : « ${lien} » renvoie vers la version anglaise`);
     }
   }
 
-  for (const [nom, page] of [[nomEn, en], [nomFr, fr]]) {
+  for (const [chemin, page] of [[cheminEn, en], [cheminFr, fr]]) {
+    const dossier = path.dirname(path.join(RACINE, chemin));
     for (const lien of page.liens) {
-      if (!fs.existsSync(path.resolve(RACINE, lien))) {
-        ecarts.push(`${nom} : « ${lien} » ne résout vers aucun fichier`);
+      if (!fs.existsSync(path.resolve(dossier, lien))) {
+        ecarts.push(`${chemin} : « ${lien} » ne résout vers aucun fichier`);
       }
     }
   }
+
+  return {ecarts, liens: en.liens.length + fr.liens.length};
+}
+
+let liensRacine = 0;
+
+for (const [nomEn, nomFr] of pairesRacine) {
+  const paire = comparerPaire(nomEn, nomFr);
+  liensRacine += paire.liens;
+  ecarts.push(...paire.ecarts);
+}
+
+let liensHorsRacine = 0;
+
+for (const cheminEn of PAIRES_HORS_RACINE) {
+  const cheminFr = cheminEn.replace(/\.md$/, '.fr.md');
+  const manquants = [cheminEn, cheminFr].filter(
+    (chemin) => !fs.existsSync(path.join(RACINE, chemin)),
+  );
+  if (manquants.length > 0) {
+    for (const chemin of manquants) {
+      ecarts.push(`${chemin} : annoncé comme moitié d'une paire, ce fichier n'existe pas`);
+    }
+    continue;
+  }
+
+  const paire = comparerPaire(cheminEn, cheminFr);
+  liensHorsRacine += paire.liens;
+  ecarts.push(...paire.ecarts);
 }
 
 console.log(`${paires.length} paires de pages, ${memeCommit}/${paires.length} au même dernier commit`);
@@ -231,6 +279,10 @@ const totalLiens = paires.reduce(
 );
 console.log(`${totalLiens} liens relatifs en anglais, autant attendus en français`);
 console.log(`${pairesRacine.length} paires de fichiers racine, ${liensRacine} liens relatifs résolus`);
+console.log(
+  `${PAIRES_HORS_RACINE.length} paires de README hors racine, ` +
+    `${liensHorsRacine} liens relatifs résolus`,
+);
 
 if (ecarts.length === 0) {
   console.log('0 écart structurel');
