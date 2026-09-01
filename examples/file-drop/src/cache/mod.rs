@@ -138,6 +138,19 @@ impl Cache {
     }
     // endregion: invalidate_prefix
 
+    /// Le serveur répond-il ? La sonde que `GET /health` interroge.
+    ///
+    /// Rend un booléen et non un `Result` : un contrôle de santé ne distingue pas les
+    /// raisons d'une panne, et le détail d'une erreur n'a rien à faire dans une réponse
+    /// souvent exposée sans authentification.
+    pub async fn ping(&self) -> bool {
+        let Ok(mut connection) = self.connection().await else {
+            return false;
+        };
+
+        connection.ping::<String>().await.is_ok()
+    }
+
     async fn connection(&self) -> Result<Connection> {
         Ok(self
             .pool

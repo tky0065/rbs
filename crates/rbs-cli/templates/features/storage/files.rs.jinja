@@ -63,4 +63,11 @@ impl Storage for FileStorage {
     async fn exists(&self, key: &str) -> Result<bool, StorageError> {
         fs::try_exists(self.path(key)?).await.map_err(unavailable)
     }
+
+    // La racine est créée au premier dépôt : son absence n'est pas une panne, et le
+    // contrôle porte sur la capacité à l'atteindre — un volume démonté, un droit retiré,
+    // un chemin disparu échouent tous ici.
+    async fn available(&self) -> bool {
+        fs::create_dir_all(&self.root).await.is_ok()
+    }
 }

@@ -1206,6 +1206,54 @@ mod tests {
             .unwrap_or_else(|| panic!("{} ne porte pas {}", anchor.file, anchor.name))
     }
 
+    /// Une dépendance installée doit être contrôlée : sans sa sonde, `GET /health`
+    /// répondrait `ok` sur un cache ou un bucket injoignable, et l'orchestrateur
+    /// garderait le pod en rotation.
+    #[test]
+    fn the_redis_and_storage_plans_land_their_probe_in_the_health_anchor() {
+        for (fragment, sonde) in [
+            (
+                "redis",
+                r#"rbs_core::health::Probe::new("cache", state.cache().ping()),"#,
+            ),
+            (
+                "storage",
+                r#"rbs_core::health::Probe::new("storage", crate::storage::probe(&state.storage)),"#,
+            ),
+        ] {
+            let (_parent, root) = project();
+
+            let planned = plan_for(&options(&root, fragment)).expect("le plan doit se calculer");
+
+            assert!(
+                anchor_body(&planned, &crate::anchors::HEALTH_PROBES).contains(sonde),
+                "{}",
+                projected(&planned, "src/health/controller.rs")
+            );
+        }
+    }
+
+    /// La file de `jobs` est une table de la base, et sonder un relais SMTP à chaque
+    /// contrôle coûterait cher pour un envoi que rien ne rend synchrone : ni l'un ni
+    /// l'autre n'a de sonde, et l'absence se teste comme la présence.
+    #[test]
+    fn the_jobs_and_mail_fragments_declare_no_probe() {
+        for fragment in ["jobs", "mail"] {
+            let (_parent, root) = project();
+
+            let planned = plan_for(&options(&root, fragment)).expect("le plan doit se calculer");
+
+            assert!(
+                !planned
+                    .plan
+                    .files()
+                    .iter()
+                    .any(|file| file.path == crate::anchors::HEALTH_PROBES.file),
+                "`{fragment}` a touché au contrôle de santé"
+            );
+        }
+    }
+
     /// Une couche se pose dans `layers`, jamais dans `routes` : montée parmi les routes,
     /// elle n'envelopperait rien.
     #[test]

@@ -1,5 +1,5 @@
 [feature]
-description = "stockage d'objets : un trait à quatre méthodes, deux backends — fichiers et S3"
+description = "stockage d'objets : un trait à cinq méthodes, deux backends — fichiers et S3"
 
 [[files]]
 source      = "mod.rs.jinja"
@@ -31,6 +31,12 @@ pub storage: std::sync::Arc<dyn crate::storage::Storage>,
 [[anchors]]
 anchor  = "state_init"
 content = "storage: crate::storage::from_config()?,"
+
+# Sans cette sonde, `/health` répondrait `ok` sur un bucket injoignable et l'orchestrateur
+# garderait le pod en rotation.
+[[anchors]]
+anchor  = "health_probes"
+content = 'rbs_core::health::Probe::new("storage", crate::storage::probe(&state.storage)),'
 
 [[dependencies]]
 name    = "async-trait"

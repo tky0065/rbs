@@ -351,8 +351,9 @@ volumes:
 ```
 
 `docker compose up -d` starts it. The `# <rbs:services>` anchor is where [`rbs
-add`](./add.md) inserts the services `docker` brings, and it is one of the eleven anchors
-[`rbs doctor`](./doctor.md) checks — nine on a project with no compose to carry a tenth.
+add`](./add.md) inserts the services `docker` brings, and it is one of the twelve anchors
+[`rbs doctor`](./doctor.md) checks — eleven on a project with no compose to carry a
+twelfth.
 
 Four cases write nothing:
 

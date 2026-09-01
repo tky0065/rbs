@@ -5,7 +5,10 @@
 //! bien avec l'`AppState` d'un projet qu'avec un [`CoreState`](crate::state::CoreState)
 //! nu.
 
+use std::collections::BTreeMap;
 use std::future::Future;
+use std::pin::Pin;
+use std::task::Poll;
 use std::time::Duration;
 
 use axum::Router;
@@ -13,7 +16,7 @@ use axum::extract::State;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
-use sea_orm::{DbErr, RuntimeErr};
+use sea_orm::{DatabaseConnection, DbErr, RuntimeErr};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -27,7 +30,7 @@ use crate::state::HasCoreState;
 const PING_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Santé de l'application et de ses dépendances.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
 #[non_exhaustive]
 pub struct Health {
     /// Verdict d'ensemble.
@@ -49,13 +52,17 @@ pub enum Status {
 
 /// État de chaque dépendance contrôlée.
 ///
-/// Les contrôles sont imbriqués plutôt qu'à plat pour qu'une dépendance ajoutée plus
-/// tard — cache, file, stockage — n'oblige pas à toucher la racine du corps.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, ToSchema)]
+/// Les contrôles sont imbriqués sous `checks` plutôt qu'à la racine du corps, et les
+/// dépendances du projet s'y ajoutent à plat, à côté de `database` : une supervision qui
+/// lit `checks.database` ne change pas de chemin quand un cache est installé.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
 #[non_exhaustive]
 pub struct Checks {
     /// État de la base de données.
     pub database: Check,
+    /// État de chaque dépendance sondée par le projet, sous le nom qu'il lui a donné.
+    #[serde(flatten)]
+    pub extras: BTreeMap<String, Check>,
 }
 
 /// Résultat d'un contrôle de dépendance.
@@ -77,14 +84,104 @@ where
     Router::new().route("/health", get(handler::<S>))
 }
 
-/// Rend la santé de l'application, `503` dès qu'une dépendance manque à l'appel.
+/// Rend la santé de l'application, `503` dès que la base manque à l'appel.
+///
+/// N'interroge que la base : le squelette engendré délègue à [`report`], seul à savoir
+/// quelles dépendances le projet a installées.
 pub async fn handler<S>(State(state): State<S>) -> Response
 where
     S: HasCoreState,
 {
-    let (status, health) = verdict(bounded_ping(state.core().db().ping()).await);
+    report(state.core().db(), Vec::new()).await
+}
+
+/// Une dépendance à contrôler, sous le nom qu'elle portera dans le corps de la réponse.
+pub struct Probe<'a> {
+    name: &'static str,
+    check: Pin<Box<dyn Future<Output = bool> + Send + 'a>>,
+}
+
+impl<'a> Probe<'a> {
+    /// Nomme une dépendance et la façon de la joindre.
+    ///
+    /// Le futur rend `true` quand la dépendance répond. Ce qu'elle a répondu ne regarde
+    /// pas le contrôle de santé : une erreur applicative n'est pas une panne.
+    pub fn new<F>(name: &'static str, check: F) -> Self
+    where
+        F: Future<Output = bool> + Send + 'a,
+    {
+        Self {
+            name,
+            check: Box::pin(check),
+        }
+    }
+}
+
+impl std::fmt::Debug for Probe<'_> {
+    /// Le futur d'une sonde n'est pas inspectable : seul son nom l'est.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Probe").field("name", &self.name).finish()
+    }
+}
+
+/// Rend la santé de l'application, `503` dès qu'une dépendance manque à l'appel.
+///
+/// La base est toujours contrôlée ; `probes` ajoute les dépendances que le projet a
+/// installées, chacune bornée par le même délai.
+pub async fn report(db: &DatabaseConnection, probes: Vec<Probe<'_>>) -> Response {
+    let (ping, extras) = run_all(db.ping(), probes).await;
+    let (status, health) = verdict(ping, extras);
 
     (status, axum::Json(health)).into_response()
+}
+
+/// Mène le ping de la base et toutes les sondes de front, chacun borné séparément.
+///
+/// Un `join` écrit à la main plutôt qu'une dépendance à `futures` : le noyau n'a besoin
+/// que de cette seule combinaison, et la faire entrer ne vaut pas une crate de plus dans
+/// tout projet engendré. Les contrôles déjà rendus ne sont plus interrogés ; les autres
+/// sont repollés à chaque réveil, ce qui reste sans effet à cette échelle — un projet
+/// compte ses dépendances sur les doigts d'une main.
+async fn run_all<'a>(
+    ping: impl Future<Output = Result<(), DbErr>> + Send + 'a,
+    probes: Vec<Probe<'a>>,
+) -> (Result<(), DbErr>, BTreeMap<String, Check>) {
+    let mut ping = Box::pin(bounded_ping(ping));
+    let mut sondes: Vec<_> = probes
+        .into_iter()
+        .map(|probe| (probe.name, Some(Box::pin(bounded_probe(probe.check)))))
+        .collect();
+
+    let mut rendu = None;
+    let mut extras = BTreeMap::new();
+
+    std::future::poll_fn(|cx| {
+        if rendu.is_none()
+            && let Poll::Ready(resultat) = ping.as_mut().poll(cx)
+        {
+            rendu = Some(resultat);
+        }
+
+        for (name, sonde) in &mut sondes {
+            let Some(future) = sonde else { continue };
+            if let Poll::Ready(check) = future.as_mut().poll(cx) {
+                extras.insert((*name).to_owned(), check);
+                *sonde = None;
+            }
+        }
+
+        if rendu.is_some() && sondes.iter().all(|(_, sonde)| sonde.is_none()) {
+            Poll::Ready(())
+        } else {
+            Poll::Pending
+        }
+    })
+    .await;
+
+    (
+        rendu.expect("le ping est rendu quand la boucle s'achève"),
+        extras,
+    )
 }
 
 /// Borne le ping dans le temps.
@@ -106,36 +203,46 @@ where
         })
 }
 
+/// Borne une sonde dans le temps.
+///
+/// Une dépendance qui n'a pas répondu dans le délai est injoignable : l'expiration n'est
+/// pas un troisième cas, pour la même raison que sur le ping de la base.
+async fn bounded_probe(check: Pin<Box<dyn Future<Output = bool> + Send + '_>>) -> Check {
+    match tokio::time::timeout(PING_TIMEOUT, check).await {
+        Ok(true) => Check::Ok,
+        _ => Check::Unreachable,
+    }
+}
+
 /// Traduit le résultat du ping en verdict.
 ///
 /// Séparée du transport pour que la branche « base saine » reste couverte : sans base
 /// démarrée, seule la branche 503 est atteignable par une requête réelle.
-fn verdict(ping: Result<(), DbErr>) -> (StatusCode, Health) {
-    match ping {
-        Ok(()) => (
-            StatusCode::OK,
-            Health {
-                status: Status::Ok,
-                checks: Checks {
-                    database: Check::Ok,
-                },
-            },
-        ),
+fn verdict(ping: Result<(), DbErr>, extras: BTreeMap<String, Check>) -> (StatusCode, Health) {
+    let database = match ping {
+        Ok(()) => Check::Ok,
         Err(error) => {
             // La cause part au journal et nulle part ailleurs : un contrôle de santé est
             // souvent exposé sans authentification.
             tracing::error!(error = %error, "base de données injoignable");
-            (
-                StatusCode::SERVICE_UNAVAILABLE,
-                Health {
-                    status: Status::Unavailable,
-                    checks: Checks {
-                        database: Check::Unreachable,
-                    },
-                },
-            )
+            Check::Unreachable
         }
-    }
+    };
+
+    let sain = database == Check::Ok && extras.values().all(|check| *check == Check::Ok);
+    let (code, status) = if sain {
+        (StatusCode::OK, Status::Ok)
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, Status::Unavailable)
+    };
+
+    (
+        code,
+        Health {
+            status,
+            checks: Checks { database, extras },
+        },
+    )
 }
 
 #[cfg(test)]
@@ -208,9 +315,144 @@ mod tests {
         );
     }
 
+    /// `report` sans aucune sonde doit rendre, à l'octet près, ce que `handler` rendait :
+    /// un projet engendré avant ce jalon expose le même corps qu'hier.
+    #[tokio::test]
+    async fn report_without_probes_renders_the_body_it_rendered_before() {
+        let db = DatabaseConnection::default();
+
+        let response = report(&db, Vec::new()).await;
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("corps lisible");
+        assert_eq!(
+            std::str::from_utf8(&bytes).expect("corps UTF-8"),
+            r#"{"status":"unavailable","checks":{"database":"unreachable"}}"#
+        );
+    }
+
+    /// Une dépendance muette vaut 503 comme la base : le verdict est binaire, et une
+    /// application dont le cache est injoignable n'a rien à faire dans la rotation.
+    #[test]
+    fn a_failing_probe_drops_the_verdict_though_the_database_answers() {
+        let extras = BTreeMap::from([("cache".to_owned(), Check::Unreachable)]);
+
+        let (status, health) = verdict(Ok(()), extras);
+
+        assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
+        assert_eq!(
+            serde_json::to_value(health).expect("sérialisable"),
+            json!({
+                "status": "unavailable",
+                "checks": { "database": "ok", "cache": "unreachable" }
+            })
+        );
+    }
+
+    /// Les sondes s'ajoutent au corps sans le réorganiser : `database` garde sa place, et
+    /// une supervision qui la lit ne change pas de chemin.
+    #[test]
+    fn probes_that_all_answer_keep_the_verdict_at_200() {
+        let extras = BTreeMap::from([
+            ("cache".to_owned(), Check::Ok),
+            ("storage".to_owned(), Check::Ok),
+        ]);
+
+        let (status, health) = verdict(Ok(()), extras);
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(health.status, Status::Ok);
+    }
+
+    /// Les sondes s'exécutent de front, et non l'une après l'autre : sans cela, chaque
+    /// dépendance ajoutée allongerait `/health` d'une borne pour tout le monde, et quatre
+    /// dépendances muettes tiendraient l'orchestrateur huit secondes.
+    ///
+    /// L'horloge est en pause : ce n'est pas une mesure de durée réelle mais une lecture
+    /// du temps que les bornes ont fait avancer.
+    #[tokio::test(start_paused = true)]
+    async fn silent_probes_answer_within_one_bound_and_not_one_each() {
+        let db = DatabaseConnection::default();
+        let depart = tokio::time::Instant::now();
+
+        let response = report(
+            &db,
+            vec![
+                Probe::new("cache", std::future::pending()),
+                Probe::new("storage", std::future::pending()),
+            ],
+        )
+        .await;
+
+        let ecoule = depart.elapsed();
+        assert!(
+            ecoule >= PING_TIMEOUT && ecoule < PING_TIMEOUT * 2,
+            "les sondes ne sont pas menées de front : {ecoule:?}"
+        );
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("corps lisible");
+        let body: Value = serde_json::from_slice(&bytes).expect("corps JSON");
+        assert_eq!(
+            body,
+            json!({
+                "status": "unavailable",
+                "checks": {
+                    "database": "unreachable",
+                    "cache": "unreachable",
+                    "storage": "unreachable"
+                }
+            })
+        );
+    }
+
+    /// L'ordre des clés du corps est celui du `BTreeMap`, et non celui de l'installation :
+    /// deux réponses successives se comparent alors ligne à ligne, et un test
+    /// d'intégration peut asserter le corps entier.
+    #[test]
+    fn the_body_orders_the_probes_by_name_and_keeps_database_first() {
+        let extras = BTreeMap::from([
+            ("storage".to_owned(), Check::Ok),
+            ("cache".to_owned(), Check::Unreachable),
+        ]);
+
+        let (_, health) = verdict(Ok(()), extras);
+
+        assert_eq!(
+            serde_json::to_string(&health).expect("sérialisable"),
+            r#"{"status":"unavailable","checks":{"database":"ok","cache":"unreachable","storage":"ok"}}"#
+        );
+    }
+
+    /// Ce que `utoipa` fait d'un `#[serde(flatten)]` sur une carte se lit sur le document
+    /// engendré, jamais sur une intuition : le schéma doit décrire le corps réel, où
+    /// `database` est une propriété nommée et les sondes des clés libres.
+    #[test]
+    fn the_schema_declares_the_probes_as_free_keys_beside_database() {
+        use utoipa::PartialSchema;
+
+        let schema = serde_json::to_value(Checks::schema()).expect("schéma sérialisable");
+
+        assert_eq!(schema["type"], "object");
+        assert_eq!(schema["required"], json!(["database"]));
+        assert_eq!(
+            schema["properties"]["database"]["$ref"],
+            "#/components/schemas/Check"
+        );
+        assert_eq!(
+            schema["additionalProperties"]["$ref"],
+            "#/components/schemas/Check"
+        );
+    }
+
     #[test]
     fn a_healthy_database_gives_200_and_an_ok_status() {
-        let (status, health) = verdict(Ok(()));
+        let (status, health) = verdict(Ok(()), BTreeMap::new());
 
         assert_eq!(status, StatusCode::OK);
         assert_eq!(
@@ -221,9 +463,12 @@ mod tests {
 
     #[test]
     fn an_unreachable_database_gives_503_and_names_the_failed_check() {
-        let (status, health) = verdict(Err(DbErr::Conn(sea_orm::RuntimeErr::Internal(
-            "connexion refusée".to_owned(),
-        ))));
+        let (status, health) = verdict(
+            Err(DbErr::Conn(sea_orm::RuntimeErr::Internal(
+                "connexion refusée".to_owned(),
+            ))),
+            BTreeMap::new(),
+        );
 
         assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
         assert_eq!(health.checks.database, Check::Unreachable);
@@ -239,7 +484,7 @@ mod tests {
     async fn a_ping_that_never_answers_becomes_a_503_rather_than_a_wait() {
         let depart = tokio::time::Instant::now();
 
-        let (status, health) = verdict(bounded_ping(std::future::pending()).await);
+        let (status, health) = verdict(bounded_ping(std::future::pending()).await, BTreeMap::new());
 
         assert!(
             depart.elapsed() >= PING_TIMEOUT,
@@ -254,16 +499,22 @@ mod tests {
     /// transformer le cas courant.
     #[tokio::test(start_paused = true)]
     async fn a_ping_that_answers_within_the_bound_keeps_its_verdict() {
-        let (status, _) = verdict(bounded_ping(std::future::ready(Ok(()))).await);
+        let (status, _) = verdict(
+            bounded_ping(std::future::ready(Ok(()))).await,
+            BTreeMap::new(),
+        );
 
         assert_eq!(status, StatusCode::OK);
     }
 
     #[test]
     fn the_database_error_detail_does_not_leak_into_the_response() {
-        let (_, health) = verdict(Err(DbErr::Conn(sea_orm::RuntimeErr::Internal(
-            "postgres://alice:s3cr3t@localhost/app injoignable".to_owned(),
-        ))));
+        let (_, health) = verdict(
+            Err(DbErr::Conn(sea_orm::RuntimeErr::Internal(
+                "postgres://alice:s3cr3t@localhost/app injoignable".to_owned(),
+            ))),
+            BTreeMap::new(),
+        );
 
         let rendered = serde_json::to_string(&health).expect("sérialisable");
 

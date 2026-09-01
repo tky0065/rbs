@@ -25,6 +25,12 @@ content = "pub cache: crate::cache::Cache,"
 anchor  = "state_init"
 content = "cache: crate::cache::Cache::from_config()?,"
 
+# Sans cette sonde, `/health` répondrait `ok` sur un cache injoignable et l'orchestrateur
+# garderait le pod en rotation.
+[[anchors]]
+anchor  = "health_probes"
+content = 'rbs_core::health::Probe::new("cache", state.cache().ping()),'
+
 [[dependencies]]
 name     = "redis"
 version  = "1.6"

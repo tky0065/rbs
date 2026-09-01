@@ -219,6 +219,21 @@ pub(crate) const SERVICES: Anchor = Anchor {
     after: "services:",
 };
 
+/// Sondes de santé que les fragments ajoutent au contrôle de `GET /health`.
+///
+/// Le noyau porte la mécanique du contrôle, jamais la façon de joindre un cache ou un
+/// stockage : ces clients-là vivent dans le projet, et leur sonde s'inscrit ici.
+///
+/// Elle manque à tout projet engendré avant son arrivée : `doctor` la nomme alors et
+/// affiche son bloc, comme pour n'importe quelle autre ancre absente.
+pub(crate) const HEALTH_PROBES: Anchor = Anchor {
+    name: Cow::Borrowed("health_probes"),
+    file: Cow::Borrowed("src/health/controller.rs"),
+    comment: "//",
+    sorted: false,
+    optional: false,
+};
+
 /// Variantes de l'énumération `Relation` du modèle d'une entité.
 ///
 /// Hors du registre statique : son fichier et son nom dépendent tous deux de l'entité
@@ -249,7 +264,7 @@ pub(crate) const RELATED: Anchor = Anchor {
 ///
 /// La génération vise chaque ancre nommément ; `rbs doctor` parcourt cette liste pour
 /// vérifier qu'un projet les porte toutes.
-pub(crate) const ANCRES: [Anchor; 11] = [
+pub(crate) const ANCRES: [Anchor; 12] = [
     FEATURES,
     ROUTES,
     LAYERS,
@@ -261,6 +276,7 @@ pub(crate) const ANCRES: [Anchor; 11] = [
     STARTUP,
     SEEDS,
     SERVICES,
+    HEALTH_PROBES,
 ];
 
 /// Résout l'ancre `<rbs:features>` par repli, entre `src/lib.rs` et `src/main.rs`.
@@ -288,7 +304,7 @@ pub(crate) fn resolve(anchor: Anchor, with_library: bool) -> Anchor {
 
 /// Les ancres du registre, celle des features résolue pour `root`.
 ///
-/// Le disque n'est interrogé qu'une fois pour les onze, et non une fois par ancre.
+/// Le disque n'est interrogé qu'une fois pour les douze, et non une fois par ancre.
 pub(crate) fn resolved(root: &Path) -> Vec<Anchor> {
     let with_library = has_library(root);
 
@@ -1044,6 +1060,21 @@ struct AppState {
             .collect();
 
         assert_eq!(optionnelles, ["services"]);
+    }
+
+    /// La sonde d'une dépendance vit dans le projet, et le fragment qui l'installe a
+    /// besoin d'un endroit où l'inscrire : sans cette ancre, `/health` ne contrôlerait
+    /// jamais que la base.
+    // `HEALTH_PROBES` étant un `const`, clippy évalue `.sorted` à la compilation et
+    // signale l'assertion comme triviale ; elle mord pourtant si quelqu'un change le
+    // champ, ce que clippy ne voit pas.
+    #[allow(clippy::assertions_on_constants)]
+    #[test]
+    fn the_health_probes_anchor_lives_in_the_health_controller() {
+        assert_eq!(HEALTH_PROBES.file, "src/health/controller.rs");
+        assert_eq!(HEALTH_PROBES.opening(), "// <rbs:health_probes>");
+        assert!(!HEALTH_PROBES.sorted);
+        assert!(ANCRES.contains(&HEALTH_PROBES));
     }
 
     #[test]
