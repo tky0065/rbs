@@ -238,23 +238,31 @@ mod tests {
     /// `From<Model>`. `format::format_batch` le rattrape à l'écriture.
     #[test]
     fn the_render_is_already_what_rustfmt_would_write() {
-        for name in [
-            "tag",
-            "articles",
-            "administrative_documents",
-            "organizational_structures",
-        ] {
-            let rendered = dto(
-                name,
-                "title:string,summary:text:optional,published_at:datetime",
-            );
+        let divergentes = bench::longueurs_divergentes(|name| {
+            dto(name, "title:string,summary:text:optional,published_at:datetime")
+        });
 
-            assert_eq!(
-                bench::formatted(&rendered),
-                rendered,
-                "le rendu de `{name}` diverge de rustfmt"
-            );
-        }
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu du DTO diverge de rustfmt à ces longueurs de nom"
+        );
+    }
+
+    /// L'axe qui finit par bouger n'est pas le nom de l'entité mais celui d'un champ :
+    /// dans `impl From<Model>`, `<champ>: model.<champ>,` croît deux fois plus vite que
+    /// lui. Aucun garde ne balayait cet axe-là.
+    #[test]
+    fn the_render_is_already_what_rustfmt_would_write_whatever_the_field_length() {
+        let divergentes = bench::longueurs_divergentes(|champ| {
+            dto("article", &format!("{champ}:string"))
+        });
+
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu du DTO diverge de rustfmt à ces longueurs de champ"
+        );
     }
 
     #[test]

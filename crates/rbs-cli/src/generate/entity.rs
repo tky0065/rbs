@@ -403,6 +403,22 @@ mod tests {
         );
     }
 
+    /// Le modèle ne porte le nom de l'entité que dans son `DeriveEntityModel` et son
+    /// `table_name`, tous deux courts : le balayage ne trouve aucune bascule, et tient la
+    /// propriété pour la prochaine retouche du gabarit.
+    #[test]
+    fn the_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(|name| {
+            entity(name, "title:string,summary:text:optional,published_at:datetime")
+        });
+
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu du modèle diverge de rustfmt à ces longueurs de nom"
+        );
+    }
+
     // La garde de `command.rs` (`the_render_goes_through_rustfmt_without_a_diff_…`) ne
     // porte aucun champ `:references:` : rien n'y prouve que les blocs `impl Related` et
     // le commentaire d'ambiguïté sortent déjà mis en forme. Ce test-ci les couvre au

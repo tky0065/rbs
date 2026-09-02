@@ -53,7 +53,15 @@ impl From<Model> for {@ entity @}Response {
         Self {
             id: model.id,
 {%- for field in fields %}
-            {@ field.name @}: model.{@ field.name @},
+{#- Les cent colonnes de `max_width` : la ligne porte le nom du champ deux fois, et
+    rustfmt casse alors l'accès plutôt que l'affectation. #}
+{%- set affectation = "            " ~ field.name ~ ": model." ~ field.name ~ "," %}
+{%- if affectation | length <= 100 %}
+{@ affectation @}
+{%- else %}
+            {@ field.name @}: model
+                .{@ field.name @},
+{%- endif %}
 {%- endfor %}
             created_at: model.created_at,
             updated_at: model.updated_at,

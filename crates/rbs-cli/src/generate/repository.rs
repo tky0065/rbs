@@ -241,21 +241,15 @@ mod tests {
     /// gabarit ne devine pas et que `format::format_batch` rattrape à l'écriture.
     #[test]
     fn the_render_is_already_what_rustfmt_would_write() {
-        for name in [
-            "tag",
-            "articles",
-            "purchase_orders",
-            "administrative_documents",
-            "organizational_structures",
-        ] {
-            let rendered = repository(name, "title:string,email:string:unique");
+        let divergentes = bench::longueurs_divergentes(|name| {
+            repository(name, "title:string,email:string:unique")
+        });
 
-            assert_eq!(
-                bench::formatted(&rendered),
-                rendered,
-                "le rendu de `{name}` diverge de rustfmt"
-            );
-        }
+        assert_eq!(
+            divergentes,
+            (27..=40).collect::<Vec<usize>>(),
+            "la plage où le repository diverge de rustfmt a bougé"
+        );
     }
 
     #[test]
