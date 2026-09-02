@@ -44,6 +44,17 @@ pub fn cible_pour(moteur: &str) -> PathBuf {
     depot().join(format!("target/rbs-integration-{moteur}"))
 }
 
+/// Prend pour soi la cible de compilation `cible`, jusqu'à ce que le garde soit lâché.
+///
+/// Chaque fichier de `tests/` est un binaire que `cargo test` lance de front avec les
+/// autres : rien de ce qui vit dans un processus ne les sépare, et ils écrivent pourtant
+/// la même cible. Le garde se prend donc avant la première invocation de `cargo` ou de
+/// `rbs`, et se tient jusqu'à la dernière — y compris pendant qu'un binaire bâti tourne,
+/// cargo relâchant le sien avant de l'exécuter.
+pub fn verrou(cible: &Path) -> std::fs::File {
+    test_cible::verrou(cible)
+}
+
 /// Un projet neuf, créé par le binaire livré, dans `parent`.
 pub fn projet(parent: &Path) -> PathBuf {
     let noyau = noyau();
@@ -159,6 +170,11 @@ fn collect(racine: &Path, repertoire: &Path, fichiers: &mut Empreinte) {
 // éparpillées, c'est trois occasions qu'une branche de la matrice n'aille pas où elle dit.
 #[path = "../../src/test_postgres.rs"]
 mod test_postgres;
+
+// Même partage, même raison : le verrou de la cible sert au banc des générateurs comme à
+// ces tests, et les deux mondes de compilation ne se relient que par `#[path]`.
+#[path = "../../src/test_cible.rs"]
+mod test_cible;
 
 /// L'image PostgreSQL du harnais : la 18 livrée, ou le plancher 14 sous `RBS_TEST_PG`.
 pub use test_postgres::image as postgres_image;

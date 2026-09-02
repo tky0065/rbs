@@ -17,7 +17,7 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generate::{bench, entity, fields};
+    use crate::generate::{bench, fields};
 
     fn dto(name: &str, fields: &str) -> String {
         let fields = fields::parse(fields).expect("les champs du test doivent être valides");
@@ -278,13 +278,7 @@ mod tests {
         let project = bench::Project::fresh();
         project.write_feature(
             "articles",
-            &[
-                (
-                    "model.rs",
-                    &entity::render(&feature).expect("entité rendue"),
-                ),
-                ("dto.rs", &render(&feature).expect("DTO rendus")),
-            ],
+            &bench::retenus(&feature, false, &["model.rs", "dto.rs"]),
         );
         project.compile();
     }

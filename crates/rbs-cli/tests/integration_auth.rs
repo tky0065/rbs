@@ -185,12 +185,18 @@ static CIBLE_PARTAGEE: Mutex<()> = Mutex::new(());
 ///
 /// Le verrou se prend après le conteneur : les PostgreSQL n'ont rien à partager et
 /// démarrent en parallèle.
-fn own_target() -> MutexGuard<'static, ()> {
+///
+/// Deux verrous, parce que la course a deux portées : le `Mutex` tranche entre les tests
+/// de ce fichier sans toucher au système de fichiers, celui de la cible entre ce binaire
+/// et les autres de `tests/`, que `cargo test` lance de front.
+fn own_target() -> (MutexGuard<'static, ()>, std::fs::File) {
     // Un test qui panique empoisonne le verrou. Sans cette reprise, les suivants
     // échoueraient tous sur un message qui ne dit rien de leur propre défaut.
-    CIBLE_PARTAGEE
+    let exclusivite = CIBLE_PARTAGEE
         .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .unwrap_or_else(PoisonError::into_inner);
+
+    (exclusivite, common::verrou(&common::cible()))
 }
 
 /// Le critère exécutable du lot, pris au niveau qu'exige la CI générée.

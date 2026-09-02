@@ -74,6 +74,10 @@ fn a_generated_crud_migrates_and_passes_its_tests_against_postgresql() {
         .assert()
         .success();
 
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
     rbs(&projet)
         .env("CARGO_TARGET_DIR", common::cible())
         .args(["migrate", "up"])
@@ -174,6 +178,10 @@ fn a_relation_migrates_its_foreign_key_in_the_right_order() {
         ])
         .assert()
         .success();
+
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
 
     rbs(&projet)
         .env("CARGO_TARGET_DIR", common::cible())

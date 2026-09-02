@@ -555,7 +555,7 @@ mod tests {
     /// savent le nommer n'étaient atteignables qu'en test unitaire.
     #[test]
     fn a_broken_manifest_is_diagnosed_instead_of_aborting_the_command() {
-        let (_parent, root) = crate::fixtures::project();
+        let (_parent, root) = projet_hors_ligne();
         std::fs::write(root.join("Cargo.toml"), "[package\nname = \"demo-api\"\n")
             .expect("manifeste cassé");
 
@@ -591,7 +591,7 @@ mod tests {
     /// `toml_edit` en fait cinq, et les recopier telles quelles disloquait la colonne.
     #[test]
     fn a_broken_manifest_is_reported_one_line_per_check() {
-        let (_parent, root) = crate::fixtures::project();
+        let (_parent, root) = projet_hors_ligne();
         std::fs::write(root.join("Cargo.toml"), "[package\nname = \"demo-api\"\n")
             .expect("manifeste cassé");
 
@@ -632,12 +632,26 @@ mod tests {
         assert!(report.succeeded());
     }
 
-    /// Le projet de `crate::fixtures::project`, dont le manifeste est réécrit pour ne
-    /// déclarer que les `features` passées.
+    /// Le projet de ces tests, dont la base est hors d'atteinte.
+    ///
+    /// Le contrôle `base` demande sa version au moteur dès qu'il le joint, et il la
+    /// demande à `cargo run -p migration` : sur une machine où un PostgreSQL écoute le
+    /// port par défaut — celui que vise le projet des fixtures — chacun de ces tests
+    /// bâtissait la crate `migration` d'un projet temporaire. Le port 1 est réservé, rien
+    /// n'y écoute, et le refus est immédiat : c'est déjà le choix des tests de `base` et
+    /// de `tests/integration_doctor`.
+    fn projet_hors_ligne() -> (TempDir, std::path::PathBuf) {
+        crate::fixtures::Project::new()
+            .url("postgres://rbs:rbs@127.0.0.1:1/demo_api")
+            .create()
+    }
+
+    /// Le projet de `projet_hors_ligne`, dont le manifeste est réécrit pour ne déclarer
+    /// que les `features` passées.
     ///
     /// `pub(super)` : `doctor/guards.rs` est son seul réemploi hors de ce module.
     pub(super) fn project(features: &[&str]) -> (TempDir, std::path::PathBuf) {
-        let (parent, root) = crate::fixtures::project();
+        let (parent, root) = projet_hors_ligne();
 
         let manifest = root.join("Cargo.toml");
         let source = std::fs::read_to_string(&manifest).expect("manifeste lisible");
