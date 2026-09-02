@@ -139,11 +139,11 @@ failure does that.
 
 ```text
 $ rbs doctor
-  ✓ ancres      les 11 points d'insertion sont en place
+  ✓ ancres      les 12 points d'insertion sont en place
   ! agents      écrit hors du CLI : webhooks
       légitime si rbs ne couvre pas ce code ; sinon, rbs generate le reprend
   ✓ relations   les modèles portent leurs ancres de relation
-  ✓ .env        les 4 variables de .env.example sont renseignées
+  ✓ .env        les 7 variables de .env.example sont renseignées
   ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
   … base        compilation de la crate migration, peut prendre
                 une minute au premier lancement…

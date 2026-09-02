@@ -69,7 +69,7 @@ after the way you called it, so its `--help` stays true to what you type.
 rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 ```
 
-<!-- rbs:transcript cmd="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" -->
+{/* rbs:transcript cmd="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" */}
 ```text
 ✓ demo créé — 20 fichiers
 
@@ -216,7 +216,7 @@ rbs generate crud articles --fields "title:string,body:text,published:bool"
 
 The command prints what it intends to do, then does it:
 
-<!-- rbs:transcript cmd="rbs generate crud articles --fields title:string,body:text,published:bool" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" -->
+{/* rbs:transcript cmd="rbs generate crud articles --fields title:string,body:text,published:bool" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" */}
 ```text
 plan pour …/demo
 
@@ -390,11 +390,12 @@ When something looks wrong, ask before guessing:
 rbs doctor
 ```
 
+{/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
-  ✓ ancres      les 11 points d'insertion sont en place
+  ✓ ancres      les 12 points d'insertion sont en place
   ✓ agents      guide et inventaire à jour
   ✓ relations   les modèles portent leurs ancres de relation
-  ✓ .env        les 4 variables de .env.example sont renseignées
+  ✓ .env        les 7 variables de .env.example sont renseignées
   ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
   … base        compilation de la crate migration, peut prendre
                 une minute au premier lancement…
@@ -404,8 +405,8 @@ rbs doctor
 ✓ le projet est sain
 ```
 
-Six checks: the anchors are still in place — ten of them here, nine from the skeleton
-plus the compose's, which drops out of the count for a project with no
+Six checks: the anchors are still in place — twelve of them here, eleven from the
+skeleton plus the compose's, which drops out of the count for a project with no
 `docker-compose.yml` — [`AGENTS.md`](./guides/agents.md)'s guide and inventory still match
 what the project carries, no model has a relation without the two anchors it would need to
 receive one, `.env` holds every key `.env.example` declares, the project and `rbs-core`

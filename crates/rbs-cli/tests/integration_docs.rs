@@ -33,7 +33,7 @@ struct Transcript {
     attendu: String,
 }
 
-const MARQUEUR: &str = "<!-- rbs:transcript";
+const MARQUEUR: &str = "{/* rbs:transcript";
 
 /// Les blocs gardés de `contenu`, dans l'ordre où la page les écrit.
 fn extrait(page: &Path, contenu: &str) -> Vec<Transcript> {
@@ -109,7 +109,7 @@ fn extrait(page: &Path, contenu: &str) -> Vec<Transcript> {
 fn marqueur(ligne: &str) -> Option<&str> {
     let nu = ligne.trim();
     let reste = nu.strip_prefix(MARQUEUR)?;
-    Some(reste.strip_suffix("-->").unwrap_or(reste))
+    Some(reste.strip_suffix("*/}").unwrap_or(reste))
 }
 
 /// La valeur de `clé="…"` dans une ligne d'attributs.
@@ -203,6 +203,7 @@ fn normalise(sortie: &str, tmp: &Path) -> String {
     texte = masque_version(&texte);
     texte = masque_horodatage(&texte);
     texte = masque_duree(&texte);
+    texte = masque_adresse(&texte);
 
     let mut rendu = String::with_capacity(texte.len());
     for ligne in texte.lines() {
@@ -377,6 +378,30 @@ fn masque_duree(texte: &str) -> String {
     })
 }
 
+/// `répond sur localhost:5432` → `répond sur <adresse>`.
+///
+/// L'hôte et le port sont ceux de la machine qui rejoue : le serveur du test écoute sur
+/// un port que Docker lui donne, quand la page montre celui qu'un lecteur aurait.
+fn masque_adresse(texte: &str) -> String {
+    const ANNONCE: &str = "répond sur ";
+    let mut rendu = String::with_capacity(texte.len());
+
+    for ligne in texte.split_inclusive('\n') {
+        match ligne.find(ANNONCE) {
+            Some(debut) => {
+                rendu.push_str(&ligne[..debut + ANNONCE.len()]);
+                rendu.push_str("<adresse>");
+                if ligne.ends_with('\n') {
+                    rendu.push('\n');
+                }
+            }
+            None => rendu.push_str(ligne),
+        }
+    }
+
+    rendu
+}
+
 fn compte_chiffres(lettres: &[char], debut: usize) -> usize {
     lettres[debut..]
         .iter()
@@ -448,16 +473,30 @@ fn decoupe(commande: &str) -> Vec<String> {
 }
 
 /// Lance `commande` dans `repertoire` et rend ce qu'elle a écrit, les deux sorties
-/// réunies.
+/// réunies dans l'ordre où le terminal les aurait vues.
 ///
 /// Le statut n'est pas exigé : une page montre aussi ce qu'un refus rend, et c'est
 /// précisément la sortie qu'il faut comparer.
-fn lance(commande: &str, repertoire: &Path) -> String {
+///
+/// Les deux flux partagent un même fichier, et non deux tuyaux : `rbs doctor` écrit ses
+/// verdicts sur la sortie standard pendant que cargo compile sur l'erreur, et deux
+/// captures séparées rendraient un bloc que personne n'a jamais vu à l'écran.
+fn lance(commande: &str, repertoire: &Path, base: Option<&str>) -> String {
     let mut arguments = decoupe(commande);
     assert!(!arguments.is_empty(), "commande vide");
     let programme = arguments.remove(0);
 
-    let sortie = if programme == "rbs" {
+    // Même raison que `--core-path` : l'URL qu'une page montre est celle qu'un lecteur
+    // écrirait, et le serveur du test écoute là où Docker l'a mis.
+    if let Some(vivante) = base {
+        for argument in &mut arguments {
+            if argument.starts_with("postgres://") {
+                *argument = vivante.to_string();
+            }
+        }
+    }
+
+    let executable = if programme == "rbs" {
         // L'utilisateur, lui, prend la crate publiée. Le test ne le peut pas : le dépôt
         // travaille sur une version que crates.io ne porte pas encore, et la résolution
         // échouerait avant la première ligne de sortie. La substitution appartient donc
@@ -472,29 +511,28 @@ fn lance(commande: &str, repertoire: &Path) -> String {
             );
         }
 
-        assert_cmd::Command::cargo_bin("rbs")
-            .expect("le binaire rbs doit être compilé")
-            .current_dir(repertoire)
-            .args(&arguments)
-            .output()
-            .expect("le binaire rbs doit être lançable")
+        env!("CARGO_BIN_EXE_rbs").to_string()
     } else {
-        std::process::Command::new(&programme)
-            .current_dir(repertoire)
-            .args(&arguments)
-            .output()
-            .unwrap_or_else(|erreur| panic!("`{programme}` doit être lançable : {erreur}"))
+        programme.clone()
     };
 
-    format!(
-        "{}{}",
-        String::from_utf8_lossy(&sortie.stdout),
-        String::from_utf8_lossy(&sortie.stderr)
-    )
+    let journal = tempfile::NamedTempFile::new().expect("fichier de capture créable");
+    let sortie = std::fs::File::create(journal.path()).expect("capture ouvrable");
+    let erreur = sortie.try_clone().expect("capture duplicable");
+
+    std::process::Command::new(&executable)
+        .current_dir(repertoire)
+        .args(&arguments)
+        .stdout(std::process::Stdio::from(sortie))
+        .stderr(std::process::Stdio::from(erreur))
+        .status()
+        .unwrap_or_else(|erreur| panic!("`{programme}` doit être lançable : {erreur}"));
+
+    String::from_utf8_lossy(&std::fs::read(journal.path()).expect("capture lisible")).into_owned()
 }
 
 /// Rejoue un transcript dans un répertoire neuf et compare sa sortie au bloc.
-fn compare_transcript(transcript: &Transcript) {
+fn compare_transcript(transcript: &Transcript, base: Option<&str>) {
     let situe = format!("{}:{}", transcript.page.display(), transcript.ligne);
 
     if let Some(invite) = &transcript.invite {
@@ -524,10 +562,10 @@ fn compare_transcript(transcript: &Transcript) {
         } else {
             tmp.path()
         };
-        lance(commande.trim(), ou);
+        lance(commande.trim(), ou, base);
     }
 
-    let obtenu = normalise(&lance(&transcript.cmd, &dans), tmp.path());
+    let obtenu = normalise(&lance(&transcript.cmd, &dans, base), tmp.path());
     let attendu = normalise(&transcript.attendu, tmp.path());
 
     let conforme = if transcript.extrait {
@@ -556,7 +594,7 @@ fn the_marked_transcripts_still_render_what_the_docs_show() {
     let mut rejoues = 0;
 
     for transcript in transcripts().iter().filter(|garde| !garde.base) {
-        compare_transcript(transcript);
+        compare_transcript(transcript, None);
         rejoues += 1;
     }
 
@@ -573,90 +611,17 @@ fn the_marked_transcripts_that_need_a_database_still_render_what_the_docs_show()
         .filter(|garde| garde.base)
         .collect();
 
-    // Le serveur écoute sur le port que la page déclare, plutôt que sur un port tiré au
-    // hasard : ce que `doctor` imprime porte l'hôte et le port, et un port tiré ferait du
-    // bloc une sortie qu'aucun lecteur ne peut obtenir.
-    let _serveurs: Vec<_> = serveurs(&gardes).into_iter().map(demarre).collect();
-
-    for transcript in &gardes {
-        compare_transcript(transcript);
-    }
-
     assert!(
         !gardes.is_empty(),
         "aucun bloc `base=\"oui\"` n'a été rejoué"
     );
-}
 
-/// Un serveur à monter : les valeurs qu'une URL de page déclare.
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
-struct Serveur {
-    utilisateur: String,
-    mot_de_passe: String,
-    base: String,
-    port: u16,
-}
+    let postgres = common::start_postgres();
+    let url = common::url_of(&postgres);
 
-/// Les serveurs que les transcripts gardés réclament, dédoublonnés.
-fn serveurs(gardes: &[Transcript]) -> Vec<Serveur> {
-    let mut trouves: Vec<Serveur> = gardes
-        .iter()
-        .filter_map(|garde| {
-            let source = format!("{} {}", garde.setup.clone().unwrap_or_default(), garde.cmd);
-            serveur_de(&source)
-        })
-        .collect();
-
-    trouves.sort();
-    trouves.dedup();
-    trouves
-}
-
-/// `postgres://rbs:secret@localhost:5432/demo` → ce qu'il faut monter pour l'honorer.
-fn serveur_de(source: &str) -> Option<Serveur> {
-    let apres = source.find("postgres://").map(|debut| debut + 11)?;
-    let url = &source[apres..];
-    let url = &url[..url
-        .find(|lettre: char| lettre.is_whitespace())
-        .unwrap_or(url.len())];
-
-    let (identifiants, hote) = url.split_once('@')?;
-    let (utilisateur, mot_de_passe) = identifiants.split_once(':')?;
-    let (hote, base) = hote.split_once('/')?;
-    let (_, port) = hote.split_once(':')?;
-
-    Some(Serveur {
-        utilisateur: utilisateur.to_string(),
-        mot_de_passe: mot_de_passe.to_string(),
-        base: base.to_string(),
-        port: port.parse().ok()?,
-    })
-}
-
-fn demarre(serveur: Serveur) -> testcontainers::Container<testcontainers::GenericImage> {
-    use testcontainers::core::wait::LogWaitStrategy;
-    use testcontainers::core::{IntoContainerPort, WaitFor};
-    use testcontainers::runners::SyncRunner;
-    use testcontainers::{GenericImage, ImageExt};
-
-    let (nom, version) = common::postgres_image();
-
-    GenericImage::new(nom, version)
-        .with_wait_for(WaitFor::log(
-            LogWaitStrategy::stdout_or_stderr("database system is ready to accept connections")
-                .with_times(2),
-        ))
-        .with_env_var("POSTGRES_USER", &serveur.utilisateur)
-        .with_env_var("POSTGRES_PASSWORD", &serveur.mot_de_passe)
-        .with_env_var("POSTGRES_DB", &serveur.base)
-        .with_mapped_port(serveur.port, 5432.tcp())
-        .start()
-        .unwrap_or_else(|erreur| {
-            panic!(
-                "PostgreSQL doit démarrer sur le port {} que la page déclare : {erreur}",
-                serveur.port
-            )
-        })
+    for transcript in &gardes {
+        compare_transcript(transcript, Some(&url));
+    }
 }
 
 mod extraction {
@@ -666,7 +631,7 @@ mod extraction {
     fn a_marker_carries_its_command_and_the_block_that_follows() {
         let page = "\
 avant\n\
-<!-- rbs:transcript cmd=\"rbs new demo\" -->\n\
+{/* rbs:transcript cmd=\"rbs new demo\" */}\n\
 ```text\n\
 ✓ demo créé — 18 fichiers\n\
 ```\n";
@@ -685,14 +650,14 @@ avant\n\
 
     #[test]
     fn the_optional_attributes_default_to_the_cheapest_case() {
-        let page = "<!-- rbs:transcript cmd=\"rbs doctor\" base=\"oui\" extrait=\"oui\" dans=\"demo\" -->\n```text\n✓\n```\n";
+        let page = "{/* rbs:transcript cmd=\"rbs doctor\" base=\"oui\" extrait=\"oui\" dans=\"demo\" */}\n```text\n✓\n```\n";
         let trouve = &extrait(Path::new("page.md"), page)[0];
 
         assert!(trouve.base);
         assert!(trouve.extrait);
         assert_eq!(trouve.dans.as_deref(), Some("demo"));
 
-        let sobre = "<!-- rbs:transcript cmd=\"rbs doctor\" -->\n```text\n✓\n```\n";
+        let sobre = "{/* rbs:transcript cmd=\"rbs doctor\" */}\n```text\n✓\n```\n";
         let sobre = &extrait(Path::new("page.md"), sobre)[0];
 
         assert!(!sobre.base);
@@ -704,7 +669,7 @@ avant\n\
 
     #[test]
     fn the_prompt_a_page_shows_is_kept_apart_from_the_output() {
-        let page = "<!-- rbs:transcript cmd=\"rbs new site --yes\" -->\n```text\n$ rbs new site --yes\n✓ site créé\n```\n";
+        let page = "{/* rbs:transcript cmd=\"rbs new site --yes\" */}\n```text\n$ rbs new site --yes\n✓ site créé\n```\n";
         let trouve = &extrait(Path::new("page.md"), page)[0];
 
         assert_eq!(trouve.invite.as_deref(), Some("$ rbs new site --yes"));

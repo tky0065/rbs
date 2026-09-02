@@ -28,10 +28,12 @@ normalisation près.
 
 ### Le marqueur
 
-Chaque bloc gardé est précédé d'un commentaire HTML, invisible au rendu Docusaurus :
+Chaque bloc gardé est précédé d'un commentaire MDX, invisible au rendu Docusaurus.
+Un commentaire HTML ne convient pas : Docusaurus compile ces pages en MDX, qui refuse
+`<!--` — le site ne se construit plus.
 
 ```markdown
-<!-- rbs:transcript cmd="rbs new demo-api --database-url postgres://rbs:rbs@localhost:5432/demo" -->
+{/* rbs:transcript cmd="rbs new demo-api --database-url postgres://rbs:rbs@localhost:5432/demo" */}
 ```text
 ✓ demo-api créé — 18 fichiers
 ```
