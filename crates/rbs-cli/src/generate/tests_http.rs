@@ -233,6 +233,28 @@ mod tests {
         );
     }
 
+    #[test]
+    fn a_second_delete_is_exercised() {
+        // `unique` allume le quatrième scénario de suppression (`a_replayed_unique_value_
+        // returns_409`) : sans lui, `title` ne serait filtrable que par le troisième, et le
+        // compte plafonnerait à 4 au lieu des 5 attendus.
+        let feature = Feature::fresh(
+            "articles",
+            fields::parse("title:string:unique").expect("champs"),
+        );
+        let rendered = render(&feature).expect("les tests doivent se rendre");
+
+        assert_eq!(
+            rendered
+                .matches(r#"without_body("DELETE", &resource)"#)
+                .count(),
+            5,
+            "chaque scénario de suppression doit rejouer le DELETE : c'est la seule \
+             assertion qui distingue une suppression logique bien gardée d'une qui \
+             rendrait 204 deux fois :\n{rendered}"
+        );
+    }
+
     /// `ValidatedJson` existe pour ce chemin : un corps lisible mais non conforme rend
     /// 422, là où un corps illisible rend 400. Rien ne l'éprouvait.
     #[test]

@@ -153,6 +153,12 @@ async fn the_full_lifecycle_goes_through_the_api() {
 
     let (status, _) = call(&api, without_body("GET", &resource)).await;
     assert_eq!(status, StatusCode::NOT_FOUND, "elle répond encore");
+
+    // Une seconde suppression ne trouve plus rien à supprimer. L'assertion vaut des deux
+    // côtés de `--soft-delete` : c'est elle qui attrape une suppression logique dont la
+    // condition de garde manquerait, et qui rendrait alors 204 indéfiniment.
+    let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "elle se supprime deux fois");
 }
 // endregion: cycle_de_vie
 
