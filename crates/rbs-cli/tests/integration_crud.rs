@@ -215,6 +215,196 @@ fn a_relation_migrates_its_foreign_key_in_the_right_order() {
     );
 }
 
+/// La migration d'une suppression logique s'applique, et son unicité ne porte que sur les
+/// lignes vivantes.
+///
+/// Les tests unitaires lisent une chaîne de caractères : seul ce banc dit si PostgreSQL
+/// accepte l'index partiel que la template écrit, et si le repository engendré filtre
+/// bien ce qu'il doit taire. Le nom de la feature — `soft_articles` — reste propre à ce
+/// banc : il partage `target/rbs-integration` avec les deux tests ci-dessus, dont les
+/// features `articles`, `users` et `posts` ne le recouvrent pas.
+#[test]
+#[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn a_soft_deleting_crud_migrates_and_hides_its_deleted_rows() {
+    let (nom, version) = common::postgres_image();
+    let postgres = GenericImage::new(nom, version)
+        .with_wait_for(WaitFor::log(
+            LogWaitStrategy::stdout_or_stderr("database system is ready to accept connections")
+                .with_times(2),
+        ))
+        .with_env_var("POSTGRES_USER", UTILISATEUR)
+        .with_env_var("POSTGRES_PASSWORD", MOT_DE_PASSE)
+        .with_env_var("POSTGRES_DB", BASE)
+        .start()
+        .expect("PostgreSQL doit démarrer — Docker est-il lancé ?");
+
+    let port = postgres
+        .get_host_port_ipv4(5432.tcp())
+        .expect("le port de PostgreSQL doit être publié");
+    let url = format!("postgres://{UTILISATEUR}:{MOT_DE_PASSE}@127.0.0.1:{port}/{BASE}");
+
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+
+    rbs(parent.path())
+        .args([
+            "new",
+            "demo-api",
+            "--database-url",
+            &url,
+            "--core-path",
+            common::noyau()
+                .to_str()
+                .expect("chemin du noyau représentable"),
+            "--yes",
+        ])
+        .assert()
+        .success();
+
+    let projet = parent.path().join("demo-api");
+
+    rbs(&projet)
+        .args([
+            "generate",
+            "crud",
+            "soft_articles",
+            "--fields",
+            "title:string:unique",
+            "--soft-delete",
+        ])
+        .assert()
+        .success();
+
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
+    rbs(&projet)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .args(["migrate", "up"])
+        .assert()
+        .success();
+
+    let sortie = Command::new("cargo")
+        .current_dir(&projet)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .args(["test", "--workspace", "--", "--include-ignored"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+
+    let joues = format!(
+        "{}{}",
+        String::from_utf8_lossy(&sortie.stdout),
+        String::from_utf8_lossy(&sortie.stderr)
+    );
+
+    // La suppression logique tient tout entière dans ce scénario : la ligne créée
+    // disparaît des lectures (`GET` y rend 404) sans quitter la table, et un second
+    // `DELETE` retrouve la même absence plutôt qu'un nouveau succès — la garde manquante
+    // que la template commente rendrait 204 les deux fois.
+    assert!(
+        joues.contains("test soft_articles::tests::the_full_lifecycle_goes_through_the_api ... ok"),
+        "le cycle complet n'a pas été joué :\n{joues}"
+    );
+
+    // Le doublon n'est refusé que tant que la ligne d'origine reste vivante : c'est
+    // l'index partiel qui le permet, et c'est lui, et lui seul, que ce test met à
+    // l'épreuve contre une vraie base — un rendu correct en apparence mais que PostgreSQL
+    // refuserait à l'application ne se verrait qu'ici.
+    assert!(
+        joues.contains("test soft_articles::tests::a_replayed_unique_value_returns_409 ... ok"),
+        "le refus du doublon n'a pas été joué :\n{joues}"
+    );
+
+    rbs(&projet)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .args(["doctor"])
+        .assert()
+        .success();
+}
+
+/// Le même scénario contre SQLite, qui écrit l'index partiel unique autrement que
+/// PostgreSQL — la garde `and_where` de la template ne change pas, mais le SQL qu'elle
+/// produit sous ce moteur n'est jamais exercé par le banc ci-dessus.
+///
+/// Aucun conteneur n'est requis : la base est un fichier du projet.
+#[test]
+#[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn a_soft_deleting_crud_migrates_and_hides_its_deleted_rows_on_sqlite() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+
+    rbs(parent.path())
+        .args([
+            "new",
+            "demo-api",
+            "--database",
+            "sqlite",
+            "--database-url",
+            "sqlite://demo_api.db?mode=rwc",
+            "--core-path",
+            common::noyau()
+                .to_str()
+                .expect("chemin du noyau représentable"),
+            "--yes",
+        ])
+        .assert()
+        .success();
+
+    let projet = parent.path().join("demo-api");
+
+    rbs(&projet)
+        .args([
+            "generate",
+            "crud",
+            "soft_articles",
+            "--fields",
+            "title:string:unique",
+            "--soft-delete",
+        ])
+        .assert()
+        .success();
+
+    // Une cible propre à ce banc, comme pour les trois moteurs d'`integration_new` :
+    // SQLite active des features `sea-orm` que PostgreSQL n'active pas, et une cible
+    // commune ferait recompiler l'un pour l'autre à chaque bascule.
+    let cible = common::cible_pour("soft-delete-sqlite");
+    let _verrou = common::verrou(&cible);
+
+    rbs(&projet)
+        .env("CARGO_TARGET_DIR", &cible)
+        .args(["migrate", "up"])
+        .assert()
+        .success();
+
+    let sortie = Command::new("cargo")
+        .current_dir(&projet)
+        .env("CARGO_TARGET_DIR", &cible)
+        .args(["test", "--workspace", "--", "--include-ignored"])
+        .output()
+        .expect("cargo doit être lançable");
+
+    let joues = format!(
+        "{}{}",
+        String::from_utf8_lossy(&sortie.stdout),
+        String::from_utf8_lossy(&sortie.stderr)
+    );
+
+    assert!(
+        sortie.status.success(),
+        "la suite du projet engendré échoue sur SQLite :\n{joues}"
+    );
+
+    assert!(
+        joues.contains("test soft_articles::tests::the_full_lifecycle_goes_through_the_api ... ok"),
+        "le cycle complet n'a pas été joué sur SQLite :\n{joues}"
+    );
+    assert!(
+        joues.contains("test soft_articles::tests::a_replayed_unique_value_returns_409 ... ok"),
+        "le refus du doublon n'a pas été joué sur SQLite :\n{joues}"
+    );
+}
+
 /// Le binaire livré, lancé depuis `repertoire`.
 fn rbs(repertoire: impl AsRef<std::path::Path>) -> Command {
     let mut commande = Command::cargo_bin("rbs").expect("le binaire rbs doit être compilé");
