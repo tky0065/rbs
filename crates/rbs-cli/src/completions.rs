@@ -105,6 +105,16 @@ mod tests {
         }
     }
 
+    /// `rbs completions bash | head -3` : le générateur écrit sans jamais rendre son
+    /// erreur, et relève celle du puits par un `expect`. Sur un tube refermé, la commande
+    /// rendait une trace de panique au lieu des trois lignes demandées.
+    #[test]
+    fn a_reader_that_leaves_does_not_panic_the_generator() {
+        let mut sortie = crate::ui::Tolerante::new(crate::ui::Rompue);
+
+        render(Shell::Bash, &mut sortie);
+    }
+
     /// Le catalogue proposé à la complétion ne doit pas être descendu dans le parseur :
     /// `rbs add ma-feature --template-dir ./mes-templates` installe un fragment dont
     /// aucun binaire ne porte le nom, et clap le refuserait avant qu'`add` ne le cherche.
