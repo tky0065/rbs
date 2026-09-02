@@ -23,6 +23,26 @@ pub enum RootError {
     Illisible(#[from] Error),
 }
 
+/// Un `Cargo.toml` analysé, et les métadonnées rbs qui en sortent.
+///
+/// Les deux vont ensemble parce qu'une seule lecture les produit : les redemander
+/// séparément fait rouvrir le fichier, et deux lectures d'un manifeste qu'on est en
+/// train de corriger ne disent pas forcément la même chose.
+pub struct Manifeste {
+    /// Le document, mise en forme et commentaires préservés.
+    pub document: DocumentMut,
+    /// Les métadonnées rbs qu'il déclare.
+    pub metadonnees: Metadata,
+}
+
+/// Le projet trouvé par la remontée, et le manifeste qu'elle a lu pour le reconnaître.
+pub struct Racine {
+    /// Racine du projet.
+    pub root: PathBuf,
+    /// Son `Cargo.toml`, lu et analysé au passage.
+    pub manifeste: Manifeste,
+}
+
 /// Remonte de `start` jusqu'au projet rbs qui le contient.
 ///
 /// Le manifeste seul ne suffit pas à trancher : la crate `migration` en porte un, et une
@@ -31,10 +51,15 @@ pub enum RootError {
 /// Une faute autre que l'absence arrête la remontée : un manifeste que le développeur
 /// vient de casser désigne le projet qu'il visait, et le taire ferait viser un projet
 /// englobant — celui du dépôt, voire celui d'un répertoire parent sans rapport.
-pub fn project_root(start: &Path) -> Result<PathBuf, RootError> {
+pub fn racine(start: &Path) -> Result<Racine, RootError> {
     for candidat in start.ancestors() {
-        match read(&candidat.join("Cargo.toml")) {
-            Ok(_) => return Ok(candidat.to_path_buf()),
+        match manifeste(&candidat.join("Cargo.toml")) {
+            Ok(manifeste) => {
+                return Ok(Racine {
+                    root: candidat.to_path_buf(),
+                    manifeste,
+                });
+            }
             // Ces deux-là sont le régime ordinaire d'un ancêtre traversé : un répertoire
             // sans manifeste, ou celui d'une crate étrangère à rbs comme `migration`.
             Err(Error::PasUnProjet { .. }) => continue,
@@ -46,6 +71,11 @@ pub fn project_root(start: &Path) -> Result<PathBuf, RootError> {
     }
 
     Err(RootError::Absent)
+}
+
+/// La racine du projet qui contient `start`, pour qui n'a que faire de son manifeste.
+pub fn project_root(start: &Path) -> Result<PathBuf, RootError> {
+    racine(start).map(|racine| racine.root)
 }
 
 /// Métadonnées rbs d'un projet, telles que portées par son `Cargo.toml`.
@@ -177,8 +207,27 @@ pub enum Error {
 
 /// Lit les métadonnées rbs du manifeste désigné.
 pub fn read(cargo_toml: &Path) -> Result<Metadata, Error> {
-    let document = load(cargo_toml)?;
+    manifeste(cargo_toml).map(|manifeste| manifeste.metadonnees)
+}
 
+/// Lit et analyse le manifeste désigné, document compris.
+///
+/// Pour qui a besoin des deux : le document porte les déclarations que
+/// `[package.metadata.rbs]` ne dit pas — la dépendance au noyau, la feature de `sea-orm`.
+pub fn manifeste(cargo_toml: &Path) -> Result<Manifeste, Error> {
+    let document = load(cargo_toml)?;
+    let metadonnees = metadata_of(&document, cargo_toml)?;
+
+    Ok(Manifeste {
+        document,
+        metadonnees,
+    })
+}
+
+/// Les métadonnées rbs d'un manifeste déjà analysé.
+///
+/// `cargo_toml` ne sert qu'à nommer le fichier dans les messages : rien n'est relu ici.
+fn metadata_of(document: &DocumentMut, cargo_toml: &Path) -> Result<Metadata, Error> {
     let rbs = document
         .get("package")
         .and_then(|package| package.get("metadata"))
@@ -1323,6 +1372,37 @@ features = ["health"]
         assert_eq!(
             read(&manifest).expect("le manifeste est lisible").lang,
             crate::lang::Lang::Fr
+        );
+    }
+
+    /// La remontée ouvre le manifeste de la racine pour la reconnaître : elle rend le
+    /// document et les métadonnées qu'elle en a tirés, au lieu de laisser l'appelant
+    /// rouvrir le même fichier.
+    #[test]
+    fn the_climb_hands_back_the_manifest_it_had_to_read() {
+        let dir = TempDir::new().expect("répertoire temporaire");
+        let projet = dir.path().join("api");
+        fs::create_dir_all(projet.join("src")).expect("arborescence");
+        fs::write(
+            projet.join("Cargo.toml"),
+            "[package]\nname = \"api\"\n\n[package.metadata.rbs]\nversion = \"1.1.0\"\n\
+             features = [\"health\"]\ndatabase = \"postgres\"\n",
+        )
+        .expect("manifeste du projet");
+
+        let racine = racine(&projet.join("src")).expect("la racine est trouvée");
+
+        assert_eq!(racine.root, projet);
+        assert_eq!(racine.manifeste.metadonnees.features, ["health"]);
+        assert_eq!(
+            racine
+                .manifeste
+                .document
+                .get("package")
+                .and_then(|package| package.get("name"))
+                .and_then(Item::as_str),
+            Some("api"),
+            "le document rendu doit être celui de la racine"
         );
     }
 

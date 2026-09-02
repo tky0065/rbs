@@ -24,7 +24,7 @@ const HORS_FEATURES: [&str; 3] = ["health", "seeds", "cache"];
 
 /// Contrôle l'`AGENTS.md` du projet, et nomme le code qui n'est pas passé par le CLI.
 pub(crate) fn check(root: &Path, manifeste: &Manifeste) -> Check {
-    let Ok(metadonnees) = manifeste else {
+    let Ok(manifeste) = manifeste else {
         return Check::failed(
             TITRE,
             "le manifeste du projet est illisible",
@@ -82,7 +82,7 @@ pub(crate) fn check(root: &Path, manifeste: &Manifeste) -> Check {
     // cause à un développeur qui vient de corriger la première.
     let mut echecs: Vec<(String, String)> = Vec::new();
 
-    if let Ok(attendu) = agents::inventory(root, metadonnees.lang)
+    if let Ok(attendu) = agents::inventory(root, manifeste.metadonnees.lang)
         && agents::body(&present, agents::INVENTORY) != Some(attendu.as_str())
     {
         echecs.push((
@@ -91,7 +91,7 @@ pub(crate) fn check(root: &Path, manifeste: &Manifeste) -> Check {
         ));
     }
 
-    if let Some(declaree) = declared_without_directory(root, &metadonnees.features) {
+    if let Some(declaree) = declared_without_directory(root, &manifeste.metadonnees.features) {
         echecs.push((
             format!("`{declaree}` est déclarée sans que src/{declaree}/ existe"),
             format!("rbs add {declaree}, ou retirez la ligne de [package.metadata.rbs]"),
@@ -113,7 +113,7 @@ pub(crate) fn check(root: &Path, manifeste: &Manifeste) -> Check {
         return Check::failed(TITRE, detail, remedy);
     }
 
-    let hors_cli = written_by_hand(root, &metadonnees.features);
+    let hors_cli = written_by_hand(root, &manifeste.metadonnees.features);
     if !hors_cli.is_empty() {
         return Check::warned(
             TITRE,

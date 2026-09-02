@@ -154,14 +154,15 @@ crate::errors::depuis_la_racine!(Error);
 /// Diagnostique le projet qui contient `directory`, en remettant chaque constat à
 /// `sortie` au moment où il est fait.
 pub(crate) fn run(directory: &Path, sortie: &mut dyn Sortie) -> Result<Report, Error> {
-    let root = metadata::project_root(directory)?;
+    let metadata::Racine { root, manifeste } = metadata::racine(directory)?;
 
     // Une seule lecture de chaque fichier pour tout le diagnostic : le manifeste comme
     // la configuration étaient relus et réanalysés par chaque contrôle pour une question
-    // d'une ligne.
+    // d'une ligne. Le manifeste vient de la remontée elle-même, qui a dû l'ouvrir pour
+    // reconnaître la racine.
     let projet = Projet {
         config: Config::read(&root),
-        manifeste: manifeste(&root),
+        manifeste: Ok(manifeste),
         root,
     };
 
@@ -196,14 +197,24 @@ pub(crate) struct Projet {
 
 /// Ce que le manifeste du projet apprend au diagnostic, ou la faute qui l'en empêche.
 ///
+/// Le document analysé y voyage avec les métadonnées : `versions` lit la dépendance au
+/// noyau et `base` la feature de `sea-orm`, deux déclarations que
+/// `[package.metadata.rbs]` ne dit pas et que chacun rouvrait le fichier pour trouver.
+///
 /// La faute est gardée plutôt que remplacée par un défaut : le moteur, les features et
 /// la version que le manifeste porte commandent la moitié des contrôles, et chacun a sa
 /// façon de dire qu'il ne les a pas.
-pub(crate) type Manifeste = Result<metadata::Metadata, metadata::Error>;
+pub(crate) type Manifeste = Result<metadata::Manifeste, metadata::Error>;
 
 /// Lit le manifeste du projet enraciné en `root`.
+///
+/// Le diagnostic ne passe plus par là — `metadata::racine` lui rend le manifeste qu'elle
+/// a dû lire pour reconnaître la racine. Restent les tests des contrôles, qui réécrivent
+/// le manifeste entre la création du projet et le verdict, et doivent donc le relire à
+/// cet instant-là.
+#[cfg(test)]
 pub(crate) fn manifeste(root: &Path) -> Manifeste {
-    metadata::read(&root.join("Cargo.toml"))
+    metadata::manifeste(&root.join("Cargo.toml"))
 }
 
 /// Un contrôle du diagnostic : son titre, connu avant qu'il ne s'exécute, et son
@@ -247,7 +258,7 @@ fn plan(manifeste: &Manifeste) -> Vec<Controle> {
         },
         Controle {
             titre: versions::TITRE,
-            executer: |projet, _| versions::check(&projet.root, &projet.manifeste),
+            executer: |projet, _| versions::check(&projet.manifeste),
         },
         Controle {
             titre: base::TITRE,
@@ -257,7 +268,7 @@ fn plan(manifeste: &Manifeste) -> Vec<Controle> {
 
     let installees = manifeste
         .as_ref()
-        .map(|metadonnees| metadonnees.features.as_slice())
+        .map(|manifeste| manifeste.metadonnees.features.as_slice())
         .unwrap_or_default();
 
     // Un projet qui n'a pas installé une feature n'a pas à lire une ligne à son sujet :
