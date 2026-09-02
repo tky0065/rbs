@@ -9,13 +9,12 @@ use std::path::Path;
 
 use crate::dotenv;
 
-use super::{Check, Config};
+use super::{CONFIG, Check, Config};
 
 /// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
 pub(crate) const TITRE: &str = "storage";
 const FICHIER: &str = ".env";
 const EXEMPLE: &str = ".env.example";
-const CONFIG: &str = "config/default.toml";
 const SECTION: &str = "storage";
 const BACKEND: &str = "backend";
 const S3: &str = "s3";
