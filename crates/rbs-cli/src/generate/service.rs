@@ -165,6 +165,34 @@ mod tests {
         );
     }
 
+    /// Trois formes de ce fichier suivent le nom de l'entité, et chacune bascule à sa
+    /// propre longueur : les signatures aux 100 colonnes de `max_width`, les chaînes
+    /// `.into_iter()…` et `.await?.into()` aux 60 de `chain_width`, l'import des DTO aux
+    /// 98 d'un `use`. Un seul nom ne prouverait donc rien : les quatre balaient la plage
+    /// où les seuils se franchissent.
+    ///
+    /// Les noms montent jusqu'à l'entité de vingt-trois caractères, la dernière dont la
+    /// ligne `use super::dto::{…}` éclatée tienne sur une seule ligne intérieure. Au-delà,
+    /// rustfmt répartirait les trois DTO sur plusieurs lignes, ce que la template ne
+    /// devine pas : `format::format_batch` s'en charge alors à l'écriture.
+    #[test]
+    fn the_render_is_already_what_rustfmt_would_write() {
+        for name in [
+            "tag",
+            "articles",
+            "administrative_documents",
+            "organizational_structures",
+        ] {
+            let rendered = service(name, "title:string,summary:text:optional");
+
+            assert_eq!(
+                bench::formatted(&rendered),
+                rendered,
+                "le rendu de `{name}` diverge de rustfmt"
+            );
+        }
+    }
+
     #[test]
     #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
     fn the_generated_service_compiles_in_a_fresh_project() {
