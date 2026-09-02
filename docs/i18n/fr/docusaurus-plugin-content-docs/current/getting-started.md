@@ -72,6 +72,7 @@ vous tapez.
 rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 ```
 
+<!-- rbs:transcript cmd="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" -->
 ```text
 ✓ demo créé — 20 fichiers
 
@@ -220,6 +221,7 @@ rbs generate crud articles --fields "title:string,body:text,published:bool"
 
 La commande affiche ce qu'elle compte faire, puis le fait :
 
+<!-- rbs:transcript cmd="rbs generate crud articles --fields title:string,body:text,published:bool" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" -->
 ```text
 plan pour …/demo
 

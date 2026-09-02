@@ -69,6 +69,7 @@ after the way you called it, so its `--help` stays true to what you type.
 rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 ```
 
+<!-- rbs:transcript cmd="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" -->
 ```text
 ✓ demo créé — 20 fichiers
 
@@ -215,6 +216,7 @@ rbs generate crud articles --fields "title:string,body:text,published:bool"
 
 The command prints what it intends to do, then does it:
 
+<!-- rbs:transcript cmd="rbs generate crud articles --fields title:string,body:text,published:bool" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" -->
 ```text
 plan pour …/demo
 

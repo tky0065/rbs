@@ -553,9 +553,16 @@ fn contient(obtenu: &str, attendu: &str) -> bool {
 
 #[test]
 fn the_marked_transcripts_still_render_what_the_docs_show() {
+    let mut rejoues = 0;
+
     for transcript in transcripts().iter().filter(|garde| !garde.base) {
         compare_transcript(transcript);
+        rejoues += 1;
     }
+
+    // Une garde qui ne garde plus rien passe au vert sans rien prouver : c'est
+    // exactement l'angle mort qui a laissé quatre blocs vivre périmés.
+    assert!(rejoues > 0, "aucun bloc marqué n'a été rejoué");
 }
 
 #[test]
@@ -574,6 +581,11 @@ fn the_marked_transcripts_that_need_a_database_still_render_what_the_docs_show()
     for transcript in &gardes {
         compare_transcript(transcript);
     }
+
+    assert!(
+        !gardes.is_empty(),
+        "aucun bloc `base=\"oui\"` n'a été rejoué"
+    );
 }
 
 /// Un serveur à monter : les valeurs qu'une URL de page déclare.
