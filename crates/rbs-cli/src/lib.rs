@@ -612,7 +612,16 @@ fn repair_anchors(
     force: bool,
     json: bool,
 ) -> Result<doctor::anchors::Repair, Box<dyn Error>> {
-    let root = metadata::project_root(directory).map_err(doctor::Error::from)?;
+    // `racine` et non `project_root` : la doctrine du second — ne rien écrire dans un
+    // projet dont on ne sait pas lire l'état — vise les commandes qui écrivent *dans* le
+    // manifeste. Reposer une ancre n'en lit aucune donnée et n'écrit que dans des fichiers
+    // source qui en portent déjà. S'y arrêter faisait dire à `--fix` le contraire du
+    // diagnostic du même passage, qui sait nommer un manifeste cassé sans s'y arrêter — et
+    // faisait tomber avec lui le rapport entier. La faute reste dite, par les contrôles
+    // qui suivent.
+    let root = metadata::racine(directory)
+        .map_err(doctor::Error::from)?
+        .root;
     let repair = doctor::anchors::repair(&root)?;
 
     // La garde Git vient après le plan, comme pour `upgrade` : un projet qui n'a rien à
@@ -819,6 +828,22 @@ mod tests {
         );
 
         let repair = repair_anchors(&root, true, true).expect("`--force` passe outre");
+        assert_eq!(repair.reposees, vec!["routes".to_string()]);
+    }
+
+    /// Reposer une ancre ne lit aucune donnée du manifeste : s'y arrêter faisait dire à
+    /// `--fix` le contraire du diagnostic du même passage, qui sait nommer un manifeste
+    /// cassé sans s'y arrêter — et faisait tomber avec lui le rapport entier.
+    #[test]
+    fn doctor_fix_repairs_anchors_despite_a_broken_manifest() {
+        let (_parent, root) = projet();
+        amputer(&root, "src/router.rs", "<rbs:routes>");
+        amputer(&root, "src/router.rs", "</rbs:routes>");
+        fs::write(root.join("Cargo.toml"), "[package\nname = \"demo-api\"\n")
+            .expect("manifeste cassé");
+
+        let repair = repair_anchors(&root, false, true).expect("la réparation aboutit");
+
         assert_eq!(repair.reposees, vec!["routes".to_string()]);
     }
 
