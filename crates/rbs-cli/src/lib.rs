@@ -98,6 +98,7 @@ pub fn run() {
                     dry_run,
                     has_many,
                     role,
+                    soft_delete,
                 } => GenerateArgs {
                     name,
                     fields,
@@ -106,6 +107,7 @@ pub fn run() {
                     dry_run,
                     has_many,
                     role,
+                    soft_delete,
                 },
                 GenerateCommands::Feature {
                     name,
@@ -119,6 +121,7 @@ pub fn run() {
                     dry_run,
                     has_many: Vec::new(),
                     role: None,
+                    soft_delete: false,
                 },
             };
 
@@ -480,6 +483,7 @@ struct GenerateArgs {
     dry_run: bool,
     has_many: Vec<String>,
     role: Option<String>,
+    soft_delete: bool,
 }
 
 fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
@@ -491,6 +495,7 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
         dry_run,
         has_many,
         role,
+        soft_delete,
     } = args;
 
     let feature = name.clone();
@@ -507,6 +512,7 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
         force,
         has_many,
         role,
+        soft_delete,
     })?;
 
     // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande

@@ -37,6 +37,8 @@ pub(crate) struct Options {
     pub has_many: Vec<String>,
     /// Rôle exigé des routes d'écriture, tel qu'il s'écrit en base : `admin`.
     pub role: Option<String>,
+    /// Rend le `DELETE` logique : la ligne reste, sa colonne `deleted_at` datée.
+    pub soft_delete: bool,
 }
 
 /// Un fichier à écrire : son chemin, relatif à la racine du projet, et son contenu.
@@ -156,6 +158,16 @@ pub(crate) enum Error {
         role: String,
     },
 
+    /// `--soft-delete` sur une entité qui déclare déjà la colonne que le drapeau injecte.
+    #[error(
+        "`--soft-delete` pose lui-même la colonne `{colonne}` : retirez-la de `--fields`, \
+         ou renoncez au drapeau"
+    )]
+    SoftDeleteColonneReservee {
+        /// Nom de la colonne en conflit, tel qu'il a été déclaré.
+        colonne: String,
+    },
+
     /// `--role` nomme un rôle que l'enum du projet ne déclare pas.
     #[error(
         "`--role {role}` ne désigne aucun rôle de src/auth/model.rs — connus : {known} ; \
@@ -228,6 +240,17 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let mut fields =
         fields::parse(options.fields.as_deref().unwrap_or_default()).map_err(Error::Fields)?;
 
+    // La colonne est injectée par le drapeau, non déclarée. Hors du drapeau elle reste un
+    // nom libre : la réserver dans `NAMES_SET_BY_RBS` casserait un `--fields` légitime
+    // sur tous les CRUD qui ne suppriment pas logiquement.
+    if options.soft_delete
+        && let Some(champ) = fields.iter().find(|champ| champ.name == "deleted_at")
+    {
+        return Err(Error::SoftDeleteColonneReservee {
+            colonne: champ.name.clone(),
+        });
+    }
+
     // Lu une fois, avant que le nom ne soit tranché : la même inventaire sert à
     // résoudre les cibles des références et à écrire leur côté inverse.
     let entities = entities::scan(&root);
@@ -237,6 +260,11 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let feature = match &options.role {
         Some(role) => Feature::fresh(&options.name, fields).guarded(role),
         None => Feature::fresh(&options.name, fields),
+    };
+    let feature = if options.soft_delete {
+        feature.soft_deleting()
+    } else {
+        feature
     };
     let module = feature.module().to_string();
 
@@ -621,6 +649,7 @@ mod tests {
             force: false,
             has_many: Vec::new(),
             role: None,
+            soft_delete: false,
         }
     }
 
@@ -716,6 +745,19 @@ mod tests {
 
         assert_eq!(entites.matches("articles").count(), 1, "{entites}");
         assert!(entites.contains("comments"), "{entites}");
+    }
+
+    #[test]
+    fn a_field_named_deleted_at_is_refused_under_soft_delete() {
+        let message = Error::SoftDeleteColonneReservee {
+            colonne: "deleted_at".to_owned(),
+        }
+        .to_string();
+
+        assert!(
+            message.contains("--soft-delete") && message.contains("deleted_at"),
+            "le refus doit nommer le drapeau et la colonne : {message}"
+        );
     }
 
     /// Le refus est prononcé avant le rendu : un contrôleur qui appellerait

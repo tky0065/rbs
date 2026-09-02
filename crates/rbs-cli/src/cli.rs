@@ -156,6 +156,10 @@ pub enum GenerateCommands {
         /// Réserve create, update et delete à ce rôle ; exige la feature auth.
         #[arg(long, value_name = "ROLE")]
         role: Option<String>,
+
+        /// Rend le DELETE logique : la ligne reste, marquée d'une date de suppression.
+        #[arg(long)]
+        soft_delete: bool,
     },
 
     /// Génère une feature vide : six fichiers, aucun champ.
@@ -274,6 +278,21 @@ mod tests {
         let long = Cli::try_parse_from(["rbs", "generate", "crud", "users"]).unwrap();
 
         assert_eq!(court, long);
+    }
+
+    #[test]
+    fn generate_crud_accepts_soft_delete() {
+        let cli = Cli::try_parse_from(["rbs", "generate", "crud", "articles", "--soft-delete"])
+            .expect("la ligne doit être acceptée");
+
+        let Commands::Generate {
+            command: GenerateCommands::Crud { soft_delete, .. },
+        } = cli.command
+        else {
+            panic!("la sous-commande doit être `generate crud`");
+        };
+
+        assert!(soft_delete);
     }
 
     /// Le flag doit accepter les deux langues et rester absent par défaut : c'est cette

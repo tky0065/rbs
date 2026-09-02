@@ -20,6 +20,8 @@ pub(crate) struct Feature {
     pub fields: Vec<Field>,
     /// Variante de l'enum `Role` que les routes d'écriture exigeront, s'il y en a une.
     pub role: Option<String>,
+    /// Le `DELETE` marque la ligne au lieu de la retirer.
+    pub soft_delete: bool,
 }
 
 impl Feature {
@@ -28,6 +30,7 @@ impl Feature {
             name: name.to_string(),
             fields,
             role: None,
+            soft_delete: false,
         }
     }
 
@@ -37,6 +40,12 @@ impl Feature {
     /// sous la forme que porte l'enum du projet : c'est elle que la template écrit.
     pub(crate) fn guarded(mut self, role: &str) -> Self {
         self.role = Some(to_pascal_case(role));
+        self
+    }
+
+    /// La même feature, dont le `DELETE` marque la ligne au lieu de la retirer.
+    pub(crate) fn soft_deleting(mut self) -> Self {
+        self.soft_delete = true;
         self
     }
 
@@ -221,7 +230,7 @@ fn named(variants: &[String]) -> String {
 /// templates lisent `entity` comme elles lisent `module`.
 impl Serialize for Feature {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("Feature", 10)?;
+        let mut state = serializer.serialize_struct("Feature", 11)?;
         state.serialize_field("module", self.module())?;
         state.serialize_field("table", self.module())?;
         state.serialize_field("entity", &self.entity())?;
@@ -232,6 +241,7 @@ impl Serialize for Feature {
         state.serialize_field("ambiguous_targets", &self.ambiguous_targets())?;
         state.serialize_field("target_idens", &self.target_idens())?;
         state.serialize_field("role", &self.role)?;
+        state.serialize_field("soft_delete", &self.soft_delete)?;
         state.end()
     }
 }
@@ -334,6 +344,25 @@ mod tests {
         assert_eq!(vue["iden"], "Users");
         assert_eq!(vue["singular"], "user");
         assert!(vue["fields"].is_array(), "les champs doivent être exposés");
+    }
+
+    #[test]
+    fn an_ordinary_feature_does_not_delete_softly() {
+        let feature = Feature::fresh("articles", Vec::new());
+        let rendu = serde_json::to_value(&feature).expect("la feature se sérialise");
+
+        assert_eq!(
+            rendu["soft_delete"], false,
+            "sans le drapeau, la clé existe et vaut faux : {rendu}"
+        );
+    }
+
+    #[test]
+    fn soft_deleting_marks_the_feature() {
+        let feature = Feature::fresh("articles", Vec::new()).soft_deleting();
+        let rendu = serde_json::to_value(&feature).expect("la feature se sérialise");
+
+        assert_eq!(rendu["soft_delete"], true);
     }
 
     #[test]
