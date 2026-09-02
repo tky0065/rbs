@@ -255,12 +255,14 @@ async fn an_invalid_email_returns_422() {
     let api = application().await;
     let mut sent = creation();
     sent["{@ email_field @}"] = Value::from("pas-une-adresse");
-{# Les arguments d'un appel basculent aux soixante colonnes de `fn_call_width` : au-delà,
-   rustfmt en pose un par ligne et sort le `.await`. #}
+{#- Les arguments d'un appel basculent aux soixante colonnes de `fn_call_width` : au-delà,
+    rustfmt en pose un par ligne et sort le `.await`. #}
 {%- set appel_invalide = "&api, request(\"POST\", \"/" ~ module ~ "\", sent)" %}
 {%- if appel_invalide | length <= 60 %}
+
     let (status, body) = call({@ appel_invalide @}).await;
 {%- else %}
+
     let (status, body) = call(
         &api,
         request("POST", "/{@ module @}", sent),
@@ -322,8 +324,10 @@ async fn an_unknown_sort_column_returns_400() {
     let critere = json!({ "sort": ["-inconnue"] });
 {%- set appel_tri = "&api, request(\"POST\", \"/" ~ module ~ "/filter\", critere)" %}
 {%- if appel_tri | length <= 60 %}
+
     let (status, body) = call({@ appel_tri @}).await;
 {%- else %}
+
     let (status, body) = call(
         &api,
         request("POST", "/{@ module @}/filter", critere),

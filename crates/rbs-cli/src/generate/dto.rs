@@ -239,7 +239,10 @@ mod tests {
     #[test]
     fn the_render_is_already_what_rustfmt_would_write() {
         let divergentes = bench::longueurs_divergentes(|name| {
-            dto(name, "title:string,summary:text:optional,published_at:datetime")
+            dto(
+                name,
+                "title:string,summary:text:optional,published_at:datetime",
+            )
         });
 
         assert_eq!(
@@ -254,9 +257,8 @@ mod tests {
     /// lui. Aucun garde ne balayait cet axe-là.
     #[test]
     fn the_render_is_already_what_rustfmt_would_write_whatever_the_field_length() {
-        let divergentes = bench::longueurs_divergentes(|champ| {
-            dto("article", &format!("{champ}:string"))
-        });
+        let divergentes =
+            bench::longueurs_divergentes(|champ| dto("article", &format!("{champ}:string")));
 
         assert_eq!(
             divergentes,

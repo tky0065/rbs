@@ -409,7 +409,10 @@ mod tests {
     #[test]
     fn the_render_is_already_what_rustfmt_would_write() {
         let divergentes = bench::longueurs_divergentes(|name| {
-            entity(name, "title:string,summary:text:optional,published_at:datetime")
+            entity(
+                name,
+                "title:string,summary:text:optional,published_at:datetime",
+            )
         });
 
         assert_eq!(

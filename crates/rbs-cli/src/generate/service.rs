@@ -181,8 +181,9 @@ mod tests {
     /// plutôt que d'échouer sur un nom pris dans une liste.
     #[test]
     fn the_render_is_already_what_rustfmt_would_write() {
-        let divergentes =
-            bench::longueurs_divergentes(|name| service(name, "title:string,summary:text:optional"));
+        let divergentes = bench::longueurs_divergentes(|name| {
+            service(name, "title:string,summary:text:optional")
+        });
 
         assert_eq!(
             divergentes,

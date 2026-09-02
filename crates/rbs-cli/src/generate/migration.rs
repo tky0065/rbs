@@ -68,9 +68,8 @@ mod tests {
     /// neuf caractères de plus que l'iden, donc elles restent éclatées à toute longueur.
     #[test]
     fn the_render_is_already_what_rustfmt_would_write() {
-        let divergentes = bench::longueurs_divergentes(|name| {
-            migration(name, "title:string,views:int").content
-        });
+        let divergentes =
+            bench::longueurs_divergentes(|name| migration(name, "title:string,views:int").content);
 
         assert_eq!(
             divergentes,
