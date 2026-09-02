@@ -195,6 +195,8 @@ fn create_project(
     let features = (!with.is_empty()).then_some(with);
     let disponibles = templates::feature_names(template_dir.as_deref());
     let options = prompts::resolve(name, database_url, database, features, &disponibles, yes)?;
+    // Relevé avant que `options` ne parte dans la création, qui l'emporte.
+    let url_opaque = new::url_opaque(database, &options.database_url);
 
     let project = new::create(
         &new::Options {
@@ -219,6 +221,17 @@ fn create_project(
     if !project.depot_git {
         ui::warn("`git init` n'a pas abouti : le projet est complet, mais sans dépôt");
     }
+    // L'absence du compose ne se découvrait qu'en cherchant un fichier qui n'a jamais été
+    // écrit : rien dans l'URL ne dit qu'elle n'a pas été comprise.
+    if url_opaque {
+        ui::warn(&format!(
+            "rbs n'a lu aucun hôte dans l'URL de la base : aucun {} n'a été écrit",
+            new::COMPOSE
+        ));
+        ui::info(
+            "  une URL à socket Unix est dans ce cas ; sinon, revoyez `RBS_DATABASE__URL` dans .env",
+        );
+    }
     for pose in &project.installed {
         let migration = if pose.migration { ", 1 migration" } else { "" };
         ui::info(&format!(
@@ -233,7 +246,7 @@ fn create_project(
     for suite in suites_installees(&project.installed) {
         ui::info(&format!("\n  {suite}"));
     }
-    let compose = project.root.join("docker-compose.yml").exists();
+    let compose = project.root.join(new::COMPOSE).exists();
     let demarrage = if compose {
         "\n  docker compose up -d   # la base du .env, montée\n  cargo run              # ou `rbs dev`, qui enchaîne les deux"
     } else {

@@ -366,8 +366,11 @@ Quatre cas n'écrivent rien :
   PostgreSQL officielle refuse de s'initialiser sans mot de passe : un compose qui ne peut
   pas démarrer est pire que pas de compose ;
 - **une URL que l'analyseur refuse d'emblée** — un séparateur non encodé dans le mot de
-  passe, par exemple, l'arrête plutôt que de deviner un hôte ou un nom de base : rien n'en
-  est tiré, donc rien n'en écrit de compose.
+  passe, ou une socket Unix comme `postgres:///demo`, l'arrête plutôt que de deviner un
+  hôte ou un nom de base : rien n'en est tiré, donc rien n'en écrit de compose. C'est le
+  seul cas dont `rbs new` avertit, et le seul qui en ait besoin : les trois précédents sont
+  des choix lisibles dans l'URL, quand celui-ci ne se voit qu'à un fichier qui n'a jamais
+  été écrit.
 
 ```text
 $ rbs new sqlite-demo --database sqlite --yes

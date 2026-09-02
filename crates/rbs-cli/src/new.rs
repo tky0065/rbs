@@ -19,7 +19,7 @@ use crate::templates::Source;
 
 /// Nom du compose à la racine du projet, tel que la template le rend et que `rbs dev` le
 /// cherche.
-const COMPOSE: &str = "docker-compose.yml";
+pub(crate) const COMPOSE: &str = "docker-compose.yml";
 
 /// Ce qu'il faut savoir avant de créer un projet, questions et flags confondus.
 pub struct Options {
@@ -450,6 +450,17 @@ fn compose_utile(options: &Options, connexion: Option<&crate::url::Connection>) 
         && connexion.is_some_and(|connexion| {
             connexion.est_locale() && !connexion.user.is_empty() && !connexion.password.is_empty()
         })
+}
+
+/// L'URL vise un moteur à serveur, et rbs n'a pas su la décomposer.
+///
+/// C'est l'un des trois cas où le compose n'est pas écrit, et le seul qui mérite d'être
+/// dit : les deux autres — une base distante, une URL sans identifiants — sont des choix
+/// lisibles dans l'URL elle-même, quand celui-ci ne se découvre qu'à l'absence du
+/// fichier. Un avertissement et non un refus : `postgres:///demo`, qui joint la base par
+/// une socket Unix, est légitime et ne se décompose pas davantage.
+pub(crate) fn url_opaque(database: Database, url: &str) -> bool {
+    database.a_un_serveur() && crate::url::parse(url).is_none()
 }
 
 /// Nom de la crate correspondant au nom du projet : un tiret n'est pas un caractère
@@ -1138,6 +1149,28 @@ mod tests {
             !exemple.contains("s3cr3t") && exemple.contains("POSTGRES_PASSWORD="),
             "l'exemple versionné doit documenter la clé sans porter le secret :\n{exemple}"
         );
+    }
+
+    /// Une URL que rbs ne décompose pas laisse le projet sans compose : c'est ce que
+    /// l'avertissement de `rbs new` annonce, et seul ce cas-là est annoncé.
+    #[test]
+    fn only_an_undecomposable_url_on_a_server_engine_is_reported() {
+        assert!(url_opaque(Database::Postgres, "postgres:///demo"));
+        assert!(url_opaque(Database::Mysql, "mysql://localhost:port/demo"));
+
+        // Décomposée : l'absence de compose y tient au choix de l'URL, non à rbs.
+        assert!(!url_opaque(
+            Database::Postgres,
+            "postgres://u:p@localhost:5432/demo"
+        ));
+        assert!(!url_opaque(Database::Postgres, "postgres://localhost/demo"));
+        assert!(!url_opaque(
+            Database::Postgres,
+            "postgres://u:p@db.exemple.fr/demo"
+        ));
+
+        // SQLite n'a rien à monter : le compose n'a jamais été attendu.
+        assert!(!url_opaque(Database::Sqlite, "sqlite://demo.db"));
     }
 
     /// Un mot de passe portant `'`, `:` ou `$(` cassait le YAML ou s'exécutait dans le

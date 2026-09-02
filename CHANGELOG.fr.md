@@ -46,6 +46,11 @@ dépréciation.
 
 ### Modifié
 
+- `rbs new` avertit quand il n'a pas su décomposer l'URL de la base. Aucun
+  `docker-compose.yml` n'est écrit dans ce cas, et le projet naissait jusqu'ici sans
+  compose et sans un mot — l'absence ne se découvrait qu'à un fichier manquant. Un
+  avertissement et non un refus : une socket Unix comme `postgres:///demo` est légitime et
+  ne se décompose pas davantage.
 - Un champ `string` est borné à 255 caractères dans les DTO engendrés, sans qu'on le
   demande. Rien d'autre ne le bornait — `ColumnDef::string()` rend un `varchar` sans
   longueur sur PostgreSQL — si bien que chaque route publique acceptait une chaîne de

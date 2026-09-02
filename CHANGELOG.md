@@ -45,6 +45,10 @@ between minor versions with no deprecation cycle.
 
 ### Changed
 
+- `rbs new` warns when it could not decompose the database URL. No `docker-compose.yml`
+  is written in that case, and until now the project was born without one and without a
+  word — the absence showed up only as a missing file. A warning and not a refusal: a Unix
+  socket such as `postgres:///demo` is legitimate and does not decompose either.
 - A `string` field is bounded at 255 characters in the generated DTOs, without anyone
   asking. Nothing else bounded it — `ColumnDef::string()` renders a `varchar` with no
   length on PostgreSQL — so every public route accepted a string of arbitrary length.

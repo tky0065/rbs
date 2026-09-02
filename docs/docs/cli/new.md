@@ -364,9 +364,12 @@ Four cases write nothing:
 - **a URL without credentials** — valid, accepted by `--database-url`, but the official
   PostgreSQL image refuses to initialize without a password: a compose that cannot start
   is worse than no compose;
-- **a URL the parser refuses outright** — an unencoded separator in the password, for
-  instance, stops it rather than guess at a host or a database name: nothing is derived,
-  so there is nothing to write a compose from.
+- **a URL the parser refuses outright** — an unencoded separator in the password, or a
+  Unix socket such as `postgres:///demo`, stops it rather than guess at a host or a
+  database name: nothing is derived, so there is nothing to write a compose from. This is
+  the one case `rbs new` warns about, and the only one that needs it: the three above are
+  choices readable in the URL, while this one shows up only as a file that was never
+  written.
 
 ```text
 $ rbs new sqlite-demo --database sqlite --yes
