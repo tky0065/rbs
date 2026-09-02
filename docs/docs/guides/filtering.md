@@ -59,6 +59,54 @@ POST /articles/filter?page=2&per_page=50
 `Pagination` is an extractor that applies to any request, filtered or not. Putting it in
 the body as well would give one value two sources.
 
+## Cursor pagination, for lists that outgrow an offset
+
+`Pagination` asks the engine to walk past the rows it is about to discard, and an insert
+between two requests shifts the window — page 2 repeats a row page 1 already showed. Past
+a few thousand rows, `Cursor` replaces it:
+
+```text
+GET /articles?after=0199e0b1-9c4a-7c3e-9d21-6f2a1b0c4d5e&per_page=50
+```
+
+`after` is the `id` of the last row you were served, and it is exclusive. Leave it out for
+the first page. A malformed `after` answers 400; a `per_page` beyond 100 is quietly capped,
+exactly as it is for `Pagination`.
+
+The response drops the counts:
+
+```json
+{
+  "data": [ … ],
+  "meta": { "per_page": 50, "next": "0199e0b1-9c4a-7c3e-9d21-6f2a1b0c4d5e" }
+}
+```
+
+`next` is null once the walk is over. There is no `total`: the `COUNT(*)` it needs is the
+cost the cursor exists to avoid.
+
+The generated CRUD keeps `Pagination` — switching it would drop `total` from every
+response your clients already read. `Cursor` is there for the routes you write yourself:
+
+```rust
+let mut query = Entity::find().order_by_desc(Column::Id);
+if let Some(after) = cursor.after() {
+    query = query.filter(Column::Id.lt(after));
+}
+let rows = query.limit(cursor.per_page()).all(db).await?;
+let dernier = rows.last().map(|row| row.id);
+
+Ok(Json(CursorPage::new(
+    rows.into_iter().map(Into::into).collect(),
+    &cursor,
+    dernier,
+)))
+```
+
+The cursor only walks `id` descending — the order `list` already applies, and the one a
+UUIDv7 makes total. It does not follow a `sort` you chose: on a column where two rows share
+a value, the boundary would be ambiguous and the next page would skip or repeat rows.
+
 ## No column name ever reaches the database
 
 The filter is typed by the columns of `--fields`, at generation time:

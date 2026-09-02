@@ -15,6 +15,11 @@ dépréciation.
 
 ### Ajouté
 
+- `rbs_core::Cursor` et `CursorPage<T>` paginent sur l'`id` plutôt que sur un offset, pour
+  les listes où `OFFSET n` fait parcourir au moteur les lignes qu'il va jeter. La borne
+  `after` est exclusive, et la réponse ne porte pas de `total` — le `COUNT(*)` qu'il
+  exigerait est le coût que le curseur évite. Le CRUD engendré ne change pas et garde
+  `Pagination` : basculer retirerait `total` de toutes les réponses déjà servies.
 - `rbs add observability` installe des traces OTLP et un `/metrics` Prometheus. Les traces
   sortent par `rbs-core`, derrière sa nouvelle feature cargo `observability` : c'est
   `logs::init()` qui pose l'abonné global, et rien d'ajouté à l'ancre `// <rbs:startup>`
