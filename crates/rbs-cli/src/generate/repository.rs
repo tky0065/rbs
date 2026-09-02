@@ -228,8 +228,11 @@ mod tests {
     /// Deux formes de ce fichier suivent le nom de l'entité, et chacune bascule à sa propre
     /// longueur : les chaînes `…insert(db).await.map_err(…)` aux 60 colonnes de
     /// `chain_width`, dès treize caractères de singulier ; les signatures de `create` et
-    /// `update` aux 100 de `max_width`, dès vingt-trois. Un seul nom ne prouverait donc
-    /// rien : les quatre balaient la plage où les deux seuils se franchissent.
+    /// `update` aux 100 de `max_width`, dès vingt-trois. Cinq noms encadrent chacun des
+    /// deux seuils — en deçà de treize, entre treize et vingt-trois où la chaîne est déjà
+    /// repliée mais la signature encore entière, à vingt-trois et au-delà où les deux le
+    /// sont — pour que la combinaison des deux macros du gabarit soit éprouvée sur chaque
+    /// forme qu'elle peut produire.
     ///
     /// Les noms montent jusqu'à `organizational_structures`, dont le singulier fait
     /// vingt-quatre caractères. Au-delà de vingt-six pour l'entité, rustfmt éventaille les
@@ -241,6 +244,7 @@ mod tests {
         for name in [
             "tag",
             "articles",
+            "purchase_orders",
             "administrative_documents",
             "organizational_structures",
         ] {
