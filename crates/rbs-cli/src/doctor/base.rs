@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use crate::database::Database;
+use crate::metadata;
 use crate::migrate;
 
 use super::{Check, Manifeste};
@@ -57,20 +58,15 @@ pub(crate) fn check(root: &Path, manifeste: &Manifeste, annonce: &mut dyn FnMut(
 
     // Un serveur qui répond ne prouve rien quand le pilote compilé ne sait pas parler son
     // protocole : l'écart se dit avant que le port soit sondé.
-    if let Some(ecart) = ecart(root, &url) {
-        return ecart;
+    match ecart(root, &url) {
+        Ok(Some(ecart)) => return ecart,
+        Ok(None) => {}
+        Err(faute) => return manifeste_fautif(&faute),
     }
 
     let database = match manifeste {
         Ok(metadonnees) => metadonnees.database,
-        Err(faute) => {
-            return Check::failed(
-                TITRE,
-                faute.to_string(),
-                "corrigez le Cargo.toml du projet : le moteur qu'il déclare commande \
-                 tout le reste du diagnostic",
-            );
-        }
+        Err(faute) => return manifeste_fautif(faute),
     };
 
     let ou = match joignable(root, database, &url) {
@@ -113,24 +109,44 @@ pub(crate) fn check(root: &Path, manifeste: &Manifeste, annonce: &mut dyn FnMut(
     }
 }
 
+/// Le constat que rend une faute du manifeste, d'où qu'elle vienne.
+///
+/// Le moteur déclaré commande le plancher de version, la forme d'URL attendue et le
+/// remède : un manifeste illisible ne laisse rien à diagnostiquer de la base.
+fn manifeste_fautif(faute: &metadata::Error) -> Check {
+    Check::failed(
+        TITRE,
+        faute.to_string(),
+        "corrigez le Cargo.toml du projet : le moteur qu'il déclare commande \
+         tout le reste du diagnostic",
+    )
+}
+
 /// L'écart entre le pilote que le projet compile et le moteur que son URL désigne.
 ///
 /// Les deux valeurs sont nommées plutôt que leur conclusion : c'est l'une ou l'autre que
 /// le lecteur aura à corriger, et « configuration invalide » le renverrait aux deux
 /// fichiers pour savoir laquelle.
-fn ecart(root: &Path, url: &str) -> Option<Check> {
-    let compile = pilote(root)?;
-    let vise = Database::TOUS
+fn ecart(root: &Path, url: &str) -> Result<Option<Check>, metadata::Error> {
+    let Some(compile) = pilote(root)? else {
+        return Ok(None);
+    };
+    let Some(vise) = Database::TOUS
         .into_iter()
-        .find(|moteur| moteur.accepte(url))?;
+        .find(|moteur| moteur.accepte(url))
+    else {
+        return Ok(None);
+    };
 
     if compile == vise {
-        return None;
+        return Ok(None);
     }
 
-    let scheme = crate::database::scheme_of(url)?;
+    let Some(scheme) = crate::database::scheme_of(url) else {
+        return Ok(None);
+    };
 
-    Some(Check::failed(
+    Ok(Some(Check::failed(
         TITRE,
         format!(
             "le manifeste compile `{}` et {} est une URL `{scheme}://`",
@@ -143,7 +159,7 @@ fn ecart(root: &Path, url: &str) -> Option<Check> {
             vise.sea_orm_feature(),
             compile.schemes()[0]
         ),
-    ))
+    )))
 }
 
 /// Moteur que le manifeste compile, lu à la feature de `sea-orm`.
@@ -151,24 +167,38 @@ fn ecart(root: &Path, url: &str) -> Option<Check> {
 /// C'est elle que `sqlx` embarque, et donc le seul pilote dont le binaire disposera.
 /// `[package.metadata.rbs].database` n'en est que le suivi, qu'une édition à la main
 /// laisse derrière elle sans rien casser à la compilation.
-fn pilote(root: &Path) -> Option<Database> {
-    let source = std::fs::read_to_string(root.join("Cargo.toml")).ok()?;
-    let manifest: toml_edit::DocumentMut = source.parse().ok()?;
+///
+/// Trois issues, là où un `Option` n'en portait que deux : un manifeste illisible est
+/// une faute qui remonte, un manifeste sans `sea-orm` ni feature de moteur n'en est pas
+/// une. Les confondre en `None` remettait le signalement de la première au contrôle
+/// suivant, qui pouvait tout aussi bien passer avant.
+fn pilote(root: &Path) -> Result<Option<Database>, metadata::Error> {
+    let chemin = root.join("Cargo.toml");
+    let source = std::fs::read_to_string(&chemin)
+        .map_err(|source| crate::errors::Acces::new(&chemin, source))?;
+    let manifest: toml_edit::DocumentMut =
+        source.parse().map_err(|source| metadata::Error::Syntaxe {
+            path: chemin.display().to_string(),
+            source,
+        })?;
 
-    let features = manifest
-        .get("dependencies")?
-        .get("sea-orm")?
-        .get("features")?
-        .as_array()?;
+    let Some(features) = manifest
+        .get("dependencies")
+        .and_then(|dependencies| dependencies.get("sea-orm"))
+        .and_then(|sea_orm| sea_orm.get("features"))
+        .and_then(|features| features.as_array())
+    else {
+        return Ok(None);
+    };
 
-    features
+    Ok(features
         .iter()
         .filter_map(|feature| feature.as_str())
         .find_map(|feature| {
             Database::TOUS
                 .into_iter()
                 .find(|moteur| moteur.sea_orm_feature() == feature)
-        })
+        }))
 }
 
 /// Dit où la base se trouve, ou pourquoi on ne l'atteint pas.
@@ -471,7 +501,36 @@ mod tests {
     fn the_compiled_driver_is_read_from_the_sea_orm_feature() {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
 
-        assert_eq!(pilote(&root), Some(Database::Postgres));
+        assert_eq!(
+            pilote(&root).expect("le manifeste du squelette est lisible"),
+            Some(Database::Postgres)
+        );
+    }
+
+    /// Un manifeste mal formé se nomme, au lieu de passer pour un manifeste qui ne
+    /// déclare pas sea-orm : la faute était avalée ici et n'était rattrapée que par le
+    /// contrôle suivant, si bien qu'en changer l'ordre l'aurait effacée du rapport.
+    #[test]
+    fn a_broken_manifest_names_its_parse_error() {
+        let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
+        std::fs::write(root.join("Cargo.toml"), "[package\nname = \"demo-api\"\n")
+            .expect("manifeste cassé");
+
+        let faute = pilote(&root).expect_err("un manifeste mal formé n'est pas un manifeste nu");
+
+        assert!(faute.to_string().contains("Cargo.toml"), "{faute}");
+        assert!(faute.to_string().contains("TOML valide"), "{faute}");
+    }
+
+    /// Un manifeste lisible qui ne déclare pas de pilote n'est pas une faute : il n'y a
+    /// alors rien à comparer à l'URL, et rien à dire au rapport.
+    #[test]
+    fn a_manifest_without_a_driver_is_not_a_fault() {
+        let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
+        std::fs::write(root.join("Cargo.toml"), "[package]\nname = \"demo-api\"\n")
+            .expect("manifeste sans dépendance");
+
+        assert_eq!(pilote(&root).expect("le manifeste reste lisible"), None);
     }
 
     #[test]
@@ -503,7 +562,11 @@ mod tests {
     fn a_url_matching_the_driver_raises_no_gap() {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
 
-        assert!(ecart(&root, "postgresql://rbs@127.0.0.1:1/demo").is_none());
+        assert!(
+            ecart(&root, "postgresql://rbs@127.0.0.1:1/demo")
+                .expect("le manifeste est lisible")
+                .is_none()
+        );
     }
 
     #[test]
@@ -554,6 +617,7 @@ mod tests {
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(check.detail.contains("Cargo.toml"), "{}", check.detail);
+        assert!(check.detail.contains("TOML valide"), "{}", check.detail);
         assert!(check.remedy.is_some());
     }
 
