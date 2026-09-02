@@ -306,12 +306,18 @@ mod tests {
     /// Le garde allonge trois signatures, et celle de `delete` franchit les 100 colonnes
     /// où rustfmt bascule : la template doit l'écrire déjà éclatée.
     ///
-    /// Les noms exercés sont ceux dont le rendu sans garde traverse déjà rustfmt sans
-    /// diff — au-delà, c'est la ligne `use super::dto::{…}` qui déborde, indépendamment du
-    /// garde, et `format::format_batch` s'en charge à l'écriture.
+    /// Les noms montent jusqu'à l'entité de vingt-trois caractères, la dernière dont la
+    /// ligne `use super::dto::{…}` éclatée tienne sur une seule ligne intérieure. Au-delà,
+    /// rustfmt répartirait les trois DTO sur plusieurs lignes, ce que la template ne
+    /// devine pas : `format::format_batch` s'en charge alors à l'écriture.
     #[test]
     fn the_guarded_render_is_already_what_rustfmt_would_write() {
-        for name in ["tag", "articles"] {
+        for name in [
+            "tag",
+            "articles",
+            "administrative_documents",
+            "organizational_structures",
+        ] {
             let rendered = guarded(name, "admin");
 
             assert_eq!(
@@ -320,6 +326,27 @@ mod tests {
                 "le rendu de `{name}` diverge de rustfmt"
             );
         }
+    }
+
+    /// La ligne des DTO est la seule du controller qui grandisse avec le nom de l'entité.
+    /// Ce que la comparaison à rustfmt prouve globalement, ce test le nomme : sous le
+    /// seuil la ligne reste entière, au-dessus la template l'éclate elle-même.
+    #[test]
+    fn the_dto_import_splits_itself_once_a_single_line_would_overflow() {
+        let court = controller("articles");
+        let long = controller("administrative_documents");
+
+        assert!(
+            court.contains("use super::dto::{ArticleResponse, CreateArticle, UpdateArticle};\n"),
+            "un nom court tient sur une ligne :\n{court}"
+        );
+        assert!(
+            long.contains(
+                "use super::dto::{\n    AdministrativeDocumentResponse, \
+                 CreateAdministrativeDocument, UpdateAdministrativeDocument,\n};\n"
+            ),
+            "un nom long doit être rendu déjà éclaté :\n{long}"
+        );
     }
 
     #[test]

@@ -9,7 +9,20 @@ use rbs_core::{HasCoreState, Page, Pagination, ProblemDetails, Result, Validated
 {%- endif %}
 use sea_orm::prelude::Uuid;
 
-use super::dto::{{@ dto | join(", ") @}};
+{# La ligne porte le nom de l'entité trois fois : dès dix-neuf caractères, elle franchit
+    les 98 colonnes au-delà desquelles rustfmt éclate un `use` — deux en deçà de son
+    `max_width`. La template l'écrit donc déjà éclatée, plutôt que de laisser la mise en
+    forme rattraper ce qu'elle aurait mal posé. Dès vingt-quatre, rustfmt répartirait les
+    trois noms sur plusieurs lignes intérieures : c'est là, et seulement là, que la mise
+    en forme reprend la main. -#}
+{% set import = "use super::dto::{" ~ (dto | join(", ")) ~ "};" -%}
+{% if import | length <= 98 -%}
+{@ import @}
+{% else -%}
+use super::dto::{
+    {@ dto | join(", ") @},
+};
+{% endif -%}
 use super::filter::{@ entity @}Filter;
 use super::service;
 {%- if role %}
