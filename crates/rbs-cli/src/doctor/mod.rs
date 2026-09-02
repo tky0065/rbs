@@ -154,6 +154,11 @@ crate::errors::depuis_la_racine!(Error);
 /// Diagnostique le projet qui contient `directory`, en remettant chaque constat à
 /// `sortie` au moment où il est fait.
 pub(crate) fn run(directory: &Path, sortie: &mut dyn Sortie) -> Result<Report, Error> {
+    // `racine` et non `project_root` : un manifeste cassé est le cas où le diagnostic
+    // sert le plus, et c'était le seul qu'il refusait de faire. La racine retenue est
+    // celle du manifeste fautif — la remontée s'y est arrêtée parce que c'est le projet
+    // visé, et diagnostiquer un répertoire englobant jugerait un autre projet. Reste
+    // l'absence, qui abandonne : il n'y a pas de projet à diagnostiquer ici.
     let metadata::Racine { root, manifeste } = metadata::racine(directory)?;
 
     // Une seule lecture de chaque fichier pour tout le diagnostic : le manifeste comme
@@ -162,7 +167,7 @@ pub(crate) fn run(directory: &Path, sortie: &mut dyn Sortie) -> Result<Report, E
     // reconnaître la racine.
     let projet = Projet {
         config: Config::read(&root),
-        manifeste: Ok(manifeste),
+        manifeste,
         root,
     };
 
@@ -345,6 +350,20 @@ const FEATURE_CHECKS: [(&str, Controle); 7] = [
 /// Le fichier de configuration que les contrôles de feature interrogent.
 const CONFIG: &str = "config/default.toml";
 
+/// Une faute réduite à sa première ligne.
+///
+/// Le rendu écrit le détail d'un constat sur la ligne de son titre, quand le report
+/// d'analyse de `toml_edit` en fait cinq : la première porte la position fautive, les
+/// suivantes n'en sont que le soulignement, et les recopier disloque la colonne.
+pub(crate) fn une_ligne(faute: impl std::fmt::Display) -> String {
+    faute
+        .to_string()
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .to_string()
+}
+
 /// Le contrôle d'une feature dont tout le diagnostic tient à sa section de configuration.
 ///
 /// Seul `config/default.toml` est lu : le CLI ne sait pas quel `RBS_ENV` l'utilisateur
@@ -432,14 +451,8 @@ impl Config {
 
         match source.parse::<toml_edit::DocumentMut>() {
             Ok(document) => Self::Lu(document),
-            // Seule la première ligne du report de `toml_edit` : elle porte la position
-            // fautive, les suivantes n'en sont que le soulignement, et un constat tient
-            // sur une ligne au rapport.
             Err(faute) => Self::Fautif {
-                detail: format!(
-                    "{CONFIG} n'est pas un TOML valide : {}",
-                    faute.to_string().lines().next().unwrap_or_default()
-                ),
+                detail: format!("{CONFIG} n'est pas un TOML valide : {}", une_ligne(faute)),
                 remede: format!("corrigez la syntaxe de {CONFIG}, puis relancez le diagnostic"),
             },
         }
@@ -535,6 +548,63 @@ mod tests {
         let error = run_with(ailleurs.path(), &mut Muet).expect_err("ce n'est pas un projet");
 
         assert!(matches!(error, Error::PasUnProjet));
+    }
+
+    /// Un manifeste cassé est le cas où le diagnostic sert le plus : la commande
+    /// s'arrêtait dessus avant de jouer un seul contrôle, si bien que les branches qui
+    /// savent le nommer n'étaient atteignables qu'en test unitaire.
+    #[test]
+    fn a_broken_manifest_is_diagnosed_instead_of_aborting_the_command() {
+        let (_parent, root) = crate::fixtures::project();
+        std::fs::write(root.join("Cargo.toml"), "[package\nname = \"demo-api\"\n")
+            .expect("manifeste cassé");
+
+        let report = run_with(&root, &mut Muet).expect("un manifeste cassé se diagnostique");
+
+        assert!(!report.succeeded(), "{:?}", titles(&report));
+
+        for titre in ["agents", "versions", "base"] {
+            let check = report
+                .checks
+                .iter()
+                .find(|check| check.title == titre)
+                .unwrap_or_else(|| panic!("{titre} doit figurer au rapport"));
+
+            assert_eq!(check.state, State::Echec, "{titre} : {}", check.detail);
+        }
+
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| check.detail.contains("TOML valide")),
+            "un contrôle doit porter la faute : {:?}",
+            report
+                .checks
+                .iter()
+                .map(|check| check.detail.as_str())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// Le rendu écrit le détail sur la ligne du titre : le report d'analyse de
+    /// `toml_edit` en fait cinq, et les recopier telles quelles disloquait la colonne.
+    #[test]
+    fn a_broken_manifest_is_reported_one_line_per_check() {
+        let (_parent, root) = crate::fixtures::project();
+        std::fs::write(root.join("Cargo.toml"), "[package\nname = \"demo-api\"\n")
+            .expect("manifeste cassé");
+
+        let report = run_with(&root, &mut Muet).expect("un manifeste cassé se diagnostique");
+
+        for check in &report.checks {
+            assert!(
+                !check.detail.contains('\n'),
+                "{} : {}",
+                check.title,
+                check.detail
+            );
+        }
     }
 
     /// Les titres sont connus avant le premier verdict — c'est ce qui fixe la largeur de

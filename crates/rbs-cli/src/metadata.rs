@@ -39,8 +39,9 @@ pub struct Manifeste {
 pub struct Racine {
     /// Racine du projet.
     pub root: PathBuf,
-    /// Son `Cargo.toml`, lu et analysé au passage.
-    pub manifeste: Manifeste,
+    /// Son `Cargo.toml`, lu et analysé au passage — ou la faute qui a arrêté la remontée
+    /// sur lui.
+    pub manifeste: Result<Manifeste, Error>,
 }
 
 /// Remonte de `start` jusqu'au projet rbs qui le contient.
@@ -50,32 +51,42 @@ pub struct Racine {
 ///
 /// Une faute autre que l'absence arrête la remontée : un manifeste que le développeur
 /// vient de casser désigne le projet qu'il visait, et le taire ferait viser un projet
-/// englobant — celui du dépôt, voire celui d'un répertoire parent sans rapport.
+/// englobant — celui du dépôt, voire celui d'un répertoire parent sans rapport. Cette
+/// racine-là est rendue avec sa faute plutôt qu'à la place d'elle : `rbs doctor` a
+/// justement à diagnostiquer ce projet, et c'est le cas où il sert le plus.
 pub fn racine(start: &Path) -> Result<Racine, RootError> {
     for candidat in start.ancestors() {
-        match manifeste(&candidat.join("Cargo.toml")) {
-            Ok(manifeste) => {
-                return Ok(Racine {
-                    root: candidat.to_path_buf(),
-                    manifeste,
-                });
-            }
+        let manifeste = match manifeste(&candidat.join("Cargo.toml")) {
+            Ok(manifeste) => Ok(manifeste),
             // Ces deux-là sont le régime ordinaire d'un ancêtre traversé : un répertoire
             // sans manifeste, ou celui d'une crate étrangère à rbs comme `migration`.
             Err(Error::PasUnProjet { .. }) => continue,
             Err(Error::Acces(faute)) if faute.source.kind() == std::io::ErrorKind::NotFound => {
                 continue;
             }
-            Err(faute) => return Err(RootError::Illisible(faute)),
-        }
+            Err(faute) => Err(faute),
+        };
+
+        return Ok(Racine {
+            root: candidat.to_path_buf(),
+            manifeste,
+        });
     }
 
     Err(RootError::Absent)
 }
 
 /// La racine du projet qui contient `start`, pour qui n'a que faire de son manifeste.
+///
+/// Un manifeste illisible reste une faute ici : les commandes qui modifient un projet
+/// n'ont rien à écrire dans celui dont elles ne savent pas lire l'état.
 pub fn project_root(start: &Path) -> Result<PathBuf, RootError> {
-    racine(start).map(|racine| racine.root)
+    let racine = racine(start)?;
+
+    match racine.manifeste {
+        Ok(_) => Ok(racine.root),
+        Err(faute) => Err(RootError::Illisible(faute)),
+    }
 }
 
 /// Métadonnées rbs d'un projet, telles que portées par son `Cargo.toml`.
@@ -1391,12 +1402,12 @@ features = ["health"]
         .expect("manifeste du projet");
 
         let racine = racine(&projet.join("src")).expect("la racine est trouvée");
+        let manifeste = racine.manifeste.expect("le manifeste est lisible");
 
         assert_eq!(racine.root, projet);
-        assert_eq!(racine.manifeste.metadonnees.features, ["health"]);
+        assert_eq!(manifeste.metadonnees.features, ["health"]);
         assert_eq!(
-            racine
-                .manifeste
+            manifeste
                 .document
                 .get("package")
                 .and_then(|package| package.get("name"))
@@ -1422,6 +1433,25 @@ features = ["health"]
         let error = project_root(&projet.join("src")).expect_err("la faute doit se dire");
 
         assert!(matches!(error, RootError::Illisible(Error::Syntaxe { .. })));
+    }
+
+    /// La remontée, elle, rend cette racine-là avec sa faute : c'est le projet visé, et
+    /// `rbs doctor` a de quoi le diagnostiquer plutôt que d'abandonner.
+    #[test]
+    fn the_climb_names_the_project_a_broken_manifest_designates() {
+        let dir = TempDir::new().expect("répertoire temporaire");
+        let projet = dir.path().join("api");
+        fs::create_dir_all(projet.join("src")).expect("arborescence");
+        fs::write(
+            projet.join("Cargo.toml"),
+            "[package]\nname = \"api\"\n[package.metadata.rbs]\nversion = \"1.1.0\",\n",
+        )
+        .expect("manifeste cassé");
+
+        let racine = racine(&projet.join("src")).expect("la racine reste désignée");
+
+        assert_eq!(racine.root, projet);
+        assert!(matches!(racine.manifeste, Err(Error::Syntaxe { .. })));
     }
 
     /// Le manifeste de la crate `migration` ne porte pas de section rbs : la remontée le

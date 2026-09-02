@@ -118,7 +118,7 @@ pub(crate) fn check(root: &Path, manifeste: &Manifeste, annonce: &mut dyn FnMut(
 fn manifeste_fautif(faute: &metadata::Error) -> Check {
     Check::failed(
         TITRE,
-        faute.to_string(),
+        super::une_ligne(faute),
         "corrigez le Cargo.toml du projet : le moteur qu'il déclare commande \
          tout le reste du diagnostic",
     )

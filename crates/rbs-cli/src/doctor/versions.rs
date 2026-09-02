@@ -38,7 +38,11 @@ fn check_with(manifeste: &Manifeste, noyau_publie: bool, cli: &str) -> Check {
     let manifeste = match manifeste {
         Ok(manifeste) => manifeste,
         Err(error) => {
-            return Check::failed(TITRE, error.to_string(), "restaurez le manifeste du projet");
+            return Check::failed(
+                TITRE,
+                super::une_ligne(error),
+                "restaurez le manifeste du projet",
+            );
         }
     };
     let metadonnees = &manifeste.metadonnees;
