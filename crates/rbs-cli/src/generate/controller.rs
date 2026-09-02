@@ -58,6 +58,22 @@ mod tests {
         render_mod(&Feature::fresh(name, fields), true).expect("le mod.rs doit se rendre")
     }
 
+    /// La route de collection est le seul appel de ce fichier dont les arguments suivent le
+    /// nom du module : ils valent cinquante caractères de plus que lui, et franchissent
+    /// donc les soixante colonnes de `fn_call_width` à onze caractères de module.
+    ///
+    /// Les deux autres routes sont déjà écrites éclatées ou tiennent sans lui.
+    #[test]
+    fn the_module_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(module_with_tests);
+
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu de `mod.rs` diverge de rustfmt à ces longueurs de nom"
+        );
+    }
+
     /// `per_page=abc` rend 400 : un document qui ne l'annonce pas fait débugger au client
     /// une pagination qui « ne marche pas », sans rien pour l'aider.
     #[test]
