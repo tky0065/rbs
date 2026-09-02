@@ -492,6 +492,41 @@ fn without_the_flag_the_language_is_taken_from_the_environment() {
     );
 }
 
+/// Une URL dont rbs ne tire aucun hôte laisse le projet sans compose, et c'est le seul
+/// cas où l'absence du fichier ne se lit pas dans l'URL : elle doit donc s'annoncer.
+///
+/// Le binaire et non `url_opaque` : ce qui est en jeu ici, c'est le câblage entre la
+/// décomposition de l'URL et l'avertissement, qu'une autorité sans hôte traversait
+/// jusqu'ici en silence. Rien n'est compilé, `rbs new` ne fait qu'écrire des fichiers.
+#[test]
+fn a_url_without_a_host_says_why_no_compose_was_written() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+
+    let sortie = Command::cargo_bin("rbs")
+        .expect("le binaire rbs doit être compilé")
+        .current_dir(parent.path())
+        .args([
+            "new",
+            "demo-api",
+            "--database-url",
+            "postgres://:5432/demo_api",
+            "--yes",
+        ])
+        .assert()
+        .success();
+
+    let rendu = String::from_utf8_lossy(&sortie.get_output().stderr).into_owned();
+
+    assert!(
+        rendu.contains("aucun hôte"),
+        "l'URL sans hôte n'est pas annoncée :\n{rendu}"
+    );
+    assert!(
+        !parent.path().join("demo-api/docker-compose.yml").exists(),
+        "un compose a été écrit pour une URL sans hôte :\n{rendu}"
+    );
+}
+
 #[test]
 fn the_created_project_carries_an_agents_file_naming_the_cli() {
     let parent = TempDir::new().expect("répertoire temporaire créable");

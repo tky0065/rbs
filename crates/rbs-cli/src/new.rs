@@ -1157,6 +1157,8 @@ mod tests {
     fn only_an_undecomposable_url_on_a_server_engine_is_reported() {
         assert!(url_opaque(Database::Postgres, "postgres:///demo"));
         assert!(url_opaque(Database::Mysql, "mysql://localhost:port/demo"));
+        // Une autorité réduite à son port : sans hôte, il n'y a rien à publier ni à sonder.
+        assert!(url_opaque(Database::Postgres, "postgres://:5432/demo"));
 
         // Décomposée : l'absence de compose y tient au choix de l'URL, non à rbs.
         assert!(!url_opaque(
