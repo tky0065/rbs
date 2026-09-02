@@ -126,9 +126,15 @@ command wires a guard onto a route you generated:
   happens here.
 - `src/posts/tests.rs`: the harness registers an account, promotes it through the database
   — registration always returns a `user`, and the role only travels in a token minted
-  afterwards — and signs the mutating requests. Three tests are added: no token → 401,
-  a `user` → 403, and the filter route answering an anonymous caller on a resource whose
-  creation demands an `admin` token.
+  afterwards — and signs the mutating requests. Around it the generated file is reworked
+  three ways. Three tests are added: no token → 401, a `user` → 403, and the list
+  answering a caller with no account at all. Three generated ones are rewritten rather
+  than added — the full lifecycle and the filter route, which now create with an `admin`
+  token and read back without presenting one, and the 400 on an unreadable body, which has
+  to be signed since `Identity` runs before the body is parsed. Two are dropped,
+  `two_creations_in_a_row_carry_increasing_ids` and `an_unknown_sort_column_returns_400`:
+  neither says anything about the guard, and `hello-crud` carries both untouched. Only
+  `an_unknown_id_returns_404` survives exactly as generated.
 
 `file-drop` carries nine more, and they are the point of the example — the three fragments
 ship a brick and no route, and a brick nothing calls proves nothing about the wiring.

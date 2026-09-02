@@ -19,6 +19,7 @@ const SECTION: &str = "storage";
 const BACKEND: &str = "backend";
 const S3: &str = "s3";
 const BUCKET: &str = "RBS_STORAGE__BUCKET";
+const REGLAGES: &str = "backend = \"fs\"\nroot = \"./storage\"";
 
 /// Identifiants du backend S3, dont `.env.example` porte une valeur à remplacer.
 const IDENTIFIANTS: [&str; 2] = [
@@ -47,11 +48,9 @@ fn check_with(root: &Path, config: &Config, env: impl Fn(&str) -> Option<String>
     let mut defauts = Vec::new();
     let mut remedes = Vec::new();
 
-    if !config.section(SECTION) {
-        defauts.push(format!("{CONFIG} ne porte pas de section `[{SECTION}]`"));
-        remedes.push(format!(
-            "ajoutez à {CONFIG} :\n[{SECTION}]\nbackend = \"fs\"\nroot = \"./storage\""
-        ));
+    if let Some((defaut, remede)) = super::defaut_de_section(config, SECTION, REGLAGES) {
+        defauts.push(defaut);
+        remedes.push(remede);
     }
 
     // Le backend fichiers se passe de tout réglage : rien de ce qui suit ne le concerne.

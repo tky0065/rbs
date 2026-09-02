@@ -8,8 +8,7 @@
 //! concordent. La première prime — des numéros alignés sur une dépendance que `cargo` ne
 //! résout pas n'apprennent rien à qui est bloqué.
 
-use std::fs;
-use std::path::Path;
+use toml_edit::DocumentMut;
 
 use super::{Check, Manifeste};
 
@@ -26,8 +25,8 @@ const CLI: &str = env!("CARGO_PKG_VERSION");
 const NOYAU_PUBLIE: bool = true;
 
 /// Compare la version qui a généré le projet, celle de son noyau et celle du CLI.
-pub(crate) fn check(root: &Path, manifeste: &Manifeste) -> Check {
-    check_with(root, manifeste, NOYAU_PUBLIE, CLI)
+pub(crate) fn check(manifeste: &Manifeste) -> Check {
+    check_with(manifeste, NOYAU_PUBLIE, CLI)
 }
 
 /// Le verdict, la publication du noyau et la version du CLI étant données en paramètres.
@@ -35,13 +34,18 @@ pub(crate) fn check(root: &Path, manifeste: &Manifeste) -> Check {
 /// Les deux chemins restent ainsi exerçables par les tests de part et d'autre de la
 /// bascule de `NOYAU_PUBLIE`, et de part et d'autre du numéro que porte le binaire — un
 /// écart de version ne s'observe pas autrement depuis le dépôt qui produit ce numéro.
-fn check_with(root: &Path, manifeste: &Manifeste, noyau_publie: bool, cli: &str) -> Check {
-    let metadonnees = match manifeste {
-        Ok(metadonnees) => metadonnees,
+fn check_with(manifeste: &Manifeste, noyau_publie: bool, cli: &str) -> Check {
+    let manifeste = match manifeste {
+        Ok(manifeste) => manifeste,
         Err(error) => {
-            return Check::failed(TITRE, error.to_string(), "restaurez le manifeste du projet");
+            return Check::failed(
+                TITRE,
+                super::une_ligne(error),
+                "restaurez le manifeste du projet",
+            );
         }
     };
+    let metadonnees = &manifeste.metadonnees;
 
     let mut ecarts = Vec::new();
 
@@ -52,7 +56,7 @@ fn check_with(root: &Path, manifeste: &Manifeste, noyau_publie: bool, cli: &str)
         ));
     }
 
-    let core = match core(&root.join("Cargo.toml")) {
+    let core = match core(&manifeste.document) {
         Ok(core) => core,
         Err(detail) => {
             return Check::failed(
@@ -110,13 +114,8 @@ enum Core {
     Local,
 }
 
-/// Lit la dépendance `rbs-core` du manifeste.
-fn core(manifest: &Path) -> Result<Core, String> {
-    let source = fs::read_to_string(manifest).map_err(|error| error.to_string())?;
-    let document: toml_edit::DocumentMut = source
-        .parse()
-        .map_err(|error: toml_edit::TomlError| error.to_string())?;
-
+/// Lit la dépendance `rbs-core` du manifeste déjà analysé.
+fn core(document: &DocumentMut) -> Result<Core, String> {
     let Some(dependency) = document
         .get("dependencies")
         .and_then(|table| table.get("rbs-core"))
@@ -140,6 +139,9 @@ fn core(manifest: &Path) -> Result<Core, String> {
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
+    use std::path::Path;
+
     use super::super::State;
     use super::*;
     use crate::fixtures::project;
@@ -159,7 +161,7 @@ mod tests {
     /// Il se relit ici et non une fois pour toutes : presque tous ces tests le réécrivent
     /// entre la création du projet et le diagnostic.
     fn check_with(root: &Path, noyau_publie: bool, cli: &str) -> Check {
-        super::check_with(root, &crate::doctor::manifeste(root), noyau_publie, cli)
+        super::check_with(&crate::doctor::manifeste(root), noyau_publie, cli)
     }
 
     /// Remplace un fragment du manifeste du projet.
@@ -220,7 +222,7 @@ mod tests {
         let (_parent, root) = project();
 
         assert_eq!(
-            check(&root, &crate::doctor::manifeste(&root)),
+            check(&crate::doctor::manifeste(&root)),
             check_with(&root, NOYAU_PUBLIE, CLI)
         );
     }
