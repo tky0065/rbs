@@ -35,12 +35,17 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
         .collect::<Vec<_>>()
         .join(", ");
 
+    // Sans champ textuel, `TextMatchSchema` ne serait cité nulle part : un `use` qui ne
+    // sert pas est une erreur dans le projet engendré, qui compile sous `-D warnings`.
+    let textuels = fields.iter().any(|field| field.textual);
+
     Renderer::new().render(
         FILTER,
         context! {
             entity => feature.entity(),
             fields => fields,
             colonnes => colonnes,
+            textuels => textuels,
         },
     )
 }
@@ -112,6 +117,42 @@ mod tests {
         ] {
             assert!(rendered.contains(champ), "« {champ} » absent :\n{rendered}");
         }
+    }
+
+    /// Les conditions ne sont plus un objet libre : le document nomme les opérateurs, et
+    /// c'est le noyau qui en porte le schéma — un `Comparison<T>` générique n'en dérive
+    /// pas.
+    #[test]
+    fn each_condition_cites_the_schema_of_its_operator() {
+        let rendered = filtre("articles", CHAMPS);
+
+        assert!(
+            !rendered.contains("value_type = Object"),
+            "l'objet libre subsiste :\n{rendered}"
+        );
+        for champ in [
+            "#[schema(value_type = ComparisonSchema)]\n    pub id:",
+            "#[schema(value_type = TextMatchSchema)]\n    pub title:",
+            "#[schema(value_type = ComparisonSchema)]\n    pub views:",
+        ] {
+            assert!(rendered.contains(champ), "« {champ} » absent :\n{rendered}");
+        }
+    }
+
+    /// Une entité sans colonne textuelle ne cite jamais `TextMatchSchema` : l'importer
+    /// quand même ferait échouer la compilation du projet, qui bâtit sous `-D warnings`.
+    #[test]
+    fn an_entity_without_text_does_not_import_the_text_schema() {
+        let rendered = filtre("meters", "views:int,published:bool");
+
+        assert!(
+            !rendered.contains("TextMatchSchema"),
+            "le schéma textuel est cité sans servir :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("ComparisonSchema"),
+            "le schéma des comparaisons doit rester :\n{rendered}"
+        );
     }
 
     /// Les trois colonnes que toute entité porte sont filtrables sans figurer dans

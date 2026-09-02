@@ -1,4 +1,4 @@
-use rbs_core::{Comparison, Error, Result, Sort, TextMatch};
+use rbs_core::{Comparison, ComparisonSchema, Error, Result, Sort, TextMatch, TextMatchSchema};
 use sea_orm::prelude::{DateTimeUtc, Uuid};
 use sea_orm::{ColumnTrait, Condition, QueryFilter, QueryOrder, Select, Value};
 use serde::Deserialize;
@@ -10,21 +10,21 @@ use super::model::{Column, Entity};
 // parcourt la table. Ajoutez « index » au champ dans `--fields` si la table grandit.
 #[derive(Debug, Default, Deserialize, ToSchema)]
 pub struct PostFilter {
-    // `value_type = Object` sur chaque condition : le schéma d'une comparaison ne dépend
-    // pas du type comparé, et utoipa ne sait pas décrire un générique dont le paramètre
-    // n'implémente pas `ToSchema`. Les opérateurs acceptés sont `eq`, `gt`, `gte`, `lt`,
-    // `lte` et `is_null` ; une valeur nue vaut `eq`.
-    #[schema(value_type = Object)]
+    // Chaque condition est décrite par le schéma que le noyau en donne : utoipa ne sait
+    // pas décrire un générique dont le paramètre n'implémente pas `ToSchema`, et un objet
+    // libre ne nommerait aucun opérateur. Les opérateurs acceptés sont `eq`, `gt`, `gte`,
+    // `lt`, `lte` et `is_null` ; une valeur nue vaut `eq`.
+    #[schema(value_type = ComparisonSchema)]
     pub id: Option<Comparison<Uuid>>,
-    #[schema(value_type = Object)]
+    #[schema(value_type = ComparisonSchema)]
     pub created_at: Option<Comparison<DateTimeUtc>>,
-    #[schema(value_type = Object)]
+    #[schema(value_type = ComparisonSchema)]
     pub updated_at: Option<Comparison<DateTimeUtc>>,
-    #[schema(value_type = Object)]
+    #[schema(value_type = TextMatchSchema)]
     pub title: Option<TextMatch>,
-    #[schema(value_type = Object)]
+    #[schema(value_type = TextMatchSchema)]
     pub body: Option<TextMatch>,
-    #[schema(value_type = Object)]
+    #[schema(value_type = ComparisonSchema)]
     pub published: Option<Comparison<bool>>,
     /// Colonnes de tri, préfixées de `-` pour l'ordre décroissant.
     #[schema(value_type = Vec<String>)]

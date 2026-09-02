@@ -4,13 +4,17 @@
 //! `filter.rs` que le CLI engendre par feature qui les compose en un type dont chaque
 //! champ vient de `--fields`, et qui seul sait traduire un nom en `Column`.
 //!
-//! Aucun d'eux ne porte `ToSchema`. Le dériver sur `Comparison<T>` exigerait `T: ToSchema`,
-//! que ni `DateTimeUtc` ni `Uuid` ne satisfont — la feature `chrono` d'utoipa agit dans la
-//! macro, qui reconnaît ces types par leur nom dans un champ, et n'implémente aucun trait.
+//! Aucun des types qu'un filtre porte réellement ne dérive `ToSchema` : le faire sur
+//! `Comparison<T>` exigerait `T: ToSchema`, que ni `DateTimeUtc` ni `Uuid` ne satisfont —
+//! la feature `chrono` d'utoipa agit dans la macro, qui reconnaît ces types par leur nom
+//! dans un champ, et n'implémente aucun trait.
 //! Le filtre engendré décrit donc lui-même ses champs par `#[schema(value_type = ...)]`,
-//! ce qui laisse la documentation au projet, où elle se lit et se modifie.
+//! en citant [`ComparisonSchema`] et [`TextMatchSchema`] : les opérateurs sont nommés dans
+//! le document sans que le type comparé ait à l'être.
 
 use serde::{Deserialize, Deserializer};
+use serde_json::Value;
+use utoipa::ToSchema;
 
 /// Conditions portées sur une colonne scalaire ordonnée.
 ///
@@ -44,6 +48,47 @@ pub struct TextMatch {
     /// La casse suit la collation du moteur : PostgreSQL la distingue, MySQL l'ignore avec
     /// sa collation par défaut. `ILIKE` l'uniformiserait, mais il n'existe que sur
     /// PostgreSQL, et le CLI engendre aussi pour MySQL et SQLite.
+    pub contains: Option<String>,
+    /// `true` exige une colonne nulle, `false` une colonne renseignée.
+    pub is_null: Option<bool>,
+}
+
+/// Conditions acceptées sur une colonne comparable.
+///
+/// Une valeur nue, écrite hors de tout objet, vaut la condition `eq`.
+// Le document OpenAPI reprend ce commentaire : il s'adresse au client, et non au
+// mainteneur. Ce type ne sert qu'à `#[schema(value_type = ComparisonSchema)]` dans le
+// filtre engendré, `Comparison<T>` étant générique ; il ne porte aucune logique et n'est
+// jamais construit, la valeur comparée y restant de type libre puisque c'est la colonne
+// qui la fixe.
+#[derive(ToSchema)]
+#[non_exhaustive]
+pub struct ComparisonSchema {
+    /// Égalité stricte. Une valeur nue, hors de tout objet, vaut cette condition.
+    pub eq: Option<Value>,
+    /// Strictement supérieur.
+    pub gt: Option<Value>,
+    /// Supérieur ou égal.
+    pub gte: Option<Value>,
+    /// Strictement inférieur.
+    pub lt: Option<Value>,
+    /// Inférieur ou égal.
+    pub lte: Option<Value>,
+    /// `true` exige une colonne nulle, `false` une colonne renseignée.
+    pub is_null: Option<bool>,
+}
+
+/// Conditions acceptées sur une colonne textuelle.
+///
+/// Une chaîne nue, écrite hors de tout objet, vaut la condition `eq`.
+// Pendant de [`ComparisonSchema`] pour [`TextMatch`] : un texte se cherche par
+// sous-chaîne et ne s'ordonne pas, ses opérateurs ne sont donc pas les mêmes.
+#[derive(ToSchema)]
+#[non_exhaustive]
+pub struct TextMatchSchema {
+    /// Égalité stricte. Une chaîne nue, hors de tout objet, vaut cette condition.
+    pub eq: Option<String>,
+    /// Sous-chaîne, cherchée par `LIKE '%…%'`.
     pub contains: Option<String>,
     /// `true` exige une colonne nulle, `false` une colonne renseignée.
     pub is_null: Option<bool>,
@@ -169,6 +214,48 @@ impl<'de> Deserialize<'de> for Sort {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Un filtre engendré cite ces deux types par `value_type` : le document doit donc
+    /// nommer les opérateurs qu'un client peut écrire, faute de quoi il ne dit rien de
+    /// plus qu'un objet libre.
+    #[test]
+    fn the_documented_conditions_are_named_one_by_one() {
+        use utoipa::PartialSchema;
+
+        for (schema, conditions) in [
+            (
+                serde_json::to_value(ComparisonSchema::schema()).expect("schéma sérialisable"),
+                vec!["eq", "gt", "gte", "lt", "lte", "is_null"],
+            ),
+            (
+                serde_json::to_value(TextMatchSchema::schema()).expect("schéma sérialisable"),
+                vec!["eq", "contains", "is_null"],
+            ),
+        ] {
+            let proprietes = schema["properties"]
+                .as_object()
+                .unwrap_or_else(|| panic!("des propriétés attendues : {schema}"));
+
+            assert_eq!(proprietes.len(), conditions.len(), "{schema}");
+            for condition in conditions {
+                assert!(
+                    proprietes.contains_key(condition),
+                    "« {condition} » absent : {schema}"
+                );
+            }
+        }
+    }
+
+    /// Aucune condition n'est exigée : un filtre qui ne porte que `gte` est valide, et un
+    /// schéma qui les réclamerait toutes ferait refuser le cas courant par un validateur.
+    #[test]
+    fn no_condition_is_required_of_a_client() {
+        use utoipa::PartialSchema;
+
+        let schema = serde_json::to_value(ComparisonSchema::schema()).expect("sérialisable");
+
+        assert!(schema.get("required").is_none(), "{schema}");
+    }
 
     /// La forme courte est ce qu'un client écrit dans le cas courant : `"published": true`
     /// doit valoir `{ "eq": true }`, sans quoi le corps le plus fréquent serait le plus
