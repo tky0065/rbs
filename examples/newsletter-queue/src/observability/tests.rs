@@ -1,0 +1,108 @@
+use std::sync::OnceLock;
+
+use axum::Router;
+use axum::body::Body;
+use axum::http::{Request, StatusCode};
+use axum::middleware::from_fn;
+use axum::routing::get;
+use metrics_exporter_prometheus::PrometheusHandle;
+use tower::ServiceExt;
+
+use super::metrics;
+
+/// Le registre est global au processus et ne s'installe qu'une fois : ces tests le
+/// partagent, et n'affirment donc rien d'une valeur absolue — seulement des séries
+/// présentes, et des séries absentes.
+fn registry() -> &'static PrometheusHandle {
+    static REGISTRY: OnceLock<PrometheusHandle> = OnceLock::new();
+
+    REGISTRY.get_or_init(|| metrics::install().expect("le registre doit s'installer"))
+}
+
+/// Une application dotée d'une route à paramètre, et du middleware de comptage à la
+/// position que le fragment lui donne dans `src/router.rs`.
+fn application() -> Router {
+    Router::new()
+        .route("/articles/{id}", get(|| async { "ok" }))
+        .layer(from_fn(metrics::middleware))
+}
+
+async fn call(uri: &str) -> StatusCode {
+    application()
+        .oneshot(
+            Request::builder()
+                .uri(uri)
+                .body(Body::empty())
+                .expect("requête constructible"),
+        )
+        .await
+        .expect("l'application doit répondre")
+        .status()
+}
+
+/// Le test qui garde la cardinalité du collecteur : une série par gabarit de route, et
+/// non une par article. Sans lui, quelques heures de production suffisent à faire tomber
+/// le collecteur sous le nombre de séries, et la feature devient nuisible.
+// region: cardinalite
+#[tokio::test]
+async fn a_request_on_a_parameterised_route_counts_under_its_template() {
+    let registry = registry();
+
+    assert_eq!(call("/articles/0192f3ab7c9d").await, StatusCode::OK);
+
+    let rendu = registry.render();
+
+    assert!(
+        rendu.contains("path=\"/articles/{id}\""),
+        "le gabarit de route n'étiquette aucune série :\n{rendu}"
+    );
+    assert!(
+        !rendu.contains("0192f3ab7c9d"),
+        "l'adresse demandée est devenue une série :\n{rendu}"
+    );
+}
+// endregion: cardinalite
+
+/// Un chemin qui ne correspond à aucune route n'ouvre qu'une série : sans ce repli, un
+/// scanner en ouvrirait une par adresse essayée, et la protection ci-dessus ne tiendrait
+/// que sur le trafic légitime.
+#[tokio::test]
+async fn an_unmatched_path_counts_under_a_single_constant() {
+    let registry = registry();
+
+    assert_eq!(call("/n-existe-pas").await, StatusCode::NOT_FOUND);
+
+    let rendu = registry.render();
+
+    assert!(
+        !rendu.contains("n-existe-pas"),
+        "un chemin sans route est devenu une série :\n{rendu}"
+    );
+}
+
+/// Les trois séries de la feature sont publiées, sous les noms qu'un tableau de bord
+/// Prometheus attend : les renommer plus tard casse silencieusement toute requête écrite
+/// contre elles.
+#[tokio::test]
+async fn the_three_series_are_published_under_their_names() {
+    let registry = registry();
+
+    call("/articles/1").await;
+
+    let rendu = registry.render();
+
+    for serie in [
+        "http_requests_total",
+        "http_request_duration_seconds",
+        "http_requests_in_flight",
+    ] {
+        assert!(rendu.contains(serie), "`{serie}` manque :\n{rendu}");
+    }
+}
+
+/// La section a un défaut : un projet qui ne l'a pas encore réglée démarre quand même,
+/// et sur un port que la documentation nomme.
+#[test]
+fn the_default_metrics_port_is_the_documented_one() {
+    assert_eq!(super::Config::default().metrics_port, 9090);
+}

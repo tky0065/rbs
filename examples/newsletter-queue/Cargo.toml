@@ -11,7 +11,7 @@ default-run = "newsletter-queue"
 
 [package.metadata.rbs]
 version = "1.2.0"
-features = ["health", "jobs", "mail", "subscribers"]
+features = ["health", "jobs", "mail", "observability", "subscribers"]
 database = "postgres"
 lang = "fr"
 
@@ -24,7 +24,9 @@ name = "seed"
 path = "src/seeds/main.rs"
 
 [dependencies]
-rbs-core = { path = "../../crates/rbs-core", default-features = false, features = ["postgres"] }
+# region: noyau
+rbs-core = { path = "../../crates/rbs-core", default-features = false, features = ["postgres", "observability"] }
+# endregion: noyau
 anyhow = "1.0"
 axum = "0.8"
 chrono = "0.4"
@@ -45,6 +47,8 @@ uuid = { version = "1.26", features = ["v4", "v7"] }
 async-trait = "0.1"
 lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "pool", "tokio1-rustls", "ring", "webpki-roots"] }
 minijinja = { version = "2.24", features = ["loader"] }
+metrics = "0.24"
+metrics-exporter-prometheus = { version = "0.18", default-features = false }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

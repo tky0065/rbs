@@ -1,0 +1,7 @@
+# Le second listener du projet, et lui seul : `/metrics` n'est jamais monté sur le
+# routeur public, et le port est celui de `metrics_port` dans config/default.toml — pas
+# `server.port`, que l'API garde pour elle.
+scrape_configs:
+  - job_name: newsletter-queue
+    static_configs:
+      - targets: ["localhost:9090"]
