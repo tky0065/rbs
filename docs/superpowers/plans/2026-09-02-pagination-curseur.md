@@ -49,7 +49,7 @@ Tout tient dans `pagination.rs`, qui passe d'environ 220 à environ 400 lignes �
 
 **Pourquoi `sea-orm/with-uuid` et non la crate `uuid` :** `rbs-core` n'a aujourd'hui aucune dépendance UUID — la tâche 73 avait retiré `with-uuid` du workspace au motif exact que la crate n'en faisait aucun usage. Le curseur en fait un. Réactiver la feature sur le seul `rbs-core` donne le **même type** que celui des entités engendrées (sea-orm ré-exporte `uuid`), là où une dépendance directe ouvrirait un écart de version entre les deux `Uuid` du graphe.
 
-- [ ] **Step 1: Activer la feature sea-orm**
+- [x] **Step 1: Activer la feature sea-orm**
 
 Dans `crates/rbs-core/Cargo.toml`, remplacer la ligne `sea-orm.workspace = true` par :
 
@@ -60,7 +60,7 @@ Dans `crates/rbs-core/Cargo.toml`, remplacer la ligne `sea-orm.workspace = true`
 sea-orm = { workspace = true, features = ["with-uuid"] }
 ```
 
-- [ ] **Step 2: Écrire les tests qui échouent**
+- [x] **Step 2: Écrire les tests qui échouent**
 
 Dans `crates/rbs-core/src/pagination.rs`, à la fin du `mod tests`, ajouter d'abord un second helper à côté de `query` :
 
@@ -135,12 +135,12 @@ Dans `crates/rbs-core/src/pagination.rs`, à la fin du `mod tests`, ajouter d'ab
     }
 ```
 
-- [ ] **Step 3: Lancer les tests pour les voir échouer**
+- [x] **Step 3: Lancer les tests pour les voir échouer**
 
 Run: `cargo test -p rbs-core pagination::tests -- --nocapture`
 Expected: FAIL à la **compilation**, `cannot find type 'Cursor' in this scope`.
 
-- [ ] **Step 4: Écrire `Cursor`**
+- [x] **Step 4: Écrire `Cursor`**
 
 Dans `crates/rbs-core/src/pagination.rs`, ajouter après la ligne 92 (fin de l'`impl FromRequestParts for Pagination`) :
 
@@ -229,12 +229,13 @@ use utoipa::ToSchema;
 use crate::Error;
 ```
 
-- [ ] **Step 5: Lancer les tests pour les voir passer**
+- [x] **Step 5: Lancer les tests pour les voir passer**
 
 Run: `cargo test -p rbs-core pagination::tests`
 Expected: PASS, 9 tests (les 5 existants plus les 4 nouveaux).
+Obtenu : 11 passés, 0 échec — le module comptait 7 tests existants et non 5.
 
-- [ ] **Step 6: Ré-exporter et vérifier le lint**
+- [x] **Step 6: Ré-exporter et vérifier le lint**
 
 Dans `crates/rbs-core/src/lib.rs:63`, remplacer :
 
@@ -251,7 +252,7 @@ pub use pagination::{Cursor, Page, Pagination};
 Run: `cargo clippy -p rbs-core --all-targets -- -D warnings && cargo fmt --all --check`
 Expected: aucune sortie.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add crates/rbs-core/Cargo.toml crates/rbs-core/src/pagination.rs crates/rbs-core/src/lib.rs
@@ -270,7 +271,7 @@ retirée du workspace faute d'usage ; elle en a un désormais, sur cette seule
 crate.
 
 Vérifications :
-- cargo test -p rbs-core pagination::tests : 9 passés, 0 échec
+- cargo test -p rbs-core pagination::tests : 11 passés, 0 échec
 - cargo clippy -p rbs-core --all-targets -- -D warnings : aucune sortie
 - cargo fmt --all --check : aucune sortie
 EOF
@@ -293,7 +294,7 @@ EOF
 
 Le troisième paramètre est l'`id` du dernier élément, que `CursorPage` ne peut pas déduire : `T` est un DTO quelconque, dont la crate ignore s'il porte un `id`.
 
-- [ ] **Step 1: Écrire les tests qui échouent**
+- [x] **Step 1: Écrire les tests qui échouent**
 
 Dans le `mod tests` de `crates/rbs-core/src/pagination.rs` :
 
@@ -355,12 +356,12 @@ Dans le `mod tests` de `crates/rbs-core/src/pagination.rs` :
     }
 ```
 
-- [ ] **Step 2: Lancer les tests pour les voir échouer**
+- [x] **Step 2: Lancer les tests pour les voir échouer**
 
 Run: `cargo test -p rbs-core pagination::tests`
 Expected: FAIL à la compilation, `cannot find type 'CursorPage' in this scope`.
 
-- [ ] **Step 3: Écrire `CursorPage`**
+- [x] **Step 3: Écrire `CursorPage`**
 
 Après l'`impl<T> Page<T>` de `crates/rbs-core/src/pagination.rs` :
 
@@ -403,12 +404,18 @@ impl<T> CursorPage<T> {
 }
 ```
 
-- [ ] **Step 4: Lancer les tests pour les voir passer**
+- [x] **Step 4: Lancer les tests pour les voir passer**
 
 Run: `cargo test -p rbs-core pagination::tests`
 Expected: PASS, 13 tests.
+Obtenu : 15 passés, 0 échec, pour la même raison.
 
-- [ ] **Step 5: Ré-exporter, lint et contrôle semver**
+Écart : le dérive de `ToSchema` sur `CursorMeta` ne compile pas sans la feature `uuid`
+d'utoipa, qu'`rbs-core` n'activait pas — utoipa n'a alors aucun schéma pour `Uuid`. Elle
+est activée sur la crate, comme les projets engendrés le font déjà
+(`templates/project/Cargo.toml.jinja:37`).
+
+- [x] **Step 5: Ré-exporter, lint et contrôle semver**
 
 Dans `crates/rbs-core/src/lib.rs:63` :
 
@@ -425,7 +432,7 @@ cargo semver-checks -p rbs-core --all-features
 ```
 Expected: tests verts ; clippy et fmt sans sortie ; semver-checks sans rupture signalée — l'ajout est purement additif.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add crates/rbs-core/src/pagination.rs crates/rbs-core/src/lib.rs
@@ -443,7 +450,7 @@ identifiant est passé et non déduit : le type paginé est un DTO quelconque,
 dont le noyau ignore s'il porte un `id`.
 
 Vérifications :
-- cargo test -p rbs-core : 13 tests de pagination, 0 échec
+- cargo test -p rbs-core : 113 passés, 0 échec, dont 15 de pagination
 - cargo semver-checks -p rbs-core --all-features : aucune rupture, ajout additif
 - cargo clippy -p rbs-core --all-targets -- -D warnings : aucune sortie
 - cargo fmt --all --check : aucune sortie
@@ -466,12 +473,12 @@ EOF
 
 **Ce qui rend cette tâche non facultative :** la documentation du projet ne cite aucune ligne écrite à la main, et `docs/scripts/parite.mjs` échoue si une page anglaise change sans sa paire française. Une doc absente n'est pas un oubli rattrapable plus tard — c'est un contrôle rouge.
 
-- [ ] **Step 1: Lire la section à prolonger**
+- [x] **Step 1: Lire la section à prolonger**
 
 Run: `sed -n '48,62p' docs/docs/guides/filtering.md`
 Objectif : reprendre le ton et le niveau de titre exacts. La section existante s'intitule `## Pagination stays in the query string`.
 
-- [ ] **Step 2: Écrire la section anglaise**
+- [x] **Step 2: Écrire la section anglaise**
 
 Ajouter après la section « Pagination stays in the query string » de `docs/docs/guides/filtering.md` :
 
@@ -525,11 +532,11 @@ UUIDv7 makes total. It does not follow a `sort` you chose: on a column where two
 a value, the boundary would be ambiguous and the next page would skip or repeat rows.
 ```
 
-- [ ] **Step 3: Écrire la section française**
+- [x] **Step 3: Écrire la section française**
 
 Ajouter la section correspondante dans `docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/filtering.md`, au même endroit relatif et au même niveau de titre (`##`), avec le même bloc de code Rust et les mêmes exemples JSON. Titre : `## Pagination par curseur, pour les listes qui débordent un offset`.
 
-- [ ] **Step 4: Écrire les deux notes de CHANGELOG**
+- [x] **Step 4: Écrire les deux notes de CHANGELOG**
 
 Dans `CHANGELOG.md`, sous `## [Unreleased]` → `### Added`, en tête de liste :
 
@@ -543,14 +550,14 @@ Dans `CHANGELOG.md`, sous `## [Unreleased]` → `### Added`, en tête de liste :
 
 Dans `CHANGELOG.fr.md`, la note française correspondante, au même endroit.
 
-- [ ] **Step 5: Vérifier la parité**
+- [x] **Step 5: Vérifier la parité**
 
 Run: `cd docs && node scripts/parite.mjs`
 Expected: exit 0, aucune paire signalée.
 
 Si le script signale un écart de niveau de titre ou de langue de bloc, le corriger avant de continuer — c'est exactement ce qu'il est là pour attraper.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add CHANGELOG.md CHANGELOG.fr.md docs/docs/guides/filtering.md docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/filtering.md
