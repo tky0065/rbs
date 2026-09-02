@@ -161,7 +161,7 @@ pub fn run() {
         // Rien d'autre ne part sur la sortie standard : le script est destiné à un `eval`,
         // et une ligne de courtoisie y deviendrait une commande à exécuter.
         Commands::Completions { shell } => {
-            completions::render(shell, &mut std::io::stdout());
+            completions::render(shell, &mut ui::stdout());
         }
 
         Commands::Doctor { json, fix, force } => match diagnose(json, fix, force) {
@@ -348,8 +348,8 @@ fn add_in(
         ));
     }
 
-    println!();
-    println!("{}", plan::render::plan(&planned.plan));
+    ui::line("");
+    ui::line(&plan::render::plan(&planned.plan));
 
     signaler_zone_manquante(planned.zone_manquante.as_ref());
 
@@ -464,7 +464,7 @@ fn generate(
 
     // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande
     // s'apprête à faire ne doit pas se découvrir après coup.
-    println!("{}", plan::render::plan(&planned.plan));
+    ui::line(&plan::render::plan(&planned.plan));
 
     signaler_zone_manquante(planned.zone_manquante.as_ref());
 
@@ -532,7 +532,7 @@ fn upgrade_in(directory: PathBuf, force: bool, dry_run: bool) -> Result<(), upgr
     }
 
     ui::info(&format!("rbs {} → {}\n", planned.depuis, planned.vers));
-    println!("{}", plan::render::plan(&planned.plan));
+    ui::line(&plan::render::plan(&planned.plan));
 
     signaler_zone_manquante(planned.zone_manquante.as_ref());
 
@@ -552,7 +552,7 @@ fn upgrade_in(directory: PathBuf, force: bool, dry_run: bool) -> Result<(), upgr
         ));
     } else {
         for note in notes {
-            println!("\n{}", note.trim_end());
+            ui::line(&format!("\n{}", note.trim_end()));
         }
     }
 
@@ -567,7 +567,7 @@ fn migrate(action: migrate::Action) -> Result<(), Box<dyn Error>> {
     match migrate::run(action, &std::env::current_dir()?)? {
         migrate::Output::Appliquees => ui::success("migrations appliquées"),
         migrate::Output::Annulee => ui::success("dernière migration annulée"),
-        migrate::Output::Inventaire(inventaire) => println!("{inventaire}"),
+        migrate::Output::Inventaire(inventaire) => ui::line(&inventaire),
         migrate::Output::Creee(fresh) => {
             ui::success(&format!("{} créée", fresh.file));
             ui::info("\n  décrivez le changement de schéma, puis `rbs migrate up`");
@@ -611,7 +611,7 @@ fn repair_anchors(
         }
 
         if !json {
-            println!("{}\n", plan::render::plan(&repair.plan));
+            ui::line(&format!("{}\n", plan::render::plan(&repair.plan)));
         }
 
         plan::application::apply(&repair.plan, force)?;
@@ -646,7 +646,7 @@ fn annoncer_reparation(repair: &doctor::anchors::Repair) {
         ));
     }
 
-    println!();
+    ui::line("");
 }
 
 /// Rend le rapport et dit si le projet est sain.
@@ -667,15 +667,12 @@ fn diagnose(json: bool, fix: bool, force: bool) -> Result<bool, Box<dyn Error>> 
     // conclusion, que `sain` remplace, ni l'annonce d'attente du contrôle `base`.
     if json {
         let report = doctor::run(&directory, &mut doctor::json::Muette)?;
-        println!("{}", doctor::json::report(&report, repair.as_ref()));
+        ui::line(&doctor::json::report(&report, repair.as_ref()));
 
         return Ok(report.succeeded());
     }
 
-    let report = doctor::run(
-        &directory,
-        &mut doctor::render::Texte::new(std::io::stdout()),
-    )?;
+    let report = doctor::run(&directory, &mut doctor::render::Texte::new(ui::stdout()))?;
 
     if report.succeeded() {
         ui::success("le projet est sain");
