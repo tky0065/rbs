@@ -1,3 +1,40 @@
+{# Deux formes de ce fichier grandissent avec le nom de l'entité, et rustfmt les replie
+    chacune à son propre seuil. La template les écrit donc telles que rustfmt les écrirait,
+    plutôt que de laisser la mise en forme rattraper ce qu'elle aurait mal posé.
+
+    `entete` pose une signature : rustfmt la garde sur une ligne tant que celle-ci tient
+    dans ses cent colonnes, et l'éclate un paramètre par ligne au-delà. -#}
+{% macro entete(nom, parametres, retour) -%}
+{% set une_ligne = "pub async fn " ~ nom ~ "(" ~ (parametres | join(", ")) ~ ") -> " ~ retour ~ " {" -%}
+{% if une_ligne | length <= 100 -%}
+{@ une_ligne @}
+{%- else -%}
+pub async fn {@ nom @}(
+{%- for parametre in parametres %}
+    {@ parametre @},
+{%- endfor %}
+) -> {@ retour @} {
+{%- endif %}
+{%- endmacro -%}
+{# `chaine` pose un receveur suivi de ses maillons. Le seuil n'est plus la largeur de la
+    ligne mais `chain_width`, soit soixante colonnes : rustfmt éclate une chaîne bien avant
+    qu'elle ne déborde.
+
+    Au-delà de vingt-six caractères d'entité, une troisième forme bouge — l'appel
+    `filter(db, &…Filter::default(), pagination).await` de `list`, dont rustfmt éventaille
+    les arguments à un seuil qui ne porte le nom d'aucun réglage. La template s'arrête ici :
+    `format::format_batch` reprend la main à l'écriture. -#}
+{% macro chaine(receveur, maillons, indentation) -%}
+{% set une_ligne = receveur ~ (maillons | join("")) -%}
+{% if une_ligne | length <= 60 -%}
+{@ une_ligne @}
+{%- else -%}
+{@ receveur @}
+{%- for maillon in maillons %}
+{@ indentation @}    {@ maillon @}
+{%- endfor %}
+{%- endif %}
+{%- endmacro -%}
 use rbs_core::{Error, Pagination, Result};
 use sea_orm::error::SqlErr;
 use sea_orm::prelude::Uuid;
@@ -43,12 +80,12 @@ pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>> {
     Ok(Entity::find_by_id(id).one(db).await?)
 }
 
-pub async fn create(db: &DatabaseConnection, {@ singular @}: ActiveModel) -> Result<Model> {
-    {@ singular @}.insert(db).await.map_err(conflict_on_duplicate)
+{@ entete("create", ["db: &DatabaseConnection", singular ~ ": ActiveModel"], "Result<Model>") @}
+    {@ chaine(singular, [".insert(db)", ".await", ".map_err(conflict_on_duplicate)"], "    ") @}
 }
 
-pub async fn update(db: &DatabaseConnection, {@ singular @}: ActiveModel) -> Result<Model> {
-    {@ singular @}.update(db).await.map_err(conflict_on_duplicate)
+{@ entete("update", ["db: &DatabaseConnection", singular ~ ": ActiveModel"], "Result<Model>") @}
+    {@ chaine(singular, [".update(db)", ".await", ".map_err(conflict_on_duplicate)"], "    ") @}
 }
 
 pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<bool> {

@@ -225,6 +225,39 @@ mod tests {
         );
     }
 
+    /// Deux formes de ce fichier suivent le nom de l'entité, et chacune bascule à sa propre
+    /// longueur : les chaînes `…insert(db).await.map_err(…)` aux 60 colonnes de
+    /// `chain_width`, dès treize caractères de singulier ; les signatures de `create` et
+    /// `update` aux 100 de `max_width`, dès vingt-trois. Cinq noms encadrent chacun des
+    /// deux seuils — en deçà de treize, entre treize et vingt-trois où la chaîne est déjà
+    /// repliée mais la signature encore entière, à vingt-trois et au-delà où les deux le
+    /// sont — pour que la combinaison des deux macros du gabarit soit éprouvée sur chaque
+    /// forme qu'elle peut produire.
+    ///
+    /// Les noms montent jusqu'à `organizational_structures`, dont le singulier fait
+    /// vingt-quatre caractères. Au-delà de vingt-six pour l'entité, rustfmt éventaille les
+    /// arguments de l'appel `filter(db, &…Filter::default(), pagination).await` que rend
+    /// `list` — un arbitrage dont la constante ne porte le nom d'aucun réglage, que le
+    /// gabarit ne devine pas et que `format::format_batch` rattrape à l'écriture.
+    #[test]
+    fn the_render_is_already_what_rustfmt_would_write() {
+        for name in [
+            "tag",
+            "articles",
+            "purchase_orders",
+            "administrative_documents",
+            "organizational_structures",
+        ] {
+            let rendered = repository(name, "title:string,email:string:unique");
+
+            assert_eq!(
+                bench::formatted(&rendered),
+                rendered,
+                "le rendu de `{name}` diverge de rustfmt"
+            );
+        }
+    }
+
     #[test]
     #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
     fn the_generated_repository_compiles_in_a_fresh_project() {
