@@ -76,6 +76,26 @@ mod tests {
             Vec::<usize>::new(),
             "le rendu de la migration diverge de rustfmt à ces longueurs de nom"
         );
+
+        // Sous suppression logique, `manager.create_index(uq_<table>_<field>).await?`
+        // dépend de la table ET du champ : les deux se combinent dans l'identifiant, si
+        // bien qu'une table au nom ordinaire peut déjà franchir la largeur de chaîne que
+        // les autres colonnes n'atteignent qu'à un nom d'iden démesuré.
+        let divergentes_soft_delete = bench::longueurs_divergentes(|name| {
+            render(
+                &Feature::fresh(name, fields::parse("title:string:unique").expect("champs"))
+                    .soft_deleting(),
+                HORODATAGE,
+            )
+            .expect("la migration doit se rendre")
+            .content
+        });
+
+        assert_eq!(
+            divergentes_soft_delete,
+            Vec::<usize>::new(),
+            "le rendu sous soft-delete diverge de rustfmt à ces longueurs de nom"
+        );
     }
 
     fn users_entity() -> Vec<crate::generate::entities::Entity> {

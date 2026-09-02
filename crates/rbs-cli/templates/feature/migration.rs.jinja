@@ -110,12 +110,48 @@ impl MigrationTrait for Migration {
             .to_owned();
 
         if !matches!(manager.get_database_backend(), sea_orm::DbBackend::MySql) {
-            uq_{@ table @}_{@ field.name @} = uq_{@ table @}_{@ field.name @}
-                .and_where(Expr::col({@ iden @}::DeletedAt).is_null())
+{#- Deux longueurs indépendantes gouvernent ce bloc : `uq_<table>_<field>`, qui décide si
+    la réaffectation tient sur une ligne, et `iden` seul, qui décide si l'appel imbriqué
+    `.and_where(Expr::col(iden::DeletedAt)…)` y tient à son tour, une fois indenté d'un
+    cran de plus si la première a déjà cédé. #}
+{%- set uq_ident = "uq_" ~ table ~ "_" ~ field.name %}
+{%- set and_where_arg = "Expr::col(" ~ iden ~ "::DeletedAt).is_null()" %}
+{%- if (uq_ident ~ " = " ~ uq_ident) | length <= 88 %}
+{%- if and_where_arg | length <= 72 %}
+            {@ uq_ident @} = {@ uq_ident @}
+                .and_where({@ and_where_arg @})
                 .to_owned();
+{%- else %}
+            {@ uq_ident @} = {@ uq_ident @}
+                .and_where(
+                    {@ and_where_arg @},
+                )
+                .to_owned();
+{%- endif %}
+{%- else %}
+{%- if and_where_arg | length <= 68 %}
+            {@ uq_ident @} =
+                {@ uq_ident @}
+                    .and_where({@ and_where_arg @})
+                    .to_owned();
+{%- else %}
+            {@ uq_ident @} =
+                {@ uq_ident @}
+                    .and_where(
+                        {@ and_where_arg @},
+                    )
+                    .to_owned();
+{%- endif %}
+{%- endif %}
         }
-
-        manager.create_index(uq_{@ table @}_{@ field.name @}).await?;
+{% set appel_uq = "manager.create_index(uq_" ~ table ~ "_" ~ field.name ~ ").await?;" %}
+{%- if appel_uq | length <= 60 %}
+        {@ appel_uq @}
+{%- else %}
+        manager
+            .create_index(uq_{@ table @}_{@ field.name @})
+            .await?;
+{%- endif %}
 {% endfor -%}
 {% endif %}
         Ok(())
