@@ -12,7 +12,7 @@ use std::time::Duration;
 use crate::database::Database;
 use crate::migrate;
 
-use super::Check;
+use super::{Check, Manifeste};
 
 /// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
 pub(crate) const TITRE: &str = "base";
@@ -29,7 +29,7 @@ const ANNONCE: &str =
     "compilation de la crate migration, peut prendre\nune minute au premier lancement…";
 
 /// Vérifie que la base répond et qu'elle est assez récente.
-pub(crate) fn check(root: &Path, annonce: &mut dyn FnMut(&str)) -> Check {
+pub(crate) fn check(root: &Path, manifeste: &Manifeste, annonce: &mut dyn FnMut(&str)) -> Check {
     let variables = match migrate::project_variables(root) {
         Ok(variables) => variables,
         Err(error) => {
@@ -61,8 +61,8 @@ pub(crate) fn check(root: &Path, annonce: &mut dyn FnMut(&str)) -> Check {
         return ecart;
     }
 
-    let database = match database_of(root) {
-        Ok(database) => database,
+    let database = match manifeste {
+        Ok(metadonnees) => metadonnees.database,
         Err(faute) => {
             return Check::failed(
                 TITRE,
@@ -169,15 +169,6 @@ fn pilote(root: &Path) -> Option<Database> {
                 .into_iter()
                 .find(|moteur| moteur.sea_orm_feature() == feature)
         })
-}
-
-/// Moteur que le manifeste déclare.
-///
-/// Un manifeste illisible ne se remplace pas par le moteur par défaut : le plancher de
-/// version, la forme d'URL attendue et le remède en découlent tous, et un projet MySQL
-/// recevrait alors un diagnostic PostgreSQL qui ne dit rien de sa panne.
-fn database_of(root: &Path) -> Result<Database, crate::metadata::Error> {
-    crate::metadata::read(&root.join("Cargo.toml")).map(|metadata| metadata.database)
 }
 
 /// Dit où la base se trouve, ou pourquoi on ne l'atteint pas.
@@ -356,6 +347,14 @@ mod tests {
             .create()
     }
 
+    /// Le contrôle, sur le manifeste que le projet porte à l'instant de l'appel.
+    ///
+    /// Il se relit ici et non une fois pour toutes : plusieurs tests le réécrivent entre
+    /// la création du projet et le diagnostic.
+    fn check(root: &Path) -> Check {
+        super::check(root, &super::super::manifeste(root), &mut |_: &str| {})
+    }
+
     #[test]
     fn the_host_and_the_port_read_from_the_url() {
         assert_eq!(
@@ -480,7 +479,7 @@ mod tests {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
         viser(&root, "mysql://root:root@127.0.0.1:1/demo");
 
-        let check = check(&root, &mut |_: &str| {});
+        let check = check(&root);
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(check.detail.contains("sqlx-postgres"), "{}", check.detail);
@@ -493,9 +492,7 @@ mod tests {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
         viser(&root, "mysql://root:root@127.0.0.1:1/demo");
 
-        let remedy = check(&root, &mut |_: &str| {})
-            .remedy
-            .expect("un échec porte son remède");
+        let remedy = check(&root).remedy.expect("un échec porte son remède");
 
         assert!(remedy.contains("sqlx-mysql"), "{remedy}");
         assert!(remedy.contains("postgres://"), "{remedy}");
@@ -514,7 +511,7 @@ mod tests {
         // Port 1 : réservé, rien n'y écoute — le refus est immédiat et déterministe.
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
 
-        let check = check(&root, &mut |_: &str| {});
+        let check = check(&root);
 
         assert_eq!(check.state, State::Echec);
         assert!(check.detail.contains("127.0.0.1:1"));
@@ -527,9 +524,7 @@ mod tests {
     fn the_remedy_names_the_project_compose_when_it_has_one() {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
 
-        let remedy = check(&root, &mut |_: &str| {})
-            .remedy
-            .expect("un échec porte son remède");
+        let remedy = check(&root).remedy.expect("un échec porte son remède");
 
         assert!(remedy.contains("docker compose up -d"), "{remedy}");
     }
@@ -541,9 +536,7 @@ mod tests {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
         std::fs::remove_file(root.join("docker-compose.yml")).expect("le compose doit exister");
 
-        let remedy = check(&root, &mut |_: &str| {})
-            .remedy
-            .expect("un échec porte son remède");
+        let remedy = check(&root).remedy.expect("un échec porte son remède");
 
         assert!(!remedy.contains("docker compose"), "{remedy}");
         assert!(remedy.contains("démarrez"), "{remedy}");
@@ -557,7 +550,7 @@ mod tests {
         std::fs::write(root.join("Cargo.toml"), "[package\nname = \"demo-api\"\n")
             .expect("manifeste cassé");
 
-        let check = check(&root, &mut |_: &str| {});
+        let check = check(&root);
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(check.detail.contains("Cargo.toml"), "{}", check.detail);
@@ -569,7 +562,7 @@ mod tests {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
         std::fs::write(root.join(".env"), "RBS_ENV=development\n").expect("écriture du .env");
 
-        let check = check(&root, &mut |_: &str| {});
+        let check = check(&root);
 
         assert_eq!(check.state, State::Echec);
         assert!(check.detail.contains(migrate::URL));

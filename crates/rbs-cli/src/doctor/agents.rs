@@ -8,9 +8,8 @@
 use std::path::Path;
 
 use crate::agents;
-use crate::metadata;
 
-use super::Check;
+use super::{Check, Manifeste};
 
 /// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
 pub(crate) const TITRE: &str = "agents";
@@ -24,8 +23,8 @@ pub(crate) const TITRE: &str = "agents";
 const HORS_FEATURES: [&str; 3] = ["health", "seeds", "cache"];
 
 /// Contrôle l'`AGENTS.md` du projet, et nomme le code qui n'est pas passé par le CLI.
-pub(crate) fn check(root: &Path) -> Check {
-    let Ok(metadonnees) = metadata::read(&root.join("Cargo.toml")) else {
+pub(crate) fn check(root: &Path, manifeste: &Manifeste) -> Check {
+    let Ok(metadonnees) = manifeste else {
         return Check::failed(
             TITRE,
             "le manifeste du projet est illisible",
@@ -167,6 +166,14 @@ mod tests {
 
     use crate::doctor::State;
     use crate::fixtures::project;
+
+    /// Le contrôle, sur le manifeste que le projet porte à l'instant de l'appel.
+    ///
+    /// Il se relit ici et non une fois pour toutes : plusieurs tests le réécrivent entre
+    /// la création du projet et le diagnostic.
+    fn check(root: &Path) -> Check {
+        super::check(root, &crate::doctor::manifeste(root))
+    }
 
     #[test]
     fn a_freshly_created_project_passes() {
