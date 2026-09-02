@@ -180,6 +180,28 @@ mod tests {
         render(&Feature::fresh(name, fields)).expect("les tests doivent se rendre")
     }
 
+    /// Trois bascules traversent ce fichier, toutes régies par les soixante colonnes de
+    /// `fn_call_width` : deux macros d'assertion dont les arguments débordent quel que soit
+    /// le nom — elles sont écrites éclatées — et les deux appels qui portent le module en
+    /// dur, qui basculent à dix-huit et vingt-huit caractères.
+    ///
+    /// Au-delà de trente-trois, l'appel intérieur `request(…)` déborde à son tour et
+    /// rustfmt l'éclate à un second niveau. Reproduire cet emboîtement reviendrait à
+    /// réimplanter une répartition qu'une montée de rustfmt peut déplacer ;
+    /// `format::format_batch` la rattrape à l'écriture, donc rien de mal formé n'atteint
+    /// l'utilisateur. C'est cette frontière que l'intervalle fixe — mesurée, et non
+    /// commentée.
+    #[test]
+    fn the_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(|name| trials(name, CHAMPS));
+
+        assert_eq!(
+            divergentes,
+            (34..=40).collect::<Vec<usize>>(),
+            "la plage où les tests HTTP divergent de rustfmt a bougé"
+        );
+    }
+
     #[test]
     fn the_scenarios_are_declared() {
         let rendered = trials("articles", CHAMPS);

@@ -88,7 +88,10 @@ fn compare(rendered: &Value, sent: &Value, champ: &str) {
 /// Les horodatages passent par ici : PostgreSQL les rend dans son propre format, qui
 /// n'est pas celui de la chaîne envoyée.
 fn filled(rendered: &Value, champ: &str) {
-    assert!(!rendered[champ].is_null(), "« {champ} » absent de la réponse");
+    assert!(
+        !rendered[champ].is_null(),
+        "« {champ} » absent de la réponse"
+    );
 }
 {% endif %}
 {%- if creatable %}
@@ -234,7 +237,11 @@ async fn two_creations_in_a_row_carry_increasing_ids() {
         assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
     }
 
-    assert_eq!(premier.get_version_num(), 7, "{premier} n'est pas un UUIDv7");
+    assert_eq!(
+        premier.get_version_num(),
+        7,
+        "{premier} n'est pas un UUIDv7"
+    );
     assert!(second > premier, "{second} ne suit pas {premier}");
 }
 {% if email_field %}
@@ -248,8 +255,18 @@ async fn an_invalid_email_returns_422() {
     let api = application().await;
     let mut sent = creation();
     sent["{@ email_field @}"] = Value::from("pas-une-adresse");
-
-    let (status, body) = call(&api, request("POST", "/{@ module @}", sent)).await;
+{# Les arguments d'un appel basculent aux soixante colonnes de `fn_call_width` : au-delà,
+   rustfmt en pose un par ligne et sort le `.await`. #}
+{%- set appel_invalide = "&api, request(\"POST\", \"/" ~ module ~ "\", sent)" %}
+{%- if appel_invalide | length <= 60 %}
+    let (status, body) = call({@ appel_invalide @}).await;
+{%- else %}
+    let (status, body) = call(
+        &api,
+        request("POST", "/{@ module @}", sent),
+    )
+    .await;
+{%- endif %}
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert_eq!(body["status"], 422, "{body}");
@@ -303,8 +320,16 @@ async fn the_filter_narrows_the_list() {
 async fn an_unknown_sort_column_returns_400() {
     let api = application().await;
     let critere = json!({ "sort": ["-inconnue"] });
-
-    let (status, body) = call(&api, request("POST", "/{@ module @}/filter", critere)).await;
+{%- set appel_tri = "&api, request(\"POST\", \"/" ~ module ~ "/filter\", critere)" %}
+{%- if appel_tri | length <= 60 %}
+    let (status, body) = call({@ appel_tri @}).await;
+{%- else %}
+    let (status, body) = call(
+        &api,
+        request("POST", "/{@ module @}/filter", critere),
+    )
+    .await;
+{%- endif %}
 
     assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
     assert_eq!(body["status"], 400, "{body}");
