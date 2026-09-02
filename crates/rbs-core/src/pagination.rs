@@ -7,6 +7,7 @@
 
 use axum::extract::{FromRequestParts, Query};
 use axum::http::request::Parts;
+use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -86,6 +87,77 @@ where
 
         Ok(Self::new(
             parametres.page.unwrap_or(PAGE_PAR_DEFAUT),
+            parametres.per_page.unwrap_or(PAR_PAGE_PAR_DEFAUT),
+        ))
+    }
+}
+
+/// Fenêtre de pagination par curseur, déjà bornée.
+///
+/// Là où [`Pagination`] saute `offset` lignes pour atteindre une page, le curseur reprend
+/// la marche à l'`id` où elle s'était arrêtée : le moteur ne parcourt plus les lignes
+/// qu'il va jeter, et une insertion survenue entre deux requêtes ne décale plus la
+/// fenêtre.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Cursor {
+    after: Option<Uuid>,
+    per_page: u64,
+}
+
+/// Ce que le client a écrit dans la chaîne de requête, avant bornage.
+#[derive(Debug, Deserialize)]
+struct ParamsCurseur {
+    after: Option<Uuid>,
+    per_page: Option<u64>,
+}
+
+impl Cursor {
+    /// Construit une fenêtre en ramenant `per_page` dans ses bornes.
+    pub fn new(after: Option<Uuid>, per_page: u64) -> Self {
+        Self {
+            after,
+            per_page: per_page.clamp(1, PAR_PAGE_MAX),
+        }
+    }
+
+    /// Identifiant après lequel reprendre, `None` pour la première page.
+    ///
+    /// La borne est **exclusive** : le repository écrit `Column::Id.lt(after)`, sans quoi
+    /// chaque page réafficherait la dernière ligne de la précédente.
+    pub fn after(&self) -> Option<Uuid> {
+        self.after
+    }
+
+    /// Nombre d'éléments par page.
+    pub fn per_page(&self) -> u64 {
+        self.per_page
+    }
+}
+
+impl Default for Cursor {
+    fn default() -> Self {
+        Self::new(None, PAR_PAGE_PAR_DEFAUT)
+    }
+}
+
+impl<S> FromRequestParts<S> for Cursor
+where
+    S: Send + Sync,
+{
+    type Rejection = Error;
+
+    async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
+        // Même asymétrie que `Pagination`, et pour la même raison : une taille de page
+        // hors bornes est ramenée en silence, un curseur illisible est signalé. Repartir
+        // du début sur un `after` cassé ferait boucler un client sur la première page
+        // sans que rien ne le lui dise.
+        let Query(parametres) = Query::<ParamsCurseur>::from_request_parts(parts, state)
+            .await
+            .map_err(|rejet| Error::BadRequest(rejet.body_text()))?;
+
+        Ok(Self::new(
+            parametres.after,
             parametres.per_page.unwrap_or(PAR_PAGE_PAR_DEFAUT),
         ))
     }
@@ -226,5 +298,74 @@ mod tests {
 
         assert_eq!(rendered["meta"]["total_pages"], 0);
         assert_eq!(rendered["data"], json!([]));
+    }
+
+    /// Interroge `/curseur` avec la chaîne de requête donnée et rend `(statut, body JSON)`.
+    async fn curseur(query: &str) -> (StatusCode, Value) {
+        async fn handler(cursor: Cursor) -> axum::Json<Value> {
+            axum::Json(json!({
+                "after": cursor.after().map(|id| id.to_string()),
+                "per_page": cursor.per_page(),
+            }))
+        }
+
+        let response = Router::new()
+            .route("/curseur", get(handler))
+            .oneshot(
+                Request::builder()
+                    .uri(format!("/curseur?{query}"))
+                    .body(Body::empty())
+                    .expect("requête valide"),
+            )
+            .await
+            .expect("le router doit répondre");
+
+        let status = response.status();
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("corps lisible");
+
+        (status, serde_json::from_slice(&bytes).expect("corps JSON"))
+    }
+
+    #[tokio::test]
+    async fn the_first_page_needs_no_cursor() {
+        let (status, body) = curseur("").await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["after"], Value::Null, "sans `after`, on part du début");
+        assert_eq!(body["per_page"], PAR_PAGE_PAR_DEFAUT);
+    }
+
+    #[tokio::test]
+    async fn a_readable_cursor_is_carried_through() {
+        let id = "01926b3e-0000-7000-8000-000000000000";
+        let (status, body) = curseur(&format!("after={id}")).await;
+
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body["after"], id);
+    }
+
+    #[tokio::test]
+    async fn an_unreadable_cursor_answers_400() {
+        let (status, body) = curseur("after=pas-un-uuid").await;
+
+        assert_eq!(
+            status,
+            StatusCode::BAD_REQUEST,
+            "un curseur illisible se signale, il ne s'ignore pas : {body}"
+        );
+        assert_eq!(body["status"], 400);
+    }
+
+    #[tokio::test]
+    async fn the_cursor_shares_the_page_size_bounds() {
+        let (status, body) = curseur("per_page=5000").await;
+
+        assert_eq!(status, StatusCode::OK, "le plafonnement est muet : {body}");
+        assert_eq!(body["per_page"], PAR_PAGE_MAX);
+
+        let (_, body) = curseur("per_page=0").await;
+        assert_eq!(body["per_page"], 1, "une page vide n'aurait aucun sens");
     }
 }

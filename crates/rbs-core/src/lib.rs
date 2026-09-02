@@ -60,7 +60,7 @@ pub use extract::Identity;
 pub use extract::ValidatedJson;
 pub use filter::{Comparison, ComparisonSchema, Sort, SortKey, TextMatch, TextMatchSchema};
 pub use openapi::{CommonResponses, ProblemDetails};
-pub use pagination::{Page, Pagination};
+pub use pagination::{Cursor, Page, Pagination};
 #[cfg(feature = "auth")]
 pub use state::HasAuth;
 pub use state::{CoreState, HasCoreState};

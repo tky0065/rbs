@@ -60,7 +60,10 @@ opentelemetry = { workspace = true, optional = true }
 opentelemetry-otlp = { workspace = true, optional = true }
 opentelemetry_sdk = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
-sea-orm.workspace = true
+# `Cursor` pagine sur l'`id`, un UUIDv7 : le type vient de sea-orm plutôt que d'une
+# dépendance directe à `uuid`, pour qu'il soit celui-là même que portent les entités
+# engendrées, sans écart de version possible entre les deux.
+sea-orm = { workspace = true, features = ["with-uuid"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2 = { workspace = true, optional = true }
