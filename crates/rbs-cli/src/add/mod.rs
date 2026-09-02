@@ -1460,6 +1460,29 @@ mod tests {
         );
     }
 
+    /// Les helpers du fragment portent les noms que rend le gabarit d'une feature.
+    ///
+    /// Les deux fichiers cohabitent dans le même projet dès qu'une entité est engendrée :
+    /// deux conventions de nommage y feraient croire que l'un des deux a été écrit à la
+    /// main, quand les deux sortent du CLI.
+    #[test]
+    fn the_observability_tests_name_their_helpers_as_the_feature_template_does() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "observability")).expect("le plan doit se calculer");
+
+        let tests = projected(&planned, "src/observability/tests.rs");
+        for helper in ["fn registry()", "async fn call(uri: &str)"] {
+            assert!(tests.contains(helper), "`{helper}` manque :\n{tests}");
+        }
+        for francais in ["appeler(", "registre(", "REGISTRE"] {
+            assert!(
+                !tests.contains(francais),
+                "`{francais}` subsiste :\n{tests}"
+            );
+        }
+    }
+
     /// `/metrics` publie la topologie du service : monté sur le routeur public, chaque
     /// déploiement devrait le cacher par une règle de reverse-proxy, et celui qui
     /// l'oublie fuit sans le savoir.
