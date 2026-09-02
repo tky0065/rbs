@@ -409,6 +409,244 @@ fn remplace_motif(
     rendu
 }
 
+// --- Rejouer -----------------------------------------------------------------------
+
+/// Une commande citée, telle qu'elle se lance : le programme et ses arguments.
+///
+/// Un découpage aux blancs ne suffit pas — `--fields "title:string,body:text"` est un
+/// seul argument — et le dépôt n'a pas de shell portable à qui déléguer.
+fn decoupe(commande: &str) -> Vec<String> {
+    let mut arguments = Vec::new();
+    let mut courant = String::new();
+    let mut entre_guillemets = false;
+    let mut commence = false;
+
+    for lettre in commande.chars() {
+        match lettre {
+            '"' => {
+                entre_guillemets = !entre_guillemets;
+                commence = true;
+            }
+            lettre if lettre.is_whitespace() && !entre_guillemets => {
+                if commence {
+                    arguments.push(std::mem::take(&mut courant));
+                    commence = false;
+                }
+            }
+            lettre => {
+                courant.push(lettre);
+                commence = true;
+            }
+        }
+    }
+
+    if commence {
+        arguments.push(courant);
+    }
+
+    arguments
+}
+
+/// Lance `commande` dans `repertoire` et rend ce qu'elle a écrit, les deux sorties
+/// réunies.
+///
+/// Le statut n'est pas exigé : une page montre aussi ce qu'un refus rend, et c'est
+/// précisément la sortie qu'il faut comparer.
+fn lance(commande: &str, repertoire: &Path) -> String {
+    let mut arguments = decoupe(commande);
+    assert!(!arguments.is_empty(), "commande vide");
+    let programme = arguments.remove(0);
+
+    let sortie = if programme == "rbs" {
+        // L'utilisateur, lui, prend la crate publiée. Le test ne le peut pas : le dépôt
+        // travaille sur une version que crates.io ne porte pas encore, et la résolution
+        // échouerait avant la première ligne de sortie. La substitution appartient donc
+        // au test, non au bloc.
+        if arguments.first().is_some_and(|premier| premier == "new") {
+            arguments.push("--core-path".to_string());
+            arguments.push(
+                common::noyau()
+                    .to_str()
+                    .expect("chemin du noyau représentable")
+                    .to_string(),
+            );
+        }
+
+        assert_cmd::Command::cargo_bin("rbs")
+            .expect("le binaire rbs doit être compilé")
+            .current_dir(repertoire)
+            .args(&arguments)
+            .output()
+            .expect("le binaire rbs doit être lançable")
+    } else {
+        std::process::Command::new(&programme)
+            .current_dir(repertoire)
+            .args(&arguments)
+            .output()
+            .unwrap_or_else(|erreur| panic!("`{programme}` doit être lançable : {erreur}"))
+    };
+
+    format!(
+        "{}{}",
+        String::from_utf8_lossy(&sortie.stdout),
+        String::from_utf8_lossy(&sortie.stderr)
+    )
+}
+
+/// Rejoue un transcript dans un répertoire neuf et compare sa sortie au bloc.
+fn compare_transcript(transcript: &Transcript) {
+    let situe = format!("{}:{}", transcript.page.display(), transcript.ligne);
+
+    if let Some(invite) = &transcript.invite {
+        assert_eq!(
+            invite,
+            &format!("$ {}", transcript.cmd),
+            "{situe} : l'invite montrée n'est pas la commande que le marqueur porte"
+        );
+    }
+
+    let tmp = tempfile::TempDir::new().expect("répertoire temporaire créable");
+    let dans = transcript
+        .dans
+        .as_ref()
+        .map(|sous| tmp.path().join(sous))
+        .unwrap_or_else(|| tmp.path().to_path_buf());
+
+    for commande in transcript
+        .setup
+        .iter()
+        .flat_map(|decor| decor.split(" && "))
+    {
+        // Le décor se pose à la racine tant que le projet n'existe pas, puis dedans :
+        // c'est l'ordre dans lequel une page l'écrit, `rbs new` puis ce qui suit.
+        let ou = if dans.is_dir() {
+            dans.as_path()
+        } else {
+            tmp.path()
+        };
+        lance(commande.trim(), ou);
+    }
+
+    let obtenu = normalise(&lance(&transcript.cmd, &dans), tmp.path());
+    let attendu = normalise(&transcript.attendu, tmp.path());
+
+    let conforme = if transcript.extrait {
+        contient(&obtenu, &attendu)
+    } else {
+        obtenu == attendu
+    };
+
+    assert!(
+        conforme,
+        "{situe} : `{}` ne rend plus ce que la page montre.\n\n--- la page ---\n{attendu}\n--- la commande ---\n{obtenu}",
+        transcript.cmd
+    );
+}
+
+/// Les lignes d'`attendu` paraissent-elles dans `obtenu`, dans l'ordre ?
+fn contient(obtenu: &str, attendu: &str) -> bool {
+    let mut lignes = obtenu.lines();
+    attendu
+        .lines()
+        .all(|cherchee| lignes.any(|ligne| ligne == cherchee))
+}
+
+#[test]
+fn the_marked_transcripts_still_render_what_the_docs_show() {
+    for transcript in transcripts().iter().filter(|garde| !garde.base) {
+        compare_transcript(transcript);
+    }
+}
+
+#[test]
+#[ignore = "démarre un PostgreSQL sous Docker et compile la crate migration d'un projet temporaire"]
+fn the_marked_transcripts_that_need_a_database_still_render_what_the_docs_show() {
+    let gardes: Vec<Transcript> = transcripts()
+        .into_iter()
+        .filter(|garde| garde.base)
+        .collect();
+
+    // Le serveur écoute sur le port que la page déclare, plutôt que sur un port tiré au
+    // hasard : ce que `doctor` imprime porte l'hôte et le port, et un port tiré ferait du
+    // bloc une sortie qu'aucun lecteur ne peut obtenir.
+    let _serveurs: Vec<_> = serveurs(&gardes).into_iter().map(demarre).collect();
+
+    for transcript in &gardes {
+        compare_transcript(transcript);
+    }
+}
+
+/// Un serveur à monter : les valeurs qu'une URL de page déclare.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct Serveur {
+    utilisateur: String,
+    mot_de_passe: String,
+    base: String,
+    port: u16,
+}
+
+/// Les serveurs que les transcripts gardés réclament, dédoublonnés.
+fn serveurs(gardes: &[Transcript]) -> Vec<Serveur> {
+    let mut trouves: Vec<Serveur> = gardes
+        .iter()
+        .filter_map(|garde| {
+            let source = format!("{} {}", garde.setup.clone().unwrap_or_default(), garde.cmd);
+            serveur_de(&source)
+        })
+        .collect();
+
+    trouves.sort();
+    trouves.dedup();
+    trouves
+}
+
+/// `postgres://rbs:secret@localhost:5432/demo` → ce qu'il faut monter pour l'honorer.
+fn serveur_de(source: &str) -> Option<Serveur> {
+    let apres = source.find("postgres://").map(|debut| debut + 11)?;
+    let url = &source[apres..];
+    let url = &url[..url
+        .find(|lettre: char| lettre.is_whitespace())
+        .unwrap_or(url.len())];
+
+    let (identifiants, hote) = url.split_once('@')?;
+    let (utilisateur, mot_de_passe) = identifiants.split_once(':')?;
+    let (hote, base) = hote.split_once('/')?;
+    let (_, port) = hote.split_once(':')?;
+
+    Some(Serveur {
+        utilisateur: utilisateur.to_string(),
+        mot_de_passe: mot_de_passe.to_string(),
+        base: base.to_string(),
+        port: port.parse().ok()?,
+    })
+}
+
+fn demarre(serveur: Serveur) -> testcontainers::Container<testcontainers::GenericImage> {
+    use testcontainers::core::wait::LogWaitStrategy;
+    use testcontainers::core::{IntoContainerPort, WaitFor};
+    use testcontainers::runners::SyncRunner;
+    use testcontainers::{GenericImage, ImageExt};
+
+    let (nom, version) = common::postgres_image();
+
+    GenericImage::new(nom, version)
+        .with_wait_for(WaitFor::log(
+            LogWaitStrategy::stdout_or_stderr("database system is ready to accept connections")
+                .with_times(2),
+        ))
+        .with_env_var("POSTGRES_USER", &serveur.utilisateur)
+        .with_env_var("POSTGRES_PASSWORD", &serveur.mot_de_passe)
+        .with_env_var("POSTGRES_DB", &serveur.base)
+        .with_mapped_port(serveur.port, 5432.tcp())
+        .start()
+        .unwrap_or_else(|erreur| {
+            panic!(
+                "PostgreSQL doit démarrer sur le port {} que la page déclare : {erreur}",
+                serveur.port
+            )
+        })
+}
+
 mod extraction {
     use super::*;
 
