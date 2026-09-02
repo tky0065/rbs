@@ -284,6 +284,43 @@ fn a_soft_deleting_crud_migrates_and_hides_its_deleted_rows() {
         .assert()
         .success();
 
+    // La promesse même de l'index partiel — la seule raison de le préférer à une unicité
+    // globale — est qu'une valeur redevient disponible dès que la ligne qui la portait est
+    // supprimée. `a_replayed_unique_value_returns_409` plus bas ne prouve que l'autre
+    // moitié, le refus tant que cette ligne reste vivante ; une clause `.and_where(...)`
+    // oubliée la laisserait passer sans être vue.
+    let mut rebond = postgres
+        .exec(ExecCommand::new([
+            "psql",
+            "-U",
+            UTILISATEUR,
+            "-d",
+            BASE,
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-c",
+            "insert into soft_articles (id, title, created_at, updated_at) \
+             values ('00000000-0000-4000-8000-000000000001', 'rebond-apres-suppression', now(), now()); \
+             update soft_articles set deleted_at = now() \
+             where id = '00000000-0000-4000-8000-000000000001'; \
+             insert into soft_articles (id, title, created_at, updated_at) \
+             values ('00000000-0000-4000-8000-000000000002', 'rebond-apres-suppression', now(), now());",
+        ]))
+        .expect("psql doit pouvoir s'exécuter dans le conteneur");
+
+    let sortie_rebond = format!(
+        "{}{}",
+        String::from_utf8_lossy(&rebond.stdout_to_vec().expect("la sortie de psql se lit")),
+        String::from_utf8_lossy(&rebond.stderr_to_vec().expect("l'erreur de psql se lit")),
+    );
+
+    assert_eq!(
+        sortie_rebond.matches("INSERT 0 1").count(),
+        2,
+        "la valeur unique ne se libère pas après la suppression de la ligne qui la \
+         portait — l'index n'est plus partiel :\n{sortie_rebond}"
+    );
+
     let sortie = Command::new("cargo")
         .current_dir(&projet)
         .env("CARGO_TARGET_DIR", common::cible())
@@ -376,6 +413,33 @@ fn a_soft_deleting_crud_migrates_and_hides_its_deleted_rows_on_sqlite() {
         .args(["migrate", "up"])
         .assert()
         .success();
+
+    // Le même rebond qu'au banc PostgreSQL, contre le fichier SQLite : la base est ici un
+    // simple fichier, `sqlite3` s'y connecte directement sans conteneur à traverser.
+    //
+    // SeaORM range l'`uuid` en BLOB de 16 octets sur SQLite, jamais en texte : un `id`
+    // écrit comme la chaîne à tirets que Postgres accepte nativement casse le décodage de
+    // la première lecture venue (« invalid length: expected 16 bytes, found 36 »), sur une
+    // colonne que le rebond ne met pourtant pas en cause. D'où les littéraux `x'…'`.
+    let rebond = std::process::Command::new("sqlite3")
+        .arg(projet.join("demo_api.db"))
+        .arg(
+            "insert into soft_articles (id, title, created_at, updated_at) \
+             values (x'00000000000040008000000000000001', 'rebond-apres-suppression', datetime('now'), datetime('now')); \
+             update soft_articles set deleted_at = datetime('now') \
+             where id = x'00000000000040008000000000000001'; \
+             insert into soft_articles (id, title, created_at, updated_at) \
+             values (x'00000000000040008000000000000002', 'rebond-apres-suppression', datetime('now'), datetime('now'));",
+        )
+        .output()
+        .expect("sqlite3 doit être lançable");
+
+    assert!(
+        rebond.status.success(),
+        "la valeur unique ne se libère pas après la suppression de la ligne qui la \
+         portait sur SQLite — l'index n'est plus partiel :\n{}",
+        String::from_utf8_lossy(&rebond.stderr)
+    );
 
     let sortie = Command::new("cargo")
         .current_dir(&projet)
