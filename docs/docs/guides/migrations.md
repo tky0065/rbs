@@ -76,6 +76,84 @@ list:
 As everywhere in rbs, an absent anchor means the CLI writes nothing and prints the block
 for you to paste.
 
+## Soft delete
+
+```bash
+rbs generate crud articles --fields "title:string,slug:string:unique" --soft-delete
+```
+
+The HTTP contract does not move: `DELETE` still answers 204, a second one still 404, `GET`
+on a deleted row still 404, and the row is gone from `list` and `filter` alike. What
+`--soft-delete` changes is what `DELETE` does underneath — the row stays, its `deleted_at`
+column dated, and every read filters it out.
+
+The column is nullable, carries no default, and the flag injects it: it is not a field you
+declare. Naming it yourself under `--fields` is refused, by the flag that owns it:
+
+```text
+$ rbs generate crud comments --fields "body:text,deleted_at:datetime" --soft-delete --dry-run
+erreur : `--soft-delete` pose lui-même la colonne `deleted_at` : retirez-la de `--fields`, ou renoncez au drapeau
+```
+
+Outside `--soft-delete`, `deleted_at` is an ordinary name — nothing reserves it project-wide.
+
+Every read filters on the column, so the migration lays down the column and an index on it:
+
+```rust
+.col(
+    ColumnDef::new(Articles::DeletedAt)
+        .timestamp_with_time_zone()
+        .null(),
+)
+```
+
+```rust
+manager
+    .create_index(
+        Index::create()
+            .if_not_exists()
+            .name("idx_articles_deleted_at")
+            .table(Articles::Table)
+            .col(Articles::DeletedAt)
+            .to_owned(),
+    )
+    .await?;
+```
+
+A `unique` field moves its constraint off the column and onto an index restricted to live
+rows — `WHERE deleted_at IS NULL` — rather than the whole table. That is what lets a value a
+deleted row held come back into use: someone can re-register with the address they had
+before deleting their account. Proven by running the generated migration on both
+PostgreSQL and SQLite.
+
+```rust
+// PostgreSQL et SQLite savent restreindre un index à un sous-ensemble de lignes :
+// deux lignes portent alors la même valeur si l'une est supprimée. MySQL ne le
+// sait pas — l'unicité y reste globale, et une valeur supprimée y reste réservée.
+let mut uq_articles_slug = Index::create()
+    .if_not_exists()
+    .unique()
+    .name("uq_articles_slug")
+    .table(Articles::Table)
+    .col(Articles::Slug)
+    .to_owned();
+
+if !matches!(manager.get_database_backend(), sea_orm::DbBackend::MySql) {
+    uq_articles_slug = uq_articles_slug
+        .and_where(Expr::col(Articles::DeletedAt).is_null())
+        .to_owned();
+}
+```
+
+The comment states the limit outright: MySQL has no partial index, so the migration keeps a
+global uniqueness there instead of restricting it — on MySQL, a value a deleted row held
+stays reserved.
+
+The flag stops there. It writes no restoration route, no `?include_deleted` query
+parameter, and no purge job. Restoring a row is a SQL `UPDATE`, for as long as no real need
+has said what shape that route should take — a restoration route raises a question the flag
+does not settle on its own: who is allowed to restore.
+
 ## Running them
 
 ```bash

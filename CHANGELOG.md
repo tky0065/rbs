@@ -42,6 +42,13 @@ between minor versions with no deprecation cycle.
   document, and the compose's `api` service sets `RBS_ENV=production`. Every Docker
   deployment used to publish both.
 - `rbs-core` registers a `TooManyRequests` response under `components/responses`.
+- `rbs generate crud --soft-delete` makes `DELETE` logical: the row stays, its `deleted_at`
+  column dated, and every read hides it. The HTTP contract is unchanged — 204 on delete,
+  404 on a second one, 404 on reading a deleted row — so no client notices. A `unique`
+  field moves its constraint to an index restricted to live rows, which is what lets
+  someone re-register with an address they had before. **MySQL has no partial index**: the
+  generated migration branches at run time and keeps a global uniqueness there, so on MySQL
+  a deleted value stays reserved.
 
 ### Changed
 

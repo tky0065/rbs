@@ -43,6 +43,13 @@ dépréciation.
   et le service `api` du compose pose `RBS_ENV=production`. Tout déploiement Docker
   publiait les deux jusqu'ici.
 - `rbs-core` enregistre une réponse `TooManyRequests` sous `components/responses`.
+- `rbs generate crud --soft-delete` rend le `DELETE` logique : la ligne reste, sa colonne
+  `deleted_at` datée, et toute lecture l'écarte. Le contrat HTTP ne change pas — 204 à la
+  suppression, 404 pour une seconde, 404 en lisant une ligne supprimée — si bien qu'aucun
+  client ne le voit. Un champ `unique` fait quitter sa contrainte pour un index restreint
+  aux lignes vivantes, ce qui permet de se réinscrire avec une adresse qu'on avait avant.
+  **MySQL n'a pas d'index partiel** : la migration engendrée branche à l'exécution et y
+  garde une unicité globale, si bien qu'une valeur supprimée y reste réservée.
 
 ### Modifié
 
