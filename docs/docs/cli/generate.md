@@ -16,6 +16,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs generate --help" */}
 ```text
 $ rbs generate --help
 Génère une feature dans un projet existant
@@ -41,6 +42,7 @@ a clap error rather than a flag that is taken and ignored.
 
 ## `rbs generate crud`
 
+{/* rbs:transcript cmd="rbs generate crud --help" */}
 ```text
 $ rbs generate crud --help
 Génère une feature CRUD complète, entité et migration comprises
@@ -56,6 +58,7 @@ Options:
       --dry-run            Affiche le plan sans rien écrire
       --has-many <ENTITE>  Entité enfant dont ce modèle doit porter la variante inverse, répétable
       --role <ROLE>        Réserve create, update et delete à ce rôle ; exige la feature auth
+      --soft-delete        Rend le DELETE logique : la ligne reste, marquée d'une date de suppression
   -h, --help               Print help
   -V, --version            Print version
 ```
@@ -67,9 +70,11 @@ Options:
 | `--dry-run` | Prints the plan and stops. Nothing is written. |
 | `--has-many <ENTITE>` | Repairs the far side of a relation: writes into the model of an already generated feature the `has_many` variant pointing at the named child, and nothing else. Repeatable. [The relations guide](../guides/relations.md) covers when it is needed. |
 | `--role <ROLE>` | Reserves `create`, `update` and `delete` to that role: they take an `Identity` and call `require_role`, while `list` and `find` stay open. Requires the [`auth`](../guides/auth.md) feature, and a role its `Role` enum declares — both are checked before anything is written. |
+| `--soft-delete` | Makes `DELETE` logical instead of removing the row. The HTTP contract does not change, and a `unique` field's constraint narrows to live rows — on MySQL it stays global, so a deleted value stays reserved there. [The migrations guide](../guides/migrations.md#soft-delete) has the rest. |
 
 ## `rbs generate feature`
 
+{/* rbs:transcript cmd="rbs generate feature --help" */}
 ```text
 $ rbs generate feature --help
 Génère une feature vide : six fichiers, aucun champ

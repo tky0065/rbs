@@ -18,6 +18,7 @@ sortie de terminal ne se traduit pas.
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs generate --help" */}
 ```text
 $ rbs generate --help
 Génère une feature dans un projet existant
@@ -43,6 +44,7 @@ un est une erreur de clap plutôt qu'un flag pris puis ignoré.
 
 ## `rbs generate crud`
 
+{/* rbs:transcript cmd="rbs generate crud --help" */}
 ```text
 $ rbs generate crud --help
 Génère une feature CRUD complète, entité et migration comprises
@@ -58,6 +60,7 @@ Options:
       --dry-run            Affiche le plan sans rien écrire
       --has-many <ENTITE>  Entité enfant dont ce modèle doit porter la variante inverse, répétable
       --role <ROLE>        Réserve create, update et delete à ce rôle ; exige la feature auth
+      --soft-delete        Rend le DELETE logique : la ligne reste, marquée d'une date de suppression
   -h, --help               Print help
   -V, --version            Print version
 ```
@@ -69,9 +72,11 @@ Options:
 | `--dry-run` | Affiche le plan et s'arrête. Rien n'est écrit. |
 | `--has-many <ENTITE>` | Répare le côté lointain d'une relation : écrit dans le modèle d'une feature déjà générée la variante `has_many` qui vise l'enfant nommé, et rien d'autre. Répétable. [Le guide des relations](../guides/relations.md) dit quand c'est nécessaire. |
 | `--role <ROLE>` | Réserve `create`, `update` et `delete` à ce rôle : elles prennent une `Identity` et appellent `require_role`, tandis que `list` et `find` restent ouvertes. Exige la feature [`auth`](../guides/auth.md), et un rôle que son enum `Role` déclare — les deux sont vérifiés avant toute écriture. |
+| `--soft-delete` | Rend `DELETE` logique plutôt que de retirer la ligne. Le contrat HTTP ne change pas, et la contrainte d'un champ `unique` se restreint aux lignes vivantes — sur MySQL elle reste globale, si bien qu'une valeur supprimée y reste réservée. [Le guide des migrations](../guides/migrations.md#suppression-logique) a le reste. |
 
 ## `rbs generate feature`
 
+{/* rbs:transcript cmd="rbs generate feature --help" */}
 ```text
 $ rbs generate feature --help
 Génère une feature vide : six fichiers, aucun champ
