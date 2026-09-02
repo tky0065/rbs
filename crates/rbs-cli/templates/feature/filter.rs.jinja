@@ -53,7 +53,16 @@ fn column_of(name: &str) -> Result<Column> {
 ///
 /// Le tri par défaut reste l'`id` décroissant : c'est un UUIDv7, et la pagination en
 /// dépend.
-pub(super) fn apply(select: Select<Entity>, filtre: &{@ entity @}Filter) -> Result<Select<Entity>> {
+{#- Les cent colonnes de `max_width` : au-delà, rustfmt pose un paramètre par ligne. #}
+{%- set signature = "pub(super) fn apply(select: Select<Entity>, filtre: &" ~ entity ~ "Filter) -> Result<Select<Entity>> {" %}
+{%- if signature | length <= 100 %}
+{@ signature @}
+{%- else %}
+pub(super) fn apply(
+    select: Select<Entity>,
+    filtre: &{@ entity @}Filter,
+) -> Result<Select<Entity>> {
+{%- endif %}
     let conditions = Condition::all()
         .add(compare(Column::Id, filtre.id.as_ref()))
         .add(compare(Column::CreatedAt, filtre.created_at.as_ref()))
