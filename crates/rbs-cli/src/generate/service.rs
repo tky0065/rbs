@@ -18,7 +18,7 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
 mod tests {
     use super::*;
     use crate::generate::feature::Feature;
-    use crate::generate::{bench, dto, entity, fields, filter, repository};
+    use crate::generate::{bench, fields};
 
     fn service(name: &str, fields: &str) -> String {
         let fields = fields::parse(fields).expect("les champs du test doivent être valides");
@@ -203,22 +203,17 @@ mod tests {
         let project = bench::Project::fresh();
         project.write_feature(
             "articles",
-            &[
-                (
+            &bench::retenus(
+                &feature,
+                false,
+                &[
                     "model.rs",
-                    &entity::render(&feature).expect("entité rendue"),
-                ),
-                (
+                    "dto.rs",
                     "filter.rs",
-                    &filter::render(&feature).expect("filtre rendu"),
-                ),
-                ("dto.rs", &dto::render(&feature).expect("DTO rendus")),
-                (
                     "repository.rs",
-                    &repository::render(&feature).expect("repository rendu"),
-                ),
-                ("service.rs", &render(&feature).expect("service rendu")),
-            ],
+                    "service.rs",
+                ],
+            ),
         );
         project.compile();
     }
