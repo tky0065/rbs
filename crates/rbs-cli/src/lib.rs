@@ -230,7 +230,7 @@ fn create_project(
             "rbs n'a lu aucun hôte dans l'URL de la base : aucun {} n'a été écrit",
             new::COMPOSE
         ));
-        ui::info(
+        ui::warn_detail(
             "  une URL à socket Unix est dans ce cas ; sinon, revoyez `RBS_DATABASE__URL` dans .env",
         );
     }

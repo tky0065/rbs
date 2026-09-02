@@ -540,6 +540,16 @@ fn a_url_without_a_host_says_why_no_compose_was_written() {
         rendu.contains("aucun hôte"),
         "l'URL sans hôte n'est pas annoncée :\n{rendu}"
     );
+    // La phrase qui explique l'avertissement doit le suivre sur le même flux : redirigée
+    // seule, elle ne dirait ni ce qu'elle explique ni ce qu'il faut en faire.
+    assert!(
+        rendu.contains("socket Unix"),
+        "la suite de l'avertissement n'est pas sur la sortie d'erreur :\n{rendu}"
+    );
+    assert!(
+        !String::from_utf8_lossy(&sortie.get_output().stdout).contains("socket Unix"),
+        "la suite de l'avertissement est restée sur la sortie standard"
+    );
     assert!(
         !parent.path().join("demo-api/docker-compose.yml").exists(),
         "un compose a été écrit pour une URL sans hôte :\n{rendu}"
