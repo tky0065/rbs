@@ -126,8 +126,9 @@ l'exemple — aucune commande ne câble un garde sur une route que vous avez eng
   exactement le cas ici.
 - `src/posts/tests.rs` : le harnais inscrit un compte, le promeut par la base —
   l'inscription rend toujours un `user`, et le rôle ne voyage que dans un jeton frappé
-  ensuite — et signe les requêtes qui écrivent. Deux tests s'ajoutent : sans jeton → 401,
-  avec un `user` → 403.
+  ensuite — et signe les requêtes qui écrivent. Trois tests s'ajoutent : sans jeton → 401,
+  avec un `user` → 403, et la route de filtrage qui répond sans jeton sur une ressource
+  dont la création en exige un d'`admin`.
 
 `file-drop` en porte neuf de plus, et elles sont tout l'intérêt de l'exemple — les trois
 fragments livrent une brique et aucune route, et une brique que rien n'appelle ne prouve

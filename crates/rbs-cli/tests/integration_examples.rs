@@ -581,8 +581,8 @@ fn the_hand_edits_of_blog_auth_are_in_place() {
 
     let tests = lire("src/posts/tests.rs");
     for nom in [
-        "sans_jeton_la_creation_rend_401",
-        "un_user_ne_peut_pas_creer_403",
+        "an_anonymous_write_returns_401",
+        "a_non_admin_write_returns_403",
     ] {
         assert!(tests.contains(nom), "`{nom}` a disparu de l'exemple");
     }
