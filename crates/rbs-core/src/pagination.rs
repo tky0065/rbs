@@ -195,6 +195,43 @@ impl<T> Page<T> {
     }
 }
 
+/// Une page rendue par curseur, et de quoi demander la suivante.
+#[derive(Debug, Clone, Serialize, ToSchema)]
+#[non_exhaustive]
+pub struct CursorPage<T> {
+    data: Vec<T>,
+    meta: CursorMeta,
+}
+
+/// Description d'une page rendue par curseur.
+///
+/// Ni `total` ni `total_pages` : le `COUNT(*)` qu'ils exigeraient est précisément ce que
+/// le curseur existe pour ne pas payer.
+#[derive(Debug, Clone, Copy, Serialize, ToSchema)]
+struct CursorMeta {
+    per_page: u64,
+    next: Option<Uuid>,
+}
+
+impl<T> CursorPage<T> {
+    /// Enveloppe `data`, `dernier` étant l'`id` du dernier élément rendu.
+    ///
+    /// `next` s'éteint dès que la page est plus courte que demandée : c'est la fin de la
+    /// marche, et elle se lit sans compter la table. Le dernier `id` est passé plutôt que
+    /// déduit — `T` est un DTO quelconque, dont cette crate ignore s'il porte un `id`.
+    pub fn new(data: Vec<T>, cursor: &Cursor, dernier: Option<Uuid>) -> Self {
+        let complete = data.len() as u64 == cursor.per_page();
+
+        Self {
+            meta: CursorMeta {
+                per_page: cursor.per_page(),
+                next: dernier.filter(|_| complete),
+            },
+            data,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -367,5 +404,61 @@ mod tests {
 
         let (_, body) = curseur("per_page=0").await;
         assert_eq!(body["per_page"], 1, "une page vide n'aurait aucun sens");
+    }
+
+    /// Un identifiant lisible, dont seule l'unicité compte ici.
+    fn identifiant(n: u8) -> Uuid {
+        Uuid::from_bytes([n; 16])
+    }
+
+    #[test]
+    fn a_full_page_names_its_successor() {
+        let cursor = Cursor::new(None, 3);
+        let dernier = identifiant(3);
+
+        let page = CursorPage::new(vec!["a", "b", "c"], &cursor, Some(dernier));
+        let rendu = serde_json::to_value(&page).expect("la page se sérialise");
+
+        assert_eq!(rendu["meta"]["next"], dernier.to_string());
+        assert_eq!(rendu["meta"]["per_page"], 3);
+        assert_eq!(rendu["data"], json!(["a", "b", "c"]));
+    }
+
+    #[test]
+    fn a_short_page_ends_the_walk() {
+        let cursor = Cursor::new(None, 3);
+
+        let page = CursorPage::new(vec!["a", "b"], &cursor, Some(identifiant(2)));
+        let rendu = serde_json::to_value(&page).expect("la page se sérialise");
+
+        assert_eq!(
+            rendu["meta"]["next"],
+            Value::Null,
+            "une page plus courte que demandée est la dernière : {rendu}"
+        );
+    }
+
+    #[test]
+    fn an_empty_page_ends_the_walk() {
+        let cursor = Cursor::new(Some(identifiant(9)), 3);
+
+        let page = CursorPage::<&str>::new(Vec::new(), &cursor, None);
+        let rendu = serde_json::to_value(&page).expect("la page se sérialise");
+
+        assert_eq!(rendu["meta"]["next"], Value::Null);
+        assert_eq!(rendu["data"], json!([]));
+    }
+
+    #[test]
+    fn the_cursor_page_never_counts_the_rows() {
+        let cursor = Cursor::new(None, 2);
+        let page = CursorPage::new(vec!["a", "b"], &cursor, Some(identifiant(2)));
+        let rendu = serde_json::to_value(&page).expect("la page se sérialise");
+
+        let meta = rendu["meta"].as_object().expect("meta est un objet");
+        assert!(
+            !meta.contains_key("total") && !meta.contains_key("total_pages"),
+            "le curseur existe pour ne pas payer le COUNT(*) : {rendu}"
+        );
     }
 }

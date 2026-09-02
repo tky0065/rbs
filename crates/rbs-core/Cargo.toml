@@ -73,7 +73,10 @@ tracing.workspace = true
 tracing-opentelemetry = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, features = ["fmt", "ansi", "chrono", "env-filter"] }
 ulid.workspace = true
-utoipa.workspace = true
+# Le `next` de `CursorPage` est un `Uuid` : sans cette feature, utoipa n'a pas de schéma
+# pour lui et le dérive de `ToSchema` ne compile pas. C'est celle que les projets
+# engendrés activent déjà.
+utoipa = { workspace = true, features = ["uuid"] }
 validator.workspace = true
 
 [dev-dependencies]
