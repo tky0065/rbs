@@ -91,6 +91,14 @@ pub(crate) fn parse(url: &str) -> Option<Connection> {
         },
     };
 
+    // `postgres://:5432/demo` a bien une autorité, mais pas d'hôte : la découpe au `:`
+    // accepte une partie gauche vide. Un hôte vide partirait dans le compose et dans la
+    // sonde de `doctor` sans désigner de machine, quand un `None` déclenche
+    // l'avertissement sur l'URL que rbs n'a pas lue.
+    if host.is_empty() {
+        return None;
+    }
+
     Some(Connection {
         user: user.to_string(),
         password: password.to_string(),
@@ -345,6 +353,23 @@ mod tests {
         assert_eq!(connexion.user, "");
         assert_eq!(connexion.host, "localhost");
         assert_eq!(connexion.database, "de:mo@x");
+    }
+
+    /// Une autorité réduite à son port n'a pas d'hôte : la décomposer rendrait un hôte
+    /// vide, que le compose publierait et que la sonde de `doctor` interrogerait. C'est
+    /// exactement le cas que guette l'avertissement de `rbs new` sur une URL non lue.
+    #[test]
+    fn an_authority_without_a_host_is_not_understood() {
+        assert!(parse("postgres://:5432/demo").is_none());
+        assert!(parse("postgres://rbs:secret@:5432/demo").is_none());
+    }
+
+    /// Des crochets vides ne portent pas davantage d'adresse : la branche IPv6 refuse au
+    /// même titre que l'autre.
+    #[test]
+    fn an_empty_bracketed_host_is_not_understood() {
+        assert!(parse("postgres://[]:5432/demo").is_none());
+        assert!(parse("postgres://[]/demo").is_none());
     }
 
     #[test]
