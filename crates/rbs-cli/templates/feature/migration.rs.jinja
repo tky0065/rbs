@@ -11,14 +11,34 @@ impl MigrationTrait for Migration {
                 Table::create()
                     .table({@ iden @}::Table)
                     .if_not_exists()
+{#- Les arguments d'un appel basculent aux soixante colonnes de `fn_call_width` : en deçà,
+    rustfmt ramène la colonne sur une ligne. Le gabarit écrit les deux régimes plutôt que
+    d'en laisser un à `format_batch`, qui ne rattrape la mise en forme qu'à l'écriture. #}
+{%- set col_id = "ColumnDef::new(" ~ iden ~ "::Id).uuid().not_null().primary_key()" %}
+{%- if col_id | length <= 60 %}
+                    .col({@ col_id @})
+{%- else %}
                     .col(
                         ColumnDef::new({@ iden @}::Id)
                             .uuid()
                             .not_null()
                             .primary_key(),
                     )
+{%- endif %}
 {%- for field in fields %}
-                    .col(ColumnDef::new({@ iden @}::{@ field.pascal_name @}).{@ field.migration_method @}.{@ "null()" if field.optional else "not_null()" @}{@ ".unique_key()" if field.unique else "" @})
+{%- set nullite = "null()" if field.optional else "not_null()" %}
+{%- set unicite = ".unique_key()" if field.unique else "" %}
+{%- set col = "ColumnDef::new(" ~ iden ~ "::" ~ field.pascal_name ~ ")." ~ field.migration_method ~ "." ~ nullite ~ unicite %}
+{%- if col | length <= 60 %}
+                    .col({@ col @})
+{%- else %}
+                    .col(
+                        ColumnDef::new({@ iden @}::{@ field.pascal_name @})
+                            .{@ field.migration_method @}
+                            .{@ nullite @}{@ "
+                            .unique_key()" if field.unique else "" @},
+                    )
+{%- endif %}
 {%- endfor %}
 {%- for field in fields if field.relation %}
                     .foreign_key(
@@ -61,7 +81,16 @@ impl MigrationTrait for Migration {
 
     async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
         manager
-            .drop_table(Table::drop().table({@ iden @}::Table).to_owned())
+{%- set drop = "Table::drop().table(" ~ iden ~ "::Table).to_owned()" %}
+{%- if drop | length <= 60 %}
+            .drop_table({@ drop @})
+{%- else %}
+            .drop_table(
+                Table::drop()
+                    .table({@ iden @}::Table)
+                    .to_owned(),
+            )
+{%- endif %}
             .await
     }
 }
@@ -82,4 +111,4 @@ enum {@ target @} {
     Table,
     Id,
 }
-{% endfor %}
+{% endfor -%}

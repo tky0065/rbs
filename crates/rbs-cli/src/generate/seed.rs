@@ -409,20 +409,17 @@ async fn les_semis_sont_rendus_par_l_api() {
         assert!(is_seedable(&feature));
     }
 
+    /// Le seed est balayé sur ses deux formes : la feature à champs, et celle qui n'en
+    /// porte aucun — dont le rendu perd des blocs entiers.
     #[test]
     fn the_render_needs_no_pass_of_rustfmt() {
-        for (name, fields) in [
-            ("tag", "title:string"),
-            ("articles", CHAMPS),
-            ("administrative_documents", "title:string,views:int"),
-            ("tokens", ""),
-        ] {
-            let rendered = seed(name, fields);
+        for champs in [CHAMPS, ""] {
+            let divergentes = bench::longueurs_divergentes(|name| seed(name, champs));
 
             assert_eq!(
-                bench::formatted(&rendered),
-                rendered,
-                "un `cargo fmt` reformaterait le seed de {name}"
+                divergentes,
+                Vec::<usize>::new(),
+                "le seed diverge de rustfmt à ces longueurs de nom, sur « {champs} »"
             );
         }
     }

@@ -171,26 +171,25 @@ mod tests {
     /// 98 d'un `use`. Un seul nom ne prouverait donc rien : les quatre balaient la plage
     /// où les seuils se franchissent.
     ///
-    /// Les noms montent jusqu'à l'entité de vingt-trois caractères, la dernière dont la
-    /// ligne `use super::dto::{…}` éclatée tienne sur une seule ligne intérieure. Au-delà,
-    /// rustfmt répartirait les trois DTO sur plusieurs lignes, ce que la template ne
-    /// devine pas : `format::format_batch` s'en charge alors à l'écriture.
+    /// L'import des DTO borne le point fixe : sa ligne intérieure franchit les
+    /// quatre-vingt-dix-huit colonnes d'un `use` à vingt-quatre caractères d'entité, et
+    /// rustfmt passe alors au remplissage glouton — un régime qu'on ne réimplante pas, et
+    /// que `format::format_batch` rattrape à l'écriture. La signature de `filter`, qui
+    /// déborde à trente caractères de module, tombe déjà au-delà de cette frontière.
+    ///
+    /// L'intervalle asserté est cette frontière ; s'il bouge, le test affiche le nouveau
+    /// plutôt que d'échouer sur un nom pris dans une liste.
     #[test]
     fn the_render_is_already_what_rustfmt_would_write() {
-        for name in [
-            "tag",
-            "articles",
-            "administrative_documents",
-            "organizational_structures",
-        ] {
-            let rendered = service(name, "title:string,summary:text:optional");
+        let divergentes = bench::longueurs_divergentes(|name| {
+            service(name, "title:string,summary:text:optional")
+        });
 
-            assert_eq!(
-                bench::formatted(&rendered),
-                rendered,
-                "le rendu de `{name}` diverge de rustfmt"
-            );
-        }
+        assert_eq!(
+            divergentes,
+            (24..=40).collect::<Vec<usize>>(),
+            "la plage où le service diverge de rustfmt a bougé"
+        );
     }
 
     #[test]

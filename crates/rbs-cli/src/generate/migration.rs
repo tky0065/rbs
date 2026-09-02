@@ -50,6 +50,34 @@ mod tests {
         render(&Feature::fresh(name, fields), HORODATAGE).expect("la migration doit se rendre")
     }
 
+    /// Le rendu débarrassé de ses blancs.
+    ///
+    /// Une colonne dont les arguments franchissent les soixante colonnes de
+    /// `fn_call_width` est écrite éclatée : ce qui s'y vérifie est la projection du type
+    /// sur sa méthode, et non la ligne où elle tombe.
+    fn sans_blancs(rendu: &str) -> String {
+        rendu.split_whitespace().collect()
+    }
+
+    /// Deux régimes se croisent dans ce fichier, tous deux régis par les soixante colonnes
+    /// de `fn_call_width` : la colonne `Id`, que rustfmt compacte tant que ses arguments
+    /// tiennent, et les colonnes de champs, qu'il éclate dès qu'elles débordent. Le gabarit
+    /// écrivait chacune dans un seul de ces deux régimes.
+    ///
+    /// `CreatedAt` et `UpdatedAt` n'y figurent pas : leurs arguments valent quatre-vingt-dix-
+    /// neuf caractères de plus que l'iden, donc elles restent éclatées à toute longueur.
+    #[test]
+    fn the_render_is_already_what_rustfmt_would_write() {
+        let divergentes =
+            bench::longueurs_divergentes(|name| migration(name, "title:string,views:int").content);
+
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu de la migration diverge de rustfmt à ces longueurs de nom"
+        );
+    }
+
     fn users_entity() -> Vec<crate::generate::entities::Entity> {
         vec![crate::generate::entities::Entity {
             table: "users".to_string(),
@@ -115,6 +143,8 @@ mod tests {
         )
         .content;
 
+        let compact = sans_blancs(&rendered);
+
         for expected in [
             "ColumnDef::new(Samples::Title).string()",
             "ColumnDef::new(Samples::Quantity).integer()",
@@ -125,7 +155,7 @@ mod tests {
             "ColumnDef::new(Samples::Body).text()",
         ] {
             assert!(
-                rendered.contains(expected),
+                compact.contains(expected),
                 "« {expected} » absent de :\n{rendered}"
             );
         }
@@ -156,7 +186,8 @@ mod tests {
         let rendered = migration("users", "email:string:unique").content;
 
         assert!(
-            rendered.contains("ColumnDef::new(Users::Email).string().not_null().unique_key()"),
+            sans_blancs(&rendered)
+                .contains("ColumnDef::new(Users::Email).string().not_null().unique_key()"),
             "contrainte d'unicité absente :\n{rendered}"
         );
     }

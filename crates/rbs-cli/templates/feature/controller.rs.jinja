@@ -120,10 +120,17 @@ pub async fn create(
         (status = 404, description = "{@ singular @} introuvable", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
+{#- Les cent colonnes de `max_width` : en deçà, rustfmt ramène la signature sur une ligne,
+    ce qui n'arrive qu'aux entités d'une ou deux lettres. #}
+{%- set signature_find = "pub async fn find(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<Json<" ~ entity ~ "Response>> {" %}
+{%- if signature_find | length <= 100 %}
+{@ signature_find @}
+{%- else %}
 pub async fn find(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<{@ entity @}Response>> {
+{%- endif %}
     Ok(Json(service::find(state.core().db(), id).await?))
 }
 

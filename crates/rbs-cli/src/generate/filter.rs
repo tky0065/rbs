@@ -298,16 +298,19 @@ mod tests {
 
     /// Le rendu est écrit tel que rustfmt l'écrirait : sans quoi le `cargo fmt --check` du
     /// projet engendré échouerait sur ce que le CLI vient de produire.
+    ///
+    /// La signature d'`apply` est la seule ligne de ce fichier qui suive le nom de
+    /// l'entité : elle vaut quatre-vingt-huit caractères de plus que lui, et franchit donc
+    /// les cent colonnes de `max_width` à treize. Deux noms ne le voyaient pas — le seuil
+    /// est désormais mesuré, et le test affiche sa valeur quand elle bouge.
     #[test]
     fn the_render_is_already_what_rustfmt_would_write() {
-        for name in ["tag", "articles"] {
-            let rendered = filtre(name, CHAMPS);
+        let divergentes = bench::longueurs_divergentes(|name| filtre(name, CHAMPS));
 
-            assert_eq!(
-                bench::formatted(&rendered),
-                rendered,
-                "le rendu de `{name}` diverge de rustfmt"
-            );
-        }
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu du filtre diverge de rustfmt à ces longueurs de nom"
+        );
     }
 }

@@ -58,6 +58,43 @@ mod tests {
         render_mod(&Feature::fresh(name, fields), true).expect("le mod.rs doit se rendre")
     }
 
+    /// Deux formes de ce fichier suivent le nom de l'entité et bornent le point fixe des
+    /// deux côtés : la signature de `find`, que rustfmt ramène sur une ligne tant qu'elle
+    /// tient sous les cent colonnes de `max_width` — soit jusqu'à deux caractères
+    /// d'entité — et l'import des DTO, dont la ligne intérieure déborde à vingt-quatre.
+    ///
+    /// Au-delà de vingt-trois, rustfmt répartit les trois DTO par remplissage glouton, un
+    /// régime que le gabarit ne sait pas écrire et qu'on ne réimplante pas : une montée de
+    /// rustfmt le déplacerait. `format::format_batch` le rattrape à l'écriture, donc rien
+    /// de mal formé n'atteint l'utilisateur. C'est cette frontière que l'intervalle fixe,
+    /// mesurée et non commentée.
+    #[test]
+    fn the_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(controller);
+
+        assert_eq!(
+            divergentes,
+            (24..=40).collect::<Vec<usize>>(),
+            "la plage où le contrôleur diverge de rustfmt a bougé"
+        );
+    }
+
+    /// La route de collection est le seul appel de ce fichier dont les arguments suivent le
+    /// nom du module : ils valent cinquante caractères de plus que lui, et franchissent
+    /// donc les soixante colonnes de `fn_call_width` à onze caractères de module.
+    ///
+    /// Les deux autres routes sont déjà écrites éclatées ou tiennent sans lui.
+    #[test]
+    fn the_module_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(module_with_tests);
+
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu de `mod.rs` diverge de rustfmt à ces longueurs de nom"
+        );
+    }
+
     /// `per_page=abc` rend 400 : un document qui ne l'annonce pas fait débugger au client
     /// une pagination qui « ne marche pas », sans rien pour l'aider.
     #[test]
@@ -303,29 +340,21 @@ mod tests {
         );
     }
 
-    /// Le garde allonge trois signatures, et celle de `delete` franchit les 100 colonnes
+    /// Le garde allonge trois signatures, et celle de `delete` franchit les cent colonnes
     /// où rustfmt bascule : la template doit l'écrire déjà éclatée.
     ///
-    /// Les noms montent jusqu'à l'entité de vingt-trois caractères, la dernière dont la
-    /// ligne `use super::dto::{…}` éclatée tienne sur une seule ligne intérieure. Au-delà,
-    /// rustfmt répartirait les trois DTO sur plusieurs lignes, ce que la template ne
-    /// devine pas : `format::format_batch` s'en charge alors à l'écriture.
+    /// La frontière haute est la même que sans garde — l'import des DTO, à vingt-quatre
+    /// caractères d'entité. La basse en diffère : `Identity` allonge la signature de
+    /// `find`, qui ne se compacte donc jamais.
     #[test]
     fn the_guarded_render_is_already_what_rustfmt_would_write() {
-        for name in [
-            "tag",
-            "articles",
-            "administrative_documents",
-            "organizational_structures",
-        ] {
-            let rendered = guarded(name, "admin");
+        let divergentes = bench::longueurs_divergentes(|name| guarded(name, "admin"));
 
-            assert_eq!(
-                bench::formatted(&rendered),
-                rendered,
-                "le rendu de `{name}` diverge de rustfmt"
-            );
-        }
+        assert_eq!(
+            divergentes,
+            (24..=40).collect::<Vec<usize>>(),
+            "la plage où le contrôleur gardé diverge de rustfmt a bougé"
+        );
     }
 
     /// La ligne des DTO est la seule du controller qui grandisse avec le nom de l'entité.

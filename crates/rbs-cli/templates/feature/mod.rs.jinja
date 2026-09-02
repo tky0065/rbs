@@ -15,10 +15,28 @@ use crate::state::AppState;
 
 pub fn routes() -> Router<AppState> {
     Router::new()
-        .route("/{@ module @}", get(controller::list).post(controller::create))
+{#- Les arguments d'un appel basculent aux soixante colonnes de `fn_call_width` : au-delà,
+    rustfmt en pose un par ligne. #}
+{%- set route_collection = "\"/" ~ module ~ "\", get(controller::list).post(controller::create)" %}
+{%- if route_collection | length <= 60 %}
+        .route({@ route_collection @})
+{%- else %}
+        .route(
+            "/{@ module @}",
+            get(controller::list).post(controller::create),
+        )
+{%- endif %}
         // Avant `/{@ module @}/{id}`, sans quoi `filter` serait lu comme un identifiant
         // et rendrait un 400 sur un chemin pourtant monté.
-        .route("/{@ module @}/filter", post(controller::filter))
+{%- set route_filtre = "\"/" ~ module ~ "/filter\", post(controller::filter)" %}
+{%- if route_filtre | length <= 60 %}
+        .route({@ route_filtre @})
+{%- else %}
+        .route(
+            "/{@ module @}/filter",
+            post(controller::filter),
+        )
+{%- endif %}
         .route(
             "/{@ module @}/{id}",
             get(controller::find)
