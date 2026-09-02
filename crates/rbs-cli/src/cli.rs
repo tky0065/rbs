@@ -354,9 +354,20 @@ mod tests {
             vec!["rbs", "doctor", "--template-dir", "/tmp/t"],
             vec!["rbs", "upgrade", "--template-dir", "/tmp/t"],
         ] {
+            // Le motif du refus est asserté, et pas seulement le refus : sans lui, une
+            // faute de frappe dans le nom de la sous-commande ferait passer le test pour
+            // la mauvaise raison.
+            let refus = Cli::try_parse_from(&commande)
+                .expect_err("le drapeau n'y ferait rien : la commande doit être refusée");
+
+            assert_eq!(
+                refus.kind(),
+                clap::error::ErrorKind::UnknownArgument,
+                "{commande:?} : {refus}"
+            );
             assert!(
-                Cli::try_parse_from(&commande).is_err(),
-                "{commande:?} doit être refusée : le drapeau n'y ferait rien"
+                refus.to_string().contains("--template-dir"),
+                "le refus doit nommer le drapeau — {commande:?} : {refus}"
             );
         }
     }
@@ -423,9 +434,20 @@ mod tests {
             vec!["rbs", "doctor", "--yes"],
             vec!["rbs", "upgrade", "--yes"],
         ] {
+            // Le motif du refus est asserté, et pas seulement le refus : sans lui, une
+            // faute de frappe dans le nom de la sous-commande ferait passer le test pour
+            // la mauvaise raison.
+            let refus = Cli::try_parse_from(&commande)
+                .expect_err("le drapeau n'y ferait rien : la commande doit être refusée");
+
+            assert_eq!(
+                refus.kind(),
+                clap::error::ErrorKind::UnknownArgument,
+                "{commande:?} : {refus}"
+            );
             assert!(
-                Cli::try_parse_from(&commande).is_err(),
-                "{commande:?} doit être refusée : le drapeau n'y ferait rien"
+                refus.to_string().contains("--yes"),
+                "le refus doit nommer le drapeau — {commande:?} : {refus}"
             );
         }
     }
