@@ -227,6 +227,36 @@ mod tests {
         assert!(rendered.contains("pub id: Uuid,"), "{rendered}");
     }
 
+    /// Aucune ligne de ce fichier ne suit le nom de l'entité d'assez près pour franchir un
+    /// seuil de rustfmt : la plus longue, `impl From<Model> for …Response {`, vaut trente
+    /// et un caractères de plus que lui, et le balayage de deux à quarante ne trouve pas
+    /// une divergence. Les quatre noms n'y cherchent donc pas un seuil — ils tiennent la
+    /// propriété pour la prochaine retouche du gabarit.
+    ///
+    /// L'axe qui, lui, finit par bouger est le nom d'un champ, pas celui de l'entité : à
+    /// quarante caractères, `<champ>: model.<champ>,` atteint 101 colonnes dans
+    /// `From<Model>`. `format::format_batch` le rattrape à l'écriture.
+    #[test]
+    fn the_render_is_already_what_rustfmt_would_write() {
+        for name in [
+            "tag",
+            "articles",
+            "administrative_documents",
+            "organizational_structures",
+        ] {
+            let rendered = dto(
+                name,
+                "title:string,summary:text:optional,published_at:datetime",
+            );
+
+            assert_eq!(
+                bench::formatted(&rendered),
+                rendered,
+                "le rendu de `{name}` diverge de rustfmt"
+            );
+        }
+    }
+
     #[test]
     #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
     fn the_generated_dtos_compile_in_a_fresh_project() {
