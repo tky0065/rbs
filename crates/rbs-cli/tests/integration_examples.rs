@@ -84,9 +84,9 @@ const EXEMPLES: &[Exemple] = &[
         nom: "newsletter-queue",
         database_url: "postgres://rbs:rbs@localhost:5432/newsletter_queue",
         // L'ancre `features` empile les `mod` dans l'ordre d'installation et doit rester
-        // triée : `jobs` puis `mail`, et une ressource qui les suit — ce qui écarte
-        // `newsletter` comme nom de ressource.
-        features: &["jobs", "mail"],
+        // triée : `jobs`, `mail`, `observability`, et une ressource qui les suit — ce qui
+        // écarte `newsletter` comme nom de ressource.
+        features: &["jobs", "mail", "observability"],
         crud: "subscribers",
         // `email` seul suffit à la contrainte de validation du DTO : la règle porte sur
         // le nom exact autant que sur le suffixe `_email`.
@@ -100,6 +100,7 @@ const EXEMPLES: &[Exemple] = &[
             "src/jobs/newsletter.rs",
             "src/mail/mod.rs",
             "src/mail/service.rs",
+            "src/main.rs",
             "src/openapi.rs",
             "src/subscribers/dto.rs",
             "src/subscribers/repository.rs",
@@ -108,6 +109,7 @@ const EXEMPLES: &[Exemple] = &[
             "src/subscribers/mod.rs",
             "src/seeds/subscribers.rs",
             "templates/mail/newsletter.html",
+            "prometheus.yml",
         ],
     },
 ];
@@ -255,9 +257,13 @@ fn normalize(contenu: &str) -> String {
         .join("\n")
 }
 
+/// Les deux syntaxes de commentaire que reconnaît `docs/plugins/remark-code-from-file.js` :
+/// `//` pour le Rust, `#` pour le TOML et le YAML. N'en admettre qu'une ici ferait passer
+/// pour une dérive un marqueur posé dans un `config/default.toml` que la documentation
+/// cite.
 fn is_marker(ligne: &str) -> bool {
     let nu = ligne.trim_start();
-    let Some(reste) = nu.strip_prefix("//") else {
+    let Some(reste) = nu.strip_prefix("//").or_else(|| nu.strip_prefix('#')) else {
         return false;
     };
     let reste = reste.trim_start();
@@ -426,7 +432,10 @@ fn a_migration_timestamp_is_properly_masked() {
 fn the_region_markers_are_ignored() {
     assert!(is_marker("// region: routeur"));
     assert!(is_marker("    // endregion: routeur"));
+    assert!(is_marker("# region: metriques"));
+    assert!(is_marker("  # endregion: metriques"));
     assert!(!is_marker("// la région parisienne"));
+    assert!(!is_marker("# le port de la region"));
     assert!(!is_marker("let region = 1;"));
 }
 
@@ -699,9 +708,9 @@ fn the_hand_edits_of_file_drop_are_in_place() {
 
 /// Ce que `newsletter-queue` porte et qu'aucune commande n'écrit.
 ///
-/// Onze de ses fichiers sortent de la comparaison octet à octet, qui signalerait l'édition
-/// elle-même. Sans ce test, ces onze chemins ne seraient sous aucune surveillance et le
-/// câblage pourrait disparaître en silence.
+/// Quinze de ses fichiers sortent de la comparaison octet à octet, qui signalerait
+/// l'édition elle-même. Sans ce test, ces quinze chemins ne seraient sous aucune
+/// surveillance et le câblage pourrait disparaître en silence.
 #[test]
 fn the_hand_edits_of_newsletter_queue_are_in_place() {
     let racine = common::depot().join("examples").join("newsletter-queue");
@@ -828,5 +837,33 @@ fn the_hand_edits_of_newsletter_queue_are_in_place() {
     assert!(
         gabarit.contains("{{ name }}") && gabarit.contains("{{ body }}"),
         "templates/mail/newsletter.html : les deux variables du contexte doivent y être"
+    );
+
+    // `src/main.rs` sort de la comparaison depuis qu'il appelle `logs::shutdown()` : ce
+    // qu'il portait d'engendré — les deux lignes de l'ancre `startup` — se vérifie donc
+    // ici, faute de quoi l'exclusion les ferait disparaître sans bruit.
+    let main = lire("src/main.rs");
+    for extrait in [
+        "newsletter_queue::jobs::worker::spawn(state.clone());",
+        "newsletter_queue::observability::serve(&state).await?;",
+        "rbs_core::logs::shutdown();",
+    ] {
+        assert!(
+            main.contains(extrait),
+            "src/main.rs : « {extrait} » absent :\n{main}"
+        );
+    }
+
+    // La configuration Prometheus vise le second listener, et non l'API : deux littéraux
+    // `9090` qui dériveraient l'un de l'autre feraient d'un exemple compilé un exemple
+    // faux, que rien d'autre ne relèverait.
+    let prometheus = lire("prometheus.yml");
+    let port = lire("config/default.toml")
+        .lines()
+        .find_map(|ligne| ligne.strip_prefix("metrics_port = ").map(str::to_owned))
+        .expect("config/default.toml doit porter `metrics_port`");
+    assert!(
+        prometheus.contains(&format!("\"localhost:{port}\"")),
+        "prometheus.yml : la cible doit être le port {port} de `[observability]` :\n{prometheus}"
     );
 }

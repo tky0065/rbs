@@ -11,7 +11,7 @@ lit ces fichiers, et la CI les compile.
 | `hello-crud` | Un projet créé par `rbs new`, avec une feature CRUD engendrée par `rbs generate crud`. |
 | `blog-auth` | Le même, plus `rbs add auth` : des billets que tout le monde peut lire, et que seul un administrateur peut écrire. |
 | `file-drop` | Les trois features de la v0.3 sur un même projet — `redis`, `mail`, `storage` — câblées dans un CRUD `uploads`. |
-| `newsletter-queue` | `jobs` et `mail` : une route de diffusion qui enfile une lettre par abonné confirmé, dans la transaction qui les lit. |
+| `newsletter-queue` | `jobs`, `mail` et `observability` : une route de diffusion qui enfile une lettre par abonné confirmé, dans la transaction qui les lit — et un listener `/metrics` à lui. |
 
 Ils ne sont pas membres du workspace racine — un projet engendré déclare son propre
 `[workspace]`, et Cargo interdit l'imbrication. Le manifeste racine les exclut et la CI
@@ -84,10 +84,10 @@ sans que personne ne l'écrive, et le courriel a un destinataire qui vient du mo
 ### `newsletter-queue`
 
 L'ordre d'installation n'est pas libre : l'ancre `features` empile les déclarations `mod`
-dans l'ordre d'arrivée des features et doit rester triée, donc `jobs`, puis `mail`, puis une
-ressource qui suit les deux — ce qui écarte `newsletter` comme nom de ressource. `email`
-seul mérite la contrainte de validation du DTO ; la règle reconnaît le nom exact autant que
-le suffixe `_email`.
+dans l'ordre d'arrivée des features et doit rester triée, donc `jobs`, `mail`,
+`observability`, puis une ressource qui suit les trois — ce qui écarte `newsletter` comme
+nom de ressource. `email` seul mérite la contrainte de validation du DTO ; la règle
+reconnaît le nom exact autant que le suffixe `_email`.
 
 ```bash
 cargo run -p rbs-cli --bin rbs -- new newsletter-queue --yes \
@@ -95,7 +95,7 @@ cargo run -p rbs-cli --bin rbs -- new newsletter-queue --yes \
   --database-url 'postgres://rbs:rbs@localhost:5432/newsletter_queue' \
   --lang fr
 cd newsletter-queue
-for f in jobs mail; do
+for f in jobs mail observability; do
   git add -A && git commit -q -m "before $f"
   cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add "$f"
 done
@@ -112,7 +112,8 @@ Trois s'appliquent aux quatre projets :
 - réécrire la dépendance `rbs-core` en `{ path = "../../crates/rbs-core" }`, puisque
   `--core-path` est canonicalisé en un chemin absolu qui ne survivrait pas à une autre
   machine ;
-- restaurer les marqueurs `// region:` que la documentation cite.
+- restaurer les marqueurs `// region:` que la documentation cite — `# region:` dans un
+  TOML ou un YAML, la syntaxe qu'y lit le plugin du site.
 
 `blog-auth` en porte trois de plus, une par fichier, et elles sont tout l'intérêt de
 l'exemple — aucune commande ne câble un garde sur une route que vous avez engendrée :
@@ -161,9 +162,9 @@ rien du câblage.
 `the_hand_edits_of_file_drop_are_in_place` les atteste toutes. Sans lui, ces neuf chemins
 resteraient hors de toute surveillance, et le câblage pourrait disparaître en silence.
 
-`newsletter-queue` en porte onze de plus, et elles sont tout l'intérêt de l'exemple — le
-fragment livre une file et aucune route, et un job que rien n'enfile ne prouve rien de la
-file.
+`newsletter-queue` en porte quinze de plus, et elles sont tout l'intérêt de l'exemple — les
+fragments livrent une file, un expéditeur et un module de métriques, et aucun d'eux une
+route ; un job que rien n'enfile ne prouve rien de la file.
 
 - `src/jobs/newsletter.rs` : `SendNewsletter` implémente `Job`. Il attend l'envoi plutôt que
   de le détacher, et c'est toute la différence : une erreur rendue ici est un réessai, là où
@@ -183,9 +184,16 @@ file.
   handler qui répond `202` (les lettres sont enfilées, pas envoyées), la route montée avant
   `/subscribers/{id}` pour que `broadcast` ne soit pas lu comme un id, et le chemin déclaré
   à OpenAPI.
-- `src/mail/service.rs` : `send_detached` garde un `allow(dead_code)` ciblé — la fonction
-  est conservée, un message dont la perte ne coûte rien n'ayant pas besoin d'une ligne en
-  base.
+- `src/mail/mod.rs` et `src/mail/service.rs` : la permission `dead_code` de module tombe
+  avec le premier appel, et `send_detached` en garde une pour elle seule — la fonction est
+  conservée, un message dont la perte ne coûte rien n'ayant pas besoin d'une ligne en base.
+- `src/main.rs` : `rbs_core::logs::shutdown()` avant de sortir, qui pousse le dernier lot de
+  spans au lieu de le perdre. Rien dans le squelette ne l'appelle, le coût d'un oubli étant
+  ce lot et non une panne — un exemple est donc le seul endroit où l'appel se lise.
+- `prometheus.yml` : aucune commande ne l'écrit, et un `/metrics` que personne ne scrute ne
+  prouve rien non plus. Il vise `metrics_port`, et non `server.port` ; le test de non-dérive
+  relit le port dans `config/default.toml` plutôt que de faire confiance à un second
+  littéral.
 - `src/seeds/subscribers.rs` : quatre abonnés, dont un qui n'a jamais confirmé — sans eux,
   le filtre de `confirmed` ne se verrait pas.
 - `templates/mail/newsletter.html` : la template que le fragment livre annonce un compte
