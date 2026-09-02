@@ -818,13 +818,23 @@ mod tests {
             .join("\n")
     }
 
-    /// La longueur d'un nom de feature est un continuum, et rustfmt bascule à 100
-    /// colonnes : une forme écrite en dur dans un template n'est juste que pour les noms
-    /// qui la font tomber du bon côté. L'éventail balaye les deux bascules — `tag` tient
-    /// sur une ligne là où `articles` déborde, `administrative_documents` déborde là où
-    /// `articles` tient — et la feature sans champ, dont le rendu perd des blocs entiers.
+    /// La longueur d'un nom de feature est un continuum, et rustfmt bascule à des seuils
+    /// que le gabarit doit connaître : `fn_call_width` à soixante colonnes sur les
+    /// arguments d'un appel, `max_width` à cent sur une signature. Une forme écrite en dur
+    /// dans un template n'est juste que pour les noms qui la font tomber du bon côté.
+    /// L'éventail balaye ces bascules, et la feature sans champ, dont le rendu perd des
+    /// blocs entiers.
+    ///
+    /// Ce test lit le rendu **avant** `format::format_batch` : c'est la seule position
+    /// d'où il puisse échouer. Lu après, sur les fichiers écrits, il comparerait la sortie
+    /// de rustfmt à elle-même — ce qu'il faisait, en promettant l'inverse par son nom.
+    ///
+    /// L'éventail s'arrête à `administrative_documents`, vingt-trois caractères de
+    /// singulier : c'est là que s'arrête le point fixe du contrôleur et du service, que
+    /// l'import des DTO borne. Au-delà, `format_batch` reprend la main, et ce sont les
+    /// gardes de chaque module qui fixent la frontière par `bench::longueurs_divergentes`.
     #[test]
-    fn the_render_goes_through_rustfmt_without_a_diff_whatever_the_name_length() {
+    fn the_rendered_templates_are_already_what_rustfmt_would_write() {
         let cas: &[(&str, Option<&str>, bool)] = &[
             ("tag", Some("title:string,views:int"), true),
             ("post", Some("title:string,views:int"), true),
@@ -842,36 +852,24 @@ mod tests {
             ("notes", None, false),
         ];
 
-        for (name, fields, complete) in cas {
-            let (_parent, root) = project();
+        for (name, champs, complete) in cas {
+            let fields = fields::parse(champs.unwrap_or_default()).expect("champs valides");
+            let feature = Feature::fresh(name, fields);
+            let seedable = seed::is_seedable(&feature);
 
-            let generated =
-                run(&options(&root, name, *fields, *complete)).expect("la génération doit aboutir");
+            let (files, _migration) = render(&feature, *complete, seedable, Some("demo_api"))
+                .expect("la génération doit aboutir");
 
-            let mut ecrits: Vec<PathBuf> = generated
-                .files
-                .iter()
-                .map(|relatif| root.join(relatif))
-                .collect();
-            if let Some(module) = &generated.migration {
-                ecrits.push(root.join("migration/src").join(format!("{module}.rs")));
-            }
+            assert!(!files.is_empty(), "{name} n'a rien rendu");
 
-            assert!(!ecrits.is_empty(), "{name} n'a rien écrit");
-
-            for path in ecrits {
-                let ecrit = read(&path);
-                let formatted = bench::formatted(&ecrit);
-                let file = path
-                    .file_name()
-                    .expect("le chemin nomme un fichier")
-                    .to_string_lossy();
+            for (path, rendu) in &files {
+                let formatted = bench::formatted(rendu);
 
                 assert!(
-                    formatted == ecrit,
-                    "un `cargo fmt` chez l'utilisateur reformaterait {name}/{file}, \
+                    formatted == *rendu,
+                    "un `cargo fmt` chez l'utilisateur reformaterait {name}/{path}, \
                      qu'il n'a pas touché :\n{}",
-                    divergence(&ecrit, &formatted)
+                    divergence(rendu, &formatted)
                 );
             }
         }
