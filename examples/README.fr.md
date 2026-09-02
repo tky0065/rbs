@@ -126,9 +126,15 @@ l'exemple — aucune commande ne câble un garde sur une route que vous avez eng
   exactement le cas ici.
 - `src/posts/tests.rs` : le harnais inscrit un compte, le promeut par la base —
   l'inscription rend toujours un `user`, et le rôle ne voyage que dans un jeton frappé
-  ensuite — et signe les requêtes qui écrivent. Trois tests s'ajoutent : sans jeton → 401,
-  avec un `user` → 403, et la route de filtrage qui répond sans jeton sur une ressource
-  dont la création en exige un d'`admin`.
+  ensuite — et signe les requêtes qui écrivent. Autour de lui, le fichier engendré est
+  repris de trois façons. Trois tests s'ajoutent : sans jeton → 401, avec un `user` → 403,
+  et la liste qui répond à qui n'a pas de compte. Trois autres sont réécrits plutôt
+  qu'ajoutés — le cycle de vie complet et la route de filtrage, qui créent désormais avec
+  un jeton d'`admin` et relisent sans en présenter aucun, et le 400 du corps illisible,
+  qu'il faut signer puisque `Identity` passe avant l'analyse du corps. Deux disparaissent,
+  `two_creations_in_a_row_carry_increasing_ids` et `an_unknown_sort_column_returns_400` :
+  ni l'un ni l'autre ne dit rien du garde, et `hello-crud` les porte tous deux intacts.
+  Seul `an_unknown_id_returns_404` subsiste tel qu'il a été engendré.
 
 `file-drop` en porte neuf de plus, et elles sont tout l'intérêt de l'exemple — les trois
 fragments livrent une brique et aucune route, et une brique que rien n'appelle ne prouve

@@ -13,10 +13,10 @@ use super::metrics;
 /// Le registre est global au processus et ne s'installe qu'une fois : ces tests le
 /// partagent, et n'affirment donc rien d'une valeur absolue — seulement des séries
 /// présentes, et des séries absentes.
-fn registre() -> &'static PrometheusHandle {
-    static REGISTRE: OnceLock<PrometheusHandle> = OnceLock::new();
+fn registry() -> &'static PrometheusHandle {
+    static REGISTRY: OnceLock<PrometheusHandle> = OnceLock::new();
 
-    REGISTRE.get_or_init(|| metrics::install().expect("le registre doit s'installer"))
+    REGISTRY.get_or_init(|| metrics::install().expect("le registre doit s'installer"))
 }
 
 /// Une application dotée d'une route à paramètre, et du middleware de comptage à la
@@ -27,7 +27,7 @@ fn application() -> Router {
         .layer(from_fn(metrics::middleware))
 }
 
-async fn appeler(uri: &str) -> StatusCode {
+async fn call(uri: &str) -> StatusCode {
     application()
         .oneshot(
             Request::builder()
@@ -45,11 +45,11 @@ async fn appeler(uri: &str) -> StatusCode {
 /// le collecteur sous le nombre de séries, et la feature devient nuisible.
 #[tokio::test]
 async fn a_request_on_a_parameterised_route_counts_under_its_template() {
-    let registre = registre();
+    let registry = registry();
 
-    assert_eq!(appeler("/articles/0192f3ab7c9d").await, StatusCode::OK);
+    assert_eq!(call("/articles/0192f3ab7c9d").await, StatusCode::OK);
 
-    let rendu = registre.render();
+    let rendu = registry.render();
 
     assert!(
         rendu.contains("path=\"/articles/{id}\""),
@@ -66,11 +66,11 @@ async fn a_request_on_a_parameterised_route_counts_under_its_template() {
 /// que sur le trafic légitime.
 #[tokio::test]
 async fn an_unmatched_path_counts_under_a_single_constant() {
-    let registre = registre();
+    let registry = registry();
 
-    assert_eq!(appeler("/n-existe-pas").await, StatusCode::NOT_FOUND);
+    assert_eq!(call("/n-existe-pas").await, StatusCode::NOT_FOUND);
 
-    let rendu = registre.render();
+    let rendu = registry.render();
 
     assert!(
         !rendu.contains("n-existe-pas"),
@@ -83,11 +83,11 @@ async fn an_unmatched_path_counts_under_a_single_constant() {
 /// contre elles.
 #[tokio::test]
 async fn the_three_series_are_published_under_their_names() {
-    let registre = registre();
+    let registry = registry();
 
-    appeler("/articles/1").await;
+    call("/articles/1").await;
 
-    let rendu = registre.render();
+    let rendu = registry.render();
 
     for serie in [
         "http_requests_total",
