@@ -64,6 +64,15 @@ pub fn warn(message: &str) {
     );
 }
 
+/// La suite d'un avertissement, sur le flux qui le porte.
+///
+/// `info` écrit sur la sortie standard : y laisser la continuation d'un `warn` la
+/// détacherait de ce qu'elle explique dès que l'un des deux flux est redirigé — un
+/// `rbs new > journal` garderait la phrase d'explication et perdrait l'avertissement.
+pub fn warn_detail(message: &str) {
+    let _ = writeln!(stderr(), "{}", style(message).dim());
+}
+
 /// Annonce ce qui a été fait.
 pub fn success(message: &str) {
     line(&format!("{} {message}", style("✓").green().bold()));

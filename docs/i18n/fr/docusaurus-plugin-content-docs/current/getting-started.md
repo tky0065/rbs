@@ -72,6 +72,7 @@ vous tapez.
 rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 ```
 
+{/* rbs:transcript cmd="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" */}
 ```text
 ✓ demo créé — 20 fichiers
 
@@ -220,6 +221,7 @@ rbs generate crud articles --fields "title:string,body:text,published:bool"
 
 La commande affiche ce qu'elle compte faire, puis le fait :
 
+{/* rbs:transcript cmd="rbs generate crud articles --fields title:string,body:text,published:bool" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" */}
 ```text
 plan pour …/demo
 
@@ -396,11 +398,12 @@ Quand quelque chose cloche, demandez avant de deviner :
 rbs doctor
 ```
 
+{/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
-  ✓ ancres      les 11 points d'insertion sont en place
+  ✓ ancres      les 12 points d'insertion sont en place
   ✓ agents      guide et inventaire à jour
   ✓ relations   les modèles portent leurs ancres de relation
-  ✓ .env        les 4 variables de .env.example sont renseignées
+  ✓ .env        les 7 variables de .env.example sont renseignées
   ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
   … base        compilation de la crate migration, peut prendre
                 une minute au premier lancement…
@@ -410,7 +413,7 @@ rbs doctor
 ✓ le projet est sain
 ```
 
-Six vérifications : les ancres sont toujours en place — dix ici, neuf du squelette
+Six vérifications : les ancres sont toujours en place — douze ici, onze du squelette
 plus celle du compose, qui sort du compte pour un projet sans `docker-compose.yml` — le
 guide et l'inventaire d'[`AGENTS.md`](./guides/agents.md) s'accordent toujours avec ce que
 porte le projet, aucun modèle ne porte de relation sans les deux ancres qu'il lui

@@ -36,7 +36,7 @@ pub(crate) fn render_mod(feature: &Feature, with_tests: bool) -> Result<String, 
 mod tests {
     use super::*;
     use crate::generate::feature::Feature;
-    use crate::generate::{bench, dto, entity, fields, filter, repository, service};
+    use crate::generate::{bench, fields};
 
     fn controller(name: &str) -> String {
         let fields = fields::parse("title:string").expect("champs valides");
@@ -536,36 +536,7 @@ fn chaque_route_annonce_le_schema_qu_elle_rend() {
         let feature = Feature::fresh("articles", fields);
 
         let project = bench::Project::fresh();
-        project.write_feature(
-            "articles",
-            &[
-                (
-                    "mod.rs",
-                    &render_mod(&feature, false).expect("mod.rs rendu"),
-                ),
-                (
-                    "model.rs",
-                    &entity::render(&feature).expect("entité rendue"),
-                ),
-                ("dto.rs", &dto::render(&feature).expect("DTO rendus")),
-                (
-                    "filter.rs",
-                    &filter::render(&feature).expect("filtre rendu"),
-                ),
-                (
-                    "repository.rs",
-                    &repository::render(&feature).expect("repository rendu"),
-                ),
-                (
-                    "service.rs",
-                    &service::render(&feature).expect("service rendu"),
-                ),
-                (
-                    "controller.rs",
-                    &render(&feature).expect("controller rendu"),
-                ),
-            ],
-        );
+        project.write_feature("articles", &bench::tous(&feature, false));
         project.mount_feature("articles");
         project.write_unit_test("verification_openapi", VERIFICATION);
         project.test_of();
@@ -581,36 +552,7 @@ fn chaque_route_annonce_le_schema_qu_elle_rend() {
         let feature = Feature::fresh("articles", fields);
 
         let project = bench::Project::fresh();
-        project.write_feature(
-            "articles",
-            &[
-                (
-                    "mod.rs",
-                    &render_mod(&feature, false).expect("mod.rs rendu"),
-                ),
-                (
-                    "model.rs",
-                    &entity::render(&feature).expect("entité rendue"),
-                ),
-                ("dto.rs", &dto::render(&feature).expect("DTO rendus")),
-                (
-                    "filter.rs",
-                    &filter::render(&feature).expect("filtre rendu"),
-                ),
-                (
-                    "repository.rs",
-                    &repository::render(&feature).expect("repository rendu"),
-                ),
-                (
-                    "service.rs",
-                    &service::render(&feature).expect("service rendu"),
-                ),
-                (
-                    "controller.rs",
-                    &render(&feature).expect("controller rendu"),
-                ),
-            ],
-        );
+        project.write_feature("articles", &bench::tous(&feature, false));
         project.mount_feature("articles");
 
         println!("{}", project.keep().display());

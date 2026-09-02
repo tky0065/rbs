@@ -151,7 +151,7 @@ $ rbs doctor --json
     {
       "name": "ancres",
       "status": "ok",
-      "detail": "les 11 points d'insertion sont en place"
+      "detail": "les 12 points d'insertion sont en place"
     },
     {
       "name": "base",
@@ -194,9 +194,10 @@ L'annonce est une ligne du seul rendu texte ; `--json` ne la porte jamais.
 
 ## Un projet sain
 
+{/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --with jobs --database-url postgres://rbs:secret@localhost:55501/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
 $ rbs doctor
-  ✓ ancres      les 11 points d'insertion sont en place
+  ✓ ancres      les 12 points d'insertion sont en place
   ✓ agents      guide et inventaire à jour
   ✓ relations   les modèles portent leurs ancres de relation
   ✓ .env        les 7 variables de .env.example sont renseignées
@@ -267,7 +268,7 @@ plan pour /private/tmp/rbs-demo/demo
 
 ✓ 2 ancres reposées : openapi, state_init
 
-  ✓ ancres      les 10 points d'insertion sont en place
+  ✓ ancres      les 11 points d'insertion sont en place
   ✓ agents      guide et inventaire à jour
   ✓ relations   les modèles portent leurs ancres de relation
   ✓ .env        les 4 variables de .env.example sont renseignées
@@ -389,7 +390,7 @@ commande à lancer à la main :
 
 ```text
 $ rbs doctor
-  ✓ ancres      les 11 points d'insertion sont en place
+  ✓ ancres      les 12 points d'insertion sont en place
   ✓ agents      guide et inventaire à jour
   ✓ relations   les modèles portent leurs ancres de relation
   ✓ .env        les 7 variables de .env.example sont renseignées

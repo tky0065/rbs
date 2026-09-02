@@ -96,6 +96,7 @@ attente de la base dans [`rbs dev`](./dev.md), et une URL sans hôte ni port.
 
 ## Créer un projet
 
+{/* rbs:transcript cmd="rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes" */}
 ```text
 $ rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes
 ✓ blog créé — 20 fichiers
@@ -267,6 +268,7 @@ connaît dix — `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`, `observability`
 `rate-limit`, `redis` et `storage` — et installe chacune des nommées, dans la même passe
 qui écrit le projet :
 
+{/* rbs:transcript cmd="rbs new site --with auth --yes" */}
 ```text
 $ rbs new site --with auth --yes
 ✓ site créé — 20 fichiers
@@ -307,6 +309,7 @@ qu'un second `rbs add` de l'une d'elles laisserait intact.
 Un nom qui n'est pas une feature du tout est refusé avant que le premier fichier ne soit
 écrit :
 
+{/* rbs:transcript cmd="rbs new site --with graphql --yes" */}
 ```text
 $ rbs new site --with graphql --yes
 erreur : `graphql` n'est pas une feature rbs — disponibles : auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage

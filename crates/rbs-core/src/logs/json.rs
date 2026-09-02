@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::fmt;
 
 use serde_json::{Map, Value};
@@ -59,17 +60,40 @@ where
         let mut visiteur = ChampsJson::default();
         event.record(&mut visiteur);
 
-        let mut objet = visiteur.fields;
-        objet.insert("ts".to_owned(), Value::String(self.timestamp()));
-        objet.insert(
+        // Les paires partent dans le `Writer` au fil de l'eau : la déduplication ne
+        // retient donc que les clés déjà écrites, et non un objet entier dont aucune
+        // valeur n'aurait été relue.
+        let mut vues = BTreeSet::new();
+
+        write!(writer, "{{")?;
+        paire(
+            &mut writer,
+            &mut vues,
+            "ts".to_owned(),
+            &Value::String(self.timestamp()),
+        )?;
+        paire(
+            &mut writer,
+            &mut vues,
             "level".to_owned(),
-            Value::String(metadata.level().to_string()),
-        );
-        objet.insert(
+            &Value::String(metadata.level().to_string()),
+        )?;
+        paire(
+            &mut writer,
+            &mut vues,
             "target".to_owned(),
-            Value::String(metadata.target().to_owned()),
-        );
-        objet.insert("msg".to_owned(), Value::String(visiteur.message));
+            &Value::String(metadata.target().to_owned()),
+        )?;
+        paire(
+            &mut writer,
+            &mut vues,
+            "msg".to_owned(),
+            &Value::String(visiteur.message),
+        )?;
+
+        for (cle, value) in visiteur.fields {
+            paire(&mut writer, &mut vues, cle, &value)?;
+        }
 
         // Le registry ne conserve les champs d'un span que sous forme de texte déjà
         // formaté. Les relire est le seul accès à leur contenu sans écrire une `Layer`
@@ -84,13 +108,36 @@ where
                     continue;
                 };
                 for (cle, value) in fields {
-                    objet.entry(cle).or_insert(value);
+                    paire(&mut writer, &mut vues, cle, &value)?;
                 }
             }
         }
 
-        writeln!(writer, "{}", Value::Object(objet))
+        writeln!(writer, "}}")
     }
+}
+
+/// Écrit une paire, sauf si sa clé est déjà sortie, et retient la clé.
+///
+/// La clé passe par `Value::String` et la valeur par son `Display` : l'échappement JSON
+/// reste celui de `serde_json`, aucun n'est écrit ici.
+fn paire(
+    writer: &mut Writer<'_>,
+    vues: &mut BTreeSet<String>,
+    cle: String,
+    value: &Value,
+) -> fmt::Result {
+    if vues.contains(&cle) {
+        return Ok(());
+    }
+
+    if !vues.is_empty() {
+        write!(writer, ",")?;
+    }
+    write!(writer, "{}:{value}", Value::String(cle.clone()))?;
+    vues.insert(cle);
+
+    Ok(())
 }
 
 impl<'writer> FormatFields<'writer> for JsonFormat {
@@ -196,6 +243,69 @@ mod tests {
         assert_eq!(objet["latency_ms"], serde_json::json!(12.4));
         assert_eq!(objet["actif"], serde_json::json!(true));
         assert_eq!(objet["msg"], serde_json::json!("refus"));
+    }
+
+    /// L'en-tête de la ligne précède les champs, et dans cet ordre : un collecteur qui
+    /// tronque une ligne trop longue garde alors de quoi la dater et la classer. Un objet
+    /// intermédiaire reclasserait tout par ordre alphabétique.
+    #[test]
+    fn the_line_opens_on_its_header_before_any_field() {
+        let output = render(|| tracing::warn!(actives = 18, "pool proche de la saturation"));
+
+        let ligne = output.trim();
+        let entete: Vec<&str> = ligne
+            .trim_start_matches('{')
+            .split(',')
+            .take(4)
+            .map(|paire| paire.split(':').next().expect("une clé"))
+            .collect();
+
+        assert_eq!(entete, [r#""ts""#, r#""level""#, r#""target""#, r#""msg""#]);
+    }
+
+    /// Une clé portée des deux côtés ne sort qu'une fois, et c'est l'événement qui
+    /// l'emporte : la valeur la plus proche de l'émission est celle qui décrit la ligne.
+    /// Une clé répétée ferait d'ailleurs de la ligne un JSON que deux collecteurs lisent
+    /// différemment.
+    #[test]
+    fn a_field_of_the_event_wins_over_the_span_field_of_the_same_name() {
+        let output = render(|| {
+            let span = tracing::info_span!("requete", request_id = "01JQ3F8K2P", status = 200);
+            let _entre = span.enter();
+            tracing::error!(status = 422, "requête refusée");
+        });
+
+        let ligne = output.trim();
+        let objet: serde_json::Value = serde_json::from_str(ligne).expect("ligne non JSON");
+        assert_eq!(objet["request_id"], serde_json::json!("01JQ3F8K2P"));
+        assert_eq!(objet["status"], serde_json::json!(422));
+        assert_eq!(
+            ligne.matches("\"status\":").count(),
+            1,
+            "la clé sort deux fois : {ligne}"
+        );
+    }
+
+    /// Entre deux spans imbriqués, c'est le plus intérieur qui l'emporte, pour la même
+    /// raison : la portée la plus proche de l'événement est la plus précise.
+    #[test]
+    fn the_innermost_span_wins_over_the_one_that_encloses_it() {
+        let output = render(|| {
+            let dehors = tracing::info_span!("requete", tenant = "acme");
+            let _dehors = dehors.enter();
+            let dedans = tracing::info_span!("commande", tenant = "beta");
+            let _dedans = dedans.enter();
+            tracing::error!("commande refusée");
+        });
+
+        let ligne = output.trim();
+        let objet: serde_json::Value = serde_json::from_str(ligne).expect("ligne non JSON");
+        assert_eq!(objet["tenant"], serde_json::json!("beta"));
+        assert_eq!(
+            ligne.matches("\"tenant\":").count(),
+            1,
+            "la clé sort deux fois : {ligne}"
+        );
     }
 
     #[test]

@@ -17,7 +17,10 @@ use testcontainers::runners::SyncRunner;
 use testcontainers::{Container, ImageExt};
 
 use crate::anchors::{self, Anchor};
+use crate::test_cible;
 
+use super::command;
+use super::feature::Feature;
 use super::mount::{self, Mount};
 
 /// PostgreSQL en conteneur, et l'URL de connexion qui y mène.
@@ -73,6 +76,11 @@ impl TestDatabase {
 /// module de migration — même nom de fichier, même crate `migration` — se sont montrés
 /// capables d'échanger leur code compilé d'un projet à l'autre. Deux tests lourds ne
 /// doivent donc jamais poser une feature ni une migration de même nom.
+///
+/// Il ne tranche qu'entre les bancs, tous compilés dans la bibliothèque : les binaires de
+/// `tests/` écrivent la même cible sans rien en voir, et c'est `test_cible::verrou` qui
+/// s'interpose entre eux. Ce `Mutex` reste devant lui pour que le cas courant — deux bancs
+/// du même processus — ne passe pas par le système de fichiers.
 static CARGO: Mutex<()> = Mutex::new(());
 
 /// Racine du dépôt, d'où se déduisent le noyau local et la cible de compilation.
@@ -81,6 +89,42 @@ pub(crate) fn repo() -> PathBuf {
         .join("../..")
         .canonicalize()
         .expect("la racine du dépôt doit être résoluble")
+}
+
+/// La cible que ces projets partagent, et que partagent aussi les tests d'intégration.
+fn cible() -> PathBuf {
+    repo().join("target/rbs-integration")
+}
+
+/// Tous les fichiers que `generate` déposerait dans le répertoire de `feature`, rendus.
+///
+/// Le banc ne les énumère plus : la liste est celle de `generate`, et un fichier qu'une
+/// feature gagne arrive ici sans que personne ait à y penser — `filter.rs` avait cassé
+/// quatre bancs l'un après l'autre, chacun ne se voyant qu'après une compilation complète.
+pub(crate) fn tous(feature: &Feature, complete: bool) -> Vec<(String, String)> {
+    command::fichiers(feature, complete).expect("la feature doit se rendre")
+}
+
+/// Les mêmes, restreints à ceux que le banc éprouve.
+///
+/// La sélection reste explicite — un banc qui n'éprouve que le DTO n'a pas à compiler le
+/// controller — mais elle se dit par des noms, et un nom qui cesse d'exister échoue ici,
+/// avant la compilation, plutôt que d'y rendre un projet amputé.
+pub(crate) fn retenus(feature: &Feature, complete: bool, gardes: &[&str]) -> Vec<(String, String)> {
+    let fichiers = tous(feature, complete);
+
+    for garde in gardes {
+        assert!(
+            fichiers.iter().any(|(nom, _)| nom == garde),
+            "`{garde}` n'est plus un fichier de feature, la feature en porte : {:?}",
+            fichiers.iter().map(|(nom, _)| nom).collect::<Vec<_>>()
+        );
+    }
+
+    fichiers
+        .into_iter()
+        .filter(|(nom, _)| gardes.contains(&nom.as_str()))
+        .collect()
 }
 
 /// Un projet neuf, créé par le binaire livré, prêt à recevoir une feature.
@@ -131,7 +175,14 @@ impl Project {
     }
 
     /// Écrit `src/<module>/` avec les fichiers donnés, et déclare le module.
-    pub(crate) fn write_feature(&self, module: &str, files: &[(&str, &str)]) {
+    ///
+    /// Générique sur les deux moitiés du couple : les bancs passent ce que `tous` et
+    /// `retenus` leur rendent — des `String` — et non plus des littéraux.
+    pub(crate) fn write_feature<N: AsRef<str>, C: AsRef<str>>(
+        &self,
+        module: &str,
+        files: &[(N, C)],
+    ) {
         let directory = self.root.join("src").join(module);
         fs::create_dir_all(&directory).expect("répertoire de feature créable");
 
@@ -139,24 +190,25 @@ impl Project {
         // la liste de déclarations déduite des noms de fichiers ne suffit plus.
         let declarations = files
             .iter()
-            .find(|(name, _)| *name == "mod.rs")
+            .find(|(name, _)| name.as_ref() == "mod.rs")
             .map_or_else(
                 || {
                     files
                         .iter()
                         .map(|(name, _)| {
-                            let module = name.trim_end_matches(".rs");
+                            let module = name.as_ref().trim_end_matches(".rs");
                             format!("pub mod {module};\n")
                         })
                         .collect()
                 },
-                |(_, content)| (*content).to_string(),
+                |(_, content)| content.as_ref().to_string(),
             );
 
         fs::write(directory.join("mod.rs"), declarations).expect("mod.rs écrivable");
 
-        for (name, content) in files.iter().filter(|(name, _)| *name != "mod.rs") {
-            fs::write(directory.join(name), content).expect("fichier de feature écrivable");
+        for (name, content) in files.iter().filter(|(name, _)| name.as_ref() != "mod.rs") {
+            fs::write(directory.join(name.as_ref()), content.as_ref())
+                .expect("fichier de feature écrivable");
         }
 
         let features = anchors::resolve_features(&self.root);
@@ -257,10 +309,11 @@ async fn apply() {
     /// Lance cargo sur le projet, un seul appel à la fois.
     fn cargo(&self, arguments: &[&str], variables: &[(&str, &str)]) -> Output {
         let _exclusivite = CARGO.lock().unwrap_or_else(PoisonError::into_inner);
+        let _cible = test_cible::verrou(&cible());
 
         std::process::Command::new("cargo")
             .current_dir(&self.root)
-            .env("CARGO_TARGET_DIR", repo().join("target/rbs-integration"))
+            .env("CARGO_TARGET_DIR", cible())
             .envs(variables.iter().copied())
             .args(arguments)
             .output()
@@ -273,11 +326,12 @@ async fn apply() {
     /// doit écrire dans la cible partagée comme les autres.
     pub(crate) fn rbs(&self, arguments: &[&str]) -> Output {
         let _exclusivite = CARGO.lock().unwrap_or_else(PoisonError::into_inner);
+        let _cible = test_cible::verrou(&cible());
 
         Command::cargo_bin("rbs")
             .expect("le binaire rbs doit être compilé")
             .current_dir(&self.root)
-            .env("CARGO_TARGET_DIR", repo().join("target/rbs-integration"))
+            .env("CARGO_TARGET_DIR", cible())
             .args(arguments)
             .output()
             .expect("rbs doit être lançable")

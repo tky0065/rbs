@@ -168,9 +168,7 @@ fn names(fields: &[Field], retenu: impl Fn(&Field) -> bool) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generate::{
-        bench, controller, dto, entity, fields, filter, migration, repository, service,
-    };
+    use crate::generate::{bench, fields, migration};
 
     const CHAMPS: &str = "title:string,email:string:unique,summary:text:optional,views:int,\
                           note:float,published:bool,auteur_id:uuid,published_at:datetime";
@@ -694,37 +692,7 @@ mod tests {
         let base = bench::TestDatabase::start();
 
         let project = bench::Project::fresh_on(base.url());
-        project.write_feature(
-            "billets",
-            &[
-                (
-                    "mod.rs",
-                    &controller::render_mod(&feature, true).expect("mod.rs rendu"),
-                ),
-                (
-                    "model.rs",
-                    &entity::render(&feature).expect("entité rendue"),
-                ),
-                ("dto.rs", &dto::render(&feature).expect("DTO rendus")),
-                (
-                    "filter.rs",
-                    &filter::render(&feature).expect("filtre rendu"),
-                ),
-                (
-                    "repository.rs",
-                    &repository::render(&feature).expect("repository rendu"),
-                ),
-                (
-                    "service.rs",
-                    &service::render(&feature).expect("service rendu"),
-                ),
-                (
-                    "controller.rs",
-                    &controller::render(&feature).expect("controller rendu"),
-                ),
-                ("tests.rs", &render(&feature).expect("tests rendus")),
-            ],
-        );
+        project.write_feature("billets", &bench::tous(&feature, true));
         project.mount_feature("billets");
 
         let migration = migration::render(&feature, HORODATAGE).expect("migration rendue");

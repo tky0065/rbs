@@ -476,6 +476,44 @@ fn plan_repair(
     })
 }
 
+/// Ce que `generate` dépose dans `src/<module>/`, rendu, chaque fichier sous le nom qu'il
+/// portera dans le répertoire de la feature.
+///
+/// Les bancs des générateurs y puisent la liste qu'ils énuméraient chacun de leur côté :
+/// `filter.rs` en avait cassé quatre l'un après l'autre, et chaque oubli ne se voyait
+/// qu'après une compilation complète sous Docker. Ils choisissent ce qu'ils en gardent —
+/// c'est la sélection qui les regarde, pas l'inventaire.
+pub(crate) fn fichiers(feature: &Feature, complete: bool) -> Result<Vec<File>, Error> {
+    let module = feature.module();
+
+    let mut files = vec![
+        ("mod.rs", controller::render_mod(feature, complete)),
+        ("model.rs", entity::render(feature)),
+        ("dto.rs", dto::render(feature)),
+        ("filter.rs", filter::render(feature)),
+        ("repository.rs", repository::render(feature)),
+        ("service.rs", service::render(feature)),
+        ("controller.rs", controller::render(feature)),
+    ];
+
+    if complete {
+        files.push(("tests.rs", tests_http::render(feature)));
+    }
+
+    let mut rendus = Vec::with_capacity(files.len());
+    for (name, rendered) in files {
+        // L'erreur nomme le chemin du projet, et non le seul nom de fichier : c'est celui
+        // que l'utilisateur ira ouvrir.
+        let content = rendered.map_err(|source| Error::Rendu {
+            file: format!("src/{module}/{name}"),
+            source,
+        })?;
+        rendus.push((name.to_string(), content));
+    }
+
+    Ok(rendus)
+}
+
 /// Rend les fichiers de la feature, et sa migration si elle est complète.
 ///
 /// Rien n'est écrit ici : une template fautive doit échouer avant la première écriture.
@@ -486,34 +524,17 @@ fn render(
     crate_name: Option<&str>,
 ) -> Result<(Vec<File>, Option<String>), Error> {
     let module = feature.module();
-    let dans = |name: &str| format!("src/{module}/{name}");
 
-    let mut files = vec![
-        (dans("mod.rs"), controller::render_mod(feature, complete)),
-        (dans("model.rs"), entity::render(feature)),
-        (dans("dto.rs"), dto::render(feature)),
-        (dans("filter.rs"), filter::render(feature)),
-        (dans("repository.rs"), repository::render(feature)),
-        (dans("service.rs"), service::render(feature)),
-        (dans("controller.rs"), controller::render(feature)),
-    ];
-
-    if complete {
-        files.push((dans("tests.rs"), tests_http::render(feature)));
-    }
+    let mut rendus: Vec<File> = fichiers(feature, complete)?
+        .into_iter()
+        .map(|(name, content)| (format!("src/{module}/{name}"), content))
+        .collect();
 
     if complete && seedable {
         // Hors du répertoire de la feature : le seed appartient au binaire qui l'applique,
         // et non au module que le routeur monte.
-        files.push((
-            format!("src/seeds/{module}.rs"),
-            seed::render(feature, crate_name),
-        ));
-    }
-
-    let mut rendus = Vec::with_capacity(files.len() + 1);
-    for (path, rendered) in files {
-        let content = rendered.map_err(|source| Error::Rendu {
+        let path = format!("src/seeds/{module}.rs");
+        let content = seed::render(feature, crate_name).map_err(|source| Error::Rendu {
             file: path.clone(),
             source,
         })?;

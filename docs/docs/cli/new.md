@@ -96,6 +96,7 @@ nor port.
 
 ## Creating a project
 
+{/* rbs:transcript cmd="rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes" */}
 ```text
 $ rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes
 ✓ blog créé — 20 fichiers
@@ -266,6 +267,7 @@ MAISON=1
 `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis` and
 `storage` — and installs every one named, in the same pass that writes the project:
 
+{/* rbs:transcript cmd="rbs new site --with auth --yes" */}
 ```text
 $ rbs new site --with auth --yes
 ✓ site créé — 20 fichiers
@@ -305,6 +307,7 @@ add` of any of them would leave untouched.
 
 A name that is no feature at all is refused before the first file is written:
 
+{/* rbs:transcript cmd="rbs new site --with graphql --yes" */}
 ```text
 $ rbs new site --with graphql --yes
 erreur : `graphql` n'est pas une feature rbs — disponibles : auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage

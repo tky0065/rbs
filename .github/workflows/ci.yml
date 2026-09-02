@@ -148,8 +148,13 @@ jobs:
         with:
           tool: cargo-audit
 
+      # `--deny warnings` : une advisory « unmaintained » ou « yanked » n'est pas une
+      # vulnérabilité, mais laissée en avertissement elle passait le job sans que personne
+      # ne la lise. Chaque tolérance est désormais un choix inscrit dans
+      # `.cargo/audit.toml`, avec la commande qui dira qu'elle peut partir ; tout le reste
+      # échoue.
       - name: cargo audit
-        run: cargo audit
+        run: cargo audit --deny warnings
 
   # `rust-version` est une promesse faite à qui installe, et rien ne la tenait : tous les
   # autres jobs tournent sur `stable`, qui satisfait n'importe quel plancher. Une dépendance

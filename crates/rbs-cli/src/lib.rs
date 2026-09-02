@@ -24,8 +24,10 @@ mod prompts;
 mod secret;
 mod seed;
 mod template;
-// Partagé avec `tests/common` par `#[path]` : voir l'en-tête du fichier.
 mod templates;
+// Partagés avec `tests/common` par `#[path]` : voir l'en-tête de chaque fichier.
+#[cfg(test)]
+mod test_cible;
 #[cfg(test)]
 mod test_postgres;
 mod ui;
@@ -228,7 +230,7 @@ fn create_project(
             "rbs n'a lu aucun hôte dans l'URL de la base : aucun {} n'a été écrit",
             new::COMPOSE
         ));
-        ui::info(
+        ui::warn_detail(
             "  une URL à socket Unix est dans ce cas ; sinon, revoyez `RBS_DATABASE__URL` dans .env",
         );
     }

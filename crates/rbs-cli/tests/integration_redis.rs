@@ -40,6 +40,10 @@ fn the_cache_of_a_generated_project_plays_against_a_real_redis() {
     //
     // `-- --ignored` ne lance que les tests serveur du fragment : le squelette n'en porte
     // aucun autre, et ses tests de santé exigeraient une base de données.
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
     let output = Command::new("cargo")
         .current_dir(&projet)
         .env("CARGO_TARGET_DIR", common::cible())

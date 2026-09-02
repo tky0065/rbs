@@ -42,6 +42,10 @@ fn the_generated_project_compiles_and_passes_its_tests() {
     let projet = parent.path().join("demo-api");
     assert!(projet.join("Cargo.toml").is_file(), "projet non créé");
 
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
     for action in ["build", "test"] {
         Command::new("cargo")
             .current_dir(&projet)
@@ -173,6 +177,9 @@ fn each_engine_produces_a_project_whose_tests_pass() {
 
         let projet = parent.path().join("demo-api");
         let cible = common::cible_pour(moteur);
+        // Une cible par moteur, donc un verrou par moteur : les trois branches restent
+        // libres de tourner de front avec celles d'un autre binaire de test.
+        let _verrou = common::verrou(&cible);
 
         Command::cargo_bin("rbs")
             .expect("le binaire rbs doit être compilé")
@@ -289,6 +296,10 @@ fn the_generated_compose_serves_the_project_it_was_generated_for() {
     // passée à la main — précisément ce que ce test doit prouver.
     compose(&root, &["up", "-d", "--wait"]).assert().success();
 
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
     rbs(&root)
         .env("CARGO_TARGET_DIR", common::cible())
         .args(["migrate", "up"])
@@ -357,6 +368,10 @@ fn a_project_created_with_two_features_compiles() {
         .assert()
         .success();
 
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
     Command::new("cargo")
         .current_dir(&root)
         .env("CARGO_TARGET_DIR", common::cible())
@@ -413,6 +428,10 @@ fn the_probes_installed_by_two_fragments_compile_into_the_health_route() {
     // `clippy -D warnings` plutôt que `build` : la sonde du stockage passe par une
     // fonction que rien d'autre n'appelle, et un `#[allow(dead_code)]` mal placé la
     // laisserait passer pour morte.
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
     Command::new("cargo")
         .current_dir(&root)
         .env("CARGO_TARGET_DIR", common::cible())
@@ -489,6 +508,51 @@ fn without_the_flag_the_language_is_taken_from_the_environment() {
     assert!(
         manifeste.contains(r#"lang = "fr""#),
         "la locale de l'environnement n'a pas été suivie :\n{manifeste}"
+    );
+}
+
+/// Une URL dont rbs ne tire aucun hôte laisse le projet sans compose, et c'est le seul
+/// cas où l'absence du fichier ne se lit pas dans l'URL : elle doit donc s'annoncer.
+///
+/// Le binaire et non `url_opaque` : ce qui est en jeu ici, c'est le câblage entre la
+/// décomposition de l'URL et l'avertissement, qu'une autorité sans hôte traversait
+/// jusqu'ici en silence. Rien n'est compilé, `rbs new` ne fait qu'écrire des fichiers.
+#[test]
+fn a_url_without_a_host_says_why_no_compose_was_written() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+
+    let sortie = Command::cargo_bin("rbs")
+        .expect("le binaire rbs doit être compilé")
+        .current_dir(parent.path())
+        .args([
+            "new",
+            "demo-api",
+            "--database-url",
+            "postgres://:5432/demo_api",
+            "--yes",
+        ])
+        .assert()
+        .success();
+
+    let rendu = String::from_utf8_lossy(&sortie.get_output().stderr).into_owned();
+
+    assert!(
+        rendu.contains("aucun hôte"),
+        "l'URL sans hôte n'est pas annoncée :\n{rendu}"
+    );
+    // La phrase qui explique l'avertissement doit le suivre sur le même flux : redirigée
+    // seule, elle ne dirait ni ce qu'elle explique ni ce qu'il faut en faire.
+    assert!(
+        rendu.contains("socket Unix"),
+        "la suite de l'avertissement n'est pas sur la sortie d'erreur :\n{rendu}"
+    );
+    assert!(
+        !String::from_utf8_lossy(&sortie.get_output().stdout).contains("socket Unix"),
+        "la suite de l'avertissement est restée sur la sortie standard"
+    );
+    assert!(
+        !parent.path().join("demo-api/docker-compose.yml").exists(),
+        "un compose a été écrit pour une URL sans hôte :\n{rendu}"
     );
 }
 

@@ -13,6 +13,7 @@ async fn main() -> anyhow::Result<()> {
 
     // <rbs:startup>
     newsletter_queue::jobs::worker::spawn(state.clone());
+    newsletter_queue::observability::serve(&state).await?;
     // </rbs:startup>
 
     let app = router::router(state);
@@ -31,6 +32,13 @@ async fn main() -> anyhow::Result<()> {
         app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
     .await?;
+
+    // region: arret
+    // Les spans partent par lots, et un processus qui meurt entre deux emporte le
+    // dernier. Rien dans le squelette n'appelle ceci : le coût d'un oubli est ce lot, non
+    // une panne, et l'appel ne fait rien tant que `rbs-core` n'a pas sa feature.
+    rbs_core::logs::shutdown();
+    // endregion: arret
 
     Ok(())
 }

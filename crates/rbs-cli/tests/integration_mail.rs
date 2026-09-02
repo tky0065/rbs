@@ -47,6 +47,10 @@ fn a_templated_email_reaches_its_destination_and_reads_back_through_the_api() {
 
     // Le conteneur reçoit ses ports au démarrage : `config/default.toml` ne peut pas les
     // connaître, et c'est la surcharge par l'environnement qui les lui apprend.
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
     let output = Command::new("cargo")
         .current_dir(&projet)
         .env("CARGO_TARGET_DIR", common::cible())

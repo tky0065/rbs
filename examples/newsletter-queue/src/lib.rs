@@ -10,5 +10,6 @@ pub mod state;
 // <rbs:features>
 pub mod jobs;
 pub mod mail;
+pub mod observability;
 pub mod subscribers;
 // </rbs:features>
