@@ -835,6 +835,36 @@ mod tests {
         );
     }
 
+    /// Une URL que rien ne décompose fait refuser l'installation : ses identifiants
+    /// tombaient à vide, et le `.env` recevait un `POSTGRES_USER=` que Compose remplace
+    /// par rien. Le refus tombe avant la première écriture, ce qui se vérifie à l'octet
+    /// près.
+    #[test]
+    fn add_refuses_an_undecomposable_url_without_writing_anything() {
+        const FAUTIVE: &str = "postgres://rbs:mot/de/passe@localhost:5432/demo_api";
+
+        let (_parent, root) = projet();
+        let env = root.join(".env");
+        let source = fs::read_to_string(&env).expect("le .env est lisible");
+        let reecrit = source.replace("postgres://rbs:rbs@localhost:5432/demo_api", FAUTIVE);
+        assert_ne!(source, reecrit, "l'URL attendue n'a pas été trouvée");
+        fs::write(&env, reecrit).expect("le .env est réécrivable");
+        let avant = empreinte(&root);
+
+        let refus = add_in(root.clone(), "docker".to_string(), false, false, None)
+            .expect_err("une URL que rien ne décompose doit être refusée");
+
+        assert!(
+            refus.to_string().contains("RBS_DATABASE__URL"),
+            "le refus doit nommer la variable : {refus}"
+        );
+        assert_eq!(
+            ecarts(&avant, &empreinte(&root)),
+            Vec::<PathBuf>::new(),
+            "le refus a tout de même écrit dans le projet"
+        );
+    }
+
     /// Le guide supprimé est ce qu'`upgrade` a toujours à rétablir, même sur un projet
     /// par ailleurs à jour : sans lui, le plan serait vide et le test ne prouverait rien.
     #[test]
