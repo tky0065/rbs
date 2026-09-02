@@ -477,4 +477,80 @@ async fn la_migration_monte_insere_et_redescend() {
 
         project.compile();
     }
+
+    #[test]
+    fn soft_delete_creates_the_column_and_its_index() {
+        let feature = Feature::fresh("articles", fields::parse("title:string").expect("champs"))
+            .soft_deleting();
+        let rendered = render(&feature, "20260902_000000")
+            .expect("la migration doit se rendre")
+            .content;
+
+        assert!(
+            rendered.contains("ColumnDef::new(Articles::DeletedAt)"),
+            "la colonne manque :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("idx_articles_deleted_at"),
+            "toute lecture filtre sur cette colonne, elle doit être indexée :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("    DeletedAt,"),
+            "l'enum DeriveIden doit porter la variante :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn the_unique_constraint_moves_to_a_partial_index() {
+        let feature = Feature::fresh(
+            "articles",
+            fields::parse("title:string:unique").expect("champs"),
+        )
+        .soft_deleting();
+        let rendered = render(&feature, "20260902_000000")
+            .expect("la migration doit se rendre")
+            .content;
+
+        assert!(
+            !rendered.contains(".unique_key()"),
+            "la contrainte de colonne serait inconditionnelle, l'index partiel n'y \
+             changerait rien :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("uq_articles_title") && rendered.contains("Articles::DeletedAt)"),
+            "l'unicité doit passer par un index restreint aux lignes vivantes :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn mysql_keeps_a_global_uniqueness() {
+        let feature = Feature::fresh(
+            "articles",
+            fields::parse("title:string:unique").expect("champs"),
+        )
+        .soft_deleting();
+        let rendered = render(&feature, "20260902_000000")
+            .expect("la migration doit se rendre")
+            .content;
+
+        assert!(
+            rendered.contains("sea_orm::DbBackend::MySql"),
+            "MySQL n'a pas d'index partiel : la migration doit brancher, faute de quoi \
+             elle ne s'y applique pas du tout :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn an_ordinary_migration_keeps_its_unique_key() {
+        let feature = Feature::fresh(
+            "articles",
+            fields::parse("title:string:unique").expect("champs"),
+        );
+        let rendered = render(&feature, "20260902_000000")
+            .expect("la migration doit se rendre")
+            .content;
+
+        assert!(rendered.contains(".unique_key()"), "témoin :\n{rendered}");
+        assert!(!rendered.contains("deleted_at"), "témoin :\n{rendered}");
+    }
 }

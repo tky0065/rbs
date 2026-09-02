@@ -468,4 +468,27 @@ mod tests {
             "ligne vide finale :\n{rendered}"
         );
     }
+
+    #[test]
+    fn soft_delete_adds_a_nullable_deletion_date() {
+        let feature = Feature::fresh("articles", fields::parse("title:string").expect("champs"))
+            .soft_deleting();
+        let rendered = render(&feature).expect("le modèle doit se rendre");
+
+        assert!(
+            rendered.contains("pub deleted_at: Option<DateTimeWithTimeZone>,"),
+            "la colonne est nullable : une ligne vivante n'a pas de date :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn an_ordinary_model_carries_no_deletion_date() {
+        let feature = Feature::fresh("articles", fields::parse("title:string").expect("champs"));
+        let rendered = render(&feature).expect("le modèle doit se rendre");
+
+        assert!(
+            !rendered.contains("deleted_at"),
+            "sans le drapeau, rien n'est injecté :\n{rendered}"
+        );
+    }
 }

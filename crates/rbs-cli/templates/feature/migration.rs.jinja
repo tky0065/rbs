@@ -27,7 +27,10 @@ impl MigrationTrait for Migration {
 {%- endif %}
 {%- for field in fields %}
 {%- set nullite = "null()" if field.optional else "not_null()" %}
-{%- set unicite = ".unique_key()" if field.unique else "" %}
+{#- Sous suppression logique, l'unicité quitte la colonne pour un index restreint aux
+    lignes vivantes : laissée ici, la contrainte serait inconditionnelle et l'index
+    partiel n'y changerait rien. #}
+{%- set unicite = ".unique_key()" if field.unique and not soft_delete else "" %}
 {%- set col = "ColumnDef::new(" ~ iden ~ "::" ~ field.pascal_name ~ ")." ~ field.migration_method ~ "." ~ nullite ~ unicite %}
 {%- if col | length <= 60 %}
                     .col({@ col @})
@@ -36,7 +39,7 @@ impl MigrationTrait for Migration {
                         ColumnDef::new({@ iden @}::{@ field.pascal_name @})
                             .{@ field.migration_method @}
                             .{@ nullite @}{@ "
-                            .unique_key()" if field.unique else "" @},
+                            .unique_key()" if field.unique and not soft_delete else "" @},
                     )
 {%- endif %}
 {%- endfor %}
@@ -61,6 +64,13 @@ impl MigrationTrait for Migration {
                             .not_null()
                             .default(Expr::current_timestamp()),
                     )
+{%- if soft_delete %}
+                    .col(
+                        ColumnDef::new({@ iden @}::DeletedAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
+{%- endif %}
                     .to_owned(),
             )
             .await?;
@@ -76,6 +86,38 @@ impl MigrationTrait for Migration {
             )
             .await?;
 {% endfor %}
+{%- if soft_delete %}
+        manager
+            .create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_{@ table @}_deleted_at")
+                    .table({@ iden @}::Table)
+                    .col({@ iden @}::DeletedAt)
+                    .to_owned(),
+            )
+            .await?;
+{% for field in fields if field.unique %}
+        // PostgreSQL et SQLite savent restreindre un index à un sous-ensemble de lignes :
+        // deux lignes portent alors la même valeur si l'une est supprimée. MySQL ne le
+        // sait pas — l'unicité y reste globale, et une valeur supprimée y reste réservée.
+        let mut uq_{@ table @}_{@ field.name @} = Index::create()
+            .if_not_exists()
+            .unique()
+            .name("uq_{@ table @}_{@ field.name @}")
+            .table({@ iden @}::Table)
+            .col({@ iden @}::{@ field.pascal_name @})
+            .to_owned();
+
+        if !matches!(manager.get_database_backend(), sea_orm::DbBackend::MySql) {
+            uq_{@ table @}_{@ field.name @} = uq_{@ table @}_{@ field.name @}
+                .and_where(Expr::col({@ iden @}::DeletedAt).is_null())
+                .to_owned();
+        }
+
+        manager.create_index(uq_{@ table @}_{@ field.name @}).await?;
+{% endfor -%}
+{% endif %}
         Ok(())
     }
 
@@ -104,6 +146,9 @@ enum {@ iden @} {
 {%- endfor %}
     CreatedAt,
     UpdatedAt,
+{%- if soft_delete %}
+    DeletedAt,
+{%- endif %}
 }
 {% for target in target_idens %}
 #[derive(DeriveIden)]
