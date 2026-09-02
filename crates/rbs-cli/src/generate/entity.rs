@@ -169,6 +169,95 @@ mod tests {
         );
     }
 
+    /// Le corps de `struct Model`, sans la clé primaire ni les horodatages qui l'encadrent.
+    ///
+    /// Compter les attributs sur le rendu entier confondrait `table_name` et les
+    /// `belongs_to` des relations avec ceux que porte une colonne.
+    fn model_block(rendered: &str) -> &str {
+        rendered
+            .split_once("pub struct Model {")
+            .and_then(|(_, reste)| reste.split_once("\n}"))
+            .map_or_else(
+                || panic!("le bloc du modèle doit se délimiter :\n{rendered}"),
+                |(corps, _)| corps,
+            )
+    }
+
+    /// Le gabarit n'écrit qu'un attribut par colonne, en `if`/`elif`, parce qu'aucune
+    /// ligne de `--fields` acceptée n'en produit deux : `column_type` ne sort que sur
+    /// `text`, qui refuse `unique` comme `index` ; sur les autres scalaires, les cumuler
+    /// est refusé comme redondant ; et une référence n'indexe que ce qu'`unique`
+    /// n'indexe pas déjà. Ce test exerce les six cas où un attribut sort, plus le cas nu.
+    #[test]
+    fn each_accepted_field_carries_the_single_attribute_it_earns() {
+        for (spec, expected) in [
+            (
+                "body:text",
+                "#[sea_orm(column_type = \"Text\")]\n    pub body: String,",
+            ),
+            (
+                "body:text:optional",
+                "#[sea_orm(column_type = \"Text\")]\n    pub body: Option<String>,",
+            ),
+            (
+                "email:string:unique",
+                "#[sea_orm(unique)]\n    pub email: String,",
+            ),
+            (
+                "slug:string:index",
+                "#[sea_orm(indexed)]\n    pub slug: String,",
+            ),
+            (
+                "author:references:users:unique",
+                "#[sea_orm(unique)]\n    pub author_id: Uuid,",
+            ),
+            (
+                "author:references:users",
+                "#[sea_orm(indexed)]\n    pub author_id: Uuid,",
+            ),
+            ("title:string", "pub title: String,"),
+        ] {
+            let rendered = entity_with("posts", spec, &users_entity());
+            let model = model_block(&rendered);
+
+            assert!(
+                model.contains(expected),
+                "« {spec} » doit rendre :\n{expected}\n--- rendu :\n{model}"
+            );
+            assert_eq!(
+                model.matches("#[sea_orm(").count(),
+                1 + usize::from(expected.contains("#[sea_orm(")),
+                "« {spec} » doit porter la clé primaire et son seul attribut :\n{model}"
+            );
+        }
+    }
+
+    /// Les attributs se distribuent par champ : une colonne ne doit pas hériter de celui
+    /// de sa voisine, ce qu'une déclaration isolée ne peut pas montrer.
+    #[test]
+    fn on_a_full_line_of_fields_each_attribute_stays_on_its_own_column() {
+        let rendered = entity_with(
+            "posts",
+            "title:string,email:string:unique,slug:string:index,body:text,author:references:users",
+            &users_entity(),
+        );
+        let model = model_block(&rendered);
+
+        assert_eq!(
+            model,
+            "\n    #[sea_orm(primary_key, auto_increment = false)]\n    \
+             pub id: Uuid,\n    \
+             pub title: String,\n    \
+             #[sea_orm(unique)]\n    pub email: String,\n    \
+             #[sea_orm(indexed)]\n    pub slug: String,\n    \
+             #[sea_orm(column_type = \"Text\")]\n    pub body: String,\n    \
+             #[sea_orm(indexed)]\n    pub author_id: Uuid,\n    \
+             pub created_at: DateTimeWithTimeZone,\n    \
+             pub updated_at: DateTimeWithTimeZone,",
+            "le modèle rendu :\n{rendered}"
+        );
+    }
+
     #[test]
     fn the_timestamps_are_set_without_having_been_declared() {
         let rendered = entity("users", "name:string");
