@@ -90,7 +90,7 @@ pub fn run() {
         }
 
         Commands::Generate { command } => {
-            let (name, fields, complete, force, dry_run, has_many, role) = match command {
+            let args = match command {
                 GenerateCommands::Crud {
                     name,
                     fields,
@@ -98,15 +98,31 @@ pub fn run() {
                     dry_run,
                     has_many,
                     role,
-                } => (name, fields, true, force, dry_run, has_many, role),
+                } => GenerateArgs {
+                    name,
+                    fields,
+                    complete: true,
+                    force,
+                    dry_run,
+                    has_many,
+                    role,
+                },
                 GenerateCommands::Feature {
                     name,
                     force,
                     dry_run,
-                } => (name, None, false, force, dry_run, Vec::new(), None),
+                } => GenerateArgs {
+                    name,
+                    fields: None,
+                    complete: false,
+                    force,
+                    dry_run,
+                    has_many: Vec::new(),
+                    role: None,
+                },
             };
 
-            if let Err(error) = generate(name, fields, complete, force, dry_run, has_many, role) {
+            if let Err(error) = generate(args) {
                 ui::error(&error.to_string());
                 if let Some(remedy) = error.remedy() {
                     ui::info(&format!("\n{remedy}"));
@@ -452,7 +468,11 @@ fn suite(feature: &str) -> Option<&'static str> {
     }
 }
 
-fn generate(
+/// Ce que la ligne de commande dit d'une génération.
+///
+/// Une struct et non des paramètres positionnels : les drapeaux sont pour moitié des
+/// `bool` voisins, et une inversion entre deux d'entre eux ne se verrait qu'à l'exécution.
+struct GenerateArgs {
     name: String,
     fields: Option<String>,
     complete: bool,
@@ -460,7 +480,19 @@ fn generate(
     dry_run: bool,
     has_many: Vec<String>,
     role: Option<String>,
-) -> Result<(), generate::command::Error> {
+}
+
+fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
+    let GenerateArgs {
+        name,
+        fields,
+        complete,
+        force,
+        dry_run,
+        has_many,
+        role,
+    } = args;
+
     let feature = name.clone();
     // `--has-many` répare une feature déjà là : rien à générer, donc rien à annoncer sous
     // ce nom-là une fois l'écriture faite.
