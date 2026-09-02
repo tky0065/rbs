@@ -11,7 +11,7 @@ si votre terminal affiche la même chose, vous n'avez pas dévié — aux durée
 identifiants et aux dates près, qui sont les vôtres. Une seule chose a été retirée des
 blocs : le chemin absolu du répertoire où l'exécution a eu lieu, noté `…/demo`.
 
-Le CLI parle français : `✓ demo créé — 19 fichiers` est une ligne de succès. Les
+Le CLI parle français : `✓ demo créé — 20 fichiers` est une ligne de succès. Les
 options, les noms de fichiers et le code généré, eux, sont les mêmes quelle que soit la
 langue.
 
@@ -73,7 +73,7 @@ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 ```
 
 ```text
-✓ demo créé — 19 fichiers
+✓ demo créé — 20 fichiers
 
   cd demo
   docker compose up -d   # la base du .env, montée
@@ -95,7 +95,7 @@ terminal où poser ses questions : c'est pourquoi un script ou un job de CI a be
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
 ```
 
-Dix-neuf fichiers, et aucun n'est une boîte noire :
+Vingt fichiers, et aucun n'est une boîte noire :
 
 - `src/main.rs`, `src/router.rs`, `src/state.rs`, `src/openapi.rs` — le montage.
 - `src/lib.rs` — la bibliothèque sur laquelle s'appuient `src/main.rs` et
@@ -105,7 +105,8 @@ Dix-neuf fichiers, et aucun n'est une boîte noire :
   générer une.
 - `src/seeds/` — un second binaire, `seed`, que `rbs seed` lance.
 - `migration/` — une seconde crate, qui porte les migrations.
-- `config/default.toml` et `config/development.toml` — hôte, port, taille du pool.
+- `config/default.toml`, `config/development.toml` et `config/production.toml` — hôte,
+  port, taille du pool.
 - `docker-compose.yml` — la base du projet, construite depuis l'URL ci-dessous.
 - `.env` — l'URL de la base et les réglages de logs, tenus hors de Git.
 - `.env.example` — les mêmes clés sans secret, versionnées.
@@ -225,6 +226,7 @@ plan pour …/demo
   + src/articles/mod.rs                                 créé
   + src/articles/model.rs                               créé
   + src/articles/dto.rs                                 créé
+  + src/articles/filter.rs                              créé
   + src/articles/repository.rs                          créé
   + src/articles/service.rs                             créé
   + src/articles/controller.rs                          créé
@@ -239,8 +241,8 @@ plan pour …/demo
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  16 fichiers à écrire
-✓ articles générée — 9 fichiers
+  17 fichiers à écrire
+✓ articles générée — 10 fichiers
 
   la migration m20260830_110245_create_articles reste à appliquer avant de lancer le projet
 ```
@@ -277,7 +279,7 @@ rbs migrate status
 
 ## Ce que le générateur a écrit
 
-Six fichiers par feature, plus ses tests et son seed, avec une seule direction de
+Sept fichiers par feature, plus ses tests et son seed, avec une seule direction de
 dépendance : contrôleur → service → dépôt → modèle. Voici le gestionnaire de `POST /articles`, lu
 dans [`examples/hello-crud`](https://github.com/tky0065/rbs/tree/main/examples/hello-crud) —
 la même feature, produite par la même commande :
