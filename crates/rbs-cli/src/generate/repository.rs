@@ -250,6 +250,80 @@ mod tests {
             (27..=40).collect::<Vec<usize>>(),
             "la plage où le repository diverge de rustfmt a bougé"
         );
+
+        // Sous soft-delete, `filter::apply(Entity::find().filter(Column::DeletedAt.is_null()),
+        // filtre)?` ne dépend d'aucun nom : ses arguments valent cinquante-huit colonnes contre
+        // soixante pour `fn_call_width`, une marge que le nom de l'entité, absent de cette
+        // ligne, ne peut pas entamer.
+        let divergentes_soft_delete = bench::longueurs_divergentes(|name| {
+            let champs = fields::parse("title:string,email:string:unique").expect("champs");
+            render(&Feature::fresh(name, champs).soft_deleting())
+                .expect("le repository doit se rendre")
+        });
+
+        assert_eq!(
+            divergentes_soft_delete,
+            (27..=40).collect::<Vec<usize>>(),
+            "la plage où le repository sous soft-delete diverge de rustfmt a bougé"
+        );
+    }
+
+    #[test]
+    fn the_delete_marks_the_row_instead_of_removing_it() {
+        let feature = Feature::fresh("articles", fields::parse("title:string").expect("champs"))
+            .soft_deleting();
+        let rendered = render(&feature).expect("le repository doit se rendre");
+
+        assert!(
+            !rendered.contains("delete_by_id"),
+            "la ligne ne doit plus partir :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("Entity::update_many()") && rendered.contains("Column::DeletedAt"),
+            "la suppression doit dater la colonne :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn a_second_delete_still_answers_404() {
+        let feature = Feature::fresh("articles", fields::parse("title:string").expect("champs"))
+            .soft_deleting();
+        let rendered = render(&feature).expect("le repository doit se rendre");
+
+        assert_eq!(
+            rendered.matches("Column::DeletedAt.is_null()").count(),
+            3,
+            "les deux lectures et le delete portent la condition ; sans elle sur le \
+             delete, une seconde suppression rendrait 204 :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn every_read_hides_the_deleted_rows() {
+        let feature = Feature::fresh("articles", fields::parse("title:string").expect("champs"))
+            .soft_deleting();
+        let rendered = render(&feature).expect("le repository doit se rendre");
+
+        assert!(
+            rendered.contains("Entity::find().filter(Column::DeletedAt.is_null())"),
+            "`filter`, dont `list` dépend, doit écarter les lignes supprimées :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("Entity::find_by_id(id)") && rendered.contains("QueryFilter"),
+            "`find` doit les écarter aussi :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn an_ordinary_repository_imports_only_what_it_uses() {
+        let feature = Feature::fresh("articles", fields::parse("title:string").expect("champs"));
+        let rendered = render(&feature).expect("le repository doit se rendre");
+
+        assert!(rendered.contains("delete_by_id"), "témoin :\n{rendered}");
+        assert!(
+            !rendered.contains("QueryFilter") && !rendered.contains("ColumnTrait"),
+            "un import inutilisé ferait échouer clippy sur le projet engendré :\n{rendered}"
+        );
     }
 
     #[test]

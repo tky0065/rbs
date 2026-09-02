@@ -37,13 +37,26 @@ pub async fn {@ nom @}(
 {%- endmacro -%}
 use rbs_core::{Error, Pagination, Result};
 use sea_orm::error::SqlErr;
+{%- if soft_delete %}
+use sea_orm::prelude::Expr;
+use sea_orm::prelude::Uuid;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, PaginatorTrait,
+    QueryFilter, QuerySelect,
+};
+{%- else %}
 use sea_orm::prelude::Uuid;
 use sea_orm::{
     ActiveModelTrait, DatabaseConnection, DbErr, EntityTrait, PaginatorTrait, QuerySelect,
 };
+{%- endif %}
 
 use super::filter::{self, {@ entity @}Filter};
+{%- if soft_delete %}
+use super::model::{Column, Entity};
+{%- else %}
 use super::model::Entity;
+{%- endif %}
 
 // Le service passe par cette porte plutôt que par `model.rs` : la couche qui parle à la
 // base reste la seule à connaître l'entité.
@@ -60,7 +73,13 @@ pub async fn filter(
     filtre: &{@ entity @}Filter,
     pagination: &Pagination,
 ) -> Result<(Vec<Model>, u64)> {
+{%- if soft_delete %}
+    // Le filtre s'applique à ce qui reste : une ligne supprimée n'est plus une ligne que
+    // l'API connaisse, et la faire réapparaître par un filtre serait une fuite.
+    let requete = filter::apply(Entity::find().filter(Column::DeletedAt.is_null()), filtre)?;
+{%- else %}
     let requete = filter::apply(Entity::find(), filtre)?;
+{%- endif %}
 
     let page = requete
         .clone()
@@ -76,9 +95,20 @@ pub async fn filter(
     Ok(({@ module @}, total))
 }
 
+{%- if soft_delete %}
+
+pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>> {
+    Ok(Entity::find_by_id(id)
+        .filter(Column::DeletedAt.is_null())
+        .one(db)
+        .await?)
+}
+{%- else %}
+
 pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>> {
     Ok(Entity::find_by_id(id).one(db).await?)
 }
+{%- endif %}
 
 {@ entete("create", ["db: &DatabaseConnection", singular ~ ": ActiveModel"], "Result<Model>") @}
     {@ chaine(singular, [".insert(db)", ".await", ".map_err(conflict_on_duplicate)"], "    ") @}
@@ -88,11 +118,28 @@ pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>> {
     {@ chaine(singular, [".update(db)", ".await", ".map_err(conflict_on_duplicate)"], "    ") @}
 }
 
+{%- if soft_delete %}
+
+pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
+    // La ligne déjà supprimée n'est pas retouchée : sans cette seconde condition, un
+    // second DELETE rendrait 204 là où il doit rendre 404.
+    let effet = Entity::update_many()
+        .col_expr(Column::DeletedAt, Expr::value(chrono::Utc::now()))
+        .filter(Column::Id.eq(id))
+        .filter(Column::DeletedAt.is_null())
+        .exec(db)
+        .await?;
+
+    Ok(effet.rows_affected > 0)
+}
+{%- else %}
+
 pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
     let effet = Entity::delete_by_id(id).exec(db).await?;
 
     Ok(effet.rows_affected > 0)
 }
+{%- endif %}
 
 /// Une valeur déjà prise sur une colonne `unique` est une faute du client, pas une panne :
 /// sans cette traduction, le doublon remonterait en erreur interne, donc en 500.
