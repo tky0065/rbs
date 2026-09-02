@@ -433,12 +433,24 @@ fn tests_run(journal: &str) -> u32 {
 /// Le code généré est écrit à la main dans des templates, sans que rien ne garantisse
 /// qu'il porte déjà la mise en forme de rustfmt. Sans cette vérification, le premier
 /// `cargo fmt` de l'utilisateur produirait un diff sur des fichiers qu'il n'a pas touchés.
+///
+/// `newline_style` est forcé pour la même raison qu'en `format::formatted` : son défaut,
+/// « Auto », retombe sur le style de la plateforme, et les gardes compareraient un rendu LF
+/// à une sortie CRLF.
 pub(crate) fn formatted(source: &str) -> String {
     use std::io::Write;
     use std::process::Stdio;
 
     let mut rustfmt = std::process::Command::new("rustfmt")
-        .args(["--edition", "2024", "--emit", "stdout", "--quiet"])
+        .args([
+            "--edition",
+            "2024",
+            "--emit",
+            "stdout",
+            "--quiet",
+            "--config",
+            "newline_style=Unix",
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
