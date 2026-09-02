@@ -42,6 +42,10 @@ fn the_generated_project_compiles_and_passes_its_tests() {
     let projet = parent.path().join("demo-api");
     assert!(projet.join("Cargo.toml").is_file(), "projet non créé");
 
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
     for action in ["build", "test"] {
         Command::new("cargo")
             .current_dir(&projet)
@@ -173,6 +177,9 @@ fn each_engine_produces_a_project_whose_tests_pass() {
 
         let projet = parent.path().join("demo-api");
         let cible = common::cible_pour(moteur);
+        // Une cible par moteur, donc un verrou par moteur : les trois branches restent
+        // libres de tourner de front avec celles d'un autre binaire de test.
+        let _verrou = common::verrou(&cible);
 
         Command::cargo_bin("rbs")
             .expect("le binaire rbs doit être compilé")
@@ -289,6 +296,10 @@ fn the_generated_compose_serves_the_project_it_was_generated_for() {
     // passée à la main — précisément ce que ce test doit prouver.
     compose(&root, &["up", "-d", "--wait"]).assert().success();
 
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
     rbs(&root)
         .env("CARGO_TARGET_DIR", common::cible())
         .args(["migrate", "up"])
@@ -357,6 +368,10 @@ fn a_project_created_with_two_features_compiles() {
         .assert()
         .success();
 
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
     Command::new("cargo")
         .current_dir(&root)
         .env("CARGO_TARGET_DIR", common::cible())
@@ -413,6 +428,10 @@ fn the_probes_installed_by_two_fragments_compile_into_the_health_route() {
     // `clippy -D warnings` plutôt que `build` : la sonde du stockage passe par une
     // fonction que rien d'autre n'appelle, et un `#[allow(dead_code)]` mal placé la
     // laisserait passer pour morte.
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
     Command::new("cargo")
         .current_dir(&root)
         .env("CARGO_TARGET_DIR", common::cible())

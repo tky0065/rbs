@@ -38,6 +38,10 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = project_with_jobs(&common::url_of(&postgres), &parent);
 
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
     migrate(&racine);
 
     let ordinaires = cargo_test(&racine, &[]);
@@ -98,6 +102,9 @@ fn the_dequeue_never_hands_the_same_job_twice_on_the_three_engines() {
         eprintln!("── moteur : {moteur} ──");
 
         let cible = common::cible_pour(moteur);
+        // Une cible par moteur, donc un verrou par moteur : les trois branches restent
+        // libres de tourner de front avec celles d'un autre binaire de test.
+        let _verrou = common::verrou(&cible);
         let racine = project_with_jobs_on(moteur, &url, parent);
 
         migrate_dans(&racine, &cible);
@@ -159,6 +166,11 @@ fn a_job_enqueued_before_the_process_is_killed_runs_after_the_restart() {
     let postgres = common::start_postgres();
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = project_with_jobs(&common::url_of(&postgres), &parent);
+
+    // Tenu jusqu'à la fin du test, et non le temps des seuls cargo : les deux serveurs
+    // lancés plus bas exécutent le binaire bâti dans cette cible, qu'un autre projet
+    // remplacerait sous leurs pieds.
+    let _cible = common::verrou(&common::cible());
 
     migrate(&racine);
     compile(&racine);

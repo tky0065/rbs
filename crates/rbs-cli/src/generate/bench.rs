@@ -17,6 +17,7 @@ use testcontainers::runners::SyncRunner;
 use testcontainers::{Container, ImageExt};
 
 use crate::anchors::{self, Anchor};
+use crate::test_cible;
 
 use super::mount::{self, Mount};
 
@@ -73,6 +74,11 @@ impl TestDatabase {
 /// module de migration — même nom de fichier, même crate `migration` — se sont montrés
 /// capables d'échanger leur code compilé d'un projet à l'autre. Deux tests lourds ne
 /// doivent donc jamais poser une feature ni une migration de même nom.
+///
+/// Il ne tranche qu'entre les bancs, tous compilés dans la bibliothèque : les binaires de
+/// `tests/` écrivent la même cible sans rien en voir, et c'est `test_cible::verrou` qui
+/// s'interpose entre eux. Ce `Mutex` reste devant lui pour que le cas courant — deux bancs
+/// du même processus — ne passe pas par le système de fichiers.
 static CARGO: Mutex<()> = Mutex::new(());
 
 /// Racine du dépôt, d'où se déduisent le noyau local et la cible de compilation.
@@ -81,6 +87,11 @@ pub(crate) fn repo() -> PathBuf {
         .join("../..")
         .canonicalize()
         .expect("la racine du dépôt doit être résoluble")
+}
+
+/// La cible que ces projets partagent, et que partagent aussi les tests d'intégration.
+fn cible() -> PathBuf {
+    repo().join("target/rbs-integration")
 }
 
 /// Un projet neuf, créé par le binaire livré, prêt à recevoir une feature.
@@ -257,10 +268,11 @@ async fn apply() {
     /// Lance cargo sur le projet, un seul appel à la fois.
     fn cargo(&self, arguments: &[&str], variables: &[(&str, &str)]) -> Output {
         let _exclusivite = CARGO.lock().unwrap_or_else(PoisonError::into_inner);
+        let _cible = test_cible::verrou(&cible());
 
         std::process::Command::new("cargo")
             .current_dir(&self.root)
-            .env("CARGO_TARGET_DIR", repo().join("target/rbs-integration"))
+            .env("CARGO_TARGET_DIR", cible())
             .envs(variables.iter().copied())
             .args(arguments)
             .output()
@@ -273,11 +285,12 @@ async fn apply() {
     /// doit écrire dans la cible partagée comme les autres.
     pub(crate) fn rbs(&self, arguments: &[&str]) -> Output {
         let _exclusivite = CARGO.lock().unwrap_or_else(PoisonError::into_inner);
+        let _cible = test_cible::verrou(&cible());
 
         Command::cargo_bin("rbs")
             .expect("le binaire rbs doit être compilé")
             .current_dir(&self.root)
-            .env("CARGO_TARGET_DIR", repo().join("target/rbs-integration"))
+            .env("CARGO_TARGET_DIR", cible())
             .args(arguments)
             .output()
             .expect("rbs doit être lançable")

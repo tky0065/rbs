@@ -147,6 +147,10 @@ fn a_required_reference_leaves_no_seed_and_names_it_in_the_output() {
     );
 
     // Le seul juge qui compte : un `mod` vers un fichier absent ne compilerait pas.
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
     let compilation = std::process::Command::new("cargo")
         .current_dir(&racine)
         .env("CARGO_TARGET_DIR", common::cible())
