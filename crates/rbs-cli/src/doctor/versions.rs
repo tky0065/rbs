@@ -11,7 +11,7 @@
 use std::fs;
 use std::path::Path;
 
-use super::Check;
+use super::{Check, Manifeste};
 
 /// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
 pub(crate) const TITRE: &str = "versions";
@@ -26,8 +26,8 @@ const CLI: &str = env!("CARGO_PKG_VERSION");
 const NOYAU_PUBLIE: bool = true;
 
 /// Compare la version qui a généré le projet, celle de son noyau et celle du CLI.
-pub(crate) fn check(root: &Path) -> Check {
-    check_with(root, NOYAU_PUBLIE, CLI)
+pub(crate) fn check(root: &Path, manifeste: &Manifeste) -> Check {
+    check_with(root, manifeste, NOYAU_PUBLIE, CLI)
 }
 
 /// Le verdict, la publication du noyau et la version du CLI étant données en paramètres.
@@ -35,10 +35,8 @@ pub(crate) fn check(root: &Path) -> Check {
 /// Les deux chemins restent ainsi exerçables par les tests de part et d'autre de la
 /// bascule de `NOYAU_PUBLIE`, et de part et d'autre du numéro que porte le binaire — un
 /// écart de version ne s'observe pas autrement depuis le dépôt qui produit ce numéro.
-fn check_with(root: &Path, noyau_publie: bool, cli: &str) -> Check {
-    let manifest = root.join("Cargo.toml");
-
-    let metadonnees = match crate::metadata::read(&manifest) {
+fn check_with(root: &Path, manifeste: &Manifeste, noyau_publie: bool, cli: &str) -> Check {
+    let metadonnees = match manifeste {
         Ok(metadonnees) => metadonnees,
         Err(error) => {
             return Check::failed(TITRE, error.to_string(), "restaurez le manifeste du projet");
@@ -54,7 +52,7 @@ fn check_with(root: &Path, noyau_publie: bool, cli: &str) -> Check {
         ));
     }
 
-    let core = match core(&manifest) {
+    let core = match core(&root.join("Cargo.toml")) {
         Ok(core) => core,
         Err(detail) => {
             return Check::failed(
@@ -156,6 +154,14 @@ mod tests {
         )
     }
 
+    /// Le contrôle, sur le manifeste que le projet porte à l'instant de l'appel.
+    ///
+    /// Il se relit ici et non une fois pour toutes : presque tous ces tests le réécrivent
+    /// entre la création du projet et le diagnostic.
+    fn check_with(root: &Path, noyau_publie: bool, cli: &str) -> Check {
+        super::check_with(root, &crate::doctor::manifeste(root), noyau_publie, cli)
+    }
+
     /// Remplace un fragment du manifeste du projet.
     fn rewrite(root: &Path, before: &str, after: &str) {
         let path = root.join("Cargo.toml");
@@ -213,7 +219,10 @@ mod tests {
     fn check_decides_from_the_publication_constant() {
         let (_parent, root) = project();
 
-        assert_eq!(check(&root), check_with(&root, NOYAU_PUBLIE, CLI));
+        assert_eq!(
+            check(&root, &crate::doctor::manifeste(&root)),
+            check_with(&root, NOYAU_PUBLIE, CLI)
+        );
     }
 
     #[test]

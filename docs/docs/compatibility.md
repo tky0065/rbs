@@ -56,14 +56,15 @@ modifier. Their shape is frozen more tightly than the rest, not less.
 
 This is the scope one forgets, and the one whose loss hurts most.
 
-Alongside your code, a generated project carries two things you never call: ten comment
-anchors — nine Rust ones, `// <rbs:features>`, `// <rbs:routes>`, `// <rbs:openapi>`,
-`// <rbs:migration_modules>`, `// <rbs:migrations>`, `// <rbs:state_champs>`,
-`// <rbs:state_init>`, `// <rbs:startup>`, `// <rbs:seeds>`, plus a YAML one in
-`docker-compose.yml` for whatever project has one, `# <rbs:services>` — and a
-`[package.metadata.rbs]` section in `Cargo.toml` recording the rbs version that generated
-the project, the features installed in it, and the database it targets. Neither is a Rust
-API. A compatibility promise written for Rust APIs alone would step straight over both.
+Alongside your code, a generated project carries two things you never call: twelve comment
+anchors — eleven Rust ones, `// <rbs:features>`, `// <rbs:routes>`, `// <rbs:layers>`,
+`// <rbs:openapi>`, `// <rbs:migration_modules>`, `// <rbs:migrations>`,
+`// <rbs:state_champs>`, `// <rbs:state_init>`, `// <rbs:startup>`, `// <rbs:seeds>`,
+`// <rbs:health_probes>`, plus a YAML one in `docker-compose.yml` for whatever project has
+one, `# <rbs:services>` — and a `[package.metadata.rbs]` section in `Cargo.toml` recording
+the rbs version that generated the project, the features installed in it, and the database
+it targets. Neither is a Rust API. A compatibility promise written for Rust APIs alone
+would step straight over both.
 
 `// <rbs:features>` is where the promise shows what it is for. It moved to `src/lib.rs`
 once projects gained a library — the file two separate binaries, the app and its seeds,
@@ -74,8 +75,8 @@ generated under an earlier version: it is the promise holding, not an exception 
 
 A model can also carry two anchors of its own once it has a relation —
 `// <rbs:relations:table>`, inside its `Relation` enum, and `// <rbs:related:table>`
-beside it — the table's name standing in for the fixed name the ten above have, since a
-file can hold more than one entity. They sit outside the count of ten because which file
+beside it — the table's name standing in for the fixed name the twelve above have, since a
+file can hold more than one entity. They sit outside the count of twelve because which file
 carries them depends on the project's own features, not on the skeleton every project
 shares; their comment syntax and their naming convention are frozen exactly the same way.
 
@@ -91,7 +92,7 @@ hand — on every command, forever.
 
 So the format is covered exactly as the Rust API is. Inside 1.x:
 
-- the ten anchor names and their comment syntax do not change, and neither does the rule
+- the twelve anchor names and their comment syntax do not change, and neither does the rule
   that a command writes nothing when its anchor is missing;
 - the keys of `[package.metadata.rbs]` keep their name and their meaning. A key may be
   added; an absent key reads as a default, never as an error.
@@ -99,8 +100,8 @@ So the format is covered exactly as the Rust API is. Inside 1.x:
 What this does not promise is that a project generated in 0.4.0 already carries every
 anchor a later feature wants. It does not, and it never will — new features bring new
 anchors. That case is designed for rather than broken by: the command reports the anchor it
-could not find and prints the block, and [`rbs doctor`](./cli/doctor.md) checks all ten —
-nine on a project with no compose to carry the tenth — before anything goes wrong.
+could not find and prints the block, and [`rbs doctor`](./cli/doctor.md) checks all twelve
+— eleven on a project with no compose to carry a twelfth — before anything goes wrong.
 
 ## What the promise leaves out
 

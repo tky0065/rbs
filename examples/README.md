@@ -126,8 +126,9 @@ command wires a guard onto a route you generated:
   happens here.
 - `src/posts/tests.rs`: the harness registers an account, promotes it through the database
   — registration always returns a `user`, and the role only travels in a token minted
-  afterwards — and signs the mutating requests. Two tests are added: no token → 401,
-  a `user` → 403.
+  afterwards — and signs the mutating requests. Three tests are added: no token → 401,
+  a `user` → 403, and the filter route answering an anonymous caller on a resource whose
+  creation demands an `admin` token.
 
 `file-drop` carries nine more, and they are the point of the example — the three fragments
 ship a brick and no route, and a brick nothing calls proves nothing about the wiring.

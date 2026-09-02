@@ -1305,6 +1305,43 @@ mod tests {
         assert_eq!(project.files, 19);
     }
 
+    /// L'expression est celle qu'`rbs add` porte aussi : les identifiants d'une URL que
+    /// rien ne décompose tombent à `String::new()`. La conséquence, elle, diffère — sans
+    /// décomposition il n'y a pas de compose, et les deux fichiers d'environnement ne
+    /// portent les clés du service `db` que lorsqu'un compose les lit. Rien de vide n'est
+    /// donc écrit, et c'est ce que ce test tient.
+    #[test]
+    fn a_url_that_does_not_decompose_writes_no_empty_credentials() {
+        const FAUTIVE: &str = "postgres://rbs:mot/de/passe@localhost:5432/demo_api";
+
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: FAUTIVE.to_string(),
+                database: Database::Postgres,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+                lang: crate::lang::Lang::Fr,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        assert!(!project.root.join("docker-compose.yml").exists());
+
+        let env = fs::read_to_string(project.root.join(".env")).expect("le .env est lisible");
+        assert!(
+            !env.contains("POSTGRES_"),
+            "le .env porte les clés du service `db` sans compose pour les lire :\n{env}"
+        );
+        assert!(
+            env.contains(&format!("RBS_DATABASE__URL={FAUTIVE}")),
+            "l'URL du projet n'est pas celle qui a été demandée :\n{env}"
+        );
+    }
+
     #[test]
     fn a_new_project_carries_its_agents_file() {
         let parent = TempDir::new().expect("répertoire temporaire créable");

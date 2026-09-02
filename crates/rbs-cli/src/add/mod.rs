@@ -104,6 +104,20 @@ pub(crate) enum Error {
     #[error("{0}")]
     Env(#[from] migrate::Error),
 
+    /// L'URL du projet ne se décompose pas, et le fragment s'appuie dessus.
+    ///
+    /// Un caractère réservé laissé tel quel dans le mot de passe met fin à l'autorité de
+    /// l'URL. Les identifiants tombaient alors à vide plutôt que de le dire : le `.env`
+    /// recevait un `POSTGRES_USER=` sans valeur, et le service `db` ne montait pas.
+    #[error(
+        "RBS_DATABASE__URL ne se décompose pas : {url} — encodez les caractères réservés \
+         du mot de passe (`/` en %2F, `?` en %3F, `#` en %23, `@` en %40)"
+    )]
+    UrlIndecomposable {
+        /// L'URL, telle que le `.env` du projet la porte.
+        url: String,
+    },
+
     /// Le plan de l'installation n'a pu être calculé.
     #[error("{0}")]
     Plan(#[from] plan::Error),
@@ -206,6 +220,14 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     }
     .unwrap_or_else(|| database.default_url(&crate_name));
     let connexion = crate::url::parse(&url);
+
+    // Refuser plutôt que se replier : des identifiants vides posent un `POSTGRES_USER=`
+    // que Compose substitue par rien, et le service `db` ne monte jamais — panne à
+    // l'exécution, pour une URL que la commande avait sous les yeux. SQLite n'a pas
+    // d'autorité à décomposer, et n'est donc pas concerné.
+    if database.a_un_serveur() && connexion.is_none() {
+        return Err(Error::UrlIndecomposable { url });
+    }
 
     // Une URL sans chemin rend un nom de base vide, que le repli ne rattraperait pas
     // s'il ne guettait que `None` : le compose porterait un `POSTGRES_DB:` vide, et le
@@ -476,6 +498,25 @@ mod tests {
 
         fs::write(root.join(".env"), ancien).expect("le .env doit se réécrire");
         let _ = fs::remove_file(root.join("docker-compose.yml"));
+    }
+
+    /// Fait viser `url` au projet, sans toucher au reste de son `.env`.
+    fn viser(root: &Path, url: &str) {
+        let env = root.join(".env");
+        let source = fs::read_to_string(&env).expect("le .env doit exister");
+        let reecrit: String = source
+            .lines()
+            .map(|ligne| match ligne.starts_with("RBS_DATABASE__URL=") {
+                true => format!("RBS_DATABASE__URL={url}\n"),
+                false => format!("{ligne}\n"),
+            })
+            .collect();
+
+        assert!(
+            reecrit.contains(url),
+            "le .env ne porte pas d'URL :\n{source}"
+        );
+        fs::write(&env, reecrit).expect("le .env doit se réécrire");
     }
 
     fn options(root: &Path, feature: &str) -> Options {
@@ -1993,6 +2034,34 @@ mod tests {
         assert!(
             error.to_string().contains(".env"),
             "le message ne nomme pas le fichier fautif : {error}"
+        );
+    }
+
+    /// Un mot de passe dont le `/` n'est pas encodé met fin à l'autorité de l'URL, que
+    /// rien ne décompose plus. Les identifiants tombaient alors à vide : le `.env`
+    /// recevait un `POSTGRES_USER=` sans valeur, et le service `db` ne montait jamais.
+    #[test]
+    fn a_url_that_no_longer_decomposes_stops_the_installation() {
+        const FAUTIVE: &str = "postgres://rbs:mot/de/passe@localhost:5432/demo_api";
+
+        let (_parent, root) = project();
+        avant_les_cles_du_compose(&root);
+        viser(&root, FAUTIVE);
+
+        let error = plan_for(&options(&root, "docker")).expect_err("l'URL ne se décompose pas");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("RBS_DATABASE__URL"),
+            "le refus doit nommer la variable : {message}"
+        );
+        assert!(
+            message.contains(FAUTIVE),
+            "le refus doit montrer l'URL fautive : {message}"
+        );
+        assert!(
+            message.contains("%2F"),
+            "le refus doit donner l'encodage à poser : {message}"
         );
     }
 

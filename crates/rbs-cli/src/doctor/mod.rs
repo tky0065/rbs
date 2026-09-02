@@ -20,7 +20,7 @@ pub mod render;
 pub mod storage;
 pub mod versions;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
@@ -156,19 +156,25 @@ crate::errors::depuis_la_racine!(Error);
 pub(crate) fn run(directory: &Path, sortie: &mut dyn Sortie) -> Result<Report, Error> {
     let root = metadata::project_root(directory)?;
 
-    let controles = plan(&root);
+    // Une seule lecture de chaque fichier pour tout le diagnostic : le manifeste comme
+    // la configuration étaient relus et réanalysés par chaque contrôle pour une question
+    // d'une ligne.
+    let projet = Projet {
+        config: Config::read(&root),
+        manifeste: manifeste(&root),
+        root,
+    };
+
+    let controles = plan(&projet.manifeste);
     let titres: Vec<&'static str> = controles.iter().map(|controle| controle.titre).collect();
     sortie.debut(&titres);
 
-    // Une seule lecture pour toute la boucle : la configuration était relue et
-    // réanalysée par chaque contrôle pour une question d'une ligne.
-    let config = Config::read(&root);
     let mut checks = Vec::with_capacity(controles.len());
 
     for controle in controles {
         let check = {
             let mut annonce = |raison: &str| sortie.annonce(controle.titre, raison);
-            (controle.executer)(&root, &config, &mut annonce)
+            (controle.executer)(&projet, &mut annonce)
         };
 
         sortie.constat(&check);
@@ -178,12 +184,33 @@ pub(crate) fn run(directory: &Path, sortie: &mut dyn Sortie) -> Result<Report, E
     Ok(Report { checks })
 }
 
+/// Le projet diagnostiqué, tel que chaque contrôle le reçoit.
+pub(crate) struct Projet {
+    /// Racine du projet.
+    pub root: PathBuf,
+    /// `config/default.toml`, lu et analysé une seule fois.
+    pub config: Config,
+    /// `Cargo.toml`, lu et analysé une seule fois.
+    pub manifeste: Manifeste,
+}
+
+/// Ce que le manifeste du projet apprend au diagnostic, ou la faute qui l'en empêche.
+///
+/// La faute est gardée plutôt que remplacée par un défaut : le moteur, les features et
+/// la version que le manifeste porte commandent la moitié des contrôles, et chacun a sa
+/// façon de dire qu'il ne les a pas.
+pub(crate) type Manifeste = Result<metadata::Metadata, metadata::Error>;
+
+/// Lit le manifeste du projet enraciné en `root`.
+pub(crate) fn manifeste(root: &Path) -> Manifeste {
+    metadata::read(&root.join("Cargo.toml"))
+}
+
 /// Un contrôle du diagnostic : son titre, connu avant qu'il ne s'exécute, et son
 /// exécution.
 ///
-/// Un contrôle qui n'interroge ni la configuration ni l'annonce les ignore par une
-/// fermeture : lui imposer un paramètre qu'il n'emploie pas se lirait comme une
-/// dépendance qu'il n'a pas.
+/// Un contrôle qui n'interroge pas l'annonce l'ignore par une fermeture : lui imposer un
+/// paramètre qu'il n'emploie pas se lirait comme une dépendance qu'il n'a pas.
 #[derive(Clone, Copy)]
 struct Controle {
     /// Ce qui est vérifié, tel qu'il paraîtra au rapport.
@@ -192,44 +219,45 @@ struct Controle {
     executer: Execution,
 }
 
-/// Ce que reçoit un contrôle : la racine du projet, la configuration lue une seule fois,
-/// et de quoi annoncer ce qu'il s'apprête à faire.
-type Execution = fn(&Path, &Config, &mut dyn FnMut(&str)) -> Check;
+/// Ce que reçoit un contrôle : le projet, lu une seule fois pour tous, et de quoi
+/// annoncer ce qu'il s'apprête à faire.
+type Execution = fn(&Projet, &mut dyn FnMut(&str)) -> Check;
 
 /// Les contrôles à jouer sur ce projet, dans l'ordre du rapport.
 ///
 /// Le plan se construit avant le premier verdict : c'est ce qui permet à un rendu écrit
 /// au fil de l'eau de connaître la largeur de sa colonne de titres.
-fn plan(root: &Path) -> Vec<Controle> {
+fn plan(manifeste: &Manifeste) -> Vec<Controle> {
     let mut controles = vec![
         Controle {
             titre: anchors::TITRE,
-            executer: |root, _, _| anchors::check(root),
+            executer: |projet, _| anchors::check(&projet.root),
         },
         Controle {
             titre: agents::TITRE,
-            executer: |root, _, _| agents::check(root),
+            executer: |projet, _| agents::check(&projet.root, &projet.manifeste),
         },
         Controle {
             titre: relations::TITRE,
-            executer: |root, _, _| relations::check(root),
+            executer: |projet, _| relations::check(&projet.root),
         },
         Controle {
             titre: env::TITRE,
-            executer: |root, _, _| env::check(root),
+            executer: |projet, _| env::check(&projet.root),
         },
         Controle {
             titre: versions::TITRE,
-            executer: |root, _, _| versions::check(root),
+            executer: |projet, _| versions::check(&projet.root, &projet.manifeste),
         },
         Controle {
             titre: base::TITRE,
-            executer: |root, _, annonce| base::check(root, annonce),
+            executer: |projet, annonce| base::check(&projet.root, &projet.manifeste, annonce),
         },
     ];
 
-    let installees = metadata::read(&root.join("Cargo.toml"))
-        .map(|metadonnees| metadonnees.features)
+    let installees = manifeste
+        .as_ref()
+        .map(|metadonnees| metadonnees.features.as_slice())
         .unwrap_or_default();
 
     // Un projet qui n'a pas installé une feature n'a pas à lire une ligne à son sujet :
@@ -256,49 +284,49 @@ const FEATURE_CHECKS: [(&str, Controle); 7] = [
         "auth",
         Controle {
             titre: auth::TITRE,
-            executer: |root, config, _| auth::check(root, config),
+            executer: |projet, _| auth::check(&projet.root, &projet.config),
         },
     ),
     (
         "auth",
         Controle {
             titre: guards::TITRE,
-            executer: |root, _, _| guards::check(root),
+            executer: |projet, _| guards::check(&projet.root),
         },
     ),
     (
         "redis",
         Controle {
             titre: redis::TITRE,
-            executer: |_, config, _| redis::check(config),
+            executer: |projet, _| redis::check(&projet.config),
         },
     ),
     (
         "mail",
         Controle {
             titre: mail::TITRE,
-            executer: |root, config, _| mail::check(root, config),
+            executer: |projet, _| mail::check(&projet.root, &projet.config),
         },
     ),
     (
         "storage",
         Controle {
             titre: storage::TITRE,
-            executer: |root, config, _| storage::check(root, config),
+            executer: |projet, _| storage::check(&projet.root, &projet.config),
         },
     ),
     (
         "jobs",
         Controle {
             titre: jobs::TITRE,
-            executer: |_, config, _| jobs::check(config),
+            executer: |projet, _| jobs::check(&projet.config),
         },
     ),
     (
         "observability",
         Controle {
             titre: observability::TITRE,
-            executer: |_, config, _| observability::check(config),
+            executer: |projet, _| observability::check(&projet.config),
         },
     ),
 ];
