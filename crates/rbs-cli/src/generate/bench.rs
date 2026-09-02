@@ -476,3 +476,45 @@ pub(crate) fn formatted(source: &str) -> String {
 
     String::from_utf8(output.stdout).expect("rustfmt rend de l'UTF-8")
 }
+
+/// Les longueurs de nom pour lesquelles `rendu` n'est pas déjà ce que rustfmt écrirait.
+///
+/// Une liste de quatre noms écrite à la main ne dit pas où le gabarit bascule : elle échoue
+/// sans nommer le seuil, et ment en silence le jour où une montée de rustfmt le déplace. Un
+/// balayage rend la frontière elle-même, et un `assert_eq!` sur l'intervalle affiche
+/// l'ancien seuil et le nouveau.
+///
+/// Le nom passé à `rendu` est fait d'un `a` répété terminé par un `e` : il ne se pluralise
+/// pas, donc sa longueur est bien celle du singulier que portent les gabarits.
+pub(crate) fn longueurs_divergentes(rendu: impl Fn(&str) -> String) -> Vec<usize> {
+    (1..=40usize)
+        .filter(|taille| {
+            let name = "a".repeat(taille - 1) + "e";
+            let rendered = rendu(&name);
+            formatted(&rendered) != rendered
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Le mesureur doit distinguer un rendu point fixe d'un rendu qui ne l'est jamais, sans
+    /// quoi les gardes qui s'appuient dessus ne prouveraient rien.
+    #[test]
+    fn the_measurer_tells_a_fixed_point_from_a_diverging_render() {
+        let point_fixe = longueurs_divergentes(|name| format!("pub struct {name};\n"));
+        assert!(
+            point_fixe.is_empty(),
+            "une déclaration courte est point fixe à toute longueur : {point_fixe:?}"
+        );
+
+        let jamais = longueurs_divergentes(|name| format!("pub struct {name} ;\n"));
+        assert_eq!(
+            jamais,
+            (1..=40).collect::<Vec<usize>>(),
+            "l'espace avant le point-virgule diverge à toute longueur"
+        );
+    }
+}
