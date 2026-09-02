@@ -95,6 +95,24 @@ where
     report(state.core().db(), Vec::new()).await
 }
 
+/// Ce que [`report`] attend d'une base : savoir dire si elle répond.
+///
+/// Le trait existe pour que la borne du ping soit éprouvable sur une base joignable mais
+/// muette, cas que `DatabaseConnection` ne sait pas représenter — son pool répond tout de
+/// suite, connecté ou non.
+pub trait Ping {
+    /// Interroge la base et rend `Ok(())` quand elle répond.
+    fn ping(&self) -> impl Future<Output = Result<(), DbErr>> + Send;
+}
+
+impl Ping for DatabaseConnection {
+    /// Appel qualifié : la méthode inhérente porte le même nom, et `self.ping()` la
+    /// choisirait ici sans que rien ne le dise.
+    fn ping(&self) -> impl Future<Output = Result<(), DbErr>> + Send {
+        DatabaseConnection::ping(self)
+    }
+}
+
 /// Une dépendance à contrôler, sous le nom qu'elle portera dans le corps de la réponse.
 pub struct Probe<'a> {
     name: &'static str,
@@ -128,7 +146,7 @@ impl std::fmt::Debug for Probe<'_> {
 ///
 /// La base est toujours contrôlée ; `probes` ajoute les dépendances que le projet a
 /// installées, chacune bornée par le même délai.
-pub async fn report(db: &DatabaseConnection, probes: Vec<Probe<'_>>) -> Response {
+pub async fn report(db: &impl Ping, probes: Vec<Probe<'_>>) -> Response {
     let (ping, extras) = run_all(db.ping(), probes).await;
     let (status, health) = verdict(ping, extras);
 
@@ -505,6 +523,47 @@ mod tests {
         );
 
         assert_eq!(status, StatusCode::OK);
+    }
+
+    /// Une base joignable mais muette est le cas que `DatabaseConnection` ne sait pas
+    /// représenter : son pool répond tout de suite, connecté ou non.
+    struct BaseMuette;
+
+    impl Ping for BaseMuette {
+        async fn ping(&self) -> Result<(), DbErr> {
+            std::future::pending().await
+        }
+    }
+
+    /// La borne du ping ne vaut que si elle tient sur le chemin réel : c'est le statut de
+    /// la réponse HTTP, et non le verdict interne, qui décide de la rotation.
+    #[tokio::test(start_paused = true)]
+    async fn a_database_that_never_answers_gives_a_503_over_http() {
+        let app = Router::new().route(
+            "/health",
+            axum::routing::get(|| async { report(&BaseMuette, Vec::new()).await }),
+        );
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .expect("requête valide"),
+            )
+            .await
+            .expect("le router doit répondre");
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+
+        let bytes = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("corps lisible");
+        let body: Value = serde_json::from_slice(&bytes).expect("corps JSON");
+        assert_eq!(
+            body,
+            json!({ "status": "unavailable", "checks": { "database": "unreachable" } })
+        );
     }
 
     #[test]
