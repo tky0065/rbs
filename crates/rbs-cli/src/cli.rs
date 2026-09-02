@@ -331,7 +331,21 @@ mod tests {
 
     #[test]
     fn an_unknown_language_is_refused_by_the_parser() {
-        assert!(Cli::try_parse_from(["rbs", "new", "blog", "--lang", "de"]).is_err());
+        // Le motif du refus est asserté, et pas seulement le refus : sans lui, une faute
+        // de frappe dans `new` ou dans `--lang` ferait passer le test pour la mauvaise
+        // raison.
+        let refus = Cli::try_parse_from(["rbs", "new", "blog", "--lang", "de"])
+            .expect_err("une langue hors de la liste doit être refusée");
+
+        assert_eq!(
+            refus.kind(),
+            clap::error::ErrorKind::InvalidValue,
+            "{refus}"
+        );
+        assert!(
+            refus.to_string().contains("--lang"),
+            "le refus doit nommer le drapeau — {refus}"
+        );
     }
 
     /// Le drapeau ne descend que sur les deux commandes qui le lisent. Ailleurs, clap
