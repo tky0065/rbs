@@ -5,8 +5,8 @@ title: rbs add
 
 # `rbs add`
 
-Installs a feature into an existing project. Ten are shipped: `auth`, `ci`, `cors`,
-`docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis` and `storage`.
+Installs a feature into an existing project. Eleven are shipped: `audit`, `auth`, `ci`,
+`cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis` and `storage`.
 
 :::note
 rbs speaks French in its help screens and in its output. Every terminal block on this page
@@ -17,7 +17,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ```text
 $ rbs add --help
-Ajoute une feature : auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage
+Ajoute une feature : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage
 
 Usage: rbs add [OPTIONS] <FEATURE>
 
@@ -38,7 +38,7 @@ Options:
 | `--dry-run` | Prints the plan and stops. Nothing is written. |
 | `--template-dir <CHEMIN>` | Reads the fragments from a directory holding one subdirectory per feature, instead of the ones embedded in the binary. |
 
-## The ten features
+## The eleven features
 
 | Feature | Files | Next step |
 |---|---|---|
@@ -52,6 +52,7 @@ Options:
 | `cors` | three files under `src/cors/`, a `[cors]` config section, and a layer in `// <rbs:layers>` | list your origins in `[cors]` — empty, so nothing cross-origin passes |
 | `rate-limit` | four files under `src/rate_limit/`, a `[rate_limit]` config section, a field on `AppState`, and a layer in `// <rbs:layers>` | behind a reverse proxy, set `rate_limit.trust_forwarded_for` |
 | `observability` | four files under `src/observability/`, an `[observability]` config section, a layer in `// <rbs:layers>`, and a second listener in `// <rbs:startup>` | name a collector in `OTEL_EXPORTER_OTLP_ENDPOINT` — without it nothing is exported |
+| `audit` | four files under `src/audit/`, and one migration | `rbs migrate up`, then call `audit::record` in your services — the entry is written in the transaction of the change |
 
 `cors`, `rate-limit` and `observability` are the three that stack a middleware rather
 than mount a route: their layer goes into `// <rbs:layers>`, inside `trace` and
@@ -280,7 +281,7 @@ Anything else is refused with the list of what is installable:
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage
+erreur : `graphql` n'est pas une feature installable : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage
 ```
 
 ## Idempotence

@@ -30,7 +30,7 @@ SQLite 3.35 ou plus.
 | Commande | Ce qu'elle fait |
 |---|---|
 | `rbs new <nom>` | Crée un projet prêt à démarrer : base de données, migrations, route `/health` |
-| `rbs add <feature>` | Installe une feature : `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`, `storage` |
+| `rbs add <feature>` | Installe une feature : `audit`, `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`, `storage` |
 | `rbs generate crud <nom>` | Engendre une feature CRUD complète — entité et migration comprises |
 | `rbs generate feature <nom>` | Engendre une feature vide : six fichiers, aucun champ |
 | `rbs migrate up\|down\|status\|new` | Pilote les migrations du projet |

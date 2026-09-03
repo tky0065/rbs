@@ -264,7 +264,7 @@ MAISON=1
 ## `--with` installe
 
 `--with` nomme les features à installer à la création, séparées par des virgules. rbs en
-connaît dix — `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`, `observability`,
+connaît onze — `audit`, `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`, `observability`,
 `rate-limit`, `redis` et `storage` — et installe chacune des nommées, dans la même passe
 qui écrit le projet :
 
@@ -312,7 +312,7 @@ Un nom qui n'est pas une feature du tout est refusé avant que le premier fichie
 {/* rbs:transcript cmd="rbs new site --with graphql --yes" */}
 ```text
 $ rbs new site --with graphql --yes
-erreur : `graphql` n'est pas une feature rbs — disponibles : auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage
+erreur : `graphql` n'est pas une feature rbs — disponibles : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage
 ```
 
 ## Le compose engendré
