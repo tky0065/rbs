@@ -151,6 +151,25 @@ Le commentaire dit la limite sans détour : MySQL n'a pas d'index partiel, la mi
 garde donc une unicité globale plutôt que de la restreindre — sur MySQL, une valeur qu'une
 ligne supprimée occupait reste réservée.
 
+### Ce qu'il change pour les features voisines
+
+Le contrat HTTP tient pour la feature qui porte le drapeau. Il ne tient pas pour celles qui
+la référencent. Une clé étrangère engendrée porte un `ON DELETE Restrict | Cascade |
+SetNull`, et une suppression logique n'en déclenche aucun : la ligne n'est jamais retirée,
+le moteur n'a rien à quoi réagir. Vu du client :
+
+- un parent supprimé logiquement laisse ses enfants pointer vers une ligne qui rend
+  désormais 404, et ces enfants restent listables par leur propre API — là où `Cascade` les
+  aurait retirés et `SetNull` dénoués ;
+- `Restrict`, le défaut, faisait échouer `DELETE /parents/{id}` tant qu'un enfant existait.
+  Il rend désormais 204 ;
+- `POST /children` avec l'identifiant d'un parent supprimé **réussit**, la clé étrangère
+  restant satisfaite, là où il était refusé.
+
+Poser le drapeau sur une feature que d'autres référencent laisse donc à votre charge ce que
+devient un enfant dont le parent est supprimé : dans le service de la feature enfant, ou
+dans un `deleted_at` qui lui soit propre.
+
 Le drapeau s'arrête là. Il n'écrit ni route de restauration, ni paramètre
 `?include_deleted`, ni tâche de purge. Restaurer une ligne se fait par un `UPDATE` SQL, tant
 qu'aucun besoin réel n'a dit quelle forme cette route devrait prendre — une route de

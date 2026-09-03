@@ -560,6 +560,41 @@ async fn la_migration_monte_insere_et_redescend() {
         );
     }
 
+    /// Le drapeau et les relations ne s'étaient jamais rencontrés, et leur rencontre n'est
+    /// pas neutre : la clé étrangère garde son `ON DELETE`, qu'une suppression logique ne
+    /// déclenche jamais — la ligne n'est pas retirée, le moteur n'a rien à quoi réagir.
+    ///
+    /// Le rendu doit donc porter les deux sans que l'un efface l'autre. Ce que le test ne
+    /// dit pas, et que la documentation dit à sa place : ce que devient un enfant dont le
+    /// parent est supprimé logiquement reste à la charge de l'appelant.
+    #[test]
+    fn a_reference_keeps_its_foreign_key_under_soft_delete() {
+        let mut parsed =
+            fields::parse("title:string,author:references:users").expect("champs valides");
+        crate::generate::relations::resolve(&mut parsed, &users_entity(), "posts")
+            .expect("la cible doit se résoudre");
+        let rendered = render(&Feature::fresh("posts", parsed).soft_deleting(), HORODATAGE)
+            .expect("la migration doit se rendre")
+            .content;
+
+        assert!(
+            rendered.contains("ForeignKeyAction::Restrict"),
+            "la clé étrangère garde son action, que le drapeau ne touche pas :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("fk_posts_author"),
+            "la contrainte doit rester nommée comme sans le drapeau :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("ColumnDef::new(Posts::DeletedAt)"),
+            "la colonne de suppression logique manque :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("idx_posts_deleted_at"),
+            "l'index de la colonne manque :\n{rendered}"
+        );
+    }
+
     #[test]
     fn an_ordinary_migration_keeps_its_unique_key() {
         let feature = Feature::fresh(

@@ -149,6 +149,25 @@ The comment states the limit outright: MySQL has no partial index, so the migrat
 global uniqueness there instead of restricting it — on MySQL, a value a deleted row held
 stays reserved.
 
+### What it changes for the neighbouring features
+
+The HTTP contract holds for the feature carrying the flag. It does not hold for the ones
+that reference it. A generated foreign key carries an `ON DELETE Restrict | Cascade |
+SetNull`, and a logical delete triggers none of them: the row is never removed, so the
+engine has nothing to react to. Seen from a client:
+
+- a parent deleted logically leaves its children pointing at a row that now answers 404,
+  and those children stay listable through their own API — where `Cascade` would have
+  removed them and `SetNull` untied them;
+- `Restrict`, the default, used to make `DELETE /parents/{id}` fail as long as a child
+  existed. It now answers 204;
+- `POST /children` carrying the id of a deleted parent **succeeds**, the foreign key still
+  being satisfied, where it used to be refused.
+
+Put the flag on a feature others reference, and what a deleted parent means for them is a
+decision the flag leaves to you — in the service of the child feature, or in a `deleted_at`
+of its own.
+
 The flag stops there. It writes no restoration route, no `?include_deleted` query
 parameter, and no purge job. Restoring a row is a SQL `UPDATE`, for as long as no real need
 has said what shape that route should take — a restoration route raises a question the flag
