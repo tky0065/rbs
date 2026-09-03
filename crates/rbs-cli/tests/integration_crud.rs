@@ -18,6 +18,9 @@ const UTILISATEUR: &str = "rbs";
 const MOT_DE_PASSE: &str = "rbs";
 const BASE: &str = "demo";
 
+// L'image MySQL ne crée que `root` : `MYSQL_USER` n'est pas passé par le démarreur commun.
+const UTILISATEUR_MYSQL: &str = "root";
+
 #[test]
 #[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
 fn a_generated_crud_migrates_and_passes_its_tests_against_postgresql() {
@@ -466,6 +469,128 @@ fn a_soft_deleting_crud_migrates_and_hides_its_deleted_rows_on_sqlite() {
     assert!(
         joues.contains("test soft_articles::tests::a_replayed_unique_value_returns_409 ... ok"),
         "le refus du doublon n'a pas été joué sur SQLite :\n{joues}"
+    );
+}
+
+/// Le même scénario contre MySQL, le seul moteur des trois qui ne sait pas restreindre un
+/// index à un sous-ensemble de lignes.
+///
+/// Deux choses s'y jouent, qu'aucun autre banc ne joue. La branche `get_database_backend()`
+/// de la migration n'est prise qu'ici : ailleurs, la clause `and_where` part toujours.
+/// Et `Index::create().if_not_exists()` n'avait jamais rencontré MySQL — le banc des trois
+/// moteurs engendre un CRUD sans champ `unique` ni `index`, donc sans le moindre
+/// `CREATE INDEX`. Une migration qui échouerait ici échouerait chez tout utilisateur MySQL
+/// dès son premier champ indexé, drapeau ou non.
+///
+/// L'unicité y reste globale : le rebond que PostgreSQL et SQLite accordent après une
+/// suppression logique est ici refusé, et c'est ce refus que le banc exige — la
+/// documentation le promet, seul un vrai MySQL le prouve.
+#[test]
+#[ignore = "démarre MySQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn a_soft_deleting_crud_keeps_a_global_uniqueness_on_mysql() {
+    let mysql = common::start_mysql();
+    let url = common::url_of_mysql(&mysql);
+
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+
+    rbs(parent.path())
+        .args([
+            "new",
+            "demo-api",
+            "--database",
+            "mysql",
+            "--database-url",
+            &url,
+            "--core-path",
+            common::noyau()
+                .to_str()
+                .expect("chemin du noyau représentable"),
+            "--yes",
+        ])
+        .assert()
+        .success();
+
+    let projet = parent.path().join("demo-api");
+
+    // Un nom de feature propre à ce banc : la cible de compilation est celle du moteur,
+    // partagée avec la branche MySQL d'`integration_new`, dont la feature `articles` ne
+    // doit pas se confondre avec celle-ci.
+    rbs(&projet)
+        .args([
+            "generate",
+            "crud",
+            "soft_memos",
+            "--fields",
+            "title:string:unique",
+            "--soft-delete",
+        ])
+        .assert()
+        .success();
+
+    let cible = common::cible_pour("mysql");
+    let _verrou = common::verrou(&cible);
+
+    rbs(&projet)
+        .env("CARGO_TARGET_DIR", &cible)
+        .args(["migrate", "up"])
+        .assert()
+        .success();
+
+    // Le rebond que les deux autres moteurs accordent, rejoué ici pour constater qu'il est
+    // refusé : l'index unique de MySQL ignore `deleted_at`, la valeur reste réservée.
+    let mut rebond = mysql
+        .exec(ExecCommand::new([
+            "mysql",
+            &format!("-u{UTILISATEUR_MYSQL}"),
+            &format!("-p{MOT_DE_PASSE}"),
+            BASE,
+            "-e",
+            "insert into soft_memos (id, title, created_at, updated_at) \
+             values (x'00000000000040008000000000000001', 'rebond-apres-suppression', now(), now()); \
+             update soft_memos set deleted_at = now() \
+             where id = x'00000000000040008000000000000001'; \
+             insert into soft_memos (id, title, created_at, updated_at) \
+             values (x'00000000000040008000000000000002', 'rebond-apres-suppression', now(), now());",
+        ]))
+        .expect("mysql doit pouvoir s'exécuter dans le conteneur");
+
+    let sortie_rebond = format!(
+        "{}{}",
+        String::from_utf8_lossy(&rebond.stdout_to_vec().expect("la sortie de mysql se lit")),
+        String::from_utf8_lossy(&rebond.stderr_to_vec().expect("l'erreur de mysql se lit")),
+    );
+
+    assert!(
+        sortie_rebond.contains("Duplicate entry"),
+        "MySQL a laissé passer le doublon après suppression logique : son index unique \
+         n'est plus global, alors qu'il ne sait pas être partiel :\n{sortie_rebond}"
+    );
+
+    let sortie = Command::new("cargo")
+        .current_dir(&projet)
+        .env("CARGO_TARGET_DIR", &cible)
+        .args(["test", "--workspace", "--", "--include-ignored"])
+        .output()
+        .expect("cargo doit être lançable");
+
+    let joues = format!(
+        "{}{}",
+        String::from_utf8_lossy(&sortie.stdout),
+        String::from_utf8_lossy(&sortie.stderr)
+    );
+
+    assert!(
+        sortie.status.success(),
+        "la suite du projet engendré échoue sur MySQL :\n{joues}"
+    );
+
+    assert!(
+        joues.contains("test soft_memos::tests::the_full_lifecycle_goes_through_the_api ... ok"),
+        "le cycle complet n'a pas été joué sur MySQL :\n{joues}"
+    );
+    assert!(
+        joues.contains("test soft_memos::tests::a_replayed_unique_value_returns_409 ... ok"),
+        "le refus du doublon n'a pas été joué sur MySQL :\n{joues}"
     );
 }
 
