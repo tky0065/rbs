@@ -1,0 +1,36 @@
+use std::str::FromStr;
+
+use super::normaliser;
+
+/// La crate `cron` attend six champs, la seconde en tête ; le crontab Unix en a cinq. Un
+/// utilisateur qui colle une ligne de son crontab doit être servi, pas puni.
+#[test]
+fn a_five_field_expression_means_the_same_as_its_six_field_form() {
+    let cinq = normaliser("0 3 * * *").expect("cinq champs sont acceptés");
+    let six = normaliser("0 0 3 * * *").expect("six champs sont acceptés");
+
+    assert_eq!(cinq, six);
+
+    let horaire = cron::Schedule::from_str(&cinq).expect("l'expression normalisée compile");
+    let base =
+        chrono::DateTime::parse_from_rfc3339("2026-09-03T10:00:00+00:00").expect("instant lisible");
+
+    assert_eq!(
+        horaire.after(&base).next().expect("une occurrence suit"),
+        chrono::DateTime::parse_from_rfc3339("2026-09-04T03:00:00+00:00").expect("instant lisible")
+    );
+}
+
+#[test]
+fn an_expression_of_any_other_length_is_refused_by_name() {
+    let erreur = normaliser("0 3 * *").expect_err("quatre champs ne veulent rien dire");
+
+    // Le message doit porter l'expression : c'est la seule chose qui distingue une
+    // échéance fautive des autres au démarrage.
+    assert!(erreur.to_string().contains("0 3 * *"), "{erreur}");
+}
+
+#[test]
+fn an_unparsable_expression_is_refused_even_with_the_right_field_count() {
+    normaliser("0 99 * * *").expect_err("99 n'est pas une minute");
+}

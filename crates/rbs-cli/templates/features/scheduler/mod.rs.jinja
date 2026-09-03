@@ -1,0 +1,134 @@
+pub mod config;
+pub mod model;
+pub mod sync;
+pub mod ticker;
+
+#[cfg(test)]
+mod tests;
+
+use std::future::Future;
+use std::pin::Pin;
+use std::str::FromStr;
+use std::sync::Arc;
+
+use chrono::Timelike;
+use sea_orm::DatabaseTransaction;
+use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
+
+pub use config::Config;
+
+use crate::jobs::{self, Job};
+use crate::state::AppState;
+
+/// L'enfilage d'une échéance, son type de job oublié.
+///
+/// La transaction est empruntée : c'est elle qui rend la réservation de l'échéance et la
+/// naissance du job indissociables.
+type Enfilage = Arc<
+    dyn for<'a> Fn(
+            &'a DatabaseTransaction,
+        ) -> Pin<Box<dyn Future<Output = anyhow::Result<Uuid>> + Send + 'a>>
+        + Send
+        + Sync,
+>;
+
+/// Une échéance : un job, et quand le déclencher.
+pub struct Schedule {
+    /// Le `KIND` du job visé, d'où la ligne de la table tire sa clé.
+    pub kind: &'static str,
+    /// L'expression, telle qu'elle a été écrite — normalisée à la compilation.
+    pub expression: String,
+    enfiler: Enfilage,
+}
+
+impl Schedule {
+    /// Déclare qu'un job doit être enfilé aux occurrences de `expression`.
+    ///
+    /// Le `kind` vient de `J::KIND` et non d'une chaîne : une échéance qui viserait un job
+    /// non inscrit au registre est ainsi inécrivable.
+    ///
+    /// La fabrique est un pointeur de fonction et non une fermeture : elle est rejouée à
+    /// chaque déclenchement — une charge utile qui porte une date la veut à l'instant du
+    /// tick — et ne peut capturer aucun état qui aurait vieilli entre-temps.
+    pub fn every<J: Job>(expression: impl Into<String>, fabrique: fn() -> J) -> Self {
+        Self {
+            kind: J::KIND,
+            expression: expression.into(),
+            enfiler: Arc::new(move |transaction| {
+                Box::pin(async move { jobs::enqueue(transaction, &fabrique()).await })
+            }),
+        }
+    }
+
+    /// Compile l'expression, en acceptant les deux formes.
+    pub fn compiler(&self) -> anyhow::Result<cron::Schedule> {
+        let normalisee = normaliser(&self.expression)?;
+
+        cron::Schedule::from_str(&normalisee)
+            .map_err(|source| anyhow::anyhow!("`{}` : {source}", self.expression))
+    }
+
+    /// Enfile le job de cette échéance dans la transaction qui vient de la réserver.
+    pub(super) async fn enfiler(&self, transaction: &DatabaseTransaction) -> anyhow::Result<Uuid> {
+        (self.enfiler)(transaction).await
+    }
+}
+
+/// Ramène une expression à la forme que `cron` attend : six champs, la seconde en tête.
+///
+/// Le crontab Unix en a cinq et ne dit rien des secondes ; les cinq champs valent donc
+/// « à la seconde zéro ». Sans cette normalisation, coller une ligne de son crontab —
+/// le premier geste évident — arrête le démarrage.
+pub fn normaliser(expression: &str) -> anyhow::Result<String> {
+    let champs = expression.split_whitespace().count();
+
+    let normalisee = match champs {
+        5 => format!("0 {expression}"),
+        6 => expression.to_string(),
+        autre => anyhow::bail!(
+            "`{expression}` porte {autre} champ(s) : une expression cron en compte cinq \
+             (minute heure jour mois jour-de-semaine) ou six, la seconde en tête"
+        ),
+    };
+
+    // Compilée ici et jetée : le but est de refuser tout de suite une expression que
+    // `Schedule::compiler` refuserait plus tard, au démarrage.
+    cron::Schedule::from_str(&normalisee)
+        .map_err(|source| anyhow::anyhow!("`{expression}` : {source}"))?;
+
+    Ok(normalisee)
+}
+
+/// Tronque un instant à la seconde, tel qu'il sera stocké.
+///
+/// MySQL rend `timestamp` sans précision fractionnaire et **arrondit** ce qu'on y écrit :
+/// une échéance à `…34,6 s` y devient `…35 s`, soit une échéance que sa propre date place
+/// dans le futur et qu'aucun tick ne verra.
+///
+/// Elle vit ici et non dans `ticker` parce que la réconciliation l'utilise aussi : les
+/// deux écrivent dans la même colonne, et une troncature d'un seul côté rendrait
+/// inégales deux dates qui doivent se comparer.
+pub(super) fn a_la_seconde(instant: DateTimeWithTimeZone) -> DateTimeWithTimeZone {
+    instant.with_nanosecond(0).unwrap_or(instant)
+}
+
+/// Les échéances de ce projet. Déclarez les vôtres ici.
+///
+/// Les expressions sont évaluées **en UTC** : `0 3 * * *` est 3 h UTC.
+pub fn schedules() -> Vec<Schedule> {
+    vec![Schedule::every::<crate::jobs::demo::Log>(
+        "0 3 * * *",
+        || crate::jobs::demo::Log {
+            message: "échéance quotidienne".to_string(),
+        },
+    )]
+}
+
+/// Détache le ticker dans le runtime, et rend la main aussitôt.
+pub fn spawn(state: AppState) {
+    tokio::spawn(async move {
+        if let Err(error) = ticker::run(state).await {
+            tracing::error!(%error, "le ticker du calendrier ne démarre pas");
+        }
+    });
+}
