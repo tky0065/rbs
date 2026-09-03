@@ -60,6 +60,55 @@ POST /articles/filter?page=2&per_page=50
 `Pagination` est un extracteur qui s'applique à n'importe quelle requête, filtrée ou non.
 La porter aussi dans le corps donnerait deux sources à une même valeur.
 
+## Pagination par curseur, pour les listes qui débordent un offset
+
+`Pagination` fait parcourir au moteur les lignes qu'il va jeter, et une insertion survenue
+entre deux requêtes décale la fenêtre — la page 2 réaffiche une ligne que la page 1 avait
+déjà rendue. Au-delà de quelques milliers de lignes, `Cursor` la remplace :
+
+```text
+GET /articles?after=0199e0b1-9c4a-7c3e-9d21-6f2a1b0c4d5e&per_page=50
+```
+
+`after` est l'`id` de la dernière ligne qui vous a été servie, et la borne est exclusive.
+Omettez-le pour la première page. Un `after` illisible répond 400 ; un `per_page` au-delà
+de 100 est ramené en silence, exactement comme pour `Pagination`.
+
+La réponse abandonne les décomptes :
+
+```json
+{
+  "data": [ … ],
+  "meta": { "per_page": 50, "next": "0199e0b1-9c4a-7c3e-9d21-6f2a1b0c4d5e" }
+}
+```
+
+`next` est nul une fois la marche terminée. Il n'y a pas de `total` : le `COUNT(*)` qu'il
+demanderait est précisément le coût que le curseur existe pour éviter.
+
+Le CRUD engendré garde `Pagination` — basculer retirerait `total` de toutes les réponses
+que vos clients lisent déjà. `Cursor` est là pour les routes que vous écrivez vous-même :
+
+```rust
+let mut query = Entity::find().order_by_desc(Column::Id);
+if let Some(after) = cursor.after() {
+    query = query.filter(Column::Id.lt(after));
+}
+let rows = query.limit(cursor.per_page()).all(db).await?;
+let dernier = rows.last().map(|row| row.id);
+
+Ok(Json(CursorPage::new(
+    rows.into_iter().map(Into::into).collect(),
+    &cursor,
+    dernier,
+)))
+```
+
+Le curseur n'avance que sur l'`id` décroissant — l'ordre que `list` applique déjà, et celui
+que l'UUIDv7 rend total. Il ne suit pas un `sort` que vous auriez choisi : sur une colonne
+où deux lignes partagent une valeur, la frontière serait ambiguë et la page suivante
+sauterait des lignes ou en répéterait.
+
 ## Aucun nom de colonne n'atteint la base
 
 Le filtre est typé par les colonnes de `--fields`, à la génération :

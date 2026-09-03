@@ -21,6 +21,11 @@ between minor versions with no deprecation cycle.
   so no column carries it. Without the `storage` feature the flag is refused before
   anything is written, naming `rbs add storage`. A body limit applies to the upload route
   alone, as a constant you can raise.
+- `rbs_core::Cursor` and `CursorPage<T>` paginate on the `id` instead of an offset, for
+  lists where `OFFSET n` makes the engine walk the rows it is about to discard. `after` is
+  exclusive and the response carries no `total` — the `COUNT(*)` it would need is the cost
+  the cursor avoids. The generated CRUD is unchanged and keeps `Pagination`: switching it
+  would drop `total` from every response already being served.
 - `rbs add observability` installs OTLP traces and a Prometheus `/metrics`. Traces leave
   through `rbs-core`, behind its new `observability` cargo feature: `logs::init()` posts
   the global subscriber itself, and nothing added at the `// <rbs:startup>` anchor could
