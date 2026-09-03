@@ -640,6 +640,20 @@ mod tests {
         );
     }
 
+    /// Le rendu entier du contrôleur sous le drapeau, figé octet à octet.
+    ///
+    /// `examples/file-drop` retouche `src/uploads/controller.rs` à la main : le fichier
+    /// sort de la comparaison des exemples, et c'est pourtant celui que le guide du
+    /// stockage cite. Les assertions ci-dessus cherchent chacune une chaîne ; aucune ne
+    /// verrait une ligne vide perdue entre deux blocs, que rustfmt ne rétablit pas.
+    #[test]
+    fn the_uploading_controller_renders_the_frozen_fixture() {
+        bench::fige(
+            "fixtures/uploads/controller.rs",
+            &render(&bench::uploads()).expect("le contrôleur doit se rendre"),
+        );
+    }
+
     #[test]
     fn the_content_routes_are_mounted() {
         let fields = fields::parse("title:string").expect("champs");

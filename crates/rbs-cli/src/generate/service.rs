@@ -167,6 +167,20 @@ mod tests {
         );
     }
 
+    /// Le rendu entier du service sous le drapeau, figé octet à octet.
+    ///
+    /// Même raison qu'en face : `examples/file-drop` retouche `src/uploads/service.rs`, le
+    /// fichier sort de la comparaison des exemples, et le guide du stockage en cite la
+    /// région `contenu`. Un blanc perdu dans la branche sous drapeau n'avait ici aucun
+    /// oracle — ni les assertions par chaîne, ni rustfmt, qui n'insère pas de ligne vide.
+    #[test]
+    fn the_uploading_service_renders_the_frozen_fixture() {
+        bench::fige(
+            "fixtures/uploads/service.rs",
+            &render(&bench::uploads()).expect("le service doit se rendre"),
+        );
+    }
+
     #[test]
     fn a_missing_object_is_the_only_client_error() {
         let rendered = service_with_upload("articles", "title:string");

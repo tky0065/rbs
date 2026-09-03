@@ -531,6 +531,81 @@ pub(crate) fn formatted(source: &str) -> String {
     String::from_utf8(output.stdout).expect("rustfmt rend de l'UTF-8")
 }
 
+/// La feature de contenu que `file-drop` engendre, telle que son README la commande.
+///
+/// C'est elle que les fixtures figent : la documentation cite deux de ses fichiers, et ce
+/// sont précisément ceux que l'exemple retouche à la main.
+pub(crate) fn uploads() -> Feature {
+    let fields =
+        super::fields::parse("title:string,owner_email:string,content_type:string,size:int")
+            .expect("les champs de file-drop doivent être valides");
+
+    Feature::fresh("uploads", fields).uploading()
+}
+
+/// Compare `rendu` à la fixture figée sous `chemin`, relatif à la racine de la crate.
+///
+/// `src/uploads/controller.rs` et `src/uploads/service.rs` d'`examples/file-drop` sortent
+/// de la comparaison octet à octet des exemples — l'exemple les retouche — et ce sont eux
+/// que le guide du stockage cite. Ce qui reste alors sans oracle est le blanc : rustfmt
+/// n'insère jamais une ligne vide, donc `longueurs_divergentes` ne verrait pas celle qui
+/// manquerait dans une branche sous drapeau. La fixture la voit, et c'est là son point.
+///
+/// `RBS_FIGE=1 cargo test` la repose. Le diff qui en sort *est* la revue : rien n'oblige à
+/// le relire, mais rien ne le relira à votre place.
+pub(crate) fn fige(chemin: &str, rendu: &str) {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join(chemin);
+
+    if std::env::var_os("RBS_FIGE").is_some() {
+        let parent = fixture.parent().expect("la fixture a un répertoire");
+        fs::create_dir_all(parent).expect("répertoire de fixture créable");
+        fs::write(&fixture, rendu).expect("fixture écrivable");
+
+        return;
+    }
+
+    let attendu = fs::read_to_string(&fixture).unwrap_or_else(|error| {
+        panic!(
+            "{} illisible : {error} — `RBS_FIGE=1 cargo test` la pose",
+            fixture.display()
+        )
+    });
+
+    if rendu == attendu {
+        return;
+    }
+
+    // Un `assert_eq!` sur deux fichiers entiers noie l'écart dans le rendu ; celui qu'on
+    // cherche ici tient souvent en une ligne vide.
+    let ecart = rendu
+        .lines()
+        .zip(attendu.lines())
+        .position(|(rendu, attendu)| rendu != attendu)
+        .map_or_else(
+            || {
+                format!(
+                    "le rendu porte {} lignes, la fixture {}",
+                    rendu.lines().count(),
+                    attendu.lines().count()
+                )
+            },
+            |rang| {
+                format!(
+                    "ligne {} :\n  rendu   : {:?}\n  fixture : {:?}",
+                    rang + 1,
+                    rendu.lines().nth(rang).unwrap_or_default(),
+                    attendu.lines().nth(rang).unwrap_or_default()
+                )
+            },
+        );
+
+    panic!(
+        "le rendu s'écarte de {}, {ecart}\n\n\
+         `RBS_FIGE=1 cargo test` la repose si l'écart est voulu",
+        fixture.display()
+    );
+}
+
 /// Les longueurs de nom pour lesquelles `rendu` n'est pas déjà ce que rustfmt écrirait.
 ///
 /// Une liste de quatre noms écrite à la main ne dit pas où le gabarit bascule : elle échoue
