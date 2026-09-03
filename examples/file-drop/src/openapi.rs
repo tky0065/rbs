@@ -18,6 +18,9 @@ use crate::state::AppState;
         crate::uploads::controller::find,
         crate::uploads::controller::update,
         crate::uploads::controller::delete,
+        crate::uploads::controller::put_content,
+        crate::uploads::controller::get_content,
+        crate::uploads::controller::head_content,
         // </rbs:openapi>
     )
 )]

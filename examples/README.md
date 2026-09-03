@@ -72,7 +72,8 @@ for f in redis mail storage; do
 done
 cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
   generate crud uploads \
-  --fields 'title:string,owner_email:string,content_type:string,size:int' --force
+  --fields 'title:string,owner_email:string,content_type:string,size:int' \
+  --with-upload --force
 cd .. && mv file-drop examples/file-drop
 ```
 
@@ -137,20 +138,22 @@ command wires a guard onto a route you generated:
   neither says anything about the guard, and `hello-crud` carries both untouched. Only
   `an_unknown_id_returns_404` survives exactly as generated.
 
-`file-drop` carries nine more, and they are the point of the example — the three fragments
-ship a brick and no route, and a brick nothing calls proves nothing about the wiring.
+`file-drop` carries eight more. `--with-upload` on `generate crud` now writes the three
+content handlers themselves — `PUT`, `GET` and `HEAD` on `/uploads/{id}/content`, and the
+route that mounts them — so what remains by hand is what no flag generates: the three
+fragments shipping a brick and no route, and a brick nothing calls proves nothing about
+the wiring.
 
 - `src/uploads/service.rs`: the service orchestrates the three bricks. Storage receives
   the content under `uploads/{id}`; the mail goes out in its own task, rendering
   `depot.html`; the cache holds the `COUNT(*)` that all three writes invalidate. The
   total rather than the page — `Page` is only `Serialize`, and reading it back from the
   cache would mean making it deserialisable in the core.
-- `src/uploads/controller.rs`: three handlers on `/uploads/{id}/content` — `PUT`, `GET`
-  and `HEAD` — and the existing five pass the bricks down to the service. The content
-  travels outside the DTO: a binary body has no place in JSON.
+- `src/uploads/controller.rs`: `list`, `create`, `update` and `delete` pass the bricks
+  down to the service; the three content handlers are generated as `--with-upload`
+  produces them.
 - `src/uploads/repository.rs`: `page` splits off from `list`, so a caller who already
   holds the count does not redo the `COUNT(*)`.
-- `src/uploads/mod.rs`: the content route is mounted.
 - `src/{cache,storage}/mod.rs` and `src/mail/service.rs`: `src/storage/mod.rs` drops the
   `allow(dead_code)` the fragment puts on the `Storage` trait, whose five methods this
   project calls. `src/cache/mod.rs` and `src/mail/service.rs` keep a targeted one on
@@ -159,7 +162,7 @@ ship a brick and no route, and a brick nothing calls proves nothing about the wi
   ships says "your account is open", which no file upload can reuse.
 
 `the_hand_edits_of_file_drop_are_in_place` asserts every one of them. Without it those
-nine paths would sit outside any surveillance, and the wiring could vanish silently.
+eight paths would sit outside any surveillance, and the wiring could vanish silently.
 
 `newsletter-queue` carries fifteen more, and they are the point of the example — the
 fragments ship a queue, a mailer and a metrics module, and none of them a route; a job that

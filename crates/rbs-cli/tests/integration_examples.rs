@@ -20,6 +20,10 @@ struct Exemple {
     features: &'static [&'static str],
     crud: &'static str,
     champs: &'static str,
+    /// `--with-upload` sur `generate crud` : engendre les trois routes de contenu binaire.
+    ///
+    /// Seul `file-drop` le porte — les autres exemples n'ont rien à déposer.
+    with_upload: bool,
     /// Ce qu'aucune commande ne produit : les fichiers que l'exemple retouche à la main.
     ///
     /// Ils sortent de la comparaison, faute de quoi elle signalerait l'édition
@@ -36,6 +40,7 @@ const EXEMPLES: &[Exemple] = &[
         features: &[],
         crud: "articles",
         champs: "title:string,body:text,published:bool",
+        with_upload: false,
         edite_a_la_main: &[],
     },
     Exemple {
@@ -48,6 +53,7 @@ const EXEMPLES: &[Exemple] = &[
         // `mod auth; mod articles;` ferait broncher un `cargo fmt` dans le projet.
         crud: "posts",
         champs: "title:string,body:text,published:bool",
+        with_upload: false,
         edite_a_la_main: &[
             "src/posts/controller.rs",
             "src/posts/tests.rs",
@@ -65,14 +71,18 @@ const EXEMPLES: &[Exemple] = &[
         // `owner_email` finit par `_email` : le DTO généré gagne sa contrainte d'email
         // sans qu'on l'écrive, et le courriel a un destinataire qui vient du modèle.
         champs: "title:string,owner_email:string,content_type:string,size:int",
+        // Les trois routes de contenu binaire, sans quoi elles resteraient écrites à la
+        // main alors que c'est précisément ce que ce drapeau produit.
+        with_upload: true,
         // Les trois briques câblées, et les trois fragments dont la permission
         // `dead_code` tombe parce qu'un handler les appelle enfin. C'est le point de cet
         // exemple, et `the_hand_edits_of_file_drop_are_in_place` en répond.
+        // `mod.rs` en est sorti : le drapeau engendre désormais sa route et sa borne de
+        // taille à l'identique, marqueurs de région compris.
         edite_a_la_main: &[
             "src/uploads/service.rs",
             "src/uploads/controller.rs",
             "src/uploads/repository.rs",
-            "src/uploads/mod.rs",
             "src/cache/mod.rs",
             "src/mail/mod.rs",
             "src/mail/service.rs",
@@ -91,6 +101,7 @@ const EXEMPLES: &[Exemple] = &[
         // `email` seul suffit à la contrainte de validation du DTO : la règle porte sur
         // le nom exact autant que sur le suffixe `_email`.
         champs: "email:string:unique,name:string,confirmed:bool",
+        with_upload: false,
         // Ce que montre cet exemple et qu'aucun autre ne montre : un job enfilé dans la
         // transaction qui l'a motivé. `the_hand_edits_of_newsletter_queue_are_in_place`
         // en répond.
@@ -202,17 +213,22 @@ fn generate(parent: &Path, example: &Exemple) -> PathBuf {
             .success();
     }
 
+    let mut args = vec![
+        "generate",
+        "crud",
+        example.crud,
+        "--fields",
+        example.champs,
+        "--force",
+    ];
+    if example.with_upload {
+        args.push("--with-upload");
+    }
+
     assert_cmd::Command::cargo_bin("rbs")
         .expect("le binaire rbs doit être compilé")
         .current_dir(&racine)
-        .args([
-            "generate",
-            "crud",
-            example.crud,
-            "--fields",
-            example.champs,
-            "--force",
-        ])
+        .args(args)
         .assert()
         .success();
 

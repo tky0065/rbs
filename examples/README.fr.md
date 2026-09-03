@@ -72,7 +72,8 @@ for f in redis mail storage; do
 done
 cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
   generate crud uploads \
-  --fields 'title:string,owner_email:string,content_type:string,size:int' --force
+  --fields 'title:string,owner_email:string,content_type:string,size:int' \
+  --with-upload --force
 cd .. && mv file-drop examples/file-drop
 ```
 
@@ -137,21 +138,22 @@ l'exemple — aucune commande ne câble un garde sur une route que vous avez eng
   ni l'un ni l'autre ne dit rien du garde, et `hello-crud` les porte tous deux intacts.
   Seul `an_unknown_id_returns_404` subsiste tel qu'il a été engendré.
 
-`file-drop` en porte neuf de plus, et elles sont tout l'intérêt de l'exemple — les trois
-fragments livrent une brique et aucune route, et une brique que rien n'appelle ne prouve
-rien du câblage.
+`file-drop` en porte huit de plus. `--with-upload` sur `generate crud` écrit désormais les
+trois handlers de contenu eux-mêmes — `PUT`, `GET` et `HEAD` sur `/uploads/{id}/content`,
+et la route qui les monte — si bien que ce qui reste à la main est ce qu'aucun drapeau
+n'engendre : les trois fragments qui livrent une brique et aucune route, et une brique que
+rien n'appelle ne prouve rien du câblage.
 
 - `src/uploads/service.rs` : le service orchestre les trois briques. Le stockage reçoit le
   contenu sous `uploads/{id}` ; le courriel part dans sa propre tâche, en rendant
   `depot.html` ; le cache tient le `COUNT(*)` que les trois écritures invalident. Le total
   plutôt que la page — `Page` n'est que `Serialize`, et le relire depuis le cache imposerait
   de le rendre désérialisable dans le noyau.
-- `src/uploads/controller.rs` : trois handlers sur `/uploads/{id}/content` — `PUT`, `GET` et
-  `HEAD` — et les cinq existants passent les briques au service. Le contenu voyage hors du
-  DTO : un corps binaire n'a pas sa place dans du JSON.
+- `src/uploads/controller.rs` : `list`, `create`, `update` et `delete` passent les briques
+  au service ; les trois handlers de contenu sont engendrés tels que `--with-upload` les
+  produit.
 - `src/uploads/repository.rs` : `page` se détache de `list`, pour qu'un appelant qui tient
   déjà le compte ne refasse pas le `COUNT(*)`.
-- `src/uploads/mod.rs` : la route de contenu est montée.
 - `src/{cache,storage}/mod.rs` et `src/mail/service.rs` : `src/storage/mod.rs` abandonne
   l'`allow(dead_code)` que le fragment pose sur le trait `Storage`, dont ce projet appelle
   les cinq méthodes. `src/cache/mod.rs` et `src/mail/service.rs` en gardent un, ciblé, sur
@@ -159,7 +161,7 @@ rien du câblage.
 - `templates/mail/depot.html` : une seconde template, ajoutée à la main — celle que le
   fragment livre dit « votre compte est ouvert », ce qu'aucun dépôt de fichier ne réutilise.
 
-`the_hand_edits_of_file_drop_are_in_place` les atteste toutes. Sans lui, ces neuf chemins
+`the_hand_edits_of_file_drop_are_in_place` les atteste toutes. Sans lui, ces huit chemins
 resteraient hors de toute surveillance, et le câblage pourrait disparaître en silence.
 
 `newsletter-queue` en porte quinze de plus, et elles sont tout l'intérêt de l'exemple — les
