@@ -481,6 +481,36 @@ mod tests {
         );
     }
 
+    /// La migration a déplacé l'unicité vers un index restreint aux lignes vivantes :
+    /// laisser `#[sea_orm(unique)]` sur l'entité lui ferait décrire un schéma que la base
+    /// n'a pas. L'attribut ne construit rien à l'exécution — aucun
+    /// `Schema::create_table_from_entity` dans ce qu'engendre le CLI — mais il se lit.
+    #[test]
+    fn soft_delete_takes_the_unique_attribute_off_the_model() {
+        let feature = Feature::fresh(
+            "articles",
+            fields::parse("title:string:unique").expect("champs"),
+        )
+        .soft_deleting();
+        let rendered = render(&feature).expect("le modèle doit se rendre");
+
+        assert!(
+            !rendered.contains("#[sea_orm(unique)]"),
+            "l'entité décrit une unicité de colonne que la migration n'a pas posée :\n{rendered}"
+        );
+
+        let temoin = render(&Feature::fresh(
+            "articles",
+            fields::parse("title:string:unique").expect("champs"),
+        ))
+        .expect("le modèle doit se rendre");
+
+        assert!(
+            temoin.contains("#[sea_orm(unique)]\n    pub title: String,"),
+            "témoin : sans le drapeau, l'attribut reste :\n{temoin}"
+        );
+    }
+
     #[test]
     fn an_ordinary_model_carries_no_deletion_date() {
         let feature = Feature::fresh("articles", fields::parse("title:string").expect("champs"));

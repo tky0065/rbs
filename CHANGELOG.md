@@ -48,7 +48,9 @@ between minor versions with no deprecation cycle.
   field moves its constraint to an index restricted to live rows, which is what lets
   someone re-register with an address they had before. **MySQL has no partial index**: the
   generated migration branches at run time and keeps a global uniqueness there, so on MySQL
-  a deleted value stays reserved.
+  a deleted value stays reserved. The unchanged contract covers the feature carrying the
+  flag, not the ones referencing it: a foreign key's `ON DELETE` never fires on a logical
+  delete, so children survive a deleted parent and a `Restrict` stops refusing anything.
 
 ### Changed
 

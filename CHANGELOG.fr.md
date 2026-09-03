@@ -49,7 +49,11 @@ dépréciation.
   client ne le voit. Un champ `unique` fait quitter sa contrainte pour un index restreint
   aux lignes vivantes, ce qui permet de se réinscrire avec une adresse qu'on avait avant.
   **MySQL n'a pas d'index partiel** : la migration engendrée branche à l'exécution et y
-  garde une unicité globale, si bien qu'une valeur supprimée y reste réservée.
+  garde une unicité globale, si bien qu'une valeur supprimée y reste réservée. Le contrat
+  inchangé vaut pour la feature qui porte le drapeau, non pour celles qui la référencent :
+  l'`ON DELETE` d'une clé étrangère ne se déclenche jamais sur une suppression logique, si
+  bien que les enfants survivent à un parent supprimé et qu'un `Restrict` ne refuse plus
+  rien.
 
 ### Modifié
 
