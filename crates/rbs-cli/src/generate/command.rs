@@ -355,7 +355,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         builder.create(path, content)?;
     }
 
-    let mut montages = mount::pour(&module, features_anchor);
+    let mut montages = mount::pour(&module, features_anchor, options.with_upload);
     if let Some(migration) = &migration {
         montages.extend(mount::for_migration(migration));
     }

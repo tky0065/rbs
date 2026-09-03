@@ -11,6 +11,12 @@ use super::relations;
 /// Les handlers que le controller généré expose, dans l'ordre où ils y sont écrits.
 const HANDLERS: [&str; 6] = ["list", "filter", "create", "find", "update", "delete"];
 
+/// Les trois handlers que `--with-upload` ajoute, dans le même ordre.
+///
+/// Ils s'inscrivent à l'ancre `openapi` comme les six autres : montées sans y figurer,
+/// les routes existeraient hors du document, et aucune compilation ne le dirait.
+const HANDLERS_CONTENU: [&str; 3] = ["put_content", "get_content", "head_content"];
+
 /// Une insertion à faire : l'ancre visée, et les lignes à y ajouter.
 #[derive(Debug, PartialEq, Eq)]
 pub(crate) struct Mount {
@@ -24,7 +30,7 @@ pub(crate) struct Mount {
 /// module se pose en `pub mod` quand la cible est `src/lib.rs`, faute de quoi le binaire
 /// des seeds ne pourrait pas atteindre l'entité depuis l'autre côté de la frontière de
 /// crate ; elle reste un `mod` privé sur un projet antérieur, encore réduit à `src/main.rs`.
-pub(crate) fn pour(module: &str, features: Anchor) -> Vec<Mount> {
+pub(crate) fn pour(module: &str, features: Anchor, with_upload: bool) -> Vec<Mount> {
     let visibility = if features.file == "src/lib.rs" {
         "pub "
     } else {
@@ -44,6 +50,11 @@ pub(crate) fn pour(module: &str, features: Anchor) -> Vec<Mount> {
             anchor: anchors::OPENAPI,
             lines: HANDLERS
                 .iter()
+                .chain(if with_upload {
+                    HANDLERS_CONTENU.iter()
+                } else {
+                    [].iter()
+                })
                 .map(|handler| format!("crate::{module}::controller::{handler},"))
                 .collect(),
         },
@@ -119,7 +130,7 @@ mod tests {
 
     #[test]
     fn the_feature_module_is_declared_in_main_on_a_project_without_a_library() {
-        let montages = pour("users", anchors::FEATURES);
+        let montages = pour("users", anchors::FEATURES, false);
 
         assert_eq!(lines(&montages, anchors::FEATURES), ["mod users;"]);
     }
@@ -127,14 +138,14 @@ mod tests {
     #[test]
     fn the_feature_module_is_declared_public_in_the_library() {
         let lib = anchors::FEATURES.in_file("src/lib.rs");
-        let montages = pour("users", lib.clone());
+        let montages = pour("users", lib.clone(), false);
 
         assert_eq!(lines(&montages, lib), ["pub mod users;"]);
     }
 
     #[test]
     fn the_routes_are_mounted_by_an_absolute_path() {
-        let montages = pour("blog_posts", anchors::FEATURES);
+        let montages = pour("blog_posts", anchors::FEATURES, false);
 
         assert_eq!(
             lines(&montages, anchors::ROUTES),
@@ -144,7 +155,7 @@ mod tests {
 
     #[test]
     fn the_six_handlers_enter_the_openapi_document() {
-        let montages = pour("users", anchors::FEATURES);
+        let montages = pour("users", anchors::FEATURES, false);
 
         assert_eq!(
             lines(&montages, anchors::OPENAPI),
@@ -157,6 +168,42 @@ mod tests {
                 "crate::users::controller::delete,",
             ]
         );
+    }
+
+    #[test]
+    fn the_three_content_handlers_reach_the_openapi_anchor() {
+        let mounts = pour("articles", anchors::FEATURES, true);
+        let openapi = mounts
+            .iter()
+            .find(|mount| mount.anchor == anchors::OPENAPI)
+            .expect("l'ancre openapi doit être visée");
+
+        assert_eq!(
+            openapi.lines.len(),
+            9,
+            "trois handlers de plus ; sans eux les routes existent hors du document, \
+             et rien ne le signale : {:?}",
+            openapi.lines
+        );
+        assert!(
+            openapi
+                .lines
+                .iter()
+                .any(|line| line.contains("controller::put_content")),
+            "{:?}",
+            openapi.lines
+        );
+    }
+
+    #[test]
+    fn an_ordinary_feature_mounts_six_handlers() {
+        let mounts = pour("articles", anchors::FEATURES, false);
+        let openapi = mounts
+            .iter()
+            .find(|mount| mount.anchor == anchors::OPENAPI)
+            .expect("l'ancre openapi doit être visée");
+
+        assert_eq!(openapi.lines.len(), 6, "témoin : {:?}", openapi.lines);
     }
 
     fn inverse_towards_users() -> relations::Inverse {
@@ -225,7 +272,7 @@ mod tests {
     /// n'inscrit dans le `Migrator` que ce qu'il a lui-même généré.
     #[test]
     fn mounting_a_feature_does_not_touch_the_migration_crate() {
-        let montages = pour("users", anchors::FEATURES);
+        let montages = pour("users", anchors::FEATURES, false);
 
         assert!(
             !montages
@@ -245,7 +292,7 @@ mod tests {
     /// Une feature écrite à la main n'a pas d'entité : rien à semer, donc rien à déclarer.
     #[test]
     fn mounting_a_feature_declares_no_seed() {
-        let montages = pour("users", anchors::FEATURES);
+        let montages = pour("users", anchors::FEATURES, false);
 
         assert!(
             !montages.iter().any(|mount| mount.anchor == anchors::SEEDS),
@@ -255,7 +302,7 @@ mod tests {
 
     #[test]
     fn each_mount_targets_a_skeleton_anchor() {
-        let mut montages = pour("users", anchors::FEATURES);
+        let mut montages = pour("users", anchors::FEATURES, false);
         montages.extend(for_migration("m20260826_143000_create_users"));
         montages.extend(for_seed("users"));
 

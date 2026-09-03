@@ -58,6 +58,22 @@ mod tests {
         render_mod(&Feature::fresh(name, fields), true).expect("le mod.rs doit se rendre")
     }
 
+    /// Rend le contrôleur d'une feature dotée de ses routes de contenu.
+    fn controller_with_upload(name: &str, fields: &str) -> String {
+        let fields = fields::parse(fields).expect("les champs du test doivent être valides");
+        render(&Feature::fresh(name, fields).uploading()).expect("le contrôleur doit se rendre")
+    }
+
+    fn controller_uploading(name: &str) -> String {
+        controller_with_upload(name, "title:string")
+    }
+
+    fn module_uploading(name: &str) -> String {
+        let fields = fields::parse("title:string").expect("champs valides");
+        render_mod(&Feature::fresh(name, fields).uploading(), true)
+            .expect("le mod.rs doit se rendre")
+    }
+
     /// Deux formes de ce fichier suivent le nom de l'entité et bornent le point fixe des
     /// deux côtés : la signature de `find`, que rustfmt ramène sur une ligne tant qu'elle
     /// tient sous les cent colonnes de `max_width` — soit jusqu'à deux caractères
@@ -79,6 +95,19 @@ mod tests {
         );
     }
 
+    /// Même garde que ci-dessus, pour les trois handlers de contenu qu'ajoute
+    /// `--with-upload` : leurs chemins portent eux aussi le nom du module.
+    #[test]
+    fn the_uploading_controller_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(controller_uploading);
+
+        assert_eq!(
+            divergentes,
+            (24..=40).collect::<Vec<usize>>(),
+            "la plage où le contrôleur de contenu diverge de rustfmt a bougé"
+        );
+    }
+
     /// La route de collection est le seul appel de ce fichier dont les arguments suivent le
     /// nom du module : ils valent cinquante caractères de plus que lui, et franchissent
     /// donc les soixante colonnes de `fn_call_width` à onze caractères de module.
@@ -92,6 +121,19 @@ mod tests {
             divergentes,
             Vec::<usize>::new(),
             "le rendu de `mod.rs` diverge de rustfmt à ces longueurs de nom"
+        );
+    }
+
+    /// La route de contenu que `--with-upload` ajoute est déjà éclatée sans condition de
+    /// longueur ; ce garde vérifie que ce choix reste un point fixe à toute taille de nom.
+    #[test]
+    fn the_uploading_module_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(module_uploading);
+
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu de `mod.rs` avec `--with-upload` diverge de rustfmt à ces longueurs de nom"
         );
     }
 
@@ -464,6 +506,68 @@ mod tests {
         let sans = module("articles");
 
         assert!(!sans.contains("mod tests;"), "{sans}");
+    }
+
+    #[test]
+    fn the_three_content_handlers_are_rendered() {
+        let rendered = controller_with_upload("articles", "title:string");
+
+        for handler in ["put_content", "get_content", "head_content"] {
+            assert!(
+                rendered.contains(&format!("pub async fn {handler}")),
+                "{handler} manque :\n{rendered}"
+            );
+        }
+        assert!(
+            rendered.contains("content: Bytes"),
+            "le corps voyage brut : en JSON il passerait en base64, donc deux fois en \
+             mémoire :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn the_content_routes_are_mounted() {
+        let fields = fields::parse("title:string").expect("champs");
+        let rendered = render_mod(&Feature::fresh("articles", fields).uploading(), false)
+            .expect("le mod doit se rendre");
+
+        assert!(
+            rendered.contains(r#""/articles/{id}/content""#),
+            "les trois routes partagent un chemin :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("put(controller::put_content)")
+                && rendered.contains("get(controller::get_content)")
+                && rendered.contains("head(controller::head_content)"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn the_upload_route_alone_raises_the_body_limit() {
+        let fields = fields::parse("title:string").expect("champs");
+        let rendered = render_mod(&Feature::fresh("articles", fields).uploading(), false)
+            .expect("le mod doit se rendre");
+
+        assert_eq!(
+            rendered.matches("DefaultBodyLimit::max").count(),
+            1,
+            "posée sur le routeur, la limite relèverait aussi celle des routes JSON, \
+             qu'aucun besoin ne justifie :\n{rendered}"
+        );
+        assert!(rendered.contains("const TAILLE_MAX"), "{rendered}");
+    }
+
+    #[test]
+    fn an_ordinary_module_mounts_no_content_route() {
+        let fields = fields::parse("title:string").expect("champs");
+        let rendered =
+            render_mod(&Feature::fresh("articles", fields), false).expect("le mod doit se rendre");
+
+        assert!(
+            !rendered.contains("content") && !rendered.contains("DefaultBodyLimit"),
+            "témoin :\n{rendered}"
+        );
     }
 
     /// Ce que le projet généré vérifie de son propre document OpenAPI.

@@ -212,14 +212,14 @@ impl Project {
         }
 
         let features = anchors::resolve_features(&self.root);
-        self.mount(&mount::pour(module, features.clone()), &[features]);
+        self.mount(&mount::pour(module, features.clone(), false), &[features]);
     }
 
     /// Monte les routes de `module` et ses handlers dans le document OpenAPI.
     pub(crate) fn mount_feature(&self, module: &str) {
         let features = anchors::resolve_features(&self.root);
         self.mount(
-            &mount::pour(module, features),
+            &mount::pour(module, features, false),
             &[anchors::ROUTES, anchors::OPENAPI],
         );
     }

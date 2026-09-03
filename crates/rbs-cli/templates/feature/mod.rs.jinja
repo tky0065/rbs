@@ -9,10 +9,20 @@ pub mod service;
 mod tests;
 {% endif %}
 use axum::Router;
+{%- if with_upload %}
+use axum::extract::DefaultBodyLimit;
+use axum::routing::head;
+use axum::routing::{get, post, put};
+{%- else %}
 use axum::routing::{get, post};
+{%- endif %}
 
 use crate::state::AppState;
-
+{% if with_upload %}
+/// Taille maximale d'un contenu déposé. Relevez-la si vos fichiers sont plus gros ; elle
+/// ne vaut que pour la route de dépôt, les routes JSON gardant la limite d'axum.
+const TAILLE_MAX: usize = 10 * 1024 * 1024;
+{% endif %}
 pub fn routes() -> Router<AppState> {
     Router::new()
 {#- Les arguments d'un appel basculent aux soixante colonnes de `fn_call_width` : au-delà,
@@ -43,4 +53,13 @@ pub fn routes() -> Router<AppState> {
                 .patch(controller::update)
                 .delete(controller::delete),
         )
+{%- if with_upload %}
+        .route(
+            "/{@ module @}/{id}/content",
+            put(controller::put_content)
+                .get(controller::get_content)
+                .head(controller::head_content)
+                .layer(DefaultBodyLimit::max(TAILLE_MAX)),
+        )
+{%- endif %}
 }
