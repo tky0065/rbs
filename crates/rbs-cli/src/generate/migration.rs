@@ -96,6 +96,45 @@ mod tests {
             Vec::<usize>::new(),
             "le rendu sous soft-delete diverge de rustfmt à ces longueurs de nom"
         );
+
+        // Les deux balayages ci-dessus figent le champ à `title`, cinq caractères : aucune
+        // des gardes qui combinent la table et le champ n'y est jamais atteinte, et une
+        // garde manquante y passerait au vert. Ceux-ci fixent une table déjà longue et font
+        // varier le champ, si bien que leur somme franchit chacun des seuils du gabarit :
+        // la tête `ColumnDef::new(iden::Champ)`, la déclaration de l'index unique, le nom
+        // qu'elle porte, et l'appel qui la crée.
+        let table_longue = "a".repeat(33) + "e";
+
+        let divergentes_champ = bench::longueurs_divergentes(|champ| {
+            render(
+                &Feature::fresh(
+                    &table_longue,
+                    fields::parse(&format!("{champ}:string:unique")).expect("champs"),
+                )
+                .soft_deleting(),
+                HORODATAGE,
+            )
+            .expect("la migration doit se rendre")
+            .content
+        });
+
+        assert_eq!(
+            divergentes_champ,
+            Vec::<usize>::new(),
+            "le rendu sous soft-delete diverge de rustfmt à ces longueurs de champ"
+        );
+
+        // La tête de colonne est commune aux deux régimes : sans le drapeau, elle déborde
+        // à la même somme, et le témoin le dit.
+        let divergentes_champ_ordinaire = bench::longueurs_divergentes(|champ| {
+            migration(&table_longue, &format!("{champ}:string:unique")).content
+        });
+
+        assert_eq!(
+            divergentes_champ_ordinaire,
+            Vec::<usize>::new(),
+            "le rendu ordinaire diverge de rustfmt à ces longueurs de champ"
+        );
     }
 
     fn users_entity() -> Vec<crate::generate::entities::Entity> {

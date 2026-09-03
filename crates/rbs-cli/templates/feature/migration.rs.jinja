@@ -32,14 +32,27 @@ impl MigrationTrait for Migration {
     partiel n'y changerait rien. #}
 {%- set unicite = ".unique_key()" if field.unique and not soft_delete else "" %}
 {%- set col = "ColumnDef::new(" ~ iden ~ "::" ~ field.pascal_name ~ ")." ~ field.migration_method ~ "." ~ nullite ~ unicite %}
+{#- Une fois la colonne éclatée, sa tête `ColumnDef::new(iden::Champ)` peut à son tour
+    déborder : rustfmt casse alors la tête, et la suite de la chaîne se réaligne d'un cran
+    à gauche plutôt que de s'indenter sous elle. #}
+{%- set col_new = "ColumnDef::new(" ~ iden ~ "::" ~ field.pascal_name ~ ")" %}
 {%- if col | length <= 60 %}
                     .col({@ col @})
-{%- else %}
+{%- elif col_new | length <= 75 %}
                     .col(
                         ColumnDef::new({@ iden @}::{@ field.pascal_name @})
                             .{@ field.migration_method @}
                             .{@ nullite @}{@ "
                             .unique_key()" if field.unique and not soft_delete else "" @},
+                    )
+{%- else %}
+                    .col(
+                        ColumnDef::new(
+                            {@ iden @}::{@ field.pascal_name @},
+                        )
+                        .{@ field.migration_method @}
+                        .{@ nullite @}{@ "
+                        .unique_key()" if field.unique and not soft_delete else "" @},
                     )
 {%- endif %}
 {%- endfor %}
@@ -98,23 +111,43 @@ impl MigrationTrait for Migration {
             )
             .await?;
 {% for field in fields if field.unique %}
+{#- L'identifiant combine la table et le champ : c'est leur *somme* qui décide de la mise
+    en forme, si bien qu'une table au nom ordinaire suffit à faire céder ces lignes dès que
+    le champ est long. Déclaration trop large, rustfmt renvoie `Index::create()` à la ligne
+    suivante et indente toute la chaîne d'un cran de plus. #}
+{%- set uq_ident = "uq_" ~ table ~ "_" ~ field.name %}
+{%- set decl_uq = "let mut " ~ uq_ident ~ " = Index::create()" %}
+{%- set marge = "" if decl_uq | length <= 91 else "    " %}
+{#- Le nom de l'index est un littéral, que rustfmt ne coupe pas : il déporte l'argument
+    d'un cran plutôt que la chaîne. La ligne se mesure donc entière, marge comprise. #}
+{%- set ligne_nom = "        " ~ marge ~ '    .name("' ~ uq_ident ~ '")' %}
         // PostgreSQL et SQLite savent restreindre un index à un sous-ensemble de lignes :
         // deux lignes portent alors la même valeur si l'une est supprimée. MySQL ne le
         // sait pas — l'unicité y reste globale, et une valeur supprimée y reste réservée.
-        let mut uq_{@ table @}_{@ field.name @} = Index::create()
-            .if_not_exists()
-            .unique()
-            .name("uq_{@ table @}_{@ field.name @}")
-            .table({@ iden @}::Table)
-            .col({@ iden @}::{@ field.pascal_name @})
-            .to_owned();
+{%- if marge == "" %}
+        {@ decl_uq @}
+{%- else %}
+        let mut {@ uq_ident @} =
+            Index::create()
+{%- endif %}
+        {@ marge @}    .if_not_exists()
+        {@ marge @}    .unique()
+{%- if ligne_nom | length <= 100 %}
+        {@ marge @}    .name("{@ uq_ident @}")
+{%- else %}
+        {@ marge @}    .name(
+        {@ marge @}        "{@ uq_ident @}",
+        {@ marge @}    )
+{%- endif %}
+        {@ marge @}    .table({@ iden @}::Table)
+        {@ marge @}    .col({@ iden @}::{@ field.pascal_name @})
+        {@ marge @}    .to_owned();
 
         if !matches!(manager.get_database_backend(), sea_orm::DbBackend::MySql) {
 {#- Deux longueurs indépendantes gouvernent ce bloc : `uq_<table>_<field>`, qui décide si
     la réaffectation tient sur une ligne, et `iden` seul, qui décide si l'appel imbriqué
     `.and_where(Expr::col(iden::DeletedAt)…)` y tient à son tour, une fois indenté d'un
     cran de plus si la première a déjà cédé. #}
-{%- set uq_ident = "uq_" ~ table ~ "_" ~ field.name %}
 {%- set and_where_arg = "Expr::col(" ~ iden ~ "::DeletedAt).is_null()" %}
 {%- if (uq_ident ~ " = " ~ uq_ident) | length <= 88 %}
 {%- if and_where_arg | length <= 72 %}
@@ -144,12 +177,19 @@ impl MigrationTrait for Migration {
 {%- endif %}
 {%- endif %}
         }
-{% set appel_uq = "manager.create_index(uq_" ~ table ~ "_" ~ field.name ~ ").await?;" %}
+{% set appel_uq = "manager.create_index(" ~ uq_ident ~ ").await?;" %}
+{%- set ligne_index = "            .create_index(" ~ uq_ident ~ ")" %}
 {%- if appel_uq | length <= 60 %}
         {@ appel_uq @}
+{%- elif ligne_index | length <= 100 %}
+        manager
+            .create_index({@ uq_ident @})
+            .await?;
 {%- else %}
         manager
-            .create_index(uq_{@ table @}_{@ field.name @})
+            .create_index(
+                {@ uq_ident @},
+            )
             .await?;
 {%- endif %}
 {% endfor -%}
