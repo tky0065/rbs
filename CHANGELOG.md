@@ -14,6 +14,13 @@ between minor versions with no deprecation cycle.
 
 ### Added
 
+- `rbs generate crud --with-upload` mounts three content routes on the generated
+  resource — `PUT`, `GET` and `HEAD` on `/<resource>/{id}/content` — backed by the
+  `storage` fragment's trait. The body travels as `application/octet-stream`, not JSON:
+  base64 would hold the file in memory twice. The storage key is derived from the `id`,
+  so no column carries it. Without the `storage` feature the flag is refused before
+  anything is written, naming `rbs add storage`. A body limit applies to the upload route
+  alone, as a constant you can raise.
 - `rbs add observability` installs OTLP traces and a Prometheus `/metrics`. Traces leave
   through `rbs-core`, behind its new `observability` cargo feature: `logs::init()` posts
   the global subscriber itself, and nothing added at the `// <rbs:startup>` anchor could

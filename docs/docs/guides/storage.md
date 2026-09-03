@@ -117,10 +117,26 @@ Those credentials belong in the environment, not in the committed
 `backend = "s3"` with no bucket named anywhere — and says nothing about any of it while
 the backend is `fs`, which needs none of it.
 
-## What the example does with it
+## Generated content routes
 
-`file-drop` gives its `uploads` resource a content endpoint. The service keeps the store
-and the table in step:
+`rbs generate crud <name> --fields "…" --with-upload` mounts three routes on
+`/<name>/{id}/content`, backed by the trait above:
+
+| Method | On a row with content | On a row without content | On no such row |
+|---|---|---|---|
+| `PUT` | 204, content replaced | 204, content deposited | 404 |
+| `GET` | 200, `application/octet-stream` | 404 | 404 |
+| `HEAD` | 204 | 404 | 404 |
+
+Without the `storage` feature the flag is refused before anything is written:
+
+```text
+$ rbs generate crud uploads --fields "title:string" --with-upload
+erreur : `--with-upload` exige la feature `storage`, absente de ce projet : lancez `rbs add storage`, puis relancez la génération
+```
+
+`file-drop` carries the flag on its `uploads` resource. The service keeps the store and the
+table in step:
 
 ```rust file=examples/file-drop/src/uploads/service.rs region=contenu
 ```
@@ -133,16 +149,29 @@ object, and both backends can answer it without reading one.
 Deletion goes the other way: the content leaves with the row, and `delete` being idempotent
 on both sides means a resource created without content does not fail to be deleted.
 
-The content travels outside the DTO:
+The content travels outside the DTO, as `application/octet-stream` rather than JSON:
 
 ```rust file=examples/file-drop/src/uploads/controller.rs region=put_content
 ```
 
-A binary body has no place in a JSON document, and base64 would mean holding the file twice
-in memory. The three verbs are mounted together:
+Base64 would mean holding the file twice in memory — once decoded, once as the JSON string
+carrying it. The storage key is derived from the row's `id`, `format!("uploads/{id}")`, so
+no column carries it: wanting metadata such as `content_type` or `size` means declaring it
+in `--fields` yourself, which is what `file-drop` does above. The three verbs are mounted
+together, behind a body limit that applies to the deposit route alone:
 
-```rust file=examples/file-drop/src/uploads/mod.rs region=route_contenu
+```rust file=examples/file-drop/src/uploads/mod.rs
 ```
+
+`TAILLE_MAX` is a plain constant in the generated `mod.rs` — raise it, or read it from
+configuration, exactly as you would any other generated code. Posing the limit on the whole
+router instead would also raise it for the JSON routes.
+
+What the flag does not do: **one file per row**, and no table of attachments — a second
+file for the same row replaces the first. **No MIME-type filtering** either: the store
+holds bytes, and a whitelist guessed for the documentation would be wrong for every
+project that reads it. And it injects no column of any kind — an id is all it needs to
+derive a key.
 
 ## Testing
 
@@ -169,7 +198,9 @@ and not assumed. See the [testing guide](./testing.md).
   index in your database anyway, which is what the example's table is;
 - **signed URLs** — serving a private object means proxying it through your handler, as
   the example does. Pre-signed links are an S3 feature the trait does not expose;
-- **size limits** — nothing caps a body. Axum's `DefaultBodyLimit` is where that belongs;
+- **size limits** — the trait itself caps nothing. `--with-upload` sets one on its content
+  route alone, as the `TAILLE_MAX` constant above; a project built without the flag caps
+  nothing, and Axum's `DefaultBodyLimit` is where that belongs;
 - **content types** — the store holds bytes. The example keeps `content_type` in its
   table because the store will not remember it;
 - **lifecycle, versioning, encryption at rest** — configured on the bucket, not here.

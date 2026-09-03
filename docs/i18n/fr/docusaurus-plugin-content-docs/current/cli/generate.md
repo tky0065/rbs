@@ -61,6 +61,7 @@ Options:
       --has-many <ENTITE>  Entité enfant dont ce modèle doit porter la variante inverse, répétable
       --role <ROLE>        Réserve create, update et delete à ce rôle ; exige la feature auth
       --soft-delete        Rend le DELETE logique : la ligne reste, marquée d'une date de suppression
+      --with-upload        Ajoute trois routes de contenu binaire ; exige la feature storage
   -h, --help               Print help
   -V, --version            Print version
 ```
@@ -73,6 +74,7 @@ Options:
 | `--has-many <ENTITE>` | Répare le côté lointain d'une relation : écrit dans le modèle d'une feature déjà générée la variante `has_many` qui vise l'enfant nommé, et rien d'autre. Répétable. [Le guide des relations](../guides/relations.md) dit quand c'est nécessaire. |
 | `--role <ROLE>` | Réserve `create`, `update` et `delete` à ce rôle : elles prennent une `Identity` et appellent `require_role`, tandis que `list` et `find` restent ouvertes. Exige la feature [`auth`](../guides/auth.md), et un rôle que son enum `Role` déclare — les deux sont vérifiés avant toute écriture. |
 | `--soft-delete` | Rend `DELETE` logique plutôt que de retirer la ligne. Le contrat HTTP ne change pas, et la contrainte d'un champ `unique` se restreint aux lignes vivantes — sur MySQL elle reste globale, si bien qu'une valeur supprimée y reste réservée. [Le guide des migrations](../guides/migrations.md#suppression-logique) a le reste. |
+| `--with-upload` | Monte trois routes sur `/<ressource>/{id}/content` — `PUT`, `GET`, `HEAD` — contre le trait du fragment `storage`. Exige la feature [`storage`](../guides/storage.md), vérifiée avant toute écriture. |
 
 ## `rbs generate feature`
 

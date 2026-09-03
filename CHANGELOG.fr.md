@@ -15,6 +15,13 @@ dépréciation.
 
 ### Ajouté
 
+- `rbs generate crud --with-upload` monte trois routes de contenu sur la ressource
+  engendrée — `PUT`, `GET` et `HEAD` sur `/<ressource>/{id}/content` — contre le trait du
+  fragment `storage`. Le corps voyage en `application/octet-stream`, pas en JSON : le
+  base64 chargerait le fichier deux fois en mémoire. La clé de stockage se dérive de
+  l'`id`, si bien qu'aucune colonne ne la porte. Sans la feature `storage`, le drapeau est
+  refusé avant tout écrit, en nommant `rbs add storage`. Une borne de taille s'applique à
+  la seule route de dépôt, sous forme d'une constante à relever.
 - `rbs add observability` installe des traces OTLP et un `/metrics` Prometheus. Les traces
   sortent par `rbs-core`, derrière sa nouvelle feature cargo `observability` : c'est
   `logs::init()` qui pose l'abonné global, et rien d'ajouté à l'ancre `// <rbs:startup>`
