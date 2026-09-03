@@ -39,6 +39,8 @@ pub(crate) struct Options {
     pub role: Option<String>,
     /// Rend le `DELETE` logique : la ligne reste, sa colonne `deleted_at` datée.
     pub soft_delete: bool,
+    /// Ajoute au CRUD trois routes de contenu binaire, adossées au fragment `storage`.
+    pub with_upload: bool,
 }
 
 /// Un fichier à écrire : son chemin, relatif à la racine du projet, et son contenu.
@@ -158,6 +160,13 @@ pub(crate) enum Error {
         role: String,
     },
 
+    /// `--with-upload` réclamé sur un projet dépourvu du fragment qui porte le stockage.
+    #[error(
+        "`--with-upload` exige la feature `storage`, absente de ce projet : lancez \
+         `rbs add storage`, puis relancez la génération"
+    )]
+    UploadSansStorage,
+
     /// `--soft-delete` sur une entité qui déclare déjà la colonne que le drapeau injecte.
     #[error(
         "`--soft-delete` pose lui-même la colonne `{colonne}` : retirez-la de `--fields`, \
@@ -231,6 +240,18 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         validate_role(role, &metadonnees, &root)?;
     }
 
+    // Avant tout rendu, comme le garde de rôle : sans le fragment, `state.storage()`
+    // n'existe pas et le projet engendré cesserait de compiler — une erreur de rustc sur
+    // du code que l'utilisateur n'a pas écrit.
+    if options.with_upload
+        && !metadonnees
+            .features
+            .iter()
+            .any(|feature| feature == "storage")
+    {
+        return Err(Error::UploadSansStorage);
+    }
+
     // `--has-many` ne génère rien : il répare le côté inverse d'une feature déjà
     // présente, et suit donc un chemin entièrement séparé du reste de la fonction.
     if !options.has_many.is_empty() {
@@ -263,6 +284,11 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     };
     let feature = if options.soft_delete {
         feature.soft_deleting()
+    } else {
+        feature
+    };
+    let feature = if options.with_upload {
+        feature.uploading()
     } else {
         feature
     };
@@ -650,6 +676,7 @@ mod tests {
             has_many: Vec::new(),
             role: None,
             soft_delete: false,
+            with_upload: false,
         }
     }
 
@@ -774,6 +801,20 @@ mod tests {
             "le message doit nommer la commande qui installe la feature : {error}"
         );
         assert_eq!(fingerprint(&root), avant, "rien ne doit avoir été écrit");
+    }
+
+    #[test]
+    fn upload_without_the_storage_feature_names_the_command_that_repairs_it() {
+        let message = Error::UploadSansStorage.to_string();
+
+        assert!(
+            message.contains("rbs add storage"),
+            "un refus qui ne dit pas comment le lever fait chercher : {message}"
+        );
+        assert!(
+            message.contains("storage"),
+            "le refus doit nommer la feature attendue : {message}"
+        );
     }
 
     #[test]

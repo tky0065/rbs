@@ -160,6 +160,10 @@ pub enum GenerateCommands {
         /// Rend le DELETE logique : la ligne reste, marquée d'une date de suppression.
         #[arg(long)]
         soft_delete: bool,
+
+        /// Ajoute trois routes de contenu binaire ; exige la feature storage.
+        #[arg(long)]
+        with_upload: bool,
     },
 
     /// Génère une feature vide : six fichiers, aucun champ.
@@ -293,6 +297,21 @@ mod tests {
         };
 
         assert!(soft_delete);
+    }
+
+    #[test]
+    fn generate_crud_accepts_with_upload() {
+        let cli = Cli::try_parse_from(["rbs", "generate", "crud", "articles", "--with-upload"])
+            .expect("la ligne doit être acceptée");
+
+        let Commands::Generate {
+            command: GenerateCommands::Crud { with_upload, .. },
+        } = cli.command
+        else {
+            panic!("la sous-commande doit être `generate crud`");
+        };
+
+        assert!(with_upload);
     }
 
     /// Le flag doit accepter les deux langues et rester absent par défaut : c'est cette
