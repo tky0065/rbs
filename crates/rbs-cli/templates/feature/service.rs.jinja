@@ -50,6 +50,17 @@ use super::dto::{
 {% endif -%}
 use super::filter::{@ entity @}Filter;
 use super::repository::{self, ActiveModel};
+{%- if with_upload %}
+use crate::storage::{Storage, StorageError};
+
+/// Clé du contenu déposé pour `id`.
+///
+/// Le stockage est un magasin plat : c'est ce préfixe qui range les objets de cette
+/// ressource, et rien d'autre ne les distingue.
+fn content_key(id: Uuid) -> String {
+    format!("{@ module @}/{id}")
+}
+{%- endif %}
 
 {@ entete("list", ["db: &DatabaseConnection", "pagination: &Pagination"], "Result<Page<" ~ entity ~ "Response>>") @}
     let ({@ module @}, total) = repository::list(db, pagination).await?;
@@ -109,6 +120,59 @@ use super::repository::{self, ActiveModel};
     Ok({@ chaine("repository::update(db, " ~ singular ~ ")", [".await?", ".into()"], "    ") @})
 }
 
+{%- if with_upload %}
+
+{@ entete("delete", ["db: &DatabaseConnection", "storage: &dyn Storage", "id: Uuid"], "Result<()>") @}
+    if !repository::delete(db, id).await? {
+        return Err(Error::NotFound("{@ singular @}"));
+    }
+
+    // Le contenu part avec la ligne. `delete` est idempotent des deux côtés du trait :
+    // une ressource créée sans contenu ne fait donc pas échouer sa suppression.
+    storage
+        .delete(&content_key(id))
+        .await
+        .map_err(|error| Error::Internal(anyhow::anyhow!("{error}")))
+}
+
+/// Dépose le contenu de `id`, la ressource devant exister.
+{@ entete("put_content", ["db: &DatabaseConnection", "storage: &dyn Storage", "id: Uuid", "content: Vec<u8>"], "Result<()>") @}
+    // La ligne est lue avant le dépôt : sans elle, le magasin accumulerait des objets
+    // qu'aucune ressource ne réclame.
+    repository::find(db, id)
+        .await?
+        .ok_or(Error::NotFound("{@ singular @}"))?;
+
+    storage
+        .put(&content_key(id), content)
+        .await
+        .map_err(|error| Error::Internal(anyhow::anyhow!("{error}")))
+}
+
+/// Un contenu est-il déposé pour `id` ?
+///
+/// `exists` plutôt qu'un `get` dont on jetterait le corps : la question ne demande pas de
+/// transférer l'objet, et les deux backends savent y répondre sans le lire.
+pub async fn has_content(storage: &dyn Storage, id: Uuid) -> Result<bool> {
+    storage
+        .exists(&content_key(id))
+        .await
+        .map_err(|error| Error::Internal(anyhow::anyhow!("{error}")))
+}
+
+/// Rend le contenu déposé pour `id`.
+pub async fn get_content(storage: &dyn Storage, id: Uuid) -> Result<Vec<u8>> {
+    storage
+        .get(&content_key(id))
+        .await
+        // `NotFound` est le seul cas qui vienne du client : les autres sont des pannes.
+        .map_err(|error| match error {
+            StorageError::NotFound(_) => Error::NotFound("contenu"),
+            autre => Error::Internal(anyhow::anyhow!("{autre}")),
+        })
+}
+{%- else %}
+
 pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<()> {
     if !repository::delete(db, id).await? {
         return Err(Error::NotFound("{@ singular @}"));
@@ -116,3 +180,4 @@ pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<()> {
 
     Ok(())
 }
+{%- endif %}

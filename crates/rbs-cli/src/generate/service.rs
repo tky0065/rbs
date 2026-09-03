@@ -25,6 +25,80 @@ mod tests {
         render(&Feature::fresh(name, fields)).expect("le service doit se rendre")
     }
 
+    /// Rend le service d'une feature dotée de ses routes de contenu.
+    fn service_with_upload(name: &str, fields: &str) -> String {
+        let fields = fields::parse(fields).expect("les champs du test doivent être valides");
+        render(&Feature::fresh(name, fields).uploading()).expect("le service doit se rendre")
+    }
+
+    #[test]
+    fn the_key_is_derived_from_the_id() {
+        let rendered = service_with_upload("articles", "title:string");
+
+        assert!(
+            rendered.contains(r#"format!("articles/{id}")"#),
+            "la clé range les objets sous le nom du module, rien d'autre ne les \
+             distingue :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn putting_content_reads_the_row_first() {
+        let rendered = service_with_upload("articles", "title:string");
+        let put = rendered
+            .split("pub async fn put_content")
+            .nth(1)
+            .expect("put_content doit être rendu");
+        let lecture = put
+            .find("repository::find")
+            .expect("la ligne doit être lue");
+        // La signature elle-même porte `storage: &dyn Storage` : chercher `storage`
+        // trouverait ce paramètre avant tout appel. `storage\n` ne matche que l'usage en
+        // tête de la chaîne d'appel dans le corps.
+        let depot = put.find("storage\n").expect("le dépôt doit avoir lieu");
+
+        assert!(
+            lecture < depot,
+            "sans lecture préalable, le magasin accumulerait des objets qu'aucune \
+             ressource ne réclame :\n{put}"
+        );
+    }
+
+    #[test]
+    fn deleting_the_row_removes_its_content() {
+        let rendered = service_with_upload("articles", "title:string");
+        let delete = rendered
+            .split("pub async fn delete")
+            .nth(1)
+            .expect("delete doit être rendu");
+
+        assert!(
+            delete.contains("storage") && delete.contains("content_key(id)"),
+            "le contenu part avec la ligne :\n{delete}"
+        );
+    }
+
+    #[test]
+    fn a_missing_object_is_the_only_client_error() {
+        let rendered = service_with_upload("articles", "title:string");
+
+        assert!(
+            rendered.contains("StorageError::NotFound(_) => Error::NotFound(\"contenu\")"),
+            "les autres erreurs du stockage sont des pannes, pas des fautes du \
+             client :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn an_ordinary_service_knows_nothing_of_storage() {
+        let rendered = service("articles", "title:string");
+
+        assert!(
+            !rendered.contains("storage") && !rendered.contains("content_key"),
+            "témoin :\n{rendered}"
+        );
+    }
+
     #[test]
     fn the_service_exposes_the_five_crud_operations() {
         let rendered = service("articles", "title:string");
@@ -189,6 +263,22 @@ mod tests {
             divergentes,
             (24..=40).collect::<Vec<usize>>(),
             "la plage où le service diverge de rustfmt a bougé"
+        );
+    }
+
+    /// La même garde, sous le drapeau : `content_key`, `put_content`, `has_content` et
+    /// `get_content` s'ajoutent au fichier et doivent, eux aussi, franchir les seuils de
+    /// rustfmt sans jamais s'en écarter.
+    #[test]
+    fn the_uploading_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(|name| {
+            service_with_upload(name, "title:string,summary:text:optional")
+        });
+
+        assert_eq!(
+            divergentes,
+            (24..=40).collect::<Vec<usize>>(),
+            "la plage où le service diverge de rustfmt a bougé sous --with-upload"
         );
     }
 
