@@ -1047,6 +1047,81 @@ mod tests {
         );
     }
 
+    /// Le rendu d'un fragment est-il déjà ce que `rustfmt` écrirait ?
+    ///
+    /// Le squelette a son balayage depuis toujours ; les fragments n'en avaient aucun. Ce
+    /// que `each_example_passes_cargo_fmt` couvre est le rendu des seules features
+    /// qu'un exemple installe, et un fragment qu'aucun n'installe n'était vérifié nulle
+    /// part. L'enjeu est celui du squelette : le workflow d'`rbs add ci` lance
+    /// `cargo fmt --check` sur le projet, et un blanc perdu par un `-%}` le fait échouer
+    /// au premier pas, sur du code que le développeur n'a pas écrit.
+    ///
+    /// Les fichiers d'un fragment sont déroulés à leur destination avant d'être formatés :
+    /// `rustfmt` suit les déclarations de modules, et un `mod.rs` seul ne résout pas ses
+    /// `mod`.
+    #[test]
+    fn each_rust_template_of_each_fragment_conforms_to_rustfmt() {
+        let renderer = Renderer::new();
+        let temp = tempfile::tempdir().expect("répertoire temporaire créable");
+
+        let mut sources = Vec::new();
+        for feature in crate::templates::embedded_names() {
+            let root = temp.path().join(&feature);
+
+            let files = Source::feature(None, &feature)
+                .expect("le fragment doit exister")
+                .files()
+                .expect("les templates embarquées doivent se lire");
+
+            for file in &files {
+                let destination = root.join(&file.destination);
+                if let Some(parent) = destination.parent() {
+                    fs::create_dir_all(parent).expect("le répertoire est créable");
+                }
+
+                let rendered = renderer
+                    .render(&file.source, feature_context(&[]))
+                    .unwrap_or_else(|error| {
+                        panic!(
+                            "{feature}/{} ne se rend pas : {error}",
+                            file.destination.display()
+                        )
+                    });
+                fs::write(&destination, rendered).expect("le rendu est écrivable");
+
+                if destination
+                    .extension()
+                    .is_some_and(|suffixe| suffixe == "rs")
+                {
+                    sources.push((
+                        format!("{feature}/{}", file.destination.display()),
+                        destination,
+                    ));
+                }
+            }
+        }
+
+        assert!(
+            !sources.is_empty(),
+            "aucun fragment ne dépose de fichier Rust"
+        );
+
+        for (relatif, path) in sources {
+            let output = std::process::Command::new("rustfmt")
+                .args(["--edition", "2024", "--check"])
+                .arg(&path)
+                .output()
+                .expect("rustfmt doit être lançable");
+
+            assert!(
+                output.status.success(),
+                "{relatif} n'est pas conforme à rustfmt :\n{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+        }
+    }
+
     #[test]
     fn the_audit_fragment_declares_its_migration_and_its_single_anchor() {
         let source = read(&Path::new(RACINE_FEATURES).join("audit/feature.toml"));
