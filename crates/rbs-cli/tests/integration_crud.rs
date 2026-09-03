@@ -788,6 +788,29 @@ fn the_deposited_content_round_trips_through_the_running_server() {
         &[],
     );
     assert_eq!(statut, 404, "HEAD doit refléter l'absence de contenu");
+
+    // La borne de taille n'était prouvée que par une assertion de chaîne sur le `mod.rs`
+    // engendré : que la constante y figure ne dit pas qu'un dépôt qui la franchit est
+    // refusé. La valeur est figée des deux côtés de la frontière — la template écrit
+    // `TAILLE_MAX`, ce banc le relit ici ; les deux bougent ensemble ou pas du tout.
+    const TAILLE_MAX: usize = 10 * 1024 * 1024;
+
+    let (statut, _) = raw_request(
+        port,
+        "PUT",
+        &format!("/attachments/{id}/content"),
+        &vec![b'x'; TAILLE_MAX + 1],
+    );
+    assert_eq!(
+        statut, 413,
+        "un octet de trop franchit la borne de {TAILLE_MAX} : le dépôt doit être refusé"
+    );
+
+    // Et la borne ne mange pas ce qu'elle doit laisser passer : le contenu déposé plus
+    // haut se relit à l'identique après le refus.
+    let (statut, relu) = raw_request(port, "GET", &format!("/attachments/{id}/content"), &[]);
+    assert_eq!(statut, 200, "le refus ne doit rien avoir écrasé");
+    assert_eq!(relu, DEPOSE, "le contenu déposé a changé sous le refus");
 }
 
 /// Un port que personne n'écoute au moment de l'appel.
@@ -886,11 +909,21 @@ fn envoyer(
     let mut trame = entete.into_bytes();
     trame.extend_from_slice(corps);
 
-    flux.write_all(&trame).expect("la requête doit partir");
+    // Écriture et lecture sont réconciliées après coup : un corps refusé pour sa taille
+    // reçoit sa réponse avant d'avoir été lu en entier, et le flux se ferme sous
+    // l'écriture qui reste. Une réponse est alors déjà là, et c'est elle qu'on veut ; ce
+    // n'est que si rien n'est arrivé que la rupture devient l'échec à rapporter.
+    let ecriture = flux.write_all(&trame);
 
     let mut reponse = Vec::new();
-    flux.read_to_end(&mut reponse)
-        .expect("la réponse doit être lisible");
+    let lecture = flux.read_to_end(&mut reponse);
+
+    if reponse.is_empty() {
+        ecriture.expect("la requête doit partir");
+        lecture.expect("la réponse doit être lisible");
+
+        panic!("le serveur a fermé le flux sans rien répondre");
+    }
 
     let separateur = reponse
         .windows(4)
