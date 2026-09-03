@@ -794,10 +794,12 @@ mod tests {
             "ci",
             "cors",
             "docker",
+            "jobs",
             "mail",
             "observability",
             "rate-limit",
             "redis",
+            "scheduler",
             "storage",
         ] {
             assert!(
@@ -1244,6 +1246,30 @@ mod tests {
             1,
             "le dépilage doit tenir dans une fonction unique :\n{queue}"
         );
+    }
+
+    #[test]
+    fn the_scheduler_fragment_requires_jobs_and_carries_both_anchors() {
+        let source = read(&Path::new(RACINE_FEATURES).join("scheduler/feature.toml"));
+        let manifest = crate::manifest::read(&source, "scheduler/feature.toml")
+            .expect("le manifeste du fragment scheduler doit se lire");
+
+        // Le scheduler déclenche sans exécuter : sans la file, il n'aurait nulle part où
+        // enfiler, et l'installation poserait un projet qui ne compile pas.
+        assert_eq!(manifest.feature.requires, ["jobs"]);
+
+        let migration = manifest
+            .migration
+            .as_ref()
+            .expect("le fragment pose une table, il doit donc porter une migration");
+        assert_eq!(migration.name, "create_schedules");
+
+        let ancres: Vec<&str> = manifest
+            .anchors
+            .iter()
+            .map(|ancre| ancre.anchor.as_str())
+            .collect();
+        assert_eq!(ancres, ["features", "startup"]);
     }
 
     /// Une balise Jinja de contrôle (`{%- if … %}`, `{%- endif %}`) s'écrit au ras de la
