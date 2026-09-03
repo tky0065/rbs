@@ -31,6 +31,13 @@ mod tests {
         render(&Feature::fresh(name, fields).uploading()).expect("le service doit se rendre")
     }
 
+    /// Rend le service d'une feature qui porte les deux drapeaux à la fois.
+    fn service_uploading_and_soft_deleting(name: &str, fields: &str) -> String {
+        let fields = fields::parse(fields).expect("les champs du test doivent être valides");
+        render(&Feature::fresh(name, fields).uploading().soft_deleting())
+            .expect("le service doit se rendre")
+    }
+
     #[test]
     fn the_key_is_derived_from_the_id() {
         let rendered = service_with_upload("articles", "title:string");
@@ -75,6 +82,88 @@ mod tests {
         assert!(
             delete.contains("storage") && delete.contains("content_key(id)"),
             "le contenu part avec la ligne :\n{delete}"
+        );
+    }
+
+    /// Sous `--soft-delete`, `repository::delete` estampille `deleted_at` : la ligne
+    /// survit. En effacer le contenu la restituerait vide, ce qui ôterait son sens à la
+    /// suppression logique. Les deux drapeaux se combinent donc en : ligne marquée,
+    /// contenu conservé.
+    #[test]
+    fn a_logical_deletion_keeps_the_content_it_claims_to_preserve() {
+        let rendered = service_uploading_and_soft_deleting("articles", "title:string");
+        let delete = rendered
+            .split("pub async fn delete")
+            .nth(1)
+            .expect("delete doit être rendu")
+            .split("\n}\n")
+            .next()
+            .expect("le corps de delete est délimité par son accolade");
+
+        assert!(
+            !delete.contains("storage"),
+            "la ligne survit, son contenu aussi :\n{delete}"
+        );
+        assert!(
+            !delete.contains("content_key"),
+            "la ligne survit, son contenu aussi :\n{delete}"
+        );
+    }
+
+    /// Le code engendré doit dire *pourquoi* le contenu reste : c'est la combinaison des
+    /// deux drapeaux qui décide, et rien dans le corps de `delete` ne la laisse deviner.
+    #[test]
+    fn the_generated_deletion_says_why_the_content_stays() {
+        let rendered = service_uploading_and_soft_deleting("articles", "title:string");
+
+        assert!(
+            rendered.contains("// La suppression est logique"),
+            "la décision doit être commentée :\n{rendered}"
+        );
+    }
+
+    /// Le paramètre disparaît avec l'appel : gardé sans usage, il ferait échouer un
+    /// `clippy -D warnings` dans le projet engendré.
+    #[test]
+    fn a_logical_deletion_takes_no_store() {
+        const SIGNATURE: &str =
+            "pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<()> {";
+
+        let rendered = service_uploading_and_soft_deleting("articles", "title:string");
+
+        assert!(
+            rendered.contains(SIGNATURE),
+            "`delete` ne prend plus le magasin :\n{rendered}"
+        );
+    }
+
+    /// Témoin : sans `--soft-delete`, la ligne part pour de bon et son contenu avec elle.
+    #[test]
+    fn a_hard_deletion_still_removes_the_content() {
+        let rendered = service_with_upload("articles", "title:string");
+
+        assert!(
+            rendered.contains("storage: &dyn Storage, id: Uuid"),
+            "`delete` prend le magasin :\n{rendered}"
+        );
+        assert!(
+            !rendered.contains("// La suppression est logique"),
+            "rien de logique ici :\n{rendered}"
+        );
+    }
+
+    /// Les deux drapeaux ensemble raccourcissent la signature de `delete` : le point fixe
+    /// de rustfmt doit tenir sur cette combinaison comme sur les autres.
+    #[test]
+    fn the_uploading_and_soft_deleting_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(|name| {
+            service_uploading_and_soft_deleting(name, "title:string,summary:text:optional")
+        });
+
+        assert_eq!(
+            divergentes,
+            (24..=40).collect::<Vec<usize>>(),
+            "la plage où le service diverge de rustfmt a bougé sous les deux drapeaux"
         );
     }
 

@@ -68,6 +68,13 @@ mod tests {
         controller_with_upload(name, "title:string")
     }
 
+    /// Rend le contrôleur d'une feature dont le contenu survit à une suppression logique.
+    fn uploading_and_soft_deleting(name: &str) -> String {
+        let fields = fields::parse("title:string").expect("champs valides");
+        render(&Feature::fresh(name, fields).uploading().soft_deleting())
+            .expect("le contrôleur doit se rendre")
+    }
+
     /// Rend le contrôleur d'une feature qui porte les deux drapeaux à la fois.
     fn guarded_uploading(name: &str, role: &str) -> String {
         let fields = fields::parse("title:string").expect("champs valides");
@@ -529,6 +536,31 @@ mod tests {
             rendered.contains("content: Bytes"),
             "le corps voyage brut : en JSON il passerait en base64, donc deux fois en \
              mémoire :\n{rendered}"
+        );
+    }
+
+    /// Sous `--soft-delete`, le contenu reste : le service ne prend donc plus le magasin
+    /// pour supprimer, et le contrôleur ne le lui passe pas.
+    #[test]
+    fn a_logical_deletion_hands_the_service_no_store() {
+        let rendered = uploading_and_soft_deleting("articles");
+
+        assert!(
+            rendered.contains("service::delete(state.core().db(), id).await?;"),
+            "le magasin n'a rien à faire dans cet appel :\n{rendered}"
+        );
+    }
+
+    /// Témoin : hors suppression logique, le magasin voyage avec l'appel.
+    #[test]
+    fn a_hard_deletion_hands_the_service_its_store() {
+        let rendered = controller_uploading("articles");
+
+        assert!(
+            rendered.contains(
+                "service::delete(state.core().db(), state.storage().as_ref(), id).await?;"
+            ),
+            "le contenu part avec la ligne :\n{rendered}"
         );
     }
 

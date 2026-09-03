@@ -153,6 +153,13 @@ object, and both backends can answer it without reading one.
 Deletion goes the other way: the content leaves with the row, and `delete` being idempotent
 on both sides means a resource created without content does not fail to be deleted.
 
+Unless [`--soft-delete`](../cli/generate.md) comes along, in which case it does not. That
+flag only stamps the row, which survives; erasing its content would hand an empty resource
+back to whoever restores it, and emptying the row of its payload is what the stamp exists to
+avoid. The two flags therefore combine into: row stamped, content kept. The generated
+`delete` says so in a comment and takes no store at all — remove the object there if your
+own purge is meant to carry it away.
+
 The content travels outside the DTO, as `application/octet-stream` rather than JSON:
 
 ```rust file=examples/file-drop/src/uploads/controller.rs region=put_content

@@ -120,7 +120,7 @@ fn content_key(id: Uuid) -> String {
     Ok({@ chaine("repository::update(db, " ~ singular ~ ")", [".await?", ".into()"], "    ") @})
 }
 
-{%- if with_upload %}
+{%- if with_upload and not soft_delete %}
 
 {@ entete("delete", ["db: &DatabaseConnection", "storage: &dyn Storage", "id: Uuid"], "Result<()>") @}
     if !repository::delete(db, id).await? {
@@ -134,6 +134,25 @@ fn content_key(id: Uuid) -> String {
         .await
         .map_err(|error| Error::Internal(anyhow::anyhow!("{error}")))
 }
+{%- else %}
+
+pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<()> {
+    if !repository::delete(db, id).await? {
+        return Err(Error::NotFound("{@ singular @}"));
+    }
+{%- if with_upload %}
+
+    // La suppression est logique : la ligne reste, marquée d'une date. En effacer le
+    // contenu la restituerait vide à qui la restaure, ce qui ôterait son sens au
+    // marquage. Retirez l'objet du magasin ici si votre purge doit l'emporter.
+    Ok(())
+{%- else %}
+
+    Ok(())
+{%- endif %}
+}
+{%- endif %}
+{%- if with_upload %}
 
 /// Dépose le contenu de `id`, la ressource devant exister.
 {@ entete("put_content", ["db: &DatabaseConnection", "storage: &dyn Storage", "id: Uuid", "content: Vec<u8>"], "Result<()>") @}
@@ -170,14 +189,5 @@ pub async fn get_content(storage: &dyn Storage, id: Uuid) -> Result<Vec<u8>> {
             StorageError::NotFound(_) => Error::NotFound("contenu"),
             autre => Error::Internal(anyhow::anyhow!("{autre}")),
         })
-}
-{%- else %}
-
-pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<()> {
-    if !repository::delete(db, id).await? {
-        return Err(Error::NotFound("{@ singular @}"));
-    }
-
-    Ok(())
 }
 {%- endif %}

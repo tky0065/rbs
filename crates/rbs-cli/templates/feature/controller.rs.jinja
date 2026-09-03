@@ -200,7 +200,7 @@ pub async fn delete(
 {% else -%}
 pub async fn delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<StatusCode> {
 {%- endif %}
-{%- if with_upload %}
+{%- if with_upload and not soft_delete %}
     service::delete(state.core().db(), state.storage().as_ref(), id).await?;
 {%- else %}
     service::delete(state.core().db(), id).await?;

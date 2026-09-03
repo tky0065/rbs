@@ -158,6 +158,13 @@ La suppression va dans l'autre sens : le contenu part avec la ligne, et `delete`
 idempotent des deux côtés, une ressource créée sans contenu ne fait pas échouer sa
 suppression.
 
+Sauf si [`--soft-delete`](../cli/generate.md) l'accompagne. Ce drapeau ne fait qu'estampiller
+la ligne, qui survit ; en effacer le contenu restituerait une ressource vide à qui la
+restaure, et vider la ligne de sa charge utile est précisément ce que l'estampille sert à
+éviter. Les deux drapeaux se combinent donc en : ligne estampillée, contenu conservé. Le
+`delete` engendré le dit en commentaire et ne prend plus le magasin du tout — retirez-y
+l'objet si votre propre purge doit l'emporter.
+
 Le contenu voyage hors du DTO, en `application/octet-stream` plutôt qu'en JSON :
 
 ```rust file=examples/file-drop/src/uploads/controller.rs region=put_content
