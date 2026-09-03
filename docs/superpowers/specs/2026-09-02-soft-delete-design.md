@@ -159,11 +159,20 @@ qui rend puis des `assert!(rendered.contains(…))` :
 compile, migre contre PostgreSQL, et ses scénarios HTTP passent — le seul test qui prouve
 que la migration est valide.
 
-La couverture des trois moteurs est **inégale, et il faut le dire** : PostgreSQL prouve la
-branche partielle par exécution ; SQLite la prouve une seconde fois sans conteneur, ce qui
-vaut la peine puisque les deux moteurs n'écrivent pas le même SQL ; MySQL n'a pas de
-conteneur dans ce dépôt et sa branche n'est prouvée que par le rendu — le test lit que le
-`!= DbBackend::MySql` est écrit, non que MySQL l'accepte.
+La couverture des trois moteurs est **égale, et par exécution** : PostgreSQL prouve la
+branche partielle contre un conteneur ; SQLite la prouve une seconde fois sans conteneur,
+ce qui vaut la peine puisque les deux moteurs n'écrivent pas le même SQL ; et MySQL, dont
+le dépôt porte un conteneur (`common::start_mysql`), prouve l'autre branche —
+`a_soft_deleting_crud_keeps_a_global_uniqueness_on_mysql` y applique la migration et exige
+le refus du rebond, l'unicité y restant globale.
+
+Ce banc a levé au passage une crainte qui pesait sur le drapeau, et qui ne le concernait
+pas : le banc des trois moteurs engendre un CRUD sans champ `unique` ni `index`, si bien
+qu'`Index::create().if_not_exists()` n'avait jamais rencontré MySQL, qui ne connaît pas
+`IF NOT EXISTS` sur un `CREATE INDEX`. Le constructeur d'index MySQL de `sea-query 1.0.2`
+ne lit simplement jamais ce drapeau (`src/backend/mysql/index.rs`,
+`prepare_index_create_statement`) : le SQL reçu est un `CREATE UNIQUE INDEX` nu, et les
+deux index sont créés. Aucun défaut antérieur ne se cachait là.
 
 **Conformité rustfmt** : `bench::longueurs_divergentes` sur le repository et la migration,
 les deux templates écrivant elles-mêmes ce que rustfmt écrirait
