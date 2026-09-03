@@ -1,6 +1,13 @@
 use std::str::FromStr;
+use std::sync::OnceLock;
 
-use super::normaliser;
+use rbs_core::HasCoreState;
+use sea_orm::EntityTrait;
+use tokio::sync::{Mutex, MutexGuard};
+
+use super::model::Entity;
+use super::{Schedule, normaliser, sync};
+use crate::state::AppState;
 
 /// La crate `cron` attend six champs, la seconde en tête ; le crontab Unix en a cinq. Un
 /// utilisateur qui colle une ligne de son crontab doit être servi, pas puni.
@@ -33,4 +40,134 @@ fn an_expression_of_any_other_length_is_refused_by_name() {
 #[test]
 fn an_unparsable_expression_is_refused_even_with_the_right_field_count() {
     normaliser("0 99 * * *").expect_err("99 n'est pas une minute");
+}
+
+// Les tests qui suivent joignent la base que décrit `.env`, et sont donc `#[ignore]` :
+// `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre la base du
+// projet, migrations appliquées.
+
+/// Les tests qui réconcilient partagent l'unique table `schedules` : ils se relaient
+/// plutôt que de se voler leurs lignes.
+async fn table_a_soi() -> (MutexGuard<'static, ()>, AppState) {
+    static VERROU: OnceLock<Mutex<()>> = OnceLock::new();
+
+    let garde = VERROU.get_or_init(Mutex::default).lock().await;
+    let config = rbs_core::Config::load().expect("configuration lisible");
+    let db = rbs_core::db::connect(&config.database)
+        .await
+        .expect("base joignable — les migrations doivent avoir été appliquées");
+
+    Entity::delete_many()
+        .exec(&db)
+        .await
+        .expect("la table schedules doit se vider");
+    // La file est vidée aussi : un tick y dépose un job, et c'est ce compte que les
+    // tests du déclenchement examinent.
+    crate::jobs::model::Entity::delete_many()
+        .exec(&db)
+        .await
+        .expect("la table jobs doit se vider");
+
+    (
+        garde,
+        AppState::new(db, config).expect("état constructible"),
+    )
+}
+
+/// Un calendrier de test, indépendant de celui que le projet déclare.
+fn calendrier(expression: &'static str) -> Vec<Schedule> {
+    vec![Schedule::every::<crate::jobs::demo::Log>(
+        expression,
+        || crate::jobs::demo::Log {
+            message: "test".to_string(),
+        },
+    )]
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_newly_declared_schedule_is_inserted_with_its_next_occurrence() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    sync::reconcilier(db, &calendrier("0 3 * * *"))
+        .await
+        .expect("la réconciliation aboutit");
+
+    let ligne = Entity::find_by_id("log")
+        .one(db)
+        .await
+        .expect("lecture possible")
+        .expect("l'échéance déclarée doit avoir été insérée");
+
+    assert!(ligne.next_run_at > chrono::Utc::now());
+    assert!(ligne.last_run_at.is_none(), "rien n'a encore été déclenché");
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_schedule_removed_from_the_code_is_removed_from_the_table() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    sync::reconcilier(db, &calendrier("0 3 * * *"))
+        .await
+        .expect("la réconciliation aboutit");
+    // Sans cette suppression, une échéance retirée du code resterait due pour toujours,
+    // que plus personne ne réserverait ni ne ferait avancer.
+    sync::reconcilier(db, &[])
+        .await
+        .expect("la réconciliation aboutit");
+
+    assert!(
+        Entity::find_by_id("log")
+            .one(db)
+            .await
+            .expect("lecture possible")
+            .is_none(),
+        "l'échéance retirée du code survit dans la table"
+    );
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_redeploy_does_not_move_the_next_occurrence_of_a_known_schedule() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    sync::reconcilier(db, &calendrier("0 3 * * *"))
+        .await
+        .expect("la réconciliation aboutit");
+    let avant = Entity::find_by_id("log")
+        .one(db)
+        .await
+        .expect("lecture possible")
+        .expect("l'échéance existe")
+        .next_run_at;
+
+    sync::reconcilier(db, &calendrier("0 3 * * *"))
+        .await
+        .expect("la réconciliation aboutit");
+    let apres = Entity::find_by_id("log")
+        .one(db)
+        .await
+        .expect("lecture possible")
+        .expect("l'échéance existe")
+        .next_run_at;
+
+    // C'est ce qui rend un déploiement invisible pour le calendrier : un redémarrage ne
+    // rejoue pas une échéance passée et ne repousse pas une échéance imminente.
+    assert_eq!(avant, apres);
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_unparsable_expression_stops_the_reconciliation() {
+    let (_garde, state) = table_a_soi().await;
+
+    let erreur = sync::reconcilier(state.core().db(), &calendrier("0 99 * * *"))
+        .await
+        .expect_err("une expression illisible doit arrêter le démarrage");
+
+    assert!(erreur.to_string().contains("0 99 * * *"), "{erreur}");
 }
