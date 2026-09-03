@@ -190,11 +190,14 @@ have been in memory.
 ## What it leaves to you
 
 - **when to enqueue** — no route, no hook, no event. The example enqueues on broadcast
-  because that is what its domain is about;
+  because that is what its domain is about. A job that must be enqueued by the clock rather
+  than by an event is what [`rbs add scheduler`](./scheduler.md) is for: it triggers, and
+  this queue still executes;
 - **monitoring failed jobs** — the rows are there, and nothing looks at them;
 - **cleaning up done rows** — nothing prunes the table;
-- **priorities, unique jobs, cron schedules** — none of these are here. `enqueue_at` is
-  the only scheduling primitive;
+- **priorities and unique jobs** — neither is here. `enqueue_at` is the only scheduling
+  primitive this fragment carries; cron expressions live in the
+  [scheduler](./scheduler.md), which enqueues into this very table;
 - **a second process for the worker** — the worker runs inside the API process. Splitting
   them means a second binary, which is yours to add.
 
