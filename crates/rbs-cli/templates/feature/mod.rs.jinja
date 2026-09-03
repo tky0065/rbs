@@ -11,7 +11,8 @@ mod tests;
 use axum::Router;
 {%- if with_upload %}
 use axum::extract::DefaultBodyLimit;
-use axum::routing::head;
+{#- `head` s'appelle en méthode sur le `MethodRouter` que rend `put(...)`, jamais comme
+    fonction libre : l'importer en plus ferait un import mort, que clippy refuse. #}
 use axum::routing::{get, post, put};
 {%- else %}
 use axum::routing::{get, post};

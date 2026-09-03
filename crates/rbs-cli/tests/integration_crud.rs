@@ -5,6 +5,11 @@
 //! PostgreSQL. Aucune étape n'est simulée — le binaire `rbs` est invoqué comme un
 //! utilisateur l'invoquerait.
 
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::process::Stdio;
+use std::time::{Duration, Instant};
+
 use assert_cmd::Command;
 use tempfile::TempDir;
 use testcontainers::core::wait::LogWaitStrategy;
@@ -592,6 +597,315 @@ fn a_soft_deleting_crud_keeps_a_global_uniqueness_on_mysql() {
         joues.contains("test soft_memos::tests::a_replayed_unique_value_returns_409 ... ok"),
         "le refus du doublon n'a pas été joué sur MySQL :\n{joues}"
     );
+}
+
+/// Le CRUD à routes de contenu compile contre le trait que le fragment installe.
+///
+/// Les tests unitaires comparent des chaînes de caractères : seul ce banc dit si les
+/// appels engendrés — `state.storage()`, puis les cinq méthodes de `Storage` derrière —
+/// satisfont réellement la signature du trait, et si le tout passe clippy sans
+/// avertissement.
+#[test]
+#[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn an_uploading_crud_compiles_against_the_storage_trait() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+
+    rbs(&projet).args(["add", "storage"]).assert().success();
+    rbs(&projet)
+        .args([
+            "generate",
+            "crud",
+            "attachments",
+            "--fields",
+            "title:string",
+            "--with-upload",
+        ])
+        .assert()
+        .success();
+
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
+    Command::new("cargo")
+        .current_dir(&projet)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .arg("build")
+        .assert()
+        .success();
+
+    // `--all-targets`, pour que `src/attachments/tests.rs` entre dans la compilation
+    // vérifiée, et `-D warnings` : c'est la commande que `rbs add ci` inscrit dans le
+    // workflow livré, celle qui jugerait ce code chez l'utilisateur.
+    Command::new("cargo")
+        .current_dir(&projet)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .args([
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings",
+        ])
+        .assert()
+        .success();
+}
+
+/// `--with-upload` sur un projet sans le fragment `storage` refuse en nommant la commande
+/// qui répare, avant d'avoir rien écrit.
+#[test]
+#[ignore = "engendre un projet complet"]
+fn uploading_without_the_storage_feature_is_refused() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+
+    let sortie = rbs(&projet)
+        .args([
+            "generate",
+            "crud",
+            "attachments",
+            "--fields",
+            "title:string",
+            "--with-upload",
+        ])
+        .assert()
+        .failure()
+        .get_output()
+        .clone();
+
+    let erreur = String::from_utf8_lossy(&sortie.stderr);
+    assert!(
+        erreur.contains("rbs add storage"),
+        "le refus doit nommer la commande qui répare : {erreur}"
+    );
+    assert!(
+        !projet.join("src/attachments").exists(),
+        "le refus tombe avant tout écrit : src/attachments ne devrait pas exister"
+    );
+}
+
+/// Ce que ni la compilation ni clippy ne peuvent dire : l'octet déposé par `PUT` est celui
+/// que `GET` rend, et `HEAD` reflète bien la présence ou l'absence d'un contenu.
+///
+/// Le backend `fs` du fragment `storage` n'exige aucun service : un répertoire suffit. La
+/// base est SQLite, un fichier du projet, pour la même raison — aucun conteneur à faire
+/// tenir en plus du binaire compilé.
+#[test]
+#[ignore = "compile un projet Axum + SeaORM complet et lance son binaire : plusieurs minutes"]
+fn the_deposited_content_round_trips_through_the_running_server() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+
+    rbs(parent.path())
+        .args([
+            "new",
+            "demo-api",
+            "--database",
+            "sqlite",
+            "--database-url",
+            "sqlite://demo_api.db?mode=rwc",
+            "--core-path",
+            common::noyau()
+                .to_str()
+                .expect("chemin du noyau représentable"),
+            "--yes",
+        ])
+        .assert()
+        .success();
+
+    let projet = parent.path().join("demo-api");
+
+    rbs(&projet).args(["add", "storage"]).assert().success();
+    rbs(&projet)
+        .args([
+            "generate",
+            "crud",
+            "attachments",
+            "--fields",
+            "title:string",
+            "--with-upload",
+        ])
+        .assert()
+        .success();
+
+    // Une cible propre à ce banc : SQLite active des features `sea-orm` que PostgreSQL
+    // n'active pas, comme pour les bancs de suppression logique ci-dessus — une cible
+    // commune ferait recompiler l'un pour l'autre à chaque bascule.
+    let cible = common::cible_pour("attachments-sqlite");
+    let _verrou = common::verrou(&cible);
+
+    rbs(&projet)
+        .env("CARGO_TARGET_DIR", &cible)
+        .args(["migrate", "up"])
+        .assert()
+        .success();
+
+    Command::new("cargo")
+        .current_dir(&projet)
+        .env("CARGO_TARGET_DIR", &cible)
+        .arg("build")
+        .assert()
+        .success();
+
+    let serveur = Serveur::lancer(&projet, &cible, "demo-api");
+    let port = serveur.port;
+
+    let (statut, corps) = json_request(port, "POST", "/attachments", br#"{"title":"note"}"#);
+    assert_eq!(
+        statut,
+        201,
+        "la création doit aboutir : {}",
+        String::from_utf8_lossy(&corps)
+    );
+    let cree: serde_json::Value =
+        serde_json::from_slice(&corps).expect("le corps créé doit être du JSON");
+    let id = cree["id"].as_str().expect("la réponse doit porter un id");
+
+    const DEPOSE: &[u8] = b"un contenu binaire quelconque, pas seulement du texte \xff\xfe";
+
+    let (statut, _) = raw_request(port, "PUT", &format!("/attachments/{id}/content"), DEPOSE);
+    assert_eq!(statut, 204, "le dépôt du contenu doit aboutir");
+
+    let (statut, relu) = raw_request(port, "GET", &format!("/attachments/{id}/content"), &[]);
+    assert_eq!(statut, 200, "le contenu déposé doit se relire");
+    assert_eq!(
+        relu, DEPOSE,
+        "l'octet rendu par GET diffère de celui déposé par PUT"
+    );
+
+    let (statut, _) = raw_request(port, "HEAD", &format!("/attachments/{id}/content"), &[]);
+    assert_eq!(
+        statut, 204,
+        "HEAD doit refléter la présence d'un contenu déposé"
+    );
+
+    // Un identifiant jamais créé : aucune ligne, donc aucun contenu à trouver.
+    let (statut, _) = raw_request(
+        port,
+        "HEAD",
+        "/attachments/00000000-0000-4000-8000-000000000099/content",
+        &[],
+    );
+    assert_eq!(statut, 404, "HEAD doit refléter l'absence de contenu");
+}
+
+/// Un port que personne n'écoute au moment de l'appel.
+fn free_port() -> u16 {
+    TcpListener::bind("127.0.0.1:0")
+        .expect("l'hôte doit pouvoir prêter un port")
+        .local_addr()
+        .expect("adresse locale lisible")
+        .port()
+}
+
+/// Attend que le serveur accepte les connexions sur `port`.
+fn wait_for_listening(port: u16) {
+    let limite = Instant::now() + Duration::from_secs(60);
+
+    while Instant::now() < limite {
+        if TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            return;
+        }
+
+        std::thread::sleep(Duration::from_millis(100));
+    }
+
+    panic!("le serveur n'écoute toujours pas sur {port} après 60 s");
+}
+
+/// Le binaire d'un projet, lancé sur un port libre, arrêté quand ce garde tombe.
+///
+/// `Drop` plutôt qu'un arrêt explicite : une assertion qui échoue au milieu du parcours
+/// déroule la pile sans jamais l'atteindre, et laisserait sinon un serveur ouvert derrière
+/// elle.
+struct Serveur {
+    processus: std::process::Child,
+    port: u16,
+}
+
+impl Serveur {
+    fn lancer(racine: &std::path::Path, cible: &std::path::Path, binaire: &str) -> Self {
+        let port = free_port();
+
+        let processus = std::process::Command::new(cible.join("debug").join(binaire))
+            .current_dir(racine)
+            .env("RBS_SERVER__PORT", port.to_string())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("le binaire du projet doit être lançable");
+
+        wait_for_listening(port);
+
+        Self { processus, port }
+    }
+}
+
+impl Drop for Serveur {
+    fn drop(&mut self) {
+        let _ = self.processus.kill();
+        let _ = self.processus.wait();
+    }
+}
+
+/// Joue une requête `POST` au corps JSON, et rend son statut avec son corps en octets.
+fn json_request(port: u16, methode: &str, chemin: &str, corps: &[u8]) -> (u16, Vec<u8>) {
+    envoyer(port, methode, chemin, "application/json", corps)
+}
+
+/// Joue une requête dont le corps est binaire, et rend son statut avec son corps en
+/// octets.
+///
+/// Écrite à la main plutôt qu'avec un client HTTP : le corps d'un `GET .../content` n'est
+/// pas du texte, et un client qui le décoderait comme tel perdrait la preuve même que ce
+/// banc cherche à faire — que l'octet rendu est bien celui qui a été déposé.
+fn raw_request(port: u16, methode: &str, chemin: &str, corps: &[u8]) -> (u16, Vec<u8>) {
+    envoyer(port, methode, chemin, "application/octet-stream", corps)
+}
+
+fn envoyer(
+    port: u16,
+    methode: &str,
+    chemin: &str,
+    content_type: &str,
+    corps: &[u8],
+) -> (u16, Vec<u8>) {
+    let mut flux = TcpStream::connect(("127.0.0.1", port)).expect("le serveur doit répondre");
+
+    let mut entete =
+        format!("{methode} {chemin} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n");
+    if !corps.is_empty() {
+        entete.push_str(&format!(
+            "Content-Type: {content_type}\r\nContent-Length: {}\r\n",
+            corps.len()
+        ));
+    }
+    entete.push_str("\r\n");
+
+    let mut trame = entete.into_bytes();
+    trame.extend_from_slice(corps);
+
+    flux.write_all(&trame).expect("la requête doit partir");
+
+    let mut reponse = Vec::new();
+    flux.read_to_end(&mut reponse)
+        .expect("la réponse doit être lisible");
+
+    let separateur = reponse
+        .windows(4)
+        .position(|fenetre| fenetre == b"\r\n\r\n")
+        .expect("la réponse doit séparer ses en-têtes de son corps");
+
+    let entetes = String::from_utf8_lossy(&reponse[..separateur]);
+    let statut = entetes
+        .lines()
+        .next()
+        .and_then(|ligne| ligne.split_whitespace().nth(1))
+        .and_then(|code| code.parse().ok())
+        .unwrap_or_else(|| panic!("réponse sans ligne de statut lisible :\n{entetes}"));
+
+    (statut, reponse[separateur + 4..].to_vec())
 }
 
 /// Le binaire livré, lancé depuis `repertoire`.
