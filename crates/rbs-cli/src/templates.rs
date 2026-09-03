@@ -1272,6 +1272,32 @@ mod tests {
         assert_eq!(ancres, ["features", "startup"]);
     }
 
+    /// Le guide `AGENTS.md` énumère les features installables à la main.
+    ///
+    /// La liste ne se déduit d'aucun catalogue : elle avait vieilli en silence, et un
+    /// agent lisant le guide d'un projet fraîchement engendré s'y voyait refuser une
+    /// feature que le binaire sait pourtant poser. C'est ce test qui doit mordre à la
+    /// livraison du fragment suivant, dans les deux langues.
+    #[test]
+    fn each_agents_guide_names_every_installable_feature() {
+        let installables = Source::feature(None, "_aucune_feature_de_ce_nom_")
+            .expect_err("ce nom ne doit désigner aucun fragment")
+            .known;
+
+        for langue in ["en.md.jinja", "fr.md.jinja"] {
+            let guide = read(
+                &Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/agents")).join(langue),
+            );
+
+            for feature in installables.split(", ") {
+                assert!(
+                    guide.contains(feature),
+                    "`{feature}` s'installe mais {langue} ne la nomme pas"
+                );
+            }
+        }
+    }
+
     /// Une balise Jinja de contrôle (`{%- if … %}`, `{%- endif %}`) s'écrit au ras de la
     /// marge par convention du dépôt, quelle que soit la profondeur YAML environnante :
     /// elle ne porte donc aucune indentation à retirer, dans aucun des deux fichiers.

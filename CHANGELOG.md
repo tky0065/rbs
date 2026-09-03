@@ -14,6 +14,15 @@ between minor versions with no deprecation cycle.
 
 ### Added
 
+- `rbs add scheduler` installs calendar triggering: a due schedule enqueues a job in the
+  existing queue, once, however many replicas are running. It pulls in `jobs` — the
+  scheduler triggers, it does not execute — and the calendar is declared in code, in
+  `src/scheduler/mod.rs`, where `Schedule::every::<J>` takes the `kind` from `J::KIND`, so
+  a schedule aiming at an unregistered job cannot be written. A reservation is one
+  conditional `UPDATE` on `next_run_at`, sharing its transaction with the enqueue, so no
+  crash can advance a schedule without creating its job. Expressions take five fields as
+  well as six — a line pasted from a crontab is served, not punished — and are evaluated
+  in UTC; a single unreadable one stops start-up by name.
 - `rbs generate crud --with-upload` mounts three content routes on the generated
   resource — `PUT`, `GET` and `HEAD` on `/<resource>/{id}/content` — backed by the
   `storage` fragment's trait. The body travels as `application/octet-stream`, not JSON:
