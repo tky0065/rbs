@@ -4,8 +4,10 @@ pub mod model;
 pub mod queue;
 pub mod worker;
 
+// `pub(crate)` : la file est une table partagée, et le verrou que ses tests posent doit
+// pouvoir être pris par ceux d'un fragment qui y enfile.
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use std::collections::HashMap;
 use std::future::Future;
