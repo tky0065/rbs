@@ -1,0 +1,89 @@
+use std::time::Duration;
+
+use chrono::Utc;
+use rbs_core::HasCoreState;
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, TransactionTrait};
+
+use super::model::{Column, Entity};
+use super::{Config, Schedule, a_la_seconde, schedules, sync};
+use crate::state::AppState;
+
+/// Examine le calendrier jusqu'à l'arrêt du processus.
+pub async fn run(state: AppState) -> anyhow::Result<()> {
+    let config = Config::load()?;
+    let schedules = schedules();
+    let db = state.core().db();
+
+    sync::reconcilier(db, &schedules).await?;
+
+    let attente = Duration::from_secs(config.poll_interval_secs);
+    tracing::info!(
+        echeances = schedules.len(),
+        poll_interval_secs = config.poll_interval_secs,
+        "calendrier prêt"
+    );
+
+    loop {
+        // Une base momentanément injoignable ne condamne pas le calendrier : le ticker
+        // retente au tour suivant plutôt que de rendre la main pour de bon.
+        if let Err(error) = tick(db, &schedules).await {
+            tracing::error!(%error, "examen du calendrier impossible");
+        }
+
+        tokio::time::sleep(attente).await;
+    }
+}
+
+/// Réserve puis déclenche toutes les échéances dues, et rend leur nombre.
+pub(super) async fn tick(db: &DatabaseConnection, schedules: &[Schedule]) -> anyhow::Result<usize> {
+    let mut declenchees = 0;
+
+    for schedule in schedules {
+        if reserver_et_enfiler(db, schedule).await? {
+            declenchees += 1;
+        }
+    }
+
+    Ok(declenchees)
+}
+
+/// Tente de gagner une échéance, et enfile son job si elle est gagnée.
+///
+/// La réservation et l'enfilage partagent une transaction : sans elle, un arrêt entre les
+/// deux avancerait l'échéance sans créer le job, et personne ne s'en apercevrait avant
+/// l'occurrence suivante.
+async fn reserver_et_enfiler(db: &DatabaseConnection, schedule: &Schedule) -> anyhow::Result<bool> {
+    let horaire = schedule.compiler()?;
+    let maintenant = a_la_seconde(Utc::now().fixed_offset());
+
+    let prochaine = horaire
+        .after(&maintenant)
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("`{}` n'a plus aucune occurrence", schedule.expression))?;
+
+    let transaction = db.begin().await?;
+
+    // La condition porte sur `next_run_at` et non sur une lecture préalable : c'est ce
+    // qui rend la réservation atomique. Le verrou de ligne que l'`UPDATE` pose fait
+    // attendre le réplica suivant, qui relit une échéance déjà avancée et n'affecte rien.
+    let reserve = Entity::update_many()
+        .col_expr(Column::NextRunAt, a_la_seconde(prochaine).into())
+        .col_expr(Column::LastRunAt, maintenant.into())
+        .col_expr(Column::UpdatedAt, maintenant.into())
+        .filter(Column::Kind.eq(schedule.kind))
+        .filter(Column::NextRunAt.lte(maintenant))
+        .exec(&transaction)
+        .await?;
+
+    if reserve.rows_affected == 0 {
+        transaction.rollback().await?;
+        return Ok(false);
+    }
+
+    schedule.enfiler(&transaction).await?;
+    transaction.commit().await?;
+
+    tracing::debug!(kind = schedule.kind, "échéance déclenchée");
+
+    Ok(true)
+}

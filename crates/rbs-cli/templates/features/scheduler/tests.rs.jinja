@@ -2,11 +2,11 @@ use std::str::FromStr;
 use std::sync::OnceLock;
 
 use rbs_core::HasCoreState;
-use sea_orm::EntityTrait;
+use sea_orm::{ActiveModelTrait, DatabaseConnection, EntityTrait};
 use tokio::sync::{Mutex, MutexGuard};
 
-use super::model::Entity;
-use super::{Schedule, normaliser, sync};
+use super::model::{ActiveModel, Entity};
+use super::{Schedule, normaliser, sync, ticker};
 use crate::state::AppState;
 
 /// La crate `cron` attend six champs, la seconde en tête ; le crontab Unix en a cinq. Un
@@ -170,4 +170,120 @@ async fn an_unparsable_expression_stops_the_reconciliation() {
         .expect_err("une expression illisible doit arrêter le démarrage");
 
     assert!(erreur.to_string().contains("0 99 * * *"), "{erreur}");
+}
+
+/// Pose une échéance déjà due, en court-circuitant la réconciliation.
+async fn echeance_due(db: &DatabaseConnection) {
+    use sea_orm::ActiveValue::Set;
+
+    let maintenant = super::a_la_seconde(chrono::Utc::now().fixed_offset());
+
+    ActiveModel {
+        kind: Set("log".to_string()),
+        next_run_at: Set((chrono::Utc::now() - chrono::TimeDelta::hours(1)).fixed_offset()),
+        last_run_at: Set(None),
+        created_at: Set(maintenant),
+        updated_at: Set(maintenant),
+    }
+    .insert(db)
+    .await
+    .expect("l'échéance due s'insère");
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_due_schedule_enqueues_its_job_and_moves_on() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+    echeance_due(db).await;
+
+    let declenchees = ticker::tick(db, &calendrier("0 3 * * *"))
+        .await
+        .expect("le tick aboutit");
+    assert_eq!(declenchees, 1);
+
+    let ligne = Entity::find_by_id("log")
+        .one(db)
+        .await
+        .expect("lecture possible")
+        .expect("l'échéance existe");
+    assert!(
+        ligne.next_run_at > chrono::Utc::now(),
+        "l'échéance n'a pas avancé"
+    );
+    assert!(
+        ligne.last_run_at.is_some(),
+        "le déclenchement n'est pas daté"
+    );
+
+    // C'est le job qui compte : une échéance qui avance sans rien enfiler serait une
+    // horloge qui tourne à vide.
+    let jobs = crate::jobs::model::Entity::find()
+        .all(db)
+        .await
+        .expect("lecture possible");
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].kind, "log");
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_schedule_that_is_not_due_is_left_alone() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    sync::reconcilier(db, &calendrier("0 3 * * *"))
+        .await
+        .expect("la réconciliation aboutit");
+
+    let declenchees = ticker::tick(db, &calendrier("0 3 * * *"))
+        .await
+        .expect("le tick aboutit");
+
+    assert_eq!(declenchees, 0);
+    assert!(
+        crate::jobs::model::Entity::find()
+            .all(db)
+            .await
+            .expect("lecture possible")
+            .is_empty(),
+        "un job est né d'une échéance qui n'était pas due"
+    );
+}
+
+/// La garantie qui justifie d'avoir mis le calendrier en base plutôt que dans le
+/// processus : trois réplicas, une seule purge nocturne.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+#[ignore = "joint la base du projet"]
+async fn concurrent_tickers_trigger_a_due_schedule_exactly_once() {
+    const TICKERS: usize = 8;
+
+    let (_garde, state) = table_a_soi().await;
+    echeance_due(state.core().db()).await;
+
+    let mut taches = Vec::new();
+    for _ in 0..TICKERS {
+        let db = state.core().db().clone();
+        taches.push(tokio::spawn(async move {
+            ticker::tick(&db, &calendrier("0 3 * * *"))
+                .await
+                .expect("le tick aboutit")
+        }));
+    }
+
+    let mut declenchees = 0;
+    for tache in taches {
+        declenchees += tache.await.expect("le ticker ne panique pas");
+    }
+
+    assert_eq!(
+        declenchees, 1,
+        "{declenchees} réplicas ont cru gagner l'échéance"
+    );
+
+    let jobs = crate::jobs::model::Entity::find()
+        .all(state.core().db())
+        .await
+        .expect("lecture possible");
+    assert_eq!(jobs.len(), 1, "l'échéance a enfilé {} job(s)", jobs.len());
 }
