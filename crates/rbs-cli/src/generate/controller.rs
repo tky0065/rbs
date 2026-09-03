@@ -68,6 +68,13 @@ mod tests {
         controller_with_upload(name, "title:string")
     }
 
+    /// Rend le contrôleur d'une feature qui porte les deux drapeaux à la fois.
+    fn guarded_uploading(name: &str, role: &str) -> String {
+        let fields = fields::parse("title:string").expect("champs valides");
+        render(&Feature::fresh(name, fields).guarded(role).uploading())
+            .expect("le contrôleur doit se rendre")
+    }
+
     fn module_uploading(name: &str) -> String {
         let fields = fields::parse("title:string").expect("champs valides");
         render_mod(&Feature::fresh(name, fields).uploading(), true)
@@ -522,6 +529,82 @@ mod tests {
             rendered.contains("content: Bytes"),
             "le corps voyage brut : en JSON il passerait en base64, donc deux fois en \
              mémoire :\n{rendered}"
+        );
+    }
+
+    /// `PUT /<ressource>/{id}/content` remplace la charge utile de la ressource : c'est une
+    /// écriture, et le garde qui couvre `create`, `update` et `delete` doit la couvrir.
+    /// `GET` et `HEAD` sont des lectures, et restent ouvertes comme `list` et `find`.
+    #[test]
+    fn the_guard_protects_the_content_deposit() {
+        let rendered = guarded_uploading("articles", "admin");
+        let depot = handler(&rendered, "put_content");
+
+        assert!(
+            depot.contains("identite: Identity,"),
+            "`put_content` doit extraire l'identité :\n{depot}"
+        );
+        assert!(
+            depot.contains("identite.require_role(Role::Admin)?;"),
+            "`put_content` doit exiger le rôle :\n{depot}"
+        );
+    }
+
+    #[test]
+    fn the_guard_spares_the_two_content_reads() {
+        let rendered = guarded_uploading("articles", "admin");
+
+        for name in ["get_content", "head_content"] {
+            let bloc = handler(&rendered, name);
+
+            assert!(
+                !bloc.contains("Identity") && !bloc.contains("require_role"),
+                "relire un contenu est une lecture, `{name}` reste ouverte :\n{bloc}"
+            );
+        }
+    }
+
+    /// Quatre écritures sous les deux drapeaux, donc quatre contrats à annoncer.
+    #[test]
+    fn the_guarded_deposit_declares_the_bearer_and_the_two_refusals() {
+        let rendered = guarded_uploading("articles", "admin");
+
+        for annotation in [
+            r#"security(("bearer" = []))"#,
+            "status = 401",
+            "status = 403",
+        ] {
+            assert_eq!(
+                rendered.matches(annotation).count(),
+                4,
+                "« {annotation} » doit figurer sur les quatre écritures :\n{rendered}"
+            );
+        }
+    }
+
+    /// Témoin : sans `--role`, les trois routes de contenu ne portent rien du garde.
+    #[test]
+    fn without_a_role_the_content_routes_carry_nothing_of_the_guard() {
+        let rendered = controller_uploading("articles");
+
+        assert!(
+            !rendered.contains("Identity")
+                && !rendered.contains("require_role")
+                && !rendered.contains("status = 401"),
+            "sans `--role`, le rendu des routes de contenu est inchangé :\n{rendered}"
+        );
+    }
+
+    /// Le garde allonge une quatrième signature, déjà éclatée sans condition de longueur.
+    /// La frontière reste celle des autres rendus du contrôleur.
+    #[test]
+    fn the_guarded_uploading_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(|name| guarded_uploading(name, "admin"));
+
+        assert_eq!(
+            divergentes,
+            (24..=40).collect::<Vec<usize>>(),
+            "la plage où le contrôleur gardé à routes de contenu diverge de rustfmt a bougé"
         );
     }
 

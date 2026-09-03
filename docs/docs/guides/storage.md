@@ -128,6 +128,10 @@ the backend is `fs`, which needs none of it.
 | `GET` | 200, `application/octet-stream` | 404 | 404 |
 | `HEAD` | 204 | 404 | 404 |
 
+Add [`--role`](../cli/generate.md) and the `PUT` joins the guarded writes: it takes an
+`Identity` and calls `require_role` like `create`, `update` and `delete` — replacing a
+resource's payload is a write. `GET` and `HEAD` stay open, as `list` and `find` do.
+
 Without the `storage` feature the flag is refused before anything is written:
 
 ```text

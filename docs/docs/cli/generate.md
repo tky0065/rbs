@@ -57,7 +57,7 @@ Options:
       --force              Écrit même si le working tree Git est sale
       --dry-run            Affiche le plan sans rien écrire
       --has-many <ENTITE>  Entité enfant dont ce modèle doit porter la variante inverse, répétable
-      --role <ROLE>        Réserve create, update et delete à ce rôle ; exige la feature auth
+      --role <ROLE>        Réserve les écritures à ce rôle ; exige la feature auth
       --soft-delete        Rend le DELETE logique : la ligne reste, marquée d'une date de suppression
       --with-upload        Ajoute trois routes de contenu binaire ; exige la feature storage
   -h, --help               Print help
@@ -70,9 +70,9 @@ Options:
 | `--force` | Writes even though the Git working tree is dirty, and overwrites files reported as conflicting. |
 | `--dry-run` | Prints the plan and stops. Nothing is written. |
 | `--has-many <ENTITE>` | Repairs the far side of a relation: writes into the model of an already generated feature the `has_many` variant pointing at the named child, and nothing else. Repeatable. [The relations guide](../guides/relations.md) covers when it is needed. |
-| `--role <ROLE>` | Reserves `create`, `update` and `delete` to that role: they take an `Identity` and call `require_role`, while `list` and `find` stay open. Requires the [`auth`](../guides/auth.md) feature, and a role its `Role` enum declares — both are checked before anything is written. |
+| `--role <ROLE>` | Reserves the writes to that role — `create`, `update`, `delete`, and the `PUT` of the content route when `--with-upload` comes along: they take an `Identity` and call `require_role`. The reads stay open: `list`, `find`, `filter`, and the content route's `GET` and `HEAD`. Requires the [`auth`](../guides/auth.md) feature, and a role its `Role` enum declares — both are checked before anything is written. |
 | `--soft-delete` | Makes `DELETE` logical instead of removing the row. The HTTP contract does not change, and a `unique` field's constraint narrows to live rows — on MySQL it stays global, so a deleted value stays reserved there. [The migrations guide](../guides/migrations.md#soft-delete) has the rest. |
-| `--with-upload` | Mounts three routes on `/<resource>/{id}/content` — `PUT`, `GET`, `HEAD` — against the `storage` fragment's trait. Requires the [`storage`](../guides/storage.md) feature, checked before anything is written. |
+| `--with-upload` | Mounts three routes on `/<resource>/{id}/content` — `PUT`, `GET`, `HEAD` — against the `storage` fragment's trait. Requires the [`storage`](../guides/storage.md) feature, checked before anything is written. With `--role`, the `PUT` is guarded like the other writes. [The storage guide](../guides/storage.md#generated-content-routes) has the rest. |
 
 ## `rbs generate feature`
 

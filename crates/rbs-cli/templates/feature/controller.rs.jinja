@@ -216,18 +216,31 @@ pub async fn delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> Resu
     put,
     path = "/{@ module @}/{id}/content",
     tag = "{@ module @}",
+{%- if role %}
+    security(("bearer" = [])),
+{%- endif %}
     params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
     request_body(content = String, content_type = "application/octet-stream"),
     responses(
         (status = 204, description = "contenu déposé"),
+{%- if role %}
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
+{%- endif %}
         (status = 404, description = "{@ singular @} introuvable", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn put_content(
     State(state): State<AppState>,
+{%- if role %}
+    identite: Identity,
+{%- endif %}
     Path(id): Path<Uuid>,
     content: Bytes,
 ) -> Result<StatusCode> {
+{%- if role %}
+    identite.require_role(Role::{@ role @})?;
+{% endif %}
     service::put_content(
         state.core().db(),
         state.storage().as_ref(),

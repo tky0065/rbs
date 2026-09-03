@@ -131,6 +131,11 @@ aucun bucket n'est nommé nulle part — et ne dit rien de tout cela tant que le
 | `GET` | 200, `application/octet-stream` | 404 | 404 |
 | `HEAD` | 204 | 404 | 404 |
 
+Ajoutez [`--role`](../cli/generate.md) et le `PUT` rejoint les écritures gardées : il prend
+une `Identity` et appelle `require_role` comme `create`, `update` et `delete` — remplacer la
+charge utile d'une ressource est une écriture. `GET` et `HEAD` restent ouvertes, comme
+`list` et `find`.
+
 Sans la feature `storage`, le drapeau est refusé avant tout écrit :
 
 ```text
