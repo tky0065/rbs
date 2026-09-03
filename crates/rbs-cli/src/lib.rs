@@ -422,6 +422,12 @@ fn suites_installees(installed: &[new::InstalledFeature]) -> Vec<&'static str> {
 /// Ce qu'il reste à faire de la main du développeur, une fois la feature posée.
 fn suite(feature: &str) -> Option<&'static str> {
     match feature {
+        // La table n'existe pas encore, et surtout : le fragment n'est branché sur aucune
+        // route. Installé et jamais appelé, il paraîtrait cassé.
+        "audit" => Some(
+            "rbs migrate up, puis appelez audit::record dans vos services — l'entrée \
+             s'écrit dans la transaction du changement",
+        ),
         // `migrate` et `api` portent `profiles: ["app"]` : sans ce flag, `docker compose
         // up` ne bâtit ni ne démarre ni l'un ni l'autre — seul `db` reste dans le
         // périmètre par défaut, celui que `rbs dev` monte.
@@ -989,6 +995,16 @@ mod tests {
                 "`{feature}` s'installe sans dire ce qu'il reste à faire"
             );
         }
+    }
+
+    /// Le fragment n'est branché sur aucune route : installé et jamais appelé, il
+    /// paraîtrait cassé. Le conseil est le seul endroit où le geste se dit.
+    #[test]
+    fn the_audit_fragment_advises_the_migration_and_the_call_site() {
+        let conseil = suite("audit").expect("le fragment pose une table : il doit conseiller");
+
+        assert!(conseil.contains("rbs migrate up"), "{conseil}");
+        assert!(conseil.contains("audit::record"), "{conseil}");
     }
 
     /// `rbs new --with auth` pose la feature mais avalait le conseil qu'`add auth` aurait

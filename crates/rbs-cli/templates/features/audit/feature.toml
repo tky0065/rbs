@@ -1,0 +1,35 @@
+[feature]
+description = "journal des écritures : qui a modifié quoi, quand, dans la transaction du changement"
+
+[[files]]
+source      = "mod.rs.jinja"
+destination = "src/audit/mod.rs"
+
+[[files]]
+source      = "model.rs.jinja"
+destination = "src/audit/model.rs"
+
+[[files]]
+source      = "repository.rs.jinja"
+destination = "src/audit/repository.rs"
+
+[[files]]
+source      = "tests.rs.jinja"
+destination = "src/audit/tests.rs"
+
+[[anchors]]
+anchor  = "features"
+content = "pub mod audit;"
+
+[migration]
+source = "migration.rs.jinja"
+name   = "create_audit_log"
+
+# `changes` est une valeur JSON, que sea-orm ne sait lire que sous cette feature.
+[cargo.sea-orm]
+features = ["with-json"]
+
+# `sync` : les tests livrés se relaient sur l'unique table `audit_log`, et leur verrou
+# traverse un `await`. Le squelette n'active que `macros` et `rt-multi-thread`.
+[cargo.tokio]
+features = ["sync"]

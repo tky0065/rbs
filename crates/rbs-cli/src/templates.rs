@@ -790,6 +790,7 @@ mod tests {
         // Énumérées une à une plutôt qu'en un bloc : la liste s'allonge à chaque fragment
         // livré, et l'ordre alphabétique intercale les nouveaux venus.
         for installable in [
+            "audit",
             "auth",
             "ci",
             "cors",
@@ -1043,6 +1044,33 @@ mod tests {
         assert!(
             source.contains("\n// <rbs:related:jobs>\n// </rbs:related:jobs>\n"),
             "{source}"
+        );
+    }
+
+    #[test]
+    fn the_audit_fragment_declares_its_migration_and_its_single_anchor() {
+        let source = read(&Path::new(RACINE_FEATURES).join("audit/feature.toml"));
+        let manifest = crate::manifest::read(&source, "audit/feature.toml")
+            .expect("le manifeste du fragment audit doit se lire");
+
+        let migration = manifest
+            .migration
+            .as_ref()
+            .expect("le fragment pose une table, il doit donc porter une migration");
+        assert_eq!(migration.name, "create_audit_log");
+
+        // Le fragment n'expose ni route, ni layer, ni tâche de fond : une ancre de plus
+        // serait le signe qu'il en fait plus que ce que la spec lui donne à faire.
+        let ancres: Vec<&str> = manifest
+            .anchors
+            .iter()
+            .map(|ancre| ancre.anchor.as_str())
+            .collect();
+        assert_eq!(ancres, ["features"]);
+
+        assert!(
+            manifest.feature.requires.is_empty(),
+            "le fragment ne dépend pas de `auth` — c'est ce qui le rend installable sans JWT"
         );
     }
 
