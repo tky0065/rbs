@@ -415,7 +415,7 @@ three use it.
 
 `docker` is the one fragment `rbs add` installs that is itself an exception: its `api` and
 `migrate` services go into `# <rbs:services>`, the YAML anchor a compose carries — see
-[above](#the-twelve-features). The rule is the same everywhere: no AST is ever rewritten,
+[above](#the-thirteen-features). The rule is the same everywhere: no AST is ever rewritten,
 and a missing anchor makes the command write nothing and print the block to paste back.
 [`rbs doctor`](./doctor.md) checks all twelve — eleven on a project with no compose to
 carry a twelfth.

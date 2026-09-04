@@ -417,7 +417,7 @@ toutes les trois.
 
 `docker` est le seul fragment que `rbs add` installe à faire lui-même exception : ses
 services `api` et `migrate` vont dans `# <rbs:services>`, l'ancre YAML que porte un
-compose — voir [plus haut](#les-douze-features). La règle est la même partout : aucun AST
+compose — voir [plus haut](#les-treize-features). La règle est la même partout : aucun AST
 n'est jamais réécrit, et une ancre absente fait que la commande n'écrit rien et affiche le
 bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les douze — onze sur un
 projet sans compose pour en porter une onzième.

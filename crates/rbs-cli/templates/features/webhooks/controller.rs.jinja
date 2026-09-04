@@ -19,6 +19,7 @@ use crate::state::AppState;
     post,
     path = "/webhooks/subscriptions",
     tag = "webhooks",
+    operation_id = "webhooks_subscribe",
     security(("bearer" = [])),
     request_body = CreateSubscription,
     responses(
@@ -41,6 +42,7 @@ pub async fn subscribe(
     get,
     path = "/webhooks/subscriptions",
     tag = "webhooks",
+    operation_id = "webhooks_list",
     security(("bearer" = [])),
     responses(
         (status = 200, description = "tous les abonnements, révoqués compris, sans leurs secrets", body = Vec<SubscriptionResponse>),
@@ -58,6 +60,7 @@ pub async fn list(
     delete,
     path = "/webhooks/subscriptions/{id}",
     tag = "webhooks",
+    operation_id = "webhooks_revoke",
     security(("bearer" = [])),
     params(("id" = Uuid, Path, description = "identifiant de l'abonnement")),
     responses(
