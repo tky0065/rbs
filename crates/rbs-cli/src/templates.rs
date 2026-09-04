@@ -301,7 +301,7 @@ mod tests {
     ///
     /// `docker-compose.yml` en fait partie : la source les rend tous, et c'est `rbs new`
     /// qui l'écarte pour un projet qui n'a rien à monter.
-    const DESTINATIONS: [&str; 19] = [
+    const DESTINATIONS: [&str; 20] = [
         ".env",
         ".env.example",
         ".gitignore",
@@ -313,6 +313,7 @@ mod tests {
         "migration/Cargo.toml",
         "migration/src/lib.rs",
         "migration/src/main.rs",
+        "src/bin/openapi.rs",
         "src/health/controller.rs",
         "src/health/mod.rs",
         "src/lib.rs",

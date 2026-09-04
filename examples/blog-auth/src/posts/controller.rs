@@ -15,6 +15,7 @@ use crate::state::AppState;
     get,
     path = "/posts",
     tag = "posts",
+    operation_id = "posts_list",
     params(
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
@@ -38,6 +39,7 @@ pub async fn list(
     post,
     path = "/posts/filter",
     tag = "posts",
+    operation_id = "posts_filter",
     params(
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
@@ -62,6 +64,7 @@ pub async fn filter(
     post,
     path = "/posts",
     tag = "posts",
+    operation_id = "posts_create",
     security(("bearer" = [])),
     request_body = CreatePost,
     responses(
@@ -89,6 +92,7 @@ pub async fn create(
     get,
     path = "/posts/{id}",
     tag = "posts",
+    operation_id = "posts_find",
     params(("id" = Uuid, Path, description = "identifiant de post")),
     responses(
         (status = 200, description = "post demandé", body = PostResponse),
@@ -106,6 +110,7 @@ pub async fn find(
     patch,
     path = "/posts/{id}",
     tag = "posts",
+    operation_id = "posts_update",
     security(("bearer" = [])),
     params(("id" = Uuid, Path, description = "identifiant de post")),
     request_body = UpdatePost,
@@ -132,6 +137,7 @@ pub async fn update(
     delete,
     path = "/posts/{id}",
     tag = "posts",
+    operation_id = "posts_delete",
     security(("bearer" = [])),
     params(("id" = Uuid, Path, description = "identifiant de post")),
     responses(

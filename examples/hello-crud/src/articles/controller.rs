@@ -13,6 +13,7 @@ use crate::state::AppState;
     get,
     path = "/articles",
     tag = "articles",
+    operation_id = "articles_list",
     params(
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
@@ -35,6 +36,7 @@ pub async fn list(
     post,
     path = "/articles/filter",
     tag = "articles",
+    operation_id = "articles_filter",
     params(
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
@@ -60,6 +62,7 @@ pub async fn filter(
     post,
     path = "/articles",
     tag = "articles",
+    operation_id = "articles_create",
     request_body = CreateArticle,
     responses(
         (status = 201, description = "article créé", body = ArticleResponse),
@@ -81,6 +84,7 @@ pub async fn create(
     get,
     path = "/articles/{id}",
     tag = "articles",
+    operation_id = "articles_find",
     params(("id" = Uuid, Path, description = "identifiant de article")),
     responses(
         (status = 200, description = "article demandé", body = ArticleResponse),
@@ -98,6 +102,7 @@ pub async fn find(
     patch,
     path = "/articles/{id}",
     tag = "articles",
+    operation_id = "articles_update",
     params(("id" = Uuid, Path, description = "identifiant de article")),
     request_body = UpdateArticle,
     responses(
@@ -118,6 +123,7 @@ pub async fn update(
     delete,
     path = "/articles/{id}",
     tag = "articles",
+    operation_id = "articles_delete",
     params(("id" = Uuid, Path, description = "identifiant de article")),
     responses(
         (status = 204, description = "article supprimé"),

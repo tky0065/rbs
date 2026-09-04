@@ -11,7 +11,7 @@ your terminal prints matches, you have not drifted — timings, identifiers and 
 excepted, which are yours. Only one thing was edited out of the blocks: the absolute
 path of the directory the run happened in, written `…/demo` below.
 
-The CLI speaks French: `✓ demo créé — 20 fichiers` is a success line, not an error.
+The CLI speaks French: `✓ demo créé — 21 fichiers` is a success line, not an error.
 Only the messages are translated-in-waiting; the flags, the file names and the generated
 code are the same in every locale.
 
@@ -71,7 +71,7 @@ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 
 {/* rbs:transcript cmd="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" */}
 ```text
-✓ demo créé — 20 fichiers
+✓ demo créé — 21 fichiers
 
   cd demo
   docker compose up -d   # la base du .env, montée

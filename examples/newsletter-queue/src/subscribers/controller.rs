@@ -15,6 +15,7 @@ use crate::state::AppState;
     get,
     path = "/subscribers",
     tag = "subscribers",
+    operation_id = "subscribers_list",
     params(
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
@@ -37,6 +38,7 @@ pub async fn list(
     post,
     path = "/subscribers/filter",
     tag = "subscribers",
+    operation_id = "subscribers_filter",
     params(
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
@@ -61,6 +63,7 @@ pub async fn filter(
     post,
     path = "/subscribers",
     tag = "subscribers",
+    operation_id = "subscribers_create",
     request_body = CreateSubscriber,
     responses(
         (status = 201, description = "subscriber créé", body = SubscriberResponse),
@@ -84,6 +87,7 @@ pub async fn create(
     post,
     path = "/subscribers/broadcast",
     tag = "subscribers",
+    operation_id = "subscribers_broadcast",
     request_body = Broadcast,
     responses(
         (status = 202, description = "lettres enfilées", body = BroadcastAccepted),
@@ -104,6 +108,7 @@ pub async fn broadcast(
     get,
     path = "/subscribers/{id}",
     tag = "subscribers",
+    operation_id = "subscribers_find",
     params(("id" = Uuid, Path, description = "identifiant de subscriber")),
     responses(
         (status = 200, description = "subscriber demandé", body = SubscriberResponse),
@@ -121,6 +126,7 @@ pub async fn find(
     patch,
     path = "/subscribers/{id}",
     tag = "subscribers",
+    operation_id = "subscribers_update",
     params(("id" = Uuid, Path, description = "identifiant de subscriber")),
     request_body = UpdateSubscriber,
     responses(
@@ -141,6 +147,7 @@ pub async fn update(
     delete,
     path = "/subscribers/{id}",
     tag = "subscribers",
+    operation_id = "subscribers_delete",
     params(("id" = Uuid, Path, description = "identifiant de subscriber")),
     responses(
         (status = 204, description = "subscriber supprimé"),

@@ -31,6 +31,8 @@ cargo run -p rbs-cli --bin rbs -- new hello-crud --yes \
 mv hello-crud examples/hello-crud
 cd examples/hello-crud && cargo run --manifest-path ../../Cargo.toml -p rbs-cli --bin rbs -- \
   generate crud articles --fields 'title:string,body:text,published:bool' --force
+cargo run --manifest-path ../../Cargo.toml -p rbs-cli --bin rbs -- \
+  generate client --lang ts --force
 ```
 
 ### `blog-auth`

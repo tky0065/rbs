@@ -7,6 +7,8 @@ use crate::state::AppState;
 #[utoipa::path(
     get,
     path = "/health",
+    tag = "health",
+    operation_id = "health",
     responses((status = 200, description = "l'application et ses dépendances répondent"))
 )]
 pub async fn health(State(state): State<AppState>) -> Response {

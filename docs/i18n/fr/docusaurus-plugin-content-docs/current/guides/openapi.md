@@ -61,8 +61,13 @@ Une asymétrie mérite d'être connue, et elle se lit dans le code ci-dessus : S
 charge le document par HTTP et monte lui-même cette route. Afficher l'interface implique
 donc d'exposer le document, et le router une seconde fois ferait paniquer Axum au
 démarrage. **Pour n'exposer que le document, coupez `docs.swagger_ui`** — c'est la
-combinaison qui sert à générer des clients ou à vérifier un contrat depuis la CI. La
-combinaison inverse n'existe pas, et la demander ne change rien.
+combinaison qui sert à vérifier un contrat depuis la CI. La combinaison inverse n'existe
+pas, et la demander ne change rien.
+
+Engendrer un client ne demande ni l'une ni l'autre : `src/bin/openapi.rs` imprime le
+document sans qu'aucun serveur ne tourne, et [`rbs generate client`](../cli/client.md) l'y
+lit. Par HTTP, le document est celui que sert une instance déployée ; par ce binaire, celui
+que produit le code sous vos yeux.
 
 ## Jugez par vous-même
 

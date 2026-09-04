@@ -14,6 +14,16 @@ between minor versions with no deprecation cycle.
 
 ### Added
 
+- `rbs generate client --lang ts` writes a typed TypeScript client from the project's own
+  OpenAPI document — one method per operation, one interface per schema, no dependency to
+  install on the TypeScript side. No server runs: `rbs new` now writes a third binary,
+  `src/bin/openapi.rs`, which prints what `ApiDoc::openapi()` returns, and the command runs
+  it. The client is a configurable `ApiClient` class rather than free functions, so a token
+  is set once at construction instead of being threaded through every call; `headers` takes
+  a function as well as an object, for a token that rotates. It is projected as a creation,
+  so regenerating an unchanged contract writes nothing and a client you edited comes back as
+  a conflict rather than being overwritten. The binary is useful on its own: `cargo run
+  --bin openapi > openapi.json` followed by a `git diff` freezes the contract in CI.
 - `rbs add webhooks` installs outgoing webhooks: a `webhook_subscriptions` table, three
   routes to register, list and revoke a subscriber, and an `emit` function that enqueues one
   signed delivery per listening subscription. `emit` takes a `&C: ConnectionTrait` rather
@@ -138,6 +148,12 @@ between minor versions with no deprecation cycle.
   `#[allow(dead_code)]` that stood in for the accessor.
 
 ### Fixed
+
+- Every handler the CLI generates carries an `operation_id`, and the health probe carries
+  its `tag`. Without them utoipa derives an identifier from the function name alone, so
+  `list` on two features collided in the document — and a generated client could not name
+  its methods. The five routes of the `auth` fragment, the filter route and the three
+  content routes had none at all.
 
 - `rbs dev` names the file that triggered a restart. Nothing on screen told a wanted
   restart from a server that had just died on its own.

@@ -31,6 +31,12 @@ struct Exemple {
     /// `the_hand_edits_of_blog_auth_are_in_place`, sans lequel cette liste
     /// serait une porte ouverte à la dérive qu'elle sert à déclarer.
     edite_a_la_main: &'static [&'static str],
+    /// Ce qu'une *autre* commande produit : les fichiers qu'un second appel dépose.
+    ///
+    /// Distinct d'`edite_a_la_main` — rien ici n'est écrit à la main — et hors de la
+    /// comparaison pour la même raison : la génération de référence ne lance pas cette
+    /// commande-là. `the_typescript_client_of_hello_crud_is_in_place` en répond.
+    engendre_a_part: &'static [&'static str],
 }
 
 const EXEMPLES: &[Exemple] = &[
@@ -42,6 +48,7 @@ const EXEMPLES: &[Exemple] = &[
         champs: "title:string,body:text,published:bool",
         with_upload: false,
         edite_a_la_main: &[],
+        engendre_a_part: &["clients/ts/client.ts"],
     },
     Exemple {
         nom: "blog-auth",
@@ -59,6 +66,7 @@ const EXEMPLES: &[Exemple] = &[
             "src/posts/tests.rs",
             "src/auth/guard.rs",
         ],
+        engendre_a_part: &[],
     },
     Exemple {
         nom: "file-drop",
@@ -89,6 +97,7 @@ const EXEMPLES: &[Exemple] = &[
             "src/storage/mod.rs",
             "templates/mail/depot.html",
         ],
+        engendre_a_part: &[],
     },
     Exemple {
         nom: "newsletter-queue",
@@ -122,6 +131,7 @@ const EXEMPLES: &[Exemple] = &[
             "templates/mail/newsletter.html",
             "prometheus.yml",
         ],
+        engendre_a_part: &[],
     },
 ];
 
@@ -250,6 +260,12 @@ fn normalize_fingerprint(
                 .edite_a_la_main
                 .iter()
                 .any(|edite| chemin.as_path() == Path::new(edite))
+        })
+        .filter(|(chemin, _)| {
+            !example
+                .engendre_a_part
+                .iter()
+                .any(|engendre| chemin.as_path() == Path::new(engendre))
         })
         .map(|(chemin, contenu)| {
             (
@@ -882,4 +898,44 @@ fn the_hand_edits_of_newsletter_queue_are_in_place() {
         prometheus.contains(&format!("\"localhost:{port}\"")),
         "prometheus.yml : la cible doit être le port {port} de `[observability]` :\n{prometheus}"
     );
+}
+
+/// Ce que `rbs generate client` a déposé dans `hello-crud`, et que la comparaison exclut.
+///
+/// La documentation cite ce fichier plutôt qu'un extrait écrit à la main : sans ce test,
+/// `engendre_a_part` le sortirait de toute surveillance, et une page du site pourrait
+/// montrer un client que la commande ne produit plus.
+///
+/// Il n'est pas régénéré ici — la commande compile le projet pour lire son document, ce
+/// qu'un test rapide ne peut pas faire. `integration_client` s'en charge sur un projet
+/// jetable ; ce test-ci répond du fichier versionné.
+#[test]
+fn the_typescript_client_of_hello_crud_is_in_place() {
+    let client = std::fs::read_to_string(
+        common::depot()
+            .join("examples/hello-crud")
+            .join("clients/ts/client.ts"),
+    )
+    .expect("le client versionné doit être lisible");
+
+    // Une méthode par opération du CRUD, plus la sonde : c'est ce que le document porte.
+    for methode in [
+        "articlesList(",
+        "articlesCreate(",
+        "articlesFind(",
+        "articlesUpdate(",
+        "articlesDelete(",
+        "health(",
+    ] {
+        assert!(
+            client.contains(methode),
+            "{methode} absente du client versionné"
+        );
+    }
+
+    assert!(client.contains("export class ApiClient"), "{client}");
+
+    // Le paramètre interne accepte un objet fermé : un `Record<string, unknown>` y
+    // refuserait toute interface de query, et le client ne passerait plus `tsc --strict`.
+    assert!(client.contains("query?: object;"), "{client}");
 }
