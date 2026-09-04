@@ -11,11 +11,11 @@ use serde_json::Value;
 
 /// Le document, réduit aux chemins et aux schémas de composants — tout ce qu'un client
 /// a besoin de lire.
-// Champs seulement écrits par `parse` tant qu'aucun appelant ne les lit : tombe avec le
-// lot qui traduit ce modèle en types TypeScript.
-#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct Document {
+    // Champ seulement écrit par `parse` tant qu'aucun appelant ne le lit : tombe avec
+    // le lot qui traduit ce modèle en méthodes du client.
+    #[allow(dead_code)]
     pub paths: BTreeMap<String, PathItem>,
     pub schemas: BTreeMap<String, Schema>,
 }
