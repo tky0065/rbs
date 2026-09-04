@@ -10,13 +10,25 @@ use super::model::{ActiveModel, Column, Entity};
 // base reste la seule à connaître l'entité.
 pub use super::model::Model;
 
-/// Les abonnements que rien n'a révoqués.
+/// Les abonnements que rien n'a révoqués — ceux qu'`emit` doit livrer.
 ///
 /// `ConnectionTrait` et non une connexion : l'émission se fait dans la transaction du
 /// métier, et la liste doit être lue avec la même vue qu'elle.
 pub async fn actifs<C: ConnectionTrait>(db: &C) -> Result<Vec<Model>> {
     Ok(Entity::find()
         .filter(Column::RevokedAt.is_null())
+        .order_by_asc(Column::CreatedAt)
+        .all(db)
+        .await?)
+}
+
+/// Tous les abonnements, révoqués compris — ce que `list` doit montrer.
+///
+/// La révocation est datée et non destructrice précisément pour que l'historique d'un
+/// abonnement reste lisible après elle : le filtrer ici viderait ce que `revoked_at` existe
+/// pour dire.
+pub async fn tous<C: ConnectionTrait>(db: &C) -> Result<Vec<Model>> {
+    Ok(Entity::find()
         .order_by_asc(Column::CreatedAt)
         .all(db)
         .await?)

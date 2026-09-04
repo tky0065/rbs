@@ -483,11 +483,14 @@ fn suite(feature: &str) -> Option<&'static str> {
             "derrière un reverse proxy, passez rate_limit.trust_forwarded_for à true — \
              sinon tous les clients partagent l'adresse du proxy",
         ),
-        // La table n'existe pas encore, et aucun abonné n'est inscrit : sans les deux,
-        // `emit` enfile dans le vide et rien ne le signale.
+        // La table n'existe pas encore, aucun abonné n'est inscrit, et rien n'émet : les
+        // trois manquent, et le troisième est le seul qu'aucune commande ne fait à la
+        // place du développeur — installé et jamais appelé, le fragment n'a aucun effet
+        // observable.
         "webhooks" => Some(
-            "rbs migrate up, puis inscrivez un abonné par POST /webhooks/subscriptions — \
-             son secret n'est rendu qu'à cet instant",
+            "rbs migrate up, inscrivez un abonné par POST /webhooks/subscriptions — son \
+             secret n'est rendu qu'à cet instant — puis appelez webhooks::emit dans vos \
+             services",
         ),
         _ => None,
     }
@@ -1028,6 +1031,17 @@ mod tests {
         // La liste livrée ne contient qu'une échéance d'exemple : sans ce rappel, le
         // fragment paraît installé et ne déclenche rien de ce que le projet attend.
         assert!(conseil.contains("src/scheduler/mod.rs"), "{conseil}");
+    }
+
+    /// Trois tables à créer — le fragment entraîne `jobs` et `auth` — et une émission qui
+    /// n'a lieu que si le code du projet l'appelle : installé et jamais appelé, le fragment
+    /// n'a aucun effet observable, et rien ne le dirait.
+    #[test]
+    fn the_webhooks_fragment_advises_the_migration_and_the_emission_site() {
+        let conseil = suite("webhooks").expect("le fragment pose une table : il doit conseiller");
+
+        assert!(conseil.contains("rbs migrate up"), "{conseil}");
+        assert!(conseil.contains("webhooks::emit"), "{conseil}");
     }
 
     /// `rbs new --with auth` pose la feature mais avalait le conseil qu'`add auth` aurait

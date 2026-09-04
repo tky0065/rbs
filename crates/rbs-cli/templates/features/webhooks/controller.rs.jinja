@@ -43,7 +43,7 @@ pub async fn subscribe(
     tag = "webhooks",
     security(("bearer" = [])),
     responses(
-        (status = 200, description = "les abonnements actifs, sans leurs secrets", body = Vec<SubscriptionResponse>),
+        (status = 200, description = "tous les abonnements, révoqués compris, sans leurs secrets", body = Vec<SubscriptionResponse>),
         (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]

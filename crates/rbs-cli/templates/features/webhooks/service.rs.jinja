@@ -85,8 +85,10 @@ pub async fn subscribe(
     })
 }
 
+/// Tous les abonnements, révoqués compris : `revoked_at` n'aurait aucun sens dans une liste
+/// qui ne pourrait jamais le porter.
 pub async fn list(db: &DatabaseConnection) -> Result<Vec<SubscriptionResponse>> {
-    repository::actifs(db)
+    repository::tous(db)
         .await?
         .into_iter()
         .map(reponse)
