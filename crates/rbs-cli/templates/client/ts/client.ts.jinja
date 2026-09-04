@@ -76,8 +76,7 @@ export class ApiClient {
 {@ methode.corps @}
   }
 
-{% endfor -%}
-  private async request<T>(
+{% endfor %}  private async request<T>(
     method: string,
     path: string,
     // `object` et non `Record<string, unknown>` : une interface de query est fermée, et

@@ -132,6 +132,16 @@ fn regenerating_the_client_changes_nothing() {
 #[ignore = "compile le projet engendré pour lire son document OpenAPI"]
 fn dry_run_writes_nothing() {
     let (_parent, racine) = projet_avec_crud();
+
+    // Une première passe avant l'empreinte : lire le document impose de compiler le
+    // projet, et cargo écrit alors son `Cargo.lock`. C'est son écriture à lui, non celle
+    // de rbs — la prendre pour une violation du `--dry-run` accuserait la mauvaise
+    // commande.
+    rbs(&racine)
+        .args(["generate", "client", "--lang", "ts", "--force", "--dry-run"])
+        .assert()
+        .success();
+
     let avant = common::empreinte(&racine);
 
     rbs(&racine)

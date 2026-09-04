@@ -578,10 +578,10 @@ pub(crate) fn rendre(document: &Document, projet: &str) -> Result<String, Erreur
 
             let mut retours = Vec::new();
             for (statut, schema) in &operation.responses {
-                if (200..300).contains(statut) {
-                    if let Some(schema) = schema {
-                        retours.push(type_de(schema));
-                    }
+                if (200..300).contains(statut)
+                    && let Some(schema) = schema
+                {
+                    retours.push(type_de(schema));
                 }
             }
             let retour = if retours.is_empty() {
