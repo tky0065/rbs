@@ -14,6 +14,26 @@ between minor versions with no deprecation cycle.
 
 ### Added
 
+- `rbs add audit` installs a write log: an `audit_log` table, an `Entry` type and a
+  `record` function under `src/audit/`. `record` takes a `&C: ConnectionTrait` rather than
+  a connection, which is the whole reason the log lives in the database: hand it the
+  transaction carrying your change, and the trace exists if and only if that change is
+  committed. `actor_id` is nullable and takes a `String` rather than the `auth` feature's
+  `Identity`, so the fragment installs on a service with no JWT and keeps writes made
+  outside a request — a job, a seed, an admin command — traceable. `action` is a string
+  rather than an enum, with `CREATE`, `UPDATE` and `DELETE` as constants: `login` and
+  `export` are legitimate actions a closed enum would only force you around. The fragment
+  mounts no route and wires itself into none of the generated CRUD — which writes deserve
+  a trace is a question only your domain answers.
+- `rbs add scheduler` installs calendar triggering: a due schedule enqueues a job in the
+  existing queue, once, however many replicas are running. It pulls in `jobs` — the
+  scheduler triggers, it does not execute — and the calendar is declared in code, in
+  `src/scheduler/mod.rs`, where `Schedule::every::<J>` takes the `kind` from `J::KIND`, so
+  a schedule aiming at an unregistered job cannot be written. A reservation is one
+  conditional `UPDATE` on `next_run_at`, sharing its transaction with the enqueue, so no
+  crash can advance a schedule without creating its job. Expressions take five fields as
+  well as six — a line pasted from a crontab is served, not punished — and are evaluated
+  in UTC; a single unreadable one stops start-up by name.
 - `rbs generate crud --with-upload` mounts three content routes on the generated
   resource — `PUT`, `GET` and `HEAD` on `/<resource>/{id}/content` — backed by the
   `storage` fragment's trait. The body travels as `application/octet-stream`, not JSON:

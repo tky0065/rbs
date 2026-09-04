@@ -89,15 +89,15 @@ pour la complétion — les features qu'installe [`rbs add`](./add.md) :
 ```text
 $ rbs completions bash | grep -A1 'rbs__subcmd__add)'
         rbs__subcmd__add)
-            opts="-h -V --force --dry-run --template-dir --help --version auth ci cors docker jobs mail rate-limit redis storage"
+            opts="-h -V --force --dry-run --template-dir --help --version audit auth ci cors docker jobs mail observability rate-limit redis storage"
 ```
 
 ```text
 $ rbs completions zsh | grep "':feature"
-':feature -- Feature à installer:(auth ci cors docker jobs mail rate-limit redis storage)' \
+':feature -- Feature à installer:(audit auth ci cors docker jobs mail observability rate-limit redis storage)' \
 ```
 
-Les neuf noms viennent des fragments embarqués dans le binaire, et sont ceux qu'un shell
+Les onze noms viennent des fragments embarqués dans le binaire, et sont ceux qu'un shell
 n'a aucun moyen de deviner.
 
 Ils sont proposés, non exigés. `rbs add` accepte lui-même un nom qu'aucun binaire ne
@@ -107,7 +107,7 @@ complétion qui refuserait ce que la commande accepte vaudrait moins que pas de 
 du tout.
 
 Fish et PowerShell sont les deux shells dont le générateur s'arrête avant les valeurs d'un
-argument positionnel : là, `rbs add ` complète les drapeaux mais pas les neuf noms. C'est
+argument positionnel : là, `rbs add ` complète les drapeaux mais pas les douze noms. C'est
 une limite du générateur, non de la déclaration.
 
 ## Un shell inconnu

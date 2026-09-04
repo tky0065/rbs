@@ -66,7 +66,7 @@ mod tests {
     #[test]
     fn the_command_rendered_proposes_the_embedded_fragments_after_add() {
         let fragments = crate::templates::embedded_names();
-        assert_eq!(fragments.len(), 10, "le catalogue embarqué a changé");
+        assert_eq!(fragments.len(), 12, "le catalogue embarqué a changé");
         assert!(
             fragments.contains(&"observability".to_string()),
             "{fragments:?}"

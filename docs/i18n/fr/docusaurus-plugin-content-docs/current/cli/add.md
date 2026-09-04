@@ -5,8 +5,12 @@ title: rbs add
 
 # `rbs add`
 
-Installe une feature dans un projet existant. Elle en livre dix : `auth`, `ci`, `cors`,
-`docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis` et `storage`.
+Installe une feature dans un projet existant. Elle en livre onze : `audit`, `auth`,
+`ci`, `cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis` et
+`storage`.
+Installe une feature dans un projet existant. Elle en livre onze : `auth`, `ci`, `cors`,
+`docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`, `scheduler` et
+`storage`.
 
 :::note
 Les blocs de terminal de cette page sont des sorties réelles, capturées en lançant la
@@ -18,7 +22,7 @@ sortie de terminal ne se traduit pas.
 
 ```text
 $ rbs add --help
-Ajoute une feature : auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage
+Ajoute une feature : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage
 
 Usage: rbs add [OPTIONS] <FEATURE>
 
@@ -39,7 +43,7 @@ Options:
 | `--dry-run` | Affiche le plan et s'arrête. Rien n'est écrit. |
 | `--template-dir <CHEMIN>` | Lit les fragments dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire. |
 
-## Les dix features
+## Les douze features
 
 | Feature | Fichiers | Suite |
 |---|---|---|
@@ -47,12 +51,14 @@ Options:
 | `ci` | `.github/workflows/ci.yml` | `git push` |
 | `auth` | huit fichiers sous `src/auth/`, une migration, quatre fichiers du projet modifiés — et `rate-limit`, qu'elle exige | `rbs migrate up` |
 | `jobs` | sept fichiers sous `src/jobs/`, une migration, et une section `[jobs]` de configuration | `rbs migrate up`, puis inscrire vos jobs dans `src/jobs/mod.rs` |
+| `scheduler` | six fichiers sous `src/scheduler/`, une migration, une section `[scheduler]`, un ticker dans `// <rbs:startup>` — et `jobs`, qu'elle exige | `rbs migrate up`, puis déclarer vos échéances dans `src/scheduler/mod.rs` |
 | `redis` | trois fichiers sous `src/cache/`, et un service `redis` inséré dans le compose du projet | le compose le porte déjà — `docker compose up -d` le démarre |
 | `mail` | cinq fichiers sous `src/mail/`, un gabarit d'exemple, et un service `mailpit` inséré dans le compose du projet | régler `[mail]` dans `config/default.toml` — un SMTP local par défaut |
 | `storage` | quatre fichiers sous `src/storage/` | ignorer `./storage`, ou passer le backend à `s3` |
 | `cors` | trois fichiers sous `src/cors/`, une section `[cors]` de configuration, et une couche dans `// <rbs:layers>` | énumérer vos origines dans `[cors]` — vide, donc rien d'origine croisée ne passe |
 | `rate-limit` | quatre fichiers sous `src/rate_limit/`, une section `[rate_limit]`, un champ sur `AppState`, et une couche dans `// <rbs:layers>` | derrière un reverse proxy, régler `rate_limit.trust_forwarded_for` |
 | `observability` | quatre fichiers sous `src/observability/`, une section `[observability]`, une couche dans `// <rbs:layers>`, et un second listener dans `// <rbs:startup>` | nommer un collecteur dans `OTEL_EXPORTER_OTLP_ENDPOINT` — sans lui rien n'est exporté |
+| `audit` | quatre fichiers sous `src/audit/`, et une migration | `rbs migrate up`, puis appeler `audit::record` dans vos services — l'entrée s'écrit dans la transaction du changement |
 
 `cors`, `rate-limit` et `observability` sont les trois qui empilent un middleware au lieu
 de monter une route : leur couche va dans `// <rbs:layers>`, à l'intérieur de `trace` et
@@ -252,8 +258,9 @@ plan pour /private/tmp/rbs-demo/blog
   rbs migrate up
 ```
 
-`auth` est le seul fragment qui en exige un autre. `POST /auth/login` hache un Argon2 même
-pour un email inconnu — c'est ce qui empêche d'énumérer les comptes — et chaque requête
+`auth` est l'un des deux fragments qui en exigent un autre —
+[`scheduler`](../guides/scheduler.md) est l'autre, et il entraîne `jobs`, dont il déclenche
+la file. `POST /auth/login` hache un Argon2 même pour un email inconnu — c'est ce qui empêche d'énumérer les comptes — et chaque requête
 anonyme y coûte donc 19 Mio. Sans limite de débit, la protection contre l'énumération est
 un déni de service offert au premier venu : le fragment arrive donc avec `rate-limit`, le
 plan le nomme avant que rien ne s'écrive, et la section `[rate_limit]` qu'il pose tient
@@ -281,7 +288,7 @@ Tout autre nom est refusé avec la liste de ce qui est installable :
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage
+erreur : `graphql` n'est pas une feature installable : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage
 ```
 
 ## L'idempotence
@@ -396,7 +403,7 @@ sinon un plan vide, donc une commande qui réussit sans rien faire.
 ## Les ancres
 
 `rbs add` écrit surtout des fichiers entiers et modifie le manifeste ; c'est [`rbs
-generate`](./generate.md#les-ancres) qui insère dans les dix ancres en commentaires Rust
+generate`](./generate.md#les-ancres) qui insère dans les onze ancres en commentaires Rust
 du projet — `// <rbs:features>` (dans `src/lib.rs`, ou dans `src/main.rs` sur un projet
 sans bibliothèque — voir [plus bas](./generate.md#les-ancres)), `// <rbs:routes>`,
 `// <rbs:layers>`, `// <rbs:openapi>`, `// <rbs:migration_modules>`, `// <rbs:migrations>`,
@@ -412,9 +419,9 @@ toutes les trois.
 
 `docker` est le seul fragment que `rbs add` installe à faire lui-même exception : ses
 services `api` et `migrate` vont dans `# <rbs:services>`, l'ancre YAML que porte un
-compose — voir [plus haut](#les-dix-features). La règle est la même partout : aucun AST
+compose — voir [plus haut](#les-douze-features). La règle est la même partout : aucun AST
 n'est jamais réécrit, et une ancre absente fait que la commande n'écrit rien et affiche le
-bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les onze — dix sur un
+bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les douze — onze sur un
 projet sans compose pour en porter une onzième.
 
 Un projet engendré avant l'existence de `// <rbs:layers>` ne la porte pas, et `rbs upgrade`

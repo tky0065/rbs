@@ -331,7 +331,7 @@ fn masque_horodatage(texte: &str) -> String {
     })
 }
 
-/// `in 0.11s`, `en 1.2 s` → `<durée>`.
+/// `in 0.11s`, `en 1.2 s`, `in 1m 12s` → `<durée>`.
 fn masque_duree(texte: &str) -> String {
     remplace_motif(texte, |lettres, debut| {
         let prefixe: String = lettres[debut..(debut + 3).min(lettres.len())]
@@ -345,30 +345,49 @@ fn masque_duree(texte: &str) -> String {
         }
 
         let mut rang = debut + 3;
-        let entiers = compte_chiffres(lettres, rang);
-        if entiers == 0 {
-            return None;
-        }
-        rang += entiers;
 
-        if lettres.get(rang) == Some(&'.') {
-            let decimales = compte_chiffres(lettres, rang + 1);
-            if decimales == 0 {
+        // Cargo passe à `1m 12s` puis à `1h 02m 03s` dès que la compilation s'allonge :
+        // la durée est une suite de groupes, et seul le dernier porte les secondes.
+        loop {
+            let entiers = compte_chiffres(lettres, rang);
+            if entiers == 0 {
                 return None;
             }
-            rang += 1 + decimales;
-        }
+            rang += entiers;
 
-        while lettres.get(rang) == Some(&' ') {
+            if lettres.get(rang) == Some(&'.') {
+                let decimales = compte_chiffres(lettres, rang + 1);
+                if decimales == 0 {
+                    return None;
+                }
+                rang += 1 + decimales;
+            }
+
+            while lettres.get(rang) == Some(&' ') {
+                rang += 1;
+            }
+
+            // `h` et `m` ouvrent un groupe de plus ; `ms` clôt, et c'est ce qui les
+            // sépare — sans quoi une milliseconde serait lue comme une minute.
+            let heure = lettres.get(rang) == Some(&'h');
+            let minute = lettres.get(rang) == Some(&'m') && lettres.get(rang + 1) != Some(&'s');
+            if heure || minute {
+                rang += 1;
+                while lettres.get(rang) == Some(&' ') {
+                    rang += 1;
+                }
+                continue;
+            }
+
+            if lettres.get(rang) == Some(&'m') {
+                rang += 1;
+            }
+            if lettres.get(rang) != Some(&'s') {
+                return None;
+            }
             rang += 1;
+            break;
         }
-        if lettres.get(rang) == Some(&'m') {
-            rang += 1;
-        }
-        if lettres.get(rang) != Some(&'s') {
-            return None;
-        }
-        rang += 1;
 
         if lettres.get(rang).is_some_and(char::is_ascii_alphanumeric) {
             return None;
@@ -685,6 +704,26 @@ avant\n\
             normalise(sortie, tmp),
             "  ✓ base  <moteur> répond\n    Finished `dev` profile in <durée>\n  <tmp>/demo\n"
         );
+    }
+
+    /// Cargo passe de `12.34s` à `1m 12s` dès qu'une compilation dépasse la minute, et
+    /// celle de la crate `migration` la dépasse sur une machine froide. Une durée non
+    /// masquée fait échouer le transcript de `doctor` sous les traits d'une dérive de la
+    /// documentation, là où seule l'horloge a bougé.
+    #[test]
+    fn a_duration_above_the_minute_is_masked_like_the_others() {
+        let tmp = Path::new("/var/folders/x/T/.tmpAbC");
+
+        for sortie in [
+            "    Finished `dev` profile in 1m 12s\n",
+            "    Finished `dev` profile in 1h 02m 03s\n",
+        ] {
+            assert_eq!(
+                normalise(sortie, tmp),
+                "    Finished `dev` profile in <durée>\n",
+                "durée non masquée : {sortie}"
+            );
+        }
     }
 
     #[test]

@@ -194,11 +194,14 @@ bien pu être en mémoire.
 ## Ce qu'elle vous laisse
 
 - **le moment d'enfiler** — ni route, ni hook, ni événement. L'exemple enfile à la
-  diffusion parce que c'est ce dont son métier parle ;
+  diffusion parce que c'est ce dont son métier parle. Un job qu'il faut enfiler à l'horloge
+  plutôt que sur un événement, c'est ce à quoi sert
+  [`rbs add scheduler`](./scheduler.md) : il déclenche, et cette file exécute toujours ;
 - **la surveillance des jobs en échec** — les lignes sont là, et rien ne les regarde ;
 - **le nettoyage des lignes terminées** — rien ne purge la table ;
-- **priorités, jobs uniques, planification cron** — rien de tout cela n'est ici.
-  `enqueue_at` est la seule primitive de planification ;
+- **priorités et jobs uniques** — ni l'une ni les autres ne sont ici. `enqueue_at` est la
+  seule primitive de planification que porte ce fragment ; les expressions cron vivent dans
+  le [scheduler](./scheduler.md), qui enfile dans cette table même ;
 - **un second processus pour le worker** — le worker tourne dans le processus de l'API.
   Les séparer demande un second binaire, qu'il vous revient d'ajouter.
 
