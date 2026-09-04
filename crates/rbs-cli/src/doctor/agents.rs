@@ -17,11 +17,12 @@ pub(crate) const TITRE: &str = "agents";
 
 /// Répertoires de `src/` qui ne sont pas des features engendrées.
 ///
-/// `health` est le module du squelette et `seeds` le binaire des données de démonstration ;
-/// les autres sont les répertoires que les fragments déposent sous un nom qui n'est pas le
-/// leur — `redis` s'installe en `src/cache/`. Les compter comme écrits à la main ferait
-/// avertir sur chaque projet qui les porte.
-const HORS_FEATURES: [&str; 3] = ["health", "seeds", "cache"];
+/// `health` est le module du squelette, `seeds` le binaire des données de démonstration et
+/// `bin` celui qui imprime le document OpenAPI ; les autres sont les répertoires que les
+/// fragments déposent sous un nom qui n'est pas le leur — `redis` s'installe en
+/// `src/cache/`. Les compter comme écrits à la main ferait avertir sur chaque projet qui
+/// les porte.
+const HORS_FEATURES: [&str; 4] = ["health", "seeds", "cache", "bin"];
 
 /// Contrôle l'`AGENTS.md` du projet, et nomme le code qui n'est pas passé par le CLI.
 pub(crate) fn check(root: &Path) -> Check {
@@ -311,5 +312,6 @@ mod tests {
 
         assert!(!constat.detail.contains("health"), "{constat:?}");
         assert!(!constat.detail.contains("seeds"), "{constat:?}");
+        assert!(!constat.detail.contains("bin"), "{constat:?}");
     }
 }

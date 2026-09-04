@@ -1,0 +1,12 @@
+//! Imprime le document OpenAPI du projet, sans démarrer de serveur.
+//!
+//! `rbs generate client` lit cette sortie. Elle sert aussi à figer le contrat en CI :
+//! `cargo run --bin openapi > openapi.json` puis un `git diff` qui doit rester vide.
+
+use utoipa::OpenApi;
+
+fn main() -> Result<(), serde_json::Error> {
+    println!("{}", {@ crate_name @}::openapi::ApiDoc::openapi().to_pretty_json()?);
+
+    Ok(())
+}

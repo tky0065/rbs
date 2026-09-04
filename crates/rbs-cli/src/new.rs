@@ -636,6 +636,7 @@ mod tests {
             "migration/Cargo.toml",
             "migration/src/lib.rs",
             "migration/src/main.rs",
+            "src/bin/openapi.rs",
             "src/health/controller.rs",
             "src/health/mod.rs",
             "src/lib.rs",
@@ -666,6 +667,32 @@ mod tests {
         assert!(
             manifest.contains("tokio"),
             "le binaire de migration n'a pas de runtime asynchrone"
+        );
+    }
+
+    #[test]
+    fn the_generated_project_carries_a_binary_that_prints_the_openapi_document() {
+        let parent = parent();
+
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+
+        let binaire = read(&project.root.join("src/bin/openapi.rs"));
+        // Le nom de crate, et non `crate::` : un binaire séparé atteint `ApiDoc` par la
+        // bibliothèque du projet, dont Cargo a remplacé les tirets par des soulignés.
+        assert!(
+            binaire.contains("mon_api::openapi::ApiDoc::openapi()"),
+            "{binaire}"
+        );
+        assert!(binaire.contains("to_pretty_json"), "{binaire}");
+
+        let manifeste = read(&project.root.join("Cargo.toml"));
+        assert!(
+            manifeste.contains("name = \"openapi\""),
+            "le manifeste doit déclarer le binaire :\n{manifeste}"
+        );
+        assert!(
+            manifeste.contains("path = \"src/bin/openapi.rs\""),
+            "{manifeste}"
         );
     }
 
@@ -1095,7 +1122,7 @@ mod tests {
         assert!(compose.contains("- \"5432:5432\""), "{compose}");
         assert!(compose.contains("# <rbs:services>"), "{compose}");
         assert!(compose.contains("# </rbs:services>"), "{compose}");
-        assert_eq!(project.files, 20);
+        assert_eq!(project.files, 21);
     }
 
     /// Le compose est versionné, le `.env` ne l'est pas : les identifiants vivent dans
@@ -1255,7 +1282,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 19);
+        assert_eq!(project.files, 20);
     }
 
     #[test]
@@ -1276,7 +1303,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 19);
+        assert_eq!(project.files, 20);
     }
 
     /// Une URL sans identifiants est valide et acceptée par `parse` : sans cette
@@ -1302,7 +1329,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 19);
+        assert_eq!(project.files, 20);
     }
 
     #[test]
