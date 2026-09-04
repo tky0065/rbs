@@ -455,6 +455,13 @@ fn suite(feature: &str) -> Option<&'static str> {
         // La table n'existe pas encore, et le worker démarre avec l'API : sans la
         // migration, chaque tour de boucle échoue sur une relation absente.
         "jobs" => Some("rbs migrate up, puis inscrivez vos jobs dans src/jobs/mod.rs"),
+        // Deux tables à créer — le fragment entraîne `jobs` — et une liste d'échéances qui
+        // ne contient qu'un exemple : installé et non édité, le calendrier ne déclenche
+        // rien d'utile.
+        "scheduler" => Some(
+            "rbs migrate up, puis déclarez vos échéances dans src/scheduler/mod.rs — \
+             les expressions sont évaluées en UTC",
+        ),
         // La liste est vide à l'installation : sans ce rappel, le développeur croirait
         // avoir monté du CORS alors qu'aucune origine n'est encore autorisée.
         "cors" => Some(
@@ -1005,6 +1012,16 @@ mod tests {
 
         assert!(conseil.contains("rbs migrate up"), "{conseil}");
         assert!(conseil.contains("audit::record"), "{conseil}");
+    }
+
+    #[test]
+    fn the_scheduler_fragment_advises_the_migration_and_the_declaration_site() {
+        let conseil = suite("scheduler").expect("le fragment pose une table : il doit conseiller");
+
+        assert!(conseil.contains("rbs migrate up"), "{conseil}");
+        // La liste livrée ne contient qu'une échéance d'exemple : sans ce rappel, le
+        // fragment paraît installé et ne déclenche rien de ce que le projet attend.
+        assert!(conseil.contains("src/scheduler/mod.rs"), "{conseil}");
     }
 
     /// `rbs new --with auth` pose la feature mais avalait le conseil qu'`add auth` aurait

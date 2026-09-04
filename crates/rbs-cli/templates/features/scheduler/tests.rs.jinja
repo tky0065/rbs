@@ -1,0 +1,338 @@
+use std::str::FromStr;
+
+use rbs_core::HasCoreState;
+use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use serde::{Deserialize, Serialize};
+use tokio::sync::MutexGuard;
+
+use super::model::{ActiveModel, Entity};
+use super::{Schedule, normaliser, sync, ticker};
+use crate::jobs::Job;
+use crate::state::AppState;
+
+/// Le job que ces tests font déclencher.
+///
+/// Un type à eux, et non celui d'exemple du fragment `jobs` : la file est une table
+/// partagée, et les tests des deux fragments tournent de front dans le même binaire. Un
+/// `KIND` qui n'appartient qu'ici est ce qui permet de ne vider et de ne compter que ses
+/// propres lignes, sans emporter celles que le voisin est en train d'observer.
+#[derive(Debug, Serialize, Deserialize)]
+struct Scheduled;
+
+#[async_trait::async_trait]
+impl Job for Scheduled {
+    const KIND: &'static str = "tests::scheduled";
+
+    async fn run(&self, _state: &AppState) -> anyhow::Result<()> {
+        Ok(())
+    }
+}
+
+/// Les lignes de la file que ces tests ont fait naître, et elles seules.
+async fn jobs_declenches(db: &DatabaseConnection) -> Vec<crate::jobs::model::Model> {
+    crate::jobs::model::Entity::find()
+        .filter(crate::jobs::model::Column::Kind.eq(Scheduled::KIND))
+        .all(db)
+        .await
+        .expect("lecture possible")
+}
+
+/// La crate `cron` attend six champs, la seconde en tête ; le crontab Unix en a cinq. Un
+/// utilisateur qui colle une ligne de son crontab doit être servi, pas puni.
+#[test]
+fn a_five_field_expression_means_the_same_as_its_six_field_form() {
+    let cinq = normaliser("0 3 * * *").expect("cinq champs sont acceptés");
+    let six = normaliser("0 0 3 * * *").expect("six champs sont acceptés");
+
+    assert_eq!(cinq, six);
+
+    let horaire = cron::Schedule::from_str(&cinq).expect("l'expression normalisée compile");
+    let base =
+        chrono::DateTime::parse_from_rfc3339("2026-09-03T10:00:00+00:00").expect("instant lisible");
+
+    assert_eq!(
+        horaire.after(&base).next().expect("une occurrence suit"),
+        chrono::DateTime::parse_from_rfc3339("2026-09-04T03:00:00+00:00").expect("instant lisible")
+    );
+}
+
+#[test]
+fn an_expression_of_any_other_length_is_refused_by_name() {
+    let erreur = normaliser("0 3 * *").expect_err("quatre champs ne veulent rien dire");
+
+    // Le message doit porter l'expression : c'est la seule chose qui distingue une
+    // échéance fautive des autres au démarrage.
+    assert!(erreur.to_string().contains("0 3 * *"), "{erreur}");
+}
+
+#[test]
+fn an_unparsable_expression_is_refused_even_with_the_right_field_count() {
+    normaliser("0 99 * * *").expect_err("99 n'est pas une minute");
+}
+
+// Les tests qui suivent joignent la base que décrit `.env`, et sont donc `#[ignore]` :
+// `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre la base du
+// projet, migrations appliquées.
+
+/// Les tests qui réconcilient partagent l'unique table `schedules` : ils se relaient
+/// plutôt que de se voler leurs lignes.
+///
+/// Le verrou est celui du fragment `jobs`, et non un second : un tick enfile dans la
+/// file, dont les tests vident la table sans filtre. Deux verrous indépendants
+/// laisseraient chaque suite effacer ce que l'autre vient d'écrire, et les deux
+/// paraîtraient fautives à tour de rôle.
+async fn table_a_soi() -> (MutexGuard<'static, ()>, AppState) {
+    let garde = crate::jobs::tests::verrou_base().lock().await;
+    let config = rbs_core::Config::load().expect("configuration lisible");
+    let db = rbs_core::db::connect(&config.database)
+        .await
+        .expect("base joignable — les migrations doivent avoir été appliquées");
+
+    Entity::delete_many()
+        .exec(&db)
+        .await
+        .expect("la table schedules doit se vider");
+    // De la file, seules les lignes de ce module : les tests du fragment `jobs` tournent
+    // dans le même binaire et sur la même table, et un vidage sans filtre leur retirerait
+    // sous les pieds les jobs qu'ils viennent d'enfiler.
+    crate::jobs::model::Entity::delete_many()
+        .filter(crate::jobs::model::Column::Kind.eq(Scheduled::KIND))
+        .exec(&db)
+        .await
+        .expect("la file doit se vider de ses jobs déclenchés");
+
+    (
+        garde,
+        AppState::new(db, config).expect("état constructible"),
+    )
+}
+
+/// Un calendrier de test, indépendant de celui que le projet déclare.
+fn calendrier(expression: &'static str) -> Vec<Schedule> {
+    vec![Schedule::every::<Scheduled>(expression, || Scheduled)]
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_newly_declared_schedule_is_inserted_with_its_next_occurrence() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    sync::reconcilier(db, &calendrier("0 3 * * *"))
+        .await
+        .expect("la réconciliation aboutit");
+
+    let ligne = Entity::find_by_id(Scheduled::KIND)
+        .one(db)
+        .await
+        .expect("lecture possible")
+        .expect("l'échéance déclarée doit avoir été insérée");
+
+    assert!(ligne.next_run_at > chrono::Utc::now());
+    assert!(ligne.last_run_at.is_none(), "rien n'a encore été déclenché");
+}
+
+/// Le pendant, au démarrage, de la garantie que porte le tick.
+///
+/// Un déploiement lance ses réplicas ensemble, et tous réconcilient une table où l'échéance
+/// n'existe pas encore. Une insertion qui ne tolère pas d'avoir été devancée fait échouer
+/// le démarrage de tous sauf un — sur le fragment dont l'argument même est de tenir le
+/// multi-réplica.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+#[ignore = "joint la base du projet"]
+async fn concurrent_boots_all_succeed_and_insert_one_row() {
+    const REPLICAS: usize = 8;
+
+    let (_garde, state) = table_a_soi().await;
+
+    let mut taches = Vec::new();
+    for _ in 0..REPLICAS {
+        let db = state.core().db().clone();
+        taches.push(tokio::spawn(async move {
+            sync::reconcilier(&db, &calendrier("0 3 * * *")).await
+        }));
+    }
+
+    for (rang, tache) in taches.into_iter().enumerate() {
+        tache
+            .await
+            .expect("la réconciliation ne panique pas")
+            .unwrap_or_else(|error| panic!("le démarrage du réplica {rang} a échoué : {error}"));
+    }
+
+    let lignes = Entity::find()
+        .filter(super::model::Column::Kind.eq(Scheduled::KIND))
+        .all(state.core().db())
+        .await
+        .expect("lecture possible");
+
+    assert_eq!(lignes.len(), 1, "{} lignes pour une échéance", lignes.len());
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_schedule_removed_from_the_code_is_removed_from_the_table() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    sync::reconcilier(db, &calendrier("0 3 * * *"))
+        .await
+        .expect("la réconciliation aboutit");
+    // Sans cette suppression, une échéance retirée du code resterait due pour toujours,
+    // que plus personne ne réserverait ni ne ferait avancer.
+    sync::reconcilier(db, &[])
+        .await
+        .expect("la réconciliation aboutit");
+
+    assert!(
+        Entity::find_by_id(Scheduled::KIND)
+            .one(db)
+            .await
+            .expect("lecture possible")
+            .is_none(),
+        "l'échéance retirée du code survit dans la table"
+    );
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_redeploy_does_not_move_the_next_occurrence_of_a_known_schedule() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    sync::reconcilier(db, &calendrier("0 3 * * *"))
+        .await
+        .expect("la réconciliation aboutit");
+    let avant = Entity::find_by_id(Scheduled::KIND)
+        .one(db)
+        .await
+        .expect("lecture possible")
+        .expect("l'échéance existe")
+        .next_run_at;
+
+    sync::reconcilier(db, &calendrier("0 3 * * *"))
+        .await
+        .expect("la réconciliation aboutit");
+    let apres = Entity::find_by_id(Scheduled::KIND)
+        .one(db)
+        .await
+        .expect("lecture possible")
+        .expect("l'échéance existe")
+        .next_run_at;
+
+    // C'est ce qui rend un déploiement invisible pour le calendrier : un redémarrage ne
+    // rejoue pas une échéance passée et ne repousse pas une échéance imminente.
+    assert_eq!(avant, apres);
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_unparsable_expression_stops_the_reconciliation() {
+    let (_garde, state) = table_a_soi().await;
+
+    let erreur = sync::reconcilier(state.core().db(), &calendrier("0 99 * * *"))
+        .await
+        .expect_err("une expression illisible doit arrêter le démarrage");
+
+    assert!(erreur.to_string().contains("0 99 * * *"), "{erreur}");
+}
+
+/// Pose une échéance déjà due, en court-circuitant la réconciliation.
+async fn echeance_due(db: &DatabaseConnection) {
+    use sea_orm::ActiveValue::Set;
+
+    let maintenant = super::a_la_seconde(chrono::Utc::now().fixed_offset());
+
+    ActiveModel {
+        kind: Set(Scheduled::KIND.to_string()),
+        next_run_at: Set((chrono::Utc::now() - chrono::TimeDelta::hours(1)).fixed_offset()),
+        last_run_at: Set(None),
+        created_at: Set(maintenant),
+        updated_at: Set(maintenant),
+    }
+    .insert(db)
+    .await
+    .expect("l'échéance due s'insère");
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_due_schedule_enqueues_its_job_and_moves_on() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+    echeance_due(db).await;
+
+    let declenchees = ticker::tick(db, &calendrier("0 3 * * *")).await;
+    assert_eq!(declenchees, 1);
+
+    let ligne = Entity::find_by_id(Scheduled::KIND)
+        .one(db)
+        .await
+        .expect("lecture possible")
+        .expect("l'échéance existe");
+    assert!(
+        ligne.next_run_at > chrono::Utc::now(),
+        "l'échéance n'a pas avancé"
+    );
+    assert!(
+        ligne.last_run_at.is_some(),
+        "le déclenchement n'est pas daté"
+    );
+
+    // C'est le job qui compte : une échéance qui avance sans rien enfiler serait une
+    // horloge qui tourne à vide.
+    let jobs = jobs_declenches(db).await;
+    assert_eq!(jobs.len(), 1);
+    assert_eq!(jobs[0].kind, Scheduled::KIND);
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_schedule_that_is_not_due_is_left_alone() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    sync::reconcilier(db, &calendrier("0 3 * * *"))
+        .await
+        .expect("la réconciliation aboutit");
+
+    let declenchees = ticker::tick(db, &calendrier("0 3 * * *")).await;
+
+    assert_eq!(declenchees, 0);
+    assert!(
+        jobs_declenches(db).await.is_empty(),
+        "un job est né d'une échéance qui n'était pas due"
+    );
+}
+
+/// La garantie qui justifie d'avoir mis le calendrier en base plutôt que dans le
+/// processus : trois réplicas, une seule purge nocturne.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+#[ignore = "joint la base du projet"]
+async fn concurrent_tickers_trigger_a_due_schedule_exactly_once() {
+    const TICKERS: usize = 8;
+
+    let (_garde, state) = table_a_soi().await;
+    echeance_due(state.core().db()).await;
+
+    let mut taches = Vec::new();
+    for _ in 0..TICKERS {
+        let db = state.core().db().clone();
+        taches.push(tokio::spawn(async move {
+            ticker::tick(&db, &calendrier("0 3 * * *")).await
+        }));
+    }
+
+    let mut declenchees = 0;
+    for tache in taches {
+        declenchees += tache.await.expect("le ticker ne panique pas");
+    }
+
+    assert_eq!(
+        declenchees, 1,
+        "{declenchees} réplicas ont cru gagner l'échéance"
+    );
+
+    let jobs = jobs_declenches(state.core().db()).await;
+    assert_eq!(jobs.len(), 1, "l'échéance a enfilé {} job(s)", jobs.len());
+}

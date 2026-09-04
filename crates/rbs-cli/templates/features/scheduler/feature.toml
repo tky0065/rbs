@@ -1,0 +1,65 @@
+[feature]
+description = "déclenchement calendaire : une échéance due enfile un job, une seule fois entre réplicas"
+requires    = ["jobs"]
+
+[[files]]
+source      = "mod.rs.jinja"
+destination = "src/scheduler/mod.rs"
+
+[[files]]
+source      = "config.rs.jinja"
+destination = "src/scheduler/config.rs"
+
+[[files]]
+source      = "model.rs.jinja"
+destination = "src/scheduler/model.rs"
+
+[[files]]
+source      = "sync.rs.jinja"
+destination = "src/scheduler/sync.rs"
+
+[[files]]
+source      = "ticker.rs.jinja"
+destination = "src/scheduler/ticker.rs"
+
+[[files]]
+source      = "tests.rs.jinja"
+destination = "src/scheduler/tests.rs"
+
+[[anchors]]
+anchor  = "features"
+content = "pub mod scheduler;"
+
+# Comme le worker de la file, le ticker vit dans le processus de l'API : c'est ce qui lui
+# donne l'`AppState` du projet. `crate_path` et non `crate_name`, pour la raison
+# qu'énonce le manifeste de `jobs`.
+#
+# `.await?` et non un `spawn` détaché, à la différence de la file : le calendrier est relu
+# et validé avant que le serveur n'écoute, et une expression illisible arrête le
+# démarrage. Détaché, il laisserait l'API répondre en paraissant saine avec un calendrier
+# qui ne déclenchera jamais rien — une panne qu'aucune sonde ne voit.
+[[anchors]]
+anchor  = "startup"
+content = "{@ crate_path @}::scheduler::spawn(state.clone()).await?;"
+
+[migration]
+source = "migration.rs.jinja"
+name   = "create_schedules"
+
+[[dependencies]]
+name    = "cron"
+version = "0.17"
+
+# Le ticker dort entre deux tours de boucle.
+[cargo.tokio]
+features = ["time"]
+
+[[config]]
+file    = "config/default.toml"
+section = "scheduler"
+content = """
+# Attente entre deux examens du calendrier. Une échéance à la minute n'a pas besoin d'un
+# réveil par seconde ; trente secondes bornent le retard de déclenchement à trente
+# secondes.
+poll_interval_secs = 30
+"""

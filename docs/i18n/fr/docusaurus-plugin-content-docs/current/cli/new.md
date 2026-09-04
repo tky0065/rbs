@@ -264,8 +264,8 @@ MAISON=1
 ## `--with` installe
 
 `--with` nomme les features à installer à la création, séparées par des virgules. rbs en
-connaît onze — `audit`, `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`, `observability`,
-`rate-limit`, `redis` et `storage` — et installe chacune des nommées, dans la même passe
+connaît douze — `audit`, `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`, `observability`,
+`rate-limit`, `redis`, `scheduler` et `storage` — et installe chacune des nommées, dans la même passe
 qui écrit le projet :
 
 {/* rbs:transcript cmd="rbs new site --with auth --yes" */}
@@ -282,7 +282,7 @@ $ rbs new site --with auth --yes
 ```
 
 L'ordre d'installation est dérivé des noms, non de l'ordre où ils ont été tapés —
-alphabétique, le même ordre dans lequel [`rbs add`](./add.md) énumère les onze :
+alphabétique, le même ordre dans lequel [`rbs add`](./add.md) énumère les douze :
 
 ```text
 $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes
@@ -312,7 +312,7 @@ Un nom qui n'est pas une feature du tout est refusé avant que le premier fichie
 {/* rbs:transcript cmd="rbs new site --with graphql --yes" */}
 ```text
 $ rbs new site --with graphql --yes
-erreur : `graphql` n'est pas une feature rbs — disponibles : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage
+erreur : `graphql` n'est pas une feature rbs — disponibles : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage
 ```
 
 ## Le compose engendré

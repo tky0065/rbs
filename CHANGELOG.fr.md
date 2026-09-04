@@ -27,6 +27,16 @@ dépréciation.
   qu'un enum fermé ne ferait que forcer à contourner. Le fragment ne monte aucune route et
   ne se câble sur aucun CRUD engendré — quelles écritures méritent une trace est une
   question à laquelle seul votre domaine répond.
+- `rbs add scheduler` installe le déclenchement calendaire : une échéance due enfile un
+  job dans la file existante, une seule fois quel que soit le nombre de réplicas. Il
+  entraîne `jobs` — le scheduler déclenche, il n'exécute pas — et le calendrier se déclare
+  en code, dans `src/scheduler/mod.rs`, où `Schedule::every::<J>` tire le `kind` de
+  `J::KIND` : une échéance qui viserait un job non inscrit est inécrivable. La réservation
+  est un `UPDATE` conditionnel sur `next_run_at`, qui partage sa transaction avec
+  l'enfilage — aucun arrêt ne peut donc avancer une échéance sans créer son job. Les
+  expressions acceptent cinq champs comme six — une ligne collée d'un crontab est servie,
+  pas punie — et s'évaluent en UTC ; une seule illisible arrête le démarrage en la
+  nommant.
 - `rbs generate crud --with-upload` monte trois routes de contenu sur la ressource
   engendrée — `PUT`, `GET` et `HEAD` sur `/<ressource>/{id}/content` — contre le trait du
   fragment `storage`. Le corps voyage en `application/octet-stream`, pas en JSON : le

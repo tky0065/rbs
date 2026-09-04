@@ -107,7 +107,7 @@ complétion qui refuserait ce que la commande accepte vaudrait moins que pas de 
 du tout.
 
 Fish et PowerShell sont les deux shells dont le générateur s'arrête avant les valeurs d'un
-argument positionnel : là, `rbs add ` complète les drapeaux mais pas les onze noms. C'est
+argument positionnel : là, `rbs add ` complète les drapeaux mais pas les douze noms. C'est
 une limite du générateur, non de la déclaration.
 
 ## Un shell inconnu

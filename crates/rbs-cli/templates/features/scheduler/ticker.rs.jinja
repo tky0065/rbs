@@ -1,0 +1,101 @@
+use std::time::Duration;
+
+use chrono::Utc;
+use rbs_core::HasCoreState;
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, TransactionTrait};
+
+use super::model::{Column, Entity};
+use super::{Config, Schedule, a_la_seconde};
+use crate::state::AppState;
+
+/// Examine le calendrier jusqu'à l'arrêt du processus.
+///
+/// Le calendrier est reçu déjà réconcilié : sa validation appartient au démarrage, qu'une
+/// expression illisible doit arrêter, et non à cette boucle, dont l'échec ne serait qu'une
+/// ligne de log.
+pub async fn run(state: AppState, schedules: Vec<Schedule>) {
+    let attente = match Config::load() {
+        Ok(config) => Duration::from_secs(config.poll_interval_secs),
+        // La section a été lue au démarrage sans erreur ; l'échec ici tiendrait à une
+        // relecture de la cascade, et retirer le ticker pour cela serait pire que de le
+        // faire tourner à sa cadence par défaut.
+        Err(error) => {
+            tracing::error!(%error, "section [scheduler] illisible, cadence par défaut");
+            Duration::from_secs(30)
+        }
+    };
+
+    tracing::info!(
+        echeances = schedules.len(),
+        attente_secs = attente.as_secs(),
+        "calendrier prêt"
+    );
+
+    loop {
+        tick(state.core().db(), &schedules).await;
+
+        tokio::time::sleep(attente).await;
+    }
+}
+
+/// Réserve puis déclenche toutes les échéances dues, et rend leur nombre.
+///
+/// Une échéance en échec **n'interrompt pas le tour**. Rendre l'erreur ici laisserait les
+/// échéances suivantes de la liste inexaminées, et une échéance durablement cassée gèlerait
+/// tout le calendrier derrière elle — chaque tour s'arrêtant au même endroit.
+pub(super) async fn tick(db: &DatabaseConnection, schedules: &[Schedule]) -> usize {
+    let mut declenchees = 0;
+
+    for schedule in schedules {
+        match reserver_et_enfiler(db, schedule).await {
+            Ok(true) => declenchees += 1,
+            Ok(false) => {}
+            Err(error) => {
+                tracing::error!(kind = schedule.kind, %error, "échéance non déclenchée")
+            }
+        }
+    }
+
+    declenchees
+}
+
+/// Tente de gagner une échéance, et enfile son job si elle est gagnée.
+///
+/// La réservation et l'enfilage partagent une transaction : sans elle, un arrêt entre les
+/// deux avancerait l'échéance sans créer le job, et personne ne s'en apercevrait avant
+/// l'occurrence suivante.
+async fn reserver_et_enfiler(db: &DatabaseConnection, schedule: &Schedule) -> anyhow::Result<bool> {
+    let horaire = schedule.compiler()?;
+    let maintenant = a_la_seconde(Utc::now().fixed_offset());
+
+    let prochaine = horaire
+        .after(&maintenant)
+        .next()
+        .ok_or_else(|| anyhow::anyhow!("`{}` n'a plus aucune occurrence", schedule.expression))?;
+
+    let transaction = db.begin().await?;
+
+    // La condition porte sur `next_run_at` et non sur une lecture préalable : c'est ce
+    // qui rend la réservation atomique. Le verrou de ligne que l'`UPDATE` pose fait
+    // attendre le réplica suivant, qui relit une échéance déjà avancée et n'affecte rien.
+    let reserve = Entity::update_many()
+        .col_expr(Column::NextRunAt, a_la_seconde(prochaine).into())
+        .col_expr(Column::LastRunAt, maintenant.into())
+        .col_expr(Column::UpdatedAt, maintenant.into())
+        .filter(Column::Kind.eq(schedule.kind))
+        .filter(Column::NextRunAt.lte(maintenant))
+        .exec(&transaction)
+        .await?;
+
+    if reserve.rows_affected == 0 {
+        transaction.rollback().await?;
+        return Ok(false);
+    }
+
+    schedule.enfiler(&transaction).await?;
+    transaction.commit().await?;
+
+    tracing::debug!(kind = schedule.kind, "échéance déclenchée");
+
+    Ok(true)
+}

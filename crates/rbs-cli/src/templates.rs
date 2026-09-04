@@ -803,10 +803,12 @@ mod tests {
             "ci",
             "cors",
             "docker",
+            "jobs",
             "mail",
             "observability",
             "rate-limit",
             "redis",
+            "scheduler",
             "storage",
         ] {
             assert!(
@@ -1353,6 +1355,72 @@ mod tests {
             1,
             "le dépilage doit tenir dans une fonction unique :\n{queue}"
         );
+    }
+
+    #[test]
+    fn the_scheduler_fragment_requires_jobs_and_carries_both_anchors() {
+        let source = read(&Path::new(RACINE_FEATURES).join("scheduler/feature.toml"));
+        let manifest = crate::manifest::read(&source, "scheduler/feature.toml")
+            .expect("le manifeste du fragment scheduler doit se lire");
+
+        // Le scheduler déclenche sans exécuter : sans la file, il n'aurait nulle part où
+        // enfiler, et l'installation poserait un projet qui ne compile pas.
+        assert_eq!(manifest.feature.requires, ["jobs"]);
+
+        let migration = manifest
+            .migration
+            .as_ref()
+            .expect("le fragment pose une table, il doit donc porter une migration");
+        assert_eq!(migration.name, "create_schedules");
+
+        let ancres: Vec<&str> = manifest
+            .anchors
+            .iter()
+            .map(|ancre| ancre.anchor.as_str())
+            .collect();
+        assert_eq!(ancres, ["features", "startup"]);
+
+        // Le calendrier est relu et validé avant que le serveur n'écoute, et une
+        // expression illisible doit arrêter le démarrage — ce que le guide promet. Un
+        // `spawn` détaché, comme celui de la file, laisserait au contraire l'API répondre
+        // en paraissant saine, avec un calendrier qui ne déclenchera jamais rien : c'est
+        // le mode de panne que ce fragment existe pour éviter, et il ne se voit pas.
+        let startup = manifest
+            .anchors
+            .iter()
+            .find(|ancre| ancre.anchor == "startup")
+            .expect("l'ancre startup vient d'être exigée");
+        assert!(
+            startup.content.contains(".await?"),
+            "l'erreur du démarrage ne remonte pas à `main` : {}",
+            startup.content
+        );
+    }
+
+    /// Le guide `AGENTS.md` énumère les features installables à la main.
+    ///
+    /// La liste ne se déduit d'aucun catalogue : elle avait vieilli en silence, et un
+    /// agent lisant le guide d'un projet fraîchement engendré s'y voyait refuser une
+    /// feature que le binaire sait pourtant poser. C'est ce test qui doit mordre à la
+    /// livraison du fragment suivant, dans les deux langues.
+    #[test]
+    fn each_agents_guide_names_every_installable_feature() {
+        let installables = Source::feature(None, "_aucune_feature_de_ce_nom_")
+            .expect_err("ce nom ne doit désigner aucun fragment")
+            .known;
+
+        for langue in ["en.md.jinja", "fr.md.jinja"] {
+            let guide = read(
+                &Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/agents")).join(langue),
+            );
+
+            for feature in installables.split(", ") {
+                assert!(
+                    guide.contains(feature),
+                    "`{feature}` s'installe mais {langue} ne la nomme pas"
+                );
+            }
+        }
     }
 
     /// Une balise Jinja de contrôle (`{%- if … %}`, `{%- endif %}`) s'écrit au ras de la

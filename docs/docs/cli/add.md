@@ -6,7 +6,7 @@ title: rbs add
 # `rbs add`
 
 Installs a feature into an existing project. Eleven are shipped: `audit`, `auth`, `ci`,
-`cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis` and `storage`.
+`cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`, `scheduler` and `storage`.
 
 :::note
 rbs speaks French in its help screens and in its output. Every terminal block on this page
@@ -17,7 +17,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ```text
 $ rbs add --help
-Ajoute une feature : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage
+Ajoute une feature : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage
 
 Usage: rbs add [OPTIONS] <FEATURE>
 
@@ -38,7 +38,7 @@ Options:
 | `--dry-run` | Prints the plan and stops. Nothing is written. |
 | `--template-dir <CHEMIN>` | Reads the fragments from a directory holding one subdirectory per feature, instead of the ones embedded in the binary. |
 
-## The eleven features
+## The twelve features
 
 | Feature | Files | Next step |
 |---|---|---|
@@ -46,6 +46,7 @@ Options:
 | `ci` | `.github/workflows/ci.yml` | `git push` |
 | `auth` | eight files under `src/auth/`, one migration, edits to four project files — and `rate-limit`, which it requires | `rbs migrate up` |
 | `jobs` | seven files under `src/jobs/`, one migration, and a `[jobs]` config section | `rbs migrate up`, then register your jobs in `src/jobs/mod.rs` |
+| `scheduler` | six files under `src/scheduler/`, one migration, a `[scheduler]` config section, a ticker in `// <rbs:startup>` — and `jobs`, which it requires | `rbs migrate up`, then declare your schedules in `src/scheduler/mod.rs` |
 | `redis` | three files under `src/cache/`, and a `redis` service inserted into the project's compose | the compose already carries it — `docker compose up -d` starts it |
 | `mail` | five files under `src/mail/`, a sample template, and a `mailpit` service inserted into the project's compose | set `[mail]` in `config/default.toml` — a local SMTP by default |
 | `storage` | four files under `src/storage/` | ignore `./storage`, or switch the backend to `s3` |
@@ -253,8 +254,9 @@ plan pour /private/tmp/rbs-demo/blog
   rbs migrate up
 ```
 
-`auth` is the only fragment that requires another. `POST /auth/login` hashes an Argon2 even
-for an unknown email — that is what stops accounts being enumerated — so every anonymous
+`auth` is one of the two fragments that require another —
+[`scheduler`](../guides/scheduler.md) is the other, and it pulls in `jobs`, whose queue it
+triggers. `POST /auth/login` hashes an Argon2 even for an unknown email — that is what stops accounts being enumerated — so every anonymous
 request there costs 19 MiB. Without a rate limit, the protection against enumeration is a
 denial of service offered to the first comer: the fragment therefore ships with
 `rate-limit`, the plan names it before anything is written, and the `[rate_limit]` section
@@ -281,7 +283,7 @@ Anything else is refused with the list of what is installable:
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage
+erreur : `graphql` n'est pas une feature installable : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage
 ```
 
 ## Idempotence
@@ -411,7 +413,7 @@ three use it.
 
 `docker` is the one fragment `rbs add` installs that is itself an exception: its `api` and
 `migrate` services go into `# <rbs:services>`, the YAML anchor a compose carries — see
-[above](#the-ten-features). The rule is the same everywhere: no AST is ever rewritten,
+[above](#the-twelve-features). The rule is the same everywhere: no AST is ever rewritten,
 and a missing anchor makes the command write nothing and print the block to paste back.
 [`rbs doctor`](./doctor.md) checks all eleven — ten on a project with no compose to carry
 an eleventh.

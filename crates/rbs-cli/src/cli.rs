@@ -53,7 +53,7 @@ pub enum Commands {
         yes: bool,
     },
 
-    /// Ajoute une feature : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage.
+    /// Ajoute une feature : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage.
     Add {
         /// Feature à installer.
         feature: String,

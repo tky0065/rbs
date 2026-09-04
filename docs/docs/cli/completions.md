@@ -102,7 +102,7 @@ is what `--template-dir` exists for — so the parser keeps no such list, and on
 accepts would be worse than no completion at all.
 
 Fish and PowerShell are the two shells whose generator stops short of the values of a
-positional argument: there, `rbs add ` completes the flags but not the eleven names. That is
+positional argument: there, `rbs add ` completes the flags but not the twelve names. That is
 a limit of the generator, not of the declaration.
 
 ## An unknown shell
