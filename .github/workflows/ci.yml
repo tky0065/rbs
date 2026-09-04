@@ -38,8 +38,11 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
 
+      # `--no-fail-fast` comme sur le job d'intégration : sans lui, cargo s'arrête au
+      # premier binaire en échec et les suivants ne rendent aucun verdict. Deux tests
+      # d'`integration_docs` ont ainsi masqué tout ce qui les suivait sous Windows.
       - name: cargo test
-        run: cargo test --workspace --all-features
+        run: cargo test --workspace --all-features --no-fail-fast
 
       # `clippy` et les tests disent que le dépôt compile contre lui-même ; ils ne disent
       # rien des projets déjà bâtis sur la version parue. Un instantané textuel de l'API
@@ -203,5 +206,8 @@ jobs:
       - name: cargo clippy
         run: cargo clippy --workspace --all-features --all-targets -- -D warnings
 
+      # `--no-fail-fast` comme sur le job d'intégration : sans lui, cargo s'arrête au
+      # premier binaire en échec et les suivants ne rendent aucun verdict. Deux tests
+      # d'`integration_docs` ont ainsi masqué tout ce qui les suivait sous Windows.
       - name: cargo test
-        run: cargo test --workspace --all-features
+        run: cargo test --workspace --all-features --no-fail-fast
