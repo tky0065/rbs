@@ -263,10 +263,10 @@ MAISON=1
 
 ## `--with` installs
 
-`--with` names features to install at creation, comma-separated. rbs knows twelve —
+`--with` names features to install at creation, comma-separated. rbs knows thirteen —
 `audit`, `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`,
-`redis`, `scheduler` and `storage` — and installs every one named, in the same pass that writes the
-project:
+`redis`, `scheduler`, `storage` and `webhooks` — and installs every one named, in the
+same pass that writes the project:
 
 {/* rbs:transcript cmd="rbs new site --with auth --yes" */}
 ```text
@@ -311,7 +311,7 @@ A name that is no feature at all is refused before the first file is written:
 {/* rbs:transcript cmd="rbs new site --with graphql --yes" */}
 ```text
 $ rbs new site --with graphql --yes
-erreur : `graphql` n'est pas une feature rbs — disponibles : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage
+erreur : `graphql` n'est pas une feature rbs — disponibles : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 ```
 
 ## The generated compose

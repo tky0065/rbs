@@ -5,12 +5,9 @@ title: rbs add
 
 # `rbs add`
 
-Installe une feature dans un projet existant. Elle en livre onze : `audit`, `auth`,
-`ci`, `cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis` et
-`storage`.
-Installe une feature dans un projet existant. Elle en livre onze : `auth`, `ci`, `cors`,
-`docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`, `scheduler` et
-`storage`.
+Installe une feature dans un projet existant. Elle en livre treize : `audit`, `auth`,
+`ci`, `cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`,
+`scheduler`, `storage` et `webhooks`.
 
 :::note
 Les blocs de terminal de cette page sont des sorties réelles, capturées en lançant la
@@ -22,7 +19,7 @@ sortie de terminal ne se traduit pas.
 
 ```text
 $ rbs add --help
-Ajoute une feature : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage
+Ajoute une feature : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 
 Usage: rbs add [OPTIONS] <FEATURE>
 
@@ -43,7 +40,7 @@ Options:
 | `--dry-run` | Affiche le plan et s'arrête. Rien n'est écrit. |
 | `--template-dir <CHEMIN>` | Lit les fragments dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire. |
 
-## Les douze features
+## Les treize features
 
 | Feature | Fichiers | Suite |
 |---|---|---|
@@ -59,6 +56,7 @@ Options:
 | `rate-limit` | quatre fichiers sous `src/rate_limit/`, une section `[rate_limit]`, un champ sur `AppState`, et une couche dans `// <rbs:layers>` | derrière un reverse proxy, régler `rate_limit.trust_forwarded_for` |
 | `observability` | quatre fichiers sous `src/observability/`, une section `[observability]`, une couche dans `// <rbs:layers>`, et un second listener dans `// <rbs:startup>` | nommer un collecteur dans `OTEL_EXPORTER_OTLP_ENDPOINT` — sans lui rien n'est exporté |
 | `audit` | quatre fichiers sous `src/audit/`, et une migration | `rbs migrate up`, puis appeler `audit::record` dans vos services — l'entrée s'écrit dans la transaction du changement |
+| `webhooks` | dix fichiers sous `src/webhooks/`, une migration, une section `[webhooks]`, trois routes, un champ sur `AppState` — et `jobs` et `auth`, qu'elle exige | `rbs migrate up`, puis appeler `webhooks::emit` là où votre code écrit |
 
 `cors`, `rate-limit` et `observability` sont les trois qui empilent un middleware au lieu
 de monter une route : leur couche va dans `// <rbs:layers>`, à l'intérieur de `trace` et
@@ -288,7 +286,7 @@ Tout autre nom est refusé avec la liste de ce qui est installable :
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage
+erreur : `graphql` n'est pas une feature installable : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 ```
 
 ## L'idempotence

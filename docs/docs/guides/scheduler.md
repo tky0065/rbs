@@ -16,7 +16,7 @@ logging and the execution already exist and are proven — rewriting them for th
 that a clock started them would leave two loops to maintain instead of one.
 
 That is why the fragment requires `jobs`, and it is the only one in the
-[`rbs add` table](../cli/add.md#the-eleven-features) that pulls another feature along
+[`rbs add` table](../cli/add.md#the-thirteen-features) that pulls another feature along
 besides `auth`. On a bare project, `rbs add scheduler` lays down `jobs` first and
 `scheduler` second, in a single plan:
 

@@ -14,6 +14,22 @@ between minor versions with no deprecation cycle.
 
 ### Added
 
+- `rbs add webhooks` installs outgoing webhooks: a `webhook_subscriptions` table, three
+  routes to register, list and revoke a subscriber, and an `emit` function that enqueues one
+  signed delivery per listening subscription. `emit` takes a `&C: ConnectionTrait` rather
+  than a connection, for the same reason `audit::record` does: hand it the transaction
+  carrying your change, and the deliveries exist if and only if that change is committed —
+  an event announcing a signup that was rolled back is a lie no retry takes back. Delivery
+  goes through the `jobs` queue unchanged, which is why the fragment requires it: retries,
+  backoff and `last_error` were already proven, and a second retry loop would have been a
+  second thing to maintain. It requires `auth` too — a subscription endpoint left open lets
+  anyone have the project's events delivered to their own server. The body is signed
+  HMAC-SHA256 over `<timestamp>.<raw body>` and carried as `X-Rbs-Signature: t=…,v1=…`: the
+  timestamp is inside the digest, which is what closes replay. Each subscription gets its
+  own secret, returned once at creation and never by the list — a shared one would give every
+  subscriber what they need to forge the events delivered to all the others. The subscription
+  is named by its id in the job rather than copied, so a rotated secret applies to deliveries
+  already queued and a revocation stops them.
 - `rbs add audit` installs a write log: an `audit_log` table, an `Entry` type and a
   `record` function under `src/audit/`. `record` takes a `&C: ConnectionTrait` rather than
   a connection, which is the whole reason the log lives in the database: hand it the

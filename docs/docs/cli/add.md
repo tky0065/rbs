@@ -5,8 +5,9 @@ title: rbs add
 
 # `rbs add`
 
-Installs a feature into an existing project. Eleven are shipped: `audit`, `auth`, `ci`,
-`cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`, `scheduler` and `storage`.
+Installs a feature into an existing project. Thirteen are shipped: `audit`, `auth`,
+`ci`, `cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`,
+`scheduler`, `storage` and `webhooks`.
 
 :::note
 rbs speaks French in its help screens and in its output. Every terminal block on this page
@@ -17,7 +18,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ```text
 $ rbs add --help
-Ajoute une feature : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage
+Ajoute une feature : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 
 Usage: rbs add [OPTIONS] <FEATURE>
 
@@ -38,7 +39,7 @@ Options:
 | `--dry-run` | Prints the plan and stops. Nothing is written. |
 | `--template-dir <CHEMIN>` | Reads the fragments from a directory holding one subdirectory per feature, instead of the ones embedded in the binary. |
 
-## The twelve features
+## The thirteen features
 
 | Feature | Files | Next step |
 |---|---|---|
@@ -54,6 +55,7 @@ Options:
 | `rate-limit` | four files under `src/rate_limit/`, a `[rate_limit]` config section, a field on `AppState`, and a layer in `// <rbs:layers>` | behind a reverse proxy, set `rate_limit.trust_forwarded_for` |
 | `observability` | four files under `src/observability/`, an `[observability]` config section, a layer in `// <rbs:layers>`, and a second listener in `// <rbs:startup>` | name a collector in `OTEL_EXPORTER_OTLP_ENDPOINT` — without it nothing is exported |
 | `audit` | four files under `src/audit/`, and one migration | `rbs migrate up`, then call `audit::record` in your services — the entry is written in the transaction of the change |
+| `webhooks` | ten files under `src/webhooks/`, one migration, a `[webhooks]` config section, three routes, a field on `AppState` — and `jobs` and `auth`, which it requires | `rbs migrate up`, then call `webhooks::emit` where your code writes |
 
 `cors`, `rate-limit` and `observability` are the three that stack a middleware rather
 than mount a route: their layer goes into `// <rbs:layers>`, inside `trace` and
@@ -283,7 +285,7 @@ Anything else is refused with the list of what is installable:
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage
+erreur : `graphql` n'est pas une feature installable : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 ```
 
 ## Idempotence

@@ -15,6 +15,23 @@ dépréciation.
 
 ### Ajouté
 
+- `rbs add webhooks` installe les webhooks sortants : une table `webhook_subscriptions`,
+  trois routes pour inscrire, lister et révoquer un abonné, et une fonction `emit` qui enfile
+  une livraison signée par abonnement qui écoute. `emit` prend un `&C: ConnectionTrait` et non
+  une connexion, pour la raison qui vaut déjà pour `audit::record` : passez-lui la transaction
+  qui porte votre changement, et les livraisons naissent si et seulement si elle est committée
+  — un événement annonçant une inscription annulée est un mensonge qu'aucun réessai ne
+  rattrape. La livraison passe par la file de `jobs` inchangée, et c'est pourquoi le fragment
+  l'exige : les réessais, l'attente entre deux tentatives et `last_error` étaient déjà
+  prouvés, et une seconde boucle de réessai aurait fait une seconde chose à maintenir. Il
+  exige aussi `auth` — une création d'abonnement laissée ouverte permet à n'importe qui de
+  faire livrer chez lui les événements du projet. Le corps est signé en HMAC-SHA256 sur
+  `<horodatage>.<corps brut>` et porté par `X-Rbs-Signature: t=…,v1=…` : l'horodatage entre
+  dans le condensat, ce qui ferme le rejeu. Chaque abonnement a son propre secret, rendu une
+  seule fois à la création et jamais par la liste — un secret commun donnerait à chaque abonné
+  de quoi contrefaire les événements livrés à tous les autres. L'abonnement est désigné dans
+  le job par son identifiant plutôt que recopié, si bien qu'un secret tourné s'applique aux
+  livraisons déjà en file et qu'une révocation les arrête.
 - `rbs add audit` installe un journal des écritures : une table `audit_log`, un type
   `Entry` et une fonction `record` sous `src/audit/`. `record` prend un
   `&C: ConnectionTrait` et non une connexion, ce qui est toute la raison de mettre le

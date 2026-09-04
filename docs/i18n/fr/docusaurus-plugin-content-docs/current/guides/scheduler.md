@@ -16,7 +16,7 @@ journalisation et l'exécution existent déjà et sont éprouvés — les rééc
 raison qu'une horloge les aurait lancés donnerait deux boucles à maintenir au lieu d'une.
 
 C'est pourquoi le fragment exige `jobs`, et c'est le seul du
-[tableau d'`rbs add`](../cli/add.md#les-onze-features) à entraîner une autre feature avec
+[tableau d'`rbs add`](../cli/add.md#les-treize-features) à entraîner une autre feature avec
 lui, en dehors d'`auth`. Sur un projet nu, `rbs add scheduler` pose `jobs` d'abord et
 `scheduler` ensuite, dans un même plan :
 
