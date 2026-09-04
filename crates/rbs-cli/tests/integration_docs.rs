@@ -203,6 +203,7 @@ fn normalise(sortie: &str, tmp: &Path) -> String {
     // là où la page montre la commande telle qu'on la tape. Le suffixe tombe des deux
     // côtés de la comparaison, qui reste sensible à tout le reste de la ligne.
     texte = texte.replace("rbs.exe", "rbs");
+    texte = unifie_separateurs(&texte);
     texte = masque_moteur(&texte);
     texte = masque_version(&texte);
     texte = masque_horodatage(&texte);
@@ -220,6 +221,25 @@ fn normalise(sortie: &str, tmp: &Path) -> String {
     }
 
     rendu
+}
+
+/// Les chemins situés sous `<tmp>` reçoivent la barre oblique : Windows imprime
+/// `<tmp>\demo` là où la page montre `<tmp>/demo`.
+///
+/// Seuls les mots commençant par `<tmp>` sont touchés. Un `\` ailleurs appartient à du
+/// code cité — une chaîne Rust échappée, un chemin d'exemple — et doit rester comparé
+/// tel quel, faute de quoi la normalisation masquerait une vraie dérive de la page.
+fn unifie_separateurs(texte: &str) -> String {
+    texte
+        .split_inclusive(char::is_whitespace)
+        .map(|mot| {
+            if mot.starts_with("<tmp>") {
+                mot.replace('\\', "/")
+            } else {
+                mot.to_string()
+            }
+        })
+        .collect()
 }
 
 fn efface_ansi(texte: &str) -> String {
@@ -737,6 +757,36 @@ avant\n\
         assert_eq!(
             normalise("plan pour …/demo\n", tmp),
             normalise("plan pour /var/folders/x/T/.tmpAbC/demo\n", tmp)
+        );
+    }
+
+    /// Windows imprime le chemin absolu du tmpdir avec des barres inverses, et son `Usage:`
+    /// avec le nom réel de l'exécutable. Les pages montrent l'un et l'autre sous la forme
+    /// qu'on tape : sans cette unification, tout transcript citant un chemin absolu
+    /// échouait sur cette seule plateforme, en accusant la page d'une dérive.
+    #[test]
+    fn a_windows_path_and_executable_meet_what_the_page_writes() {
+        let tmp = Path::new("/var/folders/x/T/.tmpAbC");
+
+        assert_eq!(
+            normalise("plan pour <tmp>\\demo\\src\n", tmp),
+            "plan pour <tmp>/demo/src\n"
+        );
+        assert_eq!(
+            normalise("Usage: rbs.exe generate <COMMAND>\n", tmp),
+            "Usage: rbs generate <COMMAND>\n"
+        );
+    }
+
+    /// Un `\` hors d'un chemin du tmpdir appartient au contenu que la page cite : le
+    /// masquer y ferait passer une vraie dérive pour une différence de plateforme.
+    #[test]
+    fn a_backslash_outside_the_tmpdir_is_left_alone() {
+        let tmp = Path::new("/var/folders/x/T/.tmpAbC");
+
+        assert_eq!(
+            normalise("  let ligne = \"a\\nb\";\n", tmp),
+            "  let ligne = \"a\\nb\";\n"
         );
     }
 
