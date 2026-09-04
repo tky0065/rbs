@@ -44,7 +44,7 @@ rbs --version
 ```
 
 ```text
-rbs 1.1.0
+rbs 1.2.0
 ```
 
 :::note
@@ -396,7 +396,7 @@ rbs doctor
   ✓ agents      guide et inventaire à jour
   ✓ relations   les modèles portent leurs ancres de relation
   ✓ .env        les 7 variables de .env.example sont renseignées
-  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
+  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
   … base        compilation de la crate migration, peut prendre
                 une minute au premier lancement…
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s

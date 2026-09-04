@@ -180,7 +180,7 @@ muette ne passe jamais pour un blocage :
 
 ```text
   ✓ .env        les 7 variables de .env.example sont renseignées
-  ✓ versions    projet et rbs-core alignés sur le CLI 1.1.0
+  ✓ versions    projet et rbs-core alignés sur le CLI 1.2.0
   … base        compilation de la crate migration, peut prendre
                 une minute au premier lancement…
    Compiling sea-orm v2.0.2
@@ -201,7 +201,7 @@ $ rbs doctor
   ✓ agents      guide et inventaire à jour
   ✓ relations   les modèles portent leurs ancres de relation
   ✓ .env        les 7 variables de .env.example sont renseignées
-  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
+  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
   … base        compilation de la crate migration, peut prendre
                 une minute au premier lancement…
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.30s
@@ -229,7 +229,7 @@ $ rbs doctor
   ✗ .env        RBS_LOG_FORMAT absente du .env
       ajoutez au .env :
       RBS_LOG_FORMAT=pretty
-  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
+  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
   ✗ base        rien ne répond sur localhost:55501
       lancez `docker compose up -d` à la racine du projet, ou corrigez l'URL du .env
   ✓ jobs        la configuration de la file est en place
@@ -272,7 +272,7 @@ plan pour /private/tmp/rbs-demo/demo
   ✓ agents      guide et inventaire à jour
   ✓ relations   les modèles portent leurs ancres de relation
   ✓ .env        les 4 variables de .env.example sont renseignées
-  ✓ versions    projet et rbs-core 1.1.0 alignés sur le CLI 1.1.0
+  ✓ versions    projet et rbs-core 1.2.0 alignés sur le CLI 1.2.0
   … base        compilation de la crate migration, peut prendre
                 une minute au premier lancement…
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.09s
@@ -394,7 +394,7 @@ $ rbs doctor
   ✓ agents      guide et inventaire à jour
   ✓ relations   les modèles portent leurs ancres de relation
   ✓ .env        les 7 variables de .env.example sont renseignées
-  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
+  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
   … base        compilation de la crate migration, peut prendre
                 une minute au premier lancement…
    Compiling migration v0.1.0 (/private/tmp/rbs-demo/demo/migration)
