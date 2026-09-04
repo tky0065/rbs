@@ -1,0 +1,77 @@
+use axum::Json;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use rbs_core::{HasCoreState, Identity, ProblemDetails, Result, ValidatedJson};
+use sea_orm::prelude::Uuid;
+
+use super::dto::{CreateSubscription, SubscriptionCreated, SubscriptionResponse};
+use super::service;
+use crate::state::AppState;
+
+// Les trois routes exigent un appelant authentifié. Une création laissée ouverte
+// permettrait à n'importe qui de faire livrer chez lui les événements du projet : ce n'est
+// pas une faiblesse théorique, `user.created` porte des adresses.
+//
+// `Identity` ne dit que « le jeton est valide ». Un projet qui réserve l'administration des
+// abonnements à un rôle remplace l'extracteur par sa propre garde — `src/auth/guard.rs`.
+
+#[utoipa::path(
+    post,
+    path = "/webhooks/subscriptions",
+    tag = "webhooks",
+    security(("bearer" = [])),
+    request_body = CreateSubscription,
+    responses(
+        (status = 201, description = "abonnement inscrit, secret rendu cette seule fois", body = SubscriptionCreated),
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, description = "entrée invalide", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn subscribe(
+    State(state): State<AppState>,
+    _identite: Identity,
+    ValidatedJson(input): ValidatedJson<CreateSubscription>,
+) -> Result<(StatusCode, Json<SubscriptionCreated>)> {
+    let inscrit = service::subscribe(state.core().db(), input).await?;
+
+    Ok((StatusCode::CREATED, Json(inscrit)))
+}
+
+#[utoipa::path(
+    get,
+    path = "/webhooks/subscriptions",
+    tag = "webhooks",
+    security(("bearer" = [])),
+    responses(
+        (status = 200, description = "les abonnements actifs, sans leurs secrets", body = Vec<SubscriptionResponse>),
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn list(
+    State(state): State<AppState>,
+    _identite: Identity,
+) -> Result<Json<Vec<SubscriptionResponse>>> {
+    Ok(Json(service::list(state.core().db()).await?))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/webhooks/subscriptions/{id}",
+    tag = "webhooks",
+    security(("bearer" = [])),
+    params(("id" = Uuid, Path, description = "identifiant de l'abonnement")),
+    responses(
+        (status = 204, description = "abonnement révoqué"),
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 404, description = "abonnement inconnu", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn revoke(
+    State(state): State<AppState>,
+    _identite: Identity,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode> {
+    service::revoke(state.core().db(), id).await?;
+
+    Ok(StatusCode::NO_CONTENT)
+}

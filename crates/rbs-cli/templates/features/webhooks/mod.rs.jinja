@@ -1,0 +1,66 @@
+pub mod config;
+pub mod controller;
+pub mod delivery;
+pub mod dto;
+pub mod model;
+pub mod repository;
+pub mod service;
+pub mod signature;
+
+#[cfg(test)]
+mod tests;
+
+use axum::Router;
+use axum::routing::{delete, post};
+
+pub use config::Config;
+pub use delivery::Sender;
+// Réexportée pour que le projet écrive `webhooks::emit(&transaction, "user.created", &dto)`
+// : tant qu'aucun handler ne le fait, le compilateur la tient pour inutile.
+#[allow(unused_imports)]
+pub use service::emit;
+
+use crate::state::AppState;
+
+/// L'accès au client de livraison depuis l'état partagé.
+///
+/// L'accesseur arrive avec la feature et repart avec elle : `state.rs` n'a pas à connaître
+/// un type qu'un `rbs add` a déposé.
+impl AppState {
+    pub fn webhooks(&self) -> &Sender {
+        &self.webhooks
+    }
+}
+
+// Les deux méthodes du même chemin se déclarent en une fois : axum refuse — et le dit par
+// une panique au démarrage — deux `route()` sur un chemin identique.
+pub fn routes() -> Router<AppState> {
+    Router::new()
+        .route(
+            "/webhooks/subscriptions",
+            post(controller::subscribe).get(controller::list),
+        )
+        .route("/webhooks/subscriptions/{id}", delete(controller::revoke))
+}
+
+/// Dit si l'un des motifs d'un abonnement vaut pour `event`.
+///
+/// Trois formes, et pas une de plus : `*` pour tout, `user.*` pour une famille,
+/// `user.created` pour lui-même.
+///
+/// Le tri se fait ici et non en SQL, et c'est délibéré : la recherche dans un tableau JSON
+/// n'a pas de forme commune à PostgreSQL, MySQL et SQLite, et les motifs à préfixe
+/// l'auraient de toute façon interdite. Le prix est une lecture de la table des abonnements
+/// par événement émis — sans conséquence tant que les abonnés se comptent en centaines.
+pub fn matches(patterns: &[String], event: &str) -> bool {
+    patterns.iter().any(|motif| {
+        if motif == "*" {
+            return true;
+        }
+
+        match motif.strip_suffix('*') {
+            Some(prefixe) => event.starts_with(prefixe),
+            None => motif == event,
+        }
+    })
+}

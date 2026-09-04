@@ -483,6 +483,12 @@ fn suite(feature: &str) -> Option<&'static str> {
             "derrière un reverse proxy, passez rate_limit.trust_forwarded_for à true — \
              sinon tous les clients partagent l'adresse du proxy",
         ),
+        // La table n'existe pas encore, et aucun abonné n'est inscrit : sans les deux,
+        // `emit` enfile dans le vide et rien ne le signale.
+        "webhooks" => Some(
+            "rbs migrate up, puis inscrivez un abonné par POST /webhooks/subscriptions — \
+             son secret n'est rendu qu'à cet instant",
+        ),
         _ => None,
     }
 }
