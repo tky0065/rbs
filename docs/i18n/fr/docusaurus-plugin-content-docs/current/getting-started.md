@@ -11,7 +11,7 @@ si votre terminal affiche la même chose, vous n'avez pas dévié — aux durée
 identifiants et aux dates près, qui sont les vôtres. Une seule chose a été retirée des
 blocs : le chemin absolu du répertoire où l'exécution a eu lieu, noté `…/demo`.
 
-Le CLI parle français : `✓ demo créé — 20 fichiers` est une ligne de succès. Les
+Le CLI parle français : `✓ demo créé — 21 fichiers` est une ligne de succès. Les
 options, les noms de fichiers et le code généré, eux, sont les mêmes quelle que soit la
 langue.
 
@@ -74,7 +74,7 @@ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 
 {/* rbs:transcript cmd="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" */}
 ```text
-✓ demo créé — 20 fichiers
+✓ demo créé — 21 fichiers
 
   cd demo
   docker compose up -d   # la base du .env, montée

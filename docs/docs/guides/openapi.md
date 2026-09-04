@@ -63,8 +63,13 @@ One asymmetry is worth knowing, and it is visible in the code above: Swagger UI 
 document over HTTP and mounts that route itself. Displaying the interface therefore
 implies exposing the document, and mounting it a second time would make Axum panic at
 startup. **To serve the document alone, turn `docs.swagger_ui` off** — that combination
-is the one that generates clients or checks a contract from CI. The reverse combination
-does not exist, and asking for it changes nothing.
+is the one that checks a contract from CI. The reverse combination does not exist, and
+asking for it changes nothing.
+
+Generating a client needs neither of the two: `src/bin/openapi.rs` prints the document with
+no server running, and [`rbs generate client`](../cli/client.md) reads it from there. Over
+HTTP the document is what a deployed instance serves; from that binary it is what the code
+in front of you produces.
 
 ## Judge for yourself
 

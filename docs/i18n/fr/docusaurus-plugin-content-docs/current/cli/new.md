@@ -99,7 +99,7 @@ attente de la base dans [`rbs dev`](./dev.md), et une URL sans hôte ni port.
 {/* rbs:transcript cmd="rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes" */}
 ```text
 $ rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes
-✓ blog créé — 20 fichiers
+✓ blog créé — 21 fichiers
 
   cd blog
   docker compose up -d   # la base du .env, montée
@@ -121,6 +121,7 @@ blog/docker-compose.yml
 blog/migration/Cargo.toml
 blog/migration/src/lib.rs
 blog/migration/src/main.rs
+blog/src/bin/openapi.rs
 blog/src/health/controller.rs
 blog/src/health/mod.rs
 blog/src/lib.rs
@@ -179,7 +180,7 @@ dans laquelle il est écrit :
 
 ```text
 $ rbs new demo-api --database-url postgres://rbs:rbs@localhost:5432/demo_api --lang en --yes
-✓ demo-api créé — 20 fichiers
+✓ demo-api créé — 21 fichiers
 
 $ grep lang demo-api/Cargo.toml
 lang = "en"
@@ -222,7 +223,7 @@ crate :
 
 ```text
 $ rbs new blog --core-path /private/tmp/rbs-core --yes
-✓ blog créé — 20 fichiers
+✓ blog créé — 21 fichiers
 
   cd blog
   docker compose up -d   # la base du .env, montée
@@ -250,7 +251,7 @@ du squelette dont le `.env.jinja` porte une ligne de plus :
 
 ```text
 $ rbs new maison --template-dir /private/tmp/rbs-demo/mes-templates --yes
-✓ maison créé — 20 fichiers
+✓ maison créé — 21 fichiers
 
   cd maison
   docker compose up -d   # la base du .env, montée
@@ -271,7 +272,7 @@ qui écrit le projet :
 {/* rbs:transcript cmd="rbs new site --with auth --yes" */}
 ```text
 $ rbs new site --with auth --yes
-✓ site créé — 20 fichiers
+✓ site créé — 21 fichiers
   + auth       13 fichiers, 1 migration
 
   rbs migrate up
@@ -286,7 +287,7 @@ alphabétique, le même ordre dans lequel [`rbs add`](./add.md) énumère les do
 
 ```text
 $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes
-✓ with-demo créé — 20 fichiers
+✓ with-demo créé — 21 fichiers
   + auth       13 fichiers, 1 migration
   + docker     2 fichiers
   + storage    4 fichiers
@@ -379,7 +380,7 @@ Quatre cas n'écrivent rien :
 
 ```text
 $ rbs new sqlite-demo --database sqlite --yes
-✓ sqlite-demo créé — 19 fichiers
+✓ sqlite-demo créé — 20 fichiers
 
   cd sqlite-demo
   cargo run          # la base visée est dans .env
