@@ -63,10 +63,21 @@ pub async fn reconcilier(db: &DatabaseConnection, schedules: &[Schedule]) -> any
         // sauf un échouerait sur la clé primaire — sur le fragment dont l'argument est
         // précisément de tenir le multi-réplica.
         //
-        // `do_nothing` laisse intacte la ligne du réplica qui a devancé, ce qui est la
-        // règle voulue : la première échéance posée fait foi.
+        // La ligne du réplica qui a devancé reste intacte, ce qui est la règle voulue :
+        // la première échéance posée fait foi.
+        //
+        // `do_nothing_on` et non `do_nothing` : les deux disent la même chose, mais le
+        // second laisse vide la liste de colonnes, et le générateur MySQL écrit alors
+        // `ON DUPLICATE KEY IGNORE`, qui n'est pas du SQL — l'erreur 1064 est levée à
+        // l'exécution, sur ce seul moteur. Nommer la colonne lui fait écrire
+        // `ON DUPLICATE KEY UPDATE kind = kind`, pendant que PostgreSQL et SQLite
+        // reçoivent le `DO NOTHING` attendu.
         let pose = Entity::insert(ligne)
-            .on_conflict(OnConflict::column(Column::Kind).do_nothing().to_owned())
+            .on_conflict(
+                OnConflict::column(Column::Kind)
+                    .do_nothing_on([Column::Kind])
+                    .to_owned(),
+            )
             .exec(db)
             .await;
 
