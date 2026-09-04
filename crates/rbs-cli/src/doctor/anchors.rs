@@ -132,15 +132,19 @@ mod tests {
         fs::write(&path, ampute.join("\n")).expect("le fichier est réécrivable");
     }
 
+    /// Un projet frais ne porte pas *toutes* les ancres du registre : `jobs` vit dans
+    /// `src/jobs/mod.rs`, que seul `rbs add jobs` dépose — contrairement au compose, que
+    /// `new` écrit déjà. Une seule des deux ancres optionnelles est donc applicable ici,
+    /// et le compte attendu est celui du registre moins cette ancre-là.
     #[test]
-    fn a_fresh_project_carries_all_its_anchors() {
+    fn a_fresh_project_carries_every_anchor_that_applies_to_it() {
         let (_parent, root) = project();
 
         let check = check(&root);
 
         assert_eq!(check.state, State::Bon);
         assert!(
-            check.detail.contains(&ANCRES.len().to_string()),
+            check.detail.contains(&(ANCRES.len() - 1).to_string()),
             "{}",
             check.detail
         );
@@ -258,9 +262,11 @@ mod tests {
         let check = check(&root);
 
         assert_eq!(check.state, State::Bon, "{check:?}");
+        // Le compose retiré à la main, `jobs` déjà absent par défaut (v. le test
+        // précédent) : les deux ancres optionnelles du registre sont inapplicables.
         assert!(
-            check.detail.contains(&(ANCRES.len() - 1).to_string()),
-            "l'ancre du compose ne compte pas parmi les applicables : {}",
+            check.detail.contains(&(ANCRES.len() - 2).to_string()),
+            "ni le compose ni le registre de la file ne comptent parmi les applicables : {}",
             check.detail
         );
     }
@@ -333,7 +339,14 @@ mod tests {
     fn every_anchor_of_the_registry_is_put_back_at_its_own_indentation() {
         let (_parent, root) = project();
 
-        for anchor in anchors::resolved(&root) {
+        // Même filtre que celui de `inventaire()` : une ancre optionnelle dont le fichier
+        // est absent n'a pas de fichier où lire une indentation, et n'est pas de celles
+        // que la réparation d'un projet frais doit reposer.
+        let applicables = anchors::resolved(&root)
+            .into_iter()
+            .filter(|anchor| !anchor.optional || root.join(anchor.file.as_ref()).exists());
+
+        for anchor in applicables {
             let path = root.join(anchor.file.as_ref());
             let avant = fs::read_to_string(&path).expect("le fichier porteur est lisible");
 
