@@ -21,6 +21,7 @@ mod migrate;
 mod new;
 mod notes;
 mod plan;
+mod preset;
 mod prompts;
 mod secret;
 mod seed;
@@ -53,6 +54,7 @@ pub fn run() {
             database_url,
             database,
             with,
+            preset,
             core_path,
             lang,
             template_dir,
@@ -63,6 +65,7 @@ pub fn run() {
                 database_url,
                 database,
                 with,
+                preset,
                 core_path,
                 template_dir,
                 yes,
@@ -230,14 +233,17 @@ fn create_project(
     database_url: Option<String>,
     database: Database,
     with: Vec<String>,
+    preset: Option<preset::Preset>,
     core_path: Option<PathBuf>,
     template_dir: Option<PathBuf>,
     yes: bool,
     lang: Option<lang::Lang>,
 ) -> Result<(), Box<dyn Error>> {
-    // Un `--with` absent laisse la question ouverte ; un `--with` vide n'existe pas.
-    let features = (!with.is_empty()).then_some(with);
     let disponibles = templates::feature_names(template_dir.as_deref());
+    let demandees = preset::reunir(preset, &with, &disponibles);
+    // Une liste vide laisse la question ouverte ; ni `--with` ni `--preset` vides
+    // n'existent.
+    let features = (!demandees.is_empty()).then_some(demandees);
     let options = prompts::resolve(name, database_url, database, features, &disponibles, yes)?;
     // Relevé avant que `options` ne parte dans la création, qui l'emporte.
     let url_opaque = new::url_opaque(database, &options.database_url);

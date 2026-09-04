@@ -30,6 +30,7 @@ Options:
       --database-url <URL>     URL de connexion, à défaut de quoi la question est posée
       --database <MOTEUR>      Moteur de base sur lequel le projet tournera [default: postgres] [possible values: postgres, mysql, sqlite]
       --with <FEATURES>        Features à installer sans passer par les questions, séparées par des virgules
+      --preset <PRESET>        Jeu de features nommé, cumulable avec `--with` [possible values: api, worker, full]
       --core-path <CHEMIN>     Crate `rbs-core` locale à utiliser au lieu de la version publiée
       --lang <LANGUE>          Langue de l'`AGENTS.md` engendré. À défaut, celle de l'environnement [possible values: fr, en]
       --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
@@ -49,6 +50,7 @@ première des [trois questions](#les-trois-questions).
 | `--database-url <URL>` | URL de connexion écrite dans le `.env` du projet sous `RBS_DATABASE__URL`. Absente, la question est posée — ou la valeur par défaut est prise sous `--yes`. |
 | `--database <MOTEUR>` | Moteur sur lequel le projet tournera : `postgres`, `mysql` ou `sqlite`. `postgres` par défaut. |
 | `--with <FEATURES>` | Features à installer à la création, séparées par des virgules. Réellement installées — voir plus bas. |
+| `--preset <PRESET>` | Un jeu de features nommé : `api`, `worker` ou `full`. Il s'ajoute à `--with` plutôt que de le remplacer — voir [plus bas](#un-preset-nomme-un-jeu). |
 | `--core-path <CHEMIN>` | Fait pointer le manifeste généré vers une crate `rbs-core` locale plutôt que vers la version publiée — le mode dans lequel rbs se développe, décrit [plus bas](#construire-contre-un-noyau-local). |
 | `--lang <LANGUE>` | Langue de l'[`AGENTS.md`](../guides/agents.md) engendré : `fr` ou `en`. Absent, déduite de `LC_ALL`, puis de `LANG`. |
 | `--template-dir <CHEMIN>` | Rend le projet depuis un répertoire de templates, au lieu de celles embarquées dans le binaire. |
@@ -314,6 +316,32 @@ Un nom qui n'est pas une feature du tout est refusé avant que le premier fichie
 ```text
 $ rbs new site --with graphql --yes
 erreur : `graphql` n'est pas une feature rbs — disponibles : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
+```
+
+## Un preset nomme un jeu
+
+`--preset` dit une intention là où `--with` dit une liste :
+
+| Preset | Features |
+|---|---|
+| `api` | `auth`, `cors`, `docker`, `rate-limit` |
+| `worker` | `docker`, `jobs`, `redis`, `scheduler` |
+| `full` | tout ce que le CLI sait installer |
+
+`full` se dérive de ce que porte le binaire plutôt que de s'écrire : une liste figée ici
+périmerait au premier fragment ajouté, et « tout » cesserait sans bruit de vouloir dire
+tout.
+
+`api` nomme `rate-limit` alors qu'`auth` l'entraîne de toute façon. Le preset dit ce qu'il
+garantit, au lieu de s'appuyer sur une implication qui pourrait changer.
+
+**Les deux drapeaux se cumulent.** `--preset api --with mail` installe les quatre d'`api`
+plus `mail`, sans répéter ce que les deux nomment, et dans l'ordre des features plutôt que
+dans celui de la frappe — deux invocations équivalentes doivent rendre deux projets
+identiques.
+
+```bash
+rbs new shop --preset api --with mail --yes
 ```
 
 ## Le compose engendré

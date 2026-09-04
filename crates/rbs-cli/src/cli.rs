@@ -36,6 +36,10 @@ pub enum Commands {
         #[arg(long, value_name = "FEATURES", value_delimiter = ',')]
         with: Vec<String>,
 
+        /// Jeu de features nommé, cumulable avec `--with`.
+        #[arg(long, value_name = "PRESET")]
+        preset: Option<crate::preset::Preset>,
+
         /// Crate `rbs-core` locale à utiliser au lieu de la version publiée.
         #[arg(long, value_name = "CHEMIN")]
         core_path: Option<PathBuf>,

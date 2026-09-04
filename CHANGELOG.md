@@ -14,6 +14,13 @@ between minor versions with no deprecation cycle.
 
 ### Added
 
+- `rbs new --preset api|worker|full` installs a named set of features: `api` is `auth`,
+  `cors`, `docker` and `rate-limit`; `worker` is `docker`, `jobs`, `redis` and `scheduler`;
+  `full` is everything the binary can install, derived from what it carries rather than
+  written down — a frozen list would go stale at the first fragment added. It adds to
+  `--with` rather than replacing it, without repeating what both name, and in the order of
+  the features rather than the order typed, so two equivalent invocations produce two
+  identical projects.
 - `rbs generate client --lang ts` writes a typed TypeScript client from the project's own
   OpenAPI document — one method per operation, one interface per schema, no dependency to
   install on the TypeScript side. No server runs: `rbs new` now writes a third binary,

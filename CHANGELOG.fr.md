@@ -15,6 +15,13 @@ dépréciation.
 
 ### Ajouté
 
+- `rbs new --preset api|worker|full` installe un jeu de features nommé : `api` vaut `auth`,
+  `cors`, `docker` et `rate-limit` ; `worker` vaut `docker`, `jobs`, `redis` et
+  `scheduler` ; `full` vaut tout ce que le binaire sait installer, dérivé de ce qu'il porte
+  plutôt qu'écrit — une liste figée périmerait au premier fragment ajouté. Il s'ajoute à
+  `--with` plutôt que de le remplacer, sans répéter ce que les deux nomment, et dans l'ordre
+  des features plutôt que dans celui de la frappe : deux invocations équivalentes rendent
+  deux projets identiques.
 - `rbs generate client --lang ts` écrit un client TypeScript typé depuis le document
   OpenAPI du projet lui-même — une méthode par opération, une interface par schéma, aucune
   dépendance à installer côté TypeScript. Aucun serveur ne tourne : `rbs new` écrit
