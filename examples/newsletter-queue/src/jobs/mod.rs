@@ -102,5 +102,7 @@ impl Registry {
 /// où l'oubli se voie, et il ne se voit qu'à l'exécution.
 pub fn registry() -> Registry {
     Registry::new().register::<newsletter::SendNewsletter>()
+    // <rbs:jobs>
+    // </rbs:jobs>
 }
 // endregion: registry
