@@ -646,7 +646,9 @@ projet, dont les tests sont regroupés.
 - [ ] **Step 1 : écrire la template**
 
 ```rust
-use hmac::{Hmac, Mac};
+// `KeyInit` porte `new_from_slice` depuis hmac 0.13 : la 0.12 le réexportait par `Mac`, et
+// l'omettre ne se voit qu'à la compilation, sur une erreur qui ne nomme pas la version.
+use hmac::{Hmac, KeyInit, Mac};
 use sha2::Sha256;
 
 /// L'en-tête qui porte la signature.
@@ -1372,17 +1374,30 @@ Message : `feat(webhooks): monte les trois routes d'abonnement derrière l'authe
 - Consumes: tout le fragment. Le verrou de base est celui de `jobs` —
   `crate::jobs::tests::verrou_base()` — pour la raison qu'énonce `scheduler/tests.rs.jinja` :
   deux verrous indépendants laisseraient chaque suite effacer ce que l'autre vient d'écrire.
-- Produces: les dix noms de tests que la Task 8 exigera nommément.
+- Produces: les onze noms de tests que la Task 8 exigera nommément.
 
-**Les cinq sans base :**
+**Les six sans base :**
 
 | Nom | Ce qu'il prouve |
 |---|---|
+| `the_signature_matches_an_independently_computed_vector` | le vecteur ci-dessous |
 | `the_signature_changes_with_the_timestamp` | l'horodatage entre dans le condensat, donc le rejeu est fermé |
 | `the_signature_header_carries_the_timestamp_and_the_v1_digest` | la forme `t=…,v1=…`, hexadécimal minuscule, 64 caractères |
 | `an_exact_pattern_matches_only_its_own_event` | |
 | `a_prefix_pattern_matches_every_event_of_its_family` | `user.*` prend `user.created`, pas `order.created` |
 | `the_star_pattern_matches_every_event` | |
+
+Le vecteur est calculé hors de Rust, et c'est ce qui lui donne sa valeur : un test qui
+compare `sign` à `sign` ne prouve que la stabilité, jamais la justesse. Un receveur écrit
+en Python ou en Go doit retrouver ce condensat-là.
+
+```
+$ printf '1757000000.{}' | openssl dgst -sha256 -hmac "secret" -hex
+SHA2-256(stdin)= a5dba1becd39e5b001811ec483ca620bdfc84f2167017c06f8a0fc0ca2953b75
+```
+
+donc `sign("secret", 1_757_000_000, b"{}")` vaut
+`"a5dba1becd39e5b001811ec483ca620bdfc84f2167017c06f8a0fc0ca2953b75"`.
 
 **Les cinq qui joignent la base**, tous `#[ignore = "joint la base du projet"]` :
 
@@ -1447,7 +1462,7 @@ Message : `test(webhooks): livre au projet la preuve de sa signature et de son �
 
 Copie fidèle de la structure d'`integration_scheduler.rs`, avec :
 
-- `TESTS_ORDINAIRES: [&str; 5]` et `TESTS_SOUS_CONTENEUR: [&str; 5]`, les dix noms de la
+- `TESTS_ORDINAIRES: [&str; 6]` et `TESTS_SOUS_CONTENEUR: [&str; 5]`, les onze noms de la
   Task 7, chacun exigé sous la forme
   `"test webhooks::tests::{test} ... ok"` ;
 - `the_tests_shipped_with_the_fragment_run_against_a_real_database` : `rbs new`,
