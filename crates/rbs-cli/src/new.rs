@@ -68,7 +68,7 @@ pub struct InstalledFeature {
 pub enum Error {
     /// Le nom ne peut être ni un paquet Cargo ni un répertoire.
     #[error(
-        "`{name}` n'est pas un name de project utilisable : lettres, chiffres, `-` et `_`, \
+        "`{name}` n'est pas un nom de projet utilisable : lettres, chiffres, `-` et `_`, \
          en commençant par une lettre"
     )]
     NomInvalide {
@@ -998,9 +998,17 @@ mod tests {
         for name in ["mon api", "../evasion", "3volution", ""] {
             let resultat = create(&options(name), parent.path());
 
+            let erreur =
+                resultat.expect_err(&format!("`{name}` a été accepté comme nom de projet"));
+
+            // Le message est ce que l'utilisateur lit pour corriger sa commande : il
+            // avait pris « name de project » d'un renommage passé au travers d'un
+            // littéral, et rien ne le figeait nulle part.
             assert!(
-                resultat.is_err(),
-                "`{name}` a été accepté comme nom de projet"
+                erreur
+                    .to_string()
+                    .contains("n'est pas un nom de projet utilisable"),
+                "{erreur}"
             );
         }
 
