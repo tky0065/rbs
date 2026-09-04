@@ -697,6 +697,18 @@ mod tests {
     }
 
     #[test]
+    fn the_health_handler_declares_its_own_tag() {
+        let parent = parent();
+
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+
+        let controleur = read(&project.root.join("src/health/controller.rs"));
+        // Sans `tag =`, utoipa retombe sur le chemin de module et le document porte
+        // `crate::health::controller` en guise de section.
+        assert!(controleur.contains("tag = \"health\""), "{controleur}");
+    }
+
+    #[test]
     fn the_project_name_becomes_the_package_and_crate_name() {
         let parent = parent();
 

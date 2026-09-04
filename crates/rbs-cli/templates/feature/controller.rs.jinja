@@ -21,6 +21,7 @@ use crate::state::AppState;
     get,
     path = "/{@ module @}",
     tag = "{@ module @}",
+    operation_id = "{@ module @}_list",
     params(
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
@@ -41,6 +42,7 @@ pub async fn list(
     post,
     path = "/{@ module @}",
     tag = "{@ module @}",
+    operation_id = "{@ module @}_create",
 {%- if role %}
     security(("bearer" = [])),
 {%- endif %}
@@ -74,6 +76,7 @@ pub async fn create(
     get,
     path = "/{@ module @}/{id}",
     tag = "{@ module @}",
+    operation_id = "{@ module @}_find",
     params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
     responses(
         (status = 200, description = "{@ singular @} demandé", body = {@ entity @}Response),
@@ -91,6 +94,7 @@ pub async fn find(
     patch,
     path = "/{@ module @}/{id}",
     tag = "{@ module @}",
+    operation_id = "{@ module @}_update",
 {%- if role %}
     security(("bearer" = [])),
 {%- endif %}
@@ -124,6 +128,7 @@ pub async fn update(
     delete,
     path = "/{@ module @}/{id}",
     tag = "{@ module @}",
+    operation_id = "{@ module @}_delete",
 {%- if role %}
     security(("bearer" = [])),
 {%- endif %}

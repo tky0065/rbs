@@ -119,6 +119,21 @@ mod tests {
         );
     }
 
+    // utoipa retombe sur le nom nu du handler faute d'`operation_id` : deux features CRUD
+    // dans un même projet produiraient alors deux opérations d'identifiant `list`, ce que
+    // la spécification OpenAPI interdit.
+    #[test]
+    fn each_handler_carries_an_operation_id_prefixed_by_its_module() {
+        let rendered = controller("articles");
+
+        for action in ["list", "create", "find", "update", "delete"] {
+            assert!(
+                rendered.contains(&format!("operation_id = \"articles_{action}\"")),
+                "`{action}` doit porter son operation_id :\n{rendered}"
+            );
+        }
+    }
+
     #[test]
     fn the_five_verbs_and_their_paths_are_documented() {
         let rendered = controller("blog_posts");
