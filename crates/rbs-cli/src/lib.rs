@@ -3,6 +3,7 @@ mod agents;
 mod anchors;
 mod cargo;
 mod cli;
+mod client;
 mod completions;
 mod database;
 mod dev;
