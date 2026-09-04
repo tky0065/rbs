@@ -1270,6 +1270,22 @@ mod tests {
             .map(|ancre| ancre.anchor.as_str())
             .collect();
         assert_eq!(ancres, ["features", "startup"]);
+
+        // Le calendrier est relu et validé avant que le serveur n'écoute, et une
+        // expression illisible doit arrêter le démarrage — ce que le guide promet. Un
+        // `spawn` détaché, comme celui de la file, laisserait au contraire l'API répondre
+        // en paraissant saine, avec un calendrier qui ne déclenchera jamais rien : c'est
+        // le mode de panne que ce fragment existe pour éviter, et il ne se voit pas.
+        let startup = manifest
+            .anchors
+            .iter()
+            .find(|ancre| ancre.anchor == "startup")
+            .expect("l'ancre startup vient d'être exigée");
+        assert!(
+            startup.content.contains(".await?"),
+            "l'erreur du démarrage ne remonte pas à `main` : {}",
+            startup.content
+        );
     }
 
     /// Le guide `AGENTS.md` énumère les features installables à la main.

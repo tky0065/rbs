@@ -5,46 +5,58 @@ use rbs_core::HasCoreState;
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, TransactionTrait};
 
 use super::model::{Column, Entity};
-use super::{Config, Schedule, a_la_seconde, schedules, sync};
+use super::{Config, Schedule, a_la_seconde};
 use crate::state::AppState;
 
 /// Examine le calendrier jusqu'à l'arrêt du processus.
-pub async fn run(state: AppState) -> anyhow::Result<()> {
-    let config = Config::load()?;
-    let schedules = schedules();
-    let db = state.core().db();
+///
+/// Le calendrier est reçu déjà réconcilié : sa validation appartient au démarrage, qu'une
+/// expression illisible doit arrêter, et non à cette boucle, dont l'échec ne serait qu'une
+/// ligne de log.
+pub async fn run(state: AppState, schedules: Vec<Schedule>) {
+    let attente = match Config::load() {
+        Ok(config) => Duration::from_secs(config.poll_interval_secs),
+        // La section a été lue au démarrage sans erreur ; l'échec ici tiendrait à une
+        // relecture de la cascade, et retirer le ticker pour cela serait pire que de le
+        // faire tourner à sa cadence par défaut.
+        Err(error) => {
+            tracing::error!(%error, "section [scheduler] illisible, cadence par défaut");
+            Duration::from_secs(30)
+        }
+    };
 
-    sync::reconcilier(db, &schedules).await?;
-
-    let attente = Duration::from_secs(config.poll_interval_secs);
     tracing::info!(
         echeances = schedules.len(),
-        poll_interval_secs = config.poll_interval_secs,
+        attente_secs = attente.as_secs(),
         "calendrier prêt"
     );
 
     loop {
-        // Une base momentanément injoignable ne condamne pas le calendrier : le ticker
-        // retente au tour suivant plutôt que de rendre la main pour de bon.
-        if let Err(error) = tick(db, &schedules).await {
-            tracing::error!(%error, "examen du calendrier impossible");
-        }
+        tick(state.core().db(), &schedules).await;
 
         tokio::time::sleep(attente).await;
     }
 }
 
 /// Réserve puis déclenche toutes les échéances dues, et rend leur nombre.
-pub(super) async fn tick(db: &DatabaseConnection, schedules: &[Schedule]) -> anyhow::Result<usize> {
+///
+/// Une échéance en échec **n'interrompt pas le tour**. Rendre l'erreur ici laisserait les
+/// échéances suivantes de la liste inexaminées, et une échéance durablement cassée gèlerait
+/// tout le calendrier derrière elle — chaque tour s'arrêtant au même endroit.
+pub(super) async fn tick(db: &DatabaseConnection, schedules: &[Schedule]) -> usize {
     let mut declenchees = 0;
 
     for schedule in schedules {
-        if reserver_et_enfiler(db, schedule).await? {
-            declenchees += 1;
+        match reserver_et_enfiler(db, schedule).await {
+            Ok(true) => declenchees += 1,
+            Ok(false) => {}
+            Err(error) => {
+                tracing::error!(kind = schedule.kind, %error, "échéance non déclenchée")
+            }
         }
     }
 
-    Ok(declenchees)
+    declenchees
 }
 
 /// Tente de gagner une échéance, et enfile son job si elle est gagnée.

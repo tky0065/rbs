@@ -33,9 +33,14 @@ content = "pub mod scheduler;"
 # Comme le worker de la file, le ticker vit dans le processus de l'API : c'est ce qui lui
 # donne l'`AppState` du projet. `crate_path` et non `crate_name`, pour la raison
 # qu'énonce le manifeste de `jobs`.
+#
+# `.await?` et non un `spawn` détaché, à la différence de la file : le calendrier est relu
+# et validé avant que le serveur n'écoute, et une expression illisible arrête le
+# démarrage. Détaché, il laisserait l'API répondre en paraissant saine avec un calendrier
+# qui ne déclenchera jamais rien — une panne qu'aucune sonde ne voit.
 [[anchors]]
 anchor  = "startup"
-content = "{@ crate_path @}::scheduler::spawn(state.clone());"
+content = "{@ crate_path @}::scheduler::spawn(state.clone()).await?;"
 
 [migration]
 source = "migration.rs.jinja"

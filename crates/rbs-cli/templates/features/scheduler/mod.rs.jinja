@@ -12,6 +12,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use chrono::Timelike;
+use rbs_core::HasCoreState;
 use sea_orm::DatabaseTransaction;
 use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 
@@ -124,11 +125,23 @@ pub fn schedules() -> Vec<Schedule> {
     )]
 }
 
-/// Détache le ticker dans le runtime, et rend la main aussitôt.
-pub fn spawn(state: AppState) {
-    tokio::spawn(async move {
-        if let Err(error) = ticker::run(state).await {
-            tracing::error!(%error, "le ticker du calendrier ne démarre pas");
-        }
-    });
+/// Valide le calendrier, l'aligne sur la table, puis détache le ticker.
+///
+/// La réconciliation est faite **ici et non dans la boucle détachée** : elle compile
+/// chaque expression, et son échec doit remonter à `main` pour arrêter le démarrage. Une
+/// expression illisible détachée ne ferait qu'une ligne de log dans un service qui répond
+/// — un calendrier qui ne déclenchera jamais rien, et qu'aucune sonde ne distingue d'un
+/// calendrier sain. C'est l'écart assumé avec `jobs::worker::spawn`, où c'est le service
+/// HTTP qui est en jeu ; ici, une liste statique que le développeur vient d'écrire.
+///
+/// Une fois le calendrier validé, la boucle est détachée : au-delà du démarrage, une base
+/// momentanément injoignable ne doit plus emporter le serveur.
+pub async fn spawn(state: AppState) -> anyhow::Result<()> {
+    let schedules = schedules();
+
+    sync::reconcilier(state.core().db(), &schedules).await?;
+
+    tokio::spawn(async move { ticker::run(state, schedules).await });
+
+    Ok(())
 }

@@ -132,6 +132,43 @@ async fn a_newly_declared_schedule_is_inserted_with_its_next_occurrence() {
     assert!(ligne.last_run_at.is_none(), "rien n'a encore été déclenché");
 }
 
+/// Le pendant, au démarrage, de la garantie que porte le tick.
+///
+/// Un déploiement lance ses réplicas ensemble, et tous réconcilient une table où l'échéance
+/// n'existe pas encore. Une insertion qui ne tolère pas d'avoir été devancée fait échouer
+/// le démarrage de tous sauf un — sur le fragment dont l'argument même est de tenir le
+/// multi-réplica.
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+#[ignore = "joint la base du projet"]
+async fn concurrent_boots_all_succeed_and_insert_one_row() {
+    const REPLICAS: usize = 8;
+
+    let (_garde, state) = table_a_soi().await;
+
+    let mut taches = Vec::new();
+    for _ in 0..REPLICAS {
+        let db = state.core().db().clone();
+        taches.push(tokio::spawn(async move {
+            sync::reconcilier(&db, &calendrier("0 3 * * *")).await
+        }));
+    }
+
+    for (rang, tache) in taches.into_iter().enumerate() {
+        tache
+            .await
+            .expect("la réconciliation ne panique pas")
+            .unwrap_or_else(|error| panic!("le démarrage du réplica {rang} a échoué : {error}"));
+    }
+
+    let lignes = Entity::find()
+        .filter(super::model::Column::Kind.eq(Scheduled::KIND))
+        .all(state.core().db())
+        .await
+        .expect("lecture possible");
+
+    assert_eq!(lignes.len(), 1, "{} lignes pour une échéance", lignes.len());
+}
+
 #[tokio::test]
 #[ignore = "joint la base du projet"]
 async fn a_schedule_removed_from_the_code_is_removed_from_the_table() {
@@ -225,9 +262,7 @@ async fn a_due_schedule_enqueues_its_job_and_moves_on() {
     let db = state.core().db();
     echeance_due(db).await;
 
-    let declenchees = ticker::tick(db, &calendrier("0 3 * * *"))
-        .await
-        .expect("le tick aboutit");
+    let declenchees = ticker::tick(db, &calendrier("0 3 * * *")).await;
     assert_eq!(declenchees, 1);
 
     let ligne = Entity::find_by_id(Scheduled::KIND)
@@ -261,9 +296,7 @@ async fn a_schedule_that_is_not_due_is_left_alone() {
         .await
         .expect("la réconciliation aboutit");
 
-    let declenchees = ticker::tick(db, &calendrier("0 3 * * *"))
-        .await
-        .expect("le tick aboutit");
+    let declenchees = ticker::tick(db, &calendrier("0 3 * * *")).await;
 
     assert_eq!(declenchees, 0);
     assert!(
@@ -286,9 +319,7 @@ async fn concurrent_tickers_trigger_a_due_schedule_exactly_once() {
     for _ in 0..TICKERS {
         let db = state.core().db().clone();
         taches.push(tokio::spawn(async move {
-            ticker::tick(&db, &calendrier("0 3 * * *"))
-                .await
-                .expect("le tick aboutit")
+            ticker::tick(&db, &calendrier("0 3 * * *")).await
         }));
     }
 

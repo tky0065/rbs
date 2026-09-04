@@ -1,6 +1,7 @@
 use chrono::Utc;
 use sea_orm::ActiveValue::Set;
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter};
+use sea_orm::sea_query::OnConflict;
+use sea_orm::{ColumnTrait, DatabaseConnection, DbErr, EntityTrait, QueryFilter};
 
 use super::Schedule;
 use super::model::{ActiveModel, Column, Entity};
@@ -49,15 +50,32 @@ pub async fn reconcilier(db: &DatabaseConnection, schedules: &[Schedule]) -> any
         // Les deux horodatages sont posés plutôt que laissés aux défauts de la table :
         // la clé n'étant pas auto-incrémentée, `ActiveModelBehavior` ne remplit rien, et
         // SeaORM refuse un `NotSet` sur une colonne `not null`.
-        ActiveModel {
+        let ligne = ActiveModel {
             kind: Set(kind.to_string()),
             next_run_at: Set(prochaine),
             last_run_at: Set(None),
             created_at: Set(maintenant),
             updated_at: Set(maintenant),
+        };
+
+        // Un déploiement lance ses réplicas ensemble : tous lisent une table où l'échéance
+        // manque encore, et tous l'insèrent. Sans cette tolérance, le démarrage de tous
+        // sauf un échouerait sur la clé primaire — sur le fragment dont l'argument est
+        // précisément de tenir le multi-réplica.
+        //
+        // `do_nothing` laisse intacte la ligne du réplica qui a devancé, ce qui est la
+        // règle voulue : la première échéance posée fait foi.
+        let pose = Entity::insert(ligne)
+            .on_conflict(OnConflict::column(Column::Kind).do_nothing().to_owned())
+            .exec(db)
+            .await;
+
+        match pose {
+            Ok(_) => {}
+            // Ce que SeaORM rend quand le `do_nothing` a mordu : la ligne était déjà là.
+            Err(DbErr::RecordNotInserted) => {}
+            Err(autre) => return Err(autre.into()),
         }
-        .insert(db)
-        .await?;
     }
 
     Ok(())
