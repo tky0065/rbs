@@ -103,6 +103,25 @@ pub fn run() {
                     force,
                     dry_run,
                 } => (name, None, false, force, dry_run, Vec::new(), None),
+
+                // Le client ne partage ni les options ni l'erreur des deux autres : il
+                // se termine ici plutôt que de traverser un tuple qui ne lui va pas.
+                GenerateCommands::Client {
+                    lang,
+                    out,
+                    force,
+                    dry_run,
+                } => {
+                    if let Err(error) = generate_client(lang, out, force, dry_run) {
+                        ui::error(&error.to_string());
+                        if let Some(remedy) = error.remedy() {
+                            ui::info(&format!("\n{remedy}"));
+                        }
+                        std::process::exit(1);
+                    }
+
+                    return;
+                }
             };
 
             if let Err(error) = generate(name, fields, complete, force, dry_run, has_many, role) {
@@ -503,6 +522,39 @@ fn generate(
             "\n  la migration {migration} reste à appliquer avant de lancer le projet"
         ));
     }
+
+    Ok(())
+}
+
+/// Engendre le client typé du projet courant, plan affiché avant écriture.
+fn generate_client(
+    lang: client::Lang,
+    out: Option<PathBuf>,
+    force: bool,
+    dry_run: bool,
+) -> Result<(), client::Error> {
+    let directory = std::env::current_dir()
+        .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
+
+    let planned = client::plan_for(&client::Options {
+        lang,
+        out,
+        directory,
+        force,
+    })?;
+
+    // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande
+    // s'apprête à faire ne doit pas se découvrir après coup.
+    println!("{}", plan::render::plan(&planned.plan));
+
+    if !appliquer(&planned.plan, force, dry_run)? {
+        return Ok(());
+    }
+
+    ui::success(&format!(
+        "client engendré — {} porte {} opérations",
+        planned.fichier, planned.operations
+    ));
 
     Ok(())
 }

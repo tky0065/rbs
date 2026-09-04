@@ -171,6 +171,25 @@ pub enum GenerateCommands {
         #[arg(long)]
         dry_run: bool,
     },
+
+    /// Engendre un client typé depuis le document OpenAPI du projet.
+    Client {
+        /// Langage du client.
+        #[arg(long, value_name = "LANGAGE")]
+        lang: crate::client::Lang,
+
+        /// Répertoire de sortie, relatif à la racine du projet.
+        #[arg(long, value_name = "DIR")]
+        out: Option<PathBuf>,
+
+        /// Écrit même si le working tree Git est sale.
+        #[arg(long)]
+        force: bool,
+
+        /// Affiche le plan sans rien écrire.
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Debug, PartialEq, Subcommand)]

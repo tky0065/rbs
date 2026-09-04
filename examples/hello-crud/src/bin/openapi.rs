@@ -9,7 +9,7 @@ fn main() -> Result<(), serde_json::Error> {
     // Le document passe par une liaison plutôt que d'être imprimé d'un trait : rustfmt
     // borne un appel de macro à 60 colonnes, et l'expression entière les dépasse pour tout
     // nom de projet — le fichier engendré échouerait au `cargo fmt --check` de sa propre CI.
-    let document = {@ crate_name @}::openapi::ApiDoc::openapi().to_pretty_json()?;
+    let document = hello_crud::openapi::ApiDoc::openapi().to_pretty_json()?;
 
     println!("{document}");
 

@@ -68,7 +68,7 @@ pub struct InstalledFeature {
 pub enum Error {
     /// Le nom ne peut être ni un paquet Cargo ni un répertoire.
     #[error(
-        "`{name}` n'est pas un name de project utilisable : lettres, chiffres, `-` et `_`, \
+        "`{name}` n'est pas un nom de projet utilisable : lettres, chiffres, `-` et `_`, \
          en commençant par une lettre"
     )]
     NomInvalide {

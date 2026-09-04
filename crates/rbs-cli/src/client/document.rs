@@ -13,17 +13,11 @@ use serde_json::Value;
 /// a besoin de lire.
 #[derive(Debug)]
 pub(crate) struct Document {
-    // Champ seulement écrit par `parse` tant qu'aucun appelant ne le lit : tombe avec
-    // le lot qui traduit ce modèle en méthodes du client.
-    #[allow(dead_code)]
     pub paths: BTreeMap<String, PathItem>,
     pub schemas: BTreeMap<String, Schema>,
 }
 
 /// Les opérations déclarées sur un chemin.
-// Champ seulement écrit par `parse` tant qu'aucun appelant ne le lit : tombe avec le lot
-// qui traduit ce modèle en types TypeScript.
-#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct PathItem {
     /// Les opérations de ce chemin, méthode HTTP en majuscules.
@@ -31,9 +25,6 @@ pub(crate) struct PathItem {
 }
 
 /// Une opération : une méthode HTTP sur un chemin.
-// Champs seulement écrits par `parse_operation` tant qu'aucun appelant ne les lit :
-// tombe avec le lot qui traduit ce modèle en méthodes du client.
-#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct Operation {
     pub operation_id: Option<String>,

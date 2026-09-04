@@ -6,7 +6,7 @@ resolver = "3"
 name = "hello-crud"
 version = "0.1.0"
 edition = "2024"
-# Le paquet porte deux binaires : sans ce choix, `cargo run` ne saurait plus lequel lancer.
+# Le paquet porte trois binaires : sans ce choix, `cargo run` ne saurait plus lequel lancer.
 default-run = "hello-crud"
 
 [package.metadata.rbs]
@@ -22,6 +22,10 @@ path = "src/main.rs"
 [[bin]]
 name = "seed"
 path = "src/seeds/main.rs"
+
+[[bin]]
+name = "openapi"
+path = "src/bin/openapi.rs"
 
 [dependencies]
 rbs-core = { path = "../../crates/rbs-core", default-features = false, features = ["postgres"] }

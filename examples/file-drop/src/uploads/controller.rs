@@ -14,6 +14,7 @@ use crate::state::AppState;
     get,
     path = "/uploads",
     tag = "uploads",
+    operation_id = "uploads_list",
     params(
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
@@ -36,6 +37,7 @@ pub async fn list(
     post,
     path = "/uploads",
     tag = "uploads",
+    operation_id = "uploads_create",
     request_body = CreateUpload,
     responses(
         (status = 201, description = "upload créé", body = UploadResponse),
@@ -56,6 +58,7 @@ pub async fn create(
     get,
     path = "/uploads/{id}",
     tag = "uploads",
+    operation_id = "uploads_find",
     params(("id" = Uuid, Path, description = "identifiant de upload")),
     responses(
         (status = 200, description = "upload demandé", body = UploadResponse),
@@ -73,6 +76,7 @@ pub async fn find(
     patch,
     path = "/uploads/{id}",
     tag = "uploads",
+    operation_id = "uploads_update",
     params(("id" = Uuid, Path, description = "identifiant de upload")),
     request_body = UpdateUpload,
     responses(
@@ -95,6 +99,7 @@ pub async fn update(
     delete,
     path = "/uploads/{id}",
     tag = "uploads",
+    operation_id = "uploads_delete",
     params(("id" = Uuid, Path, description = "identifiant de upload")),
     responses(
         (status = 204, description = "upload supprimé"),
@@ -114,6 +119,7 @@ pub async fn delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> Resu
     put,
     path = "/uploads/{id}/content",
     tag = "uploads",
+    operation_id = "uploads_put_content",
     params(("id" = Uuid, Path, description = "identifiant de upload")),
     request_body(content = String, content_type = "application/octet-stream"),
     responses(
@@ -142,6 +148,7 @@ pub async fn put_content(
     get,
     path = "/uploads/{id}/content",
     tag = "uploads",
+    operation_id = "uploads_get_content",
     params(("id" = Uuid, Path, description = "identifiant de upload")),
     responses(
         (status = 200, description = "contenu du upload", content_type = "application/octet-stream"),
@@ -162,6 +169,7 @@ pub async fn get_content(
     head,
     path = "/uploads/{id}/content",
     tag = "uploads",
+    operation_id = "uploads_head_content",
     params(("id" = Uuid, Path, description = "identifiant de upload")),
     responses(
         (status = 204, description = "un contenu est déposé"),

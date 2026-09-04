@@ -1,12 +1,21 @@
-//! Traduction des schémas OpenAPI (`client::document::Schema`) en types TypeScript.
+//! Traduction du document OpenAPI (`client::document`) en client TypeScript.
 //!
 //! `type_de` rend l'expression de type d'un schéma partout où il apparaît en position
 //! de champ ou de paramètre ; `interfaces` rend en plus la déclaration de plus haut
-//! niveau associée à chaque composant nommé du document.
+//! niveau associée à chaque composant nommé du document ; `rendre` assemble le fichier
+//! entier, méthodes comprises, à partir du document et de la template du client.
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use crate::client::document::{Document, Schema};
+use serde::Serialize;
+
+use crate::client::document::{Document, Location, Schema};
+use crate::template::Renderer;
+
+const TEMPLATE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/client/ts/client.ts.jinja"
+));
 
 /// Le nom TypeScript d'un composant : coupe sur tout ce qui n'est pas alphanumérique,
 /// capitalise la première lettre de chaque tronçon et recolle — `Page_PostResponse`
@@ -81,7 +90,7 @@ fn primitif(kind: &str, enumeration: &[String]) -> String {
     if !enumeration.is_empty() {
         return enumeration
             .iter()
-            .map(|valeur| format!("\"{valeur}\""))
+            .map(|valeur| format!("\"{}\"", echappe_litteral(valeur)))
             .collect::<Vec<_>>()
             .join(" | ");
     }
@@ -92,6 +101,14 @@ fn primitif(kind: &str, enumeration: &[String]) -> String {
         _ => "unknown",
     }
     .to_string()
+}
+
+/// Échappe `\` et `"` d'une valeur d'énumération OpenAPI avant de l'écrire entre
+/// guillemets doubles TypeScript — rien n'interdit à l'un ou l'autre d'y figurer, et
+/// sans cette passe le littéral produit casserait la syntaxe, voire se refermerait au
+/// milieu du type.
+fn echappe_litteral(valeur: &str) -> String {
+    valeur.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
 /// `T[]`, `T` parenthésé quand son rendu contient un espace — sans quoi `A | B[]` se
@@ -152,8 +169,14 @@ fn corps_de(schema: &Schema) -> String {
             properties,
             required,
             additional: None,
+            nullable,
             ..
-        } if !properties.is_empty() => objet_corps(properties, required),
+        } if !properties.is_empty() => {
+            // `objet_corps` ignore `nullable`, à la différence de `type_de` : sans ce
+            // second `avec_nullable`, un composant nullable à propriétés perdait son
+            // `| null` en devenant une déclaration multi-lignes.
+            avec_nullable(objet_corps(properties, required), *nullable)
+        }
         _ => type_de(schema),
     }
 }
@@ -161,6 +184,9 @@ fn corps_de(schema: &Schema) -> String {
 /// Un commentaire `/** … */` prêt à écrire au-dessus d'une interface, chaque ligne de
 /// la description préfixée de ` * ` au-delà de la première.
 fn commentaire(description: &str) -> String {
+    // Une description OpenAPI n'a aucune raison d'éviter `*/` : sans cette neutralisation,
+    // une occurrence y referme le commentaire et déverse le reste en code TypeScript brut.
+    let description = description.replace("*/", "*\\/");
     let lignes: Vec<&str> = description.lines().collect();
     match lignes.as_slice() {
         [] => format!("/** {description} */"),
@@ -177,9 +203,6 @@ fn commentaire(description: &str) -> String {
 
 /// Une interface prête à écrire : nom déjà passé par `identifiant`, doc déjà formatée
 /// en `/** … */`, corps déjà rendu par `corps_de`.
-// Construite par `interfaces`, qu'aucune commande n'appelle encore : tombe avec le lot
-// qui assemble le fichier client et y écrit chaque interface.
-#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct Interface {
     pub nom: String,
@@ -192,9 +215,6 @@ pub(crate) struct Interface {
 /// Deux vérifications précèdent le rendu, plutôt que de laisser un rendu partiel
 /// masquer l'erreur : que tout `$ref` cible un composant déclaré, et qu'aucun couple de
 /// composants ne se réduise au même identifiant TypeScript.
-// Aucun appelant tant que `generate client` n'existe pas : tombe avec la commande, qui
-// assemblera le fichier client à partir de ces interfaces.
-#[allow(dead_code)]
 pub(crate) fn interfaces(document: &Document) -> Result<Vec<Interface>, Erreur> {
     for (nom, schema) in &document.schemas {
         verifie_references(nom, schema, document)?;
@@ -276,7 +296,7 @@ fn verifie_references(nom: &str, schema: &Schema, document: &Document) -> Result
     }
 }
 
-/// Les erreurs que peut rendre `interfaces`.
+/// Les erreurs que peut rendre `interfaces` ou `rendre`.
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Erreur {
     #[error(
@@ -289,7 +309,334 @@ pub(crate) enum Erreur {
     },
     #[error("le schéma `{nom}` référence `{cible}`, que le document ne déclare pas")]
     ReferenceInconnue { nom: String, cible: String },
-    // D'autres variantes s'ajoutent avec le rendu des opérations en méthodes du client.
+    #[error(
+        "les opérations `{premiere}` et `{seconde}` donnent la même méthode `{rendu}` : posez un `operation_id` sur l'un des deux handlers"
+    )]
+    MethodesHomonymes {
+        premiere: String,
+        seconde: String,
+        rendu: String,
+    },
+    #[error(
+        "l'opération `{operation}` n'a pas d'operationId : posez un `operation_id` sur son handler"
+    )]
+    SansOperationId { operation: String },
+    #[error(
+        "l'opération `{operation}` déclare un paramètre `{parametre}` en `{emplacement}`, que le générateur ne sait pas poser"
+    )]
+    ParametreNonSupporte {
+        operation: String,
+        parametre: String,
+        emplacement: String,
+    },
+}
+
+/// Une méthode prête à écrire dans le corps de la classe `ApiClient` : nom déjà passé
+/// par `nom_de_methode`, doc déjà formatée en `/** … */` indenté, signature et corps déjà
+/// rendus — la template n'a plus qu'à les concaténer, sans logique conditionnelle.
+#[derive(Debug, Serialize)]
+pub(crate) struct Methode {
+    pub nom: String,
+    pub doc: String,
+    pub signature: String,
+    pub corps: String,
+}
+
+/// `articles_list` → `articlesList` : coupe sur `_`, `-` et l'espace, capitalise
+/// chaque tronçon suivant `map`pé par `capitalise`, garde le premier tel quel hormis
+/// sa casse initiale — un `operationId` déjà en casse mixte n'est pas retouché plus
+/// qu'il ne faut.
+fn nom_de_methode(operation_id: &str) -> String {
+    let mut troncons = operation_id
+        .split(['_', '-', ' '])
+        .filter(|tronc| !tronc.is_empty());
+
+    let Some(premier) = troncons.next() else {
+        return String::new();
+    };
+    let mut chars = premier.chars();
+    let premier_rendu = match chars.next() {
+        Some(c) => c.to_ascii_lowercase().to_string() + chars.as_str(),
+        None => String::new(),
+    };
+
+    premier_rendu + &troncons.map(capitalise).collect::<String>()
+}
+
+/// Le chemin d'une requête : un littéral de gabarit TypeScript quand un paramètre de
+/// chemin y figure — `encodeURIComponent` protège une valeur qui contiendrait une barre
+/// ou un caractère spécial — une chaîne simple sinon.
+fn chemin_gabarit(chemin: &str) -> String {
+    if !chemin.contains('{') {
+        return format!("\"{chemin}\"");
+    }
+
+    let mut rendu = String::from("`");
+    let mut reste = chemin;
+    while let Some(debut) = reste.find('{') {
+        rendu.push_str(&reste[..debut]);
+        let apres = &reste[debut + 1..];
+        let fin = apres
+            .find('}')
+            .expect("un chemin OpenAPI ferme toute accolade qu'il ouvre");
+        let nom = &apres[..fin];
+        rendu.push_str(&format!("${{encodeURIComponent(String({nom}))}}"));
+        reste = &apres[fin + 1..];
+    }
+    rendu.push_str(reste);
+    rendu.push('`');
+    rendu
+}
+
+/// Le corps `return this.request<…>(…);` d'une méthode. Les clés `body` et `query` de
+/// l'objet d'options ne figurent que si l'opération en porte l'un ou l'autre ; sans les
+/// deux, l'objet d'options est omis plutôt que passé vide.
+fn corps_de_methode(
+    verbe: &str,
+    chemin_rendu: &str,
+    return_type: &str,
+    a_body: bool,
+    a_query: bool,
+) -> String {
+    let mut options = String::new();
+    if a_body || a_query {
+        let mut cles = Vec::new();
+        if a_body {
+            cles.push("body");
+        }
+        if a_query {
+            cles.push("query");
+        }
+        let lignes: String = cles.iter().map(|cle| format!("      {cle},\n")).collect();
+        options = format!(", {{\n{lignes}    }}");
+    }
+
+    format!("    return this.request<{return_type}>(\"{verbe}\", {chemin_rendu}{options});")
+}
+
+/// Le doc-commentaire `/** … */` d'une méthode, indenté de deux espaces pour s'aligner
+/// dans le corps de la classe — le pendant de `commentaire` pour une déclaration membre
+/// plutôt que de plus haut niveau, et vide s'il n'y a rien à dire.
+fn commentaire_methode(lignes: &[String]) -> String {
+    match lignes {
+        [] => String::new(),
+        [seule] => format!("  /** {seule} */\n"),
+        plusieurs => {
+            let corps: Vec<String> = plusieurs
+                .iter()
+                .map(|ligne| format!("   * {ligne}"))
+                .collect();
+            format!("  /**\n{}\n   */\n", corps.join("\n"))
+        }
+    }
+}
+
+/// Le contexte passé à la template du client — tout y arrive déjà sous une forme que
+/// minijinja n'a plus qu'à écrire, sans logique conditionnelle côté template.
+#[derive(Serialize)]
+struct Contexte<'a> {
+    projet: &'a str,
+    interfaces: Vec<InterfaceVue>,
+    methodes: Vec<Methode>,
+    problem_details_manquant: bool,
+}
+
+/// `Interface`, mais avec `doc` converti en chaîne prête à écrire : `UndefinedBehavior::
+/// Strict` de minijinja lève sur un `Option::None`, et la template place `interface.doc`
+/// directement devant `export interface`, sans `{% if %}` pour s'en garder.
+#[derive(Serialize)]
+struct InterfaceVue {
+    nom: String,
+    doc: String,
+    corps: String,
+}
+
+impl From<Interface> for InterfaceVue {
+    fn from(interface: Interface) -> Self {
+        Self {
+            nom: interface.nom,
+            doc: interface
+                .doc
+                .map_or_else(String::new, |doc| format!("{doc}\n")),
+            corps: interface.corps,
+        }
+    }
+}
+
+/// Rend le fichier client TypeScript entier : les interfaces des composants, une
+/// interface de query par opération qui en a, une méthode par opération, assemblées par
+/// la template `client.ts.jinja`.
+///
+/// Les opérations sont collectées dans l'ordre déterministe du document — `paths` est
+/// une `BTreeMap`, `operations` un `Vec` dans l'ordre du texte — puis, pour chacune :
+/// l'absence d'`operationId` et un paramètre d'un emplacement non supporté sont refusés
+/// avant qu'une méthode n'en soit tirée, pour qu'une opération mal formée ne produise
+/// jamais un client partiel.
+pub(crate) fn rendre(document: &Document, projet: &str) -> Result<String, Erreur> {
+    let interfaces_composants = interfaces(document)?;
+
+    // Repris de `document.schemas` plutôt que des `Interface` déjà rendues, qui ne
+    // portent plus le nom d'origine du composant : `interfaces` a déjà refusé toute
+    // collision à ce stade, donc cette reconstruction ne peut pas elle-même en trouver.
+    let mut identifiants_vus: BTreeMap<String, String> = document
+        .schemas
+        .keys()
+        .map(|nom| (identifiant(nom), nom.clone()))
+        .collect();
+
+    let mut interfaces_vue: Vec<InterfaceVue> =
+        interfaces_composants.into_iter().map(Into::into).collect();
+    let mut methodes_vues: BTreeMap<String, String> = BTreeMap::new();
+    let mut methodes = Vec::new();
+
+    for (chemin, path_item) in &document.paths {
+        for (verbe, operation) in &path_item.operations {
+            let descripteur = format!("{verbe} {chemin}");
+
+            let Some(operation_id) = &operation.operation_id else {
+                return Err(Erreur::SansOperationId {
+                    operation: descripteur,
+                });
+            };
+
+            for parametre in &operation.parameters {
+                if let Location::Autre(emplacement) = &parametre.location {
+                    return Err(Erreur::ParametreNonSupporte {
+                        operation: descripteur,
+                        parametre: parametre.name.clone(),
+                        emplacement: emplacement.clone(),
+                    });
+                }
+            }
+
+            let nom_methode = nom_de_methode(operation_id);
+            if let Some(premiere) = methodes_vues.get(&nom_methode) {
+                return Err(Erreur::MethodesHomonymes {
+                    premiere: premiere.clone(),
+                    seconde: operation_id.clone(),
+                    rendu: nom_methode,
+                });
+            }
+            methodes_vues.insert(nom_methode.clone(), operation_id.clone());
+
+            let params_chemin = operation
+                .parameters
+                .iter()
+                .filter(|parametre| parametre.location == Location::Path);
+            let params_query: Vec<_> = operation
+                .parameters
+                .iter()
+                .filter(|parametre| parametre.location == Location::Query)
+                .collect();
+
+            let mut arguments = Vec::new();
+            for parametre in params_chemin {
+                arguments.push(format!(
+                    "{}: {}",
+                    parametre.name,
+                    type_de(&parametre.schema)
+                ));
+            }
+
+            let a_body = operation.request_body.is_some();
+            if let Some(schema_corps) = &operation.request_body {
+                arguments.push(format!("body: {}", type_de(schema_corps)));
+            }
+
+            let a_query = !params_query.is_empty();
+            if a_query {
+                let nom_query = format!("{}Query", capitalise(&nom_methode));
+                if let Some(origine) = identifiants_vus.get(&nom_query) {
+                    return Err(Erreur::IdentifiantsHomonymes {
+                        premier: origine.clone(),
+                        second: operation_id.clone(),
+                        rendu: nom_query,
+                    });
+                }
+                identifiants_vus.insert(nom_query.clone(), operation_id.clone());
+
+                let properties: Vec<(String, Schema)> = params_query
+                    .iter()
+                    .map(|parametre| (parametre.name.clone(), parametre.schema.clone()))
+                    .collect();
+                let required: BTreeSet<String> = params_query
+                    .iter()
+                    .filter(|parametre| parametre.required)
+                    .map(|parametre| parametre.name.clone())
+                    .collect();
+                let toutes_optionnelles = required.is_empty();
+
+                interfaces_vue.push(InterfaceVue {
+                    nom: nom_query.clone(),
+                    doc: String::new(),
+                    corps: objet_corps(&properties, &required),
+                });
+
+                let defaut = if toutes_optionnelles { " = {}" } else { "" };
+                arguments.push(format!("query: {nom_query}{defaut}"));
+            }
+
+            let mut retours = Vec::new();
+            for (statut, schema) in &operation.responses {
+                if (200..300).contains(statut) {
+                    if let Some(schema) = schema {
+                        retours.push(type_de(schema));
+                    }
+                }
+            }
+            let retour = if retours.is_empty() {
+                "void".to_string()
+            } else {
+                retours.join(" | ")
+            };
+
+            let signature = format!("{nom_methode}({}): Promise<{retour}>", arguments.join(", "));
+            let corps = corps_de_methode(verbe, &chemin_gabarit(chemin), &retour, a_body, a_query);
+
+            let mut lignes_doc = Vec::new();
+            if let Some(summary) = operation
+                .summary
+                .as_deref()
+                .filter(|s| !s.trim().is_empty())
+            {
+                lignes_doc.push(summary.to_string());
+            }
+            if let Some(description) = operation
+                .description
+                .as_deref()
+                .filter(|d| !d.trim().is_empty())
+            {
+                lignes_doc.push(description.to_string());
+            }
+            lignes_doc.push(descripteur);
+            if operation.secured {
+                lignes_doc.push("requiert un jeton".to_string());
+            }
+
+            methodes.push(Methode {
+                nom: nom_methode,
+                doc: commentaire_methode(&lignes_doc),
+                signature,
+                corps,
+            });
+        }
+    }
+
+    let contexte = Contexte {
+        projet,
+        interfaces: interfaces_vue,
+        methodes,
+        problem_details_manquant: !document.schemas.contains_key("ProblemDetails"),
+    };
+
+    // Le contexte ci-dessus fournit systématiquement chaque variable que la template
+    // lit : un échec de rendu signalerait une faute dans la template elle-même, jamais
+    // une entrée utilisateur, d'où l'`expect` plutôt qu'une variante d'erreur de plus.
+    let rendu = Renderer::new()
+        .render(TEMPLATE, contexte)
+        .expect("la template du client ne doit jamais manquer de variable");
+
+    Ok(rendu)
 }
 
 #[cfg(test)]
@@ -445,5 +792,267 @@ mod tests {
             rendues[0].corps,
             "{\n  draft?: boolean | null;\n  title: string;\n}"
         );
+    }
+
+    #[test]
+    fn a_nullable_object_with_properties_keeps_its_null_union() {
+        let document = schemas(
+            r#"{"openapi":"3.1.0","components":{"schemas":{"S":{"type":["object","null"],
+                 "properties":{"a":{"type":"string"}}}}}}"#,
+        );
+
+        let rendues = interfaces(&document).expect("rendu");
+
+        assert_eq!(rendues[0].corps, "{\n  a?: string;\n} | null");
+    }
+
+    #[test]
+    fn an_enum_value_containing_a_quote_is_escaped() {
+        assert_eq!(
+            type_du_champ(r#"{"type":"string","enum":["a\"b"]}"#),
+            "\"a\\\"b\""
+        );
+    }
+
+    /// Un document minimal portant une seule opération, pour les tests de méthode.
+    fn une_operation(chemin: &str, verbe: &str, corps_json: &str) -> Document {
+        document::parse(&format!(
+            r#"{{"openapi":"3.1.0","paths":{{"{chemin}":{{"{verbe}":{corps_json}}}}}}}"#
+        ))
+        .expect("document valide")
+    }
+
+    #[test]
+    fn an_operation_id_becomes_a_camel_case_method() {
+        let rendu = rendre(
+            &une_operation(
+                "/articles",
+                "get",
+                r#"{"operationId":"articles_list","responses":{}}"#,
+            ),
+            "demo",
+        )
+        .expect("rendu");
+
+        assert!(rendu.contains("articlesList("), "{rendu}");
+    }
+
+    #[test]
+    fn a_path_parameter_becomes_a_positional_argument() {
+        let rendu = rendre(
+            &une_operation(
+                "/articles/{id}",
+                "get",
+                r#"{"operationId":"articles_find","parameters":[
+                     {"name":"id","in":"path","required":true,"schema":{"type":"string","format":"uuid"}}],
+                   "responses":{"200":{"description":"ok","content":{"application/json":{
+                     "schema":{"type":"string"}}}}}}"#,
+            ),
+            "demo",
+        )
+        .expect("rendu");
+
+        assert!(
+            rendu.contains("articlesFind(id: string): Promise<string>"),
+            "{rendu}"
+        );
+        assert!(
+            rendu.contains("${encodeURIComponent(String(id))}"),
+            "{rendu}"
+        );
+    }
+
+    #[test]
+    fn the_query_parameters_are_gathered_in_an_exported_interface() {
+        let rendu = rendre(
+            &une_operation(
+                "/articles",
+                "get",
+                r#"{"operationId":"articles_list","parameters":[
+                     {"name":"page","in":"query","required":false,"schema":{"type":"integer"}},
+                     {"name":"per_page","in":"query","required":false,"schema":{"type":"integer"}}],
+                   "responses":{}}"#,
+            ),
+            "demo",
+        )
+        .expect("rendu");
+
+        assert!(
+            rendu.contains("export interface ArticlesListQuery {"),
+            "{rendu}"
+        );
+        assert!(rendu.contains("page?: number;"), "{rendu}");
+        assert!(
+            rendu.contains("articlesList(query: ArticlesListQuery = {})"),
+            "{rendu}"
+        );
+    }
+
+    #[test]
+    fn a_required_query_parameter_makes_the_argument_required() {
+        let rendu = rendre(
+            &une_operation(
+                "/recherche",
+                "get",
+                r#"{"operationId":"recherche","parameters":[
+                     {"name":"q","in":"query","required":true,"schema":{"type":"string"}}],
+                   "responses":{}}"#,
+            ),
+            "demo",
+        )
+        .expect("rendu");
+
+        assert!(
+            rendu.contains("recherche(query: RechercheQuery)"),
+            "{rendu}"
+        );
+        assert!(!rendu.contains("RechercheQuery = {}"), "{rendu}");
+    }
+
+    #[test]
+    fn the_arguments_run_path_then_body_then_query() {
+        let rendu = rendre(
+            &une_operation(
+                "/articles/{id}",
+                "patch",
+                r#"{"operationId":"articles_update","parameters":[
+                     {"name":"id","in":"path","required":true,"schema":{"type":"string"}},
+                     {"name":"dry","in":"query","required":false,"schema":{"type":"boolean"}}],
+                   "requestBody":{"required":true,"content":{"application/json":{
+                     "schema":{"type":"string"}}}},
+                   "responses":{}}"#,
+            ),
+            "demo",
+        )
+        .expect("rendu");
+
+        assert!(
+            rendu.contains(
+                "articlesUpdate(id: string, body: string, query: ArticlesUpdateQuery = {})"
+            ),
+            "{rendu}"
+        );
+    }
+
+    #[test]
+    fn a_204_alone_returns_void() {
+        let rendu = rendre(
+            &une_operation(
+                "/articles/{id}",
+                "delete",
+                r#"{"operationId":"articles_delete","parameters":[
+                     {"name":"id","in":"path","required":true,"schema":{"type":"string"}}],
+                   "responses":{"204":{"description":"supprimé"},
+                                "404":{"description":"absent"}}}"#,
+            ),
+            "demo",
+        )
+        .expect("rendu");
+
+        assert!(
+            rendu.contains("articlesDelete(id: string): Promise<void>"),
+            "{rendu}"
+        );
+    }
+
+    #[test]
+    fn several_successful_responses_are_unioned() {
+        let rendu = rendre(
+            &une_operation(
+                "/a",
+                "post",
+                r#"{"operationId":"a_create","responses":{
+                     "200":{"description":"ok","content":{"application/json":{"schema":{"type":"string"}}}},
+                     "202":{"description":"accepté","content":{"application/json":{"schema":{"type":"boolean"}}}}}}"#,
+            ),
+            "demo",
+        )
+        .expect("rendu");
+
+        assert!(rendu.contains("Promise<string | boolean>"), "{rendu}");
+    }
+
+    #[test]
+    fn a_secured_operation_says_so_in_its_doc_comment() {
+        let rendu = rendre(
+            &une_operation(
+                "/moi",
+                "get",
+                r#"{"operationId":"moi","security":[{"bearer":[]}],"responses":{}}"#,
+            ),
+            "demo",
+        )
+        .expect("rendu");
+
+        assert!(rendu.contains("requiert un jeton"), "{rendu}");
+    }
+
+    #[test]
+    fn two_operations_of_the_same_name_are_refused() {
+        let document = document::parse(
+            r#"{"openapi":"3.1.0","paths":{
+                 "/a":{"get":{"operationId":"list","responses":{}}},
+                 "/b":{"get":{"operationId":"list","responses":{}}}}}"#,
+        )
+        .expect("document valide");
+
+        let erreur = rendre(&document, "demo").expect_err("la collision doit être refusée");
+
+        let message = erreur.to_string();
+        assert!(message.contains("list"), "{message}");
+        assert!(message.contains("operation_id"), "{message}");
+    }
+
+    #[test]
+    fn an_operation_without_an_operation_id_is_refused() {
+        let document = une_operation("/a", "get", r#"{"responses":{}}"#);
+
+        let erreur = rendre(&document, "demo").expect_err("l'absence doit être refusée");
+
+        assert!(erreur.to_string().contains("operation_id"), "{erreur}");
+    }
+
+    #[test]
+    fn a_header_parameter_is_refused_rather_than_ignored() {
+        let document = une_operation(
+            "/a",
+            "get",
+            r#"{"operationId":"a","parameters":[
+                 {"name":"X-Tenant","in":"header","required":true,"schema":{"type":"string"}}],
+               "responses":{}}"#,
+        );
+
+        let erreur = rendre(&document, "demo").expect_err("le paramètre doit être refusé");
+
+        let message = erreur.to_string();
+        assert!(message.contains("X-Tenant"), "{message}");
+        assert!(message.contains("header"), "{message}");
+    }
+
+    #[test]
+    fn the_rendered_client_carries_the_project_name_and_the_error_class() {
+        let rendu = rendre(
+            &une_operation("/a", "get", r#"{"operationId":"a","responses":{}}"#),
+            "demo-api",
+        )
+        .expect("rendu");
+
+        assert!(rendu.contains("demo-api"), "{rendu}");
+        assert!(
+            rendu.contains("export class ApiError extends Error"),
+            "{rendu}"
+        );
+        assert!(rendu.contains("export class ApiClient"), "{rendu}");
+    }
+
+    #[test]
+    fn a_problem_details_interface_is_emitted_even_when_the_document_has_none() {
+        let rendu = rendre(
+            &une_operation("/a", "get", r#"{"operationId":"a","responses":{}}"#),
+            "demo",
+        )
+        .expect("rendu");
+
+        assert!(rendu.contains("interface ProblemDetails"), "{rendu}");
     }
 }
