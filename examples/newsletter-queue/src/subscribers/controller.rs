@@ -38,6 +38,7 @@ pub async fn list(
     post,
     path = "/subscribers/filter",
     tag = "subscribers",
+    operation_id = "subscribers_filter",
     params(
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")

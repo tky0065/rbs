@@ -12,6 +12,7 @@ use crate::state::AppState;
     post,
     path = "/auth/register",
     tag = "auth",
+    operation_id = "auth_register",
     request_body = RegisterRequest,
     responses(
         (status = 201, description = "compte créé", body = UserResponse),
@@ -34,6 +35,7 @@ pub async fn register(
     post,
     path = "/auth/login",
     tag = "auth",
+    operation_id = "auth_login",
     request_body = LoginRequest,
     responses(
         (status = 200, description = "paire de jetons", body = TokenPair),
@@ -51,6 +53,7 @@ pub async fn login(
     post,
     path = "/auth/refresh",
     tag = "auth",
+    operation_id = "auth_refresh",
     request_body = RefreshRequest,
     responses(
         (status = 200, description = "nouvelle paire de jetons", body = TokenPair),
@@ -68,6 +71,7 @@ pub async fn refresh(
     post,
     path = "/auth/logout",
     tag = "auth",
+    operation_id = "auth_logout",
     request_body = RefreshRequest,
     responses(
         (status = 204, description = "session révoquée"),
@@ -87,6 +91,7 @@ pub async fn logout(
     get,
     path = "/auth/me",
     tag = "auth",
+    operation_id = "auth_me",
     security(("bearer" = [])),
     responses(
         (status = 200, description = "profil de l'appelant", body = UserResponse),

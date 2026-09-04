@@ -3,6 +3,16 @@
 // Régénérez-le après chaque changement de contrat plutôt que de le retoucher : la
 // commande refuse d'écraser un fichier modifié, et `--force` lève ce refus.
 
+export interface ArticleFilter {
+  body: TextMatchSchema;
+  created_at: ComparisonSchema;
+  id: ComparisonSchema;
+  published: ComparisonSchema;
+  sort: string[];
+  title: TextMatchSchema;
+  updated_at: ComparisonSchema;
+}
+
 export interface ArticleResponse {
   body: string;
   created_at: string;
@@ -10,6 +20,20 @@ export interface ArticleResponse {
   published: boolean;
   title: string;
   updated_at: string;
+}
+
+/**
+ * Conditions acceptées sur une colonne comparable.
+ * 
+ * Une valeur nue, écrite hors de tout objet, vaut la condition `eq`.
+ */
+export interface ComparisonSchema {
+  eq?: unknown;
+  gt?: unknown;
+  gte?: unknown;
+  is_null?: boolean | null;
+  lt?: unknown;
+  lte?: unknown;
 }
 
 export interface CreateArticle {
@@ -47,6 +71,17 @@ export interface ProblemDetails {
   type: string;
 }
 
+/**
+ * Conditions acceptées sur une colonne textuelle.
+ * 
+ * Une chaîne nue, écrite hors de tout objet, vaut la condition `eq`.
+ */
+export interface TextMatchSchema {
+  contains?: string | null;
+  eq?: string | null;
+  is_null?: boolean | null;
+}
+
 export interface UpdateArticle {
   body?: string | null;
   published?: boolean | null;
@@ -54,6 +89,11 @@ export interface UpdateArticle {
 }
 
 export interface ArticlesListQuery {
+  page?: number;
+  per_page?: number;
+}
+
+export interface ArticlesFilterQuery {
   page?: number;
   per_page?: number;
 }
@@ -88,6 +128,7 @@ export type Headers =
   | Record<string, string>
   | (() => Record<string, string> | Promise<Record<string, string>>);
 
+// region: options
 export interface ApiClientOptions {
   /** Racine de l'API : `https://api.exemple.fr`, ou `/api` sur le même domaine. */
   baseUrl: string;
@@ -97,6 +138,9 @@ export interface ApiClientOptions {
   fetch?: typeof globalThis.fetch;
 }
 
+// endregion: options
+
+// region: classe
 export class ApiClient {
   private readonly baseUrl: string;
   private readonly headers: Headers;
@@ -110,6 +154,9 @@ export class ApiClient {
     this.fetchImpl = options.fetch ?? globalThis.fetch.bind(globalThis);
   }
 
+// endregion: classe
+
+// region: methodes
   /** GET /articles */
   articlesList(query: ArticlesListQuery = {}): Promise<PageArticleResponse> {
     return this.request<PageArticleResponse>("GET", "/articles", {
@@ -121,6 +168,18 @@ export class ApiClient {
   articlesCreate(body: CreateArticle): Promise<ArticleResponse> {
     return this.request<ArticleResponse>("POST", "/articles", {
       body,
+    });
+  }
+
+  /**
+   * Filtrer est une lecture : le corps porte les conditions, que l'URL rendrait illisibles.
+Le garde de rôle ne s'y applique donc pas, pas plus qu'à `list` ou `find`.
+   * POST /articles/filter
+   */
+  articlesFilter(body: ArticleFilter, query: ArticlesFilterQuery = {}): Promise<PageArticleResponse> {
+    return this.request<PageArticleResponse>("POST", "/articles/filter", {
+      body,
+      query,
     });
   }
 
@@ -146,7 +205,8 @@ export class ApiClient {
     return this.request<void>("GET", "/health");
   }
 
-private async request<T>(
+// endregion: methodes
+  private async request<T>(
     method: string,
     path: string,
     // `object` et non `Record<string, unknown>` : une interface de query est fermée, et

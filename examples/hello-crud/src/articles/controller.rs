@@ -36,6 +36,7 @@ pub async fn list(
     post,
     path = "/articles/filter",
     tag = "articles",
+    operation_id = "articles_filter",
     params(
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
