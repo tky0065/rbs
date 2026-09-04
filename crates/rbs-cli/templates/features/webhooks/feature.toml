@@ -1,0 +1,129 @@
+[feature]
+description = "webhooks sortants : abonnements, signature HMAC horodatée, livraison par la file"
+# `jobs` porte la livraison-avec-réessais : réservation sans double dépilage, `attempts`,
+# `available_at`, `last_error`. Un second mécanisme de réessai n'aurait laissé que deux
+# boucles à maintenir.
+#
+# `auth` protège les trois routes d'abonnement. Une création laissée ouverte permettrait à
+# n'importe qui de faire livrer chez lui les événements du projet — `user.created` porte des
+# adresses. C'est le même arbitrage qu'`auth`, qui exige `rate-limit` pour la même raison :
+# une protection dont l'absence se paie en fuite de données n'est pas facultative.
+requires = ["jobs", "auth"]
+
+[[files]]
+source      = "mod.rs.jinja"
+destination = "src/webhooks/mod.rs"
+
+[[files]]
+source      = "config.rs.jinja"
+destination = "src/webhooks/config.rs"
+
+[[files]]
+source      = "model.rs.jinja"
+destination = "src/webhooks/model.rs"
+
+[[files]]
+source      = "dto.rs.jinja"
+destination = "src/webhooks/dto.rs"
+
+[[files]]
+source      = "repository.rs.jinja"
+destination = "src/webhooks/repository.rs"
+
+[[files]]
+source      = "service.rs.jinja"
+destination = "src/webhooks/service.rs"
+
+[[files]]
+source      = "controller.rs.jinja"
+destination = "src/webhooks/controller.rs"
+
+[[files]]
+source      = "signature.rs.jinja"
+destination = "src/webhooks/signature.rs"
+
+[[files]]
+source      = "delivery.rs.jinja"
+destination = "src/webhooks/delivery.rs"
+
+[[files]]
+source      = "tests.rs.jinja"
+destination = "src/webhooks/tests.rs"
+
+[[anchors]]
+anchor  = "features"
+content = "pub mod webhooks;"
+
+[[anchors]]
+anchor  = "routes"
+content = ".merge(crate::webhooks::routes())"
+
+[[anchors]]
+anchor  = "openapi"
+content = """
+crate::webhooks::controller::subscribe,
+crate::webhooks::controller::list,
+crate::webhooks::controller::revoke,
+"""
+
+# Le worker n'exécute que ce que le registre connaît : sans cette ligne, chaque livraison
+# partirait en réessai puis en échec sous « aucun job n'est inscrit ».
+[[anchors]]
+anchor  = "jobs"
+content = ".register::<crate::webhooks::delivery::Delivery>()"
+
+# Un client par processus, donc un pool de connexions partagé : le construire à chaque
+# livraison rouvrirait une session TLS par tentative.
+[[anchors]]
+anchor  = "state_champs"
+content = "pub webhooks: crate::webhooks::Sender,"
+
+[[anchors]]
+anchor  = "state_init"
+content = "webhooks: crate::webhooks::Sender::from_config()?,"
+
+[migration]
+source = "migration.rs.jinja"
+name   = "create_webhook_subscriptions"
+
+# Les défauts de reqwest 0.13 sont rustls : rien à faire de plus pour éviter OpenSSL, à la
+# différence de la 0.12 dont le défaut était native-tls.
+[[dependencies]]
+name    = "reqwest"
+version = "0.13"
+
+[[dependencies]]
+name    = "hmac"
+version = "0.13"
+
+[[dependencies]]
+name    = "sha2"
+version = "0.11"
+
+[[dependencies]]
+name    = "async-trait"
+version = "0.1"
+
+# `events` est un tableau JSON, que sea-orm ne sait lire que sous cette feature.
+[cargo.sea-orm]
+features = ["with-json"]
+
+# `Identity` garde les trois routes et `token::random` tire le secret d'un abonnement : les
+# deux vivent derrière cette feature du noyau. `auth` l'active déjà — la redéclarer dit que
+# webhooks en dépend pour son propre compte.
+[cargo.rbs-core]
+features = ["auth"]
+
+# `sync` : les tests livrés se relaient sur la table des abonnements et sur la file, et leur
+# verrou traverse un `await`.
+[cargo.tokio]
+features = ["sync"]
+
+[[config]]
+file    = "config/default.toml"
+section = "webhooks"
+content = """
+# Temps laissé au receveur pour répondre. Au-delà, la livraison compte pour un échec et
+# repart en réessai : un endpoint lent ne doit pas retenir un worker.
+timeout_secs = 10
+"""

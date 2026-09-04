@@ -810,12 +810,35 @@ mod tests {
             "redis",
             "scheduler",
             "storage",
+            "webhooks",
         ] {
             assert!(
                 error.to_string().contains(installable),
                 "le message n'énumère pas `{installable}` : {error}"
             );
         }
+    }
+
+    /// Le fragment ne fait ni boucle ni horloge : il enfile dans la file et s'inscrit à son
+    /// registre. Les deux ancres le disent, et `requires` en fait la condition.
+    #[test]
+    fn the_webhooks_fragment_requires_the_queue_and_registers_its_delivery_job() {
+        let source = read(&Path::new(RACINE_FEATURES).join("webhooks/feature.toml"));
+        let manifest = crate::manifest::read(&source, "webhooks/feature.toml")
+            .expect("le manifeste du fragment webhooks doit se lire");
+
+        assert!(manifest.feature.requires.contains(&"jobs".to_string()));
+        assert!(manifest.feature.requires.contains(&"auth".to_string()));
+
+        let ancres: Vec<&str> = manifest
+            .anchors
+            .iter()
+            .map(|insertion| insertion.anchor.as_str())
+            .collect();
+
+        assert!(ancres.contains(&"jobs"), "{ancres:?}");
+        assert!(ancres.contains(&"routes"), "{ancres:?}");
+        assert!(ancres.contains(&"openapi"), "{ancres:?}");
     }
 
     #[test]
