@@ -278,9 +278,13 @@ Rendu (rapide, `cargo test -p rbs-cli --lib`) :
 - l'ordre des arguments : chemin, corps, query ;
 - `204` seul → `Promise<void>` ;
 - l'union des 2xx quand il y en a plusieurs ;
-- une opération `security` → la mention du jeton dans le doc-commentaire ;
-- le document complet de `blog-auth`, relevé le 2026-09-04, rendu en entier et comparé à
-  une fixture — le seul test qui prouve que les morceaux tiennent ensemble.
+- une opération `security` → la mention du jeton dans le doc-commentaire.
+
+Chaque test de rendu porte son propre document JSON, court et écrit dans le test. Pas de
+grande fixture relevée sur un exemple : elle deviendrait un second exemplaire des
+templates, à régénérer à chaque retouche, et rien ne le signalerait. Ce que les morceaux
+donnent une fois assemblés est prouvé plus loin, sur le client versionné de
+`examples/hello-crud`.
 
 Commande (lent, `--ignored`) :
 
