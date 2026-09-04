@@ -64,6 +64,7 @@ pub async fn list(
     post,
     path = "/{@ module @}/filter",
     tag = "{@ module @}",
+    operation_id = "{@ module @}_filter",
     params(
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
@@ -221,6 +222,7 @@ pub async fn delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> Resu
     put,
     path = "/{@ module @}/{id}/content",
     tag = "{@ module @}",
+    operation_id = "{@ module @}_put_content",
 {%- if role %}
     security(("bearer" = [])),
 {%- endif %}
@@ -261,6 +263,7 @@ pub async fn put_content(
     get,
     path = "/{@ module @}/{id}/content",
     tag = "{@ module @}",
+    operation_id = "{@ module @}_get_content",
     params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
     responses(
         (status = 200, description = "contenu du {@ singular @}", content_type = "application/octet-stream"),
@@ -280,6 +283,7 @@ pub async fn get_content(
     head,
     path = "/{@ module @}/{id}/content",
     tag = "{@ module @}",
+    operation_id = "{@ module @}_head_content",
     params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
     responses(
         (status = 204, description = "un contenu est déposé"),
