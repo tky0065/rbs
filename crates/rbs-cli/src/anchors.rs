@@ -235,6 +235,26 @@ pub(crate) const HEALTH_PROBES: Anchor = Anchor {
     after: "vec![",
 };
 
+/// Inscription d'un job au registre que le worker de la file consulte.
+///
+/// Seule ancre à vivre dans un fichier qu'un fragment dépose plutôt que le squelette, avec
+/// celle du compose : `src/jobs/mod.rs` n'existe que sur un projet qui a installé la file.
+/// C'est ce qui la rend optionnelle — un projet sans file n'a pas à passer pour incomplet.
+///
+/// Sans elle, `registry()` ne s'écrit qu'à la main : un fragment ne peut viser qu'une ancre
+/// de ce registre, et le worker n'exécute que ce que `registry()` lui a déclaré.
+pub(crate) const JOBS: Anchor = Anchor {
+    name: Cow::Borrowed("jobs"),
+    file: Cow::Borrowed("src/jobs/mod.rs"),
+    comment: "//",
+    sorted: false,
+    optional: true,
+    // rustfmt recompacte `Registry::new()\n.register::<demo::Log>()` en une ligne dès que
+    // le registre ne compte qu'un seul job : l'accroche est cette ligne entière, pas le
+    // seul appel, sans quoi `repose()` ne la retrouverait jamais dans le fichier engendré.
+    after: "Registry::new().register::<demo::Log>()",
+};
+
 /// Variantes de l'énumération `Relation` du modèle d'une entité.
 ///
 /// Hors du registre statique : son fichier et son nom dépendent tous deux de l'entité
@@ -265,7 +285,7 @@ pub(crate) const RELATED: Anchor = Anchor {
 ///
 /// La génération vise chaque ancre nommément ; `rbs doctor` parcourt cette liste pour
 /// vérifier qu'un projet les porte toutes.
-pub(crate) const ANCRES: [Anchor; 12] = [
+pub(crate) const ANCRES: [Anchor; 13] = [
     FEATURES,
     ROUTES,
     LAYERS,
@@ -278,6 +298,7 @@ pub(crate) const ANCRES: [Anchor; 12] = [
     SEEDS,
     SERVICES,
     HEALTH_PROBES,
+    JOBS,
 ];
 
 /// Résout l'ancre `<rbs:features>` par repli, entre `src/lib.rs` et `src/main.rs`.
@@ -305,7 +326,7 @@ pub(crate) fn resolve(anchor: Anchor, with_library: bool) -> Anchor {
 
 /// Les ancres du registre, celle des features résolue pour `root`.
 ///
-/// Le disque n'est interrogé qu'une fois pour les douze, et non une fois par ancre.
+/// Le disque n'est interrogé qu'une fois pour les treize, et non une fois par ancre.
 pub(crate) fn resolved(root: &Path) -> Vec<Anchor> {
     let with_library = has_library(root);
 
@@ -1138,17 +1159,54 @@ struct AppState {
         assert!(ANCRES.contains(&LAYERS));
     }
 
-    /// Une ancre optionnelle est l'exception : toutes les autres décrivent un fichier que
-    /// le squelette écrit toujours, et leur absence est un défaut.
+    /// Une ancre optionnelle est l'exception : les onze autres décrivent un fichier que le
+    /// squelette écrit toujours, et leur absence est un défaut. Les deux qui le sont vivent
+    /// dans un fichier qu'un fragment dépose — le compose de `docker`, le registre de
+    /// `jobs` — et manquent légitimement à qui n'a pas installé ce fragment.
     #[test]
-    fn only_the_services_anchor_is_optional() {
+    fn only_the_anchors_of_a_fragment_deposited_file_are_optional() {
         let optionnelles: Vec<&str> = ANCRES
             .iter()
             .filter(|anchor| anchor.optional)
             .map(|anchor| anchor.name.as_ref())
             .collect();
 
-        assert_eq!(optionnelles, ["services"]);
+        assert_eq!(optionnelles, ["services", "jobs"]);
+    }
+
+    /// Sans elle, un fragment ne peut pas inscrire de job : le worker n'exécute que ce que
+    /// `registry()` connaît, et `add` refuse tout nom d'ancre hors du registre.
+    // `JOBS` étant un `const`, clippy évalue `.optional` à la compilation et signale
+    // l'assertion comme triviale ; elle mord pourtant si quelqu'un change le champ.
+    #[allow(clippy::assertions_on_constants)]
+    #[test]
+    fn the_jobs_anchor_lives_in_the_queue_registry_and_is_optional() {
+        assert_eq!(JOBS.file, "src/jobs/mod.rs");
+        assert_eq!(JOBS.opening(), "// <rbs:jobs>");
+        assert!(JOBS.optional);
+        assert!(ANCRES.contains(&JOBS));
+    }
+
+    /// L'accroche d'une ancre est vérifiée contre la template qui la porte, et celle-ci
+    /// vit sous `features/` : le balayage du squelette ne la rencontre jamais.
+    #[test]
+    fn the_jobs_anchor_and_its_hook_are_in_the_queue_fragment() {
+        let source = std::fs::read_to_string(
+            Path::new(env!("CARGO_MANIFEST_DIR")).join("templates/features/jobs/mod.rs.jinja"),
+        )
+        .expect("la template du fragment jobs doit se lire");
+
+        assert!(source.contains(&JOBS.opening()), "{source}");
+        assert!(source.contains(&JOBS.closing()), "{source}");
+        assert_eq!(
+            source.matches(JOBS.after).count(),
+            1,
+            "l'accroche doit paraître une fois exactement"
+        );
+        assert!(
+            source.find(JOBS.after) < source.find(&JOBS.opening()),
+            "l'ancre doit suivre son accroche"
+        );
     }
 
     /// La sonde d'une dépendance vit dans le projet, et le fragment qui l'installe a
