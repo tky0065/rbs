@@ -24,7 +24,7 @@ commentaire HTML :
 ```text
 # <projet> — mode d'emploi pour agents
 
-<!-- rbs:guide 1.1.0 -->
+<!-- rbs:guide 1.2.0 -->
 … le mode d'emploi …
 <!-- /rbs:guide -->
 
@@ -57,7 +57,7 @@ Les zones d'un vrai projet, engendré en français, se lisent ainsi :
 ```text
 # blog — mode d'emploi pour agents
 
-<!-- rbs:guide 1.1.0 -->
+<!-- rbs:guide 1.2.0 -->
 ## Le CLI d'abord
 ## Ce fichier
 ## Les commandes
@@ -69,7 +69,7 @@ Les zones d'un vrai projet, engendré en français, se lisent ainsi :
 <!-- /rbs:guide -->
 
 <!-- rbs:inventory -->
-- rbs 1.1.0 · base postgres
+- rbs 1.2.0 · base postgres
 - Fragments installés : aucun
 - Entités engendrées : aucune
 - Ancres du projet : features (src/lib.rs), routes (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml)
@@ -147,7 +147,7 @@ $ rbs doctor
       légitime si rbs ne couvre pas ce code ; sinon, rbs generate le reprend
   ✓ relations   les modèles portent leurs ancres de relation
   ✓ .env        les 7 variables de .env.example sont renseignées
-  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.1.0
+  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
   … base        compilation de la crate migration, peut prendre
                 une minute au premier lancement…
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
@@ -182,7 +182,7 @@ courant est précisément son rôle :
 
 ```text
 $ rbs upgrade
-rbs 1.1.0 → 1.1.0
+rbs 1.2.0 → 1.2.0
 
 plan pour /private/tmp/rbs-demo/blog2
 
@@ -190,5 +190,5 @@ plan pour /private/tmp/rbs-demo/blog2
   + AGENTS.md    créé
 
   1 fichier à écrire, 1 inchangé
-✓ manifeste aligné sur rbs 1.1.0
+✓ manifeste aligné sur rbs 1.2.0
 ```
