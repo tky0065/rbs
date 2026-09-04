@@ -1,0 +1,41 @@
+use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+use validator::Validate;
+
+#[derive(Debug, Deserialize, ToSchema, Validate)]
+pub struct CreateSubscription {
+    /// L'URL du receveur. `https` en production : la signature authentifie l'émetteur,
+    /// elle ne chiffre pas ce qui est livré.
+    #[validate(url)]
+    pub url: String,
+    /// Les motifs écoutés. `*` pour tout, `user.*` pour une famille, `user.created` pour un
+    /// événement précis.
+    #[validate(length(min = 1))]
+    pub events: Vec<String>,
+}
+
+/// Ce que rend la création, et elle seule.
+///
+/// `secret` n'y paraît qu'ici : une seule lecture de la liste livrerait sinon les secrets de
+/// tous les abonnés d'un coup.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SubscriptionCreated {
+    pub id: Uuid,
+    pub url: String,
+    pub events: Vec<String>,
+    pub secret: String,
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: DateTimeWithTimeZone,
+}
+
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SubscriptionResponse {
+    pub id: Uuid,
+    pub url: String,
+    pub events: Vec<String>,
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub revoked_at: Option<DateTimeWithTimeZone>,
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: DateTimeWithTimeZone,
+}

@@ -1,0 +1,67 @@
+use rbs_core::{Error, Result};
+use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, Set,
+};
+
+use super::model::{ActiveModel, Column, Entity};
+
+// Le service passe par cette porte plutôt que par `model.rs` : la couche qui parle à la
+// base reste la seule à connaître l'entité.
+pub use super::model::Model;
+
+/// Les abonnements que rien n'a révoqués.
+///
+/// `ConnectionTrait` et non une connexion : l'émission se fait dans la transaction du
+/// métier, et la liste doit être lue avec la même vue qu'elle.
+pub async fn actifs<C: ConnectionTrait>(db: &C) -> Result<Vec<Model>> {
+    Ok(Entity::find()
+        .filter(Column::RevokedAt.is_null())
+        .order_by_asc(Column::CreatedAt)
+        .all(db)
+        .await?)
+}
+
+pub async fn find<C: ConnectionTrait>(db: &C, id: Uuid) -> Result<Option<Model>> {
+    Ok(Entity::find_by_id(id).one(db).await?)
+}
+
+/// Inscrit un abonnement, les horodatages venant des défauts de la table.
+pub async fn create<C: ConnectionTrait>(
+    db: &C,
+    url: &str,
+    events: &[String],
+    secret: &str,
+) -> Result<Model> {
+    let nouveau = ActiveModel {
+        url: Set(url.to_owned()),
+        events: Set(serde_json::json!(events)),
+        secret: Set(secret.to_owned()),
+        revoked_at: Set(None),
+        ..Default::default()
+    };
+
+    Ok(nouveau.insert(db).await?)
+}
+
+/// Date la révocation d'un abonnement, ou dit qu'il n'existe pas.
+///
+/// Révoquer deux fois ne repousse pas la date : la première révocation est celle qui compte,
+/// et un client qui rejoue son appel ne doit pas réécrire l'histoire.
+pub async fn revoke<C: ConnectionTrait>(
+    db: &C,
+    id: Uuid,
+    quand: DateTimeWithTimeZone,
+) -> Result<Model> {
+    let abonnement = find(db, id).await?.ok_or(Error::NotFound("abonnement"))?;
+
+    if abonnement.revoked_at.is_some() {
+        return Ok(abonnement);
+    }
+
+    let mut ligne: ActiveModel = abonnement.into();
+    ligne.revoked_at = Set(Some(quand));
+    ligne.updated_at = Set(quand);
+
+    Ok(ligne.update(db).await?)
+}
