@@ -199,6 +199,10 @@ fn normalise(sortie: &str, tmp: &Path) -> String {
     }
 
     texte = texte.replace("…/", "<tmp>/");
+    // Sous Windows, clap tire l'`Usage:` du nom réel de l'exécutable et écrit `rbs.exe`,
+    // là où la page montre la commande telle qu'on la tape. Le suffixe tombe des deux
+    // côtés de la comparaison, qui reste sensible à tout le reste de la ligne.
+    texte = texte.replace("rbs.exe", "rbs");
     texte = masque_moteur(&texte);
     texte = masque_version(&texte);
     texte = masque_horodatage(&texte);
@@ -749,10 +753,14 @@ avant\n\
     #[test]
     fn both_languages_are_walked() {
         let pages = pages();
+        // Les séparateurs sont ramenés à `/` avant la comparaison : sous Windows un chemin
+        // s'écrit `docs\docs\getting-started.md`, et le suffixe attendu ne s'y retrouvait
+        // pas — l'assertion accusait le parcours des pages d'une absence qui n'était que
+        // celle d'une barre oblique.
         let porte = |suffixe: &str| {
             pages
                 .iter()
-                .any(|page| page.to_string_lossy().ends_with(suffixe))
+                .any(|page| page.to_string_lossy().replace('\\', "/").ends_with(suffixe))
         };
 
         assert!(porte("docs/docs/getting-started.md"));
