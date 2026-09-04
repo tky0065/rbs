@@ -7,16 +7,18 @@ use super::model::Model;
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct CreateSubscriber {
-    #[validate(email)]
+    #[validate(email, length(max = 255))]
     pub email: String,
+    #[validate(length(max = 255))]
     pub name: String,
     pub confirmed: bool,
 }
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct UpdateSubscriber {
-    #[validate(email)]
+    #[validate(email, length(max = 255))]
     pub email: Option<String>,
+    #[validate(length(max = 255))]
     pub name: Option<String>,
     pub confirmed: Option<bool>,
 }

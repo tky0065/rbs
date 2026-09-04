@@ -46,6 +46,7 @@ pub(crate) enum ErrorKind {
         name: String,
     },
     RedundantIndex,
+    UniqueOnBool,
     IndexOnText {
         modifier: String,
     },
@@ -56,6 +57,12 @@ pub(crate) enum ErrorKind {
     NullifyWithoutOptional,
     ConflictingOnDelete,
     RedundantIndexOnReference,
+    MaxLengthOnNonTextual {
+        type_: String,
+    },
+    InvalidMaxLength {
+        value: String,
+    },
 }
 
 impl ErrorKind {
@@ -90,6 +97,9 @@ impl ErrorKind {
             Self::RedundantIndex => {
                 "« index » redondant : « unique » pose déjà un index".to_string()
             }
+            Self::UniqueOnBool => {
+                "« unique » sur un booléen : la colonne n'admettrait que deux lignes".to_string()
+            }
             Self::IndexOnText { modifier } => format!(
                 "« {modifier} » ne s'applique pas à un champ « text » : MySQL refuse un index \
                  sur une colonne TEXT sans longueur de préfixe (erreur 1170)"
@@ -102,6 +112,13 @@ impl ErrorKind {
             Self::ConflictingOnDelete => "« cascade » et « nullify » se contredisent".to_string(),
             Self::RedundantIndexOnReference => {
                 "« index » redondant : une clé étrangère est déjà indexée".to_string()
+            }
+            Self::MaxLengthOnNonTextual { type_ } => format!(
+                "« max » borne une longueur de texte et ne s'applique pas à un champ \
+                 « {type_} »"
+            ),
+            Self::InvalidMaxLength { value } => {
+                format!("« max » attend un entier strictement positif, et non « {value} »")
             }
         }
     }
@@ -138,11 +155,13 @@ impl ErrorKind {
                 names.push_str(", references:<table>");
                 Some(names)
             }
-            Self::UnknownModifier { .. } => {
-                Some("unique, optional, index — sur une référence : cascade, nullify".to_string())
-            }
+            Self::UnknownModifier { .. } => Some(
+                "unique, optional, index, max=<n> — sur une référence : cascade, nullify"
+                    .to_string(),
+            ),
             Self::DuplicateModifier { .. } => None,
             Self::RedundantIndex => Some("retirez « index »".to_string()),
+            Self::UniqueOnBool => Some("retirez « unique »".to_string()),
             Self::IndexOnText { modifier } => Some(format!(
                 "essayez « {label}:string:{modifier} » — un varchar(255) s'indexe"
             )),
@@ -153,6 +172,10 @@ impl ErrorKind {
             }
             Self::ConflictingOnDelete => Some("gardez l'un des deux".to_string()),
             Self::RedundantIndexOnReference => Some("retirez « index »".to_string()),
+            Self::MaxLengthOnNonTextual { .. } => {
+                Some("« max » s'écrit sur un champ « string » ou « text »".to_string())
+            }
+            Self::InvalidMaxLength { .. } => Some(format!("exemple : « {label}:string:max=200 »")),
         }
     }
 }
@@ -406,7 +429,9 @@ mod tests {
         );
         assert!(text.contains("modificateur inconnu « uniq »"), "{text}");
         assert!(
-            text.contains("unique, optional, index — sur une référence : cascade, nullify"),
+            text.contains(
+                "unique, optional, index, max=<n> — sur une référence : cascade, nullify"
+            ),
             "{text}"
         );
     }

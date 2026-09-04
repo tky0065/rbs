@@ -20,7 +20,7 @@ pub mod render;
 pub mod storage;
 pub mod versions;
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
@@ -154,21 +154,33 @@ crate::errors::depuis_la_racine!(Error);
 /// Diagnostique le projet qui contient `directory`, en remettant chaque constat à
 /// `sortie` au moment où il est fait.
 pub(crate) fn run(directory: &Path, sortie: &mut dyn Sortie) -> Result<Report, Error> {
-    let root = metadata::project_root(directory)?;
+    // `racine` et non `project_root` : un manifeste cassé est le cas où le diagnostic
+    // sert le plus, et c'était le seul qu'il refusait de faire. La racine retenue est
+    // celle du manifeste fautif — la remontée s'y est arrêtée parce que c'est le projet
+    // visé, et diagnostiquer un répertoire englobant jugerait un autre projet. Reste
+    // l'absence, qui abandonne : il n'y a pas de projet à diagnostiquer ici.
+    let metadata::Racine { root, manifeste } = metadata::racine(directory)?;
 
-    let controles = plan(&root);
+    // Une seule lecture de chaque fichier pour tout le diagnostic : le manifeste comme
+    // la configuration étaient relus et réanalysés par chaque contrôle pour une question
+    // d'une ligne. Le manifeste vient de la remontée elle-même, qui a dû l'ouvrir pour
+    // reconnaître la racine.
+    let projet = Projet {
+        config: Config::read(&root),
+        manifeste,
+        root,
+    };
+
+    let controles = plan(&projet.manifeste);
     let titres: Vec<&'static str> = controles.iter().map(|controle| controle.titre).collect();
     sortie.debut(&titres);
 
-    // Une seule lecture pour toute la boucle : la configuration était relue et
-    // réanalysée par chaque contrôle pour une question d'une ligne.
-    let config = Config::read(&root);
     let mut checks = Vec::with_capacity(controles.len());
 
     for controle in controles {
         let check = {
             let mut annonce = |raison: &str| sortie.annonce(controle.titre, raison);
-            (controle.executer)(&root, &config, &mut annonce)
+            (controle.executer)(&projet, &mut annonce)
         };
 
         sortie.constat(&check);
@@ -178,12 +190,43 @@ pub(crate) fn run(directory: &Path, sortie: &mut dyn Sortie) -> Result<Report, E
     Ok(Report { checks })
 }
 
+/// Le projet diagnostiqué, tel que chaque contrôle le reçoit.
+pub(crate) struct Projet {
+    /// Racine du projet.
+    pub root: PathBuf,
+    /// `config/default.toml`, lu et analysé une seule fois.
+    pub config: Config,
+    /// `Cargo.toml`, lu et analysé une seule fois.
+    pub manifeste: Manifeste,
+}
+
+/// Ce que le manifeste du projet apprend au diagnostic, ou la faute qui l'en empêche.
+///
+/// Le document analysé y voyage avec les métadonnées : `versions` lit la dépendance au
+/// noyau et `base` la feature de `sea-orm`, deux déclarations que
+/// `[package.metadata.rbs]` ne dit pas et que chacun rouvrait le fichier pour trouver.
+///
+/// La faute est gardée plutôt que remplacée par un défaut : le moteur, les features et
+/// la version que le manifeste porte commandent la moitié des contrôles, et chacun a sa
+/// façon de dire qu'il ne les a pas.
+pub(crate) type Manifeste = Result<metadata::Manifeste, metadata::Error>;
+
+/// Lit le manifeste du projet enraciné en `root`.
+///
+/// Le diagnostic ne passe plus par là — `metadata::racine` lui rend le manifeste qu'elle
+/// a dû lire pour reconnaître la racine. Restent les tests des contrôles, qui réécrivent
+/// le manifeste entre la création du projet et le verdict, et doivent donc le relire à
+/// cet instant-là.
+#[cfg(test)]
+pub(crate) fn manifeste(root: &Path) -> Manifeste {
+    metadata::manifeste(&root.join("Cargo.toml"))
+}
+
 /// Un contrôle du diagnostic : son titre, connu avant qu'il ne s'exécute, et son
 /// exécution.
 ///
-/// Un contrôle qui n'interroge ni la configuration ni l'annonce les ignore par une
-/// fermeture : lui imposer un paramètre qu'il n'emploie pas se lirait comme une
-/// dépendance qu'il n'a pas.
+/// Un contrôle qui n'interroge pas l'annonce l'ignore par une fermeture : lui imposer un
+/// paramètre qu'il n'emploie pas se lirait comme une dépendance qu'il n'a pas.
 #[derive(Clone, Copy)]
 struct Controle {
     /// Ce qui est vérifié, tel qu'il paraîtra au rapport.
@@ -192,44 +235,45 @@ struct Controle {
     executer: Execution,
 }
 
-/// Ce que reçoit un contrôle : la racine du projet, la configuration lue une seule fois,
-/// et de quoi annoncer ce qu'il s'apprête à faire.
-type Execution = fn(&Path, &Config, &mut dyn FnMut(&str)) -> Check;
+/// Ce que reçoit un contrôle : le projet, lu une seule fois pour tous, et de quoi
+/// annoncer ce qu'il s'apprête à faire.
+type Execution = fn(&Projet, &mut dyn FnMut(&str)) -> Check;
 
 /// Les contrôles à jouer sur ce projet, dans l'ordre du rapport.
 ///
 /// Le plan se construit avant le premier verdict : c'est ce qui permet à un rendu écrit
 /// au fil de l'eau de connaître la largeur de sa colonne de titres.
-fn plan(root: &Path) -> Vec<Controle> {
+fn plan(manifeste: &Manifeste) -> Vec<Controle> {
     let mut controles = vec![
         Controle {
             titre: anchors::TITRE,
-            executer: |root, _, _| anchors::check(root),
+            executer: |projet, _| anchors::check(&projet.root),
         },
         Controle {
             titre: agents::TITRE,
-            executer: |root, _, _| agents::check(root),
+            executer: |projet, _| agents::check(&projet.root, &projet.manifeste),
         },
         Controle {
             titre: relations::TITRE,
-            executer: |root, _, _| relations::check(root),
+            executer: |projet, _| relations::check(&projet.root),
         },
         Controle {
             titre: env::TITRE,
-            executer: |root, _, _| env::check(root),
+            executer: |projet, _| env::check(&projet.root),
         },
         Controle {
             titre: versions::TITRE,
-            executer: |root, _, _| versions::check(root),
+            executer: |projet, _| versions::check(&projet.manifeste),
         },
         Controle {
             titre: base::TITRE,
-            executer: |root, _, annonce| base::check(root, annonce),
+            executer: |projet, annonce| base::check(&projet.root, &projet.manifeste, annonce),
         },
     ];
 
-    let installees = metadata::read(&root.join("Cargo.toml"))
-        .map(|metadonnees| metadonnees.features)
+    let installees = manifeste
+        .as_ref()
+        .map(|manifeste| manifeste.metadonnees.features.as_slice())
         .unwrap_or_default();
 
     // Un projet qui n'a pas installé une feature n'a pas à lire une ligne à son sujet :
@@ -256,55 +300,69 @@ const FEATURE_CHECKS: [(&str, Controle); 7] = [
         "auth",
         Controle {
             titre: auth::TITRE,
-            executer: |root, config, _| auth::check(root, config),
+            executer: |projet, _| auth::check(&projet.root, &projet.config),
         },
     ),
     (
         "auth",
         Controle {
             titre: guards::TITRE,
-            executer: |root, _, _| guards::check(root),
+            executer: |projet, _| guards::check(&projet.root),
         },
     ),
     (
         "redis",
         Controle {
             titre: redis::TITRE,
-            executer: |_, config, _| redis::check(config),
+            executer: |projet, _| redis::check(&projet.config),
         },
     ),
     (
         "mail",
         Controle {
             titre: mail::TITRE,
-            executer: |root, config, _| mail::check(root, config),
+            executer: |projet, _| mail::check(&projet.root, &projet.config),
         },
     ),
     (
         "storage",
         Controle {
             titre: storage::TITRE,
-            executer: |root, config, _| storage::check(root, config),
+            executer: |projet, _| storage::check(&projet.root, &projet.config),
         },
     ),
     (
         "jobs",
         Controle {
             titre: jobs::TITRE,
-            executer: |_, config, _| jobs::check(config),
+            executer: |projet, _| jobs::check(&projet.config),
         },
     ),
     (
         "observability",
         Controle {
             titre: observability::TITRE,
-            executer: |_, config, _| observability::check(config),
+            executer: |projet, _| observability::check(&projet.config),
         },
     ),
 ];
 
 /// Le fichier de configuration que les contrôles de feature interrogent.
 const CONFIG: &str = "config/default.toml";
+
+/// Une faute réduite à sa première ligne.
+///
+/// Le rendu écrit le détail d'un constat sur la ligne de son titre, quand le report
+/// d'analyse de `toml_edit` en fait cinq : la première porte la position fautive, les
+/// suivantes n'en sont que le soulignement, et les recopier disloque la colonne.
+pub(crate) fn une_ligne(faute: impl std::fmt::Display) -> String {
+    faute
+        .to_string()
+        .lines()
+        .next()
+        .unwrap_or_default()
+        .to_string()
+}
 
 /// Le contrôle d'une feature dont tout le diagnostic tient à sa section de configuration.
 ///
@@ -321,15 +379,33 @@ fn section_check(
     present: &str,
     reglages: &str,
 ) -> Check {
-    if config.section(section) {
-        return Check::ok(titre, present);
+    match defaut_de_section(config, section, reglages) {
+        Some((detail, remede)) => Check::failed(titre, detail, remede),
+        None => Check::ok(titre, present),
     }
+}
 
-    Check::failed(
-        titre,
-        format!("{CONFIG} ne porte pas de section `[{section}]`"),
-        format!("ajoutez à {CONFIG} :\n[{section}]\n{reglages}"),
-    )
+/// Ce qui empêche `section` d'être en place, et le geste qui le corrige.
+///
+/// Trois fautes, et non une : le fichier peut n'être pas là, n'être pas analysable, ou
+/// ne pas porter la section. Les confondre faisait annoncer une section manquante d'un
+/// fichier qui n'avait pas pu être lu, et proposer d'y ajouter ce qui s'y trouvait déjà.
+///
+/// `reglages` ne sert qu'aux deux cas où le remède est d'écrire la section : un fichier
+/// mal formé se corrige avant qu'on y ajoute quoi que ce soit.
+fn defaut_de_section(config: &Config, section: &str, reglages: &str) -> Option<(String, String)> {
+    match config {
+        Config::Fautif { detail, remede } => Some((detail.clone(), remede.clone())),
+        Config::Absent => Some((
+            format!("{CONFIG} est absent"),
+            format!("créez {CONFIG} avec :\n[{section}]\n{reglages}"),
+        )),
+        Config::Lu(document) if document.get(section).is_none() => Some((
+            format!("{CONFIG} ne porte pas de section `[{section}]`"),
+            format!("ajoutez à {CONFIG} :\n[{section}]\n{reglages}"),
+        )),
+        Config::Lu(_) => None,
+    }
 }
 
 /// `config/default.toml` du projet, lu et analysé une seule fois.
@@ -337,20 +413,57 @@ fn section_check(
 /// Un diagnostic complet interrogeait ce fichier jusqu'à huit fois, chaque contrôle le
 /// relisant et le réanalysant pour une question d'une ligne — `storage` en enchaînait
 /// trois d'affilée.
-pub(crate) struct Config(Option<toml_edit::DocumentMut>);
+pub(crate) enum Config {
+    /// Le document, analysé.
+    Lu(toml_edit::DocumentMut),
+    /// Aucun fichier à cet emplacement.
+    Absent,
+    /// Le fichier est là, mais illisible ou mal formé : ce qui a été constaté, et le
+    /// geste qui le corrige, tels qu'un contrôle les rendra.
+    Fautif {
+        /// Ce qui a empêché d'analyser le fichier.
+        detail: String,
+        /// Quoi faire pour qu'il s'analyse.
+        remede: String,
+    },
+}
 
 impl Config {
     /// Lit la configuration du projet.
     ///
-    /// Un fichier absent ou illisible se comporte comme un fichier vide : ce qui
-    /// intéresse un contrôle est de disposer ou non de la valeur, jamais laquelle des
-    /// couches manque.
+    /// Les trois issues restent distinctes jusqu'au rapport : un fichier qu'on n'a pas su
+    /// analyser n'apprend rien sur les sections qu'il porte, et le tenir pour vide faisait
+    /// dire au diagnostic l'inverse de la panne.
     pub(crate) fn read(root: &Path) -> Self {
-        Self(
-            std::fs::read_to_string(root.join(CONFIG))
-                .ok()
-                .and_then(|source| source.parse::<toml_edit::DocumentMut>().ok()),
-        )
+        let source = match std::fs::read_to_string(root.join(CONFIG)) {
+            Ok(source) => source,
+            Err(faute) if faute.kind() == std::io::ErrorKind::NotFound => return Self::Absent,
+            Err(faute) => {
+                return Self::Fautif {
+                    detail: format!("{CONFIG} est inaccessible : {faute}"),
+                    remede: format!(
+                        "rendez {CONFIG} lisible : aucun réglage de feature ne se \
+                         diagnostique sans lui"
+                    ),
+                };
+            }
+        };
+
+        match source.parse::<toml_edit::DocumentMut>() {
+            Ok(document) => Self::Lu(document),
+            Err(faute) => Self::Fautif {
+                detail: format!("{CONFIG} n'est pas un TOML valide : {}", une_ligne(faute)),
+                remede: format!("corrigez la syntaxe de {CONFIG}, puis relancez le diagnostic"),
+            },
+        }
+    }
+
+    /// Le document, quand il a pu être analysé.
+    fn document(&self) -> Option<&toml_edit::DocumentMut> {
+        match self {
+            Self::Lu(document) => Some(document),
+            Self::Absent | Self::Fautif { .. } => None,
+        }
     }
 
     /// Vrai si la configuration porte une section `[name]`.
@@ -358,8 +471,7 @@ impl Config {
     /// Analysé par `toml_edit` et non cherché en texte : une section en commentaire n'est
     /// pas une section.
     pub(crate) fn section(&self, name: &str) -> bool {
-        self.0
-            .as_ref()
+        self.document()
             .is_some_and(|document| document.get(name).is_some())
     }
 
@@ -369,7 +481,7 @@ impl Config {
     /// refuserait au démarrage, et le contrôle qui le lirait comme un entier jugerait
     /// une valeur que le projet n'a jamais eue.
     pub(crate) fn integer(&self, section: &str, key: &str) -> Option<i64> {
-        self.0.as_ref().and_then(|document| {
+        self.document().and_then(|document| {
             document
                 .get(section)
                 .and_then(|table| table.get(key))
@@ -379,7 +491,7 @@ impl Config {
 
     /// Valeur d'un champ, s'il est renseigné.
     pub(crate) fn field(&self, section: &str, key: &str) -> Option<String> {
-        self.0.as_ref().and_then(|document| {
+        self.document().and_then(|document| {
             document
                 .get(section)
                 .and_then(|table| table.get(key))
@@ -438,6 +550,63 @@ mod tests {
         assert!(matches!(error, Error::PasUnProjet));
     }
 
+    /// Un manifeste cassé est le cas où le diagnostic sert le plus : la commande
+    /// s'arrêtait dessus avant de jouer un seul contrôle, si bien que les branches qui
+    /// savent le nommer n'étaient atteignables qu'en test unitaire.
+    #[test]
+    fn a_broken_manifest_is_diagnosed_instead_of_aborting_the_command() {
+        let (_parent, root) = projet_hors_ligne();
+        std::fs::write(root.join("Cargo.toml"), "[package\nname = \"demo-api\"\n")
+            .expect("manifeste cassé");
+
+        let report = run_with(&root, &mut Muet).expect("un manifeste cassé se diagnostique");
+
+        assert!(!report.succeeded(), "{:?}", titles(&report));
+
+        for titre in ["agents", "versions", "base"] {
+            let check = report
+                .checks
+                .iter()
+                .find(|check| check.title == titre)
+                .unwrap_or_else(|| panic!("{titre} doit figurer au rapport"));
+
+            assert_eq!(check.state, State::Echec, "{titre} : {}", check.detail);
+        }
+
+        assert!(
+            report
+                .checks
+                .iter()
+                .any(|check| check.detail.contains("TOML valide")),
+            "un contrôle doit porter la faute : {:?}",
+            report
+                .checks
+                .iter()
+                .map(|check| check.detail.as_str())
+                .collect::<Vec<_>>()
+        );
+    }
+
+    /// Le rendu écrit le détail sur la ligne du titre : le report d'analyse de
+    /// `toml_edit` en fait cinq, et les recopier telles quelles disloquait la colonne.
+    #[test]
+    fn a_broken_manifest_is_reported_one_line_per_check() {
+        let (_parent, root) = projet_hors_ligne();
+        std::fs::write(root.join("Cargo.toml"), "[package\nname = \"demo-api\"\n")
+            .expect("manifeste cassé");
+
+        let report = run_with(&root, &mut Muet).expect("un manifeste cassé se diagnostique");
+
+        for check in &report.checks {
+            assert!(
+                !check.detail.contains('\n'),
+                "{} : {}",
+                check.title,
+                check.detail
+            );
+        }
+    }
+
     /// Les titres sont connus avant le premier verdict — c'est ce qui fixe la largeur de
     /// la colonne sans attendre le dernier — et chaque constat est remis au fil de l'eau.
     #[test]
@@ -463,12 +632,26 @@ mod tests {
         assert!(report.succeeded());
     }
 
-    /// Le projet de `crate::fixtures::project`, dont le manifeste est réécrit pour ne
-    /// déclarer que les `features` passées.
+    /// Le projet de ces tests, dont la base est hors d'atteinte.
+    ///
+    /// Le contrôle `base` demande sa version au moteur dès qu'il le joint, et il la
+    /// demande à `cargo run -p migration` : sur une machine où un PostgreSQL écoute le
+    /// port par défaut — celui que vise le projet des fixtures — chacun de ces tests
+    /// bâtissait la crate `migration` d'un projet temporaire. Le port 1 est réservé, rien
+    /// n'y écoute, et le refus est immédiat : c'est déjà le choix des tests de `base` et
+    /// de `tests/integration_doctor`.
+    fn projet_hors_ligne() -> (TempDir, std::path::PathBuf) {
+        crate::fixtures::Project::new()
+            .url("postgres://rbs:rbs@127.0.0.1:1/demo_api")
+            .create()
+    }
+
+    /// Le projet de `projet_hors_ligne`, dont le manifeste est réécrit pour ne déclarer
+    /// que les `features` passées.
     ///
     /// `pub(super)` : `doctor/guards.rs` est son seul réemploi hors de ce module.
     pub(super) fn project(features: &[&str]) -> (TempDir, std::path::PathBuf) {
-        let (parent, root) = crate::fixtures::project();
+        let (parent, root) = projet_hors_ligne();
 
         let manifest = root.join("Cargo.toml");
         let source = std::fs::read_to_string(&manifest).expect("manifeste lisible");
@@ -567,6 +750,96 @@ mod tests {
             "la feature est déclarée, son contrôle doit figurer : {:?}",
             titles(&report)
         );
+    }
+
+    /// Le contrôle de section, tel que `redis` et `jobs` l'appellent.
+    fn section(root: &std::path::Path) -> Check {
+        section_check(
+            &Config::read(root),
+            "jobs",
+            "jobs",
+            "la configuration de la file est en place",
+            "max_attempts = 5",
+        )
+    }
+
+    /// Un `config/default.toml` mal formé n'est pas un fichier absent : le rapport
+    /// annonçait une section manquante et proposait d'ajouter ce qui s'y trouvait déjà.
+    #[test]
+    fn a_malformed_config_names_its_syntax_error() {
+        let (_parent, root) = project(&["health", "jobs"]);
+        std::fs::write(root.join(CONFIG), "[jobs\nmax_attempts = 5\n").expect("config cassée");
+
+        let check = section(&root);
+
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
+        assert!(check.detail.contains("TOML valide"), "{}", check.detail);
+        assert!(
+            !check.detail.contains("ne porte pas de section"),
+            "le remède mentirait sur la panne : {}",
+            check.detail
+        );
+    }
+
+    /// Un fichier absent se nomme comme tel : la section n'y manque pas, c'est le fichier
+    /// entier qui manque.
+    #[test]
+    fn an_absent_config_names_the_missing_file() {
+        let (_parent, root) = project(&["health", "jobs"]);
+        std::fs::remove_file(root.join(CONFIG)).expect("config supprimable");
+
+        let check = section(&root);
+
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
+        assert!(check.detail.contains("est absent"), "{}", check.detail);
+        assert!(
+            check
+                .remedy
+                .as_ref()
+                .is_some_and(|remede| remede.contains("[jobs]")),
+            "{:?}",
+            check.remedy
+        );
+    }
+
+    /// Un fichier lisible qui ne porte pas la section garde le verdict qu'il a toujours
+    /// eu : distinguer les trois cas n'en efface aucun.
+    #[test]
+    fn a_readable_config_without_the_section_still_says_so() {
+        let (_parent, root) = project(&["health", "jobs"]);
+
+        let check = section(&root);
+
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
+        assert!(
+            check.detail.contains("ne porte pas de section"),
+            "{}",
+            check.detail
+        );
+    }
+
+    /// La faute traverse le rapport entier : chaque contrôle de feature la nomme, au lieu
+    /// de réclamer huit fois une section qu'il n'a pas pu chercher.
+    #[test]
+    fn a_malformed_config_is_named_by_every_feature_check() {
+        let (_parent, root) = project(&["health", "jobs", "redis", "observability"]);
+        std::fs::write(root.join(CONFIG), "[jobs\nmax_attempts = 5\n").expect("config cassée");
+
+        let report = run_with(&root, &mut Muet).expect("c'est un projet rbs");
+
+        for titre in ["jobs", "redis", "observability"] {
+            let check = report
+                .checks
+                .iter()
+                .find(|check| check.title == titre)
+                .unwrap_or_else(|| panic!("{titre} doit figurer au rapport"));
+
+            assert!(
+                check.detail.contains("TOML valide"),
+                "{titre} : {}",
+                check.detail
+            );
+        }
     }
 
     #[test]

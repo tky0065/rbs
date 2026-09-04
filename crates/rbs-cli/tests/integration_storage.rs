@@ -52,6 +52,10 @@ fn both_backends_pass_the_same_round_and_the_object_reads_back_outside_the_trait
 
     rbs(&projet).args(["add", "storage"]).assert().success();
 
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
     let output = Command::new("cargo")
         .current_dir(&projet)
         .env("CARGO_TARGET_DIR", common::cible())

@@ -115,20 +115,24 @@ impl Source {
     /// Le manifeste d'un fragment est écarté : il déclare ce que l'installation fait au
     /// projet, il n'est pas un des fichiers qu'elle y dépose.
     pub fn files(&self) -> io::Result<Vec<File>> {
-        let mut files = self.all()?;
-
-        files.retain(|file| file.destination != Path::new(MANIFESTE));
-
-        Ok(files)
+        Ok(self.manifest_and_files()?.1)
     }
 
-    /// Source du manifeste du fragment, ou `None` s'il n'en porte pas.
-    pub fn manifest(&self) -> io::Result<Option<String>> {
-        Ok(self
-            .all()?
-            .into_iter()
-            .find(|file| file.destination == Path::new(MANIFESTE))
-            .map(|file| file.source))
+    /// Le manifeste du fragment et les fichiers que son installation dépose, en une passe.
+    ///
+    /// L'installation a besoin des deux, et les lire séparément parcourait l'arborescence
+    /// deux fois en copiant chaque source en `String` autant de fois. Les deux
+    /// [`Source::files`] s'y ramène : la règle disant que le manifeste n'est pas un
+    /// fichier déposé n'est ainsi écrite qu'ici.
+    pub fn manifest_and_files(&self) -> io::Result<(Option<String>, Vec<File>)> {
+        let mut files = self.all()?;
+
+        let manifest = files
+            .iter()
+            .position(|file| file.destination == Path::new(MANIFESTE))
+            .map(|rang| files.remove(rang).source);
+
+        Ok((manifest, files))
     }
 
     /// Toutes les entrées du répertoire, manifeste compris.
@@ -464,6 +468,26 @@ mod tests {
         }
     }
 
+    /// `rustfmt --check` sur un fichier rendu, l'écart rendu lisible.
+    ///
+    /// `relatif` ne sert qu'au message : c'est le chemin de la template, celui que
+    /// l'auteur de l'échec doit rouvrir, et non celui du temporaire où elle a été
+    /// déroulée.
+    fn conforme_a_rustfmt(relatif: &str, path: &Path) {
+        let output = std::process::Command::new("rustfmt")
+            .args(["--edition", "2024", "--check"])
+            .arg(path)
+            .output()
+            .expect("rustfmt doit être lançable");
+
+        assert!(
+            output.status.success(),
+            "{relatif} n'est pas conforme à rustfmt :\n{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
     #[test]
     fn each_rust_template_of_the_skeleton_conforms_to_rustfmt() {
         // Le workflow d'`rbs add ci` lance `cargo fmt --check` sur le projet généré : un
@@ -508,19 +532,7 @@ mod tests {
         );
 
         for (relatif, path) in sources {
-            let output = std::process::Command::new("rustfmt")
-                .args(["--edition", "2024", "--check"])
-                .arg(&path)
-                .output()
-                .expect("rustfmt doit être lançable");
-
-            assert!(
-                output.status.success(),
-                "{} n'est pas conforme à rustfmt :\n{}{}",
-                relatif.display(),
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
+            conforme_a_rustfmt(&relatif.display().to_string(), &path);
         }
     }
 
@@ -787,14 +799,17 @@ mod tests {
         // Énumérées une à une plutôt qu'en un bloc : la liste s'allonge à chaque fragment
         // livré, et l'ordre alphabétique intercale les nouveaux venus.
         for installable in [
+            "audit",
             "auth",
             "ci",
             "cors",
             "docker",
+            "jobs",
             "mail",
             "observability",
             "rate-limit",
             "redis",
+            "scheduler",
             "storage",
         ] {
             assert!(
@@ -888,6 +903,68 @@ mod tests {
         }
     }
 
+    /// Le manifeste et les fichiers d'un fragment se lisent en une seule passe.
+    ///
+    /// L'installation a besoin des deux : les lire séparément parcourt l'arborescence deux
+    /// fois et copie chaque source en `String` deux fois, pour le fragment entier.
+    #[test]
+    fn the_manifest_and_the_files_come_out_of_one_reading() {
+        let source = Source::feature(None, "auth").expect("le fragment auth est embarqué");
+
+        let (manifeste, fichiers) = source
+            .manifest_and_files()
+            .expect("le fragment se lit d'un coup");
+
+        assert!(
+            manifeste.is_some_and(|texte| texte.contains("[feature]")),
+            "le manifeste doit sortir de la même lecture"
+        );
+        assert!(
+            fichiers
+                .iter()
+                .all(|file| file.destination != Path::new(MANIFESTE)),
+            "le manifeste n'est pas un fichier que l'installation dépose"
+        );
+        let empreinte = |files: &[File]| -> Vec<(PathBuf, usize)> {
+            files
+                .iter()
+                .map(|file| (file.destination.clone(), file.source.len()))
+                .collect()
+        };
+        assert_eq!(
+            empreinte(&fichiers),
+            empreinte(&source.files().expect("les fichiers se lisent")),
+            "la lecture d'un coup doit rendre exactement ce que `files` rend"
+        );
+    }
+
+    /// Une réponse portant des jetons ne se met pas en cache — RFC 6749 §5.1.
+    ///
+    /// L'en-tête est posé par le type et non par les deux handlers : un troisième, ajouté
+    /// plus tard dans le projet de l'utilisateur, rendrait sinon la paire sans lui, et
+    /// rien ne le signalerait.
+    #[test]
+    fn the_token_pair_forbids_its_own_caching() {
+        let dto = read(&Path::new(RACINE_FEATURES).join("auth/dto.rs.jinja"));
+
+        assert!(
+            dto.contains("impl IntoResponse for TokenPair"),
+            "la paire doit porter sa propre réponse :\n{dto}"
+        );
+        for entete in ["CACHE_CONTROL, \"no-store\"", "PRAGMA, \"no-cache\""] {
+            assert!(
+                dto.contains(entete),
+                "`{entete}` doit être posé par la paire :\n{dto}"
+            );
+        }
+
+        let controller = read(&Path::new(RACINE_FEATURES).join("auth/controller.rs.jinja"));
+        assert!(
+            !controller.contains("Json<TokenPair>"),
+            "un handler qui enveloppe la paire dans un `Json` nu contourne l'en-tête :\n{controller}"
+        );
+    }
+
     /// L'appel qui commence à `debut`, refermé sur sa parenthèse ouvrante.
     ///
     /// Une fenêtre d'un nombre fixe de caractères déborderait sur le code d'après, où
@@ -978,6 +1055,106 @@ mod tests {
         assert!(
             source.contains("\n// <rbs:related:jobs>\n// </rbs:related:jobs>\n"),
             "{source}"
+        );
+    }
+
+    /// Le rendu d'un fragment est-il déjà ce que `rustfmt` écrirait ?
+    ///
+    /// Le squelette a son balayage depuis toujours ; les fragments n'en avaient aucun. Ce
+    /// que `each_example_passes_cargo_fmt` couvre est le rendu des seules features qu'un
+    /// exemple installe — `audit` et `cors` n'en ont aucun, et n'étaient donc vérifiés
+    /// nulle part. L'enjeu est celui du squelette : le workflow d'`rbs add ci` lance
+    /// `cargo fmt --check` sur le projet, et un blanc perdu par un `-%}` le fait échouer
+    /// au premier pas, sur du code que le développeur n'a pas écrit.
+    ///
+    /// Les fichiers d'un fragment sont déroulés côte à côte, sous un répertoire par
+    /// fragment, avant d'être formatés : `rustfmt` suit les déclarations de modules, et un
+    /// `mod.rs` seul ne résout pas ses `mod`.
+    ///
+    /// Deux contextes, comme `each_feature_template_renders_with_its_context` : le
+    /// compteur de `rate-limit` a deux rendus selon que `redis` est posée, et celui qu'on
+    /// ne déroule pas est celui qui casse.
+    #[test]
+    fn each_rust_template_of_each_fragment_conforms_to_rustfmt() {
+        let renderer = Renderer::new();
+        let temp = tempfile::tempdir().expect("répertoire temporaire créable");
+
+        let mut sources = Vec::new();
+        for (rang, installees) in [&[][..], &["redis"][..]].into_iter().enumerate() {
+            for feature in crate::templates::embedded_names() {
+                let root = temp.path().join(rang.to_string()).join(&feature);
+
+                let files = Source::feature(None, &feature)
+                    .expect("le fragment doit exister")
+                    .files()
+                    .expect("les templates embarquées doivent se lire");
+
+                for file in &files {
+                    let destination = root.join(&file.destination);
+                    if let Some(parent) = destination.parent() {
+                        fs::create_dir_all(parent).expect("le répertoire est créable");
+                    }
+
+                    let rendered = renderer
+                        .render(&file.source, feature_context(installees))
+                        .unwrap_or_else(|error| {
+                            panic!(
+                                "{feature}/{} ne se rend pas sur {installees:?} : {error}",
+                                file.destination.display()
+                            )
+                        });
+                    fs::write(&destination, rendered).expect("le rendu est écrivable");
+
+                    if destination
+                        .extension()
+                        .is_some_and(|suffixe| suffixe == "rs")
+                    {
+                        sources.push((
+                            format!(
+                                "{feature}/{} sur {installees:?}",
+                                file.destination.display()
+                            ),
+                            destination,
+                        ));
+                    }
+                }
+            }
+        }
+
+        assert!(
+            !sources.is_empty(),
+            "aucun fragment ne dépose de fichier Rust"
+        );
+
+        for (relatif, path) in sources {
+            conforme_a_rustfmt(&relatif, &path);
+        }
+    }
+
+    #[test]
+    fn the_audit_fragment_declares_its_migration_and_its_single_anchor() {
+        let source = read(&Path::new(RACINE_FEATURES).join("audit/feature.toml"));
+        let manifest = crate::manifest::read(&source, "audit/feature.toml")
+            .expect("le manifeste du fragment audit doit se lire");
+
+        let migration = manifest
+            .migration
+            .as_ref()
+            .expect("le fragment pose une table, il doit donc porter une migration");
+        assert_eq!(migration.name, "create_audit_log");
+
+        // Le fragment n'expose ni route, ni layer, ni tâche de fond : une ancre de plus
+        // serait le signe qu'il en fait plus que ce que la spec lui donne à faire.
+        let ancres: Vec<&str> = manifest
+            .anchors
+            .iter()
+            .map(|ancre| ancre.anchor.as_str())
+            .collect();
+        assert_eq!(ancres, ["features"]);
+
+        assert!(
+            manifest.feature.requires.is_empty(),
+            "le fragment ne dépend pas de `auth` — c'est ce qui le rend installable sans JWT"
         );
     }
 
@@ -1179,6 +1356,72 @@ mod tests {
             1,
             "le dépilage doit tenir dans une fonction unique :\n{queue}"
         );
+    }
+
+    #[test]
+    fn the_scheduler_fragment_requires_jobs_and_carries_both_anchors() {
+        let source = read(&Path::new(RACINE_FEATURES).join("scheduler/feature.toml"));
+        let manifest = crate::manifest::read(&source, "scheduler/feature.toml")
+            .expect("le manifeste du fragment scheduler doit se lire");
+
+        // Le scheduler déclenche sans exécuter : sans la file, il n'aurait nulle part où
+        // enfiler, et l'installation poserait un projet qui ne compile pas.
+        assert_eq!(manifest.feature.requires, ["jobs"]);
+
+        let migration = manifest
+            .migration
+            .as_ref()
+            .expect("le fragment pose une table, il doit donc porter une migration");
+        assert_eq!(migration.name, "create_schedules");
+
+        let ancres: Vec<&str> = manifest
+            .anchors
+            .iter()
+            .map(|ancre| ancre.anchor.as_str())
+            .collect();
+        assert_eq!(ancres, ["features", "startup"]);
+
+        // Le calendrier est relu et validé avant que le serveur n'écoute, et une
+        // expression illisible doit arrêter le démarrage — ce que le guide promet. Un
+        // `spawn` détaché, comme celui de la file, laisserait au contraire l'API répondre
+        // en paraissant saine, avec un calendrier qui ne déclenchera jamais rien : c'est
+        // le mode de panne que ce fragment existe pour éviter, et il ne se voit pas.
+        let startup = manifest
+            .anchors
+            .iter()
+            .find(|ancre| ancre.anchor == "startup")
+            .expect("l'ancre startup vient d'être exigée");
+        assert!(
+            startup.content.contains(".await?"),
+            "l'erreur du démarrage ne remonte pas à `main` : {}",
+            startup.content
+        );
+    }
+
+    /// Le guide `AGENTS.md` énumère les features installables à la main.
+    ///
+    /// La liste ne se déduit d'aucun catalogue : elle avait vieilli en silence, et un
+    /// agent lisant le guide d'un projet fraîchement engendré s'y voyait refuser une
+    /// feature que le binaire sait pourtant poser. C'est ce test qui doit mordre à la
+    /// livraison du fragment suivant, dans les deux langues.
+    #[test]
+    fn each_agents_guide_names_every_installable_feature() {
+        let installables = Source::feature(None, "_aucune_feature_de_ce_nom_")
+            .expect_err("ce nom ne doit désigner aucun fragment")
+            .known;
+
+        for langue in ["en.md.jinja", "fr.md.jinja"] {
+            let guide = read(
+                &Path::new(concat!(env!("CARGO_MANIFEST_DIR"), "/templates/agents")).join(langue),
+            );
+
+            for feature in installables.split(", ") {
+                assert!(
+                    guide.contains(feature),
+                    "`{feature}` s'installe mais {langue} ne la nomme pas"
+                );
+            }
+        }
     }
 
     /// Une balise Jinja de contrôle (`{%- if … %}`, `{%- endif %}`) s'écrit au ras de la

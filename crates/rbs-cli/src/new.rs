@@ -19,7 +19,7 @@ use crate::templates::Source;
 
 /// Nom du compose à la racine du projet, tel que la template le rend et que `rbs dev` le
 /// cherche.
-const COMPOSE: &str = "docker-compose.yml";
+pub(crate) const COMPOSE: &str = "docker-compose.yml";
 
 /// Ce qu'il faut savoir avant de créer un projet, questions et flags confondus.
 pub struct Options {
@@ -450,6 +450,17 @@ fn compose_utile(options: &Options, connexion: Option<&crate::url::Connection>) 
         && connexion.is_some_and(|connexion| {
             connexion.est_locale() && !connexion.user.is_empty() && !connexion.password.is_empty()
         })
+}
+
+/// L'URL vise un moteur à serveur, et rbs n'a pas su la décomposer.
+///
+/// C'est l'un des trois cas où le compose n'est pas écrit, et le seul qui mérite d'être
+/// dit : les deux autres — une base distante, une URL sans identifiants — sont des choix
+/// lisibles dans l'URL elle-même, quand celui-ci ne se découvre qu'à l'absence du
+/// fichier. Un avertissement et non un refus : `postgres:///demo`, qui joint la base par
+/// une socket Unix, est légitime et ne se décompose pas davantage.
+pub(crate) fn url_opaque(database: Database, url: &str) -> bool {
+    database.a_un_serveur() && crate::url::parse(url).is_none()
 }
 
 /// Nom de la crate correspondant au nom du projet : un tiret n'est pas un caractère
@@ -1026,9 +1037,17 @@ mod tests {
         for name in ["mon api", "../evasion", "3volution", ""] {
             let resultat = create(&options(name), parent.path());
 
+            let erreur =
+                resultat.expect_err(&format!("`{name}` a été accepté comme nom de projet"));
+
+            // Le message est ce que l'utilisateur lit pour corriger sa commande : il
+            // avait pris « name de project » d'un renommage passé au travers d'un
+            // littéral, et rien ne le figeait nulle part.
             assert!(
-                resultat.is_err(),
-                "`{name}` a été accepté comme nom de projet"
+                erreur
+                    .to_string()
+                    .contains("n'est pas un nom de projet utilisable"),
+                "{erreur}"
             );
         }
 
@@ -1177,6 +1196,30 @@ mod tests {
             !exemple.contains("s3cr3t") && exemple.contains("POSTGRES_PASSWORD="),
             "l'exemple versionné doit documenter la clé sans porter le secret :\n{exemple}"
         );
+    }
+
+    /// Une URL que rbs ne décompose pas laisse le projet sans compose : c'est ce que
+    /// l'avertissement de `rbs new` annonce, et seul ce cas-là est annoncé.
+    #[test]
+    fn only_an_undecomposable_url_on_a_server_engine_is_reported() {
+        assert!(url_opaque(Database::Postgres, "postgres:///demo"));
+        assert!(url_opaque(Database::Mysql, "mysql://localhost:port/demo"));
+        // Une autorité réduite à son port : sans hôte, il n'y a rien à publier ni à sonder.
+        assert!(url_opaque(Database::Postgres, "postgres://:5432/demo"));
+
+        // Décomposée : l'absence de compose y tient au choix de l'URL, non à rbs.
+        assert!(!url_opaque(
+            Database::Postgres,
+            "postgres://u:p@localhost:5432/demo"
+        ));
+        assert!(!url_opaque(Database::Postgres, "postgres://localhost/demo"));
+        assert!(!url_opaque(
+            Database::Postgres,
+            "postgres://u:p@db.exemple.fr/demo"
+        ));
+
+        // SQLite n'a rien à monter : le compose n'a jamais été attendu.
+        assert!(!url_opaque(Database::Sqlite, "sqlite://demo.db"));
     }
 
     /// Un mot de passe portant `'`, `:` ou `$(` cassait le YAML ou s'exécutait dans le
@@ -1342,6 +1385,43 @@ mod tests {
 
         assert!(!project.root.join("docker-compose.yml").exists());
         assert_eq!(project.files, 20);
+    }
+
+    /// L'expression est celle qu'`rbs add` porte aussi : les identifiants d'une URL que
+    /// rien ne décompose tombent à `String::new()`. La conséquence, elle, diffère — sans
+    /// décomposition il n'y a pas de compose, et les deux fichiers d'environnement ne
+    /// portent les clés du service `db` que lorsqu'un compose les lit. Rien de vide n'est
+    /// donc écrit, et c'est ce que ce test tient.
+    #[test]
+    fn a_url_that_does_not_decompose_writes_no_empty_credentials() {
+        const FAUTIVE: &str = "postgres://rbs:mot/de/passe@localhost:5432/demo_api";
+
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: FAUTIVE.to_string(),
+                database: Database::Postgres,
+                features: Vec::new(),
+                core_path: None,
+                template_dir: None,
+                lang: crate::lang::Lang::Fr,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        assert!(!project.root.join("docker-compose.yml").exists());
+
+        let env = fs::read_to_string(project.root.join(".env")).expect("le .env est lisible");
+        assert!(
+            !env.contains("POSTGRES_"),
+            "le .env porte les clés du service `db` sans compose pour les lire :\n{env}"
+        );
+        assert!(
+            env.contains(&format!("RBS_DATABASE__URL={FAUTIVE}")),
+            "l'URL du projet n'est pas celle qui a été demandée :\n{env}"
+        );
     }
 
     #[test]

@@ -11,6 +11,10 @@ use crate::router::router;
 use crate::state::AppState;
 
 // region: harnais
+// Les tests de ce fichier joignent la base que décrit `.env`, et sont donc `#[ignore]` :
+// `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre la base du
+// projet, migrations appliquées.
+
 /// Monte l'application sur la base décrite par `.env`, sans écouter sur le réseau.
 ///
 /// Les migrations sont supposées appliquées : elles précèdent `cargo test`.
@@ -27,7 +31,7 @@ async fn application() -> Router {
 /// Ouvre une connexion à la même base que l'application.
 ///
 /// Elle ne sert qu'à promouvoir un compte : le rôle ne s'obtient par aucune route.
-async fn connexion() -> DatabaseConnection {
+async fn connection() -> DatabaseConnection {
     let config = rbs_core::Config::load().expect("configuration lisible");
 
     rbs_core::db::connect(&config.database)
@@ -35,61 +39,61 @@ async fn connexion() -> DatabaseConnection {
         .expect("base joignable")
 }
 
-/// Fait traverser le routeur à `requete`, et rend son statut avec son corps.
-async fn appeler(api: &Router, requete: Request<Body>) -> (StatusCode, Value) {
-    let reponse = api
+/// Fait traverser le routeur à `request`, et rend son statut avec son corps.
+async fn call(api: &Router, request: Request<Body>) -> (StatusCode, Value) {
+    let response = api
         .clone()
-        .oneshot(requete)
+        .oneshot(request)
         .await
         .expect("l'application doit répondre");
-    let statut = reponse.status();
-    let octets = to_bytes(reponse.into_body(), usize::MAX)
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("corps de réponse lisible");
 
     // La suppression ne rend aucun corps : il se lit `null` plutôt que d'arrêter le test.
-    let corps = serde_json::from_slice(&octets).unwrap_or(Value::Null);
+    let body = serde_json::from_slice(&bytes).unwrap_or(Value::Null);
 
-    (statut, corps)
+    (status, body)
 }
 
-fn requete(methode: &str, chemin: &str, corps: Value) -> Request<Body> {
+fn request(method: &str, path: &str, body: Value) -> Request<Body> {
     Request::builder()
-        .method(methode)
-        .uri(chemin)
+        .method(method)
+        .uri(path)
         .header("content-type", "application/json")
-        .body(Body::from(corps.to_string()))
+        .body(Body::from(body.to_string()))
         .expect("requête bien formée")
 }
 
-fn sans_corps(methode: &str, chemin: &str) -> Request<Body> {
+fn without_body(method: &str, path: &str) -> Request<Body> {
     Request::builder()
-        .method(methode)
-        .uri(chemin)
+        .method(method)
+        .uri(path)
         .body(Body::empty())
         .expect("requête bien formée")
 }
 
 // region: signee
-/// Présente `jeton` sur une requête déjà construite.
+/// Présente `token` sur une requête déjà construite.
 ///
 /// Signer plutôt que construire garde les deux formes sous les yeux : ce qui n'est pas
 /// signé dans ce fichier est ce que l'API laisse ouvert.
-fn signee(mut requete: Request<Body>, jeton: &str) -> Request<Body> {
-    requete.headers_mut().insert(
+fn signed(mut request: Request<Body>, token: &str) -> Request<Body> {
+    request.headers_mut().insert(
         "authorization",
-        format!("Bearer {jeton}")
+        format!("Bearer {token}")
             .parse()
             .expect("en-tête bien formé"),
     );
 
-    requete
+    request
 }
 // endregion: signee
 
 /// Compare à la réponse la valeur envoyée pour `champ`.
-fn comparer(rendu: &Value, envoye: &Value, champ: &str) {
-    assert_eq!(rendu[champ], envoye[champ], "« {champ} » mal rendu");
+fn compare(rendered: &Value, sent: &Value, champ: &str) {
+    assert_eq!(rendered[champ], sent[champ], "« {champ} » mal rendu");
 }
 
 /// Corps de création dont les valeurs textuelles portent un suffixe tiré au sort.
@@ -97,78 +101,78 @@ fn comparer(rendu: &Value, envoye: &Value, champ: &str) {
 /// Les champs uniques interdisent de rejouer deux fois la même valeur : le suffixe rend
 /// chaque exécution indépendante des précédentes.
 fn creation() -> Value {
-    let suffixe = Uuid::new_v4();
+    let suffix = Uuid::new_v4();
 
     json!({
-        "title": format!("title-{suffixe}"),
-        "body": format!("body-{suffixe}"),
+        "title": format!("title-{suffix}"),
+        "body": format!("body-{suffix}"),
         "published": true,
     })
 }
 
 fn modification() -> Value {
-    let suffixe = Uuid::new_v4();
+    let suffix = Uuid::new_v4();
 
     json!({
-        "title": format!("title-modifie-{suffixe}"),
-        "body": format!("body-modifie-{suffixe}"),
+        "title": format!("title-modifie-{suffix}"),
+        "body": format!("body-modifie-{suffix}"),
         "published": false,
     })
 }
 
 /// Un mot de passe qui satisfait la validation du DTO d'inscription.
-const MOT_DE_PASSE: &str = "un mot de passe assez long";
+const PASSWORD: &str = "un mot de passe assez long";
 
 /// Une adresse jamais inscrite : les tests partagent une base qu'ils ne vident pas.
-fn email_neuf() -> String {
+fn fresh_email() -> String {
     format!("{}@exemple.test", Uuid::new_v4())
 }
 
-async fn inscrire(api: &Router, email: &str) -> Value {
-    let (statut, profil) = appeler(
+async fn register(api: &Router, email: &str) -> Value {
+    let (status, profile) = call(
         api,
-        requete(
+        request(
             "POST",
             "/auth/register",
-            json!({ "email": email, "password": MOT_DE_PASSE }),
+            json!({ "email": email, "password": PASSWORD }),
         ),
     )
     .await;
 
     assert_eq!(
-        statut,
+        status,
         StatusCode::CREATED,
-        "inscription refusée : {profil}"
+        "inscription refusée : {profile}"
     );
 
-    profil
+    profile
 }
 
-async fn connecter(api: &Router, email: &str) -> String {
-    let (statut, paire) = appeler(
+async fn log_in(api: &Router, email: &str) -> String {
+    let (status, pair) = call(
         api,
-        requete(
+        request(
             "POST",
             "/auth/login",
-            json!({ "email": email, "password": MOT_DE_PASSE }),
+            json!({ "email": email, "password": PASSWORD }),
         ),
     )
     .await;
 
-    assert_eq!(statut, StatusCode::OK, "connexion refusée : {paire}");
+    assert_eq!(status, StatusCode::OK, "connexion refusée : {pair}");
 
-    paire["access_token"]
+    pair["access_token"]
         .as_str()
         .expect("la paire doit porter un jeton d'accès")
         .to_owned()
 }
 
 /// Inscrit un compte ordinaire et rend son jeton d'accès.
-async fn jeton_utilisateur(api: &Router) -> String {
-    let email = email_neuf();
-    inscrire(api, &email).await;
+async fn user_token(api: &Router) -> String {
+    let email = fresh_email();
+    register(api, &email).await;
 
-    connecter(api, &email).await
+    log_in(api, &email).await
 }
 
 // region: jeton_admin
@@ -177,11 +181,11 @@ async fn jeton_utilisateur(api: &Router) -> String {
 /// La promotion passe par la base : l'inscription rend toujours un `user`, par défaut de
 /// la table, et le rôle ne voyage que dans un jeton émis après coup — se connecter avant
 /// la promotion rendrait un jeton que la garde refuserait.
-async fn jeton_admin(api: &Router, db: &DatabaseConnection) -> String {
-    let email = email_neuf();
-    let profil = inscrire(api, &email).await;
+async fn admin_token(api: &Router, db: &DatabaseConnection) -> String {
+    let email = fresh_email();
+    let profile = register(api, &email).await;
     let id = Uuid::parse_str(
-        profil["id"]
+        profile["id"]
             .as_str()
             .expect("le profil porte un identifiant"),
     )
@@ -197,62 +201,115 @@ async fn jeton_admin(api: &Router, db: &DatabaseConnection) -> String {
     promu.role = Set(Role::Admin);
     promu.update(db).await.expect("compte promu");
 
-    connecter(api, &email).await
+    log_in(api, &email).await
 }
 // endregion: jeton_admin
 
 // region: cycle_de_vie
 #[tokio::test]
-async fn le_cycle_de_vie_complet_passe_par_l_api() {
+#[ignore = "joint la base du projet"]
+async fn the_full_lifecycle_goes_through_the_api() {
     let api = application().await;
-    let db = connexion().await;
-    let jeton = jeton_admin(&api, &db).await;
+    let db = connection().await;
+    let token = admin_token(&api, &db).await;
     let collection = "/posts";
-    let envoye = creation();
+    let sent = creation();
 
-    let creer = signee(requete("POST", collection, envoye.clone()), &jeton);
-    let (statut, cree) = appeler(&api, creer).await;
-    assert_eq!(statut, StatusCode::CREATED, "création refusée : {cree}");
-    comparer(&cree, &envoye, "title");
-    comparer(&cree, &envoye, "body");
-    comparer(&cree, &envoye, "published");
+    let creer = signed(request("POST", collection, sent.clone()), &token);
+    let (status, created) = call(&api, creer).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {created}");
+    compare(&created, &sent, "title");
+    compare(&created, &sent, "body");
+    compare(&created, &sent, "published");
 
-    let id = cree["id"].as_str().expect("identifiant rendu");
-    let ressource = format!("{collection}/{id}");
+    let id = created["id"].as_str().expect("identifiant rendu");
+    let resource = format!("{collection}/{id}");
 
     // Les lectures ne sont pas signées : c'est le partage que fait ce projet, et le test
     // le montre en ne présentant aucun jeton.
-    let (statut, lu) = appeler(&api, sans_corps("GET", &ressource)).await;
-    assert_eq!(statut, StatusCode::OK, "relecture refusée : {lu}");
-    assert_eq!(lu["id"], cree["id"], "l'identifiant doit être stable");
+    let (status, read) = call(&api, without_body("GET", &resource)).await;
+    assert_eq!(status, StatusCode::OK, "relecture refusée : {read}");
+    assert_eq!(read["id"], created["id"], "l'identifiant doit être stable");
 
     // L'`id` est un UUIDv7 et la liste trie du plus récent au plus ancien : ce qui vient
     // d'être créé ouvre la première page.
     let premiere = format!("{collection}?per_page=1");
-    let (statut, page) = appeler(&api, sans_corps("GET", &premiere)).await;
-    assert_eq!(statut, StatusCode::OK, "liste refusée : {page}");
-    assert_eq!(page["data"][0]["id"], cree["id"], "liste : {page}");
+    let (status, page) = call(&api, without_body("GET", &premiere)).await;
+    assert_eq!(status, StatusCode::OK, "liste refusée : {page}");
+    assert_eq!(page["data"][0]["id"], created["id"], "liste : {page}");
     assert!(
         page["meta"]["total"].as_u64().unwrap_or_default() >= 1,
         "la page doit compter au moins ce qui vient d'être créé : {page}"
     );
 
-    let envoye = modification();
-    let mise_a_jour = signee(requete("PATCH", &ressource, envoye.clone()), &jeton);
-    let (statut, modifie) = appeler(&api, mise_a_jour).await;
-    assert_eq!(statut, StatusCode::OK, "mise à jour refusée : {modifie}");
-    comparer(&modifie, &envoye, "title");
-    comparer(&modifie, &envoye, "body");
-    comparer(&modifie, &envoye, "published");
+    let sent = modification();
+    let mise_a_jour = signed(request("PATCH", &resource, sent.clone()), &token);
+    let (status, updated) = call(&api, mise_a_jour).await;
+    assert_eq!(status, StatusCode::OK, "mise à jour refusée : {updated}");
+    compare(&updated, &sent, "title");
+    compare(&updated, &sent, "body");
+    compare(&updated, &sent, "published");
 
-    let supprimer = signee(sans_corps("DELETE", &ressource), &jeton);
-    let (statut, _) = appeler(&api, supprimer).await;
-    assert_eq!(statut, StatusCode::NO_CONTENT, "suppression refusée");
+    let supprimer = signed(without_body("DELETE", &resource), &token);
+    let (status, _) = call(&api, supprimer).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
 
-    let (statut, _) = appeler(&api, sans_corps("GET", &ressource)).await;
-    assert_eq!(statut, StatusCode::NOT_FOUND, "elle répond encore");
+    let (status, _) = call(&api, without_body("GET", &resource)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "elle répond encore");
+
+    // Une seconde suppression ne trouve plus rien à supprimer. L'assertion vaut des deux
+    // côtés de `--soft-delete` : c'est elle qui attrape une suppression logique dont la
+    // condition de garde manquerait, et qui rendrait alors 204 indéfiniment.
+    let supprimer = signed(without_body("DELETE", &resource), &token);
+    let (status, _) = call(&api, supprimer).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "elle se supprime deux fois");
 }
 // endregion: cycle_de_vie
+
+// region: filtre
+/// Filtrer reste ouvert, là où créer la ligne filtrée exige un jeton `admin`.
+///
+/// `POST /posts/filter` a la méthode d'une écriture sans en être une : le seul test qui
+/// distingue les deux est celui qui crée avec un jeton, puis filtre sans en présenter
+/// aucun. Et le rendu du filtre ne prouve rien de son côté — une condition mal traduite
+/// rend une page vide, que seule une requête jouée contre la base montre.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn the_filter_narrows_the_list() {
+    let api = application().await;
+    let db = connection().await;
+    let token = admin_token(&api, &db).await;
+    let collection = "/posts";
+    let sent = creation();
+
+    let creer = signed(request("POST", collection, sent.clone()), &token);
+    let (status, created) = call(&api, creer).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {created}");
+
+    let critere = json!({ "title": sent["title"] });
+    let chemin = format!("{collection}/filter");
+    let (status, page) = call(&api, request("POST", &chemin, critere)).await;
+    assert_eq!(status, StatusCode::OK, "filtre refusé sans jeton : {page}");
+
+    let ids: Vec<&str> = page["data"]
+        .as_array()
+        .expect("la liste rend un tableau")
+        .iter()
+        .map(|ligne| ligne["id"].as_str().expect("identifiant rendu"))
+        .collect();
+
+    let id = created["id"].as_str().expect("identifiant rendu");
+    assert!(
+        ids.contains(&id),
+        "la ligne créée doit satisfaire son propre critère : {page}"
+    );
+
+    let resource = format!("{collection}/{id}");
+    let supprimer = signed(without_body("DELETE", &resource), &token);
+    let (status, _) = call(&api, supprimer).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
+}
+// endregion: filtre
 
 // region: refus
 /// Sans jeton, la réponse dit « identifie-toi », et non « tu n'as pas le droit ».
@@ -260,49 +317,53 @@ async fn le_cycle_de_vie_complet_passe_par_l_api() {
 /// Les deux se confondent aisément. Ici c'est l'extracteur `Identity` qui tranche, avant
 /// que le corps du handler — et donc `require_role` — s'exécute.
 #[tokio::test]
-async fn sans_jeton_la_creation_rend_401() {
+#[ignore = "joint la base du projet"]
+async fn an_anonymous_write_returns_401() {
     let api = application().await;
 
-    let (statut, corps) = appeler(&api, requete("POST", "/posts", creation())).await;
+    let (status, body) = call(&api, request("POST", "/posts", creation())).await;
 
-    assert_eq!(statut, StatusCode::UNAUTHORIZED, "{corps}");
-    assert_ne!(statut, StatusCode::FORBIDDEN, "{corps}");
+    assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
+    assert_ne!(status, StatusCode::FORBIDDEN, "{body}");
 }
 
 /// Identifié, mais pas administrateur : c'est la garde qui répond, et elle rend 403.
 #[tokio::test]
-async fn un_user_ne_peut_pas_creer_403() {
+#[ignore = "joint la base du projet"]
+async fn a_non_admin_write_returns_403() {
     let api = application().await;
-    let jeton = jeton_utilisateur(&api).await;
+    let token = user_token(&api).await;
 
-    let creer = signee(requete("POST", "/posts", creation()), &jeton);
-    let (statut, corps) = appeler(&api, creer).await;
+    let creer = signed(request("POST", "/posts", creation()), &token);
+    let (status, body) = call(&api, creer).await;
 
-    assert_eq!(statut, StatusCode::FORBIDDEN, "{corps}");
+    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
 }
 
 /// La lecture reste ouverte à qui n'a pas de compte : c'est ce qui fait un blog.
 #[tokio::test]
-async fn la_liste_est_publique() {
+#[ignore = "joint la base du projet"]
+async fn the_list_is_public() {
     let api = application().await;
 
-    let (statut, corps) = appeler(&api, sans_corps("GET", "/posts?per_page=1")).await;
+    let (status, body) = call(&api, without_body("GET", "/posts?per_page=1")).await;
 
-    assert_eq!(statut, StatusCode::OK, "{corps}");
+    assert_eq!(status, StatusCode::OK, "{body}");
 }
 // endregion: refus
 
 // region: erreur_404
 #[tokio::test]
-async fn un_identifiant_inconnu_rend_404() {
+#[ignore = "joint la base du projet"]
+async fn an_unknown_id_returns_404() {
     let api = application().await;
     let inconnu = Uuid::new_v4();
-    let ressource = format!("/posts/{inconnu}");
+    let resource = format!("/posts/{inconnu}");
 
-    let (statut, corps) = appeler(&api, sans_corps("GET", &ressource)).await;
+    let (status, body) = call(&api, without_body("GET", &resource)).await;
 
-    assert_eq!(statut, StatusCode::NOT_FOUND);
-    assert_eq!(corps["status"], 404, "{corps}");
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert_eq!(body["status"], 404, "{body}");
 }
 // endregion: erreur_404
 
@@ -310,21 +371,22 @@ async fn un_identifiant_inconnu_rend_404() {
 /// La requête est signée : l'ordre des extracteurs veut que `Identity` passe avant le
 /// corps, et sans jeton c'est 401 qui reviendrait — le 400 resterait invérifié.
 #[tokio::test]
-async fn un_corps_illisible_rend_400() {
+#[ignore = "joint la base du projet"]
+async fn an_unreadable_body_returns_400() {
     let api = application().await;
-    let db = connexion().await;
-    let jeton = jeton_admin(&api, &db).await;
+    let db = connection().await;
+    let token = admin_token(&api, &db).await;
 
-    let tronque = Request::builder()
+    let truncated = Request::builder()
         .method("POST")
         .uri("/posts")
         .header("content-type", "application/json")
         .body(Body::from("{"))
         .expect("requête bien formée");
 
-    let (statut, corps) = appeler(&api, signee(tronque, &jeton)).await;
+    let (status, body) = call(&api, signed(truncated, &token)).await;
 
-    assert_eq!(statut, StatusCode::BAD_REQUEST);
-    assert_eq!(corps["status"], 400, "{corps}");
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["status"], 400, "{body}");
 }
 // endregion: corps_illisible

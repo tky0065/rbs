@@ -34,3 +34,12 @@ tls = "none"
 from = "no-reply@localhost"
 timeout_secs = 10
 templates = "templates/mail"
+
+# region: metriques
+[observability]
+# Port du second listener, celui qui sert `/metrics`. Il diffère de `server.port` à
+# dessein : les métriques publient la topologie interne du service — routes, volumétrie,
+# versions — et les exposer sur le port de l'API demanderait à chaque déploiement une
+# règle de reverse-proxy pour les cacher.
+metrics_port = 9090
+# endregion: metriques

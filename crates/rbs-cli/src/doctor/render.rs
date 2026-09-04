@@ -80,7 +80,15 @@ impl<W: Write> Sortie for Texte<W> {
             State::Echec => ui::red("✗"),
         };
         let tete = self.tete(&marqueur, check.title);
-        self.ligne(&format!("{tete}{}", check.detail));
+        let mut detail = check.detail.lines();
+        self.ligne(&format!("{tete}{}", detail.next().unwrap_or_default()));
+
+        // Un contrôle libre de composer son détail peut en rendre plusieurs lignes : les
+        // écrire brutes les ferait repartir de la marge, à hauteur des marqueurs. Le
+        // retrait est celui des remèdes, sous le constat qui les porte.
+        for suite in detail {
+            self.ligne(&format!("{RETRAIT}{suite}"));
+        }
 
         let Some(remedy) = &check.remedy else {
             return;
@@ -183,6 +191,27 @@ mod tests {
                 "chaque ligne du remède est en retrait : « {line} »"
             );
         }
+    }
+
+    /// Un détail de plusieurs lignes disloquait la colonne : sa suite repartait de la
+    /// marge, à hauteur des marqueurs. `une_ligne` ne protège que les trois sites qui
+    /// l'appellent — le rendu, lui, tient la colonne quel que soit l'appelant.
+    #[test]
+    fn a_multi_line_detail_is_indented_like_a_remedy() {
+        let rendered = rendu(vec![Check::ok(
+            "config",
+            "deux sections lues\nrbs.database, rbs.server",
+        )]);
+        let mut lines = rendered.lines();
+
+        let premiere = lines.next().expect("le constat est rendu");
+        let suite = lines.next().expect("la suite du détail est rendue");
+
+        assert!(premiere.contains("deux sections lues"), "{rendered}");
+        assert_eq!(
+            suite, "      rbs.database, rbs.server",
+            "la suite du détail repart de la marge :\n{rendered}"
+        );
     }
 
     #[test]

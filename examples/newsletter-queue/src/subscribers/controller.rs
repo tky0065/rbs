@@ -7,6 +7,7 @@ use sea_orm::prelude::Uuid;
 use super::dto::{
     Broadcast, BroadcastAccepted, CreateSubscriber, SubscriberResponse, UpdateSubscriber,
 };
+use super::filter::SubscriberFilter;
 use super::service;
 use crate::state::AppState;
 
@@ -29,6 +30,32 @@ pub async fn list(
     pagination: Pagination,
 ) -> Result<Json<Page<SubscriberResponse>>> {
     Ok(Json(service::list(state.core().db(), &pagination).await?))
+}
+
+/// Filtrer est une lecture : le corps porte les conditions, que l'URL rendrait illisibles.
+/// Le garde de rôle ne s'y applique donc pas, pas plus qu'à `list` ou `find`.
+#[utoipa::path(
+    post,
+    path = "/subscribers/filter",
+    tag = "subscribers",
+    params(
+        ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
+        ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
+    ),
+    request_body = SubscriberFilter,
+    responses(
+        (status = 200, description = "page de subscribers filtrés", body = Page<SubscriberResponse>),
+        (status = 400, description = "filtre, tri ou pagination illisible", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn filter(
+    State(state): State<AppState>,
+    pagination: Pagination,
+    Json(filtre): Json<SubscriberFilter>,
+) -> Result<Json<Page<SubscriberResponse>>> {
+    Ok(Json(
+        service::filter(state.core().db(), &filtre, &pagination).await?,
+    ))
 }
 
 #[utoipa::path(

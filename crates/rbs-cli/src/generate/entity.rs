@@ -169,6 +169,95 @@ mod tests {
         );
     }
 
+    /// Le corps de `struct Model`, sans la clé primaire ni les horodatages qui l'encadrent.
+    ///
+    /// Compter les attributs sur le rendu entier confondrait `table_name` et les
+    /// `belongs_to` des relations avec ceux que porte une colonne.
+    fn model_block(rendered: &str) -> &str {
+        rendered
+            .split_once("pub struct Model {")
+            .and_then(|(_, reste)| reste.split_once("\n}"))
+            .map_or_else(
+                || panic!("le bloc du modèle doit se délimiter :\n{rendered}"),
+                |(corps, _)| corps,
+            )
+    }
+
+    /// Le gabarit n'écrit qu'un attribut par colonne, en `if`/`elif`, parce qu'aucune
+    /// ligne de `--fields` acceptée n'en produit deux : `column_type` ne sort que sur
+    /// `text`, qui refuse `unique` comme `index` ; sur les autres scalaires, les cumuler
+    /// est refusé comme redondant ; et une référence n'indexe que ce qu'`unique`
+    /// n'indexe pas déjà. Ce test exerce les six cas où un attribut sort, plus le cas nu.
+    #[test]
+    fn each_accepted_field_carries_the_single_attribute_it_earns() {
+        for (spec, expected) in [
+            (
+                "body:text",
+                "#[sea_orm(column_type = \"Text\")]\n    pub body: String,",
+            ),
+            (
+                "body:text:optional",
+                "#[sea_orm(column_type = \"Text\")]\n    pub body: Option<String>,",
+            ),
+            (
+                "email:string:unique",
+                "#[sea_orm(unique)]\n    pub email: String,",
+            ),
+            (
+                "slug:string:index",
+                "#[sea_orm(indexed)]\n    pub slug: String,",
+            ),
+            (
+                "author:references:users:unique",
+                "#[sea_orm(unique)]\n    pub author_id: Uuid,",
+            ),
+            (
+                "author:references:users",
+                "#[sea_orm(indexed)]\n    pub author_id: Uuid,",
+            ),
+            ("title:string", "pub title: String,"),
+        ] {
+            let rendered = entity_with("posts", spec, &users_entity());
+            let model = model_block(&rendered);
+
+            assert!(
+                model.contains(expected),
+                "« {spec} » doit rendre :\n{expected}\n--- rendu :\n{model}"
+            );
+            assert_eq!(
+                model.matches("#[sea_orm(").count(),
+                1 + usize::from(expected.contains("#[sea_orm(")),
+                "« {spec} » doit porter la clé primaire et son seul attribut :\n{model}"
+            );
+        }
+    }
+
+    /// Les attributs se distribuent par champ : une colonne ne doit pas hériter de celui
+    /// de sa voisine, ce qu'une déclaration isolée ne peut pas montrer.
+    #[test]
+    fn on_a_full_line_of_fields_each_attribute_stays_on_its_own_column() {
+        let rendered = entity_with(
+            "posts",
+            "title:string,email:string:unique,slug:string:index,body:text,author:references:users",
+            &users_entity(),
+        );
+        let model = model_block(&rendered);
+
+        assert_eq!(
+            model,
+            "\n    #[sea_orm(primary_key, auto_increment = false)]\n    \
+             pub id: Uuid,\n    \
+             pub title: String,\n    \
+             #[sea_orm(unique)]\n    pub email: String,\n    \
+             #[sea_orm(indexed)]\n    pub slug: String,\n    \
+             #[sea_orm(column_type = \"Text\")]\n    pub body: String,\n    \
+             #[sea_orm(indexed)]\n    pub author_id: Uuid,\n    \
+             pub created_at: DateTimeWithTimeZone,\n    \
+             pub updated_at: DateTimeWithTimeZone,",
+            "le modèle rendu :\n{rendered}"
+        );
+    }
+
     #[test]
     fn the_timestamps_are_set_without_having_been_declared() {
         let rendered = entity("users", "name:string");
@@ -314,6 +403,25 @@ mod tests {
         );
     }
 
+    /// Le modèle ne porte le nom de l'entité que dans son `DeriveEntityModel` et son
+    /// `table_name`, tous deux courts : le balayage ne trouve aucune bascule, et tient la
+    /// propriété pour la prochaine retouche du gabarit.
+    #[test]
+    fn the_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(|name| {
+            entity(
+                name,
+                "title:string,summary:text:optional,published_at:datetime",
+            )
+        });
+
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu du modèle diverge de rustfmt à ces longueurs de nom"
+        );
+    }
+
     // La garde de `command.rs` (`the_render_goes_through_rustfmt_without_a_diff_…`) ne
     // porte aucun champ `:references:` : rien n'y prouve que les blocs `impl Related` et
     // le commentaire d'ambiguïté sortent déjà mis en forme. Ce test-ci les couvre au
@@ -347,35 +455,6 @@ mod tests {
         project.compile();
     }
 
-    /// Rendu complet imprimé pour la revue de lecture qu'exige le lot.
-    #[test]
-    #[ignore = "affichage pour revue humaine"]
-    fn preview() {
-        println!(
-            "{}",
-            entity_with(
-                "articles",
-                "title:string,slug:string:unique,summary:text:optional,views:int,published:bool,\
-                 author:references:users",
-                &users_entity()
-            )
-        );
-    }
-
-    /// Rendu d'un modèle à deux relations vers la même cible, pour la revue de lecture.
-    #[test]
-    #[ignore = "affichage pour revue humaine"]
-    fn preview_two_relations_to_the_same_target() {
-        println!(
-            "{}",
-            entity_with(
-                "posts",
-                "title:string,author:references:users,reviewer:references:users",
-                &users_entity()
-            )
-        );
-    }
-
     #[test]
     fn the_render_ends_with_a_single_newline() {
         let rendered = entity("users", "name:string");
@@ -387,6 +466,59 @@ mod tests {
         assert!(
             !rendered.ends_with("\n\n"),
             "ligne vide finale :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn soft_delete_adds_a_nullable_deletion_date() {
+        let feature = Feature::fresh("articles", fields::parse("title:string").expect("champs"))
+            .soft_deleting();
+        let rendered = render(&feature).expect("le modèle doit se rendre");
+
+        assert!(
+            rendered.contains("pub deleted_at: Option<DateTimeWithTimeZone>,"),
+            "la colonne est nullable : une ligne vivante n'a pas de date :\n{rendered}"
+        );
+    }
+
+    /// La migration a déplacé l'unicité vers un index restreint aux lignes vivantes :
+    /// laisser `#[sea_orm(unique)]` sur l'entité lui ferait décrire un schéma que la base
+    /// n'a pas. L'attribut ne construit rien à l'exécution — aucun
+    /// `Schema::create_table_from_entity` dans ce qu'engendre le CLI — mais il se lit.
+    #[test]
+    fn soft_delete_takes_the_unique_attribute_off_the_model() {
+        let feature = Feature::fresh(
+            "articles",
+            fields::parse("title:string:unique").expect("champs"),
+        )
+        .soft_deleting();
+        let rendered = render(&feature).expect("le modèle doit se rendre");
+
+        assert!(
+            !rendered.contains("#[sea_orm(unique)]"),
+            "l'entité décrit une unicité de colonne que la migration n'a pas posée :\n{rendered}"
+        );
+
+        let temoin = render(&Feature::fresh(
+            "articles",
+            fields::parse("title:string:unique").expect("champs"),
+        ))
+        .expect("le modèle doit se rendre");
+
+        assert!(
+            temoin.contains("#[sea_orm(unique)]\n    pub title: String,"),
+            "témoin : sans le drapeau, l'attribut reste :\n{temoin}"
+        );
+    }
+
+    #[test]
+    fn an_ordinary_model_carries_no_deletion_date() {
+        let feature = Feature::fresh("articles", fields::parse("title:string").expect("champs"));
+        let rendered = render(&feature).expect("le modèle doit se rendre");
+
+        assert!(
+            !rendered.contains("deleted_at"),
+            "sans le drapeau, rien n'est injecté :\n{rendered}"
         );
     }
 }

@@ -33,6 +33,10 @@ fn the_fragment_compiles_and_keeps_the_cardinality_of_the_collector() {
 
     // Filtré sur le module : les tests de santé du squelette exigeraient une base de
     // données, que cette feature-ci n'a aucune raison de faire monter.
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
     let output = Command::new("cargo")
         .current_dir(&projet)
         .env("CARGO_TARGET_DIR", common::cible())

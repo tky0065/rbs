@@ -17,7 +17,7 @@ pub async fn health(State(state): State<AppState>) -> Response {
         vec![
             // <rbs:health_probes>
             rbs_core::health::Probe::new("cache", state.cache().ping()),
-            rbs_core::health::Probe::new("storage", crate::storage::probe(&state.storage)),
+            rbs_core::health::Probe::new("storage", crate::storage::probe(state.storage())),
             // </rbs:health_probes>
         ],
     )

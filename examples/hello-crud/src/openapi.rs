@@ -14,6 +14,7 @@ use crate::state::AppState;
         crate::health::controller::health,
         // <rbs:openapi>
         crate::articles::controller::list,
+        crate::articles::controller::filter,
         crate::articles::controller::create,
         crate::articles::controller::find,
         crate::articles::controller::update,

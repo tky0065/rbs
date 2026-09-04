@@ -185,12 +185,18 @@ static CIBLE_PARTAGEE: Mutex<()> = Mutex::new(());
 ///
 /// Le verrou se prend après le conteneur : les PostgreSQL n'ont rien à partager et
 /// démarrent en parallèle.
-fn own_target() -> MutexGuard<'static, ()> {
+///
+/// Deux verrous, parce que la course a deux portées : le `Mutex` tranche entre les tests
+/// de ce fichier sans toucher au système de fichiers, celui de la cible entre ce binaire
+/// et les autres de `tests/`, que `cargo test` lance de front.
+fn own_target() -> (MutexGuard<'static, ()>, std::fs::File) {
     // Un test qui panique empoisonne le verrou. Sans cette reprise, les suivants
     // échoueraient tous sur un message qui ne dit rien de leur propre défaut.
-    CIBLE_PARTAGEE
+    let exclusivite = CIBLE_PARTAGEE
         .lock()
-        .unwrap_or_else(PoisonError::into_inner)
+        .unwrap_or_else(PoisonError::into_inner);
+
+    (exclusivite, common::verrou(&common::cible()))
 }
 
 /// Le critère exécutable du lot, pris au niveau qu'exige la CI générée.
@@ -330,12 +336,30 @@ fn the_auth_tests_of_the_generated_project_pass() {
 
     migrate(&racine);
 
-    Command::new("cargo")
+    // `--include-ignored` : les tests du fragment joignent la base et sont `#[ignore]`.
+    // Sans lui, `cargo test` sortait en 0 sans en jouer un seul, et ce test passait au
+    // vert sans rien prouver de ce que reçoit l'utilisateur.
+    let sortie = Command::new("cargo")
         .current_dir(&racine)
         .env("CARGO_TARGET_DIR", common::cible())
-        .args(["test", "--workspace"])
-        .assert()
-        .success();
+        .args(["test", "--workspace", "--", "--include-ignored"])
+        .output()
+        .expect("cargo doit être lançable");
+
+    let rendu = format!(
+        "{}{}",
+        String::from_utf8_lossy(&sortie.stdout),
+        String::from_utf8_lossy(&sortie.stderr)
+    );
+
+    assert!(
+        sortie.status.success(),
+        "la suite du projet engendré échoue :\n{rendu}"
+    );
+    assert!(
+        rendu.contains("auth::tests::") && rendu.contains(" ... ok"),
+        "aucun test du fragment auth n'a tourné :\n{rendu}"
+    );
 }
 
 /// Le mot de passe traverse le serveur, son hash y est calculé, et le journal n'en garde

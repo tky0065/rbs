@@ -36,7 +36,7 @@ pub(crate) fn render_mod(feature: &Feature, with_tests: bool) -> Result<String, 
 mod tests {
     use super::*;
     use crate::generate::feature::Feature;
-    use crate::generate::{bench, dto, entity, fields, repository, service};
+    use crate::generate::{bench, fields};
 
     fn controller(name: &str) -> String {
         let fields = fields::parse("title:string").expect("champs valides");
@@ -56,6 +56,99 @@ mod tests {
     fn module_with_tests(name: &str) -> String {
         let fields = fields::parse("title:string").expect("champs valides");
         render_mod(&Feature::fresh(name, fields), true).expect("le mod.rs doit se rendre")
+    }
+
+    /// Rend le contrôleur d'une feature dotée de ses routes de contenu.
+    fn controller_with_upload(name: &str, fields: &str) -> String {
+        let fields = fields::parse(fields).expect("les champs du test doivent être valides");
+        render(&Feature::fresh(name, fields).uploading()).expect("le contrôleur doit se rendre")
+    }
+
+    fn controller_uploading(name: &str) -> String {
+        controller_with_upload(name, "title:string")
+    }
+
+    /// Rend le contrôleur d'une feature dont le contenu survit à une suppression logique.
+    fn uploading_and_soft_deleting(name: &str) -> String {
+        let fields = fields::parse("title:string").expect("champs valides");
+        render(&Feature::fresh(name, fields).uploading().soft_deleting())
+            .expect("le contrôleur doit se rendre")
+    }
+
+    /// Rend le contrôleur d'une feature qui porte les deux drapeaux à la fois.
+    fn guarded_uploading(name: &str, role: &str) -> String {
+        let fields = fields::parse("title:string").expect("champs valides");
+        render(&Feature::fresh(name, fields).guarded(role).uploading())
+            .expect("le contrôleur doit se rendre")
+    }
+
+    fn module_uploading(name: &str) -> String {
+        let fields = fields::parse("title:string").expect("champs valides");
+        render_mod(&Feature::fresh(name, fields).uploading(), true)
+            .expect("le mod.rs doit se rendre")
+    }
+
+    /// Deux formes de ce fichier suivent le nom de l'entité et bornent le point fixe des
+    /// deux côtés : la signature de `find`, que rustfmt ramène sur une ligne tant qu'elle
+    /// tient sous les cent colonnes de `max_width` — soit jusqu'à deux caractères
+    /// d'entité — et l'import des DTO, dont la ligne intérieure déborde à vingt-quatre.
+    ///
+    /// Au-delà de vingt-trois, rustfmt répartit les trois DTO par remplissage glouton, un
+    /// régime que le gabarit ne sait pas écrire et qu'on ne réimplante pas : une montée de
+    /// rustfmt le déplacerait. `format::format_batch` le rattrape à l'écriture, donc rien
+    /// de mal formé n'atteint l'utilisateur. C'est cette frontière que l'intervalle fixe,
+    /// mesurée et non commentée.
+    #[test]
+    fn the_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(controller);
+
+        assert_eq!(
+            divergentes,
+            (24..=40).collect::<Vec<usize>>(),
+            "la plage où le contrôleur diverge de rustfmt a bougé"
+        );
+    }
+
+    /// Même garde que ci-dessus, pour les trois handlers de contenu qu'ajoute
+    /// `--with-upload` : leurs chemins portent eux aussi le nom du module.
+    #[test]
+    fn the_uploading_controller_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(controller_uploading);
+
+        assert_eq!(
+            divergentes,
+            (24..=40).collect::<Vec<usize>>(),
+            "la plage où le contrôleur de contenu diverge de rustfmt a bougé"
+        );
+    }
+
+    /// La route de collection est le seul appel de ce fichier dont les arguments suivent le
+    /// nom du module : ils valent cinquante caractères de plus que lui, et franchissent
+    /// donc les soixante colonnes de `fn_call_width` à onze caractères de module.
+    ///
+    /// Les deux autres routes sont déjà écrites éclatées ou tiennent sans lui.
+    #[test]
+    fn the_module_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(module_with_tests);
+
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu de `mod.rs` diverge de rustfmt à ces longueurs de nom"
+        );
+    }
+
+    /// La route de contenu que `--with-upload` ajoute est déjà éclatée sans condition de
+    /// longueur ; ce garde vérifie que ce choix reste un point fixe à toute taille de nom.
+    #[test]
+    fn the_uploading_module_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(module_uploading);
+
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu de `mod.rs` avec `--with-upload` diverge de rustfmt à ces longueurs de nom"
+        );
     }
 
     /// `per_page=abc` rend 400 : un document qui ne l'annonce pas fait débugger au client
@@ -114,8 +207,8 @@ mod tests {
 
         assert_eq!(
             rendered.matches("#[utoipa::path(").count(),
-            5,
-            "les cinq handlers doivent être documentés :\n{rendered}"
+            6,
+            "les six handlers doivent être documentés :\n{rendered}"
         );
     }
 
@@ -318,23 +411,42 @@ mod tests {
         );
     }
 
-    /// Le garde allonge trois signatures, et celle de `delete` franchit les 100 colonnes
+    /// Le garde allonge trois signatures, et celle de `delete` franchit les cent colonnes
     /// où rustfmt bascule : la template doit l'écrire déjà éclatée.
     ///
-    /// Les noms exercés sont ceux dont le rendu sans garde traverse déjà rustfmt sans
-    /// diff — au-delà, c'est la ligne `use super::dto::{…}` qui déborde, indépendamment du
-    /// garde, et `format::format_batch` s'en charge à l'écriture.
+    /// La frontière haute est la même que sans garde — l'import des DTO, à vingt-quatre
+    /// caractères d'entité. La basse en diffère : `Identity` allonge la signature de
+    /// `find`, qui ne se compacte donc jamais.
     #[test]
     fn the_guarded_render_is_already_what_rustfmt_would_write() {
-        for name in ["tag", "articles"] {
-            let rendered = guarded(name, "admin");
+        let divergentes = bench::longueurs_divergentes(|name| guarded(name, "admin"));
 
-            assert_eq!(
-                bench::formatted(&rendered),
-                rendered,
-                "le rendu de `{name}` diverge de rustfmt"
-            );
-        }
+        assert_eq!(
+            divergentes,
+            (24..=40).collect::<Vec<usize>>(),
+            "la plage où le contrôleur gardé diverge de rustfmt a bougé"
+        );
+    }
+
+    /// La ligne des DTO est la seule du controller qui grandisse avec le nom de l'entité.
+    /// Ce que la comparaison à rustfmt prouve globalement, ce test le nomme : sous le
+    /// seuil la ligne reste entière, au-dessus la template l'éclate elle-même.
+    #[test]
+    fn the_dto_import_splits_itself_once_a_single_line_would_overflow() {
+        let court = controller("articles");
+        let long = controller("administrative_documents");
+
+        assert!(
+            court.contains("use super::dto::{ArticleResponse, CreateArticle, UpdateArticle};\n"),
+            "un nom court tient sur une ligne :\n{court}"
+        );
+        assert!(
+            long.contains(
+                "use super::dto::{\n    AdministrativeDocumentResponse, \
+                 CreateAdministrativeDocument, UpdateAdministrativeDocument,\n};\n"
+            ),
+            "un nom long doit être rendu déjà éclaté :\n{long}"
+        );
     }
 
     #[test]
@@ -352,6 +464,39 @@ mod tests {
                 && rendered.contains(".patch(controller::update)")
                 && rendered.contains(".delete(controller::delete)"),
             "routes unitaires absentes :\n{rendered}"
+        );
+    }
+
+    /// La route littérale se monte avant `/{id}`, sans quoi `filter` serait lu comme un
+    /// identifiant — c'est ce que fait déjà `broadcast` dans `examples/newsletter-queue`.
+    #[test]
+    fn the_filter_route_is_mounted_before_the_id_route() {
+        let rendered = module("articles");
+
+        // Les chemins sont cherchés entre guillemets : le commentaire qui précède la
+        // route nomme `/articles/{id}` sans les siens, et serait trouvé le premier.
+        let filtre = rendered
+            .find(r#""/articles/filter""#)
+            .expect("route de filtre montée");
+        let id = rendered
+            .find(r#""/articles/{id}""#)
+            .expect("route d'identifiant montée");
+
+        assert!(
+            filtre < id,
+            "`filter` doit précéder l'identifiant :\n{rendered}"
+        );
+    }
+
+    /// Filtrer est une lecture : le garde de rôle ne la protège pas, comme il ne protège
+    /// ni `list` ni `find`.
+    #[test]
+    fn the_filter_route_stays_open_under_a_role() {
+        let rendered = guarded("articles", "admin");
+
+        assert!(
+            !handler(&rendered, "filter").contains("require_role"),
+            "filtrer est une lecture :\n{rendered}"
         );
     }
 
@@ -392,6 +537,183 @@ mod tests {
         assert!(!sans.contains("mod tests;"), "{sans}");
     }
 
+    #[test]
+    fn the_three_content_handlers_are_rendered() {
+        let rendered = controller_with_upload("articles", "title:string");
+
+        for handler in ["put_content", "get_content", "head_content"] {
+            assert!(
+                rendered.contains(&format!("pub async fn {handler}")),
+                "{handler} manque :\n{rendered}"
+            );
+        }
+        assert!(
+            rendered.contains("content: Bytes"),
+            "le corps voyage brut : en JSON il passerait en base64, donc deux fois en \
+             mémoire :\n{rendered}"
+        );
+    }
+
+    /// Sous `--soft-delete`, le contenu reste : le service ne prend donc plus le magasin
+    /// pour supprimer, et le contrôleur ne le lui passe pas.
+    #[test]
+    fn a_logical_deletion_hands_the_service_no_store() {
+        let rendered = uploading_and_soft_deleting("articles");
+
+        assert!(
+            rendered.contains("service::delete(state.core().db(), id).await?;"),
+            "le magasin n'a rien à faire dans cet appel :\n{rendered}"
+        );
+    }
+
+    /// Témoin : hors suppression logique, le magasin voyage avec l'appel.
+    #[test]
+    fn a_hard_deletion_hands_the_service_its_store() {
+        let rendered = controller_uploading("articles");
+
+        assert!(
+            rendered.contains(
+                "service::delete(state.core().db(), state.storage().as_ref(), id).await?;"
+            ),
+            "le contenu part avec la ligne :\n{rendered}"
+        );
+    }
+
+    /// `PUT /<ressource>/{id}/content` remplace la charge utile de la ressource : c'est une
+    /// écriture, et le garde qui couvre `create`, `update` et `delete` doit la couvrir.
+    /// `GET` et `HEAD` sont des lectures, et restent ouvertes comme `list` et `find`.
+    #[test]
+    fn the_guard_protects_the_content_deposit() {
+        let rendered = guarded_uploading("articles", "admin");
+        let depot = handler(&rendered, "put_content");
+
+        assert!(
+            depot.contains("identite: Identity,"),
+            "`put_content` doit extraire l'identité :\n{depot}"
+        );
+        assert!(
+            depot.contains("identite.require_role(Role::Admin)?;"),
+            "`put_content` doit exiger le rôle :\n{depot}"
+        );
+    }
+
+    #[test]
+    fn the_guard_spares_the_two_content_reads() {
+        let rendered = guarded_uploading("articles", "admin");
+
+        for name in ["get_content", "head_content"] {
+            let bloc = handler(&rendered, name);
+
+            assert!(
+                !bloc.contains("Identity") && !bloc.contains("require_role"),
+                "relire un contenu est une lecture, `{name}` reste ouverte :\n{bloc}"
+            );
+        }
+    }
+
+    /// Quatre écritures sous les deux drapeaux, donc quatre contrats à annoncer.
+    #[test]
+    fn the_guarded_deposit_declares_the_bearer_and_the_two_refusals() {
+        let rendered = guarded_uploading("articles", "admin");
+
+        for annotation in [
+            r#"security(("bearer" = []))"#,
+            "status = 401",
+            "status = 403",
+        ] {
+            assert_eq!(
+                rendered.matches(annotation).count(),
+                4,
+                "« {annotation} » doit figurer sur les quatre écritures :\n{rendered}"
+            );
+        }
+    }
+
+    /// Témoin : sans `--role`, les trois routes de contenu ne portent rien du garde.
+    #[test]
+    fn without_a_role_the_content_routes_carry_nothing_of_the_guard() {
+        let rendered = controller_uploading("articles");
+
+        assert!(
+            !rendered.contains("Identity")
+                && !rendered.contains("require_role")
+                && !rendered.contains("status = 401"),
+            "sans `--role`, le rendu des routes de contenu est inchangé :\n{rendered}"
+        );
+    }
+
+    /// Le garde allonge une quatrième signature, déjà éclatée sans condition de longueur.
+    /// La frontière reste celle des autres rendus du contrôleur.
+    #[test]
+    fn the_guarded_uploading_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(|name| guarded_uploading(name, "admin"));
+
+        assert_eq!(
+            divergentes,
+            (24..=40).collect::<Vec<usize>>(),
+            "la plage où le contrôleur gardé à routes de contenu diverge de rustfmt a bougé"
+        );
+    }
+
+    /// Le rendu entier du contrôleur sous le drapeau, figé octet à octet.
+    ///
+    /// `examples/file-drop` retouche `src/uploads/controller.rs` à la main : le fichier
+    /// sort de la comparaison des exemples, et c'est pourtant celui que le guide du
+    /// stockage cite. Les assertions ci-dessus cherchent chacune une chaîne ; aucune ne
+    /// verrait une ligne vide perdue entre deux blocs, que rustfmt ne rétablit pas.
+    #[test]
+    fn the_uploading_controller_renders_the_frozen_fixture() {
+        bench::fige(
+            "fixtures/uploads/controller.rs",
+            &render(&bench::uploads()).expect("le contrôleur doit se rendre"),
+        );
+    }
+
+    #[test]
+    fn the_content_routes_are_mounted() {
+        let fields = fields::parse("title:string").expect("champs");
+        let rendered = render_mod(&Feature::fresh("articles", fields).uploading(), false)
+            .expect("le mod doit se rendre");
+
+        assert!(
+            rendered.contains(r#""/articles/{id}/content""#),
+            "les trois routes partagent un chemin :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("put(controller::put_content)")
+                && rendered.contains("get(controller::get_content)")
+                && rendered.contains("head(controller::head_content)"),
+            "{rendered}"
+        );
+    }
+
+    #[test]
+    fn the_upload_route_alone_raises_the_body_limit() {
+        let fields = fields::parse("title:string").expect("champs");
+        let rendered = render_mod(&Feature::fresh("articles", fields).uploading(), false)
+            .expect("le mod doit se rendre");
+
+        assert_eq!(
+            rendered.matches("DefaultBodyLimit::max").count(),
+            1,
+            "posée sur le routeur, la limite relèverait aussi celle des routes JSON, \
+             qu'aucun besoin ne justifie :\n{rendered}"
+        );
+        assert!(rendered.contains("const TAILLE_MAX"), "{rendered}");
+    }
+
+    #[test]
+    fn an_ordinary_module_mounts_no_content_route() {
+        let fields = fields::parse("title:string").expect("champs");
+        let rendered =
+            render_mod(&Feature::fresh("articles", fields), false).expect("le mod doit se rendre");
+
+        assert!(
+            !rendered.contains("content") && !rendered.contains("DefaultBodyLimit"),
+            "témoin :\n{rendered}"
+        );
+    }
+
     /// Ce que le projet généré vérifie de son propre document OpenAPI.
     ///
     /// Le projet est un binaire : un test d'intégration ne pourrait pas atteindre son
@@ -420,6 +742,13 @@ fn the_five_routes_of_the_feature_are_documented() {
     assert!(unit.get.is_some(), "GET unitaire absent");
     assert!(unit.patch.is_some(), "PATCH unitaire absent");
     assert!(unit.delete.is_some(), "DELETE unitaire absent");
+
+    let filtre = doc
+        .paths
+        .paths
+        .get("/articles/filter")
+        .expect("la route de filtrage doit etre documentee");
+    assert!(filtre.post.is_some(), "POST de filtrage absent");
 }
 
 #[test]
@@ -428,7 +757,12 @@ fn chaque_route_annonce_le_schema_qu_elle_rend() {
     let composants = doc.components.expect("composants absents du document");
     let names: Vec<&str> = composants.schemas.keys().map(String::as_str).collect();
 
-    for expected in ["ArticleResponse", "CreateArticle", "UpdateArticle"] {
+    for expected in [
+        "ArticleResponse",
+        "CreateArticle",
+        "UpdateArticle",
+        "ArticleFilter",
+    ] {
         assert!(
             names.contains(&expected),
             "schema {expected} absent, present : {names:?}"
@@ -450,32 +784,7 @@ fn chaque_route_annonce_le_schema_qu_elle_rend() {
         let feature = Feature::fresh("articles", fields);
 
         let project = bench::Project::fresh();
-        project.write_feature(
-            "articles",
-            &[
-                (
-                    "mod.rs",
-                    &render_mod(&feature, false).expect("mod.rs rendu"),
-                ),
-                (
-                    "model.rs",
-                    &entity::render(&feature).expect("entité rendue"),
-                ),
-                ("dto.rs", &dto::render(&feature).expect("DTO rendus")),
-                (
-                    "repository.rs",
-                    &repository::render(&feature).expect("repository rendu"),
-                ),
-                (
-                    "service.rs",
-                    &service::render(&feature).expect("service rendu"),
-                ),
-                (
-                    "controller.rs",
-                    &render(&feature).expect("controller rendu"),
-                ),
-            ],
-        );
+        project.write_feature("articles", &bench::tous(&feature, false));
         project.mount_feature("articles");
         project.write_unit_test("verification_openapi", VERIFICATION);
         project.test_of();
@@ -491,45 +800,9 @@ fn chaque_route_annonce_le_schema_qu_elle_rend() {
         let feature = Feature::fresh("articles", fields);
 
         let project = bench::Project::fresh();
-        project.write_feature(
-            "articles",
-            &[
-                (
-                    "mod.rs",
-                    &render_mod(&feature, false).expect("mod.rs rendu"),
-                ),
-                (
-                    "model.rs",
-                    &entity::render(&feature).expect("entité rendue"),
-                ),
-                ("dto.rs", &dto::render(&feature).expect("DTO rendus")),
-                (
-                    "repository.rs",
-                    &repository::render(&feature).expect("repository rendu"),
-                ),
-                (
-                    "service.rs",
-                    &service::render(&feature).expect("service rendu"),
-                ),
-                (
-                    "controller.rs",
-                    &render(&feature).expect("controller rendu"),
-                ),
-            ],
-        );
+        project.write_feature("articles", &bench::tous(&feature, false));
         project.mount_feature("articles");
 
         println!("{}", project.keep().display());
-    }
-
-    /// Rendu complet imprimé pour la revue de lecture qu'exige le lot.
-    #[test]
-    #[ignore = "affichage pour revue humaine"]
-    fn preview() {
-        println!(
-            "{}\n// ---- mod.rs ----\n{}",
-            controller("articles"),
-            module("articles")
-        );
     }
 }

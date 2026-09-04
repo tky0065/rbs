@@ -53,7 +53,7 @@ pub enum Commands {
         yes: bool,
     },
 
-    /// Ajoute une feature : auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage.
+    /// Ajoute une feature : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage.
     Add {
         /// Feature à installer.
         feature: String,
@@ -153,9 +153,17 @@ pub enum GenerateCommands {
         #[arg(long = "has-many", value_name = "ENTITE")]
         has_many: Vec<String>,
 
-        /// Réserve create, update et delete à ce rôle ; exige la feature auth.
+        /// Réserve les écritures à ce rôle ; exige la feature auth.
         #[arg(long, value_name = "ROLE")]
         role: Option<String>,
+
+        /// Rend le DELETE logique : la ligne reste, marquée d'une date de suppression.
+        #[arg(long)]
+        soft_delete: bool,
+
+        /// Ajoute trois routes de contenu binaire ; exige la feature storage.
+        #[arg(long)]
+        with_upload: bool,
     },
 
     /// Génère une feature vide : six fichiers, aucun champ.
@@ -295,6 +303,36 @@ mod tests {
         assert_eq!(court, long);
     }
 
+    #[test]
+    fn generate_crud_accepts_soft_delete() {
+        let cli = Cli::try_parse_from(["rbs", "generate", "crud", "articles", "--soft-delete"])
+            .expect("la ligne doit être acceptée");
+
+        let Commands::Generate {
+            command: GenerateCommands::Crud { soft_delete, .. },
+        } = cli.command
+        else {
+            panic!("la sous-commande doit être `generate crud`");
+        };
+
+        assert!(soft_delete);
+    }
+
+    #[test]
+    fn generate_crud_accepts_with_upload() {
+        let cli = Cli::try_parse_from(["rbs", "generate", "crud", "articles", "--with-upload"])
+            .expect("la ligne doit être acceptée");
+
+        let Commands::Generate {
+            command: GenerateCommands::Crud { with_upload, .. },
+        } = cli.command
+        else {
+            panic!("la sous-commande doit être `generate crud`");
+        };
+
+        assert!(with_upload);
+    }
+
     /// Le flag doit accepter les deux langues et rester absent par défaut : c'est cette
     /// absence qui laisse la détection décider.
     #[test]
@@ -350,7 +388,21 @@ mod tests {
 
     #[test]
     fn an_unknown_language_is_refused_by_the_parser() {
-        assert!(Cli::try_parse_from(["rbs", "new", "blog", "--lang", "de"]).is_err());
+        // Le motif du refus est asserté, et pas seulement le refus : sans lui, une faute
+        // de frappe dans `new` ou dans `--lang` ferait passer le test pour la mauvaise
+        // raison.
+        let refus = Cli::try_parse_from(["rbs", "new", "blog", "--lang", "de"])
+            .expect_err("une langue hors de la liste doit être refusée");
+
+        assert_eq!(
+            refus.kind(),
+            clap::error::ErrorKind::InvalidValue,
+            "{refus}"
+        );
+        assert!(
+            refus.to_string().contains("--lang"),
+            "le refus doit nommer le drapeau — {refus}"
+        );
     }
 
     /// Le drapeau ne descend que sur les deux commandes qui le lisent. Ailleurs, clap
@@ -373,9 +425,20 @@ mod tests {
             vec!["rbs", "doctor", "--template-dir", "/tmp/t"],
             vec!["rbs", "upgrade", "--template-dir", "/tmp/t"],
         ] {
+            // Le motif du refus est asserté, et pas seulement le refus : sans lui, une
+            // faute de frappe dans le nom de la sous-commande ferait passer le test pour
+            // la mauvaise raison.
+            let refus = Cli::try_parse_from(&commande)
+                .expect_err("le drapeau n'y ferait rien : la commande doit être refusée");
+
+            assert_eq!(
+                refus.kind(),
+                clap::error::ErrorKind::UnknownArgument,
+                "{commande:?} : {refus}"
+            );
             assert!(
-                Cli::try_parse_from(&commande).is_err(),
-                "{commande:?} doit être refusée : le drapeau n'y ferait rien"
+                refus.to_string().contains("--template-dir"),
+                "le refus doit nommer le drapeau — {commande:?} : {refus}"
             );
         }
     }
@@ -442,9 +505,20 @@ mod tests {
             vec!["rbs", "doctor", "--yes"],
             vec!["rbs", "upgrade", "--yes"],
         ] {
+            // Le motif du refus est asserté, et pas seulement le refus : sans lui, une
+            // faute de frappe dans le nom de la sous-commande ferait passer le test pour
+            // la mauvaise raison.
+            let refus = Cli::try_parse_from(&commande)
+                .expect_err("le drapeau n'y ferait rien : la commande doit être refusée");
+
+            assert_eq!(
+                refus.kind(),
+                clap::error::ErrorKind::UnknownArgument,
+                "{commande:?} : {refus}"
+            );
             assert!(
-                Cli::try_parse_from(&commande).is_err(),
-                "{commande:?} doit être refusée : le drapeau n'y ferait rien"
+                refus.to_string().contains("--yes"),
+                "le refus doit nommer le drapeau — {commande:?} : {refus}"
             );
         }
     }

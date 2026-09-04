@@ -77,6 +77,105 @@ liste :
 Comme partout dans rbs, une ancre absente signifie que le CLI n'écrit rien et affiche le
 bloc à coller.
 
+## Suppression logique
+
+```bash
+rbs generate crud articles --fields "title:string,slug:string:unique" --soft-delete
+```
+
+Le contrat HTTP ne bouge pas : `DELETE` rend toujours 204, un second toujours 404, un `GET`
+sur une ligne supprimée toujours 404, et la ligne disparaît de `list` comme de `filter`. Ce
+que change `--soft-delete`, c'est ce que fait `DELETE` en-dessous — la ligne reste, sa
+colonne `deleted_at` datée, et toute lecture l'écarte.
+
+La colonne est nullable, sans défaut, et le drapeau l'injecte : ce n'est pas un champ qu'on
+déclare. La nommer soi-même sous `--fields` est refusé, par le drapeau qui la possède :
+
+```text
+$ rbs generate crud comments --fields "body:text,deleted_at:datetime" --soft-delete --dry-run
+erreur : `--soft-delete` pose lui-même la colonne `deleted_at` : retirez-la de `--fields`, ou renoncez au drapeau
+```
+
+Hors de `--soft-delete`, `deleted_at` reste un nom ordinaire — rien ne le réserve à
+l'échelle du projet.
+
+Toute lecture filtre sur la colonne, donc la migration pose la colonne et un index dessus :
+
+```rust
+.col(
+    ColumnDef::new(Articles::DeletedAt)
+        .timestamp_with_time_zone()
+        .null(),
+)
+```
+
+```rust
+manager
+    .create_index(
+        Index::create()
+            .if_not_exists()
+            .name("idx_articles_deleted_at")
+            .table(Articles::Table)
+            .col(Articles::DeletedAt)
+            .to_owned(),
+    )
+    .await?;
+```
+
+Un champ `unique` fait quitter sa contrainte à la colonne pour un index restreint aux
+lignes vivantes — `WHERE deleted_at IS NULL` — plutôt qu'à la table entière. C'est ce qui
+permet à une valeur qu'une ligne supprimée occupait de redevenir utilisable : se réinscrire
+avec l'adresse qu'on avait avant de supprimer son compte. Prouvé en exécutant la migration
+engendrée sur PostgreSQL et sur SQLite.
+
+```rust
+// PostgreSQL et SQLite savent restreindre un index à un sous-ensemble de lignes :
+// deux lignes portent alors la même valeur si l'une est supprimée. MySQL ne le
+// sait pas — l'unicité y reste globale, et une valeur supprimée y reste réservée.
+let mut uq_articles_slug = Index::create()
+    .if_not_exists()
+    .unique()
+    .name("uq_articles_slug")
+    .table(Articles::Table)
+    .col(Articles::Slug)
+    .to_owned();
+
+if !matches!(manager.get_database_backend(), sea_orm::DbBackend::MySql) {
+    uq_articles_slug = uq_articles_slug
+        .and_where(Expr::col(Articles::DeletedAt).is_null())
+        .to_owned();
+}
+```
+
+Le commentaire dit la limite sans détour : MySQL n'a pas d'index partiel, la migration y
+garde donc une unicité globale plutôt que de la restreindre — sur MySQL, une valeur qu'une
+ligne supprimée occupait reste réservée.
+
+### Ce qu'il change pour les features voisines
+
+Le contrat HTTP tient pour la feature qui porte le drapeau. Il ne tient pas pour celles qui
+la référencent. Une clé étrangère engendrée porte un `ON DELETE Restrict | Cascade |
+SetNull`, et une suppression logique n'en déclenche aucun : la ligne n'est jamais retirée,
+le moteur n'a rien à quoi réagir. Vu du client :
+
+- un parent supprimé logiquement laisse ses enfants pointer vers une ligne qui rend
+  désormais 404, et ces enfants restent listables par leur propre API — là où `Cascade` les
+  aurait retirés et `SetNull` dénoués ;
+- `Restrict`, le défaut, faisait échouer `DELETE /parents/{id}` tant qu'un enfant existait.
+  Il rend désormais 204 ;
+- `POST /children` avec l'identifiant d'un parent supprimé **réussit**, la clé étrangère
+  restant satisfaite, là où il était refusé.
+
+Poser le drapeau sur une feature que d'autres référencent laisse donc à votre charge ce que
+devient un enfant dont le parent est supprimé : dans le service de la feature enfant, ou
+dans un `deleted_at` qui lui soit propre.
+
+Le drapeau s'arrête là. Il n'écrit ni route de restauration, ni paramètre
+`?include_deleted`, ni tâche de purge. Restaurer une ligne se fait par un `UPDATE` SQL, tant
+qu'aucun besoin réel n'a dit quelle forme cette route devrait prendre — une route de
+restauration pose d'ailleurs une question que le drapeau ne tranche pas seul : qui a le
+droit de restaurer.
+
 ## Les lancer
 
 ```bash

@@ -15,6 +15,11 @@ second listener HTTP qui sert `/metrics`.
 rbs add observability
 ```
 
+Tous les extraits de cette page sont tirés de
+[`examples/newsletter-queue`](https://github.com/tky0065/rbs/tree/main/examples/newsletter-queue),
+un projet engendré par le CLI et compilé en CI. Rien ici n'est écrit à la main pour la
+documentation.
+
 ## Les traces sortent par le noyau, pas par le fragment
 
 `rbs_core::logs::init()` est la première ligne du `main` engendré, et c'est lui qui pose
@@ -23,11 +28,14 @@ processus, et l'ancre `// <rbs:startup>` s'exécute après lui : rien de ce qu'i
 fragment ne pourrait donc greffer une couche d'export sur cet abonné.
 
 La greffe vit par conséquent dans le noyau, derrière une feature cargo que le fragment
-active :
+active. Voici la ligne de manifeste que laisse `rbs add observability` :
 
-```toml
-rbs-core = { version = "1.1", features = ["observability"] }
+```toml file=examples/newsletter-queue/Cargo.toml region=noyau
 ```
+
+L'exemple dépend du noyau par `path` parce qu'il vit dans ce dépôt et compile contre la
+crate d'à côté ; votre projet, lui, porte un `version`. Ce que la commande a changé est la
+dernière entrée de `features`.
 
 Cette feature levée, `logs::init()` compose une couche d'export OTLP en même temps que le
 formateur qu'il pose déjà. Le span exporté est celui que `rbs_core::trace` construit par
@@ -52,10 +60,10 @@ exportateur qui compose une adresse où rien ne répond.
 ### Vider le dernier lot
 
 Les spans partent par lots. Un processus qui meurt entre deux lots emporte le dernier :
-appelez donc ceci avant de sortir de `main` :
+appelez donc ceci avant de sortir de `main` — c'est ce que fait l'exemple, à la toute fin
+du sien :
 
-```rust
-rbs_core::logs::shutdown();
+```rust file=examples/newsletter-queue/src/main.rs region=arret
 ```
 
 Sans la feature `observability`, l'appel ne fait rien, et l'appeler alors que rien n'a
@@ -85,17 +93,15 @@ scanner qui frappe mille adresses inventées ouvre une série, et non mille.
 C'est la contrainte autour de laquelle tout le module est bâti, et le
 `src/observability/tests.rs` engendré la garde :
 
-```text
-$ cargo test observability
-test observability::tests::a_request_on_a_parameterised_route_counts_under_its_template ... ok
-test observability::tests::an_unmatched_path_counts_under_a_single_constant ... ok
+```rust file=examples/newsletter-queue/src/observability/tests.rs region=cardinalite
 ```
+
+Un second test en fait autant pour un chemin qui ne correspond à aucune route. Les deux
+passent sous `cargo test observability`, dans votre projet comme dans l'exemple.
 
 ## `/metrics` a son propre port
 
-```toml
-[observability]
-metrics_port = 9090
+```toml file=examples/newsletter-queue/config/default.toml region=metriques
 ```
 
 `/metrics` n'est jamais monté sur le routeur public. Les métriques publient la topologie
@@ -110,13 +116,10 @@ par défaut, 9090, diffère de `server.port` ; [`rbs doctor`](../cli/doctor.md) 
 configuration où les deux coïncident, un `bind` qui échoue au démarrage coûtant plus cher
 à diagnostiquer qu'une configuration refusée avant.
 
-Pointez Prometheus dessus, et il n'y a rien d'autre à faire :
+Pointez Prometheus dessus, et il n'y a rien d'autre à faire — voici l'intégralité du
+`prometheus.yml` de l'exemple :
 
-```yaml
-scrape_configs:
-  - job_name: mon-api
-    static_configs:
-      - targets: ["localhost:9090"]
+```yaml file=examples/newsletter-queue/prometheus.yml
 ```
 
 ## Ce que le fragment ne fait pas

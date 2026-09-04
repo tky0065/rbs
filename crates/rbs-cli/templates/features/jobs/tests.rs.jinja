@@ -89,12 +89,21 @@ async fn an_unregistered_kind_is_reported_rather_than_silently_dropped() {
 // `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre la base du
 // projet, migrations appliquées.
 
+/// Le verrou de tout test qui joint la base de ce projet.
+///
+/// Il est rendu au reste du projet parce que la file est une table partagée : un fragment
+/// qui y enfile — le calendrier — a des tests qui doivent se relayer avec ceux-ci, faute
+/// de quoi le vidage de l'un emporte les lignes que l'autre vient d'observer.
+pub(crate) fn verrou_base() -> &'static Mutex<()> {
+    static VERROU: OnceLock<Mutex<()>> = OnceLock::new();
+
+    VERROU.get_or_init(Mutex::default)
+}
+
 /// Les tests qui dépilent partagent l'unique table `jobs` : ils se relaient plutôt que de
 /// se voler leurs lignes.
 async fn table_a_soi() -> (MutexGuard<'static, ()>, AppState) {
-    static VERROU: OnceLock<Mutex<()>> = OnceLock::new();
-
-    let garde = VERROU.get_or_init(Mutex::default).lock().await;
+    let garde = verrou_base().lock().await;
     let config = rbs_core::Config::load().expect("configuration lisible");
     let db = rbs_core::db::connect(&config.database)
         .await

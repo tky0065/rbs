@@ -15,10 +15,11 @@ use super::{Check, Config};
 
 /// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
 pub(crate) const TITRE: &str = "auth";
+const SECTION: &str = "auth";
+const REGLAGES: &str = "access_ttl_secs = 900\nrefresh_ttl_secs = 2592000";
 const SECRET: &str = "RBS_AUTH__SECRET";
 const FICHIER: &str = ".env";
 const EXEMPLE: &str = ".env.example";
-const CONFIG: &str = "config/default.toml";
 
 /// Longueur minimale du secret, en octets.
 ///
@@ -79,11 +80,9 @@ fn check_with(root: &Path, config: &Config, env: impl Fn(&str) -> Option<String>
         }
     }
 
-    if !config.section("auth") {
-        defauts.push(format!("{CONFIG} ne porte pas de section `[auth]`"));
-        remedes.push(format!(
-            "ajoutez à {CONFIG} :\n[auth]\naccess_ttl_secs = 900\nrefresh_ttl_secs = 2592000"
-        ));
+    if let Some((defaut, remede)) = super::defaut_de_section(config, SECTION, REGLAGES) {
+        defauts.push(defaut);
+        remedes.push(remede);
     }
 
     if defauts.is_empty() {
@@ -100,7 +99,7 @@ mod tests {
 
     use tempfile::TempDir;
 
-    use super::super::{Config, State};
+    use super::super::{CONFIG, Config, State};
     use super::*;
 
     /// Un projet neuf, doté à la main de ce que `add auth` y dépose.

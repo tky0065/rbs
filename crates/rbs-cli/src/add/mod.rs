@@ -104,6 +104,20 @@ pub(crate) enum Error {
     #[error("{0}")]
     Env(#[from] migrate::Error),
 
+    /// L'URL du projet ne se décompose pas, et le fragment s'appuie dessus.
+    ///
+    /// Un caractère réservé laissé tel quel dans le mot de passe met fin à l'autorité de
+    /// l'URL. Les identifiants tombaient alors à vide plutôt que de le dire : le `.env`
+    /// recevait un `POSTGRES_USER=` sans valeur, et le service `db` ne montait pas.
+    #[error(
+        "RBS_DATABASE__URL ne se décompose pas : {url} — encodez les caractères réservés \
+         du mot de passe (`/` en %2F, `?` en %3F, `#` en %23, `@` en %40)"
+    )]
+    UrlIndecomposable {
+        /// L'URL, telle que le `.env` du projet la porte.
+        url: String,
+    },
+
     /// Le plan de l'installation n'a pu être calculé.
     #[error("{0}")]
     Plan(#[from] plan::Error),
@@ -206,6 +220,14 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     }
     .unwrap_or_else(|| database.default_url(&crate_name));
     let connexion = crate::url::parse(&url);
+
+    // Refuser plutôt que se replier : des identifiants vides posent un `POSTGRES_USER=`
+    // que Compose substitue par rien, et le service `db` ne monte jamais — panne à
+    // l'exécution, pour une URL que la commande avait sous les yeux. SQLite n'a pas
+    // d'autorité à décomposer, et n'est donc pas concerné.
+    if database.a_un_serveur() && connexion.is_none() {
+        return Err(Error::UrlIndecomposable { url });
+    }
 
     // Une URL sans chemin rend un nom de base vide, que le repli ne rattraperait pas
     // s'il ne guettait que `None` : le compose porterait un `POSTGRES_DB:` vide, et le
@@ -363,10 +385,12 @@ impl Resolution<'_> {
         }
 
         let source = Source::feature(self.template_dir, feature)?;
-        let manifest = read_manifest(&source, feature)?;
-        let templates = source
-            .files()
+        // Le fragment est lu une fois pour ses deux usages : son manifeste dit ce que
+        // l'installation fait au projet, ses fichiers sont ce qu'elle y dépose.
+        let (manifeste, templates) = source
+            .manifest_and_files()
             .map_err(|source| crate::errors::Acces::new(Path::new(feature), source))?;
+        let manifest = read_manifest(manifeste, feature)?;
 
         self.en_cours.push(feature.to_string());
         for requise in manifest.feature.requires.clone() {
@@ -384,14 +408,14 @@ impl Resolution<'_> {
     }
 }
 
-/// Lit le manifeste du fragment, qui dit ce que son installation fait au projet.
-fn read_manifest(source: &Source, feature: &str) -> Result<manifest::Manifest, Error> {
-    let text = source
-        .manifest()
-        .map_err(|source| crate::errors::Acces::new(Path::new(feature), source))?
-        .ok_or_else(|| Error::SansManifeste {
-            feature: feature.to_string(),
-        })?;
+/// Analyse le manifeste du fragment, qui dit ce que son installation fait au projet.
+///
+/// La source lui est passée plutôt que relue : elle sort de la même lecture que les
+/// fichiers du fragment.
+fn read_manifest(source: Option<String>, feature: &str) -> Result<manifest::Manifest, Error> {
+    let text = source.ok_or_else(|| Error::SansManifeste {
+        feature: feature.to_string(),
+    })?;
 
     Ok(manifest::read(&text, &format!("{feature}/feature.toml"))?)
 }
@@ -474,6 +498,25 @@ mod tests {
 
         fs::write(root.join(".env"), ancien).expect("le .env doit se réécrire");
         let _ = fs::remove_file(root.join("docker-compose.yml"));
+    }
+
+    /// Fait viser `url` au projet, sans toucher au reste de son `.env`.
+    fn viser(root: &Path, url: &str) {
+        let env = root.join(".env");
+        let source = fs::read_to_string(&env).expect("le .env doit exister");
+        let reecrit: String = source
+            .lines()
+            .map(|ligne| match ligne.starts_with("RBS_DATABASE__URL=") {
+                true => format!("RBS_DATABASE__URL={url}\n"),
+                false => format!("{ligne}\n"),
+            })
+            .collect();
+
+        assert!(
+            reecrit.contains(url),
+            "le .env ne porte pas d'URL :\n{source}"
+        );
+        fs::write(&env, reecrit).expect("le .env doit se réécrire");
     }
 
     fn options(root: &Path, feature: &str) -> Options {
@@ -694,6 +737,17 @@ mod tests {
             manifest.contains("features = [\"health\", \"docker\"]"),
             "la feature n'est pas inscrite dans le manifeste projeté :\n{manifest}"
         );
+    }
+
+    /// Le manifeste de `ci` désigne sa template par son chemin dans le fragment, répertoire
+    /// caché compris : une déclaration fautive rendrait `TemplateAbsente` au lieu du plan.
+    #[test]
+    fn the_ci_plan_creates_the_workflow_its_manifest_declares() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "ci")).expect("le plan doit se calculer");
+
+        assert_eq!(planned.files, [".github/workflows/ci.yml"]);
     }
 
     /// Trois états, trois comportements. Le premier : le projet a son compose, `add
@@ -1218,7 +1272,7 @@ mod tests {
             ),
             (
                 "storage",
-                r#"rbs_core::health::Probe::new("storage", crate::storage::probe(&state.storage)),"#,
+                r#"rbs_core::health::Probe::new("storage", crate::storage::probe(state.storage())),"#,
             ),
         ] {
             let (_parent, root) = project();
@@ -1404,6 +1458,29 @@ mod tests {
             configuration.contains("metrics_port = 9090"),
             "{configuration}"
         );
+    }
+
+    /// Les helpers du fragment portent les noms que rend le gabarit d'une feature.
+    ///
+    /// Les deux fichiers cohabitent dans le même projet dès qu'une entité est engendrée :
+    /// deux conventions de nommage y feraient croire que l'un des deux a été écrit à la
+    /// main, quand les deux sortent du CLI.
+    #[test]
+    fn the_observability_tests_name_their_helpers_as_the_feature_template_does() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "observability")).expect("le plan doit se calculer");
+
+        let tests = projected(&planned, "src/observability/tests.rs");
+        for helper in ["fn registry()", "async fn call(uri: &str)"] {
+            assert!(tests.contains(helper), "`{helper}` manque :\n{tests}");
+        }
+        for francais in ["appeler(", "registre(", "REGISTRE"] {
+            assert!(
+                !tests.contains(francais),
+                "`{francais}` subsiste :\n{tests}"
+            );
+        }
     }
 
     /// `/metrics` publie la topologie du service : monté sur le routeur public, chaque
@@ -1980,6 +2057,34 @@ mod tests {
         assert!(
             error.to_string().contains(".env"),
             "le message ne nomme pas le fichier fautif : {error}"
+        );
+    }
+
+    /// Un mot de passe dont le `/` n'est pas encodé met fin à l'autorité de l'URL, que
+    /// rien ne décompose plus. Les identifiants tombaient alors à vide : le `.env`
+    /// recevait un `POSTGRES_USER=` sans valeur, et le service `db` ne montait jamais.
+    #[test]
+    fn a_url_that_no_longer_decomposes_stops_the_installation() {
+        const FAUTIVE: &str = "postgres://rbs:mot/de/passe@localhost:5432/demo_api";
+
+        let (_parent, root) = project();
+        avant_les_cles_du_compose(&root);
+        viser(&root, FAUTIVE);
+
+        let error = plan_for(&options(&root, "docker")).expect_err("l'URL ne se décompose pas");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("RBS_DATABASE__URL"),
+            "le refus doit nommer la variable : {message}"
+        );
+        assert!(
+            message.contains(FAUTIVE),
+            "le refus doit montrer l'URL fautive : {message}"
+        );
+        assert!(
+            message.contains("%2F"),
+            "le refus doit donner l'encodage à poser : {message}"
         );
     }
 

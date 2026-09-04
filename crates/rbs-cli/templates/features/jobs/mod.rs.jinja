@@ -1,15 +1,13 @@
-// Le fragment livre une file, pas une route : tant qu'aucun handler n'enfile de job, le
-// compilateur tient l'essentiel du module pour mort. La ligne se retire au premier appel.
-#![allow(dead_code)]
-
 pub mod config;
 pub mod demo;
 pub mod model;
 pub mod queue;
 pub mod worker;
 
+// `pub(crate)` : la file est une table partagée, et le verrou que ses tests posent doit
+// pouvoir être pris par ceux d'un fragment qui y enfile.
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use std::collections::HashMap;
 use std::future::Future;

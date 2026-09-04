@@ -6,19 +6,30 @@ use sea_orm::entity::prelude::*;
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
+{#- Un champ ne porte jamais deux de ces attributs : `column_type` ne sort que sur
+    `text`, qui refuse `unique` comme `index` ; sur les autres scalaires, cumuler les
+    deux est refusé comme redondant ; et une référence n'indexe que ce qu'`unique`
+    n'indexe pas déjà. -#}
 {%- for field in fields %}
-{%- set attributes = [
-        'column_type = "' ~ field.column_type_attribute ~ '"' if field.column_type_attribute else none,
-        "unique" if field.unique else none,
-        "indexed" if field.index else none,
-    ] | select | join(", ") %}
-{%- if attributes %}
-    #[sea_orm({@ attributes @})]
+{%- if field.column_type_attribute %}
+    #[sea_orm(column_type = "{@ field.column_type_attribute @}")]
+{#- Sous suppression logique, l'unicité a quitté la colonne pour un index restreint aux
+    lignes vivantes : la laisser ici ferait décrire à l'entité un schéma que la base n'a
+    pas. Elle ne construit rien à l'exécution, elle se lit — et elle mentirait. #}
+{%- elif field.unique and not soft_delete %}
+    #[sea_orm(unique)]
+{%- elif field.index %}
+    #[sea_orm(indexed)]
 {%- endif %}
     pub {@ field.name @}: {@ field.rust_type @},
 {%- endfor %}
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
+{%- if soft_delete %}
+    // Nulle tant que la ligne vit. Le repository la remplit au lieu de retirer la ligne,
+    // et écarte de toute lecture celles qui la portent.
+    pub deleted_at: Option<DateTimeWithTimeZone>,
+{%- endif %}
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]

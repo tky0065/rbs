@@ -1,51 +1,145 @@
+{# Deux formes de ce fichier grandissent avec le nom de l'entité, et rustfmt les replie
+    chacune à son propre seuil. La template les écrit donc telles que rustfmt les écrirait,
+    plutôt que de laisser la mise en forme rattraper ce qu'elle aurait mal posé.
+
+    `entete` pose une signature : rustfmt la garde sur une ligne tant que celle-ci tient
+    dans ses cent colonnes, et l'éclate un paramètre par ligne au-delà. -#}
+{% macro entete(nom, parametres, retour) -%}
+{% set une_ligne = "pub async fn " ~ nom ~ "(" ~ (parametres | join(", ")) ~ ") -> " ~ retour ~ " {" -%}
+{% if une_ligne | length <= 100 -%}
+{@ une_ligne @}
+{%- else -%}
+pub async fn {@ nom @}(
+{%- for parametre in parametres %}
+    {@ parametre @},
+{%- endfor %}
+) -> {@ retour @} {
+{%- endif %}
+{%- endmacro -%}
+{# `chaine` pose un receveur suivi de ses maillons. Le seuil n'est plus la largeur de la
+    ligne mais `chain_width`, soit soixante colonnes : rustfmt éclate une chaîne bien avant
+    qu'elle ne déborde.
+
+    Au-delà de vingt-six caractères d'entité, une troisième forme bouge — l'appel
+    `filter(db, &…Filter::default(), pagination).await` de `list`, dont rustfmt éventaille
+    les arguments à un seuil qui ne porte le nom d'aucun réglage. La template s'arrête ici :
+    `format::format_batch` reprend la main à l'écriture. -#}
+{% macro chaine(receveur, maillons, indentation) -%}
+{% set une_ligne = receveur ~ (maillons | join("")) -%}
+{% if une_ligne | length <= 60 -%}
+{@ une_ligne @}
+{%- else -%}
+{@ receveur @}
+{%- for maillon in maillons %}
+{@ indentation @}    {@ maillon @}
+{%- endfor %}
+{%- endif %}
+{%- endmacro -%}
 use rbs_core::{Error, Pagination, Result};
 use sea_orm::error::SqlErr;
+{%- if soft_delete %}
+use sea_orm::prelude::Expr;
 use sea_orm::prelude::Uuid;
 use sea_orm::{
-    ActiveModelTrait, DatabaseConnection, DbErr, EntityTrait, PaginatorTrait, QueryOrder,
-    QuerySelect,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, PaginatorTrait,
+    QueryFilter, QuerySelect,
 };
+{%- else %}
+use sea_orm::prelude::Uuid;
+use sea_orm::{
+    ActiveModelTrait, DatabaseConnection, DbErr, EntityTrait, PaginatorTrait, QuerySelect,
+};
+{%- endif %}
 
+use super::filter::{self, {@ entity @}Filter};
+{%- if soft_delete %}
 use super::model::{Column, Entity};
+{%- else %}
+use super::model::Entity;
+{%- endif %}
 
 // Le service passe par cette porte plutôt que par `model.rs` : la couche qui parle à la
 // base reste la seule à connaître l'entité.
 pub use super::model::{ActiveModel, Model};
 
 pub async fn list(db: &DatabaseConnection, pagination: &Pagination) -> Result<(Vec<Model>, u64)> {
-    // L'`id` est un UUIDv7 : son ordre est celui des insertions. Trier dessus donne une
-    // liste du plus récent au plus ancien, et une pagination stable, sans colonne de plus.
-    let page = Entity::find()
-        .order_by_desc(Column::Id)
+    // Un seul chemin de lecture : la liste est le filtre vide, qui trie sur l'`id`
+    // décroissant. Deux chemins divergeraient au premier tri ajouté.
+    filter(db, &{@ entity @}Filter::default(), pagination).await
+}
+
+pub async fn filter(
+    db: &DatabaseConnection,
+    filtre: &{@ entity @}Filter,
+    pagination: &Pagination,
+) -> Result<(Vec<Model>, u64)> {
+{%- if soft_delete %}
+    // Le filtre s'applique à ce qui reste : une ligne supprimée n'est plus une ligne que
+    // l'API connaisse, et la faire réapparaître par un filtre serait une fuite.
+    let requete = filter::apply(Entity::find().filter(Column::DeletedAt.is_null()), filtre)?;
+{%- else %}
+    let requete = filter::apply(Entity::find(), filtre)?;
+{%- endif %}
+
+    let page = requete
+        .clone()
         .offset(pagination.offset())
         .limit(pagination.per_page())
         .all(db);
 
-    // Le total compte toute la table : l'attendre avant la page ferait deux allers-retours
-    // en série à chaque appel. Les deux partent donc ensemble — `max_connections` vaut 10
-    // dans config/default.toml, le pool en sert bien deux à la fois.
-    let ({@ module @}, total) = tokio::try_join!(page, Entity::find().count(db))?;
+    // Le total compte les lignes que le filtre retient : l'attendre avant la page ferait
+    // deux allers-retours en série à chaque appel. Les deux partent donc ensemble —
+    // `max_connections` vaut 10 dans config/default.toml, le pool en sert bien deux.
+    let ({@ module @}, total) = tokio::try_join!(page, requete.count(db))?;
 
     Ok(({@ module @}, total))
 }
 
+{%- if soft_delete %}
+
+pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>> {
+    Ok(Entity::find_by_id(id)
+        .filter(Column::DeletedAt.is_null())
+        .one(db)
+        .await?)
+}
+{%- else %}
+
 pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>> {
     Ok(Entity::find_by_id(id).one(db).await?)
 }
+{%- endif %}
 
-pub async fn create(db: &DatabaseConnection, {@ singular @}: ActiveModel) -> Result<Model> {
-    {@ singular @}.insert(db).await.map_err(conflict_on_duplicate)
+{@ entete("create", ["db: &DatabaseConnection", singular ~ ": ActiveModel"], "Result<Model>") @}
+    {@ chaine(singular, [".insert(db)", ".await", ".map_err(conflict_on_duplicate)"], "    ") @}
 }
 
-pub async fn update(db: &DatabaseConnection, {@ singular @}: ActiveModel) -> Result<Model> {
-    {@ singular @}.update(db).await.map_err(conflict_on_duplicate)
+{@ entete("update", ["db: &DatabaseConnection", singular ~ ": ActiveModel"], "Result<Model>") @}
+    {@ chaine(singular, [".update(db)", ".await", ".map_err(conflict_on_duplicate)"], "    ") @}
 }
+
+{%- if soft_delete %}
+
+pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
+    // La ligne déjà supprimée n'est pas retouchée : sans cette seconde condition, un
+    // second DELETE rendrait 204 là où il doit rendre 404.
+    let effet = Entity::update_many()
+        .col_expr(Column::DeletedAt, Expr::value(chrono::Utc::now()))
+        .filter(Column::Id.eq(id))
+        .filter(Column::DeletedAt.is_null())
+        .exec(db)
+        .await?;
+
+    Ok(effet.rows_affected > 0)
+}
+{%- else %}
 
 pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
     let effet = Entity::delete_by_id(id).exec(db).await?;
 
     Ok(effet.rows_affected > 0)
 }
+{%- endif %}
 
 /// Une valeur déjà prise sur une colonne `unique` est une faute du client, pas une panne :
 /// sans cette traduction, le doublon remonterait en erreur interne, donc en 500.

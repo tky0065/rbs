@@ -7,6 +7,7 @@ use rbs_core::{HasCoreState, Page, Pagination, ProblemDetails, Result, Validated
 use sea_orm::prelude::Uuid;
 
 use super::dto::{CreateUpload, UpdateUpload, UploadResponse};
+use super::filter::UploadFilter;
 use super::service;
 use crate::state::AppState;
 
@@ -33,6 +34,32 @@ pub async fn list(
     ))
 }
 
+/// Filtrer est une lecture : le corps porte les conditions, que l'URL rendrait illisibles.
+/// Le garde de rôle ne s'y applique donc pas, pas plus qu'à `list` ou `find`.
+#[utoipa::path(
+    post,
+    path = "/uploads/filter",
+    tag = "uploads",
+    params(
+        ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
+        ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
+    ),
+    request_body = UploadFilter,
+    responses(
+        (status = 200, description = "page de uploads filtrés", body = Page<UploadResponse>),
+        (status = 400, description = "filtre, tri ou pagination illisible", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn filter(
+    State(state): State<AppState>,
+    pagination: Pagination,
+    Json(filtre): Json<UploadFilter>,
+) -> Result<Json<Page<UploadResponse>>> {
+    Ok(Json(
+        service::filter(state.core().db(), &filtre, &pagination).await?,
+    ))
+}
+
 #[utoipa::path(
     post,
     path = "/uploads",
@@ -49,7 +76,7 @@ pub async fn create(
     State(state): State<AppState>,
     ValidatedJson(input): ValidatedJson<CreateUpload>,
 ) -> Result<(StatusCode, Json<UploadResponse>)> {
-    let upload = service::create(state.core().db(), state.cache(), &state.mail, input).await?;
+    let upload = service::create(state.core().db(), state.cache(), state.mail(), input).await?;
 
     Ok((StatusCode::CREATED, Json(upload)))
 }
@@ -107,7 +134,13 @@ pub async fn update(
     )
 )]
 pub async fn delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<StatusCode> {
-    service::delete(state.core().db(), state.cache(), state.storage.as_ref(), id).await?;
+    service::delete(
+        state.core().db(),
+        state.cache(),
+        state.storage().as_ref(),
+        id,
+    )
+    .await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -134,7 +167,7 @@ pub async fn put_content(
 ) -> Result<StatusCode> {
     service::put_content(
         state.core().db(),
-        state.storage.as_ref(),
+        state.storage().as_ref(),
         id,
         content.to_vec(),
     )
@@ -159,7 +192,7 @@ pub async fn get_content(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
-    let content = service::get_content(state.storage.as_ref(), id).await?;
+    let content = service::get_content(state.storage().as_ref(), id).await?;
 
     Ok(([("content-type", "application/octet-stream")], content))
 }
@@ -180,7 +213,7 @@ pub async fn head_content(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode> {
-    if service::has_content(state.storage.as_ref(), id).await? {
+    if service::has_content(state.storage().as_ref(), id).await? {
         Ok(StatusCode::NO_CONTENT)
     } else {
         Err(rbs_core::Error::NotFound("contenu"))

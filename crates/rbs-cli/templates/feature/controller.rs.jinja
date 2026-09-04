@@ -1,7 +1,13 @@
 {% set dto = ["Create" ~ entity, entity ~ "Response", "Update" ~ entity] | sort -%}
 use axum::Json;
+{%- if with_upload %}
+use axum::body::Bytes;
+{%- endif %}
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
+{%- if with_upload %}
+use axum::response::IntoResponse;
+{%- endif %}
 {%- if role %}
 use rbs_core::{HasCoreState, Identity, Page, Pagination, ProblemDetails, Result, ValidatedJson};
 {%- else %}
@@ -9,7 +15,21 @@ use rbs_core::{HasCoreState, Page, Pagination, ProblemDetails, Result, Validated
 {%- endif %}
 use sea_orm::prelude::Uuid;
 
-use super::dto::{{@ dto | join(", ") @}};
+{# La ligne porte le nom de l'entité trois fois : dès dix-neuf caractères, elle franchit
+    les 98 colonnes au-delà desquelles rustfmt éclate un `use` — deux en deçà de son
+    `max_width`. La template l'écrit donc déjà éclatée, plutôt que de laisser la mise en
+    forme rattraper ce qu'elle aurait mal posé. Dès vingt-quatre, rustfmt répartirait les
+    trois noms sur plusieurs lignes intérieures : c'est là, et seulement là, que la mise
+    en forme reprend la main. -#}
+{% set import = "use super::dto::{" ~ (dto | join(", ")) ~ "};" -%}
+{% if import | length <= 98 -%}
+{@ import @}
+{% else -%}
+use super::dto::{
+    {@ dto | join(", ") @},
+};
+{% endif -%}
+use super::filter::{@ entity @}Filter;
 use super::service;
 {%- if role %}
 use crate::auth::guard::RequireRole;
@@ -36,6 +56,32 @@ pub async fn list(
     pagination: Pagination,
 ) -> Result<Json<Page<{@ entity @}Response>>> {
     Ok(Json(service::list(state.core().db(), &pagination).await?))
+}
+
+/// Filtrer est une lecture : le corps porte les conditions, que l'URL rendrait illisibles.
+/// Le garde de rôle ne s'y applique donc pas, pas plus qu'à `list` ou `find`.
+#[utoipa::path(
+    post,
+    path = "/{@ module @}/filter",
+    tag = "{@ module @}",
+    params(
+        ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
+        ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
+    ),
+    request_body = {@ entity @}Filter,
+    responses(
+        (status = 200, description = "page de {@ module @} filtrés", body = Page<{@ entity @}Response>),
+        (status = 400, description = "filtre, tri ou pagination illisible", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn filter(
+    State(state): State<AppState>,
+    pagination: Pagination,
+    Json(filtre): Json<{@ entity @}Filter>,
+) -> Result<Json<Page<{@ entity @}Response>>> {
+    Ok(Json(
+        service::filter(state.core().db(), &filtre, &pagination).await?,
+    ))
 }
 
 #[utoipa::path(
@@ -83,10 +129,17 @@ pub async fn create(
         (status = 404, description = "{@ singular @} introuvable", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
+{#- Les cent colonnes de `max_width` : en deçà, rustfmt ramène la signature sur une ligne,
+    ce qui n'arrive qu'aux entités d'une ou deux lettres. #}
+{%- set signature_find = "pub async fn find(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<Json<" ~ entity ~ "Response>> {" %}
+{%- if signature_find | length <= 100 %}
+{@ signature_find @}
+{%- else %}
 pub async fn find(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<Json<{@ entity @}Response>> {
+{%- endif %}
     Ok(Json(service::find(state.core().db(), id).await?))
 }
 
@@ -152,7 +205,95 @@ pub async fn delete(
 {% else -%}
 pub async fn delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<StatusCode> {
 {%- endif %}
+{%- if with_upload and not soft_delete %}
+    service::delete(state.core().db(), state.storage().as_ref(), id).await?;
+{%- else %}
     service::delete(state.core().db(), id).await?;
+{%- endif %}
 
     Ok(StatusCode::NO_CONTENT)
 }
+{%- if with_upload %}
+
+// Le contenu voyage hors du DTO : un corps binaire n'a pas sa place dans un JSON, et le
+// faire passer en base64 obligerait à charger deux fois le fichier en mémoire.
+#[utoipa::path(
+    put,
+    path = "/{@ module @}/{id}/content",
+    tag = "{@ module @}",
+{%- if role %}
+    security(("bearer" = [])),
+{%- endif %}
+    params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
+    request_body(content = String, content_type = "application/octet-stream"),
+    responses(
+        (status = 204, description = "contenu déposé"),
+{%- if role %}
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
+{%- endif %}
+        (status = 404, description = "{@ singular @} introuvable", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn put_content(
+    State(state): State<AppState>,
+{%- if role %}
+    identite: Identity,
+{%- endif %}
+    Path(id): Path<Uuid>,
+    content: Bytes,
+) -> Result<StatusCode> {
+{%- if role %}
+    identite.require_role(Role::{@ role @})?;
+{% endif %}
+    service::put_content(
+        state.core().db(),
+        state.storage().as_ref(),
+        id,
+        content.to_vec(),
+    )
+    .await?;
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[utoipa::path(
+    get,
+    path = "/{@ module @}/{id}/content",
+    tag = "{@ module @}",
+    params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
+    responses(
+        (status = 200, description = "contenu du {@ singular @}", content_type = "application/octet-stream"),
+        (status = 404, description = "contenu introuvable", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn get_content(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse> {
+    let content = service::get_content(state.storage().as_ref(), id).await?;
+
+    Ok(([("content-type", "application/octet-stream")], content))
+}
+
+#[utoipa::path(
+    head,
+    path = "/{@ module @}/{id}/content",
+    tag = "{@ module @}",
+    params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
+    responses(
+        (status = 204, description = "un contenu est déposé"),
+        (status = 404, description = "aucun contenu", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn head_content(
+    State(state): State<AppState>,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode> {
+    if service::has_content(state.storage().as_ref(), id).await? {
+        Ok(StatusCode::NO_CONTENT)
+    } else {
+        Err(rbs_core::Error::NotFound("contenu"))
+    }
+}
+{%- endif %}

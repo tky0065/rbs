@@ -146,6 +146,9 @@ pub(crate) struct Field {
     pub unique: bool,
     pub optional: bool,
     pub index: bool,
+    /// Borne de longueur écrite par `max=`, quand elle l'a été. `None` laisse jouer le
+    /// défaut du type, que rend [`Field::max_length`].
+    pub max: Option<u32>,
     /// Posée par `relations::resolve`, absente jusque-là et pour tout scalaire.
     pub relation: Option<RelationView>,
 }
@@ -231,6 +234,50 @@ impl Field {
         }
     }
 
+    /// Le champ porte-t-il du texte, seul endroit où une longueur se borne ?
+    pub(crate) fn is_textual(&self) -> bool {
+        matches!(
+            self.kind,
+            FieldKind::Scalar(FieldType::String | FieldType::Text)
+        )
+    }
+
+    /// Borne de longueur que les DTO posent sur le champ, s'il en porte une.
+    ///
+    /// Un `string` en reçoit une d'office : sans elle, chaque route publique d'un projet
+    /// engendré accepte une chaîne de longueur arbitraire, et la colonne ne l'arrête pas
+    /// davantage — `ColumnDef::string()` rend un `varchar` sans longueur sur PostgreSQL.
+    /// La valeur reprend celle du `varchar(255)` traditionnel, assez large pour un nom,
+    /// un titre ou une adresse. `text` est le type qu'on choisit *pour* dépasser cette
+    /// borne : la lui poser d'office le viderait de son sens.
+    pub(crate) fn max_length(&self) -> Option<u32> {
+        const DEFAUT_STRING: u32 = 255;
+
+        match (self.max, &self.kind) {
+            (Some(borne), _) => Some(borne),
+            (None, FieldKind::Scalar(FieldType::String)) => Some(DEFAUT_STRING),
+            _ => None,
+        }
+    }
+
+    /// Les contraintes `validator` du champ, dans l'ordre où elles s'écrivent.
+    ///
+    /// Rendues assemblées plutôt qu'une à une : `validator` veut un seul attribut
+    /// `#[validate(…)]` par champ, et une template qui en empilerait deux engendrerait
+    /// un projet qui ne compile pas.
+    pub(crate) fn validations(&self) -> Vec<String> {
+        let mut contraintes = Vec::new();
+
+        if self.validates_email() {
+            contraintes.push("email".to_string());
+        }
+        if let Some(borne) = self.max_length() {
+            contraintes.push(format!("length(max = {borne})"));
+        }
+
+        contraintes
+    }
+
     /// Le champ mérite-t-il une contrainte d'email dans les DTO ?
     ///
     /// La grammaire de `--fields` n'a pas de type `email` et n'en aura pas : sept types
@@ -269,7 +316,7 @@ impl Serialize for Field {
         state.serialize_field("bare_rust_type", &self.bare_rust_type())?;
         state.serialize_field("migration_method", self.migration_method())?;
         state.serialize_field("column_type_attribute", &self.column_type_attribute())?;
-        state.serialize_field("valide_email", &self.validates_email())?;
+        state.serialize_field("validations", &self.validations())?;
         state.serialize_field("relation", &self.relation)?;
         state.end()
     }
@@ -428,6 +475,7 @@ fn parse_field(rank: usize, chunk: &str) -> Result<Field, FieldError> {
         unique: false,
         optional: false,
         index: false,
+        max: None,
         relation: None,
     };
 
@@ -442,6 +490,29 @@ fn parse_field(rank: usize, chunk: &str) -> Result<Field, FieldError> {
         // modificateur dont le nom serait vide.
         if modifier.is_empty() {
             return Err(error(name, ErrorKind::InvalidForm));
+        }
+
+        // `max=<n>` est le seul modificateur à valeur : il est lu avant le `match` des
+        // drapeaux, qui n'a pas de forme pour en porter une.
+        if let Some(valeur) = modifier.strip_prefix("max=") {
+            if field.max.is_some() {
+                return Err(error(
+                    name,
+                    ErrorKind::DuplicateModifier {
+                        name: "max".to_string(),
+                    },
+                ));
+            }
+            let Some(borne) = valeur.parse::<u32>().ok().filter(|n| *n > 0) else {
+                return Err(error(
+                    name,
+                    ErrorKind::InvalidMaxLength {
+                        value: valeur.to_string(),
+                    },
+                ));
+            };
+            field.max = Some(borne);
+            continue;
         }
 
         let flag = match modifier {
@@ -507,9 +578,26 @@ fn parse_field(rank: usize, chunk: &str) -> Result<Field, FieldError> {
                 },
             ));
         }
+        // Deux valeurs possibles, donc deux lignes au plus dans toute la table : la
+        // contrainte est presque sûrement une faute de frappe, et les tests engendrés
+        // n'auraient aucune valeur d'exemple à rejouer.
+        if matches!(field.kind, FieldKind::Scalar(FieldType::Bool)) && field.unique {
+            return Err(error(name, ErrorKind::UniqueOnBool));
+        }
         if field.unique && field.index {
             return Err(error(name, ErrorKind::RedundantIndex));
         }
+    }
+
+    // Après la résolution des références : une référence porte un `uuid`, dont le nom de
+    // type est celui qu'a écrit l'utilisateur.
+    if field.max.is_some() && !field.is_textual() {
+        return Err(error(
+            name,
+            ErrorKind::MaxLengthOnNonTextual {
+                type_: field.type_name().to_string(),
+            },
+        ));
     }
 
     Ok(field)
@@ -562,6 +650,86 @@ mod tests {
         for (word, expected) in cas {
             assert_eq!(FieldType::parse(word), Some(expected), "type « {word} »");
         }
+    }
+
+    /// La borne par défaut : sans elle, toute route publique d'un projet engendré accepte
+    /// une chaîne de longueur arbitraire dans chaque champ textuel.
+    #[test]
+    fn a_string_field_carries_a_default_length_bound() {
+        let champs = parse("titre:string").expect("la déclaration est valide");
+
+        assert_eq!(champs[0].max_length(), Some(255));
+    }
+
+    /// `text` existe pour porter du texte long : lui poser la borne le viderait de son
+    /// sens, et c'est le seul type que l'utilisateur choisit *pour* cela.
+    #[test]
+    fn a_text_field_carries_no_default_bound() {
+        let champs = parse("resume:text").expect("la déclaration est valide");
+
+        assert_eq!(champs[0].max_length(), None);
+    }
+
+    #[test]
+    fn the_max_modifier_overrides_the_default_bound() {
+        assert_eq!(
+            parse("titre:string:max=200").expect("valide")[0].max_length(),
+            Some(200)
+        );
+        assert_eq!(
+            parse("resume:text:max=5000").expect("valide")[0].max_length(),
+            Some(5000)
+        );
+    }
+
+    /// Une longueur ne se borne que sur du texte : la demander ailleurs est une faute de
+    /// forme, pas un souhait qu'on pourrait honorer autrement.
+    #[test]
+    fn the_max_modifier_is_refused_outside_a_textual_field() {
+        assert_eq!(
+            kind("age:int:max=10"),
+            ErrorKind::MaxLengthOnNonTextual {
+                type_: "int".to_string()
+            }
+        );
+        assert_eq!(
+            kind("auteur:references:users:max=10"),
+            ErrorKind::MaxLengthOnNonTextual {
+                type_: "references".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn a_max_that_is_not_a_positive_number_is_refused() {
+        assert_eq!(
+            kind("titre:string:max=zero"),
+            ErrorKind::InvalidMaxLength {
+                value: "zero".to_string()
+            }
+        );
+        assert_eq!(
+            kind("titre:string:max=0"),
+            ErrorKind::InvalidMaxLength {
+                value: "0".to_string()
+            }
+        );
+        assert_eq!(
+            kind("titre:string:max="),
+            ErrorKind::InvalidMaxLength {
+                value: String::new()
+            }
+        );
+    }
+
+    #[test]
+    fn the_max_modifier_is_refused_twice() {
+        assert_eq!(
+            kind("titre:string:max=10:max=20"),
+            ErrorKind::DuplicateModifier {
+                name: "max".to_string()
+            }
+        );
     }
 
     #[test]
@@ -638,6 +806,7 @@ mod tests {
             unique: false,
             optional: false,
             index: false,
+            max: None,
             relation: None,
         };
         let optional = Field {
@@ -935,6 +1104,14 @@ mod tests {
                 name: "unique".to_string()
             }
         );
+    }
+
+    /// Une colonne booléenne sous contrainte d'unicité n'admet que deux lignes dans
+    /// toute la table : la troisième création est refusée, et aucune valeur d'exemple ne
+    /// peut sauver les tests engendrés.
+    #[test]
+    fn unique_on_a_bool_field_is_rejected() {
+        assert_eq!(kind("actif:bool:unique"), ErrorKind::UniqueOnBool);
     }
 
     #[test]

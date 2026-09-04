@@ -14,6 +14,38 @@ between minor versions with no deprecation cycle.
 
 ### Added
 
+- `rbs add audit` installs a write log: an `audit_log` table, an `Entry` type and a
+  `record` function under `src/audit/`. `record` takes a `&C: ConnectionTrait` rather than
+  a connection, which is the whole reason the log lives in the database: hand it the
+  transaction carrying your change, and the trace exists if and only if that change is
+  committed. `actor_id` is nullable and takes a `String` rather than the `auth` feature's
+  `Identity`, so the fragment installs on a service with no JWT and keeps writes made
+  outside a request — a job, a seed, an admin command — traceable. `action` is a string
+  rather than an enum, with `CREATE`, `UPDATE` and `DELETE` as constants: `login` and
+  `export` are legitimate actions a closed enum would only force you around. The fragment
+  mounts no route and wires itself into none of the generated CRUD — which writes deserve
+  a trace is a question only your domain answers.
+- `rbs add scheduler` installs calendar triggering: a due schedule enqueues a job in the
+  existing queue, once, however many replicas are running. It pulls in `jobs` — the
+  scheduler triggers, it does not execute — and the calendar is declared in code, in
+  `src/scheduler/mod.rs`, where `Schedule::every::<J>` takes the `kind` from `J::KIND`, so
+  a schedule aiming at an unregistered job cannot be written. A reservation is one
+  conditional `UPDATE` on `next_run_at`, sharing its transaction with the enqueue, so no
+  crash can advance a schedule without creating its job. Expressions take five fields as
+  well as six — a line pasted from a crontab is served, not punished — and are evaluated
+  in UTC; a single unreadable one stops start-up by name.
+- `rbs generate crud --with-upload` mounts three content routes on the generated
+  resource — `PUT`, `GET` and `HEAD` on `/<resource>/{id}/content` — backed by the
+  `storage` fragment's trait. The body travels as `application/octet-stream`, not JSON:
+  base64 would hold the file in memory twice. The storage key is derived from the `id`,
+  so no column carries it. Without the `storage` feature the flag is refused before
+  anything is written, naming `rbs add storage`. A body limit applies to the upload route
+  alone, as a constant you can raise.
+- `rbs_core::Cursor` and `CursorPage<T>` paginate on the `id` instead of an offset, for
+  lists where `OFFSET n` makes the engine walk the rows it is about to discard. `after` is
+  exclusive and the response carries no `total` — the `COUNT(*)` it would need is the cost
+  the cursor avoids. The generated CRUD is unchanged and keeps `Pagination`: switching it
+  would drop `total` from every response already being served.
 - `rbs add observability` installs OTLP traces and a Prometheus `/metrics`. Traces leave
   through `rbs-core`, behind its new `observability` cargo feature: `logs::init()` posts
   the global subscriber itself, and nothing added at the `// <rbs:startup>` anchor could
@@ -23,6 +55,8 @@ between minor versions with no deprecation cycle.
   never under the requested URL, and they are served on a listener of their own so that no
   deployment has to hide them behind a reverse-proxy rule. `rbs doctor` refuses a
   configuration where that port equals `server.port`.
+- `--fields` takes a `max=<n>` modifier, which bounds the length of a textual field in the
+  generated DTOs. It is refused on any other type.
 - `rbs add cors` installs a CORS layer whose allowed origins are read from the project's
   configuration, never wide open by default.
 - `rbs add rate-limit` installs a rate limiter. The counter is a Redis pipeline when the
@@ -40,9 +74,26 @@ between minor versions with no deprecation cycle.
   document, and the compose's `api` service sets `RBS_ENV=production`. Every Docker
   deployment used to publish both.
 - `rbs-core` registers a `TooManyRequests` response under `components/responses`.
+- `rbs generate crud --soft-delete` makes `DELETE` logical: the row stays, its `deleted_at`
+  column dated, and every read hides it. The HTTP contract is unchanged — 204 on delete,
+  404 on a second one, 404 on reading a deleted row — so no client notices. A `unique`
+  field moves its constraint to an index restricted to live rows, which is what lets
+  someone re-register with an address they had before. **MySQL has no partial index**: the
+  generated migration branches at run time and keeps a global uniqueness there, so on MySQL
+  a deleted value stays reserved. The unchanged contract covers the feature carrying the
+  flag, not the ones referencing it: a foreign key's `ON DELETE` never fires on a logical
+  delete, so children survive a deleted parent and a `Restrict` stops refusing anything.
 
 ### Changed
 
+- `rbs new` warns when it could not decompose the database URL. No `docker-compose.yml`
+  is written in that case, and until now the project was born without one and without a
+  word — the absence showed up only as a missing file. A warning and not a refusal: a Unix
+  socket such as `postgres:///demo` is legitimate and does not decompose either.
+- A `string` field is bounded at 255 characters in the generated DTOs, without anyone
+  asking. Nothing else bounded it — `ColumnDef::string()` renders a `varchar` with no
+  length on PostgreSQL — so every public route accepted a string of arbitrary length.
+  `text` keeps none by default: it is the type one picks to exceed that bound.
 - **The minimum supported Rust version goes from 1.85 to 1.94.** 1.85 had already stopped
   resolving: `sea-orm` 2.0.2 and `sqlx` 0.9.0 require 1.94.0, and Cargo refuses to build
   below that. The declared floor was describing a toolchain no installation could have
@@ -63,9 +114,32 @@ between minor versions with no deprecation cycle.
   printed when the database answers straight away.
 - The `features` anchor keeps its block sorted instead of stacking in arrival order, so a
   project whose `cargo fmt --check` runs in CI is not failed by a line it did not write.
+- The generated feature modules no longer carry a module-wide `#![allow(dead_code)]`. A
+  project generated today has a `src/lib.rs`, and a public item of a public module stays
+  reachable from outside the crate: the permission masked nothing but a forgotten call.
+- The mailer and the object store are reached through `state.mail()` and `state.storage()`,
+  as the cache already was through `state.cache()`. Their field drops the
+  `#[allow(dead_code)]` that stood in for the accessor.
 
 ### Fixed
 
+- `rbs dev` names the file that triggered a restart. Nothing on screen told a wanted
+  restart from a server that had just died on its own.
+- `POST /auth/login` and `POST /auth/refresh` answer with `Cache-Control: no-store` and
+  `Pragma: no-cache`, as RFC 6749 §5.1 requires of a response carrying tokens. The header
+  is carried by the `TokenPair` type rather than by the two handlers, so a third one added
+  later gets it without thinking about it.
+- Writing into an anchor follows the line endings of the host file. On a repository with
+  `core.autocrlf=true`, the CLI laid LF lines down in the middle of a CRLF file, which the
+  `cargo fmt --check` of the generated `ci` workflow could then refuse. Repairing an
+  anchor rewrote the whole file in LF.
+- A zone of `AGENTS.md` only opens on a marker alone on its line. Quoting
+  `<!-- rbs:inventory -->` in one's own prose made `rbs upgrade` erase everything between
+  that quotation and the real closing marker.
+- The entity inventory no longer counts the braces of strings and comments. A
+  `format!("{{")` shifted the depth and attached the following entities to the wrong
+  module, and an entity commented out in a block was inventoried as a real one — both
+  ending in a wrong `belongs_to`.
 - `--fields "author_id:uuid,author:references:users"` is refused instead of generating a
   project that does not compile: both fields resolve to the same `author_id` column, and
   deduplication now happens on the column name rather than on the declared name.

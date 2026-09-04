@@ -16,7 +16,7 @@ use crate::plan;
 use super::feature::Feature;
 use super::fields::to_pascal_case;
 use super::{
-    controller, dto, entities, entity, fields, format, migration, mount, name, relations,
+    controller, dto, entities, entity, fields, filter, format, migration, mount, name, relations,
     repository, seed, service, tests_http,
 };
 
@@ -37,6 +37,10 @@ pub(crate) struct Options {
     pub has_many: Vec<String>,
     /// Rôle exigé des routes d'écriture, tel qu'il s'écrit en base : `admin`.
     pub role: Option<String>,
+    /// Rend le `DELETE` logique : la ligne reste, sa colonne `deleted_at` datée.
+    pub soft_delete: bool,
+    /// Ajoute au CRUD trois routes de contenu binaire, adossées au fragment `storage`.
+    pub with_upload: bool,
 }
 
 /// Un fichier à écrire : son chemin, relatif à la racine du projet, et son contenu.
@@ -156,6 +160,23 @@ pub(crate) enum Error {
         role: String,
     },
 
+    /// `--with-upload` réclamé sur un projet dépourvu du fragment qui porte le stockage.
+    #[error(
+        "`--with-upload` exige la feature `storage`, absente de ce projet : lancez \
+         `rbs add storage`, puis relancez la génération"
+    )]
+    UploadSansStorage,
+
+    /// `--soft-delete` sur une entité qui déclare déjà la colonne que le drapeau injecte.
+    #[error(
+        "`--soft-delete` pose lui-même la colonne `{colonne}` : retirez-la de `--fields`, \
+         ou renoncez au drapeau"
+    )]
+    SoftDeleteColonneReservee {
+        /// Nom de la colonne en conflit, tel qu'il a été déclaré.
+        colonne: String,
+    },
+
     /// `--role` nomme un rôle que l'enum du projet ne déclare pas.
     #[error(
         "`--role {role}` ne désigne aucun rôle de src/auth/model.rs — connus : {known} ; \
@@ -219,6 +240,18 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         validate_role(role, &metadonnees, &root)?;
     }
 
+    // Avant tout rendu, comme le garde de rôle : sans le fragment, `state.storage()`
+    // n'existe pas et le projet engendré cesserait de compiler — une erreur de rustc sur
+    // du code que l'utilisateur n'a pas écrit.
+    if options.with_upload
+        && !metadonnees
+            .features
+            .iter()
+            .any(|feature| feature == "storage")
+    {
+        return Err(Error::UploadSansStorage);
+    }
+
     // `--has-many` ne génère rien : il répare le côté inverse d'une feature déjà
     // présente, et suit donc un chemin entièrement séparé du reste de la fonction.
     if !options.has_many.is_empty() {
@@ -227,6 +260,17 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     let mut fields =
         fields::parse(options.fields.as_deref().unwrap_or_default()).map_err(Error::Fields)?;
+
+    // La colonne est injectée par le drapeau, non déclarée. Hors du drapeau elle reste un
+    // nom libre : la réserver dans `NAMES_SET_BY_RBS` casserait un `--fields` légitime
+    // sur tous les CRUD qui ne suppriment pas logiquement.
+    if options.soft_delete
+        && let Some(champ) = fields.iter().find(|champ| champ.name == "deleted_at")
+    {
+        return Err(Error::SoftDeleteColonneReservee {
+            colonne: champ.name.clone(),
+        });
+    }
 
     // Lu une fois, avant que le nom ne soit tranché : la même inventaire sert à
     // résoudre les cibles des références et à écrire leur côté inverse.
@@ -237,6 +281,16 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let feature = match &options.role {
         Some(role) => Feature::fresh(&options.name, fields).guarded(role),
         None => Feature::fresh(&options.name, fields),
+    };
+    let feature = if options.soft_delete {
+        feature.soft_deleting()
+    } else {
+        feature
+    };
+    let feature = if options.with_upload {
+        feature.uploading()
+    } else {
+        feature
     };
     let module = feature.module().to_string();
 
@@ -301,7 +355,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         builder.create(path, content)?;
     }
 
-    let mut montages = mount::pour(&module, features_anchor);
+    let mut montages = mount::pour(&module, features_anchor, options.with_upload);
     if let Some(migration) = &migration {
         montages.extend(mount::for_migration(migration));
     }
@@ -476,6 +530,44 @@ fn plan_repair(
     })
 }
 
+/// Ce que `generate` dépose dans `src/<module>/`, rendu, chaque fichier sous le nom qu'il
+/// portera dans le répertoire de la feature.
+///
+/// Les bancs des générateurs y puisent la liste qu'ils énuméraient chacun de leur côté :
+/// `filter.rs` en avait cassé quatre l'un après l'autre, et chaque oubli ne se voyait
+/// qu'après une compilation complète sous Docker. Ils choisissent ce qu'ils en gardent —
+/// c'est la sélection qui les regarde, pas l'inventaire.
+pub(crate) fn fichiers(feature: &Feature, complete: bool) -> Result<Vec<File>, Error> {
+    let module = feature.module();
+
+    let mut files = vec![
+        ("mod.rs", controller::render_mod(feature, complete)),
+        ("model.rs", entity::render(feature)),
+        ("dto.rs", dto::render(feature)),
+        ("filter.rs", filter::render(feature)),
+        ("repository.rs", repository::render(feature)),
+        ("service.rs", service::render(feature)),
+        ("controller.rs", controller::render(feature)),
+    ];
+
+    if complete {
+        files.push(("tests.rs", tests_http::render(feature)));
+    }
+
+    let mut rendus = Vec::with_capacity(files.len());
+    for (name, rendered) in files {
+        // L'erreur nomme le chemin du projet, et non le seul nom de fichier : c'est celui
+        // que l'utilisateur ira ouvrir.
+        let content = rendered.map_err(|source| Error::Rendu {
+            file: format!("src/{module}/{name}"),
+            source,
+        })?;
+        rendus.push((name.to_string(), content));
+    }
+
+    Ok(rendus)
+}
+
 /// Rend les fichiers de la feature, et sa migration si elle est complète.
 ///
 /// Rien n'est écrit ici : une template fautive doit échouer avant la première écriture.
@@ -486,33 +578,17 @@ fn render(
     crate_name: Option<&str>,
 ) -> Result<(Vec<File>, Option<String>), Error> {
     let module = feature.module();
-    let dans = |name: &str| format!("src/{module}/{name}");
 
-    let mut files = vec![
-        (dans("mod.rs"), controller::render_mod(feature, complete)),
-        (dans("model.rs"), entity::render(feature)),
-        (dans("dto.rs"), dto::render(feature)),
-        (dans("repository.rs"), repository::render(feature)),
-        (dans("service.rs"), service::render(feature)),
-        (dans("controller.rs"), controller::render(feature)),
-    ];
-
-    if complete {
-        files.push((dans("tests.rs"), tests_http::render(feature)));
-    }
+    let mut rendus: Vec<File> = fichiers(feature, complete)?
+        .into_iter()
+        .map(|(name, content)| (format!("src/{module}/{name}"), content))
+        .collect();
 
     if complete && seedable {
         // Hors du répertoire de la feature : le seed appartient au binaire qui l'applique,
         // et non au module que le routeur monte.
-        files.push((
-            format!("src/seeds/{module}.rs"),
-            seed::render(feature, crate_name),
-        ));
-    }
-
-    let mut rendus = Vec::with_capacity(files.len() + 1);
-    for (path, rendered) in files {
-        let content = rendered.map_err(|source| Error::Rendu {
+        let path = format!("src/seeds/{module}.rs");
+        let content = seed::render(feature, crate_name).map_err(|source| Error::Rendu {
             file: path.clone(),
             source,
         })?;
@@ -599,6 +675,8 @@ mod tests {
             force: false,
             has_many: Vec::new(),
             role: None,
+            soft_delete: false,
+            with_upload: false,
         }
     }
 
@@ -696,6 +774,19 @@ mod tests {
         assert!(entites.contains("comments"), "{entites}");
     }
 
+    #[test]
+    fn a_field_named_deleted_at_is_refused_under_soft_delete() {
+        let message = Error::SoftDeleteColonneReservee {
+            colonne: "deleted_at".to_owned(),
+        }
+        .to_string();
+
+        assert!(
+            message.contains("--soft-delete") && message.contains("deleted_at"),
+            "le refus doit nommer le drapeau et la colonne : {message}"
+        );
+    }
+
     /// Le refus est prononcé avant le rendu : un contrôleur qui appellerait
     /// `crate::auth::guard` sur un projet sans `auth` ne compilerait pas.
     #[test]
@@ -710,6 +801,20 @@ mod tests {
             "le message doit nommer la commande qui installe la feature : {error}"
         );
         assert_eq!(fingerprint(&root), avant, "rien ne doit avoir été écrit");
+    }
+
+    #[test]
+    fn upload_without_the_storage_feature_names_the_command_that_repairs_it() {
+        let message = Error::UploadSansStorage.to_string();
+
+        assert!(
+            message.contains("rbs add storage"),
+            "un refus qui ne dit pas comment le lever fait chercher : {message}"
+        );
+        assert!(
+            message.contains("storage"),
+            "le refus doit nommer la feature attendue : {message}"
+        );
     }
 
     #[test]
@@ -775,6 +880,7 @@ mod tests {
             "mod.rs",
             "model.rs",
             "dto.rs",
+            "filter.rs",
             "repository.rs",
             "service.rs",
             "controller.rs",
@@ -816,13 +922,23 @@ mod tests {
             .join("\n")
     }
 
-    /// La longueur d'un nom de feature est un continuum, et rustfmt bascule à 100
-    /// colonnes : une forme écrite en dur dans un template n'est juste que pour les noms
-    /// qui la font tomber du bon côté. L'éventail balaye les deux bascules — `tag` tient
-    /// sur une ligne là où `articles` déborde, `administrative_documents` déborde là où
-    /// `articles` tient — et la feature sans champ, dont le rendu perd des blocs entiers.
+    /// La longueur d'un nom de feature est un continuum, et rustfmt bascule à des seuils
+    /// que le gabarit doit connaître : `fn_call_width` à soixante colonnes sur les
+    /// arguments d'un appel, `max_width` à cent sur une signature. Une forme écrite en dur
+    /// dans un template n'est juste que pour les noms qui la font tomber du bon côté.
+    /// L'éventail balaye ces bascules, et la feature sans champ, dont le rendu perd des
+    /// blocs entiers.
+    ///
+    /// Ce test lit le rendu **avant** `format::format_batch` : c'est la seule position
+    /// d'où il puisse échouer. Lu après, sur les fichiers écrits, il comparerait la sortie
+    /// de rustfmt à elle-même — ce qu'il faisait, en promettant l'inverse par son nom.
+    ///
+    /// L'éventail s'arrête à `administrative_documents`, vingt-trois caractères de
+    /// singulier : c'est là que s'arrête le point fixe du contrôleur et du service, que
+    /// l'import des DTO borne. Au-delà, `format_batch` reprend la main, et ce sont les
+    /// gardes de chaque module qui fixent la frontière par `bench::longueurs_divergentes`.
     #[test]
-    fn the_render_goes_through_rustfmt_without_a_diff_whatever_the_name_length() {
+    fn the_rendered_templates_are_already_what_rustfmt_would_write() {
         let cas: &[(&str, Option<&str>, bool)] = &[
             ("tag", Some("title:string,views:int"), true),
             ("post", Some("title:string,views:int"), true),
@@ -840,36 +956,24 @@ mod tests {
             ("notes", None, false),
         ];
 
-        for (name, fields, complete) in cas {
-            let (_parent, root) = project();
+        for (name, champs, complete) in cas {
+            let fields = fields::parse(champs.unwrap_or_default()).expect("champs valides");
+            let feature = Feature::fresh(name, fields);
+            let seedable = seed::is_seedable(&feature);
 
-            let generated =
-                run(&options(&root, name, *fields, *complete)).expect("la génération doit aboutir");
+            let (files, _migration) = render(&feature, *complete, seedable, Some("demo_api"))
+                .expect("la génération doit aboutir");
 
-            let mut ecrits: Vec<PathBuf> = generated
-                .files
-                .iter()
-                .map(|relatif| root.join(relatif))
-                .collect();
-            if let Some(module) = &generated.migration {
-                ecrits.push(root.join("migration/src").join(format!("{module}.rs")));
-            }
+            assert!(!files.is_empty(), "{name} n'a rien rendu");
 
-            assert!(!ecrits.is_empty(), "{name} n'a rien écrit");
-
-            for path in ecrits {
-                let ecrit = read(&path);
-                let formatted = bench::formatted(&ecrit);
-                let file = path
-                    .file_name()
-                    .expect("le chemin nomme un fichier")
-                    .to_string_lossy();
+            for (path, rendu) in &files {
+                let formatted = bench::formatted(rendu);
 
                 assert!(
-                    formatted == ecrit,
-                    "un `cargo fmt` chez l'utilisateur reformaterait {name}/{file}, \
+                    formatted == *rendu,
+                    "un `cargo fmt` chez l'utilisateur reformaterait {name}/{path}, \
                      qu'il n'a pas touché :\n{}",
-                    divergence(&ecrit, &formatted)
+                    divergence(rendu, &formatted)
                 );
             }
         }

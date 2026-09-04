@@ -120,10 +120,31 @@ contrôle le couple qui met réellement un déploiement en défaut — un `backe
 aucun bucket n'est nommé nulle part — et ne dit rien de tout cela tant que le backend est
 `fs`, qui n'en a besoin d'aucun.
 
-## Ce que l'exemple en fait
+## Les routes de contenu engendrées
 
-`file-drop` donne à sa ressource `uploads` un point d'entrée de contenu. Le service tient la
-table et le magasin au pas :
+`rbs generate crud <nom> --fields "…" --with-upload` monte trois routes sur
+`/<nom>/{id}/content`, contre le trait ci-dessus :
+
+| Méthode | Ligne avec contenu | Ligne sans contenu | Ligne absente |
+|---|---|---|---|
+| `PUT` | 204, contenu remplacé | 204, contenu déposé | 404 |
+| `GET` | 200, `application/octet-stream` | 404 | 404 |
+| `HEAD` | 204 | 404 | 404 |
+
+Ajoutez [`--role`](../cli/generate.md) et le `PUT` rejoint les écritures gardées : il prend
+une `Identity` et appelle `require_role` comme `create`, `update` et `delete` — remplacer la
+charge utile d'une ressource est une écriture. `GET` et `HEAD` restent ouvertes, comme
+`list` et `find`.
+
+Sans la feature `storage`, le drapeau est refusé avant tout écrit :
+
+```text
+$ rbs generate crud uploads --fields "title:string" --with-upload
+erreur : `--with-upload` exige la feature `storage`, absente de ce projet : lancez `rbs add storage`, puis relancez la génération
+```
+
+`file-drop` porte le drapeau sur sa ressource `uploads`. Le service tient la table et le
+magasin au pas :
 
 ```rust file=examples/file-drop/src/uploads/service.rs region=contenu
 ```
@@ -137,16 +158,37 @@ La suppression va dans l'autre sens : le contenu part avec la ligne, et `delete`
 idempotent des deux côtés, une ressource créée sans contenu ne fait pas échouer sa
 suppression.
 
-Le contenu voyage hors du DTO :
+Sauf si [`--soft-delete`](../cli/generate.md) l'accompagne. Ce drapeau ne fait qu'estampiller
+la ligne, qui survit ; en effacer le contenu restituerait une ressource vide à qui la
+restaure, et vider la ligne de sa charge utile est précisément ce que l'estampille sert à
+éviter. Les deux drapeaux se combinent donc en : ligne estampillée, contenu conservé. Le
+`delete` engendré le dit en commentaire et ne prend plus le magasin du tout — retirez-y
+l'objet si votre propre purge doit l'emporter.
+
+Le contenu voyage hors du DTO, en `application/octet-stream` plutôt qu'en JSON :
 
 ```rust file=examples/file-drop/src/uploads/controller.rs region=put_content
 ```
 
-Un corps binaire n'a pas sa place dans un document JSON, et le base64 obligerait à charger
-le fichier deux fois en mémoire. Les trois verbes sont montés ensemble :
+Le base64 obligerait à charger le fichier deux fois en mémoire — une fois décodé, une fois
+comme chaîne JSON qui le porte. La clé de stockage se dérive de l'`id` de la ligne,
+`format!("uploads/{id}")`, si bien qu'aucune colonne ne la porte : vouloir des métadonnées
+comme `content_type` ou `size` veut dire les déclarer soi-même dans `--fields`, ce que fait
+`file-drop` ci-dessus. Les trois verbes sont montés ensemble, derrière une borne de taille
+qui ne vaut que pour la route de dépôt :
 
-```rust file=examples/file-drop/src/uploads/mod.rs region=route_contenu
+```rust file=examples/file-drop/src/uploads/mod.rs
 ```
+
+`TAILLE_MAX` est une constante ordinaire dans le `mod.rs` engendré — relevez-la, ou lisez-la
+depuis la configuration, exactement comme tout autre code engendré. La poser sur le routeur
+entier relèverait aussi la limite des routes JSON.
+
+Ce que le drapeau ne fait pas : **un fichier par ligne**, et aucune table de pièces
+jointes — un second dépôt sur la même ligne remplace le premier. **Aucun filtrage de type
+MIME** non plus : le magasin ne tient que des octets, et une liste blanche devinée pour la
+documentation serait fausse pour tout projet qui la lirait. Et il n'injecte aucune colonne :
+un `id` suffit à dériver une clé.
 
 ## Les tests
 
@@ -174,8 +216,9 @@ supposé. Voir le [guide des tests](./testing.md).
 - **les URL signées** — servir un objet privé veut dire le relayer par votre handler, comme
   le fait l'exemple. Les liens pré-signés sont une fonction de S3 que le trait n'expose
   pas ;
-- **les limites de taille** — rien ne borne un corps. C'est à `DefaultBodyLimit` d'Axum que
-  cela revient ;
+- **les limites de taille** — le trait lui-même ne borne rien. `--with-upload` en pose une
+  sur sa seule route de contenu, la constante `TAILLE_MAX` ci-dessus ; un projet bâti sans
+  le drapeau ne borne rien, et c'est à `DefaultBodyLimit` d'Axum que cela revient ;
 - **les types de contenu** — le magasin ne tient que des octets. L'exemple garde
   `content_type` dans sa table parce que le magasin ne s'en souviendra pas ;
 - **le cycle de vie, le versionnage, le chiffrement au repos** — se règlent sur le bucket,

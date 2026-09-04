@@ -25,8 +25,10 @@ mod prompts;
 mod secret;
 mod seed;
 mod template;
-// Partagé avec `tests/common` par `#[path]` : voir l'en-tête du fichier.
 mod templates;
+// Partagés avec `tests/common` par `#[path]` : voir l'en-tête de chaque fichier.
+#[cfg(test)]
+mod test_cible;
 #[cfg(test)]
 mod test_postgres;
 mod ui;
@@ -89,7 +91,7 @@ pub fn run() {
         }
 
         Commands::Generate { command } => {
-            let (name, fields, complete, force, dry_run, has_many, role) = match command {
+            let args = match command {
                 GenerateCommands::Crud {
                     name,
                     fields,
@@ -97,15 +99,37 @@ pub fn run() {
                     dry_run,
                     has_many,
                     role,
-                } => (name, fields, true, force, dry_run, has_many, role),
+                    soft_delete,
+                    with_upload,
+                } => GenerateArgs {
+                    name,
+                    fields,
+                    complete: true,
+                    force,
+                    dry_run,
+                    has_many,
+                    role,
+                    soft_delete,
+                    with_upload,
+                },
                 GenerateCommands::Feature {
                     name,
                     force,
                     dry_run,
-                } => (name, None, false, force, dry_run, Vec::new(), None),
+                } => GenerateArgs {
+                    name,
+                    fields: None,
+                    complete: false,
+                    force,
+                    dry_run,
+                    has_many: Vec::new(),
+                    role: None,
+                    soft_delete: false,
+                    with_upload: false,
+                },
 
-                // Le client ne partage ni les options ni l'erreur des deux autres : il
-                // se termine ici plutôt que de traverser un tuple qui ne lui va pas.
+                // Le client ne partage ni les options ni l'erreur des deux autres : il se
+                // termine ici plutôt que de traverser une structure qui ne lui va pas.
                 GenerateCommands::Client {
                     lang,
                     out,
@@ -124,7 +148,7 @@ pub fn run() {
                 }
             };
 
-            if let Err(error) = generate(name, fields, complete, force, dry_run, has_many, role) {
+            if let Err(error) = generate(args) {
                 ui::error(&error.to_string());
                 if let Some(remedy) = error.remedy() {
                     ui::info(&format!("\n{remedy}"));
@@ -181,7 +205,7 @@ pub fn run() {
         // Rien d'autre ne part sur la sortie standard : le script est destiné à un `eval`,
         // et une ligne de courtoisie y deviendrait une commande à exécuter.
         Commands::Completions { shell } => {
-            completions::render(shell, &mut std::io::stdout());
+            completions::render(shell, &mut ui::stdout());
         }
 
         Commands::Doctor { json, fix, force } => match diagnose(json, fix, force) {
@@ -215,6 +239,8 @@ fn create_project(
     let features = (!with.is_empty()).then_some(with);
     let disponibles = templates::feature_names(template_dir.as_deref());
     let options = prompts::resolve(name, database_url, database, features, &disponibles, yes)?;
+    // Relevé avant que `options` ne parte dans la création, qui l'emporte.
+    let url_opaque = new::url_opaque(database, &options.database_url);
 
     let project = new::create(
         &new::Options {
@@ -239,6 +265,17 @@ fn create_project(
     if !project.depot_git {
         ui::warn("`git init` n'a pas abouti : le projet est complet, mais sans dépôt");
     }
+    // L'absence du compose ne se découvrait qu'en cherchant un fichier qui n'a jamais été
+    // écrit : rien dans l'URL ne dit qu'elle n'a pas été comprise.
+    if url_opaque {
+        ui::warn(&format!(
+            "rbs n'a lu aucun hôte dans l'URL de la base : aucun {} n'a été écrit",
+            new::COMPOSE
+        ));
+        ui::warn_detail(
+            "  une URL à socket Unix est dans ce cas ; sinon, revoyez `RBS_DATABASE__URL` dans .env",
+        );
+    }
     for pose in &project.installed {
         let migration = if pose.migration { ", 1 migration" } else { "" };
         ui::info(&format!(
@@ -253,7 +290,7 @@ fn create_project(
     for suite in suites_installees(&project.installed) {
         ui::info(&format!("\n  {suite}"));
     }
-    let compose = project.root.join("docker-compose.yml").exists();
+    let compose = project.root.join(new::COMPOSE).exists();
     let demarrage = if compose {
         "\n  docker compose up -d   # la base du .env, montée\n  cargo run              # ou `rbs dev`, qui enchaîne les deux"
     } else {
@@ -368,8 +405,8 @@ fn add_in(
         ));
     }
 
-    println!();
-    println!("{}", plan::render::plan(&planned.plan));
+    ui::line("");
+    ui::line(&plan::render::plan(&planned.plan));
 
     signaler_zone_manquante(planned.zone_manquante.as_ref());
 
@@ -405,6 +442,12 @@ fn suites_installees(installed: &[new::InstalledFeature]) -> Vec<&'static str> {
 /// Ce qu'il reste à faire de la main du développeur, une fois la feature posée.
 fn suite(feature: &str) -> Option<&'static str> {
     match feature {
+        // La table n'existe pas encore, et surtout : le fragment n'est branché sur aucune
+        // route. Installé et jamais appelé, il paraîtrait cassé.
+        "audit" => Some(
+            "rbs migrate up, puis appelez audit::record dans vos services — l'entrée \
+             s'écrit dans la transaction du changement",
+        ),
         // `migrate` et `api` portent `profiles: ["app"]` : sans ce flag, `docker compose
         // up` ne bâtit ni ne démarre ni l'un ni l'autre — seul `db` reste dans le
         // périmètre par défaut, celui que `rbs dev` monte.
@@ -432,6 +475,13 @@ fn suite(feature: &str) -> Option<&'static str> {
         // La table n'existe pas encore, et le worker démarre avec l'API : sans la
         // migration, chaque tour de boucle échoue sur une relation absente.
         "jobs" => Some("rbs migrate up, puis inscrivez vos jobs dans src/jobs/mod.rs"),
+        // Deux tables à créer — le fragment entraîne `jobs` — et une liste d'échéances qui
+        // ne contient qu'un exemple : installé et non édité, le calendrier ne déclenche
+        // rien d'utile.
+        "scheduler" => Some(
+            "rbs migrate up, puis déclarez vos échéances dans src/scheduler/mod.rs — \
+             les expressions sont évaluées en UTC",
+        ),
         // La liste est vide à l'installation : sans ce rappel, le développeur croirait
         // avoir monté du CORS alors qu'aucune origine n'est encore autorisée.
         "cors" => Some(
@@ -457,7 +507,11 @@ fn suite(feature: &str) -> Option<&'static str> {
     }
 }
 
-fn generate(
+/// Ce que la ligne de commande dit d'une génération.
+///
+/// Une struct et non des paramètres positionnels : les drapeaux sont pour moitié des
+/// `bool` voisins, et une inversion entre deux d'entre eux ne se verrait qu'à l'exécution.
+struct GenerateArgs {
     name: String,
     fields: Option<String>,
     complete: bool,
@@ -465,7 +519,23 @@ fn generate(
     dry_run: bool,
     has_many: Vec<String>,
     role: Option<String>,
-) -> Result<(), generate::command::Error> {
+    soft_delete: bool,
+    with_upload: bool,
+}
+
+fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
+    let GenerateArgs {
+        name,
+        fields,
+        complete,
+        force,
+        dry_run,
+        has_many,
+        role,
+        soft_delete,
+        with_upload,
+    } = args;
+
     let feature = name.clone();
     // `--has-many` répare une feature déjà là : rien à générer, donc rien à annoncer sous
     // ce nom-là une fois l'écriture faite.
@@ -480,11 +550,13 @@ fn generate(
         force,
         has_many,
         role,
+        soft_delete,
+        with_upload,
     })?;
 
     // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande
     // s'apprête à faire ne doit pas se découvrir après coup.
-    println!("{}", plan::render::plan(&planned.plan));
+    ui::line(&plan::render::plan(&planned.plan));
 
     signaler_zone_manquante(planned.zone_manquante.as_ref());
 
@@ -585,7 +657,7 @@ fn upgrade_in(directory: PathBuf, force: bool, dry_run: bool) -> Result<(), upgr
     }
 
     ui::info(&format!("rbs {} → {}\n", planned.depuis, planned.vers));
-    println!("{}", plan::render::plan(&planned.plan));
+    ui::line(&plan::render::plan(&planned.plan));
 
     signaler_zone_manquante(planned.zone_manquante.as_ref());
 
@@ -605,7 +677,7 @@ fn upgrade_in(directory: PathBuf, force: bool, dry_run: bool) -> Result<(), upgr
         ));
     } else {
         for note in notes {
-            println!("\n{}", note.trim_end());
+            ui::line(&format!("\n{}", note.trim_end()));
         }
     }
 
@@ -620,7 +692,7 @@ fn migrate(action: migrate::Action) -> Result<(), Box<dyn Error>> {
     match migrate::run(action, &std::env::current_dir()?)? {
         migrate::Output::Appliquees => ui::success("migrations appliquées"),
         migrate::Output::Annulee => ui::success("dernière migration annulée"),
-        migrate::Output::Inventaire(inventaire) => println!("{inventaire}"),
+        migrate::Output::Inventaire(inventaire) => ui::line(&inventaire),
         migrate::Output::Creee(fresh) => {
             ui::success(&format!("{} créée", fresh.file));
             ui::info("\n  décrivez le changement de schéma, puis `rbs migrate up`");
@@ -652,7 +724,16 @@ fn repair_anchors(
     force: bool,
     json: bool,
 ) -> Result<doctor::anchors::Repair, Box<dyn Error>> {
-    let root = metadata::project_root(directory).map_err(doctor::Error::from)?;
+    // `racine` et non `project_root` : la doctrine du second — ne rien écrire dans un
+    // projet dont on ne sait pas lire l'état — vise les commandes qui écrivent *dans* le
+    // manifeste. Reposer une ancre n'en lit aucune donnée et n'écrit que dans des fichiers
+    // source qui en portent déjà. S'y arrêter faisait dire à `--fix` le contraire du
+    // diagnostic du même passage, qui sait nommer un manifeste cassé sans s'y arrêter — et
+    // faisait tomber avec lui le rapport entier. La faute reste dite, par les contrôles
+    // qui suivent.
+    let root = metadata::racine(directory)
+        .map_err(doctor::Error::from)?
+        .root;
     let repair = doctor::anchors::repair(&root)?;
 
     // La garde Git vient après le plan, comme pour `upgrade` : un projet qui n'a rien à
@@ -664,7 +745,7 @@ fn repair_anchors(
         }
 
         if !json {
-            println!("{}\n", plan::render::plan(&repair.plan));
+            ui::line(&format!("{}\n", plan::render::plan(&repair.plan)));
         }
 
         plan::application::apply(&repair.plan, force)?;
@@ -699,7 +780,7 @@ fn annoncer_reparation(repair: &doctor::anchors::Repair) {
         ));
     }
 
-    println!();
+    ui::line("");
 }
 
 /// Rend le rapport et dit si le projet est sain.
@@ -720,15 +801,12 @@ fn diagnose(json: bool, fix: bool, force: bool) -> Result<bool, Box<dyn Error>> 
     // conclusion, que `sain` remplace, ni l'annonce d'attente du contrôle `base`.
     if json {
         let report = doctor::run(&directory, &mut doctor::json::Muette)?;
-        println!("{}", doctor::json::report(&report, repair.as_ref()));
+        ui::line(&doctor::json::report(&report, repair.as_ref()));
 
         return Ok(report.succeeded());
     }
 
-    let report = doctor::run(
-        &directory,
-        &mut doctor::render::Texte::new(std::io::stdout()),
-    )?;
+    let report = doctor::run(&directory, &mut doctor::render::Texte::new(ui::stdout()))?;
 
     if report.succeeded() {
         ui::success("le projet est sain");
@@ -865,6 +943,22 @@ mod tests {
         assert_eq!(repair.reposees, vec!["routes".to_string()]);
     }
 
+    /// Reposer une ancre ne lit aucune donnée du manifeste : s'y arrêter faisait dire à
+    /// `--fix` le contraire du diagnostic du même passage, qui sait nommer un manifeste
+    /// cassé sans s'y arrêter — et faisait tomber avec lui le rapport entier.
+    #[test]
+    fn doctor_fix_repairs_anchors_despite_a_broken_manifest() {
+        let (_parent, root) = projet();
+        amputer(&root, "src/router.rs", "<rbs:routes>");
+        amputer(&root, "src/router.rs", "</rbs:routes>");
+        fs::write(root.join("Cargo.toml"), "[package\nname = \"demo-api\"\n")
+            .expect("manifeste cassé");
+
+        let repair = repair_anchors(&root, false, true).expect("la réparation aboutit");
+
+        assert_eq!(repair.reposees, vec!["routes".to_string()]);
+    }
+
     /// La seule promesse de `--dry-run` est que le projet ne bouge pas : elle se vérifie
     /// à l'octet près, et la même commande sans le flag prouve que le test n'est pas
     /// vide de sens.
@@ -888,6 +982,36 @@ mod tests {
         assert!(
             !ecarts(&avant, &empreinte(&root)).is_empty(),
             "sans `--dry-run`, la feature n'a rien posé : le test ne prouve rien"
+        );
+    }
+
+    /// Une URL que rien ne décompose fait refuser l'installation : ses identifiants
+    /// tombaient à vide, et le `.env` recevait un `POSTGRES_USER=` que Compose remplace
+    /// par rien. Le refus tombe avant la première écriture, ce qui se vérifie à l'octet
+    /// près.
+    #[test]
+    fn add_refuses_an_undecomposable_url_without_writing_anything() {
+        const FAUTIVE: &str = "postgres://rbs:mot/de/passe@localhost:5432/demo_api";
+
+        let (_parent, root) = projet();
+        let env = root.join(".env");
+        let source = fs::read_to_string(&env).expect("le .env est lisible");
+        let reecrit = source.replace("postgres://rbs:rbs@localhost:5432/demo_api", FAUTIVE);
+        assert_ne!(source, reecrit, "l'URL attendue n'a pas été trouvée");
+        fs::write(&env, reecrit).expect("le .env est réécrivable");
+        let avant = empreinte(&root);
+
+        let refus = add_in(root.clone(), "docker".to_string(), false, false, None)
+            .expect_err("une URL que rien ne décompose doit être refusée");
+
+        assert!(
+            refus.to_string().contains("RBS_DATABASE__URL"),
+            "le refus doit nommer la variable : {refus}"
+        );
+        assert_eq!(
+            ecarts(&avant, &empreinte(&root)),
+            Vec::<PathBuf>::new(),
+            "le refus a tout de même écrit dans le projet"
         );
     }
 
@@ -931,6 +1055,26 @@ mod tests {
                 "`{feature}` s'installe sans dire ce qu'il reste à faire"
             );
         }
+    }
+
+    /// Le fragment n'est branché sur aucune route : installé et jamais appelé, il
+    /// paraîtrait cassé. Le conseil est le seul endroit où le geste se dit.
+    #[test]
+    fn the_audit_fragment_advises_the_migration_and_the_call_site() {
+        let conseil = suite("audit").expect("le fragment pose une table : il doit conseiller");
+
+        assert!(conseil.contains("rbs migrate up"), "{conseil}");
+        assert!(conseil.contains("audit::record"), "{conseil}");
+    }
+
+    #[test]
+    fn the_scheduler_fragment_advises_the_migration_and_the_declaration_site() {
+        let conseil = suite("scheduler").expect("le fragment pose une table : il doit conseiller");
+
+        assert!(conseil.contains("rbs migrate up"), "{conseil}");
+        // La liste livrée ne contient qu'une échéance d'exemple : sans ce rappel, le
+        // fragment paraît installé et ne déclenche rien de ce que le projet attend.
+        assert!(conseil.contains("src/scheduler/mod.rs"), "{conseil}");
     }
 
     /// `rbs new --with auth` pose la feature mais avalait le conseil qu'`add auth` aurait

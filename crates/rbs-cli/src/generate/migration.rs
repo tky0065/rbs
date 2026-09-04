@@ -50,6 +50,93 @@ mod tests {
         render(&Feature::fresh(name, fields), HORODATAGE).expect("la migration doit se rendre")
     }
 
+    /// Le rendu débarrassé de ses blancs.
+    ///
+    /// Une colonne dont les arguments franchissent les soixante colonnes de
+    /// `fn_call_width` est écrite éclatée : ce qui s'y vérifie est la projection du type
+    /// sur sa méthode, et non la ligne où elle tombe.
+    fn sans_blancs(rendu: &str) -> String {
+        rendu.split_whitespace().collect()
+    }
+
+    /// Deux régimes se croisent dans ce fichier, tous deux régis par les soixante colonnes
+    /// de `fn_call_width` : la colonne `Id`, que rustfmt compacte tant que ses arguments
+    /// tiennent, et les colonnes de champs, qu'il éclate dès qu'elles débordent. Le gabarit
+    /// écrivait chacune dans un seul de ces deux régimes.
+    ///
+    /// `CreatedAt` et `UpdatedAt` n'y figurent pas : leurs arguments valent quatre-vingt-dix-
+    /// neuf caractères de plus que l'iden, donc elles restent éclatées à toute longueur.
+    #[test]
+    fn the_render_is_already_what_rustfmt_would_write() {
+        let divergentes =
+            bench::longueurs_divergentes(|name| migration(name, "title:string,views:int").content);
+
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu de la migration diverge de rustfmt à ces longueurs de nom"
+        );
+
+        // Sous suppression logique, `manager.create_index(uq_<table>_<field>).await?`
+        // dépend de la table ET du champ : les deux se combinent dans l'identifiant, si
+        // bien qu'une table au nom ordinaire peut déjà franchir la largeur de chaîne que
+        // les autres colonnes n'atteignent qu'à un nom d'iden démesuré.
+        let divergentes_soft_delete = bench::longueurs_divergentes(|name| {
+            render(
+                &Feature::fresh(name, fields::parse("title:string:unique").expect("champs"))
+                    .soft_deleting(),
+                HORODATAGE,
+            )
+            .expect("la migration doit se rendre")
+            .content
+        });
+
+        assert_eq!(
+            divergentes_soft_delete,
+            Vec::<usize>::new(),
+            "le rendu sous soft-delete diverge de rustfmt à ces longueurs de nom"
+        );
+
+        // Les deux balayages ci-dessus figent le champ à `title`, cinq caractères : aucune
+        // des gardes qui combinent la table et le champ n'y est jamais atteinte, et une
+        // garde manquante y passerait au vert. Ceux-ci fixent une table déjà longue et font
+        // varier le champ, si bien que leur somme franchit chacun des seuils du gabarit :
+        // la tête `ColumnDef::new(iden::Champ)`, la déclaration de l'index unique, le nom
+        // qu'elle porte, et l'appel qui la crée.
+        let table_longue = "a".repeat(33) + "e";
+
+        let divergentes_champ = bench::longueurs_divergentes(|champ| {
+            render(
+                &Feature::fresh(
+                    &table_longue,
+                    fields::parse(&format!("{champ}:string:unique")).expect("champs"),
+                )
+                .soft_deleting(),
+                HORODATAGE,
+            )
+            .expect("la migration doit se rendre")
+            .content
+        });
+
+        assert_eq!(
+            divergentes_champ,
+            Vec::<usize>::new(),
+            "le rendu sous soft-delete diverge de rustfmt à ces longueurs de champ"
+        );
+
+        // La tête de colonne est commune aux deux régimes : sans le drapeau, elle déborde
+        // à la même somme, et le témoin le dit.
+        let divergentes_champ_ordinaire = bench::longueurs_divergentes(|champ| {
+            migration(&table_longue, &format!("{champ}:string:unique")).content
+        });
+
+        assert_eq!(
+            divergentes_champ_ordinaire,
+            Vec::<usize>::new(),
+            "le rendu ordinaire diverge de rustfmt à ces longueurs de champ"
+        );
+    }
+
     fn users_entity() -> Vec<crate::generate::entities::Entity> {
         vec![crate::generate::entities::Entity {
             table: "users".to_string(),
@@ -115,6 +202,8 @@ mod tests {
         )
         .content;
 
+        let compact = sans_blancs(&rendered);
+
         for expected in [
             "ColumnDef::new(Samples::Title).string()",
             "ColumnDef::new(Samples::Quantity).integer()",
@@ -125,7 +214,7 @@ mod tests {
             "ColumnDef::new(Samples::Body).text()",
         ] {
             assert!(
-                rendered.contains(expected),
+                compact.contains(expected),
                 "« {expected} » absent de :\n{rendered}"
             );
         }
@@ -156,7 +245,8 @@ mod tests {
         let rendered = migration("users", "email:string:unique").content;
 
         assert!(
-            rendered.contains("ColumnDef::new(Users::Email).string().not_null().unique_key()"),
+            sans_blancs(&rendered)
+                .contains("ColumnDef::new(Users::Email).string().not_null().unique_key()"),
             "contrainte d'unicité absente :\n{rendered}"
         );
     }
@@ -447,18 +537,114 @@ async fn la_migration_monte_insere_et_redescend() {
         project.compile();
     }
 
-    /// Rendu complet imprimé pour la revue de lecture qu'exige le lot.
     #[test]
-    #[ignore = "affichage pour revue humaine"]
-    fn preview() {
-        println!(
-            "{}",
-            migration(
-                "articles",
-                "title:string,slug:string:unique,summary:text:optional,views:int,\
-                 published_at:datetime,auteur:uuid:index"
-            )
-            .content
+    fn soft_delete_creates_the_column_and_its_index() {
+        let feature = Feature::fresh("articles", fields::parse("title:string").expect("champs"))
+            .soft_deleting();
+        let rendered = render(&feature, "20260902_000000")
+            .expect("la migration doit se rendre")
+            .content;
+
+        assert!(
+            rendered.contains("ColumnDef::new(Articles::DeletedAt)"),
+            "la colonne manque :\n{rendered}"
         );
+        assert!(
+            rendered.contains("idx_articles_deleted_at"),
+            "toute lecture filtre sur cette colonne, elle doit être indexée :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("    DeletedAt,"),
+            "l'enum DeriveIden doit porter la variante :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn the_unique_constraint_moves_to_a_partial_index() {
+        let feature = Feature::fresh(
+            "articles",
+            fields::parse("title:string:unique").expect("champs"),
+        )
+        .soft_deleting();
+        let rendered = render(&feature, "20260902_000000")
+            .expect("la migration doit se rendre")
+            .content;
+
+        assert!(
+            !rendered.contains(".unique_key()"),
+            "la contrainte de colonne serait inconditionnelle, l'index partiel n'y \
+             changerait rien :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("uq_articles_title") && rendered.contains("Articles::DeletedAt)"),
+            "l'unicité doit passer par un index restreint aux lignes vivantes :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn mysql_keeps_a_global_uniqueness() {
+        let feature = Feature::fresh(
+            "articles",
+            fields::parse("title:string:unique").expect("champs"),
+        )
+        .soft_deleting();
+        let rendered = render(&feature, "20260902_000000")
+            .expect("la migration doit se rendre")
+            .content;
+
+        assert!(
+            rendered.contains("sea_orm::DbBackend::MySql"),
+            "MySQL n'a pas d'index partiel : la migration doit brancher, faute de quoi \
+             elle ne s'y applique pas du tout :\n{rendered}"
+        );
+    }
+
+    /// Le drapeau et les relations ne s'étaient jamais rencontrés, et leur rencontre n'est
+    /// pas neutre : la clé étrangère garde son `ON DELETE`, qu'une suppression logique ne
+    /// déclenche jamais — la ligne n'est pas retirée, le moteur n'a rien à quoi réagir.
+    ///
+    /// Le rendu doit donc porter les deux sans que l'un efface l'autre. Ce que le test ne
+    /// dit pas, et que la documentation dit à sa place : ce que devient un enfant dont le
+    /// parent est supprimé logiquement reste à la charge de l'appelant.
+    #[test]
+    fn a_reference_keeps_its_foreign_key_under_soft_delete() {
+        let mut parsed =
+            fields::parse("title:string,author:references:users").expect("champs valides");
+        crate::generate::relations::resolve(&mut parsed, &users_entity(), "posts")
+            .expect("la cible doit se résoudre");
+        let rendered = render(&Feature::fresh("posts", parsed).soft_deleting(), HORODATAGE)
+            .expect("la migration doit se rendre")
+            .content;
+
+        assert!(
+            rendered.contains("ForeignKeyAction::Restrict"),
+            "la clé étrangère garde son action, que le drapeau ne touche pas :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("fk_posts_author"),
+            "la contrainte doit rester nommée comme sans le drapeau :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("ColumnDef::new(Posts::DeletedAt)"),
+            "la colonne de suppression logique manque :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("idx_posts_deleted_at"),
+            "l'index de la colonne manque :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn an_ordinary_migration_keeps_its_unique_key() {
+        let feature = Feature::fresh(
+            "articles",
+            fields::parse("title:string:unique").expect("champs"),
+        );
+        let rendered = render(&feature, "20260902_000000")
+            .expect("la migration doit se rendre")
+            .content;
+
+        assert!(rendered.contains(".unique_key()"), "témoin :\n{rendered}");
+        assert!(!rendered.contains("deleted_at"), "témoin :\n{rendered}");
     }
 }

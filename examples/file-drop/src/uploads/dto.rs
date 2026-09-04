@@ -7,18 +7,22 @@ use super::model::Model;
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct CreateUpload {
+    #[validate(length(max = 255))]
     pub title: String,
-    #[validate(email)]
+    #[validate(email, length(max = 255))]
     pub owner_email: String,
+    #[validate(length(max = 255))]
     pub content_type: String,
     pub size: i32,
 }
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct UpdateUpload {
+    #[validate(length(max = 255))]
     pub title: Option<String>,
-    #[validate(email)]
+    #[validate(email, length(max = 255))]
     pub owner_email: Option<String>,
+    #[validate(length(max = 255))]
     pub content_type: Option<String>,
     pub size: Option<i32>,
 }

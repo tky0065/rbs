@@ -18,6 +18,7 @@ sortie de terminal ne se traduit pas.
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs generate --help" */}
 ```text
 $ rbs generate --help
 Génère une feature dans un projet existant
@@ -43,6 +44,7 @@ un est une erreur de clap plutôt qu'un flag pris puis ignoré.
 
 ## `rbs generate crud`
 
+{/* rbs:transcript cmd="rbs generate crud --help" */}
 ```text
 $ rbs generate crud --help
 Génère une feature CRUD complète, entité et migration comprises
@@ -57,7 +59,9 @@ Options:
       --force              Écrit même si le working tree Git est sale
       --dry-run            Affiche le plan sans rien écrire
       --has-many <ENTITE>  Entité enfant dont ce modèle doit porter la variante inverse, répétable
-      --role <ROLE>        Réserve create, update et delete à ce rôle ; exige la feature auth
+      --role <ROLE>        Réserve les écritures à ce rôle ; exige la feature auth
+      --soft-delete        Rend le DELETE logique : la ligne reste, marquée d'une date de suppression
+      --with-upload        Ajoute trois routes de contenu binaire ; exige la feature storage
   -h, --help               Print help
   -V, --version            Print version
 ```
@@ -68,10 +72,13 @@ Options:
 | `--force` | Écrit même si le working tree Git est sale, et écrase les fichiers signalés en conflit. |
 | `--dry-run` | Affiche le plan et s'arrête. Rien n'est écrit. |
 | `--has-many <ENTITE>` | Répare le côté lointain d'une relation : écrit dans le modèle d'une feature déjà générée la variante `has_many` qui vise l'enfant nommé, et rien d'autre. Répétable. [Le guide des relations](../guides/relations.md) dit quand c'est nécessaire. |
-| `--role <ROLE>` | Réserve `create`, `update` et `delete` à ce rôle : elles prennent une `Identity` et appellent `require_role`, tandis que `list` et `find` restent ouvertes. Exige la feature [`auth`](../guides/auth.md), et un rôle que son enum `Role` déclare — les deux sont vérifiés avant toute écriture. |
+| `--role <ROLE>` | Réserve les écritures à ce rôle — `create`, `update`, `delete`, et le `PUT` de la route de contenu quand `--with-upload` l'accompagne : elles prennent une `Identity` et appellent `require_role`. Les lectures restent ouvertes : `list`, `find`, `filter`, et les `GET` et `HEAD` de la route de contenu. Exige la feature [`auth`](../guides/auth.md), et un rôle que son enum `Role` déclare — les deux sont vérifiés avant toute écriture. |
+| `--soft-delete` | Rend `DELETE` logique plutôt que de retirer la ligne. Le contrat HTTP ne change pas, et la contrainte d'un champ `unique` se restreint aux lignes vivantes — sur MySQL elle reste globale, si bien qu'une valeur supprimée y reste réservée. [Le guide des migrations](../guides/migrations.md#suppression-logique) a le reste. |
+| `--with-upload` | Monte trois routes sur `/<ressource>/{id}/content` — `PUT`, `GET`, `HEAD` — contre le trait du fragment `storage`. Exige la feature [`storage`](../guides/storage.md), vérifiée avant toute écriture. Avec `--role`, le `PUT` est gardé comme les autres écritures ; avec `--soft-delete`, le contenu survit à la ligne que le `DELETE` se contente d'estampiller. [Le guide du stockage](../guides/storage.md#les-routes-de-contenu-engendrées) a les deux. |
 
 ## `rbs generate feature`
 
+{/* rbs:transcript cmd="rbs generate feature --help" */}
 ```text
 $ rbs generate feature --help
 Génère une feature vide : six fichiers, aucun champ
@@ -139,13 +146,14 @@ de celles qu'il connaît. Ce qu'une référence écrit des deux côtés de la re
 modificateurs propres et la forme de ses refus relèvent de
 [Relations](../guides/relations.md), pas de cette page.
 
-### Les cinq modificateurs
+### Les six modificateurs
 
 | Modificateur | Effet |
 |---|---|
 | `unique` | Contrainte d'unicité sur la colonne — sur une référence, c'est ce qui rend la relation un-à-un. |
 | `optional` | La colonne devient nullable et le type Rust devient `Option<T>`. |
 | `index` | Index simple sur la colonne. |
+| `max=<n>` | Réservé aux champs textuels. Borne de longueur dans les DTO générés, en surcharge du défaut. |
 | `cascade` | Réservé aux références. `ON DELETE CASCADE`. |
 | `nullify` | Réservé aux références. `ON DELETE SET NULL` — exige `optional`. |
 
@@ -179,6 +187,26 @@ faux :
 Un champ nommé `email`, ou finissant par `_email`, et typé `string` ou `text` reçoit une
 contrainte d'email dans les DTO générés. Elle se déduit du nom, seule information dont on
 dispose.
+
+### La borne de longueur
+
+Un champ `string` est borné à 255 caractères dans les DTO générés, sans qu'on le demande :
+`#[validate(length(max = 255))]`. Rien d'autre ne le borne — `ColumnDef::string()` rend un
+`varchar` sans longueur sur PostgreSQL — si bien que sans cette ligne chaque route publique
+d'un projet engendré accepte une chaîne de longueur arbitraire. La valeur est celle du
+`varchar(255)` traditionnel, assez large pour un nom, un titre ou une adresse.
+
+`text` est le type qu'on choisit *pour* dépasser cette borne : il n'en reçoit donc aucune
+par défaut. `max=<n>` pose une borne sur l'un comme sur l'autre, ou élargit et resserre
+celle du défaut :
+
+```bash
+rbs generate crud articles --fields "titre:string:max=200,resume:text:max=5000"
+```
+
+`max=` borne une longueur de texte et est refusé sur tout autre type ; `<n>` est un entier
+strictement positif. Une contrainte écrite à la main dans le DTO engendré survit, comme
+toute autre retouche : ce code est fait pour être modifié.
 
 ### Les erreurs
 
@@ -365,7 +393,7 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) contrôle les onze ancres — dix sur un projet sans compose pour
+[`rbs doctor`](./doctor.md) contrôle les douze ancres — onze sur un projet sans compose pour
 en porter une dixième : une ancre disparue se trouve donc
 avant qu'une génération ne bute dessus.
 

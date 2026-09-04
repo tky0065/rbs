@@ -40,12 +40,14 @@ impl PrettyFormat {
         }
     }
 
-    fn paint(&self, style: Style, text: &str) -> String {
-        if self.ansi {
-            style.paint(text).to_string()
-        } else {
-            text.to_owned()
-        }
+    /// Le style à appliquer, neutre quand la couleur est coupée.
+    ///
+    /// Rendre le style plutôt que le texte peint évite d'allouer : `prefix` et `suffix`
+    /// sont des `Display` qui écrivent directement dans le flux, et n'écrivent rien du
+    /// tout pour un style vide. Le formateur est traversé à chaque événement tracé,
+    /// c'est-à-dire à chaque requête servie.
+    fn style(&self, style: Style) -> Style {
+        if self.ansi { style } else { Style::new() }
     }
 
     fn level_style(level: &Level) -> Style {
@@ -80,14 +82,25 @@ where
 
         self.horodatage.format_time(&mut writer)?;
 
-        // La couleur est appliquée après l'alignement : les séquences ANSI comptent
-        // dans la largeur demandée à `format!` et décaleraient les colonnes.
-        let level = format!("{:<LARGEUR_NIVEAU$}", metadata.level().as_str());
-        let style = Self::level_style(metadata.level());
-        write!(writer, "  {}", self.paint(style, &level))?;
+        // Les séquences ANSI encadrent le champ déjà aligné : à l'intérieur, elles
+        // compteraient dans la largeur demandée et décaleraient les colonnes.
+        let niveau = self.style(Self::level_style(metadata.level()));
+        write!(
+            writer,
+            "  {}{:<LARGEUR_NIVEAU$}{}",
+            niveau.prefix(),
+            metadata.level().as_str(),
+            niveau.suffix()
+        )?;
 
-        let target = format!("{:<LARGEUR_CIBLE$}", metadata.target());
-        write!(writer, "  {}", self.paint(Style::new().dimmed(), &target))?;
+        let cible = self.style(Style::new().dimmed());
+        write!(
+            writer,
+            "  {}{:<LARGEUR_CIBLE$}{}",
+            cible.prefix(),
+            metadata.target(),
+            cible.suffix()
+        )?;
 
         let mut visiteur = ChampsEvenement::default();
         event.record(&mut visiteur);
@@ -96,9 +109,20 @@ where
         // Les champs des spans parents suivent ceux de l'événement : sans eux, le
         // `request_id` que le middleware attache au span ne serait jamais journalisé.
         // Ils arrivent déjà peints par l'implémentation de `FormatFields` ci-dessous.
-        let mut fields = Vec::new();
+        //
+        // Ils sont écrits à la file plutôt que rassemblés : le `Vec` que cela demandait
+        // clonait chaque bloc de champs pour le rejoindre aussitôt.
+        let mut separateur = "  ";
         if !visiteur.fields.is_empty() {
-            fields.push(self.paint(Style::new().dimmed(), &visiteur.fields));
+            let champs = self.style(Style::new().dimmed());
+            write!(
+                writer,
+                "{separateur}{}{}{}",
+                champs.prefix(),
+                visiteur.fields,
+                champs.suffix()
+            )?;
+            separateur = " ";
         }
         if let Some(portee) = ctx.event_scope() {
             for span in portee {
@@ -107,13 +131,10 @@ where
                     continue;
                 };
                 if !formates.fields.is_empty() {
-                    fields.push(formates.fields.clone());
+                    write!(writer, "{separateur}{}", formates.fields)?;
+                    separateur = " ";
                 }
             }
-        }
-
-        if !fields.is_empty() {
-            write!(writer, "  {}", fields.join(" "))?;
         }
 
         writeln!(writer)
@@ -132,10 +153,13 @@ impl<'writer> FormatFields<'writer> for PrettyFormat {
         if visiteur.fields.is_empty() {
             return Ok(());
         }
+        let champs = self.style(Style::new().dimmed());
         write!(
             writer,
-            "{}",
-            self.paint(Style::new().dimmed(), &visiteur.fields)
+            "{}{}{}",
+            champs.prefix(),
+            visiteur.fields,
+            champs.suffix()
         )
     }
 }
@@ -224,6 +248,44 @@ mod tests {
             "ordre inattendu : {output:?}"
         );
         assert!(output.contains("max=20"), "champ manquant : {output:?}");
+    }
+
+    /// La ligne colorée, figée octet à octet.
+    ///
+    /// C'est ce que la suppression des allocations intermédiaires ne doit pas changer :
+    /// les séquences ANSI encadrent le champ *déjà* aligné, faute de quoi elles
+    /// compteraient dans la largeur et décaleraient les colonnes.
+    #[test]
+    fn the_coloured_line_frames_each_column_around_its_padding() {
+        let output = render(PrettyFormat::with_ansi(true), || tracing::info!("bonjour"));
+
+        assert!(
+            output.contains("\u{1b}[32mINFO \u{1b}[0m"),
+            "le niveau doit être peint padding compris : {output:?}"
+        );
+        assert!(
+            output.contains("\u{1b}[2mrbs_core::logs::pretty::tests\u{1b}[0m"),
+            "la cible doit être peinte, sa largeur dépassée sans être tronquée : {output:?}"
+        );
+        assert!(
+            output.contains("\u{1b}[0m  bonjour\n"),
+            "le message suit la cible, séparé de deux espaces : {output:?}"
+        );
+    }
+
+    /// Les champs sont écrits à la file : deux espaces avant le premier, un entre chacun.
+    #[test]
+    fn the_fields_are_separated_by_a_single_space_after_a_double_one() {
+        let output = render(PrettyFormat::with_ansi(false), || {
+            let span = tracing::info_span!("requete", request_id = "01JQ3F8K2P");
+            let _input = span.enter();
+            tracing::info!(status = 200, "bonjour");
+        });
+
+        assert!(
+            output.contains("bonjour  status=200 request_id=01JQ3F8K2P"),
+            "espacement des champs inattendu : {output:?}"
+        );
     }
 
     #[test]

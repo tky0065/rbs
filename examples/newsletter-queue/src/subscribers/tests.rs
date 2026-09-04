@@ -8,6 +8,10 @@ use uuid::Uuid;
 use crate::router::router;
 use crate::state::AppState;
 
+// Les tests de ce fichier joignent la base que décrit `.env`, et sont donc `#[ignore]` :
+// `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre la base du
+// projet, migrations appliquées.
+
 /// Monte l'application sur la base décrite par `.env`, sans écouter sur le réseau.
 ///
 /// Les migrations sont supposées appliquées : elles précèdent `cargo test`.
@@ -85,6 +89,7 @@ fn modification() -> Value {
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn the_full_lifecycle_goes_through_the_api() {
     let api = application().await;
     let collection = "/subscribers";
@@ -145,6 +150,12 @@ async fn the_full_lifecycle_goes_through_the_api() {
 
     let (status, _) = call(&api, without_body("GET", &resource)).await;
     assert_eq!(status, StatusCode::NOT_FOUND, "elle répond encore");
+
+    // Une seconde suppression ne trouve plus rien à supprimer. L'assertion vaut des deux
+    // côtés de `--soft-delete` : c'est elle qui attrape une suppression logique dont la
+    // condition de garde manquerait, et qui rendrait alors 204 indéfiniment.
+    let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "elle se supprime deux fois");
 }
 
 /// Deux créations à la suite portent des identifiants croissants.
@@ -153,6 +164,7 @@ async fn the_full_lifecycle_goes_through_the_api() {
 /// l'`id` pour rendre le plus récent en tête. Un test qui se contenterait de constater
 /// la présence d'un UUID laisserait passer la régression.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn two_creations_in_a_row_carry_increasing_ids() {
     let api = application().await;
     let collection = "/subscribers";
@@ -189,6 +201,7 @@ async fn two_creations_in_a_row_carry_increasing_ids() {
 /// C'est le chemin qu'ouvre `ValidatedJson` : il désérialise, puis valide, et le refus
 /// nomme le champ fautif.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_invalid_email_returns_422() {
     let api = application().await;
     let mut sent = creation();
@@ -204,10 +217,61 @@ async fn an_invalid_email_returns_422() {
     );
 }
 
+/// La route de filtrage retient la ligne qui satisfait son propre critère.
+///
+/// Le rendu du filtre ne prouve rien : une condition mal traduite rend une page vide, et
+/// seule une requête jouée contre la base le montre.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn the_filter_narrows_the_list() {
+    let api = application().await;
+    let collection = "/subscribers";
+    let sent = creation();
+
+    let (status, created) = call(&api, request("POST", collection, sent.clone())).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {created}");
+
+    let critere = json!({ "email": sent["email"] });
+    let chemin = format!("{collection}/filter");
+    let (status, page) = call(&api, request("POST", &chemin, critere)).await;
+    assert_eq!(status, StatusCode::OK, "filtre refusé : {page}");
+
+    let ids: Vec<&str> = page["data"]
+        .as_array()
+        .expect("la liste rend un tableau")
+        .iter()
+        .map(|ligne| ligne["id"].as_str().expect("identifiant rendu"))
+        .collect();
+
+    let id = created["id"].as_str().expect("identifiant rendu");
+    assert!(
+        ids.contains(&id),
+        "la ligne créée doit satisfaire son propre critère : {page}"
+    );
+
+    let resource = format!("{collection}/{id}");
+    let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
+}
+
+/// Une colonne de tri inconnue est une faute du client, et le refus la nomme.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_unknown_sort_column_returns_400() {
+    let api = application().await;
+    let critere = json!({ "sort": ["-inconnue"] });
+
+    let (status, body) = call(&api, request("POST", "/subscribers/filter", critere)).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["status"], 400, "{body}");
+}
+
 /// Une valeur déjà prise sur une colonne `unique` est une faute du client, pas une panne.
 ///
 /// Sans la traduction que pose le repository, le doublon remonterait en 500.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn a_replayed_unique_value_returns_409() {
     let api = application().await;
     let collection = "/subscribers";
@@ -228,6 +292,7 @@ async fn a_replayed_unique_value_returns_409() {
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_unknown_id_returns_404() {
     let api = application().await;
     let inconnu = Uuid::new_v4();
@@ -240,6 +305,7 @@ async fn an_unknown_id_returns_404() {
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_unreadable_body_returns_400() {
     let api = application().await;
     let truncated = Request::builder()

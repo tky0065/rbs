@@ -9,6 +9,10 @@ use crate::router::router;
 use crate::state::AppState;
 
 // region: harnais
+// Les tests de ce fichier joignent la base que décrit `.env`, et sont donc `#[ignore]` :
+// `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre la base du
+// projet, migrations appliquées.
+
 /// Monte l'application sur la base décrite par `.env`, sans écouter sur le réseau.
 ///
 /// Les migrations sont supposées appliquées : elles précèdent `cargo test`.
@@ -20,7 +24,6 @@ async fn application() -> Router {
 
     router(AppState::new(db, config).expect("état partagé constructible"))
 }
-// endregion: harnais
 
 /// Fait traverser le routeur à `request`, et rend son statut avec son corps.
 async fn call(api: &Router, request: Request<Body>) -> (StatusCode, Value) {
@@ -56,6 +59,7 @@ fn without_body(method: &str, path: &str) -> Request<Body> {
         .body(Body::empty())
         .expect("requête bien formée")
 }
+// endregion: harnais
 
 /// Compare à la réponse la valeur envoyée pour `champ`.
 fn compare(rendered: &Value, sent: &Value, champ: &str) {
@@ -88,6 +92,7 @@ fn modification() -> Value {
 
 // region: cycle_de_vie
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn the_full_lifecycle_goes_through_the_api() {
     let api = application().await;
     let collection = "/articles";
@@ -148,6 +153,12 @@ async fn the_full_lifecycle_goes_through_the_api() {
 
     let (status, _) = call(&api, without_body("GET", &resource)).await;
     assert_eq!(status, StatusCode::NOT_FOUND, "elle répond encore");
+
+    // Une seconde suppression ne trouve plus rien à supprimer. L'assertion vaut des deux
+    // côtés de `--soft-delete` : c'est elle qui attrape une suppression logique dont la
+    // condition de garde manquerait, et qui rendrait alors 204 indéfiniment.
+    let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "elle se supprime deux fois");
 }
 // endregion: cycle_de_vie
 
@@ -157,6 +168,7 @@ async fn the_full_lifecycle_goes_through_the_api() {
 /// l'`id` pour rendre le plus récent en tête. Un test qui se contenterait de constater
 /// la présence d'un UUID laisserait passer la régression.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn two_creations_in_a_row_carry_increasing_ids() {
     let api = application().await;
     let collection = "/articles";
@@ -188,8 +200,59 @@ async fn two_creations_in_a_row_carry_increasing_ids() {
     assert!(second > premier, "{second} ne suit pas {premier}");
 }
 
+/// La route de filtrage retient la ligne qui satisfait son propre critère.
+///
+/// Le rendu du filtre ne prouve rien : une condition mal traduite rend une page vide, et
+/// seule une requête jouée contre la base le montre.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn the_filter_narrows_the_list() {
+    let api = application().await;
+    let collection = "/articles";
+    let sent = creation();
+
+    let (status, created) = call(&api, request("POST", collection, sent.clone())).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {created}");
+
+    let critere = json!({ "title": sent["title"] });
+    let chemin = format!("{collection}/filter");
+    let (status, page) = call(&api, request("POST", &chemin, critere)).await;
+    assert_eq!(status, StatusCode::OK, "filtre refusé : {page}");
+
+    let ids: Vec<&str> = page["data"]
+        .as_array()
+        .expect("la liste rend un tableau")
+        .iter()
+        .map(|ligne| ligne["id"].as_str().expect("identifiant rendu"))
+        .collect();
+
+    let id = created["id"].as_str().expect("identifiant rendu");
+    assert!(
+        ids.contains(&id),
+        "la ligne créée doit satisfaire son propre critère : {page}"
+    );
+
+    let resource = format!("{collection}/{id}");
+    let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
+}
+
+/// Une colonne de tri inconnue est une faute du client, et le refus la nomme.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_unknown_sort_column_returns_400() {
+    let api = application().await;
+    let critere = json!({ "sort": ["-inconnue"] });
+
+    let (status, body) = call(&api, request("POST", "/articles/filter", critere)).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["status"], 400, "{body}");
+}
+
 // region: erreur_404
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_unknown_id_returns_404() {
     let api = application().await;
     let inconnu = Uuid::new_v4();
@@ -204,6 +267,7 @@ async fn an_unknown_id_returns_404() {
 
 // region: corps_illisible
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_unreadable_body_returns_400() {
     let api = application().await;
     let truncated = Request::builder()

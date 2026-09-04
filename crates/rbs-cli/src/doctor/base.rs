@@ -9,10 +9,13 @@ use std::net::{TcpStream, ToSocketAddrs};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
+use toml_edit::DocumentMut;
+
 use crate::database::Database;
+use crate::metadata;
 use crate::migrate;
 
-use super::Check;
+use super::{Check, Manifeste};
 
 /// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
 pub(crate) const TITRE: &str = "base";
@@ -29,7 +32,7 @@ const ANNONCE: &str =
     "compilation de la crate migration, peut prendre\nune minute au premier lancement…";
 
 /// Vérifie que la base répond et qu'elle est assez récente.
-pub(crate) fn check(root: &Path, annonce: &mut dyn FnMut(&str)) -> Check {
+pub(crate) fn check(root: &Path, manifeste: &Manifeste, annonce: &mut dyn FnMut(&str)) -> Check {
     let variables = match migrate::project_variables(root) {
         Ok(variables) => variables,
         Err(error) => {
@@ -55,23 +58,18 @@ pub(crate) fn check(root: &Path, annonce: &mut dyn FnMut(&str)) -> Check {
         }
     };
 
+    let manifeste = match manifeste {
+        Ok(manifeste) => manifeste,
+        Err(faute) => return manifeste_fautif(faute),
+    };
+
     // Un serveur qui répond ne prouve rien quand le pilote compilé ne sait pas parler son
     // protocole : l'écart se dit avant que le port soit sondé.
-    if let Some(ecart) = ecart(root, &url) {
+    if let Some(ecart) = ecart(&manifeste.document, &url) {
         return ecart;
     }
 
-    let database = match database_of(root) {
-        Ok(database) => database,
-        Err(faute) => {
-            return Check::failed(
-                TITRE,
-                faute.to_string(),
-                "corrigez le Cargo.toml du projet : le moteur qu'il déclare commande \
-                 tout le reste du diagnostic",
-            );
-        }
-    };
+    let database = manifeste.metadonnees.database;
 
     let ou = match joignable(root, database, &url) {
         Ok(ou) => ou,
@@ -113,13 +111,26 @@ pub(crate) fn check(root: &Path, annonce: &mut dyn FnMut(&str)) -> Check {
     }
 }
 
+/// Le constat que rend une faute du manifeste, d'où qu'elle vienne.
+///
+/// Le moteur déclaré commande le plancher de version, la forme d'URL attendue et le
+/// remède : un manifeste illisible ne laisse rien à diagnostiquer de la base.
+fn manifeste_fautif(faute: &metadata::Error) -> Check {
+    Check::failed(
+        TITRE,
+        super::une_ligne(faute),
+        "corrigez le Cargo.toml du projet : le moteur qu'il déclare commande \
+         tout le reste du diagnostic",
+    )
+}
+
 /// L'écart entre le pilote que le projet compile et le moteur que son URL désigne.
 ///
 /// Les deux valeurs sont nommées plutôt que leur conclusion : c'est l'une ou l'autre que
 /// le lecteur aura à corriger, et « configuration invalide » le renverrait aux deux
 /// fichiers pour savoir laquelle.
-fn ecart(root: &Path, url: &str) -> Option<Check> {
-    let compile = pilote(root)?;
+fn ecart(document: &DocumentMut, url: &str) -> Option<Check> {
+    let compile = pilote(document)?;
     let vise = Database::TOUS
         .into_iter()
         .find(|moteur| moteur.accepte(url))?;
@@ -151,15 +162,17 @@ fn ecart(root: &Path, url: &str) -> Option<Check> {
 /// C'est elle que `sqlx` embarque, et donc le seul pilote dont le binaire disposera.
 /// `[package.metadata.rbs].database` n'en est que le suivi, qu'une édition à la main
 /// laisse derrière elle sans rien casser à la compilation.
-fn pilote(root: &Path) -> Option<Database> {
-    let source = std::fs::read_to_string(root.join("Cargo.toml")).ok()?;
-    let manifest: toml_edit::DocumentMut = source.parse().ok()?;
-
-    let features = manifest
-        .get("dependencies")?
-        .get("sea-orm")?
-        .get("features")?
-        .as_array()?;
+///
+/// Le document est celui que le diagnostic a analysé une fois pour tous : un manifeste
+/// illisible n'arrive pas jusqu'ici, sa faute étant portée par le manifeste que chaque
+/// contrôle reçoit. `None` ne dit donc plus qu'une chose — aucune feature de moteur
+/// déclarée —, et ce n'est pas une faute.
+fn pilote(document: &DocumentMut) -> Option<Database> {
+    let features = document
+        .get("dependencies")
+        .and_then(|dependencies| dependencies.get("sea-orm"))
+        .and_then(|sea_orm| sea_orm.get("features"))
+        .and_then(|features| features.as_array())?;
 
     features
         .iter()
@@ -169,15 +182,6 @@ fn pilote(root: &Path) -> Option<Database> {
                 .into_iter()
                 .find(|moteur| moteur.sea_orm_feature() == feature)
         })
-}
-
-/// Moteur que le manifeste déclare.
-///
-/// Un manifeste illisible ne se remplace pas par le moteur par défaut : le plancher de
-/// version, la forme d'URL attendue et le remède en découlent tous, et un projet MySQL
-/// recevrait alors un diagnostic PostgreSQL qui ne dit rien de sa panne.
-fn database_of(root: &Path) -> Result<Database, crate::metadata::Error> {
-    crate::metadata::read(&root.join("Cargo.toml")).map(|metadata| metadata.database)
 }
 
 /// Dit où la base se trouve, ou pourquoi on ne l'atteint pas.
@@ -356,6 +360,14 @@ mod tests {
             .create()
     }
 
+    /// Le contrôle, sur le manifeste que le projet porte à l'instant de l'appel.
+    ///
+    /// Il se relit ici et non une fois pour toutes : plusieurs tests le réécrivent entre
+    /// la création du projet et le diagnostic.
+    fn check(root: &Path) -> Check {
+        super::check(root, &super::super::manifeste(root), &mut |_: &str| {})
+    }
+
     #[test]
     fn the_host_and_the_port_read_from_the_url() {
         assert_eq!(
@@ -468,11 +480,29 @@ mod tests {
         .expect("écriture du .env");
     }
 
+    /// Le manifeste du projet, analysé — celui que le diagnostic remet aux contrôles.
+    fn document(root: &Path) -> DocumentMut {
+        super::super::manifeste(root)
+            .expect("le manifeste du squelette est lisible")
+            .document
+    }
+
     #[test]
     fn the_compiled_driver_is_read_from_the_sea_orm_feature() {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
 
-        assert_eq!(pilote(&root), Some(Database::Postgres));
+        assert_eq!(pilote(&document(&root)), Some(Database::Postgres));
+    }
+
+    /// Un manifeste lisible qui ne déclare pas de pilote n'est pas une faute : il n'y a
+    /// alors rien à comparer à l'URL, et rien à dire au rapport.
+    #[test]
+    fn a_manifest_without_a_driver_is_not_a_fault() {
+        let manifeste: DocumentMut = "[package]\nname = \"demo-api\"\n"
+            .parse()
+            .expect("le manifeste reste du TOML valide");
+
+        assert_eq!(pilote(&manifeste), None);
     }
 
     #[test]
@@ -480,7 +510,7 @@ mod tests {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
         viser(&root, "mysql://root:root@127.0.0.1:1/demo");
 
-        let check = check(&root, &mut |_: &str| {});
+        let check = check(&root);
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(check.detail.contains("sqlx-postgres"), "{}", check.detail);
@@ -493,9 +523,7 @@ mod tests {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
         viser(&root, "mysql://root:root@127.0.0.1:1/demo");
 
-        let remedy = check(&root, &mut |_: &str| {})
-            .remedy
-            .expect("un échec porte son remède");
+        let remedy = check(&root).remedy.expect("un échec porte son remède");
 
         assert!(remedy.contains("sqlx-mysql"), "{remedy}");
         assert!(remedy.contains("postgres://"), "{remedy}");
@@ -506,7 +534,7 @@ mod tests {
     fn a_url_matching_the_driver_raises_no_gap() {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
 
-        assert!(ecart(&root, "postgresql://rbs@127.0.0.1:1/demo").is_none());
+        assert!(ecart(&document(&root), "postgresql://rbs@127.0.0.1:1/demo").is_none());
     }
 
     #[test]
@@ -514,7 +542,7 @@ mod tests {
         // Port 1 : réservé, rien n'y écoute — le refus est immédiat et déterministe.
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
 
-        let check = check(&root, &mut |_: &str| {});
+        let check = check(&root);
 
         assert_eq!(check.state, State::Echec);
         assert!(check.detail.contains("127.0.0.1:1"));
@@ -527,9 +555,7 @@ mod tests {
     fn the_remedy_names_the_project_compose_when_it_has_one() {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
 
-        let remedy = check(&root, &mut |_: &str| {})
-            .remedy
-            .expect("un échec porte son remède");
+        let remedy = check(&root).remedy.expect("un échec porte son remède");
 
         assert!(remedy.contains("docker compose up -d"), "{remedy}");
     }
@@ -541,9 +567,7 @@ mod tests {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
         std::fs::remove_file(root.join("docker-compose.yml")).expect("le compose doit exister");
 
-        let remedy = check(&root, &mut |_: &str| {})
-            .remedy
-            .expect("un échec porte son remède");
+        let remedy = check(&root).remedy.expect("un échec porte son remède");
 
         assert!(!remedy.contains("docker compose"), "{remedy}");
         assert!(remedy.contains("démarrez"), "{remedy}");
@@ -557,10 +581,11 @@ mod tests {
         std::fs::write(root.join("Cargo.toml"), "[package\nname = \"demo-api\"\n")
             .expect("manifeste cassé");
 
-        let check = check(&root, &mut |_: &str| {});
+        let check = check(&root);
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(check.detail.contains("Cargo.toml"), "{}", check.detail);
+        assert!(check.detail.contains("TOML valide"), "{}", check.detail);
         assert!(check.remedy.is_some());
     }
 
@@ -569,7 +594,7 @@ mod tests {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
         std::fs::write(root.join(".env"), "RBS_ENV=development\n").expect("écriture du .env");
 
-        let check = check(&root, &mut |_: &str| {});
+        let check = check(&root);
 
         assert_eq!(check.state, State::Echec);
         assert!(check.detail.contains(migrate::URL));

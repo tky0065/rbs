@@ -96,16 +96,17 @@ nor port.
 
 ## Creating a project
 
+{/* rbs:transcript cmd="rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes" */}
 ```text
 $ rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes
-✓ blog créé — 19 fichiers
+✓ blog créé — 20 fichiers
 
   cd blog
   docker compose up -d   # la base du .env, montée
   cargo run              # ou `rbs dev`, qui enchaîne les deux
 ```
 
-The nineteen files:
+The twenty files:
 
 ```text
 blog/.env
@@ -115,6 +116,7 @@ blog/AGENTS.md
 blog/Cargo.toml
 blog/config/default.toml
 blog/config/development.toml
+blog/config/production.toml
 blog/docker-compose.yml
 blog/migration/Cargo.toml
 blog/migration/src/lib.rs
@@ -176,7 +178,7 @@ written in:
 
 ```text
 $ rbs new demo-api --database-url postgres://rbs:rbs@localhost:5432/demo_api --lang en --yes
-✓ demo-api créé — 19 fichiers
+✓ demo-api créé — 20 fichiers
 
 $ grep lang demo-api/Cargo.toml
 lang = "en"
@@ -220,7 +222,7 @@ of the crate:
 
 ```text
 $ rbs new blog --core-path /private/tmp/rbs-core --yes
-✓ blog créé — 19 fichiers
+✓ blog créé — 20 fichiers
 
   cd blog
   docker compose up -d   # la base du .env, montée
@@ -248,7 +250,7 @@ skeleton with one line appended to its `.env.jinja`:
 
 ```text
 $ rbs new maison --template-dir /private/tmp/rbs-demo/mes-templates --yes
-✓ maison créé — 19 fichiers
+✓ maison créé — 20 fichiers
 
   cd maison
   docker compose up -d   # la base du .env, montée
@@ -261,14 +263,16 @@ MAISON=1
 
 ## `--with` installs
 
-`--with` names features to install at creation, comma-separated. rbs knows seven —
-`auth`, `ci`, `docker`, `jobs`, `mail`, `redis` and `storage` — and installs every one
-named, in the same pass that writes the project:
+`--with` names features to install at creation, comma-separated. rbs knows twelve —
+`audit`, `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`,
+`redis`, `scheduler` and `storage` — and installs every one named, in the same pass that writes the
+project:
 
+{/* rbs:transcript cmd="rbs new site --with auth --yes" */}
 ```text
 $ rbs new site --with auth --yes
-✓ site créé — 19 fichiers
-  + auth     9 fichiers, 1 migration
+✓ site créé — 20 fichiers
+  + auth       13 fichiers, 1 migration
 
   rbs migrate up
 
@@ -278,14 +282,14 @@ $ rbs new site --with auth --yes
 ```
 
 The order installed is derived from the names rather than from the order they were typed
-in — alphabetical, the same order [`rbs add`](./add.md) lists the seven in:
+in — alphabetical, the same order [`rbs add`](./add.md) lists the twelve in:
 
 ```text
 $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes
-✓ with-demo créé — 19 fichiers
-  + auth     9 fichiers, 1 migration
-  + docker   2 fichiers
-  + storage  4 fichiers
+✓ with-demo créé — 20 fichiers
+  + auth       13 fichiers, 1 migration
+  + docker     2 fichiers
+  + storage    4 fichiers
 
   rbs migrate up
 
@@ -304,14 +308,15 @@ add` of any of them would leave untouched.
 
 A name that is no feature at all is refused before the first file is written:
 
+{/* rbs:transcript cmd="rbs new site --with graphql --yes" */}
 ```text
 $ rbs new site --with graphql --yes
-erreur : `graphql` n'est pas une feature rbs — disponibles : auth, ci, docker, jobs, mail, redis, storage
+erreur : `graphql` n'est pas une feature rbs — disponibles : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage
 ```
 
 ## The generated compose
 
-Unless one of the two cases below applies, `rbs new` writes a `docker-compose.yml` next to
+Unless one of the four cases below applies, `rbs new` writes a `docker-compose.yml` next to
 the project, holding the database its URL describes — the identifiers, the database name
 and the published port all read from it, none of them retyped. The compose is committed
 and `.env` is not, so it names the three values rather than spelling them out, and Compose
@@ -364,19 +369,22 @@ Four cases write nothing:
 - **a URL without credentials** — valid, accepted by `--database-url`, but the official
   PostgreSQL image refuses to initialize without a password: a compose that cannot start
   is worse than no compose;
-- **a URL the parser refuses outright** — an unencoded separator in the password, for
-  instance, stops it rather than guess at a host or a database name: nothing is derived,
-  so there is nothing to write a compose from.
+- **a URL the parser refuses outright** — an unencoded separator in the password, or a
+  Unix socket such as `postgres:///demo`, stops it rather than guess at a host or a
+  database name: nothing is derived, so there is nothing to write a compose from. This is
+  the one case `rbs new` warns about, and the only one that needs it: the three above are
+  choices readable in the URL, while this one shows up only as a file that was never
+  written.
 
 ```text
 $ rbs new sqlite-demo --database sqlite --yes
-✓ sqlite-demo créé — 18 fichiers
+✓ sqlite-demo créé — 19 fichiers
 
   cd sqlite-demo
   cargo run          # la base visée est dans .env
 ```
 
-Eighteen files, not nineteen: the count is how you tell, since nothing in the output names
+Nineteen files, not twenty: the count is how you tell, since nothing in the output names
 the compose by absence.
 
 A project created before rbs 1.1.0 has no compose either, and running

@@ -19,7 +19,7 @@ written between their markers is lost, without warning, on the next `rbs upgrade
 | Command | What it does | What it saves you from writing |
 |---|---|---|
 | `rbs new <name>` | creates a project; `--lang fr\|en` sets this file's language | the whole skeleton |
-| `rbs add <feature>` | installs auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, storage | the feature's wiring |
+| `rbs add <feature>` | installs audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage | the feature's wiring |
 | `rbs generate crud <name> --fields "..."` | a full CRUD feature | seven files, the seed and the migration |
 | `rbs generate feature <name>` | an empty feature | six files |
 | `rbs migrate up\|down\|status` | drives migrations | — |
@@ -81,8 +81,10 @@ generate these, and writing them by hand is legitimate. When you do:
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
+cargo test --workspace -- --ignored
 rbs doctor
 ```
 
-The tests need the `.env` database running — `docker compose up -d`, or `rbs dev`, which
-chains it.
+The second line is the one that matters: the tests that reach the database are `#[ignore]`,
+and `cargo test` alone does not run them. They need the `.env` database running —
+`docker compose up -d`, or `rbs dev`, which chains it.

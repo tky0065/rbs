@@ -26,6 +26,9 @@ pub mod db;
 pub mod error;
 /// Extracteurs de requête du runtime.
 pub mod extract;
+
+/// Opérateurs de filtrage et de tri des listes.
+pub mod filter;
 /// Hachage et vérification des mots de passe.
 #[cfg(feature = "auth")]
 pub mod hash;
@@ -55,8 +58,9 @@ pub use error::{Error, Result};
 #[cfg(feature = "auth")]
 pub use extract::Identity;
 pub use extract::ValidatedJson;
+pub use filter::{Comparison, ComparisonSchema, Sort, SortKey, TextMatch, TextMatchSchema};
 pub use openapi::{CommonResponses, ProblemDetails};
-pub use pagination::{Page, Pagination};
+pub use pagination::{Cursor, CursorPage, Page, Pagination};
 #[cfg(feature = "auth")]
 pub use state::HasAuth;
 pub use state::{CoreState, HasCoreState};

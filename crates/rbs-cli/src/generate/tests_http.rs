@@ -45,6 +45,11 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
             compared => names(sent, |champ| !timestamp(champ)),
             timestamped => names(sent, timestamp),
             suffix => sent.iter().any(textual),
+            unique_number => sent.iter().any(drawn_number),
+            // Le critère du scénario de filtrage : un champ dont la valeur envoyée se
+            // rejoue telle quelle. Un horodatage en est écarté — PostgreSQL le rend dans
+            // un autre format que la chaîne envoyée, et l'égalité porterait à faux.
+            filterable => sent.iter().find(|champ| filterable(champ)).map(Field::column_name),
             // Les deux scénarios ci-dessous n'ont de sens que si `--fields` les rend
             // atteignables : sans contrainte d'e-mail rien ne rend 422, sans colonne
             // unique rien ne rend 409, et le test échouerait faute de refus à observer.
@@ -84,6 +89,19 @@ fn value(champ: &Field, mark: &str) -> String {
         return "Value::Null".to_string();
     }
 
+    // Une colonne `unique` non textuelle ne peut pas porter de valeur écrite : les
+    // scénarios de ce fichier créent en parallèle sur la même base, et se refuseraient
+    // l'un l'autre par un 409 dès la première exécution. Les textes tiennent déjà
+    // l'invariant par leur suffixe, et un UUID se tire déjà à chaque appel.
+    if drawn_number(champ) {
+        return match champ.column_type() {
+            FieldType::Int => "unique_number() as i32".to_string(),
+            FieldType::Float => "unique_number() as f64 / 10.0".to_string(),
+            _ => "(chrono::Utc::now() + chrono::Duration::microseconds(unique_number()))\n            .to_rfc3339()"
+                .to_string(),
+        };
+    }
+
     match champ.column_type() {
         FieldType::String | FieldType::Text if champ.validates_email() => {
             format!("format!(\"{}-{mark}{{suffix}}@example.com\")", champ.name)
@@ -114,6 +132,27 @@ fn timestamp(champ: &Field) -> bool {
     champ.column_type() == FieldType::Datetime
 }
 
+/// Un champ sur lequel le scénario de filtrage peut porter.
+///
+/// La référence en est écartée : elle part à `null`, et un filtre d'égalité sur `null` ne
+/// retiendrait rien. L'horodatage aussi : sa valeur revient dans un autre format.
+fn filterable(champ: &Field) -> bool {
+    champ.reference().is_none() && !timestamp(champ)
+}
+
+/// Un scalaire `unique` dont la valeur d'exemple se tire au lieu de s'écrire.
+///
+/// Un booléen n'y figure pas : `--fields` refuse d'y poser « unique », faute de pouvoir
+/// tenir plus de deux lignes dans la table.
+fn drawn_number(champ: &Field) -> bool {
+    champ.unique
+        && champ.reference().is_none()
+        && matches!(
+            champ.column_type(),
+            FieldType::Int | FieldType::Float | FieldType::Datetime
+        )
+}
+
 fn textual(champ: &Field) -> bool {
     matches!(champ.column_type(), FieldType::String | FieldType::Text)
 }
@@ -129,7 +168,7 @@ fn names(fields: &[Field], retenu: impl Fn(&Field) -> bool) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::generate::{bench, controller, dto, entity, fields, migration, repository, service};
+    use crate::generate::{bench, fields, migration};
 
     const CHAMPS: &str = "title:string,email:string:unique,summary:text:optional,views:int,\
                           note:float,published:bool,auteur_id:uuid,published_at:datetime";
@@ -139,18 +178,43 @@ mod tests {
         render(&Feature::fresh(name, fields)).expect("les tests doivent se rendre")
     }
 
+    /// Trois bascules traversent ce fichier, toutes régies par les soixante colonnes de
+    /// `fn_call_width` : deux macros d'assertion dont les arguments débordent quel que soit
+    /// le nom — elles sont écrites éclatées — et les deux appels qui portent le module en
+    /// dur, qui basculent à dix-huit et vingt-huit caractères.
+    ///
+    /// Au-delà de trente-trois, l'appel intérieur `request(…)` déborde à son tour et
+    /// rustfmt l'éclate à un second niveau. Reproduire cet emboîtement reviendrait à
+    /// réimplanter une répartition qu'une montée de rustfmt peut déplacer ;
+    /// `format::format_batch` la rattrape à l'écriture, donc rien de mal formé n'atteint
+    /// l'utilisateur. C'est cette frontière que l'intervalle fixe — mesurée, et non
+    /// commentée.
+    #[test]
+    fn the_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(|name| trials(name, CHAMPS));
+
+        assert_eq!(
+            divergentes,
+            (34..=40).collect::<Vec<usize>>(),
+            "la plage où les tests HTTP divergent de rustfmt a bougé"
+        );
+    }
+
     #[test]
     fn the_scenarios_are_declared() {
         let rendered = trials("articles", CHAMPS);
 
-        // `CHAMPS` porte `email:string:unique` : les deux scénarios conditionnels y sont
-        // donc attendus, avec les quatre que toute feature créable emporte.
+        // `CHAMPS` porte `email:string:unique` et des champs filtrables : les quatre
+        // scénarios conditionnels y sont donc attendus, avec les quatre que toute feature
+        // créable emporte.
         let scenarios = [
             "async fn the_full_lifecycle_goes_through_the_api()",
             // L'identifiant est posé par le modèle depuis que `uuidv7()` a quitté la
             // migration : la croissance des identifiants se prouve dans le projet.
             "async fn two_creations_in_a_row_carry_increasing_ids()",
             "async fn an_invalid_email_returns_422()",
+            "async fn the_filter_narrows_the_list()",
+            "async fn an_unknown_sort_column_returns_400()",
             "async fn a_replayed_unique_value_returns_409()",
             "async fn an_unknown_id_returns_404()",
             "async fn an_unreadable_body_returns_400()",
@@ -166,6 +230,28 @@ mod tests {
             rendered.matches("#[tokio::test]").count(),
             scenarios.len(),
             "chaque scénario est un test asynchrone :\n{rendered}"
+        );
+    }
+
+    #[test]
+    fn a_second_delete_is_exercised() {
+        // `unique` allume le quatrième scénario de suppression (`a_replayed_unique_value_
+        // returns_409`) : sans lui, `title` ne serait filtrable que par le troisième, et le
+        // compte plafonnerait à 4 au lieu des 5 attendus.
+        let feature = Feature::fresh(
+            "articles",
+            fields::parse("title:string:unique").expect("champs"),
+        );
+        let rendered = render(&feature).expect("les tests doivent se rendre");
+
+        assert_eq!(
+            rendered
+                .matches(r#"without_body("DELETE", &resource)"#)
+                .count(),
+            5,
+            "chaque scénario de suppression doit rejouer le DELETE : c'est la seule \
+             assertion qui distingue une suppression logique bien gardée d'une qui \
+             rendrait 204 deux fois :\n{rendered}"
         );
     }
 
@@ -254,6 +340,110 @@ mod tests {
         assert!(
             scenario.contains(r#"without_body("DELETE", &resource)"#),
             "les deux lignes créées doivent être supprimées :\n{scenario}"
+        );
+    }
+
+    /// Tout scénario de ce fichier monte l'application sur la base du `.env` : sans
+    /// `#[ignore]`, `cargo test` échouerait sur un projet neuf dont la base n'est pas
+    /// démarrée, là où les fragments installés par `add` s'en gardent tous.
+    #[test]
+    fn every_scenario_is_ignored() {
+        let rendered = trials("articles", CHAMPS);
+
+        assert_eq!(
+            rendered
+                .matches(r#"#[ignore = "joint la base du projet"]"#)
+                .count(),
+            rendered.matches("#[tokio::test]").count(),
+            "chaque scénario doit être ignoré sans base :\n{rendered}"
+        );
+    }
+
+    /// Le doc-commentaire de `value` promet qu'un champ `unique` ne fera pas échouer une
+    /// exécution sur ce qu'une autre a laissé. Une valeur en dur ne le tient pas : les
+    /// scénarios de ce fichier créent en parallèle sur la même base, et se refuseraient
+    /// l'un l'autre par un 409 dès la première exécution.
+    #[test]
+    fn a_unique_number_is_drawn_at_each_call() {
+        let rendered = trials(
+            "articles",
+            "views:int:unique,note:float:unique,vu_le:datetime:unique",
+        );
+
+        assert!(
+            rendered.contains("fn unique_number() -> i64"),
+            "l'aide qui tire le nombre est absente :\n{rendered}"
+        );
+        for valeur in [
+            r#""views": unique_number() as i32"#,
+            r#""note": unique_number() as f64 / 10.0"#,
+        ] {
+            assert!(
+                rendered.contains(valeur),
+                "« {valeur} » absent :\n{rendered}"
+            );
+        }
+        assert!(
+            rendered.contains("chrono::Duration::microseconds(unique_number())"),
+            "l'horodatage unique doit se décaler :\n{rendered}"
+        );
+        for en_dur in ["\"views\": 42", "\"views\": 43", "\"note\": 4.2"] {
+            assert!(
+                !rendered.contains(en_dur),
+                "« {en_dur} » se rejouerait d'une exécution à l'autre :\n{rendered}"
+            );
+        }
+    }
+
+    /// Un scalaire qui n'est pas `unique` garde une valeur lisible : le code engendré est
+    /// fait pour être lu et modifié.
+    #[test]
+    fn an_ordinary_number_keeps_its_readable_value() {
+        let rendered = trials("articles", CHAMPS);
+
+        assert!(rendered.contains(r#""views": 42"#), "{rendered}");
+        assert!(rendered.contains(r#""views": 43"#), "{rendered}");
+        assert!(
+            !rendered.contains("unique_number()"),
+            "aucun champ numérique n'est unique ici :\n{rendered}"
+        );
+    }
+
+    /// Le filtre se prouve par la route, et non par le rendu : une condition mal traduite
+    /// rend une page vide, ce qu'aucune comparaison de chaînes ne verrait.
+    #[test]
+    fn a_filter_scenario_is_generated_when_a_field_can_carry_one() {
+        let rendered = trials("articles", CHAMPS);
+
+        assert!(
+            rendered.contains("async fn the_filter_narrows_the_list()"),
+            "le scénario de filtre est absent :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(r#"let chemin = format!("{collection}/filter");"#),
+            "le scénario doit appeler la route de filtre :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("async fn an_unknown_sort_column_returns_400()"),
+            "le refus d'une colonne de tri inconnue n'est pas éprouvé :\n{rendered}"
+        );
+        // `clippy::useless_format` refuse un `format!` sans interpolation, et le projet
+        // engendré compile sous `-D warnings`.
+        assert!(
+            !rendered.contains(r#"format!("/articles/filter")"#),
+            "un chemin constant s'écrit sans `format!` :\n{rendered}"
+        );
+    }
+
+    /// Sans champ dont la valeur se rejoue, le scénario n'aurait pas de critère : une
+    /// référence part à `null` et un horodatage revient dans un autre format.
+    #[test]
+    fn a_feature_without_a_usable_criterion_carries_no_filter_scenario() {
+        let rendered = trials("articles", "vu_le:datetime");
+
+        assert!(
+            !rendered.contains("the_filter_narrows_the_list"),
+            "aucun champ ne peut porter le critère :\n{rendered}"
         );
     }
 
@@ -524,33 +714,7 @@ mod tests {
         let base = bench::TestDatabase::start();
 
         let project = bench::Project::fresh_on(base.url());
-        project.write_feature(
-            "billets",
-            &[
-                (
-                    "mod.rs",
-                    &controller::render_mod(&feature, true).expect("mod.rs rendu"),
-                ),
-                (
-                    "model.rs",
-                    &entity::render(&feature).expect("entité rendue"),
-                ),
-                ("dto.rs", &dto::render(&feature).expect("DTO rendus")),
-                (
-                    "repository.rs",
-                    &repository::render(&feature).expect("repository rendu"),
-                ),
-                (
-                    "service.rs",
-                    &service::render(&feature).expect("service rendu"),
-                ),
-                (
-                    "controller.rs",
-                    &controller::render(&feature).expect("controller rendu"),
-                ),
-                ("tests.rs", &render(&feature).expect("tests rendus")),
-            ],
-        );
+        project.write_feature("billets", &bench::tous(&feature, true));
         project.mount_feature("billets");
 
         let migration = migration::render(&feature, HORODATAGE).expect("migration rendue");

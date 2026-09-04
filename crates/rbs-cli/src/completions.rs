@@ -66,7 +66,7 @@ mod tests {
     #[test]
     fn the_command_rendered_proposes_the_embedded_fragments_after_add() {
         let fragments = crate::templates::embedded_names();
-        assert_eq!(fragments.len(), 10, "le catalogue embarqué a changé");
+        assert_eq!(fragments.len(), 12, "le catalogue embarqué a changé");
         assert!(
             fragments.contains(&"observability".to_string()),
             "{fragments:?}"
@@ -103,6 +103,16 @@ mod tests {
                 "{shell} : les fragments ne sont pas proposés après `add`"
             );
         }
+    }
+
+    /// `rbs completions bash | head -3` : le générateur écrit sans jamais rendre son
+    /// erreur, et relève celle du puits par un `expect`. Sur un tube refermé, la commande
+    /// rendait une trace de panique au lieu des trois lignes demandées.
+    #[test]
+    fn a_reader_that_leaves_does_not_panic_the_generator() {
+        let mut sortie = crate::ui::Tolerante::new(crate::ui::Rompue);
+
+        render(Shell::Bash, &mut sortie);
     }
 
     /// Le catalogue proposé à la complétion ne doit pas être descendu dans le parseur :

@@ -17,7 +17,10 @@ use testcontainers::runners::SyncRunner;
 use testcontainers::{Container, ImageExt};
 
 use crate::anchors::{self, Anchor};
+use crate::test_cible;
 
+use super::command;
+use super::feature::Feature;
 use super::mount::{self, Mount};
 
 /// PostgreSQL en conteneur, et l'URL de connexion qui y mène.
@@ -73,6 +76,11 @@ impl TestDatabase {
 /// module de migration — même nom de fichier, même crate `migration` — se sont montrés
 /// capables d'échanger leur code compilé d'un projet à l'autre. Deux tests lourds ne
 /// doivent donc jamais poser une feature ni une migration de même nom.
+///
+/// Il ne tranche qu'entre les bancs, tous compilés dans la bibliothèque : les binaires de
+/// `tests/` écrivent la même cible sans rien en voir, et c'est `test_cible::verrou` qui
+/// s'interpose entre eux. Ce `Mutex` reste devant lui pour que le cas courant — deux bancs
+/// du même processus — ne passe pas par le système de fichiers.
 static CARGO: Mutex<()> = Mutex::new(());
 
 /// Racine du dépôt, d'où se déduisent le noyau local et la cible de compilation.
@@ -81,6 +89,42 @@ pub(crate) fn repo() -> PathBuf {
         .join("../..")
         .canonicalize()
         .expect("la racine du dépôt doit être résoluble")
+}
+
+/// La cible que ces projets partagent, et que partagent aussi les tests d'intégration.
+fn cible() -> PathBuf {
+    repo().join("target/rbs-integration")
+}
+
+/// Tous les fichiers que `generate` déposerait dans le répertoire de `feature`, rendus.
+///
+/// Le banc ne les énumère plus : la liste est celle de `generate`, et un fichier qu'une
+/// feature gagne arrive ici sans que personne ait à y penser — `filter.rs` avait cassé
+/// quatre bancs l'un après l'autre, chacun ne se voyant qu'après une compilation complète.
+pub(crate) fn tous(feature: &Feature, complete: bool) -> Vec<(String, String)> {
+    command::fichiers(feature, complete).expect("la feature doit se rendre")
+}
+
+/// Les mêmes, restreints à ceux que le banc éprouve.
+///
+/// La sélection reste explicite — un banc qui n'éprouve que le DTO n'a pas à compiler le
+/// controller — mais elle se dit par des noms, et un nom qui cesse d'exister échoue ici,
+/// avant la compilation, plutôt que d'y rendre un projet amputé.
+pub(crate) fn retenus(feature: &Feature, complete: bool, gardes: &[&str]) -> Vec<(String, String)> {
+    let fichiers = tous(feature, complete);
+
+    for garde in gardes {
+        assert!(
+            fichiers.iter().any(|(nom, _)| nom == garde),
+            "`{garde}` n'est plus un fichier de feature, la feature en porte : {:?}",
+            fichiers.iter().map(|(nom, _)| nom).collect::<Vec<_>>()
+        );
+    }
+
+    fichiers
+        .into_iter()
+        .filter(|(nom, _)| gardes.contains(&nom.as_str()))
+        .collect()
 }
 
 /// Un projet neuf, créé par le binaire livré, prêt à recevoir une feature.
@@ -131,7 +175,14 @@ impl Project {
     }
 
     /// Écrit `src/<module>/` avec les fichiers donnés, et déclare le module.
-    pub(crate) fn write_feature(&self, module: &str, files: &[(&str, &str)]) {
+    ///
+    /// Générique sur les deux moitiés du couple : les bancs passent ce que `tous` et
+    /// `retenus` leur rendent — des `String` — et non plus des littéraux.
+    pub(crate) fn write_feature<N: AsRef<str>, C: AsRef<str>>(
+        &self,
+        module: &str,
+        files: &[(N, C)],
+    ) {
         let directory = self.root.join("src").join(module);
         fs::create_dir_all(&directory).expect("répertoire de feature créable");
 
@@ -139,35 +190,36 @@ impl Project {
         // la liste de déclarations déduite des noms de fichiers ne suffit plus.
         let declarations = files
             .iter()
-            .find(|(name, _)| *name == "mod.rs")
+            .find(|(name, _)| name.as_ref() == "mod.rs")
             .map_or_else(
                 || {
                     files
                         .iter()
                         .map(|(name, _)| {
-                            let module = name.trim_end_matches(".rs");
+                            let module = name.as_ref().trim_end_matches(".rs");
                             format!("pub mod {module};\n")
                         })
                         .collect()
                 },
-                |(_, content)| (*content).to_string(),
+                |(_, content)| content.as_ref().to_string(),
             );
 
         fs::write(directory.join("mod.rs"), declarations).expect("mod.rs écrivable");
 
-        for (name, content) in files.iter().filter(|(name, _)| *name != "mod.rs") {
-            fs::write(directory.join(name), content).expect("fichier de feature écrivable");
+        for (name, content) in files.iter().filter(|(name, _)| name.as_ref() != "mod.rs") {
+            fs::write(directory.join(name.as_ref()), content.as_ref())
+                .expect("fichier de feature écrivable");
         }
 
         let features = anchors::resolve_features(&self.root);
-        self.mount(&mount::pour(module, features.clone()), &[features]);
+        self.mount(&mount::pour(module, features.clone(), false), &[features]);
     }
 
     /// Monte les routes de `module` et ses handlers dans le document OpenAPI.
     pub(crate) fn mount_feature(&self, module: &str) {
         let features = anchors::resolve_features(&self.root);
         self.mount(
-            &mount::pour(module, features),
+            &mount::pour(module, features, false),
             &[anchors::ROUTES, anchors::OPENAPI],
         );
     }
@@ -257,10 +309,11 @@ async fn apply() {
     /// Lance cargo sur le projet, un seul appel à la fois.
     fn cargo(&self, arguments: &[&str], variables: &[(&str, &str)]) -> Output {
         let _exclusivite = CARGO.lock().unwrap_or_else(PoisonError::into_inner);
+        let _cible = test_cible::verrou(&cible());
 
         std::process::Command::new("cargo")
             .current_dir(&self.root)
-            .env("CARGO_TARGET_DIR", repo().join("target/rbs-integration"))
+            .env("CARGO_TARGET_DIR", cible())
             .envs(variables.iter().copied())
             .args(arguments)
             .output()
@@ -273,11 +326,12 @@ async fn apply() {
     /// doit écrire dans la cible partagée comme les autres.
     pub(crate) fn rbs(&self, arguments: &[&str]) -> Output {
         let _exclusivite = CARGO.lock().unwrap_or_else(PoisonError::into_inner);
+        let _cible = test_cible::verrou(&cible());
 
         Command::cargo_bin("rbs")
             .expect("le binaire rbs doit être compilé")
             .current_dir(&self.root)
-            .env("CARGO_TARGET_DIR", repo().join("target/rbs-integration"))
+            .env("CARGO_TARGET_DIR", cible())
             .args(arguments)
             .output()
             .expect("rbs doit être lançable")
@@ -313,8 +367,12 @@ async fn apply() {
     }
 
     /// Lance les tests du projet, et rapporte leur sortie.
+    ///
+    /// `--include-ignored` plutôt que `test` seul : les tests engendrés joignent la base
+    /// du projet et sont `#[ignore]` pour cette raison. Sans lui, la commande sortirait
+    /// verte sans avoir rien exécuté, et le garde-fou ci-dessous serait le seul à le voir.
     pub(crate) fn test_of(&self) {
-        let output = self.cargo(&["test"], &[]);
+        let output = self.cargo(&["test", "--", "--include-ignored"], &[]);
         let journal = String::from_utf8_lossy(&output.stdout);
 
         assert!(
@@ -429,12 +487,24 @@ fn tests_run(journal: &str) -> u32 {
 /// Le code généré est écrit à la main dans des templates, sans que rien ne garantisse
 /// qu'il porte déjà la mise en forme de rustfmt. Sans cette vérification, le premier
 /// `cargo fmt` de l'utilisateur produirait un diff sur des fichiers qu'il n'a pas touchés.
+///
+/// `newline_style` est forcé pour la même raison qu'en `format::formatted` : son défaut,
+/// « Auto », retombe sur le style de la plateforme, et les gardes compareraient un rendu LF
+/// à une sortie CRLF.
 pub(crate) fn formatted(source: &str) -> String {
     use std::io::Write;
     use std::process::Stdio;
 
     let mut rustfmt = std::process::Command::new("rustfmt")
-        .args(["--edition", "2024", "--emit", "stdout", "--quiet"])
+        .args([
+            "--edition",
+            "2024",
+            "--emit",
+            "stdout",
+            "--quiet",
+            "--config",
+            "newline_style=Unix",
+        ])
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -459,4 +529,121 @@ pub(crate) fn formatted(source: &str) -> String {
     );
 
     String::from_utf8(output.stdout).expect("rustfmt rend de l'UTF-8")
+}
+
+/// La feature de contenu que `file-drop` engendre, telle que son README la commande.
+///
+/// C'est elle que les fixtures figent : la documentation cite deux de ses fichiers, et ce
+/// sont précisément ceux que l'exemple retouche à la main.
+pub(crate) fn uploads() -> Feature {
+    let fields =
+        super::fields::parse("title:string,owner_email:string,content_type:string,size:int")
+            .expect("les champs de file-drop doivent être valides");
+
+    Feature::fresh("uploads", fields).uploading()
+}
+
+/// Compare `rendu` à la fixture figée sous `chemin`, relatif à la racine de la crate.
+///
+/// `src/uploads/controller.rs` et `src/uploads/service.rs` d'`examples/file-drop` sortent
+/// de la comparaison octet à octet des exemples — l'exemple les retouche — et ce sont eux
+/// que le guide du stockage cite. Ce qui reste alors sans oracle est le blanc : rustfmt
+/// n'insère jamais une ligne vide, donc `longueurs_divergentes` ne verrait pas celle qui
+/// manquerait dans une branche sous drapeau. La fixture la voit, et c'est là son point.
+///
+/// `RBS_FIGE=1 cargo test` la repose. Le diff qui en sort *est* la revue : rien n'oblige à
+/// le relire, mais rien ne le relira à votre place.
+pub(crate) fn fige(chemin: &str, rendu: &str) {
+    let fixture = Path::new(env!("CARGO_MANIFEST_DIR")).join(chemin);
+
+    if std::env::var_os("RBS_FIGE").is_some() {
+        let parent = fixture.parent().expect("la fixture a un répertoire");
+        fs::create_dir_all(parent).expect("répertoire de fixture créable");
+        fs::write(&fixture, rendu).expect("fixture écrivable");
+
+        return;
+    }
+
+    let attendu = fs::read_to_string(&fixture).unwrap_or_else(|error| {
+        panic!(
+            "{} illisible : {error} — `RBS_FIGE=1 cargo test` la pose",
+            fixture.display()
+        )
+    });
+
+    if rendu == attendu {
+        return;
+    }
+
+    // Un `assert_eq!` sur deux fichiers entiers noie l'écart dans le rendu ; celui qu'on
+    // cherche ici tient souvent en une ligne vide.
+    let ecart = rendu
+        .lines()
+        .zip(attendu.lines())
+        .position(|(rendu, attendu)| rendu != attendu)
+        .map_or_else(
+            || {
+                format!(
+                    "le rendu porte {} lignes, la fixture {}",
+                    rendu.lines().count(),
+                    attendu.lines().count()
+                )
+            },
+            |rang| {
+                format!(
+                    "ligne {} :\n  rendu   : {:?}\n  fixture : {:?}",
+                    rang + 1,
+                    rendu.lines().nth(rang).unwrap_or_default(),
+                    attendu.lines().nth(rang).unwrap_or_default()
+                )
+            },
+        );
+
+    panic!(
+        "le rendu s'écarte de {}, {ecart}\n\n\
+         `RBS_FIGE=1 cargo test` la repose si l'écart est voulu",
+        fixture.display()
+    );
+}
+
+/// Les longueurs de nom pour lesquelles `rendu` n'est pas déjà ce que rustfmt écrirait.
+///
+/// Une liste de quatre noms écrite à la main ne dit pas où le gabarit bascule : elle échoue
+/// sans nommer le seuil, et ment en silence le jour où une montée de rustfmt le déplace. Un
+/// balayage rend la frontière elle-même, et un `assert_eq!` sur l'intervalle affiche
+/// l'ancien seuil et le nouveau.
+///
+/// Le nom passé à `rendu` est fait d'un `a` répété terminé par un `e` : il ne se pluralise
+/// pas, donc sa longueur est bien celle du singulier que portent les gabarits.
+pub(crate) fn longueurs_divergentes(rendu: impl Fn(&str) -> String) -> Vec<usize> {
+    (1..=40usize)
+        .filter(|taille| {
+            let name = "a".repeat(taille - 1) + "e";
+            let rendered = rendu(&name);
+            formatted(&rendered) != rendered
+        })
+        .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Le mesureur doit distinguer un rendu point fixe d'un rendu qui ne l'est jamais, sans
+    /// quoi les gardes qui s'appuient dessus ne prouveraient rien.
+    #[test]
+    fn the_measurer_tells_a_fixed_point_from_a_diverging_render() {
+        let point_fixe = longueurs_divergentes(|name| format!("pub struct {name};\n"));
+        assert!(
+            point_fixe.is_empty(),
+            "une déclaration courte est point fixe à toute longueur : {point_fixe:?}"
+        );
+
+        let jamais = longueurs_divergentes(|name| format!("pub struct {name} ;\n"));
+        assert_eq!(
+            jamais,
+            (1..=40).collect::<Vec<usize>>(),
+            "l'espace avant le point-virgule diverge à toute longueur"
+        );
+    }
 }

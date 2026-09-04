@@ -24,6 +24,10 @@ use uuid::Uuid;
 use crate::router::router;
 use crate::state::AppState;
 
+// Les tests de ce fichier joignent la base que décrit `.env`, et sont donc `#[ignore]` :
+// `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre la base du
+// projet, migrations appliquées.
+
 /// Monte l'application sur la base décrite par `.env`, sans écouter sur le réseau.
 ///
 /// Les migrations sont supposées appliquées : elles précèdent `cargo test`.
@@ -84,10 +88,22 @@ fn compare(rendered: &Value, sent: &Value, champ: &str) {
 /// Les horodatages passent par ici : PostgreSQL les rend dans son propre format, qui
 /// n'est pas celui de la chaîne envoyée.
 fn filled(rendered: &Value, champ: &str) {
-    assert!(!rendered[champ].is_null(), "« {champ} » absent de la réponse");
+    assert!(
+        !rendered[champ].is_null(),
+        "« {champ} » absent de la réponse"
+    );
 }
 {% endif %}
 {%- if creatable %}
+{%- if unique_number %}
+/// Un nombre différent à chaque appel.
+///
+/// Une colonne `unique` non textuelle interdit de rejouer une valeur, et les scénarios de
+/// ce fichier créent en parallèle sur la même base.
+fn unique_number() -> i64 {
+    (Uuid::new_v4().as_u128() % 1_000_000) as i64
+}
+{% endif %}
 {%- if suffix %}
 /// Corps de création dont les valeurs textuelles portent un suffixe tiré au sort.
 ///
@@ -125,6 +141,7 @@ fn modification() -> Value {
 }
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn the_full_lifecycle_goes_through_the_api() {
     let api = application().await;
     let collection = "/{@ module @}";
@@ -188,6 +205,12 @@ async fn the_full_lifecycle_goes_through_the_api() {
 
     let (status, _) = call(&api, without_body("GET", &resource)).await;
     assert_eq!(status, StatusCode::NOT_FOUND, "elle répond encore");
+
+    // Une seconde suppression ne trouve plus rien à supprimer. L'assertion vaut des deux
+    // côtés de `--soft-delete` : c'est elle qui attrape une suppression logique dont la
+    // condition de garde manquerait, et qui rendrait alors 204 indéfiniment.
+    let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "elle se supprime deux fois");
 }
 
 /// Deux créations à la suite portent des identifiants croissants.
@@ -196,6 +219,7 @@ async fn the_full_lifecycle_goes_through_the_api() {
 /// l'`id` pour rendre le plus récent en tête. Un test qui se contenterait de constater
 /// la présence d'un UUID laisserait passer la régression.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn two_creations_in_a_row_carry_increasing_ids() {
     let api = application().await;
     let collection = "/{@ module @}";
@@ -219,7 +243,11 @@ async fn two_creations_in_a_row_carry_increasing_ids() {
         assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
     }
 
-    assert_eq!(premier.get_version_num(), 7, "{premier} n'est pas un UUIDv7");
+    assert_eq!(
+        premier.get_version_num(),
+        7,
+        "{premier} n'est pas un UUIDv7"
+    );
     assert!(second > premier, "{second} ne suit pas {premier}");
 }
 {% if email_field %}
@@ -228,12 +256,25 @@ async fn two_creations_in_a_row_carry_increasing_ids() {
 /// C'est le chemin qu'ouvre `ValidatedJson` : il désérialise, puis valide, et le refus
 /// nomme le champ fautif.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_invalid_email_returns_422() {
     let api = application().await;
     let mut sent = creation();
     sent["{@ email_field @}"] = Value::from("pas-une-adresse");
+{#- Les arguments d'un appel basculent aux soixante colonnes de `fn_call_width` : au-delà,
+    rustfmt en pose un par ligne et sort le `.await`. #}
+{%- set appel_invalide = "&api, request(\"POST\", \"/" ~ module ~ "\", sent)" %}
+{%- if appel_invalide | length <= 60 %}
 
-    let (status, body) = call(&api, request("POST", "/{@ module @}", sent)).await;
+    let (status, body) = call({@ appel_invalide @}).await;
+{%- else %}
+
+    let (status, body) = call(
+        &api,
+        request("POST", "/{@ module @}", sent),
+    )
+    .await;
+{%- endif %}
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert_eq!(body["status"], 422, "{body}");
@@ -243,11 +284,73 @@ async fn an_invalid_email_returns_422() {
     );
 }
 {% endif %}
+{%- if filterable %}
+/// La route de filtrage retient la ligne qui satisfait son propre critère.
+///
+/// Le rendu du filtre ne prouve rien : une condition mal traduite rend une page vide, et
+/// seule une requête jouée contre la base le montre.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn the_filter_narrows_the_list() {
+    let api = application().await;
+    let collection = "/{@ module @}";
+    let sent = creation();
+
+    let (status, created) = call(&api, request("POST", collection, sent.clone())).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {created}");
+
+    let critere = json!({ "{@ filterable @}": sent["{@ filterable @}"] });
+    let chemin = format!("{collection}/filter");
+    let (status, page) = call(&api, request("POST", &chemin, critere)).await;
+    assert_eq!(status, StatusCode::OK, "filtre refusé : {page}");
+
+    let ids: Vec<&str> = page["data"]
+        .as_array()
+        .expect("la liste rend un tableau")
+        .iter()
+        .map(|ligne| ligne["id"].as_str().expect("identifiant rendu"))
+        .collect();
+
+    let id = created["id"].as_str().expect("identifiant rendu");
+    assert!(
+        ids.contains(&id),
+        "la ligne créée doit satisfaire son propre critère : {page}"
+    );
+
+    let resource = format!("{collection}/{id}");
+    let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
+}
+
+/// Une colonne de tri inconnue est une faute du client, et le refus la nomme.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_unknown_sort_column_returns_400() {
+    let api = application().await;
+    let critere = json!({ "sort": ["-inconnue"] });
+{%- set appel_tri = "&api, request(\"POST\", \"/" ~ module ~ "/filter\", critere)" %}
+{%- if appel_tri | length <= 60 %}
+
+    let (status, body) = call({@ appel_tri @}).await;
+{%- else %}
+
+    let (status, body) = call(
+        &api,
+        request("POST", "/{@ module @}/filter", critere),
+    )
+    .await;
+{%- endif %}
+
+    assert_eq!(status, StatusCode::BAD_REQUEST, "{body}");
+    assert_eq!(body["status"], 400, "{body}");
+}
+{% endif %}
 {%- if unique_field %}
 /// Une valeur déjà prise sur une colonne `unique` est une faute du client, pas une panne.
 ///
 /// Sans la traduction que pose le repository, le doublon remonterait en 500.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn a_replayed_unique_value_returns_409() {
     let api = application().await;
     let collection = "/{@ module @}";
@@ -269,6 +372,7 @@ async fn a_replayed_unique_value_returns_409() {
 {% endif %}
 {%- endif %}
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_unknown_id_returns_404() {
     let api = application().await;
     let inconnu = Uuid::new_v4();
@@ -283,6 +387,7 @@ async fn an_unknown_id_returns_404() {
 
 /// Sans jeton, l'écriture est refusée avant même que le corps ne soit lu.
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_anonymous_write_returns_401() {
     let api = application().await;
     let anonyme = Request::builder()
@@ -300,6 +405,7 @@ async fn an_anonymous_write_returns_401() {
 {%- else %}
 
 #[tokio::test]
+#[ignore = "joint la base du projet"]
 async fn an_unreadable_body_returns_400() {
     let api = application().await;
     let truncated = Request::builder()

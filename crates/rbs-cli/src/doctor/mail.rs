@@ -17,9 +17,9 @@ use super::{Check, Config};
 pub(crate) const TITRE: &str = "mail";
 const CLE: &str = "RBS_MAIL__SMTP_PASSWORD";
 const FICHIER: &str = ".env";
-const CONFIG: &str = "config/default.toml";
 const SECTION: &str = "mail";
 const UTILISATEUR: &str = "smtp_user";
+const REGLAGES: &str = "smtp_host = \"localhost\"\nsmtp_port = 1025\nsmtp_user = \"\"\ntls = \"none\"\nfrom = \"no-reply@localhost\"\ntimeout_secs = 10\ntemplates = \"templates/mail\"";
 
 /// Vérifie ce dont la feature `mail` a besoin pour envoyer.
 pub(crate) fn check(root: &Path, config: &Config) -> Check {
@@ -63,13 +63,9 @@ fn check_with(root: &Path, config: &Config, env: impl Fn(&str) -> Option<String>
         Some(_) => {}
     }
 
-    if !config.section(SECTION) {
-        defauts.push(format!("{CONFIG} ne porte pas de section `[{SECTION}]`"));
-        remedes.push(format!(
-            "ajoutez à {CONFIG} :\n[{SECTION}]\nsmtp_host = \"localhost\"\nsmtp_port = 1025\n\
-             smtp_user = \"\"\ntls = \"none\"\nfrom = \"no-reply@localhost\"\ntimeout_secs = 10\n\
-             templates = \"templates/mail\""
-        ));
+    if let Some((defaut, remede)) = super::defaut_de_section(config, SECTION, REGLAGES) {
+        defauts.push(defaut);
+        remedes.push(remede);
     }
 
     if defauts.is_empty() {
@@ -86,7 +82,7 @@ mod tests {
 
     use tempfile::TempDir;
 
-    use super::super::{Config, State};
+    use super::super::{CONFIG, Config, State};
     use super::*;
 
     /// Un projet neuf, doté à la main de ce que `add mail` y dépose.

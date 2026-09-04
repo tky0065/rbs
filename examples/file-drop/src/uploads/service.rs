@@ -5,6 +5,7 @@ use sea_orm::DatabaseConnection;
 use sea_orm::prelude::Uuid;
 
 use super::dto::{CreateUpload, UpdateUpload, UploadResponse};
+use super::filter::UploadFilter;
 use super::repository::{self, ActiveModel};
 use crate::cache::Cache;
 use crate::mail::Mailer;
@@ -56,6 +57,20 @@ pub async fn list(
     ))
 }
 // endregion: list
+
+pub async fn filter(
+    db: &DatabaseConnection,
+    filtre: &UploadFilter,
+    pagination: &Pagination,
+) -> Result<Page<UploadResponse>> {
+    let (uploads, total) = repository::filter(db, filtre, pagination).await?;
+
+    Ok(Page::new(
+        uploads.into_iter().map(Into::into).collect(),
+        pagination,
+        total,
+    ))
+}
 
 pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<UploadResponse> {
     let upload = repository::find(db, id)
