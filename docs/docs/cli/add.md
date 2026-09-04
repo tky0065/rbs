@@ -400,7 +400,7 @@ otherwise produce an empty plan, and a command that succeeds without doing anyth
 ## Anchors
 
 `rbs add` mostly writes whole files and edits the manifest; it is [`rbs
-generate`](./generate.md#anchors) that inserts into the project's eleven Rust comment
+generate`](./generate.md#anchors) that inserts into the project's twelve Rust comment
 anchors — `// <rbs:features>` (in `src/lib.rs`, or in `src/main.rs` on a project with no
 library — see [below](./generate.md#anchors)), `// <rbs:routes>`, `// <rbs:layers>`,
 `// <rbs:openapi>`, `// <rbs:migration_modules>`, `// <rbs:migrations>`,
@@ -417,8 +417,7 @@ three use it.
 `migrate` services go into `# <rbs:services>`, the YAML anchor a compose carries — see
 [above](#the-thirteen-features). The rule is the same everywhere: no AST is ever rewritten,
 and a missing anchor makes the command write nothing and print the block to paste back.
-[`rbs doctor`](./doctor.md) checks all twelve — eleven on a project with no compose to
-carry a twelfth.
+[`rbs doctor`](./doctor.md) checks all thirteen — eleven on a project carrying neither a compose nor the queue, the two optional ones.
 
 A project generated before `// <rbs:layers>` existed does not have it, and `rbs upgrade`
 does not add it: that command aligns the manifest and the `AGENTS.md` zones, and touches

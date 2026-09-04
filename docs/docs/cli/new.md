@@ -285,7 +285,7 @@ $ rbs new site --with auth --yes
 ```
 
 The order installed is derived from the names rather than from the order they were typed
-in — alphabetical, the same order [`rbs add`](./add.md) lists the twelve in:
+in — alphabetical, the same order [`rbs add`](./add.md) lists the thirteen in:
 
 ```text
 $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes
@@ -384,9 +384,8 @@ volumes:
 ```
 
 `docker compose up -d` starts it. The `# <rbs:services>` anchor is where [`rbs
-add`](./add.md) inserts the services `docker` brings, and it is one of the twelve anchors
-[`rbs doctor`](./doctor.md) checks — eleven on a project with no compose to carry a
-twelfth.
+add`](./add.md) inserts the services `docker` brings, and it is one of the thirteen anchors
+[`rbs doctor`](./doctor.md) checks — eleven on a project carrying neither a compose nor the queue, the two optional ones.
 
 Four cases write nothing:
 

@@ -394,7 +394,7 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) contrôle les douze ancres — onze sur un projet sans compose pour
+[`rbs doctor`](./doctor.md) contrôle les treize ancres — onze sur un projet qui ne porte ni compose ni file, les deux optionnelles
 en porter une dixième : une ancre disparue se trouve donc
 avant qu'une génération ne bute dessus.
 

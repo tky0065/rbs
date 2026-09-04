@@ -285,7 +285,7 @@ $ rbs new site --with auth --yes
 ```
 
 L'ordre d'installation est dérivé des noms, non de l'ordre où ils ont été tapés —
-alphabétique, le même ordre dans lequel [`rbs add`](./add.md) énumère les douze :
+alphabétique, le même ordre dans lequel [`rbs add`](./add.md) énumère les treize :
 
 ```text
 $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes
@@ -386,8 +386,8 @@ volumes:
 ```
 
 `docker compose up -d` la démarre. L'ancre `# <rbs:services>` est là où [`rbs
-add`](./add.md) insère les services qu'apporte `docker`, et c'est l'une des douze ancres
-que vérifie [`rbs doctor`](./doctor.md) — onze sur un projet sans compose pour en porter
+add`](./add.md) insère les services qu'apporte `docker`, et c'est l'une des treize ancres
+que vérifie [`rbs doctor`](./doctor.md) — onze sur un projet qui ne porte ni compose ni file, les deux optionnelles
 une douzième.
 
 Quatre cas n'écrivent rien :

@@ -401,7 +401,7 @@ sinon un plan vide, donc une commande qui réussit sans rien faire.
 ## Les ancres
 
 `rbs add` écrit surtout des fichiers entiers et modifie le manifeste ; c'est [`rbs
-generate`](./generate.md#les-ancres) qui insère dans les onze ancres en commentaires Rust
+generate`](./generate.md#les-ancres) qui insère dans les douze ancres en commentaires Rust
 du projet — `// <rbs:features>` (dans `src/lib.rs`, ou dans `src/main.rs` sur un projet
 sans bibliothèque — voir [plus bas](./generate.md#les-ancres)), `// <rbs:routes>`,
 `// <rbs:layers>`, `// <rbs:openapi>`, `// <rbs:migration_modules>`, `// <rbs:migrations>`,
@@ -419,7 +419,7 @@ toutes les trois.
 services `api` et `migrate` vont dans `# <rbs:services>`, l'ancre YAML que porte un
 compose — voir [plus haut](#les-treize-features). La règle est la même partout : aucun AST
 n'est jamais réécrit, et une ancre absente fait que la commande n'écrit rien et affiche le
-bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les douze — onze sur un
+bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les treize — onze sur un projet qui ne porte ni compose ni file, les deux optionnelles
 projet sans compose pour en porter une onzième.
 
 Un projet engendré avant l'existence de `// <rbs:layers>` ne la porte pas, et `rbs upgrade`

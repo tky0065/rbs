@@ -1845,5 +1845,29 @@ mod tests {
             "le préambule du binaire doit avoir été réécrit"
         );
         fs::write(&main, rewritten).expect("l'écriture aboutit");
+
+        // Le binaire qui imprime le document part avec la bibliothèque : il l'atteint par
+        // le nom de la crate, et cette forme du squelette est antérieure aux deux. Le
+        // laisser ferait échouer la compilation sur une absence que le projet visé n'a
+        // jamais eue.
+        fs::remove_file(root.join("src/bin/openapi.rs")).expect("le binaire s'efface");
+
+        let manifeste = root.join("Cargo.toml");
+        let source = read(&manifeste);
+        let rewritten = source
+            .replace(
+                "\n[[bin]]\nname = \"openapi\"\npath = \"src/bin/openapi.rs\"\n",
+                "",
+            )
+            .replace(
+                "Le paquet porte trois binaires",
+                "Le paquet porte deux binaires",
+            );
+
+        assert_ne!(
+            rewritten, source,
+            "la déclaration du binaire doit avoir été retirée"
+        );
+        fs::write(&manifeste, rewritten).expect("l'écriture aboutit");
     }
 }

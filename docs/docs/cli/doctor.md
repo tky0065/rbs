@@ -145,7 +145,7 @@ $ rbs doctor --json
     {
       "name": "ancres",
       "status": "ok",
-      "detail": "les 12 points d'insertion sont en place"
+      "detail": "les 13 points d'insertion sont en place"
     },
     {
       "name": "base",
@@ -191,7 +191,7 @@ The announcement is a line of the text rendering only; `--json` never carries it
 {/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --with jobs --database-url postgres://rbs:secret@localhost:55501/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
 $ rbs doctor
-  ✓ ancres      les 12 points d'insertion sont en place
+  ✓ ancres      les 13 points d'insertion sont en place
   ✓ agents      guide et inventaire à jour
   ✓ relations   les modèles portent leurs ancres de relation
   ✓ .env        les 7 variables de .env.example sont renseignées
@@ -380,7 +380,7 @@ names the command to run by hand:
 
 ```text
 $ rbs doctor
-  ✓ ancres      les 12 points d'insertion sont en place
+  ✓ ancres      les 13 points d'insertion sont en place
   ✓ agents      guide et inventaire à jour
   ✓ relations   les modèles portent leurs ancres de relation
   ✓ .env        les 7 variables de .env.example sont renseignées
