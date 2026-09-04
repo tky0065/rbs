@@ -60,26 +60,56 @@ raison de mettre le journal en base plutôt que dans un fichier. Une transaction
 `ConnectionTrait` : passez-lui celle qui porte votre changement, et la trace naît si et
 seulement si le changement est committé.
 
+Le repository qu'écrit `rbs generate` prend une `&DatabaseConnection`. Élargissez la
+signature de l'écriture que vous voulez tracer, pour que le service puisse lui passer sa
+transaction — c'est le seul changement que le fragment demande à votre code existant, et
+[`examples/newsletter-queue`](https://github.com/tky0065/rbs/tree/main/examples/newsletter-queue)
+fait de même pour une lecture qui lui est propre :
+
 ```rust
-use sea_orm::TransactionTrait;
+// src/posts/repository.rs — la seule couche qui construise une requête.
+use sea_orm::ConnectionTrait;
+
+pub async fn update<C: ConnectionTrait>(db: &C, post: ActiveModel) -> Result<Model> {
+    Ok(post.update(db).await?)
+}
+```
+
+Le service tient alors la transaction, et décide de ce qui mérite une trace :
+
+```rust
+// src/posts/service.rs
+use sea_orm::{DatabaseConnection, Set, TransactionTrait};
 use serde_json::json;
 
+use super::repository;
 use crate::audit::{self, Entry};
 
-let transaction = state.core().db().begin().await?;
+pub async fn rename(
+    db: &DatabaseConnection,
+    post: Model,
+    titre: String,
+    actor: &str,
+) -> Result<Model> {
+    let transaction = db.begin().await?;
 
-let ancien = post.title.clone();
-let post = post.update(&transaction).await?;
+    let ancien = post.title.clone();
+    let mut modifie: ActiveModel = post.into();
+    modifie.title = Set(titre);
+    let post = repository::update(&transaction, modifie).await?;
 
-audit::record(
-    &transaction,
-    Entry::new(audit::UPDATE, "posts", post.id.to_string())
-        .actor(identity.user_id.clone())
-        .changes(json!({ "title": { "from": ancien, "to": post.title } })),
-)
-.await?;
+    audit::record(
+        &transaction,
+        Entry::new(audit::UPDATE, "posts", post.id.to_string())
+            .actor(actor)
+            .changes(json!({ "title": { "from": ancien, "to": post.title } })),
+    )
+    .await?;
 
-transaction.commit().await?;
+    transaction.commit().await?;
+
+    Ok(post)
+}
 ```
 
 Un journal qui garde la trace d'un `UPDATE` annulé ment. Un journal qui rate la trace d'un
@@ -154,17 +184,24 @@ Pas de colonne `updated_at` : une ligne de journal ne se modifie pas.
 Relire l'histoire d'une ligne est une requête ordinaire :
 
 ```rust
+// src/audit/repository.rs — la lecture se pose à côté de l'écriture, pour la même
+// raison : rien d'autre dans le projet ne construit de requête.
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 
-use crate::audit::model::{Column, Entity};
+use super::model::{Column, Entity, Model};
 
-let histoire = Entity::find()
-    .filter(Column::Entity.eq("posts"))
-    .filter(Column::EntityId.eq(id.to_string()))
-    .order_by_asc(Column::CreatedAt)
-    .order_by_asc(Column::Id)
-    .all(state.core().db())
-    .await?;
+pub async fn history<C>(db: &C, entity: &str, entity_id: &str) -> anyhow::Result<Vec<Model>>
+where
+    C: ConnectionTrait,
+{
+    Ok(Entity::find()
+        .filter(Column::Entity.eq(entity))
+        .filter(Column::EntityId.eq(entity_id))
+        .order_by_asc(Column::CreatedAt)
+        .order_by_asc(Column::Id)
+        .all(db)
+        .await?)
+}
 ```
 
 Le second tri n'est pas décoratif : MySQL tronque `created_at` à la seconde, et trois

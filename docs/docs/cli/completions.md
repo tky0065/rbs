@@ -85,15 +85,15 @@ alone — the features [`rbs add`](./add.md) installs:
 ```text
 $ rbs completions bash | grep -A1 'rbs__subcmd__add)'
         rbs__subcmd__add)
-            opts="-h -V --force --dry-run --template-dir --help --version auth ci cors docker jobs mail rate-limit redis storage"
+            opts="-h -V --force --dry-run --template-dir --help --version audit auth ci cors docker jobs mail observability rate-limit redis storage"
 ```
 
 ```text
 $ rbs completions zsh | grep "':feature"
-':feature -- Feature à installer:(auth ci cors docker jobs mail rate-limit redis storage)' \
+':feature -- Feature à installer:(audit auth ci cors docker jobs mail observability rate-limit redis storage)' \
 ```
 
-The nine names come from the fragments embedded in the binary, and are the ones a shell
+The eleven names come from the fragments embedded in the binary, and are the ones a shell
 has no way of guessing.
 
 They are proposed, not required. `rbs add` itself accepts a name no binary carries — that
@@ -102,7 +102,7 @@ is what `--template-dir` exists for — so the parser keeps no such list, and on
 accepts would be worse than no completion at all.
 
 Fish and PowerShell are the two shells whose generator stops short of the values of a
-positional argument: there, `rbs add ` completes the flags but not the nine names. That is
+positional argument: there, `rbs add ` completes the flags but not the eleven names. That is
 a limit of the generator, not of the declaration.
 
 ## An unknown shell

@@ -282,7 +282,7 @@ $ rbs new site --with auth --yes
 ```
 
 The order installed is derived from the names rather than from the order they were typed
-in — alphabetical, the same order [`rbs add`](./add.md) lists the ten in:
+in — alphabetical, the same order [`rbs add`](./add.md) lists the eleven in:
 
 ```text
 $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes

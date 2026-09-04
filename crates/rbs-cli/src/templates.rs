@@ -467,6 +467,26 @@ mod tests {
         }
     }
 
+    /// `rustfmt --check` sur un fichier rendu, l'écart rendu lisible.
+    ///
+    /// `relatif` ne sert qu'au message : c'est le chemin de la template, celui que
+    /// l'auteur de l'échec doit rouvrir, et non celui du temporaire où elle a été
+    /// déroulée.
+    fn conforme_a_rustfmt(relatif: &str, path: &Path) {
+        let output = std::process::Command::new("rustfmt")
+            .args(["--edition", "2024", "--check"])
+            .arg(path)
+            .output()
+            .expect("rustfmt doit être lançable");
+
+        assert!(
+            output.status.success(),
+            "{relatif} n'est pas conforme à rustfmt :\n{}{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
+
     #[test]
     fn each_rust_template_of_the_skeleton_conforms_to_rustfmt() {
         // Le workflow d'`rbs add ci` lance `cargo fmt --check` sur le projet généré : un
@@ -511,19 +531,7 @@ mod tests {
         );
 
         for (relatif, path) in sources {
-            let output = std::process::Command::new("rustfmt")
-                .args(["--edition", "2024", "--check"])
-                .arg(&path)
-                .output()
-                .expect("rustfmt doit être lançable");
-
-            assert!(
-                output.status.success(),
-                "{} n'est pas conforme à rustfmt :\n{}{}",
-                relatif.display(),
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
+            conforme_a_rustfmt(&relatif.display().to_string(), &path);
         }
     }
 
@@ -1050,53 +1058,62 @@ mod tests {
     /// Le rendu d'un fragment est-il déjà ce que `rustfmt` écrirait ?
     ///
     /// Le squelette a son balayage depuis toujours ; les fragments n'en avaient aucun. Ce
-    /// que `each_example_passes_cargo_fmt` couvre est le rendu des seules features
-    /// qu'un exemple installe, et un fragment qu'aucun n'installe n'était vérifié nulle
-    /// part. L'enjeu est celui du squelette : le workflow d'`rbs add ci` lance
+    /// que `each_example_passes_cargo_fmt` couvre est le rendu des seules features qu'un
+    /// exemple installe — `audit` et `cors` n'en ont aucun, et n'étaient donc vérifiés
+    /// nulle part. L'enjeu est celui du squelette : le workflow d'`rbs add ci` lance
     /// `cargo fmt --check` sur le projet, et un blanc perdu par un `-%}` le fait échouer
     /// au premier pas, sur du code que le développeur n'a pas écrit.
     ///
-    /// Les fichiers d'un fragment sont déroulés à leur destination avant d'être formatés :
-    /// `rustfmt` suit les déclarations de modules, et un `mod.rs` seul ne résout pas ses
-    /// `mod`.
+    /// Les fichiers d'un fragment sont déroulés côte à côte, sous un répertoire par
+    /// fragment, avant d'être formatés : `rustfmt` suit les déclarations de modules, et un
+    /// `mod.rs` seul ne résout pas ses `mod`.
+    ///
+    /// Deux contextes, comme `each_feature_template_renders_with_its_context` : le
+    /// compteur de `rate-limit` a deux rendus selon que `redis` est posée, et celui qu'on
+    /// ne déroule pas est celui qui casse.
     #[test]
     fn each_rust_template_of_each_fragment_conforms_to_rustfmt() {
         let renderer = Renderer::new();
         let temp = tempfile::tempdir().expect("répertoire temporaire créable");
 
         let mut sources = Vec::new();
-        for feature in crate::templates::embedded_names() {
-            let root = temp.path().join(&feature);
+        for (rang, installees) in [&[][..], &["redis"][..]].into_iter().enumerate() {
+            for feature in crate::templates::embedded_names() {
+                let root = temp.path().join(rang.to_string()).join(&feature);
 
-            let files = Source::feature(None, &feature)
-                .expect("le fragment doit exister")
-                .files()
-                .expect("les templates embarquées doivent se lire");
+                let files = Source::feature(None, &feature)
+                    .expect("le fragment doit exister")
+                    .files()
+                    .expect("les templates embarquées doivent se lire");
 
-            for file in &files {
-                let destination = root.join(&file.destination);
-                if let Some(parent) = destination.parent() {
-                    fs::create_dir_all(parent).expect("le répertoire est créable");
-                }
+                for file in &files {
+                    let destination = root.join(&file.destination);
+                    if let Some(parent) = destination.parent() {
+                        fs::create_dir_all(parent).expect("le répertoire est créable");
+                    }
 
-                let rendered = renderer
-                    .render(&file.source, feature_context(&[]))
-                    .unwrap_or_else(|error| {
-                        panic!(
-                            "{feature}/{} ne se rend pas : {error}",
-                            file.destination.display()
-                        )
-                    });
-                fs::write(&destination, rendered).expect("le rendu est écrivable");
+                    let rendered = renderer
+                        .render(&file.source, feature_context(installees))
+                        .unwrap_or_else(|error| {
+                            panic!(
+                                "{feature}/{} ne se rend pas sur {installees:?} : {error}",
+                                file.destination.display()
+                            )
+                        });
+                    fs::write(&destination, rendered).expect("le rendu est écrivable");
 
-                if destination
-                    .extension()
-                    .is_some_and(|suffixe| suffixe == "rs")
-                {
-                    sources.push((
-                        format!("{feature}/{}", file.destination.display()),
-                        destination,
-                    ));
+                    if destination
+                        .extension()
+                        .is_some_and(|suffixe| suffixe == "rs")
+                    {
+                        sources.push((
+                            format!(
+                                "{feature}/{} sur {installees:?}",
+                                file.destination.display()
+                            ),
+                            destination,
+                        ));
+                    }
                 }
             }
         }
@@ -1107,18 +1124,7 @@ mod tests {
         );
 
         for (relatif, path) in sources {
-            let output = std::process::Command::new("rustfmt")
-                .args(["--edition", "2024", "--check"])
-                .arg(&path)
-                .output()
-                .expect("rustfmt doit être lançable");
-
-            assert!(
-                output.status.success(),
-                "{relatif} n'est pas conforme à rustfmt :\n{}{}",
-                String::from_utf8_lossy(&output.stdout),
-                String::from_utf8_lossy(&output.stderr)
-            );
+            conforme_a_rustfmt(&relatif, &path);
         }
     }
 

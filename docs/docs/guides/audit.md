@@ -58,26 +58,56 @@ whole reason for putting the log in the database rather than in a file. A transa
 a `ConnectionTrait`: hand it the one carrying your change, and the trace exists if and only
 if the change is committed.
 
+The repository `rbs generate` writes takes a `&DatabaseConnection`. Widen the signature of
+the write you want to trace, so that the service can hand it the transaction instead — it
+is the one change the fragment asks of your existing code, and
+[`examples/newsletter-queue`](https://github.com/tky0065/rbs/tree/main/examples/newsletter-queue)
+does the same for a read of its own:
+
 ```rust
-use sea_orm::TransactionTrait;
+// src/posts/repository.rs — the only layer that builds a query.
+use sea_orm::ConnectionTrait;
+
+pub async fn update<C: ConnectionTrait>(db: &C, post: ActiveModel) -> Result<Model> {
+    Ok(post.update(db).await?)
+}
+```
+
+The service then holds the transaction, and decides what deserves a trace:
+
+```rust
+// src/posts/service.rs
+use sea_orm::{DatabaseConnection, Set, TransactionTrait};
 use serde_json::json;
 
+use super::repository;
 use crate::audit::{self, Entry};
 
-let transaction = state.core().db().begin().await?;
+pub async fn rename(
+    db: &DatabaseConnection,
+    post: Model,
+    title: String,
+    actor: &str,
+) -> Result<Model> {
+    let transaction = db.begin().await?;
 
-let ancien = post.title.clone();
-let post = post.update(&transaction).await?;
+    let former = post.title.clone();
+    let mut changed: ActiveModel = post.into();
+    changed.title = Set(title);
+    let post = repository::update(&transaction, changed).await?;
 
-audit::record(
-    &transaction,
-    Entry::new(audit::UPDATE, "posts", post.id.to_string())
-        .actor(identity.user_id.clone())
-        .changes(json!({ "title": { "from": ancien, "to": post.title } })),
-)
-.await?;
+    audit::record(
+        &transaction,
+        Entry::new(audit::UPDATE, "posts", post.id.to_string())
+            .actor(actor)
+            .changes(json!({ "title": { "from": former, "to": post.title } })),
+    )
+    .await?;
 
-transaction.commit().await?;
+    transaction.commit().await?;
+
+    Ok(post)
+}
 ```
 
 A log that keeps the trace of a rolled-back `UPDATE` lies. A log that misses the trace of a
@@ -150,17 +180,24 @@ There is no `updated_at`: a log line is not modified.
 Reading a row's history is a plain query:
 
 ```rust
+// src/audit/repository.rs — reading belongs beside the write, for the same reason:
+// nothing else in the project builds a query.
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 
-use crate::audit::model::{Column, Entity};
+use super::model::{Column, Entity, Model};
 
-let history = Entity::find()
-    .filter(Column::Entity.eq("posts"))
-    .filter(Column::EntityId.eq(id.to_string()))
-    .order_by_asc(Column::CreatedAt)
-    .order_by_asc(Column::Id)
-    .all(state.core().db())
-    .await?;
+pub async fn history<C>(db: &C, entity: &str, entity_id: &str) -> anyhow::Result<Vec<Model>>
+where
+    C: ConnectionTrait,
+{
+    Ok(Entity::find()
+        .filter(Column::Entity.eq(entity))
+        .filter(Column::EntityId.eq(entity_id))
+        .order_by_asc(Column::CreatedAt)
+        .order_by_asc(Column::Id)
+        .all(db)
+        .await?)
+}
 ```
 
 The second ordering is not decorative: MySQL truncates `created_at` to the second, and

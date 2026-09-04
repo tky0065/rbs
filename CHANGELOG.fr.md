@@ -15,6 +15,18 @@ dépréciation.
 
 ### Ajouté
 
+- `rbs add audit` installe un journal des écritures : une table `audit_log`, un type
+  `Entry` et une fonction `record` sous `src/audit/`. `record` prend un
+  `&C: ConnectionTrait` et non une connexion, ce qui est toute la raison de mettre le
+  journal en base : passez-lui la transaction qui porte votre changement, et la trace naît
+  si et seulement si ce changement est committé. `actor_id` est nullable et prend une
+  `String` plutôt que l'`Identity` de la feature `auth`, si bien que le fragment s'installe
+  sur un service sans JWT et garde traçables les écritures hors requête — un job, un seed,
+  une commande d'administration. `action` est une chaîne et non un enum, avec `CREATE`,
+  `UPDATE` et `DELETE` pour constantes : `login` et `export` sont des actions légitimes
+  qu'un enum fermé ne ferait que forcer à contourner. Le fragment ne monte aucune route et
+  ne se câble sur aucun CRUD engendré — quelles écritures méritent une trace est une
+  question à laquelle seul votre domaine répond.
 - `rbs generate crud --with-upload` monte trois routes de contenu sur la ressource
   engendrée — `PUT`, `GET` et `HEAD` sur `/<ressource>/{id}/content` — contre le trait du
   fragment `storage`. Le corps voyage en `application/octet-stream`, pas en JSON : le
