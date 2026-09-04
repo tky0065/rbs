@@ -22,7 +22,7 @@ du projet », en bas, est faite pour l'accueillir.
 | Commande | Ce qu'elle fait | Ce qu'elle dispense d'écrire |
 |---|---|---|
 | `rbs new <nom>` | crée un projet ; `--lang fr\|en` fixe la langue de ce fichier | tout le squelette |
-| `rbs add <feature>` | installe audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage | le câblage de la feature |
+| `rbs add <feature>` | installe audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks | le câblage de la feature |
 | `rbs generate crud <nom> --fields "..."` | une feature CRUD complète | sept fichiers, le seed et la migration |
 | `rbs generate feature <nom>` | une feature vide | six fichiers |
 | `rbs migrate up\|down\|status` | pilote les migrations | — |
@@ -76,6 +76,7 @@ faire.
 - `<rbs:seeds>` dans `src/seeds/main.rs`
 - `<rbs:services>` dans `docker-compose.yml`
 - `<rbs:health_probes>` dans `src/health/controller.rs`
+- `<rbs:jobs>` dans `src/jobs/mod.rs`
 - `<rbs:relations:<table>>` et `<rbs:related:<table>>` dans le modèle de chaque entité
 
 ## Ce que rbs ne couvre pas
@@ -110,7 +111,7 @@ et `cargo test` seul ne les lance pas. Ils demandent la base du `.env` démarré
 - rbs 1.2.0 · base postgres
 - Fragments installés : jobs, mail, observability
 - Entités engendrées : subscribers
-- Ancres du projet : features (src/lib.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), health_probes (src/health/controller.rs)
+- Ancres du projet : features (src/lib.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), health_probes (src/health/controller.rs), jobs (src/jobs/mod.rs)
 <!-- /rbs:inventory -->
 
 ## Notes du projet

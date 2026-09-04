@@ -22,7 +22,7 @@ du projet », en bas, est faite pour l'accueillir.
 | Commande | Ce qu'elle fait | Ce qu'elle dispense d'écrire |
 |---|---|---|
 | `rbs new <nom>` | crée un projet ; `--lang fr\|en` fixe la langue de ce fichier | tout le squelette |
-| `rbs add <feature>` | installe audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage | le câblage de la feature |
+| `rbs add <feature>` | installe audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks | le câblage de la feature |
 | `rbs generate crud <nom> --fields "..."` | une feature CRUD complète | sept fichiers, le seed et la migration |
 | `rbs generate feature <nom>` | une feature vide | six fichiers |
 | `rbs migrate up\|down\|status` | pilote les migrations | — |
@@ -76,6 +76,7 @@ faire.
 - `<rbs:seeds>` dans `src/seeds/main.rs`
 - `<rbs:services>` dans `docker-compose.yml`
 - `<rbs:health_probes>` dans `src/health/controller.rs`
+- `<rbs:jobs>` dans `src/jobs/mod.rs`
 - `<rbs:relations:<table>>` et `<rbs:related:<table>>` dans le modèle de chaque entité
 
 ## Ce que rbs ne couvre pas
