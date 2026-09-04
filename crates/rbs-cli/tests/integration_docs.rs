@@ -393,7 +393,7 @@ fn masque_duree(texte: &str) -> String {
             return None;
         }
 
-        Some((rang, format!("{}<durée>", &prefixe)))
+        Some((rang, format!("{prefixe}<durée>")))
     })
 }
 
