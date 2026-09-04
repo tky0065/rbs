@@ -92,13 +92,14 @@ impl Registry {
 
 /// Les jobs de ce projet. Inscrivez les vôtres ici.
 ///
-/// `#[rustfmt::skip]` : sans elle, la chaîne tient sur une ligne tant que rien ne s'inscrit
-/// à l'ancre, puis rustfmt l'éclate sur plusieurs dès le premier `.register()` qu'un
-/// fragment y ajoute — un même fichier basculerait de forme à chaque installation, et
-/// `cargo fmt --check` verrait une divergence qu'aucune des deux formes ne corrige seule.
-#[rustfmt::skip]
+/// En instructions et non en chaîne fluide : une ancre posée au milieu d'un enchaînement de
+/// `.register()` ne survit pas à rustfmt, qui la disloque dès qu'un fragment y ajoute un
+/// second appel — la balise fermante finit à une autre indentation que l'ouvrante, une
+/// ancre que plus rien ne referme au bon endroit.
 pub fn registry() -> Registry {
-    Registry::new().register::<demo::Log>()
+    let mut registre = Registry::new();
+    registre = registre.register::<demo::Log>();
     // <rbs:jobs>
     // </rbs:jobs>
+    registre
 }

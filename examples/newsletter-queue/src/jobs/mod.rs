@@ -100,9 +100,15 @@ impl Registry {
 ///
 /// Un `kind` absent d'ici part en réessai puis en échec : le registre est le seul endroit
 /// où l'oubli se voie, et il ne se voit qu'à l'exécution.
+///
+/// En instructions et non en chaîne fluide : une ancre posée au milieu d'un enchaînement de
+/// `.register()` ne survit pas à rustfmt, qui la disloque dès qu'un fragment y ajoute un
+/// second appel — la balise fermante finit à une autre indentation que l'ouvrante.
 pub fn registry() -> Registry {
-    Registry::new().register::<newsletter::SendNewsletter>()
+    let mut registre = Registry::new();
+    registre = registre.register::<newsletter::SendNewsletter>();
     // <rbs:jobs>
     // </rbs:jobs>
+    registre
 }
 // endregion: registry

@@ -249,10 +249,11 @@ pub(crate) const JOBS: Anchor = Anchor {
     comment: "//",
     sorted: false,
     optional: true,
-    // rustfmt recompacte `Registry::new()\n.register::<demo::Log>()` en une ligne dès que
-    // le registre ne compte qu'un seul job : l'accroche est cette ligne entière, pas le
-    // seul appel, sans quoi `repose()` ne la retrouverait jamais dans le fichier engendré.
-    after: "Registry::new().register::<demo::Log>()",
+    // Une instruction entière et non un appel chaîné : une ancre posée au milieu d'un
+    // enchaînement de `.register()` ne survit pas à rustfmt, qui la disloque — la balise
+    // fermante finit à une autre indentation que l'ouvrante — dès qu'un fragment y ajoute
+    // un second appel. La forme en instructions reste, elle, stable dans les deux états.
+    after: "registre = registre.register::<demo::Log>();",
 };
 
 /// Variantes de l'énumération `Relation` du modèle d'une entité.

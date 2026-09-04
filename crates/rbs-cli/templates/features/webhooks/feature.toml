@@ -70,7 +70,7 @@ crate::webhooks::controller::revoke,
 # partirait en réessai puis en échec sous « aucun job n'est inscrit ».
 [[anchors]]
 anchor  = "jobs"
-content = ".register::<crate::webhooks::delivery::Delivery>()"
+content = "registre = registre.register::<crate::webhooks::delivery::Delivery>();"
 
 # Un client par processus, donc un pool de connexions partagé : le construire à chaque
 # livraison rouvrirait une session TLS par tentative.
