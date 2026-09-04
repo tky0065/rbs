@@ -297,6 +297,12 @@ fn a_soft_deleting_crud_migrates_and_hides_its_deleted_rows() {
     // supprimée. `a_replayed_unique_value_returns_409` plus bas ne prouve que l'autre
     // moitié, le refus tant que cette ligne reste vivante ; une clause `.and_where(...)`
     // oubliée la laisserait passer sans être vue.
+    // Un `-c` par instruction, et non trois instructions dans un seul : jusqu'à
+    // PostgreSQL 15, `psql -c` n'imprime que le résultat de la dernière commande de la
+    // chaîne. Le compte des `INSERT 0 1` y tombait à un sur une base saine, et le test
+    // accusait l'index partiel de ce que le client ne disait pas. Séparées, les trois
+    // instructions rendent chacune sa ligne sur toutes les versions, et une violation
+    // d'unicité reste visible telle quelle.
     let mut rebond = postgres
         .exec(ExecCommand::new([
             "psql",
@@ -308,10 +314,12 @@ fn a_soft_deleting_crud_migrates_and_hides_its_deleted_rows() {
             "ON_ERROR_STOP=1",
             "-c",
             "insert into soft_articles (id, title, created_at, updated_at) \
-             values ('00000000-0000-4000-8000-000000000001', 'rebond-apres-suppression', now(), now()); \
-             update soft_articles set deleted_at = now() \
-             where id = '00000000-0000-4000-8000-000000000001'; \
-             insert into soft_articles (id, title, created_at, updated_at) \
+             values ('00000000-0000-4000-8000-000000000001', 'rebond-apres-suppression', now(), now());",
+            "-c",
+            "update soft_articles set deleted_at = now() \
+             where id = '00000000-0000-4000-8000-000000000001';",
+            "-c",
+            "insert into soft_articles (id, title, created_at, updated_at) \
              values ('00000000-0000-4000-8000-000000000002', 'rebond-apres-suppression', now(), now());",
         ]))
         .expect("psql doit pouvoir s'exécuter dans le conteneur");
