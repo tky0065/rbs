@@ -1,6 +1,278 @@
-//! Tests du fragment `webhooks`.
-//!
-//! Vide pour l'instant : la signature, la correspondance des motifs et le cycle complet
-//! d'un abonnement y arrivent dans une tâche ultérieure. Le fichier est déjà déclaré ici,
-//! et non ajouté avec son premier test, pour que `mod.rs` compile sans attendre — un
-//! module absent aurait bloqué `cargo check` du fragment entier.
+use rbs_core::HasCoreState;
+use sea_orm::ActiveValue::Set;
+use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, TransactionTrait,
+};
+use tokio::sync::MutexGuard;
+
+use super::delivery::{Delivery, Event};
+use super::model::{ActiveModel, Entity, Model};
+use super::{matches, signature};
+use crate::jobs::Job;
+use crate::state::AppState;
+
+/// Le vecteur de signature, calculé hors de Rust :
+///
+/// ```text
+/// $ printf '1757000000.{}' | openssl dgst -sha256 -hmac "secret" -hex
+/// ```
+///
+/// C'est ce qui lui donne sa valeur : un test qui comparerait `sign` à `sign` ne prouverait
+/// que la stabilité du condensat, jamais sa justesse. Un receveur écrit en Python ou en Go
+/// doit retrouver celui-ci, octet pour octet.
+const VECTEUR: &str = "a5dba1becd39e5b001811ec483ca620bdfc84f2167017c06f8a0fc0ca2953b75";
+
+#[test]
+fn the_signature_matches_an_independently_computed_vector() {
+    assert_eq!(signature::sign("secret", 1_757_000_000, b"{}"), VECTEUR);
+}
+
+#[test]
+fn the_signature_changes_with_the_timestamp() {
+    // L'horodatage entre dans le condensat, et c'est ce qui ferme le rejeu : un tiers qui
+    // capte une livraison ne peut pas la resservir plus tard sous une date fraîche.
+    assert_ne!(
+        signature::sign("secret", 1_757_000_000, b"{}"),
+        signature::sign("secret", 1_757_000_001, b"{}"),
+        "la date ne participe pas à la signature"
+    );
+}
+
+#[test]
+fn the_signature_header_carries_the_timestamp_and_the_v1_digest() {
+    let entete = signature::header("secret", 1_757_000_000, b"{}");
+
+    assert_eq!(entete, format!("t=1757000000,v1={VECTEUR}"));
+
+    // La forme est ce que le receveur découpe : elle ne peut pas dériver sans casser tous
+    // les receveurs déjà écrits.
+    let (horodatage, condensat) = entete.split_once(',').expect("deux champs séparés par ,");
+    assert_eq!(horodatage, "t=1757000000");
+
+    let condensat = condensat.strip_prefix("v1=").expect("le schéma est nommé");
+    assert_eq!(condensat.len(), 64, "un SHA-256 fait 32 octets");
+    assert!(
+        condensat
+            .chars()
+            .all(|caractere| caractere.is_ascii_digit() || ('a'..='f').contains(&caractere)),
+        "l'hexadécimal doit être minuscule : {condensat}"
+    );
+}
+
+#[test]
+fn an_exact_pattern_matches_only_its_own_event() {
+    let motifs = vec!["user.created".to_string()];
+
+    assert!(matches(&motifs, "user.created"));
+    assert!(!matches(&motifs, "user.deleted"));
+    // Un motif exact n'est pas un préfixe : sans quoi `user.created` prendrait aussi
+    // `user.created.retry`, un événement que l'abonné n'a jamais demandé.
+    assert!(!matches(&motifs, "user.created.retry"));
+}
+
+#[test]
+fn a_prefix_pattern_matches_every_event_of_its_family() {
+    let motifs = vec!["user.*".to_string()];
+
+    assert!(matches(&motifs, "user.created"));
+    assert!(matches(&motifs, "user.deleted"));
+    assert!(!matches(&motifs, "order.created"));
+}
+
+#[test]
+fn the_star_pattern_matches_every_event() {
+    let motifs = vec!["*".to_string()];
+
+    assert!(matches(&motifs, "user.created"));
+    assert!(matches(&motifs, "order.paid"));
+}
+
+// Les tests qui suivent joignent la base que décrit `.env`, et sont donc `#[ignore]` :
+// `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre la base du
+// projet, migrations appliquées.
+
+/// Les tests qui émettent partagent l'unique table `webhook_subscriptions` et l'unique file
+/// `jobs` : ils se relaient plutôt que de se voler leurs lignes.
+///
+/// Le verrou est celui du fragment `jobs`, et non un second : une émission enfile dans la
+/// file, dont les tests voisins vident la table. Deux verrous indépendants laisseraient
+/// chaque suite effacer ce que l'autre vient d'écrire, et les deux paraîtraient fautives à
+/// tour de rôle.
+async fn table_a_soi() -> (MutexGuard<'static, ()>, AppState) {
+    let garde = crate::jobs::tests::verrou_base().lock().await;
+    let config = rbs_core::Config::load().expect("configuration lisible");
+    let db = rbs_core::db::connect(&config.database)
+        .await
+        .expect("base joignable — les migrations doivent avoir été appliquées");
+
+    Entity::delete_many()
+        .exec(&db)
+        .await
+        .expect("la table webhook_subscriptions doit se vider");
+    // De la file, seules les livraisons : les tests des fragments `jobs` et `scheduler`
+    // tournent dans le même binaire et sur la même table, et un vidage sans filtre leur
+    // retirerait sous les pieds les jobs qu'ils viennent d'enfiler.
+    crate::jobs::model::Entity::delete_many()
+        .filter(crate::jobs::model::Column::Kind.eq(Delivery::KIND))
+        .exec(&db)
+        .await
+        .expect("la file doit se vider de ses livraisons");
+
+    (
+        garde,
+        AppState::new(db, config).expect("état constructible"),
+    )
+}
+
+/// Un abonnement actif, inséré sans passer par la route : ces tests-là n'authentifient rien.
+async fn abonne(db: &DatabaseConnection, url: &str, events: &[&str]) -> Model {
+    inserer(db, url, events, None).await
+}
+
+/// Le même, révoqué à l'instant.
+async fn abonne_revoque(db: &DatabaseConnection, url: &str, events: &[&str]) -> Model {
+    inserer(db, url, events, Some(chrono::Utc::now().fixed_offset())).await
+}
+
+async fn inserer(
+    db: &DatabaseConnection,
+    url: &str,
+    events: &[&str],
+    revoked_at: Option<DateTimeWithTimeZone>,
+) -> Model {
+    ActiveModel {
+        url: Set(url.to_string()),
+        events: Set(serde_json::json!(events)),
+        secret: Set("secret".to_string()),
+        revoked_at: Set(revoked_at),
+        ..Default::default()
+    }
+    .insert(db)
+    .await
+    .expect("l'abonnement s'insère")
+}
+
+/// La charge utile des émissions de ces tests : ce qu'elle porte n'importe pas, seul compte
+/// qu'elle voyage.
+fn donnees() -> serde_json::Value {
+    serde_json::json!({ "id": 1 })
+}
+
+/// Les lignes de la file que ces tests ont fait naître, et elles seules.
+async fn livraisons(db: &DatabaseConnection) -> usize {
+    crate::jobs::model::Entity::find()
+        .filter(crate::jobs::model::Column::Kind.eq(Delivery::KIND))
+        .all(db)
+        .await
+        .expect("lecture possible")
+        .len()
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn emitting_an_event_enqueues_one_delivery_per_listening_subscription() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    abonne(db, "https://un.example.com/hook", &["user.created"]).await;
+    abonne(db, "https://deux.example.com/hook", &["user.*"]).await;
+
+    let enfilees = super::emit(db, "user.created", &donnees())
+        .await
+        .expect("l'émission aboutit");
+
+    assert_eq!(enfilees, 2);
+    assert_eq!(livraisons(db).await, 2);
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_revoked_subscription_is_not_delivered_to() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    abonne(db, "https://vivant.example.com/hook", &["*"]).await;
+    abonne_revoque(db, "https://parti.example.com/hook", &["*"]).await;
+
+    let enfilees = super::emit(db, "user.created", &donnees())
+        .await
+        .expect("l'émission aboutit");
+
+    assert_eq!(enfilees, 1, "un abonnement révoqué a reçu une livraison");
+    assert_eq!(livraisons(db).await, 1);
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_subscription_that_does_not_listen_receives_nothing() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    abonne(db, "https://commandes.example.com/hook", &["order.*"]).await;
+
+    let enfilees = super::emit(db, "user.created", &donnees())
+        .await
+        .expect("l'émission aboutit");
+
+    // Aucun abonné concerné n'est pas une erreur : un projet sans webhook configuré émet
+    // dans le vide, ce qui est le cas nominal.
+    assert_eq!(enfilees, 0);
+    assert_eq!(livraisons(db).await, 0);
+}
+
+/// L'abonnement est relu au dépilage, et c'est ce qui rend la révocation rétroactive sur
+/// les livraisons déjà en file.
+///
+/// L'URL est injoignable par construction : si la relecture cessait d'arrêter la livraison,
+/// le job partirait poster et échouerait au lieu de rendre `Ok(())`. Ce test n'a donc besoin
+/// d'aucun serveur.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_delivery_whose_subscription_was_revoked_succeeds_without_a_request() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    let abonnement = abonne_revoque(db, "http://127.0.0.1:1/hook", &["*"]).await;
+
+    let job = Delivery {
+        subscription: abonnement.id,
+        event: Event {
+            id: Uuid::now_v7(),
+            event: "user.created".to_string(),
+            created_at: chrono::Utc::now().fixed_offset(),
+            data: donnees(),
+        },
+    };
+
+    job.run(&state)
+        .await
+        .expect("une livraison sans destinataire n'a rien à réessayer");
+}
+
+/// Le critère qui justifie qu'`emit` prenne un `ConnectionTrait` et non une connexion.
+///
+/// Un `user.created` livré alors que l'inscription a été annulée serait un mensonge que
+/// rien ne rattrape : les livraisons naissent si et seulement si la transaction du métier
+/// est committée.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_emission_rolled_back_with_its_transaction_enqueues_nothing() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    abonne(db, "https://un.example.com/hook", &["*"]).await;
+
+    let transaction = db.begin().await.expect("transaction ouvrable");
+    let enfilees = super::emit(&transaction, "user.created", &donnees())
+        .await
+        .expect("l'émission aboutit dans la transaction");
+    assert_eq!(enfilees, 1);
+    transaction.rollback().await.expect("transaction annulable");
+
+    assert_eq!(
+        livraisons(db).await,
+        0,
+        "une livraison a survécu au rollback de la transaction qui la motivait"
+    );
+}
