@@ -410,7 +410,7 @@ rbs doctor
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
      Running `target/debug/migration version`
   ✓ base          postgres 18.6 répond sur localhost:5432
-  ✓ disposition   les modules installés sont là où le CLI les pose
+  ✓ disposition   aucun module ne mélange les deux dispositions
 ✓ le projet est sain
 ```
 

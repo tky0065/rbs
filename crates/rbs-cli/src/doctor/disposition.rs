@@ -38,7 +38,7 @@ pub(crate) fn check(root: &Path) -> Check {
     let src = root.join("src");
 
     if !src.join("modules").is_dir() {
-        return Check::ok(TITRE, "les modules installés sont là où le CLI les pose");
+        return Check::ok(TITRE, "aucun module ne mélange les deux dispositions");
     }
 
     let restes: Vec<String> = ANCIENS
@@ -48,7 +48,7 @@ pub(crate) fn check(root: &Path) -> Check {
         .collect();
 
     if restes.is_empty() {
-        return Check::ok(TITRE, "les modules installés sont là où le CLI les pose");
+        return Check::ok(TITRE, "aucun module ne mélange les deux dispositions");
     }
 
     Check::warned(

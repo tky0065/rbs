@@ -222,7 +222,7 @@ $ rbs doctor
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.30s
      Running `target/debug/migration version`
   ✓ base          postgres 18.6 répond sur localhost:55501
-  ✓ disposition   les modules installés sont là où le CLI les pose
+  ✓ disposition   aucun module ne mélange les deux dispositions
   ✓ jobs          la configuration de la file est en place
 ✓ le projet est sain
 ```
@@ -248,7 +248,7 @@ $ rbs doctor
   ✓ versions      projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
   ✗ base          rien ne répond sur localhost:55501
       lancez `docker compose up -d` à la racine du projet, ou corrigez l'URL du .env
-  ✓ disposition   les modules installés sont là où le CLI les pose
+  ✓ disposition   aucun module ne mélange les deux dispositions
   ✓ jobs          la configuration de la file est en place
 attention : le projet demande votre attention
 ```
@@ -295,7 +295,7 @@ plan pour /private/tmp/rbs-demo/demo
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.09s
      Running `target/debug/migration version`
   ✓ base          sqlite 3.51 répond sur demo.db
-  ✓ disposition   les modules installés sont là où le CLI les pose
+  ✓ disposition   aucun module ne mélange les deux dispositions
 ✓ le projet est sain
 ```
 
@@ -426,7 +426,7 @@ For more information about this error, try `rustc --explain E0425`.
 error: could not compile `migration` (bin "migration") due to 1 previous error
   ✗ base          localhost:55501 répond, mais sa version reste inconnue : la crate migration a échoué (code 101)
       vérifiez que `cargo run -p migration -- version` aboutit
-  ✓ disposition   les modules installés sont là où le CLI les pose
+  ✓ disposition   aucun module ne mélange les deux dispositions
   ✓ jobs          la configuration de la file est en place
 attention : le projet demande votre attention
 ```
