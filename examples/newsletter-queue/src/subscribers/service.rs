@@ -6,8 +6,8 @@ use sea_orm::{DatabaseConnection, TransactionTrait};
 use super::dto::{Broadcast, CreateSubscriber, SubscriberResponse, UpdateSubscriber};
 use super::filter::SubscriberFilter;
 use super::repository::{self, ActiveModel};
-use crate::jobs;
-use crate::jobs::newsletter::SendNewsletter;
+use crate::modules::jobs;
+use crate::modules::jobs::newsletter::SendNewsletter;
 
 // region: broadcast
 /// Enfile une lettre par abonné confirmé, et rend leur nombre.

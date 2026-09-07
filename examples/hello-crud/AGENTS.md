@@ -65,6 +65,7 @@ retirer, ne pas les réordonner, ne pas écrire à leur place quand une commande
 faire.
 
 - `<rbs:features>` dans `src/lib.rs`
+- `<rbs:modules>` dans `src/modules/mod.rs`
 - `<rbs:routes>` dans `src/router.rs`
 - `<rbs:layers>` dans `src/router.rs`
 - `<rbs:openapi>` dans `src/openapi.rs`
@@ -76,7 +77,7 @@ faire.
 - `<rbs:seeds>` dans `src/seeds/main.rs`
 - `<rbs:services>` dans `docker-compose.yml`
 - `<rbs:health_probes>` dans `src/health/controller.rs`
-- `<rbs:jobs>` dans `src/jobs/mod.rs`
+- `<rbs:jobs>` dans `src/modules/jobs/mod.rs`
 - `<rbs:relations:<table>>` et `<rbs:related:<table>>` dans le modèle de chaque entité
 
 ## Ce que rbs ne couvre pas

@@ -6,9 +6,9 @@ use sea_orm::DatabaseConnection;
 pub struct AppState {
     core: CoreState,
     // <rbs:state_champs>
-    pub cache: crate::cache::Cache,
-    pub mail: crate::mail::Mailer,
-    pub storage: std::sync::Arc<dyn crate::storage::Storage>,
+    pub cache: crate::modules::cache::Cache,
+    pub mail: crate::modules::mail::Mailer,
+    pub storage: std::sync::Arc<dyn crate::modules::storage::Storage>,
     // </rbs:state_champs>
 }
 
@@ -17,9 +17,9 @@ impl AppState {
         Ok(Self {
             core: CoreState::new(db, config),
             // <rbs:state_init>
-            cache: crate::cache::Cache::from_config()?,
-            mail: crate::mail::Mailer::from_config()?,
-            storage: crate::storage::from_config()?,
+            cache: crate::modules::cache::Cache::from_config()?,
+            mail: crate::modules::mail::Mailer::from_config()?,
+            storage: crate::modules::storage::from_config()?,
             // </rbs:state_init>
         })
     }

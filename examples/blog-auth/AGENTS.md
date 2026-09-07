@@ -65,6 +65,7 @@ retirer, ne pas les réordonner, ne pas écrire à leur place quand une commande
 faire.
 
 - `<rbs:features>` dans `src/lib.rs`
+- `<rbs:modules>` dans `src/modules/mod.rs`
 - `<rbs:routes>` dans `src/router.rs`
 - `<rbs:layers>` dans `src/router.rs`
 - `<rbs:openapi>` dans `src/openapi.rs`
@@ -76,7 +77,7 @@ faire.
 - `<rbs:seeds>` dans `src/seeds/main.rs`
 - `<rbs:services>` dans `docker-compose.yml`
 - `<rbs:health_probes>` dans `src/health/controller.rs`
-- `<rbs:jobs>` dans `src/jobs/mod.rs`
+- `<rbs:jobs>` dans `src/modules/jobs/mod.rs`
 - `<rbs:relations:<table>>` et `<rbs:related:<table>>` dans le modèle de chaque entité
 
 ## Ce que rbs ne couvre pas
@@ -111,7 +112,7 @@ et `cargo test` seul ne les lance pas. Ils demandent la base du `.env` démarré
 - rbs 1.2.0 · base postgres
 - Fragments installés : auth, rate-limit
 - Entités engendrées : posts
-- Ancres du projet : features (src/lib.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), health_probes (src/health/controller.rs)
+- Ancres du projet : features (src/lib.rs), modules (src/modules/mod.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), health_probes (src/health/controller.rs)
 <!-- /rbs:inventory -->
 
 ## Notes du projet

@@ -7,9 +7,9 @@ use sea_orm::prelude::Uuid;
 use super::dto::{CreateUpload, UpdateUpload, UploadResponse};
 use super::filter::UploadFilter;
 use super::repository::{self, ActiveModel};
-use crate::cache::Cache;
-use crate::mail::Mailer;
-use crate::storage::Storage;
+use crate::modules::cache::Cache;
+use crate::modules::mail::Mailer;
+use crate::modules::storage::Storage;
 use minijinja::context;
 // endregion: imports
 
@@ -234,7 +234,7 @@ pub async fn get_content(storage: &dyn Storage, id: Uuid) -> Result<Vec<u8>> {
         .await
         // `Introuvable` est le seul cas qui vient du client : les autres sont des pannes.
         .map_err(|error| match error {
-            crate::storage::StorageError::NotFound(_) => Error::NotFound("contenu"),
+            crate::modules::storage::StorageError::NotFound(_) => Error::NotFound("contenu"),
             autre => Error::Internal(anyhow::anyhow!("{autre}")),
         })
 }

@@ -12,8 +12,8 @@ async fn main() -> anyhow::Result<()> {
     let state = state::AppState::new(db, config)?;
 
     // <rbs:startup>
-    newsletter_queue::jobs::worker::spawn(state.clone());
-    newsletter_queue::observability::serve(&state).await?;
+    newsletter_queue::modules::jobs::worker::spawn(state.clone());
+    newsletter_queue::modules::observability::serve(&state).await?;
     // </rbs:startup>
 
     let app = router::router(state);

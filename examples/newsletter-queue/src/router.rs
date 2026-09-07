@@ -32,7 +32,7 @@ pub fn router(state: AppState) -> Router {
             timeout,
         ))
         .layer(axum::middleware::from_fn(
-            crate::observability::metrics::middleware,
+            crate::modules::observability::metrics::middleware,
         ))
         // </rbs:layers>
         .layer(from_fn(rbs_core::trace::middleware))
