@@ -82,8 +82,10 @@ fn a_module_written_by_hand_is_reported_as_a_warning_not_a_failure() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let projet = common::projet(parent.path());
     viser(&projet, INJOIGNABLE);
-    fs::create_dir_all(projet.join("src/webhooks")).expect("répertoire créable");
-    fs::write(projet.join("src/webhooks/mod.rs"), "// à la main\n").expect("l'écriture aboutit");
+    // `facturation` : un nom qu'aucun fragment ne porte, pour ne pas confondre ce
+    // répertoire écrit à la main avec un module que `rbs add` aurait déposé.
+    fs::create_dir_all(projet.join("src/facturation")).expect("répertoire créable");
+    fs::write(projet.join("src/facturation/mod.rs"), "// à la main\n").expect("l'écriture aboutit");
 
     let rendu = diagnostic(&projet);
     let ligne = ligne(&rendu, "agents");
@@ -91,7 +93,7 @@ fn a_module_written_by_hand_is_reported_as_a_warning_not_a_failure() {
     assert!(ligne.contains('!'), "{ligne}\n\n{rendu}");
     assert!(!ligne.contains('✗'), "{ligne}\n\n{rendu}");
     assert!(
-        ligne.contains("webhooks"),
+        ligne.contains("facturation"),
         "le constat doit nommer le module : {ligne}"
     );
 }

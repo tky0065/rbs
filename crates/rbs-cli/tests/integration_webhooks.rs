@@ -58,7 +58,7 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     assert!(abouti, "`cargo test` du projet a échoué :\n{ordinaires}");
     for test in TESTS_ORDINAIRES {
         assert!(
-            ordinaires.contains(&format!("test webhooks::tests::{test} ... ok")),
+            ordinaires.contains(&format!("test modules::webhooks::tests::{test} ... ok")),
             "`{test}` n'a pas été exécuté :\n{ordinaires}"
         );
     }
@@ -74,7 +74,7 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     // au vert sans qu'une seule transaction ait été ouverte.
     for test in TESTS_SOUS_CONTENEUR {
         assert!(
-            sous_conteneur.contains(&format!("test webhooks::tests::{test} ... ok")),
+            sous_conteneur.contains(&format!("test modules::webhooks::tests::{test} ... ok")),
             "`{test}` n'a pas été exécuté :\n{sous_conteneur}"
         );
     }
@@ -111,23 +111,24 @@ fn project_with_webhooks_on(moteur: &str, url: &str, parent: &TempDir) -> PathBu
     rbs(&racine).args(["add", "webhooks"]).assert().success();
 
     for requis in [
-        "src/jobs/mod.rs",
+        "src/modules/jobs/mod.rs",
         "src/auth/mod.rs",
-        "src/rate_limit/mod.rs",
+        "src/modules/rate_limit/mod.rs",
     ] {
         assert!(
             racine.join(requis).exists(),
             "le fragment requis n'a pas été entraîné : {requis}"
         );
     }
-    assert!(racine.join("src/webhooks/mod.rs").exists());
+    assert!(racine.join("src/modules/webhooks/mod.rs").exists());
 
     // Le worker n'exécute que ce que le registre connaît : sans cette ligne, chaque
     // livraison partirait en réessai puis en échec sous « aucun job n'est inscrit », et la
     // compilation du projet ne le dirait pas.
-    let registre = fs::read_to_string(racine.join("src/jobs/mod.rs")).expect("registre lisible");
+    let registre =
+        fs::read_to_string(racine.join("src/modules/jobs/mod.rs")).expect("registre lisible");
     assert!(
-        registre.contains(".register::<crate::webhooks::delivery::Delivery>()"),
+        registre.contains(".register::<crate::modules::webhooks::delivery::Delivery>()"),
         "le job de livraison n'est pas inscrit au registre :\n{registre}"
     );
 

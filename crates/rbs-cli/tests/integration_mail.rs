@@ -75,7 +75,7 @@ fn a_templated_email_reaches_its_destination_and_reads_back_through_the_api() {
     // cette ligne, un fragment qui cesserait de livrer son test d'envoi laisserait
     // celui-ci au vert.
     assert!(
-        journal.contains(&format!("test mail::tests::{ENVOI} ... ok")),
+        journal.contains(&format!("test modules::mail::tests::{ENVOI} ... ok")),
         "`{ENVOI}` n'a pas été exécuté :\n{journal}"
     );
 

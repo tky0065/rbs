@@ -57,7 +57,7 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     // celui-ci au vert sans qu'une seule transaction ait été ouverte.
     for test in TESTS {
         assert!(
-            sous_conteneur.contains(&format!("test jobs::tests::{test} ... ok")),
+            sous_conteneur.contains(&format!("test modules::jobs::tests::{test} ... ok")),
             "`{test}` n'a pas été exécuté :\n{sous_conteneur}"
         );
     }
@@ -116,7 +116,7 @@ fn the_dequeue_never_hands_the_same_job_twice_on_the_three_engines() {
         );
         assert!(
             joues.contains(
-                "test jobs::tests::two_concurrent_workers_never_reserve_the_same_job ... ok"
+                "test modules::jobs::tests::two_concurrent_workers_never_reserve_the_same_job ... ok"
             ),
             "le test de concurrence n'a pas été joué sur {moteur} :\n{joues}"
         );
