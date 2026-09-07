@@ -51,7 +51,7 @@ use super::dto::{
 use super::filter::{@ entity @}Filter;
 use super::repository::{self, ActiveModel};
 {%- if with_upload %}
-use crate::storage::{Storage, StorageError};
+use crate::modules::storage::{Storage, StorageError};
 
 /// Clé du contenu déposé pour `id`.
 ///

@@ -485,7 +485,7 @@ fn suite(feature: &str) -> Option<&'static str> {
         // ne contient qu'un exemple : installé et non édité, le calendrier ne déclenche
         // rien d'utile.
         "scheduler" => Some(
-            "rbs migrate up, puis déclarez vos échéances dans src/scheduler/mod.rs — \
+            "rbs migrate up, puis déclarez vos échéances dans src/modules/scheduler/mod.rs — \
              les expressions sont évaluées en UTC",
         ),
         // La liste est vide à l'installation : sans ce rappel, le développeur croirait
@@ -1089,7 +1089,10 @@ mod tests {
         assert!(conseil.contains("rbs migrate up"), "{conseil}");
         // La liste livrée ne contient qu'une échéance d'exemple : sans ce rappel, le
         // fragment paraît installé et ne déclenche rien de ce que le projet attend.
-        assert!(conseil.contains("src/scheduler/mod.rs"), "{conseil}");
+        assert!(
+            conseil.contains("src/modules/scheduler/mod.rs"),
+            "{conseil}"
+        );
     }
 
     /// Trois tables à créer — le fragment entraîne `jobs` et `auth` — et une émission qui

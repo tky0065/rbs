@@ -33,7 +33,12 @@ content = "storage: crate::modules::storage::from_config()?,"
 # garderait le pod en rotation.
 [[anchors]]
 anchor  = "health_probes"
-content = 'rbs_core::health::Probe::new("storage", crate::modules::storage::probe(state.storage())),'
+content = """
+rbs_core::health::Probe::new(
+    "storage",
+    crate::modules::storage::probe(state.storage()),
+),
+"""
 
 [[dependencies]]
 name    = "async-trait"

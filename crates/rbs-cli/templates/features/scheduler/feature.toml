@@ -4,30 +4,30 @@ requires    = ["jobs"]
 
 [[files]]
 source      = "mod.rs.jinja"
-destination = "src/scheduler/mod.rs"
+destination = "src/modules/scheduler/mod.rs"
 
 [[files]]
 source      = "config.rs.jinja"
-destination = "src/scheduler/config.rs"
+destination = "src/modules/scheduler/config.rs"
 
 [[files]]
 source      = "model.rs.jinja"
-destination = "src/scheduler/model.rs"
+destination = "src/modules/scheduler/model.rs"
 
 [[files]]
 source      = "sync.rs.jinja"
-destination = "src/scheduler/sync.rs"
+destination = "src/modules/scheduler/sync.rs"
 
 [[files]]
 source      = "ticker.rs.jinja"
-destination = "src/scheduler/ticker.rs"
+destination = "src/modules/scheduler/ticker.rs"
 
 [[files]]
 source      = "tests.rs.jinja"
-destination = "src/scheduler/tests.rs"
+destination = "src/modules/scheduler/tests.rs"
 
 [[anchors]]
-anchor  = "features"
+anchor  = "modules"
 content = "pub mod scheduler;"
 
 # Comme le worker de la file, le ticker vit dans le processus de l'API : c'est ce qui lui
@@ -40,7 +40,7 @@ content = "pub mod scheduler;"
 # qui ne déclenchera jamais rien — une panne qu'aucune sonde ne voit.
 [[anchors]]
 anchor  = "startup"
-content = "{@ crate_path @}::scheduler::spawn(state.clone()).await?;"
+content = "{@ crate_path @}::modules::scheduler::spawn(state.clone()).await?;"
 
 [migration]
 source = "migration.rs.jinja"

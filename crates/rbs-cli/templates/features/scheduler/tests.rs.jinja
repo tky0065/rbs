@@ -7,7 +7,7 @@ use tokio::sync::MutexGuard;
 
 use super::model::{ActiveModel, Entity};
 use super::{Schedule, normaliser, sync, ticker};
-use crate::jobs::Job;
+use crate::modules::jobs::Job;
 use crate::state::AppState;
 
 /// Le job que ces tests font déclencher.
@@ -29,9 +29,9 @@ impl Job for Scheduled {
 }
 
 /// Les lignes de la file que ces tests ont fait naître, et elles seules.
-async fn jobs_declenches(db: &DatabaseConnection) -> Vec<crate::jobs::model::Model> {
-    crate::jobs::model::Entity::find()
-        .filter(crate::jobs::model::Column::Kind.eq(Scheduled::KIND))
+async fn jobs_declenches(db: &DatabaseConnection) -> Vec<crate::modules::jobs::model::Model> {
+    crate::modules::jobs::model::Entity::find()
+        .filter(crate::modules::jobs::model::Column::Kind.eq(Scheduled::KIND))
         .all(db)
         .await
         .expect("lecture possible")
@@ -82,7 +82,7 @@ fn an_unparsable_expression_is_refused_even_with_the_right_field_count() {
 /// laisseraient chaque suite effacer ce que l'autre vient d'écrire, et les deux
 /// paraîtraient fautives à tour de rôle.
 async fn table_a_soi() -> (MutexGuard<'static, ()>, AppState) {
-    let garde = crate::jobs::tests::verrou_base().lock().await;
+    let garde = crate::modules::jobs::tests::verrou_base().lock().await;
     let config = rbs_core::Config::load().expect("configuration lisible");
     let db = rbs_core::db::connect(&config.database)
         .await
@@ -95,8 +95,8 @@ async fn table_a_soi() -> (MutexGuard<'static, ()>, AppState) {
     // De la file, seules les lignes de ce module : les tests du fragment `jobs` tournent
     // dans le même binaire et sur la même table, et un vidage sans filtre leur retirerait
     // sous les pieds les jobs qu'ils viennent d'enfiler.
-    crate::jobs::model::Entity::delete_many()
-        .filter(crate::jobs::model::Column::Kind.eq(Scheduled::KIND))
+    crate::modules::jobs::model::Entity::delete_many()
+        .filter(crate::modules::jobs::model::Column::Kind.eq(Scheduled::KIND))
         .exec(&db)
         .await
         .expect("la file doit se vider de ses jobs déclenchés");

@@ -17,11 +17,11 @@ pub(crate) const TITRE: &str = "agents";
 /// Répertoires de `src/` qui ne sont pas des features engendrées.
 ///
 /// `health` est le module du squelette, `seeds` le binaire des données de démonstration et
-/// `bin` celui qui imprime le document OpenAPI ; les autres sont les répertoires que les
-/// fragments déposent sous un nom qui n'est pas le leur — `redis` s'installe en
-/// `src/cache/`. Les compter comme écrits à la main ferait avertir sur chaque projet qui
-/// les porte.
-const HORS_FEATURES: [&str; 4] = ["health", "seeds", "cache", "bin"];
+/// `bin` celui qui imprime le document OpenAPI ; `modules` est le point de montage sous
+/// lequel `rbs add` installe tout ce qu'il pose. `cache` reste ici pour le parc engendré
+/// avant ce rangement, qui en porte encore un à la racine — `redis` s'y installait sous ce
+/// nom. Les compter comme écrits à la main ferait avertir sur chaque projet qui les porte.
+const HORS_FEATURES: [&str; 5] = ["health", "seeds", "cache", "bin", "modules"];
 
 /// Contrôle l'`AGENTS.md` du projet, et nomme le code qui n'est pas passé par le CLI.
 pub(crate) fn check(root: &Path, manifeste: &Manifeste) -> Check {

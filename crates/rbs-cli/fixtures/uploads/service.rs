@@ -6,7 +6,7 @@ use sea_orm::prelude::Uuid;
 use super::dto::{CreateUpload, UpdateUpload, UploadResponse};
 use super::filter::UploadFilter;
 use super::repository::{self, ActiveModel};
-use crate::storage::{Storage, StorageError};
+use crate::modules::storage::{Storage, StorageError};
 
 /// Clé du contenu déposé pour `id`.
 ///

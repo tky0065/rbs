@@ -1402,7 +1402,7 @@ mod tests {
             .iter()
             .map(|ancre| ancre.anchor.as_str())
             .collect();
-        assert_eq!(ancres, ["features", "startup"]);
+        assert_eq!(ancres, ["modules", "startup"]);
 
         // Le calendrier est relu et validé avant que le serveur n'écoute, et une
         // expression illisible doit arrêter le démarrage — ce que le guide promet. Un

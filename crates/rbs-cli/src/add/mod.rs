@@ -1272,7 +1272,7 @@ mod tests {
             ),
             (
                 "storage",
-                r#"rbs_core::health::Probe::new("storage", crate::modules::storage::probe(state.storage())),"#,
+                r#"crate::modules::storage::probe(state.storage()),"#,
             ),
         ] {
             let (_parent, root) = project();
@@ -1373,16 +1373,16 @@ mod tests {
         assert_eq!(
             planned.files,
             [
-                "src/rate_limit/mod.rs",
-                "src/rate_limit/config.rs",
-                "src/rate_limit/counter.rs",
-                "src/rate_limit/tests.rs",
+                "src/modules/rate_limit/mod.rs",
+                "src/modules/rate_limit/config.rs",
+                "src/modules/rate_limit/counter.rs",
+                "src/modules/rate_limit/tests.rs",
             ]
         );
 
         assert!(
             anchor_body(&planned, &crate::anchors::LAYERS)
-                .contains("crate::rate_limit::middleware"),
+                .contains("crate::modules::rate_limit::middleware"),
             "{}",
             projected(&planned, "src/router.rs")
         );
@@ -1530,7 +1530,7 @@ mod tests {
         let (_parent, root) = project();
 
         let planned = plan_for(&options(&root, "rate-limit")).expect("le plan doit se calculer");
-        let counter = projected(&planned, "src/rate_limit/counter.rs");
+        let counter = projected(&planned, "src/modules/rate_limit/counter.rs");
 
         assert!(counter.contains("HashMap"), "{counter}");
         assert!(!counter.contains("deadpool_redis"), "{counter}");
@@ -1544,11 +1544,11 @@ mod tests {
         run(&options(&root, "redis")).expect("la pose du cache doit aboutir");
 
         let planned = plan_for(&options(&root, "rate-limit")).expect("le plan doit se calculer");
-        let counter = projected(&planned, "src/rate_limit/counter.rs");
+        let counter = projected(&planned, "src/modules/rate_limit/counter.rs");
 
         assert!(counter.contains("deadpool_redis"), "{counter}");
         assert!(
-            counter.contains("crate::cache::Config::load()"),
+            counter.contains("crate::modules::cache::Config::load()"),
             "{counter}"
         );
         assert!(!counter.contains("HashMap"), "{counter}");
@@ -1567,7 +1567,7 @@ mod tests {
             planned
                 .files
                 .iter()
-                .any(|file| file == "src/rate_limit/mod.rs"),
+                .any(|file| file == "src/modules/rate_limit/mod.rs"),
             "{:?}",
             planned.files
         );
@@ -1597,7 +1597,7 @@ mod tests {
             !planned
                 .files
                 .iter()
-                .any(|file| file.starts_with("src/rate_limit/")),
+                .any(|file| file.starts_with("src/modules/rate_limit/")),
             "{:?}",
             planned.files
         );

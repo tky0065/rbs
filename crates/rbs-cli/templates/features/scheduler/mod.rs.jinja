@@ -18,7 +18,7 @@ use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 
 pub use config::Config;
 
-use crate::jobs::{self, Job};
+use crate::modules::jobs::{self, Job};
 use crate::state::AppState;
 
 /// L'enfilage d'une échéance, son type de job oublié.
@@ -117,9 +117,9 @@ pub(super) fn a_la_seconde(instant: DateTimeWithTimeZone) -> DateTimeWithTimeZon
 ///
 /// Les expressions sont évaluées **en UTC** : `0 3 * * *` est 3 h UTC.
 pub fn schedules() -> Vec<Schedule> {
-    vec![Schedule::every::<crate::jobs::demo::Log>(
+    vec![Schedule::every::<crate::modules::jobs::demo::Log>(
         "0 3 * * *",
-        || crate::jobs::demo::Log {
+        || crate::modules::jobs::demo::Log {
             message: "échéance quotidienne".to_string(),
         },
     )]
