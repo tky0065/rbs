@@ -34,7 +34,7 @@ pub fn router(state: AppState) -> Router {
         ))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
-            crate::rate_limit::middleware,
+            crate::modules::rate_limit::middleware,
         ))
         // </rbs:layers>
         .layer(from_fn(rbs_core::trace::middleware))

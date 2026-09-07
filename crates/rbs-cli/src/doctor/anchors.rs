@@ -133,9 +133,9 @@ mod tests {
     }
 
     /// Un projet frais ne porte pas *toutes* les ancres du registre : `jobs` vit dans
-    /// `src/jobs/mod.rs`, que seul `rbs add jobs` dépose — contrairement au compose, que
-    /// `new` écrit déjà. Une seule des deux ancres optionnelles est donc applicable ici,
-    /// et le compte attendu est celui du registre moins cette ancre-là.
+    /// `src/modules/jobs/mod.rs` et `modules` dans `src/modules/mod.rs`, que seul
+    /// `rbs add` dépose — contrairement au compose, que `new` écrit déjà. Deux des trois
+    /// ancres optionnelles sont donc inapplicables ici.
     #[test]
     fn a_fresh_project_carries_every_anchor_that_applies_to_it() {
         let (_parent, root) = project();
@@ -144,7 +144,7 @@ mod tests {
 
         assert_eq!(check.state, State::Bon);
         assert!(
-            check.detail.contains(&(ANCRES.len() - 1).to_string()),
+            check.detail.contains(&(ANCRES.len() - 2).to_string()),
             "{}",
             check.detail
         );
@@ -262,11 +262,12 @@ mod tests {
         let check = check(&root);
 
         assert_eq!(check.state, State::Bon, "{check:?}");
-        // Le compose retiré à la main, `jobs` déjà absent par défaut (v. le test
-        // précédent) : les deux ancres optionnelles du registre sont inapplicables.
+        // Le compose retiré à la main, `jobs` et `modules` déjà absents par défaut
+        // (v. le test précédent) : les trois ancres optionnelles sont inapplicables.
         assert!(
-            check.detail.contains(&(ANCRES.len() - 2).to_string()),
-            "ni le compose ni le registre de la file ne comptent parmi les applicables : {}",
+            check.detail.contains(&(ANCRES.len() - 3).to_string()),
+            "ni le compose, ni le registre de la file, ni le point de montage ne comptent \
+             parmi les applicables : {}",
             check.detail
         );
     }

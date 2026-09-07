@@ -357,7 +357,7 @@ fn a_project_created_with_two_features_compiles() {
     let root = parent.path().join("demo-with-features");
 
     assert!(root.join("src/auth/service.rs").is_file());
-    assert!(root.join("src/cache/mod.rs").is_file());
+    assert!(root.join("src/modules/cache/mod.rs").is_file());
 
     let compose_yml = fs::read_to_string(root.join("docker-compose.yml")).expect("compose lisible");
     assert!(compose_yml.contains("redis:8-alpine"), "{compose_yml}");
@@ -415,9 +415,12 @@ fn the_probes_installed_by_two_fragments_compile_into_the_health_route() {
 
     let controleur =
         fs::read_to_string(root.join("src/health/controller.rs")).expect("contrôleur lisible");
+    // La sonde de `storage` dépasse la largeur de ligne de rustfmt une fois préfixée par
+    // `modules::` : elle se reformate sur trois lignes, à la différence de celle de `cache`.
     for sonde in [
         r#"rbs_core::health::Probe::new("cache", state.cache().ping()),"#,
-        r#"rbs_core::health::Probe::new("storage", crate::storage::probe(state.storage())),"#,
+        "rbs_core::health::Probe::new(\n                \"storage\",\n                \
+         crate::modules::storage::probe(state.storage()),\n            ),",
     ] {
         assert!(
             controleur.contains(sonde),

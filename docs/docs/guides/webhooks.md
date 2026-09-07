@@ -6,7 +6,7 @@ title: Webhooks
 # Outgoing webhooks
 
 `rbs add webhooks` gives a project a way to tell the outside world what just happened: ten
-files under `src/webhooks/`, a migration for the `webhook_subscriptions` table, three
+files under `src/modules/webhooks/`, a migration for the `webhook_subscriptions` table, three
 routes, and a signed HTTP POST for every subscriber that listens.
 
 **The fragment delivers; it does not decide what is worth telling.** Nothing is emitted
@@ -30,24 +30,24 @@ plan pour /private/tmp/rbs-demo/blog
 
   + src/auth/mod.rs                                                  créé
   …
-  + src/jobs/mod.rs                                                  créé
+  + src/modules/jobs/mod.rs                                          créé
   …
-  + src/rate_limit/mod.rs                                            créé
+  + src/modules/rate_limit/mod.rs                                    créé
   …
-  + src/webhooks/mod.rs                                              créé
-  + src/webhooks/config.rs                                           créé
-  + src/webhooks/model.rs                                            créé
-  + src/webhooks/dto.rs                                              créé
-  + src/webhooks/repository.rs                                       créé
-  + src/webhooks/service.rs                                          créé
-  + src/webhooks/controller.rs                                       créé
-  + src/webhooks/signature.rs                                        créé
-  + src/webhooks/delivery.rs                                         créé
-  + src/webhooks/tests.rs                                            créé
+  + src/modules/webhooks/mod.rs                                      créé
+  + src/modules/webhooks/config.rs                                   créé
+  + src/modules/webhooks/model.rs                                    créé
+  + src/modules/webhooks/dto.rs                                      créé
+  + src/modules/webhooks/repository.rs                               créé
+  + src/modules/webhooks/service.rs                                  créé
+  + src/modules/webhooks/controller.rs                               créé
+  + src/modules/webhooks/signature.rs                                créé
+  + src/modules/webhooks/delivery.rs                                 créé
+  + src/modules/webhooks/tests.rs                                    créé
   + migration/src/m20260904_160207_create_webhook_subscriptions.rs   créé
   ~ AGENTS.md                                                        modifié
 
-  43 fichiers à écrire
+  44 fichiers à écrire
 ✓ webhooks installée — 32 fichiers
 
   rbs migrate up, inscrivez un abonné par POST /webhooks/subscriptions — son secret n'est rendu qu'à cet instant — puis appelez webhooks::emit dans vos services
@@ -219,7 +219,7 @@ worker's log.
 
 ## Testing
 
-The generated `src/webhooks/tests.rs` covers the two halves separately. The signature is
+The generated `src/modules/webhooks/tests.rs` covers the two halves separately. The signature is
 proven against **a vector computed outside Rust**, so the test would survive a rewrite of
 the signing code and catch a change of scheme; the pattern matching is proven on its three
 forms.

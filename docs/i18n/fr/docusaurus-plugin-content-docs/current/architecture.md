@@ -98,6 +98,18 @@ src/articles/
 Pas de `src/models/`, pas de `src/services/`. Une feature se lit, se déplace et se
 supprime d'un bloc, et un simple listing du répertoire dit ce que l'API fait.
 
+### `src/` contre `src/modules/`
+
+`src/` porte les features que vous engendrez, `src/modules/` les modules que `rbs add`
+installe : `mail`, `storage`, `jobs`, `cache`… La séparation existe pour qu'ouvrir `src/`
+montre votre code, et lui seul. `auth` fait exception et reste à la racine : il pose
+l'entité `User`, que vous étendez comme n'importe laquelle des vôtres.
+
+Un projet engendré avant rbs 1.3 garde ses modules là où il les a reçus. `rbs` ne les
+déplacera pas — réécrire vos `use` reviendrait à toucher à votre code — mais s'il reçoit
+ensuite un module rangé, `rbs doctor` vous signale que le projet porte les deux
+dispositions.
+
 ### `mod.rs` — le câblage
 
 Il déclare les cinq autres fichiers et publie les routes de la feature sous forme de

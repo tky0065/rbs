@@ -46,16 +46,16 @@ Options:
 | `docker` | `.dockerignore`, `Dockerfile`, and its `api`/`migrate` services inserted into the project's compose — a whole `docker-compose.yml` when there is none | `docker compose --profile app up --build` |
 | `ci` | `.github/workflows/ci.yml` | `git push` |
 | `auth` | eight files under `src/auth/`, one migration, edits to four project files — and `rate-limit`, which it requires | `rbs migrate up` |
-| `jobs` | seven files under `src/jobs/`, one migration, and a `[jobs]` config section | `rbs migrate up`, then register your jobs in `src/jobs/mod.rs` |
-| `scheduler` | six files under `src/scheduler/`, one migration, a `[scheduler]` config section, a ticker in `// <rbs:startup>` — and `jobs`, which it requires | `rbs migrate up`, then declare your schedules in `src/scheduler/mod.rs` |
-| `redis` | three files under `src/cache/`, and a `redis` service inserted into the project's compose | the compose already carries it — `docker compose up -d` starts it |
-| `mail` | five files under `src/mail/`, a sample template, and a `mailpit` service inserted into the project's compose | set `[mail]` in `config/default.toml` — a local SMTP by default |
-| `storage` | four files under `src/storage/` | ignore `./storage`, or switch the backend to `s3` |
-| `cors` | three files under `src/cors/`, a `[cors]` config section, and a layer in `// <rbs:layers>` | list your origins in `[cors]` — empty, so nothing cross-origin passes |
-| `rate-limit` | four files under `src/rate_limit/`, a `[rate_limit]` config section, a field on `AppState`, and a layer in `// <rbs:layers>` | behind a reverse proxy, set `rate_limit.trust_forwarded_for` |
-| `observability` | four files under `src/observability/`, an `[observability]` config section, a layer in `// <rbs:layers>`, and a second listener in `// <rbs:startup>` | name a collector in `OTEL_EXPORTER_OTLP_ENDPOINT` — without it nothing is exported |
-| `audit` | four files under `src/audit/`, and one migration | `rbs migrate up`, then call `audit::record` in your services — the entry is written in the transaction of the change |
-| `webhooks` | ten files under `src/webhooks/`, one migration, a `[webhooks]` config section, three routes, a field on `AppState` — and `jobs` and `auth`, which it requires | `rbs migrate up`, then call `webhooks::emit` where your code writes |
+| `jobs` | seven files under `src/modules/jobs/`, one migration, and a `[jobs]` config section | `rbs migrate up`, then register your jobs in `src/modules/jobs/mod.rs` |
+| `scheduler` | six files under `src/modules/scheduler/`, one migration, a `[scheduler]` config section, a ticker in `// <rbs:startup>` — and `jobs`, which it requires | `rbs migrate up`, then declare your schedules in `src/modules/scheduler/mod.rs` |
+| `redis` | three files under `src/modules/cache/`, and a `redis` service inserted into the project's compose | the compose already carries it — `docker compose up -d` starts it |
+| `mail` | five files under `src/modules/mail/`, a sample template, and a `mailpit` service inserted into the project's compose | set `[mail]` in `config/default.toml` — a local SMTP by default |
+| `storage` | four files under `src/modules/storage/` | ignore `./storage`, or switch the backend to `s3` |
+| `cors` | three files under `src/modules/cors/`, a `[cors]` config section, and a layer in `// <rbs:layers>` | list your origins in `[cors]` — empty, so nothing cross-origin passes |
+| `rate-limit` | four files under `src/modules/rate_limit/`, a `[rate_limit]` config section, a field on `AppState`, and a layer in `// <rbs:layers>` | behind a reverse proxy, set `rate_limit.trust_forwarded_for` |
+| `observability` | four files under `src/modules/observability/`, an `[observability]` config section, a layer in `// <rbs:layers>`, and a second listener in `// <rbs:startup>` | name a collector in `OTEL_EXPORTER_OTLP_ENDPOINT` — without it nothing is exported |
+| `audit` | four files under `src/modules/audit/`, and one migration | `rbs migrate up`, then call `audit::record` in your services — the entry is written in the transaction of the change |
+| `webhooks` | ten files under `src/modules/webhooks/`, one migration, a `[webhooks]` config section, three routes, a field on `AppState` — and `jobs` and `auth`, which it requires | `rbs migrate up`, then call `webhooks::emit` where your code writes |
 
 `cors`, `rate-limit` and `observability` are the three that stack a middleware rather
 than mount a route: their layer goes into `// <rbs:layers>`, inside `trace` and
@@ -159,16 +159,17 @@ cors : CORS : origines, méthodes et en-têtes autorisés, énumérés par la co
 
 plan pour /private/tmp/rbs-demo/blog
 
-  + src/cors/mod.rs       créé
-  + src/cors/config.rs    créé
-  + src/cors/tests.rs     créé
-  ~ src/lib.rs            modifié
-  ~ src/router.rs         modifié
-  ~ Cargo.toml            modifié
-  ~ config/default.toml   modifié
-  ~ AGENTS.md             modifié
+  + src/modules/cors/mod.rs      créé
+  + src/modules/cors/config.rs   créé
+  + src/modules/cors/tests.rs    créé
+  + src/modules/mod.rs           créé
+  ~ src/lib.rs                   modifié
+  ~ src/router.rs                modifié
+  ~ Cargo.toml                   modifié
+  ~ config/default.toml          modifié
+  ~ AGENTS.md                    modifié
 
-  8 fichiers à écrire
+  9 fichiers à écrire
 ✓ cors installée — 3 fichiers
 
   énumérez vos origines dans [cors] de config/default.toml — la liste est vide, donc aucune requête d'origine croisée ne passe
@@ -186,18 +187,19 @@ rate-limit : limite de débit : un compteur par adresse cliente, plus strict sur
 
 plan pour /private/tmp/rbs-demo/depot
 
-  + src/rate_limit/mod.rs       créé
-  + src/rate_limit/config.rs    créé
-  + src/rate_limit/counter.rs   créé
-  + src/rate_limit/tests.rs     créé
-  ~ src/lib.rs                  modifié
-  ~ src/state.rs                modifié
-  ~ src/router.rs               modifié
-  ~ Cargo.toml                  modifié
-  ~ config/default.toml         modifié
-  ~ AGENTS.md                   modifié
+  + src/modules/rate_limit/mod.rs       créé
+  + src/modules/rate_limit/config.rs    créé
+  + src/modules/rate_limit/counter.rs   créé
+  + src/modules/rate_limit/tests.rs     créé
+  + src/modules/mod.rs                  créé
+  ~ src/lib.rs                          modifié
+  ~ src/state.rs                        modifié
+  ~ src/router.rs                       modifié
+  ~ Cargo.toml                          modifié
+  ~ config/default.toml                 modifié
+  ~ AGENTS.md                           modifié
 
-  10 fichiers à écrire
+  11 fichiers à écrire
 ✓ rate-limit installée — 4 fichiers
 
   derrière un reverse proxy, passez rate_limit.trust_forwarded_for à true — sinon tous les clients partagent l'adresse du proxy
@@ -207,7 +209,7 @@ A fixed window per client address: `limit` requests per `window_secs`, then a 42
 `application/problem+json` carrying `Retry-After`. `[[rate_limit.routes]]` entries hold
 tighter limits on a path prefix, the first match winning.
 
-`src/rate_limit/counter.rs` is written one of two ways, decided when the fragment is laid
+`src/modules/rate_limit/counter.rs` is written one of two ways, decided when the fragment is laid
 down. With `redis` installed, the counter lives on the cache's server — two instances
 behind a load balancer have to count together. Without it, the counter lives in the
 process, and the effective limit is multiplied by the number of instances. `rbs add redis`
@@ -243,10 +245,10 @@ plan pour /private/tmp/rbs-demo/blog
   ~ config/default.toml                                    modifié
   ~ .env.example                                           modifié
   ~ .env                                                   modifié
-  + src/rate_limit/mod.rs                                  créé
-  + src/rate_limit/config.rs                               créé
-  + src/rate_limit/counter.rs                              créé
-  + src/rate_limit/tests.rs                                créé
+  + src/modules/rate_limit/mod.rs                          créé
+  + src/modules/rate_limit/config.rs                       créé
+  + src/modules/rate_limit/counter.rs                      créé
+  + src/modules/rate_limit/tests.rs                        créé
   ~ src/state.rs                                           modifié
   ~ AGENTS.md                                              modifié
 
@@ -400,11 +402,14 @@ otherwise produce an empty plan, and a command that succeeds without doing anyth
 ## Anchors
 
 `rbs add` mostly writes whole files and edits the manifest; it is [`rbs
-generate`](./generate.md#anchors) that inserts into the project's twelve Rust comment
+generate`](./generate.md#anchors) that inserts into the project's thirteen Rust comment
 anchors — `// <rbs:features>` (in `src/lib.rs`, or in `src/main.rs` on a project with no
-library — see [below](./generate.md#anchors)), `// <rbs:routes>`, `// <rbs:layers>`,
-`// <rbs:openapi>`, `// <rbs:migration_modules>`, `// <rbs:migrations>`,
-`// <rbs:state_champs>`, `// <rbs:state_init>`, `// <rbs:startup>` and `// <rbs:seeds>`.
+library — see [below](./generate.md#anchors)), `// <rbs:modules>` (optional: only a
+project that has installed a fragment under `src/modules/` has it), `// <rbs:routes>`,
+`// <rbs:layers>`, `// <rbs:openapi>`, `// <rbs:migration_modules>`,
+`// <rbs:migrations>`, `// <rbs:state_champs>`, `// <rbs:state_init>`, `// <rbs:startup>`,
+`// <rbs:seeds>`, `// <rbs:health_probes>` and `// <rbs:jobs>` (optional too: only a
+project carrying the queue has it).
 
 `// <rbs:layers>` is where a fragment stacks a middleware, and it is not interchangeable
 with `// <rbs:routes>` a few lines above: a `.layer()` wraps those that precede it, so a
@@ -417,7 +422,7 @@ three use it.
 `migrate` services go into `# <rbs:services>`, the YAML anchor a compose carries — see
 [above](#the-thirteen-features). The rule is the same everywhere: no AST is ever rewritten,
 and a missing anchor makes the command write nothing and print the block to paste back.
-[`rbs doctor`](./doctor.md) checks all thirteen — eleven on a project carrying neither a compose nor the queue, the two optional ones.
+[`rbs doctor`](./doctor.md) checks all fourteen — eleven on a project carrying no compose, no queue and no fragment moved under `src/modules/`, the three optional ones.
 
 A project generated before `// <rbs:layers>` existed does not have it, and `rbs upgrade`
 does not add it: that command aligns the manifest and the `AGENTS.md` zones, and touches

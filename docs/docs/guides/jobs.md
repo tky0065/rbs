@@ -6,7 +6,7 @@ title: Jobs
 # Background jobs
 
 `rbs add jobs` installs a work queue into an existing project: seven files under
-`src/jobs/`, a migration for the `jobs` table, and a worker started with the server. Like
+`src/modules/jobs/`, a migration for the `jobs` table, and a worker started with the server. Like
 the other bricks, it mounts no route — when work leaves the request cycle is a decision
 only your domain can make.
 
@@ -23,25 +23,26 @@ jobs : jobs en arrière-plan : une table, un enfilage transactionnel, un worker 
 
 plan pour /private/tmp/rbs-demo/demo
 
-  + src/jobs/mod.rs                                 créé
-  + src/jobs/config.rs                              créé
-  + src/jobs/model.rs                               créé
-  + src/jobs/queue.rs                               créé
-  + src/jobs/worker.rs                              créé
-  + src/jobs/demo.rs                                créé
-  + src/jobs/tests.rs                               créé
+  + src/modules/jobs/mod.rs                         créé
+  + src/modules/jobs/config.rs                      créé
+  + src/modules/jobs/model.rs                       créé
+  + src/modules/jobs/queue.rs                       créé
+  + src/modules/jobs/worker.rs                      créé
+  + src/modules/jobs/demo.rs                        créé
+  + src/modules/jobs/tests.rs                       créé
   + migration/src/m20260830_111505_create_jobs.rs   créé
   ~ migration/src/lib.rs                            modifié
+  + src/modules/mod.rs                              créé
   ~ src/lib.rs                                      modifié
   ~ src/main.rs                                     modifié
   ~ Cargo.toml                                      modifié
   ~ config/default.toml                             modifié
   ~ AGENTS.md                                       modifié
 
-  14 fichiers à écrire
+  15 fichiers à écrire
 ✓ jobs installée — 8 fichiers
 
-  rbs migrate up, puis inscrivez vos jobs dans src/jobs/mod.rs
+  rbs migrate up, puis inscrivez vos jobs dans src/modules/jobs/mod.rs
 ```
 
 The migration comes with it, so [`rbs migrate up`](../cli/migrate.md) is the next command:
@@ -66,7 +67,7 @@ broker's fan-out is not what this feature is. The trade is deliberate, and the
 
 ## Configuration
 
-```rust file=examples/newsletter-queue/src/jobs/config.rs
+```rust file=examples/newsletter-queue/src/modules/jobs/config.rs
 ```
 
 Three settings, all with defaults written where the section is declared rather than in the
@@ -86,7 +87,7 @@ see the [configuration guide](./configuration.md).
 
 A job is a serialisable type that implements one trait:
 
-```rust file=examples/newsletter-queue/src/jobs/mod.rs region=trait
+```rust file=examples/newsletter-queue/src/modules/jobs/mod.rs region=trait
 ```
 
 `KIND` is written into the row and is what the registry looks the job up by. Renaming it
@@ -95,7 +96,7 @@ is part of your data, not just your code.
 
 Here is the example's:
 
-```rust file=examples/newsletter-queue/src/jobs/newsletter.rs region=job
+```rust file=examples/newsletter-queue/src/modules/jobs/newsletter.rs region=job
 ```
 
 Two decisions worth copying. The payload carries an identifier rather than an address:
@@ -105,7 +106,7 @@ retry, which is the entire reason this is a job.
 
 ## Registering it
 
-```rust file=examples/newsletter-queue/src/jobs/mod.rs region=registry
+```rust file=examples/newsletter-queue/src/modules/jobs/mod.rs region=registry
 ```
 
 A `kind` absent from the registry is treated as a failure of the job, not of the worker:
@@ -115,7 +116,7 @@ generated `demo::Log` is meant to be replaced rather than left alongside yours.
 
 ## Enqueuing
 
-```rust file=examples/newsletter-queue/src/jobs/queue.rs region=enqueue
+```rust file=examples/newsletter-queue/src/modules/jobs/queue.rs region=enqueue
 ```
 
 `db` is a `ConnectionTrait`, not a connection, and that is the point of the whole feature:
@@ -142,7 +143,7 @@ The route answers `202`, not `200` — the letters are enqueued, not sent:
 
 ## The worker
 
-```rust file=examples/newsletter-queue/src/jobs/worker.rs
+```rust file=examples/newsletter-queue/src/modules/jobs/worker.rs
 ```
 
 It is spawned by `main.rs` next to the server and returns immediately. Three failure modes
@@ -175,7 +176,7 @@ process that keeps dying on it.
 
 ## Testing
 
-The generated `src/jobs/tests.rs` runs against a real database, like every test that
+The generated `src/modules/jobs/tests.rs` runs against a real database, like every test that
 touches one — see the [testing guide](./testing.md). Four of them are the ones worth
 keeping when you edit the fragment:
 

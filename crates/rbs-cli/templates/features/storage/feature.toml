@@ -3,37 +3,42 @@ description = "stockage d'objets : un trait à cinq méthodes, deux backends —
 
 [[files]]
 source      = "mod.rs.jinja"
-destination = "src/storage/mod.rs"
+destination = "src/modules/storage/mod.rs"
 
 [[files]]
 source      = "files.rs.jinja"
-destination = "src/storage/files.rs"
+destination = "src/modules/storage/files.rs"
 
 [[files]]
 source      = "s3.rs.jinja"
-destination = "src/storage/s3.rs"
+destination = "src/modules/storage/s3.rs"
 
 [[files]]
 source      = "tests.rs.jinja"
-destination = "src/storage/tests.rs"
+destination = "src/modules/storage/tests.rs"
 
 [[anchors]]
-anchor  = "features"
+anchor  = "modules"
 content = "pub mod storage;"
 
 [[anchors]]
 anchor  = "state_champs"
-content = "pub storage: std::sync::Arc<dyn crate::storage::Storage>,"
+content = "pub storage: std::sync::Arc<dyn crate::modules::storage::Storage>,"
 
 [[anchors]]
 anchor  = "state_init"
-content = "storage: crate::storage::from_config()?,"
+content = "storage: crate::modules::storage::from_config()?,"
 
 # Sans cette sonde, `/health` répondrait `ok` sur un bucket injoignable et l'orchestrateur
 # garderait le pod en rotation.
 [[anchors]]
 anchor  = "health_probes"
-content = 'rbs_core::health::Probe::new("storage", crate::storage::probe(state.storage())),'
+content = """
+rbs_core::health::Probe::new(
+    "storage",
+    crate::modules::storage::probe(state.storage()),
+),
+"""
 
 [[dependencies]]
 name    = "async-trait"

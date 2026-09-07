@@ -53,9 +53,9 @@ cd .. && mv blog-auth examples/blog-auth
 ```
 
 `posts` rather than `articles`, which `hello-crud` already carries: what distinguishes this
-example is the protection, not the resource. The name also leaves the `features` anchor
-sorted — it stacks `mod` declarations in installation order, and `mod auth; mod articles;`
-would make a `cargo fmt` inside the project balk.
+example is the protection, not the resource. The name has no bearing on the `features`
+anchor's order — `insert()` re-sorts the whole block on every insertion, whatever order
+`mod auth;` and `mod posts;` arrive in.
 
 ### `file-drop`
 
@@ -79,18 +79,17 @@ cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
 cd .. && mv file-drop examples/file-drop
 ```
 
-`uploads` is the only resource name that leaves the `features` anchor sorted behind
-`storage` — and note that `rbs add redis` writes `mod cache;`, not `mod redis;`.
+The three fragments live under the `modules` anchor, separate from `features` and sorted
+on its own — note that `rbs add redis` writes `mod cache;` there, not `mod redis;`.
 `owner_email` ends in `_email`, so the generated DTO gains its email constraint without
 anyone writing it, and the mail has a recipient that comes from the model.
 
 ### `newsletter-queue`
 
-The install order is not free: the `features` anchor stacks `mod` declarations in the
-order the features arrive and must stay sorted, so `jobs`, `mail`, `observability`, then a
-resource that follows all three — which rules out `newsletter` as the resource name.
-`email` on its own earns the DTO's validation constraint; the rule matches the exact name
-as well as the `_email` suffix.
+The three fragments live under the `modules` anchor: `jobs`, `mail` and `observability`
+sort there alphabetically, whatever order the `add` calls below run in. `email` on its own
+earns the DTO's validation constraint; the rule matches the exact name as well as the
+`_email` suffix.
 
 ```bash
 cargo run -p rbs-cli --bin rbs -- new newsletter-queue --yes \
@@ -156,10 +155,11 @@ the wiring.
   produces them.
 - `src/uploads/repository.rs`: `page` splits off from `list`, so a caller who already
   holds the count does not redo the `COUNT(*)`.
-- `src/{cache,storage}/mod.rs` and `src/mail/service.rs`: `src/storage/mod.rs` drops the
-  `allow(dead_code)` the fragment puts on the `Storage` trait, whose five methods this
-  project calls. `src/cache/mod.rs` and `src/mail/service.rs` keep a targeted one on
-  `invalidate` and `send_detached`, which no project is obliged to call.
+- `src/modules/{cache,storage}/mod.rs` and `src/modules/mail/service.rs`:
+  `src/modules/storage/mod.rs` drops the `allow(dead_code)` the fragment puts on the
+  `Storage` trait, whose five methods this project calls. `src/modules/cache/mod.rs` and
+  `src/modules/mail/service.rs` keep a targeted one on `invalidate` and `send_detached`,
+  which no project is obliged to call.
 - `templates/mail/depot.html`: a second template, added by hand — the one the fragment
   ships says "your account is open", which no file upload can reuse.
 
@@ -170,13 +170,14 @@ eight paths would sit outside any surveillance, and the wiring could vanish sile
 fragments ship a queue, a mailer and a metrics module, and none of them a route; a job that
 nothing enqueues proves nothing about the queue.
 
-- `src/jobs/newsletter.rs`: `SendNewsletter` implements `Job`. It awaits the send rather
-  than detaching it, which is the whole difference: an error returned here is a retry,
-  where `send_detached` leaves nothing but a log line. The payload carries the subscriber's
-  id and not their address — between the enqueue and the run, an address can change.
-- `src/jobs/mod.rs`: `registry()` registers `SendNewsletter`, and `demo.rs` goes with its
-  registration. `enqueue` loses its `unused_imports` permission — `broadcast` calls it —
-  while `enqueue_at` keeps one of its own, no letter here being scheduled.
+- `src/modules/jobs/newsletter.rs`: `SendNewsletter` implements `Job`. It awaits the send
+  rather than detaching it, which is the whole difference: an error returned here is a
+  retry, where `send_detached` leaves nothing but a log line. The payload carries the
+  subscriber's id and not their address — between the enqueue and the run, an address can
+  change.
+- `src/modules/jobs/mod.rs`: `registry()` registers `SendNewsletter`, and `demo.rs` goes
+  with its registration. `enqueue` loses its `unused_imports` permission — `broadcast`
+  calls it — while `enqueue_at` keeps one of its own, no letter here being scheduled.
 - `src/subscribers/service.rs`: `broadcast` opens a transaction, reads the confirmed
   subscribers and enqueues one letter each **inside it**. On `db` rather than
   `&transaction`, the letters would survive the rollback that cancels them, which is
@@ -187,9 +188,10 @@ nothing enqueues proves nothing about the queue.
   the handler answering `202` (the letters are enqueued, not sent), the route mounted
   before `/subscribers/{id}` so that `broadcast` is not read as an id, and the path
   declared to OpenAPI.
-- `src/mail/mod.rs` and `src/mail/service.rs`: the module-wide `allow(dead_code)` falls
-  with the first call, and `send_detached` keeps a targeted one of its own — the function
-  is kept, a message whose loss costs nothing having no need of a row in the database.
+- `src/modules/mail/mod.rs` and `src/modules/mail/service.rs`: the module-wide
+  `allow(dead_code)` falls with the first call, and `send_detached` keeps a targeted one
+  of its own — the function is kept, a message whose loss costs nothing having no need of
+  a row in the database.
 - `src/main.rs`: `rbs_core::logs::shutdown()` before returning, which pushes the last batch
   of spans instead of losing it. Nothing in the skeleton calls it, the cost of forgetting
   being that batch and not an outage — so an example is the only place the call can be

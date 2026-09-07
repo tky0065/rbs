@@ -47,7 +47,7 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     // celui-ci au vert sans qu'une seule transaction ait été ouverte.
     for test in TESTS {
         assert!(
-            sous_conteneur.contains(&format!("test audit::tests::{test} ... ok")),
+            sous_conteneur.contains(&format!("test modules::audit::tests::{test} ... ok")),
             "`{test}` n'a pas été exécuté :\n{sous_conteneur}"
         );
     }

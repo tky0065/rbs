@@ -3,22 +3,22 @@ description = "observabilité : traces OTLP vers un collecteur, et un /metrics P
 
 [[files]]
 source      = "mod.rs.jinja"
-destination = "src/observability/mod.rs"
+destination = "src/modules/observability/mod.rs"
 
 [[files]]
 source      = "config.rs.jinja"
-destination = "src/observability/config.rs"
+destination = "src/modules/observability/config.rs"
 
 [[files]]
 source      = "metrics.rs.jinja"
-destination = "src/observability/metrics.rs"
+destination = "src/modules/observability/metrics.rs"
 
 [[files]]
 source      = "tests.rs.jinja"
-destination = "src/observability/tests.rs"
+destination = "src/modules/observability/tests.rs"
 
 [[anchors]]
-anchor  = "features"
+anchor  = "modules"
 content = "pub mod observability;"
 
 # Dans `layers`, donc à l'intérieur de `trace` et de `request_id` : le middleware voit
@@ -29,7 +29,7 @@ content = "pub mod observability;"
 anchor  = "layers"
 content = """
 .layer(axum::middleware::from_fn(
-    crate::observability::metrics::middleware,
+    crate::modules::observability::metrics::middleware,
 ))
 """
 
@@ -43,7 +43,7 @@ content = """
 # n'existe.
 [[anchors]]
 anchor  = "startup"
-content = "{@ crate_path @}::observability::serve(&state).await?;"
+content = "{@ crate_path @}::modules::observability::serve(&state).await?;"
 
 # La façade et son exportateur, séparés à dessein : les métriques métier du projet
 # s'inscrivent par macro depuis n'importe quelle couche, sans qu'un registre ait à

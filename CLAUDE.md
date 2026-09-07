@@ -97,13 +97,14 @@ Chaque couche ne voit que la suivante. Un `service` n'accède jamais *directemen
 requête SeaORM ; un `controller` n'en construit jamais. Cette règle rend chaque fichier
 lisible isolément.
 
-**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires, treize au
+**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires, quatorze au
 total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est cette liste que
 `rbs doctor` parcourt, et non celle-ci :
 
 | Ancre | Fichier |
 |---|---|
 | `// <rbs:features>` | `src/lib.rs`, ou `src/main.rs` sur un projet sans bibliothèque |
+| `// <rbs:modules>` | `src/modules/mod.rs` — le point de montage des fragments, la troisième optionnelle |
 | `// <rbs:routes>` | `src/router.rs` |
 | `// <rbs:layers>` | `src/router.rs` |
 | `// <rbs:openapi>` | `src/openapi.rs` |
@@ -113,9 +114,9 @@ total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est 
 | `// <rbs:state_init>` | `src/state.rs` |
 | `// <rbs:startup>` | `src/main.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
-| `# <rbs:services>` | `docker-compose.yml` — la seule en YAML, et l'une des deux optionnelles |
+| `# <rbs:services>` | `docker-compose.yml` — la seule en YAML, et l'une des trois optionnelles |
 | `// <rbs:health_probes>` | `src/health/controller.rs` |
-| `// <rbs:jobs>` | `src/jobs/mod.rs` — l'autre optionnelle : le registre que pose le fragment `jobs` |
+| `// <rbs:jobs>` | `src/modules/jobs/mod.rs` — la deuxième optionnelle : le registre que pose le fragment `jobs` |
 
 `generate` en emploie six ; les autres appartiennent aux fragments qu'installe `add`. Une
 ancre insérée dans `<rbs:layers>` est *intérieure* à `trace` et `request_id` : un `.layer()`

@@ -1,6 +1,6 @@
 //! Contrôle de la feature `redis`.
 //!
-//! La feature se déclare `redis` mais s'installe en `src/cache/`, sous une section
+//! La feature se déclare `redis` mais s'installe en `src/modules/cache/`, sous une section
 //! `[cache]` : c'est le nom de la crate d'un côté, celui du service rendu de l'autre. Le
 //! contrôle porte le nom déclaré, comme les autres, et nomme la section dans son détail.
 

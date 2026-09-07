@@ -57,7 +57,7 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     assert!(abouti, "`cargo test` du projet a échoué :\n{ordinaires}");
     for test in TESTS_ORDINAIRES {
         assert!(
-            ordinaires.contains(&format!("test scheduler::tests::{test} ... ok")),
+            ordinaires.contains(&format!("test modules::scheduler::tests::{test} ... ok")),
             "`{test}` n'a pas été exécuté :\n{ordinaires}"
         );
     }
@@ -73,7 +73,7 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     // au vert sans qu'une seule transaction ait été ouverte.
     for test in TESTS_SOUS_CONTENEUR {
         assert!(
-            sous_conteneur.contains(&format!("test scheduler::tests::{test} ... ok")),
+            sous_conteneur.contains(&format!("test modules::scheduler::tests::{test} ... ok")),
             "`{test}` n'a pas été exécuté :\n{sous_conteneur}"
         );
     }
@@ -131,7 +131,9 @@ fn a_due_schedule_is_triggered_once_on_the_three_engines() {
             "les tests du projet ont échoué sur {moteur} :\n{joues}"
         );
         assert!(
-            joues.contains(&format!("test scheduler::tests::{CONCURRENCE} ... ok")),
+            joues.contains(&format!(
+                "test modules::scheduler::tests::{CONCURRENCE} ... ok"
+            )),
             "le test de concurrence n'a pas été joué sur {moteur} :\n{joues}"
         );
     }
@@ -141,7 +143,8 @@ fn a_due_schedule_is_triggered_once_on_the_three_engines() {
 ///
 /// Le fragment déclare `requires = ["jobs"]` : `rbs add scheduler` sur un projet nu doit
 /// poser la file **puis** le calendrier. Un utilisateur qui ne s'y attend pas verrait
-/// apparaître `src/jobs/` sans l'avoir demandé, et c'est la documentation qui le lui dit.
+/// apparaître `src/modules/jobs/` sans l'avoir demandé, et c'est la documentation qui le
+/// lui dit.
 fn project_with_scheduler_on(moteur: &str, url: &str, parent: &TempDir) -> PathBuf {
     let racine = parent.path().join("demo-api");
 
@@ -167,10 +170,10 @@ fn project_with_scheduler_on(moteur: &str, url: &str, parent: &TempDir) -> PathB
     rbs(&racine).args(["add", "scheduler"]).assert().success();
 
     assert!(
-        racine.join("src/jobs/mod.rs").exists(),
+        racine.join("src/modules/jobs/mod.rs").exists(),
         "le fragment requis n'a pas été entraîné"
     );
-    assert!(racine.join("src/scheduler/mod.rs").exists());
+    assert!(racine.join("src/modules/scheduler/mod.rs").exists());
 
     racine
 }

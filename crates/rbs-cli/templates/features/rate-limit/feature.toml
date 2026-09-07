@@ -3,31 +3,31 @@ description = "limite de débit : un compteur par adresse cliente, plus strict s
 
 [[files]]
 source      = "mod.rs.jinja"
-destination = "src/rate_limit/mod.rs"
+destination = "src/modules/rate_limit/mod.rs"
 
 [[files]]
 source      = "config.rs.jinja"
-destination = "src/rate_limit/config.rs"
+destination = "src/modules/rate_limit/config.rs"
 
 [[files]]
 source      = "counter.rs.jinja"
-destination = "src/rate_limit/counter.rs"
+destination = "src/modules/rate_limit/counter.rs"
 
 [[files]]
 source      = "tests.rs.jinja"
-destination = "src/rate_limit/tests.rs"
+destination = "src/modules/rate_limit/tests.rs"
 
 [[anchors]]
-anchor  = "features"
+anchor  = "modules"
 content = "pub mod rate_limit;"
 
 [[anchors]]
 anchor  = "state_champs"
-content = "pub rate_limit: crate::rate_limit::RateLimiter,"
+content = "pub rate_limit: crate::modules::rate_limit::RateLimiter,"
 
 [[anchors]]
 anchor  = "state_init"
-content = "rate_limit: crate::rate_limit::RateLimiter::from_config()?,"
+content = "rate_limit: crate::modules::rate_limit::RateLimiter::from_config()?,"
 
 # Dans `layers` et non dans `routes` : une route se monte, une couche enveloppe. Posée
 # là, elle est interne à `trace` et à `request_id` — le 429 qu'elle rend porte donc
@@ -37,7 +37,7 @@ anchor  = "layers"
 content = """
 .layer(axum::middleware::from_fn_with_state(
     state.clone(),
-    crate::rate_limit::middleware,
+    crate::modules::rate_limit::middleware,
 ))
 """
 

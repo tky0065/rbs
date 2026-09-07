@@ -9,7 +9,7 @@ use tokio::sync::MutexGuard;
 use super::delivery::{Delivery, Event};
 use super::model::{ActiveModel, Entity, Model};
 use super::{matches, signature};
-use crate::jobs::Job;
+use crate::modules::jobs::Job;
 use crate::state::AppState;
 
 /// Le vecteur de signature, calculé hors de Rust :
@@ -100,7 +100,7 @@ fn the_star_pattern_matches_every_event() {
 /// chaque suite effacer ce que l'autre vient d'écrire, et les deux paraîtraient fautives à
 /// tour de rôle.
 async fn table_a_soi() -> (MutexGuard<'static, ()>, AppState) {
-    let garde = crate::jobs::tests::verrou_base().lock().await;
+    let garde = crate::modules::jobs::tests::verrou_base().lock().await;
     let config = rbs_core::Config::load().expect("configuration lisible");
     let db = rbs_core::db::connect(&config.database)
         .await
@@ -113,8 +113,8 @@ async fn table_a_soi() -> (MutexGuard<'static, ()>, AppState) {
     // De la file, seules les livraisons : les tests des fragments `jobs` et `scheduler`
     // tournent dans le même binaire et sur la même table, et un vidage sans filtre leur
     // retirerait sous les pieds les jobs qu'ils viennent d'enfiler.
-    crate::jobs::model::Entity::delete_many()
-        .filter(crate::jobs::model::Column::Kind.eq(Delivery::KIND))
+    crate::modules::jobs::model::Entity::delete_many()
+        .filter(crate::modules::jobs::model::Column::Kind.eq(Delivery::KIND))
         .exec(&db)
         .await
         .expect("la file doit se vider de ses livraisons");
@@ -161,8 +161,8 @@ fn donnees() -> serde_json::Value {
 
 /// Les lignes de la file que ces tests ont fait naître, et elles seules.
 async fn livraisons(db: &DatabaseConnection) -> usize {
-    crate::jobs::model::Entity::find()
-        .filter(crate::jobs::model::Column::Kind.eq(Delivery::KIND))
+    crate::modules::jobs::model::Entity::find()
+        .filter(crate::modules::jobs::model::Column::Kind.eq(Delivery::KIND))
         .all(db)
         .await
         .expect("lecture possible")

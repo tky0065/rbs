@@ -72,7 +72,7 @@ fn the_cache_of_a_generated_project_plays_against_a_real_redis() {
         "a_prefix_with_a_metacharacter_only_removes_what_it_designates",
     ] {
         assert!(
-            journal.contains(&format!("test cache::tests::{test} ... ok")),
+            journal.contains(&format!("test modules::cache::tests::{test} ... ok")),
             "`{test}` n'a pas été exécuté :\n{journal}"
         );
     }

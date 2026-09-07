@@ -86,7 +86,7 @@ fn both_backends_pass_the_same_round_and_the_object_reads_back_outside_the_trait
     // celui-ci au vert sans que rien n'ait joint MinIO.
     for test in TESTS {
         assert!(
-            journal.contains(&format!("test storage::tests::{test} ... ok")),
+            journal.contains(&format!("test modules::storage::tests::{test} ... ok")),
             "`{test}` n'a pas été exécuté :\n{journal}"
         );
     }

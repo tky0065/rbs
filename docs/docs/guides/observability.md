@@ -7,7 +7,7 @@ title: Observability
 
 Logs answer *what happened*. `rbs add observability` answers the two questions that come
 next: *which route is slow, since when* — from metrics — and *on which downstream call* —
-from traces. It installs four files under `src/observability/`, an `[observability]`
+from traces. It installs four files under `src/modules/observability/`, an `[observability]`
 config section, a counting middleware, and a second HTTP listener that serves `/metrics`.
 
 ```bash
@@ -88,9 +88,9 @@ all is counted under a single constant, for the same reason: a scanner hitting a
 made-up paths opens one series, not a thousand.
 
 This is the constraint the whole module is built around, and the generated
-`src/observability/tests.rs` holds it:
+`src/modules/observability/tests.rs` holds it:
 
-```rust file=examples/newsletter-queue/src/observability/tests.rs region=cardinalite
+```rust file=examples/newsletter-queue/src/modules/observability/tests.rs region=cardinalite
 ```
 
 A second test does the same for a path matching no route at all. Both run under

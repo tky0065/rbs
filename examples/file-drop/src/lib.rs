@@ -8,8 +8,6 @@ pub mod openapi;
 pub mod router;
 pub mod state;
 // <rbs:features>
-pub mod cache;
-pub mod mail;
-pub mod storage;
+pub mod modules;
 pub mod uploads;
 // </rbs:features>

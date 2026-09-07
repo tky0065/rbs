@@ -556,8 +556,11 @@ fn the_redis_fragment_writes_the_state_anchors_the_dependencies_and_the_cache_se
 
     let state = fs::read_to_string(racine.join("src/state.rs")).expect("state.rs est lisible");
     for (anchor, ligne) in [
-        ("state_champs", "pub cache: crate::cache::Cache,"),
-        ("state_init", "cache: crate::cache::Cache::from_config()?,"),
+        ("state_champs", "pub cache: crate::modules::cache::Cache,"),
+        (
+            "state_init",
+            "cache: crate::modules::cache::Cache::from_config()?,",
+        ),
     ] {
         let ouverture = format!("// <rbs:{anchor}>");
         let fermeture = format!("// </rbs:{anchor}>");

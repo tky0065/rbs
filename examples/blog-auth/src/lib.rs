@@ -9,6 +9,6 @@ pub mod router;
 pub mod state;
 // <rbs:features>
 pub mod auth;
+pub mod modules;
 pub mod posts;
-pub mod rate_limit;
 // </rbs:features>

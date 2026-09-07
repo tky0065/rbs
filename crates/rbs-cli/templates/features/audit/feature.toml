@@ -3,22 +3,22 @@ description = "journal des écritures : qui a modifié quoi, quand, dans la tran
 
 [[files]]
 source      = "mod.rs.jinja"
-destination = "src/audit/mod.rs"
+destination = "src/modules/audit/mod.rs"
 
 [[files]]
 source      = "model.rs.jinja"
-destination = "src/audit/model.rs"
+destination = "src/modules/audit/model.rs"
 
 [[files]]
 source      = "repository.rs.jinja"
-destination = "src/audit/repository.rs"
+destination = "src/modules/audit/repository.rs"
 
 [[files]]
 source      = "tests.rs.jinja"
-destination = "src/audit/tests.rs"
+destination = "src/modules/audit/tests.rs"
 
 [[anchors]]
-anchor  = "features"
+anchor  = "modules"
 content = "pub mod audit;"
 
 [migration]

@@ -6,7 +6,7 @@ title: Audit log
 # Audit log
 
 `rbs add audit` installs a write log into an existing project: four files under
-`src/audit/`, and a migration for the `audit_log` table. Like the other bricks, it mounts
+`src/modules/audit/`, and a migration for the `audit_log` table. Like the other bricks, it mounts
 no route — and unlike them, it does not even wire itself into the ones you already have.
 Calling it is your service's job, and the reason is [below](#what-the-fragment-does-not-do).
 
@@ -18,17 +18,18 @@ audit : journal des écritures : qui a modifié quoi, quand, dans la transaction
 
 plan pour /private/tmp/rbs-demo/demo
 
-  + src/audit/mod.rs                                     créé
-  + src/audit/model.rs                                   créé
-  + src/audit/repository.rs                              créé
-  + src/audit/tests.rs                                   créé
+  + src/modules/audit/mod.rs                             créé
+  + src/modules/audit/model.rs                           créé
+  + src/modules/audit/repository.rs                      créé
+  + src/modules/audit/tests.rs                           créé
   + migration/src/m20260903_173024_create_audit_log.rs   créé
   ~ migration/src/lib.rs                                 modifié
+  + src/modules/mod.rs                                   créé
   ~ src/lib.rs                                           modifié
   ~ Cargo.toml                                           modifié
   ~ AGENTS.md                                            modifié
 
-  9 fichiers à écrire
+  10 fichiers à écrire
 ✓ audit installée — 5 fichiers
 
   rbs migrate up, puis appelez audit::record dans vos services — l'entrée s'écrit dans la transaction du changement
@@ -81,7 +82,7 @@ use sea_orm::{DatabaseConnection, Set, TransactionTrait};
 use serde_json::json;
 
 use super::repository;
-use crate::audit::{self, Entry};
+use crate::modules::audit::{self, Entry};
 
 pub async fn rename(
     db: &DatabaseConnection,
@@ -180,7 +181,7 @@ There is no `updated_at`: a log line is not modified.
 Reading a row's history is a plain query:
 
 ```rust
-// src/audit/repository.rs — reading belongs beside the write, for the same reason:
+// src/modules/audit/repository.rs — reading belongs beside the write, for the same reason:
 // nothing else in the project builds a query.
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 

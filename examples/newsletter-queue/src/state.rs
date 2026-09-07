@@ -6,7 +6,7 @@ use sea_orm::DatabaseConnection;
 pub struct AppState {
     core: CoreState,
     // <rbs:state_champs>
-    pub mail: crate::mail::Mailer,
+    pub mail: crate::modules::mail::Mailer,
     // </rbs:state_champs>
 }
 
@@ -15,7 +15,7 @@ impl AppState {
         Ok(Self {
             core: CoreState::new(db, config),
             // <rbs:state_init>
-            mail: crate::mail::Mailer::from_config()?,
+            mail: crate::modules::mail::Mailer::from_config()?,
             // </rbs:state_init>
         })
     }

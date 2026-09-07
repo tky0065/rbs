@@ -10,6 +10,33 @@ between minor versions with no deprecation cycle.
 
 *[Version française](CHANGELOG.fr.md).*
 
+## [1.3.0] — 2026-09-07
+
+### Changed
+
+- **`rbs add` now installs ten of its modules under `src/modules/` instead of at the root
+  of `src/`** — `audit`, `cache` (the directory `redis` writes), `cors`, `jobs`, `mail`,
+  `observability`, `rate_limit` (what `rate-limit` writes), `scheduler`, `storage` and
+  `webhooks`. The point of mount is `src/modules/mod.rs`, opened at the first fragment
+  that needs it and inserted at the `<rbs:modules>` anchor from then on — the fourteenth,
+  alongside the thirteen the CLI already knew. `auth` is the one fragment left out: it
+  lays down the `User` entity you extend like any feature of your own, so it stays where
+  your own code lives. A project generated before this version keeps its modules exactly
+  where it received them — moving them would mean rewriting `use` statements the CLI does
+  not own — but `rbs doctor` gained a `disposition` check that warns, without failing,
+  the day such a project receives a module laid out the new way alongside ones still at
+  the root. That guarantee holds for a fragment installed on its own, but not for three
+  that reach into another module by its new path: `webhooks` targets the `<rbs:jobs>`
+  anchor inside `src/modules/jobs/mod.rs`, and on a project that still carries `src/jobs/`
+  from an earlier version the install simply fails — `src/modules/jobs/mod.rs is
+  missing`, with no block to paste, but nothing written either. `scheduler` writes a
+  `use crate::modules::jobs::{self, Job};`, and `rate-limit` a call to
+  `crate::modules::cache::Config::load()?` when the project also carries `redis`; both
+  install successfully and leave code that does not compile — `rbs doctor` reports it
+  afterwards, but the install already claimed success. On a project predating 1.3.0, move
+  `src/jobs/` (and, before adding `rate-limit`, `src/cache/`) under `src/modules/` and fix
+  their `use` statements before installing `webhooks`, `scheduler` or `rate-limit`.
+
 ## [1.2.0] — 2026-09-04
 
 ### Added

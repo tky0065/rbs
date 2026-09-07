@@ -3,23 +3,23 @@ description = "CORS : origines, méthodes et en-têtes autorisés, énumérés p
 
 [[files]]
 source      = "mod.rs.jinja"
-destination = "src/cors/mod.rs"
+destination = "src/modules/cors/mod.rs"
 
 [[files]]
 source      = "config.rs.jinja"
-destination = "src/cors/config.rs"
+destination = "src/modules/cors/config.rs"
 
 [[files]]
 source      = "tests.rs.jinja"
-destination = "src/cors/tests.rs"
+destination = "src/modules/cors/tests.rs"
 
 [[anchors]]
-anchor  = "features"
+anchor  = "modules"
 content = "pub mod cors;"
 
 [[anchors]]
 anchor  = "layers"
-content = ".layer(crate::cors::layer())"
+content = ".layer(crate::modules::cors::layer())"
 
 [[dependencies]]
 name     = "tower-http"

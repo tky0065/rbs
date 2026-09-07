@@ -31,6 +31,17 @@ const FICHIER_EXEMPLE: &str = ".env.example";
 /// le projet lui-même dicte.
 const FICHIER_ENV: &str = ".env";
 
+/// Le fichier qui déclare les modules installés, et qui porte leur ancre.
+const POINT_DE_MONTAGE: &str = "src/modules/mod.rs";
+
+/// Ce que `add` y dépose en l'ouvrant.
+const MONTAGE_INITIAL: &str = "\
+//! Les modules d'infrastructure que `rbs add` installe.
+
+// <rbs:modules>
+// </rbs:modules>
+";
+
 /// Le fragment tel que l'installation le voit.
 pub(crate) struct Fragment<'a> {
     /// Nom de la feature, pour les messages d'erreur.
@@ -122,6 +133,8 @@ pub(crate) fn actions(
             builder.insert(mount.anchor, &mount.lines)?;
         }
     }
+
+    ouvre_le_point_de_montage(fragment, builder)?;
 
     for insertion in &fragment.manifest.anchors {
         let anchor = anchor(fragment, &insertion.anchor, builder)?;
@@ -227,6 +240,38 @@ fn anchor(fragment: &Fragment, name: &str, builder: &plan::Builder) -> Result<An
     } else {
         Ok(anchor)
     }
+}
+
+/// Ouvre `src/modules/` si le fragment s'y déclare et que le projet ne l'a pas encore.
+///
+/// Le squelette ne pose pas ce fichier : un projet qui n'installe rien n'a pas de
+/// répertoire vide à porter. C'est donc le premier fragment qui vise l'ancre `modules`
+/// qui l'ouvre, et qui inscrit `pub mod modules;` là où les features se déclarent.
+fn ouvre_le_point_de_montage(
+    fragment: &Fragment,
+    builder: &mut plan::Builder,
+) -> Result<(), Error> {
+    let s_y_declare = fragment
+        .manifest
+        .anchors
+        .iter()
+        .any(|insertion| insertion.anchor == anchors::MODULES.name);
+
+    if !s_y_declare {
+        return Ok(());
+    }
+
+    if !builder.exists(POINT_DE_MONTAGE)? {
+        builder.create(POINT_DE_MONTAGE, MONTAGE_INITIAL)?;
+    }
+
+    // Inconditionnelle plutôt que réservée à l'ouverture : l'insertion est idempotente,
+    // et un projet dont la ligne a été retirée à la main la retrouve, au lieu de porter
+    // un répertoire que rien ne compile.
+    let features = anchor(fragment, anchors::FEATURES.name.as_ref(), builder)?;
+    builder.insert(features, &["pub mod modules;".to_string()])?;
+
+    Ok(())
 }
 
 /// Découpe le contenu déclaré en lignes à insérer.

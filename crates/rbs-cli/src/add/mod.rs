@@ -1099,7 +1099,7 @@ mod tests {
             .expect("le squelette doit porter l'ancre de démarrage");
 
         assert!(
-            startup.contains("demo_api::jobs::worker::spawn(state.clone());"),
+            startup.contains("demo_api::modules::jobs::worker::spawn(state.clone());"),
             "le worker n'est pas détaché au démarrage :\n{main}"
         );
 
@@ -1272,7 +1272,7 @@ mod tests {
             ),
             (
                 "storage",
-                r#"rbs_core::health::Probe::new("storage", crate::storage::probe(state.storage())),"#,
+                r#"crate::modules::storage::probe(state.storage()),"#,
             ),
         ] {
             let (_parent, root) = project();
@@ -1318,10 +1318,15 @@ mod tests {
 
         assert_eq!(
             planned.files,
-            ["src/cors/mod.rs", "src/cors/config.rs", "src/cors/tests.rs"]
+            [
+                "src/modules/cors/mod.rs",
+                "src/modules/cors/config.rs",
+                "src/modules/cors/tests.rs"
+            ]
         );
         assert!(
-            anchor_body(&planned, &crate::anchors::LAYERS).contains(".layer(crate::cors::layer())"),
+            anchor_body(&planned, &crate::anchors::LAYERS)
+                .contains(".layer(crate::modules::cors::layer())"),
             "{}",
             projected(&planned, "src/router.rs")
         );
@@ -1368,16 +1373,16 @@ mod tests {
         assert_eq!(
             planned.files,
             [
-                "src/rate_limit/mod.rs",
-                "src/rate_limit/config.rs",
-                "src/rate_limit/counter.rs",
-                "src/rate_limit/tests.rs",
+                "src/modules/rate_limit/mod.rs",
+                "src/modules/rate_limit/config.rs",
+                "src/modules/rate_limit/counter.rs",
+                "src/modules/rate_limit/tests.rs",
             ]
         );
 
         assert!(
             anchor_body(&planned, &crate::anchors::LAYERS)
-                .contains("crate::rate_limit::middleware"),
+                .contains("crate::modules::rate_limit::middleware"),
             "{}",
             projected(&planned, "src/router.rs")
         );
@@ -1427,27 +1432,26 @@ mod tests {
         assert_eq!(
             planned.files,
             [
-                "src/observability/mod.rs",
-                "src/observability/config.rs",
-                "src/observability/metrics.rs",
-                "src/observability/tests.rs",
+                "src/modules/observability/mod.rs",
+                "src/modules/observability/config.rs",
+                "src/modules/observability/metrics.rs",
+                "src/modules/observability/tests.rs",
             ]
         );
 
         let bibliotheque = projected(&planned, "src/lib.rs");
-        assert!(
-            bibliotheque.contains("pub mod observability;"),
-            "{bibliotheque}"
-        );
+        assert!(bibliotheque.contains("pub mod modules;"), "{bibliotheque}");
+        let montage = projected(&planned, "src/modules/mod.rs");
+        assert!(montage.contains("pub mod observability;"), "{montage}");
         assert!(
             anchor_body(&planned, &crate::anchors::LAYERS)
-                .contains("crate::observability::metrics::middleware"),
+                .contains("crate::modules::observability::metrics::middleware"),
             "{}",
             projected(&planned, "src/router.rs")
         );
         assert!(
             anchor_body(&planned, &crate::anchors::STARTUP)
-                .contains("demo_api::observability::serve(&state).await?;"),
+                .contains("demo_api::modules::observability::serve(&state).await?;"),
             "{}",
             projected(&planned, "src/main.rs")
         );
@@ -1471,7 +1475,7 @@ mod tests {
 
         let planned = plan_for(&options(&root, "observability")).expect("le plan doit se calculer");
 
-        let tests = projected(&planned, "src/observability/tests.rs");
+        let tests = projected(&planned, "src/modules/observability/tests.rs");
         for helper in ["fn registry()", "async fn call(uri: &str)"] {
             assert!(tests.contains(helper), "`{helper}` manque :\n{tests}");
         }
@@ -1504,7 +1508,7 @@ mod tests {
         let (_parent, root) = project();
 
         let planned = plan_for(&options(&root, "observability")).expect("le plan doit se calculer");
-        let metriques = projected(&planned, "src/observability/metrics.rs");
+        let metriques = projected(&planned, "src/modules/observability/metrics.rs");
 
         assert!(metriques.contains("MatchedPath"), "{metriques}");
         assert!(
@@ -1512,7 +1516,7 @@ mod tests {
             "le chemin demandé sert d'étiquette :\n{metriques}"
         );
 
-        let tests = projected(&planned, "src/observability/tests.rs");
+        let tests = projected(&planned, "src/modules/observability/tests.rs");
         assert!(
             tests.contains("path=\\\"/articles/{id}\\\""),
             "les tests engendrés ne gardent pas la cardinalité :\n{tests}"
@@ -1526,7 +1530,7 @@ mod tests {
         let (_parent, root) = project();
 
         let planned = plan_for(&options(&root, "rate-limit")).expect("le plan doit se calculer");
-        let counter = projected(&planned, "src/rate_limit/counter.rs");
+        let counter = projected(&planned, "src/modules/rate_limit/counter.rs");
 
         assert!(counter.contains("HashMap"), "{counter}");
         assert!(!counter.contains("deadpool_redis"), "{counter}");
@@ -1540,11 +1544,11 @@ mod tests {
         run(&options(&root, "redis")).expect("la pose du cache doit aboutir");
 
         let planned = plan_for(&options(&root, "rate-limit")).expect("le plan doit se calculer");
-        let counter = projected(&planned, "src/rate_limit/counter.rs");
+        let counter = projected(&planned, "src/modules/rate_limit/counter.rs");
 
         assert!(counter.contains("deadpool_redis"), "{counter}");
         assert!(
-            counter.contains("crate::cache::Config::load()"),
+            counter.contains("crate::modules::cache::Config::load()"),
             "{counter}"
         );
         assert!(!counter.contains("HashMap"), "{counter}");
@@ -1563,7 +1567,7 @@ mod tests {
             planned
                 .files
                 .iter()
-                .any(|file| file == "src/rate_limit/mod.rs"),
+                .any(|file| file == "src/modules/rate_limit/mod.rs"),
             "{:?}",
             planned.files
         );
@@ -1593,7 +1597,7 @@ mod tests {
             !planned
                 .files
                 .iter()
-                .any(|file| file.starts_with("src/rate_limit/")),
+                .any(|file| file.starts_with("src/modules/rate_limit/")),
             "{:?}",
             planned.files
         );
@@ -1744,6 +1748,69 @@ mod tests {
         let mut options = options(root, "essai");
         options.template_dir = Some(fragments.path().to_path_buf());
         options
+    }
+
+    /// Écrit dans `fragments` un fragment nommé `nom` qui se déclare dans les modules.
+    fn fragment_module(fragments: &TempDir, nom: &str) {
+        fs::create_dir(fragments.path().join(nom)).expect("le fragment se crée");
+        fs::write(
+            fragments.path().join(nom).join("feature.toml"),
+            format!(
+                "[feature]\ndescription = \"{nom}\"\n\n\
+                 [[anchors]]\nanchor = \"modules\"\ncontent = \"pub mod {nom};\"\n"
+            ),
+        )
+        .expect("le manifeste s'écrit");
+    }
+
+    /// Le squelette ne pose pas `src/modules/mod.rs` : c'est le premier fragment qui s'y
+    /// déclare qui l'ouvre, et qui inscrit le module dans la bibliothèque du projet.
+    #[test]
+    fn the_first_fragment_that_targets_modules_opens_the_mount_point() {
+        let (_parent, root) = project();
+        let fragments = TempDir::new().expect("répertoire temporaire créable");
+        fragment_module(&fragments, "essai");
+
+        run(&fragment_options(&root, &fragments)).expect("l'installation doit aboutir");
+
+        let montage = fs::read_to_string(root.join("src/modules/mod.rs"))
+            .expect("le point de montage doit être posé");
+        assert!(montage.contains("// <rbs:modules>"), "{montage}");
+        assert!(montage.contains("pub mod essai;"), "{montage}");
+
+        let lib = fs::read_to_string(root.join("src/lib.rs")).expect("lib.rs lisible");
+        assert!(lib.contains("pub mod modules;"), "{lib}");
+        assert!(
+            !lib.contains("pub mod essai;"),
+            "le fragment se déclare dans le point de montage, pas dans la bibliothèque : {lib}"
+        );
+    }
+
+    /// Le second fragment trouve le point de montage ouvert : il s'y ajoute sans redéclarer
+    /// `pub mod modules;`, qu'un doublon ferait refuser à la compilation.
+    #[test]
+    fn a_second_fragment_does_not_declare_the_mount_point_twice() {
+        let (_parent, root) = project();
+        let fragments = TempDir::new().expect("répertoire temporaire créable");
+        fragment_module(&fragments, "essai");
+        fragment_module(&fragments, "autre");
+        run(&fragment_options(&root, &fragments)).expect("la première installation aboutit");
+
+        let mut options = fragment_options(&root, &fragments);
+        options.feature = "autre".to_string();
+        options.force = true;
+        run(&options).expect("la seconde installation doit aboutir");
+
+        let lib = fs::read_to_string(root.join("src/lib.rs")).expect("lib.rs lisible");
+        assert_eq!(
+            lib.matches("pub mod modules;").count(),
+            1,
+            "le point de montage ne se déclare qu'une fois : {lib}"
+        );
+        let montage = fs::read_to_string(root.join("src/modules/mod.rs"))
+            .expect("le point de montage existe");
+        assert!(montage.contains("pub mod essai;"), "{montage}");
+        assert!(montage.contains("pub mod autre;"), "{montage}");
     }
 
     /// La ligne qui précède immédiatement la balise fermante de `anchor`.

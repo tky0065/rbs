@@ -400,25 +400,28 @@ rbs doctor
 
 {/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
-  ✓ ancres      les 12 points d'insertion sont en place
-  ✓ agents      guide et inventaire à jour
-  ✓ relations   les modèles portent leurs ancres de relation
-  ✓ .env        les 7 variables de .env.example sont renseignées
-  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
-  … base        compilation de la crate migration, peut prendre
-                une minute au premier lancement…
+  ✓ ancres        les 12 points d'insertion sont en place
+  ✓ agents        guide et inventaire à jour
+  ✓ relations     les modèles portent leurs ancres de relation
+  ✓ .env          les 7 variables de .env.example sont renseignées
+  ✓ versions      projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
+  … base          compilation de la crate migration, peut prendre
+                  une minute au premier lancement…
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
      Running `target/debug/migration version`
-  ✓ base        postgres 18.6 répond sur localhost:5432
+  ✓ base          postgres 18.6 répond sur localhost:5432
+  ✓ disposition   aucun module ne mélange les deux dispositions
 ✓ le projet est sain
 ```
 
-Six vérifications : les ancres sont toujours en place — douze ici, onze du squelette
-plus celle du compose, qui sort du compte pour un projet sans `docker-compose.yml` — le
-guide et l'inventaire d'[`AGENTS.md`](./guides/agents.md) s'accordent toujours avec ce que
-porte le projet, aucun modèle ne porte de relation sans les deux ancres qu'il lui
+Sept vérifications : les ancres sont toujours en place — douze ici, onze du squelette
+plus celle du compose, qui sort du compte pour un projet sans `docker-compose.yml`
+(`modules` et `jobs` en sortent aussi, sur un projet qui n'a jamais installé de fragment)
+— le guide et l'inventaire d'[`AGENTS.md`](./guides/agents.md) s'accordent toujours avec
+ce que porte le projet, aucun modèle ne porte de relation sans les deux ancres qu'il lui
 faudrait pour en recevoir une, `.env` porte chaque clé que déclare `.env.example`, le
-projet et `rbs-core` s'accordent avec la version du CLI, et la base répond.
+projet et `rbs-core` s'accordent avec la version du CLI, la base répond, et aucun fragment
+ne vit à la racine de `src/` aux côtés de `src/modules/`.
 
 ## Pour aller plus loin
 

@@ -22,7 +22,7 @@ impl Counter {
     /// Aucune connexion n'est ouverte ici : le pool est paresseux, ce qui laisse
     /// `AppState::new` synchrone.
     pub fn new() -> anyhow::Result<Self> {
-        let cache = crate::cache::Config::load()?;
+        let cache = crate::modules::cache::Config::load()?;
         let pool = deadpool_redis::Config::from_url(&cache.url)
             .create_pool(Some(Runtime::Tokio1))
             .with_context(|| format!("pool Redis inconstructible pour `{}`", cache.url))?;

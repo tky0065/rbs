@@ -1814,7 +1814,7 @@ mod tests {
 
         let main = read(&project.root().join("src/main.rs"));
         assert!(
-            main.contains("crate::jobs::worker::spawn(state.clone());"),
+            main.contains("crate::modules::jobs::worker::spawn(state.clone());"),
             "le worker se détache par `crate::`, faute de bibliothèque :\n{main}"
         );
 

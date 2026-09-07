@@ -6,7 +6,7 @@ title: Storage
 # Storage
 
 `rbs add storage` installs object storage into an existing project: four files under
-`src/storage/`, and an `Arc<dyn Storage>` on your `AppState`. Two backends come with it —
+`src/modules/storage/`, and an `Arc<dyn Storage>` on your `AppState`. Two backends come with it —
 the local filesystem and S3 — and the point of the feature is that your code cannot tell
 which one it is talking to.
 
@@ -23,19 +23,20 @@ storage : stockage d'objets : un trait à cinq méthodes, deux backends — fich
 
 plan pour /private/tmp/rbs-demo/depot
 
-  + src/storage/mod.rs         créé
-  + src/storage/files.rs       créé
-  + src/storage/s3.rs          créé
-  + src/storage/tests.rs       créé
-  ~ src/lib.rs                 modifié
-  ~ src/state.rs               modifié
-  ~ src/health/controller.rs   modifié
-  ~ Cargo.toml                 modifié
-  ~ config/default.toml        modifié
-  ~ .env.example               modifié
-  ~ AGENTS.md                  modifié
+  + src/modules/storage/mod.rs     créé
+  + src/modules/storage/files.rs   créé
+  + src/modules/storage/s3.rs      créé
+  + src/modules/storage/tests.rs   créé
+  + src/modules/mod.rs             créé
+  ~ src/lib.rs                     modifié
+  ~ src/state.rs                   modifié
+  ~ src/health/controller.rs       modifié
+  ~ Cargo.toml                     modifié
+  ~ config/default.toml            modifié
+  ~ .env.example                   modifié
+  ~ AGENTS.md                      modifié
 
-  11 fichiers à écrire
+  12 fichiers à écrire
 ✓ storage installée — 4 fichiers
 
   les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example
@@ -46,7 +47,7 @@ The next step is not decoration: with the default `fs` backend, deposited object
 
 ## Five methods
 
-```rust file=examples/file-drop/src/storage/mod.rs region=trait
+```rust file=examples/file-drop/src/modules/storage/mod.rs region=trait
 ```
 
 That is the whole contract. Deliberately not in it: listing, copying, signed URLs,
@@ -57,7 +58,7 @@ project can no longer reach.
 
 Failures are one enum, which is what lets a caller tell a client error from an outage:
 
-```rust file=examples/file-drop/src/storage/mod.rs region=erreurs
+```rust file=examples/file-drop/src/modules/storage/mod.rs region=erreurs
 ```
 
 `NotFound` is the only variant that comes from the caller. `delete` does not raise it — a
@@ -66,7 +67,7 @@ find, and two backends that disagreed on that would not be substitutable.
 
 ## Choosing a backend
 
-```rust file=examples/file-drop/src/storage/mod.rs region=build
+```rust file=examples/file-drop/src/modules/storage/mod.rs region=build
 ```
 
 The error message spells out the accepted values rather than deferring to a serde enum,
@@ -79,10 +80,10 @@ have propagated a type parameter through every handler signature in the project.
 
 The local backend is small enough to read in full:
 
-```rust file=examples/file-drop/src/storage/files.rs
+```rust file=examples/file-drop/src/modules/storage/files.rs
 ```
 
-The S3 backend is `src/storage/s3.rs`. Its one decision worth knowing: credentials come
+The S3 backend is `src/modules/storage/s3.rs`. Its one decision worth knowing: credentials come
 from the configuration, not from the SDK's default provider chain. That chain is async and
 interrogates the instance metadata service, which a synchronous `AppState::new` can neither
 launch nor await — so `aws-config` is not a dependency here, and `Credentials`, `Region`
@@ -93,7 +94,7 @@ the bucket in the path rather than the sub-domain, which is what MinIO expects.
 
 An object name often comes from a user, so it is not handed to the filesystem as-is:
 
-```rust file=examples/file-drop/src/storage/mod.rs region=normalize
+```rust file=examples/file-drop/src/modules/storage/mod.rs region=normalize
 ```
 
 The key is walked component by component and refused as soon as a `..` climbs above the
@@ -186,7 +187,7 @@ derive a key.
 
 ## Testing
 
-The generated `src/storage/tests.rs` is built around one function, `round`, which
+The generated `src/modules/storage/tests.rs` is built around one function, `round`, which
 exercises what the trait promises — put, get, exists, delete — against `&dyn Storage`
 rather than a concrete type.
 

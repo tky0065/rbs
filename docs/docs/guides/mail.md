@@ -6,7 +6,7 @@ title: Mail
 # Mail
 
 `rbs add mail` installs SMTP sending into an existing project: five files under
-`src/mail/`, a template directory, and a `Mailer` on your `AppState`. Like the other
+`src/modules/mail/`, a template directory, and a `Mailer` on your `AppState`. Like the other
 bricks, it mounts no route — when a message goes out is a decision only your domain can
 make.
 
@@ -23,12 +23,13 @@ mail : envoi de courriels par SMTP : transport partagé, gabarits minijinja
 
 plan pour /private/tmp/rbs-demo/depot
 
-  + src/mail/mod.rs                 créé
-  + src/mail/config.rs              créé
-  + src/mail/template.rs            créé
-  + src/mail/service.rs             créé
-  + src/mail/tests.rs               créé
+  + src/modules/mail/mod.rs         créé
+  + src/modules/mail/config.rs      créé
+  + src/modules/mail/template.rs    créé
+  + src/modules/mail/service.rs     créé
+  + src/modules/mail/tests.rs       créé
   + templates/mail/bienvenue.html   créé
+  + src/modules/mod.rs              créé
   ~ src/lib.rs                      modifié
   ~ src/state.rs                    modifié
   ~ docker-compose.yml              modifié
@@ -37,7 +38,7 @@ plan pour /private/tmp/rbs-demo/depot
   ~ .env.example                    modifié
   ~ AGENTS.md                       modifié
 
-  13 fichiers à écrire
+  14 fichiers à écrire
 ✓ mail installée — 6 fichiers
 
   réglez [mail] dans config/default.toml — un SMTP local par défaut
@@ -51,7 +52,7 @@ dev`](../cli/dev.md) runs — brings it up alongside the database, and its web U
 
 ## Configuration
 
-```rust file=examples/newsletter-queue/src/mail/config.rs
+```rust file=examples/newsletter-queue/src/modules/mail/config.rs
 ```
 
 The defaults describe a development server: port 1025 in the clear, which is what
@@ -74,7 +75,7 @@ local relay needs neither.
 
 ## The transport
 
-```rust file=examples/newsletter-queue/src/mail/service.rs region=construction
+```rust file=examples/newsletter-queue/src/modules/mail/service.rs region=construction
 ```
 
 Two things are decided here, and both are about *when* failure happens.
@@ -112,7 +113,7 @@ directory when you are trying to find out what went wrong.
 
 The common case renders and sends in one call:
 
-```rust file=examples/newsletter-queue/src/mail/service.rs region=send_template
+```rust file=examples/newsletter-queue/src/modules/mail/service.rs region=send_template
 ```
 
 `message()` is available when you would rather build the `Message` yourself, and `send()`
@@ -127,7 +128,7 @@ a 500 — see the [errors guide](./errors.md).
 Sending inside a handler makes the HTTP response wait for the SMTP server. When the
 message does not condition the response, it can be detached instead:
 
-```rust file=examples/newsletter-queue/src/mail/service.rs region=send_detached
+```rust file=examples/newsletter-queue/src/modules/mail/service.rs region=send_detached
 ```
 
 **Read the trade-off before reaching for it.** There is no queue and no retry: a message
@@ -144,7 +145,7 @@ and nothing else will tell them it failed.
 When you need the retry, the message has to survive the process. That means writing it down
 somewhere, which is what the [jobs feature](./jobs.md) is:
 
-```rust file=examples/newsletter-queue/src/jobs/newsletter.rs region=job
+```rust file=examples/newsletter-queue/src/modules/jobs/newsletter.rs region=job
 ```
 
 Read it against `send_detached` above. Nothing about the sending changed — same `Mailer`,
@@ -168,7 +169,7 @@ database. Installing `jobs` is a decision, not a prerequisite.
 
 ## Testing
 
-The generated `src/mail/tests.rs` needs no server for six of its seven tests: the three
+The generated `src/modules/mail/tests.rs` needs no server for six of its seven tests: the three
 encryption modes each build a transport, an invalid sender is rejected by name, a built
 message carries its sender and recipient, a template renders its variables, and a missing
 template names its file without panicking.

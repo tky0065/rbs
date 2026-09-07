@@ -71,9 +71,8 @@ const EXEMPLES: &[Exemple] = &[
     Exemple {
         nom: "file-drop",
         database_url: "postgres://rbs:rbs@localhost:5432/file_drop",
-        // `rbs add redis` inscrit `mod cache;`, non `mod redis;`. L'ancre empile dans
-        // l'ordre d'installation et doit rester triée : `uploads` est le nom de
-        // ressource qui la laisse close derrière `storage`.
+        // `rbs add redis` inscrit `mod cache;`, non `mod redis;`, dans l'ancre
+        // `modules` — distincte de `features`, qui ne porte plus que `uploads`.
         features: &["redis", "mail", "storage"],
         crud: "uploads",
         // `owner_email` finit par `_email` : le DTO généré gagne sa contrainte d'email
@@ -91,10 +90,10 @@ const EXEMPLES: &[Exemple] = &[
             "src/uploads/service.rs",
             "src/uploads/controller.rs",
             "src/uploads/repository.rs",
-            "src/cache/mod.rs",
-            "src/mail/mod.rs",
-            "src/mail/service.rs",
-            "src/storage/mod.rs",
+            "src/modules/cache/mod.rs",
+            "src/modules/mail/mod.rs",
+            "src/modules/mail/service.rs",
+            "src/modules/storage/mod.rs",
             "templates/mail/depot.html",
         ],
         engendre_a_part: &[],
@@ -102,9 +101,9 @@ const EXEMPLES: &[Exemple] = &[
     Exemple {
         nom: "newsletter-queue",
         database_url: "postgres://rbs:rbs@localhost:5432/newsletter_queue",
-        // L'ancre `features` empile les `mod` dans l'ordre d'installation et doit rester
-        // triée : `jobs`, `mail`, `observability`, et une ressource qui les suit — ce qui
-        // écarte `newsletter` comme nom de ressource.
+        // Les trois fragments s'installent dans l'ancre `modules`, triée indépendamment
+        // de l'ordre d'arrivée des `add` : `jobs`, `mail`, `observability` y figurent
+        // alphabétiquement quel que soit l'ordre choisi ici.
         features: &["jobs", "mail", "observability"],
         crud: "subscribers",
         // `email` seul suffit à la contrainte de validation du DTO : la règle porte sur
@@ -115,11 +114,11 @@ const EXEMPLES: &[Exemple] = &[
         // transaction qui l'a motivé. `the_hand_edits_of_newsletter_queue_are_in_place`
         // en répond.
         edite_a_la_main: &[
-            "src/jobs/mod.rs",
-            "src/jobs/demo.rs",
-            "src/jobs/newsletter.rs",
-            "src/mail/mod.rs",
-            "src/mail/service.rs",
+            "src/modules/jobs/mod.rs",
+            "src/modules/jobs/demo.rs",
+            "src/modules/jobs/newsletter.rs",
+            "src/modules/mail/mod.rs",
+            "src/modules/mail/service.rs",
             "src/main.rs",
             "src/openapi.rs",
             "src/subscribers/dto.rs",
@@ -684,11 +683,11 @@ fn the_hand_edits_of_file_drop_are_in_place() {
     // fait de `clippy -D warnings` la preuve que les briques sont appelées : une seule
     // d'entre elles remise ferait passer un câblage disparu.
     for module in ["cache", "mail", "storage"] {
-        let source = lire(&format!("src/{module}/mod.rs"));
+        let source = lire(&format!("src/modules/{module}/mod.rs"));
         assert!(
             !source.contains("#![allow(dead_code)]"),
-            "src/{module}/mod.rs : la permission de module tombe avec le premier appel, \
-             et c'est ce que cet exemple montre"
+            "src/modules/{module}/mod.rs : la permission de module tombe avec le premier \
+             appel, et c'est ce que cet exemple montre"
         );
     }
 
@@ -755,44 +754,44 @@ fn the_hand_edits_of_newsletter_queue_are_in_place() {
     // permission `dead_code` que son commentaire dit de retirer au premier appel. C'est
     // ce retrait qui fait de `clippy -D warnings` la preuve du câblage.
     for module in ["jobs", "mail"] {
-        let source = lire(&format!("src/{module}/mod.rs"));
+        let source = lire(&format!("src/modules/{module}/mod.rs"));
         assert!(
             !source.contains("#![allow(dead_code)]"),
-            "src/{module}/mod.rs : la permission de module tombe avec le premier appel, \
-             et c'est ce que cet exemple montre"
+            "src/modules/{module}/mod.rs : la permission de module tombe avec le premier \
+             appel, et c'est ce que cet exemple montre"
         );
     }
 
     // Le job de démonstration part avec son inscription : le laisser inscrit ferait passer
     // un exemple dont le registre ne porterait aucun job à lui.
     assert!(
-        !racine.join("src/jobs/demo.rs").exists(),
-        "src/jobs/demo.rs : le job d'exemple s'efface devant celui du projet"
+        !racine.join("src/modules/jobs/demo.rs").exists(),
+        "src/modules/jobs/demo.rs : le job d'exemple s'efface devant celui du projet"
     );
-    let jobs = lire("src/jobs/mod.rs");
+    let jobs = lire("src/modules/jobs/mod.rs");
     assert!(
         jobs.contains("register::<newsletter::SendNewsletter>()") && !jobs.contains("demo::Log"),
-        "src/jobs/mod.rs : le registre doit porter `SendNewsletter` et lui seul :\n{jobs}"
+        "src/modules/jobs/mod.rs : le registre doit porter `SendNewsletter` et lui seul :\n{jobs}"
     );
 
     // Le job attend l'envoi au lieu de le détacher : c'est ce que le réessai exige, et
     // toute la différence que cet exemple sert à montrer.
-    let newsletter = lire("src/jobs/newsletter.rs");
+    let newsletter = lire("src/modules/jobs/newsletter.rs");
     assert!(
         newsletter.contains("impl Job for SendNewsletter")
             && newsletter.contains(".send_template(")
             && !newsletter.contains(".send_detached("),
-        "src/jobs/newsletter.rs : le job rend l'échec au worker, il ne détache pas l'envoi :\n\
-         {newsletter}"
+        "src/modules/jobs/newsletter.rs : le job rend l'échec au worker, il ne détache pas \
+         l'envoi :\n{newsletter}"
     );
 
     // `send_detached` reste offert, et n'a plus que sa propre permission : la permission
     // de module retirée ci-dessus la rendait invisible.
-    let mailer = lire("src/mail/service.rs");
+    let mailer = lire("src/modules/mail/service.rs");
     assert!(
         mailer.contains("#[allow(dead_code)]\n    pub fn send_detached"),
-        "src/mail/service.rs : la fonction est conservée, sous une permission qui ne vaut \
-         que pour elle"
+        "src/modules/mail/service.rs : la fonction est conservée, sous une permission qui \
+         ne vaut que pour elle"
     );
 
     // Le cœur de l'exemple. `jobs::enqueue` reçoit la transaction et non `db` : sur `db`,
@@ -876,8 +875,8 @@ fn the_hand_edits_of_newsletter_queue_are_in_place() {
     // ici, faute de quoi l'exclusion les ferait disparaître sans bruit.
     let main = lire("src/main.rs");
     for extrait in [
-        "newsletter_queue::jobs::worker::spawn(state.clone());",
-        "newsletter_queue::observability::serve(&state).await?;",
+        "newsletter_queue::modules::jobs::worker::spawn(state.clone());",
+        "newsletter_queue::modules::observability::serve(&state).await?;",
         "rbs_core::logs::shutdown();",
     ] {
         assert!(

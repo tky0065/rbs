@@ -51,9 +51,9 @@ cd .. && mv blog-auth examples/blog-auth
 ```
 
 `posts` plutôt qu'`articles`, que `hello-crud` porte déjà : ce qui distingue cet exemple est
-la protection, pas la ressource. Le nom laisse aussi l'ancre `features` triée — elle empile
-les déclarations `mod` dans l'ordre d'installation, et `mod auth; mod articles;` ferait
-tiquer un `cargo fmt` à l'intérieur du projet.
+la protection, pas la ressource. Le nom n'a aucune incidence sur l'ordre de l'ancre
+`features` — `insert()` retrie tout le bloc à chaque insertion, quel que soit l'ordre
+d'arrivée de `mod auth;` et `mod posts;`.
 
 ### `file-drop`
 
@@ -77,18 +77,18 @@ cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
 cd .. && mv file-drop examples/file-drop
 ```
 
-`uploads` est le seul nom de ressource qui laisse l'ancre `features` triée derrière
-`storage` — et notez que `rbs add redis` écrit `mod cache;`, et non `mod redis;`.
-`owner_email` se termine par `_email`, donc le DTO engendré gagne sa contrainte d'adresse
-sans que personne ne l'écrive, et le courriel a un destinataire qui vient du modèle.
+Les trois fragments se rangent dans l'ancre `modules`, distincte de `features` et triée
+indépendamment d'elle — notez que `rbs add redis` y écrit `mod cache;`, et non
+`mod redis;`. `owner_email` se termine par `_email`, donc le DTO engendré gagne sa
+contrainte d'adresse sans que personne ne l'écrive, et le courriel a un destinataire qui
+vient du modèle.
 
 ### `newsletter-queue`
 
-L'ordre d'installation n'est pas libre : l'ancre `features` empile les déclarations `mod`
-dans l'ordre d'arrivée des features et doit rester triée, donc `jobs`, `mail`,
-`observability`, puis une ressource qui suit les trois — ce qui écarte `newsletter` comme
-nom de ressource. `email` seul mérite la contrainte de validation du DTO ; la règle
-reconnaît le nom exact autant que le suffixe `_email`.
+Les trois fragments se rangent dans l'ancre `modules` : `jobs`, `mail` et `observability`
+s'y trient alphabétiquement, quel que soit l'ordre des `add` ci-dessous. `email` seul
+mérite la contrainte de validation du DTO ; la règle reconnaît le nom exact autant que le
+suffixe `_email`.
 
 ```bash
 cargo run -p rbs-cli --bin rbs -- new newsletter-queue --yes \
@@ -154,10 +154,11 @@ rien n'appelle ne prouve rien du câblage.
   produit.
 - `src/uploads/repository.rs` : `page` se détache de `list`, pour qu'un appelant qui tient
   déjà le compte ne refasse pas le `COUNT(*)`.
-- `src/{cache,storage}/mod.rs` et `src/mail/service.rs` : `src/storage/mod.rs` abandonne
-  l'`allow(dead_code)` que le fragment pose sur le trait `Storage`, dont ce projet appelle
-  les cinq méthodes. `src/cache/mod.rs` et `src/mail/service.rs` en gardent un, ciblé, sur
-  `invalidate` et `send_detached`, qu'aucun projet n'est tenu d'appeler.
+- `src/modules/{cache,storage}/mod.rs` et `src/modules/mail/service.rs` :
+  `src/modules/storage/mod.rs` abandonne l'`allow(dead_code)` que le fragment pose sur le
+  trait `Storage`, dont ce projet appelle les cinq méthodes. `src/modules/cache/mod.rs` et
+  `src/modules/mail/service.rs` en gardent un, ciblé, sur `invalidate` et `send_detached`,
+  qu'aucun projet n'est tenu d'appeler.
 - `templates/mail/depot.html` : une seconde template, ajoutée à la main — celle que le
   fragment livre dit « votre compte est ouvert », ce qu'aucun dépôt de fichier ne réutilise.
 
@@ -168,13 +169,14 @@ resteraient hors de toute surveillance, et le câblage pourrait disparaître en 
 fragments livrent une file, un expéditeur et un module de métriques, et aucun d'eux une
 route ; un job que rien n'enfile ne prouve rien de la file.
 
-- `src/jobs/newsletter.rs` : `SendNewsletter` implémente `Job`. Il attend l'envoi plutôt que
-  de le détacher, et c'est toute la différence : une erreur rendue ici est un réessai, là où
-  `send_detached` ne laisse qu'une ligne de log. La charge porte l'`id` de l'abonné et non
-  son adresse — entre l'enfilage et l'exécution, une adresse peut changer.
-- `src/jobs/mod.rs` : `registry()` enregistre `SendNewsletter`, et `demo.rs` part avec son
-  enregistrement. `enqueue` perd sa permission `unused_imports` — `broadcast` l'appelle —
-  quand `enqueue_at` en garde une pour elle, aucune lettre n'étant ici programmée.
+- `src/modules/jobs/newsletter.rs` : `SendNewsletter` implémente `Job`. Il attend l'envoi
+  plutôt que de le détacher, et c'est toute la différence : une erreur rendue ici est un
+  réessai, là où `send_detached` ne laisse qu'une ligne de log. La charge porte l'`id` de
+  l'abonné et non son adresse — entre l'enfilage et l'exécution, une adresse peut changer.
+- `src/modules/jobs/mod.rs` : `registry()` enregistre `SendNewsletter`, et `demo.rs` part
+  avec son enregistrement. `enqueue` perd sa permission `unused_imports` — `broadcast`
+  l'appelle — quand `enqueue_at` en garde une pour elle, aucune lettre n'étant ici
+  programmée.
 - `src/subscribers/service.rs` : `broadcast` ouvre une transaction, lit les abonnés
   confirmés et enfile une lettre pour chacun **à l'intérieur** de celle-ci. Sur `db` plutôt
   que `&transaction`, les lettres survivraient au rollback qui les annule, ce qu'une file en
@@ -186,9 +188,10 @@ route ; un job que rien n'enfile ne prouve rien de la file.
   handler qui répond `202` (les lettres sont enfilées, pas envoyées), la route montée avant
   `/subscribers/{id}` pour que `broadcast` ne soit pas lu comme un id, et le chemin déclaré
   à OpenAPI.
-- `src/mail/mod.rs` et `src/mail/service.rs` : la permission `dead_code` de module tombe
-  avec le premier appel, et `send_detached` en garde une pour elle seule — la fonction est
-  conservée, un message dont la perte ne coûte rien n'ayant pas besoin d'une ligne en base.
+- `src/modules/mail/mod.rs` et `src/modules/mail/service.rs` : la permission `dead_code`
+  de module tombe avec le premier appel, et `send_detached` en garde une pour elle seule —
+  la fonction est conservée, un message dont la perte ne coûte rien n'ayant pas besoin
+  d'une ligne en base.
 - `src/main.rs` : `rbs_core::logs::shutdown()` avant de sortir, qui pousse le dernier lot de
   spans au lieu de le perdre. Rien dans le squelette ne l'appelle, le coût d'un oubli étant
   ce lot et non une panne — un exemple est donc le seul endroit où l'appel se lise.

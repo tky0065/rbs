@@ -7,7 +7,7 @@ use serde::Serialize;
 use super::delivery::{Delivery, Event};
 use super::dto::{CreateSubscription, SubscriptionCreated, SubscriptionResponse};
 use super::{matches, repository};
-use crate::jobs;
+use crate::modules::jobs;
 
 /// Émet un événement : un job de livraison par abonné qui l'écoute.
 ///

@@ -5,7 +5,7 @@ title: Scheduler
 
 # Le déclenchement calendaire
 
-`rbs add scheduler` donne un calendrier à un projet : six fichiers sous `src/scheduler/`,
+`rbs add scheduler` donne un calendrier à un projet : six fichiers sous `src/modules/scheduler/`,
 une migration pour la table `schedules`, et un ticker démarré avec le serveur. C'est la
 réponse à la dernière ligne du [guide des jobs](./jobs.md) — une file sait exécuter un
 travail et le réessayer, mais rien ne l'enfile sinon un événement que vous écrivez.
@@ -27,32 +27,33 @@ scheduler exige jobs : posée avec elle
 
 plan pour /private/tmp/rbs-demo/blog
 
-  + src/jobs/mod.rs                                      créé
-  + src/jobs/config.rs                                   créé
-  + src/jobs/model.rs                                    créé
-  + src/jobs/queue.rs                                    créé
-  + src/jobs/worker.rs                                   créé
-  + src/jobs/demo.rs                                     créé
-  + src/jobs/tests.rs                                    créé
+  + src/modules/jobs/mod.rs                              créé
+  + src/modules/jobs/config.rs                           créé
+  + src/modules/jobs/model.rs                            créé
+  + src/modules/jobs/queue.rs                            créé
+  + src/modules/jobs/worker.rs                           créé
+  + src/modules/jobs/demo.rs                             créé
+  + src/modules/jobs/tests.rs                            créé
   + migration/src/m20260903_173943_create_jobs.rs        créé
   ~ migration/src/lib.rs                                 modifié
+  + src/modules/mod.rs                                   créé
   ~ src/lib.rs                                           modifié
   ~ src/main.rs                                          modifié
   ~ Cargo.toml                                           modifié
   ~ config/default.toml                                  modifié
-  + src/scheduler/mod.rs                                 créé
-  + src/scheduler/config.rs                              créé
-  + src/scheduler/model.rs                               créé
-  + src/scheduler/sync.rs                                créé
-  + src/scheduler/ticker.rs                              créé
-  + src/scheduler/tests.rs                               créé
+  + src/modules/scheduler/mod.rs                         créé
+  + src/modules/scheduler/config.rs                      créé
+  + src/modules/scheduler/model.rs                       créé
+  + src/modules/scheduler/sync.rs                        créé
+  + src/modules/scheduler/ticker.rs                      créé
+  + src/modules/scheduler/tests.rs                       créé
   + migration/src/m20260903_173943_create_schedules.rs   créé
   ~ AGENTS.md                                            modifié
 
-  21 fichiers à écrire
+  22 fichiers à écrire
 ✓ scheduler installée — 15 fichiers
 
-  rbs migrate up, puis déclarez vos échéances dans src/scheduler/mod.rs — les expressions sont évaluées en UTC
+  rbs migrate up, puis déclarez vos échéances dans src/modules/scheduler/mod.rs — les expressions sont évaluées en UTC
 ```
 
 Deux migrations viennent avec lui : [`rbs migrate up`](../cli/migrate.md) est donc la
@@ -61,15 +62,15 @@ n'ont rien à lire.
 
 ## Déclarer une échéance
 
-Le calendrier est déclaré en code, dans `src/scheduler/mod.rs`, et la base n'en porte que
+Le calendrier est déclaré en code, dans `src/modules/scheduler/mod.rs`, et la base n'en porte que
 l'état. `schedules()` est au ticker ce que `registry()` est au worker — l'unique liste que
 vous éditez :
 
 ```rust
 pub fn schedules() -> Vec<Schedule> {
-    vec![Schedule::every::<crate::jobs::demo::Log>(
+    vec![Schedule::every::<crate::modules::jobs::demo::Log>(
         "0 3 * * *",
-        || crate::jobs::demo::Log {
+        || crate::modules::jobs::demo::Log {
             message: "échéance quotidienne".to_string(),
         },
     )]
@@ -195,7 +196,7 @@ trente secondes le retard d'un déclenchement. `config/{env}.toml` et
 
 ## Les tests
 
-Le `src/scheduler/tests.rs` engendré tourne contre une vraie base, comme tout test qui en
+Le `src/modules/scheduler/tests.rs` engendré tourne contre une vraie base, comme tout test qui en
 touche une — voir le [guide des tests](./testing.md). Cinq d'entre eux sont ceux qu'il vaut
 la peine de garder si vous éditez le fragment :
 

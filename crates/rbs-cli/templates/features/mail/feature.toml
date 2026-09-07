@@ -3,23 +3,23 @@ description = "envoi de courriels par SMTP : transport partagé, gabarits miniji
 
 [[files]]
 source      = "mod.rs.jinja"
-destination = "src/mail/mod.rs"
+destination = "src/modules/mail/mod.rs"
 
 [[files]]
 source      = "config.rs.jinja"
-destination = "src/mail/config.rs"
+destination = "src/modules/mail/config.rs"
 
 [[files]]
 source      = "template.rs.jinja"
-destination = "src/mail/template.rs"
+destination = "src/modules/mail/template.rs"
 
 [[files]]
 source      = "service.rs.jinja"
-destination = "src/mail/service.rs"
+destination = "src/modules/mail/service.rs"
 
 [[files]]
 source      = "tests.rs.jinja"
-destination = "src/mail/tests.rs"
+destination = "src/modules/mail/tests.rs"
 
 # Le gabarit est déposé dans le projet, non embarqué dans un binaire : c'est un texte que
 # son auteur relit et récrit.
@@ -28,16 +28,16 @@ source      = "bienvenue.html.jinja"
 destination = "templates/mail/bienvenue.html"
 
 [[anchors]]
-anchor  = "features"
+anchor  = "modules"
 content = "pub mod mail;"
 
 [[anchors]]
 anchor  = "state_champs"
-content = "pub mail: crate::mail::Mailer,"
+content = "pub mail: crate::modules::mail::Mailer,"
 
 [[anchors]]
 anchor  = "state_init"
-content = "mail: crate::mail::Mailer::from_config()?,"
+content = "mail: crate::modules::mail::Mailer::from_config()?,"
 
 # `default_features = false` : les défauts de `lettre` activent `native-tls`, qui réclame
 # OpenSSL sur les trois plateformes de la CI. `ring` et `webpki-roots` ne sont pas

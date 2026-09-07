@@ -60,7 +60,9 @@ fn the_fragment_compiles_and_keeps_the_cardinality_of_the_collector() {
     // vérifié sous quelle étiquette une requête est comptée.
     for test in CARDINALITE {
         assert!(
-            journal.contains(&format!("test observability::tests::{test} ... ok")),
+            journal.contains(&format!(
+                "test modules::observability::tests::{test} ... ok"
+            )),
             "`{test}` n'a pas été exécuté :\n{journal}"
         );
     }
