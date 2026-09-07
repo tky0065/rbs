@@ -97,6 +97,24 @@ pub(crate) const FEATURES: Anchor = Anchor {
     after: "pub mod state;",
 };
 
+/// Déclaration des modules que `rbs add` installe, dans leur point de montage.
+///
+/// `src/` ne mêle plus le code du développeur et celui du CLI : les fragments s'y
+/// déclarent, et `<rbs:features>` ne reçoit d'eux que le `pub mod modules;` qui ouvre ce
+/// fichier. `auth` fait exception et reste une feature comme les siennes.
+pub(crate) const MODULES: Anchor = Anchor {
+    name: Cow::Borrowed("modules"),
+    file: Cow::Borrowed("src/modules/mod.rs"),
+    comment: "//",
+    // Même raison que `FEATURES` : rustfmt trie les `pub mod`, et un fragment intercalé
+    // entre deux autres ferait échouer le `cargo fmt --check` du développeur.
+    sorted: true,
+    // `add` pose ce fichier au premier fragment qui l'y vise, et pas avant : un projet
+    // sans fragment n'a pas de répertoire vide à porter.
+    optional: true,
+    after: "",
+};
+
 /// Montage des routes d'une feature dans le routeur.
 pub(crate) const ROUTES: Anchor = Anchor {
     name: Cow::Borrowed("routes"),
@@ -286,8 +304,9 @@ pub(crate) const RELATED: Anchor = Anchor {
 ///
 /// La génération vise chaque ancre nommément ; `rbs doctor` parcourt cette liste pour
 /// vérifier qu'un projet les porte toutes.
-pub(crate) const ANCRES: [Anchor; 13] = [
+pub(crate) const ANCRES: [Anchor; 14] = [
     FEATURES,
+    MODULES,
     ROUTES,
     LAYERS,
     OPENAPI,
@@ -1161,9 +1180,10 @@ struct AppState {
     }
 
     /// Une ancre optionnelle est l'exception : les onze autres décrivent un fichier que le
-    /// squelette écrit toujours, et leur absence est un défaut. Les deux qui le sont vivent
-    /// dans un fichier qu'un fragment dépose — le compose de `docker`, le registre de
-    /// `jobs` — et manquent légitimement à qui n'a pas installé ce fragment.
+    /// squelette écrit toujours, et leur absence est un défaut. Les trois qui le sont
+    /// vivent dans un fichier qu'un fragment dépose — le point de montage des `modules`,
+    /// le compose de `docker`, le registre de `jobs` — et manquent légitimement à qui n'a
+    /// pas installé ce fragment.
     #[test]
     fn only_the_anchors_of_a_fragment_deposited_file_are_optional() {
         let optionnelles: Vec<&str> = ANCRES
@@ -1172,7 +1192,7 @@ struct AppState {
             .map(|anchor| anchor.name.as_ref())
             .collect();
 
-        assert_eq!(optionnelles, ["services", "jobs"]);
+        assert_eq!(optionnelles, ["modules", "services", "jobs"]);
     }
 
     /// Sans elle, un fragment ne peut pas inscrire de job : le worker n'exécute que ce que
@@ -1186,6 +1206,23 @@ struct AppState {
         assert_eq!(JOBS.opening(), "// <rbs:jobs>");
         assert!(JOBS.optional);
         assert!(ANCRES.contains(&JOBS));
+    }
+
+    /// L'ancre des modules vit dans un fichier que le squelette ne pose pas : la déclarer
+    /// obligatoire ferait passer pour incomplet tout projet sans fragment.
+    #[test]
+    fn the_modules_anchor_is_optional_and_sorted() {
+        let modules = ANCRES
+            .into_iter()
+            .find(|anchor| anchor.name == "modules")
+            .expect("le registre porte l'ancre des modules");
+
+        assert_eq!(modules.file, "src/modules/mod.rs");
+        assert!(modules.optional, "son fichier n'existe pas sans fragment");
+        assert!(
+            modules.sorted,
+            "rustfmt trie les `pub mod` du point de montage"
+        );
     }
 
     /// L'accroche d'une ancre est vérifiée contre la template qui la porte, et celle-ci
