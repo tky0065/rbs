@@ -1099,7 +1099,7 @@ mod tests {
             .expect("le squelette doit porter l'ancre de démarrage");
 
         assert!(
-            startup.contains("demo_api::jobs::worker::spawn(state.clone());"),
+            startup.contains("demo_api::modules::jobs::worker::spawn(state.clone());"),
             "le worker n'est pas détaché au démarrage :\n{main}"
         );
 
@@ -1272,7 +1272,7 @@ mod tests {
             ),
             (
                 "storage",
-                r#"rbs_core::health::Probe::new("storage", crate::storage::probe(state.storage())),"#,
+                r#"rbs_core::health::Probe::new("storage", crate::modules::storage::probe(state.storage())),"#,
             ),
         ] {
             let (_parent, root) = project();
@@ -1318,10 +1318,15 @@ mod tests {
 
         assert_eq!(
             planned.files,
-            ["src/cors/mod.rs", "src/cors/config.rs", "src/cors/tests.rs"]
+            [
+                "src/modules/cors/mod.rs",
+                "src/modules/cors/config.rs",
+                "src/modules/cors/tests.rs"
+            ]
         );
         assert!(
-            anchor_body(&planned, &crate::anchors::LAYERS).contains(".layer(crate::cors::layer())"),
+            anchor_body(&planned, &crate::anchors::LAYERS)
+                .contains(".layer(crate::modules::cors::layer())"),
             "{}",
             projected(&planned, "src/router.rs")
         );
@@ -1427,27 +1432,26 @@ mod tests {
         assert_eq!(
             planned.files,
             [
-                "src/observability/mod.rs",
-                "src/observability/config.rs",
-                "src/observability/metrics.rs",
-                "src/observability/tests.rs",
+                "src/modules/observability/mod.rs",
+                "src/modules/observability/config.rs",
+                "src/modules/observability/metrics.rs",
+                "src/modules/observability/tests.rs",
             ]
         );
 
         let bibliotheque = projected(&planned, "src/lib.rs");
-        assert!(
-            bibliotheque.contains("pub mod observability;"),
-            "{bibliotheque}"
-        );
+        assert!(bibliotheque.contains("pub mod modules;"), "{bibliotheque}");
+        let montage = projected(&planned, "src/modules/mod.rs");
+        assert!(montage.contains("pub mod observability;"), "{montage}");
         assert!(
             anchor_body(&planned, &crate::anchors::LAYERS)
-                .contains("crate::observability::metrics::middleware"),
+                .contains("crate::modules::observability::metrics::middleware"),
             "{}",
             projected(&planned, "src/router.rs")
         );
         assert!(
             anchor_body(&planned, &crate::anchors::STARTUP)
-                .contains("demo_api::observability::serve(&state).await?;"),
+                .contains("demo_api::modules::observability::serve(&state).await?;"),
             "{}",
             projected(&planned, "src/main.rs")
         );
@@ -1471,7 +1475,7 @@ mod tests {
 
         let planned = plan_for(&options(&root, "observability")).expect("le plan doit se calculer");
 
-        let tests = projected(&planned, "src/observability/tests.rs");
+        let tests = projected(&planned, "src/modules/observability/tests.rs");
         for helper in ["fn registry()", "async fn call(uri: &str)"] {
             assert!(tests.contains(helper), "`{helper}` manque :\n{tests}");
         }
@@ -1504,7 +1508,7 @@ mod tests {
         let (_parent, root) = project();
 
         let planned = plan_for(&options(&root, "observability")).expect("le plan doit se calculer");
-        let metriques = projected(&planned, "src/observability/metrics.rs");
+        let metriques = projected(&planned, "src/modules/observability/metrics.rs");
 
         assert!(metriques.contains("MatchedPath"), "{metriques}");
         assert!(
@@ -1512,7 +1516,7 @@ mod tests {
             "le chemin demandé sert d'étiquette :\n{metriques}"
         );
 
-        let tests = projected(&planned, "src/observability/tests.rs");
+        let tests = projected(&planned, "src/modules/observability/tests.rs");
         assert!(
             tests.contains("path=\\\"/articles/{id}\\\""),
             "les tests engendrés ne gardent pas la cardinalité :\n{tests}"

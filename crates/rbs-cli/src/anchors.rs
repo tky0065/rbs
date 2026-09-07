@@ -256,14 +256,15 @@ pub(crate) const HEALTH_PROBES: Anchor = Anchor {
 /// Inscription d'un job au registre que le worker de la file consulte.
 ///
 /// Seule ancre à vivre dans un fichier qu'un fragment dépose plutôt que le squelette, avec
-/// celle du compose : `src/jobs/mod.rs` n'existe que sur un projet qui a installé la file.
-/// C'est ce qui la rend optionnelle — un projet sans file n'a pas à passer pour incomplet.
+/// celle du compose : `src/modules/jobs/mod.rs` n'existe que sur un projet qui a installé
+/// la file. C'est ce qui la rend optionnelle — un projet sans file n'a pas à passer pour
+/// incomplet.
 ///
 /// Sans elle, `registry()` ne s'écrit qu'à la main : un fragment ne peut viser qu'une ancre
 /// de ce registre, et le worker n'exécute que ce que `registry()` lui a déclaré.
 pub(crate) const JOBS: Anchor = Anchor {
     name: Cow::Borrowed("jobs"),
-    file: Cow::Borrowed("src/jobs/mod.rs"),
+    file: Cow::Borrowed("src/modules/jobs/mod.rs"),
     comment: "//",
     sorted: false,
     optional: true,
@@ -1202,7 +1203,7 @@ struct AppState {
     #[allow(clippy::assertions_on_constants)]
     #[test]
     fn the_jobs_anchor_lives_in_the_queue_registry_and_is_optional() {
-        assert_eq!(JOBS.file, "src/jobs/mod.rs");
+        assert_eq!(JOBS.file, "src/modules/jobs/mod.rs");
         assert_eq!(JOBS.opening(), "// <rbs:jobs>");
         assert!(JOBS.optional);
         assert!(ANCRES.contains(&JOBS));

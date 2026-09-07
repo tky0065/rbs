@@ -3,27 +3,27 @@ description = "cache Redis : pool paresseux partagé par l'état, valeurs typée
 
 [[files]]
 source      = "mod.rs.jinja"
-destination = "src/cache/mod.rs"
+destination = "src/modules/cache/mod.rs"
 
 [[files]]
 source      = "config.rs.jinja"
-destination = "src/cache/config.rs"
+destination = "src/modules/cache/config.rs"
 
 [[files]]
 source      = "tests.rs.jinja"
-destination = "src/cache/tests.rs"
+destination = "src/modules/cache/tests.rs"
 
 [[anchors]]
-anchor  = "features"
+anchor  = "modules"
 content = "pub mod cache;"
 
 [[anchors]]
 anchor  = "state_champs"
-content = "pub cache: crate::cache::Cache,"
+content = "pub cache: crate::modules::cache::Cache,"
 
 [[anchors]]
 anchor  = "state_init"
-content = "cache: crate::cache::Cache::from_config()?,"
+content = "cache: crate::modules::cache::Cache::from_config()?,"
 
 # Sans cette sonde, `/health` répondrait `ok` sur un cache injoignable et l'orchestrateur
 # garderait le pod en rotation.

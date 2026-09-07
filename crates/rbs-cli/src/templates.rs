@@ -1173,7 +1173,7 @@ mod tests {
             .iter()
             .map(|ancre| ancre.anchor.as_str())
             .collect();
-        assert_eq!(ancres, ["features"]);
+        assert_eq!(ancres, ["modules"]);
 
         assert!(
             manifest.feature.requires.is_empty(),

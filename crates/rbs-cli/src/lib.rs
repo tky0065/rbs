@@ -480,7 +480,7 @@ fn suite(feature: &str) -> Option<&'static str> {
         ),
         // La table n'existe pas encore, et le worker démarre avec l'API : sans la
         // migration, chaque tour de boucle échoue sur une relation absente.
-        "jobs" => Some("rbs migrate up, puis inscrivez vos jobs dans src/jobs/mod.rs"),
+        "jobs" => Some("rbs migrate up, puis inscrivez vos jobs dans src/modules/jobs/mod.rs"),
         // Deux tables à créer — le fragment entraîne `jobs` — et une liste d'échéances qui
         // ne contient qu'un exemple : installé et non édité, le calendrier ne déclenche
         // rien d'utile.
