@@ -26,7 +26,19 @@ dépréciation.
   version garde ses modules exactement là où il les a reçus — les déplacer reviendrait à
   réécrire des `use` que le CLI ne possède pas — mais `rbs doctor` gagne un contrôle
   `disposition` qui avertit, sans faire échouer, le jour où un tel projet reçoit un module
-  rangé de la nouvelle façon aux côtés de modules restés à la racine.
+  rangé de la nouvelle façon aux côtés de modules restés à la racine. Cette garantie tient
+  pour un fragment installé seul, mais pas pour trois d'entre eux, qui visent un autre
+  module par son nouveau chemin : `webhooks` vise l'ancre `<rbs:jobs>` dans
+  `src/modules/jobs/mod.rs`, et sur un projet portant encore `src/jobs/` d'une version
+  antérieure, l'installation échoue tout simplement — `src/modules/jobs/mod.rs est
+  introuvable`, sans bloc à coller, mais sans rien écrire non plus. `scheduler` dépose un
+  `use crate::modules::jobs::{self, Job};`, et `rate-limit` un appel à
+  `crate::modules::cache::Config::load()?` quand le projet porte aussi `redis` ; les deux
+  s'installent avec succès et laissent du code qui ne compile pas — `rbs doctor` le
+  signale après coup, mais l'installation aura déjà déclaré sa réussite. Sur un projet
+  antérieur à la 1.3.0, déplacez `src/jobs/` (et, avant d'ajouter `rate-limit`,
+  `src/cache/`) sous `src/modules/` et corrigez leurs `use` avant d'installer `webhooks`,
+  `scheduler` ou `rate-limit`.
 
 ## [1.2.0] — 2026-09-04
 
