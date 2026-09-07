@@ -8,7 +8,7 @@ title: Observabilité
 Les logs disent *ce qui s'est passé*. `rbs add observability` répond aux deux questions
 suivantes : *quelle route est lente, et depuis quand* — par les métriques — et *sur quel
 appel en aval* — par les traces. La feature installe quatre fichiers sous
-`src/observability/`, une section `[observability]`, un middleware de comptage, et un
+`src/modules/observability/`, une section `[observability]`, un middleware de comptage, et un
 second listener HTTP qui sert `/metrics`.
 
 ```bash
@@ -91,9 +91,9 @@ correspond à aucune route est comptée sous une constante unique, pour la même
 scanner qui frappe mille adresses inventées ouvre une série, et non mille.
 
 C'est la contrainte autour de laquelle tout le module est bâti, et le
-`src/observability/tests.rs` engendré la garde :
+`src/modules/observability/tests.rs` engendré la garde :
 
-```rust file=examples/newsletter-queue/src/observability/tests.rs region=cardinalite
+```rust file=examples/newsletter-queue/src/modules/observability/tests.rs region=cardinalite
 ```
 
 Un second test en fait autant pour un chemin qui ne correspond à aucune route. Les deux

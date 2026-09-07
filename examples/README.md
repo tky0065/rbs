@@ -53,9 +53,9 @@ cd .. && mv blog-auth examples/blog-auth
 ```
 
 `posts` rather than `articles`, which `hello-crud` already carries: what distinguishes this
-example is the protection, not the resource. The name also leaves the `features` anchor
-sorted — it stacks `mod` declarations in installation order, and `mod auth; mod articles;`
-would make a `cargo fmt` inside the project balk.
+example is the protection, not the resource. The name has no bearing on the `features`
+anchor's order — `insert()` re-sorts the whole block on every insertion, whatever order
+`mod auth;` and `mod posts;` arrive in.
 
 ### `file-drop`
 

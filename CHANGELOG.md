@@ -10,6 +10,23 @@ between minor versions with no deprecation cycle.
 
 *[Version française](CHANGELOG.fr.md).*
 
+## [1.3.0] — 2026-09-07
+
+### Changed
+
+- **`rbs add` now installs ten of its modules under `src/modules/` instead of at the root
+  of `src/`** — `audit`, `cache` (the directory `redis` writes), `cors`, `jobs`, `mail`,
+  `observability`, `rate_limit` (what `rate-limit` writes), `scheduler`, `storage` and
+  `webhooks`. The point of mount is `src/modules/mod.rs`, opened at the first fragment
+  that needs it and inserted at the `<rbs:modules>` anchor from then on — the fourteenth,
+  alongside the thirteen the CLI already knew. `auth` is the one fragment left out: it
+  lays down the `User` entity you extend like any feature of your own, so it stays where
+  your own code lives. A project generated before this version keeps its modules exactly
+  where it received them — moving them would mean rewriting `use` statements the CLI does
+  not own — but `rbs doctor` gained a `disposition` check that warns, without failing,
+  the day such a project receives a module laid out the new way alongside ones still at
+  the root.
+
 ## [1.2.0] — 2026-09-04
 
 ### Added

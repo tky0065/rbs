@@ -6,7 +6,7 @@ title: Cache
 # Cache
 
 `rbs add redis` installs a Redis-backed cache into an existing project: three files under
-`src/cache/`, a `[cache]` section in the configuration, and a field on your `AppState`.
+`src/modules/cache/`, a `[cache]` section in the configuration, and a field on your `AppState`.
 No route, no middleware — the feature is a brick, and what you cache is yours to decide.
 
 Every snippet on this page is taken from
@@ -22,18 +22,19 @@ redis : cache Redis : pool paresseux partagé par l'état, valeurs typées par s
 
 plan pour /private/tmp/rbs-demo/depot
 
-  + src/cache/mod.rs           créé
-  + src/cache/config.rs        créé
-  + src/cache/tests.rs         créé
-  ~ src/lib.rs                 modifié
-  ~ src/state.rs               modifié
-  ~ src/health/controller.rs   modifié
-  ~ docker-compose.yml         modifié
-  ~ Cargo.toml                 modifié
-  ~ config/default.toml        modifié
-  ~ AGENTS.md                  modifié
+  + src/modules/cache/mod.rs      créé
+  + src/modules/cache/config.rs   créé
+  + src/modules/cache/tests.rs    créé
+  + src/modules/mod.rs            créé
+  ~ src/lib.rs                    modifié
+  ~ src/state.rs                  modifié
+  ~ src/health/controller.rs      modifié
+  ~ docker-compose.yml            modifié
+  ~ Cargo.toml                    modifié
+  ~ config/default.toml           modifié
+  ~ AGENTS.md                     modifié
 
-  10 fichiers à écrire
+  11 fichiers à écrire
 ✓ redis installée — 3 fichiers
 
   le compose du projet porte déjà un service redis — docker compose up -d le démarre ; sans compose, faites écouter un Redis à l'URL de [cache] de config/default.toml
@@ -52,7 +53,7 @@ reports it under `redis`, the name the manifest carries.
 Defaults live in the feature, not in the core — `rbs-core` opposes nothing to a section it
 does not know about, so this is the file where they are read and changed:
 
-```rust file=examples/file-drop/src/cache/config.rs
+```rust file=examples/file-drop/src/modules/cache/config.rs
 ```
 
 The installation appends a `[cache]` section to `config/default.toml` carrying those two
@@ -63,7 +64,7 @@ in the URL: `redis://:secret@host:6379/0`.
 
 ## Construction, and why startup stays synchronous
 
-```rust file=examples/file-drop/src/cache/mod.rs region=construction
+```rust file=examples/file-drop/src/modules/cache/mod.rs region=construction
 ```
 
 Nothing connects here. `deadpool` builds a lazy pool that reaches the server on the first
@@ -79,7 +80,7 @@ you want to know before your users do, ask [`rbs doctor`](../cli/doctor.md).
 Values are typed, not stringly: anything `Serialize` goes in, anything `DeserializeOwned`
 comes out, with `serde_json` in between.
 
-```rust file=examples/file-drop/src/cache/mod.rs region=lecture
+```rust file=examples/file-drop/src/modules/cache/mod.rs region=lecture
 ```
 
 A missing or expired key returns `Ok(None)`, not an error. That distinction is the whole
@@ -95,7 +96,7 @@ expiry at all.
 One-key invalidation exists, but a project that caches a paginated list does not know how
 many pages it has served. So the feature invalidates a whole prefix:
 
-```rust file=examples/file-drop/src/cache/mod.rs region=invalidate_prefix
+```rust file=examples/file-drop/src/modules/cache/mod.rs region=invalidate_prefix
 ```
 
 `SCAN` rather than `KEYS`: the second walks the entire keyspace while blocking the server,
@@ -104,7 +105,7 @@ which is fine on a laptop and an outage in production.
 `SCAN MATCH` takes a glob, interpreted at the other end, and glob metacharacters in your
 prefix would widen it. The keys the server hands back are therefore filtered again here:
 
-```rust file=examples/file-drop/src/cache/mod.rs region=to_delete
+```rust file=examples/file-drop/src/modules/cache/mod.rs region=to_delete
 ```
 
 A deletion cannot be undone — that is the entire argument for re-checking the prefix on
@@ -132,7 +133,7 @@ stale total behind every edit.
 
 ## Testing
 
-The generated `src/cache/tests.rs` splits in two, and the split is deliberate.
+The generated `src/modules/cache/tests.rs` splits in two, and the split is deliberate.
 
 Four tests need no server at all: the typed round trip through `encode`/`decode`, the
 missing key that decodes to `None`, the prefix filter, and the glob escaping. They are the

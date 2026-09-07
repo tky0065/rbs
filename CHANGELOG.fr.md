@@ -11,6 +11,23 @@ dépréciation.
 
 *[English version](CHANGELOG.md).*
 
+## [1.3.0] — 2026-09-07
+
+### Modifié
+
+- **`rbs add` range désormais dix de ses modules sous `src/modules/`, au lieu de la
+  racine de `src/`** — `audit`, `cache` (le répertoire qu'écrit `redis`), `cors`, `jobs`,
+  `mail`, `observability`, `rate_limit` (ce qu'écrit `rate-limit`), `scheduler`, `storage`
+  et `webhooks`. Le point de montage est `src/modules/mod.rs`, ouvert au premier fragment
+  qui en a besoin, puis inséré à l'ancre `<rbs:modules>` par la suite — la quatorzième,
+  aux côtés des treize que le CLI connaissait déjà. `auth` est le seul fragment laissé de
+  côté : il pose l'entité `User` que vous étendez comme n'importe laquelle de vos propres
+  features, et reste donc là où vit votre propre code. Un projet engendré avant cette
+  version garde ses modules exactement là où il les a reçus — les déplacer reviendrait à
+  réécrire des `use` que le CLI ne possède pas — mais `rbs doctor` gagne un contrôle
+  `disposition` qui avertit, sans faire échouer, le jour où un tel projet reçoit un module
+  rangé de la nouvelle façon aux côtés de modules restés à la racine.
+
 ## [1.2.0] — 2026-09-04
 
 ### Ajouté

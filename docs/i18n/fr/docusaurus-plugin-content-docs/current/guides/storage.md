@@ -6,7 +6,7 @@ title: Stockage
 # Stockage
 
 `rbs add storage` installe un stockage d'objets dans un projet existant : quatre fichiers
-sous `src/storage/`, et un `Arc<dyn Storage>` sur votre `AppState`. Deux backends
+sous `src/modules/storage/`, et un `Arc<dyn Storage>` sur votre `AppState`. Deux backends
 l'accompagnent — le système de fichiers local et S3 — et tout l'intérêt de la feature est
 que votre code ne puisse pas dire auquel des deux il parle.
 
@@ -23,19 +23,20 @@ storage : stockage d'objets : un trait à cinq méthodes, deux backends — fich
 
 plan pour /private/tmp/rbs-demo/depot
 
-  + src/storage/mod.rs         créé
-  + src/storage/files.rs       créé
-  + src/storage/s3.rs          créé
-  + src/storage/tests.rs       créé
-  ~ src/lib.rs                 modifié
-  ~ src/state.rs               modifié
-  ~ src/health/controller.rs   modifié
-  ~ Cargo.toml                 modifié
-  ~ config/default.toml        modifié
-  ~ .env.example               modifié
-  ~ AGENTS.md                  modifié
+  + src/modules/storage/mod.rs     créé
+  + src/modules/storage/files.rs   créé
+  + src/modules/storage/s3.rs      créé
+  + src/modules/storage/tests.rs   créé
+  + src/modules/mod.rs             créé
+  ~ src/lib.rs                     modifié
+  ~ src/state.rs                   modifié
+  ~ src/health/controller.rs       modifié
+  ~ Cargo.toml                     modifié
+  ~ config/default.toml            modifié
+  ~ .env.example                   modifié
+  ~ AGENTS.md                      modifié
 
-  11 fichiers à écrire
+  12 fichiers à écrire
 ✓ storage installée — 4 fichiers
 
   les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example
@@ -46,7 +47,7 @@ atterrissent dans `./storage`, au cœur de votre arborescence, et `git status` l
 
 ## Cinq méthodes
 
-```rust file=examples/file-drop/src/storage/mod.rs region=trait
+```rust file=examples/file-drop/src/modules/storage/mod.rs region=trait
 ```
 
 Voilà tout le contrat. Délibérément absents : le listage, la copie, les URL signées, les
@@ -58,7 +59,7 @@ transporte rien et ne répond qu'à `GET /health` : c'est elle qui empêche la r
 Les échecs tiennent en une énumération, ce qui permet à l'appelant de distinguer une erreur
 du client d'une panne :
 
-```rust file=examples/file-drop/src/storage/mod.rs region=erreurs
+```rust file=examples/file-drop/src/modules/storage/mod.rs region=erreurs
 ```
 
 `NotFound` est la seule variante qui vienne de l'appelant. `delete` ne la lève pas — une clé
@@ -67,7 +68,7 @@ trouve pas, et deux backends qui divergeraient là-dessus ne seraient pas substi
 
 ## Choisir un backend
 
-```rust file=examples/file-drop/src/storage/mod.rs region=build
+```rust file=examples/file-drop/src/modules/storage/mod.rs region=build
 ```
 
 Le message d'erreur énonce les valeurs admises plutôt que de s'en remettre à une
@@ -80,10 +81,10 @@ aurait propagé un paramètre de type dans la signature de chaque handler du pro
 
 Le backend local est assez court pour être lu en entier :
 
-```rust file=examples/file-drop/src/storage/files.rs
+```rust file=examples/file-drop/src/modules/storage/files.rs
 ```
 
-Le backend S3 est `src/storage/s3.rs`. Sa seule décision qui mérite d'être connue : les
+Le backend S3 est `src/modules/storage/s3.rs`. Sa seule décision qui mérite d'être connue : les
 identifiants viennent de la configuration, non de la chaîne de fournisseurs par défaut du
 SDK. Cette chaîne est asynchrone et interroge le service de métadonnées de l'instance, ce
 qu'un `AppState::new` synchrone ne peut ni lancer ni attendre — `aws-config` n'est donc pas
@@ -96,7 +97,7 @@ sous-domaine, ce qu'attend MinIO.
 Un nom d'objet vient souvent d'un utilisateur : il n'est donc pas remis tel quel au système
 de fichiers.
 
-```rust file=examples/file-drop/src/storage/mod.rs region=normalize
+```rust file=examples/file-drop/src/modules/storage/mod.rs region=normalize
 ```
 
 La clé est parcourue composant par composant et refusée dès qu'un `..` remonte au-dessus de
@@ -192,7 +193,7 @@ un `id` suffit à dériver une clé.
 
 ## Les tests
 
-Le `src/storage/tests.rs` engendré est bâti autour d'une seule fonction, `round`, qui
+Le `src/modules/storage/tests.rs` engendré est bâti autour d'une seule fonction, `round`, qui
 éprouve ce que le trait promet — déposer, lire, attester, supprimer — contre un
 `&dyn Storage` plutôt que contre un type concret.
 

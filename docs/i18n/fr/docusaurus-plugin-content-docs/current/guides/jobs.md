@@ -6,7 +6,7 @@ title: Jobs
 # Jobs en arrière-plan
 
 `rbs add jobs` installe une file de travaux dans un projet existant : sept fichiers sous
-`src/jobs/`, une migration pour la table `jobs`, et un worker démarré avec le serveur.
+`src/modules/jobs/`, une migration pour la table `jobs`, et un worker démarré avec le serveur.
 Comme les autres briques, elle ne monte aucune route — le moment où un travail sort du
 cycle de la requête est une décision que seul votre métier peut prendre.
 
@@ -23,25 +23,26 @@ jobs : jobs en arrière-plan : une table, un enfilage transactionnel, un worker 
 
 plan pour /private/tmp/rbs-demo/demo
 
-  + src/jobs/mod.rs                                 créé
-  + src/jobs/config.rs                              créé
-  + src/jobs/model.rs                               créé
-  + src/jobs/queue.rs                               créé
-  + src/jobs/worker.rs                              créé
-  + src/jobs/demo.rs                                créé
-  + src/jobs/tests.rs                               créé
+  + src/modules/jobs/mod.rs                         créé
+  + src/modules/jobs/config.rs                      créé
+  + src/modules/jobs/model.rs                       créé
+  + src/modules/jobs/queue.rs                       créé
+  + src/modules/jobs/worker.rs                      créé
+  + src/modules/jobs/demo.rs                        créé
+  + src/modules/jobs/tests.rs                       créé
   + migration/src/m20260830_111505_create_jobs.rs   créé
   ~ migration/src/lib.rs                            modifié
+  + src/modules/mod.rs                              créé
   ~ src/lib.rs                                      modifié
   ~ src/main.rs                                     modifié
   ~ Cargo.toml                                      modifié
   ~ config/default.toml                             modifié
   ~ AGENTS.md                                       modifié
 
-  14 fichiers à écrire
+  15 fichiers à écrire
 ✓ jobs installée — 8 fichiers
 
-  rbs migrate up, puis inscrivez vos jobs dans src/jobs/mod.rs
+  rbs migrate up, puis inscrivez vos jobs dans src/modules/jobs/mod.rs
 ```
 
 La migration vient avec, et [`rbs migrate up`](../cli/migrate.md) est donc la commande
@@ -67,7 +68,7 @@ l'exemple `newsletter-queue` est bâti autour de lui.
 
 ## Configuration
 
-```rust file=examples/newsletter-queue/src/jobs/config.rs
+```rust file=examples/newsletter-queue/src/modules/jobs/config.rs
 ```
 
 Trois réglages, chacun avec un défaut écrit là où la section est déclarée plutôt que dans
@@ -87,7 +88,7 @@ autre section — voir le [guide de la configuration](./configuration.md).
 
 Un job est un type sérialisable qui implémente un trait :
 
-```rust file=examples/newsletter-queue/src/jobs/mod.rs region=trait
+```rust file=examples/newsletter-queue/src/modules/jobs/mod.rs region=trait
 ```
 
 `KIND` est écrit dans la ligne et sert de clé au registre. Le renommer sans migration
@@ -96,7 +97,7 @@ données, non à votre seul code.
 
 Voici celui de l'exemple :
 
-```rust file=examples/newsletter-queue/src/jobs/newsletter.rs region=job
+```rust file=examples/newsletter-queue/src/modules/jobs/newsletter.rs region=job
 ```
 
 Deux décisions bonnes à reprendre. Le payload porte un identifiant plutôt qu'une adresse :
@@ -106,7 +107,7 @@ qui est toute la raison d'en avoir fait un job.
 
 ## L'inscrire
 
-```rust file=examples/newsletter-queue/src/jobs/mod.rs region=registry
+```rust file=examples/newsletter-queue/src/modules/jobs/mod.rs region=registry
 ```
 
 Un `kind` absent du registre est traité comme un échec du job et non du worker : la ligne
@@ -116,7 +117,7 @@ le `demo::Log` livré est fait pour être remplacé plutôt que laissé à côt�
 
 ## Enfiler
 
-```rust file=examples/newsletter-queue/src/jobs/queue.rs region=enqueue
+```rust file=examples/newsletter-queue/src/modules/jobs/queue.rs region=enqueue
 ```
 
 `db` est un `ConnectionTrait` et non une connexion, et c'est tout le propos de cette
@@ -144,7 +145,7 @@ La route répond `202` et non `200` — les lettres sont enfilées, non envoyée
 
 ## Le worker
 
-```rust file=examples/newsletter-queue/src/jobs/worker.rs
+```rust file=examples/newsletter-queue/src/modules/jobs/worker.rs
 ```
 
 Il est détaché par `main.rs` à côté du serveur et rend la main aussitôt. Trois défaillances
@@ -179,7 +180,7 @@ processus qui meurt dessus à chaque fois.
 
 ## Tests
 
-Le `src/jobs/tests.rs` livré tourne contre une vraie base, comme tout test qui en touche
+Le `src/modules/jobs/tests.rs` livré tourne contre une vraie base, comme tout test qui en touche
 une — voir le [guide des tests](./testing.md). Quatre d'entre eux sont ceux à garder quand
 vous modifiez le fragment :
 

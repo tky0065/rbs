@@ -5,11 +5,11 @@ title: rbs doctor
 
 # `rbs doctor`
 
-Diagnoses a generated project through six checks: the anchors,
+Diagnoses a generated project through seven checks: the anchors,
 [`AGENTS.md`](../guides/agents.md), the relations already written into its models, the
-`.env`, the versions and the database. Each is independent and returns its verdict without
-stopping the others — a diagnosis that halts on the first problem has to be re-run once
-per problem.
+`.env`, the versions, the database and the fragment layout. Each is independent and returns
+its verdict without stopping the others — a diagnosis that halts on the first problem has to
+be re-run once per problem.
 
 :::note
 rbs speaks French in its help screens and in its output. Every terminal block on this page
@@ -38,16 +38,17 @@ tree. `--force` only lifts that one guard, and is therefore refused on its own: 
 else in `doctor` writes, so alone it would be taken and ignored. `--template-dir` and `--yes` are not accepted here: each is declared on the commands
 that read it, so passing one is a clap error rather than a flag that is taken and ignored.
 
-## The six checks
+## The seven checks
 
 | Check | What it looks at |
 |---|---|
-| `ancres` | The eleven Rust comment anchors: `// <rbs:features>` in `src/lib.rs` — or in `src/main.rs`, on a project generated before that library existed — `// <rbs:routes>` and `// <rbs:layers>` in `src/router.rs`, `// <rbs:openapi>` in `src/openapi.rs`, `// <rbs:migration_modules>` and `// <rbs:migrations>` in `migration/src/lib.rs`, `// <rbs:state_champs>` and `// <rbs:state_init>` in `src/state.rs`, `// <rbs:startup>` in `src/main.rs`, `// <rbs:seeds>` in `src/seeds/main.rs`, `// <rbs:health_probes>` in `src/health/controller.rs` — plus the YAML `# <rbs:services>` in `docker-compose.yml`, twelfth and optional: a project with no compose has none to carry it. |
+| `ancres` | The fourteen Rust comment anchors: `// <rbs:features>` in `src/lib.rs` — or in `src/main.rs`, on a project generated before that library existed — `// <rbs:modules>` in `src/modules/mod.rs`, `// <rbs:routes>` and `// <rbs:layers>` in `src/router.rs`, `// <rbs:openapi>` in `src/openapi.rs`, `// <rbs:migration_modules>` and `// <rbs:migrations>` in `migration/src/lib.rs`, `// <rbs:state_champs>` and `// <rbs:state_init>` in `src/state.rs`, `// <rbs:startup>` in `src/main.rs`, `// <rbs:seeds>` in `src/seeds/main.rs`, `// <rbs:jobs>` in `src/modules/jobs/mod.rs`, `// <rbs:health_probes>` in `src/health/controller.rs` — plus the YAML `# <rbs:services>` in `docker-compose.yml`. Three are optional, inapplicable rather than missing when their file does not exist: `modules`, on a project that has never installed a fragment; `jobs`, on one that has not installed it; `services`, on one with no compose. |
 | `agents` | [`AGENTS.md`](../guides/agents.md): present, its two zones present, the guide's version matching the CLI's, the inventory matching the project, every declared feature backed by a directory — and, only as a warning, a directory under `src/` that nothing declares. Covered on its own below. |
 | `relations` | The two anchors a model needs to receive a relation — `// <rbs:relations:table>` and `// <rbs:related:table>`, one pair per entity. Outside the anchor registry above, since which file carries them depends on the project's own features. It only turns red on a model that already has a `belongs_to` or `has_many` but is missing one of its two anchors — a state a hand edit is the likely cause of, since [`rbs generate`](./generate.md) never leaves that behind. |
 | `.env` | Every variable declared by `.env.example` is set in `.env`. `.env.example` is the reference because it is versioned and generated alongside the skeleton — a list kept inside the CLI would have been a second truth to keep in sync. |
 | `versions` | The rbs recorded in `[package.metadata.rbs]`, the `rbs-core` dependency, and the CLI running the diagnosis. |
 | `base` | The driver compiled into the manifest against the URL's scheme, then a TCP connection within three seconds, then the server version — asked of the `migration` crate's binary, since rbs embeds no SQL client. Each engine has its own floor, and each floor has a reason: PostgreSQL 14, the oldest still maintained; MySQL 8.0, for `FOR UPDATE SKIP LOCKED`; SQLite 3.35, for `UPDATE … RETURNING`. |
+| `disposition` | Whether the project mixes the two layouts a fragment can land in: a directory `rbs add` used to write at the root of `src/` — any of `audit`, `cache`, `cors`, `jobs`, `mail`, `observability`, `rate_limit`, `scheduler`, `storage`, `webhooks` — still there alongside a `src/modules/` the project has since started to receive. Only a warning: the fix is a manual move, since rewriting your own `use` statements is not the CLI's to do. `auth` is never counted — it lives at the root by design. |
 
 A missing anchor breaks nothing until a generation happens, which is exactly why `doctor`
 looks for it before [`rbs generate`](./generate.md) trips over it.
@@ -64,7 +65,7 @@ first would charge three seconds to a diagnosis that fits in two file reads:
 That is the contradiction [`rbs new`](./new.md) refuses outright, met here after the fact —
 on a project whose `.env` was edited later.
 
-## The two warnings
+## The three warnings
 
 Every other verdict above is pass or fail. `agents` can also warn, on one condition only:
 a directory under `src/` that no installed fragment and no feature declared in
@@ -97,6 +98,18 @@ Same reasoning, twice over. An API that writes without asking who is calling is 
 legitimate design — a public catalogue, a service behind a gateway that already
 authenticates — so the finding cannot be a failure. And the guard is recognised by that one
 call, so a project protecting its writes some other way is named here too.
+
+The third belongs to `disposition`, on a project that carries both layouts a fragment can
+land in — one of the ten directories `rbs add` used to write at the root of `src/`, still
+there alongside a `src/modules/` the project has since started to receive:
+
+```text
+  ! disposition   hors de src/modules/ : src/mail
+      posés par une version antérieure ; rbs ne les déplacera pas — déplacez-les et corrigez leurs `use` si vous voulez une disposition unique
+```
+
+The remedy is manual, and stays that way: moving `src/mail/` would mean rewriting the
+`use crate::mail::` lines your own code already wrote — an AST the CLI does not touch.
 
 ## Installed features
 
@@ -145,7 +158,7 @@ $ rbs doctor --json
     {
       "name": "ancres",
       "status": "ok",
-      "detail": "les 13 points d'insertion sont en place"
+      "detail": "les 14 points d'insertion sont en place"
     },
     {
       "name": "base",
@@ -191,17 +204,18 @@ The announcement is a line of the text rendering only; `--json` never carries it
 {/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --with jobs --database-url postgres://rbs:secret@localhost:55501/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
 $ rbs doctor
-  ✓ ancres      les 13 points d'insertion sont en place
-  ✓ agents      guide et inventaire à jour
-  ✓ relations   les modèles portent leurs ancres de relation
-  ✓ .env        les 7 variables de .env.example sont renseignées
-  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
-  … base        compilation de la crate migration, peut prendre
-                une minute au premier lancement…
+  ✓ ancres        les 14 points d'insertion sont en place
+  ✓ agents        guide et inventaire à jour
+  ✓ relations     les modèles portent leurs ancres de relation
+  ✓ .env          les 7 variables de .env.example sont renseignées
+  ✓ versions      projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
+  … base          compilation de la crate migration, peut prendre
+                  une minute au premier lancement…
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.30s
      Running `target/debug/migration version`
-  ✓ base        postgres 18.6 répond sur localhost:55501
-  ✓ jobs        la configuration de la file est en place
+  ✓ base          postgres 18.6 répond sur localhost:55501
+  ✓ disposition   les modules installés sont là où le CLI les pose
+  ✓ jobs          la configuration de la file est en place
 ✓ le projet est sain
 ```
 
@@ -214,23 +228,24 @@ Below, the same project with `// <rbs:openapi>` deleted from `src/openapi.rs`,
 
 ```text
 $ rbs doctor
-  ✗ ancres      openapi manque dans src/openapi.rs
+  ✗ ancres        openapi manque dans src/openapi.rs
       dans src/openapi.rs :
       // <rbs:openapi>
       // </rbs:openapi>
-  ✓ agents      guide et inventaire à jour
-  ✓ relations   les modèles portent leurs ancres de relation
-  ✗ .env        RBS_LOG_FORMAT absente du .env
+  ✓ agents        guide et inventaire à jour
+  ✓ relations     les modèles portent leurs ancres de relation
+  ✗ .env          RBS_LOG_FORMAT absente du .env
       ajoutez au .env :
       RBS_LOG_FORMAT=pretty
-  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
-  ✗ base        rien ne répond sur localhost:55501
+  ✓ versions      projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
+  ✗ base          rien ne répond sur localhost:55501
       lancez `docker compose up -d` à la racine du projet, ou corrigez l'URL du .env
-  ✓ jobs        la configuration de la file est en place
+  ✓ disposition   les modules installés sont là où le CLI les pose
+  ✓ jobs          la configuration de la file est en place
 attention : le projet demande votre attention
 ```
 
-Three failures, four checks still green, and every failing line carries what to do about
+Three failures, five checks still green, and every failing line carries what to do about
 it — the anchor block to paste back, the `.env` line to add, the server to start.
 
 Exit status 1. A diagnosis that finds something is not a failure of the command, but a
@@ -260,16 +275,17 @@ plan pour /private/tmp/rbs-demo/demo
 
 ✓ 2 ancres reposées : openapi, state_init
 
-  ✓ ancres      les 11 points d'insertion sont en place
-  ✓ agents      guide et inventaire à jour
-  ✓ relations   les modèles portent leurs ancres de relation
-  ✓ .env        les 4 variables de .env.example sont renseignées
-  ✓ versions    projet et rbs-core 1.2.0 alignés sur le CLI 1.2.0
-  … base        compilation de la crate migration, peut prendre
-                une minute au premier lancement…
+  ✓ ancres        les 11 points d'insertion sont en place
+  ✓ agents        guide et inventaire à jour
+  ✓ relations     les modèles portent leurs ancres de relation
+  ✓ .env          les 4 variables de .env.example sont renseignées
+  ✓ versions      projet et rbs-core 1.2.0 alignés sur le CLI 1.2.0
+  … base          compilation de la crate migration, peut prendre
+                  une minute au premier lancement…
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.09s
      Running `target/debug/migration version`
-  ✓ base        sqlite 3.51 répond sur demo.db
+  ✓ base          sqlite 3.51 répond sur demo.db
+  ✓ disposition   les modules installés sont là où le CLI les pose
 ✓ le projet est sain
 ```
 
@@ -323,7 +339,7 @@ plan pour /private/tmp/rbs-demo/demo
 ✓ 1 ancre reposée : seeds
 attention : layers n'a pas été reposée — la ligne d'accroche `.merge(docs)` est introuvable dans src/router.rs
 
-  ✗ ancres      layers manque dans src/router.rs
+  ✗ ancres        layers manque dans src/router.rs
       dans src/router.rs :
       // <rbs:layers>
       // </rbs:layers>
@@ -380,13 +396,13 @@ names the command to run by hand:
 
 ```text
 $ rbs doctor
-  ✓ ancres      les 13 points d'insertion sont en place
-  ✓ agents      guide et inventaire à jour
-  ✓ relations   les modèles portent leurs ancres de relation
-  ✓ .env        les 7 variables de .env.example sont renseignées
-  ✓ versions    projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
-  … base        compilation de la crate migration, peut prendre
-                une minute au premier lancement…
+  ✓ ancres        les 14 points d'insertion sont en place
+  ✓ agents        guide et inventaire à jour
+  ✓ relations     les modèles portent leurs ancres de relation
+  ✓ .env          les 7 variables de .env.example sont renseignées
+  ✓ versions      projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
+  … base          compilation de la crate migration, peut prendre
+                  une minute au premier lancement…
    Compiling migration v0.1.0 (/private/tmp/rbs-demo/demo/migration)
 error[E0425]: cannot find value `url_de_la_base` in this scope
   --> migration/src/main.rs:16:13
@@ -396,9 +412,10 @@ error[E0425]: cannot find value `url_de_la_base` in this scope
 
 For more information about this error, try `rustc --explain E0425`.
 error: could not compile `migration` (bin "migration") due to 1 previous error
-  ✗ base        localhost:55501 répond, mais sa version reste inconnue : la crate migration a échoué (code 101)
+  ✗ base          localhost:55501 répond, mais sa version reste inconnue : la crate migration a échoué (code 101)
       vérifiez que `cargo run -p migration -- version` aboutit
-  ✓ jobs        la configuration de la file est en place
+  ✓ disposition   les modules installés sont là où le CLI les pose
+  ✓ jobs          la configuration de la file est en place
 attention : le projet demande votre attention
 ```
 

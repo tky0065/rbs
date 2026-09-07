@@ -6,7 +6,7 @@ title: Cache
 # Cache
 
 `rbs add redis` installe un cache Redis dans un projet existant : trois fichiers sous
-`src/cache/`, une section `[cache]` dans la configuration, et un champ sur votre
+`src/modules/cache/`, une section `[cache]` dans la configuration, et un champ sur votre
 `AppState`. Aucune route, aucun middleware — la feature est une brique, et ce que vous
 mettez en cache ne regarde que vous.
 
@@ -23,18 +23,19 @@ redis : cache Redis : pool paresseux partagé par l'état, valeurs typées par s
 
 plan pour /private/tmp/rbs-demo/depot
 
-  + src/cache/mod.rs           créé
-  + src/cache/config.rs        créé
-  + src/cache/tests.rs         créé
-  ~ src/lib.rs                 modifié
-  ~ src/state.rs               modifié
-  ~ src/health/controller.rs   modifié
-  ~ docker-compose.yml         modifié
-  ~ Cargo.toml                 modifié
-  ~ config/default.toml        modifié
-  ~ AGENTS.md                  modifié
+  + src/modules/cache/mod.rs      créé
+  + src/modules/cache/config.rs   créé
+  + src/modules/cache/tests.rs    créé
+  + src/modules/mod.rs            créé
+  ~ src/lib.rs                    modifié
+  ~ src/state.rs                  modifié
+  ~ src/health/controller.rs      modifié
+  ~ docker-compose.yml            modifié
+  ~ Cargo.toml                    modifié
+  ~ config/default.toml           modifié
+  ~ AGENTS.md                     modifié
 
-  10 fichiers à écrire
+  11 fichiers à écrire
 ✓ redis installée — 3 fichiers
 
   le compose du projet porte déjà un service redis — docker compose up -d le démarre ; sans compose, faites écouter un Redis à l'URL de [cache] de config/default.toml
@@ -53,7 +54,7 @@ que déclare le manifeste, le second nomme ce que votre code appelle.
 Les défauts vivent dans la feature et non dans le noyau — `rbs-core` n'oppose rien à une
 section qu'il ne connaît pas : c'est donc dans ce fichier qu'ils se lisent et se changent.
 
-```rust file=examples/file-drop/src/cache/config.rs
+```rust file=examples/file-drop/src/modules/cache/config.rs
 ```
 
 L'installation ajoute à `config/default.toml` une section `[cache]` portant ces deux mêmes
@@ -64,7 +65,7 @@ place dans l'URL : `redis://:secret@hote:6379/0`.
 
 ## La construction, et pourquoi le démarrage reste synchrone
 
-```rust file=examples/file-drop/src/cache/mod.rs region=construction
+```rust file=examples/file-drop/src/modules/cache/mod.rs region=construction
 ```
 
 Rien ne se connecte ici. `deadpool` bâtit un pool paresseux qui joint le serveur au premier
@@ -81,7 +82,7 @@ requête. Pour le savoir avant vos utilisateurs, demandez à
 Les valeurs sont typées et non des chaînes : tout ce qui est `Serialize` entre, tout ce qui
 est `DeserializeOwned` sort, avec `serde_json` entre les deux.
 
-```rust file=examples/file-drop/src/cache/mod.rs region=lecture
+```rust file=examples/file-drop/src/modules/cache/mod.rs region=lecture
 ```
 
 Une clé absente ou expirée rend `Ok(None)`, non une erreur. Cette distinction fait toute
@@ -97,7 +98,7 @@ signifie aucune expiration.
 L'invalidation d'une clé unique existe, mais un projet qui met en cache une liste paginée
 ne sait pas combien de pages il a servies. La feature invalide donc tout un préfixe :
 
-```rust file=examples/file-drop/src/cache/mod.rs region=invalidate_prefix
+```rust file=examples/file-drop/src/modules/cache/mod.rs region=invalidate_prefix
 ```
 
 `SCAN` plutôt que `KEYS` : le second parcourt tout l'espace de clés en bloquant le serveur,
@@ -106,7 +107,7 @@ ce qui passe inaperçu sur un portable et fait une panne en production.
 `SCAN MATCH` prend un glob, interprété à l'autre bout, et un métacaractère présent dans
 votre préfixe l'élargirait. Les clés que le serveur rend sont donc filtrées à nouveau ici :
 
-```rust file=examples/file-drop/src/cache/mod.rs region=to_delete
+```rust file=examples/file-drop/src/modules/cache/mod.rs region=to_delete
 ```
 
 Une suppression ne se défait pas — c'est tout l'argument de la revérification du préfixe du
@@ -134,7 +135,7 @@ total périmé derrière chaque modification.
 
 ## Les tests
 
-Le `src/cache/tests.rs` engendré se sépare en deux, et la séparation est délibérée.
+Le `src/modules/cache/tests.rs` engendré se sépare en deux, et la séparation est délibérée.
 
 Quatre tests n'ont besoin d'aucun serveur : l'aller-retour typé par `encode`/`decode`, la
 clé absente qui se décode en `None`, le filtre de préfixe et l'échappement du glob. Ce sont

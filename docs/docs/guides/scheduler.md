@@ -5,7 +5,7 @@ title: Scheduler
 
 # Scheduled triggers
 
-`rbs add scheduler` gives a project a calendar: six files under `src/scheduler/`, a
+`rbs add scheduler` gives a project a calendar: six files under `src/modules/scheduler/`, a
 migration for the `schedules` table, and a ticker started with the server. It is the answer
 to the last line of the [jobs guide](./jobs.md) — a queue knows how to run work and retry
 it, but nothing enqueues anything except an event of your own.
@@ -27,32 +27,33 @@ scheduler exige jobs : posée avec elle
 
 plan pour /private/tmp/rbs-demo/blog
 
-  + src/jobs/mod.rs                                      créé
-  + src/jobs/config.rs                                   créé
-  + src/jobs/model.rs                                    créé
-  + src/jobs/queue.rs                                    créé
-  + src/jobs/worker.rs                                   créé
-  + src/jobs/demo.rs                                     créé
-  + src/jobs/tests.rs                                    créé
+  + src/modules/jobs/mod.rs                              créé
+  + src/modules/jobs/config.rs                           créé
+  + src/modules/jobs/model.rs                            créé
+  + src/modules/jobs/queue.rs                            créé
+  + src/modules/jobs/worker.rs                           créé
+  + src/modules/jobs/demo.rs                             créé
+  + src/modules/jobs/tests.rs                            créé
   + migration/src/m20260903_173943_create_jobs.rs        créé
   ~ migration/src/lib.rs                                 modifié
+  + src/modules/mod.rs                                   créé
   ~ src/lib.rs                                           modifié
   ~ src/main.rs                                          modifié
   ~ Cargo.toml                                           modifié
   ~ config/default.toml                                  modifié
-  + src/scheduler/mod.rs                                 créé
-  + src/scheduler/config.rs                              créé
-  + src/scheduler/model.rs                               créé
-  + src/scheduler/sync.rs                                créé
-  + src/scheduler/ticker.rs                              créé
-  + src/scheduler/tests.rs                               créé
+  + src/modules/scheduler/mod.rs                         créé
+  + src/modules/scheduler/config.rs                      créé
+  + src/modules/scheduler/model.rs                       créé
+  + src/modules/scheduler/sync.rs                        créé
+  + src/modules/scheduler/ticker.rs                      créé
+  + src/modules/scheduler/tests.rs                       créé
   + migration/src/m20260903_173943_create_schedules.rs   créé
   ~ AGENTS.md                                            modifié
 
-  21 fichiers à écrire
+  22 fichiers à écrire
 ✓ scheduler installée — 15 fichiers
 
-  rbs migrate up, puis déclarez vos échéances dans src/scheduler/mod.rs — les expressions sont évaluées en UTC
+  rbs migrate up, puis déclarez vos échéances dans src/modules/scheduler/mod.rs — les expressions sont évaluées en UTC
 ```
 
 Two migrations come with it, so [`rbs migrate up`](../cli/migrate.md) is the next command:
@@ -60,15 +61,15 @@ until both tables exist, neither the ticker nor the worker has anything to read.
 
 ## Declaring a schedule
 
-The calendar is declared in code, in `src/scheduler/mod.rs`, and the database holds nothing
+The calendar is declared in code, in `src/modules/scheduler/mod.rs`, and the database holds nothing
 but its state. `schedules()` is to the ticker what `registry()` is to the worker — the one
 list you edit:
 
 ```rust
 pub fn schedules() -> Vec<Schedule> {
-    vec![Schedule::every::<crate::jobs::demo::Log>(
+    vec![Schedule::every::<crate::modules::jobs::demo::Log>(
         "0 3 * * *",
-        || crate::jobs::demo::Log {
+        || crate::modules::jobs::demo::Log {
             message: "échéance quotidienne".to_string(),
         },
     )]
@@ -191,7 +192,7 @@ bound how late a trigger can be to thirty seconds. `config/{env}.toml` and
 
 ## Testing
 
-The generated `src/scheduler/tests.rs` runs against a real database, like every test that
+The generated `src/modules/scheduler/tests.rs` runs against a real database, like every test that
 touches one — see the [testing guide](./testing.md). Five of them are the ones worth
 keeping when you edit the fragment:
 

@@ -6,7 +6,7 @@ title: Journal des écritures
 # Journal des écritures
 
 `rbs add audit` installe un journal des écritures dans un projet existant : quatre fichiers
-sous `src/audit/`, et une migration pour la table `audit_log`. Comme les autres briques, il
+sous `src/modules/audit/`, et une migration pour la table `audit_log`. Comme les autres briques, il
 ne monte aucune route — et, contrairement à elles, il ne se câble même pas sur celles que
 vous avez déjà. C'est à votre service de l'appeler, et la raison est
 [plus bas](#ce-que-le-fragment-ne-fait-pas).
@@ -19,17 +19,18 @@ audit : journal des écritures : qui a modifié quoi, quand, dans la transaction
 
 plan pour /private/tmp/rbs-demo/demo
 
-  + src/audit/mod.rs                                     créé
-  + src/audit/model.rs                                   créé
-  + src/audit/repository.rs                              créé
-  + src/audit/tests.rs                                   créé
+  + src/modules/audit/mod.rs                             créé
+  + src/modules/audit/model.rs                           créé
+  + src/modules/audit/repository.rs                      créé
+  + src/modules/audit/tests.rs                           créé
   + migration/src/m20260903_173024_create_audit_log.rs   créé
   ~ migration/src/lib.rs                                 modifié
+  + src/modules/mod.rs                                   créé
   ~ src/lib.rs                                           modifié
   ~ Cargo.toml                                           modifié
   ~ AGENTS.md                                            modifié
 
-  9 fichiers à écrire
+  10 fichiers à écrire
 ✓ audit installée — 5 fichiers
 
   rbs migrate up, puis appelez audit::record dans vos services — l'entrée s'écrit dans la transaction du changement
@@ -83,7 +84,7 @@ use sea_orm::{DatabaseConnection, Set, TransactionTrait};
 use serde_json::json;
 
 use super::repository;
-use crate::audit::{self, Entry};
+use crate::modules::audit::{self, Entry};
 
 pub async fn rename(
     db: &DatabaseConnection,
@@ -184,7 +185,7 @@ Pas de colonne `updated_at` : une ligne de journal ne se modifie pas.
 Relire l'histoire d'une ligne est une requête ordinaire :
 
 ```rust
-// src/audit/repository.rs — la lecture se pose à côté de l'écriture, pour la même
+// src/modules/audit/repository.rs — la lecture se pose à côté de l'écriture, pour la même
 // raison : rien d'autre dans le projet ne construit de requête.
 use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
 
