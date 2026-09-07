@@ -1746,6 +1746,69 @@ mod tests {
         options
     }
 
+    /// Écrit dans `fragments` un fragment nommé `nom` qui se déclare dans les modules.
+    fn fragment_module(fragments: &TempDir, nom: &str) {
+        fs::create_dir(fragments.path().join(nom)).expect("le fragment se crée");
+        fs::write(
+            fragments.path().join(nom).join("feature.toml"),
+            format!(
+                "[feature]\ndescription = \"{nom}\"\n\n\
+                 [[anchors]]\nanchor = \"modules\"\ncontent = \"pub mod {nom};\"\n"
+            ),
+        )
+        .expect("le manifeste s'écrit");
+    }
+
+    /// Le squelette ne pose pas `src/modules/mod.rs` : c'est le premier fragment qui s'y
+    /// déclare qui l'ouvre, et qui inscrit le module dans la bibliothèque du projet.
+    #[test]
+    fn the_first_fragment_that_targets_modules_opens_the_mount_point() {
+        let (_parent, root) = project();
+        let fragments = TempDir::new().expect("répertoire temporaire créable");
+        fragment_module(&fragments, "essai");
+
+        run(&fragment_options(&root, &fragments)).expect("l'installation doit aboutir");
+
+        let montage = fs::read_to_string(root.join("src/modules/mod.rs"))
+            .expect("le point de montage doit être posé");
+        assert!(montage.contains("// <rbs:modules>"), "{montage}");
+        assert!(montage.contains("pub mod essai;"), "{montage}");
+
+        let lib = fs::read_to_string(root.join("src/lib.rs")).expect("lib.rs lisible");
+        assert!(lib.contains("pub mod modules;"), "{lib}");
+        assert!(
+            !lib.contains("pub mod essai;"),
+            "le fragment se déclare dans le point de montage, pas dans la bibliothèque : {lib}"
+        );
+    }
+
+    /// Le second fragment trouve le point de montage ouvert : il s'y ajoute sans redéclarer
+    /// `pub mod modules;`, qu'un doublon ferait refuser à la compilation.
+    #[test]
+    fn a_second_fragment_does_not_declare_the_mount_point_twice() {
+        let (_parent, root) = project();
+        let fragments = TempDir::new().expect("répertoire temporaire créable");
+        fragment_module(&fragments, "essai");
+        fragment_module(&fragments, "autre");
+        run(&fragment_options(&root, &fragments)).expect("la première installation aboutit");
+
+        let mut options = fragment_options(&root, &fragments);
+        options.feature = "autre".to_string();
+        options.force = true;
+        run(&options).expect("la seconde installation doit aboutir");
+
+        let lib = fs::read_to_string(root.join("src/lib.rs")).expect("lib.rs lisible");
+        assert_eq!(
+            lib.matches("pub mod modules;").count(),
+            1,
+            "le point de montage ne se déclare qu'une fois : {lib}"
+        );
+        let montage = fs::read_to_string(root.join("src/modules/mod.rs"))
+            .expect("le point de montage existe");
+        assert!(montage.contains("pub mod essai;"), "{montage}");
+        assert!(montage.contains("pub mod autre;"), "{montage}");
+    }
+
     /// La ligne qui précède immédiatement la balise fermante de `anchor`.
     fn last_line_of(root: &Path, anchor: &crate::anchors::Anchor) -> String {
         let source = fs::read_to_string(root.join(anchor.file.as_ref()))
