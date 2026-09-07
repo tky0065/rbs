@@ -8,6 +8,7 @@ pub mod agents;
 pub mod anchors;
 pub mod auth;
 pub mod base;
+mod disposition;
 pub mod env;
 pub mod guards;
 pub mod jobs;
@@ -269,6 +270,10 @@ fn plan(manifeste: &Manifeste) -> Vec<Controle> {
             titre: base::TITRE,
             executer: |projet, annonce| base::check(&projet.root, &projet.manifeste, annonce),
         },
+        Controle {
+            titre: disposition::TITRE,
+            executer: |projet, _| disposition::check(&projet.root),
+        },
     ];
 
     let installees = manifeste
@@ -289,9 +294,9 @@ fn plan(manifeste: &Manifeste) -> Vec<Controle> {
 
 /// Le contrôle propre à chaque feature, sous le nom qu'elle porte dans le manifeste.
 ///
-/// `redis` s'installe en `src/cache/` sous une section `[cache]` : c'est le nom de la
-/// crate d'un côté, celui du service rendu de l'autre. Le tableau porte le nom déclaré,
-/// seul commun aux quatre.
+/// `redis` s'installe sous `src/modules/cache/` avec une section `[cache]` : c'est le nom
+/// de la crate d'un côté, celui du service rendu de l'autre. Le tableau porte le nom
+/// déclaré, seul commun aux quatre.
 ///
 /// Une feature peut y figurer deux fois : `auth` amène de quoi vérifier son secret, et de
 /// quoi juger les routes que les rôles qu'elle installe pourraient protéger.

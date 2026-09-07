@@ -128,9 +128,9 @@ pub(crate) fn check(root: &Path, manifeste: &Manifeste) -> Check {
 
 /// Une feature déclarée dont le répertoire manque, s'il y en a une.
 ///
-/// Un fragment peut écrire ailleurs que dans `src/<nom>/` — `redis` va dans `src/cache/` —
-/// et n'est donc pas jugé ici : ce contrôle vise les entités engendrées, dont le
-/// répertoire porte toujours le nom.
+/// Un fragment installé ne vit plus sous `src/<nom>/` mais sous `src/modules/`, et n'est
+/// donc pas jugé ici : ce contrôle vise les entités engendrées, dont le répertoire porte
+/// toujours le nom.
 fn declared_without_directory(root: &Path, features: &[String]) -> Option<String> {
     let catalogue = crate::templates::feature_names(None);
 
@@ -279,17 +279,18 @@ mod tests {
     #[test]
     fn a_module_written_by_hand_is_a_warning_not_a_failure() {
         let (_parent, root) = project();
-        fs::create_dir_all(root.join("src/webhooks")).expect("répertoire créable");
-        fs::write(root.join("src/webhooks/mod.rs"), "// à la main\n").expect("l'écriture aboutit");
+        fs::create_dir_all(root.join("src/facturation")).expect("répertoire créable");
+        fs::write(root.join("src/facturation/mod.rs"), "// à la main\n")
+            .expect("l'écriture aboutit");
 
         let constat = check(&root);
 
         assert_eq!(constat.state, State::Avertissement);
-        assert!(constat.detail.contains("webhooks"), "{constat:?}");
+        assert!(constat.detail.contains("facturation"), "{constat:?}");
     }
 
-    /// `redis` s'installe en `src/cache/` : compter ce répertoire comme écrit à la main
-    /// ferait avertir sur chaque projet qui installe la feature.
+    /// `redis` s'installe sous `src/modules/cache/` : compter ce répertoire comme écrit à
+    /// la main ferait avertir sur chaque projet qui installe la feature.
     #[test]
     fn a_directory_deposited_by_a_fragment_under_another_name_is_not_a_warning() {
         let (_parent, root) = project();
