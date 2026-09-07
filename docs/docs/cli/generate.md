@@ -385,7 +385,9 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) checks all thirteen anchors — eleven on a project carrying neither a compose nor the queue, the two optional ones — so a missing one can be found before a generation trips over it.
+[`rbs doctor`](./doctor.md) checks all fourteen anchors — eleven on a project carrying no
+compose, no queue and no fragment moved under `src/modules/`, the three optional ones —
+so a missing one can be found before a generation trips over it.
 
 ## Failures
 

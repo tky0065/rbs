@@ -403,11 +403,14 @@ sinon un plan vide, donc une commande qui réussit sans rien faire.
 ## Les ancres
 
 `rbs add` écrit surtout des fichiers entiers et modifie le manifeste ; c'est [`rbs
-generate`](./generate.md#les-ancres) qui insère dans les douze ancres en commentaires Rust
-du projet — `// <rbs:features>` (dans `src/lib.rs`, ou dans `src/main.rs` sur un projet
-sans bibliothèque — voir [plus bas](./generate.md#les-ancres)), `// <rbs:routes>`,
-`// <rbs:layers>`, `// <rbs:openapi>`, `// <rbs:migration_modules>`, `// <rbs:migrations>`,
-`// <rbs:state_champs>`, `// <rbs:state_init>`, `// <rbs:startup>` et `// <rbs:seeds>`.
+generate`](./generate.md#les-ancres) qui insère dans les treize ancres en commentaires
+Rust du projet — `// <rbs:features>` (dans `src/lib.rs`, ou dans `src/main.rs` sur un
+projet sans bibliothèque — voir [plus bas](./generate.md#les-ancres)),
+`// <rbs:modules>` (optionnelle : seul un projet qui a installé un fragment sous
+`src/modules/` la porte), `// <rbs:routes>`, `// <rbs:layers>`, `// <rbs:openapi>`,
+`// <rbs:migration_modules>`, `// <rbs:migrations>`, `// <rbs:state_champs>`,
+`// <rbs:state_init>`, `// <rbs:startup>`, `// <rbs:seeds>`, `// <rbs:health_probes>` et
+`// <rbs:jobs>` (optionnelle aussi : seul un projet qui porte la file la porte).
 
 `// <rbs:layers>` est l'endroit où un fragment empile un middleware, et elle ne
 s'interchange pas avec `// <rbs:routes>` qui la précède de quelques lignes : un `.layer()`
@@ -421,8 +424,9 @@ toutes les trois.
 services `api` et `migrate` vont dans `# <rbs:services>`, l'ancre YAML que porte un
 compose — voir [plus haut](#les-treize-features). La règle est la même partout : aucun AST
 n'est jamais réécrit, et une ancre absente fait que la commande n'écrit rien et affiche le
-bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les treize — onze sur un projet qui ne porte ni compose ni file, les deux optionnelles
-projet sans compose pour en porter une onzième.
+bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les quatorze — onze sur
+un projet qui ne porte ni compose, ni file, ni fragment déplacé sous `src/modules/`, les
+trois optionnelles.
 
 Un projet engendré avant l'existence de `// <rbs:layers>` ne la porte pas, et `rbs upgrade`
 ne l'ajoute pas : cette commande aligne le manifeste et les zones de l'`AGENTS.md`, et ne
