@@ -443,6 +443,23 @@ mod tests {
         );
     }
 
+    /// La garde est une préface au corps, et s'en détache partout de la même façon.
+    ///
+    /// `rustfmt` n'ajoute pas de ligne vide : un blanc mangé par un `{%- else %}` ne se
+    /// voit qu'ici, ou à l'œil dans un exemple.
+    #[test]
+    fn under_auth_every_guard_is_followed_by_a_blank_line() {
+        let rendered = authenticated("articles");
+
+        assert_eq!(
+            rendered
+                .matches("identite.require_role(Role::User)?;\n\n")
+                .count(),
+            6,
+            "chaque garde doit être suivie d'une ligne vide :\n{rendered}"
+        );
+    }
+
     /// `--role` ne substitue le nom que sur les écritures.
     #[test]
     fn a_role_raises_the_threshold_of_the_writes_only() {

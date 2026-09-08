@@ -124,6 +124,7 @@ pub async fn find(
     Path(id): Path<Uuid>,
 ) -> Result<Json<PostResponse>> {
     identite.require_role(Role::User)?;
+
     Ok(Json(service::find(state.core().db(), id).await?))
 }
 
