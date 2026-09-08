@@ -197,9 +197,11 @@ une revient à remettre à la main les quatre mêmes éléments.
 toute feature dont `create`, `update` ou `delete` n'appelle aucune garde — mais sur un
 projet engendré à partir de la 1.3.0, il n'a plus rien à dire, puisque ce qu'écrit
 `generate crud` l'appelle déjà. Ce qu'il trouve désormais, c'est un CRUD engendré avant la
-venue d'`auth`, un CRUD engendré par une version antérieure, ou un CRUD rouvert à la main.
-Un avertissement et non un échec : un catalogue public est un choix légitime, et la commande
-sort toujours en 0.
+venue d'`auth`, un CRUD engendré par une version antérieure, ou un CRUD dont les écritures
+ont été rouvertes à la main — la garde se cherche dans le corps de chaque handler
+d'écriture, et non n'importe où dans le fichier : le bandeau qui nomme `require_role` ne
+répond donc pas pour elle. Un avertissement et non un échec : un catalogue public est un
+choix légitime, et la commande sort toujours en 0.
 
 ## Les rôles
 

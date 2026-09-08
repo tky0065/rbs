@@ -106,8 +106,10 @@ projet qui protège ses écritures autrement est nommé ici aussi.
 Depuis la 1.3.0, le contrôle a moins à trouver : sur un projet portant `auth`,
 `rbs generate crud` écrit la garde sur chacune des routes qu'il monte. Ce qu'il nomme
 désormais, c'est une feature engendrée avant l'installation d'`auth`, une feature engendrée
-par une version antérieure, ou une feature
-[rouverte à la main](../guides/auth.md#fermées-par-défaut-à-la-génération).
+par une version antérieure, ou une feature dont les écritures ont été
+[rouvertes à la main](../guides/auth.md#fermées-par-défaut-à-la-génération). La garde se
+cherche dans le corps de chaque handler d'écriture : le bandeau que porte le contrôleur
+engendré nomme `require_role` sans rien garder, et ne répond pas pour elle.
 
 Le troisième appartient à `disposition`, sur un projet qui porte les deux dispositions
 qu'un fragment peut prendre — un des dix répertoires que `rbs add` posait jadis à la racine
