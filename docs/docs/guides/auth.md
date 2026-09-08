@@ -191,8 +191,10 @@ create and none to clean up:
 ```rust file=examples/blog-auth/src/posts/tests.rs region=jeton
 ```
 
-Two tests then pin the pair of refusals, and they must not be allowed to collapse into
-each other — the extractor answers before the handler, the guard answers inside it:
+Three tests then pin the refusals, and they must not be allowed to collapse into one
+another. Two are generated — a write and a read, both anonymous, both answered 401 by the
+extractor before the handler runs. The third is the example's own: a caller who *is*
+identified but whose role falls short, refused 403 by the guard inside the handler.
 
 ```rust file=examples/blog-auth/src/posts/tests.rs region=refus
 ```

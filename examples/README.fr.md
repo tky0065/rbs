@@ -130,11 +130,12 @@ et `--role` relève le seuil des écritures. Le contrôleur est donc le fichier 
 quel, et `src/auth/guard.rs` aussi.
 
 - `src/posts/tests.rs` : un test s'ajoute, `a_non_admin_write_returns_403`. Le fichier
-  engendré signe un jeton `admin` pour tout ce qu'il envoie : il prouve la 401 que reçoit
-  un anonyme et rien du seuil lui-même ; c'est de présenter un jeton `user` qui sépare les
-  deux refus — 403 sur `POST /posts`, 200 sur `GET /posts` avec ce même jeton. Rien
-  d'autre n'est retouché : le harnais, le cycle de vie, le filtre et le 404 sont tels
-  qu'ils ont été engendrés.
+  engendré refuse déjà une écriture anonyme et une lecture anonyme — 401 toutes deux, de
+  l'extracteur — mais il signe un jeton `admin` pour tout le reste de ce qu'il envoie, et
+  ne dit donc rien du seuil lui-même. C'est de présenter un jeton `user` qui sépare les
+  deux refus : 403 sur `POST /posts`, 200 sur `GET /posts` avec ce même jeton. Rien
+  d'autre n'est écrit à la main — le harnais, le cycle de vie, le filtre et le 404 sont
+  tels qu'ils ont été engendrés, seuls les marqueurs `// region:` se posent par-dessus.
 
 Deux entrées qui figuraient ici ont disparu, et c'est leur absence qui compte :
 
@@ -146,7 +147,9 @@ Deux entrées qui figuraient ici ont disparu, et c'est leur absence qui compte :
   Garder ce retrait coûtait à la comparaison de non-dérive sa surveillance du fichier
   entier — c'est exactement ainsi que la réécriture du garde en seuil est passée sous le
   test sans être vue — en échange d'une ligne dont aucune route ne dépend. L'exemple prend
-  désormais le fichier tel qu'il est engendré.
+  désormais le fichier tel qu'il est engendré, et le commentaire posé au-dessus de
+  l'attribut le dit : votre premier CRUD engendré appelle la garde, si bien que la ligne
+  ne masque plus rien et peut partir.
 
 `file-drop` en porte huit de plus. `--with-upload` sur `generate crud` écrit désormais les
 trois handlers de contenu eux-mêmes — `PUT`, `GET` et `HEAD` sur `/uploads/{id}/content`,

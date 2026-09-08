@@ -214,6 +214,55 @@ mod tests {
         );
     }
 
+    /// La lecture aussi est fermée, et un `POST` refusé ne le dirait pas.
+    ///
+    /// C'est le renversement que porte la seule présence d'`auth` : une API protégeant ses
+    /// seules écritures passerait le scénario voisin sans faillir.
+    #[test]
+    fn under_auth_an_anonymous_read_is_refused_too() {
+        let fields = fields::parse("title:string").expect("champs valides");
+        let rendered = render(&Feature::fresh("articles", fields).authenticated())
+            .expect("les tests doivent se rendre");
+
+        assert!(
+            rendered.contains("async fn an_anonymous_read_returns_401()"),
+            "le refus d'une lecture anonyme doit être éprouvé :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(
+                ".method(\"GET\")\n        .uri(\"/articles\")\n        .body(Body::empty())"
+            ),
+            "la lecture éprouvée ne présente aucun en-tête d'autorisation :\n{rendered}"
+        );
+    }
+
+    /// Témoin : sans `auth`, aucun scénario de refus n'apparaît.
+    #[test]
+    fn without_auth_no_refusal_scenario_is_rendered() {
+        let rendered = trials("articles", CHAMPS);
+
+        assert!(
+            !rendered.contains("an_anonymous_read_returns_401")
+                && !rendered.contains("an_anonymous_request_returns_401"),
+            "sans `auth`, le rendu ne porte rien du garde :\n{rendered}"
+        );
+    }
+
+    /// Le rendu entier des tests sous `auth`, figé octet à octet.
+    ///
+    /// `examples/blog-auth` retouche `src/posts/tests.rs` : le fichier sort de la
+    /// comparaison des exemples, et c'est le seul du dépôt rendu sous `auth`. Cette branche
+    /// de la template n'a donc plus aucun oracle — les assertions ci-dessus cherchent
+    /// chacune une chaîne, et aucune ne verrait un scénario disparu ni une ligne vide
+    /// perdue, que rustfmt ne rétablit pas.
+    #[test]
+    fn the_guarded_trials_render_the_frozen_fixture() {
+        bench::fige(
+            "fixtures/posts/tests.rs",
+            &render(&bench::posts()).expect("les tests doivent se rendre"),
+        );
+    }
+
     /// Le rôle signé est celui que le contrôleur exige.
     #[test]
     fn the_signed_role_matches_the_one_the_controller_requires() {

@@ -131,11 +131,12 @@ threshold of the writes. The controller is therefore the plain generated file, a
 `src/auth/guard.rs`.
 
 - `src/posts/tests.rs`: one test is added, `a_non_admin_write_returns_403`. The generated
-  file signs an `admin` token for everything it sends, so it proves the 401 an anonymous
-  caller gets and nothing about the threshold itself; presenting a `user` token is what
-  separates the two refusals — 403 on `POST /posts`, 200 on `GET /posts` with that same
-  token. Nothing else is touched: the harness, the lifecycle, the filter and the 404 are
-  all as generated.
+  file already refuses an anonymous write and an anonymous read — both 401, both from the
+  extractor — but it signs an `admin` token for everything else it sends, so it says
+  nothing about the threshold itself. Presenting a `user` token is what separates the two
+  refusals: 403 on `POST /posts`, 200 on `GET /posts` with that same token. Nothing else
+  in the file is written by hand — the harness, the lifecycle, the filter and the 404 are
+  all as generated, and only the `// region:` markers are restored on top.
 
 Two things that used to be listed here are gone, and their absence is the point:
 
@@ -146,7 +147,8 @@ Two things that used to be listed here are gone, and their absence is the point:
   dead code there. Keeping the removal cost the drift comparison its watch over the whole
   file — which is exactly how the guard's rewrite into a threshold slipped through the
   test unnoticed — in exchange for one line no route depends on. The example now takes
-  the file as generated.
+  the file as generated, and the comment above the attribute says as much: your first
+  generated CRUD calls the guard, so the line stops hiding anything and can go.
 
 `file-drop` carries eight more. `--with-upload` on `generate crud` now writes the three
 content handlers themselves — `PUT`, `GET` and `HEAD` on `/uploads/{id}/content`, and the

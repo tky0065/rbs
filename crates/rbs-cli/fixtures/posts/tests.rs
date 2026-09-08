@@ -42,7 +42,6 @@ async fn call(api: &Router, request: Request<Body>) -> (StatusCode, Value) {
     (status, body)
 }
 
-// region: jeton
 /// Signe un jeton portant `role`, sans passer par la base.
 ///
 /// L'extracteur `Identity` ne vérifie que la signature : le compte n'a pas à exister
@@ -61,7 +60,6 @@ fn token(role: &str) -> String {
 
     rbs_core::jwt::sign(&claims, &config.auth.secret).expect("jeton signable")
 }
-// endregion: jeton
 
 fn request(method: &str, path: &str, body: Value) -> Request<Body> {
     Request::builder()
@@ -300,7 +298,6 @@ async fn an_unreadable_body_returns_400() {
     assert_eq!(body["status"], 400, "{body}");
 }
 
-// region: refus
 /// Sans jeton, la requête est refusée avant même que le corps ne soit lu.
 #[tokio::test]
 #[ignore = "joint la base du projet"]
@@ -340,39 +337,3 @@ async fn an_anonymous_read_returns_401() {
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     assert_eq!(body["status"], 401, "{body}");
 }
-
-/// Identifié, mais sans le rôle qu'exige l'écriture : c'est la garde qui répond, et 403.
-///
-/// Les deux refus voisins ne disent pas la même chose — l'extracteur refuse avant le
-/// handler, la garde refuse dedans. Les confondre laisserait passer un `--role admin`
-/// devenu sans effet, les routes restant fermées aux anonymes. Le même jeton `user` lit
-/// pourtant `/posts` : c'est le seuil, et non l'égalité, que ces deux régimes éprouvent.
-#[tokio::test]
-#[ignore = "joint la base du projet"]
-async fn a_non_admin_write_returns_403() {
-    let api = application().await;
-    let ordinaire = Request::builder()
-        .method("POST")
-        .uri("/posts")
-        .header("content-type", "application/json")
-        .header("authorization", format!("Bearer {}", token("user")))
-        .body(Body::from(creation().to_string()))
-        .expect("requête bien formée");
-
-    let (status, body) = call(&api, ordinaire).await;
-
-    assert_eq!(status, StatusCode::FORBIDDEN, "{body}");
-    assert_eq!(body["status"], 403, "{body}");
-
-    let lecture = Request::builder()
-        .method("GET")
-        .uri("/posts?per_page=1")
-        .header("authorization", format!("Bearer {}", token("user")))
-        .body(Body::empty())
-        .expect("requête bien formée");
-
-    let (status, body) = call(&api, lecture).await;
-
-    assert_eq!(status, StatusCode::OK, "{body}");
-}
-// endregion: refus

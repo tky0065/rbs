@@ -196,8 +196,10 @@ ligne à créer ni ligne à nettoyer :
 ```rust file=examples/blog-auth/src/posts/tests.rs region=jeton
 ```
 
-Deux tests tiennent ensuite la paire de refus, et il ne faut pas les laisser se confondre —
-l'extracteur répond avant le handler, la garde répond dedans :
+Trois tests tiennent ensuite les refus, et il ne faut pas les laisser se confondre. Deux
+sont engendrés — une écriture et une lecture, anonymes toutes deux, auxquelles l'extracteur
+répond 401 avant que le handler s'exécute. Le troisième appartient à l'exemple : un appelant
+bien identifié mais d'un rôle trop court, à qui la garde répond 403 dans le handler.
 
 ```rust file=examples/blog-auth/src/posts/tests.rs region=refus
 ```
