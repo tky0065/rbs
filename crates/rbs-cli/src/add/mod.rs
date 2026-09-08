@@ -53,6 +53,33 @@ pub(crate) struct Planned {
     pub deja_installee: bool,
     /// La zone de l'`AGENTS.md` que le projet ne porte pas, s'il en manque une.
     pub zone_manquante: Option<crate::agents::MissingZone>,
+    /// Les CRUD déjà générés qu'`auth` laisse ouverts, quand elle arrive après eux.
+    ///
+    /// Vide dès que `auth` n'est pas posée par ce plan : le CLI ne réécrit jamais un
+    /// fichier existant, et un CRUD généré avant elle resterait grand ouvert sans qu'un
+    /// message ne le dise.
+    ouverts: Vec<String>,
+}
+
+impl Planned {
+    /// Le message nommant les CRUD que cette installation laisse ouverts, s'il y en a.
+    ///
+    /// Ne se pose que lorsque `auth` s'installe et que la liste n'est pas vide : les
+    /// autres fragments ne ferment aucune route, et un projet neuf n'a aucun CRUD à
+    /// fermer.
+    pub(crate) fn remedy(&self) -> Option<String> {
+        if self.ouverts.is_empty() {
+            return None;
+        }
+
+        Some(format!(
+            "les features déjà générées restent publiques : {}. Le CLI ne réécrit pas un \
+             fichier existant — sur chaque handler à fermer, ajoutez le paramètre \
+             `identite: Identity`, l'appel `identite.require_role(Role::User)?`, l'entrée \
+             `security((\"bearer\" = []))` et les réponses 401 et 403 de son annotation.",
+            self.ouverts.join(", ")
+        ))
+    }
 }
 
 /// Ce qui peut empêcher d'installer une feature.
@@ -181,6 +208,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
             entrainees: Vec::new(),
             deja_installee: true,
             zone_manquante: None,
+            ouverts: Vec::new(),
         });
     }
 
@@ -300,6 +328,20 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     let posees: Vec<String> = a_poser.iter().map(|f| f.name.clone()).collect();
 
+    // Nommé au moment où `auth` arrive, pas seulement quand elle est demandée :
+    // `webhooks` l'entraîne, et un CRUD généré avant elle reste ouvert dans les deux cas.
+    let ouverts = if posees.iter().any(|nom| nom == "auth") {
+        let catalogue = templates::feature_names(options.template_dir.as_deref());
+        metadonnees
+            .features
+            .iter()
+            .filter(|feature| feature.as_str() != "health" && !catalogue.contains(feature))
+            .cloned()
+            .collect()
+    } else {
+        Vec::new()
+    };
+
     // L'inventaire décrit le projet tel que ce plan le laissera : les features viennent
     // d'y être inscrites, et le manifeste du disque les ignore encore.
     let zone_manquante = crate::agents::refresh(&mut builder, &root, &metadonnees, &posees)?;
@@ -321,6 +363,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
             .collect(),
         deja_installee: false,
         zone_manquante,
+        ouverts,
     })
 }
 
@@ -1221,6 +1264,92 @@ mod tests {
             !exemple.contains(tire),
             "la valeur du .env est celle que l'exemple versionné publie :\n{exemple}"
         );
+    }
+
+    /// Inscrit `feature` dans le manifeste comme le ferait `rbs generate crud`, sans
+    /// engendrer de CRUD complet : `add::plan_for` ne lit que la liste, jamais le disque
+    /// sous `src/`.
+    fn inscrire_feature(root: &Path, feature: &str) {
+        let cargo = root.join("Cargo.toml");
+        let source = fs::read_to_string(&cargo).expect("le manifeste doit exister");
+        let reecrit = source.replacen(
+            "features = [\"health\"]",
+            &format!("features = [\"health\", \"{feature}\"]"),
+            1,
+        );
+
+        assert_ne!(
+            source, reecrit,
+            "le manifeste ne porte pas la liste attendue :\n{source}"
+        );
+        fs::write(&cargo, reecrit).expect("le manifeste doit se réécrire");
+    }
+
+    /// Le critère de la tâche : un CRUD généré avant `auth` reste ouvert — le CLI ne
+    /// réécrit pas un fichier existant — et se taire ferait croire l'API fermée.
+    #[test]
+    fn installing_auth_names_the_cruds_that_stay_open() {
+        let (_parent, root) = project();
+        inscrire_feature(&root, "posts");
+
+        let planned = plan_for(&options(&root, "auth")).expect("l'installation doit se planifier");
+
+        let message = planned.remedy().expect("un avertissement doit être rendu");
+
+        assert!(
+            message.contains("posts"),
+            "le module déjà présent doit être nommé : {message}"
+        );
+        assert!(
+            !message.contains("health"),
+            "un fragment posé par `rbs new` n'est pas un CRUD : {message}"
+        );
+    }
+
+    /// `auth` entraîne parfois d'autres fragments (`rate-limit`), mais ceux-ci ne sont
+    /// pas des CRUD : les nommer ferait croire à un handler à fermer qui n'existe pas.
+    #[test]
+    fn installing_auth_does_not_name_the_fragments_it_drags_in() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "auth")).expect("l'installation doit se planifier");
+
+        assert!(
+            planned.remedy().is_none(),
+            "aucun CRUD n'est présent, aucun message ne doit sortir : {:?}",
+            planned.remedy()
+        );
+    }
+
+    /// Le message ne concerne qu'`auth` : les autres fragments ne ferment aucune route,
+    /// et nommer un CRUD à leur installation induirait le développeur en erreur.
+    #[test]
+    fn installing_another_feature_names_no_open_crud() {
+        let (_parent, root) = project();
+        inscrire_feature(&root, "posts");
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+
+        assert!(
+            planned.remedy().is_none(),
+            "docker ne ferme aucune route : {:?}",
+            planned.remedy()
+        );
+    }
+
+    /// `webhooks` entraîne `auth` : un CRUD déjà présent reste ouvert par ce chemin
+    /// comme par l'installation directe, et le message doit le dire dans les deux cas.
+    #[test]
+    fn auth_entrained_by_another_fragment_still_names_open_cruds() {
+        let (_parent, root) = project();
+        inscrire_feature(&root, "posts");
+
+        let planned = plan_for(&options(&root, "webhooks")).expect("le plan doit se calculer");
+
+        let message = planned
+            .remedy()
+            .expect("auth arrive par entraînement, l'avertissement doit sortir");
+        assert!(message.contains("posts"), "{message}");
     }
 
     /// Le fragment annonçait redis://127.0.0.1:6379 dans config/default.toml sans que

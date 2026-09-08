@@ -425,6 +425,12 @@ fn add_in(
         ui::files(planned.files.len())
     ));
 
+    // `auth` arrivée après des CRUD déjà générés les laisse ouverts : le CLI ne réécrit
+    // jamais un fichier existant pour les fermer, et se taire ferait croire l'API fermée.
+    if let Some(remedy) = planned.remedy() {
+        ui::info(&format!("\n{remedy}"));
+    }
+
     if let Some(suite) = suite(&feature) {
         ui::info(&format!("\n  {suite}"));
     }
