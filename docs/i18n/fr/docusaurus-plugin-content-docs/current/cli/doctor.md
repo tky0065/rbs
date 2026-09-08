@@ -103,6 +103,12 @@ légitime — un catalogue public, un service derrière une passerelle qui authe
 et le constat ne peut donc pas être un échec. Et la garde se reconnaît à ce seul appel : un
 projet qui protège ses écritures autrement est nommé ici aussi.
 
+Depuis la 1.3.0, le contrôle a moins à trouver : sur un projet portant `auth`,
+`rbs generate crud` écrit la garde sur chacune des routes qu'il monte. Ce qu'il nomme
+désormais, c'est une feature engendrée avant l'installation d'`auth`, une feature engendrée
+par une version antérieure, ou une feature
+[rouverte à la main](../guides/auth.md#fermées-par-défaut-à-la-génération).
+
 Le troisième appartient à `disposition`, sur un projet qui porte les deux dispositions
 qu'un fragment peut prendre — un des dix répertoires que `rbs add` posait jadis à la racine
 de `src/`, toujours là aux côtés d'un `src/modules/` que le projet a depuis commencé à
