@@ -344,6 +344,71 @@ mod tests {
         );
     }
 
+    /// Le bloc d'un handler : son annotation et sa fonction, isolées du reste du fichier.
+    ///
+    /// Un compte global sur le fichier entier ne verrait pas un échange apparié — `filter`
+    /// portant le seuil de `create`, et réciproquement — c'est ce que nommer chaque route
+    /// permet d'affirmer que les comptes seuls ne prouvent pas.
+    fn handler<'a>(rendered: &'a str, name: &str) -> &'a str {
+        rendered
+            .split("#[utoipa::path(")
+            .find(|bloc| bloc.contains(&format!("pub async fn {name}(")))
+            .unwrap_or_else(|| panic!("handler `{name}` absent :\n{rendered}"))
+    }
+
+    /// La carte route → rôle sous `auth` et `--role`, nommée route par route : les quatre
+    /// écritures montent au rôle demandé, les cinq lectures restent au seuil par défaut.
+    #[test]
+    fn under_a_role_each_route_names_its_own_threshold() {
+        let rendered = authenticated_and_guarded_uploading("articles", "admin");
+
+        for (name, role) in [
+            ("create", "Admin"),
+            ("update", "Admin"),
+            ("delete", "Admin"),
+            ("put_content", "Admin"),
+            ("list", "User"),
+            ("filter", "User"),
+            ("find", "User"),
+            ("get_content", "User"),
+            ("head_content", "User"),
+        ] {
+            let bloc = handler(&rendered, name);
+
+            assert!(
+                bloc.contains(&format!("identite.require_role(Role::{role})?;")),
+                "`{name}` doit porter le rôle `{role}` :\n{bloc}"
+            );
+        }
+    }
+
+    /// `Identity` implémente `FromRequestParts` : `identite` doit précéder, dans la
+    /// signature, tout extracteur qui consomme le corps de la requête.
+    #[test]
+    fn under_auth_identite_precedes_every_body_consuming_extractor() {
+        let rendered = authenticated_and_guarded_uploading("articles", "admin");
+
+        for (name, extracteur_de_corps) in [
+            ("filter", "Json(filtre)"),
+            ("create", "ValidatedJson(input)"),
+            ("update", "ValidatedJson(input)"),
+            ("put_content", "content: Bytes"),
+        ] {
+            let bloc = handler(&rendered, name);
+            let position_identite = bloc
+                .find("identite: Identity,")
+                .unwrap_or_else(|| panic!("`{name}` doit porter `identite` :\n{bloc}"));
+            let position_corps = bloc.find(extracteur_de_corps).unwrap_or_else(|| {
+                panic!("`{name}` doit porter `{extracteur_de_corps}` :\n{bloc}")
+            });
+
+            assert!(
+                position_identite < position_corps,
+                "`identite` doit précéder `{extracteur_de_corps}` dans `{name}` :\n{bloc}"
+            );
+        }
+    }
+
     /// Les six routes portent la même garde, lectures comprises.
     #[test]
     fn under_auth_every_route_requires_a_token() {

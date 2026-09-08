@@ -79,6 +79,9 @@ pub async fn list(
 }
 
 /// Filtrer est une lecture : le corps porte les conditions, que l'URL rendrait illisibles.
+{%- if not auth %}
+/// Le garde de rôle ne s'y applique donc pas, pas plus qu'à `list` ou `find`.
+{%- endif %}
 #[utoipa::path(
     post,
     path = "/{@ module @}/filter",
