@@ -46,6 +46,14 @@ disent la même chose, et la forme courte est celle que l'on écrit le plus souv
 sa collation par défaut. `ILIKE` trancherait, mais sea-orm ne l'expose que par `PgExpr`, et
 rbs engendre aussi pour MySQL et SQLite.
 
+## Swagger dit les deux formes
+
+Aucune colonne n'est exigée : un corps qui ne nomme qu'une condition est un corps valide,
+et celui qui n'en nomme aucune rend la liste entière. Chaque colonne est décrite par un
+`oneOf` — la valeur nue d'abord, typée par la colonne, puis l'objet qui nomme ses
+opérateurs — si bien que `/docs` vous propose `{ "published": true }`, et non un objet de
+`"string"` sur chaque colonne.
+
 ## Le tri
 
 `sort` est une liste de noms de colonnes, `-` préfixant les décroissantes. Sans elle,

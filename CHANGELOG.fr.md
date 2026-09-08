@@ -11,6 +11,31 @@ dépréciation.
 
 *[English version](CHANGELOG.md).*
 
+## [1.4.0] — 2026-09-08
+
+### Modifié
+
+- **Le filtre engendré se décrit désormais par le type de ses colonnes.** `filter.rs` cite
+  le schéma du type de sa colonne — `rbs_core::BoolComparisonSchema` pour un `bool`,
+  `TextMatchSchema` pour un texte — là où chaque colonne citait le seul
+  `ComparisonSchema`, qui portait une valeur libre. Le document OpenAPI décrit maintenant
+  les deux formes qu'une condition a toujours acceptées : un `oneOf` entre la valeur nue,
+  typée par la colonne, et l'objet qui nomme ses opérateurs. Et plus aucune colonne n'y est
+  exigée — le document les réclamait toutes, si bien qu'un client qui le validait devait
+  envoyer le filtre entier pour restreindre une liste sur un seul champ. Swagger propose
+  désormais `{ "published": true }` au lieu d'un objet de `"string"` sur chaque colonne.
+  Rien ne change à l'exécution : un corps accepté hier l'est aujourd'hui. Un projet déjà
+  engendré compile sans retouche — `ComparisonSchema` reste exporté — et gagne le nouveau
+  document en régénérant son filtre.
+
+### Ajouté
+
+- **Six schémas dans `rbs-core`**, un par type de colonne que `--fields` peut nommer :
+  `BoolComparisonSchema`, `IntComparisonSchema`, `FloatComparisonSchema`,
+  `UuidComparisonSchema`, `DateTimeComparisonSchema` et `TextMatchSchema`, chacun nommant
+  ses opérateurs par un type compagnon. Ils n'existent que pour être cités par
+  `#[schema(value_type = ...)]` ; rien ne les construit.
+
 ## [1.3.0] — 2026-09-08
 
 ### Modifié
@@ -446,6 +471,7 @@ démarrage, architecture, référence du CLI et guides, en français et en angla
 Rust 1.85 ou plus, édition 2024. Un projet généré tourne sur PostgreSQL 14 ou plus,
 MySQL 8.0 ou plus, ou SQLite 3.35 ou plus — `rbs doctor` refuse tout ce qui est en dessous.
 
+[1.4.0]: https://github.com/tky0065/rbs/releases/tag/v1.4.0
 [1.3.0]: https://github.com/tky0065/rbs/releases/tag/v1.3.0
 [1.2.0]: https://github.com/tky0065/rbs/releases/tag/v1.2.0
 [1.1.0]: https://github.com/tky0065/rbs/releases/tag/v1.1.0
