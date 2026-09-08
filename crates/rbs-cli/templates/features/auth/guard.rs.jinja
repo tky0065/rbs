@@ -3,7 +3,7 @@ use sea_orm::ActiveEnum;
 
 use super::model::Role;
 
-/// Exige un rôle de l'appelant.
+/// Exige un rôle **au moins** égal à celui donné.
 ///
 /// `Identity` vient du noyau, qui ne connaît le rôle qu'en clair : l'enum `Role` vit ici,
 /// dans le projet, et c'est ce trait qui les réunit. Un rôle de plus dans `model.rs` est
@@ -23,17 +23,19 @@ use super::model::Role;
 // l'utilise — elle masquerait alors du code réellement mort.
 #[allow(dead_code)]
 pub trait RequireRole {
-    /// Rend [`Error::Forbidden`] si l'appelant ne porte pas `expected`.
-    fn require_role(&self, expected: Role) -> Result<()>;
+    /// Rend [`Error::Forbidden`] si l'appelant porte un rôle inférieur à `minimum`.
+    fn require_role(&self, minimum: Role) -> Result<()>;
 }
 
 impl RequireRole for Identity {
-    fn require_role(&self, expected: Role) -> Result<()> {
+    fn require_role(&self, minimum: Role) -> Result<()> {
         // Un rôle que l'enum ne connaît plus vient d'un jeton signé par une version
         // antérieure du projet : il n'ouvre rien, et ne fait pas tomber le serveur.
         let porte = Role::try_from_value(&self.role).map_err(|_| Error::Forbidden)?;
 
-        if porte == expected {
+        // Le seuil, et non l'égalité : un Admin satisfait une exigence User. C'est
+        // l'ordre de déclaration de l'enum qui range les variantes.
+        if porte >= minimum {
             Ok(())
         } else {
             Err(Error::Forbidden)

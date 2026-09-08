@@ -432,6 +432,38 @@ mod tests {
     use crate::database::Database;
     use crate::plan::Status;
 
+    /// La template du garde, lue telle qu'elle est embarquée.
+    ///
+    /// Le garde vit dans le projet de l'utilisateur : aucun test Rust de cette crate ne peut
+    /// l'exécuter. Ce qui se vérifie ici est que la comparaison reste un seuil — une égalité
+    /// rendue à sa place ferait refuser un admin par la garde que `generate crud` pose par
+    /// défaut, et seule la suite Docker le dirait.
+    const GUARD: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/templates/features/auth/guard.rs.jinja"
+    ));
+
+    const ROLE_MODEL: &str = include_str!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/templates/features/auth/model.rs.jinja"
+    ));
+
+    #[test]
+    fn the_role_guard_compares_a_threshold_and_the_enum_is_ordered() {
+        assert!(
+            GUARD.contains("porte >= minimum"),
+            "le garde doit comparer un seuil, non une égalité :\n{GUARD}"
+        );
+        assert!(
+            !GUARD.contains("porte == expected"),
+            "l'égalité stricte doit avoir disparu :\n{GUARD}"
+        );
+        assert!(
+            ROLE_MODEL.contains("PartialOrd, Ord"),
+            "l'enum Role doit être ordonné pour que le seuil ait un sens :\n{ROLE_MODEL}"
+        );
+    }
+
     /// Empreinte récursive d'un répertoire : chemin relatif -> contenu.
     fn fingerprint(root: &Path) -> BTreeMap<PathBuf, String> {
         let mut vue = BTreeMap::new();
