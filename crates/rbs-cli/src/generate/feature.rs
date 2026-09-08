@@ -20,6 +20,17 @@ pub(crate) struct Feature {
     pub fields: Vec<Field>,
     /// Variante de l'enum `Role` que les routes d'écriture exigeront, s'il y en a une.
     pub role: Option<String>,
+    /// Le même rôle, tel qu'il est saisi et stocké en base : `super_admin`.
+    ///
+    /// La variante Rust ne suffit pas à le reconstituer — `SuperAdmin` en minuscules
+    /// perd le tiret bas —, et c'est cette forme-ci que porte le jeton signé par les
+    /// tests engendrés.
+    pub role_value: Option<String>,
+    /// Le projet porte le fragment `auth` : les routes générées exigent un jeton.
+    ///
+    /// Distinct de `role`, qui ne nomme que le rôle exigé des écritures : un projet peut
+    /// porter `auth` sans qu'aucun `--role` ait été passé, et c'est le cas courant.
+    pub auth: bool,
     /// Le `DELETE` marque la ligne au lieu de la retirer.
     pub soft_delete: bool,
     /// Le CRUD porte des routes de contenu binaire.
@@ -32,6 +43,8 @@ impl Feature {
             name: name.to_string(),
             fields,
             role: None,
+            role_value: None,
+            auth: false,
             soft_delete: false,
             with_upload: false,
         }
@@ -42,7 +55,14 @@ impl Feature {
     /// Le rôle est saisi comme il s'écrit en base — `admin`, `super_admin` — et rangé ici
     /// sous la forme que porte l'enum du projet : c'est elle que la template écrit.
     pub(crate) fn guarded(mut self, role: &str) -> Self {
+        self.role_value = Some(role.to_string());
         self.role = Some(to_pascal_case(role));
+        self
+    }
+
+    /// La même feature, sur un projet portant `auth` : ses routes exigent un jeton.
+    pub(crate) fn authenticated(mut self) -> Self {
+        self.auth = true;
         self
     }
 
@@ -239,7 +259,7 @@ fn named(variants: &[String]) -> String {
 /// templates lisent `entity` comme elles lisent `module`.
 impl Serialize for Feature {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("Feature", 12)?;
+        let mut state = serializer.serialize_struct("Feature", 14)?;
         state.serialize_field("module", self.module())?;
         state.serialize_field("table", self.module())?;
         state.serialize_field("entity", &self.entity())?;
@@ -250,6 +270,8 @@ impl Serialize for Feature {
         state.serialize_field("ambiguous_targets", &self.ambiguous_targets())?;
         state.serialize_field("target_idens", &self.target_idens())?;
         state.serialize_field("role", &self.role)?;
+        state.serialize_field("role_value", &self.role_value)?;
+        state.serialize_field("auth", &self.auth)?;
         state.serialize_field("soft_delete", &self.soft_delete)?;
         state.serialize_field("with_upload", &self.with_upload)?;
         state.end()
@@ -299,6 +321,20 @@ const FINALES_NON_PLURIELLES: [&str; 3] = ["ss", "us", "is"];
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn an_authenticated_feature_carries_the_flag_to_the_templates() {
+        let fields = crate::generate::fields::parse("title:string").expect("champs valides");
+        let feature = Feature::fresh("articles", fields).authenticated();
+
+        let rendered = minijinja::Value::from_serialize(&feature);
+
+        assert_eq!(
+            rendered.get_attr("auth").expect("la clé auth doit exister"),
+            minijinja::Value::from(true),
+            "les templates lisent `auth` pour poser la garde"
+        );
+    }
 
     #[test]
     fn a_regular_plural_loses_its_s() {
