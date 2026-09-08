@@ -362,6 +362,81 @@ fn the_auth_tests_of_the_generated_project_pass() {
     );
 }
 
+/// Le harnais qu'un CRUD engendré sous `auth` reçoit, joué contre une vraie base.
+///
+/// Ici plutôt que dans `integration_crud` : ce que ce test éprouve n'est pas le CRUD mais
+/// le `fn token()` de son fichier de tests, qui appelle trois contrats de `rbs-core` —
+/// `Config::load`, `jwt::Claims`, `jwt::sign`. Un changement de l'un d'eux ne compile plus
+/// chez l'utilisateur sans qu'aucune autre suite ne s'en aperçoive : `integration_crud`
+/// engendre sans `auth`, le test ci-dessus porte `auth` sans CRUD, et `integration_examples`
+/// ne fait que comparer des octets. C'est aussi ici que vivent le secret posé dans le
+/// `.env` et le verrou de la cible partagée.
+///
+/// `--role admin` fait passer les deux seuils dans la même exécution : le jeton signé est
+/// un `admin`, il franchit les écritures qui exigent `Role::Admin` comme les lectures qui
+/// exigent `Role::User`.
+#[test]
+#[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn the_tests_of_a_crud_generated_under_auth_pass() {
+    let postgres = start_postgres();
+    let _cible = own_target();
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_auth_on(&url_of(&postgres), &parent);
+
+    // `generate` garde le working tree comme `add` : l'installation d'`auth` vient de le
+    // salir, et la commande refuserait d'écrire.
+    common::commiter(&racine, "auth installée");
+
+    Command::cargo_bin("rbs")
+        .expect("le binaire rbs doit être compilé")
+        .current_dir(&racine)
+        .args([
+            "generate",
+            "crud",
+            "articles",
+            "--fields",
+            "titre:string,vues:int,publie:bool",
+            "--role",
+            "admin",
+        ])
+        .assert()
+        .success();
+
+    migrate(&racine);
+
+    let sortie = Command::new("cargo")
+        .current_dir(&racine)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .args(["test", "--workspace", "--", "--include-ignored"])
+        .output()
+        .expect("cargo doit être lançable");
+
+    let rendu = format!(
+        "{}{}",
+        String::from_utf8_lossy(&sortie.stdout),
+        String::from_utf8_lossy(&sortie.stderr)
+    );
+
+    assert!(
+        sortie.status.success(),
+        "la suite du projet engendré échoue :\n{rendu}"
+    );
+
+    // Trois scénarios nommés, et non le seul code de sortie : `cargo test` sort en 0 sur
+    // une suite amputée, et c'est précisément une suite amputée qu'une template cassée
+    // livrerait.
+    for scenario in [
+        "articles::tests::the_full_lifecycle_goes_through_the_api ... ok",
+        "articles::tests::an_anonymous_request_returns_401 ... ok",
+        "articles::tests::an_anonymous_read_returns_401 ... ok",
+    ] {
+        assert!(
+            rendu.contains(scenario),
+            "`{scenario}` n'a pas été joué :\n{rendu}"
+        );
+    }
+}
+
 /// Le mot de passe traverse le serveur, son hash y est calculé, et le journal n'en garde
 /// ni l'un ni l'autre.
 ///
