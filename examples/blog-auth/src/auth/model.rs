@@ -4,7 +4,11 @@ use sea_orm::entity::prelude::*;
 ///
 /// Un rôle de plus s'ajoute ici, sans migration : c'est le fichier que vous ouvrirez
 /// pour le faire, et la garde `require_role` le suit.
-#[derive(Clone, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum)]
+///
+/// **L'ordre de déclaration porte la hiérarchie** : `require_role` compare un seuil, si
+/// bien qu'une variante insérée entre deux autres déplace le seuil de toutes les gardes
+/// du projet. Un rôle plus étendu s'ajoute donc en fin d'énumération.
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, EnumIter, DeriveActiveEnum)]
 #[sea_orm(rs_type = "String", db_type = "String(StringLen::None)")]
 pub enum Role {
     #[sea_orm(string_value = "user")]

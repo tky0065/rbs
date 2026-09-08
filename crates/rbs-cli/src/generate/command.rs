@@ -278,9 +278,18 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     relations::resolve(&mut fields, &entities, &options.name).map_err(Error::Relations)?;
     relations::ensure_migrations_exist(&fields, &root).map_err(Error::MigrationsAbsentes)?;
 
+    // La présence du fragment suffit : aucun drapeau ne la demande, et c'est le sens du
+    // défaut fermé — un projet qui a installé de quoi fermer ne rend pas des routes
+    // anonymes au premier `generate crud`.
+    let feature = Feature::fresh(&options.name, fields);
+    let feature = if metadonnees.features.iter().any(|feature| feature == "auth") {
+        feature.authenticated()
+    } else {
+        feature
+    };
     let feature = match &options.role {
-        Some(role) => Feature::fresh(&options.name, fields).guarded(role),
-        None => Feature::fresh(&options.name, fields),
+        Some(role) => feature.guarded(role),
+        None => feature,
     };
     let feature = if options.soft_delete {
         feature.soft_deleting()
@@ -849,10 +858,49 @@ mod tests {
         );
     }
 
-    /// Les tests engendrés s'exécutent sans jeton : ceux qui écrivent ne peuvent pas
-    /// rester tels quels sous un garde, sans quoi `cargo test` échoue sur le projet neuf.
+    /// Sans aucun drapeau, la seule présence de `auth` ferme les routes générées.
     #[test]
-    fn the_generated_tests_stop_writing_once_the_feature_is_guarded() {
+    fn a_project_carrying_auth_closes_the_generated_routes_without_any_flag() {
+        let (_parent, root) = project_with_auth();
+
+        run(&options(&root, "articles", Some("title:string"), true))
+            .expect("la génération doit aboutir");
+
+        let controller = read(&root.join("src/articles/controller.rs"));
+
+        assert_eq!(
+            controller.matches("identite: Identity,").count(),
+            6,
+            "les six routes doivent extraire l'identité :\n{controller}"
+        );
+        assert_eq!(
+            controller
+                .matches("identite.require_role(Role::User)?;")
+                .count(),
+            6,
+            "les six routes doivent porter la garde par défaut :\n{controller}"
+        );
+    }
+
+    /// Le même projet sans `auth` : le rendu ne porte rien du garde.
+    #[test]
+    fn a_project_without_auth_keeps_its_routes_open() {
+        let (_parent, root) = project();
+
+        run(&options(&root, "articles", Some("title:string"), true))
+            .expect("la génération doit aboutir");
+
+        let controller = read(&root.join("src/articles/controller.rs"));
+
+        assert!(
+            !controller.contains("Identity") && !controller.contains("require_role"),
+            "sans `auth`, le contrôleur est inchangé :\n{controller}"
+        );
+    }
+
+    /// Les tests engendrés exercent le cycle complet malgré la garde : le harnais signe.
+    #[test]
+    fn the_generated_tests_keep_writing_under_a_guard() {
         let (_parent, root) = project_with_auth();
 
         run(&guarded(&root, "articles", "admin")).expect("la génération doit aboutir");
@@ -860,12 +908,12 @@ mod tests {
         let tests = read(&root.join("src/articles/tests.rs"));
 
         assert!(
-            !tests.contains("the_full_lifecycle_goes_through_the_api"),
-            "le cycle complet POSTe sans jeton :\n{tests}"
+            tests.contains("the_full_lifecycle_goes_through_the_api"),
+            "le cycle complet doit rester exercé :\n{tests}"
         );
         assert!(
-            tests.contains("StatusCode::UNAUTHORIZED"),
-            "le refus d'une écriture anonyme doit être éprouvé à la place :\n{tests}"
+            tests.contains("an_anonymous_request_returns_401"),
+            "le refus sans jeton doit être éprouvé :\n{tests}"
         );
     }
 

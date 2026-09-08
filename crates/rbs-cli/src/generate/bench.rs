@@ -543,6 +543,21 @@ pub(crate) fn uploads() -> Feature {
     Feature::fresh("uploads", fields).uploading()
 }
 
+/// La feature protégée qu'engendre `blog-auth`, telle que son README la commande.
+///
+/// Sous `auth`, et `--role admin` par-dessus : le rôle signé par le harnais cesse alors
+/// d'être celui par défaut, et la fixture le fige avec le reste. C'est la seule feature du
+/// dépôt rendue sous `auth`, et celle dont l'exemple retouche le `tests.rs` — le fichier
+/// sort de la comparaison des exemples, où cette branche de template avait son seul oracle.
+pub(crate) fn posts() -> Feature {
+    let fields = super::fields::parse("title:string,body:text,published:bool")
+        .expect("les champs de blog-auth doivent être valides");
+
+    Feature::fresh("posts", fields)
+        .authenticated()
+        .guarded("admin")
+}
+
 /// Compare `rendu` à la fixture figée sous `chemin`, relatif à la racine de la crate.
 ///
 /// `src/uploads/controller.rs` et `src/uploads/service.rs` d'`examples/file-drop` sortent

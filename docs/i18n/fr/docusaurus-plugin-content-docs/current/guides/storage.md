@@ -132,10 +132,14 @@ aucun bucket n'est nommé nulle part — et ne dit rien de tout cela tant que le
 | `GET` | 200, `application/octet-stream` | 404 | 404 |
 | `HEAD` | 204 | 404 | 404 |
 
-Ajoutez [`--role`](../cli/generate.md) et le `PUT` rejoint les écritures gardées : il prend
-une `Identity` et appelle `require_role` comme `create`, `update` et `delete` — remplacer la
-charge utile d'une ressource est une écriture. `GET` et `HEAD` restent ouvertes, comme
-`list` et `find`.
+Sur un projet portant [`auth`](./auth.md), les trois sont fermées comme le reste du CRUD :
+elles prennent une `Identity`, appellent `require_role(Role::User)` et portent le cadenas
+dans le document OpenAPI. Ajoutez [`--role`](../cli/generate.md) et le `PUT` rejoint les
+écritures dont le drapeau relève le seuil — remplacer la charge utile d'une ressource est
+une écriture — tandis que `GET` et `HEAD` gardent le seuil par défaut, comme `list`,
+`filter` et `find`. Ouvrir l'une des trois au public est une édition du handler engendré ;
+[le guide de l'authentification](./auth.md#fermées-par-défaut-à-la-génération) dit ce qu'il
+faut en retirer.
 
 Sans la feature `storage`, le drapeau est refusé avant tout écrit :
 

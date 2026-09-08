@@ -129,9 +129,13 @@ the backend is `fs`, which needs none of it.
 | `GET` | 200, `application/octet-stream` | 404 | 404 |
 | `HEAD` | 204 | 404 | 404 |
 
-Add [`--role`](../cli/generate.md) and the `PUT` joins the guarded writes: it takes an
-`Identity` and calls `require_role` like `create`, `update` and `delete` — replacing a
-resource's payload is a write. `GET` and `HEAD` stay open, as `list` and `find` do.
+On a project carrying [`auth`](./auth.md), all three are closed like the rest of the CRUD:
+they take an `Identity`, call `require_role(Role::User)`, and carry the padlock in the
+OpenAPI document. Add [`--role`](../cli/generate.md) and the `PUT` joins the writes whose
+threshold the flag raises — replacing a resource's payload is a write — while `GET` and
+`HEAD` keep the default threshold, as `list`, `filter` and `find` do. Opening one of the
+three to the public is an edit of the generated handler; [the authentication
+guide](./auth.md#closed-by-default-at-generation-time) lists what to remove.
 
 Without the `storage` feature the flag is refused before anything is written:
 

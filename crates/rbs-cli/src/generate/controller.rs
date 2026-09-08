@@ -43,9 +43,15 @@ mod tests {
         render(&Feature::fresh(name, fields)).expect("le controller doit se rendre")
     }
 
-    fn guarded(name: &str, role: &str) -> String {
+    fn authenticated(name: &str) -> String {
         let fields = fields::parse("title:string").expect("champs valides");
-        render(&Feature::fresh(name, fields).guarded(role)).expect("le controller doit se rendre")
+        render(&Feature::fresh(name, fields).authenticated()).expect("le controller doit se rendre")
+    }
+
+    fn authenticated_and_guarded(name: &str, role: &str) -> String {
+        let fields = fields::parse("title:string").expect("champs valides");
+        render(&Feature::fresh(name, fields).authenticated().guarded(role))
+            .expect("le controller doit se rendre")
     }
 
     fn module(name: &str) -> String {
@@ -75,11 +81,17 @@ mod tests {
             .expect("le contrôleur doit se rendre")
     }
 
-    /// Rend le contrôleur d'une feature qui porte les deux drapeaux à la fois.
-    fn guarded_uploading(name: &str, role: &str) -> String {
+    /// Rend le contrôleur d'une feature `auth`, aux deux drapeaux, dotée de ses routes de
+    /// contenu.
+    fn authenticated_and_guarded_uploading(name: &str, role: &str) -> String {
         let fields = fields::parse("title:string").expect("champs valides");
-        render(&Feature::fresh(name, fields).guarded(role).uploading())
-            .expect("le contrôleur doit se rendre")
+        render(
+            &Feature::fresh(name, fields)
+                .authenticated()
+                .guarded(role)
+                .uploading(),
+        )
+        .expect("le contrôleur doit se rendre")
     }
 
     fn module_uploading(name: &str) -> String {
@@ -334,8 +346,9 @@ mod tests {
 
     /// Le bloc d'un handler : son annotation et sa fonction, isolées du reste du fichier.
     ///
-    /// Ce que le garde doit prouver est distributif — trois routes le portent, deux ne le
-    /// portent pas — et une recherche sur le fichier entier ne dirait pas laquelle.
+    /// Un compte global sur le fichier entier ne verrait pas un échange apparié — `filter`
+    /// portant le seuil de `create`, et réciproquement — c'est ce que nommer chaque route
+    /// permet d'affirmer que les comptes seuls ne prouvent pas.
     fn handler<'a>(rendered: &'a str, name: &str) -> &'a str {
         rendered
             .split("#[utoipa::path(")
@@ -343,55 +356,134 @@ mod tests {
             .unwrap_or_else(|| panic!("handler `{name}` absent :\n{rendered}"))
     }
 
+    /// La carte route → rôle sous `auth` et `--role`, nommée route par route : les quatre
+    /// écritures montent au rôle demandé, les cinq lectures restent au seuil par défaut.
     #[test]
-    fn the_guard_protects_the_three_writes_and_spares_the_two_reads() {
-        let rendered = guarded("articles", "admin");
+    fn under_a_role_each_route_names_its_own_threshold() {
+        let rendered = authenticated_and_guarded_uploading("articles", "admin");
 
-        for name in ["create", "update", "delete"] {
+        for (name, role) in [
+            ("create", "Admin"),
+            ("update", "Admin"),
+            ("delete", "Admin"),
+            ("put_content", "Admin"),
+            ("list", "User"),
+            ("filter", "User"),
+            ("find", "User"),
+            ("get_content", "User"),
+            ("head_content", "User"),
+        ] {
             let bloc = handler(&rendered, name);
 
             assert!(
-                bloc.contains("identite: Identity,"),
-                "`{name}` doit extraire l'identité :\n{bloc}"
-            );
-            assert!(
-                bloc.contains("identite.require_role(Role::Admin)?;"),
-                "`{name}` doit exiger le rôle :\n{bloc}"
-            );
-        }
-
-        for name in ["list", "find"] {
-            let bloc = handler(&rendered, name);
-
-            assert!(
-                !bloc.contains("Identity") && !bloc.contains("require_role"),
-                "`{name}` reste publique :\n{bloc}"
+                bloc.contains(&format!("identite.require_role(Role::{role})?;")),
+                "`{name}` doit porter le rôle `{role}` :\n{bloc}"
             );
         }
     }
 
-    /// Le contrat OpenAPI n'annonce que les deux refus que le garde produit réellement :
-    /// 401 de l'extracteur d'identité, 403 de `require_role`.
+    /// `Identity` implémente `FromRequestParts` : `identite` doit précéder, dans la
+    /// signature, tout extracteur qui consomme le corps de la requête.
     #[test]
-    fn the_guarded_routes_declare_the_bearer_and_the_two_refusals() {
-        let rendered = guarded("articles", "admin");
+    fn under_auth_identite_precedes_every_body_consuming_extractor() {
+        let rendered = authenticated_and_guarded_uploading("articles", "admin");
 
-        for annotation in [
-            r#"security(("bearer" = []))"#,
-            "status = 401",
-            "status = 403",
+        for (name, extracteur_de_corps) in [
+            ("filter", "Json(filtre)"),
+            ("create", "ValidatedJson(input)"),
+            ("update", "ValidatedJson(input)"),
+            ("put_content", "content: Bytes"),
         ] {
-            assert_eq!(
-                rendered.matches(annotation).count(),
-                3,
-                "« {annotation} » doit figurer sur les trois routes protégées :\n{rendered}"
+            let bloc = handler(&rendered, name);
+            let position_identite = bloc
+                .find("identite: Identity,")
+                .unwrap_or_else(|| panic!("`{name}` doit porter `identite` :\n{bloc}"));
+            let position_corps = bloc.find(extracteur_de_corps).unwrap_or_else(|| {
+                panic!("`{name}` doit porter `{extracteur_de_corps}` :\n{bloc}")
+            });
+
+            assert!(
+                position_identite < position_corps,
+                "`identite` doit précéder `{extracteur_de_corps}` dans `{name}` :\n{bloc}"
             );
         }
+    }
+
+    /// Les six routes portent la même garde, lectures comprises.
+    #[test]
+    fn under_auth_every_route_requires_a_token() {
+        let rendered = authenticated("articles");
+
+        assert_eq!(
+            rendered.matches("identite: Identity,").count(),
+            6,
+            "les six routes doivent extraire l'identité :\n{rendered}"
+        );
+        assert_eq!(
+            rendered
+                .matches("identite.require_role(Role::User)?;")
+                .count(),
+            6,
+            "les six routes doivent porter le seuil par défaut :\n{rendered}"
+        );
+        assert_eq!(
+            rendered.matches(r#"security(("bearer" = [])),"#).count(),
+            6,
+            "les six annotations doivent déclarer le schéma :\n{rendered}"
+        );
+        assert_eq!(
+            rendered.matches("status = 401").count(),
+            6,
+            "les six annotations doivent documenter le refus sans jeton :\n{rendered}"
+        );
+        assert_eq!(
+            rendered.matches("status = 403").count(),
+            6,
+            "les six annotations doivent documenter le rôle insuffisant :\n{rendered}"
+        );
+    }
+
+    /// La garde est une préface au corps, et s'en détache partout de la même façon.
+    ///
+    /// `rustfmt` n'ajoute pas de ligne vide : un blanc mangé par un `{%- else %}` ne se
+    /// voit qu'ici, ou à l'œil dans un exemple.
+    #[test]
+    fn under_auth_every_guard_is_followed_by_a_blank_line() {
+        let rendered = authenticated("articles");
+
+        assert_eq!(
+            rendered
+                .matches("identite.require_role(Role::User)?;\n\n")
+                .count(),
+            6,
+            "chaque garde doit être suivie d'une ligne vide :\n{rendered}"
+        );
+    }
+
+    /// `--role` ne substitue le nom que sur les écritures.
+    #[test]
+    fn a_role_raises_the_threshold_of_the_writes_only() {
+        let rendered = authenticated_and_guarded("articles", "admin");
+
+        assert_eq!(
+            rendered
+                .matches("identite.require_role(Role::Admin)?;")
+                .count(),
+            3,
+            "create, update et delete doivent monter au rôle demandé :\n{rendered}"
+        );
+        assert_eq!(
+            rendered
+                .matches("identite.require_role(Role::User)?;")
+                .count(),
+            3,
+            "list, filter et find restent au seuil par défaut :\n{rendered}"
+        );
     }
 
     #[test]
     fn the_guard_names_the_role_in_pascal_case() {
-        let rendered = guarded("articles", "super_admin");
+        let rendered = authenticated_and_guarded("articles", "super_admin");
 
         assert!(
             rendered.contains("identite.require_role(Role::SuperAdmin)?;"),
@@ -399,15 +491,32 @@ mod tests {
         );
     }
 
+    /// Le mode d'emploi est écrit une fois, en tête du fichier.
     #[test]
-    fn without_a_role_the_controller_carries_nothing_of_the_guard() {
+    fn the_way_to_open_a_route_is_documented_once() {
+        let rendered = authenticated("articles");
+
+        assert_eq!(
+            rendered.matches("retirez le paramètre").count(),
+            1,
+            "le mode d'emploi ne se répète pas sur chaque handler :\n{rendered}"
+        );
+        assert!(
+            rendered.starts_with("//!"),
+            "le bandeau ouvre le fichier :\n{rendered}"
+        );
+    }
+
+    /// Témoin : sans `auth`, le rendu ne porte rien du garde.
+    #[test]
+    fn without_auth_the_controller_carries_nothing_of_the_guard() {
         let rendered = controller("articles");
 
         assert!(
             !rendered.contains("Identity")
                 && !rendered.contains("require_role")
-                && !rendered.contains("status = 401"),
-            "sans `--role`, le rendu est inchangé :\n{rendered}"
+                && !rendered.contains("bearer"),
+            "sans `auth`, le rendu est inchangé :\n{rendered}"
         );
     }
 
@@ -419,7 +528,8 @@ mod tests {
     /// `find`, qui ne se compacte donc jamais.
     #[test]
     fn the_guarded_render_is_already_what_rustfmt_would_write() {
-        let divergentes = bench::longueurs_divergentes(|name| guarded(name, "admin"));
+        let divergentes =
+            bench::longueurs_divergentes(|name| authenticated_and_guarded(name, "admin"));
 
         assert_eq!(
             divergentes,
@@ -485,18 +595,6 @@ mod tests {
         assert!(
             filtre < id,
             "`filter` doit précéder l'identifiant :\n{rendered}"
-        );
-    }
-
-    /// Filtrer est une lecture : le garde de rôle ne la protège pas, comme il ne protège
-    /// ni `list` ni `find`.
-    #[test]
-    fn the_filter_route_stays_open_under_a_role() {
-        let rendered = guarded("articles", "admin");
-
-        assert!(
-            !handler(&rendered, "filter").contains("require_role"),
-            "filtrer est une lecture :\n{rendered}"
         );
     }
 
@@ -579,66 +677,83 @@ mod tests {
         );
     }
 
-    /// `PUT /<ressource>/{id}/content` remplace la charge utile de la ressource : c'est une
-    /// écriture, et le garde qui couvre `create`, `update` et `delete` doit la couvrir.
-    /// `GET` et `HEAD` sont des lectures, et restent ouvertes comme `list` et `find`.
+    /// Les trois routes de contenu suivent la même règle.
     #[test]
-    fn the_guard_protects_the_content_deposit() {
-        let rendered = guarded_uploading("articles", "admin");
-        let depot = handler(&rendered, "put_content");
+    fn under_auth_the_content_routes_require_a_token_too() {
+        let fields = fields::parse("title:string").expect("champs valides");
+        let rendered = render(
+            &Feature::fresh("uploads", fields)
+                .authenticated()
+                .uploading(),
+        )
+        .expect("le controller doit se rendre");
 
-        assert!(
-            depot.contains("identite: Identity,"),
-            "`put_content` doit extraire l'identité :\n{depot}"
-        );
-        assert!(
-            depot.contains("identite.require_role(Role::Admin)?;"),
-            "`put_content` doit exiger le rôle :\n{depot}"
+        assert_eq!(
+            rendered
+                .matches("identite.require_role(Role::User)?;")
+                .count(),
+            9,
+            "les neuf routes doivent porter la garde :\n{rendered}"
         );
     }
 
+    /// `PUT /<ressource>/{id}/content` est une écriture : `--role` la monte comme
+    /// `create`, `update` et `delete`. `GET` et `HEAD` restent au seuil par défaut, comme
+    /// `list`, `filter` et `find`.
     #[test]
-    fn the_guard_spares_the_two_content_reads() {
-        let rendered = guarded_uploading("articles", "admin");
+    fn a_role_raises_the_threshold_of_the_content_writes_only() {
+        let rendered = authenticated_and_guarded_uploading("articles", "admin");
 
-        for name in ["get_content", "head_content"] {
-            let bloc = handler(&rendered, name);
-
-            assert!(
-                !bloc.contains("Identity") && !bloc.contains("require_role"),
-                "relire un contenu est une lecture, `{name}` reste ouverte :\n{bloc}"
-            );
-        }
+        assert_eq!(
+            rendered
+                .matches("identite.require_role(Role::Admin)?;")
+                .count(),
+            4,
+            "create, update, delete et put_content doivent monter au rôle demandé :\n{rendered}"
+        );
+        assert_eq!(
+            rendered
+                .matches("identite.require_role(Role::User)?;")
+                .count(),
+            5,
+            "list, filter, find, get_content et head_content restent au seuil par défaut :\n{rendered}"
+        );
     }
 
-    /// Quatre écritures sous les deux drapeaux, donc quatre contrats à annoncer.
+    /// Neuf routes sous `auth`, donc neuf contrats à annoncer.
     #[test]
-    fn the_guarded_deposit_declares_the_bearer_and_the_two_refusals() {
-        let rendered = guarded_uploading("articles", "admin");
+    fn under_auth_every_uploading_route_declares_the_bearer_and_the_two_refusals() {
+        let fields = fields::parse("title:string").expect("champs valides");
+        let rendered = render(
+            &Feature::fresh("uploads", fields)
+                .authenticated()
+                .uploading(),
+        )
+        .expect("le controller doit se rendre");
 
         for annotation in [
-            r#"security(("bearer" = []))"#,
+            r#"security(("bearer" = [])),"#,
             "status = 401",
             "status = 403",
         ] {
             assert_eq!(
                 rendered.matches(annotation).count(),
-                4,
-                "« {annotation} » doit figurer sur les quatre écritures :\n{rendered}"
+                9,
+                "« {annotation} » doit figurer sur les neuf routes :\n{rendered}"
             );
         }
     }
 
-    /// Témoin : sans `--role`, les trois routes de contenu ne portent rien du garde.
+    /// Témoin : sans `auth`, le rendu des routes de contenu ne porte rien du garde.
     #[test]
-    fn without_a_role_the_content_routes_carry_nothing_of_the_guard() {
+    fn without_auth_the_content_routes_carry_nothing_of_the_guard() {
         let rendered = controller_uploading("articles");
 
         assert!(
             !rendered.contains("Identity")
                 && !rendered.contains("require_role")
-                && !rendered.contains("status = 401"),
-            "sans `--role`, le rendu des routes de contenu est inchangé :\n{rendered}"
+                && !rendered.contains("bearer"),
+            "sans `auth`, le rendu des routes de contenu est inchangé :\n{rendered}"
         );
     }
 
@@ -646,7 +761,8 @@ mod tests {
     /// La frontière reste celle des autres rendus du contrôleur.
     #[test]
     fn the_guarded_uploading_render_is_already_what_rustfmt_would_write() {
-        let divergentes = bench::longueurs_divergentes(|name| guarded_uploading(name, "admin"));
+        let divergentes =
+            bench::longueurs_divergentes(|name| authenticated_and_guarded_uploading(name, "admin"));
 
         assert_eq!(
             divergentes,

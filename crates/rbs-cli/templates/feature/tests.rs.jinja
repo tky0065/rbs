@@ -4,11 +4,6 @@
 // inventé ferait refuser le POST par la clé étrangère. Créez la ligne cible, puis
 // écrivez la création et la mise à jour avec son identifiant.
 
-{% elif role -%}
-// Les écritures ne sont pas exercées ici : `create`, `update` et `delete` exigent un jeton
-// portant `Role::{@ role @}`, et ce fichier n'en émet aucun. Obtenez-en un par
-// `POST /auth/login`, puis écrivez le cycle complet en le posant en en-tête.
-
 {% endif -%}
 use axum::Router;
 use axum::body::{Body, to_bytes};
@@ -57,6 +52,27 @@ async fn call(api: &Router, request: Request<Body>) -> (StatusCode, Value) {
 
     (status, body)
 }
+{%- if auth %}
+
+/// Signe un jeton portant `role`, sans passer par la base.
+///
+/// L'extracteur `Identity` ne vérifie que la signature : le compte n'a pas à exister
+/// pour qu'elle tienne, et le fichier n'a donc ni compte à créer ni ligne à nettoyer.
+fn token(role: &str) -> String {
+    let config = rbs_core::Config::load().expect("configuration lisible");
+    let maintenant = chrono::Utc::now().timestamp();
+
+    let claims = rbs_core::jwt::Claims {
+        sub: Uuid::new_v4().to_string(),
+        role: role.to_string(),
+        exp: maintenant + 300,
+        iat: maintenant,
+        jti: Uuid::new_v4().to_string(),
+    };
+
+    rbs_core::jwt::sign(&claims, &config.auth.secret).expect("jeton signable")
+}
+{%- endif %}
 
 {% if creatable -%}
 fn request(method: &str, path: &str, body: Value) -> Request<Body> {
@@ -64,6 +80,9 @@ fn request(method: &str, path: &str, body: Value) -> Request<Body> {
         .method(method)
         .uri(path)
         .header("content-type", "application/json")
+{%- if auth %}
+        .header("authorization", format!("Bearer {}", token("{@ signed_role @}")))
+{%- endif %}
         .body(Body::from(body.to_string()))
         .expect("requête bien formée")
 }
@@ -73,6 +92,9 @@ fn without_body(method: &str, path: &str) -> Request<Body> {
     Request::builder()
         .method(method)
         .uri(path)
+{%- if auth %}
+        .header("authorization", format!("Bearer {}", token("{@ signed_role @}")))
+{%- endif %}
         .body(Body::empty())
         .expect("requête bien formée")
 }
@@ -383,12 +405,32 @@ async fn an_unknown_id_returns_404() {
     assert_eq!(status, StatusCode::NOT_FOUND);
     assert_eq!(body["status"], 404, "{body}");
 }
-{%- if role %}
 
-/// Sans jeton, l'écriture est refusée avant même que le corps ne soit lu.
 #[tokio::test]
 #[ignore = "joint la base du projet"]
-async fn an_anonymous_write_returns_401() {
+async fn an_unreadable_body_returns_400() {
+    let api = application().await;
+    let truncated = Request::builder()
+        .method("POST")
+        .uri("/{@ module @}")
+        .header("content-type", "application/json")
+{%- if auth %}
+        .header("authorization", format!("Bearer {}", token("{@ signed_role @}")))
+{%- endif %}
+        .body(Body::from("{"))
+        .expect("requête bien formée");
+
+    let (status, body) = call(&api, truncated).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(body["status"], 400, "{body}");
+}
+{%- if auth %}
+
+/// Sans jeton, la requête est refusée avant même que le corps ne soit lu.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_anonymous_request_returns_401() {
     let api = application().await;
     let anonyme = Request::builder()
         .method("POST")
@@ -402,22 +444,26 @@ async fn an_anonymous_write_returns_401() {
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     assert_eq!(body["status"], 401, "{body}");
 }
-{%- else %}
 
+/// La lecture aussi est fermée : sous `auth`, aucune route engendrée n'est publique.
+///
+/// C'est le renversement qu'opère la seule présence de la feature, et un `POST` refusé ne
+/// l'atteste pas — une API qui protégerait ses seules écritures le passerait aussi. Rouvrir
+/// cette route est une édition, celle que décrit le bandeau de tête du contrôleur ; ce test
+/// tombe alors, et c'est ainsi qu'il doit tomber.
 #[tokio::test]
 #[ignore = "joint la base du projet"]
-async fn an_unreadable_body_returns_400() {
+async fn an_anonymous_read_returns_401() {
     let api = application().await;
-    let truncated = Request::builder()
-        .method("POST")
+    let anonyme = Request::builder()
+        .method("GET")
         .uri("/{@ module @}")
-        .header("content-type", "application/json")
-        .body(Body::from("{"))
+        .body(Body::empty())
         .expect("requête bien formée");
 
-    let (status, body) = call(&api, truncated).await;
+    let (status, body) = call(&api, anonyme).await;
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-    assert_eq!(body["status"], 400, "{body}");
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert_eq!(body["status"], 401, "{body}");
 }
 {%- endif %}

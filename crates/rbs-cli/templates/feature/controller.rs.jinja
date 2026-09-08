@@ -1,3 +1,12 @@
+{% if auth -%}
+//! Toutes les routes exigent un jeton : `Identity` rend 401 sans jeton valide, et
+//! `require_role` 403 en deçà du rôle nommé. Sur une route à durcir, montez le rôle ;
+//! sur une route à ouvrir au public, retirez le paramètre `identite`, l'appel à
+//! `require_role`, l'entrée `security` et les réponses 401 et 403 de son annotation.
+
+{% endif -%}
+{% set role_lecture = "User" -%}
+{% set role_ecriture = role if role else "User" -%}
 {% set dto = ["Create" ~ entity, entity ~ "Response", "Update" ~ entity] | sort -%}
 use axum::Json;
 {%- if with_upload %}
@@ -8,7 +17,7 @@ use axum::http::StatusCode;
 {%- if with_upload %}
 use axum::response::IntoResponse;
 {%- endif %}
-{%- if role %}
+{%- if auth %}
 use rbs_core::{HasCoreState, Identity, Page, Pagination, ProblemDetails, Result, ValidatedJson};
 {%- else %}
 use rbs_core::{HasCoreState, Page, Pagination, ProblemDetails, Result, ValidatedJson};
@@ -31,7 +40,7 @@ use super::dto::{
 {% endif -%}
 use super::filter::{@ entity @}Filter;
 use super::service;
-{%- if role %}
+{%- if auth %}
 use crate::auth::guard::RequireRole;
 use crate::auth::model::Role;
 {%- endif %}
@@ -42,29 +51,45 @@ use crate::state::AppState;
     path = "/{@ module @}",
     tag = "{@ module @}",
     operation_id = "{@ module @}_list",
+{%- if auth %}
+    security(("bearer" = [])),
+{%- endif %}
     params(
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
     ),
     responses(
         (status = 200, description = "page de {@ module @}", body = Page<{@ entity @}Response>),
-        (status = 400, description = "pagination illisible", body = ProblemDetails, content_type = "application/problem+json")
+        (status = 400, description = "pagination illisible", body = ProblemDetails, content_type = "application/problem+json"){% if auth %},
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"){% endif %}
     )
 )]
 pub async fn list(
     State(state): State<AppState>,
+{%- if auth %}
+    identite: Identity,
+{%- endif %}
     pagination: Pagination,
 ) -> Result<Json<Page<{@ entity @}Response>>> {
+{%- if auth %}
+    identite.require_role(Role::{@ role_lecture @})?;
+{% endif %}
     Ok(Json(service::list(state.core().db(), &pagination).await?))
 }
 
 /// Filtrer est une lecture : le corps porte les conditions, que l'URL rendrait illisibles.
+{%- if not auth %}
 /// Le garde de rôle ne s'y applique donc pas, pas plus qu'à `list` ou `find`.
+{%- endif %}
 #[utoipa::path(
     post,
     path = "/{@ module @}/filter",
     tag = "{@ module @}",
     operation_id = "{@ module @}_filter",
+{%- if auth %}
+    security(("bearer" = [])),
+{%- endif %}
     params(
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
@@ -72,14 +97,22 @@ pub async fn list(
     request_body = {@ entity @}Filter,
     responses(
         (status = 200, description = "page de {@ module @} filtrés", body = Page<{@ entity @}Response>),
-        (status = 400, description = "filtre, tri ou pagination illisible", body = ProblemDetails, content_type = "application/problem+json")
+        (status = 400, description = "filtre, tri ou pagination illisible", body = ProblemDetails, content_type = "application/problem+json"){% if auth %},
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"){% endif %}
     )
 )]
 pub async fn filter(
     State(state): State<AppState>,
+{%- if auth %}
+    identite: Identity,
+{%- endif %}
     pagination: Pagination,
     Json(filtre): Json<{@ entity @}Filter>,
 ) -> Result<Json<Page<{@ entity @}Response>>> {
+{%- if auth %}
+    identite.require_role(Role::{@ role_lecture @})?;
+{% endif %}
     Ok(Json(
         service::filter(state.core().db(), &filtre, &pagination).await?,
     ))
@@ -90,14 +123,14 @@ pub async fn filter(
     path = "/{@ module @}",
     tag = "{@ module @}",
     operation_id = "{@ module @}_create",
-{%- if role %}
+{%- if auth %}
     security(("bearer" = [])),
 {%- endif %}
     request_body = Create{@ entity @},
     responses(
         (status = 201, description = "{@ singular @} créé", body = {@ entity @}Response),
         (status = 400, description = "corps illisible", body = ProblemDetails, content_type = "application/problem+json"),
-{%- if role %}
+{%- if auth %}
         (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
 {%- endif %}
@@ -106,13 +139,13 @@ pub async fn filter(
 )]
 pub async fn create(
     State(state): State<AppState>,
-{%- if role %}
+{%- if auth %}
     identite: Identity,
 {%- endif %}
     ValidatedJson(input): ValidatedJson<Create{@ entity @}>,
 ) -> Result<(StatusCode, Json<{@ entity @}Response>)> {
-{%- if role %}
-    identite.require_role(Role::{@ role @})?;
+{%- if auth %}
+    identite.require_role(Role::{@ role_ecriture @})?;
 {% endif %}
     let {@ singular @} = service::create(state.core().db(), input).await?;
 
@@ -124,14 +157,31 @@ pub async fn create(
     path = "/{@ module @}/{id}",
     tag = "{@ module @}",
     operation_id = "{@ module @}_find",
+{%- if auth %}
+    security(("bearer" = [])),
+{%- endif %}
     params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
     responses(
         (status = 200, description = "{@ singular @} demandé", body = {@ entity @}Response),
+{%- if auth %}
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
+{%- endif %}
         (status = 404, description = "{@ singular @} introuvable", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 {#- Les cent colonnes de `max_width` : en deçà, rustfmt ramène la signature sur une ligne,
-    ce qui n'arrive qu'aux entités d'une ou deux lettres. #}
+    ce qui n'arrive qu'aux entités d'une ou deux lettres. Sous `auth`, `identite` allonge
+    la signature au point qu'elle ne tient plus jamais sur une ligne : la garde de
+    longueur ne s'applique donc qu'en son absence. #}
+{%- if auth %}
+pub async fn find(
+    State(state): State<AppState>,
+    identite: Identity,
+    Path(id): Path<Uuid>,
+) -> Result<Json<{@ entity @}Response>> {
+    identite.require_role(Role::{@ role_lecture @})?;
+{% else %}
 {%- set signature_find = "pub async fn find(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<Json<" ~ entity ~ "Response>> {" %}
 {%- if signature_find | length <= 100 %}
 {@ signature_find @}
@@ -141,6 +191,7 @@ pub async fn find(
     Path(id): Path<Uuid>,
 ) -> Result<Json<{@ entity @}Response>> {
 {%- endif %}
+{%- endif %}
     Ok(Json(service::find(state.core().db(), id).await?))
 }
 
@@ -149,14 +200,14 @@ pub async fn find(
     path = "/{@ module @}/{id}",
     tag = "{@ module @}",
     operation_id = "{@ module @}_update",
-{%- if role %}
+{%- if auth %}
     security(("bearer" = [])),
 {%- endif %}
     params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
     request_body = Update{@ entity @},
     responses(
         (status = 200, description = "{@ singular @} mis à jour", body = {@ entity @}Response),
-{%- if role %}
+{%- if auth %}
         (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
 {%- endif %}
@@ -166,14 +217,14 @@ pub async fn find(
 )]
 pub async fn update(
     State(state): State<AppState>,
-{%- if role %}
+{%- if auth %}
     identite: Identity,
 {%- endif %}
     Path(id): Path<Uuid>,
     ValidatedJson(input): ValidatedJson<Update{@ entity @}>,
 ) -> Result<Json<{@ entity @}Response>> {
-{%- if role %}
-    identite.require_role(Role::{@ role @})?;
+{%- if auth %}
+    identite.require_role(Role::{@ role_ecriture @})?;
 {% endif %}
     Ok(Json(service::update(state.core().db(), id, input).await?))
 }
@@ -183,26 +234,26 @@ pub async fn update(
     path = "/{@ module @}/{id}",
     tag = "{@ module @}",
     operation_id = "{@ module @}_delete",
-{%- if role %}
+{%- if auth %}
     security(("bearer" = [])),
 {%- endif %}
     params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
     responses(
         (status = 204, description = "{@ singular @} supprimé"),
-{%- if role %}
+{%- if auth %}
         (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
 {%- endif %}
         (status = 404, description = "{@ singular @} introuvable", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
-{% if role -%}
+{% if auth -%}
 pub async fn delete(
     State(state): State<AppState>,
     identite: Identity,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode> {
-    identite.require_role(Role::{@ role @})?;
+    identite.require_role(Role::{@ role_ecriture @})?;
 {% else -%}
 pub async fn delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<StatusCode> {
 {%- endif %}
@@ -223,14 +274,14 @@ pub async fn delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> Resu
     path = "/{@ module @}/{id}/content",
     tag = "{@ module @}",
     operation_id = "{@ module @}_put_content",
-{%- if role %}
+{%- if auth %}
     security(("bearer" = [])),
 {%- endif %}
     params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
     request_body(content = String, content_type = "application/octet-stream"),
     responses(
         (status = 204, description = "contenu déposé"),
-{%- if role %}
+{%- if auth %}
         (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
 {%- endif %}
@@ -239,14 +290,14 @@ pub async fn delete(State(state): State<AppState>, Path(id): Path<Uuid>) -> Resu
 )]
 pub async fn put_content(
     State(state): State<AppState>,
-{%- if role %}
+{%- if auth %}
     identite: Identity,
 {%- endif %}
     Path(id): Path<Uuid>,
     content: Bytes,
 ) -> Result<StatusCode> {
-{%- if role %}
-    identite.require_role(Role::{@ role @})?;
+{%- if auth %}
+    identite.require_role(Role::{@ role_ecriture @})?;
 {% endif %}
     service::put_content(
         state.core().db(),
@@ -264,16 +315,29 @@ pub async fn put_content(
     path = "/{@ module @}/{id}/content",
     tag = "{@ module @}",
     operation_id = "{@ module @}_get_content",
+{%- if auth %}
+    security(("bearer" = [])),
+{%- endif %}
     params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
     responses(
         (status = 200, description = "contenu du {@ singular @}", content_type = "application/octet-stream"),
+{%- if auth %}
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
+{%- endif %}
         (status = 404, description = "contenu introuvable", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn get_content(
     State(state): State<AppState>,
+{%- if auth %}
+    identite: Identity,
+{%- endif %}
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+{%- if auth %}
+    identite.require_role(Role::{@ role_lecture @})?;
+{% endif %}
     let content = service::get_content(state.storage().as_ref(), id).await?;
 
     Ok(([("content-type", "application/octet-stream")], content))
@@ -284,16 +348,29 @@ pub async fn get_content(
     path = "/{@ module @}/{id}/content",
     tag = "{@ module @}",
     operation_id = "{@ module @}_head_content",
+{%- if auth %}
+    security(("bearer" = [])),
+{%- endif %}
     params(("id" = Uuid, Path, description = "identifiant de {@ singular @}")),
     responses(
         (status = 204, description = "un contenu est déposé"),
+{%- if auth %}
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
+{%- endif %}
         (status = 404, description = "aucun contenu", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn head_content(
     State(state): State<AppState>,
+{%- if auth %}
+    identite: Identity,
+{%- endif %}
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode> {
+{%- if auth %}
+    identite.require_role(Role::{@ role_lecture @})?;
+{% endif %}
     if service::has_content(state.storage().as_ref(), id).await? {
         Ok(StatusCode::NO_CONTENT)
     } else {

@@ -14,6 +14,41 @@ between minor versions with no deprecation cycle.
 
 ### Changed
 
+- **On a project carrying `auth`, `rbs generate crud` now writes closed routes** — all of
+  them, and not just the writes. The six routes of the CRUD, nine when `--with-upload`
+  brings the content route along, each take an `identite: Identity` parameter, open their
+  body with `identite.require_role(Role::User)?`, carry `security(("bearer" = []))` and
+  declare a 401 and a 403 in their `#[utoipa::path]`; the generated controller opens with
+  a four-line header saying so. `--role admin` no longer decides *whether* the routes are
+  guarded but how high: it raises the threshold of `create`, `update`, `delete` and the
+  content route's `PUT` to the named role, while the reads — `list`, `filter`, `find`,
+  `GET` and `HEAD` — keep the default `Role::User`. Opening a route to the public became
+  the edit rather than the default: on the handler concerned, remove the `identite`
+  parameter, the `require_role` call, the `security` entry and the 401 and 403 responses
+  from its annotation. The generated `tests.rs` follows — it signs the token it presents
+  with `rbs_core::jwt::sign`, needing no account, exercises the whole write cycle with it,
+  and adds two tests that present nothing at all, one write and one read, to pin the 401
+  that answers both. A project **without** `auth` generates exactly what it generated
+  before, byte for byte; anything that compares the output of `rbs generate crud` against
+  a stored reference will go red on a project carrying `auth`, and only there. Two
+  consequences for an existing project, since `rbs` rewrites no file it has already
+  written: a CRUD generated before this version stays wide open, including on a project
+  that installs `auth` afterwards, and `rbs add auth` therefore names those still-public
+  features in its closing output, once the feature is installed, so that you know which ones
+  to close by hand.
+- **`require_role` compares a threshold instead of an equality.** It lets the call through
+  as soon as the caller's role is greater than or equal to the one required
+  (`porte >= minimum`), so an `Admin` satisfies a `require_role(Role::User)`; without that,
+  the `Role::User` a generated CRUD names on its reads would lock the project's own
+  administrators out of them. The `Role` enum consequently derives `PartialOrd, Ord`, and
+  **the order in which it declares its variants now carries a hierarchy**: a role inserted
+  between two others moves the threshold of every guard in the project at once, so a wider
+  role belongs at the end. Only a project generated from this version on receives that
+  guard; one generated earlier keeps the strict equality it was given, because `rbs` does
+  not rewrite `src/auth/guard.rs` once it has laid it down, and the two semantics therefore
+  coexist by the date of the project. The 1.3.0 release note, printed by `rbs upgrade`,
+  carries the exact lines to replace in `src/auth/guard.rs` and in the `derive` of
+  `src/auth/model.rs` to move an existing project over.
 - **`rbs add` now installs ten of its modules under `src/modules/` instead of at the root
   of `src/`** — `audit`, `cache` (the directory `redis` writes), `cors`, `jobs`, `mail`,
   `observability`, `rate_limit` (what `rate-limit` writes), `scheduler`, `storage` and

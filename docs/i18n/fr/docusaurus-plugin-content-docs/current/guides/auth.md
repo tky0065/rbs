@@ -136,7 +136,8 @@ Un trait plutôt qu'un layer, parce que `from_fn_with_state` n'accepte pas de pa
 supplémentaire : un layer par rôle figerait l'enum `Role` que la migration a justement
 laissée ouverte.
 
-L'appeler tient en une ligne, en tête d'un handler :
+L'appeler tient en une ligne, en tête d'un handler — ici le `create` de `blog-auth`,
+engendré avec `--role admin`, d'où le `Role::Admin` plutôt que le `Role::User` par défaut :
 
 ```rust file=examples/blog-auth/src/posts/controller.rs region=create
 ```
@@ -147,28 +148,60 @@ l'appelant de s'identifier, non qu'il manque de droits. Et c'est la ligne
 `security(("bearer" = []))` qui pose le cadenas sur cette opération dans
 `/api-docs/openapi.json` ; une route laissée ouverte ne doit pas la porter.
 
-### Poser la garde à la génération
+### Fermées par défaut à la génération
 
-[`rbs generate crud`](../cli/generate.md) écrit cette ligne pour vous :
+Sur un projet portant `auth`, [`rbs generate crud`](../cli/generate.md) écrit cette ligne
+sur chacune des routes qu'il monte. Aucun drapeau ne la demande :
+
+```bash
+rbs generate crud articles --fields title:string
+```
+
+Les six routes du CRUD — `list`, `filter`, `create`, `find`, `update`, `delete` — prennent
+chacune une `identite: Identity`, ouvrent leur corps par
+`identite.require_role(Role::User)?`, portent `security(("bearer" = []))`, et déclarent les
+deux refus dans leur `#[utoipa::path]` : la 401 que rend l'extracteur, la 403 que rend
+`require_role`. Sous `--with-upload`, les `PUT`, `GET` et `HEAD` de la route de contenu les
+rejoignent — neuf routes, toutes fermées. Voir
+[le guide du stockage](./storage.md#les-routes-de-contenu-engendrées).
+
+`--role admin` ne ferme rien de plus. Il **relève le seuil des écritures** :
 
 ```bash
 rbs generate crud articles --fields title:string --role admin
 ```
 
-`create`, `update` et `delete` prennent alors une `Identity`, appellent `require_role`, et
-déclarent les deux refus dans leur `#[utoipa::path]` — la 401 que rend l'extracteur, la 403
-que rend `require_role`. `list` et `find` restent ouvertes : la lecture est ce qu'une API
-publique garde d'ordinaire publique, et un `--role` qui fermerait tout ne laisserait rien à
-choisir.
+`create`, `update` et `delete` — et le `PUT` de la route de contenu sous `--with-upload` —
+exigent alors `Role::Admin`, tandis que `list`, `filter`, `find` et les `GET` et `HEAD` de
+la route de contenu gardent le `Role::User` par défaut. Deux étages d'appelants, et non une
+moitié ouverte et une moitié fermée. Le drapeau refuse, avant toute écriture, sur un projet
+sans `auth` — le contrôleur importerait un module qui n'existe pas — et sur un rôle que
+`src/auth/model.rs` ne déclare pas.
 
-L'option refuse, avant toute écriture, sur un projet sans `auth` — le contrôleur
-importerait un module qui n'existe pas — et sur un rôle que `src/auth/model.rs` ne déclare
-pas. Le `tests.rs` engendré suit : n'ayant aucun jeton, il n'exerce aucune écriture, et
-vérifie à la place qu'une écriture anonyme est refusée.
+**Ouvrir une route au public est une édition du fichier engendré**, et son en-tête le dit :
+sur le handler à ouvrir, retirez le paramètre `identite`, l'appel à `require_role`, l'entrée
+`security` et les réponses 401 et 403 de son annotation. Quatre suppressions dans un fichier
+de votre propre arborescence. Rien dans le CLI ne les fait pour vous, et rien ne les remet.
 
-[`rbs doctor`](../cli/doctor.md) signale en orange, sur un projet portant `auth`, toute
-feature dont `create`, `update` ou `delete` n'appelle aucune garde. Un avertissement et non
-un échec : un catalogue public est un choix légitime, et la commande sort toujours en 0.
+Le `tests.rs` engendré suit. Il signe le jeton qu'il présente par `rbs_core::jwt::sign` —
+`Identity` ne vérifie qu'une signature, il n'y a donc aucun compte à créer — et exerce avec
+lui le cycle d'écriture complet. Deux de ses tests ne présentent aucun jeton, une écriture
+et une lecture, et tiennent la 401 que l'une et l'autre reçoivent.
+
+Un CRUD engendré *avant* l'installation d'`auth` reste ouvert, car le CLI ne réécrit aucun
+fichier qu'il a déjà écrit. `rbs add auth` nomme donc ces features en fin de sortie, une
+fois la feature installée — un `--dry-run` n'écrit rien et n'en affiche rien —, et en fermer
+une revient à remettre à la main les quatre mêmes éléments.
+
+[`rbs doctor`](../cli/doctor.md) signale toujours en orange, sur un projet portant `auth`,
+toute feature dont `create`, `update` ou `delete` n'appelle aucune garde — mais sur un
+projet engendré à partir de la 1.3.0, il n'a plus rien à dire, puisque ce qu'écrit
+`generate crud` l'appelle déjà. Ce qu'il trouve désormais, c'est un CRUD engendré avant la
+venue d'`auth`, un CRUD engendré par une version antérieure, ou un CRUD dont les écritures
+ont été rouvertes à la main — la garde se cherche dans le corps de chaque handler
+d'écriture, et non n'importe où dans le fichier : le bandeau qui nomme `require_role` ne
+répond donc pas pour elle. Un avertissement et non un échec : un catalogue public est un
+choix légitime, et la commande sort toujours en 0.
 
 ## Les rôles
 
@@ -178,31 +211,48 @@ un échec : un catalogue public est un choix légitime, et la commande sort touj
 - un jeton signé par une version antérieure du projet, portant un rôle que l'enum ne
   connaît plus, n'ouvre rien et ne fait pas tomber le serveur.
 
+`require_role` compare un **seuil**, non une égalité : elle laisse passer dès que le rôle
+de l'appelant est supérieur ou égal à celui exigé, si bien qu'un `Admin` satisfait un
+`require_role(Role::User)`. Sans cela, un CRUD engendré nommant `Role::User` sur ses
+lectures en fermerait la porte à ses propres administrateurs. **La hiérarchie, c'est
+l'ordre dans lequel l'enum déclare ses variantes** — `User`, puis `Admin`, avec `Ord`
+dérivé — si bien qu'un rôle inséré entre deux autres déplace d'un coup le seuil de toutes
+les gardes du projet. Un rôle plus étendu que le dernier s'ajoute donc en fin d'énumération.
+
+Un projet engendré avant la 1.3.0 porte la garde antérieure, qui comparait une égalité, et
+la conserve : `rbs` ne réécrit aucun fichier qu'il a déjà écrit, si bien que laquelle des
+deux sémantiques votre projet porte dépend de la version qui l'a engendré. La note de la
+1.3.0 — affichée par [`rbs upgrade`](../cli/upgrade.md), et versionnée sous
+`crates/rbs-cli/notes/1.3.0.md` — porte les lignes exactes à remplacer dans
+`src/auth/guard.rs` et `src/auth/model.rs` pour y faire passer un projet existant.
+
 **Aucune route ne donne un rôle.** L'inscription rend toujours un `user`, par défaut de la
 table, et la promotion passe par la base. C'est délibéré : une route HTTP qui distribue
-`admin` est une route que quelqu'un finira par atteindre. Les tests de l'exemple
-promeuvent un compte exactement ainsi, et se connectent seulement après — un jeton émis
-avant la promotion porterait l'ancien rôle :
+`admin` est une route que quelqu'un finira par atteindre. Le `src/auth/tests.rs` engendré
+promeut un compte exactement ainsi, et se connecte seulement après — un jeton émis avant la
+promotion porterait l'ancien rôle :
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=jeton_admin
+```rust file=examples/blog-auth/src/auth/tests.rs region=jeton_admin
 ```
 
 ## Tester une route protégée
 
-Les tests présentent un jeton plutôt que de construire une requête signée de zéro. Signer
-une requête déjà construite garde les deux formes sous les yeux — ce qui n'est *pas* signé
-dans le fichier est ce que l'API laisse ouvert :
+Les tests d'une feature n'ont besoin d'aucun compte. `Identity` ne vérifie qu'une
+signature : le `tests.rs` engendré signe le jeton qu'il présente, et le fichier n'a ni
+ligne à créer ni ligne à nettoyer :
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=signee
+```rust file=examples/blog-auth/src/posts/tests.rs region=jeton
 ```
 
-Trois tests suffisent ensuite à tenir le contrat, et il ne faut pas laisser les deux
-premiers se confondre :
+Trois tests tiennent ensuite les refus, et il ne faut pas les laisser se confondre. Deux
+sont engendrés — une écriture et une lecture, anonymes toutes deux, auxquelles l'extracteur
+répond 401 avant que le handler s'exécute. Le troisième appartient à l'exemple : un appelant
+bien identifié mais d'un rôle trop court, à qui la garde répond 403 dans le handler.
 
 ```rust file=examples/blog-auth/src/posts/tests.rs region=refus
 ```
 
-Le `src/auth/tests.rs` généré couvre les routes de la feature elle-même — l'inscription,
+Ce même `src/auth/tests.rs` couvre les routes de la feature elle-même — l'inscription,
 les 401 identiques, la rotation, la révocation. Tous passent par HTTP contre une vraie
 base, et tous portent donc `#[ignore]` : le `cargo test` d'un projet neuf réussit sans
 serveur démarré, et `cargo test -- --ignored` les lance contre la base que nomme votre
@@ -212,8 +262,9 @@ serveur démarré, et `cargo test -- --ignored` les lance contre la base que nom
 
 Tout ce qui est propre à votre domaine :
 
-- **qui a le droit de quoi** — la garde compare un rôle à une route ; tout ce qui est plus
-  fin, tel un propriétaire modifiant sa propre ressource, est à écrire dans le service ;
+- **qui a le droit de quoi** — la garde pèse un seuil de rôle contre une route ; tout ce
+  qui est plus fin, tel un propriétaire modifiant sa propre ressource, est à écrire dans le
+  service ;
 - **la politique de mot de passe** — le DTO valide une longueur de 12 à 128 caractères,
   rien de plus ;
 - **vérification d'adresse, réinitialisation, fournisseurs tiers** — hors de cette feature ;

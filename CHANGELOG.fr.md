@@ -15,6 +15,41 @@ dépréciation.
 
 ### Modifié
 
+- **Sur un projet portant `auth`, `rbs generate crud` engendre désormais des routes
+  fermées** — toutes, et non les seules écritures. Les six routes du CRUD, neuf lorsque
+  `--with-upload` ajoute la route de contenu, prennent chacune un paramètre
+  `identite: Identity`, ouvrent leur corps par `identite.require_role(Role::User)?`,
+  portent `security(("bearer" = []))` et déclarent une 401 et une 403 dans leur
+  `#[utoipa::path]` ; le contrôleur engendré s'ouvre sur un bandeau de quatre lignes qui le
+  dit. `--role admin` ne décide plus *si* les routes sont gardées, mais jusqu'où : il relève
+  le seuil de `create`, `update`, `delete` et du `PUT` de la route de contenu au rôle nommé,
+  les lectures — `list`, `filter`, `find`, `GET` et `HEAD` — gardant le `Role::User` par
+  défaut. Ouvrir une route au public devient l'édition, et non le défaut : sur le handler
+  concerné, retirez le paramètre `identite`, l'appel à `require_role`, l'entrée `security`
+  et les réponses 401 et 403 de son annotation. Le `tests.rs` engendré suit — il signe le
+  jeton qu'il présente par `rbs_core::jwt::sign`, sans avoir besoin d'un compte, exerce avec
+  lui le cycle d'écriture complet, et ajoute deux tests qui ne présentent rien du tout, une
+  écriture et une lecture, pour tenir la 401 que l'une et l'autre reçoivent. Un projet
+  **sans** `auth` engendre exactement ce qu'il engendrait, octet pour octet ; tout ce qui
+  compare la sortie de `rbs generate crud` à une référence enregistrée passe au rouge sur un
+  projet portant `auth`, et là seulement. Deux conséquences pour un projet existant, puisque
+  `rbs` ne réécrit aucun fichier qu'il a déjà écrit : un CRUD engendré avant cette version
+  reste grand ouvert, y compris sur un projet qui installe `auth` ensuite, et `rbs add auth`
+  nomme donc en fin de sortie, une fois la feature installée, les features restées
+  publiques, pour qu'on sache lesquelles fermer à la main.
+- **`require_role` compare un seuil plutôt qu'une égalité.** Elle laisse passer dès que le
+  rôle porté est supérieur ou égal au rôle exigé (`porte >= minimum`), si bien qu'un `Admin`
+  satisfait un `require_role(Role::User)` ; sans quoi le `Role::User` qu'un CRUD engendré
+  nomme sur ses lectures en fermerait la porte aux administrateurs du projet. L'enum `Role`
+  dérive en conséquence `PartialOrd, Ord`, et **l'ordre dans lequel elle déclare ses
+  variantes porte désormais une hiérarchie** : un rôle inséré entre deux autres déplace d'un
+  coup le seuil de toutes les gardes du projet, si bien qu'un rôle plus étendu s'ajoute en
+  fin d'énumération. Seul un projet engendré à partir de cette version reçoit cette garde ;
+  un projet plus ancien conserve l'égalité stricte qu'il a reçue, car `rbs` ne réécrit pas
+  `src/auth/guard.rs` une fois qu'il l'a posé, et les deux sémantiques coexistent donc selon
+  la date du projet. La note de version 1.3.0, qu'affiche `rbs upgrade`, porte les lignes
+  exactes à remplacer dans `src/auth/guard.rs` et dans le `derive` de `src/auth/model.rs`
+  pour y faire passer un projet existant.
 - **`rbs add` range désormais dix de ses modules sous `src/modules/`, au lieu de la
   racine de `src/`** — `audit`, `cache` (le répertoire qu'écrit `redis`), `cors`, `jobs`,
   `mail`, `observability`, `rate_limit` (ce qu'écrit `rate-limit`), `scheduler`, `storage`

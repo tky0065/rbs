@@ -95,13 +95,21 @@ aucune `require_role`.
 
 ```text
   ! gardes      écritures anonymes : articles, comments
-      réservez-les à un rôle : `rbs generate crud <nom> --fields … --role admin` pose le garde à la génération, et `identite.require_role(Role::Admin)?` le pose à la main — voir le guide de l'authentification
+      fermez-les à la main : sur chaque handler, ajoutez le paramètre `identite: Identity`, l'appel `identite.require_role(Role::User)?`, l'entrée `security(("bearer" = []))` et les réponses 401 et 403 de son annotation — un CRUD engendré sous `auth` les reçoit désormais tout seul ; voir le guide de l'authentification
 ```
 
 Le même raisonnement, deux fois. Une API qui écrit sans demander qui appelle est un choix
 légitime — un catalogue public, un service derrière une passerelle qui authentifie déjà —
 et le constat ne peut donc pas être un échec. Et la garde se reconnaît à ce seul appel : un
 projet qui protège ses écritures autrement est nommé ici aussi.
+
+Depuis la 1.3.0, le contrôle a moins à trouver : sur un projet portant `auth`,
+`rbs generate crud` écrit la garde sur chacune des routes qu'il monte. Ce qu'il nomme
+désormais, c'est une feature engendrée avant l'installation d'`auth`, une feature engendrée
+par une version antérieure, ou une feature dont les écritures ont été
+[rouvertes à la main](../guides/auth.md#fermées-par-défaut-à-la-génération). La garde se
+cherche dans le corps de chaque handler d'écriture : le bandeau que porte le contrôleur
+engendré nomme `require_role` sans rien garder, et ne répond pas pour elle.
 
 Le troisième appartient à `disposition`, sur un projet qui porte les deux dispositions
 qu'un fragment peut prendre — un des dix répertoires que `rbs add` posait jadis à la racine
