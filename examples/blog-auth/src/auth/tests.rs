@@ -577,6 +577,27 @@ async fn admin_only_route() -> Router {
         .with_state(AppState::new(db, config).expect("état partagé constructible"))
 }
 
+/// Une route ouverte à tout compte authentifié, montée pour les tests seuls.
+///
+/// C'est la forme que `rbs generate crud` pose par défaut : le seuil le plus bas, qu'un
+/// rôle plus étendu satisfait aussi.
+async fn user_or_above_route() -> Router {
+    async fn restricted(identite: Identity) -> rbs_core::Result<StatusCode> {
+        identite.require_role(Role::User)?;
+
+        Ok(StatusCode::OK)
+    }
+
+    let config = rbs_core::Config::load().expect("configuration lisible");
+    let db = rbs_core::db::connect(&config.database)
+        .await
+        .expect("base joignable");
+
+    Router::new()
+        .route("/ouverte", get(restricted))
+        .with_state(AppState::new(db, config).expect("état partagé constructible"))
+}
+
 fn with_token(methode: &str, chemin: &str, token: &str) -> Request<Body> {
     Request::builder()
         .method(methode)
@@ -594,6 +615,7 @@ fn access_for(paire: &Value) -> String {
         .to_owned()
 }
 
+// region: jeton_admin
 /// Inscrit un compte, le promeut administrateur, et ouvre une session à ce titre.
 ///
 /// La promotion passe par la base : l'inscription rend toujours un `user`, par défaut de
@@ -623,6 +645,7 @@ async fn login_as_admin(api: &Router, db: &DatabaseConnection) -> Value {
 
     paire
 }
+// endregion: jeton_admin
 
 /// Sans jeton, la réponse dit « identifie-toi », et non « tu n'as pas le droit ».
 ///
@@ -670,6 +693,31 @@ async fn an_admin_on_the_same_route_returns_200() {
     .await;
 
     assert_eq!(status, StatusCode::OK, "{body}");
+}
+
+/// Un administrateur traverse une garde posée sur `User`.
+///
+/// C'est ce que le seuil promet, et ce qu'une égalité stricte refuserait — le cas est
+/// exactement celui de toute route générée par `rbs generate crud` sous `auth`.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_admin_satisfies_a_user_requirement() {
+    let api = application().await;
+    let db = connection().await;
+    let restricted = user_or_above_route().await;
+    let paire = login_as_admin(&api, &db).await;
+
+    let (status, body) = call(
+        &restricted,
+        with_token("GET", "/ouverte", &access_for(&paire)),
+    )
+    .await;
+
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "un admin doit satisfaire une exigence User : {body}"
+    );
 }
 
 #[tokio::test]

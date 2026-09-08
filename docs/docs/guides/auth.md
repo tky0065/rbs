@@ -175,24 +175,24 @@ public catalogue is a legitimate design, and the command still exits 0.
 
 **No route grants a role.** Registration always produces a `user`, by table default, and
 promotion goes through the database. That is deliberate: an HTTP route that hands out
-`admin` is a route someone will eventually reach. The example's test suite promotes an
-account exactly this way, and only then logs in — a token minted before the promotion
-would carry the old role:
+`admin` is a route someone will eventually reach. The generated `src/auth/tests.rs`
+promotes an account exactly this way, and only then logs in — a token minted before the
+promotion would carry the old role:
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=jeton_admin
+```rust file=examples/blog-auth/src/auth/tests.rs region=jeton_admin
 ```
 
 ## Testing a protected route
 
-Tests present a token rather than building a signed request from scratch. Signing an
-already-built request keeps both forms side by side — what is *not* signed in the file is
-what the API leaves open:
+A feature's own tests need no account at all. `Identity` verifies a signature and nothing
+else, so the generated `tests.rs` signs the token it presents, and the file has no row to
+create and none to clean up:
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=signee
+```rust file=examples/blog-auth/src/posts/tests.rs region=jeton
 ```
 
-Three tests are then enough to pin the contract, and the first two must not be allowed to
-collapse into each other:
+Two tests then pin the pair of refusals, and they must not be allowed to collapse into
+each other — the extractor answers before the handler, the guard answers inside it:
 
 ```rust file=examples/blog-auth/src/posts/tests.rs region=refus
 ```

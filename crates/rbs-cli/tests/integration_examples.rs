@@ -20,6 +20,11 @@ struct Exemple {
     features: &'static [&'static str],
     crud: &'static str,
     champs: &'static str,
+    /// `--role` sur `generate crud` : le rôle qu'exigent les écritures.
+    ///
+    /// Seul `blog-auth` le porte — c'est le seul exemple sous `auth`, et l'option refuse
+    /// ailleurs.
+    role: Option<&'static str>,
     /// `--with-upload` sur `generate crud` : engendre les trois routes de contenu binaire.
     ///
     /// Seul `file-drop` le porte — les autres exemples n'ont rien à déposer.
@@ -46,6 +51,7 @@ const EXEMPLES: &[Exemple] = &[
         features: &[],
         crud: "articles",
         champs: "title:string,body:text,published:bool",
+        role: None,
         with_upload: false,
         edite_a_la_main: &[],
         engendre_a_part: &["clients/ts/client.ts"],
@@ -60,12 +66,16 @@ const EXEMPLES: &[Exemple] = &[
         // `mod auth; mod articles;` ferait broncher un `cargo fmt` dans le projet.
         crud: "posts",
         champs: "title:string,body:text,published:bool",
+        // Les lectures restent au seuil que `generate crud` pose seul, les écritures
+        // montent : l'exemple porte les deux régimes, et sa promesse — seul un admin
+        // écrit — n'a plus à être tenue à la main.
+        role: Some("admin"),
         with_upload: false,
-        edite_a_la_main: &[
-            "src/posts/controller.rs",
-            "src/posts/tests.rs",
-            "src/auth/guard.rs",
-        ],
+        // Le contrôleur et la garde en sont sortis : `generate crud` pose lui-même le
+        // `require_role` sous `auth`, et le `#[allow(dead_code)]` que la template porte
+        // reste ici tel quel — le retirer coûtait la surveillance du fichier entier pour
+        // une ligne dont aucune route ne dépend.
+        edite_a_la_main: &["src/posts/tests.rs"],
         engendre_a_part: &[],
     },
     Exemple {
@@ -78,6 +88,7 @@ const EXEMPLES: &[Exemple] = &[
         // `owner_email` finit par `_email` : le DTO généré gagne sa contrainte d'email
         // sans qu'on l'écrive, et le courriel a un destinataire qui vient du modèle.
         champs: "title:string,owner_email:string,content_type:string,size:int",
+        role: None,
         // Les trois routes de contenu binaire, sans quoi elles resteraient écrites à la
         // main alors que c'est précisément ce que ce drapeau produit.
         with_upload: true,
@@ -109,6 +120,7 @@ const EXEMPLES: &[Exemple] = &[
         // `email` seul suffit à la contrainte de validation du DTO : la règle porte sur
         // le nom exact autant que sur le suffixe `_email`.
         champs: "email:string:unique,name:string,confirmed:bool",
+        role: None,
         with_upload: false,
         // Ce que montre cet exemple et qu'aucun autre ne montre : un job enfilé dans la
         // transaction qui l'a motivé. `the_hand_edits_of_newsletter_queue_are_in_place`
@@ -230,6 +242,9 @@ fn generate(parent: &Path, example: &Exemple) -> PathBuf {
         example.champs,
         "--force",
     ];
+    if let Some(role) = example.role {
+        args.extend(["--role", role]);
+    }
     if example.with_upload {
         args.push("--with-upload");
     }
@@ -588,44 +603,51 @@ fn each_example_file_is_tracked_by_git() {
     );
 }
 
-/// Les trois fichiers exclus de la comparaison portent-ils encore ce pour quoi ils le sont ?
+/// Le seul fichier exclu de la comparaison porte-t-il encore ce pour quoi il l'est ?
 ///
-/// `blog-auth` existe pour montrer une ressource protégée. Ses trois éditions à la main
-/// sortent de la comparaison de non-dérive, qui signalerait sinon l'édition elle-même —
-/// et rien, alors, ne verrait un `require_role` disparu au fil d'une régénération.
-/// C'est exactement le mensonge que le fichier voisin sert à empêcher.
+/// `generate crud` pose désormais la garde lui-même : de l'inventaire d'hier il ne reste
+/// que le 403, qu'aucune commande n'engendre — le `tests.rs` généré ne signe qu'un jeton
+/// `admin`, et ne sait donc rien refuser à un rôle trop court. Ce test sorti de la
+/// comparaison, rien ne verrait ce refus disparaître au fil d'une régénération.
 #[test]
 fn the_hand_edits_of_blog_auth_are_in_place() {
     let racine = common::depot().join("examples").join("blog-auth");
-    let lire = |relatif: &str| {
-        std::fs::read_to_string(racine.join(relatif))
-            .unwrap_or_else(|erreur| panic!("{relatif} illisible : {erreur}"))
-    };
+    let tests = std::fs::read_to_string(racine.join("src/posts/tests.rs"))
+        .expect("src/posts/tests.rs lisible");
 
-    let controller = lire("src/posts/controller.rs");
+    assert!(
+        tests.contains("async fn a_non_admin_write_returns_403()"),
+        "`a_non_admin_write_returns_403` a disparu de l'exemple"
+    );
+    assert!(
+        tests.contains(r#"token("user")"#),
+        "le 403 ne prouve le seuil que si la requête présente un jeton d'un rôle plus court"
+    );
+}
+
+/// L'exemple montre-t-il encore les deux régimes que sa promesse annonce ?
+///
+/// Le contrôleur est rentré dans la comparaison, qui le confronte à une génération
+/// fraîche : elle rattraperait une template ayant changé, mais non un `--role admin`
+/// retiré d'`EXEMPLES` — les deux côtés régénéreraient alors des écritures au seuil par
+/// défaut, sans un mot. Or c'est ce seuil relevé que le README promet et que la
+/// documentation cite.
+#[test]
+fn blog_auth_carries_the_two_regimes_of_the_guard() {
+    let racine = common::depot().join("examples").join("blog-auth");
+    let controller = std::fs::read_to_string(racine.join("src/posts/controller.rs"))
+        .expect("src/posts/controller.rs lisible");
+
     assert_eq!(
         controller.matches("require_role(Role::Admin)").count(),
         3,
-        "les trois mutations doivent porter la garde"
+        "les trois écritures doivent exiger `admin`"
     );
-    assert!(
-        !controller.contains("pub async fn list(identite"),
-        "la lecture reste publique : c'est ce qui distingue le 401 de l'extracteur du 403 de la garde"
+    assert_eq!(
+        controller.matches("require_role(Role::User)").count(),
+        3,
+        "les trois lectures — `list`, `filter` et `find` — restent au seuil par défaut"
     );
-
-    let guard = lire("src/auth/guard.rs");
-    assert!(
-        !guard.contains("#[allow(dead_code)]"),
-        "la garde a un appelant ici — le fragment prescrit lui-même de retirer cette ligne"
-    );
-
-    let tests = lire("src/posts/tests.rs");
-    for nom in [
-        "an_anonymous_write_returns_401",
-        "a_non_admin_write_returns_403",
-    ] {
-        assert!(tests.contains(nom), "`{nom}` a disparu de l'exemple");
-    }
 }
 
 fn is_tracked(chemin: &Path) -> bool {

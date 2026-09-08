@@ -180,24 +180,24 @@ un échec : un catalogue public est un choix légitime, et la commande sort touj
 
 **Aucune route ne donne un rôle.** L'inscription rend toujours un `user`, par défaut de la
 table, et la promotion passe par la base. C'est délibéré : une route HTTP qui distribue
-`admin` est une route que quelqu'un finira par atteindre. Les tests de l'exemple
-promeuvent un compte exactement ainsi, et se connectent seulement après — un jeton émis
-avant la promotion porterait l'ancien rôle :
+`admin` est une route que quelqu'un finira par atteindre. Le `src/auth/tests.rs` engendré
+promeut un compte exactement ainsi, et se connecte seulement après — un jeton émis avant la
+promotion porterait l'ancien rôle :
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=jeton_admin
+```rust file=examples/blog-auth/src/auth/tests.rs region=jeton_admin
 ```
 
 ## Tester une route protégée
 
-Les tests présentent un jeton plutôt que de construire une requête signée de zéro. Signer
-une requête déjà construite garde les deux formes sous les yeux — ce qui n'est *pas* signé
-dans le fichier est ce que l'API laisse ouvert :
+Les tests d'une feature n'ont besoin d'aucun compte. `Identity` ne vérifie qu'une
+signature : le `tests.rs` engendré signe le jeton qu'il présente, et le fichier n'a ni
+ligne à créer ni ligne à nettoyer :
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=signee
+```rust file=examples/blog-auth/src/posts/tests.rs region=jeton
 ```
 
-Trois tests suffisent ensuite à tenir le contrat, et il ne faut pas laisser les deux
-premiers se confondre :
+Deux tests tiennent ensuite la paire de refus, et il ne faut pas les laisser se confondre —
+l'extracteur répond avant le handler, la garde répond dedans :
 
 ```rust file=examples/blog-auth/src/posts/tests.rs region=refus
 ```

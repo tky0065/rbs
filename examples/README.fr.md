@@ -9,7 +9,7 @@ lit ces fichiers, et la CI les compile.
 | Projet | Ce qu'il montre |
 |---|---|
 | `hello-crud` | Un projet créé par `rbs new`, avec une feature CRUD engendrée par `rbs generate crud`. |
-| `blog-auth` | Le même, plus `rbs add auth` : des billets que tout le monde peut lire, et que seul un administrateur peut écrire. |
+| `blog-auth` | Le même, plus `rbs add auth` : des billets que tout compte identifié peut lire, et que seul un administrateur peut écrire. |
 | `file-drop` | Les trois features de la v0.3 sur un même projet — `redis`, `mail`, `storage` — câblées dans un CRUD `uploads`. |
 | `newsletter-queue` | `jobs`, `mail` et `observability` : une route de diffusion qui enfile une lettre par abonné confirmé, dans la transaction qui les lit — et un listener `/metrics` à lui. |
 
@@ -46,9 +46,15 @@ cargo run -p rbs-cli --bin rbs -- new blog-auth --yes \
 cd blog-auth && git add -A && git commit -q -m 'projet neuf'
 cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add auth
 cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
-  generate crud posts --fields 'title:string,body:text,published:bool' --force
+  generate crud posts --fields 'title:string,body:text,published:bool' --role admin --force
 cd .. && mv blog-auth examples/blog-auth
 ```
+
+C'est `--role admin` qui fait montrer à cet exemple deux régimes d'un coup. Sur un projet
+portant `auth`, `generate crud` ferme au seuil le plus bas toutes les routes qu'il écrit ;
+le drapeau relève les trois écritures, et elles seules. Le retirer laisserait l'exemple
+protégé, mais protégé pareillement en lecture et en écriture — et sa promesse d'une ligne,
+seul un administrateur écrit, cesserait d'être vraie.
 
 `posts` plutôt qu'`articles`, que `hello-crud` porte déjà : ce qui distingue cet exemple est
 la protection, pas la ressource. Le nom n'a aucune incidence sur l'ordre de l'ancre
@@ -116,27 +122,31 @@ Trois s'appliquent aux quatre projets :
 - restaurer les marqueurs `// region:` que la documentation cite — `# region:` dans un
   TOML ou un YAML, la syntaxe qu'y lit le plugin du site.
 
-`blog-auth` en porte trois de plus, une par fichier, et elles sont tout l'intérêt de
-l'exemple — aucune commande ne câble un garde sur une route que vous avez engendrée :
+`blog-auth` en porte **une** de plus, celle qui reste une fois que `generate crud` écrit
+le garde lui-même. La phrase qui tenait ici — aucune commande ne câble un garde sur une
+route que vous avez engendrée — a cessé d'être vraie en 1.3.0 : sur un projet portant
+`auth`, chaque route que la commande écrit prend une `Identity` et appelle `require_role`,
+et `--role` relève le seuil des écritures. Le contrôleur est donc le fichier engendré tel
+quel, et `src/auth/guard.rs` aussi.
 
-- `src/posts/controller.rs` : `create`, `update` et `delete` prennent un extracteur
-  `Identity` et appellent `identite.require_role(Role::Admin)?` ; leur `#[utoipa::path]`
-  gagne `security(("bearer" = []))` et les réponses 401 et 403. `list` et `find` sont
-  intactes — la lecture reste ouverte.
-- `src/auth/guard.rs` : le `#[allow(dead_code)]` posé sur `RequireRole` a disparu. Le
-  fragment prescrit de le retirer dès qu'une de vos routes appelle le garde, ce qui est
-  exactement le cas ici.
-- `src/posts/tests.rs` : le harnais inscrit un compte, le promeut par la base —
-  l'inscription rend toujours un `user`, et le rôle ne voyage que dans un jeton frappé
-  ensuite — et signe les requêtes qui écrivent. Autour de lui, le fichier engendré est
-  repris de trois façons. Trois tests s'ajoutent : sans jeton → 401, avec un `user` → 403,
-  et la liste qui répond à qui n'a pas de compte. Trois autres sont réécrits plutôt
-  qu'ajoutés — le cycle de vie complet et la route de filtrage, qui créent désormais avec
-  un jeton d'`admin` et relisent sans en présenter aucun, et le 400 du corps illisible,
-  qu'il faut signer puisque `Identity` passe avant l'analyse du corps. Deux disparaissent,
-  `two_creations_in_a_row_carry_increasing_ids` et `an_unknown_sort_column_returns_400` :
-  ni l'un ni l'autre ne dit rien du garde, et `hello-crud` les porte tous deux intacts.
-  Seul `an_unknown_id_returns_404` subsiste tel qu'il a été engendré.
+- `src/posts/tests.rs` : un test s'ajoute, `a_non_admin_write_returns_403`. Le fichier
+  engendré signe un jeton `admin` pour tout ce qu'il envoie : il prouve la 401 que reçoit
+  un anonyme et rien du seuil lui-même ; c'est de présenter un jeton `user` qui sépare les
+  deux refus — 403 sur `POST /posts`, 200 sur `GET /posts` avec ce même jeton. Rien
+  d'autre n'est retouché : le harnais, le cycle de vie, le filtre et le 404 sont tels
+  qu'ils ont été engendrés.
+
+Deux entrées qui figuraient ici ont disparu, et c'est leur absence qui compte :
+
+- le garde posé sur le contrôleur, qu'écrit désormais `generate crud` — voir le bloc plus
+  haut ;
+- le retrait du `#[allow(dead_code)]` sur `RequireRole`, dans `src/auth/guard.rs`. Le
+  fragment le porte toujours, délibérément : un projet qui installe `auth` sans engendrer
+  le moindre CRUD compile sous `clippy -D warnings`, et le trait y serait du code mort.
+  Garder ce retrait coûtait à la comparaison de non-dérive sa surveillance du fichier
+  entier — c'est exactement ainsi que la réécriture du garde en seuil est passée sous le
+  test sans être vue — en échange d'une ligne dont aucune route ne dépend. L'exemple prend
+  désormais le fichier tel qu'il est engendré.
 
 `file-drop` en porte huit de plus. `--with-upload` sur `generate crud` écrit désormais les
 trois handlers de contenu eux-mêmes — `PUT`, `GET` et `HEAD` sur `/uploads/{id}/content`,
@@ -227,10 +237,15 @@ ci-dessus. Il échoue quand une template change sans que l'exemple ait suivi —
 son intérêt : un exemple périmé fait mentir la documentation, et rien d'autre ne s'en
 apercevrait.
 
-Les trois fichiers de `blog-auth` retouchés à la main sont exclus de cette comparaison octet
-à octet, qui signalerait sinon la retouche elle-même. Ce qu'ils portent est attesté à part,
-par `the_hand_edits_of_blog_auth_are_in_place` — sans lui, la liste d'exclusion serait une
+Le seul fichier de `blog-auth` retouché à la main est exclu de cette comparaison octet à
+octet, qui signalerait sinon la retouche elle-même. Ce qu'il porte est attesté à part, par
+`the_hand_edits_of_blog_auth_are_in_place` — sans lui, la liste d'exclusion serait une
 porte ouverte sur la dérive même qu'elle existe pour déclarer.
+
+La comparaison a son propre angle mort sur les arguments qu'elle rejoue : retirez `--role
+admin` d'`EXEMPLES` et les deux côtés régénèrent des écritures au seuil par défaut, sans un
+mot. C'est `blog_auth_carries_the_two_regimes_of_the_guard` qui en répond — il compte trois
+`Role::Admin` et trois `Role::User` dans le contrôleur engendré.
 
 ## Un piège à connaître
 
