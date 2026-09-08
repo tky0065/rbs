@@ -898,10 +898,9 @@ mod tests {
         );
     }
 
-    /// Les tests engendrés s'exécutent sans jeton : ceux qui écrivent ne peuvent pas
-    /// rester tels quels sous un garde, sans quoi `cargo test` échoue sur le projet neuf.
+    /// Les tests engendrés exercent le cycle complet malgré la garde : le harnais signe.
     #[test]
-    fn the_generated_tests_stop_writing_once_the_feature_is_guarded() {
+    fn the_generated_tests_keep_writing_under_a_guard() {
         let (_parent, root) = project_with_auth();
 
         run(&guarded(&root, "articles", "admin")).expect("la génération doit aboutir");
@@ -909,12 +908,12 @@ mod tests {
         let tests = read(&root.join("src/articles/tests.rs"));
 
         assert!(
-            !tests.contains("the_full_lifecycle_goes_through_the_api"),
-            "le cycle complet POSTe sans jeton :\n{tests}"
+            tests.contains("the_full_lifecycle_goes_through_the_api"),
+            "le cycle complet doit rester exercé :\n{tests}"
         );
         assert!(
-            tests.contains("StatusCode::UNAUTHORIZED"),
-            "le refus d'une écriture anonyme doit être éprouvé à la place :\n{tests}"
+            tests.contains("an_anonymous_request_returns_401"),
+            "le refus sans jeton doit être éprouvé :\n{tests}"
         );
     }
 

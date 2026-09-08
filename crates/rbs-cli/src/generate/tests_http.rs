@@ -23,12 +23,15 @@ const TESTS: &str = include_str!(concat!(
 /// première exécution. Le fichier garde ce qui ne crée rien, et dit ce qui manque — le
 /// seed s'écarte entièrement pour la même raison.
 ///
-/// Un garde de rôle les écarte de même : ces scénarios n'émettent aucun jeton, et le
-/// projet neuf échouerait à son propre `cargo test`. Le fichier éprouve alors le refus
-/// d'une écriture anonyme, qui est ce que le garde promet.
+/// Un garde de rôle ne les écarte plus : sous `auth`, le harnais signe son propre jeton et
+/// le cycle complet reste exercé quel que soit le rôle exigé. Le fichier éprouve en plus
+/// le refus d'une requête anonyme, qui est ce que le garde promet.
 pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
     let blocking = feature.required_reference();
-    let creatable = blocking.is_none() && feature.role.is_none();
+    // Le rôle n'écarte plus rien : le harnais signe son jeton, et une écriture gardée
+    // s'exerce comme les autres. Seule une référence requise reste bloquante — le
+    // fichier ne sait pas quelle ligne cible désigner.
+    let creatable = blocking.is_none();
     // Sans création, aucun champ n'est envoyé ni comparé : les aides qui les servent
     // resteraient inutilisées, et le projet engendré ne compile pas sous `-D warnings`.
     let sent: &[Field] = if creatable { &feature.fields } else { &[] };
@@ -40,6 +43,9 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
             module => feature.module(),
             creatable,
             role => feature.role,
+            auth => feature.auth,
+            // Le rôle que le harnais signe, tel qu'il s'écrit en base.
+            signed_role => feature.role_value.clone().unwrap_or_else(|| "user".to_string()),
             blocking_reference => blocking.map(|field| field.relation_name()),
             fields => fields,
             compared => names(sent, |champ| !timestamp(champ)),
@@ -176,6 +182,53 @@ mod tests {
     fn trials(name: &str, fields: &str) -> String {
         let fields = fields::parse(fields).expect("champs valides");
         render(&Feature::fresh(name, fields)).expect("les tests doivent se rendre")
+    }
+
+    /// Sous `auth`, le harnais signe son propre jeton et les scénarios qui écrivent
+    /// restent rendus : un fichier réduit aux refus perdrait tout ce qu'il éprouvait.
+    #[test]
+    fn under_auth_the_harness_signs_its_own_token() {
+        let fields = fields::parse("title:string").expect("champs valides");
+        let rendered = render(&Feature::fresh("articles", fields).authenticated())
+            .expect("les tests doivent se rendre");
+
+        assert!(
+            rendered.contains("fn token(role: &str) -> String"),
+            "le harnais doit savoir signer un jeton :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("rbs_core::jwt::sign"),
+            "le jeton se signe par le noyau, sans passer par la base :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("the_full_lifecycle_goes_through_the_api"),
+            "le cycle complet doit rester exercé sous auth :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("an_anonymous_request_returns_401"),
+            "le refus sans jeton doit être éprouvé :\n{rendered}"
+        );
+        assert!(
+            !rendered.contains("POST /auth/login"),
+            "le renoncement doit avoir disparu :\n{rendered}"
+        );
+    }
+
+    /// Le rôle signé est celui que le contrôleur exige.
+    #[test]
+    fn the_signed_role_matches_the_one_the_controller_requires() {
+        let fields = fields::parse("title:string").expect("champs valides");
+        let rendered = render(
+            &Feature::fresh("articles", fields)
+                .authenticated()
+                .guarded("admin"),
+        )
+        .expect("les tests doivent se rendre");
+
+        assert!(
+            rendered.contains(r#"token("admin")"#),
+            "les écritures gardées exigent un jeton du rôle demandé :\n{rendered}"
+        );
     }
 
     /// Trois bascules traversent ce fichier, toutes régies par les soixante colonnes de
