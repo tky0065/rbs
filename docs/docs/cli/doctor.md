@@ -91,7 +91,7 @@ The second warning belongs to `gardes`, and only exists on a project carrying
 
 ```text
   ! gardes      écritures anonymes : articles, comments
-      réservez-les à un rôle : `rbs generate crud <nom> --fields … --role admin` pose le garde à la génération, et `identite.require_role(Role::Admin)?` le pose à la main — voir le guide de l'authentification
+      fermez-les à la main : sur chaque handler, ajoutez le paramètre `identite: Identity`, l'appel `identite.require_role(Role::User)?`, l'entrée `security(("bearer" = []))` et les réponses 401 et 403 de son annotation — un CRUD engendré sous `auth` les reçoit désormais tout seul ; voir le guide de l'authentification
 ```
 
 Same reasoning, twice over. An API that writes without asking who is calling is a

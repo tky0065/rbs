@@ -132,7 +132,8 @@ the extractor that turns a bearer token into a caller:
 A trait rather than a layer, because `from_fn_with_state` takes no extra parameter: a
 per-role layer would freeze the `Role` enum that the migration was designed to leave open.
 
-Calling it is one line at the top of a handler:
+Calling it is one line at the top of a handler — here `blog-auth`'s `create`, generated
+with `--role admin`, which is why it names `Role::Admin` and not the default `Role::User`:
 
 ```rust file=examples/blog-auth/src/posts/controller.rs region=create
 ```
@@ -181,10 +182,11 @@ back.
 The generated `tests.rs` follows. It signs the token it presents with `rbs_core::jwt::sign`
 — `Identity` verifies a signature and nothing else, so there is no account to create — and
 exercises the full write cycle with it. Two of its tests present no token at all, one write
-and one read, and pin the 401 that both are answered.
+and one read, and pin the 401 that answers both.
 
 A CRUD generated *before* `auth` was installed stays open, because the CLI rewrites no file
-it has already written. `rbs add auth` therefore names those features while it plans, and
+it has already written. `rbs add auth` therefore names those features in its closing output,
+once the feature is installed — a `--dry-run` writes nothing and prints nothing of it — and
 closing one is the same four elements added back by hand.
 
 [`rbs doctor`](../cli/doctor.md) still reports in orange, on a project carrying `auth`, any

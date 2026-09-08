@@ -157,7 +157,7 @@ pub enum GenerateCommands {
         #[arg(long = "has-many", value_name = "ENTITE")]
         has_many: Vec<String>,
 
-        /// Réserve les écritures à ce rôle ; exige la feature auth.
+        /// Relève à ce rôle le seuil des écritures ; exige la feature auth.
         #[arg(long, value_name = "ROLE")]
         role: Option<String>,
 

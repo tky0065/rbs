@@ -35,8 +35,8 @@ dépréciation.
   projet portant `auth`, et là seulement. Deux conséquences pour un projet existant, puisque
   `rbs` ne réécrit aucun fichier qu'il a déjà écrit : un CRUD engendré avant cette version
   reste grand ouvert, y compris sur un projet qui installe `auth` ensuite, et `rbs add auth`
-  nomme donc au moment de planifier les features restées publiques, pour qu'on sache
-  lesquelles fermer à la main.
+  nomme donc en fin de sortie, une fois la feature installée, les features restées
+  publiques, pour qu'on sache lesquelles fermer à la main.
 - **`require_role` compare un seuil plutôt qu'une égalité.** Elle laisse passer dès que le
   rôle porté est supérieur ou égal au rôle exigé (`porte >= minimum`), si bien qu'un `Admin`
   satisfait un `require_role(Role::User)` ; sans quoi le `Role::User` qu'un CRUD engendré

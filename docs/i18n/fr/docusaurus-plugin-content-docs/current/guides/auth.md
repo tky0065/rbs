@@ -136,7 +136,8 @@ Un trait plutôt qu'un layer, parce que `from_fn_with_state` n'accepte pas de pa
 supplémentaire : un layer par rôle figerait l'enum `Role` que la migration a justement
 laissée ouverte.
 
-L'appeler tient en une ligne, en tête d'un handler :
+L'appeler tient en une ligne, en tête d'un handler — ici le `create` de `blog-auth`,
+engendré avec `--role admin`, d'où le `Role::Admin` plutôt que le `Role::User` par défaut :
 
 ```rust file=examples/blog-auth/src/posts/controller.rs region=create
 ```
@@ -188,8 +189,9 @@ lui le cycle d'écriture complet. Deux de ses tests ne présentent aucun jeton, 
 et une lecture, et tiennent la 401 que l'une et l'autre reçoivent.
 
 Un CRUD engendré *avant* l'installation d'`auth` reste ouvert, car le CLI ne réécrit aucun
-fichier qu'il a déjà écrit. `rbs add auth` nomme donc ces features au moment de planifier,
-et en fermer une revient à remettre à la main les quatre mêmes éléments.
+fichier qu'il a déjà écrit. `rbs add auth` nomme donc ces features en fin de sortie, une
+fois la feature installée — un `--dry-run` n'écrit rien et n'en affiche rien —, et en fermer
+une revient à remettre à la main les quatre mêmes éléments.
 
 [`rbs doctor`](../cli/doctor.md) signale toujours en orange, sur un projet portant `auth`,
 toute feature dont `create`, `update` ou `delete` n'appelle aucune garde — mais sur un

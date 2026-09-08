@@ -57,9 +57,10 @@ pub(crate) fn check(root: &Path) -> Check {
     Check::warned(
         TITRE,
         format!("écritures anonymes : {}", anonymes.join(", ")),
-        "réservez-les à un rôle : `rbs generate crud <nom> --fields … --role admin` pose le \
-         garde à la génération, et `identite.require_role(Role::Admin)?` le pose à la main — \
-         voir le guide de l'authentification",
+        "fermez-les à la main : sur chaque handler, ajoutez le paramètre `identite: Identity`, \
+         l'appel `identite.require_role(Role::User)?`, l'entrée `security((\"bearer\" = []))` et \
+         les réponses 401 et 403 de son annotation — un CRUD engendré sous `auth` les reçoit \
+         désormais tout seul ; voir le guide de l'authentification",
     )
 }
 
@@ -106,8 +107,8 @@ mod tests {
             check.detail
         );
         assert!(
-            check.remedy.unwrap_or_default().contains("--role"),
-            "le remède doit nommer l'option qui pose le garde"
+            check.remedy.unwrap_or_default().contains("require_role"),
+            "le remède doit nommer l'appel qui ferme la route"
         );
     }
 

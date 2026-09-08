@@ -28,13 +28,14 @@ between minor versions with no deprecation cycle.
   from its annotation. The generated `tests.rs` follows — it signs the token it presents
   with `rbs_core::jwt::sign`, needing no account, exercises the whole write cycle with it,
   and adds two tests that present nothing at all, one write and one read, to pin the 401
-  both are answered. A project **without** `auth` generates exactly what it generated
+  that answers both. A project **without** `auth` generates exactly what it generated
   before, byte for byte; anything that compares the output of `rbs generate crud` against
   a stored reference will go red on a project carrying `auth`, and only there. Two
   consequences for an existing project, since `rbs` rewrites no file it has already
   written: a CRUD generated before this version stays wide open, including on a project
   that installs `auth` afterwards, and `rbs add auth` therefore names those still-public
-  features while it plans, so that you know which ones to close by hand.
+  features in its closing output, once the feature is installed, so that you know which ones
+  to close by hand.
 - **`require_role` compares a threshold instead of an equality.** It lets the call through
   as soon as the caller's role is greater than or equal to the one required
   (`porte >= minimum`), so an `Admin` satisfies a `require_role(Role::User)`; without that,

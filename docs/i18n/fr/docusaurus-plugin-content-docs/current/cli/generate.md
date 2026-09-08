@@ -60,7 +60,7 @@ Options:
       --force              Écrit même si le working tree Git est sale
       --dry-run            Affiche le plan sans rien écrire
       --has-many <ENTITE>  Entité enfant dont ce modèle doit porter la variante inverse, répétable
-      --role <ROLE>        Réserve les écritures à ce rôle ; exige la feature auth
+      --role <ROLE>        Relève à ce rôle le seuil des écritures ; exige la feature auth
       --soft-delete        Rend le DELETE logique : la ligne reste, marquée d'une date de suppression
       --with-upload        Ajoute trois routes de contenu binaire ; exige la feature storage
   -h, --help               Print help
@@ -75,7 +75,7 @@ Options:
 | `--has-many <ENTITE>` | Répare le côté lointain d'une relation : écrit dans le modèle d'une feature déjà générée la variante `has_many` qui vise l'enfant nommé, et rien d'autre. Répétable. [Le guide des relations](../guides/relations.md) dit quand c'est nécessaire. |
 | `--role <ROLE>` | Relève le seuil des écritures — `create`, `update`, `delete`, et le `PUT` de la route de contenu quand `--with-upload` l'accompagne — à ce rôle plutôt qu'au `Role::User` par défaut. Il n'ouvre ni ne ferme rien : sur un projet portant `auth`, *toutes* les routes engendrées prennent déjà une `Identity` et appellent `require_role`, et les lectures (`list`, `find`, `filter`, et les `GET` et `HEAD` de la route de contenu) gardent simplement le seuil par défaut. Exige la feature [`auth`](../guides/auth.md), et un rôle que son enum `Role` déclare — les deux sont vérifiés avant toute écriture. [Le guide de l'authentification](../guides/auth.md#fermées-par-défaut-à-la-génération) dit ce qu'il faut retirer pour rouvrir une route. |
 | `--soft-delete` | Rend `DELETE` logique plutôt que de retirer la ligne. Le contrat HTTP ne change pas, et la contrainte d'un champ `unique` se restreint aux lignes vivantes — sur MySQL elle reste globale, si bien qu'une valeur supprimée y reste réservée. [Le guide des migrations](../guides/migrations.md#suppression-logique) a le reste. |
-| `--with-upload` | Monte trois routes sur `/<ressource>/{id}/content` — `PUT`, `GET`, `HEAD` — contre le trait du fragment `storage`. Exige la feature [`storage`](../guides/storage.md), vérifiée avant toute écriture. Avec `--role`, le `PUT` est gardé comme les autres écritures ; avec `--soft-delete`, le contenu survit à la ligne que le `DELETE` se contente d'estampiller. [Le guide du stockage](../guides/storage.md#les-routes-de-contenu-engendrées) a les deux. |
+| `--with-upload` | Monte trois routes sur `/<ressource>/{id}/content` — `PUT`, `GET`, `HEAD` — contre le trait du fragment `storage`. Exige la feature [`storage`](../guides/storage.md), vérifiée avant toute écriture. Avec `--role`, le `PUT` rejoint les écritures dont le drapeau relève le seuil ; avec `--soft-delete`, le contenu survit à la ligne que le `DELETE` se contente d'estampiller. [Le guide du stockage](../guides/storage.md#les-routes-de-contenu-engendrées) a les deux. |
 
 ## `rbs generate feature`
 
