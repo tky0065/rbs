@@ -22,6 +22,7 @@ struct FilterField {
     name: String,
     pascal_name: String,
     operator: String,
+    schema: &'static str,
     textual: bool,
 }
 
@@ -35,17 +36,12 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
         .collect::<Vec<_>>()
         .join(", ");
 
-    // Sans champ textuel, `TextMatchSchema` ne serait cité nulle part : un `use` qui ne
-    // sert pas est une erreur dans le projet engendré, qui compile sous `-D warnings`.
-    let textuels = fields.iter().any(|field| field.textual);
-
     Renderer::new().render(
         FILTER,
         context! {
             entity => feature.entity(),
             fields => fields,
             colonnes => colonnes,
-            textuels => textuels,
         },
     )
 }
@@ -60,7 +56,28 @@ fn champ(field: &Field) -> FilterField {
             true => "TextMatch".to_owned(),
             false => format!("Comparison<{}>", scalar_type(field)),
         },
+        schema: schema(field),
         textual,
+    }
+}
+
+/// Le schéma qui décrit la colonne dans le document OpenAPI.
+///
+/// Un schéma par type, et non un seul portant une valeur libre : c'est ce qui fait écrire
+/// `"published": true` au document plutôt que `"published": "string"`, et ce qui y nomme la
+/// forme courte à côté des opérateurs.
+fn schema(field: &Field) -> &'static str {
+    if field.reference().is_some() {
+        return "UuidComparisonSchema";
+    }
+
+    match field.column_type() {
+        FieldType::String | FieldType::Text => "TextMatchSchema",
+        FieldType::Int => "IntComparisonSchema",
+        FieldType::Float => "FloatComparisonSchema",
+        FieldType::Bool => "BoolComparisonSchema",
+        FieldType::Uuid => "UuidComparisonSchema",
+        FieldType::Datetime => "DateTimeComparisonSchema",
     }
 }
 
@@ -119,11 +136,11 @@ mod tests {
         }
     }
 
-    /// Les conditions ne sont plus un objet libre : le document nomme les opérateurs, et
-    /// c'est le noyau qui en porte le schéma — un `Comparison<T>` générique n'en dérive
-    /// pas.
+    /// Chaque condition cite le schéma du type de sa colonne, et non un schéma unique
+    /// portant une valeur libre : c'est ce qui fait écrire « published: true » au document
+    /// plutôt que « published: "string" », et ce qui y nomme la forme courte.
     #[test]
-    fn each_condition_cites_the_schema_of_its_operator() {
+    fn each_condition_cites_the_schema_of_its_column_type() {
         let rendered = filtre("articles", CHAMPS);
 
         assert!(
@@ -131,18 +148,52 @@ mod tests {
             "l'objet libre subsiste :\n{rendered}"
         );
         for champ in [
-            "#[schema(value_type = ComparisonSchema)]\n    pub id:",
-            "#[schema(value_type = TextMatchSchema)]\n    pub title:",
-            "#[schema(value_type = ComparisonSchema)]\n    pub views:",
+            "#[schema(value_type = Option<rbs_core::UuidComparisonSchema>)]\n    pub id:",
+            "#[schema(value_type = Option<rbs_core::DateTimeComparisonSchema>)]\n    pub created_at:",
+            "#[schema(value_type = Option<rbs_core::TextMatchSchema>)]\n    pub title:",
+            "#[schema(value_type = Option<rbs_core::IntComparisonSchema>)]\n    pub views:",
+            "#[schema(value_type = Option<rbs_core::BoolComparisonSchema>)]\n    pub published:",
+            "#[schema(value_type = Option<rbs_core::UuidComparisonSchema>)]\n    pub author_id:",
+            "#[schema(value_type = Option<rbs_core::DateTimeComparisonSchema>)]\n    pub published_at:",
         ] {
             assert!(rendered.contains(champ), "« {champ} » absent :\n{rendered}");
         }
     }
 
-    /// Une entité sans colonne textuelle ne cite jamais `TextMatchSchema` : l'importer
-    /// quand même ferait échouer la compilation du projet, qui bâtit sous `-D warnings`.
+    /// Aucune colonne n'est exigée du client : `value_type` écrase l'`Option` du champ, et
+    /// un filtre dont le document réclamerait toutes les colonnes ferait refuser par un
+    /// validateur le corps le plus courant — celui qui n'en porte qu'une.
     #[test]
-    fn an_entity_without_text_does_not_import_the_text_schema() {
+    fn no_column_is_required_of_a_client() {
+        let rendered = filtre("articles", CHAMPS);
+
+        for annotation in rendered.lines().filter(|ligne| ligne.contains("#[schema(")) {
+            assert!(
+                annotation.contains("value_type = Option<"),
+                "« {annotation} » rend sa colonne obligatoire :\n{rendered}"
+            );
+        }
+    }
+
+    /// Une colonne décimale a son propre schéma : `float` est le seul type de `--fields`
+    /// que `CHAMPS` ne porte pas, et un type sans schéma serait une erreur de compilation
+    /// dans le projet engendré.
+    #[test]
+    fn a_decimal_column_cites_the_decimal_schema() {
+        let rendered = filtre("meters", "ratio:float");
+
+        assert!(
+            rendered.contains(
+                "#[schema(value_type = Option<rbs_core::FloatComparisonSchema>)]\n    pub ratio:"
+            ),
+            "le schéma décimal manque :\n{rendered}"
+        );
+    }
+
+    /// Une entité sans colonne textuelle ne cite jamais le schéma textuel : le document
+    /// n'y offrirait la sous-chaîne sur aucune colonne qui l'accepte.
+    #[test]
+    fn an_entity_without_text_does_not_cite_the_text_schema() {
         let rendered = filtre("meters", "views:int,published:bool");
 
         assert!(
@@ -150,8 +201,8 @@ mod tests {
             "le schéma textuel est cité sans servir :\n{rendered}"
         );
         assert!(
-            rendered.contains("ComparisonSchema"),
-            "le schéma des comparaisons doit rester :\n{rendered}"
+            rendered.contains("use rbs_core::{Comparison, Error, Result, Sort, TextMatch};"),
+            "l'import du noyau a changé de forme :\n{rendered}"
         );
     }
 

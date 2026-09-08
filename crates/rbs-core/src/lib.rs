@@ -58,7 +58,11 @@ pub use error::{Error, Result};
 #[cfg(feature = "auth")]
 pub use extract::Identity;
 pub use extract::ValidatedJson;
-pub use filter::{Comparison, ComparisonSchema, Sort, SortKey, TextMatch, TextMatchSchema};
+pub use filter::schema::{
+    BoolComparisonSchema, ComparisonSchema, DateTimeComparisonSchema, FloatComparisonSchema,
+    IntComparisonSchema, TextMatchSchema, UuidComparisonSchema,
+};
+pub use filter::{Comparison, Sort, SortKey, TextMatch};
 pub use openapi::{CommonResponses, ProblemDetails};
 pub use pagination::{Cursor, CursorPage, Page, Pagination};
 #[cfg(feature = "auth")]

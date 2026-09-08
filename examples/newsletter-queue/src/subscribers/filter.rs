@@ -1,4 +1,4 @@
-use rbs_core::{Comparison, ComparisonSchema, Error, Result, Sort, TextMatch, TextMatchSchema};
+use rbs_core::{Comparison, Error, Result, Sort, TextMatch};
 use sea_orm::prelude::{DateTimeUtc, Uuid};
 use sea_orm::{ColumnTrait, Condition, QueryFilter, QueryOrder, Select, Value};
 use serde::Deserialize;
@@ -10,24 +10,26 @@ use super::model::{Column, Entity};
 // parcourt la table. Ajoutez « index » au champ dans `--fields` si la table grandit.
 #[derive(Debug, Default, Deserialize, ToSchema)]
 pub struct SubscriberFilter {
-    // Chaque condition est décrite par le schéma que le noyau en donne : utoipa ne sait
-    // pas décrire un générique dont le paramètre n'implémente pas `ToSchema`, et un objet
-    // libre ne nommerait aucun opérateur. Les opérateurs acceptés sont `eq`, `gt`, `gte`,
-    // `lt`, `lte` et `is_null` ; une valeur nue vaut `eq`.
-    #[schema(value_type = ComparisonSchema)]
+    // Chaque condition est décrite par le schéma que le noyau donne au type de la
+    // colonne : utoipa ne sait pas décrire un générique dont le paramètre n'implémente pas
+    // `ToSchema`. Ces schémas nomment les deux formes qu'une condition accepte — la valeur
+    // nue, qui vaut `eq`, et l'objet qui nomme ses opérateurs. L'`Option` est répétée dans
+    // l'annotation : `value_type` remplace le type du champ, et le document exigerait
+    // sinon toutes les colonnes d'un corps qui n'en porte qu'une.
+    #[schema(value_type = Option<rbs_core::UuidComparisonSchema>)]
     pub id: Option<Comparison<Uuid>>,
-    #[schema(value_type = ComparisonSchema)]
+    #[schema(value_type = Option<rbs_core::DateTimeComparisonSchema>)]
     pub created_at: Option<Comparison<DateTimeUtc>>,
-    #[schema(value_type = ComparisonSchema)]
+    #[schema(value_type = Option<rbs_core::DateTimeComparisonSchema>)]
     pub updated_at: Option<Comparison<DateTimeUtc>>,
-    #[schema(value_type = TextMatchSchema)]
+    #[schema(value_type = Option<rbs_core::TextMatchSchema>)]
     pub email: Option<TextMatch>,
-    #[schema(value_type = TextMatchSchema)]
+    #[schema(value_type = Option<rbs_core::TextMatchSchema>)]
     pub name: Option<TextMatch>,
-    #[schema(value_type = ComparisonSchema)]
+    #[schema(value_type = Option<rbs_core::BoolComparisonSchema>)]
     pub confirmed: Option<Comparison<bool>>,
     /// Colonnes de tri, préfixées de `-` pour l'ordre décroissant.
-    #[schema(value_type = Vec<String>)]
+    #[schema(value_type = Option<Vec<String>>)]
     pub sort: Option<Sort>,
 }
 

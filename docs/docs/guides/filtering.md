@@ -45,6 +45,13 @@ the same thing, and the short form is the one you write most often.
 with its default collation. `ILIKE` would settle it, but sea-orm only exposes it through
 `PgExpr`, and rbs generates for MySQL and SQLite too.
 
+## Swagger says both forms
+
+No column is required: a body naming one condition is a valid body, and the one naming
+none is the whole list. Each column is documented as a `oneOf` — the bare value first,
+typed by the column, then the object naming its operators — so `/docs` offers you
+`{ "published": true }` rather than an object of `"string"` on every column.
+
 ## Sorting
 
 `sort` is a list of column names, `-` prefixing the descending ones. Without it the order
