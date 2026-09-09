@@ -161,6 +161,16 @@ verification_ttl_secs = 86400   # un jour : la vérification ne l'est pas
 app_url = "http://localhost:3000"
 ```
 
+Ces trois clés se lisent dans le projet, pas dans le noyau. `rbs_core::config::AuthConfig`
+est `#[non_exhaustive]` et ignore les clés qu'il ne connaît pas : il continuera de rendre
+`secret`, `access_ttl_secs` et `refresh_ttl_secs` sans rien savoir des trois autres. Le
+fragment dépose donc `src/auth/config.rs`, une `FlowConfig` lue par
+`rbs_core::config::section::<FlowConfig>("auth")` — exactement ce que `mail` fait déjà avec
+sa `MailConfig`, qui vit dans le projet et non dans le noyau. Elle est construite une fois
+au démarrage et portée par `AppState`, par les ancres `state_champs` et `state_init` que le
+fragment `auth` ne touchait pas encore. C'est ce qui garde la frontière noyau / généré où
+elle est : ces trois valeurs sont des réglages de produit, pas de runtime.
+
 `app_url` pointe vers l'application du client et non vers le serveur : rbs engendre une
 API, et le lien du courriel mène à l'écran qui postera le jeton. Les gabarits rendent
 `{{ app_url }}/reset-password?token=…` et `{{ app_url }}/verify-email?token=…`.
