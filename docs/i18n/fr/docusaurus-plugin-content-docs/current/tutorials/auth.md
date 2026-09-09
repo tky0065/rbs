@@ -155,6 +155,10 @@ cargo run
 INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
 
+Un démarrage propre ici prouve que le binaire compile désormais `auth` et la garde
+`--role admin` sur `posts` dans un seul routeur — si l'un des deux avait été mal câblé,
+cette ligne ne se serait jamais affichée.
+
 ## Vérifier
 
 Depuis le second terminal, créez un compte et échangez-le contre un jeton :

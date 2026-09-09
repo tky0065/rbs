@@ -153,6 +153,10 @@ cargo run
 INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
 
+A clean start here is proof the binary now compiles both `auth` and the `--role
+admin` guard on `posts` into one router — if either had been wired wrong, this line
+would never have printed.
+
 ## Verify
 
 From the second terminal, create an account and exchange it for a token:
