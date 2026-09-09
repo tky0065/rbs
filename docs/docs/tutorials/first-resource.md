@@ -183,3 +183,5 @@ layer these seven files land in, including the two this page never opened —
   the harness it runs against.
 - [Architecture](../architecture.md) maps every file `rbs generate crud` just wrote to
   the layer it belongs to.
+- [Locking the API down](./auth.md) is the next tutorial: closing `demo` to everyone it
+  doesn't know, with a write only an administrator may make on a second resource.

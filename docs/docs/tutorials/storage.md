@@ -274,3 +274,5 @@ would be thrown away.
   how it combines with `--role` and `--soft-delete`.
 - [Testing](../guides/testing.md) is the harness `uploads/tests.rs` runs against, and
   the `storage` fragment's own `round` test this page's extracts never open.
+- [Sending mail](./mail.md) is the next tutorial: the moment this page's deposit
+  succeeds, its owner gets a mail confirming it.

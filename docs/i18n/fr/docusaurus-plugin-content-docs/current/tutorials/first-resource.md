@@ -189,3 +189,6 @@ y compris les deux que cette page n'a jamais ouverts — `service.rs` et `filter
   et le harnais contre lequel il tourne.
 - [Architecture](../architecture.md) place chaque fichier que `rbs generate crud` vient
   d'écrire dans la couche à laquelle il appartient.
+- [Fermer l'API aux inconnus](./auth.md) est le tutoriel suivant : fermer `demo` à qui
+  il ne connaît pas, avec une écriture que seul un administrateur peut faire sur une
+  seconde ressource.

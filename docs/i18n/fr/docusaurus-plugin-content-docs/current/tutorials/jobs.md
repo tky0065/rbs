@@ -165,3 +165,5 @@ perdre ou dupliquer, en bloc.
   encore installer, `jobs` désormais dessus.
 - [Tests](../guides/testing.md) est le harnais contre lequel `jobs/tests.rs` engendré
   tourne, et ce que `-- --ignored` atteint qu'un simple `cargo test` n'atteint pas.
+- [Voir ce que fait l'API](./observability.md) est le tutoriel suivant : une route est
+  devenue lente, et `/metrics` dit enfin depuis quand.

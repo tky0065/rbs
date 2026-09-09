@@ -290,3 +290,5 @@ même.
   route](../guides/auth.md#fermées-par-défaut-à-la-génération).
 - [Tests](../guides/testing.md) est le harnais contre lequel `posts/tests.rs` tourne, le
   même que le troisième extrait de cette page étend à la main.
+- [Recevoir un fichier](./storage.md) est le tutoriel suivant : un client dépose un
+  fichier, et `PUT /uploads/{id}/content` le range.

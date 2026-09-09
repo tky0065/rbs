@@ -121,3 +121,6 @@ exactement à cet état.
   base de données existante, ou un projet sans serveur à démarrer.
 - [`rbs migrate`](../cli/migrate.md) couvre `down` et `status`, les deux commandes que
   cette page n'a pas encore eu besoin d'employer.
+- [Votre première ressource](./first-resource.md) est le tutoriel suivant :
+  `rbs generate crud` transforme une déclaration `--fields` en entité, sa migration, et
+  chaque couche entre les deux.

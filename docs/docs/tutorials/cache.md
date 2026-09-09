@@ -140,3 +140,5 @@ total never outlives the write that made it stale.
   `storage`, `mail` and `redis` now all on it.
 - [Testing](../guides/testing.md) is the harness the generated `cache/tests.rs` splits
   against — four tests with no server, three that need one.
+- [Moving long work out of the request](./jobs.md) is the next tutorial: a campaign of
+  5,000 letters, enqueued without making the caller wait for any of them to send.

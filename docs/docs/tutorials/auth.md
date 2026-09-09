@@ -285,3 +285,5 @@ down which is which — a `user` token forbidden on the write, and reading anywa
   route](../guides/auth.md#closed-by-default-at-generation-time).
 - [Testing](../guides/testing.md) is the harness `posts/tests.rs` runs against, the same
   one this page's third excerpt extends by hand.
+- [Taking a file](./storage.md) is the next tutorial: a client deposits a file, and
+  `PUT /uploads/{id}/content` stores it.

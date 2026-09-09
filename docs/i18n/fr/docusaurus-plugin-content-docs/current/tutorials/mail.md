@@ -151,3 +151,5 @@ déjà repartie avec un `201`.
   installer, `storage` et `mail` désormais sur lui.
 - [Tests](../guides/testing.md) est le harnais contre lequel `mail/tests.rs` engendré
   tourne, et ce que `-- --ignored` atteint qu'un simple `cargo test` n'atteint pas.
+- [Ne pas recalculer deux fois](./cache.md) est le tutoriel suivant : un `COUNT(*)` lu
+  mille fois par minute, mis en cache plutôt que recalculé à chaque appel.

@@ -142,3 +142,5 @@ rendu périmé.
   installer, `storage`, `mail` et `redis` désormais toutes sur lui.
 - [Tests](../guides/testing.md) est le harnais contre lequel se scinde le `cache/tests.rs`
   engendré — quatre tests sans serveur, trois qui en demandent un.
+- [Sortir le travail long de la requête](./jobs.md) est le tutoriel suivant : une
+  campagne de 5 000 lettres, enfilées sans faire attendre l'appelant qu'une seule parte.

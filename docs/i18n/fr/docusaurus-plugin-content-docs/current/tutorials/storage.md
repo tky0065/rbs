@@ -277,3 +277,5 @@ qu'aucune ressource ne réclame — et `exists` répond à la requête `HEAD` pl
 - [Tests](../guides/testing.md) est le harnais contre lequel `uploads/tests.rs` tourne,
   et le test `round` propre au fragment `storage` que les extraits de cette page
   n'ouvrent jamais.
+- [Envoyer un mail](./mail.md) est le tutoriel suivant : dès que le dépôt de cette page
+  réussit, son propriétaire reçoit un mail qui le confirme.

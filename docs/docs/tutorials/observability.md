@@ -179,3 +179,6 @@ production traffic reaches it in hours, not months, once that discipline slips.
   formatter behind every line this page's server printed.
 - [`rbs add`](../cli/add.md) covers the twelve other features `demo` could still
   install, `observability` now on it.
+- [Calling the API from TypeScript](./typescript-client.md) is the last tutorial: a
+  front end that calls `articles` through a client read from the API's own OpenAPI
+  document, rather than a second copy of its types.

@@ -119,3 +119,5 @@ picks up from exactly this state.
   database, or a project with no server to start.
 - [`rbs migrate`](../cli/migrate.md) covers `down` and `status`, the two commands
   this page didn't need yet.
+- [Your first resource](./first-resource.md) is the next tutorial: `rbs generate crud`
+  turns a `--fields` declaration into an entity, its migration, and every layer between.

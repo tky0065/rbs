@@ -160,3 +160,5 @@ wholesale.
   `jobs` now on it.
 - [Testing](../guides/testing.md) is the harness the generated `jobs/tests.rs` runs
   against, and what `-- --ignored` reaches that a plain `cargo test` does not.
+- [Seeing what the API does](./observability.md) is the next tutorial: a route has gone
+  slow, and `/metrics` is what finally says since when.

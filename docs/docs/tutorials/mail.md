@@ -147,3 +147,5 @@ that has already answered `201`.
   install, `storage` and `mail` now both on it.
 - [Testing](../guides/testing.md) is the harness the generated `mail/tests.rs` runs
   against, and what `-- --ignored` reaches that a plain `cargo test` does not.
+- [Not computing twice](./cache.md) is the next tutorial: a `COUNT(*)` read a thousand
+  times a minute, cached rather than recomputed on every call.
