@@ -52,6 +52,33 @@ generate client --lang ts` qui rattrape l'écart — pas une erreur d'exécution
 appelant signale des jours plus tard. Régénérer après chaque changement de contrat est
 la boucle pour laquelle cette commande est faite, pas une étape ajoutée par-dessus.
 
+## Vérifier
+
+Le fichier qui vient d'être écrit est sa propre preuve, et le relire n'exige rien de
+plus que `rbs` lui-même : relancer exactement la même commande.
+
+```bash
+rbs generate client --lang ts
+```
+
+{/* rbs:transcript cmd="rbs generate client --lang ts" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields title:string,body:text,published:bool && rbs generate client --lang ts" dans="demo" */}
+```text
+$ rbs generate client --lang ts
+plan pour …/demo
+
+  · clients/ts/client.ts   inchangé
+
+  1 inchangé
+✓ client engendré — clients/ts/client.ts porte 7 opérations
+```
+
+`inchangé` est une preuve par idempotence : lire le même document OpenAPI une seconde
+fois produit le même fichier, octet pour octet, si bien qu'il ne restait rien à écrire
+au second passage. Le compte d'opérations réimprimé est le même sept — pas recalculé
+depuis le fichier sur disque, mais relu à neuf depuis `ApiDoc::openapi()` à chaque fois,
+ce qui rend cette commande sûre à relancer après chaque `rbs generate crud`, et non une
+seule fois pour toutes.
+
 ## Ce qui a été installé
 
 Deux extraits, lus depuis

@@ -50,6 +50,32 @@ signature by hand, and the very next `rbs generate client --lang ts` is what cat
 drift — not a runtime error a caller reports days later. Regenerating after every contract
 change is the loop this command is built for, not an extra step bolted onto it.
 
+## Verify
+
+The file just written is its own proof, and reading it needs nothing beyond `rbs`
+itself: run the exact same command again.
+
+```bash
+rbs generate client --lang ts
+```
+
+{/* rbs:transcript cmd="rbs generate client --lang ts" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields title:string,body:text,published:bool && rbs generate client --lang ts" dans="demo" */}
+```text
+$ rbs generate client --lang ts
+plan pour …/demo
+
+  · clients/ts/client.ts   inchangé
+
+  1 inchangé
+✓ client engendré — clients/ts/client.ts porte 7 opérations
+```
+
+`inchangé` is proof by idempotence: reading the same OpenAPI document a second time
+produces the same file byte for byte, so nothing was left for the second run to write.
+The operation count printed again is the same seven — not recomputed from the file on
+disk, but read fresh from `ApiDoc::openapi()` each time, which is what makes this
+command safe to run after every `rbs generate crud` rather than only once.
+
 ## What was installed
 
 Two extracts, read from
