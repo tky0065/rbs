@@ -10,7 +10,7 @@ between minor versions with no deprecation cycle.
 
 *[Version française](CHANGELOG.fr.md).*
 
-## [1.4.0] — 2026-09-08
+## [1.3.1] — 2026-09-09
 
 ### Changed
 
@@ -449,7 +449,7 @@ architecture, CLI reference and guides, in English and French.
 Rust 1.85 or later, Rust edition 2024. A generated project runs on PostgreSQL 14 or later,
 MySQL 8.0 or later, or SQLite 3.35 or later — `rbs doctor` refuses anything below those.
 
-[1.4.0]: https://github.com/tky0065/rbs/releases/tag/v1.4.0
+[1.3.1]: https://github.com/tky0065/rbs/releases/tag/v1.3.1
 [1.3.0]: https://github.com/tky0065/rbs/releases/tag/v1.3.0
 [1.2.0]: https://github.com/tky0065/rbs/releases/tag/v1.2.0
 [1.1.0]: https://github.com/tky0065/rbs/releases/tag/v1.1.0

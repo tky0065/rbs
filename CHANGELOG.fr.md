@@ -11,7 +11,7 @@ dépréciation.
 
 *[English version](CHANGELOG.md).*
 
-## [1.4.0] — 2026-09-08
+## [1.3.1] — 2026-09-09
 
 ### Modifié
 
@@ -471,7 +471,7 @@ démarrage, architecture, référence du CLI et guides, en français et en angla
 Rust 1.85 ou plus, édition 2024. Un projet généré tourne sur PostgreSQL 14 ou plus,
 MySQL 8.0 ou plus, ou SQLite 3.35 ou plus — `rbs doctor` refuse tout ce qui est en dessous.
 
-[1.4.0]: https://github.com/tky0065/rbs/releases/tag/v1.4.0
+[1.3.1]: https://github.com/tky0065/rbs/releases/tag/v1.3.1
 [1.3.0]: https://github.com/tky0065/rbs/releases/tag/v1.3.0
 [1.2.0]: https://github.com/tky0065/rbs/releases/tag/v1.2.0
 [1.1.0]: https://github.com/tky0065/rbs/releases/tag/v1.1.0

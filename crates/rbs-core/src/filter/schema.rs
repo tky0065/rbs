@@ -139,7 +139,7 @@ pub struct TextMatchOperators {
 
 /// Conditions acceptées sur une colonne comparable, sans que son type soit nommé.
 ///
-/// Les filtres engendrés citent depuis la 1.4 le schéma du type de leur colonne, qui
+/// Les filtres engendrés citent depuis la 1.3.1 le schéma du type de leur colonne, qui
 /// nomme aussi la forme courte. Celui-ci reste ce que citent les filtres engendrés avant :
 /// le retirer les empêcherait de compiler contre une 1.x ultérieure. Il ne gagne pas le
 /// `oneOf` des autres — un membre acceptant toute valeur en rendrait deux vrais à la fois,
