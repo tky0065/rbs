@@ -5,10 +5,10 @@ title: Taking a file
 
 # Taking a file
 
-This is the fourth of nine tutorials. It picks up `demo` exactly where
-[Setting up](./setup.md) left it: running, with nothing mounted but a health check. The
-case: a client deposits a justificatif — a receipt, a paper to keep on file — and by the
-end of this page, `PUT /uploads/{id}/content` stores it and answers `204`.
+This is the fourth of nine tutorials. It picks up `demo`; this page needs nothing beyond
+[Setting up](./setup.md). The case: a client deposits a justificatif — a receipt, a
+paper to keep on file — and by the end of this page, `PUT /uploads/{id}/content` stores
+it and answers `204`.
 
 ## What you need
 
@@ -92,8 +92,8 @@ plan pour …/demo
 
 Two things worth naming here. `--with-upload` is what wrote the three routes on
 `/uploads/{id}/content` — `PUT`, `GET`, `HEAD` — against the trait `storage` installed a
-moment ago; drop the flag and `generate crud` would have produced the same four routes as
-[Your first resource](./first-resource.md) and nothing under `/content` at all. And
+moment ago; drop the flag and `generate crud` would have produced the same six operations
+as [Your first resource](./first-resource.md) and nothing under `/content` at all. And
 `owner_email` — an ordinary field in `--fields`, no special syntax — earned an `email`
 constraint in the generated DTO for the one reason that its name ends in `_email`;
 nothing in the command asked for it.

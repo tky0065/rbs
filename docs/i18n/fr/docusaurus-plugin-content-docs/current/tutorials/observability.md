@@ -5,10 +5,9 @@ title: Voir ce que fait l'API
 
 # Voir ce que fait l'API
 
-C'est le huitième des neuf tutoriels. Il reprend `demo` exactement là où [Préparer le
-terrain](./setup.md) l'a laissé : en cours d'exécution, sans rien de monté hormis un
-contrôle de santé. Le cas : une route est devenue lente, et rien ne permet encore de
-dire depuis quand, ni laquelle.
+C'est le huitième des neuf tutoriels. Il reprend `demo` ; cette page n'a besoin de rien
+au-delà de [Préparer le terrain](./setup.md). Le cas : une route est devenue lente, et
+rien ne permet encore de dire depuis quand, ni laquelle.
 
 ## Ce qu'il vous faut
 
@@ -152,6 +151,11 @@ propre au domaine : un projet ne portant qu'`observability` écrit les trois mê
 fichiers.
 
 ### La configuration
+
+`add observability` écrit une seule clé nouvelle, `metrics_port`, volontairement
+distincte de `server.port` : les métriques publient la topologie interne du service — ses
+routes, son trafic, ses versions — et les poser sur le port de l'API demanderait à chaque
+déploiement une règle de reverse-proxy pour les cacher.
 
 ```toml file=examples/newsletter-queue/config/default.toml region=metriques
 ```

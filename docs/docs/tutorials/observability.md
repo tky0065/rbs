@@ -5,9 +5,9 @@ title: Seeing what the API does
 
 # Seeing what the API does
 
-This is the eighth of nine tutorials. It picks up `demo` exactly where [Setting
-up](./setup.md) left it: running, with nothing mounted but a health check. The case: one
-route has gone slow, and there is no way yet to say since when, or which one.
+This is the eighth of nine tutorials. It picks up `demo`; this page needs nothing
+beyond [Setting up](./setup.md). The case: one route has gone slow, and there is no way
+yet to say since when, or which one.
 
 ## What you need
 
@@ -145,6 +145,11 @@ the same command shown above, run on a project compiled in CI. Nothing here is
 domain-specific: a project carrying `observability` alone writes the same three files.
 
 ### The config
+
+`add observability` writes one new key, `metrics_port`, deliberately apart from
+`server.port`: metrics expose the service's internal topology — its routes, its traffic,
+its versions — and putting that on the API's own port would ask every deployment for a
+reverse-proxy rule to hide it.
 
 ```toml file=examples/newsletter-queue/config/default.toml region=metriques
 ```

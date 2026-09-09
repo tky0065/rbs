@@ -5,10 +5,9 @@ title: Moving long work out of the request
 
 # Moving long work out of the request
 
-This is the seventh of nine tutorials. It picks up `demo` exactly where [Setting
-up](./setup.md) left it: running, with nothing mounted but a health check. The case: a
-campaign of 5,000 letters, enqueued without making the caller wait for any of them to
-send.
+This is the seventh of nine tutorials. It picks up `demo`; this page needs nothing
+beyond [Setting up](./setup.md). The case: a campaign of 5,000 letters, enqueued
+without making the caller wait for any of them to send.
 
 ## What you need
 
@@ -66,7 +65,7 @@ database doing the reserving, not by however many tasks a process can spawn.
 ## 2. Apply the migration
 
 ```bash
-git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m "jobs installée"
+git add -A && git commit -q -m "jobs installée"
 rbs migrate up
 ```
 

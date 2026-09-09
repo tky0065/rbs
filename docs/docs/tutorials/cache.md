@@ -136,8 +136,8 @@ total never outlives the write that made it stale.
 
 - [Cache](../guides/cache.md) covers construction, why it stays synchronous, and what
   the feature leaves to you — stampede protection among it.
-- [`rbs add`](../cli/add.md) covers the ten other features `demo` could still install,
-  `storage`, `mail` and `redis` now all on it.
+- [`rbs add`](../cli/add.md) covers the eleven other features `demo` could still install,
+  `storage` and `redis` now both on it.
 - [Testing](../guides/testing.md) is the harness the generated `cache/tests.rs` splits
   against — four tests with no server, three that need one.
 - [Moving long work out of the request](./jobs.md) is the next tutorial: a campaign of

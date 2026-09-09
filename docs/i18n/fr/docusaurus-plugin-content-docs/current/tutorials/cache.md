@@ -138,8 +138,8 @@ rendu périmé.
 - [Cache](../guides/cache.md) couvre la construction, pourquoi elle reste synchrone, et
   ce que la feature vous laisse faire — la protection contre l'emballement en fait
   partie.
-- [`rbs add`](../cli/add.md) couvre les dix autres features que `demo` pourrait encore
-  installer, `storage`, `mail` et `redis` désormais toutes sur lui.
+- [`rbs add`](../cli/add.md) couvre les onze autres features que `demo` pourrait encore
+  installer, `storage` et `redis` désormais toutes deux sur lui.
 - [Tests](../guides/testing.md) est le harnais contre lequel se scinde le `cache/tests.rs`
   engendré — quatre tests sans serveur, trois qui en demandent un.
 - [Sortir le travail long de la requête](./jobs.md) est le tutoriel suivant : une

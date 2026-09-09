@@ -92,9 +92,11 @@ cargo run
 INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
 
-C'est la recompilation qui prend en compte `src/articles/` : une fois cette ligne
-affichée, `demo` écoute avec quatre nouvelles routes ajoutées à `/health` — `POST`,
-`GET`, `PATCH` et `DELETE` sur `/articles`, plus `/articles/{id}`.
+Un démarrage propre ici prouve que `src/articles/` compile dans le routeur : `demo`
+écoute désormais avec six nouvelles opérations ajoutées à `/health` — `GET` et `POST` sur
+`/articles`, `POST` sur `/articles/filter`, et `GET`, `PATCH` et `DELETE` sur
+`/articles/{id}` — si le module avait échoué à compiler, cette ligne ne se serait jamais
+affichée.
 
 ## Vérifier
 
@@ -134,7 +136,8 @@ sur la même ligne, à travers le même serveur en cours d'exécution.
 
 ## Ce qui a été installé
 
-Quatre des sept fichiers que `generate crud` a écrits, chacun lu depuis
+Quatre des sept fichiers que `generate crud` a écrits dans `src/articles/` — tout ce
+répertoire à l'exception de `mod.rs` —, chacun lu depuis
 [`examples/hello-crud`](https://github.com/tky0065/rbs/tree/main/examples/hello-crud) —
 la même fonctionnalité, engendrée par la même commande.
 
@@ -176,7 +179,8 @@ ci-dessus a emprunté.
 Une seule direction de dépendance traverse ces quatre fichiers : contrôleur → service →
 repository → modèle, chaque couche ne voyant que la suivante.
 [Architecture](../architecture.md) place chaque couche que ces sept fichiers occupent,
-y compris les deux que cette page n'a jamais ouverts — `service.rs` et `filter.rs`.
+y compris les trois que cette page n'a jamais ouverts — `service.rs`, `filter.rs` et
+`tests.rs`.
 
 ## Pour aller plus loin
 

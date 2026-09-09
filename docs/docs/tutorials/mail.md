@@ -127,6 +127,11 @@ awaited send looks like, the one a caller can afford to wait for.
 
 ### The detached send
 
+`send_detached` is the same trade-off applied to a message already built: it spawns its
+own task and returns before the send even starts, so nothing waits on it — no queue, no
+retry, and a failed send reaches only the log. `notify` below makes the same choice by
+hand, one call earlier, for a template rather than a finished `Message`.
+
 ```rust file=examples/file-drop/src/modules/mail/service.rs region=send_detached
 ```
 

@@ -5,10 +5,9 @@ title: Sortir le travail long de la requête
 
 # Sortir le travail long de la requête
 
-C'est le septième des neuf tutoriels. Il reprend `demo` exactement là où [Préparer le
-terrain](./setup.md) l'a laissé : en cours d'exécution, sans rien de monté hormis un
-contrôle de santé. Le cas : une campagne de 5 000 lettres, enfilées sans faire attendre
-l'appelant qu'une seule parte.
+C'est le septième des neuf tutoriels. Il reprend `demo` ; cette page n'a besoin de rien
+au-delà de [Préparer le terrain](./setup.md). Le cas : une campagne de 5 000 lettres,
+enfilées sans faire attendre l'appelant qu'une seule parte.
 
 ## Ce qu'il vous faut
 
@@ -69,7 +68,7 @@ processus peut lancer.
 ## 2. Appliquer la migration
 
 ```bash
-git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m "jobs installée"
+git add -A && git commit -q -m "jobs installée"
 rbs migrate up
 ```
 

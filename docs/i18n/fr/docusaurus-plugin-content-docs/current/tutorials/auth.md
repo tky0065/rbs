@@ -283,7 +283,7 @@ même.
 
 - [Authentification](../guides/auth.md) couvre les cinq routes que `add auth` monte, la
   paire de jetons, et l'enum `Role` que cette page n'a utilisée qu'à son défaut.
-- [`rbs add`](../cli/add.md) couvre les douze autres features que ce projet pourrait
+- [`rbs add`](../cli/add.md) couvre les onze autres features que ce projet pourrait
   encore installer, et le `--force` dont cette page n'a jamais eu besoin.
 - [`rbs generate`](../cli/generate.md) a la grammaire complète de `--role`, y compris ce
   qu'il fait sous `--with-upload`, et [ce qu'il faut retirer pour rouvrir une

@@ -5,7 +5,7 @@ title: Préparer le terrain
 
 # Préparer le terrain
 
-C'est le premier des neuf tutoriels, et le seul que chaque page suivante suppose déjà
+C'est le premier des neuf tutoriels, et celui que chaque page suivante suppose déjà
 lu : il mène d'un répertoire vide à un projet nommé `demo`, en cours d'exécution, avec
 un contrôle de santé qui répond sur `localhost:8080`. Chaque tutoriel qui suit — CRUD,
 authentification, stockage, mail, cache, tâches de fond, observabilité, client
@@ -88,9 +88,11 @@ cargo run
 INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
 
-La première compilation traverse tout l'arbre d'Axum, SeaORM et utoipa : c'est la
-commande la plus lente de cette page. Une fois cette ligne affichée, `demo` écoute, et
-le terminal qui l'a lancée est désormais celui du serveur — laissez-le tourner.
+Un démarrage propre ici prouve que tout l'arbre d'Axum, SeaORM et utoipa compile
+ensemble — si quoi que ce soit y était mal câblé, cette ligne ne se serait jamais
+affichée. C'est aussi pour cela que c'est la commande la plus lente de cette page. Une
+fois cette ligne affichée, `demo` écoute, et le terminal qui l'a lancée est désormais
+celui du serveur — laissez-le tourner.
 
 ## Vérifier
 

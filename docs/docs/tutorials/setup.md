@@ -86,9 +86,10 @@ cargo run
 INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
 
-The first build compiles the whole Axum, SeaORM and utoipa tree, so it is the slowest
-command on this page. Once this line prints, `demo` is listening, and the terminal it
-ran in is now the server's — leave it running.
+A clean start here is proof the whole Axum, SeaORM and utoipa tree compiles together —
+if any of it were wired wrong, this line would never have printed. It is also why this
+is the slowest command on this page. Once this line prints, `demo` is listening, and the
+terminal it ran in is now the server's — leave it running.
 
 ## Verify
 

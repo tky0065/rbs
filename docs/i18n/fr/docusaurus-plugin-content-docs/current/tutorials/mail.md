@@ -131,6 +131,12 @@ ressemble un envoi attendu, celui qu'un appelant peut se permettre d'attendre.
 
 ### L'envoi détaché
 
+`send_detached` applique le même compromis à un message déjà construit : il lance sa
+propre tâche et rend la main avant même que l'envoi commence, si bien que rien n'attend
+dessus — ni file, ni réessai, et un envoi manqué n'atteint que le journal. `notify`
+ci-dessous fait le même choix à la main, un cran plus tôt, pour un gabarit plutôt qu'un
+`Message` déjà prêt.
+
 ```rust file=examples/file-drop/src/modules/mail/service.rs region=send_detached
 ```
 

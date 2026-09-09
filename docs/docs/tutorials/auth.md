@@ -278,7 +278,7 @@ down which is which — a `user` token forbidden on the write, and reading anywa
 
 - [Authentication](../guides/auth.md) covers the five routes `add auth` mounts, the
   token pair, and the `Role` enum this page only used at its default.
-- [`rbs add`](../cli/add.md) covers the twelve other features this project could still
+- [`rbs add`](../cli/add.md) covers the eleven other features this project could still
   install, and the `--force` this page never needed.
 - [`rbs generate`](../cli/generate.md) has the full grammar of `--role`, including what
   it does under `--with-upload`, and [what to remove to reopen a

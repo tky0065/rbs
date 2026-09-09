@@ -5,10 +5,10 @@ title: Recevoir un fichier
 
 # Recevoir un fichier
 
-C'est le quatrième des neuf tutoriels. Il reprend `demo` exactement là où [Préparer le
-terrain](./setup.md) l'a laissé : en cours d'exécution, sans rien de monté hormis un
-contrôle de santé. Le cas : un client dépose un justificatif — un reçu, un papier à
-garder — et à la fin de cette page, `PUT /uploads/{id}/content` le range et répond `204`.
+C'est le quatrième des neuf tutoriels. Il reprend `demo` ; cette page n'a besoin de rien
+au-delà de [Préparer le terrain](./setup.md). Le cas : un client dépose un justificatif —
+un reçu, un papier à garder — et à la fin de cette page, `PUT /uploads/{id}/content` le
+range et répond `204`.
 
 ## Ce qu'il vous faut
 
@@ -95,7 +95,7 @@ plan pour …/demo
 Deux choses méritent d'être nommées ici. `--with-upload` est ce qui a écrit les trois
 routes sur `/uploads/{id}/content` — `PUT`, `GET`, `HEAD` — contre le trait que `storage`
 a installé un instant plus tôt ; sans le drapeau, `generate crud` aurait produit les
-mêmes quatre routes que dans [Votre première ressource](./first-resource.md) et rien
+mêmes six opérations que dans [Votre première ressource](./first-resource.md) et rien
 sous `/content`. Et `owner_email` — un champ ordinaire dans `--fields`, sans syntaxe
 particulière — a gagné une contrainte `email` dans le DTO engendré pour la seule raison
 que son nom finit par `_email` ; rien dans la commande ne le demandait.
