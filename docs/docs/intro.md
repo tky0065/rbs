@@ -40,6 +40,8 @@ only one that names an `Entity`.
 
 - **[Getting started](./getting-started.md)** — from installation to a CRUD API that
   answers.
+- **[Tutorials](./tutorials/setup.md)** — nine step-by-step pages, one module at a time,
+  each on a concrete case.
 - **[Architecture](./architecture.md)** — the core/generated boundary, the anatomy of a
   feature, the dependency rule.
 - **[CLI reference](./cli/new.md)** — every command and flag, with real output.

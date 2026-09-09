@@ -7,3 +7,7 @@
 /docs/node_modules
 /docs/build
 /docs/.docusaurus
+
+# Espace de travail des sessions d'exécution de plan : un journal et des paquets de revue,
+# régénérables, sans valeur une fois la branche fondue.
+/.superpowers

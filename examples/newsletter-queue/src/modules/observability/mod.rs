@@ -46,6 +46,7 @@ pub async fn serve(state: &AppState) -> anyhow::Result<()> {
         config.metrics_port
     );
 
+    // region: exposition
     let listener = tokio::net::TcpListener::bind(&adresse)
         .await
         .with_context(|| format!("impossible d'écouter les métriques sur {adresse}"))?;
@@ -57,6 +58,7 @@ pub async fn serve(state: &AppState) -> anyhow::Result<()> {
             async move { handle.render() }
         }),
     );
+    // endregion: exposition
 
     tracing::info!(%adresse, "métriques");
 

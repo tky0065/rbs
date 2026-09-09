@@ -41,6 +41,8 @@ l'interroger : des six fichiers d'une feature, `repository.rs` est le seul à no
 
 - **[Démarrage rapide](./getting-started.md)** — de l'installation à une API CRUD qui
   répond.
+- **[Tutoriels](./tutorials/setup.md)** — neuf pages pas à pas, un module à la fois,
+  chacune sur un cas concret.
 - **[Architecture](./architecture.md)** — la frontière noyau/généré, l'anatomie d'une
   feature, la règle de dépendance.
 - **[Référence du CLI](./cli/new.md)** — chaque commande, chaque option, avec une sortie
