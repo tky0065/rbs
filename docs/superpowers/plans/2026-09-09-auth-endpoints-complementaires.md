@@ -1544,8 +1544,6 @@ async fn forgetting_an_unknown_address_is_accepted_and_writes_nothing() {
     let db = connection().await;
     let inconnue = fresh_email();
 
-    let avant = one_time_tokens_count(&db).await;
-
     let (statut, _) = call(
         &api,
         post_json("/auth/forgot-password", json!({ "email": inconnue })),
@@ -1553,11 +1551,32 @@ async fn forgetting_an_unknown_address_is_accepted_and_writes_nothing() {
     .await;
 
     assert_eq!(statut, StatusCode::ACCEPTED);
-    assert_eq!(one_time_tokens_count(&db).await, avant);
+
+    // Aucun compte ne porte l'adresse, donc aucun jeton n'a pu être émis : l'émission
+    // part de `find_by_email`, et rien d'autre n'y mène.
+    assert!(
+        crate::auth::repository::find_by_email(&db, &inconnue)
+            .await
+            .expect("la lecture aboutit")
+            .is_none(),
+        "la demande a créé un compte"
+    );
 }
 ```
 
-`one_time_tokens_count(&db)` est une aide à ajouter à `tests/mod.rs.jinja` : `one_time_token::Entity::find().count(db).await`.
+`one_time_tokens_count_for(&db, user_id)` est l'aide à ajouter à `tests/mod.rs.jinja` — elle compte les jetons **d'un compte**, jamais de la table entière :
+
+```rust
+pub(super) async fn one_time_tokens_count_for(db: &DatabaseConnection, user_id: Uuid) -> u64 {
+    crate::auth::model::one_time_token::Entity::find()
+        .filter(crate::auth::model::one_time_token::Column::UserId.eq(user_id))
+        .count(db)
+        .await
+        .expect("le comptage aboutit")
+}
+```
+
+Le compte est borné à un utilisateur parce que les tests partagent une base qu'ils ne vident pas et que `cargo test` les exécute en parallèle : un compte global serait faux dès qu'un autre test inscrit quelqu'un pendant la mesure.
 
 - [ ] **Step 2 : Lancer pour voir échouer**
 
@@ -1859,12 +1878,16 @@ async fn registering_opens_a_verification_token() {
     let db = connection().await;
     let email = fresh_email();
 
-    let avant = one_time_tokens_count(&db).await;
     register(&api, &email).await;
 
+    let compte = crate::auth::repository::find_by_email(&db, &email)
+        .await
+        .expect("la lecture aboutit")
+        .expect("le compte vient d'être créé");
+
     assert_eq!(
-        one_time_tokens_count(&db).await,
-        avant + 1,
+        one_time_tokens_count_for(&db, compte.id).await,
+        1,
         "l'inscription n'a ouvert aucun jeton"
     );
 }
