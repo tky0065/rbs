@@ -111,6 +111,10 @@ rbs migrate up
 ✓ migrations appliquées
 ```
 
+Proof the table now exists and the binary is ready to serve it: the migration
+`generate` wrote a moment ago is applied, which is what lets the server below start
+against it.
+
 ```bash
 cargo run
 ```
@@ -198,7 +202,10 @@ content-length: 0
 date: Wed, 09 Sep 2026 09:55:05 GMT
 ```
 
-And reading it back:
+Proof that presence and absence read differently even through `HEAD` alone:
+`content-length` drops from `128` — the size of the JSON problem a `GET` would have
+returned a moment ago — to a flat `0`, so a caller can tell the two apart from the
+header, without ever fetching a body. And reading it back:
 
 ```bash
 curl -i http://127.0.0.1:8080/uploads/$ID/content

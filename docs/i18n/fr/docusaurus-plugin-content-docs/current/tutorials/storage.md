@@ -113,6 +113,10 @@ rbs migrate up
 ✓ migrations appliquées
 ```
 
+La preuve que la table existe désormais et que le binaire est prêt à la servir : la
+migration que `generate` a écrite un instant plus tôt est appliquée, ce qui permet au
+serveur ci-dessous de démarrer contre elle.
+
 ```bash
 cargo run
 ```
@@ -200,7 +204,10 @@ content-length: 0
 date: Wed, 09 Sep 2026 09:55:05 GMT
 ```
 
-Et en le relisant :
+La preuve que la présence et l'absence se lisent différemment, même à travers un simple
+`HEAD` : `content-length` tombe de `128` — la taille du problème JSON qu'un `GET` aurait
+rendu un instant plus tôt — à un `0` sec, si bien qu'un appelant distingue les deux cas
+depuis l'en-tête seul, sans jamais récupérer de corps. Et en le relisant :
 
 ```bash
 curl -i http://127.0.0.1:8080/uploads/$ID/content
