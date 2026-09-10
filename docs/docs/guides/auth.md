@@ -5,10 +5,10 @@ title: Authentication
 
 # Authentication
 
-`rbs add auth` installs a working authentication feature into an existing project: eight
-files under `src/auth/`, one migration, and five routes mounted on the router. What it
-lays down is ordinary code in your source tree — an entity, a service, a controller, a
-guard — and it is meant to be read and changed.
+`rbs add auth` installs a working authentication feature into an existing project:
+twenty-one files under `src/auth/`, two mail templates, one migration, and thirteen
+routes mounted on the router. What it lays down is ordinary code in your source tree —
+an entity, a service, a controller, a guard — and it is meant to be read and changed.
 
 Every snippet on this page is taken from
 [`examples/blog-auth`](https://github.com/tky0065/rbs/tree/main/examples/blog-auth), a
@@ -24,31 +24,47 @@ auth : authentification JWT : Argon2, jetons d'accès et de rafraîchissement, r
 plan pour /private/tmp/rbs-demo/blog
 
   + src/auth/mod.rs                                        créé
+  + src/auth/config.rs                                     créé
   + src/auth/model.rs                                      créé
   + src/auth/dto.rs                                        créé
-  + src/auth/repository.rs                                 créé
-  + src/auth/service.rs                                    créé
-  + src/auth/controller.rs                                 créé
+  + src/auth/repository/mod.rs                             créé
+  + src/auth/repository/user.rs                            créé
+  + src/auth/repository/refresh_token.rs                   créé
+  + src/auth/repository/one_time_token.rs                  créé
+  + src/auth/service/mod.rs                                créé
+  + src/auth/service/session.rs                            créé
+  + src/auth/service/password.rs                           créé
+  + src/auth/service/verification.rs                       créé
+  + src/auth/controller/mod.rs                             créé
+  + src/auth/controller/session.rs                         créé
+  + src/auth/controller/password.rs                        créé
+  + src/auth/controller/verification.rs                    créé
+  + templates/mail/reinitialisation.html                   créé
+  + templates/mail/verification.html                       créé
   + src/auth/guard.rs                                      créé
-  + src/auth/tests.rs                                      créé
-  + migration/src/m20260830_111428_create_auth_tables.rs   créé
+  + src/auth/tests/mod.rs                                  créé
+  + src/auth/tests/session.rs                              créé
+  + src/auth/tests/password.rs                             créé
+  + src/auth/tests/verification.rs                         créé
+  + migration/src/m20260910_162209_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
   ~ src/lib.rs                                             modifié
   ~ src/router.rs                                          modifié
   ~ src/openapi.rs                                         modifié
+  ~ src/state.rs                                           modifié
   ~ Cargo.toml                                             modifié
   ~ config/default.toml                                    modifié
   ~ .env.example                                           modifié
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  18 fichiers à écrire
-✓ auth installée — 9 fichiers
+  34 fichiers à écrire
+✓ auth installée — 24 fichiers
 
   rbs migrate up
 ```
 
-Five routes come with it:
+Thirteen routes come with it. Five open the core cycle:
 
 | Route | What it does |
 |---|---|
@@ -56,10 +72,16 @@ Five routes come with it:
 | `POST /auth/login` | Exchanges credentials for an access/refresh pair. |
 | `POST /auth/refresh` | Rotates the pair. The refresh token presented is spent. |
 | `POST /auth/logout` | Revokes one session. 204. |
-| `GET /auth/me` | The caller's profile. The only route the feature protects. |
+| `GET /auth/me` | The caller's profile. |
 
-The migration creates `users` and `refresh_tokens`, with a unique constraint on the email
-address. `rbs migrate down` takes both away: the tables arrive and leave with the feature.
+A sixth, `POST /auth/change-password`, lets a caller already holding a token do the same
+without an email link — covered right below. The other seven act on a forgotten password,
+an unconfirmed address, or the caller's own sessions, each in its own section further down
+this page.
+
+The migration creates `users`, `refresh_tokens` and `one_time_tokens`, with a unique
+constraint on the email address and a nullable `email_verified_at` on `users`.
+`rbs migrate down` takes all three away: the tables arrive and leave with the feature.
 
 ## The secret, and where it lives
 
@@ -120,6 +142,22 @@ Login answers **the same 401** whether the address is unknown or the password wr
 it hashes a comparison value even for an unknown address. Skipping that comparison would
 answer unknown addresses in two milliseconds and known ones in two hundred and forty —
 an enumeration oracle measurable from outside.
+
+## Changing your own password
+
+One route, protected, for a caller who already knows their current password and wants a
+new one without an email round trip:
+
+| Route | What it does |
+|---|---|
+| `POST /auth/change-password` | Verifies the current password, sets the new one, and revokes every session of the account — the caller's own included. 200 with a fresh pair. |
+
+Revoking is unconditional because nothing on the request ties the access token presented
+back to the session row that issued it: sparing "this" session would need an identifier
+the route does not have, so all of them fall, and the response hands back a pair to sign
+back in with immediately. The service re-checks the password before writing anything — a
+wrong `current_password` answers **403, not 401**: the caller *is* identified, their
+Bearer *is* good, and a 401 would send a client toward a refresh that fixes nothing.
 
 ## Viewing and closing sessions
 
@@ -229,7 +267,7 @@ from an address and hand back the same thing — the account and the token in cl
 **`login` does not require a verified address.** An account that never clicks its link
 still signs in — this feature hands you the token cycle and the two routes that close it,
 not an opinion on which of your routes should refuse an unverified caller. A guard for that
-is a separate piece, covered on its own.
+is a separate piece, covered [below](#requiring-a-verified-address).
 
 ## Protecting a route
 
@@ -253,6 +291,21 @@ with no token at all gets 401 without `require_role` ever being reached — the 
 told to identify, not that they lack rights. And the `security(("bearer" = []))` line is
 what puts the padlock on this operation in `/api-docs/openapi.json`; a route left
 unprotected must not carry it.
+
+### Requiring a verified address
+
+A second extractor, `VerifiedIdentity`, wraps `Identity` rather than sitting beside it: a
+handler that takes it instead gets the same 401 for a missing or invalid token, then a 403
+on top, drawn by re-reading the account and checking `email_verified_at`.
+
+The state comes from the database and not from the token, on purpose: the access token
+carries `sub` and `role` for its whole fifteen minutes, and reading verification off it
+would keep answering false for whatever is left of that window after `verify-email` clears
+it. No route in the fragment takes `VerifiedIdentity` — `login` does not require a
+verified address, as above — so it starts out as dead code behind `#[allow(dead_code)]` in
+`src/auth/guard.rs`, the same way `require_role` would if no generated route called it.
+Taking `VerifiedIdentity` instead of `Identity` on a handler's signature is what puts a
+route behind it.
 
 ### Closed by default at generation time
 
@@ -333,7 +386,7 @@ an existing project over.
 
 **No route grants a role.** Registration always produces a `user`, by table default, and
 promotion goes through the database. That is deliberate: an HTTP route that hands out
-`admin` is a route someone will eventually reach. The generated `src/auth/tests.rs`
+`admin` is a route someone will eventually reach. The generated `src/auth/tests/session.rs`
 promotes an account exactly this way, and only then logs in — a token minted before the
 promotion would carry the old role:
 
@@ -357,11 +410,13 @@ identified but whose role falls short, refused 403 by the guard inside the handl
 ```rust file=examples/blog-auth/src/posts/tests.rs region=refus
 ```
 
-That same `src/auth/tests.rs` covers the feature's own routes — registration, the
-identical 401s, rotation, revocation. Every one of them goes through HTTP against a real
-database, so every one is marked `#[ignore]`: `cargo test` on a fresh project passes with
-no server running, and `cargo test -- --ignored` runs them against the database your
-`.env` names, migrations applied. See the [testing guide](./testing.md).
+The feature's own routes are covered the same way, split across `src/auth/tests/session.rs`,
+`password.rs` and `verification.rs` — registration, the identical 401s, rotation,
+revocation, and the password and verification journeys above. Every one of them goes
+through HTTP against a real database, so every one is marked `#[ignore]`: `cargo test` on
+a fresh project passes with no server running, and `cargo test -- --ignored` runs them
+against the database your `.env` names, migrations applied. See the
+[testing guide](./testing.md).
 
 ## What it leaves to you
 
@@ -371,7 +426,7 @@ Everything specific to your domain:
   finer, such as an owner editing their own resource, is yours to write in the service;
 - **password policy** — the DTO validates a length between 12 and 128 characters, nothing
   more;
-- **email verification, third-party providers** — not in this feature;
+- **third-party providers** — not in this feature;
 - **rotating the secret** — changing `RBS_AUTH__SECRET` invalidates every access token in
   circulation, which is a feature the day you need it, and an outage the day you do not
   expect it.

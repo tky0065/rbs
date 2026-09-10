@@ -46,7 +46,7 @@ Options:
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, et ses services `api`/`migrate` insérés dans le compose du projet — un `docker-compose.yml` entier s'il n'y en a pas | `docker compose --profile app up --build` |
 | `ci` | `.github/workflows/ci.yml` | `git push` |
-| `auth` | huit fichiers sous `src/auth/`, une migration, quatre fichiers du projet modifiés — et `rate-limit`, qu'elle exige | `rbs migrate up` |
+| `auth` | vingt-et-un fichiers sous `src/auth/`, deux gabarits de courriel, une migration, trois fichiers du projet modifiés — et `mail` et `rate-limit`, qu'elle exige | `rbs migrate up` |
 | `jobs` | sept fichiers sous `src/modules/jobs/`, une migration, et une section `[jobs]` de configuration | `rbs migrate up`, puis inscrire vos jobs dans `src/modules/jobs/mod.rs` |
 | `scheduler` | six fichiers sous `src/modules/scheduler/`, une migration, une section `[scheduler]`, un ticker dans `// <rbs:startup>` — et `jobs`, qu'elle exige | `rbs migrate up`, puis déclarer vos échéances dans `src/modules/scheduler/mod.rs` |
 | `redis` | trois fichiers sous `src/modules/cache/`, et un service `redis` inséré dans le compose du projet | le compose le porte déjà — `docker compose up -d` le démarre |
@@ -224,36 +224,59 @@ où n'importe quel client pourrait alors se choisir une identité par requête.
 ```text
 $ rbs add auth
 auth : authentification JWT : Argon2, jetons d'accès et de rafraîchissement, rôles
-auth exige rate-limit : posée avec elle
+auth exige mail, rate-limit : posée avec elle
 
 plan pour /private/tmp/rbs-demo/blog
 
   + src/auth/mod.rs                                        créé
+  + src/auth/config.rs                                     créé
   + src/auth/model.rs                                      créé
   + src/auth/dto.rs                                        créé
-  + src/auth/repository.rs                                 créé
-  + src/auth/service.rs                                    créé
-  + src/auth/controller.rs                                 créé
+  + src/auth/repository/mod.rs                             créé
+  + src/auth/repository/user.rs                            créé
+  + src/auth/repository/refresh_token.rs                   créé
+  + src/auth/repository/one_time_token.rs                  créé
+  + src/auth/service/mod.rs                                créé
+  + src/auth/service/session.rs                            créé
+  + src/auth/service/password.rs                           créé
+  + src/auth/service/verification.rs                       créé
+  + src/auth/controller/mod.rs                             créé
+  + src/auth/controller/session.rs                         créé
+  + src/auth/controller/password.rs                        créé
+  + src/auth/controller/verification.rs                    créé
+  + templates/mail/reinitialisation.html                   créé
+  + templates/mail/verification.html                       créé
   + src/auth/guard.rs                                      créé
-  + src/auth/tests.rs                                      créé
-  + migration/src/m20260831_095328_create_auth_tables.rs   créé
+  + src/auth/tests/mod.rs                                  créé
+  + src/auth/tests/session.rs                              créé
+  + src/auth/tests/password.rs                             créé
+  + src/auth/tests/verification.rs                         créé
+  + migration/src/m20260910_161016_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
-  ~ src/lib.rs                                             modifié
-  ~ src/router.rs                                          modifié
-  ~ src/openapi.rs                                         modifié
-  ~ Cargo.toml                                             modifié
-  ~ config/default.toml                                    modifié
-  ~ .env.example                                           modifié
-  ~ .env                                                   modifié
+  ~ src/lib.rs                                              modifié
+  ~ src/router.rs                                           modifié
+  ~ src/openapi.rs                                          modifié
+  ~ src/state.rs                                            modifié
+  ~ Cargo.toml                                              modifié
+  ~ config/default.toml                                     modifié
+  ~ .env.example                                            modifié
+  ~ .env                                                     modifié
+  + src/modules/mail/mod.rs                                créé
+  + src/modules/mail/config.rs                             créé
+  + src/modules/mail/template.rs                           créé
+  + src/modules/mail/service.rs                            créé
+  + src/modules/mail/tests.rs                              créé
+  + templates/mail/bienvenue.html                          créé
+  + src/modules/mod.rs                                     créé
+  ~ docker-compose.yml                                     modifié
   + src/modules/rate_limit/mod.rs                          créé
   + src/modules/rate_limit/config.rs                       créé
   + src/modules/rate_limit/counter.rs                      créé
   + src/modules/rate_limit/tests.rs                        créé
-  ~ src/state.rs                                           modifié
   ~ AGENTS.md                                              modifié
 
-  23 fichiers à écrire
-✓ auth installée — 13 fichiers
+  46 fichiers à écrire
+✓ auth installée — 34 fichiers
 
   rbs migrate up
 ```
@@ -264,11 +287,13 @@ la file. `POST /auth/login` hache un Argon2 même pour un email inconnu — c'es
 anonyme y coûte donc 19 Mio. Sans limite de débit, la protection contre l'énumération est
 un déni de service offert au premier venu : le fragment arrive donc avec `rate-limit`, le
 plan le nomme avant que rien ne s'écrive, et la section `[rate_limit]` qu'il pose tient
-`/auth/login` à cinq requêtes par minute contre 120 en global.
+`/auth/login` à cinq requêtes par minute contre 120 en global. Il arrive aussi avec `mail` :
+la réinitialisation du mot de passe et la vérification d'adresse n'ont nulle part ailleurs
+où envoyer leur lien.
 
-Les deux features s'inscrivent dans `[package.metadata.rbs]` : `rbs add rate-limit` après
-coup est sans effet. L'avoir installée avant ne l'est pas davantage — le plan dresse alors
-`auth` seule.
+Les trois features s'inscrivent dans `[package.metadata.rbs]` : `rbs add rate-limit` ou
+`rbs add mail` après coup sont sans effet. Les avoir installées avant ne l'est pas
+davantage — le plan dresse alors `auth` seule.
 
 `auth` est la seule feature qui touche à votre `.env` : le secret de signature y est tiré
 et écrit à l'installation, pendant que `.env.example`, versionné, garde un placeholder.
@@ -280,7 +305,7 @@ Dans chaque plan, la ligne `Cargo.toml` est l'endroit où l'installation s'inscr
 ```text
 [package.metadata.rbs]
 version = "1.0.0"
-features = ["health", "docker", "ci", "auth", "rate-limit"]
+features = ["health", "docker", "ci", "auth", "mail", "rate-limit"]
 database = "postgres"
 ```
 

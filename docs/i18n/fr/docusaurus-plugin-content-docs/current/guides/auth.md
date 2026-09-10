@@ -5,10 +5,11 @@ title: Authentification
 
 # Authentification
 
-`rbs add auth` installe une authentification qui fonctionne dans un projet existant : huit
-fichiers sous `src/auth/`, une migration, et cinq routes montées sur le routeur. Ce qu'elle
-dépose est du code ordinaire dans votre arborescence — une entité, un service, un
-controller, une garde — et il est fait pour être lu et modifié.
+`rbs add auth` installe une authentification qui fonctionne dans un projet existant :
+vingt-et-un fichiers sous `src/auth/`, deux gabarits de courriel, une migration, et treize
+routes montées sur le routeur. Ce qu'elle dépose est du code ordinaire dans votre
+arborescence — une entité, un service, un controller, une garde — et il est fait pour être
+lu et modifié.
 
 Tous les extraits de cette page sont tirés de
 [`examples/blog-auth`](https://github.com/tky0065/rbs/tree/main/examples/blog-auth), un
@@ -24,31 +25,47 @@ auth : authentification JWT : Argon2, jetons d'accès et de rafraîchissement, r
 plan pour /private/tmp/rbs-demo/blog
 
   + src/auth/mod.rs                                        créé
+  + src/auth/config.rs                                     créé
   + src/auth/model.rs                                      créé
   + src/auth/dto.rs                                        créé
-  + src/auth/repository.rs                                 créé
-  + src/auth/service.rs                                    créé
-  + src/auth/controller.rs                                 créé
+  + src/auth/repository/mod.rs                             créé
+  + src/auth/repository/user.rs                            créé
+  + src/auth/repository/refresh_token.rs                   créé
+  + src/auth/repository/one_time_token.rs                  créé
+  + src/auth/service/mod.rs                                créé
+  + src/auth/service/session.rs                            créé
+  + src/auth/service/password.rs                           créé
+  + src/auth/service/verification.rs                       créé
+  + src/auth/controller/mod.rs                             créé
+  + src/auth/controller/session.rs                         créé
+  + src/auth/controller/password.rs                        créé
+  + src/auth/controller/verification.rs                    créé
+  + templates/mail/reinitialisation.html                   créé
+  + templates/mail/verification.html                       créé
   + src/auth/guard.rs                                      créé
-  + src/auth/tests.rs                                      créé
-  + migration/src/m20260830_111428_create_auth_tables.rs   créé
+  + src/auth/tests/mod.rs                                  créé
+  + src/auth/tests/session.rs                              créé
+  + src/auth/tests/password.rs                             créé
+  + src/auth/tests/verification.rs                         créé
+  + migration/src/m20260910_162209_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
   ~ src/lib.rs                                             modifié
   ~ src/router.rs                                          modifié
   ~ src/openapi.rs                                         modifié
+  ~ src/state.rs                                           modifié
   ~ Cargo.toml                                             modifié
   ~ config/default.toml                                    modifié
   ~ .env.example                                           modifié
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  18 fichiers à écrire
-✓ auth installée — 9 fichiers
+  34 fichiers à écrire
+✓ auth installée — 24 fichiers
 
   rbs migrate up
 ```
 
-Cinq routes viennent avec :
+Treize routes viennent avec. Cinq ouvrent le cycle central :
 
 | Route | Ce qu'elle fait |
 |---|---|
@@ -56,11 +73,17 @@ Cinq routes viennent avec :
 | `POST /auth/login` | Échange les identifiants contre une paire accès/rafraîchissement. |
 | `POST /auth/refresh` | Fait tourner la paire. Le jeton de rafraîchissement présenté est consommé. |
 | `POST /auth/logout` | Révoque une session. 204. |
-| `GET /auth/me` | Le profil de l'appelant. La seule route que la feature protège. |
+| `GET /auth/me` | Le profil de l'appelant. |
 
-La migration crée `users` et `refresh_tokens`, avec une contrainte d'unicité sur l'adresse
-courriel. `rbs migrate down` les remporte toutes deux : les tables arrivent et repartent
-avec la feature.
+Une sixième, `POST /auth/change-password`, laisse un appelant qui porte déjà un jeton en
+faire autant sans lien courriel — couverte juste en dessous. Les sept autres portent sur un
+mot de passe oublié, une adresse non confirmée, ou les sessions de l'appelant, chacune dans
+sa propre section plus bas sur cette page.
+
+La migration crée `users`, `refresh_tokens` et `one_time_tokens`, avec une contrainte
+d'unicité sur l'adresse courriel et un `email_verified_at` nullable sur `users`.
+`rbs migrate down` les remporte toutes trois : les tables arrivent et repartent avec la
+feature.
 
 ## Le secret, et où il vit
 
@@ -123,6 +146,23 @@ La connexion répond **la même 401** que l'adresse soit inconnue ou le mot de p
 et elle hache une valeur de comparaison même pour une adresse inconnue. Sauter cette
 comparaison répondrait aux adresses inconnues en deux millisecondes et aux autres en deux
 cent quarante — un oracle d'énumération mesurable de l'extérieur.
+
+## Changer son propre mot de passe
+
+Une route, protégée, pour un appelant qui connaît déjà son mot de passe actuel et en veut
+un neuf sans passer par un courriel :
+
+| Route | Ce qu'elle fait |
+|---|---|
+| `POST /auth/change-password` | Vérifie le mot de passe actuel, pose le nouveau, et révoque toutes les sessions du compte — la sienne comprise. 200 avec une paire neuve. |
+
+La révocation est inconditionnelle : rien dans la requête ne relie le jeton d'accès
+présenté à la ligne de session qui l'a émis, épargner « cette » session demanderait un
+identifiant que la route n'a pas — elles tombent donc toutes, et la réponse rend une paire
+pour se reconnecter aussitôt. Le service revérifie le mot de passe avant d'écrire quoi que
+ce soit — un `current_password` erroné rend **403, et non 401** : l'appelant *est*
+identifié, son Bearer *est* bon, et un 401 pousserait un client vers un rafraîchissement
+qui ne réglerait rien.
 
 ## Voir et fermer ses sessions
 
@@ -236,7 +276,7 @@ clair :
 **`login` n'exige pas une adresse vérifiée.** Un compte qui ne clique jamais son lien se
 connecte quand même — cette feature livre le cycle du jeton et les deux routes qui le
 ferment, pas un avis sur celles de vos routes qui devraient refuser un appelant non
-vérifié. Une garde pour cela est une pièce à part, couverte pour elle-même.
+vérifié. Une garde pour cela est une pièce à part, couverte [plus bas](#exiger-une-adresse-vérifiée).
 
 ## Protéger une route
 
@@ -261,6 +301,22 @@ requête sans aucun jeton reçoit 401 sans que `require_role` soit jamais attein
 l'appelant de s'identifier, non qu'il manque de droits. Et c'est la ligne
 `security(("bearer" = []))` qui pose le cadenas sur cette opération dans
 `/api-docs/openapi.json` ; une route laissée ouverte ne doit pas la porter.
+
+### Exiger une adresse vérifiée
+
+Un second extracteur, `VerifiedIdentity`, enveloppe `Identity` plutôt que de se poser à
+côté : un handler qui le prend à la place reçoit la même 401 pour un jeton absent ou
+invalide, puis une 403 par-dessus, tirée en relisant le compte et en vérifiant
+`email_verified_at`.
+
+L'état vient de la base et non du jeton, délibérément : le jeton d'accès porte `sub` et
+`role` pour ses quinze minutes entières, et lire la vérification dessus continuerait de
+répondre faux pour ce qu'il reste de cette fenêtre après que `verify-email` l'a levée.
+Aucune route du fragment ne prend `VerifiedIdentity` — `login` n'exige pas une adresse
+vérifiée, comme ci-dessus — si bien qu'elle démarre en code mort, derrière
+`#[allow(dead_code)]`, dans `src/auth/guard.rs`, de la même façon que `require_role` le
+serait si aucune route engendrée ne l'appelait. Prendre `VerifiedIdentity` au lieu
+d'`Identity` sur la signature d'un handler est ce qui met une route derrière elle.
 
 ### Fermées par défaut à la génération
 
@@ -342,9 +398,9 @@ deux sémantiques votre projet porte dépend de la version qui l'a engendré. La
 
 **Aucune route ne donne un rôle.** L'inscription rend toujours un `user`, par défaut de la
 table, et la promotion passe par la base. C'est délibéré : une route HTTP qui distribue
-`admin` est une route que quelqu'un finira par atteindre. Le `src/auth/tests.rs` engendré
-promeut un compte exactement ainsi, et se connecte seulement après — un jeton émis avant la
-promotion porterait l'ancien rôle :
+`admin` est une route que quelqu'un finira par atteindre. Le `src/auth/tests/session.rs`
+engendré promeut un compte exactement ainsi, et se connecte seulement après — un jeton émis
+avant la promotion porterait l'ancien rôle :
 
 ```rust file=examples/blog-auth/src/auth/tests/session.rs region=jeton_admin
 ```
@@ -366,11 +422,13 @@ bien identifié mais d'un rôle trop court, à qui la garde répond 403 dans le 
 ```rust file=examples/blog-auth/src/posts/tests.rs region=refus
 ```
 
-Ce même `src/auth/tests.rs` couvre les routes de la feature elle-même — l'inscription,
-les 401 identiques, la rotation, la révocation. Tous passent par HTTP contre une vraie
-base, et tous portent donc `#[ignore]` : le `cargo test` d'un projet neuf réussit sans
-serveur démarré, et `cargo test -- --ignored` les lance contre la base que nomme votre
-`.env`, migrations appliquées. Voir le [guide des tests](./testing.md).
+Les routes de la feature elle-même sont couvertes de la même façon, réparties entre
+`src/auth/tests/session.rs`, `password.rs` et `verification.rs` — l'inscription, les 401
+identiques, la rotation, la révocation, et les parcours de mot de passe et de vérification
+ci-dessus. Tous passent par HTTP contre une vraie base, et tous portent donc `#[ignore]` :
+le `cargo test` d'un projet neuf réussit sans serveur démarré, et `cargo test -- --ignored`
+les lance contre la base que nomme votre `.env`, migrations appliquées. Voir le
+[guide des tests](./testing.md).
 
 ## Ce qu'elle vous laisse
 
@@ -381,7 +439,7 @@ Tout ce qui est propre à votre domaine :
   service ;
 - **la politique de mot de passe** — le DTO valide une longueur de 12 à 128 caractères,
   rien de plus ;
-- **vérification d'adresse, fournisseurs tiers** — hors de cette feature ;
+- **fournisseurs tiers** — hors de cette feature ;
 - **la rotation du secret** — changer `RBS_AUTH__SECRET` invalide tous les jetons d'accès
   en circulation, ce qui est une fonctionnalité le jour où vous en avez besoin, et une
   panne le jour où vous ne l'attendez pas.
