@@ -23,7 +23,7 @@ Ces règles valent pour **toutes** les tâches. Aucune n'est rappelée dans les 
 - **Documentation bilingue** : toute page modifiée sous `docs/docs/` l'est aussi sous `docs/i18n/fr/docusaurus-plugin-content-docs/current/`, **dans le même commit**.
 - **Délimiteurs minijinja** : les gabarits emploient `{@ variable @}` et `{% bloc %}` — Jinja et `format!` se disputent `{{ }}`. Attention aux blancs : `-%}` mange l'indentation, et un blanc perdu n'est vu que par `integration_examples`.
 - **Régénération des exemples** : `examples/blog-auth` se régénère **par diff entre deux générations, jamais par écrasement** — il porte une édition à la main, `src/posts/tests.rs`, que `integration_examples.rs` déclare. La procédure exacte est en Annexe A.
-- **Suite lente** : `cargo test -p rbs-cli -- --ignored --no-fail-fast`. Sans `--no-fail-fast` la suite s'arrête au premier binaire et masque les échecs suivants. Rediriger la sortie vers le scratchpad : une sortie longue en arrière-plan est rognée et les chiffres se perdent.
+- **Suite lente** : `cargo test -p rbs-cli --no-fail-fast -- --ignored`. `--no-fail-fast` est un drapeau de **cargo** et se place **avant** le `--` : posé après, il part au harnais de test, qui refuse `Unrecognized option: 'no-fail-fast'` et fait échouer la suite entière sans en lancer un seul test. Sans lui, la suite s'arrête au premier binaire et masque les échecs suivants. Rediriger la sortie vers le scratchpad : une sortie longue en arrière-plan est rognée et les chiffres se perdent.
 - **Avant la passe lente** : `cargo check` sur `examples/blog-auth` régénéré. Le code des fragments n'est compilé nulle part ailleurs, et une erreur de compilation découverte après vingt minutes de Docker est vingt minutes perdues.
 - **Littéraux de fragments** : toute chaîne déposée par un gabarit est figée des deux côtés de la frontière Docker. `grep -rn "<la chaîne>" crates/rbs-cli/tests/` avant de conclure qu'un changement de texte est sans conséquence.
 
@@ -969,7 +969,7 @@ Docker doit tourner.
 
 ```bash
 mkdir -p "$SCRATCHPAD"
-cargo test -p rbs-cli -- --ignored --no-fail-fast > "$SCRATCHPAD/lot1.txt" 2>&1
+cargo test -p rbs-cli --no-fail-fast -- --ignored > "$SCRATCHPAD/lot1.txt" 2>&1
 tail -40 "$SCRATCHPAD/lot1.txt"
 ```
 
@@ -1812,7 +1812,7 @@ cargo clippy --workspace --all-targets -- -D warnings && cargo fmt --all --check
 - [ ] **Step 10 : Lancer la suite lente**
 
 ```bash
-cargo test -p rbs-cli -- --ignored --no-fail-fast > "$SCRATCHPAD/lot2.txt" 2>&1
+cargo test -p rbs-cli --no-fail-fast -- --ignored > "$SCRATCHPAD/lot2.txt" 2>&1
 tail -40 "$SCRATCHPAD/lot2.txt"
 ```
 
@@ -2537,7 +2537,7 @@ Clippy vert en local ne dit rien de la version que prend `@stable` en CI.
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace > "$SCRATCHPAD/final-rapide.txt" 2>&1
-cargo test -p rbs-cli -- --ignored --no-fail-fast > "$SCRATCHPAD/final-lent.txt" 2>&1
+cargo test -p rbs-cli --no-fail-fast -- --ignored > "$SCRATCHPAD/final-lent.txt" 2>&1
 tail -40 "$SCRATCHPAD/final-rapide.txt" "$SCRATCHPAD/final-lent.txt"
 ```
 
@@ -2568,7 +2568,7 @@ projet croit envoyer, ce qui rend le tutoriel exécutable sans compte SMTP.
 
 Vérifications :
 - cargo test --workspace : N passés, 0 échec
-- cargo test -p rbs-cli -- --ignored --no-fail-fast : N passés, 0 échec
+- cargo test -p rbs-cli --no-fail-fast -- --ignored : N passés, 0 échec
 - clippy -D warnings et fmt --check : propres
 EOF
 ```
@@ -2623,7 +2623,7 @@ L'oracle est `cargo test -p rbs-cli --test integration_examples`, qui compare oc
 | Rendu du fragment | `cargo test -p rbs-cli --test integration_auth` | ce que `add auth` dépose, ancres comprises | non |
 | Non-dérive des exemples | `cargo test -p rbs-cli --test integration_examples` | que les exemples versionnés valent ce que les templates rendent | non |
 | Transcriptions de la doc | `cargo test -p rbs-cli --test integration_docs` | que les sorties de CLI citées par `docs/` sont exactes | non |
-| Parcours réels | `cargo test -p rbs-cli -- --ignored --no-fail-fast` | que le projet engendré compile **et** répond contre PostgreSQL | oui |
+| Parcours réels | `cargo test -p rbs-cli --no-fail-fast -- --ignored` | que le projet engendré compile **et** répond contre PostgreSQL | oui |
 | Tests du fragment | `src/auth/tests/*.rs` du projet engendré | les invariants du module | oui |
 
 Les tests déposés dans `examples/` ne tournent jamais dans la suite du dépôt : les prouver exige un PostgreSQL monté à la main et `--include-ignored`.
