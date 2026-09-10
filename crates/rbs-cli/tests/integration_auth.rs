@@ -165,10 +165,9 @@ fn the_one_time_token_repository_is_written() {
     }
 }
 
-/// Les cinq chemins sont montés dès l'installation : I7 les enregistrera dans le
-/// document OpenAPI, J2 les jouera contre une vraie base.
+/// Les chemins sont montés dès l'installation, un de plus à chaque tâche jusqu'à treize.
 #[test]
-fn the_five_auth_paths_are_mounted() {
+fn the_auth_paths_are_mounted() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = project_with_auth(&parent);
 
@@ -181,6 +180,7 @@ fn the_five_auth_paths_are_mounted() {
         "/auth/refresh",
         "/auth/logout",
         "/auth/me",
+        "/auth/change-password",
     ] {
         assert!(
             module.contains(chemin),

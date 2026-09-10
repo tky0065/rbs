@@ -37,4 +37,8 @@ pub fn routes() -> Router<AppState> {
         .route("/auth/refresh", post(controller::refresh))
         .route("/auth/logout", post(controller::logout))
         .route("/auth/me", get(controller::me))
+        .route(
+            "/auth/change-password",
+            post(controller::password::change_password),
+        )
 }

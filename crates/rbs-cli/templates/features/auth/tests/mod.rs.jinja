@@ -84,6 +84,18 @@ fn post_json(chemin: &str, body: Value) -> Request<Body> {
         .expect("requête bien formée")
 }
 
+/// `post_json`, porteur d'un jeton d'accès. `get_authenticated` et `delete_authenticated`
+/// suivront le même modèle pour les routes protégées des autres méthodes.
+fn post_json_authenticated(chemin: &str, jeton: &str, body: Value) -> Request<Body> {
+    Request::builder()
+        .method("POST")
+        .uri(chemin)
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {jeton}"))
+        .body(Body::from(body.to_string()))
+        .expect("requête bien formée")
+}
+
 /// Une adresse jamais inscrite : les tests partagent une base qu'ils ne vident pas.
 fn fresh_email() -> String {
     format!("{}@exemple.test", Uuid::new_v4())
@@ -111,4 +123,15 @@ async fn authenticate(api: &Router, email: &str, mot_de_passe: &str) -> (StatusC
         ),
     )
     .await
+}
+
+/// Connecte `email` et rend la paire obtenue, en supposant la connexion réussie.
+///
+/// Les tests qui veulent observer un échec de connexion appellent `authenticate`
+/// directement : celui-ci n'a rien à en faire.
+async fn login(api: &Router, email: &str, mot_de_passe: &str) -> Value {
+    let (status, paire) = authenticate(api, email, mot_de_passe).await;
+    assert_eq!(status, StatusCode::OK, "{paire}");
+
+    paire
 }

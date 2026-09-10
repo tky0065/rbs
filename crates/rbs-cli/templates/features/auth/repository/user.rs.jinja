@@ -1,6 +1,6 @@
 use rbs_core::{Error, Result};
 use sea_orm::error::SqlErr;
-use sea_orm::prelude::Uuid;
+use sea_orm::prelude::{Expr, Uuid};
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 
 use super::super::model::user::{self, Entity};
@@ -46,4 +46,18 @@ pub async fn create(db: &DatabaseConnection, email: &str, password_hash: &str) -
             Some(SqlErr::UniqueConstraintViolation(_)) => Error::Conflict(ADRESSE_PRISE.to_owned()),
             _ => Error::from(error),
         })
+}
+
+/// Remplace le hash du mot de passe.
+///
+/// L'`UPDATE` ne touche que cette colonne : charger le modèle pour le réécrire en entier
+/// écraserait ce qu'une autre requête a changé entre-temps.
+pub async fn set_password(db: &DatabaseConnection, id: Uuid, hash: &str) -> Result<()> {
+    Entity::update_many()
+        .col_expr(user::Column::PasswordHash, Expr::value(hash))
+        .filter(user::Column::Id.eq(id))
+        .exec(db)
+        .await?;
+
+    Ok(())
 }

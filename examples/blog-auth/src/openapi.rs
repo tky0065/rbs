@@ -17,6 +17,7 @@ use crate::state::AppState;
         crate::auth::controller::refresh,
         crate::auth::controller::logout,
         crate::auth::controller::me,
+        crate::auth::controller::password::change_password,
         crate::posts::controller::list,
         crate::posts::controller::filter,
         crate::posts::controller::create,

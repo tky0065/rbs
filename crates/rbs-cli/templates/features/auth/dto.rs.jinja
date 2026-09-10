@@ -29,6 +29,16 @@ pub struct RefreshRequest {
     pub refresh_token: String,
 }
 
+#[derive(Debug, Deserialize, ToSchema, Validate)]
+pub struct ChangePasswordRequest {
+    // La même borne haute que sur `login`, et pour la même raison : sans elle, la route
+    // hache en Argon2 tout ce qu'on lui poste.
+    #[validate(length(min = 12, max = 128))]
+    pub current_password: String,
+    #[validate(length(min = 12, max = 128))]
+    pub new_password: String,
+}
+
 /// Ce que rendent `login` et `refresh`.
 ///
 /// `refresh_token` est le jeton en clair, remis une seule fois : la base n'en garde que

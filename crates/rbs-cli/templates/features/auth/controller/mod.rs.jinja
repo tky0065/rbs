@@ -1,3 +1,4 @@
+pub mod password;
 pub mod session;
 
 // `#[utoipa::path]` dépose un type `__path_<handler>` caché à côté de chaque fonction :

@@ -15,6 +15,7 @@ use sea_orm::DatabaseConnection;
 use super::dto::{TokenPair, UserResponse};
 use super::repository::{self, Model};
 
+pub mod password;
 pub mod session;
 
 pub use session::{login, logout, me, refresh, register};
