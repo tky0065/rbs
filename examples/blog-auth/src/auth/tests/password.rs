@@ -71,6 +71,23 @@ async fn changing_the_password_returns_a_usable_pair_and_closes_the_others() {
 
     assert_eq!(statut, StatusCode::OK, "corps : {corps}");
 
+    // L'ordre compte : rejouer le jeton de `premiere` arme la défense anti-rejeu de
+    // `refresh`, qui referme *toutes* les sessions ouvertes du compte — y compris celle
+    // que le changement de mot de passe vient d'émettre. Vérifier la nouvelle paire
+    // d'abord la prouve donc avant que le rejeu de l'ancienne ne la fasse tomber à son
+    // tour ; l'inverser ferait échouer ce deuxième appel sans rapport avec ce qu'il teste.
+
+    // Celle que le changement vient de rendre tourne.
+    let (accepte, _) = call(
+        &api,
+        post_json(
+            "/auth/refresh",
+            json!({ "refresh_token": corps["refresh_token"] }),
+        ),
+    )
+    .await;
+    assert_eq!(accepte, StatusCode::OK);
+
     // L'ancienne session est fermée : son jeton de rafraîchissement ne tourne plus.
     let (rejet, _) = call(
         &api,
@@ -81,17 +98,6 @@ async fn changing_the_password_returns_a_usable_pair_and_closes_the_others() {
     )
     .await;
     assert_eq!(rejet, StatusCode::UNAUTHORIZED);
-
-    // Celle que le changement vient de rendre, elle, tourne.
-    let (accepte, _) = call(
-        &api,
-        post_json(
-            "/auth/refresh",
-            json!({ "refresh_token": corps["refresh_token"] }),
-        ),
-    )
-    .await;
-    assert_eq!(accepte, StatusCode::OK);
 }
 
 /// Un mot de passe courant faux rend 403 et non 401 : l'appelant est identifié, son
