@@ -8,7 +8,7 @@ use chrono::Utc;
 /// suivie d'une écriture ne donnerait pas — les deux franchiraient la lecture avant que
 /// l'une ait écrit, et poseraient chacune leur mot de passe.
 #[tokio::test]
-#[ignore = "joint la base décrite par .env"]
+#[ignore = "joint la base du projet"]
 async fn a_token_is_consumed_once_even_under_concurrency() {
     let db = connection().await;
     let compte = registered_user(&db).await;
@@ -48,7 +48,7 @@ async fn a_token_is_consumed_once_even_under_concurrency() {
 
 /// Le parcours nominal : la paire rendue est utilisable, et l'ancienne ne l'est plus.
 #[tokio::test]
-#[ignore = "joint la base décrite par .env"]
+#[ignore = "joint la base du projet"]
 async fn changing_the_password_returns_a_usable_pair_and_closes_the_others() {
     let api = application().await;
     let email = fresh_email();
@@ -100,11 +100,58 @@ async fn changing_the_password_returns_a_usable_pair_and_closes_the_others() {
     assert_eq!(rejet, StatusCode::UNAUTHORIZED);
 }
 
+/// Une boîte compromise a pu recevoir une demande de réinitialisation d'un attaquant :
+/// le titulaire qui reprend la main par `/auth/change-password` ferme ce lien-là, et pas
+/// seulement ses sessions.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn changing_the_password_closes_pending_reset_links() {
+    let api = application().await;
+    let db = connection().await;
+    let email = fresh_email();
+
+    register(&api, &email).await;
+    let paire = login(&api, &email, PASSWORD).await;
+
+    let (_, jeton) = crate::auth::service::password::request_reset(&db, 3600, &email)
+        .await
+        .expect("la demande aboutit")
+        .expect("le compte existe");
+
+    let (statut, corps) = call(
+        &api,
+        post_json_authenticated(
+            "/auth/change-password",
+            paire["access_token"].as_str().expect("jeton d'accès"),
+            json!({
+                "current_password": PASSWORD,
+                "new_password": "un mot de passe repris en main",
+            }),
+        ),
+    )
+    .await;
+    assert_eq!(statut, StatusCode::OK, "corps : {corps}");
+
+    let (rejet, _) = call(
+        &api,
+        post_json(
+            "/auth/reset-password",
+            json!({ "token": jeton, "new_password": "le mot de passe de l'attaquant" }),
+        ),
+    )
+    .await;
+    assert_eq!(
+        rejet,
+        StatusCode::UNAUTHORIZED,
+        "le lien de réinitialisation aurait dû être fermé par le changement de mot de passe"
+    );
+}
+
 /// Un mot de passe courant faux rend 403 et non 401 : l'appelant est identifié, son
 /// Bearer est bon. Un 401 lui dirait que son jeton est mort et déclencherait un
 /// rafraîchissement inutile.
 #[tokio::test]
-#[ignore = "joint la base décrite par .env"]
+#[ignore = "joint la base du projet"]
 async fn a_wrong_current_password_is_forbidden_not_unauthorized() {
     let api = application().await;
     let email = fresh_email();
@@ -133,7 +180,7 @@ async fn a_wrong_current_password_is_forbidden_not_unauthorized() {
 /// Le test passe par la couche service pour l'émission : la base ne garde que
 /// l'empreinte, et aucune lecture ne rendrait le jeton en clair que le courriel porte.
 #[tokio::test]
-#[ignore = "joint la base décrite par .env"]
+#[ignore = "joint la base du projet"]
 async fn a_reset_token_sets_a_new_password_and_closes_every_session() {
     let api = application().await;
     let db = connection().await;
@@ -192,7 +239,7 @@ async fn a_reset_token_sets_a_new_password_and_closes_every_session() {
 
 /// Le même jeton, deux fois : la seconde est refusée.
 #[tokio::test]
-#[ignore = "joint la base décrite par .env"]
+#[ignore = "joint la base du projet"]
 async fn a_reset_token_serves_once() {
     let api = application().await;
     let db = connection().await;
@@ -216,7 +263,7 @@ async fn a_reset_token_serves_once() {
 /// Une seconde demande ferme la première : un lien parti dans une boîte qu'on ne
 /// contrôle plus cesse de valoir dès qu'on en redemande un.
 #[tokio::test]
-#[ignore = "joint la base décrite par .env"]
+#[ignore = "joint la base du projet"]
 async fn a_new_request_invalidates_the_previous_link() {
     let api = application().await;
     let db = connection().await;
@@ -266,7 +313,7 @@ async fn a_new_request_invalidates_the_previous_link() {
 /// cas ferait de cette route l'oracle d'énumération que le hash témoin de `login` écarte
 /// de l'autre côté.
 #[tokio::test]
-#[ignore = "joint la base décrite par .env"]
+#[ignore = "joint la base du projet"]
 async fn forgetting_an_unknown_address_is_accepted_and_writes_nothing() {
     let api = application().await;
     let db = connection().await;

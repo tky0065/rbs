@@ -58,7 +58,13 @@ pub async fn forgot_password(
         service::password::request_reset(state.core().db(), flows.reset_ttl_secs, &input.email)
             .await?
     {
-        state.mail().send_template_detached(
+        // `send_template_detached` rend le gabarit sur-le-champ et peut donc échouer —
+        // gabarit absent, mal formé, ou adresse que `lettre` refuse d'analyser. Propager
+        // cette erreur ferait de cette branche, atteinte seulement quand le compte
+        // existe, la seule à répondre 500 : un attaquant qui essaie plusieurs adresses
+        // verrait alors le code de statut lui dire lesquelles sont inscrites, ce que 202
+        // existe précisément pour taire.
+        if let Err(error) = state.mail().send_template_detached(
             &utilisateur.email,
             "Réinitialisation de votre mot de passe",
             "reinitialisation.html",
@@ -66,7 +72,13 @@ pub async fn forgot_password(
                 link => flows.link("reset-password", &jeton),
                 heures => flows.reset_ttl_secs / 3600,
             },
-        )?;
+        ) {
+            tracing::error!(
+                user_id = %utilisateur.id,
+                %error,
+                "envoi du courriel de réinitialisation échoué"
+            );
+        }
     }
 
     Ok(StatusCode::ACCEPTED)

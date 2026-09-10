@@ -36,6 +36,14 @@ pub async fn change(
     let nouveau = hash::hash_password(&input.new_password)?;
     repository::user::set_password(db, user_id, &nouveau).await?;
 
+    // Une boîte compromise a pu recevoir une demande de réinitialisation d'un attaquant
+    // avant que son titulaire ne s'en aperçoive et ne change ici son mot de passe pour
+    // reprendre la main : laisser ce lien-là vivant jusqu'à son terme le rendrait à
+    // l'attaquant malgré le geste qui devait l'en priver. C'est le scénario que ce champ
+    // existe déjà pour fermer à l'émission d'un nouveau jeton ; il vaut tout autant ici.
+    repository::one_time_token::invalidate_pending(db, user_id, TokenPurpose::PasswordReset)
+        .await?;
+
     let fermees = repository::revoke_sessions_of(db, user_id).await?;
 
     // Ni l'adresse ni les jetons : l'identifiant du compte suffit à retrouver ce qui s'est
@@ -104,6 +112,12 @@ pub async fn reset(db: &DatabaseConnection, input: ResetPasswordRequest) -> Resu
 
     let nouveau = hash::hash_password(&input.new_password)?;
     repository::user::set_password(db, ligne.user_id, &nouveau).await?;
+
+    // Symétrique à `change` : un mot de passe qui vient d'être posé rend caducs les
+    // autres liens de réinitialisation en attente, plutôt que d'en laisser un survivre à
+    // côté du mot de passe qu'il prétendait remplacer.
+    repository::one_time_token::invalidate_pending(db, ligne.user_id, TokenPurpose::PasswordReset)
+        .await?;
 
     let fermees = repository::revoke_sessions_of(db, ligne.user_id).await?;
 

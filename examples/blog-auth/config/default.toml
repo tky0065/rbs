@@ -61,9 +61,15 @@ trust_forwarded_for = false
 # ligne, une seule adresse épuise la mémoire du serveur.
 routes = [
   { path = "/auth/login", limit = 5, window_secs = 60 },
-  # Ces deux routes envoient un courriel à une adresse que l'appelant choisit. Sans borne,
-  # elles font du projet un relais de harcèlement — et le coût est payé par le titulaire
-  # de l'adresse, qui n'a rien demandé.
+  # Ces trois routes envoient un courriel à une adresse que l'appelant choisit. Sans
+  # borne, elles font du projet un relais de harcèlement — et le coût est payé par le
+  # titulaire de l'adresse, qui n'a rien demandé.
   { path = "/auth/forgot-password", limit = 3, window_secs = 3600 },
   { path = "/auth/resend-verification", limit = 3, window_secs = 3600 },
+  # `register` tolère plus large que les deux autres : s'inscrire est un geste plus
+  # fréquent qu'oublier son mot de passe, et une borne trop serrée empêcherait une
+  # famille derrière une même adresse IP de créer chacun son compte. Elle borne quand
+  # même : chaque appel envoie un courriel *et* écrit un compte et un jeton, plus coûteux
+  # qu'une simple demande de réinitialisation.
+  { path = "/auth/register", limit = 10, window_secs = 3600 },
 ]
