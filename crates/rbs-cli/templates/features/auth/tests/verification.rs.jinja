@@ -1,5 +1,7 @@
 use super::*;
 
+use axum::routing::get;
+
 /// L'inscription ouvre un jeton de vérification : c'est ce qui fait que le courriel part
 /// sans qu'aucune route ne soit appelée.
 #[tokio::test]
@@ -105,4 +107,52 @@ async fn resending_to_an_unknown_address_is_accepted() {
     .await;
 
     assert_eq!(statut, StatusCode::ACCEPTED);
+}
+
+/// La garde rejette avant la vérification et laisse passer après.
+///
+/// La route est montée ici et nulle part ailleurs : le fragment livre la garde sans
+/// l'imposer, et c'est au projet de décider où elle s'applique.
+#[tokio::test]
+#[ignore = "joint la base décrite par .env"]
+async fn the_verified_guard_opens_only_after_verification() {
+    async fn protegee(_verifiee: crate::auth::guard::VerifiedIdentity) -> StatusCode {
+        StatusCode::OK
+    }
+
+    let db = connection().await;
+    let config = rbs_core::Config::load().expect("configuration lisible");
+
+    let api = Router::new()
+        .route("/protegee", get(protegee))
+        .with_state(AppState::new(db.clone(), config).expect("état partagé constructible"));
+    let publique = application().await;
+
+    let email = fresh_email();
+    register(&publique, &email).await;
+    let paire = login(&publique, &email, PASSWORD).await;
+    let jeton_acces = paire["access_token"]
+        .as_str()
+        .expect("jeton d'accès")
+        .to_owned();
+
+    let (avant, _) = call(&api, get_authenticated("/protegee", &jeton_acces)).await;
+    assert_eq!(
+        avant,
+        StatusCode::FORBIDDEN,
+        "une adresse non vérifiée passe la garde"
+    );
+
+    let (_, jeton) = crate::auth::service::verification::request(&db, 86400, &email)
+        .await
+        .expect("la demande aboutit")
+        .expect("le compte existe");
+    call(
+        &publique,
+        post_json("/auth/verify-email", json!({ "token": jeton })),
+    )
+    .await;
+
+    let (apres, _) = call(&api, get_authenticated("/protegee", &jeton_acces)).await;
+    assert_eq!(apres, StatusCode::OK, "une adresse vérifiée est rejetée");
 }

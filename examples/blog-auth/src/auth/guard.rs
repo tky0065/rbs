@@ -1,7 +1,12 @@
-use rbs_core::{Error, Identity, Result};
+use axum::extract::FromRequestParts;
+use axum::http::request::Parts;
+use rbs_core::{Error, HasCoreState, Identity, Result};
 use sea_orm::ActiveEnum;
+use sea_orm::prelude::Uuid;
 
 use super::model::Role;
+use super::repository;
+use crate::state::AppState;
 
 /// Exige un rôle **au moins** égal à celui donné.
 ///
@@ -45,3 +50,45 @@ impl RequireRole for Identity {
     }
 }
 // endregion: require_role
+
+/// Une identité dont l'adresse est prouvée.
+///
+/// À poser sur les routes que vous jugez sensibles : `login` ne réclame pas la
+/// vérification, et c'est ici que votre projet décide où elle devient obligatoire.
+///
+/// L'état est relu en base et non lu dans le jeton : le jeton d'accès porte `sub` et
+/// `role`, et y mettre la vérification la figerait pour sa durée — une adresse tout juste
+/// vérifiée resterait non vérifiée un quart d'heure.
+///
+/// ```ignore
+/// pub async fn publier(identite: VerifiedIdentity, ...) -> Result<StatusCode> { ... }
+/// ```
+// Aucune route du fragment ne la porte, et un binaire n'exporte rien qui la tiendrait en
+// vie : sans cette ligne, un projet portant `auth` ne compilerait pas sous
+// `clippy -D warnings`. Elle se retire dès la première route qui l'emploie.
+#[allow(dead_code)]
+pub struct VerifiedIdentity(pub Identity);
+
+impl FromRequestParts<AppState> for VerifiedIdentity {
+    type Rejection = Error;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self> {
+        // `Identity` rejette déjà une requête sans jeton : la garde ne répond donc jamais
+        // à qui n'est pas identifié.
+        let identite = Identity::from_request_parts(parts, state).await?;
+
+        let id = Uuid::parse_str(&identite.user_id).map_err(|_| Error::Unauthorized)?;
+
+        // Un jeton valide dont le compte a disparu ne vaut pas mieux qu'un jeton
+        // invalide : `Forbidden` laisserait entendre que le compte existe.
+        let utilisateur = repository::find(state.core().db(), id)
+            .await?
+            .ok_or(Error::Unauthorized)?;
+
+        if utilisateur.email_verified_at.is_none() {
+            return Err(Error::Forbidden);
+        }
+
+        Ok(Self(identite))
+    }
+}
