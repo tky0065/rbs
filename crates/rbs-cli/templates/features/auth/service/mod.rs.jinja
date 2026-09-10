@@ -65,6 +65,7 @@ fn profile(utilisateur: Model) -> UserResponse {
         id: utilisateur.id,
         email: utilisateur.email,
         role: utilisateur.role.to_value(),
+        email_verified_at: utilisateur.email_verified_at,
         created_at: utilisateur.created_at,
     }
 }

@@ -107,6 +107,41 @@ fn the_four_project_anchors_are_completed() {
     }
 }
 
+/// Une table et une colonne de plus dans la migration qui crée les tables : un projet
+/// déjà engendré n'a rien à rattraper, elle n'altère toujours rien.
+#[test]
+fn the_migration_creates_the_one_time_tokens_table() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_auth(&parent);
+
+    let migrations: Vec<_> = fs::read_dir(racine.join("migration/src"))
+        .expect("la crate migration existe")
+        .filter_map(|entree| entree.ok())
+        .map(|entree| entree.file_name().to_string_lossy().to_string())
+        .filter(|nom| nom.contains("create_auth_tables"))
+        .collect();
+
+    let source = fs::read_to_string(
+        racine
+            .join("migration/src")
+            .join(migrations.first().expect("la migration du fragment existe")),
+    )
+    .expect("migration lisible");
+
+    for attendu in [
+        "OneTimeTokens::Table",
+        "OneTimeTokens::Purpose",
+        "OneTimeTokens::ConsumedAt",
+        "Users::EmailVerifiedAt",
+        "idx_one_time_tokens_token_hash",
+    ] {
+        assert!(
+            source.contains(attendu),
+            "la migration ne porte pas `{attendu}` :\n{source}"
+        );
+    }
+}
+
 /// Les cinq chemins sont montés dès l'installation : I7 les enregistrera dans le
 /// document OpenAPI, J2 les jouera contre une vraie base.
 #[test]

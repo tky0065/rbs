@@ -63,6 +63,9 @@ pub struct UserResponse {
     pub id: Uuid,
     pub email: String,
     pub role: String,
+    /// Nul tant que l'adresse n'est pas prouvée.
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub email_verified_at: Option<DateTimeWithTimeZone>,
     #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
 }
