@@ -120,6 +120,16 @@ fn get_authenticated(chemin: &str, jeton: &str) -> Request<Body> {
         .expect("requête bien formée")
 }
 
+/// `without_body`, porteur d'un jeton d'accès.
+fn delete_authenticated(chemin: &str, jeton: &str) -> Request<Body> {
+    Request::builder()
+        .method("DELETE")
+        .uri(chemin)
+        .header("authorization", format!("Bearer {jeton}"))
+        .body(Body::empty())
+        .expect("requête bien formée")
+}
+
 /// Une adresse jamais inscrite : les tests partagent une base qu'ils ne vident pas.
 fn fresh_email() -> String {
     format!("{}@exemple.test", Uuid::new_v4())

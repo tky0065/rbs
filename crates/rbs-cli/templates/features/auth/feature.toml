@@ -125,6 +125,9 @@ crate::auth::controller::password::forgot_password,
 crate::auth::controller::password::reset_password,
 crate::auth::controller::verification::verify_email,
 crate::auth::controller::verification::resend_verification,
+crate::auth::controller::list_sessions,
+crate::auth::controller::revoke_session,
+crate::auth::controller::revoke_sessions,
 """
 
 [[anchors]]

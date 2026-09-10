@@ -6,7 +6,9 @@ use rbs_core::{Error, Result, hash, token};
 use sea_orm::DatabaseConnection;
 use sea_orm::prelude::Uuid;
 
-use super::super::dto::{LoginRequest, RefreshRequest, RegisterRequest, TokenPair, UserResponse};
+use super::super::dto::{
+    LoginRequest, RefreshRequest, RegisterRequest, SessionResponse, TokenPair, UserResponse,
+};
 use super::super::repository::{self, ADRESSE_PRISE};
 use super::{issue, profile};
 
@@ -123,4 +125,43 @@ pub async fn me(db: &DatabaseConnection, id: Uuid) -> Result<UserResponse> {
         .await?
         .map(profile)
         .ok_or(Error::Unauthorized)
+}
+
+/// Les sessions ouvertes du compte, sans jamais l'empreinte du jeton qu'elles portent.
+pub async fn sessions(db: &DatabaseConnection, user_id: Uuid) -> Result<Vec<SessionResponse>> {
+    Ok(repository::open_sessions_of(db, user_id)
+        .await?
+        .into_iter()
+        .map(session_view)
+        .collect())
+}
+
+/// La vue publique d'une session.
+///
+/// Même règle que `profile()` pour `UserResponse` : `SessionResponse` ne porte pas
+/// `token_hash`, et cette fonction est le seul passage du modèle vers la réponse.
+fn session_view(session: repository::refresh_token::Model) -> SessionResponse {
+    SessionResponse {
+        id: session.id,
+        created_at: session.created_at,
+        expires_at: session.expires_at,
+    }
+}
+
+/// Ferme une session nommée du compte appelant.
+///
+/// `NotFound` et non `Forbidden` : un identifiant qui n'est pas le vôtre ne désigne, de
+/// votre côté, aucune session — un 403 confirmerait qu'elle existe chez quelqu'un d'autre.
+pub async fn revoke_session(db: &DatabaseConnection, id: Uuid, user_id: Uuid) -> Result<()> {
+    if !repository::revoke_session(db, id, user_id).await? {
+        return Err(Error::NotFound("session"));
+    }
+
+    Ok(())
+}
+
+pub async fn revoke_sessions(db: &DatabaseConnection, user_id: Uuid) -> Result<()> {
+    repository::revoke_sessions_of(db, user_id).await?;
+
+    Ok(())
 }

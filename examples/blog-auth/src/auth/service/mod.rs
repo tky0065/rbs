@@ -19,7 +19,9 @@ pub mod password;
 pub mod session;
 pub mod verification;
 
-pub use session::{login, logout, me, refresh, register};
+pub use session::{
+    login, logout, me, refresh, register, revoke_session, revoke_sessions, sessions,
+};
 
 /// Signe un jeton d'accès et ouvre la session de rafraîchissement qui l'accompagne.
 async fn issue(

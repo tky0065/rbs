@@ -124,6 +124,36 @@ et elle hache une valeur de comparaison même pour une adresse inconnue. Sauter 
 comparaison répondrait aux adresses inconnues en deux millisecondes et aux autres en deux
 cent quarante — un oracle d'énumération mesurable de l'extérieur.
 
+## Voir et fermer ses sessions
+
+Trois routes de plus, protégées celles-ci — elles portent sur le compte de l'appelant, et
+jamais sur un autre :
+
+| Route | Ce qu'elle fait |
+|---|---|
+| `GET /auth/sessions` | Les sessions encore ouvertes du compte, la plus récente d'abord. |
+| `DELETE /auth/sessions/{id}` | Ferme une session nommée. 204, ou 404 si l'identifiant ne désigne aucune session de l'appelant. |
+| `DELETE /auth/sessions` | Ferme toutes les sessions du compte, la sienne comprise. 204. |
+
+`GET /auth/sessions` rend `SessionResponse`, qui ne porte jamais `token_hash` — la même
+règle qui tient `UserResponse` à l'écart du hash du mot de passe : la vue d'une session n'a
+aucune raison de porter de quoi la présenter.
+
+`DELETE /auth/sessions/{id}` rend **404, et non 403**, quand l'identifiant ne désigne
+aucune session de l'appelant :
+
+```rust file=examples/blog-auth/src/auth/controller/session.rs region=revoke_session
+```
+
+Un identifiant qui n'est pas le vôtre ne désigne, de votre côté, aucune session — un 403
+confirmerait qu'elle existe chez quelqu'un d'autre. La fermeture porte le propriétaire dans
+la condition de l'`UPDATE` du repository, et non dans une lecture qui le précède : lire la
+ligne puis comparer laisserait la révocation de la session d'autrui à portée d'une course —
+le même motif que suit déjà la rotation d'un jeton de rafraîchissement.
+
+`DELETE /auth/sessions` ferme tout, y compris la session qui porte le jeton présenté à la
+requête : rien ne la distingue des autres, comme pour `change-password`.
+
 ## Oublier et réinitialiser un mot de passe
 
 Deux routes de plus ferment la boucle que la connexion ouvre, publiques toutes deux — sans

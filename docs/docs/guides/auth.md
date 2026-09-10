@@ -121,6 +121,37 @@ it hashes a comparison value even for an unknown address. Skipping that comparis
 answer unknown addresses in two milliseconds and known ones in two hundred and forty —
 an enumeration oracle measurable from outside.
 
+## Viewing and closing sessions
+
+Three more routes, this time protected — they act on the caller's own account, never
+another one:
+
+| Route | What it does |
+|---|---|
+| `GET /auth/sessions` | The account's still-open sessions, most recent first. |
+| `DELETE /auth/sessions/{id}` | Closes one named session. 204, or 404 if the id names no session of the caller's. |
+| `DELETE /auth/sessions` | Closes every session of the account, including the caller's own. 204. |
+
+`GET /auth/sessions` answers with `SessionResponse`, which never carries `token_hash` —
+the same rule that keeps the password hash out of `UserResponse`: a session's view has no
+reason to carry what it takes to present it.
+
+`DELETE /auth/sessions/{id}` answers **404, not 403**, when the id names no session of the
+caller's:
+
+```rust file=examples/blog-auth/src/auth/controller/session.rs region=revoke_session
+```
+
+An id that is not yours names, on your side, no session at all — a 403 would confirm it
+exists on someone else's. The close puts the owner inside the repository's `UPDATE`
+condition rather than in a read that precedes it: reading the row and comparing afterwards
+would leave someone else's session open to a race — the same pattern refresh-token
+rotation already follows.
+
+`DELETE /auth/sessions` closes everything, including the session carrying the token
+presented with the request: nothing sets it apart from the others, the same as
+`change-password`.
+
 ## Forgetting and resetting a password
 
 Two more routes close the loop that login opens, both public — no bearer token:

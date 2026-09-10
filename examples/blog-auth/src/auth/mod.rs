@@ -10,7 +10,7 @@ pub mod service;
 mod tests;
 
 use axum::Router;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use rbs_core::HasAuth;
 
 use crate::state::AppState;
@@ -57,4 +57,11 @@ pub fn routes() -> Router<AppState> {
             "/auth/resend-verification",
             post(controller::verification::resend_verification),
         )
+        // Les deux méthodes du même chemin se déclarent en une fois : axum refuse — et le
+        // dit par une panique au démarrage — deux `route()` sur un chemin identique.
+        .route(
+            "/auth/sessions",
+            get(controller::list_sessions).delete(controller::revoke_sessions),
+        )
+        .route("/auth/sessions/{id}", delete(controller::revoke_session))
 }

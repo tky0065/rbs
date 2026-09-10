@@ -101,3 +101,16 @@ pub struct UserResponse {
     #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
 }
+
+/// La vue publique d'une session.
+///
+/// Jamais `token_hash` : la vue d'une session n'a aucune raison de porter de quoi la
+/// présenter.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SessionResponse {
+    pub id: Uuid,
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: DateTimeWithTimeZone,
+    #[schema(value_type = String, format = DateTime)]
+    pub expires_at: DateTimeWithTimeZone,
+}
