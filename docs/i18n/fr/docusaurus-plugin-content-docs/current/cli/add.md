@@ -46,7 +46,7 @@ Options:
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, et ses services `api`/`migrate` insérés dans le compose du projet — un `docker-compose.yml` entier s'il n'y en a pas | `docker compose --profile app up --build` |
 | `ci` | `.github/workflows/ci.yml` | `git push` |
-| `auth` | vingt-et-un fichiers sous `src/auth/`, deux gabarits de courriel, une migration, trois fichiers du projet modifiés — et `mail` et `rate-limit`, qu'elle exige | `rbs migrate up` |
+| `auth` | vingt-et-un fichiers sous `src/auth/`, deux gabarits de courriel, une migration, dix fichiers du projet modifiés — et `mail` et `rate-limit`, qu'elle exige | `rbs migrate up` |
 | `jobs` | sept fichiers sous `src/modules/jobs/`, une migration, et une section `[jobs]` de configuration | `rbs migrate up`, puis inscrire vos jobs dans `src/modules/jobs/mod.rs` |
 | `scheduler` | six fichiers sous `src/modules/scheduler/`, une migration, une section `[scheduler]`, un ticker dans `// <rbs:startup>` — et `jobs`, qu'elle exige | `rbs migrate up`, puis déclarer vos échéances dans `src/modules/scheduler/mod.rs` |
 | `redis` | trois fichiers sous `src/modules/cache/`, et un service `redis` inséré dans le compose du projet | le compose le porte déjà — `docker compose up -d` le démarre |
@@ -251,16 +251,16 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/tests/session.rs                              créé
   + src/auth/tests/password.rs                             créé
   + src/auth/tests/verification.rs                         créé
-  + migration/src/m20260910_161016_create_auth_tables.rs   créé
+  + migration/src/m20260910_171229_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
-  ~ src/lib.rs                                              modifié
-  ~ src/router.rs                                           modifié
-  ~ src/openapi.rs                                          modifié
-  ~ src/state.rs                                            modifié
-  ~ Cargo.toml                                              modifié
-  ~ config/default.toml                                     modifié
-  ~ .env.example                                            modifié
-  ~ .env                                                     modifié
+  ~ src/lib.rs                                             modifié
+  ~ src/router.rs                                          modifié
+  ~ src/openapi.rs                                         modifié
+  ~ src/state.rs                                           modifié
+  ~ Cargo.toml                                             modifié
+  ~ config/default.toml                                    modifié
+  ~ .env.example                                           modifié
+  ~ .env                                                   modifié
   + src/modules/mail/mod.rs                                créé
   + src/modules/mail/config.rs                             créé
   + src/modules/mail/template.rs                           créé
