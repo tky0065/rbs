@@ -25,6 +25,7 @@ Ces règles valent pour **toutes** les tâches. Aucune n'est rappelée dans les 
 - **Régénération des exemples** : `examples/blog-auth` se régénère **par diff entre deux générations, jamais par écrasement** — il porte une édition à la main, `src/posts/tests.rs`, que `integration_examples.rs` déclare. La procédure exacte est en Annexe A.
 - **Suite lente** : `cargo test -p rbs-cli --no-fail-fast -- --ignored`. `--no-fail-fast` est un drapeau de **cargo** et se place **avant** le `--` : posé après, il part au harnais de test, qui refuse `Unrecognized option: 'no-fail-fast'` et fait échouer la suite entière sans en lancer un seul test. Sans lui, la suite s'arrête au premier binaire et masque les échecs suivants. Rediriger la sortie vers le scratchpad : une sortie longue en arrière-plan est rognée et les chiffres se perdent.
 - **Avant la passe lente** : `cargo check` sur `examples/blog-auth` régénéré. Le code des fragments n'est compilé nulle part ailleurs, et une erreur de compilation découverte après vingt minutes de Docker est vingt minutes perdues.
+- **Signatures des aides de `tests/mod.rs`**, telles qu'elles existent réellement — les tests des tâches suivantes s'y conforment : `register(api, email) -> (StatusCode, Value)` (le corps est le **second** membre), `authenticate(api, email, mot_de_passe) -> (StatusCode, Value)`, `login(api, email, mot_de_passe) -> Value` (assère 200 et rend la paire), `call(api, requete) -> (StatusCode, Value)`, `registered_user(db) -> repository::Model`, plus `post_json`, `post_json_authenticated`, `without_body` et `fresh_email`.
 - **Littéraux de fragments** : toute chaîne déposée par un gabarit est figée des deux côtés de la frontière Docker. `grep -rn "<la chaîne>" crates/rbs-cli/tests/` avant de conclure qu'un changement de texte est sans conséquence.
 
 ---
@@ -1900,7 +1901,8 @@ async fn verifying_marks_the_address_and_shows_on_me() {
     let db = connection().await;
     let email = fresh_email();
 
-    let compte = register(&api, &email).await;
+    // `register` rend `(StatusCode, Value)` : le corps est le second membre.
+    let (_, compte) = register(&api, &email).await;
     assert!(
         compte["email_verified_at"].is_null(),
         "une adresse fraîchement inscrite n'est pas vérifiée"
