@@ -119,6 +119,31 @@ fn a_missing_template_names_the_file_without_panicking() {
     );
 }
 
+/// Le rendu échoue avant que l'envoi ne soit lancé : un gabarit absent remonte comme
+/// une erreur à l'appelant, et non silencieusement dans une tâche détachée que
+/// personne ne regarderait.
+///
+/// `#[tokio::test]` : rien n'y est attendu, mais `Mailer::new` inscrit la tâche
+/// d'entretien du pool `lettre` au runtime courant, et panique sans lui.
+#[tokio::test]
+async fn send_template_detached_fails_on_a_missing_template_before_sending_anything() {
+    let mailer = Mailer::new(&config()).expect("le transport doit se bâtir");
+
+    let error = mailer
+        .send_template_detached(
+            "client@example.test",
+            "Bienvenue",
+            "absent.html",
+            context! {},
+        )
+        .expect_err("« absent.html » n'existe pas");
+
+    assert!(
+        error.to_string().contains("templates/mail/absent.html"),
+        "l'erreur ne nomme pas le fichier : {error}"
+    );
+}
+
 /// Le critère de la tâche, prouvé sans serveur SMTP.
 ///
 /// Le faux serveur accepte la connexion et ne répond jamais : `lettre` y reste suspendu

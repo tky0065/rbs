@@ -7,8 +7,10 @@
 //!
 //! Mailpit est retenu pour son API HTTP, qui permet de relire le message reçu.
 
+use std::fs;
 use std::io::{Read, Write};
 use std::net::TcpStream;
+use std::path::PathBuf;
 
 use assert_cmd::Command;
 use tempfile::TempDir;
@@ -22,6 +24,35 @@ mod common;
 const IMAGE: (&str, &str) = ("axllent/mailpit", "latest");
 
 const ENVOI: &str = "a_templated_message_goes_out_to_the_smtp_server";
+
+/// Un projet neuf, commité, avec le fragment `mail` installé.
+///
+/// `add` refuse d'écrire dans un working tree sale : sans ce commit, la commande
+/// s'arrête avant d'avoir rien fait.
+fn project_with_mail(parent: &TempDir) -> PathBuf {
+    let racine = common::projet(parent.path());
+    common::commiter(&racine, "projet neuf");
+
+    rbs(&racine).args(["add", "mail"]).assert().success();
+
+    racine
+}
+
+/// Le rendu est fait avant de rendre la main, l'envoi non : un gabarit absent est une
+/// erreur que l'appelant voit, une panne de SMTP n'en est pas une.
+#[test]
+fn the_mailer_can_render_now_and_send_later() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_mail(&parent);
+
+    let source = fs::read_to_string(racine.join("src/modules/mail/service.rs"))
+        .expect("src/modules/mail/service.rs lisible");
+
+    assert!(
+        source.contains("pub fn send_template_detached"),
+        "le Mailer ne sait pas rendre maintenant et envoyer plus tard"
+    );
+}
 
 #[test]
 #[ignore = "démarre Mailpit et compile un projet Axum + SeaORM complet : plusieurs minutes"]

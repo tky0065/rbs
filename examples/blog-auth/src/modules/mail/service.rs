@@ -95,6 +95,26 @@ impl Mailer {
         self.send(self.message(recipient, subject, body)?).await
     }
 
+    /// Rend `template` maintenant, et lance l'envoi sans l'attendre.
+    ///
+    /// La dissymétrie est voulue : un gabarit absent ou mal formé est une faute du projet,
+    /// que l'appelant doit voir tout de suite ; une panne du serveur SMTP n'en est pas une,
+    /// et ne doit pas retenir la réponse HTTP. C'est ce qui permet à `/auth/forgot-password`
+    /// de répondre en un temps qui ne dit pas si l'adresse est inscrite.
+    pub fn send_template_detached<S: Serialize>(
+        &self,
+        recipient: &str,
+        subject: &str,
+        template: &str,
+        context: S,
+    ) -> Result<()> {
+        let body = self.templates.render(template, context)?;
+
+        self.send_detached(self.message(recipient, subject, body)?);
+
+        Ok(())
+    }
+
     /// Lance l'envoi et rend la main sans l'attendre.
     ///
     /// Ni file ni réessai : un message perdu l'est pour de bon, et seul le journal en
