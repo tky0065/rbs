@@ -2580,23 +2580,35 @@ EOF
 L'exemple porte une édition à la main, `src/posts/tests.rs`, que `integration_examples.rs` déclare. **Ne jamais écraser le répertoire.**
 
 ```bash
-# 1. Engendrer à côté, dans un répertoire jetable.
-cd "$(mktemp -d)"
-cargo run --manifest-path /CHEMIN/VERS/rs/Cargo.toml -p rbs-cli --bin rbs -- \
-  new blog-auth --yes \
-  --core-path /CHEMIN/VERS/rs/crates/rbs-core \
-  --database-url 'postgres://rbs:rbs@localhost:5432/blog_auth' \
-  --lang fr
-cd blog-auth && git add -A && git commit -q -m 'projet neuf'
-cargo run --manifest-path /CHEMIN/VERS/rs/Cargo.toml -p rbs-cli --bin rbs -- add auth
-cargo run --manifest-path /CHEMIN/VERS/rs/Cargo.toml -p rbs-cli --bin rbs -- \
-  generate crud posts --fields 'title:string,body:text,published:bool' --role admin --force
+# Un seul bloc, à copier tel quel. RS est la racine du dépôt ; TMP le répertoire jetable.
+# Le `git commit` ci-dessous DOIT s'exécuter dans TMP : lancé à la racine du dépôt, il
+# commite le travail en cours sous le message « projet neuf ». C'est arrivé.
+RS=/Users/yacoubakone/dev/rs
+TMP=$(mktemp -d)
 
-# 2. Comparer, et n'appliquer que ce que la template a changé.
-diff -ru /CHEMIN/VERS/rs/examples/blog-auth . | less
+(
+  cd "$TMP" || exit 1
+  cargo run --manifest-path "$RS/Cargo.toml" -p rbs-cli --bin rbs -- \
+    new blog-auth --yes \
+    --core-path "$RS/crates/rbs-core" \
+    --database-url 'postgres://rbs:rbs@localhost:5432/blog_auth' \
+    --lang fr
+
+  cd "$TMP/blog-auth" || exit 1
+  # Le garde-fou : si on n'est pas dans TMP, on ne commite rien.
+  case "$PWD" in "$TMP"/*) ;; *) echo "REFUS : $PWD n'est pas sous $TMP" >&2; exit 1;; esac
+  git add -A && git commit -q -m 'projet neuf'
+
+  cargo run --manifest-path "$RS/Cargo.toml" -p rbs-cli --bin rbs -- add auth
+  cargo run --manifest-path "$RS/Cargo.toml" -p rbs-cli --bin rbs -- \
+    generate crud posts --fields 'title:string,body:text,published:bool' --role admin --force
+)
+
+# La comparaison, depuis la racine du dépôt.
+diff -ru "$RS/examples/blog-auth" "$TMP/blog-auth"
 ```
 
-Reporter les différences à la main sur `examples/blog-auth`, en laissant `src/posts/tests.rs` tel qu'il est. `--core-path` pointe vers la crate locale : sans lui l'exemple dépendrait du `rbs-core` publié, et ne verrait aucun changement du dépôt.
+Reporter les différences à la main sur `examples/blog-auth`, en laissant `src/posts/tests.rs` tel qu'il est. Les sous-shell et le garde-fou `case` ne sont pas décoratifs : un `cd` qui ne prend pas effet fait commiter le travail en cours du dépôt sous le message « projet neuf ». `--core-path` pointe vers la crate locale : sans lui l'exemple dépendrait du `rbs-core` publié, et ne verrait aucun changement du dépôt.
 
 L'oracle est `cargo test -p rbs-cli --test integration_examples`, qui compare octet à octet. Tant qu'il est rouge, le report n'est pas fini. `file-drop` et `newsletter-queue` se régénèrent par les commandes que leur donne `examples/README.md`, même méthode.
 
