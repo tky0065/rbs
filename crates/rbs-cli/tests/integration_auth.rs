@@ -183,6 +183,8 @@ fn the_auth_paths_are_mounted() {
         "/auth/change-password",
         "/auth/forgot-password",
         "/auth/reset-password",
+        "/auth/verify-email",
+        "/auth/resend-verification",
     ] {
         assert!(
             module.contains(chemin),

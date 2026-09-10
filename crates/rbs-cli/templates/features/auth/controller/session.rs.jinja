@@ -25,6 +25,23 @@ pub async fn register(
     ValidatedJson(input): ValidatedJson<RegisterRequest>,
 ) -> Result<(StatusCode, Json<UserResponse>)> {
     let cree = service::register(state.core().db(), input).await?;
+    let flows = state.flows();
+
+    // Le compte est ouvert avant l'envoi, et l'envoi ne peut plus le défaire : une panne
+    // de SMTP à cet instant laisserait sinon une inscription à moitié faite, sans compte
+    // et sans message. `resend-verification` est le rattrapage, et il est à la portée de
+    // l'utilisateur.
+    if let Some((utilisateur, jeton)) =
+        service::verification::request(state.core().db(), flows.verification_ttl_secs, &cree.email)
+            .await?
+    {
+        state.mail().send_template_detached(
+            &utilisateur.email,
+            "Confirmez votre adresse",
+            "verification.html",
+            minijinja::context! { link => flows.link("verify-email", &jeton) },
+        )?;
+    }
 
     Ok((StatusCode::CREATED, Json(cree)))
 }

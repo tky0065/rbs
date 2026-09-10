@@ -167,6 +167,47 @@ Les deux routes sont limitées à trois requêtes par heure et par client, aux c
 cette borne le projet devient un relais de harcèlement dont le coût retombe sur le
 titulaire de l'adresse.
 
+## Confirmer une adresse
+
+`register` ouvre un jeton de vérification à l'instant même où le compte est créé — avant
+de répondre, et après que le compte existe, si bien qu'une panne de courriel à cet instant
+ne peut pas défaire l'inscription : l'appelant a toujours un compte, il ne lui manque que
+`resend-verification` pour rattraper le courriel. Deux routes ferment cette boucle,
+publiques toutes deux — sans jeton porteur :
+
+| Route | Ce qu'elle fait |
+|---|---|
+| `POST /auth/resend-verification` | Envoie un lien de vérification neuf. Toujours 202, exactement comme `forgot-password`. |
+| `POST /auth/verify-email` | Consomme le jeton de ce lien et date `email_verified_at`. 204. |
+
+`resend-verification` rend le même 202 que l'adresse porte un compte ou non, et l'envoi
+part détaché de la même façon que celui de `forgot-password` — un `.await` dessus
+laisserait le temps de réponse dire ce que le code de statut refuse de dire :
+
+```rust file=examples/blog-auth/src/auth/controller/verification.rs region=resend_verification
+```
+
+`verify-email` rend le même 401 pour quatre causes distinctes : un jeton inconnu, périmé,
+déjà consommé, ou — ce quatrième cas est ce qui fait d'une table de jetons partagée une
+économie plutôt qu'une faille — émis pour l'autre parcours. La recherche filtre sur l'usage
+autant que sur l'empreinte, si bien qu'un lien de réinitialisation ne peut jamais vérifier
+une adresse :
+
+```rust file=examples/blog-auth/src/auth/controller/verification.rs region=verify_email
+```
+
+L'inscription et le renvoi partagent une seule fonction de service plutôt que deux, parce
+que les deux partent d'une adresse et rendent la même chose — le compte et le jeton en
+clair :
+
+```rust file=examples/blog-auth/src/auth/controller/session.rs region=register
+```
+
+**`login` n'exige pas une adresse vérifiée.** Un compte qui ne clique jamais son lien se
+connecte quand même — cette feature livre le cycle du jeton et les deux routes qui le
+ferment, pas un avis sur celles de vos routes qui devraient refuser un appelant non
+vérifié. Une garde pour cela est une pièce à part, couverte pour elle-même.
+
 ## Protéger une route
 
 La feature livre une garde, non un middleware. C'est un trait d'extension sur `Identity`,

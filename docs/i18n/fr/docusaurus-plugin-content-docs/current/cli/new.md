@@ -275,7 +275,7 @@ installe chacune des nommées, dans la même passe qui écrit le projet :
 ```text
 $ rbs new site --with auth --yes
 ✓ site créé — 21 fichiers
-  + auth       30 fichiers, 1 migration
+  + auth       34 fichiers, 1 migration
 
   rbs migrate up
 
@@ -290,7 +290,7 @@ alphabétique, le même ordre dans lequel [`rbs add`](./add.md) énumère les tr
 ```text
 $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes
 ✓ with-demo créé — 21 fichiers
-  + auth       30 fichiers, 1 migration
+  + auth       34 fichiers, 1 migration
   + docker     2 fichiers
   + storage    4 fichiers
 

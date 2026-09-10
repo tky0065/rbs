@@ -11,6 +11,7 @@ use crate::state::AppState;
 
 mod password;
 mod session;
+mod verification;
 
 /// Un mot de passe qui satisfait la validation du DTO, partagé par les tests.
 const PASSWORD: &str = "un mot de passe assez long";
@@ -106,6 +107,16 @@ fn post_json_authenticated(chemin: &str, jeton: &str, body: Value) -> Request<Bo
         .header("content-type", "application/json")
         .header("authorization", format!("Bearer {jeton}"))
         .body(Body::from(body.to_string()))
+        .expect("requête bien formée")
+}
+
+/// `without_body`, porteur d'un jeton d'accès.
+fn get_authenticated(chemin: &str, jeton: &str) -> Request<Body> {
+    Request::builder()
+        .method("GET")
+        .uri(chemin)
+        .header("authorization", format!("Bearer {jeton}"))
+        .body(Body::empty())
         .expect("requête bien formée")
 }
 

@@ -49,4 +49,12 @@ pub fn routes() -> Router<AppState> {
             "/auth/reset-password",
             post(controller::password::reset_password),
         )
+        .route(
+            "/auth/verify-email",
+            post(controller::verification::verify_email),
+        )
+        .route(
+            "/auth/resend-verification",
+            post(controller::verification::resend_verification),
+        )
 }

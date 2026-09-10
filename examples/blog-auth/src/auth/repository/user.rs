@@ -61,3 +61,17 @@ pub async fn set_password(db: &DatabaseConnection, id: Uuid, hash: &str) -> Resu
 
     Ok(())
 }
+
+/// Date la vérification de l'adresse.
+///
+/// La date et non un booléen : savoir *quand* une adresse a été prouvée est ce qui
+/// permet, un jour, d'en redemander la preuve aux plus anciennes.
+pub async fn mark_verified(db: &DatabaseConnection, id: Uuid) -> Result<()> {
+    Entity::update_many()
+        .col_expr(user::Column::EmailVerifiedAt, Expr::current_timestamp())
+        .filter(user::Column::Id.eq(id))
+        .exec(db)
+        .await?;
+
+    Ok(())
+}

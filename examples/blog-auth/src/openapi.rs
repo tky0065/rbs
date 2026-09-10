@@ -20,6 +20,8 @@ use crate::state::AppState;
         crate::auth::controller::password::change_password,
         crate::auth::controller::password::forgot_password,
         crate::auth::controller::password::reset_password,
+        crate::auth::controller::verification::verify_email,
+        crate::auth::controller::verification::resend_verification,
         crate::posts::controller::list,
         crate::posts::controller::filter,
         crate::posts::controller::create,

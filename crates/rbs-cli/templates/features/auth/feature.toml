@@ -55,6 +55,10 @@ source      = "service/password.rs.jinja"
 destination = "src/auth/service/password.rs"
 
 [[files]]
+source      = "service/verification.rs.jinja"
+destination = "src/auth/service/verification.rs"
+
+[[files]]
 source      = "controller/mod.rs.jinja"
 destination = "src/auth/controller/mod.rs"
 
@@ -66,11 +70,19 @@ destination = "src/auth/controller/session.rs"
 source      = "controller/password.rs.jinja"
 destination = "src/auth/controller/password.rs"
 
+[[files]]
+source      = "controller/verification.rs.jinja"
+destination = "src/auth/controller/verification.rs"
+
 # Le gabarit est déposé dans le projet, non embarqué dans un binaire : c'est un texte que
 # son auteur relit et récrit.
 [[files]]
 source      = "reinitialisation.html.jinja"
 destination = "templates/mail/reinitialisation.html"
+
+[[files]]
+source      = "verification.html.jinja"
+destination = "templates/mail/verification.html"
 
 [[files]]
 source      = "guard.rs.jinja"
@@ -87,6 +99,10 @@ destination = "src/auth/tests/session.rs"
 [[files]]
 source      = "tests/password.rs.jinja"
 destination = "src/auth/tests/password.rs"
+
+[[files]]
+source      = "tests/verification.rs.jinja"
+destination = "src/auth/tests/verification.rs"
 
 [[anchors]]
 anchor  = "features"
@@ -107,6 +123,8 @@ crate::auth::controller::me,
 crate::auth::controller::password::change_password,
 crate::auth::controller::password::forgot_password,
 crate::auth::controller::password::reset_password,
+crate::auth::controller::verification::verify_email,
+crate::auth::controller::verification::resend_verification,
 """
 
 [[anchors]]

@@ -56,6 +56,11 @@ pub struct ResetPasswordRequest {
     pub new_password: String,
 }
 
+#[derive(Debug, Deserialize, ToSchema, Validate)]
+pub struct TokenRequest {
+    pub token: String,
+}
+
 /// Ce que rendent `login` et `refresh`.
 ///
 /// `refresh_token` est le jeton en clair, remis une seule fois : la base n'en garde que

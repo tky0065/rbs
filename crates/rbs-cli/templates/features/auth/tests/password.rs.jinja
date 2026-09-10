@@ -233,10 +233,11 @@ async fn a_new_request_invalidates_the_previous_link() {
         .expect("le compte existe");
 
     // La fermeture du premier jeton ne l'efface pas : les deux lignes existent encore,
-    // une seule reste consommable.
+    // une seule reste consommable. Trois et non deux : `register` ouvre elle-même un
+    // jeton de vérification, que ce compteur ne distingue pas par usage.
     assert_eq!(
         one_time_tokens_count_for(&db, compte.id).await,
-        2,
+        3,
         "la fermeture du premier jeton ne doit pas en effacer la ligne"
     );
 

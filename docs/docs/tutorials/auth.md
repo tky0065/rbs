@@ -43,14 +43,18 @@ plan pour …/demo
   + src/auth/service/mod.rs                                créé
   + src/auth/service/session.rs                            créé
   + src/auth/service/password.rs                           créé
+  + src/auth/service/verification.rs                       créé
   + src/auth/controller/mod.rs                             créé
   + src/auth/controller/session.rs                         créé
   + src/auth/controller/password.rs                        créé
+  + src/auth/controller/verification.rs                    créé
   + templates/mail/reinitialisation.html                   créé
+  + templates/mail/verification.html                       créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
   + src/auth/tests/session.rs                              créé
   + src/auth/tests/password.rs                             créé
+  + src/auth/tests/verification.rs                         créé
   + migration/src/m20260909_093150_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
   ~ src/lib.rs                                             modifié
@@ -75,8 +79,8 @@ plan pour …/demo
   + src/modules/rate_limit/tests.rs                        créé
   ~ AGENTS.md                                              modifié
 
-  42 fichiers à écrire
-✓ auth installée — 30 fichiers
+  46 fichiers à écrire
+✓ auth installée — 34 fichiers
 
   rbs migrate up
 ```

@@ -17,6 +17,7 @@ use super::repository::{self, Model};
 
 pub mod password;
 pub mod session;
+pub mod verification;
 
 pub use session::{login, logout, me, refresh, register};
 

@@ -162,6 +162,44 @@ Both routes are rate-limited to three requests per hour per client, alongside
 `/auth/login`: they send an email to an address the caller picks, and without a limit that
 makes the project a harassment relay whose cost falls on whoever holds the address.
 
+## Confirming an email address
+
+`register` opens a verification token the moment it creates the account — before it
+answers, and after the account exists, so a mail failure at that instant cannot undo the
+signup; the caller still has an account, only `resend-verification` to catch up on the
+email. Two routes close that loop, both public — no bearer token:
+
+| Route | What it does |
+|---|---|
+| `POST /auth/resend-verification` | Emails a fresh verification link. Always 202, exactly like `forgot-password`. |
+| `POST /auth/verify-email` | Spends the token from that link and dates `email_verified_at`. 204. |
+
+`resend-verification` answers the same 202 whether or not the address carries an account,
+and the send is detached the same way `forgot-password`'s is — a `.await` on it would leak
+through response time what the status code refuses to say:
+
+```rust file=examples/blog-auth/src/auth/controller/verification.rs region=resend_verification
+```
+
+`verify-email` answers the same 401 for four different causes: an unknown token, an
+expired one, one already spent, or — this fourth case is what turns the shared token table
+into a saving rather than a hole — one issued for the other flow. The lookup filters on
+purpose as much as on fingerprint, so a password-reset link can never verify an address:
+
+```rust file=examples/blog-auth/src/auth/controller/verification.rs region=verify_email
+```
+
+Registering and resending share one service function rather than two, because both start
+from an address and hand back the same thing — the account and the token in clear:
+
+```rust file=examples/blog-auth/src/auth/controller/session.rs region=register
+```
+
+**`login` does not require a verified address.** An account that never clicks its link
+still signs in — this feature hands you the token cycle and the two routes that close it,
+not an opinion on which of your routes should refuse an unverified caller. A guard for that
+is a separate piece, covered on its own.
+
 ## Protecting a route
 
 The feature ships a guard, not a middleware layer. It is an extension trait on `Identity`,
