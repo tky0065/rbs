@@ -647,9 +647,13 @@ async fn openapi_document(api: &Router) -> Value {
     document
 }
 
+/// Douze chemins, treize points d'entrée : `/auth/sessions` porte à la fois la liste et
+/// la révocation globale. Un `#[utoipa::path]` qui disparaîtrait du document sans que
+/// cette suite rougisse laisserait le client TypeScript, déduit de ce même document, en
+/// silence sur la route perdue.
 #[tokio::test]
 #[ignore = "joint la base du projet"]
-async fn the_openapi_document_carries_the_five_auth_paths() {
+async fn the_openapi_document_carries_the_thirteen_auth_operations() {
     let api = application().await;
 
     let document = openapi_document(&api).await;
@@ -660,10 +664,24 @@ async fn the_openapi_document_carries_the_five_auth_paths() {
         "/auth/refresh",
         "/auth/logout",
         "/auth/me",
+        "/auth/change-password",
+        "/auth/forgot-password",
+        "/auth/reset-password",
+        "/auth/verify-email",
+        "/auth/resend-verification",
+        "/auth/sessions",
+        "/auth/sessions/{id}",
     ] {
         assert!(
             document["paths"][chemin].is_object(),
             "`{chemin}` ne figure pas dans le document"
+        );
+    }
+
+    for methode in ["get", "delete"] {
+        assert!(
+            document["paths"]["/auth/sessions"][methode].is_object(),
+            "`{methode} /auth/sessions` ne figure pas dans le document"
         );
     }
 }

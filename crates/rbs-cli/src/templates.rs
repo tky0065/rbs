@@ -727,19 +727,29 @@ mod tests {
     /// Chaque test du fragment monte l'application ou ouvre une connexion : aucun n'est
     /// unitaire, et tous prennent le marqueur, comme dans `jobs`, `redis` et `storage`.
     ///
-    /// Sans lui, `rbs new --with auth && cargo test` échoue tant que PostgreSQL n'est pas
-    /// démarré *et* migré, là où `--with jobs` passe.
+    /// Les tests du fragment vivent dans quatre fichiers depuis sa découpe par couche —
+    /// `tests/mod.rs` n'en porte aucun, il n'expose que les aides partagées. Se limiter à
+    /// `tests/session.rs` laisserait les trois autres sans garde-fou : sans lui, `rbs new
+    /// --with auth && cargo test` échoue tant que PostgreSQL n'est pas démarré *et*
+    /// migré, là où `--with jobs` passe.
     #[test]
     fn every_auth_test_joining_the_database_is_ignored() {
-        let tests = fragment_source("auth", "tests/session.rs");
+        for destination in [
+            "tests/mod.rs",
+            "tests/session.rs",
+            "tests/password.rs",
+            "tests/verification.rs",
+        ] {
+            let tests = fragment_source("auth", destination);
 
-        assert_eq!(
-            tests.matches("#[tokio::test]").count(),
-            tests
-                .matches(r#"#[ignore = "joint la base du projet"]"#)
-                .count(),
-            "chaque test joint la base et doit porter le marqueur :\n{tests}"
-        );
+            assert_eq!(
+                tests.matches("#[tokio::test]").count(),
+                tests
+                    .matches(r#"#[ignore = "joint la base du projet"]"#)
+                    .count(),
+                "chaque test de `{destination}` joint la base et doit porter le marqueur :\n{tests}"
+            );
+        }
     }
 
     /// Le manifeste décrit l'installation ; il n'a rien à faire dans le projet installé.

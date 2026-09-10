@@ -5,7 +5,7 @@ use axum::routing::get;
 /// L'inscription ouvre un jeton de vérification : c'est ce qui fait que le courriel part
 /// sans qu'aucune route ne soit appelée.
 #[tokio::test]
-#[ignore = "joint la base décrite par .env"]
+#[ignore = "joint la base du projet"]
 async fn registering_opens_a_verification_token() {
     let api = application().await;
     let db = connection().await;
@@ -27,7 +27,7 @@ async fn registering_opens_a_verification_token() {
 
 /// Le parcours nominal : `email_verified_at` passe de nul à daté, et `me` le montre.
 #[tokio::test]
-#[ignore = "joint la base décrite par .env"]
+#[ignore = "joint la base du projet"]
 async fn verifying_marks_the_address_and_shows_on_me() {
     let api = application().await;
     let db = connection().await;
@@ -70,7 +70,7 @@ async fn verifying_marks_the_address_and_shows_on_me() {
 /// C'est ce que l'usage porté par la recherche achète : sans lui, la table unique serait
 /// une faille au lieu d'une économie.
 #[tokio::test]
-#[ignore = "joint la base décrite par .env"]
+#[ignore = "joint la base du projet"]
 async fn a_reset_token_does_not_verify_an_address() {
     let api = application().await;
     let db = connection().await;
@@ -93,7 +93,7 @@ async fn a_reset_token_does_not_verify_an_address() {
 
 /// Une adresse inconnue rend 202, comme `forgot-password` et pour la même raison.
 #[tokio::test]
-#[ignore = "joint la base décrite par .env"]
+#[ignore = "joint la base du projet"]
 async fn resending_to_an_unknown_address_is_accepted() {
     let api = application().await;
 
@@ -114,7 +114,7 @@ async fn resending_to_an_unknown_address_is_accepted() {
 /// La route est montée ici et nulle part ailleurs : le fragment livre la garde sans
 /// l'imposer, et c'est au projet de décider où elle s'applique.
 #[tokio::test]
-#[ignore = "joint la base décrite par .env"]
+#[ignore = "joint la base du projet"]
 async fn the_verified_guard_opens_only_after_verification() {
     async fn protegee(_verifiee: crate::auth::guard::VerifiedIdentity) -> StatusCode {
         StatusCode::OK
