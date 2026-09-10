@@ -1,3 +1,4 @@
+pub mod config;
 pub mod controller;
 pub mod dto;
 pub mod guard;
@@ -19,6 +20,15 @@ use crate::state::AppState;
 // L'implémentation vit ici plutôt que dans `state.rs` — elle arrive avec la feature, et
 // repart avec elle.
 impl HasAuth for AppState {}
+
+// L'accesseur vit ici et non dans `state.rs` : il arrive avec la feature, et repart avec
+// elle.
+impl AppState {
+    /// Les réglages des parcours de réinitialisation et de vérification.
+    pub fn flows(&self) -> &config::FlowConfig {
+        &self.flows
+    }
+}
 
 pub fn routes() -> Router<AppState> {
     Router::new()

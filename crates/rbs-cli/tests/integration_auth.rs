@@ -203,6 +203,29 @@ fn the_configuration_and_the_environment_receive_what_auth_requires() {
     );
 }
 
+/// `auth` envoie deux courriels — réinitialisation et vérification. Sans `mail`, les
+/// deux parcours s'arrêteraient à la moitié de ce que le fragment promet.
+#[test]
+fn adding_auth_installs_mail() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_auth(&parent);
+
+    assert!(
+        racine.join("src/modules/mail/mod.rs").is_file(),
+        "le fragment mail n'a pas suivi"
+    );
+
+    let defaut = fs::read_to_string(racine.join("config/default.toml"))
+        .expect("config/default.toml lisible");
+
+    for cle in ["reset_ttl_secs", "verification_ttl_secs", "app_url"] {
+        assert!(
+            defaut.contains(cle),
+            "config/default.toml ne porte pas `{cle}` :\n{defaut}"
+        );
+    }
+}
+
 /// Sérialise les tests qui compilent puis exécutent un binaire du projet.
 ///
 /// Tous partagent `CARGO_TARGET_DIR` : la crate `migration` de chaque projet s'écrit au

@@ -83,9 +83,9 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
 /// Un projet neuf portant `webhooks`, sa base pointée sur `url`.
 ///
 /// Le fragment déclare `requires = ["jobs", "auth"]`, et `auth` exige à son tour
-/// `rate-limit` : `rbs add webhooks` sur un projet nu doit poser les trois **puis** les
-/// webhooks. Un utilisateur qui ne s'y attend pas verrait apparaître trois répertoires
-/// qu'il n'a pas demandés, et c'est la documentation qui le lui dit.
+/// `rate-limit` et `mail` : `rbs add webhooks` sur un projet nu doit poser les quatre
+/// **puis** les webhooks. Un utilisateur qui ne s'y attend pas verrait apparaître quatre
+/// répertoires qu'il n'a pas demandés, et c'est la documentation qui le lui dit.
 fn project_with_webhooks_on(moteur: &str, url: &str, parent: &TempDir) -> PathBuf {
     let racine = parent.path().join("demo-api");
 
@@ -114,6 +114,7 @@ fn project_with_webhooks_on(moteur: &str, url: &str, parent: &TempDir) -> PathBu
         "src/modules/jobs/mod.rs",
         "src/auth/mod.rs",
         "src/modules/rate_limit/mod.rs",
+        "src/modules/mail/mod.rs",
     ] {
         assert!(
             racine.join(requis).exists(),

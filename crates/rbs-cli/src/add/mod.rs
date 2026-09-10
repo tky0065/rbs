@@ -1716,27 +1716,27 @@ mod tests {
     }
 
     /// Le critère de la tâche 12 : `rbs add auth` ne laisse pas `/auth/login` sans limite,
-    /// et l'utilisateur le lit avant que quoi que ce soit ne s'écrive.
+    /// et l'utilisateur le lit avant que quoi que ce soit ne s'écrive. `mail` s'y ajoute
+    /// depuis qu'auth envoie des courriels : les deux entraînements sont vérifiés ici.
     #[test]
-    fn adding_auth_announces_and_lays_down_the_rate_limit_fragment() {
+    fn adding_auth_announces_and_lays_down_the_rate_limit_and_mail_fragments() {
         let (_parent, root) = project();
 
         let planned = plan_for(&options(&root, "auth")).expect("le plan doit se calculer");
 
-        assert_eq!(planned.entrainees, ["rate-limit"]);
-        assert!(
-            planned
-                .files
-                .iter()
-                .any(|file| file == "src/modules/rate_limit/mod.rs"),
-            "{:?}",
-            planned.files
-        );
+        assert_eq!(planned.entrainees, ["mail", "rate-limit"]);
+        for fichier in ["src/modules/rate_limit/mod.rs", "src/modules/mail/mod.rs"] {
+            assert!(
+                planned.files.iter().any(|file| file == fichier),
+                "{:?}",
+                planned.files
+            );
+        }
 
         let manifeste = projected(&planned, "Cargo.toml");
         assert!(
-            manifeste.contains("features = [\"health\", \"auth\", \"rate-limit\"]"),
-            "les deux features doivent être inscrites :\n{manifeste}"
+            manifeste.contains("features = [\"health\", \"auth\", \"mail\", \"rate-limit\"]"),
+            "les trois features doivent être inscrites :\n{manifeste}"
         );
         assert!(
             projected(&planned, "config/default.toml").contains("/auth/login"),
@@ -1750,6 +1750,7 @@ mod tests {
     fn an_already_installed_requirement_is_not_laid_down_twice() {
         let (_parent, root) = project();
         run(&options(&root, "rate-limit")).expect("la première pose doit aboutir");
+        run(&options(&root, "mail")).expect("la première pose doit aboutir");
 
         let planned = plan_for(&options(&root, "auth")).expect("le plan doit se calculer");
 

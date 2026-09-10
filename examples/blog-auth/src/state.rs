@@ -6,6 +6,8 @@ use sea_orm::DatabaseConnection;
 pub struct AppState {
     core: CoreState,
     // <rbs:state_champs>
+    pub flows: crate::auth::config::FlowConfig,
+    pub mail: crate::modules::mail::Mailer,
     pub rate_limit: crate::modules::rate_limit::RateLimiter,
     // </rbs:state_champs>
 }
@@ -15,6 +17,8 @@ impl AppState {
         Ok(Self {
             core: CoreState::new(db, config),
             // <rbs:state_init>
+            flows: crate::auth::config::FlowConfig::from_config()?,
+            mail: crate::modules::mail::Mailer::from_config()?,
             rate_limit: crate::modules::rate_limit::RateLimiter::from_config()?,
             // </rbs:state_init>
         })
