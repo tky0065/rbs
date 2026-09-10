@@ -39,6 +39,23 @@ pub struct ChangePasswordRequest {
     pub new_password: String,
 }
 
+/// Ce que postent `forgot-password` et `resend-verification`.
+///
+/// Une seule structure pour les deux : elles prennent la même chose, et deux structures
+/// identiques divergeraient un jour sans raison.
+#[derive(Debug, Deserialize, ToSchema, Validate)]
+pub struct EmailRequest {
+    #[validate(email)]
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema, Validate)]
+pub struct ResetPasswordRequest {
+    pub token: String,
+    #[validate(length(min = 12, max = 128))]
+    pub new_password: String,
+}
+
 /// Ce que rendent `login` et `refresh`.
 ///
 /// `refresh_token` est le jeton en clair, remis une seule fois : la base n'en garde que

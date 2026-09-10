@@ -66,6 +66,12 @@ destination = "src/auth/controller/session.rs"
 source      = "controller/password.rs.jinja"
 destination = "src/auth/controller/password.rs"
 
+# Le gabarit est déposé dans le projet, non embarqué dans un binaire : c'est un texte que
+# son auteur relit et récrit.
+[[files]]
+source      = "reinitialisation.html.jinja"
+destination = "templates/mail/reinitialisation.html"
+
 [[files]]
 source      = "guard.rs.jinja"
 destination = "src/auth/guard.rs"
@@ -99,6 +105,8 @@ crate::auth::controller::refresh,
 crate::auth::controller::logout,
 crate::auth::controller::me,
 crate::auth::controller::password::change_password,
+crate::auth::controller::password::forgot_password,
+crate::auth::controller::password::reset_password,
 """
 
 [[anchors]]

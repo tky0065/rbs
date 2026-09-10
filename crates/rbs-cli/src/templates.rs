@@ -709,14 +709,14 @@ mod tests {
     /// Un mot de passe sans borne haute fait hacher en Argon2 un corps de plusieurs
     /// mégaoctets : la borne est ce qui sépare une API d'un amplificateur.
     #[test]
-    fn the_two_password_fields_carry_a_lower_and_an_upper_bound() {
+    fn every_password_field_carries_a_lower_and_an_upper_bound() {
         let dto = fragment_source("auth", "dto.rs");
 
         assert_eq!(
             dto.matches("#[validate(length(min = 12, max = 128))]")
                 .count(),
-            2,
-            "les deux mots de passe doivent être bornés :\n{dto}"
+            5,
+            "les cinq mots de passe doivent être bornés :\n{dto}"
         );
         assert!(
             !dto.contains("length(min = 8)"),

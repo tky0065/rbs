@@ -124,6 +124,49 @@ et elle hache une valeur de comparaison même pour une adresse inconnue. Sauter 
 comparaison répondrait aux adresses inconnues en deux millisecondes et aux autres en deux
 cent quarante — un oracle d'énumération mesurable de l'extérieur.
 
+## Oublier et réinitialiser un mot de passe
+
+Deux routes de plus ferment la boucle que la connexion ouvre, publiques toutes deux — sans
+jeton porteur :
+
+| Route | Ce qu'elle fait |
+|---|---|
+| `POST /auth/forgot-password` | Envoie un lien de réinitialisation si l'adresse est inscrite. Toujours 202. |
+| `POST /auth/reset-password` | Consomme le jeton de ce lien et pose un nouveau mot de passe. 204, toutes les sessions du compte révoquées. |
+
+`forgot-password` rend 202 que l'adresse porte un compte ou non, et le corps ne diffère pas
+davantage — le même risque d'énumération que le hash témoin de la connexion écarte de
+l'autre côté :
+
+```rust file=examples/blog-auth/src/auth/controller/password.rs region=forgot_password
+```
+
+L'envoi du courriel lui-même passe par `mail().send_template_detached`, qui rend le
+gabarit tout de suite — un gabarit absent fait échouer la requête — puis confie l'envoi à
+une tâche détachée plutôt que de l'attendre : attendre le SMTP ferait dire au temps de
+réponse ce que le code de statut refuse de dire.
+
+Une seconde demande ferme la première : un seul jeton de réinitialisation reste vivant par
+compte, si bien qu'un lien parti dans une boîte qu'on ne contrôle plus cesse de valoir dès
+qu'on en redemande un. `reset-password` rend la même 401 pour un jeton inconnu, périmé, ou
+déjà consommé — les distinguer renseignerait sur l'état d'une demande en cours à qui n'en
+détient aucun des trois :
+
+```rust file=examples/blog-auth/src/auth/controller/password.rs region=reset_password
+```
+
+`auth` tire `mail` pour cela — cette route et celle qui vérifie une adresse ont toutes deux
+besoin d'un endroit où envoyer un lien, et la dépendance est déclarée plutôt que laissée
+facultative. Sa durée et sa destination viennent de la section `[auth]` montrée plus haut :
+`reset_ttl_secs` fixe la durée de vie du lien de réinitialisation, `verification_ttl_secs`
+fait de même pour l'autre parcours, et `app_url` est la racine que `FlowConfig::link`
+préfixe au chemin — l'adresse de votre client, pas de ce serveur.
+
+Les deux routes sont limitées à trois requêtes par heure et par client, aux côtés de
+`/auth/login` : elles envoient un courriel à une adresse que l'appelant choisit, et sans
+cette borne le projet devient un relais de harcèlement dont le coût retombe sur le
+titulaire de l'adresse.
+
 ## Protéger une route
 
 La feature livre une garde, non un middleware. C'est un trait d'extension sur `Identity`,
@@ -267,7 +310,7 @@ Tout ce qui est propre à votre domaine :
   service ;
 - **la politique de mot de passe** — le DTO valide une longueur de 12 à 128 caractères,
   rien de plus ;
-- **vérification d'adresse, réinitialisation, fournisseurs tiers** — hors de cette feature ;
+- **vérification d'adresse, fournisseurs tiers** — hors de cette feature ;
 - **la rotation du secret** — changer `RBS_AUTH__SECRET` invalide tous les jetons d'accès
   en circulation, ce qui est une fonctionnalité le jour où vous en avez besoin, et une
   panne le jour où vous ne l'attendez pas.

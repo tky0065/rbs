@@ -1,7 +1,7 @@
 use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
-use sea_orm::DatabaseConnection;
+use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -47,6 +47,19 @@ pub(super) async fn registered_user(db: &DatabaseConnection) -> crate::auth::rep
     crate::auth::repository::create(db, &fresh_email(), "hash sans valeur")
         .await
         .expect("le compte s'insère")
+}
+
+/// Compte les jetons à usage unique d'**un** compte, jamais de la table entière.
+///
+/// Borné à un utilisateur parce que les tests partagent une base qu'ils ne vident pas et
+/// que `cargo test` les exécute en parallèle : un compte global serait faux dès qu'un
+/// autre test inscrit quelqu'un pendant la mesure.
+pub(super) async fn one_time_tokens_count_for(db: &DatabaseConnection, user_id: Uuid) -> u64 {
+    crate::auth::model::one_time_token::Entity::find()
+        .filter(crate::auth::model::one_time_token::Column::UserId.eq(user_id))
+        .count(db)
+        .await
+        .expect("le comptage aboutit")
 }
 
 /// Fait traverser le routeur à `requete`, et rend son statut avec son corps.

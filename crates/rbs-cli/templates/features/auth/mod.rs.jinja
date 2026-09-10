@@ -41,4 +41,12 @@ pub fn routes() -> Router<AppState> {
             "/auth/change-password",
             post(controller::password::change_password),
         )
+        .route(
+            "/auth/forgot-password",
+            post(controller::password::forgot_password),
+        )
+        .route(
+            "/auth/reset-password",
+            post(controller::password::reset_password),
+        )
 }

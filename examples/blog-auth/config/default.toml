@@ -61,4 +61,9 @@ trust_forwarded_for = false
 # ligne, une seule adresse épuise la mémoire du serveur.
 routes = [
   { path = "/auth/login", limit = 5, window_secs = 60 },
+  # Ces deux routes envoient un courriel à une adresse que l'appelant choisit. Sans borne,
+  # elles font du projet un relais de harcèlement — et le coût est payé par le titulaire
+  # de l'adresse, qui n'a rien demandé.
+  { path = "/auth/forgot-password", limit = 3, window_secs = 3600 },
+  { path = "/auth/resend-verification", limit = 3, window_secs = 3600 },
 ]

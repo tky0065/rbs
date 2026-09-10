@@ -121,6 +121,47 @@ it hashes a comparison value even for an unknown address. Skipping that comparis
 answer unknown addresses in two milliseconds and known ones in two hundred and forty —
 an enumeration oracle measurable from outside.
 
+## Forgetting and resetting a password
+
+Two more routes close the loop that login opens, both public — no bearer token:
+
+| Route | What it does |
+|---|---|
+| `POST /auth/forgot-password` | Emails a reset link if the address is registered. Always 202. |
+| `POST /auth/reset-password` | Spends the token from that link and sets a new password. 204, every session of the account revoked. |
+
+`forgot-password` answers 202 whether or not the address carries an account, and the body
+never differs either — the same enumeration risk that login's decoy hash closes on the
+other route:
+
+```rust file=examples/blog-auth/src/auth/controller/password.rs region=forgot_password
+```
+
+The email itself goes out through `mail().send_template_detached`, which renders the
+template right away — a missing one fails the request — then hands delivery to a detached
+task rather than awaiting it: waiting on SMTP would let the response time say what the
+status code refuses to.
+
+A second request closes the first: only one reset token stays live per account, so a link
+sent to an inbox no longer controlled stops working the moment a fresh one is requested.
+`reset-password` answers the same 401 for an unknown token, an expired one, and one already
+spent — distinguishing the three would describe the state of an in-flight request to
+whoever holds none of them:
+
+```rust file=examples/blog-auth/src/auth/controller/password.rs region=reset_password
+```
+
+`auth` pulls in `mail` for this — both this route and the one that verifies an address need
+somewhere to send a link, so the dependency is declared rather than left optional. Its
+timing and destination come from the `[auth]` section shown above: `reset_ttl_secs` sets how
+long the reset link stays valid, `verification_ttl_secs` does the same for the other flow,
+and `app_url` is the root `FlowConfig::link` prefixes onto the path — your client's
+address, not this server's.
+
+Both routes are rate-limited to three requests per hour per client, alongside
+`/auth/login`: they send an email to an address the caller picks, and without a limit that
+makes the project a harassment relay whose cost falls on whoever holds the address.
+
 ## Protecting a route
 
 The feature ships a guard, not a middleware layer. It is an extension trait on `Identity`,
@@ -261,7 +302,7 @@ Everything specific to your domain:
   finer, such as an owner editing their own resource, is yours to write in the service;
 - **password policy** — the DTO validates a length between 12 and 128 characters, nothing
   more;
-- **email verification, password reset, third-party providers** — not in this feature;
+- **email verification, third-party providers** — not in this feature;
 - **rotating the secret** — changing `RBS_AUTH__SECRET` invalidates every access token in
   circulation, which is a feature the day you need it, and an outage the day you do not
   expect it.
