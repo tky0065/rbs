@@ -2597,7 +2597,11 @@ TMP=$(mktemp -d)
   cd "$TMP/blog-auth" || exit 1
   # Le garde-fou : si on n'est pas dans TMP, on ne commite rien.
   case "$PWD" in "$TMP"/*) ;; *) echo "REFUS : $PWD n'est pas sous $TMP" >&2; exit 1;; esac
-  git add -A && git commit -q -m 'projet neuf'
+  # L'identité passe par `-c`, jamais par `git config --local` : posée en configuration,
+  # elle atterrit sur le dépôt rbs si le `cd` n'a pas pris, et tous les commits suivants
+  # de la branche portent son auteur. Trois l'ont porté.
+  git add -A
+  git -c user.name='rbs' -c user.email='rbs@exemple.test' commit -q -m 'projet neuf'
 
   cargo run --manifest-path "$RS/Cargo.toml" -p rbs-cli --bin rbs -- add auth
   cargo run --manifest-path "$RS/Cargo.toml" -p rbs-cli --bin rbs -- \
