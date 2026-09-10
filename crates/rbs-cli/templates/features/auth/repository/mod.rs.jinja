@@ -3,6 +3,7 @@
 //! Le service passe par cette porte plutôt que par `model.rs` : la couche qui parle à la
 //! base reste la seule à connaître l'entité.
 
+pub mod one_time_token;
 pub mod refresh_token;
 pub mod user;
 

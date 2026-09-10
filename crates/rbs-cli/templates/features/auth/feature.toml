@@ -39,6 +39,10 @@ source      = "repository/refresh_token.rs.jinja"
 destination = "src/auth/repository/refresh_token.rs"
 
 [[files]]
+source      = "repository/one_time_token.rs.jinja"
+destination = "src/auth/repository/one_time_token.rs"
+
+[[files]]
 source      = "service/mod.rs.jinja"
 destination = "src/auth/service/mod.rs"
 
@@ -65,6 +69,10 @@ destination = "src/auth/tests/mod.rs"
 [[files]]
 source      = "tests/session.rs.jinja"
 destination = "src/auth/tests/session.rs"
+
+[[files]]
+source      = "tests/password.rs.jinja"
+destination = "src/auth/tests/password.rs"
 
 [[anchors]]
 anchor  = "features"

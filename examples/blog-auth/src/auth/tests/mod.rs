@@ -9,6 +9,7 @@ use uuid::Uuid;
 use crate::router::router;
 use crate::state::AppState;
 
+mod password;
 mod session;
 
 /// Un mot de passe qui satisfait la validation du DTO, partagé par les tests.
@@ -36,6 +37,16 @@ async fn connection() -> DatabaseConnection {
     rbs_core::db::connect(&config.database)
         .await
         .expect("base joignable")
+}
+
+/// Insère un compte avec une adresse fraîche, en contournant l'API HTTP.
+///
+/// Le test de concurrence a besoin d'un `user_id` avant d'émettre un jeton, sans passer
+/// par `/auth/register` ni se soucier du mot de passe qui en résulte.
+pub(super) async fn registered_user(db: &DatabaseConnection) -> crate::auth::repository::Model {
+    crate::auth::repository::create(db, &fresh_email(), "hash sans valeur")
+        .await
+        .expect("le compte s'insère")
 }
 
 /// Fait traverser le routeur à `requete`, et rend son statut avec son corps.

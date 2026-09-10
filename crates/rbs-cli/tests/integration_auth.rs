@@ -142,6 +142,29 @@ fn the_migration_creates_the_one_time_tokens_table() {
     }
 }
 
+/// Le repository des jetons est déposé, et la purge y est, prête à être branchée.
+#[test]
+fn the_one_time_token_repository_is_written() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_auth(&parent);
+
+    let source = fs::read_to_string(racine.join("src/auth/repository/one_time_token.rs"))
+        .expect("src/auth/repository/one_time_token.rs lisible");
+
+    for attendu in [
+        "pub async fn issue",
+        "pub async fn find",
+        "pub async fn consume",
+        "pub async fn invalidate_pending",
+        "pub async fn purge_expired",
+    ] {
+        assert!(
+            source.contains(attendu),
+            "le repository ne porte pas `{attendu}`"
+        );
+    }
+}
+
 /// Les cinq chemins sont montés dès l'installation : I7 les enregistrera dans le
 /// document OpenAPI, J2 les jouera contre une vraie base.
 #[test]

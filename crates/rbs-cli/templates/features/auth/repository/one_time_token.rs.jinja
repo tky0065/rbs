@@ -1,0 +1,110 @@
+use rbs_core::Result;
+use sea_orm::prelude::{DateTimeWithTimeZone, Expr, Uuid};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ExprTrait, QueryFilter, Set,
+};
+
+use super::super::model::{TokenPurpose, one_time_token};
+
+pub use one_time_token::Model;
+
+/// Ouvre un jeton à usage unique.
+///
+/// `fingerprint` et non le jeton : une base lue par un tiers ne lui donne aucun lien
+/// qu'il puisse jouer.
+pub async fn issue(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+    purpose: TokenPurpose,
+    fingerprint: String,
+    expires_at: DateTimeWithTimeZone,
+) -> Result<()> {
+    one_time_token::ActiveModel {
+        user_id: Set(user_id),
+        token_hash: Set(fingerprint),
+        purpose: Set(purpose),
+        expires_at: Set(expires_at),
+        ..Default::default()
+    }
+    .insert(db)
+    .await?;
+
+    Ok(())
+}
+
+/// Retrouve un jeton par son empreinte **et son usage**.
+///
+/// L'usage fait partie de la recherche : sans lui, un jeton de vérification — plus long à
+/// périmer, et envoyé à toute inscription — vaudrait comme jeton de réinitialisation.
+pub async fn find(
+    db: &DatabaseConnection,
+    fingerprint: &str,
+    purpose: TokenPurpose,
+) -> Result<Option<Model>> {
+    Ok(one_time_token::Entity::find()
+        .filter(one_time_token::Column::TokenHash.eq(fingerprint))
+        .filter(one_time_token::Column::Purpose.eq(purpose))
+        .one(db)
+        .await?)
+}
+
+/// Consomme un jeton, et dit si c'est bien cet appel qui l'a fait.
+///
+/// La péremption est **dans** la condition de l'`UPDATE` et non dans la lecture qui le
+/// précède : deux réinitialisations concurrentes du même jeton franchiraient sinon toutes
+/// deux la lecture, et poseraient chacune leur mot de passe — la seconde gagnant sans que
+/// la première le sache.
+pub async fn consume(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
+    let touchees = one_time_token::Entity::update_many()
+        .col_expr(
+            one_time_token::Column::ConsumedAt,
+            Expr::current_timestamp(),
+        )
+        .filter(one_time_token::Column::Id.eq(id))
+        .filter(one_time_token::Column::ConsumedAt.is_null())
+        .filter(Expr::col(one_time_token::Column::ExpiresAt).gt(Expr::current_timestamp()))
+        .exec(db)
+        .await?;
+
+    Ok(touchees.rows_affected == 1)
+}
+
+/// Ferme les jetons encore vivants du même compte et du même usage.
+///
+/// Appelée avant chaque émission. Sans elle, l'utilisateur qui redemande un lien parce que
+/// le premier est parti dans une boîte qu'il ne contrôle plus laisse ce premier lien
+/// valide jusqu'à son terme.
+pub async fn invalidate_pending(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+    purpose: TokenPurpose,
+) -> Result<u64> {
+    let touchees = one_time_token::Entity::update_many()
+        .col_expr(
+            one_time_token::Column::ConsumedAt,
+            Expr::current_timestamp(),
+        )
+        .filter(one_time_token::Column::UserId.eq(user_id))
+        .filter(one_time_token::Column::Purpose.eq(purpose))
+        .filter(one_time_token::Column::ConsumedAt.is_null())
+        .exec(db)
+        .await?;
+
+    Ok(touchees.rows_affected)
+}
+
+/// Supprime les jetons périmés, et dit combien.
+///
+/// La table croît d'une ligne par demande et n'en perd aucune : sans appel périodique,
+/// elle est la seule du projet dont la taille suit le trafic anonyme. Le fragment ne
+/// branche pas la tâche — `rbs add scheduler` vous donne où la poser, et cette fonction
+/// est ce qu'elle appellera. Retirez ce `#[allow]` en la branchant.
+#[allow(dead_code)]
+pub async fn purge_expired(db: &DatabaseConnection) -> Result<u64> {
+    let supprimees = one_time_token::Entity::delete_many()
+        .filter(Expr::col(one_time_token::Column::ExpiresAt).lt(Expr::current_timestamp()))
+        .exec(db)
+        .await?;
+
+    Ok(supprimees.rows_affected)
+}
