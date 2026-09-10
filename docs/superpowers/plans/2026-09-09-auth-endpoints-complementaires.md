@@ -2532,6 +2532,8 @@ Clippy vert en local ne dit rien de la version que prend `@stable` en CI.
 
 `docs/docs/cli/add.md` et son miroir français : `rbs add auth` installe désormais `rate-limit` **et** `mail`, et dépose treize routes. Vérifier chaque transcription de sortie du CLI que la page cite — `integration_docs` les garde, et aucun des guides ne l'est.
 
+`docs/docs/guides/auth.md` et son miroir portent encore, en tête et en `:51`, la promesse de **cinq** routes — exacte avant ce chantier, fausse depuis. Corriger les deux mentions et le tableau qui les suit.
+
 `docs/docs/tutorials/auth.md` et son miroir : le tutoriel déroule le parcours d'authentification pas à pas et s'arrête aujourd'hui à `me`. Y ajouter les trois parcours neufs — changement, réinitialisation, vérification — et signaler que Mailpit, qui arrive désormais avec `auth`, montre sur `http://localhost:8025` les courriels que le projet croit envoyer. C'est ce qui rend le tutoriel exécutable sans compte SMTP.
 
 - [ ] **Step 4 : La passe complète**
@@ -2549,10 +2551,14 @@ Attendu : 0 échec partout. Consigner les chiffres réels dans le message de com
 - [ ] **Step 5 : Vérifier qu'aucune route n'a été oubliée**
 
 ```bash
-grep -c 'route("/auth' examples/blog-auth/src/auth/mod.rs
+grep -oE '"/auth/[a-z{}/-]*"' examples/blog-auth/src/auth/mod.rs | sort -u | wc -l
 ```
 
-Attendu : `13`.
+Attendu : **12**, et non treize. `/auth/sessions` porte deux méthodes — `GET` pour lister, `DELETE` pour tout fermer — sur un seul appel à `.route()` : douze chemins font bien treize points d'entrée. Vérifier aussi que les treize `operation_id` sont dans l'ancre `openapi` :
+
+```bash
+grep -c 'crate::auth::controller::' examples/blog-auth/src/openapi.rs
+```
 
 - [ ] **Step 6 : Commit**
 
