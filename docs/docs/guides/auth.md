@@ -268,7 +268,7 @@ promotion goes through the database. That is deliberate: an HTTP route that hand
 promotes an account exactly this way, and only then logs in — a token minted before the
 promotion would carry the old role:
 
-```rust file=examples/blog-auth/src/auth/tests.rs region=jeton_admin
+```rust file=examples/blog-auth/src/auth/tests/session.rs region=jeton_admin
 ```
 
 ## Testing a protected route

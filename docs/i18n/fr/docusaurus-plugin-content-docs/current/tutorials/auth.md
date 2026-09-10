@@ -28,46 +28,65 @@ rbs add auth
 ```text
 $ rbs add auth
 auth : authentification JWT : Argon2, jetons d'accès et de rafraîchissement, rôles
-auth exige rate-limit : posée avec elle
+auth exige mail, rate-limit : posée avec elle
 
 plan pour …/demo
 
   + src/auth/mod.rs                                        créé
+  + src/auth/config.rs                                     créé
   + src/auth/model.rs                                      créé
   + src/auth/dto.rs                                        créé
-  + src/auth/repository.rs                                 créé
-  + src/auth/service.rs                                    créé
-  + src/auth/controller.rs                                 créé
+  + src/auth/repository/mod.rs                             créé
+  + src/auth/repository/user.rs                            créé
+  + src/auth/repository/refresh_token.rs                   créé
+  + src/auth/repository/one_time_token.rs                  créé
+  + src/auth/service/mod.rs                                créé
+  + src/auth/service/session.rs                            créé
+  + src/auth/service/password.rs                           créé
+  + src/auth/controller/mod.rs                             créé
+  + src/auth/controller/session.rs                         créé
+  + src/auth/controller/password.rs                        créé
+  + templates/mail/reinitialisation.html                   créé
   + src/auth/guard.rs                                      créé
-  + src/auth/tests.rs                                      créé
+  + src/auth/tests/mod.rs                                  créé
+  + src/auth/tests/session.rs                              créé
+  + src/auth/tests/password.rs                             créé
   + migration/src/m20260909_093150_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
   ~ src/lib.rs                                             modifié
   ~ src/router.rs                                          modifié
   ~ src/openapi.rs                                         modifié
+  ~ src/state.rs                                           modifié
   ~ Cargo.toml                                             modifié
   ~ config/default.toml                                    modifié
   ~ .env.example                                           modifié
   ~ .env                                                   modifié
+  + src/modules/mail/mod.rs                                créé
+  + src/modules/mail/config.rs                             créé
+  + src/modules/mail/template.rs                           créé
+  + src/modules/mail/service.rs                            créé
+  + src/modules/mail/tests.rs                              créé
+  + templates/mail/bienvenue.html                          créé
+  + src/modules/mod.rs                                     créé
+  ~ docker-compose.yml                                     modifié
   + src/modules/rate_limit/mod.rs                          créé
   + src/modules/rate_limit/config.rs                       créé
   + src/modules/rate_limit/counter.rs                      créé
   + src/modules/rate_limit/tests.rs                        créé
-  + src/modules/mod.rs                                     créé
-  ~ src/state.rs                                           modifié
   ~ AGENTS.md                                              modifié
 
-  24 fichiers à écrire
-✓ auth installée — 13 fichiers
+  42 fichiers à écrire
+✓ auth installée — 30 fichiers
 
   rbs migrate up
 ```
 
 `add` refuse un arbre de travail sale, ce pour quoi la commande ci-dessus ne tourne que
-sur un projet fraîchement commité. `auth exige rate-limit : posée avec elle` prouve que
-la feature n'arrive pas seule — une route de connexion sans limitation de débit est
-exactement le genre de trou qu'un générateur ne devrait pas vous laisser découvrir plus
-tard, alors le CLI installe les deux ensemble.
+sur un projet fraîchement commité. `auth exige mail, rate-limit : posée avec elle` prouve
+que la feature n'arrive pas seule — une route de connexion sans limitation de débit, et
+une réinitialisation de mot de passe sans moyen d'envoyer l'e-mail, sont exactement le
+genre de trou qu'un générateur ne devrait pas vous laisser découvrir plus tard, alors le
+CLI installe les trois ensemble.
 
 ## 2. Appliquer la migration
 

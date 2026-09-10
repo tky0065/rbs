@@ -275,7 +275,7 @@ table, et la promotion passe par la base. C'est délibéré : une route HTTP qui
 promeut un compte exactement ainsi, et se connecte seulement après — un jeton émis avant la
 promotion porterait l'ancien rôle :
 
-```rust file=examples/blog-auth/src/auth/tests.rs region=jeton_admin
+```rust file=examples/blog-auth/src/auth/tests/session.rs region=jeton_admin
 ```
 
 ## Tester une route protégée
