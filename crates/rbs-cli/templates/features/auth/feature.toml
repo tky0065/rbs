@@ -19,24 +19,44 @@ source      = "dto.rs.jinja"
 destination = "src/auth/dto.rs"
 
 [[files]]
-source      = "repository.rs.jinja"
-destination = "src/auth/repository.rs"
+source      = "repository/mod.rs.jinja"
+destination = "src/auth/repository/mod.rs"
 
 [[files]]
-source      = "service.rs.jinja"
-destination = "src/auth/service.rs"
+source      = "repository/user.rs.jinja"
+destination = "src/auth/repository/user.rs"
 
 [[files]]
-source      = "controller.rs.jinja"
-destination = "src/auth/controller.rs"
+source      = "repository/refresh_token.rs.jinja"
+destination = "src/auth/repository/refresh_token.rs"
+
+[[files]]
+source      = "service/mod.rs.jinja"
+destination = "src/auth/service/mod.rs"
+
+[[files]]
+source      = "service/session.rs.jinja"
+destination = "src/auth/service/session.rs"
+
+[[files]]
+source      = "controller/mod.rs.jinja"
+destination = "src/auth/controller/mod.rs"
+
+[[files]]
+source      = "controller/session.rs.jinja"
+destination = "src/auth/controller/session.rs"
 
 [[files]]
 source      = "guard.rs.jinja"
 destination = "src/auth/guard.rs"
 
 [[files]]
-source      = "tests.rs.jinja"
-destination = "src/auth/tests.rs"
+source      = "tests/mod.rs.jinja"
+destination = "src/auth/tests/mod.rs"
+
+[[files]]
+source      = "tests/session.rs.jinja"
+destination = "src/auth/tests/session.rs"
 
 [[anchors]]
 anchor  = "features"

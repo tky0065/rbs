@@ -731,7 +731,7 @@ mod tests {
     /// démarré *et* migré, là où `--with jobs` passe.
     #[test]
     fn every_auth_test_joining_the_database_is_ignored() {
-        let tests = fragment_source("auth", "tests.rs");
+        let tests = fragment_source("auth", "tests/session.rs");
 
         assert_eq!(
             tests.matches("#[tokio::test]").count(),
@@ -981,7 +981,7 @@ mod tests {
             );
         }
 
-        let controller = read(&Path::new(RACINE_FEATURES).join("auth/controller.rs.jinja"));
+        let controller = read(&Path::new(RACINE_FEATURES).join("auth/controller/session.rs.jinja"));
         assert!(
             !controller.contains("Json<TokenPair>"),
             "un handler qui enveloppe la paire dans un `Json` nu contourne l'en-tête :\n{controller}"
@@ -1015,7 +1015,7 @@ mod tests {
     /// de `login` écarte de l'autre côté.
     #[test]
     fn no_conflict_of_the_auth_fragment_echoes_the_address_it_refuses() {
-        for fichier in ["service.rs.jinja", "repository.rs.jinja"] {
+        for fichier in ["service/session.rs.jinja", "repository/user.rs.jinja"] {
             let source = read(&Path::new(RACINE_FEATURES).join("auth").join(fichier));
 
             for (debut, _) in source.match_indices("Error::Conflict") {
@@ -1033,8 +1033,9 @@ mod tests {
     /// devancé la rotation légitime avec une paire valide, renouvelée indéfiniment.
     #[test]
     fn a_replayed_refresh_closes_every_session_of_the_account() {
-        let repository = read(&Path::new(RACINE_FEATURES).join("auth/repository.rs.jinja"));
-        let service = read(&Path::new(RACINE_FEATURES).join("auth/service.rs.jinja"));
+        let repository =
+            read(&Path::new(RACINE_FEATURES).join("auth/repository/refresh_token.rs.jinja"));
+        let service = read(&Path::new(RACINE_FEATURES).join("auth/service/session.rs.jinja"));
 
         assert!(
             repository.contains("pub async fn revoke_sessions_of("),
@@ -1050,7 +1051,7 @@ mod tests {
     /// journal ne porte pas ce que la réponse tait.
     #[test]
     fn the_replay_is_logged_without_the_address_nor_the_token() {
-        let service = read(&Path::new(RACINE_FEATURES).join("auth/service.rs.jinja"));
+        let service = read(&Path::new(RACINE_FEATURES).join("auth/service/session.rs.jinja"));
 
         let debut = service
             .find("tracing::warn!")

@@ -4,8 +4,8 @@ use axum::http::StatusCode;
 use rbs_core::{HasAuth, HasCoreState, Identity, ProblemDetails, Result, ValidatedJson};
 use sea_orm::prelude::Uuid;
 
-use super::dto::{LoginRequest, RefreshRequest, RegisterRequest, TokenPair, UserResponse};
-use super::service;
+use super::super::dto::{LoginRequest, RefreshRequest, RegisterRequest, TokenPair, UserResponse};
+use super::super::service;
 use crate::state::AppState;
 
 #[utoipa::path(

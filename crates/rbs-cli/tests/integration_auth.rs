@@ -131,6 +131,43 @@ fn the_five_auth_paths_are_mounted() {
     }
 }
 
+/// La découpe par couche est ce qui rend le fragment lisible à treize routes : chaque
+/// couche est un répertoire, et le sens de la dépendance ne change pas.
+#[test]
+fn each_layer_is_a_directory() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_auth(&parent);
+
+    for fichier in [
+        "src/auth/repository/mod.rs",
+        "src/auth/repository/user.rs",
+        "src/auth/repository/refresh_token.rs",
+        "src/auth/service/mod.rs",
+        "src/auth/service/session.rs",
+        "src/auth/controller/mod.rs",
+        "src/auth/controller/session.rs",
+        "src/auth/tests/mod.rs",
+        "src/auth/tests/session.rs",
+    ] {
+        assert!(
+            racine.join(fichier).is_file(),
+            "{fichier} n'a pas été déposé"
+        );
+    }
+
+    for ancien in [
+        "src/auth/repository.rs",
+        "src/auth/service.rs",
+        "src/auth/controller.rs",
+        "src/auth/tests.rs",
+    ] {
+        assert!(
+            !racine.join(ancien).exists(),
+            "{ancien} survit à la découpe"
+        );
+    }
+}
+
 /// Le secret et les durées de vie arrivent avec la feature, sous les noms qu'`AuthConfig`
 /// attend : un projet qui les nomme autrement échoue au démarrage, pas à la compilation.
 #[test]

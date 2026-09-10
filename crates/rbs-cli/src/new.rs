@@ -950,7 +950,7 @@ mod tests {
         )
         .expect("le projet doit se créer");
 
-        assert!(project.root.join("src/auth/service.rs").is_file());
+        assert!(project.root.join("src/auth/service/mod.rs").is_file());
 
         let lib = fs::read_to_string(project.root.join("src/lib.rs")).expect("lib lisible");
         assert!(lib.contains("pub mod auth;"), "{lib}");
