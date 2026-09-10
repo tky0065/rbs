@@ -319,7 +319,7 @@ fn own_target() -> (MutexGuard<'static, ()>, std::fs::File) {
 
 /// Le critère exécutable du lot, pris au niveau qu'exige la CI générée.
 ///
-/// `--all-targets` et non `check` seul : sans lui, `src/auth/tests.rs` n'est jamais
+/// `--all-targets` et non `check` seul : sans lui, `src/auth/tests/` n'est jamais
 /// compilé. Et `clippy -D warnings` plutôt que `check`, parce que c'est la commande que
 /// le workflow d'`rbs add ci` lance : un fragment qui laisse un warning derrière lui
 /// rendrait rouge, dès le premier push, une CI portant du code que l'utilisateur n'a pas
@@ -441,7 +441,7 @@ fn the_auth_migration_creates_the_schema_then_returns_it_to_its_initial_state() 
 
 /// Les quatre critères du lot, joués par les tests que l'utilisateur reçoit.
 ///
-/// Ce que `rbs add auth` dépose dans `src/auth/tests.rs` est ce qui prouve la feature :
+/// Ce que `rbs add auth` dépose dans `src/auth/tests/` est ce qui prouve la feature :
 /// un test qui passerait ici sans passer chez l'utilisateur ne prouverait rien de ce
 /// qu'il reçoit.
 #[test]
