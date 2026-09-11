@@ -4,7 +4,7 @@
 
 **Goal:** Sous `docker compose --profile app up`, un projet portant `mail` envoie ses courriels : l'étage runtime du `Dockerfile` engendré copie `templates/` à côté de `config/`.
 
-**Architecture:** `mail/config.rs.jinja:33` lit `templates/mail` à l'exécution par un chemin relatif au répertoire de travail (`/app`). Le `Dockerfile.jinja:23-27` ne copie que les deux binaires et `config/`. On ajoute une ligne **inconditionnelle** `COPY --from=builder /build/templates* ./templates/` : BuildKit (le constructeur par défaut depuis Docker 23) tolère un motif sans correspondance — vérifié sur Docker 29.1.3 : sans `templates/`, un répertoire vide est créé ; avec, `templates/mail/…` arrive entier. L'inconditionnel tient quel que soit l'ordre dans lequel `mail` et `docker` ont été posés (`rbs new --with docker,mail` installe `docker` avant `mail`, et `rbs add mail` peut venir après), là où un `{% if "mail" in features %}` raterait ces deux cas.
+**Architecture:** `mail/config.rs.jinja:33` lit `templates/mail` à l'exécution par un chemin relatif au répertoire de travail (`/app`). Le `Dockerfile.jinja:23-27` ne copie que les deux binaires et `config/`. On ajoute une ligne **inconditionnelle** `COPY --from=builder /build/templates* ./templates/` : BuildKit (le constructeur par défaut depuis Docker 23) tolère un motif sans correspondance — vérifié sur Docker 29.1.3 : sans `templates/`, l'étape passe sans rien créer ; avec, `templates/mail/…` arrive entier. L'inconditionnel tient quel que soit l'ordre dans lequel `mail` et `docker` ont été posés (`rbs new --with docker,mail` installe `docker` avant `mail`, et `rbs add mail` peut venir après), là où un `{% if "mail" in features %}` raterait ces deux cas.
 
 **Tech Stack:** minijinja (`{@ @}` pour les valeurs), Dockerfile multi-étapes, tests de rendu dans `crates/rbs-cli/src/add/mod.rs`.
 
@@ -98,7 +98,7 @@ for p in avec sans; do
 done
 ```
 
-Attendu : pour `avec`, la liste montre `/app/templates/mail:` puis `bienvenue.html` (et les autres gabarits du fragment) ; pour `sans`, `/app/templates:` vide et un build qui réussit. Consigner les deux sorties dans le message de commit. Nettoyer : `docker rmi rbs-runtime-avec rbs-runtime-sans`.
+Attendu : pour `avec`, la liste montre `/app/templates/mail:` puis `bienvenue.html` (et les autres gabarits du fragment) ; pour `sans`, un build qui réussit et aucun `/app/templates`. Consigner les deux sorties dans le message de commit. Nettoyer : `docker rmi rbs-runtime-avec rbs-runtime-sans`.
 
 Note : le `Dockerfile.runtime` retire aussi le `USER api` ? Non — le laisser, `ls` fonctionne sous `api`. Si `debian:trixie-slim` n'est pas en cache local, le premier build le tire (quelques secondes).
 
