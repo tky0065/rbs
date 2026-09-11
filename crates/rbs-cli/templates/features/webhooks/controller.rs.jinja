@@ -6,14 +6,15 @@ use sea_orm::prelude::Uuid;
 
 use super::dto::{CreateSubscription, SubscriptionCreated, SubscriptionResponse};
 use super::service;
+use crate::auth::guard::RequireRole;
+use crate::auth::model::Role;
 use crate::state::AppState;
 
-// Les trois routes exigent un appelant authentifié. Une création laissée ouverte
-// permettrait à n'importe qui de faire livrer chez lui les événements du projet : ce n'est
-// pas une faiblesse théorique, `user.created` porte des adresses.
-//
-// `Identity` ne dit que « le jeton est valide ». Un projet qui réserve l'administration des
-// abonnements à un rôle remplace l'extracteur par sa propre garde — `src/auth/guard.rs`.
+// Les trois routes sont réservées à `Role::Admin`. Un abonnement livre chez son auteur
+// les événements du projet — `user.created` porte des adresses — et `/auth/register`
+// est ouvert : sous un simple jeton valide, n'importe qui pourrait se faire livrer
+// tout le projet, ou révoquer l'abonnement d'un autre. Pour ouvrir une route à tout
+// compte, remplacez `Role::Admin` par `Role::User` sur son `require_role`.
 
 #[utoipa::path(
     post,
@@ -25,14 +26,17 @@ use crate::state::AppState;
     responses(
         (status = 201, description = "abonnement inscrit, secret rendu cette seule fois", body = SubscriptionCreated),
         (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 422, description = "entrée invalide", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn subscribe(
     State(state): State<AppState>,
-    _identite: Identity,
+    identite: Identity,
     ValidatedJson(input): ValidatedJson<CreateSubscription>,
 ) -> Result<(StatusCode, Json<SubscriptionCreated>)> {
+    identite.require_role(Role::Admin)?;
+
     let inscrit = service::subscribe(state.core().db(), input).await?;
 
     Ok((StatusCode::CREATED, Json(inscrit)))
@@ -46,13 +50,16 @@ pub async fn subscribe(
     security(("bearer" = [])),
     responses(
         (status = 200, description = "tous les abonnements, révoqués compris, sans leurs secrets", body = Vec<SubscriptionResponse>),
-        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json")
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn list(
     State(state): State<AppState>,
-    _identite: Identity,
+    identite: Identity,
 ) -> Result<Json<Vec<SubscriptionResponse>>> {
+    identite.require_role(Role::Admin)?;
+
     Ok(Json(service::list(state.core().db()).await?))
 }
 
@@ -66,14 +73,17 @@ pub async fn list(
     responses(
         (status = 204, description = "abonnement révoqué"),
         (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 404, description = "abonnement inconnu", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn revoke(
     State(state): State<AppState>,
-    _identite: Identity,
+    identite: Identity,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode> {
+    identite.require_role(Role::Admin)?;
+
     service::revoke(state.core().db(), id).await?;
 
     Ok(StatusCode::NO_CONTENT)
