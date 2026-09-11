@@ -15,11 +15,12 @@ pub struct Config {
     /// Durée de la fenêtre de comptage, en secondes.
     #[serde(default = "default_window")]
     pub window_secs: u64,
-    /// Prend l'adresse cliente dans `X-Forwarded-For` plutôt que sur la connexion.
+    /// Prend l'adresse cliente dans `X-Forwarded-For` plutôt que sur la connexion : le
+    /// dernier élément de la liste, celui que le proxy appose.
     ///
-    /// À ne lever que derrière un proxy qui réécrit l'en-tête : exposée en direct, une
-    /// API qui le croit laisse chaque client se choisir une identité par requête, et ne
-    /// limite donc plus rien.
+    /// À ne lever que derrière un proxy qui appose l'adresse du pair à cet en-tête :
+    /// exposée en direct, une API qui le croit laisse chaque client se choisir une
+    /// identité par requête, et ne limite donc plus rien.
     #[serde(default)]
     pub trust_forwarded_for: bool,
     /// Limites propres à un préfixe de chemin, essayées dans l'ordre.

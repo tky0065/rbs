@@ -219,7 +219,11 @@ Une requête dont l'adresse cliente est inconnue n'est pas comptée : un compteu
 pour tout le monde ferait payer à chacun ce qu'un seul consomme. `axum::serve` fournit
 cette adresse ; derrière un reverse proxy c'est celle du proxy, ce à quoi sert
 `rate_limit.trust_forwarded_for = true` — à ne jamais lever sur une API exposée en direct,
-où n'importe quel client pourrait alors se choisir une identité par requête.
+où n'importe quel client pourrait alors se choisir une identité par requête. L'adresse lue
+est le **dernier** élément de `X-Forwarded-For`, celui que le proxy appose : nginx, Traefik,
+Caddy et les ALB ajoutent tous l'adresse du pair en fin de liste sans toucher à ce qui
+précède, si bien que ce que le client y a écrit avant ne change pas le compteur qu'on lui
+impute.
 
 ```text
 $ rbs add auth

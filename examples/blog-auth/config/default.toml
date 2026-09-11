@@ -51,8 +51,10 @@ window_secs = 60
 
 # Derrière un reverse proxy, l'adresse du pair est celle du proxy : sans ce drapeau tous
 # les clients partagent un même compteur, et le garde-fou devient le déni de service.
-# Ne le lever qu'avec un proxy devant, qui réécrit l'en-tête : exposée en direct, une API
-# qui le croit laisse n'importe quel client se choisir une identité par requête.
+# L'adresse lue est le dernier élément de l'en-tête, celui que le proxy appose ; ce que le
+# client y a écrit avant ne compte pas. Ne le lever qu'avec un proxy devant : exposée en
+# direct, une API qui le croit laisse n'importe quel client se choisir une identité par
+# requête.
 trust_forwarded_for = false
 
 # Limites plus strictes, par préfixe de chemin ; la première qui correspond l'emporte.
