@@ -96,9 +96,11 @@ each subscriber what they need to forge the events delivered to all the others. 
 returned by the creation response alone: a single read of the list would otherwise hand out
 everyone's secrets at once.
 
-`Identity` only says "the token is valid". A project that reserves subscription
-administration for a role replaces the extractor with its own guard — see
-`src/auth/guard.rs` and the [auth guide](./auth.md).
+The three routes require `Role::Admin`. A subscription delivers the project's events to
+whoever created it, and `/auth/register` is open: under a merely valid token, anyone could
+have every event delivered to them, or revoke someone else's subscription. To open a route
+to any account, replace `Role::Admin` with `Role::User` on its `require_role` call — see
+the [auth guide](./auth.md) for the guard.
 
 ## Event patterns
 
