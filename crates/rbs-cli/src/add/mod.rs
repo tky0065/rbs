@@ -10,6 +10,7 @@
 
 mod installation;
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::io;
 use std::path::{Path, PathBuf};
 
@@ -25,8 +26,13 @@ use crate::templates::{self, Source};
 
 /// Ce qu'il faut savoir pour installer une feature.
 pub(crate) struct Options {
-    /// Nom de la feature, tel que le sous-répertoire de `templates/features` la nomme.
-    pub feature: String,
+    /// Les features demandées, telles que les sous-répertoires de `templates/features` les
+    /// nomment.
+    ///
+    /// `rbs add` en nomme une ; `rbs new --with` les passe toutes à la fois, parce qu'un
+    /// fragment rendu doit savoir ce que le plan pose à côté de lui — `rate-limit` compte
+    /// dans Redis si `redis` arrive dans la même passe, fût-il posé après.
+    pub features: Vec<String>,
     /// Répertoire d'où la commande est lancée.
     pub directory: PathBuf,
     /// Installe même si le projet porte des modifications non commitées.
@@ -42,7 +48,15 @@ pub(crate) struct Planned {
     pub plan: plan::Plan,
     /// Chemins des fichiers de la feature, relatifs à la racine du projet.
     pub files: Vec<String>,
+    /// Chaque fragment que ce plan pose, dans l'ordre de pose.
+    ///
+    /// `rbs new` rapporte fragment par fragment ce qu'il a écrit, et `files` ne dit pas
+    /// à qui appartient quoi.
+    pub poses: Vec<Pose>,
     /// Ce que le fragment annonce installer, tel que son manifeste le décrit.
+    ///
+    /// Celle de la première feature demandée : `rbs add` n'en nomme qu'une, et c'est lui
+    /// seul qui l'affiche.
     pub description: String,
     /// Les fragments que celui demandé entraîne, et que ce plan pose avec lui.
     ///
@@ -59,6 +73,17 @@ pub(crate) struct Planned {
     /// fichier existant, et un CRUD généré avant elle resterait grand ouvert sans qu'un
     /// message ne le dise.
     ouverts: Vec<String>,
+}
+
+/// Un fragment du plan, et ce qu'il y dépose.
+#[derive(Debug)]
+pub(crate) struct Pose {
+    /// Nom de la feature, tel que `rbs add` l'accepte.
+    pub name: String,
+    /// Nombre de fichiers que le fragment dépose, sa migration comprise.
+    pub files: usize,
+    /// Le fragment pose une migration.
+    pub migration: bool,
 }
 
 impl Planned {
@@ -196,14 +221,15 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // fichiers installés : la migration d'un fragment est horodatée, et un projet dont
     // le développeur a supprimé un fichier en recevrait une seconde, datée d'un autre
     // instant. Ce que `rbs add` a posé lui appartient ensuite.
-    if metadonnees
+    if options
         .features
         .iter()
-        .any(|installee| installee == &options.feature)
+        .all(|feature| metadonnees.features.contains(feature))
     {
         return Ok(Planned {
             plan: plan::Builder::new(root).finir(),
             files: Vec::new(),
+            poses: Vec::new(),
             description: String::new(),
             entrainees: Vec::new(),
             deja_installee: true,
@@ -216,14 +242,21 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         git::garde(&root)?;
     }
 
-    // La feature demandée et celles qu'elle entraîne partagent un seul plan :
+    // Les features demandées et celles qu'elles entraînent partagent un seul plan :
     // l'utilisateur voit ce qui s'écrira, y compris ce qu'il n'a pas nommé, avant que
     // quoi que ce soit ne s'écrive.
     let a_poser = resoudre(
         options.template_dir.as_deref(),
-        &options.feature,
+        &options.features,
         &metadonnees.features,
     )?;
+
+    // Ce que le projet portera une fois le plan appliqué, et non ce que le disque porte
+    // avant lui : un fragment qui sait qu'un autre est là s'appuie dessus — la limite de
+    // débit compte dans Redis quand le cache existe, dans sa mémoire sinon — et le cache
+    // posé par le même plan existe bel et bien, même s'il se pose après.
+    let mut features = metadonnees.features.clone();
+    features.extend(a_poser.iter().map(|fragment| fragment.name.clone()));
 
     let nom_projet = metadonnees.package_name(&root.join("Cargo.toml"))?;
     let crate_name = nom_projet.replace('-', "_");
@@ -278,10 +311,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let context = context! {
         project_name => nom_projet.clone(),
         crate_name => crate_name.clone(),
-        // Ce que le projet porte déjà, tel que `[package.metadata.rbs]` l'inscrit : un
-        // fragment qui sait qu'un autre est là s'appuie dessus — la limite de débit
-        // compte dans Redis quand le cache existe, dans sa mémoire sinon.
-        features => metadonnees.features.clone(),
+        features => features,
         // Par où le binaire principal atteint un module de feature : la bibliothèque du
         // projet, ou `crate::` sur un projet engendré avant qu'elle n'existe, où ces
         // modules vivent dans le binaire lui-même.
@@ -310,9 +340,10 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let mut builder = plan::Builder::new(root.clone());
     let timestamp = crate::generate::migration::current_timestamp();
     let mut files = Vec::new();
+    let mut poses = Vec::new();
 
     for fragment in &a_poser {
-        files.extend(installation::actions(
+        let deposes = installation::actions(
             &installation::Fragment {
                 name: &fragment.name,
                 manifest: &fragment.manifest,
@@ -321,7 +352,14 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
                 timestamp: &timestamp,
             },
             &mut builder,
-        )?);
+        )?;
+
+        poses.push(Pose {
+            name: fragment.name.clone(),
+            files: deposes.len(),
+            migration: fragment.manifest.migration.is_some(),
+        });
+        files.extend(deposes);
 
         builder.patch(plan::PatchToml::InscrireFeature(fragment.name.clone()))?;
     }
@@ -348,7 +386,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     let description = a_poser
         .iter()
-        .find(|fragment| fragment.name == options.feature)
+        .find(|fragment| options.features.first() == Some(&fragment.name))
         .map_or_else(String::new, |fragment| {
             fragment.manifest.feature.description.clone()
         });
@@ -356,10 +394,11 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     Ok(Planned {
         plan: builder.finir(),
         files,
+        poses,
         description,
         entrainees: posees
             .into_iter()
-            .filter(|name| name != &options.feature)
+            .filter(|name| !options.features.contains(name))
             .collect(),
         deja_installee: false,
         zone_manquante,
@@ -377,18 +416,21 @@ struct Prevu {
     templates: Vec<templates::File>,
 }
 
-/// Les fragments à poser pour honorer `feature` : elle, et ceux qu'elle entraîne.
+/// Les fragments à poser pour honorer `features` : elles, et ceux qu'elles entraînent.
 ///
-/// Ils sont rendus par ordre alphabétique, celui que `rbs new --with` suit déjà : deux
-/// chemins d'installation équivalents doivent laisser le même projet, et rien dans un
-/// fragment déclaratif ne dépend de l'ordre où ses voisins ont écrit. C'est aussi ce qui
-/// garde les `pub mod` du squelette dans l'ordre où rustfmt les veut.
+/// L'ordre de pose est celui des dépendances, départagé par le nom : un fragment passe
+/// avant ceux qui l'exigent, et avant ceux qui insèrent dans une ancre dont il écrit le
+/// fichier porteur — `docker` dépose le compose que `mail` étend par `services`, et sur
+/// un projet qui n'en a pas l'inverse échoue sur une ancre introuvable. Le nom tranche le
+/// reste, pour que deux demandes équivalentes laissent le même projet : les ancres non
+/// triées empilent dans l'ordre de pose. Les `pub mod` du squelette n'en dépendent pas,
+/// leurs ancres se maintenant triées d'elles-mêmes.
 ///
 /// Un fragment que `[package.metadata.rbs]` inscrit déjà n'est pas reposé : l'entraînement
 /// obéit à la même idempotence que l'installation directe.
 fn resoudre(
     template_dir: Option<&Path>,
-    feature: &str,
+    features: &[String],
     installees: &[String],
 ) -> Result<Vec<Prevu>, Error> {
     let mut resolution = Resolution {
@@ -397,12 +439,84 @@ fn resoudre(
         poses: Vec::new(),
         en_cours: Vec::new(),
     };
-    resolution.resoudre(feature)?;
+    for feature in features {
+        resolution.resoudre(feature)?;
+    }
 
-    let mut poses = resolution.poses;
-    poses.sort_by(|gauche, droite| gauche.name.cmp(&droite.name));
+    Ok(ordonner(resolution.poses))
+}
 
-    Ok(poses)
+/// Trie `poses` par dépendances, le plus petit nom d'abord à chaque égalité.
+///
+/// Un cycle — deux manifestes d'un `--template-dir` qui s'exigent l'un l'autre — ne
+/// libère jamais ses membres : le plus petit nom sort alors d'office, ce qui reste
+/// déterministe et ne laisse rien derrière.
+fn ordonner(poses: Vec<Prevu>) -> Vec<Prevu> {
+    let mut restants: BTreeMap<String, Prevu> = poses
+        .into_iter()
+        .map(|pose| (pose.name.clone(), pose))
+        .collect();
+
+    // Le fichier qu'un fragment écrit porte peut-être une ancre du registre ; c'est
+    // alors lui qui l'apporte aux fragments qui la visent.
+    let porteurs: BTreeMap<&str, Vec<String>> = crate::anchors::ANCRES
+        .iter()
+        .map(|anchor| {
+            let ecrivent = restants
+                .values()
+                .filter(|pose| {
+                    pose.manifest
+                        .files
+                        .iter()
+                        .any(|file| file.destination == anchor.file)
+                })
+                .map(|pose| pose.name.clone())
+                .collect();
+            (anchor.name.as_ref(), ecrivent)
+        })
+        .collect();
+
+    let mut avant: BTreeMap<String, BTreeSet<String>> = restants
+        .values()
+        .map(|pose| {
+            let exigees = pose.manifest.feature.requires.iter().cloned();
+            let apportees = pose.manifest.anchors.iter().flat_map(|insertion| {
+                porteurs
+                    .get(insertion.anchor.as_str())
+                    .into_iter()
+                    .flatten()
+                    .cloned()
+            });
+            let precedents = exigees
+                .chain(apportees)
+                .filter(|nom| nom != &pose.name && restants.contains_key(nom))
+                .collect();
+
+            (pose.name.clone(), precedents)
+        })
+        .collect();
+
+    let mut ordre = Vec::with_capacity(restants.len());
+    while !restants.is_empty() {
+        let suivant = avant
+            .iter()
+            .find(|(_, precedents)| precedents.is_empty())
+            .or_else(|| avant.iter().next())
+            .map(|(nom, _)| nom.clone())
+            .expect("`avant` compte un nom par fragment restant");
+
+        avant.remove(&suivant);
+        for precedents in avant.values_mut() {
+            precedents.remove(&suivant);
+        }
+        ordre.push(
+            restants
+                .remove(&suivant)
+                .expect("chaque nom d'`avant` est un fragment restant"),
+        );
+    }
+
+    ordre
 }
 
 /// L'état d'un parcours des `requires`, du fragment demandé vers ceux qu'il entraîne.
@@ -595,12 +709,26 @@ mod tests {
     }
 
     fn options(root: &Path, feature: &str) -> Options {
+        options_multi(root, &[feature])
+    }
+
+    /// Plusieurs features dans une seule demande — ce que `rbs new --with` transmet.
+    fn options_multi(root: &Path, features: &[&str]) -> Options {
         Options {
-            feature: feature.to_string(),
+            features: features.iter().map(|f| f.to_string()).collect(),
             directory: root.to_path_buf(),
             force: false,
             template_dir: None,
         }
+    }
+
+    /// Les fragments du plan, dans l'ordre où ils seront posés.
+    fn ordre_de_pose(planned: &Planned) -> Vec<&str> {
+        planned
+            .poses
+            .iter()
+            .map(|pose| pose.name.as_str())
+            .collect()
     }
 
     /// Planifie puis applique, comme la commande le fait.
@@ -754,7 +882,7 @@ mod tests {
         let (_parent, root) = project();
 
         let planned = run(&Options {
-            feature: "redis".to_string(),
+            features: vec!["redis".to_string()],
             directory: root.clone(),
             force: false,
             template_dir: None,
@@ -834,7 +962,7 @@ mod tests {
         std::fs::remove_file(root.join("AGENTS.md")).expect("le fichier existe");
 
         let planned = run(&Options {
-            feature: "redis".to_string(),
+            features: vec!["redis".to_string()],
             directory: root,
             force: false,
             template_dir: None,
@@ -1792,6 +1920,90 @@ mod tests {
         assert!(!counter.contains("HashMap"), "{counter}");
     }
 
+    /// Des fragments planifiés ensemble se voient : `rate-limit` compte dans Redis dès que
+    /// `redis` est du même plan, quel que soit l'ordre où la demande les nomme. Lu sur le
+    /// disque plutôt que dans le plan, `features` ignorait `redis` tant que `rate-limit`
+    /// passait avant lui — et `rbs new --with rate-limit,redis` rendait un compteur par
+    /// réplica.
+    #[test]
+    fn rate_limit_planned_with_redis_renders_the_shared_counter_whatever_the_order() {
+        for demande in [["rate-limit", "redis"], ["redis", "rate-limit"]] {
+            let (_parent, root) = project();
+
+            let planned =
+                plan_for(&options_multi(&root, &demande)).expect("le plan doit se calculer");
+            let counter = projected(&planned, "src/modules/rate_limit/counter.rs");
+
+            assert!(
+                counter.contains("deadpool_redis"),
+                "{demande:?} rend un compteur en mémoire :\n{counter}"
+            );
+            assert!(!counter.contains("HashMap"), "{demande:?} :\n{counter}");
+        }
+    }
+
+    /// `docker` écrit le compose que `mail` étend par l'ancre `services` : sur un projet
+    /// SQLite, qui n'en porte pas, `auth` — qui entraîne `mail` — posée avant lui
+    /// échouait sur une ancre introuvable.
+    #[test]
+    fn docker_is_laid_down_before_the_fragments_that_extend_its_compose() {
+        let (_parent, root) = project_on(Database::Sqlite);
+        assert!(!root.join("docker-compose.yml").exists());
+
+        let planned =
+            plan_for(&options_multi(&root, &["auth", "docker"])).expect("le plan doit se calculer");
+
+        assert_eq!(
+            ordre_de_pose(&planned),
+            ["docker", "mail", "rate-limit", "auth"]
+        );
+        let compose = projected(&planned, "docker-compose.yml");
+        assert!(
+            compose.contains("mailpit:"),
+            "le compose que docker apporte ne reçoit pas le service de mail :\n{compose}"
+        );
+    }
+
+    /// Un fragment passe avant ceux qui l'exigent : ce qu'`auth` s'attend à trouver est
+    /// déjà dans le plan quand elle se rend.
+    #[test]
+    fn auth_alone_lays_down_mail_and_rate_limit_before_itself() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "auth")).expect("le plan doit se calculer");
+
+        assert_eq!(ordre_de_pose(&planned), ["mail", "rate-limit", "auth"]);
+    }
+
+    /// Les ancres non triées empilent dans l'ordre de pose : cet ordre ne doit tenir qu'aux
+    /// fragments, jamais à la frappe, pour que deux demandes équivalentes rendent le même
+    /// projet.
+    #[test]
+    fn two_equivalent_requests_render_the_same_project() {
+        let rendu = |demande: &[&str]| {
+            let (_parent, root) = project();
+            let planned =
+                plan_for(&options_multi(&root, demande)).expect("le plan doit se calculer");
+
+            (
+                ordre_de_pose(&planned)
+                    .into_iter()
+                    .map(str::to_string)
+                    .collect::<Vec<_>>(),
+                projected(&planned, "src/state.rs").to_string(),
+                projected(&planned, "docker-compose.yml").to_string(),
+            )
+        };
+
+        let attendu = rendu(&["storage", "auth", "docker"]);
+        assert_eq!(
+            attendu.0,
+            ["docker", "mail", "rate-limit", "auth", "storage"]
+        );
+        assert_eq!(attendu, rendu(&["docker", "auth", "storage"]));
+        assert_eq!(attendu, rendu(&["auth", "storage", "docker"]));
+    }
+
     /// Le critère de la tâche 12 : `rbs add auth` ne laisse pas `/auth/login` sans limite,
     /// et l'utilisateur le lit avant que quoi que ce soit ne s'écrive. `mail` s'y ajoute
     /// depuis qu'auth envoie des courriels : les deux entraînements sont vérifiés ici.
@@ -1812,7 +2024,7 @@ mod tests {
 
         let manifeste = projected(&planned, "Cargo.toml");
         assert!(
-            manifeste.contains("features = [\"health\", \"auth\", \"mail\", \"rate-limit\"]"),
+            manifeste.contains("features = [\"health\", \"mail\", \"rate-limit\", \"auth\"]"),
             "les trois features doivent être inscrites :\n{manifeste}"
         );
         assert!(
@@ -2036,7 +2248,7 @@ mod tests {
         run(&fragment_options(&root, &fragments)).expect("la première installation aboutit");
 
         let mut options = fragment_options(&root, &fragments);
-        options.feature = "autre".to_string();
+        options.features = vec!["autre".to_string()];
         options.force = true;
         run(&options).expect("la seconde installation doit aboutir");
 

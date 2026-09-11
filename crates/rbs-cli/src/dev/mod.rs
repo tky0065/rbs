@@ -378,7 +378,7 @@ mod tests {
     /// fragment qui décide comment le fichier s'appelle, et lui seul.
     fn install_docker(root: &Path) {
         let planned = crate::add::plan_for(&crate::add::Options {
-            feature: "docker".to_string(),
+            features: vec!["docker".to_string()],
             directory: root.to_path_buf(),
             force: true,
             template_dir: None,

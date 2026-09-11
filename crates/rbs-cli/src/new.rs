@@ -48,8 +48,16 @@ pub struct Project {
     pub files: usize,
     /// `git init` a abouti. Faux n'invalide pas le projet.
     pub depot_git: bool,
-    /// Les features que `--with` (ou la question) a demandées, et qui se sont installées.
+    /// Les fragments posés, dans l'ordre de pose — ceux que `--with` (ou la question) a
+    /// demandés et ceux qu'ils ont entraînés, que le développeur doit lire aussi.
     pub installed: Vec<InstalledFeature>,
+    /// Ce que les fragments n'ont pas pu insérer, faute de fichier porteur, rendu tel
+    /// que `rbs add` l'affiche sous son plan.
+    ///
+    /// `new` n'affiche pas de plan : sans ce relais, `--database sqlite --with auth`
+    /// poserait `mail` sans jamais dire que son service `mailpit` n'est monté nulle part.
+    /// Un seul bloc pour toutes les features : elles sortent d'un même plan.
+    pub sautees: Option<String>,
 }
 
 /// Une feature posée par la création, et ce qu'elle a écrit.
@@ -61,12 +69,14 @@ pub struct InstalledFeature {
     pub files: usize,
     /// Le fragment a posé une migration.
     pub migration: bool,
-    /// Ce que le fragment n'a pas pu insérer, faute de fichier porteur, rendu tel que
-    /// `rbs add` l'affiche sous son plan.
-    ///
-    /// `new` n'affiche pas de plan : sans ce relais, `--database sqlite --with auth`
-    /// poserait `mail` sans jamais dire que son service `mailpit` n'est monté nulle part.
-    pub sautees: Option<String>,
+}
+
+/// Ce que la pose des features a laissé : les fragments écrits, et ce qu'ils n'ont pu
+/// insérer.
+#[derive(Debug, Default)]
+struct Installation {
+    features: Vec<InstalledFeature>,
+    sautees: Option<String>,
 }
 
 /// Ce qui peut empêcher la création d'un projet.
@@ -82,11 +92,14 @@ pub enum Error {
         name: String,
     },
 
-    /// Une feature demandée n'a pas pu être installée.
-    #[error("`{feature}` n'a pas pu être installée : {source}")]
+    /// Les features demandées n'ont pas pu être installées.
+    ///
+    /// Elles se posent en une seule passe, et la panne d'un fragment y est celle de
+    /// toutes : c'est la cause qui nomme le fragment fautif, quand il y en a un.
+    #[error("les features demandées ({features}) n'ont pas pu être installées : {source}")]
     Installation {
-        /// Feature en cause.
-        feature: String,
+        /// Les features demandées, séparées par des virgules.
+        features: String,
         /// Cause remontée par l'installation.
         source: Box<crate::add::Error>,
     },
@@ -188,33 +201,18 @@ pub fn create(options: &Options, parent: &Path) -> Result<Project, Error> {
         Error::Ecriture { path, source }
     })?;
 
-    // L'ordre est celui de la liste dérivée, non celui de la frappe : les insertions dans
-    // le Migrator et dans le compose suivent l'ordre d'installation, et deux `--with`
-    // équivalents doivent rendre deux projets identiques.
-    let demandees: Vec<&String> = disponibles
-        .iter()
-        .filter(|feature| options.features.contains(feature))
-        .collect();
-
-    let mut installed = Vec::new();
-    for feature in demandees {
-        match install(&root, feature, options.template_dir.as_deref()) {
-            Ok(Some(pose)) => installed.push(pose),
-            // Une feature qu'une autre vient d'entraîner est déjà posée : l'annoncer une
-            // seconde fois, et pour zéro fichier, ferait passer une pose réussie pour un
-            // raté.
-            Ok(None) => {}
-            Err(source) => {
-                // Le répertoire n'existait pas avant la commande : le retirer entièrement
-                // ne peut rien emporter qui lui préexistait.
-                let _ = fs::remove_dir_all(&root);
-                return Err(Error::Installation {
-                    feature: feature.clone(),
-                    source: Box::new(source),
-                });
-            }
+    let Installation {
+        features: installed,
+        sautees,
+    } = install(&root, &options.features, options.template_dir.as_deref()).map_err(|source| {
+        // Le répertoire n'existait pas avant la commande : le retirer entièrement
+        // ne peut rien emporter qui lui préexistait.
+        let _ = fs::remove_dir_all(&root);
+        Error::Installation {
+            features: options.features.join(", "),
+            source: Box::new(source),
         }
-    }
+    })?;
 
     // Après les features, non avant : l'inventaire lit le manifeste que chaque
     // installation complète. Pour un projet neuf, la version qui écrit le guide est celle
@@ -237,42 +235,48 @@ pub fn create(options: &Options, parent: &Path) -> Result<Project, Error> {
         depot_git: git_init(&root),
         files: rendus.len() + 1,
         installed,
+        sautees,
         root,
     })
 }
 
-/// Pose une feature dans le projet tout juste créé, par le pipeline de `rbs add`.
+/// Pose les features dans le projet tout juste créé, par le pipeline de `rbs add`.
+///
+/// Une seule passe pour toutes, et non une par feature : un fragment rendu doit voir
+/// celles que le plan pose avec lui — `rate-limit` compte dans Redis si `redis` est du
+/// même plan — et l'ordre de pose est celui de leurs dépendances, non celui de la frappe.
+/// Ce qui en sort nomme chaque fragment posé, ceux que l'utilisateur n'a pas demandés
+/// compris : il doit lire ce qui s'est écrit.
 fn install(
     root: &Path,
-    feature: &str,
+    features: &[String],
     template_dir: Option<&Path>,
-) -> Result<Option<InstalledFeature>, crate::add::Error> {
+) -> Result<Installation, crate::add::Error> {
+    if features.is_empty() {
+        return Ok(Installation::default());
+    }
+
     let planned = crate::add::plan_for(&crate::add::Options {
         directory: root.to_path_buf(),
-        feature: feature.to_string(),
+        features: features.to_vec(),
         force: false,
         template_dir: template_dir.map(Path::to_path_buf),
     })?;
 
-    if planned.deja_installee {
-        return Ok(None);
-    }
-
-    let migration = planned
-        .files
-        .iter()
-        .any(|file| file.starts_with("migration/src/"));
-    let files = planned.files.len();
     let sautees = crate::plan::render::sautees(&planned.plan);
-
     crate::plan::application::apply(&planned.plan, false)?;
 
-    Ok(Some(InstalledFeature {
-        name: feature.to_string(),
-        files,
-        migration,
-        sautees,
-    }))
+    let features = planned
+        .poses
+        .into_iter()
+        .map(|pose| InstalledFeature {
+            name: pose.name,
+            files: pose.files,
+            migration: pose.migration,
+        })
+        .collect();
+
+    Ok(Installation { features, sautees })
 }
 
 /// Le nom devient un `name` de manifeste et un nom de répertoire : ce qui n'est pas
@@ -963,7 +967,7 @@ mod tests {
 
         assert!(!project.root.join(COMPOSE).exists());
         assert_eq!(project.installed.len(), 1);
-        let sautees = project.installed[0]
+        let sautees = project
             .sautees
             .as_deref()
             .expect("le service sans compose doit être signalé");
@@ -996,10 +1000,68 @@ mod tests {
         let manifest = fs::read_to_string(project.root.join("Cargo.toml")).expect("manifeste");
         assert!(manifest.contains("\"auth\""), "{manifest}");
 
-        assert_eq!(project.installed.len(), 1);
-        assert_eq!(project.installed[0].name, "auth");
-        assert!(project.installed[0].migration);
-        assert_eq!(project.installed[0].sautees, None);
+        // Ce qu'`auth` entraîne est rapporté avec elle, dans l'ordre de pose : le
+        // développeur lit ce qui s'est écrit, y compris ce qu'il n'a pas nommé.
+        let noms: Vec<&str> = project.installed.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(noms, ["mail", "rate-limit", "auth"]);
+        assert!(project.installed[2].migration);
+        assert!(!project.installed[0].migration);
+    }
+
+    /// Le compteur de `rate-limit` doit compter dans Redis dès que `redis` est du même
+    /// projet, que la frappe le nomme avant ou après : posées une par une, `rate-limit`
+    /// passait avant `redis` et rendait un compteur par réplica.
+    #[test]
+    fn rate_limit_created_with_redis_counts_in_redis() {
+        for features in [["rate-limit", "redis"], ["redis", "rate-limit"]] {
+            let parent = TempDir::new().expect("répertoire temporaire créable");
+            let project = create(
+                &Options {
+                    name: "demo".to_string(),
+                    database_url: "postgres://rbs:rbs@localhost:5432/demo".to_string(),
+                    database: Database::Postgres,
+                    features: features.iter().map(|f| f.to_string()).collect(),
+                    core_path: None,
+                    template_dir: None,
+                    lang: crate::lang::Lang::Fr,
+                },
+                parent.path(),
+            )
+            .expect("le projet doit se créer");
+
+            let counter =
+                fs::read_to_string(project.root.join("src/modules/rate_limit/counter.rs"))
+                    .expect("compteur lisible");
+            assert!(
+                counter.contains("deadpool_redis"),
+                "{features:?} rend un compteur en mémoire :\n{counter}"
+            );
+        }
+    }
+
+    /// Sur SQLite le squelette n'écrit pas de compose : c'est `docker` qui l'apporte, et
+    /// `mail` — qu'`auth` entraîne — y insère son service. Posée avant `docker`, elle
+    /// échouait sur une ancre introuvable.
+    #[test]
+    fn a_sqlite_project_created_with_docker_and_auth_gets_its_compose_first() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "sqlite://demo.db?mode=rwc".to_string(),
+                database: Database::Sqlite,
+                features: vec!["docker".to_string(), "auth".to_string()],
+                core_path: None,
+                template_dir: None,
+                lang: crate::lang::Lang::Fr,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        let compose = fs::read_to_string(project.root.join(COMPOSE)).expect("compose lisible");
+        assert!(compose.contains("mailpit:"), "{compose}");
+        assert_eq!(project.sautees, None, "le compose est là : rien à reporter");
     }
 
     /// L'ordre de frappe ne doit pas décider du contenu : deux `--with` équivalents
