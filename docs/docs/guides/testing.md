@@ -61,11 +61,16 @@ From the project root, with a database reachable:
 
 ```bash
 rbs migrate up
-cargo test
+cargo test -- --include-ignored
 ```
 
 The first command is not optional. `application()` fails with a message saying so if the
 schema is not there.
+
+The `--include-ignored` is not optional either. Every test that reaches the database is
+marked `#[ignore = "joint la base du projet"]`, so that a bare `cargo test` stays fast on a
+machine where nothing is running — and runs nothing that matters. The CI workflow
+`rbs add ci` installs passes the same flag, after starting the database and migrating it.
 
 ## How rbs tests itself
 
