@@ -110,7 +110,7 @@ et `cargo test` seul ne les lance pas. Ils demandent la base du `.env` démarré
 
 <!-- rbs:inventory -->
 - rbs 1.3.1 · base postgres
-- Fragments installés : auth, rate-limit
+- Fragments installés : auth, mail, rate-limit
 - Entités engendrées : posts
 - Ancres du projet : features (src/lib.rs), modules (src/modules/mod.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), health_probes (src/health/controller.rs)
 <!-- /rbs:inventory -->

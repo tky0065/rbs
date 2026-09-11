@@ -1,3 +1,4 @@
+pub mod config;
 pub mod controller;
 pub mod dto;
 pub mod guard;
@@ -9,7 +10,7 @@ pub mod service;
 mod tests;
 
 use axum::Router;
-use axum::routing::{get, post};
+use axum::routing::{delete, get, post};
 use rbs_core::HasAuth;
 
 use crate::state::AppState;
@@ -20,6 +21,15 @@ use crate::state::AppState;
 // repart avec elle.
 impl HasAuth for AppState {}
 
+// L'accesseur vit ici et non dans `state.rs` : il arrive avec la feature, et repart avec
+// elle.
+impl AppState {
+    /// Les réglages des parcours de réinitialisation et de vérification.
+    pub fn flows(&self) -> &config::FlowConfig {
+        &self.flows
+    }
+}
+
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/auth/register", post(controller::register))
@@ -27,4 +37,31 @@ pub fn routes() -> Router<AppState> {
         .route("/auth/refresh", post(controller::refresh))
         .route("/auth/logout", post(controller::logout))
         .route("/auth/me", get(controller::me))
+        .route(
+            "/auth/change-password",
+            post(controller::password::change_password),
+        )
+        .route(
+            "/auth/forgot-password",
+            post(controller::password::forgot_password),
+        )
+        .route(
+            "/auth/reset-password",
+            post(controller::password::reset_password),
+        )
+        .route(
+            "/auth/verify-email",
+            post(controller::verification::verify_email),
+        )
+        .route(
+            "/auth/resend-verification",
+            post(controller::verification::resend_verification),
+        )
+        // Les deux méthodes du même chemin se déclarent en une fois : axum refuse — et le
+        // dit par une panique au démarrage — deux `route()` sur un chemin identique.
+        .route(
+            "/auth/sessions",
+            get(controller::list_sessions).delete(controller::revoke_sessions),
+        )
+        .route("/auth/sessions/{id}", delete(controller::revoke_session))
 }

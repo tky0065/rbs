@@ -28,46 +28,68 @@ rbs add auth
 ```text
 $ rbs add auth
 auth : authentification JWT : Argon2, jetons d'accès et de rafraîchissement, rôles
-auth exige rate-limit : posée avec elle
+auth exige mail, rate-limit : posée avec elle
 
 plan pour …/demo
 
   + src/auth/mod.rs                                        créé
+  + src/auth/config.rs                                     créé
   + src/auth/model.rs                                      créé
   + src/auth/dto.rs                                        créé
-  + src/auth/repository.rs                                 créé
-  + src/auth/service.rs                                    créé
-  + src/auth/controller.rs                                 créé
+  + src/auth/repository/mod.rs                             créé
+  + src/auth/repository/user.rs                            créé
+  + src/auth/repository/refresh_token.rs                   créé
+  + src/auth/repository/one_time_token.rs                  créé
+  + src/auth/service/mod.rs                                créé
+  + src/auth/service/session.rs                            créé
+  + src/auth/service/password.rs                           créé
+  + src/auth/service/verification.rs                       créé
+  + src/auth/controller/mod.rs                             créé
+  + src/auth/controller/session.rs                         créé
+  + src/auth/controller/password.rs                        créé
+  + src/auth/controller/verification.rs                    créé
+  + templates/mail/reinitialisation.html                   créé
+  + templates/mail/verification.html                       créé
   + src/auth/guard.rs                                      créé
-  + src/auth/tests.rs                                      créé
+  + src/auth/tests/mod.rs                                  créé
+  + src/auth/tests/session.rs                              créé
+  + src/auth/tests/password.rs                             créé
+  + src/auth/tests/verification.rs                         créé
   + migration/src/m20260909_093150_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
   ~ src/lib.rs                                             modifié
   ~ src/router.rs                                          modifié
   ~ src/openapi.rs                                         modifié
+  ~ src/state.rs                                           modifié
   ~ Cargo.toml                                             modifié
   ~ config/default.toml                                    modifié
   ~ .env.example                                           modifié
   ~ .env                                                   modifié
+  + src/modules/mail/mod.rs                                créé
+  + src/modules/mail/config.rs                             créé
+  + src/modules/mail/template.rs                           créé
+  + src/modules/mail/service.rs                            créé
+  + src/modules/mail/tests.rs                              créé
+  + templates/mail/bienvenue.html                          créé
+  + src/modules/mod.rs                                     créé
+  ~ docker-compose.yml                                     modifié
   + src/modules/rate_limit/mod.rs                          créé
   + src/modules/rate_limit/config.rs                       créé
   + src/modules/rate_limit/counter.rs                      créé
   + src/modules/rate_limit/tests.rs                        créé
-  + src/modules/mod.rs                                     créé
-  ~ src/state.rs                                           modifié
   ~ AGENTS.md                                              modifié
 
-  24 fichiers à écrire
-✓ auth installée — 13 fichiers
+  46 fichiers à écrire
+✓ auth installée — 34 fichiers
 
   rbs migrate up
 ```
 
 `add` refuses a dirty working tree, which is why the command above only runs on a
-freshly committed project. `auth exige rate-limit : posée avec elle` is proof the
-feature does not arrive alone — a login endpoint with no rate limiting is exactly the
-kind of gap a generator should not leave for you to notice later, so the CLI installs
-both together.
+freshly committed project. `auth exige mail, rate-limit : posée avec elle` is proof the
+feature does not arrive alone — a login endpoint with no rate limiting, and a password
+reset with no way to send the email, are exactly the kind of gap a generator should not
+leave for you to notice later, so the CLI installs all three together.
 
 ## 2. Apply the migration
 
@@ -85,8 +107,8 @@ rbs migrate up
 
 `generate` and `add` both require a clean tree, so the commit comes first — proof of
 nothing by itself, but what makes the next two commands able to run without `--force`.
-The migration that just applied is the one `auth` wrote: two new tables, for accounts and
-refresh tokens.
+The migration that just applied is the one `auth` wrote: three new tables — accounts,
+refresh tokens, and the one-time tokens behind the password and verification links below.
 
 ## 3. Generate a protected resource
 
@@ -242,6 +264,91 @@ date: Wed, 09 Sep 2026 09:33:06 GMT
 Proof that `--role admin` never touched this route: the same `user` token that was
 forbidden on the write reads the empty list without complaint.
 
+## Changing, resetting, and confirming
+
+`auth` also ships with `mail`, and `mail`'s default SMTP is Mailpit — the `mailpit`
+service `docker-compose.yml` already carries, catching every message the project sends
+without a real inbox on the other end. Open
+[`http://localhost:8025`](http://localhost:8025) in a browser and leave it there: the
+next three requests each drop something into it.
+
+Alice, still holding `$TOKEN` from above, changes her own password:
+
+```bash
+curl -s -X POST http://127.0.0.1:8080/auth/change-password \
+  -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"current_password":"un-mot-de-passe-long","new_password":"un-second-mot-de-passe-long"}'
+```
+
+```text
+{"access_token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...","refresh_token":"MKySJ39zGPdyiC-eIjOT01s0xJTMI5Zvhn8JByDqwWI","token_type":"Bearer","expires_in":900}
+```
+
+200, not 204: the route hands back a fresh pair, because it has just revoked every
+session of the account, `$TOKEN`'s included — nothing on the request says which session
+issued it, so none is spared. The old `$TOKEN` is dead the moment this response lands.
+
+Now suppose Alice forgets that new password anyway:
+
+```bash
+curl -i -X POST http://127.0.0.1:8080/auth/forgot-password \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"alice@example.com"}'
+```
+
+```text
+HTTP/1.1 202 Accepted
+content-length: 0
+```
+
+202 whether or not the address exists — check the Mailpit tab and there is a message
+titled *Réinitialisation de votre mot de passe*, with a link shaped like
+`http://localhost:3000/reset-password?token=…`. Copy the token out of it:
+
+```bash
+curl -i -X POST http://127.0.0.1:8080/auth/reset-password \
+  -H 'Content-Type: application/json' \
+  -d '{"token":"<le token du lien>","new_password":"un-troisieme-mot-de-passe-long"}'
+```
+
+```text
+HTTP/1.1 204 No Content
+```
+
+204, and every session of the account is revoked again — logging in from here on needs
+the password just set. Registration also opened a verification token, back in `## 1`,
+before this page ever answered the first `curl`; Mailpit already holds that one too,
+titled *Confirmez votre adresse*. A link goes stale after `verification_ttl_secs`, so a
+real client leans on the other route to get a fresh one:
+
+```bash
+curl -i -X POST http://127.0.0.1:8080/auth/resend-verification \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"alice@example.com"}'
+```
+
+```text
+HTTP/1.1 202 Accepted
+content-length: 0
+```
+
+Take the token from the newest *Confirmez votre adresse* message in Mailpit and spend it:
+
+```bash
+curl -i -X POST http://127.0.0.1:8080/auth/verify-email \
+  -H 'Content-Type: application/json' \
+  -d '{"token":"<le token du lien>"}'
+```
+
+```text
+HTTP/1.1 204 No Content
+```
+
+`GET /auth/me`, logged back in with the newest password, now answers with
+`"email_verified_at"` set instead of `null` — the one field on the account these three
+requests, together, moved.
+
 ## What was installed
 
 Three files, read from
@@ -276,9 +383,9 @@ down which is which — a `user` token forbidden on the write, and reading anywa
 
 ## Going further
 
-- [Authentication](../guides/auth.md) covers the five routes `add auth` mounts, the
+- [Authentication](../guides/auth.md) covers the thirteen routes `add auth` mounts, the
   token pair, and the `Role` enum this page only used at its default.
-- [`rbs add`](../cli/add.md) covers the eleven other features this project could still
+- [`rbs add`](../cli/add.md) covers the ten other features this project could still
   install, and the `--force` this page never needed.
 - [`rbs generate`](../cli/generate.md) has the full grammar of `--role`, including what
   it does under `--with-upload`, and [what to remove to reopen a

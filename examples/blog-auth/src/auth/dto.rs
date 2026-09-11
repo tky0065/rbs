@@ -29,6 +29,38 @@ pub struct RefreshRequest {
     pub refresh_token: String,
 }
 
+#[derive(Debug, Deserialize, ToSchema, Validate)]
+pub struct ChangePasswordRequest {
+    // La même borne haute que sur `login`, et pour la même raison : sans elle, la route
+    // hache en Argon2 tout ce qu'on lui poste.
+    #[validate(length(min = 12, max = 128))]
+    pub current_password: String,
+    #[validate(length(min = 12, max = 128))]
+    pub new_password: String,
+}
+
+/// Ce que postent `forgot-password` et `resend-verification`.
+///
+/// Une seule structure pour les deux : elles prennent la même chose, et deux structures
+/// identiques divergeraient un jour sans raison.
+#[derive(Debug, Deserialize, ToSchema, Validate)]
+pub struct EmailRequest {
+    #[validate(email)]
+    pub email: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema, Validate)]
+pub struct ResetPasswordRequest {
+    pub token: String,
+    #[validate(length(min = 12, max = 128))]
+    pub new_password: String,
+}
+
+#[derive(Debug, Deserialize, ToSchema, Validate)]
+pub struct TokenRequest {
+    pub token: String,
+}
+
 /// Ce que rendent `login` et `refresh`.
 ///
 /// `refresh_token` est le jeton en clair, remis une seule fois : la base n'en garde que
@@ -63,6 +95,22 @@ pub struct UserResponse {
     pub id: Uuid,
     pub email: String,
     pub role: String,
+    /// Nul tant que l'adresse n'est pas prouvée.
+    #[schema(value_type = Option<String>, format = DateTime)]
+    pub email_verified_at: Option<DateTimeWithTimeZone>,
     #[schema(value_type = String, format = DateTime)]
     pub created_at: DateTimeWithTimeZone,
+}
+
+/// La vue publique d'une session.
+///
+/// Jamais `token_hash` : la vue d'une session n'a aucune raison de porter de quoi la
+/// présenter.
+#[derive(Debug, Serialize, ToSchema)]
+pub struct SessionResponse {
+    pub id: Uuid,
+    #[schema(value_type = String, format = DateTime)]
+    pub created_at: DateTimeWithTimeZone,
+    #[schema(value_type = String, format = DateTime)]
+    pub expires_at: DateTimeWithTimeZone,
 }

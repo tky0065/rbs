@@ -709,14 +709,14 @@ mod tests {
     /// Un mot de passe sans borne haute fait hacher en Argon2 un corps de plusieurs
     /// mégaoctets : la borne est ce qui sépare une API d'un amplificateur.
     #[test]
-    fn the_two_password_fields_carry_a_lower_and_an_upper_bound() {
+    fn every_password_field_carries_a_lower_and_an_upper_bound() {
         let dto = fragment_source("auth", "dto.rs");
 
         assert_eq!(
             dto.matches("#[validate(length(min = 12, max = 128))]")
                 .count(),
-            2,
-            "les deux mots de passe doivent être bornés :\n{dto}"
+            5,
+            "les cinq mots de passe doivent être bornés :\n{dto}"
         );
         assert!(
             !dto.contains("length(min = 8)"),
@@ -727,19 +727,29 @@ mod tests {
     /// Chaque test du fragment monte l'application ou ouvre une connexion : aucun n'est
     /// unitaire, et tous prennent le marqueur, comme dans `jobs`, `redis` et `storage`.
     ///
-    /// Sans lui, `rbs new --with auth && cargo test` échoue tant que PostgreSQL n'est pas
-    /// démarré *et* migré, là où `--with jobs` passe.
+    /// Les tests du fragment vivent dans quatre fichiers depuis sa découpe par couche —
+    /// `tests/mod.rs` n'en porte aucun, il n'expose que les aides partagées. Se limiter à
+    /// `tests/session.rs` laisserait les trois autres sans garde-fou : sans lui, `rbs new
+    /// --with auth && cargo test` échoue tant que PostgreSQL n'est pas démarré *et*
+    /// migré, là où `--with jobs` passe.
     #[test]
     fn every_auth_test_joining_the_database_is_ignored() {
-        let tests = fragment_source("auth", "tests.rs");
+        for destination in [
+            "tests/mod.rs",
+            "tests/session.rs",
+            "tests/password.rs",
+            "tests/verification.rs",
+        ] {
+            let tests = fragment_source("auth", destination);
 
-        assert_eq!(
-            tests.matches("#[tokio::test]").count(),
-            tests
-                .matches(r#"#[ignore = "joint la base du projet"]"#)
-                .count(),
-            "chaque test joint la base et doit porter le marqueur :\n{tests}"
-        );
+            assert_eq!(
+                tests.matches("#[tokio::test]").count(),
+                tests
+                    .matches(r#"#[ignore = "joint la base du projet"]"#)
+                    .count(),
+                "chaque test de `{destination}` joint la base et doit porter le marqueur :\n{tests}"
+            );
+        }
     }
 
     /// Le manifeste décrit l'installation ; il n'a rien à faire dans le projet installé.
@@ -981,7 +991,7 @@ mod tests {
             );
         }
 
-        let controller = read(&Path::new(RACINE_FEATURES).join("auth/controller.rs.jinja"));
+        let controller = read(&Path::new(RACINE_FEATURES).join("auth/controller/session.rs.jinja"));
         assert!(
             !controller.contains("Json<TokenPair>"),
             "un handler qui enveloppe la paire dans un `Json` nu contourne l'en-tête :\n{controller}"
@@ -1015,7 +1025,7 @@ mod tests {
     /// de `login` écarte de l'autre côté.
     #[test]
     fn no_conflict_of_the_auth_fragment_echoes_the_address_it_refuses() {
-        for fichier in ["service.rs.jinja", "repository.rs.jinja"] {
+        for fichier in ["service/session.rs.jinja", "repository/user.rs.jinja"] {
             let source = read(&Path::new(RACINE_FEATURES).join("auth").join(fichier));
 
             for (debut, _) in source.match_indices("Error::Conflict") {
@@ -1033,8 +1043,9 @@ mod tests {
     /// devancé la rotation légitime avec une paire valide, renouvelée indéfiniment.
     #[test]
     fn a_replayed_refresh_closes_every_session_of_the_account() {
-        let repository = read(&Path::new(RACINE_FEATURES).join("auth/repository.rs.jinja"));
-        let service = read(&Path::new(RACINE_FEATURES).join("auth/service.rs.jinja"));
+        let repository =
+            read(&Path::new(RACINE_FEATURES).join("auth/repository/refresh_token.rs.jinja"));
+        let service = read(&Path::new(RACINE_FEATURES).join("auth/service/session.rs.jinja"));
 
         assert!(
             repository.contains("pub async fn revoke_sessions_of("),
@@ -1050,7 +1061,7 @@ mod tests {
     /// journal ne porte pas ce que la réponse tait.
     #[test]
     fn the_replay_is_logged_without_the_address_nor_the_token() {
-        let service = read(&Path::new(RACINE_FEATURES).join("auth/service.rs.jinja"));
+        let service = read(&Path::new(RACINE_FEATURES).join("auth/service/session.rs.jinja"));
 
         let debut = service
             .find("tracing::warn!")

@@ -356,7 +356,7 @@ fn a_project_created_with_two_features_compiles() {
 
     let root = parent.path().join("demo-with-features");
 
-    assert!(root.join("src/auth/service.rs").is_file());
+    assert!(root.join("src/auth/service/mod.rs").is_file());
     assert!(root.join("src/modules/cache/mod.rs").is_file());
 
     let compose_yml = fs::read_to_string(root.join("docker-compose.yml")).expect("compose lisible");

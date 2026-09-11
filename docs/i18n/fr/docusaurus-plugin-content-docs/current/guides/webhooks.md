@@ -17,20 +17,22 @@ du processus est une question que seul votre domaine tranche.
 Elle exige `jobs`, parce que la file sait déjà livrer-avec-réessais — réserver une ligne
 sans double dépilage, `attempts`, `available_at`, `last_error` — et qu'un second mécanisme
 de réessai n'aurait laissé que deux boucles à maintenir. Elle exige aussi `auth`, qui
-entraîne `rate-limit` : une création d'abonnement laissée ouverte permettrait à n'importe
-qui de faire livrer chez lui les événements du projet, et `user.created` porte des adresses.
-Sur un projet nu, les quatre descendent dans un seul plan :
+entraîne `mail` et `rate-limit` : une création d'abonnement laissée ouverte permettrait à
+n'importe qui de faire livrer chez lui les événements du projet, et `user.created` porte
+des adresses. Sur un projet nu, les cinq descendent dans un seul plan :
 
 ```text
 $ rbs add webhooks
 webhooks : webhooks sortants : abonnements, signature HMAC horodatée, livraison par la file
-webhooks exige auth, jobs, rate-limit : posée avec elle
+webhooks exige auth, jobs, mail, rate-limit : posée avec elle
 
 plan pour /private/tmp/rbs-demo/blog
 
   + src/auth/mod.rs                                                  créé
   …
   + src/modules/jobs/mod.rs                                          créé
+  …
+  + src/modules/mail/mod.rs                                          créé
   …
   + src/modules/rate_limit/mod.rs                                    créé
   …
@@ -44,17 +46,17 @@ plan pour /private/tmp/rbs-demo/blog
   + src/modules/webhooks/signature.rs                                créé
   + src/modules/webhooks/delivery.rs                                 créé
   + src/modules/webhooks/tests.rs                                    créé
-  + migration/src/m20260904_160207_create_webhook_subscriptions.rs   créé
+  + migration/src/m20260910_162606_create_webhook_subscriptions.rs   créé
   ~ AGENTS.md                                                        modifié
 
-  44 fichiers à écrire
-✓ webhooks installée — 32 fichiers
+  66 fichiers à écrire
+✓ webhooks installée — 53 fichiers
 
   rbs migrate up, inscrivez un abonné par POST /webhooks/subscriptions — son secret n'est rendu qu'à cet instant — puis appelez webhooks::emit dans vos services
 ```
 
-Trois migrations l'accompagnent : [`rbs migrate up`](../cli/migrate.md) est la commande
-suivante.
+Trois migrations l'accompagnent, `mail` n'en écrivant aucune :
+[`rbs migrate up`](../cli/migrate.md) est la commande suivante.
 
 ## Émettre un événement
 

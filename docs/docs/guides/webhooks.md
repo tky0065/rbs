@@ -17,20 +17,22 @@ is a question only your domain answers.
 It requires `jobs`, because the queue already knows how to deliver-with-retries — reserving
 a row without double-dequeuing, `attempts`, `available_at`, `last_error` — and a second
 retry mechanism would have left two loops to maintain instead of one. It requires `auth`
-too, which in turn pulls `rate-limit`: a subscription endpoint left open would let anyone
-have the project's events delivered to their own server, and `user.created` carries
-addresses. On a bare project all four go down in a single plan:
+too, which in turn pulls `mail` and `rate-limit`: a subscription endpoint left open would
+let anyone have the project's events delivered to their own server, and `user.created`
+carries addresses. On a bare project all five go down in a single plan:
 
 ```text
 $ rbs add webhooks
 webhooks : webhooks sortants : abonnements, signature HMAC horodatée, livraison par la file
-webhooks exige auth, jobs, rate-limit : posée avec elle
+webhooks exige auth, jobs, mail, rate-limit : posée avec elle
 
 plan pour /private/tmp/rbs-demo/blog
 
   + src/auth/mod.rs                                                  créé
   …
   + src/modules/jobs/mod.rs                                          créé
+  …
+  + src/modules/mail/mod.rs                                          créé
   …
   + src/modules/rate_limit/mod.rs                                    créé
   …
@@ -44,16 +46,17 @@ plan pour /private/tmp/rbs-demo/blog
   + src/modules/webhooks/signature.rs                                créé
   + src/modules/webhooks/delivery.rs                                 créé
   + src/modules/webhooks/tests.rs                                    créé
-  + migration/src/m20260904_160207_create_webhook_subscriptions.rs   créé
+  + migration/src/m20260910_162606_create_webhook_subscriptions.rs   créé
   ~ AGENTS.md                                                        modifié
 
-  44 fichiers à écrire
-✓ webhooks installée — 32 fichiers
+  66 fichiers à écrire
+✓ webhooks installée — 53 fichiers
 
   rbs migrate up, inscrivez un abonné par POST /webhooks/subscriptions — son secret n'est rendu qu'à cet instant — puis appelez webhooks::emit dans vos services
 ```
 
-Three migrations come with it, so [`rbs migrate up`](../cli/migrate.md) is the next command.
+Three migrations come with it — `mail` writes none — so
+[`rbs migrate up`](../cli/migrate.md) is the next command.
 
 ## Emitting an event
 

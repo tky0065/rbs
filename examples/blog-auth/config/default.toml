@@ -19,6 +19,30 @@ openapi_json = true
 access_ttl_secs = 900
 refresh_ttl_secs = 2592000
 
+# Une heure : le lien de réinitialisation est urgent, et sa fenêtre est la durée pendant
+# laquelle une boîte compromise vaut le compte.
+reset_ttl_secs = 3600
+
+# Un jour : la vérification ne l'est pas, et un lien trop court fait revenir l'utilisateur
+# sur `resend-verification` plus souvent qu'il n'ouvre son courrier.
+verification_ttl_secs = 86400
+
+# L'application du client, et non ce serveur : rbs engendre une API, et le lien du
+# courriel mène à l'écran qui postera le jeton.
+app_url = "http://localhost:3000"
+
+[mail]
+# Mailpit et MailHog écoutent sur 1025, en clair : c'est le serveur de développement.
+# En production, `tls = "starttls"` et un `smtp_user` — dont le mot de passe vient de
+# RBS_MAIL__SMTP_PASSWORD, et jamais de ce fichier, qui est versionné.
+smtp_host = "localhost"
+smtp_port = 1025
+smtp_user = ""
+tls = "none"
+from = "no-reply@localhost"
+timeout_secs = 10
+templates = "templates/mail"
+
 [rate_limit]
 # Limite globale, comptée par adresse cliente : `limit` requêtes par fenêtre de
 # `window_secs` secondes. Au-delà, un 429 `application/problem+json` avec un `Retry-After`.
@@ -37,4 +61,15 @@ trust_forwarded_for = false
 # ligne, une seule adresse épuise la mémoire du serveur.
 routes = [
   { path = "/auth/login", limit = 5, window_secs = 60 },
+  # Ces trois routes envoient un courriel à une adresse que l'appelant choisit. Sans
+  # borne, elles font du projet un relais de harcèlement — et le coût est payé par le
+  # titulaire de l'adresse, qui n'a rien demandé.
+  { path = "/auth/forgot-password", limit = 3, window_secs = 3600 },
+  { path = "/auth/resend-verification", limit = 3, window_secs = 3600 },
+  # `register` tolère plus large que les deux autres : s'inscrire est un geste plus
+  # fréquent qu'oublier son mot de passe, et une borne trop serrée empêcherait une
+  # famille derrière une même adresse IP de créer chacun son compte. Elle borne quand
+  # même : chaque appel envoie un courriel *et* écrit un compte et un jeton, plus coûteux
+  # qu'une simple demande de réinitialisation.
+  { path = "/auth/register", limit = 10, window_secs = 3600 },
 ]

@@ -275,7 +275,7 @@ same pass that writes the project:
 ```text
 $ rbs new site --with auth --yes
 ✓ site créé — 21 fichiers
-  + auth       13 fichiers, 1 migration
+  + auth       34 fichiers, 1 migration
 
   rbs migrate up
 
@@ -290,7 +290,7 @@ in — alphabetical, the same order [`rbs add`](./add.md) lists the thirteen in:
 ```text
 $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes
 ✓ with-demo créé — 21 fichiers
-  + auth       13 fichiers, 1 migration
+  + auth       34 fichiers, 1 migration
   + docker     2 fichiers
   + storage    4 fichiers
 

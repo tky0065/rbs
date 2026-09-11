@@ -4,11 +4,19 @@ description = "authentification JWT : Argon2, jetons d'accès et de rafraîchiss
 # d'énumérer les comptes, et c'est aussi 19 Mio par requête anonyme. Sans limite de débit,
 # la protection contre l'énumération est un déni de service offert au premier venu : le
 # fragment vient donc avec, et le plan de `rbs add auth` le montre.
-requires = ["rate-limit"]
+#
+# `auth` envoie deux courriels — le lien de réinitialisation et celui de vérification — et
+# aucun des deux parcours n'a de sens sans destinataire. La dépendance est dure plutôt
+# qu'optionnelle : un point d'extension resté vide rendrait 202 sans que rien ne parte.
+requires = ["rate-limit", "mail"]
 
 [[files]]
 source      = "mod.rs.jinja"
 destination = "src/auth/mod.rs"
+
+[[files]]
+source      = "config.rs.jinja"
+destination = "src/auth/config.rs"
 
 [[files]]
 source      = "model.rs.jinja"
@@ -19,24 +27,82 @@ source      = "dto.rs.jinja"
 destination = "src/auth/dto.rs"
 
 [[files]]
-source      = "repository.rs.jinja"
-destination = "src/auth/repository.rs"
+source      = "repository/mod.rs.jinja"
+destination = "src/auth/repository/mod.rs"
 
 [[files]]
-source      = "service.rs.jinja"
-destination = "src/auth/service.rs"
+source      = "repository/user.rs.jinja"
+destination = "src/auth/repository/user.rs"
 
 [[files]]
-source      = "controller.rs.jinja"
-destination = "src/auth/controller.rs"
+source      = "repository/refresh_token.rs.jinja"
+destination = "src/auth/repository/refresh_token.rs"
+
+[[files]]
+source      = "repository/one_time_token.rs.jinja"
+destination = "src/auth/repository/one_time_token.rs"
+
+[[files]]
+source      = "service/mod.rs.jinja"
+destination = "src/auth/service/mod.rs"
+
+[[files]]
+source      = "service/session.rs.jinja"
+destination = "src/auth/service/session.rs"
+
+[[files]]
+source      = "service/password.rs.jinja"
+destination = "src/auth/service/password.rs"
+
+[[files]]
+source      = "service/verification.rs.jinja"
+destination = "src/auth/service/verification.rs"
+
+[[files]]
+source      = "controller/mod.rs.jinja"
+destination = "src/auth/controller/mod.rs"
+
+[[files]]
+source      = "controller/session.rs.jinja"
+destination = "src/auth/controller/session.rs"
+
+[[files]]
+source      = "controller/password.rs.jinja"
+destination = "src/auth/controller/password.rs"
+
+[[files]]
+source      = "controller/verification.rs.jinja"
+destination = "src/auth/controller/verification.rs"
+
+# Le gabarit est déposé dans le projet, non embarqué dans un binaire : c'est un texte que
+# son auteur relit et récrit.
+[[files]]
+source      = "reinitialisation.html.jinja"
+destination = "templates/mail/reinitialisation.html"
+
+[[files]]
+source      = "verification.html.jinja"
+destination = "templates/mail/verification.html"
 
 [[files]]
 source      = "guard.rs.jinja"
 destination = "src/auth/guard.rs"
 
 [[files]]
-source      = "tests.rs.jinja"
-destination = "src/auth/tests.rs"
+source      = "tests/mod.rs.jinja"
+destination = "src/auth/tests/mod.rs"
+
+[[files]]
+source      = "tests/session.rs.jinja"
+destination = "src/auth/tests/session.rs"
+
+[[files]]
+source      = "tests/password.rs.jinja"
+destination = "src/auth/tests/password.rs"
+
+[[files]]
+source      = "tests/verification.rs.jinja"
+destination = "src/auth/tests/verification.rs"
 
 [[anchors]]
 anchor  = "features"
@@ -54,7 +120,23 @@ crate::auth::controller::login,
 crate::auth::controller::refresh,
 crate::auth::controller::logout,
 crate::auth::controller::me,
+crate::auth::controller::password::change_password,
+crate::auth::controller::password::forgot_password,
+crate::auth::controller::password::reset_password,
+crate::auth::controller::verification::verify_email,
+crate::auth::controller::verification::resend_verification,
+crate::auth::controller::list_sessions,
+crate::auth::controller::revoke_session,
+crate::auth::controller::revoke_sessions,
 """
+
+[[anchors]]
+anchor  = "state_champs"
+content = "pub flows: crate::auth::config::FlowConfig,"
+
+[[anchors]]
+anchor  = "state_init"
+content = "flows: crate::auth::config::FlowConfig::from_config()?,"
 
 [migration]
 source = "migration.rs.jinja"
@@ -69,6 +151,18 @@ section = "auth"
 content = """
 access_ttl_secs = 900
 refresh_ttl_secs = 2592000
+
+# Une heure : le lien de réinitialisation est urgent, et sa fenêtre est la durée pendant
+# laquelle une boîte compromise vaut le compte.
+reset_ttl_secs = 3600
+
+# Un jour : la vérification ne l'est pas, et un lien trop court fait revenir l'utilisateur
+# sur `resend-verification` plus souvent qu'il n'ouvre son courrier.
+verification_ttl_secs = 86400
+
+# L'application du client, et non ce serveur : rbs engendre une API, et le lien du
+# courriel mène à l'écran qui postera le jeton.
+app_url = "http://localhost:3000"
 """
 
 [[env]]

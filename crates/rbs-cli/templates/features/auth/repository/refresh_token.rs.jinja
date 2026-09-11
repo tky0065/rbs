@@ -1,53 +1,15 @@
-use rbs_core::{Error, Result};
-use sea_orm::error::SqlErr;
+use rbs_core::Result;
 use sea_orm::prelude::{DateTimeWithTimeZone, Expr, Uuid};
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ExprTrait, QueryFilter,
+    QueryOrder, Set,
+};
 
-use super::model::user::Entity;
-use super::model::{refresh_token, user};
+use super::super::model::refresh_token;
 
-// Le service passe par cette porte plutôt que par `model.rs` : la couche qui parle à la
-// base reste la seule à connaître l'entité.
-pub use super::model::user::Model;
-
-pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>> {
-    Ok(Entity::find_by_id(id).one(db).await?)
-}
-
-pub async fn find_by_email(db: &DatabaseConnection, email: &str) -> Result<Option<Model>> {
-    Ok(Entity::find()
-        .filter(user::Column::Email.eq(email))
-        .one(db)
-        .await?)
-}
-
-/// Le refus d'une adresse déjà prise, dit sans la répéter.
-///
-/// Citer l'adresse la confirme à qui la soumet, dans la réponse comme dans le journal :
-/// l'inscription deviendrait l'oracle d'énumération que le hash témoin de `login` écarte
-/// de l'autre côté.
-pub const ADRESSE_PRISE: &str = "cette adresse est déjà inscrite";
-
-/// Inscrit un utilisateur, le rôle et les horodatages venant des défauts de la table.
-///
-/// La violation de la contrainte d'unicité devient un conflit plutôt qu'une erreur
-/// interne : sans cela, deux inscriptions simultanées de la même adresse rendraient une
-/// 409 et une 500 selon celle qui gagne la course.
-pub async fn create(db: &DatabaseConnection, email: &str, password_hash: &str) -> Result<Model> {
-    let nouveau = user::ActiveModel {
-        email: Set(email.to_owned()),
-        password_hash: Set(password_hash.to_owned()),
-        ..Default::default()
-    };
-
-    nouveau
-        .insert(db)
-        .await
-        .map_err(|error| match error.sql_err() {
-            Some(SqlErr::UniqueConstraintViolation(_)) => Error::Conflict(ADRESSE_PRISE.to_owned()),
-            _ => Error::from(error),
-        })
-}
+// La couche service a besoin du type pour rendre `SessionResponse` sans construire de
+// requête : c'est elle qui appelle `open_sessions_of`, jamais le modèle directement.
+pub use super::super::model::refresh_token::Model;
 
 /// Ouvre une session de rafraîchissement.
 ///
@@ -112,4 +74,37 @@ pub async fn revoke_sessions_of(db: &DatabaseConnection, user_id: Uuid) -> Resul
         .await?;
 
     Ok(touchees.rows_affected)
+}
+
+/// Les sessions encore ouvertes d'un compte, la plus récente d'abord.
+///
+/// Ni révoquées ni périmées : ce que la liste montre est ce qu'une révocation fermerait.
+pub async fn open_sessions_of(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+) -> Result<Vec<refresh_token::Model>> {
+    Ok(refresh_token::Entity::find()
+        .filter(refresh_token::Column::UserId.eq(user_id))
+        .filter(refresh_token::Column::RevokedAt.is_null())
+        .filter(Expr::col(refresh_token::Column::ExpiresAt).gt(Expr::current_timestamp()))
+        .order_by_desc(refresh_token::Column::CreatedAt)
+        .all(db)
+        .await?)
+}
+
+/// Ferme une session nommée, et dit si elle appartenait bien au compte.
+///
+/// Le propriétaire est dans la condition de l'`UPDATE` et non dans une lecture qui le
+/// précède : comparer après avoir lu laisserait la révocation de la session d'autrui à
+/// portée d'une course.
+pub async fn revoke_session(db: &DatabaseConnection, id: Uuid, user_id: Uuid) -> Result<bool> {
+    let touchees = refresh_token::Entity::update_many()
+        .col_expr(refresh_token::Column::RevokedAt, Expr::current_timestamp())
+        .filter(refresh_token::Column::Id.eq(id))
+        .filter(refresh_token::Column::UserId.eq(user_id))
+        .filter(refresh_token::Column::RevokedAt.is_null())
+        .exec(db)
+        .await?;
+
+    Ok(touchees.rows_affected == 1)
 }

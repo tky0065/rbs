@@ -107,10 +107,67 @@ fn the_four_project_anchors_are_completed() {
     }
 }
 
-/// Les cinq chemins sont montés dès l'installation : I7 les enregistrera dans le
-/// document OpenAPI, J2 les jouera contre une vraie base.
+/// Une table et une colonne de plus dans la migration qui crée les tables : un projet
+/// déjà engendré n'a rien à rattraper, elle n'altère toujours rien.
 #[test]
-fn the_five_auth_paths_are_mounted() {
+fn the_migration_creates_the_one_time_tokens_table() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_auth(&parent);
+
+    let migrations: Vec<_> = fs::read_dir(racine.join("migration/src"))
+        .expect("la crate migration existe")
+        .filter_map(|entree| entree.ok())
+        .map(|entree| entree.file_name().to_string_lossy().to_string())
+        .filter(|nom| nom.contains("create_auth_tables"))
+        .collect();
+
+    let source = fs::read_to_string(
+        racine
+            .join("migration/src")
+            .join(migrations.first().expect("la migration du fragment existe")),
+    )
+    .expect("migration lisible");
+
+    for attendu in [
+        "OneTimeTokens::Table",
+        "OneTimeTokens::Purpose",
+        "OneTimeTokens::ConsumedAt",
+        "Users::EmailVerifiedAt",
+        "idx_one_time_tokens_token_hash",
+    ] {
+        assert!(
+            source.contains(attendu),
+            "la migration ne porte pas `{attendu}` :\n{source}"
+        );
+    }
+}
+
+/// Le repository des jetons est déposé, et la purge y est, prête à être branchée.
+#[test]
+fn the_one_time_token_repository_is_written() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_auth(&parent);
+
+    let source = fs::read_to_string(racine.join("src/auth/repository/one_time_token.rs"))
+        .expect("src/auth/repository/one_time_token.rs lisible");
+
+    for attendu in [
+        "pub async fn issue",
+        "pub async fn find",
+        "pub async fn consume",
+        "pub async fn invalidate_pending",
+        "pub async fn purge_expired",
+    ] {
+        assert!(
+            source.contains(attendu),
+            "le repository ne porte pas `{attendu}`"
+        );
+    }
+}
+
+/// Les chemins sont montés dès l'installation, un de plus à chaque tâche jusqu'à treize.
+#[test]
+fn the_auth_paths_are_mounted() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = project_with_auth(&parent);
 
@@ -123,10 +180,54 @@ fn the_five_auth_paths_are_mounted() {
         "/auth/refresh",
         "/auth/logout",
         "/auth/me",
+        "/auth/change-password",
+        "/auth/forgot-password",
+        "/auth/reset-password",
+        "/auth/verify-email",
+        "/auth/resend-verification",
+        "/auth/sessions",
+        "/auth/sessions/{id}",
     ] {
         assert!(
             module.contains(chemin),
             "`{chemin}` n'est pas monté :\n{module}"
+        );
+    }
+}
+
+/// La découpe par couche est ce qui rend le fragment lisible à treize routes : chaque
+/// couche est un répertoire, et le sens de la dépendance ne change pas.
+#[test]
+fn each_layer_is_a_directory() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_auth(&parent);
+
+    for fichier in [
+        "src/auth/repository/mod.rs",
+        "src/auth/repository/user.rs",
+        "src/auth/repository/refresh_token.rs",
+        "src/auth/service/mod.rs",
+        "src/auth/service/session.rs",
+        "src/auth/controller/mod.rs",
+        "src/auth/controller/session.rs",
+        "src/auth/tests/mod.rs",
+        "src/auth/tests/session.rs",
+    ] {
+        assert!(
+            racine.join(fichier).is_file(),
+            "{fichier} n'a pas été déposé"
+        );
+    }
+
+    for ancien in [
+        "src/auth/repository.rs",
+        "src/auth/service.rs",
+        "src/auth/controller.rs",
+        "src/auth/tests.rs",
+    ] {
+        assert!(
+            !racine.join(ancien).exists(),
+            "{ancien} survit à la découpe"
         );
     }
 }
@@ -166,6 +267,29 @@ fn the_configuration_and_the_environment_receive_what_auth_requires() {
     );
 }
 
+/// `auth` envoie deux courriels — réinitialisation et vérification. Sans `mail`, les
+/// deux parcours s'arrêteraient à la moitié de ce que le fragment promet.
+#[test]
+fn adding_auth_installs_mail() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_auth(&parent);
+
+    assert!(
+        racine.join("src/modules/mail/mod.rs").is_file(),
+        "le fragment mail n'a pas suivi"
+    );
+
+    let defaut = fs::read_to_string(racine.join("config/default.toml"))
+        .expect("config/default.toml lisible");
+
+    for cle in ["reset_ttl_secs", "verification_ttl_secs", "app_url"] {
+        assert!(
+            defaut.contains(cle),
+            "config/default.toml ne porte pas `{cle}` :\n{defaut}"
+        );
+    }
+}
+
 /// Sérialise les tests qui compilent puis exécutent un binaire du projet.
 ///
 /// Tous partagent `CARGO_TARGET_DIR` : la crate `migration` de chaque projet s'écrit au
@@ -201,7 +325,7 @@ fn own_target() -> (MutexGuard<'static, ()>, std::fs::File) {
 
 /// Le critère exécutable du lot, pris au niveau qu'exige la CI générée.
 ///
-/// `--all-targets` et non `check` seul : sans lui, `src/auth/tests.rs` n'est jamais
+/// `--all-targets` et non `check` seul : sans lui, `src/auth/tests/` n'est jamais
 /// compilé. Et `clippy -D warnings` plutôt que `check`, parce que c'est la commande que
 /// le workflow d'`rbs add ci` lance : un fragment qui laisse un warning derrière lui
 /// rendrait rouge, dès le premier push, une CI portant du code que l'utilisateur n'a pas
@@ -323,7 +447,7 @@ fn the_auth_migration_creates_the_schema_then_returns_it_to_its_initial_state() 
 
 /// Les quatre critères du lot, joués par les tests que l'utilisateur reçoit.
 ///
-/// Ce que `rbs add auth` dépose dans `src/auth/tests.rs` est ce qui prouve la feature :
+/// Ce que `rbs add auth` dépose dans `src/auth/tests/` est ce qui prouve la feature :
 /// un test qui passerait ici sans passer chez l'utilisateur ne prouverait rien de ce
 /// qu'il reçoit.
 #[test]
