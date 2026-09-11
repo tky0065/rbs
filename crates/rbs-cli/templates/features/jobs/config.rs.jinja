@@ -16,6 +16,11 @@ pub struct Config {
     /// Attente du worker quand la file est vide, en secondes.
     #[serde(default = "default_poll_interval")]
     pub poll_interval_secs: u64,
+    /// Durée au-delà de laquelle une réservation sans suite est tenue pour abandonnée,
+    /// en secondes. À régler au-dessus du plus long job : un job encore en cours au-delà
+    /// du bail est rendu à la file, et rejoué.
+    #[serde(default = "default_lease")]
+    pub lease_secs: u64,
 }
 
 impl Config {
@@ -35,4 +40,8 @@ fn default_retry_delay() -> u64 {
 
 fn default_poll_interval() -> u64 {
     1
+}
+
+fn default_lease() -> u64 {
+    300
 }

@@ -4,7 +4,7 @@
 
 **Goal:** Un job réservé par un worker qui meurt (crash, `docker stop`, rolling restart) redevient `pending` passé un bail, au lieu de rester `running` pour toujours.
 
-**Architecture:** Aucune colonne nouvelle : `updated_at` est posé par la réservation (`queue.rs.jinja`, `SET … updated_at = $3`). Une fonction `queue::requeue_stale(db, lease)` fait un `UPDATE jobs SET status = 'pending', updated_at = now WHERE status = 'running' AND updated_at < now - lease` par `Entity::update_many().col_expr(…)` (portable sur les trois moteurs, instant lié en paramètre comme tout le fragment — jamais `Expr::current_timestamp()`, qui casse sur SQLite). Le worker l'appelle au démarrage puis **à chaque tour** de sa boucle, avant la réservation. `attempts`, déjà incrémenté à la réservation, n'est pas rendu : un crash dépense sa tentative comme un échec, et `max_attempts` borne toujours les reprises. Le bail vient d'une clé `lease_secs` (défaut 300) de la section `[jobs]`.
+**Architecture:** Aucune colonne nouvelle : `updated_at` est posé par la réservation (`queue.rs.jinja`, `SET … updated_at = $3`). Une fonction `queue::requeue_stale(db, lease)` fait un `UPDATE jobs SET status = 'pending', updated_at = now WHERE status = 'running' AND updated_at < now - lease` par `Entity::update_many().col_expr(…)` (portable sur les trois moteurs, instant lié en paramètre comme tout le fragment — jamais `Expr::current_timestamp()`, qui casse sur SQLite). Le worker l'appelle au démarrage puis **à chaque tour** de sa boucle, avant la réservation. `attempts`, déjà incrémenté à la réservation, n'est pas rendu : un crash dépense sa tentative comme un échec. **Corrigé à la revue :** `max_attempts` n'est consulté que par `retry_or_fail`, qu'un job tuant son worker n'atteint jamais — `requeue_stale` prend donc `&Config` et condamne (`failed`, `last_error` « réservation abandonnée ») la ligne dont `attempts >= max_attempts`, au lieu de la rendre `pending` sans fin ; un troisième test livré, `a_job_abandoned_on_its_last_attempt_is_failed_rather_than_requeued`, le prouve. Le bail vient d'une clé `lease_secs` (défaut 300) de la section `[jobs]`.
 
 **Tech Stack:** minijinja (`{@ @}`), SeaORM `update_many` + `sea_query::Expr`, chrono `TimeDelta`, tests `#[ignore]` joints à la base, régénération de `examples/newsletter-queue` par diff.
 
@@ -34,7 +34,7 @@
 **Interfaces:**
 - Produces: `Config { max_attempts: i32, retry_delay_secs: u64, poll_interval_secs: u64, lease_secs: u64 }` ; `default_lease() -> u64 = 300`.
 
-- [ ] **Step 1: Tests rouges côté rbs**
+- [x] **Step 1: Tests rouges côté rbs**
 
 Dans `src/doctor/jobs.rs:97` et `src/add/mod.rs:1182`, ajouter `"lease_secs"` aux tableaux de clés. Lancer :
 
@@ -44,7 +44,7 @@ cargo test -p rbs-cli --lib -- jobs 2>&1 | grep -E 'FAILED|failed|passed' | head
 
 Attendu : au moins `a_missing_section_names_every_key` (ou le nom réel) en échec sur `lease_secs`.
 
-- [ ] **Step 2: Le champ et son défaut**
+- [x] **Step 2: Le champ et son défaut**
 
 `config.rs.jinja`, après `poll_interval_secs` :
 
@@ -66,7 +66,7 @@ fn default_lease() -> u64 {
 
 Mettre à jour le commentaire de doc de `Config` si sa phrase « Les défauts sont portés ici » n'a pas à changer — elle reste vraie, ne pas y toucher.
 
-- [ ] **Step 3: La clé dans `default.toml` et dans les remèdes**
+- [x] **Step 3: La clé dans `default.toml` et dans les remèdes**
 
 `feature.toml`, bloc `[[config]]` — remplacer le contenu par :
 
@@ -86,11 +86,11 @@ lease_secs = 300
 
 `src/doctor/jobs.rs` : les trois chaînes `"max_attempts = 5\nretry_delay_secs = 30\npoll_interval_secs = 1"` reçoivent `\nlease_secs = 300` (ligne 21 : le remède ; ligne 46 : la fixture ; ligne 97 : déjà faite au Step 1).
 
-- [ ] **Step 4: La doc qui transcrit ces clés**
+- [x] **Step 4: La doc qui transcrit ces clés**
 
 `docs/docs/cli/doctor.md:133` : ajouter `      lease_secs = 300` sous `poll_interval_secs = 1` (même indentation), idem FR. `docs/docs/guides/jobs.md:73-81` : « Three settings » → « Four settings », bloc TOML avec `lease_secs = 300`, et une phrase : « `lease_secs` is the delay after which a reservation nobody reported on — the worker died mid-job — is given back to the queue; keep it above your longest job. » Idem FR (« Trois réglages » → « Quatre »).
 
-- [ ] **Step 5: Vert côté rbs**
+- [x] **Step 5: Vert côté rbs**
 
 ```bash
 cargo test -p rbs-cli --lib -- jobs 2>&1 | tail -3
@@ -99,7 +99,7 @@ cargo test -p rbs-cli --test integration_docs 2>&1 | tail -3
 
 Attendu : tout passe, `integration_docs` compris (le bloc de `doctor.md` est un transcript gardé : s'il échoue, lire le diff qu'il rend et aligner).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add crates/rbs-cli/templates/features/jobs/config.rs.jinja crates/rbs-cli/templates/features/jobs/feature.toml crates/rbs-cli/src/doctor/jobs.rs crates/rbs-cli/src/add/mod.rs docs/docs/cli/doctor.md docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md docs/docs/guides/jobs.md docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/jobs.md
@@ -124,7 +124,7 @@ git commit -m "feat(jobs): expose le bail d'une réservation par lease_secs" -m 
 - Consumes: `Entity::update_many()`, `Column::{Status, UpdatedAt}` (dérivés par `DeriveEntityModel` dans `model.rs.jinja`), `Status::as_str()`.
 - Produces: `pub async fn requeue_stale(db: &DatabaseConnection, lease: Duration) -> anyhow::Result<u64>` (nombre de lignes rendues).
 
-- [ ] **Step 1: Écrire les deux tests livrés (rouges : `requeue_stale` n'existe pas)**
+- [x] **Step 1: Écrire les deux tests livrés (rouges : `requeue_stale` n'existe pas)**
 
 Dans `tests.rs.jinja`, `config()` reçoit `lease_secs: 300,` (sinon le fichier ne compile plus). Ajouter `use std::time::Duration;` et `use sea_orm::sea_query::Expr;` / `use sea_orm::{ColumnTrait, QueryFilter}` selon besoin, et `super::model::Column`. Puis :
 
@@ -200,7 +200,7 @@ async fn a_job_running_within_the_lease_is_left_alone() {
 }
 ```
 
-- [ ] **Step 2: La fonction dans `queue.rs.jinja`**
+- [x] **Step 2: La fonction dans `queue.rs.jinja`**
 
 Imports : ajouter `std::time::Duration`, `sea_orm::sea_query::Expr`, `sea_orm::{ColumnTrait, QueryFilter}` (fusionner dans le `use sea_orm::{…}` existant) et `Column` dans `use super::model::{…}`. Après `reserver_en_deux_temps` :
 
@@ -237,7 +237,7 @@ pub async fn requeue_stale(db: &DatabaseConnection, lease: Duration) -> anyhow::
 
 Si `Column::Status.eq(&str)` ne compile pas (colonne `ActiveEnum`), employer `Status::Running` directement (`DeriveActiveEnum` implémente `Into<Value>`) et `Expr::value(Status::Pending)` ; s'inspirer d'`auth/repository/user.rs.jinja:51-63`, qui fait un `update_many().col_expr` sur ce même patron.
 
-- [ ] **Step 3: L'appel dans le worker**
+- [x] **Step 3: L'appel dans le worker**
 
 `worker.rs.jinja`, dans `run` :
 
@@ -276,11 +276,11 @@ async fn rendre_les_abandonnes(db: &sea_orm::DatabaseConnection, bail: Duration)
 
 (Importer `DatabaseConnection` proprement plutôt que le chemin complet si le fichier a déjà un `use sea_orm`.)
 
-- [ ] **Step 4: Inscrire les deux noms côté rbs**
+- [x] **Step 4: Inscrire les deux noms côté rbs**
 
 `integration_jobs.rs` : `TESTS: [&str; 6]` avec `a_job_left_running_past_the_lease_returns_to_the_queue` et `a_job_running_within_the_lease_is_left_alone`. Vérifier que le nombre « quatre » n'est pas écrit en toutes lettres ailleurs dans ce fichier ni dans `docs/docs/guides/jobs.md:181-190` (« Four of them are the ones worth keeping » : cette phrase parle des quatre tests qui comptent, elle reste vraie — ne pas la toucher).
 
-- [ ] **Step 5: Rendre, formater, compiler à froid**
+- [x] **Step 5: Rendre, formater, compiler à froid**
 
 ```bash
 S=/private/tmp/claude-501/-Users-yacoubakone-dev-rs/20433d69-a7c1-492d-8d62-250f705907e5/scratchpad/jobs-bail
@@ -291,7 +291,7 @@ cd demo && cargo fmt --check -- src/modules/jobs/*.rs && echo FMT_OK && cargo ch
 
 Attendu : `FMT_OK`, `Finished`. Si rustfmt reformate, reporter dans la template (attention aux `-%}` qui mangent l'indentation).
 
-- [ ] **Step 6: La preuve lente — Docker**
+- [x] **Step 6: La preuve lente — Docker**
 
 ```bash
 cd /chemin/du/worktree
@@ -300,7 +300,7 @@ cargo test -p rbs-cli --test integration_jobs -- --ignored --no-fail-fast > $S/i
 
 Attendu : `test result: ok.` avec tous les tests d'`integration_jobs` passés (plusieurs minutes). Lire le log entier, y chercher `a_job_left_running_past_the_lease_returns_to_the_queue ... ok`.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add crates/rbs-cli/templates/features/jobs/queue.rs.jinja crates/rbs-cli/templates/features/jobs/worker.rs.jinja crates/rbs-cli/templates/features/jobs/tests.rs.jinja crates/rbs-cli/tests/integration_jobs.rs
@@ -317,7 +317,7 @@ git commit -m "fix(jobs): rend à la file les jobs qu'un worker mort a laissés 
 - Modify: `examples/newsletter-queue/config/default.toml`, `src/modules/jobs/{config,queue,worker,tests}.rs`
 - Modify: `docs/docs/guides/jobs.md:170-178` (`## Retries and definitive failure`) et FR `:170-180` (`## Réessai et échec définitif`)
 
-- [ ] **Step 1: Régénérer par diff**
+- [x] **Step 1: Régénérer par diff**
 
 Lire `examples/README.md:93-124`. Régénérer `newsletter-queue` dans le scratchpad avec les commandes exactes du README (Cargo `--manifest-path` pointant sur le worktree), puis :
 
@@ -327,7 +327,7 @@ diff -ru /Users/yacoubakone/dev/rs/examples/newsletter-queue $S/newsletter-queue
 
 Attendu : seuls `config/default.toml` et `src/modules/jobs/{config,queue,worker,tests}.rs` diffèrent (plus les éditions manuelles connues : `rbs-core` en `path = "../../crates/rbs-core"`, marqueurs `region`). N'appliquer que les hunks des cinq fichiers du fragment, en préservant les éditions manuelles s'ils en portent (`grep -n 'region' examples/newsletter-queue/src/modules/jobs/*.rs examples/newsletter-queue/config/default.toml`).
 
-- [ ] **Step 2: L'oracle**
+- [x] **Step 2: L'oracle**
 
 ```bash
 cargo test -p rbs-cli --test integration_examples 2>&1 | tail -5
@@ -336,7 +336,7 @@ cargo test -p rbs-cli --test integration_examples 2>&1 | tail -5
 
 Attendu : `integration_examples` vert (octet à octet), `cargo check` `Finished`.
 
-- [ ] **Step 3: Le guide**
+- [x] **Step 3: Le guide**
 
 `docs/docs/guides/jobs.md`, après le paragraphe « The counter is incremented at reservation… » :
 
@@ -349,7 +349,7 @@ lease above your longest job.
 
 Idem FR, après « Le compteur est incrémenté à la réservation… ». Vérifier que l'extrait `file=examples/newsletter-queue/src/modules/jobs/config.rs` du guide (ligne ~71) n'a pas de `region=` qui exclurait le champ ; si un `region` borne l'extrait, l'étendre.
 
-- [ ] **Step 4: Vérifier**
+- [x] **Step 4: Vérifier**
 
 ```bash
 cargo test -p rbs-cli --test integration_docs 2>&1 | tail -3
@@ -358,7 +358,7 @@ cd docs && node scripts/parite.mjs 2>&1 | tail -5
 
 Attendu : vert ; parité sans écart nouveau (`IMPROVE_OLD.md` préexiste).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add examples/newsletter-queue docs/docs/guides/jobs.md docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/jobs.md
@@ -373,7 +373,7 @@ git commit -m "docs(jobs): documente le bail et régénère l'exemple newsletter
 
 ### Task 4: Passe finale
 
-- [ ] **Step 1:**
+- [x] **Step 1:**
 
 ```bash
 cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings 2>&1 | tail -3 && cargo test -p rbs-cli --lib 2>&1 | tail -3
@@ -382,4 +382,4 @@ grep -rn 'poll_interval_secs' docs crates examples --include='*.md' --include='*
 
 Attendu : fmt muet, clippy sans warning, tests verts ; la seconde commande ne liste que des lignes où `lease_secs` figure à côté (bloc TOML) ou des mentions isolées légitimes — la lire et juger.
 
-- [ ] **Step 2: Rapport** — branche, `git log --oneline main..HEAD`, chaque preuve avec la ligne exacte lue.
+- [x] **Step 2: Rapport** — branche, `git log --oneline main..HEAD`, chaque preuve avec la ligne exacte lue.

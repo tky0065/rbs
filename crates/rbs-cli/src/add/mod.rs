@@ -1194,7 +1194,12 @@ mod tests {
         );
 
         let configuration = projected(&planned, "config/default.toml");
-        for cle in ["max_attempts", "retry_delay_secs", "poll_interval_secs"] {
+        for cle in [
+            "max_attempts",
+            "retry_delay_secs",
+            "poll_interval_secs",
+            "lease_secs",
+        ] {
             assert!(
                 configuration.contains(cle),
                 "`{cle}` manque à la section [jobs] :\n{configuration}"

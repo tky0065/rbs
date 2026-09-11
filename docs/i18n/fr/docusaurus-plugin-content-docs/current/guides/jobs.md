@@ -71,7 +71,7 @@ l'exemple `newsletter-queue` est bâti autour de lui.
 ```rust file=examples/newsletter-queue/src/modules/jobs/config.rs
 ```
 
-Trois réglages, chacun avec un défaut écrit là où la section est déclarée plutôt que dans
+Quatre réglages, chacun avec un défaut écrit là où la section est déclarée plutôt que dans
 le noyau, de sorte que vous les lisiez et les changiez au même endroit :
 
 ```toml
@@ -79,7 +79,12 @@ le noyau, de sorte que vous les lisiez et les changiez au même endroit :
 max_attempts = 5
 retry_delay_secs = 30
 poll_interval_secs = 1
+lease_secs = 300
 ```
+
+`lease_secs` est le délai passé lequel une réservation dont personne n'a inscrit le sort —
+le worker est mort en plein job — est rendue à la file ; tenez-le au-dessus de votre plus
+long job.
 
 `config/{env}.toml` et les variables `RBS_JOBS__*` les surchargent comme celles de toute
 autre section — voir le [guide de la configuration](./configuration.md).
@@ -156,8 +161,9 @@ sont traitées là où elles surviennent, et chaque réponse est délibérée :
   vider ;
 - **la base est momentanément injoignable** — le worker dort et retente au tour suivant,
   plutôt que de rendre la main pour de bon ;
-- **le sort du job ne peut pas être inscrit** — la ligne reste en `running` et n'est plus
-  dépilée. Le dire est tout ce que le worker peut faire ; la base ne répond pas.
+- **le sort du job ne peut pas être inscrit** — la ligne reste en `running` jusqu'à la fin
+  du bail, puis est rejouée. Le dire est tout ce que le worker peut faire ; la base ne
+  répond pas.
 
 :::note
 Il y a un worker par processus, et il scrute. Plusieurs processus peuvent en faire tourner
@@ -177,6 +183,13 @@ réessaie ensuite, et rien ne vous en avertit non plus — `status = 'failed'` d
 Le compteur est incrémenté à la réservation, non à l'échec. Un worker tué en cours de job a
 donc déjà dépensé la tentative : le job n'est pas condamné à être réessayé sans fin par un
 processus qui meurt dessus à chaque fois.
+
+Un worker qui meurt entre la réservation d'un job et l'inscription de son sort laisse la
+ligne en `running`. Passé `lease_secs`, le tour de worker suivant la rend à la file : de
+nouveau `pending`, sa tentative dépensée. `max_attempts` atteint, un job abandonné est
+marqué `failed` comme un échec ordinaire — un job qui tue son worker à chaque fois
+n'atteint jamais le réessai, et serait sinon réservé sans fin. Un job qui dure
+légitimement plus que le bail est rejoué — réglez le bail au-dessus de votre plus long job.
 
 ## Tests
 
