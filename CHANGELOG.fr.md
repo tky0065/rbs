@@ -11,6 +11,58 @@ dépréciation.
 
 *[English version](CHANGELOG.md).*
 
+## [1.4.0] — 2026-09-11
+
+### Ajouté
+
+- **Le fragment `auth` passe de cinq routes à treize.** `/auth/change-password`
+  (authentifié) rend 200 et une paire de jetons neuve plutôt que 204 — changer le mot de
+  passe révoque toutes les sessions, celle de l'appelant comprise, et la réémettre évite
+  de déconnecter quelqu'un qui vient de faire la bonne chose ; un mot de passe courant
+  faux rend 403, pas 401, l'appelant étant déjà identifié — un 401 le pousserait vers un
+  rafraîchissement inutile. `/auth/forgot-password` et `/auth/resend-verification`
+  (anonymes) rendent toutes deux 202 qu'un compte porte l'adresse ou non, et l'envoi du
+  courriel part détaché de la réponse — distinguer les deux cas, ou attendre le SMTP,
+  énumérerait les comptes. `/auth/reset-password` et `/auth/verify-email` (anonymes)
+  consomment un jeton à usage unique et rendent la même 401 pour chacune de ses façons
+  d'échouer — inconnu, périmé, déjà consommé, ou émis pour l'autre usage.
+  `/auth/sessions` (GET, DELETE) liste ou ferme toutes les sessions ouvertes de
+  l'appelant, sans jamais exposer l'empreinte d'un jeton dans la vue, et
+  `/auth/sessions/{id}` (DELETE) rend 404 plutôt que 403 quand l'identifiant ne désigne
+  aucune session de l'appelant — un 403 confirmerait qu'elle existe ailleurs.
+- **`register` envoie désormais un courriel de vérification.** Son contrat ne change pas —
+  toujours 201, toujours un `UserResponse` — avec un champ de plus, `email_verified_at`,
+  nul à l'inscription. L'échec d'un envoi est journalisé, jamais remonté à l'appelant.
+- **Une garde `VerifiedIdentity`**, livrée dans `src/auth/guard.rs`, que le projet pose
+  lui-même sur les routes qu'il juge sensibles. `login` continue d'accepter un compte non
+  vérifié sans changement ; la garde relit l'état de vérification en base à chaque
+  requête plutôt que dans le jeton, ce qui le figerait pour la durée du jeton.
+- **Une table `one_time_tokens`**, partagée entre réinitialisation de mot de passe et
+  vérification d'adresse et distinguée par une colonne `purpose`, plus une colonne
+  `email_verified_at` sur `users` — toutes deux ajoutées par la migration
+  `create_auth_tables`, qui ne fait que créer des tables et n'en altère aucune.
+- **Trois clés sous `[auth]`** : `reset_ttl_secs` (3600), `verification_ttl_secs` (86400)
+  et `app_url` (`http://localhost:3000`), lues par une `FlowConfig` que le projet porte
+  lui-même, et non `rbs-core`.
+- **Deux limites de débit de plus**, sur `/auth/forgot-password` et
+  `/auth/resend-verification`, à 3 requêtes par heure, et une sur `/auth/register`, à
+  10 — ces trois routes envoient un courriel à une adresse que l'appelant choisit.
+
+### Modifié
+
+- **`auth` exige désormais `mail` en plus de `rate-limit`.** `rbs add auth` sur un projet
+  qui ne porte pas encore `mail` l'installe avec lui : `lettre` dans `Cargo.toml`, la
+  section `[mail]`, un service `mailpit` dans `docker-compose.yml`, `templates/mail/` et
+  `RBS_MAIL__SMTP_PASSWORD` dans `.env.example`.
+- **`src/auth/` devient un répertoire par couche.** `repository/`, `service/`,
+  `controller/` et `tests/` portent chacun plusieurs fichiers ; le fragment dépose
+  désormais 21 fichiers sous `src/auth/` au lieu de 8. Un projet déjà engendré n'est pas
+  touché — `rbs` ne réécrit aucun fichier qu'il a déjà écrit, et `rbs upgrade` ne retouche
+  jamais le code d'une feature installée — mais un `rbs add auth` neuf rend une
+  arborescence différente.
+- `rbs-core` n'a pas changé dans cette version : tout le changement vit dans le fragment
+  `auth` du CLI et ses gabarits.
+
 ## [1.3.1] — 2026-09-09
 
 ### Modifié
@@ -471,6 +523,7 @@ démarrage, architecture, référence du CLI et guides, en français et en angla
 Rust 1.85 ou plus, édition 2024. Un projet généré tourne sur PostgreSQL 14 ou plus,
 MySQL 8.0 ou plus, ou SQLite 3.35 ou plus — `rbs doctor` refuse tout ce qui est en dessous.
 
+[1.4.0]: https://github.com/tky0065/rbs/releases/tag/v1.4.0
 [1.3.1]: https://github.com/tky0065/rbs/releases/tag/v1.3.1
 [1.3.0]: https://github.com/tky0065/rbs/releases/tag/v1.3.0
 [1.2.0]: https://github.com/tky0065/rbs/releases/tag/v1.2.0

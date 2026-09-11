@@ -10,6 +10,55 @@ between minor versions with no deprecation cycle.
 
 *[Version française](CHANGELOG.fr.md).*
 
+## [1.4.0] — 2026-09-11
+
+### Added
+
+- **The `auth` fragment grows from five routes to thirteen.** `/auth/change-password`
+  (authenticated) returns 200 with a fresh token pair rather than 204 — changing a
+  password revokes every session, the caller's included, and reissuing one avoids logging
+  out someone who just did the right thing; a wrong current password answers 403, not 401,
+  since the caller is already identified and a 401 would send it toward a useless refresh.
+  `/auth/forgot-password` and `/auth/resend-verification` (anonymous) both answer 202
+  whether or not the address belongs to an account, and the email send is detached from
+  the response — telling the two cases apart, or waiting on SMTP, would enumerate
+  accounts. `/auth/reset-password` and `/auth/verify-email` (anonymous) consume a one-time
+  token and answer the same 401 for every way it can fail — unknown, expired, already
+  consumed, or issued for the other purpose. `/auth/sessions` (GET, DELETE) lists or closes
+  every open session of the caller, without ever exposing a token hash in the view, and
+  `/auth/sessions/{id}` (DELETE) answers 404 rather than 403 when the id names no session
+  of the caller's — a 403 would confirm it exists somewhere else.
+- **`register` now sends a verification email.** Its contract is unchanged — still 201,
+  still a `UserResponse` — with one field added, `email_verified_at`, null at signup. A
+  send failure is logged, never surfaced to the caller.
+- **A `VerifiedIdentity` guard**, shipped in `src/auth/guard.rs`, that a project applies
+  itself to the routes it judges sensitive. `login` keeps accepting an unverified account
+  unchanged; the guard re-reads verification state from the database on every request
+  rather than from the token, which would otherwise freeze it for the token's lifetime.
+- **A `one_time_tokens` table**, shared between password reset and email verification and
+  told apart by a `purpose` column, plus an `email_verified_at` column on `users` — both
+  added by the `create_auth_tables` migration, which only creates tables and alters none.
+- **Three keys under `[auth]`**: `reset_ttl_secs` (3600), `verification_ttl_secs` (86400)
+  and `app_url` (`http://localhost:3000`), read by a `FlowConfig` the project owns rather
+  than `rbs-core`.
+- **Three more rate limits**: `/auth/forgot-password` and `/auth/resend-verification` at
+  3 requests per hour, `/auth/register` at 10 — all three send an email to an address the
+  caller chooses.
+
+### Changed
+
+- **`auth` now requires `mail` in addition to `rate-limit`.** `rbs add auth` on a project
+  that does not already carry `mail` installs it alongside: `lettre` in `Cargo.toml`, the
+  `[mail]` section, a `mailpit` service in `docker-compose.yml`, `templates/mail/` and
+  `RBS_MAIL__SMTP_PASSWORD` in `.env.example`.
+- **`src/auth/` becomes a directory per layer.** `repository/`, `service/`, `controller/`
+  and `tests/` each carry several files; the fragment now writes 21 files under `src/auth/`
+  instead of 8. A project already generated is untouched — `rbs` rewrites no file it has
+  already written, and `rbs upgrade` never touches the code of an installed feature — but a
+  fresh `rbs add auth` renders a different tree.
+- `rbs-core` did not change in this release: the entire change lives in the CLI's `auth`
+  fragment and its templates.
+
 ## [1.3.1] — 2026-09-09
 
 ### Changed
@@ -449,6 +498,7 @@ architecture, CLI reference and guides, in English and French.
 Rust 1.85 or later, Rust edition 2024. A generated project runs on PostgreSQL 14 or later,
 MySQL 8.0 or later, or SQLite 3.35 or later — `rbs doctor` refuses anything below those.
 
+[1.4.0]: https://github.com/tky0065/rbs/releases/tag/v1.4.0
 [1.3.1]: https://github.com/tky0065/rbs/releases/tag/v1.3.1
 [1.3.0]: https://github.com/tky0065/rbs/releases/tag/v1.3.0
 [1.2.0]: https://github.com/tky0065/rbs/releases/tag/v1.2.0
