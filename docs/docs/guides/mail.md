@@ -100,6 +100,10 @@ by `templates` — `templates/mail` by default:
 ```html file=examples/newsletter-queue/templates/mail/newsletter.html
 ```
 
+The path is relative to the working directory: the `Dockerfile` written by `rbs add docker`
+copies `templates/` next to `config/` into the image, so the same configuration works
+under `docker compose --profile app up`.
+
 `Templates` wraps the environment in an `Arc`, because `AppState` is cloned on every
 request and the templates should be loaded once rather than once per call. It uses
 minijinja's `path_loader`, which refuses an absolute or upward-climbing name: a template
