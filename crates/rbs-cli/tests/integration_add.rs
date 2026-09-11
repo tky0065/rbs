@@ -625,3 +625,76 @@ fn installing_redis_twice_writes_nothing_the_second_time() {
         "la seconde installation a modifié le projet",
     );
 }
+
+/// Un projet SQLite, créé par le binaire livré et commité : le seul preset de `rbs new`
+/// qui n'écrit pas de compose, et sur lequel `rbs add auth` échouait tout net.
+fn committed_sqlite_project(parent: &TempDir) -> PathBuf {
+    let noyau = common::noyau();
+
+    rbs(parent.path())
+        .args([
+            "new",
+            "demo-api",
+            "--database",
+            "sqlite",
+            "--database-url",
+            "sqlite://demo_api.db?mode=rwc",
+            "--core-path",
+            noyau.to_str().expect("chemin du noyau représentable"),
+            "--yes",
+        ])
+        .assert()
+        .success();
+
+    let racine = parent.path().join("demo-api");
+    common::commiter(&racine, "projet neuf");
+    racine
+}
+
+/// `auth` entraîne `mail`, dont le service `mailpit` va dans un compose que le projet
+/// SQLite n'a pas. L'installation aboutit, n'invente pas de compose, et dit ce qui reste à
+/// monter — dès le `--dry-run`, avant que quoi que ce soit ne s'écrive.
+#[test]
+fn adding_auth_to_a_sqlite_project_succeeds_and_names_the_service_left_to_mount() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = committed_sqlite_project(&parent);
+    assert!(!racine.join("docker-compose.yml").exists());
+
+    let avant = common::empreinte(&racine);
+    let essai = Sortie::de(rbs(&racine).args(["add", "auth", "--dry-run"]));
+    assert!(essai.succes, "le plan doit se calculer :\n{}", essai.stderr);
+    assert!(
+        essai.stdout.contains("docker-compose.yml absent") && essai.stdout.contains("mailpit:"),
+        "le --dry-run doit nommer le fichier absent et le service :\n{}",
+        essai.stdout
+    );
+    common::assert_intact(&avant, &racine, "un --dry-run n'écrit rien");
+
+    let output = Sortie::de(rbs(&racine).args(["add", "auth"]));
+    assert!(
+        output.succes,
+        "l'installation doit aboutir :\n{}",
+        output.stderr
+    );
+    assert!(
+        output.stdout.contains("docker-compose.yml absent") && output.stdout.contains("mailpit:"),
+        "l'installation doit nommer le fichier absent et le service :\n{}",
+        output.stdout
+    );
+    assert!(
+        !racine.join("docker-compose.yml").exists(),
+        "aucun compose ne doit être inventé"
+    );
+    assert!(
+        racine.join("src/auth/service/mod.rs").is_file(),
+        "auth doit être posée"
+    );
+    let manifeste =
+        fs::read_to_string(racine.join("Cargo.toml")).expect("le manifeste est lisible");
+    for feature in ["\"auth\"", "\"mail\""] {
+        assert!(
+            manifeste.contains(feature),
+            "{feature} manque :\n{manifeste}"
+        );
+    }
+}

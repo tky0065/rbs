@@ -289,6 +289,9 @@ fn create_project(
             pose.name,
             ui::files(pose.files)
         ));
+        if let Some(sautees) = &pose.sautees {
+            ui::line(sautees);
+        }
     }
     // `add` affiche ce conseil pour chaque feature qu'il installe ; `new` l'avalait,
     // laissant par exemple `--with auth` démarrer un projet où `RBS_AUTH__SECRET` manque
@@ -1122,11 +1125,13 @@ mod tests {
                 name: "auth".to_string(),
                 files: 9,
                 migration: true,
+                sautees: None,
             },
             new::InstalledFeature {
                 name: "redis".to_string(),
                 files: 3,
                 migration: false,
+                sautees: None,
             },
         ];
 
@@ -1146,6 +1151,7 @@ mod tests {
             name: "storage".to_string(),
             files: 4,
             migration: false,
+            sautees: None,
         }];
 
         assert_eq!(

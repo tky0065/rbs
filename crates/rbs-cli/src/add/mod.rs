@@ -770,6 +770,43 @@ mod tests {
         );
     }
 
+    /// Un projet SQLite n'a pas de compose, et `auth` entraîne `mail`, dont le service
+    /// `mailpit` n'a nulle part où aller. L'installation refusait tout net — treize routes
+    /// inaccessibles au preset SQLite — là où seul le service manque : le plan se calcule,
+    /// n'invente pas de compose, et dit ce qu'il reste à monter.
+    #[test]
+    fn adding_auth_to_a_sqlite_project_without_a_compose_plans_and_names_the_service() {
+        let (_parent, root) = project_on(Database::Sqlite);
+        assert!(
+            !root.join("docker-compose.yml").exists(),
+            "un projet SQLite n'a pas de compose"
+        );
+
+        let planned = plan_for(&options(&root, "auth")).expect("le plan doit se calculer");
+
+        assert!(
+            !planned
+                .plan
+                .files()
+                .iter()
+                .any(|f| f.path == "docker-compose.yml"),
+            "le plan ne doit pas inventer de compose"
+        );
+        let sautees = planned.plan.sautees();
+        assert_eq!(sautees.len(), 1, "{sautees:?}");
+        assert_eq!(sautees[0].anchor, crate::anchors::SERVICES);
+
+        let rendered = plan::render::plan(&planned.plan);
+        assert!(
+            rendered.contains("docker-compose.yml absent"),
+            "le rendu ne nomme pas le fichier absent :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("mailpit:"),
+            "le rendu ne nomme pas le service à monter :\n{rendered}"
+        );
+    }
+
     /// Un fichier de documentation supprimé ne doit pas empêcher d'installer une feature.
     #[test]
     fn a_missing_agents_file_does_not_stop_the_installation() {

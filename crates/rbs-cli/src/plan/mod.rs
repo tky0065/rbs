@@ -33,6 +33,20 @@ pub(crate) struct File {
     pub statut: Status,
 }
 
+/// Une insertion que le plan ne fera pas, faute du fichier qui devait la porter.
+///
+/// Ne concerne que les ancres optionnelles : un projet SQLite n'a pas de compose, et le
+/// service qu'un fragment y aurait ajouté n'a nulle part où aller. Plutôt que d'échouer
+/// — ce qui condamnait `mail`, `redis`, `auth` et `webhooks` sur tout projet sans compose
+/// — le plan garde le bloc, pour que l'utilisateur sache quoi monter lui-même.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Sautee {
+    /// L'ancre visée, dont le fichier manque.
+    pub anchor: Anchor,
+    /// Les lignes qui y seraient allées.
+    pub lines: Vec<String>,
+}
+
 /// Ce qu'une commande fera au projet, entièrement calculé et rien d'écrit.
 #[derive(Debug, Clone)]
 pub(crate) struct Plan {
@@ -43,6 +57,7 @@ pub(crate) struct Plan {
     #[cfg_attr(not(test), expect(dead_code))]
     actions: Vec<Action>,
     files: Vec<File>,
+    sautees: Vec<Sautee>,
 }
 
 impl Plan {
@@ -64,6 +79,11 @@ impl Plan {
     /// Racine du projet, à laquelle les chemins des fichiers sont relatifs.
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Les insertions que le plan a sautées, dans l'ordre où elles ont été planifiées.
+    pub fn sautees(&self) -> &[Sautee] {
+        &self.sautees
     }
 }
 
@@ -137,6 +157,7 @@ pub(crate) struct Builder {
     root: PathBuf,
     actions: Vec<Action>,
     files: Vec<File>,
+    sautees: Vec<Sautee>,
 }
 
 impl Builder {
@@ -146,6 +167,7 @@ impl Builder {
             root: root.into(),
             actions: Vec::new(),
             files: Vec::new(),
+            sautees: Vec::new(),
         }
     }
 
@@ -182,14 +204,29 @@ impl Builder {
 
     /// Planifie l'ajout de `lines` dans `anchor`, juste avant sa balise fermante.
     ///
-    /// Le fichier visé est celui que l'ancre désigne : une ancre ne se déplace pas.
+    /// Le fichier visé est celui que l'ancre désigne : une ancre ne se déplace pas. S'il
+    /// manque et que l'ancre est optionnelle, l'insertion est sautée et consignée — voir
+    /// [`Sautee`] ; un fichier qu'une action précédente du plan projette compte comme
+    /// présent, pour que le fragment qui écrit le compose puis y insère n'y saute rien.
     pub fn insert(&mut self, anchor: Anchor, lines: &[String]) -> Result<(), Error> {
         let path = anchor.file.to_string();
 
         let states = self.states(&path)?;
-        let courant = states.courant.ok_or_else(|| Error::FichierAbsent {
-            path: path.to_string(),
-        })?;
+        let courant = match states.courant {
+            Some(courant) => courant,
+            None if anchor.optional => {
+                self.sautees.push(Sautee {
+                    anchor,
+                    lines: lines.to_vec(),
+                });
+                return Ok(());
+            }
+            None => {
+                return Err(Error::FichierAbsent {
+                    path: path.to_string(),
+                });
+            }
+        };
 
         let after =
             crate::anchors::insert(&courant, anchor.clone(), lines).map_err(Error::Anchor)?;
@@ -384,6 +421,7 @@ impl Builder {
             root: self.root,
             actions: self.actions,
             files: self.files,
+            sautees: self.sautees,
         }
     }
 
@@ -699,6 +737,77 @@ mod tests {
             .expect_err("le fichier ne se lit pas");
 
         assert!(matches!(error, Error::Acces(_)), "{error:?}");
+    }
+
+    const COMPOSE: &str = "services:\n  # <rbs:services>\n  # </rbs:services>\n";
+
+    fn mailpit() -> Vec<String> {
+        vec![
+            "mailpit:".to_string(),
+            "  image: axllent/mailpit".to_string(),
+        ]
+    }
+
+    /// Un projet SQLite n'a pas de compose : l'ancre `services` y est optionnelle, et
+    /// la refuser condamnait `mail`, `redis`, `auth` et `webhooks` sur tout projet sans
+    /// compose. L'insertion est sautée, et le plan la garde pour l'annoncer.
+    #[test]
+    fn inserting_into_the_missing_file_of_an_optional_anchor_is_skipped_and_recorded() {
+        let project = project();
+        let mut builder = Builder::new(project.path().to_path_buf());
+
+        builder
+            .insert(anchors::SERVICES, &mailpit())
+            .expect("l'ancre est optionnelle : son fichier peut manquer");
+        let plan = builder.finir();
+
+        assert!(plan.files().is_empty(), "{:?}", plan.files());
+        assert!(plan.actions().is_empty(), "{:?}", plan.actions());
+        assert_eq!(plan.sautees().len(), 1);
+        assert_eq!(plan.sautees()[0].anchor, anchors::SERVICES);
+        assert_eq!(plan.sautees()[0].lines, mailpit());
+    }
+
+    /// Le fragment `docker` écrit le compose puis y insère ses services, dans le même
+    /// plan : un fichier projeté par une action précédente est présent, et rien ne se saute.
+    #[test]
+    fn an_optional_anchor_in_a_file_projected_earlier_in_the_plan_is_inserted() {
+        let project = project();
+        let mut builder = Builder::new(project.path().to_path_buf());
+
+        builder
+            .create("docker-compose.yml", COMPOSE)
+            .expect("le fichier est absent");
+        builder
+            .insert(anchors::SERVICES, &mailpit())
+            .expect("le compose vient d'être projeté");
+        let plan = builder.finir();
+
+        assert!(plan.sautees().is_empty(), "{:?}", plan.sautees());
+        assert!(
+            plan.files()[0].after.contains("mailpit:"),
+            "{}",
+            plan.files()[0].after
+        );
+    }
+
+    /// Optionnelle ne veut pas dire facultative dans un fichier présent : un compose
+    /// réécrit à la main sans son ancre garde le diagnostic et le bloc à coller.
+    #[test]
+    fn an_optional_anchor_missing_from_a_present_file_stays_an_anchor_error() {
+        let project = project();
+        fs::write(
+            project.path().join("docker-compose.yml"),
+            "services:\n  db:\n    image: postgres\n",
+        )
+        .expect("l'écriture aboutit");
+        let mut builder = Builder::new(project.path().to_path_buf());
+
+        let error = builder
+            .insert(anchors::SERVICES, &mailpit())
+            .expect_err("le fichier est là, sans son ancre");
+
+        assert!(matches!(error, Error::Anchor(_)), "{error:?}");
     }
 
     #[test]
