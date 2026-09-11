@@ -21,13 +21,14 @@ use testcontainers::{Container, GenericImage};
 mod common;
 
 /// Les tests que le fragment livre au projet et qui joignent la base.
-const TESTS: [&str; 6] = [
+const TESTS: [&str; 7] = [
     "a_job_enqueued_in_a_rolled_back_transaction_does_not_exist",
     "a_job_enqueued_in_a_committed_transaction_is_visible_to_the_worker",
     "two_concurrent_workers_never_reserve_the_same_job",
     "a_failing_job_is_retried_then_marked_failed_after_the_last_attempt",
     "a_job_left_running_past_the_lease_returns_to_the_queue",
     "a_job_running_within_the_lease_is_left_alone",
+    "a_job_abandoned_on_its_last_attempt_is_failed_rather_than_requeued",
 ];
 
 /// Le message du job d'exemple, par lequel la ligne se retrouve dans la table.
@@ -55,7 +56,7 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     let sous_conteneur = cargo_test(&racine, &["--", "--ignored"]);
 
     // `cargo test -- --ignored` sort en 0 même quand il ne filtre **aucun** test : sans
-    // ces six lignes, un fragment qui cesserait de livrer ses tests laisserait
+    // ces sept lignes, un fragment qui cesserait de livrer ses tests laisserait
     // celui-ci au vert sans qu'une seule transaction ait été ouverte.
     for test in TESTS {
         assert!(

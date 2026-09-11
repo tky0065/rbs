@@ -181,8 +181,10 @@ process that keeps dying on it.
 
 A worker that dies between reserving a job and reporting on it leaves the row `running`.
 Past `lease_secs`, the next worker tour gives it back to the queue: `pending` again, its
-attempt spent. A job that legitimately runs longer than the lease is replayed — set the
-lease above your longest job.
+attempt spent. Once `max_attempts` is reached, an abandoned job is marked `failed` like an
+ordinary failure — a job that kills its worker every time never reaches the retry path,
+and would otherwise be reserved forever. A job that legitimately runs longer than the
+lease is replayed — set the lease above your longest job.
 
 ## Testing
 

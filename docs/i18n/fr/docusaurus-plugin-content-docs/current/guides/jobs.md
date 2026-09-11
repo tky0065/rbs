@@ -186,8 +186,10 @@ processus qui meurt dessus à chaque fois.
 
 Un worker qui meurt entre la réservation d'un job et l'inscription de son sort laisse la
 ligne en `running`. Passé `lease_secs`, le tour de worker suivant la rend à la file : de
-nouveau `pending`, sa tentative dépensée. Un job qui dure légitimement plus que le bail
-est rejoué — réglez le bail au-dessus de votre plus long job.
+nouveau `pending`, sa tentative dépensée. `max_attempts` atteint, un job abandonné est
+marqué `failed` comme un échec ordinaire — un job qui tue son worker à chaque fois
+n'atteint jamais le réessai, et serait sinon réservé sans fin. Un job qui dure
+légitimement plus que le bail est rejoué — réglez le bail au-dessus de votre plus long job.
 
 ## Tests
 

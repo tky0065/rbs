@@ -25,7 +25,6 @@ pub async fn run(state: AppState) -> anyhow::Result<()> {
     let config = Config::load()?;
     let registry = registry();
     let attente = Duration::from_secs(config.poll_interval_secs);
-    let bail = Duration::from_secs(config.lease_secs);
 
     tracing::info!(
         poll_interval_secs = config.poll_interval_secs,
@@ -34,7 +33,7 @@ pub async fn run(state: AppState) -> anyhow::Result<()> {
     );
 
     loop {
-        rendre_les_abandonnes(state.core().db(), bail).await;
+        reprendre_les_abandonnes(state.core().db(), &config).await;
 
         match queue::reserver_prochain_job(state.core().db()).await {
             Ok(Some(job)) => execute(&state, &registry, &config, job).await,
@@ -49,16 +48,25 @@ pub async fn run(state: AppState) -> anyhow::Result<()> {
     }
 }
 
-/// Rend à la file ce qu'un worker mort a laissé en `running` — au démarrage, puis à
-/// chaque tour : un `UPDATE` indexé qui ne touche rien le plus souvent, contre une
+/// Reprend ce qu'un worker mort a laissé en `running` — au démarrage, puis à chaque
+/// tour : deux `UPDATE` indexés qui ne touchent rien le plus souvent, contre une
 /// livraison perdue sans bruit à chaque redémarrage.
 ///
 /// Un échec ne retire pas le worker : la base injoignable sera dite par le dépilage qui
 /// suit, et la reprise retentera au tour d'après.
-async fn rendre_les_abandonnes(db: &DatabaseConnection, bail: Duration) {
-    match queue::requeue_stale(db, bail).await {
-        Ok(0) => {}
-        Ok(rendus) => tracing::warn!(rendus, "jobs abandonnés rendus à la file"),
+async fn reprendre_les_abandonnes(db: &DatabaseConnection, config: &Config) {
+    match queue::requeue_stale(db, config).await {
+        Ok(reprise) => {
+            if reprise.rendus > 0 {
+                tracing::warn!(rendus = reprise.rendus, "jobs abandonnés rendus à la file");
+            }
+            if reprise.condamnes > 0 {
+                tracing::warn!(
+                    condamnes = reprise.condamnes,
+                    "jobs abandonnés condamnés, sans tentative restante"
+                );
+            }
+        }
         Err(error) => tracing::error!(%error, "reprise des jobs abandonnés impossible"),
     }
 }

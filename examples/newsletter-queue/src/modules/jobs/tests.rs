@@ -304,10 +304,9 @@ async fn a_failing_job_is_retried_then_marked_failed_after_the_last_attempt() {
 #[tokio::test]
 #[ignore = "joint la base du projet"]
 async fn a_job_left_running_past_the_lease_returns_to_the_queue() {
-    const BAIL: Duration = Duration::from_secs(300);
-
     let (_garde, state) = table_a_soi().await;
     let db = state.core().db();
+    let config = config(5);
 
     let id = queue::enqueue(
         db,
@@ -322,12 +321,18 @@ async fn a_job_left_running_past_the_lease_returns_to_the_queue() {
         .expect("dépilage possible")
         .expect("le job est dépilable");
     assert_eq!(reserve.status, Status::Running);
-    reserved_since(db, id, BAIL + Duration::from_secs(60)).await;
+    reserved_since(db, id, Duration::from_secs(config.lease_secs + 60)).await;
 
-    let rendus = queue::requeue_stale(db, BAIL)
+    let reprise = queue::requeue_stale(db, &config)
         .await
         .expect("reprise possible");
-    assert_eq!(rendus, 1);
+    assert_eq!(
+        reprise,
+        queue::Reprise {
+            rendus: 1,
+            condamnes: 0
+        }
+    );
 
     let ligne = Entity::find_by_id(id)
         .one(db)
@@ -335,7 +340,7 @@ async fn a_job_left_running_past_the_lease_returns_to_the_queue() {
         .expect("lecture possible")
         .expect("la ligne survit");
     assert_eq!(ligne.status, Status::Pending);
-    // La tentative abandonnée reste dépensée : `max_attempts` borne aussi les crashs.
+    // La tentative abandonnée reste dépensée : c'est elle que `max_attempts` compte.
     assert_eq!(ligne.attempts, 1);
 
     let repris = queue::reserver_prochain_job(db)
@@ -349,10 +354,9 @@ async fn a_job_left_running_past_the_lease_returns_to_the_queue() {
 #[tokio::test]
 #[ignore = "joint la base du projet"]
 async fn a_job_running_within_the_lease_is_left_alone() {
-    const BAIL: Duration = Duration::from_secs(300);
-
     let (_garde, state) = table_a_soi().await;
     let db = state.core().db();
+    let config = config(5);
 
     let id = queue::enqueue(
         db,
@@ -367,10 +371,10 @@ async fn a_job_running_within_the_lease_is_left_alone() {
         .expect("dépilage possible")
         .expect("le job est dépilable");
 
-    let rendus = queue::requeue_stale(db, BAIL)
+    let reprise = queue::requeue_stale(db, &config)
         .await
         .expect("reprise possible");
-    assert_eq!(rendus, 0);
+    assert_eq!(reprise, queue::Reprise::default());
 
     let ligne = Entity::find_by_id(id)
         .one(db)
@@ -378,4 +382,54 @@ async fn a_job_running_within_the_lease_is_left_alone() {
         .expect("lecture possible")
         .expect("la ligne survit");
     assert_eq!(ligne.status, Status::Running);
+}
+
+/// Un job qui tue son worker à chaque tentative n'atteint jamais `retry_or_fail` : sans
+/// borne ici, il serait rendu à la file puis réservé sans fin.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_job_abandoned_on_its_last_attempt_is_failed_rather_than_requeued() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+    let config = config(1);
+
+    let id = queue::enqueue(
+        db,
+        &Succeeds {
+            marque: "fatal".to_string(),
+        },
+    )
+    .await
+    .expect("le job s'enfile");
+    queue::reserver_prochain_job(db)
+        .await
+        .expect("dépilage possible")
+        .expect("le job est dépilable");
+    reserved_since(db, id, Duration::from_secs(config.lease_secs + 60)).await;
+
+    let reprise = queue::requeue_stale(db, &config)
+        .await
+        .expect("reprise possible");
+    assert_eq!(
+        reprise,
+        queue::Reprise {
+            rendus: 0,
+            condamnes: 1
+        }
+    );
+
+    let ligne = Entity::find_by_id(id)
+        .one(db)
+        .await
+        .expect("lecture possible")
+        .expect("la ligne survit");
+    assert_eq!(ligne.status, Status::Failed);
+    assert!(ligne.last_error.is_some(), "l'abandon n'est pas consigné");
+    assert!(
+        queue::reserver_prochain_job(db)
+            .await
+            .expect("dépilage possible")
+            .is_none(),
+        "un job condamné est revenu dans la file"
+    );
 }
