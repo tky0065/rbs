@@ -496,6 +496,9 @@ fn the_auth_tests_of_the_generated_project_pass() {
 /// Aucun conteneur n'est requis : la base est un fichier du projet. Une cible propre,
 /// comme pour le banc SQLite d'`integration_crud` : SQLite active des features `sea-orm`
 /// que PostgreSQL n'active pas.
+///
+/// Un projet SQLite n'a pas de compose : `add auth` y pose `mail` en sautant l'ancre
+/// `services`, et ce banc prouve au passage que le projet compile et tourne ainsi.
 #[test]
 #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
 fn the_auth_tests_of_the_generated_project_pass_on_sqlite() {
@@ -999,18 +1002,6 @@ fn project_with_auth_on_engine(moteur: &str, url: &str, parent: &TempDir) -> Pat
         ])
         .assert()
         .success();
-
-    // Un projet SQLite n'a pas de compose, et `add auth` — qui installe `mail` — refuse
-    // encore un fichier absent malgré l'ancre déclarée optionnelle. Le compose minimal
-    // posé ici tient lieu de celui que `rbs new` écrit pour les autres moteurs : ce banc
-    // éprouve les dates du fragment, pas l'installation sans compose.
-    if moteur == "sqlite" {
-        fs::write(
-            racine.join("docker-compose.yml"),
-            "name: demo-api\n\nservices:\n  # <rbs:services>\n  # </rbs:services>\n",
-        )
-        .expect("docker-compose.yml inscriptible");
-    }
 
     common::commiter(&racine, "projet neuf");
 
