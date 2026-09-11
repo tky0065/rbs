@@ -71,7 +71,7 @@ l'exemple `newsletter-queue` est bâti autour de lui.
 ```rust file=examples/newsletter-queue/src/modules/jobs/config.rs
 ```
 
-Trois réglages, chacun avec un défaut écrit là où la section est déclarée plutôt que dans
+Quatre réglages, chacun avec un défaut écrit là où la section est déclarée plutôt que dans
 le noyau, de sorte que vous les lisiez et les changiez au même endroit :
 
 ```toml
@@ -79,7 +79,12 @@ le noyau, de sorte que vous les lisiez et les changiez au même endroit :
 max_attempts = 5
 retry_delay_secs = 30
 poll_interval_secs = 1
+lease_secs = 300
 ```
+
+`lease_secs` est le délai passé lequel une réservation dont personne n'a inscrit le sort —
+le worker est mort en plein job — est rendue à la file ; tenez-le au-dessus de votre plus
+long job.
 
 `config/{env}.toml` et les variables `RBS_JOBS__*` les surchargent comme celles de toute
 autre section — voir le [guide de la configuration](./configuration.md).

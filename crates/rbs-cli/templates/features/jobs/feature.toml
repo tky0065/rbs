@@ -71,4 +71,7 @@ content = """
 max_attempts = 5
 retry_delay_secs = 30
 poll_interval_secs = 1
+# Passé ce délai, un job réservé par un worker qui n'en a jamais inscrit le sort — tué en
+# plein travail — redevient dépilable. À tenir au-dessus de la durée du plus long job.
+lease_secs = 300
 """

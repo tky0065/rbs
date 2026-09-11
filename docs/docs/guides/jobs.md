@@ -70,7 +70,7 @@ broker's fan-out is not what this feature is. The trade is deliberate, and the
 ```rust file=examples/newsletter-queue/src/modules/jobs/config.rs
 ```
 
-Three settings, all with defaults written where the section is declared rather than in the
+Four settings, all with defaults written where the section is declared rather than in the
 core, so you can read and change them in one place:
 
 ```toml
@@ -78,7 +78,11 @@ core, so you can read and change them in one place:
 max_attempts = 5
 retry_delay_secs = 30
 poll_interval_secs = 1
+lease_secs = 300
 ```
+
+`lease_secs` is the delay after which a reservation nobody reported on — the worker died
+mid-job — is given back to the queue; keep it above your longest job.
 
 `config/{env}.toml` and the `RBS_JOBS__*` variables override them like any other section —
 see the [configuration guide](./configuration.md).
