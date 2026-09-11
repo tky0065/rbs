@@ -275,7 +275,13 @@ installe chacune des nommées, dans la même passe qui écrit le projet :
 ```text
 $ rbs new site --with auth --yes
 ✓ site créé — 21 fichiers
-  + auth       34 fichiers, 1 migration
+  + mail       6 fichiers
+  + rate-limit 4 fichiers
+  + auth       24 fichiers, 1 migration
+
+  réglez [mail] dans config/default.toml — un SMTP local par défaut
+
+  derrière un reverse proxy, passez rate_limit.trust_forwarded_for à true — sinon tous les clients partagent l'adresse du proxy
 
   rbs migrate up
 
@@ -284,19 +290,32 @@ $ rbs new site --with auth --yes
   cargo run              # ou `rbs dev`, qui enchaîne les deux
 ```
 
-L'ordre d'installation est dérivé des noms, non de l'ordre où ils ont été tapés —
-alphabétique, le même ordre dans lequel [`rbs add`](./add.md) énumère les treize :
+`auth` seule entraîne `mail` et `rate-limit`, et le compte rendu nomme les trois, chacune
+avec son conseil : ce que la passe écrit, vous le lisez — que vous l'ayez tapé ou non.
+
+L'ordre d'installation est dérivé des fragments, non de l'ordre où ils ont été tapés. Un
+fragment passe avant ceux qui l'exigent, et avant ceux qui insèrent dans une ancre dont il
+écrit le fichier — `docker` dépose le compose que `mail` étend de son service — et le nom
+tranche le reste, pour que deux `--with` équivalents rendent le même projet. Toutes les
+features s'installent en une seule passe, et chaque fragment voit celles posées avec lui :
+`--with rate-limit,redis` compte dans Redis, où que `redis` figure dans la liste.
 
 ```text
 $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes
 ✓ with-demo créé — 21 fichiers
-  + auth       34 fichiers, 1 migration
   + docker     2 fichiers
+  + mail       6 fichiers
+  + rate-limit 4 fichiers
+  + auth       24 fichiers, 1 migration
   + storage    4 fichiers
 
-  rbs migrate up
-
   docker compose --profile app up --build
+
+  réglez [mail] dans config/default.toml — un SMTP local par défaut
+
+  derrière un reverse proxy, passez rate_limit.trust_forwarded_for à true — sinon tous les clients partagent l'adresse du proxy
+
+  rbs migrate up
 
   les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example
 
@@ -305,9 +324,11 @@ $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_dem
   cargo run              # ou `rbs dev`, qui enchaîne les deux
 ```
 
-`storage,auth,docker` a été tapé ; `auth`, puis `docker`, puis `storage` ont été
-installées, et c'est l'ordre dans lequel `[package.metadata.rbs]` les consigne — le même
-qu'un second `rbs add` de l'une d'elles laisserait intact.
+`storage,auth,docker` a été tapé ; `docker` est passée en premier, parce que `mail` —
+qu'`auth` exige — étend le compose qu'elle écrit ; puis `mail` et `rate-limit`, avant
+l'`auth` qui les exige ; `storage`, que rien ne contraint, ferme la liste par son nom.
+C'est l'ordre dans lequel `[package.metadata.rbs]` les consigne — le même qu'un second
+`rbs add` de l'une d'elles laisserait intact.
 
 Un nom qui n'est pas une feature du tout est refusé avant que le premier fichier ne soit
 écrit :

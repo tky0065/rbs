@@ -389,7 +389,7 @@ fn add_in(
     template_dir: Option<PathBuf>,
 ) -> Result<(), add::Error> {
     let planned = add::plan_for(&add::Options {
-        feature: feature.clone(),
+        features: vec![feature.clone()],
         directory,
         force,
         template_dir,

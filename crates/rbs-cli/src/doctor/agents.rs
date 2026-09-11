@@ -295,7 +295,7 @@ mod tests {
     fn a_directory_deposited_by_a_fragment_under_another_name_is_not_a_warning() {
         let (_parent, root) = project();
         crate::add::plan_for(&crate::add::Options {
-            feature: "redis".to_string(),
+            features: vec!["redis".to_string()],
             directory: root.clone(),
             force: true,
             template_dir: None,
