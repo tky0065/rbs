@@ -1,8 +1,8 @@
+use chrono::Utc;
 use rbs_core::Result;
 use sea_orm::prelude::{DateTimeWithTimeZone, Expr, Uuid};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ExprTrait, QueryFilter,
-    QueryOrder, Set,
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set,
 };
 
 use super::super::model::refresh_token;
@@ -10,6 +10,12 @@ use super::super::model::refresh_token;
 // La couche service a besoin du type pour rendre `SessionResponse` sans construire de
 // requête : c'est elle qui appelle `open_sessions_of`, jamais le modèle directement.
 pub use super::super::model::refresh_token::Model;
+
+// L'instant vient de Rust et se lie en paramètre, jamais de `CURRENT_TIMESTAMP` : sqlx
+// écrit la colonne en RFC 3339 (`2026-01-01T…+00:00`) là où l'horloge de SQLite rend
+// `2026-01-01 23:59:59`, et SQLite compare le texte — `'T' > ' '`, toute échéance du jour
+// passait pour future. L'écriture de `revoked_at` suit la même règle pour que la colonne
+// ne mélange pas deux formats.
 
 /// Ouvre une session de rafraîchissement.
 ///
@@ -25,6 +31,10 @@ pub async fn create_refresh_token(
         user_id: Set(user_id),
         token_hash: Set(fingerprint),
         expires_at: Set(expire_a),
+        // Posé ici et non par le défaut de colonne : `CURRENT_TIMESTAMP` est à la seconde
+        // sur SQLite et MySQL, et deux sessions ouvertes dans la même seconde n'auraient
+        // plus d'ordre — `open_sessions_of` promet la plus récente en tête.
+        created_at: Set(Utc::now().fixed_offset()),
         ..Default::default()
     }
     .insert(db)
@@ -50,7 +60,10 @@ pub async fn find_refresh_token(
 /// que l'un ait écrit, et repartiraient chacun avec une paire valide.
 pub async fn consume(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
     let touchees = refresh_token::Entity::update_many()
-        .col_expr(refresh_token::Column::RevokedAt, Expr::current_timestamp())
+        .col_expr(
+            refresh_token::Column::RevokedAt,
+            Expr::value(Utc::now().fixed_offset()),
+        )
         .filter(refresh_token::Column::Id.eq(id))
         .filter(refresh_token::Column::RevokedAt.is_null())
         .exec(db)
@@ -67,7 +80,10 @@ pub async fn consume(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
 /// volée en circulation.
 pub async fn revoke_sessions_of(db: &DatabaseConnection, user_id: Uuid) -> Result<u64> {
     let touchees = refresh_token::Entity::update_many()
-        .col_expr(refresh_token::Column::RevokedAt, Expr::current_timestamp())
+        .col_expr(
+            refresh_token::Column::RevokedAt,
+            Expr::value(Utc::now().fixed_offset()),
+        )
         .filter(refresh_token::Column::UserId.eq(user_id))
         .filter(refresh_token::Column::RevokedAt.is_null())
         .exec(db)
@@ -86,7 +102,7 @@ pub async fn open_sessions_of(
     Ok(refresh_token::Entity::find()
         .filter(refresh_token::Column::UserId.eq(user_id))
         .filter(refresh_token::Column::RevokedAt.is_null())
-        .filter(Expr::col(refresh_token::Column::ExpiresAt).gt(Expr::current_timestamp()))
+        .filter(refresh_token::Column::ExpiresAt.gt(Utc::now().fixed_offset()))
         .order_by_desc(refresh_token::Column::CreatedAt)
         .all(db)
         .await?)
@@ -99,7 +115,10 @@ pub async fn open_sessions_of(
 /// portée d'une course.
 pub async fn revoke_session(db: &DatabaseConnection, id: Uuid, user_id: Uuid) -> Result<bool> {
     let touchees = refresh_token::Entity::update_many()
-        .col_expr(refresh_token::Column::RevokedAt, Expr::current_timestamp())
+        .col_expr(
+            refresh_token::Column::RevokedAt,
+            Expr::value(Utc::now().fixed_offset()),
+        )
         .filter(refresh_token::Column::Id.eq(id))
         .filter(refresh_token::Column::UserId.eq(user_id))
         .filter(refresh_token::Column::RevokedAt.is_null())

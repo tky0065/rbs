@@ -89,7 +89,9 @@ fn without_a_proxy_the_address_is_that_of_the_peer() {
 }
 
 /// Le drapeau levé, l'en-tête l'emporte : derrière un proxy, l'adresse du pair est celle
-/// du proxy, et tous les clients partageraient un compteur.
+/// du proxy, et tous les clients partageraient un compteur. C'est le dernier élément qui
+/// compte — celui que le proxy de confiance appose, les précédents étant arrivés avec la
+/// requête.
 #[test]
 fn behind_a_trusted_proxy_the_forwarded_address_wins() {
     let config = Config {
@@ -99,11 +101,37 @@ fn behind_a_trusted_proxy_the_forwarded_address_wins() {
 
     let client = client(
         &config,
-        &transmise("203.0.113.9, 198.51.100.4"),
+        &transmise("203.0.113.9, 192.0.2.77, 198.51.100.4"),
         &pair("10.0.0.1"),
     );
 
-    assert_eq!(client, Some(ip([203, 0, 113, 9])));
+    assert_eq!(client, Some(ip([198, 51, 100, 4])));
+}
+
+/// Un client qui envoie lui-même un `X-Forwarded-For` ne choisit pas sa clé : le proxy
+/// ajoute son adresse en fin de liste, et c'est elle qu'on lit. Deux requêtes aux têtes
+/// de liste distinctes partagent donc le compteur, sans quoi une valeur tirée au hasard par
+/// requête ferait tomber la borne de `/auth/login`.
+#[test]
+fn a_forged_address_ahead_of_the_list_does_not_change_the_key() {
+    let config = Config {
+        trust_forwarded_for: true,
+        ..Config::default()
+    };
+
+    let premiere = client(
+        &config,
+        &transmise("203.0.113.9, 198.51.100.4"),
+        &pair("10.0.0.1"),
+    );
+    let seconde = client(
+        &config,
+        &transmise("192.0.2.77, 198.51.100.4"),
+        &pair("10.0.0.1"),
+    );
+
+    assert_eq!(premiere, seconde);
+    assert_eq!(seconde, Some(ip([198, 51, 100, 4])));
 }
 
 /// Sans adresse, la requête passe : un compteur unique pour tout le monde ferait payer à

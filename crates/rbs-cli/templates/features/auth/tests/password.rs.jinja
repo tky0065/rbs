@@ -46,6 +46,79 @@ async fn a_token_is_consumed_once_even_under_concurrency() {
     assert_eq!(passes, 1, "deux consommations concurrentes ont abouti");
 }
 
+/// Émet un jeton de réinitialisation dont l'échéance est `decalage` après maintenant, et
+/// rend sa ligne.
+async fn reset_token_expiring_in(
+    db: &DatabaseConnection,
+    user_id: Uuid,
+    decalage: chrono::Duration,
+) -> crate::auth::repository::one_time_token::Model {
+    let jeton = rbs_core::token::random();
+    crate::auth::repository::one_time_token::issue(
+        db,
+        user_id,
+        crate::auth::model::TokenPurpose::PasswordReset,
+        rbs_core::token::fingerprint(&jeton),
+        (Utc::now() + decalage).fixed_offset(),
+    )
+    .await
+    .expect("le jeton s'émet");
+
+    crate::auth::repository::one_time_token::find(
+        db,
+        &rbs_core::token::fingerprint(&jeton),
+        crate::auth::model::TokenPurpose::PasswordReset,
+    )
+    .await
+    .expect("la lecture aboutit")
+    .expect("le jeton vient d'être émis")
+}
+
+/// Une seconde de retard suffit : l'échéance est comparée à l'instant, pas au jour —
+/// par `consume`, qui refuse, comme par `purge_expired`, qui retire le jeton échu et
+/// garde le vivant du même compte.
+///
+/// Le décalage est court à dessein. Sur SQLite, l'horloge du moteur et la colonne
+/// n'avaient pas le même format textuel, et toute échéance du jour passait pour future :
+/// un jeton échu d'une heure y restait consommable jusqu'à minuit UTC.
+///
+/// Les deux portes dans un seul test : la purge est globale, et jouée en parallèle d'un
+/// test qui vient d'émettre un jeton échu, elle le lui retirerait avant qu'il l'ait relu.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_expired_reset_token_is_refused_by_consume_and_removed_by_the_purge() {
+    let db = connection().await;
+    let compte = registered_user(&db).await;
+
+    let echu = reset_token_expiring_in(&db, compte.id, -chrono::Duration::seconds(1)).await;
+    let vivant = reset_token_expiring_in(&db, compte.id, chrono::Duration::hours(1)).await;
+
+    let consomme = crate::auth::repository::one_time_token::consume(&db, echu.id)
+        .await
+        .expect("pas d'erreur");
+    assert!(!consomme, "un jeton échu a été consommé");
+
+    crate::auth::repository::one_time_token::purge_expired(&db)
+        .await
+        .expect("la purge aboutit");
+
+    let restants: Vec<Uuid> = crate::auth::model::one_time_token::Entity::find()
+        .filter(crate::auth::model::one_time_token::Column::UserId.eq(compte.id))
+        .all(&db)
+        .await
+        .expect("la lecture aboutit")
+        .into_iter()
+        .map(|ligne| ligne.id)
+        .collect();
+
+    assert_eq!(
+        restants,
+        vec![vivant.id],
+        "le jeton échu {} devait seul disparaître",
+        echu.id
+    );
+}
+
 /// Le parcours nominal : la paire rendue est utilisable, et l'ancienne ne l'est plus.
 #[tokio::test]
 #[ignore = "joint la base du projet"]

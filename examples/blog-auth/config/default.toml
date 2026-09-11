@@ -15,22 +15,6 @@ max_lifetime_secs = 1800
 swagger_ui = true
 openapi_json = true
 
-[auth]
-access_ttl_secs = 900
-refresh_ttl_secs = 2592000
-
-# Une heure : le lien de réinitialisation est urgent, et sa fenêtre est la durée pendant
-# laquelle une boîte compromise vaut le compte.
-reset_ttl_secs = 3600
-
-# Un jour : la vérification ne l'est pas, et un lien trop court fait revenir l'utilisateur
-# sur `resend-verification` plus souvent qu'il n'ouvre son courrier.
-verification_ttl_secs = 86400
-
-# L'application du client, et non ce serveur : rbs engendre une API, et le lien du
-# courriel mène à l'écran qui postera le jeton.
-app_url = "http://localhost:3000"
-
 [mail]
 # Mailpit et MailHog écoutent sur 1025, en clair : c'est le serveur de développement.
 # En production, `tls = "starttls"` et un `smtp_user` — dont le mot de passe vient de
@@ -51,8 +35,10 @@ window_secs = 60
 
 # Derrière un reverse proxy, l'adresse du pair est celle du proxy : sans ce drapeau tous
 # les clients partagent un même compteur, et le garde-fou devient le déni de service.
-# Ne le lever qu'avec un proxy devant, qui réécrit l'en-tête : exposée en direct, une API
-# qui le croit laisse n'importe quel client se choisir une identité par requête.
+# L'adresse lue est le dernier élément de l'en-tête, celui que le proxy appose ; ce que le
+# client y a écrit avant ne compte pas. Ne le lever qu'avec un proxy devant : exposée en
+# direct, une API qui le croit laisse n'importe quel client se choisir une identité par
+# requête.
 trust_forwarded_for = false
 
 # Limites plus strictes, par préfixe de chemin ; la première qui correspond l'emporte.
@@ -73,3 +59,19 @@ routes = [
   # qu'une simple demande de réinitialisation.
   { path = "/auth/register", limit = 10, window_secs = 3600 },
 ]
+
+[auth]
+access_ttl_secs = 900
+refresh_ttl_secs = 2592000
+
+# Une heure : le lien de réinitialisation est urgent, et sa fenêtre est la durée pendant
+# laquelle une boîte compromise vaut le compte.
+reset_ttl_secs = 3600
+
+# Un jour : la vérification ne l'est pas, et un lien trop court fait revenir l'utilisateur
+# sur `resend-verification` plus souvent qu'il n'ouvre son courrier.
+verification_ttl_secs = 86400
+
+# L'application du client, et non ce serveur : rbs engendre une API, et le lien du
+# courriel mène à l'écran qui postera le jeton.
+app_url = "http://localhost:3000"

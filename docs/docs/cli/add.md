@@ -219,7 +219,10 @@ A request whose client address is unknown is not counted: a single counter for e
 would make each caller pay for what one consumes. `axum::serve` supplies that address;
 behind a reverse proxy it is the proxy's, which is what
 `rate_limit.trust_forwarded_for = true` is for — never set it on an API exposed directly,
-where any client could then pick an identity per request.
+where any client could then pick an identity per request. The address read is the **last**
+element of `X-Forwarded-For`, the one the proxy appends: nginx, Traefik, Caddy and the ALBs
+all add the peer's address at the end of the list without touching what precedes it, so
+whatever the client wrote ahead of it does not change the counter it is charged to.
 
 ```text
 $ rbs add auth

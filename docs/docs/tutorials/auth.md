@@ -32,6 +32,24 @@ auth exige mail, rate-limit : posée avec elle
 
 plan pour …/demo
 
+  + src/modules/mail/mod.rs                                créé
+  + src/modules/mail/config.rs                             créé
+  + src/modules/mail/template.rs                           créé
+  + src/modules/mail/service.rs                            créé
+  + src/modules/mail/tests.rs                              créé
+  + templates/mail/bienvenue.html                          créé
+  + src/modules/mod.rs                                     créé
+  ~ src/lib.rs                                             modifié
+  ~ src/state.rs                                           modifié
+  ~ docker-compose.yml                                     modifié
+  ~ Cargo.toml                                             modifié
+  ~ config/default.toml                                    modifié
+  ~ .env.example                                           modifié
+  + src/modules/rate_limit/mod.rs                          créé
+  + src/modules/rate_limit/config.rs                       créé
+  + src/modules/rate_limit/counter.rs                      créé
+  + src/modules/rate_limit/tests.rs                        créé
+  ~ src/router.rs                                          modifié
   + src/auth/mod.rs                                        créé
   + src/auth/config.rs                                     créé
   + src/auth/model.rs                                      créé
@@ -57,26 +75,8 @@ plan pour …/demo
   + src/auth/tests/verification.rs                         créé
   + migration/src/m20260909_093150_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
-  ~ src/lib.rs                                             modifié
-  ~ src/router.rs                                          modifié
   ~ src/openapi.rs                                         modifié
-  ~ src/state.rs                                           modifié
-  ~ Cargo.toml                                             modifié
-  ~ config/default.toml                                    modifié
-  ~ .env.example                                           modifié
   ~ .env                                                   modifié
-  + src/modules/mail/mod.rs                                créé
-  + src/modules/mail/config.rs                             créé
-  + src/modules/mail/template.rs                           créé
-  + src/modules/mail/service.rs                            créé
-  + src/modules/mail/tests.rs                              créé
-  + templates/mail/bienvenue.html                          créé
-  + src/modules/mod.rs                                     créé
-  ~ docker-compose.yml                                     modifié
-  + src/modules/rate_limit/mod.rs                          créé
-  + src/modules/rate_limit/config.rs                       créé
-  + src/modules/rate_limit/counter.rs                      créé
-  + src/modules/rate_limit/tests.rs                        créé
   ~ AGENTS.md                                              modifié
 
   46 fichiers à écrire

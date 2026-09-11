@@ -154,6 +154,7 @@ mod tests {
             root: root.to_path_buf(),
             actions: Vec::new(),
             files,
+            sautees: Vec::new(),
         }
     }
 

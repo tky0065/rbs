@@ -72,5 +72,9 @@ jobs:
       - name: migrations
         run: cargo run -p migration -- up
 
+      # Les tests qui joignent la base sont `#[ignore]` pour qu'un `cargo test` reste
+      # rapide sur le poste ; ici la base est montée et migrée, donc on les inclut — sans
+      # quoi la CI passe verte sans avoir exercé un seul CRUD. `--no-fail-fast` : un
+      # binaire de test rouge ne doit pas masquer ceux qui le suivent.
       - name: cargo test
-        run: cargo test --workspace
+        run: cargo test --workspace --no-fail-fast -- --include-ignored

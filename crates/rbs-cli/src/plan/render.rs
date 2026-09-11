@@ -4,10 +4,11 @@
 //! sont deux actions mais un seul changement, et c'est le fichier qui porte le statut
 //! agrégé qui dit la vérité.
 
-use super::{File, Plan, Status};
+use super::{File, Plan, Sautee, Status};
 use crate::ui;
 
-/// Rend le plan : la racine du projet en tête, puis un fichier par ligne.
+/// Rend le plan : la racine du projet en tête, un fichier par ligne, puis ce que le plan
+/// a renoncé à écrire.
 ///
 /// La puce et le libellé se suffisent à eux-mêmes : la couleur ne porte jamais seule une
 /// information, pour que la sortie reste lisible dans un `less`, un log ou une CI.
@@ -15,19 +16,56 @@ pub(crate) fn plan(plan: &Plan) -> String {
     let entete = format!("plan pour {}", plan.root().display());
     let files = plan.files();
 
-    if files.is_empty() {
-        return format!("{entete}\n\n  rien à faire");
+    let corps = if files.is_empty() {
+        "  rien à faire".to_string()
+    } else {
+        let width = files
+            .iter()
+            .map(|file| file.path.chars().count())
+            .max()
+            .unwrap_or(0);
+
+        let lines: Vec<String> = files.iter().map(|file| line(file, width)).collect();
+
+        format!("{}\n\n  {}", lines.join("\n"), footer(files))
+    };
+
+    match sautees(plan) {
+        Some(sautees) => format!("{entete}\n\n{corps}\n\n{sautees}"),
+        None => format!("{entete}\n\n{corps}"),
+    }
+}
+
+/// Les insertions que le plan a sautées, chacune avec son bloc à reporter.
+///
+/// Sous le tableau plutôt que dedans : le tableau dit ce qui s'écrira, et une ligne qui
+/// n'écrit rien y serait comptée. Exposée pour `rbs new`, qui n'affiche pas de plan mais
+/// doit dire la même chose de la feature qu'il vient de poser.
+pub(crate) fn sautees(plan: &Plan) -> Option<String> {
+    if plan.sautees().is_empty() {
+        return None;
     }
 
-    let width = files
+    let blocs: Vec<String> = plan.sautees().iter().map(sautee).collect();
+
+    Some(blocs.join("\n\n"))
+}
+
+/// Une insertion sautée : le fichier qui manque, l'ancre visée, le bloc — indenté d'un
+/// cran sous son annonce, indentation propre conservée, pour être collé tel quel.
+fn sautee(sautee: &Sautee) -> String {
+    let annonce = ui::yellow(&format!(
+        "{} absent : le bloc destiné à `{}` est à reporter vous-même",
+        sautee.anchor.file,
+        sautee.anchor.opening()
+    ));
+    let bloc: Vec<String> = sautee
+        .lines
         .iter()
-        .map(|file| file.path.chars().count())
-        .max()
-        .unwrap_or(0);
+        .map(|ligne| format!("    {ligne}"))
+        .collect();
 
-    let lines: Vec<String> = files.iter().map(|file| line(file, width)).collect();
-
-    format!("{entete}\n\n{}\n\n  {}", lines.join("\n"), footer(files))
+    format!("  {annonce}\n{}", bloc.join("\n"))
 }
 
 /// Ce qu'une ligne dit d'un fichier : sa puce, son chemin, ce qu'il adviendra de lui.
@@ -76,7 +114,7 @@ fn footer(files: &[File]) -> String {
 mod tests {
     use std::path::PathBuf;
 
-    use super::super::{File, Status};
+    use super::super::{File, Sautee, Status};
     use super::*;
 
     fn file(path: &str, before: Option<&str>, statut: Status) -> File {
@@ -93,6 +131,7 @@ mod tests {
             root: PathBuf::from("/projets/demo-api"),
             actions: Vec::new(),
             files,
+            sautees: Vec::new(),
         }
     }
 
@@ -216,6 +255,52 @@ mod tests {
             rendered.ends_with("1 fichier à écrire, 1 en conflit"),
             "{rendered}"
         );
+    }
+
+    fn mailpit() -> Sautee {
+        Sautee {
+            anchor: crate::anchors::SERVICES,
+            lines: vec![
+                "mailpit:".to_string(),
+                "  image: axllent/mailpit".to_string(),
+            ],
+        }
+    }
+
+    /// Ce que le plan ne fera pas se lit sous ce qu'il fera : le fichier qui manque,
+    /// l'ancre visée, et le bloc à reporter — nommé pour que l'utilisateur sache quel
+    /// service monter.
+    #[test]
+    fn a_skipped_insertion_names_its_file_its_anchor_and_carries_its_block() {
+        let mut plan = plan_of(vec![file("src/state.rs", Some("x"), Status::AFaire)]);
+        plan.sautees.push(mailpit());
+
+        let rendered = super::plan(&plan);
+
+        let (avant, apres) = rendered
+            .split_once("1 fichier à écrire")
+            .expect("le pied du tableau est là");
+        assert!(!avant.contains("docker-compose.yml"), "{rendered}");
+        assert!(apres.contains("docker-compose.yml absent"), "{rendered}");
+        assert!(apres.contains("# <rbs:services>"), "{rendered}");
+        assert!(apres.contains("mailpit:"), "{rendered}");
+        assert!(
+            apres.contains("  image: axllent/mailpit"),
+            "le bloc doit garder son indentation :\n{rendered}"
+        );
+    }
+
+    /// Un plan qui n'écrit rien mais saute une insertion n'est pas un plan sans effet :
+    /// « rien à faire » seul ferait croire que le service est en place.
+    #[test]
+    fn a_plan_with_nothing_but_a_skipped_insertion_still_announces_it() {
+        let mut plan = plan_of(Vec::new());
+        plan.sautees.push(mailpit());
+
+        let rendered = super::plan(&plan);
+
+        assert!(rendered.contains("rien à faire"), "{rendered}");
+        assert!(rendered.contains("docker-compose.yml absent"), "{rendered}");
     }
 
     #[test]

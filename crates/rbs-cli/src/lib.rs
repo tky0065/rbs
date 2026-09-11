@@ -290,6 +290,9 @@ fn create_project(
             ui::files(pose.files)
         ));
     }
+    if let Some(sautees) = &project.sautees {
+        ui::line(sautees);
+    }
     // `add` affiche ce conseil pour chaque feature qu'il installe ; `new` l'avalait,
     // laissant par exemple `--with auth` démarrer un projet où `RBS_AUTH__SECRET` manque
     // au `.env` sans que rien ne l'ait annoncé.
@@ -389,7 +392,7 @@ fn add_in(
     template_dir: Option<PathBuf>,
 ) -> Result<(), add::Error> {
     let planned = add::plan_for(&add::Options {
-        feature: feature.clone(),
+        features: vec![feature.clone()],
         directory,
         force,
         template_dir,

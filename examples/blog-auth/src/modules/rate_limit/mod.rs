@@ -104,13 +104,17 @@ fn client(
         .map(|ConnectInfo(pair)| pair.ip())
 }
 
-/// La première adresse de `X-Forwarded-For` : celle du client, les proxys suivant.
+/// La dernière adresse de `X-Forwarded-For` : celle que le proxy de confiance appose.
+///
+/// nginx, Traefik, Caddy et les ALB *ajoutent* l'adresse du pair en fin de liste sans
+/// toucher à ce qui précède ; la tête est donc ce que le client a bien voulu écrire, et
+/// l'imputer reviendrait à le laisser se choisir une clé neuve à chaque requête.
 fn forwarded_for(headers: &HeaderMap) -> Option<IpAddr> {
     headers
         .get(&FORWARDED_FOR)?
         .to_str()
         .ok()?
-        .split(',')
+        .rsplit(',')
         .next()?
         .trim()
         .parse()

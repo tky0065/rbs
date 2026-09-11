@@ -369,6 +369,40 @@ async fn an_expired_refresh_returns_401() {
     assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
 }
 
+/// La liste juge l'échéance à l'instant, comme `refresh` : une session échue d'une
+/// seconde n'y figure plus.
+///
+/// `refresh` compare en Rust, la liste dans la requête — et sur SQLite l'horloge du
+/// moteur n'avait pas le format textuel de la colonne : une session échue le jour même y
+/// restait listée jusqu'à minuit UTC.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_expired_session_is_no_longer_listed() {
+    let api = application().await;
+    let db = connection().await;
+    let (compte, paire) = login_as(&api).await;
+
+    let mut ligne: refresh_token::ActiveModel = session_row(&db, compte).await.into();
+    ligne.expires_at = Set((Utc::now() - chrono::Duration::seconds(1)).fixed_offset());
+    ligne.update(&db).await.expect("expiration reculée");
+
+    let (status, body) = call(
+        &api,
+        get_authenticated(
+            "/auth/sessions",
+            paire["access_token"].as_str().expect("jeton d'accès"),
+        ),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(
+        body.as_array().map(Vec::len),
+        Some(0),
+        "une session échue est encore listée : {body}"
+    );
+}
+
 /// Une base lue par un tiers ne lui donne aucune session utilisable.
 #[tokio::test]
 #[ignore = "joint la base du projet"]
