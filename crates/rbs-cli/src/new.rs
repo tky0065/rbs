@@ -61,6 +61,12 @@ pub struct InstalledFeature {
     pub files: usize,
     /// Le fragment a posé une migration.
     pub migration: bool,
+    /// Ce que le fragment n'a pas pu insérer, faute de fichier porteur, rendu tel que
+    /// `rbs add` l'affiche sous son plan.
+    ///
+    /// `new` n'affiche pas de plan : sans ce relais, `--database sqlite --with auth`
+    /// poserait `mail` sans jamais dire que son service `mailpit` n'est monté nulle part.
+    pub sautees: Option<String>,
 }
 
 /// Ce qui peut empêcher la création d'un projet.
@@ -257,6 +263,7 @@ fn install(
         .iter()
         .any(|file| file.starts_with("migration/src/"));
     let files = planned.files.len();
+    let sautees = crate::plan::render::sautees(&planned.plan);
 
     crate::plan::application::apply(&planned.plan, false)?;
 
@@ -264,6 +271,7 @@ fn install(
         name: feature.to_string(),
         files,
         migration,
+        sautees,
     }))
 }
 
@@ -933,6 +941,36 @@ mod tests {
         }
     }
 
+    /// Un projet SQLite n'a pas de compose : `mail` s'y pose quand même, et ce que son
+    /// service n'a pas trouvé où aller remonte avec la feature, pour que `rbs new`
+    /// l'affiche là où `rbs add` aurait montré son plan.
+    #[test]
+    fn a_sqlite_project_created_with_mail_reports_the_service_left_to_mount() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+        let project = create(
+            &Options {
+                name: "demo".to_string(),
+                database_url: "sqlite://demo.db?mode=rwc".to_string(),
+                database: Database::Sqlite,
+                features: vec!["mail".to_string()],
+                core_path: None,
+                template_dir: None,
+                lang: crate::lang::Lang::Fr,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        assert!(!project.root.join(COMPOSE).exists());
+        assert_eq!(project.installed.len(), 1);
+        let sautees = project.installed[0]
+            .sautees
+            .as_deref()
+            .expect("le service sans compose doit être signalé");
+        assert!(sautees.contains("docker-compose.yml absent"), "{sautees}");
+        assert!(sautees.contains("mailpit:"), "{sautees}");
+    }
+
     #[test]
     fn a_requested_feature_is_actually_installed() {
         let parent = TempDir::new().expect("répertoire temporaire créable");
@@ -961,6 +999,7 @@ mod tests {
         assert_eq!(project.installed.len(), 1);
         assert_eq!(project.installed[0].name, "auth");
         assert!(project.installed[0].migration);
+        assert_eq!(project.installed[0].sautees, None);
     }
 
     /// L'ordre de frappe ne doit pas décider du contenu : deux `--with` équivalents
