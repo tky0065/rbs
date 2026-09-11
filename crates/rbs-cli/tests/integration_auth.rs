@@ -486,6 +486,64 @@ fn the_auth_tests_of_the_generated_project_pass() {
     );
 }
 
+/// Les mêmes tests contre SQLite, qui ne compare pas les dates comme PostgreSQL.
+///
+/// `timestamptz` est comparé comme un instant ; SQLite compare le texte que sqlx a écrit
+/// à celui que son horloge rend, et les deux n'avaient pas le même format : toute
+/// échéance du jour passait pour future. Le banc PostgreSQL ne peut pas voir ce défaut,
+/// et c'est le seul moteur qu'il exerce.
+///
+/// Aucun conteneur n'est requis : la base est un fichier du projet. Une cible propre,
+/// comme pour le banc SQLite d'`integration_crud` : SQLite active des features `sea-orm`
+/// que PostgreSQL n'active pas.
+#[test]
+#[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn the_auth_tests_of_the_generated_project_pass_on_sqlite() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_auth_on_engine("sqlite", "sqlite://demo_api.db?mode=rwc", &parent);
+
+    let cible = common::cible_pour("auth-sqlite");
+    let _verrou = common::verrou(&cible);
+
+    Command::cargo_bin("rbs")
+        .expect("le binaire rbs doit être compilé")
+        .current_dir(&racine)
+        .env("CARGO_TARGET_DIR", &cible)
+        .args(["migrate", "up"])
+        .assert()
+        .success();
+
+    let sortie = Command::new("cargo")
+        .current_dir(&racine)
+        .env("CARGO_TARGET_DIR", &cible)
+        .args(["test", "--workspace", "--", "--include-ignored"])
+        .output()
+        .expect("cargo doit être lançable");
+
+    let rendu = format!(
+        "{}{}",
+        String::from_utf8_lossy(&sortie.stdout),
+        String::from_utf8_lossy(&sortie.stderr)
+    );
+
+    assert!(
+        sortie.status.success(),
+        "la suite du projet engendré échoue sur SQLite :\n{rendu}"
+    );
+
+    // Nommés plutôt que comptés : `--include-ignored` sort en 0 même quand rien ne
+    // filtre, et ce sont ces deux tests qui distinguent un instant d'un jour.
+    for test in [
+        "auth::tests::password::an_expired_reset_token_is_refused_by_consume_and_removed_by_the_purge",
+        "auth::tests::session::an_expired_session_is_no_longer_listed",
+    ] {
+        assert!(
+            rendu.contains(&format!("test {test} ... ok")),
+            "`{test}` n'a pas été joué sur SQLite :\n{rendu}"
+        );
+    }
+}
+
 /// Le harnais qu'un CRUD engendré sous `auth` reçoit, joué contre une vraie base.
 ///
 /// Ici plutôt que dans `integration_crud` : ce que ce test éprouve n'est pas le CRUD mais
@@ -916,6 +974,11 @@ fn url_of(postgres: &Container<GenericImage>) -> String {
 ///
 /// Les migrations ne sont pas appliquées : le test du schéma a besoin de l'état d'avant.
 fn project_with_auth_on(url: &str, parent: &TempDir) -> PathBuf {
+    project_with_auth_on_engine("postgres", url, parent)
+}
+
+/// Le même projet, sur le moteur nommé.
+fn project_with_auth_on_engine(moteur: &str, url: &str, parent: &TempDir) -> PathBuf {
     let racine = parent.path().join("demo-api");
 
     Command::cargo_bin("rbs")
@@ -924,6 +987,8 @@ fn project_with_auth_on(url: &str, parent: &TempDir) -> PathBuf {
         .args([
             "new",
             "demo-api",
+            "--database",
+            moteur,
             "--database-url",
             url,
             "--core-path",
@@ -934,6 +999,18 @@ fn project_with_auth_on(url: &str, parent: &TempDir) -> PathBuf {
         ])
         .assert()
         .success();
+
+    // Un projet SQLite n'a pas de compose, et `add auth` — qui installe `mail` — refuse
+    // encore un fichier absent malgré l'ancre déclarée optionnelle. Le compose minimal
+    // posé ici tient lieu de celui que `rbs new` écrit pour les autres moteurs : ce banc
+    // éprouve les dates du fragment, pas l'installation sans compose.
+    if moteur == "sqlite" {
+        fs::write(
+            racine.join("docker-compose.yml"),
+            "name: demo-api\n\nservices:\n  # <rbs:services>\n  # </rbs:services>\n",
+        )
+        .expect("docker-compose.yml inscriptible");
+    }
 
     common::commiter(&racine, "projet neuf");
 
