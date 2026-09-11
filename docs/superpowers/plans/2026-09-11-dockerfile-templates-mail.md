@@ -30,7 +30,7 @@
 - Consumes: le helper `projected(&planned, "<chemin>")` des tests d'`add/mod.rs` (lit un fichier tel que le plan l'écrira) — voir son usage ligne ~1181.
 - Produces: le `Dockerfile` rendu contient `COPY --from=builder /build/templates* ./templates/`.
 
-- [ ] **Step 1: Écrire le test de rendu qui échoue**
+- [x] **Step 1: Écrire le test de rendu qui échoue**
 
 Dans `crates/rbs-cli/src/add/mod.rs`, module `tests`, à côté du test existant sur `docker` (chercher `features = ["health", "docker"]`, ligne ~812, et reprendre sa façon de construire `planned`) :
 
@@ -52,7 +52,7 @@ Dans `crates/rbs-cli/src/add/mod.rs`, module `tests`, à côté du test existant
 
 Remplacer les deux premières lignes par la construction exacte qu'emploie le test voisin (lire ce test avant d'écrire).
 
-- [ ] **Step 2: Le voir échouer**
+- [x] **Step 2: Le voir échouer**
 
 ```bash
 cargo test -p rbs-cli --lib -- the_dockerfile_ships_the_templates_directory 2>&1 | tail -8
@@ -60,7 +60,7 @@ cargo test -p rbs-cli --lib -- the_dockerfile_ships_the_templates_directory 2>&1
 
 Attendu : `FAILED`, message « l'étage runtime n'embarque pas templates/ ».
 
-- [ ] **Step 3: Écrire la ligne dans la template**
+- [x] **Step 3: Écrire la ligne dans la template**
 
 Dans `Dockerfile.jinja`, après `COPY config ./config` :
 
@@ -73,7 +73,7 @@ Dans `Dockerfile.jinja`, après `COPY config ./config` :
 COPY --from=builder /build/templates* ./templates/
 ```
 
-- [ ] **Step 4: Le voir passer, avec les voisins**
+- [x] **Step 4: Le voir passer, avec les voisins**
 
 ```bash
 cargo test -p rbs-cli --lib -- add:: 2>&1 | tail -5
@@ -81,7 +81,7 @@ cargo test -p rbs-cli --lib -- add:: 2>&1 | tail -5
 
 Attendu : tous verts, dont `the_dockerfile_ships_the_templates_directory`.
 
-- [ ] **Step 5: Preuve BuildKit sur le Dockerfile réellement rendu**
+- [x] **Step 5: Preuve BuildKit sur le Dockerfile réellement rendu**
 
 Rendre deux projets (avec et sans `mail`) et construire l'étage runtime seul, en substituant à l'étage `builder` une copie du contexte (compiler le projet dans l'image prendrait dix minutes et ne prouverait rien de plus sur le `COPY`) :
 
@@ -102,7 +102,7 @@ Attendu : pour `avec`, la liste montre `/app/templates/mail:` puis `bienvenue.ht
 
 Note : le `Dockerfile.runtime` retire aussi le `USER api` ? Non — le laisser, `ls` fonctionne sous `api`. Si `debian:trixie-slim` n'est pas en cache local, le premier build le tire (quelques secondes).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add crates/rbs-cli/templates/features/docker/Dockerfile.jinja crates/rbs-cli/src/add/mod.rs
@@ -118,14 +118,14 @@ git commit -m "fix(docker): embarque templates/ dans l'image pour que mail envoi
 **Files:**
 - Vérifier : `docs/docs/cli/add.md:46,68-90` et FR (`docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md`), `docs/docs/guides/mail.md` et FR (`grep -n 'templates/mail\|conteneur\|container\|compose' …`).
 
-- [ ] **Step 1: Chercher ce que la doc dit du contenu de l'image et du chemin des gabarits**
+- [x] **Step 1: Chercher ce que la doc dit du contenu de l'image et du chemin des gabarits**
 
 ```bash
 grep -n 'templates/mail\|container\|conteneur\|compose' docs/docs/guides/mail.md docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/mail.md
 grep -n 'config/\|image' docs/docs/cli/add.md | sed -n 1,10p
 ```
 
-- [ ] **Step 2: Si `mail.md` parle du chemin relatif `templates/mail` sans dire ce qu'il implique en conteneur, ajouter une phrase EN + FR**
+- [x] **Step 2: Si `mail.md` parle du chemin relatif `templates/mail` sans dire ce qu'il implique en conteneur, ajouter une phrase EN + FR**
 
 Exemple EN, à la suite du paragraphe qui nomme `templates/mail` :
 
@@ -137,7 +137,7 @@ under `docker compose --profile app up`.
 
 Et l'équivalent FR. Si aucune page ne décrit ni le chemin ni l'image, ne rien écrire — le dire dans le rapport.
 
-- [ ] **Step 3: Vérifier**
+- [x] **Step 3: Vérifier**
 
 ```bash
 cargo test -p rbs-cli --test integration_docs 2>&1 | tail -5
@@ -146,7 +146,7 @@ cd docs && node scripts/parite.mjs 2>&1 | tail -5
 
 Attendu : vert ; parité sans écart nouveau (l'écart `IMPROVE_OLD.md` préexiste, tâche 28 du backlog).
 
-- [ ] **Step 4: Commit (seulement si une page a changé)**
+- [x] **Step 4: Commit (seulement si une page a changé)**
 
 ```bash
 git commit -am "docs(mail): dit que l'image Docker embarque les gabarits de courriel" -m "Vérifications :
@@ -158,7 +158,7 @@ git commit -am "docs(mail): dit que l'image Docker embarque les gabarits de cour
 
 ### Task 3: Passe finale
 
-- [ ] **Step 1:**
+- [x] **Step 1:**
 
 ```bash
 cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings 2>&1 | tail -3 && cargo test -p rbs-cli --lib 2>&1 | tail -3
@@ -166,4 +166,4 @@ cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings
 
 Attendu : fmt muet, clippy sans warning, tests lib verts.
 
-- [ ] **Step 2: Rapport** — branche, `git log --oneline main..HEAD`, et pour chaque preuve la ligne exacte lue.
+- [x] **Step 2: Rapport** — branche, `git log --oneline main..HEAD`, et pour chaque preuve la ligne exacte lue.

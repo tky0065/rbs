@@ -102,6 +102,10 @@ que nomme `templates` — `templates/mail` par défaut :
 ```html file=examples/newsletter-queue/templates/mail/newsletter.html
 ```
 
+Le chemin est relatif au répertoire de travail : le `Dockerfile` qu'écrit `rbs add docker`
+copie `templates/` à côté de `config/` dans l'image, si bien que la même configuration
+vaut sous `docker compose --profile app up`.
+
 `Templates` enveloppe l'environnement dans un `Arc`, parce qu'`AppState` se clone à chaque
 requête et que les gabarits doivent être chargés une fois, non une fois par appel. Il
 emploie le `path_loader` de minijinja, qui refuse un nom absolu ou remontant : un nom de
