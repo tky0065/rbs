@@ -45,7 +45,7 @@ Options:
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, and its `api`/`migrate` services inserted into the project's compose — a whole `docker-compose.yml` when there is none | `docker compose --profile app up --build` |
 | `ci` | `.github/workflows/ci.yml` | `git push` |
-| `auth` | twenty-one files under `src/auth/`, two mail templates, one migration, edits to ten project files — and `mail` and `rate-limit`, which it requires | `rbs migrate up` |
+| `auth` | twenty-one files under `src/auth/`, two mail templates, one migration, edits to nine project files of its own — and `mail` and `rate-limit`, which it requires | `rbs migrate up` |
 | `jobs` | seven files under `src/modules/jobs/`, one migration, and a `[jobs]` config section | `rbs migrate up`, then register your jobs in `src/modules/jobs/mod.rs` |
 | `scheduler` | six files under `src/modules/scheduler/`, one migration, a `[scheduler]` config section, a ticker in `// <rbs:startup>` — and `jobs`, which it requires | `rbs migrate up`, then declare your schedules in `src/modules/scheduler/mod.rs` |
 | `redis` | three files under `src/modules/cache/`, and a `redis` service inserted into the project's compose | the compose already carries it — `docker compose up -d` starts it |
