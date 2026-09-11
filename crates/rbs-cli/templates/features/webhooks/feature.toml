@@ -4,10 +4,11 @@ description = "webhooks sortants : abonnements, signature HMAC horodatée, livra
 # `available_at`, `last_error`. Un second mécanisme de réessai n'aurait laissé que deux
 # boucles à maintenir.
 #
-# `auth` protège les trois routes d'abonnement. Une création laissée ouverte permettrait à
-# n'importe qui de faire livrer chez lui les événements du projet — `user.created` porte des
-# adresses. C'est le même arbitrage qu'`auth`, qui exige `rate-limit` pour la même raison :
-# une protection dont l'absence se paie en fuite de données n'est pas facultative.
+# `auth` fournit `Role` et sa garde : les trois routes d'abonnement exigent `Role::Admin`.
+# Sous un simple jeton valide, n'importe quel compte auto-inscrit pourrait faire livrer
+# chez lui les événements du projet — `user.created` porte des adresses. C'est le même
+# arbitrage qu'`auth`, qui exige `rate-limit` pour la même raison : une protection dont
+# l'absence se paie en fuite de données n'est pas facultative.
 requires = ["jobs", "auth"]
 
 [[files]]

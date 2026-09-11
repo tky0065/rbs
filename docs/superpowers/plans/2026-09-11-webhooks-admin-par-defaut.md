@@ -30,11 +30,11 @@
 - Consumes: `crate::auth::guard::RequireRole::require_role(&self, minimum: Role) -> Result<()>` (`templates/features/auth/guard.rs.jinja:31-37`), `crate::auth::model::Role::{User, Admin}`.
 - Produces: les trois handlers `subscribe`, `list`, `revoke` rendent 403 (`ProblemDetails`) sous un rôle inférieur à `Admin`.
 
-- [ ] **Step 1: Lire le patron du CRUD**
+- [x] **Step 1: Lire le patron du CRUD**
 
 Lire `crates/rbs-cli/templates/feature/controller.rs.jinja:1-9,40-50,70-80` : les deux `use`, la forme `identite.require_role(Role::…)?;` en première ligne du corps, et la ligne `(status = 403, …)` de l'annotation utoipa. Lire `templates/features/auth/model.rs.jinja:13-25` pour la valeur chaîne des rôles (`user` / `admin`), dont les tests auront besoin.
 
-- [ ] **Step 2: Réécrire le contrôleur**
+- [x] **Step 2: Réécrire le contrôleur**
 
 Dans `controller.rs.jinja` :
 
@@ -71,11 +71,11 @@ use crate::auth::model::Role;
 
 (vérifier le libellé exact employé par `templates/feature/controller.rs.jinja` pour son 403 et reprendre le même mot pour mot.)
 
-- [ ] **Step 3: Aligner le commentaire de `feature.toml`**
+- [x] **Step 3: Aligner le commentaire de `feature.toml`**
 
 Lignes 7-11 de `feature.toml` : remplacer « `auth` protège les trois routes d'abonnement. » par une phrase qui dit que les trois routes sont sous `Role::Admin`, en gardant le reste de l'argument (fuite de données, même arbitrage qu'`auth`/`rate-limit`).
 
-- [ ] **Step 4: Vérifier que rien côté rbs ne fige l'ancien texte**
+- [x] **Step 4: Vérifier que rien côté rbs ne fige l'ancien texte**
 
 ```bash
 grep -rn "_identite\|Identity. ne dit que" crates/rbs-cli/tests crates/rbs-cli/src docs/docs docs/i18n
@@ -83,7 +83,7 @@ grep -rn "_identite\|Identity. ne dit que" crates/rbs-cli/tests crates/rbs-cli/s
 
 Attendu : aucune occurrence dans `tests/` ni `src/` (sinon adapter la chaîne figée) ; les deux occurrences de `docs/` sont traitées en Task 3.
 
-- [ ] **Step 5: Rendre le fragment et vérifier la sortie**
+- [x] **Step 5: Rendre le fragment et vérifier la sortie**
 
 ```bash
 cargo test -p rbs-cli --lib -- webhooks 2>&1 | tail -20
@@ -101,7 +101,7 @@ cd demo && cargo fmt --check -- src/modules/webhooks/controller.rs && echo FMT_O
 
 Attendu : trois `require_role(Role::Admin)`, trois `status = 403`, `FMT_OK`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add crates/rbs-cli/templates/features/webhooks/controller.rs.jinja crates/rbs-cli/templates/features/webhooks/feature.toml
@@ -122,7 +122,7 @@ git commit -m "fix(webhooks): réserve les trois routes d'abonnement au rôle ad
 - Consumes: `table_a_soi()` (verrou + base vidée + `AppState`), `crate::router::router(state) -> Router`, `rbs_core::jwt::{Claims, sign}`, `rbs_core::Config::load()`.
 - Produces: deux tests `#[ignore = "joint la base du projet"]` nommés `a_user_role_is_refused_on_the_three_routes` et `an_admin_subscribes_then_reads_and_revokes`.
 
-- [ ] **Step 1: Ajouter les imports et les deux helpers**
+- [x] **Step 1: Ajouter les imports et les deux helpers**
 
 En tête de `tests.rs.jinja`, ajouter (en respectant le tri de rustfmt) :
 
@@ -188,7 +188,7 @@ async fn call(api: &Router, request: Request<Body>) -> (StatusCode, Value) {
 
 Adapter `"user"` / `"admin"` aux valeurs lues dans `auth/model.rs.jinja` (Task 1, Step 1). `chrono` est une dépendance du squelette (le CRUD engendré l'emploie déjà dans son `token`).
 
-- [ ] **Step 2: Écrire les deux tests (ils échouent tant que Task 1 n'est pas rendue — ici Task 1 précède, ils doivent passer ; le « rouge » a été observé par l'audit : 201 pour un `user`)**
+- [x] **Step 2: Écrire les deux tests (ils échouent tant que Task 1 n'est pas rendue — ici Task 1 précède, ils doivent passer ; le « rouge » a été observé par l'audit : 201 pour un `user`)**
 
 ```rust
 /// Le rôle par défaut des routes est `Admin` : un compte auto-inscrit, qui reçoit `User`,
@@ -236,7 +236,7 @@ async fn an_admin_subscribes_then_reads_and_revokes() {
 
 Vérifier les noms des champs de `SubscriptionCreated` dans `dto.rs.jinja` (`id`, `url`, `events`, `secret`) et adapter.
 
-- [ ] **Step 3: Rendre et formater**
+- [x] **Step 3: Rendre et formater**
 
 ```bash
 cd $S && rm -rf demo && cargo run -q --manifest-path /Users/yacoubakone/dev/rs/Cargo.toml -p rbs-cli --bin rbs -- new demo --yes --with webhooks --database-url 'postgres://rbs:rbs@localhost:5432/demo' >/dev/null && cd demo && cargo fmt --check -- src/modules/webhooks/tests.rs && echo FMT_OK && cargo check --tests 2>&1 | tail -5
@@ -244,11 +244,11 @@ cd $S && rm -rf demo && cargo run -q --manifest-path /Users/yacoubakone/dev/rs/C
 
 Attendu : `FMT_OK` et `cargo check --tests` sans erreur (`Finished`). Si rustfmt reformate, reporter la mise en forme dans la template (attention : `-%}` mange l'indentation, cf. mémoire).
 
-- [ ] **Step 4: Inscrire les deux noms côté rbs**
+- [x] **Step 4: Inscrire les deux noms côté rbs**
 
 Dans `integration_webhooks.rs`, `TESTS_SOUS_CONTENEUR: [&str; 7]` avec les deux nouveaux noms en fin de liste, et corriger le commentaire des lignes ~46-49 (« six des treize tests livrés … les sept autres »).
 
-- [ ] **Step 5: La preuve lente — Docker**
+- [x] **Step 5: La preuve lente — Docker**
 
 ```bash
 cd /chemin/du/worktree
@@ -257,7 +257,7 @@ cargo test -p rbs-cli --test integration_webhooks -- --ignored --no-fail-fast > 
 
 Attendu : `test result: ok. 1 passed` (plusieurs minutes : PostgreSQL via testcontainers, compilation d'un projet complet). Lire le log en entier avant toute affirmation.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add crates/rbs-cli/templates/features/webhooks/tests.rs.jinja crates/rbs-cli/tests/integration_webhooks.rs
@@ -274,7 +274,7 @@ git commit -m "test(webhooks): prouve le 403 d'un rôle user et le cycle complet
 - Modify: `docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/webhooks.md:99-101`
 - Vérifier : `docs/docs/cli/add.md` et sa version FR (ligne du tableau `webhooks`), `crates/rbs-cli/templates/agents/{fr,en}.md.jinja` (`grep -n webhooks`).
 
-- [ ] **Step 1: Réécrire le paragraphe EN**
+- [x] **Step 1: Réécrire le paragraphe EN**
 
 Remplacer le paragraphe « `Identity` only says "the token is valid". … » par :
 
@@ -286,11 +286,11 @@ to any account, replace `Role::Admin` with `Role::User` on its `require_role` ca
 the [auth guide](./auth.md) for the guard.
 ```
 
-- [ ] **Step 2: Réécrire le paragraphe FR**
+- [x] **Step 2: Réécrire le paragraphe FR**
 
 Même contenu en français, même position, dans le fichier FR.
 
-- [ ] **Step 3: Vérifier les autres mentions et la parité**
+- [x] **Step 3: Vérifier les autres mentions et la parité**
 
 ```bash
 grep -rn "webhooks" docs/docs/cli/add.md docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md crates/rbs-cli/templates/agents/ | grep -i "identity\|jeton\|token\|rôle\|role"
@@ -300,7 +300,7 @@ cd docs && node scripts/parite.mjs 2>&1 | tail -5
 
 Attendu : aucune mention contradictoire ; `integration_docs` vert ; parité sans écart nouveau (l'écart `IMPROVE_OLD.md` préexiste, tâche 28 du backlog).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add docs/docs/guides/webhooks.md docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/webhooks.md
@@ -313,7 +313,7 @@ git commit -m "docs(webhooks): documente le rôle admin exigé par défaut sur l
 
 ### Task 4: Passe finale
 
-- [ ] **Step 1: Lint et format du workspace**
+- [x] **Step 1: Lint et format du workspace**
 
 ```bash
 cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings 2>&1 | tail -3 && cargo test -p rbs-cli --lib 2>&1 | tail -3
@@ -321,4 +321,4 @@ cargo fmt --all --check && cargo clippy --workspace --all-targets -- -D warnings
 
 Attendu : aucune sortie de fmt, clippy `Finished` sans warning, tests lib verts.
 
-- [ ] **Step 2: Rapport** — branche, commits (`git log --oneline main..HEAD`), et pour chaque preuve la ligne exacte lue dans la sortie.
+- [x] **Step 2: Rapport** — branche, commits (`git log --oneline main..HEAD`), et pour chaque preuve la ligne exacte lue dans la sortie.
