@@ -727,6 +727,26 @@ mod tests {
         );
     }
 
+    // Tout test qui joint la base est `#[ignore]` pour qu'un `cargo test` reste rapide sur
+    // le poste ; la CI, elle, vient de monter cette base et de la migrer : sans
+    // `--include-ignored`, elle passait verte sans exécuter un seul test de CRUD.
+    #[test]
+    fn the_workflow_runs_the_tests_that_reach_the_database() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "ci")).expect("le plan doit se calculer");
+        let workflow = projected(&planned, ".github/workflows/ci.yml");
+
+        assert!(
+            workflow.contains("-- --include-ignored"),
+            "le workflow laisse de côté les tests ignorés :\n{workflow}"
+        );
+        assert!(
+            workflow.contains("--no-fail-fast"),
+            "un binaire de test rouge masquerait les suivants :\n{workflow}"
+        );
+    }
+
     /// L'inventaire est ce que l'agent lit pour savoir ce que le projet porte : une
     /// feature installée qui n'y figure pas le renvoie explorer le disque.
     #[test]

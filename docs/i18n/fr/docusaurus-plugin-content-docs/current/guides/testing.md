@@ -64,11 +64,16 @@ Depuis la racine du projet, avec une base joignable :
 
 ```bash
 rbs migrate up
-cargo test
+cargo test -- --include-ignored
 ```
 
 La première commande n'est pas facultative : `application()` échoue avec un message qui le
 dit si le schéma n'est pas là.
+
+Le `--include-ignored` ne l'est pas davantage. Tout test qui joint la base est marqué
+`#[ignore = "joint la base du projet"]`, pour qu'un `cargo test` nu reste rapide sur un
+poste où rien ne tourne — et il n'y lance alors rien qui compte. Le workflow qu'installe
+`rbs add ci` passe le même drapeau, après avoir démarré la base et l'avoir migrée.
 
 ## Comment rbs se teste lui-même
 
