@@ -96,9 +96,11 @@ abonné de quoi contrefaire les événements livrés à tous les autres. Il n'es
 la réponse de création : une seule lecture de la liste livrerait sinon les secrets de tout
 le monde d'un coup.
 
-`Identity` ne dit que « le jeton est valide ». Un projet qui réserve l'administration des
-abonnements à un rôle remplace l'extracteur par sa propre garde — voir `src/auth/guard.rs`
-et le [guide auth](./auth.md).
+Les trois routes exigent `Role::Admin`. Un abonnement livre les événements du projet à qui
+l'a créé, et `/auth/register` est ouvert : sous un simple jeton valide, n'importe qui
+pourrait se faire livrer tous les événements, ou révoquer l'abonnement d'un autre. Pour
+ouvrir une route à tout compte, remplacez `Role::Admin` par `Role::User` sur son appel à
+`require_role` — voir le [guide auth](./auth.md) pour la garde.
 
 ## Les motifs d'événement
 

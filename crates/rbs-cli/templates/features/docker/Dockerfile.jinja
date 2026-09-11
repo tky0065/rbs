@@ -25,6 +25,12 @@ COPY --from=builder /build/target/release/migration /usr/local/bin/
 
 WORKDIR /app
 COPY config ./config
+# `mail` lit `templates/mail` à l'exécution, par un chemin relatif à /app : sans cette
+# couche, l'API journalise « envoi échoué » à chaque courriel et n'envoie rien. Le motif
+# tient lieu de condition — BuildKit copie ce qu'il trouve et ne se plaint pas du reste —
+# et la ligne vaut quel que soit l'ordre dans lequel `mail` et `docker` ont été posés,
+# `rbs add mail` après coup compris.
+COPY --from=builder /build/templates* ./templates/
 
 USER api
 EXPOSE 8080

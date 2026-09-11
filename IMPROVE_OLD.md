@@ -1,3 +1,5 @@
+> **[DÉPRÉCIÉ]** — backlog du scan du 2026-08-30 (v1.1.0), 126 tâches sur 126 faites. Le backlog ouvert est [`IMPROVE.md`](IMPROVE.md) (scan du 2026-09-11, v1.4.0). Ce fichier est conservé comme journal de preuves, on n'y coche plus rien.
+
 # IMPROVE — backlog d'améliorations
 
 **Scan du 2026-08-30**, sur le commit `c5486c2` (`main`, arbre propre, v1.1.0 publiée).

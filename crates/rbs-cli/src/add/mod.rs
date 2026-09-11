@@ -814,6 +814,21 @@ mod tests {
         );
     }
 
+    /// Le fragment `mail` lit `templates/mail` à l'exécution : une image qui ne l'embarque
+    /// pas n'envoie aucun courriel, et rien ne le dit avant le premier `register`.
+    #[test]
+    fn the_dockerfile_ships_the_templates_directory() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+
+        let dockerfile = projected(&planned, "Dockerfile");
+        assert!(
+            dockerfile.contains("COPY --from=builder /build/templates* ./templates/"),
+            "l'étage runtime n'embarque pas templates/ :\n{dockerfile}"
+        );
+    }
+
     /// Le manifeste de `ci` désigne sa template par son chemin dans le fragment, répertoire
     /// caché compris : une déclaration fautive rendrait `TemplateAbsente` au lieu du plan.
     #[test]
@@ -1179,7 +1194,12 @@ mod tests {
         );
 
         let configuration = projected(&planned, "config/default.toml");
-        for cle in ["max_attempts", "retry_delay_secs", "poll_interval_secs"] {
+        for cle in [
+            "max_attempts",
+            "retry_delay_secs",
+            "poll_interval_secs",
+            "lease_secs",
+        ] {
             assert!(
                 configuration.contains(cle),
                 "`{cle}` manque à la section [jobs] :\n{configuration}"

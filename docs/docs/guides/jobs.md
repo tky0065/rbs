@@ -70,7 +70,7 @@ broker's fan-out is not what this feature is. The trade is deliberate, and the
 ```rust file=examples/newsletter-queue/src/modules/jobs/config.rs
 ```
 
-Three settings, all with defaults written where the section is declared rather than in the
+Four settings, all with defaults written where the section is declared rather than in the
 core, so you can read and change them in one place:
 
 ```toml
@@ -78,7 +78,11 @@ core, so you can read and change them in one place:
 max_attempts = 5
 retry_delay_secs = 30
 poll_interval_secs = 1
+lease_secs = 300
 ```
+
+`lease_secs` is the delay after which a reservation nobody reported on — the worker died
+mid-job — is given back to the queue; keep it above your longest job.
 
 `config/{env}.toml` and the `RBS_JOBS__*` variables override them like any other section —
 see the [configuration guide](./configuration.md).
@@ -153,8 +157,9 @@ are handled where they happen, and each answer is deliberate:
   taking the server with it. The API still answers, and the queue fills without draining;
 - **the database is momentarily unreachable** — the worker sleeps and tries the next
   round, rather than returning for good;
-- **the job's fate cannot be written back** — the row stays `running` and stops being
-  dequeued. Saying so is all the worker can do; the database is not answering.
+- **the job's fate cannot be written back** — the row stays `running` until the lease
+  runs out, and is then replayed. Saying so is all the worker can do; the database is not
+  answering.
 
 :::note
 There is one worker per process, and it polls. Several processes can run one each: the
@@ -173,6 +178,13 @@ those live, and watching it is yours to arrange.
 The counter is incremented at reservation, not at failure. A worker killed mid-job has
 therefore already spent the attempt: the job is not stuck being retried forever by a
 process that keeps dying on it.
+
+A worker that dies between reserving a job and reporting on it leaves the row `running`.
+Past `lease_secs`, the next worker tour gives it back to the queue: `pending` again, its
+attempt spent. Once `max_attempts` is reached, an abandoned job is marked `failed` like an
+ordinary failure — a job that kills its worker every time never reaches the retry path,
+and would otherwise be reserved forever. A job that legitimately runs longer than the
+lease is replayed — set the lease above your longest job.
 
 ## Testing
 

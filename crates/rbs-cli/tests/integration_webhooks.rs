@@ -29,12 +29,14 @@ const TESTS_ORDINAIRES: [&str; 6] = [
 ];
 
 /// Ce qu'il livre et qui joint la base.
-const TESTS_SOUS_CONTENEUR: [&str; 5] = [
+const TESTS_SOUS_CONTENEUR: [&str; 7] = [
     "emitting_an_event_enqueues_one_delivery_per_listening_subscription",
     "a_revoked_subscription_is_not_delivered_to",
     "a_subscription_that_does_not_listen_receives_nothing",
     "a_delivery_whose_subscription_was_revoked_succeeds_without_a_request",
     "an_emission_rolled_back_with_its_transaction_enqueues_nothing",
+    "a_user_role_is_refused_on_the_three_routes",
+    "an_admin_subscribes_then_reads_and_revokes",
 ];
 
 #[test]
@@ -50,8 +52,8 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
 
     migrate_dans(&racine, &common::cible());
 
-    // Les deux flux sont exigés séparément : six des onze tests livrés n'ont besoin
-    // d'aucune base et sortent sous `cargo test` ordinaire, les cinq autres sous
+    // Les deux flux sont exigés séparément : six des treize tests livrés n'ont besoin
+    // d'aucune base et sortent sous `cargo test` ordinaire, les sept autres sous
     // `--ignored`. Les confondre ferait passer ce test sans qu'un seul des deux groupes
     // soit vraiment joué.
     let (abouti, ordinaires) = cargo_test_brut(&racine, &common::cible(), &[]);
@@ -70,7 +72,7 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     );
 
     // `cargo test -- --ignored` sort en 0 même quand il ne filtre **aucun** test : sans
-    // ces cinq lignes, un fragment qui cesserait de livrer ses tests laisserait celui-ci
+    // ces sept lignes, un fragment qui cesserait de livrer ses tests laisserait celui-ci
     // au vert sans qu'une seule transaction ait été ouverte.
     for test in TESTS_SOUS_CONTENEUR {
         assert!(
