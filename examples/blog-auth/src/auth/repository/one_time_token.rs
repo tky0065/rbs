@@ -29,6 +29,7 @@ pub async fn issue(
         token_hash: Set(fingerprint),
         purpose: Set(purpose),
         expires_at: Set(expires_at),
+        created_at: Set(Utc::now().fixed_offset()),
         ..Default::default()
     }
     .insert(db)

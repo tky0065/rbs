@@ -31,6 +31,10 @@ pub async fn create_refresh_token(
         user_id: Set(user_id),
         token_hash: Set(fingerprint),
         expires_at: Set(expire_a),
+        // Posé ici et non par le défaut de colonne : `CURRENT_TIMESTAMP` est à la seconde
+        // sur SQLite et MySQL, et deux sessions ouvertes dans la même seconde n'auraient
+        // plus d'ordre — `open_sessions_of` promet la plus récente en tête.
+        created_at: Set(Utc::now().fixed_offset()),
         ..Default::default()
     }
     .insert(db)
