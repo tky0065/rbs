@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use rbs_core::HasCoreState;
+use sea_orm::DatabaseConnection;
 
 use super::Config;
 use super::model::{Model, Status};
@@ -24,13 +25,17 @@ pub async fn run(state: AppState) -> anyhow::Result<()> {
     let config = Config::load()?;
     let registry = registry();
     let attente = Duration::from_secs(config.poll_interval_secs);
+    let bail = Duration::from_secs(config.lease_secs);
 
     tracing::info!(
         poll_interval_secs = config.poll_interval_secs,
+        lease_secs = config.lease_secs,
         "worker prêt"
     );
 
     loop {
+        rendre_les_abandonnes(state.core().db(), bail).await;
+
         match queue::reserver_prochain_job(state.core().db()).await {
             Ok(Some(job)) => execute(&state, &registry, &config, job).await,
             Ok(None) => tokio::time::sleep(attente).await,
@@ -41,6 +46,20 @@ pub async fn run(state: AppState) -> anyhow::Result<()> {
                 tokio::time::sleep(attente).await;
             }
         }
+    }
+}
+
+/// Rend à la file ce qu'un worker mort a laissé en `running` — au démarrage, puis à
+/// chaque tour : un `UPDATE` indexé qui ne touche rien le plus souvent, contre une
+/// livraison perdue sans bruit à chaque redémarrage.
+///
+/// Un échec ne retire pas le worker : la base injoignable sera dite par le dépilage qui
+/// suit, et la reprise retentera au tour d'après.
+async fn rendre_les_abandonnes(db: &DatabaseConnection, bail: Duration) {
+    match queue::requeue_stale(db, bail).await {
+        Ok(0) => {}
+        Ok(rendus) => tracing::warn!(rendus, "jobs abandonnés rendus à la file"),
+        Err(error) => tracing::error!(%error, "reprise des jobs abandonnés impossible"),
     }
 }
 
@@ -63,8 +82,9 @@ pub(super) async fn execute(state: &AppState, registry: &Registry, config: &Conf
         }
     };
 
-    // Le sort du job n'a pas pu être inscrit : la ligne reste en `running` et n'est plus
-    // dépilée. Le dire est tout ce que le worker peut faire — la base ne répond pas.
+    // Le sort du job n'a pas pu être inscrit : la ligne reste en `running` jusqu'à la fin
+    // du bail, où elle sera rejouée. Le dire est tout ce que le worker peut faire — la
+    // base ne répond pas.
     if let Err(error) = inscription {
         tracing::error!(job = %job.id, %error, "sort du job non inscrit");
     }

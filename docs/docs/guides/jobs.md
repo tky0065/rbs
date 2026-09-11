@@ -157,8 +157,9 @@ are handled where they happen, and each answer is deliberate:
   taking the server with it. The API still answers, and the queue fills without draining;
 - **the database is momentarily unreachable** — the worker sleeps and tries the next
   round, rather than returning for good;
-- **the job's fate cannot be written back** — the row stays `running` and stops being
-  dequeued. Saying so is all the worker can do; the database is not answering.
+- **the job's fate cannot be written back** — the row stays `running` until the lease
+  runs out, and is then replayed. Saying so is all the worker can do; the database is not
+  answering.
 
 :::note
 There is one worker per process, and it polls. Several processes can run one each: the
@@ -177,6 +178,11 @@ those live, and watching it is yours to arrange.
 The counter is incremented at reservation, not at failure. A worker killed mid-job has
 therefore already spent the attempt: the job is not stuck being retried forever by a
 process that keeps dying on it.
+
+A worker that dies between reserving a job and reporting on it leaves the row `running`.
+Past `lease_secs`, the next worker tour gives it back to the queue: `pending` again, its
+attempt spent. A job that legitimately runs longer than the lease is replayed — set the
+lease above your longest job.
 
 ## Testing
 

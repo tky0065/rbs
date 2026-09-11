@@ -161,8 +161,9 @@ sont traitées là où elles surviennent, et chaque réponse est délibérée :
   vider ;
 - **la base est momentanément injoignable** — le worker dort et retente au tour suivant,
   plutôt que de rendre la main pour de bon ;
-- **le sort du job ne peut pas être inscrit** — la ligne reste en `running` et n'est plus
-  dépilée. Le dire est tout ce que le worker peut faire ; la base ne répond pas.
+- **le sort du job ne peut pas être inscrit** — la ligne reste en `running` jusqu'à la fin
+  du bail, puis est rejouée. Le dire est tout ce que le worker peut faire ; la base ne
+  répond pas.
 
 :::note
 Il y a un worker par processus, et il scrute. Plusieurs processus peuvent en faire tourner
@@ -182,6 +183,11 @@ réessaie ensuite, et rien ne vous en avertit non plus — `status = 'failed'` d
 Le compteur est incrémenté à la réservation, non à l'échec. Un worker tué en cours de job a
 donc déjà dépensé la tentative : le job n'est pas condamné à être réessayé sans fin par un
 processus qui meurt dessus à chaque fois.
+
+Un worker qui meurt entre la réservation d'un job et l'inscription de son sort laisse la
+ligne en `running`. Passé `lease_secs`, le tour de worker suivant la rend à la file : de
+nouveau `pending`, sa tentative dépensée. Un job qui dure légitimement plus que le bail
+est rejoué — réglez le bail au-dessus de votre plus long job.
 
 ## Tests
 

@@ -1,13 +1,15 @@
+use std::time::Duration;
+
 use chrono::{TimeDelta, Timelike, Utc};
-use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
+use sea_orm::prelude::{DateTimeWithTimeZone, Expr, Uuid};
 use sea_orm::{
-    ActiveModelTrait, ConnectionTrait, DatabaseBackend, DatabaseConnection, EntityTrait, Set,
-    Statement, TransactionTrait,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, DatabaseBackend, DatabaseConnection,
+    EntityTrait, QueryFilter, Set, Statement, TransactionTrait,
 };
 
 use super::Config;
 use super::Job;
-use super::model::{ActiveModel, Entity, Model, Status};
+use super::model::{ActiveModel, Column, Entity, Model, Status};
 
 /// Les colonnes que la réservation doit rendre, dans l'ordre de `Model`.
 const COLONNES: &str =
@@ -233,6 +235,35 @@ async fn reserver_en_deux_temps(
     transaction.commit().await?;
 
     Ok(reserve)
+}
+
+/// Rend à la file les jobs qu'un worker a réservés sans jamais en inscrire le sort.
+///
+/// Un processus tué entre la réservation et `mark_done` laisse sa ligne en `running`, et
+/// rien d'autre ne la dépilerait plus : chaque redémarrage perdrait en silence le job en
+/// cours. Passé `lease`, la réservation est tenue pour abandonnée. Un job encore en cours
+/// au-delà du bail serait donc rejoué — c'est pourquoi `lease_secs` se règle au-dessus
+/// du plus long job.
+///
+/// `attempts` n'est pas rendu : incrémenté à la réservation, il compte le crash comme
+/// une tentative, et `max_attempts` borne les reprises d'un job qui tue son worker.
+///
+/// La borne est liée en paramètre, comme dans les trois requêtes de réservation : un
+/// `now()` du moteur comparerait l'horloge du serveur à un `updated_at` posé par
+/// l'application — et, sur SQLite, du texte à du texte d'un autre format.
+pub async fn requeue_stale(db: &DatabaseConnection, lease: Duration) -> anyhow::Result<u64> {
+    let maintenant = Utc::now().fixed_offset();
+    let limite = maintenant - TimeDelta::from_std(lease)?;
+
+    let resultat = Entity::update_many()
+        .col_expr(Column::Status, Expr::value(Status::Pending))
+        .col_expr(Column::UpdatedAt, Expr::value(maintenant))
+        .filter(Column::Status.eq(Status::Running))
+        .filter(Column::UpdatedAt.lt(limite))
+        .exec(db)
+        .await?;
+
+    Ok(resultat.rows_affected)
 }
 
 /// Marque un job réussi.
