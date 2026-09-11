@@ -1,12 +1,17 @@
+use chrono::Utc;
 use rbs_core::Result;
 use sea_orm::prelude::{DateTimeWithTimeZone, Expr, Uuid};
-use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, ExprTrait, QueryFilter, Set,
-};
+use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 
 use super::super::model::{TokenPurpose, one_time_token};
 
 pub use one_time_token::Model;
+
+// L'instant vient de Rust et se lie en paramètre, jamais de `CURRENT_TIMESTAMP` : sqlx
+// écrit la colonne en RFC 3339 (`2026-01-01T…+00:00`) là où l'horloge de SQLite rend
+// `2026-01-01 23:59:59`, et SQLite compare le texte — `'T' > ' '`, toute échéance du jour
+// passait pour future. L'écriture de `consumed_at` suit la même règle pour que la colonne
+// ne mélange pas deux formats.
 
 /// Ouvre un jeton à usage unique.
 ///
@@ -55,14 +60,13 @@ pub async fn find(
 /// deux la lecture, et poseraient chacune leur mot de passe — la seconde gagnant sans que
 /// la première le sache.
 pub async fn consume(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
+    let maintenant = Utc::now().fixed_offset();
+
     let touchees = one_time_token::Entity::update_many()
-        .col_expr(
-            one_time_token::Column::ConsumedAt,
-            Expr::current_timestamp(),
-        )
+        .col_expr(one_time_token::Column::ConsumedAt, Expr::value(maintenant))
         .filter(one_time_token::Column::Id.eq(id))
         .filter(one_time_token::Column::ConsumedAt.is_null())
-        .filter(Expr::col(one_time_token::Column::ExpiresAt).gt(Expr::current_timestamp()))
+        .filter(one_time_token::Column::ExpiresAt.gt(maintenant))
         .exec(db)
         .await?;
 
@@ -82,7 +86,7 @@ pub async fn invalidate_pending(
     let touchees = one_time_token::Entity::update_many()
         .col_expr(
             one_time_token::Column::ConsumedAt,
-            Expr::current_timestamp(),
+            Expr::value(Utc::now().fixed_offset()),
         )
         .filter(one_time_token::Column::UserId.eq(user_id))
         .filter(one_time_token::Column::Purpose.eq(purpose))
@@ -102,7 +106,7 @@ pub async fn invalidate_pending(
 #[allow(dead_code)]
 pub async fn purge_expired(db: &DatabaseConnection) -> Result<u64> {
     let supprimees = one_time_token::Entity::delete_many()
-        .filter(Expr::col(one_time_token::Column::ExpiresAt).lt(Expr::current_timestamp()))
+        .filter(one_time_token::Column::ExpiresAt.lt(Utc::now().fixed_offset()))
         .exec(db)
         .await?;
 
