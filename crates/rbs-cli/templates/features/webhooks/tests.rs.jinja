@@ -1,10 +1,15 @@
+use axum::Router;
+use axum::body::{Body, to_bytes};
+use axum::http::{Request, StatusCode};
 use rbs_core::HasCoreState;
 use sea_orm::ActiveValue::Set;
 use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, TransactionTrait,
 };
+use serde_json::{Value, json};
 use tokio::sync::MutexGuard;
+use tower::ServiceExt;
 
 use super::delivery::{Delivery, Event};
 use super::model::{ActiveModel, Entity, Model};
@@ -159,6 +164,55 @@ fn donnees() -> serde_json::Value {
     serde_json::json!({ "id": 1 })
 }
 
+/// Signe un jeton portant `role`, sans passer par la base : `Identity` ne vérifie que la
+/// signature, le compte n'a pas à exister.
+fn token(role: &str) -> String {
+    let config = rbs_core::Config::load().expect("configuration lisible");
+    let maintenant = chrono::Utc::now().timestamp();
+
+    let claims = rbs_core::jwt::Claims {
+        sub: Uuid::new_v4().to_string(),
+        role: role.to_string(),
+        exp: maintenant + 300,
+        iat: maintenant,
+        jti: Uuid::new_v4().to_string(),
+    };
+
+    rbs_core::jwt::sign(&claims, &config.auth.secret).expect("jeton signable")
+}
+
+fn request(method: &str, path: &str, role: &str, body: Option<Value>) -> Request<Body> {
+    let builder = Request::builder()
+        .method(method)
+        .uri(path)
+        .header("authorization", format!("Bearer {}", token(role)));
+    match body {
+        Some(corps) => builder
+            .header("content-type", "application/json")
+            .body(Body::from(corps.to_string())),
+        None => builder.body(Body::empty()),
+    }
+    .expect("requête bien formée")
+}
+
+/// Fait traverser le routeur à `request`, et rend son statut avec son corps.
+async fn call(api: &Router, request: Request<Body>) -> (StatusCode, Value) {
+    let response = api
+        .clone()
+        .oneshot(request)
+        .await
+        .expect("l'application doit répondre");
+    let status = response.status();
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("corps de réponse lisible");
+
+    (
+        status,
+        serde_json::from_slice(&bytes).unwrap_or(Value::Null),
+    )
+}
+
 /// Les lignes de la file que ces tests ont fait naître, et elles seules.
 async fn livraisons(db: &DatabaseConnection) -> usize {
     crate::modules::jobs::model::Entity::find()
@@ -275,4 +329,78 @@ async fn an_emission_rolled_back_with_its_transaction_enqueues_nothing() {
         0,
         "une livraison a survécu au rollback de la transaction qui la motivait"
     );
+}
+
+/// Le rôle par défaut des routes est `Admin` : un compte auto-inscrit, qui reçoit `User`,
+/// ne peut ni se faire livrer les événements du projet ni couper les abonnements d'autrui.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_user_role_is_refused_on_the_three_routes() {
+    let (_garde, state) = table_a_soi().await;
+    let existant = abonne(state.core().db(), "https://example.test/hooks", &["*"]).await;
+    let api = crate::router::router(state);
+
+    let corps = json!({ "url": "https://example.test/mine", "events": ["*"] });
+    let (creation, _) = call(
+        &api,
+        request("POST", "/webhooks/subscriptions", "user", Some(corps)),
+    )
+    .await;
+    let (liste, _) = call(
+        &api,
+        request("GET", "/webhooks/subscriptions", "user", None),
+    )
+    .await;
+    let (revocation, _) = call(
+        &api,
+        request(
+            "DELETE",
+            &format!("/webhooks/subscriptions/{}", existant.id),
+            "user",
+            None,
+        ),
+    )
+    .await;
+
+    assert_eq!(creation, StatusCode::FORBIDDEN);
+    assert_eq!(liste, StatusCode::FORBIDDEN);
+    assert_eq!(revocation, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_admin_subscribes_then_reads_and_revokes() {
+    let (_garde, state) = table_a_soi().await;
+    let api = crate::router::router(state);
+
+    let corps = json!({ "url": "https://example.test/hooks", "events": ["user.*"] });
+    let (creation, cree) = call(
+        &api,
+        request("POST", "/webhooks/subscriptions", "admin", Some(corps)),
+    )
+    .await;
+    assert_eq!(creation, StatusCode::CREATED, "{cree}");
+    let id = cree["id"]
+        .as_str()
+        .expect("l'abonnement créé porte son identifiant");
+
+    let (liste, abonnements) = call(
+        &api,
+        request("GET", "/webhooks/subscriptions", "admin", None),
+    )
+    .await;
+    assert_eq!(liste, StatusCode::OK);
+    assert_eq!(abonnements.as_array().map(Vec::len), Some(1));
+
+    let (revocation, _) = call(
+        &api,
+        request(
+            "DELETE",
+            &format!("/webhooks/subscriptions/{id}"),
+            "admin",
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(revocation, StatusCode::NO_CONTENT);
 }
