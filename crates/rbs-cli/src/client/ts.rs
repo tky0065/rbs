@@ -86,6 +86,8 @@ fn avec_nullable(base: String, nullable: bool) -> String {
 
 /// Une énumération de chaînes se rend en union de littéraux ; sinon le type porté par
 /// `kind` — `integer` et `number` se confondent, TypeScript n'ayant qu'un `number`.
+/// `null` est un type à part entière : utoipa rend `Option<Struct>` en `oneOf` d'un
+/// `{type: "null"}` et d'un `$ref`, et un `unknown` à sa place absorberait l'union.
 fn primitif(kind: &str, enumeration: &[String]) -> String {
     if !enumeration.is_empty() {
         return enumeration
@@ -98,6 +100,7 @@ fn primitif(kind: &str, enumeration: &[String]) -> String {
         "string" => "string",
         "integer" | "number" => "number",
         "boolean" => "boolean",
+        "null" => "null",
         _ => "unknown",
     }
     .to_string()
@@ -681,6 +684,14 @@ mod tests {
         assert_eq!(
             type_du_champ(r#"{"type":["string","null"]}"#),
             "string | null"
+        );
+    }
+
+    #[test]
+    fn an_optional_struct_is_a_union_of_null_and_its_reference() {
+        assert_eq!(
+            type_du_champ(r##"{"oneOf":[{"type":"null"},{"$ref":"#/components/schemas/S"}]}"##),
+            "null | S"
         );
     }
 
