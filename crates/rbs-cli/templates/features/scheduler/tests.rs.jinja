@@ -225,6 +225,44 @@ async fn a_redeploy_does_not_move_the_next_occurrence_of_a_known_schedule() {
     assert_eq!(avant, apres);
 }
 
+/// Le pendant du test précédent : une échéance dont l'expression a changé n'a pas à
+/// attendre l'occurrence de l'ancienne — un mois, ici — pour que le code fasse foi.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_changed_expression_moves_the_next_occurrence() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    sync::reconcilier(db, &calendrier("0 3 1 * *"))
+        .await
+        .expect("la réconciliation aboutit");
+    let avant = Entity::find_by_id(Scheduled::KIND)
+        .one(db)
+        .await
+        .expect("lecture possible")
+        .expect("l'échéance existe")
+        .next_run_at;
+
+    sync::reconcilier(db, &calendrier("*/5 * * * *"))
+        .await
+        .expect("la réconciliation aboutit");
+    let apres = Entity::find_by_id(Scheduled::KIND)
+        .one(db)
+        .await
+        .expect("lecture possible")
+        .expect("l'échéance existe")
+        .next_run_at;
+
+    assert_ne!(
+        avant, apres,
+        "l'échéance est restée sur l'ancienne expression"
+    );
+    assert!(
+        apres <= chrono::Utc::now() + chrono::TimeDelta::minutes(5),
+        "{apres} n'est pas une occurrence de `*/5 * * * *`"
+    );
+}
+
 #[tokio::test]
 #[ignore = "joint la base du projet"]
 async fn an_unparsable_expression_stops_the_reconciliation() {
@@ -253,6 +291,37 @@ async fn echeance_due(db: &DatabaseConnection) {
     .insert(db)
     .await
     .expect("l'échéance due s'insère");
+}
+
+/// Une échéance échue reste au tick, qui la rejoue puis l'avance selon l'expression
+/// nouvelle : la réconciliation qui la déplacerait effacerait une occurrence gagnée.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_due_schedule_is_not_moved_by_a_changed_expression() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+    echeance_due(db).await;
+    let avant = Entity::find_by_id(Scheduled::KIND)
+        .one(db)
+        .await
+        .expect("lecture possible")
+        .expect("l'échéance existe")
+        .next_run_at;
+
+    sync::reconcilier(db, &calendrier("*/5 * * * *"))
+        .await
+        .expect("la réconciliation aboutit");
+    let apres = Entity::find_by_id(Scheduled::KIND)
+        .one(db)
+        .await
+        .expect("lecture possible")
+        .expect("l'échéance existe")
+        .next_run_at;
+
+    assert_eq!(
+        avant, apres,
+        "l'échéance échue a été déplacée sans avoir été jouée"
+    );
 }
 
 #[tokio::test]

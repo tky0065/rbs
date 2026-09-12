@@ -13,6 +13,15 @@ dépréciation.
 
 ## [1.5.0] — 2026-09-12
 
+### Ajouté
+
+- **`rbs generate crud` et `rbs generate feature` prennent `--singular <NOM>`** pour les
+  cas où l'heuristique de singularisation se trompe : `rbs generate crud news` nommait
+  ses types `CreateNew` et ses liaisons `new`, schémas OpenAPI et interfaces TypeScript
+  compris. `news`, `series` et `species` sont désormais reconnus invariables sans le
+  drapeau ; tout autre cas se règle par `--singular news_item`. La valeur doit être en
+  snake_case, comme le nom de la feature.
+
 ### Modifié
 
 - **Un abonnement webhook ne peut plus atteindre le réseau du projet.** Hors du profil
@@ -29,6 +38,30 @@ dépréciation.
 
 ### Corrigé
 
+- **`rbs generate crud --with-upload` refuse un projet dont le fragment `storage` vit
+  encore en `src/storage/`** — reçu avant la 1.3.0 et jamais déplacé sous
+  `src/modules/`. Le service engendré importe `crate::modules::storage` : la génération
+  aboutissait et le projet ne compilait plus. Le refus nomme le chemin attendu et le
+  déplacement à faire ; rien n'est écrit.
+- **Une expression cron modifiée prend effet au démarrage suivant, et non après la
+  prochaine occurrence de l'ancienne.** `reconcilier` gardait le `next_run_at` stocké de
+  toute échéance connue : passer de `0 3 1 * *` à `*/5 * * * *` laissait le prochain tick
+  au premier du mois, sans un mot. Une occurrence stockée déjà échue reste au ticker, une
+  occurrence égale à celle fraîchement calculée ne bouge pas, une occurrence qui diverge
+  est remplacée — avec un log `info` qui nomme le kind, l'ancienne et la nouvelle
+  échéance. Ni colonne ni migration : un projet qui porte déjà `scheduler` reçoit la
+  règle en recopiant `sync.rs` depuis le fragment.
+- **Le client TypeScript type une structure imbriquée optionnelle en `null | T`, et non
+  `unknown | T`.** utoipa rend `Option<Struct>` en `oneOf: [{type: "null"}, {$ref}]`, et
+  la variante `null` tombait dans le repli `unknown`, qui avalait toute l'union.
+- **`modules`, `seeds`, `bin` et `lib` sont refusés comme noms de feature**, comme `main`,
+  `router`, `openapi`, `state` et `health` avant eux. `rbs generate crud modules`
+  réussissait, faisait de `src/modules/mod.rs` un CRUD, et cassait tout `rbs add`
+  suivant sur une ancre `<rbs:modules>` introuvable.
+- **`rbs doctor` et `rbs migrate status` n'affichent plus les lignes `Compiling` de cargo
+  avant leur verdict**, `doctor --json` compris. Quand le CLI capture la sortie standard
+  de cargo pour la lire, il capture aussi sa sortie d'erreur et ne la rejoue qu'en cas
+  d'échec de compilation. `migrate up`, `seed` et `dev` montrent toujours la progression.
 - **`rbs add webhooks` sur un projet engendré avant cette version ne le laisse plus
   incompilable.** Un tel projet porte `// <rbs:state_init>` sous
   `core: CoreState::new(db, config)`, qui a déjà consommé `config` quand
@@ -76,6 +109,9 @@ lit `timestamp` sur MySQL et `timestamp_with_timezone_text` sur SQLite, ce que
   ne diffèrent que par la casse, et c'est le cas à trancher à la main — puis `normalise`
   de `service/mod.rs` et ses quatre appels (`register`, `login`,
   `password::request_reset`, `verification::request`).
+- `scheduler` : recopier `sync.rs` depuis le fragment (et les deux tests neufs de
+  `tests.rs`) pour qu'une expression cron modifiée prenne effet au démarrage suivant.
+  Rien d'autre ne change ; la table garde sa forme.
 - Avant `rbs add webhooks` : remonter le bloc `// <rbs:state_init>` … `// </rbs:state_init>`
   au-dessus de `core: CoreState::new(db, config),` dans `src/state.rs`. La commande refuse
   et affiche ce bloc tant qu'il reste sous la ligne ; `rbs doctor --fix` ne fait que

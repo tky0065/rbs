@@ -12,6 +12,15 @@ between minor versions with no deprecation cycle.
 
 ## [1.5.0] — 2026-09-12
 
+### Added
+
+- **`rbs generate crud` and `rbs generate feature` take `--singular <NAME>`** for the
+  cases the singularisation heuristic gets wrong: `rbs generate crud news` used to name
+  its types `CreateNew` and its bindings `new`, OpenAPI schemas and TypeScript interfaces
+  included. `news`, `series` and `species` are now recognised as invariable without the
+  flag; anything else is one `--singular news_item` away. The value must be in
+  snake_case, like the feature name.
+
 ### Changed
 
 - **A webhook subscription can no longer reach the project's own network.** Outside the
@@ -27,6 +36,31 @@ between minor versions with no deprecation cycle.
 
 ### Fixed
 
+- **`rbs generate crud --with-upload` refuses a project whose `storage` fragment still
+  lives at `src/storage/`** — one that received the fragment before 1.3.0 and never
+  moved it under `src/modules/`. The generated service imports `crate::modules::storage`,
+  so the generation used to succeed and the project stopped compiling. The refusal names
+  the expected path and the move to make; nothing is written.
+- **A changed cron expression takes effect at the next start, not after the next
+  occurrence of the old one.** `reconcilier` used to keep the stored `next_run_at` of any
+  known schedule, so going from `0 3 1 * *` to `*/5 * * * *` left the next tick on the
+  first of the month, silently. A stored occurrence that is overdue is left to the ticker,
+  one that matches the freshly computed occurrence stays put, and one that differs is
+  replaced — with an `info` log naming the kind, the old and the new occurrence. No
+  column, no migration: a project that already carries `scheduler` gets the rule by
+  copying `sync.rs` from the fragment.
+- **The TypeScript client types an optional nested struct as `null | T`, not
+  `unknown | T`.** utoipa renders `Option<Struct>` as `oneOf: [{type: "null"}, {$ref}]`,
+  and the `null` variant fell into the `unknown` fallback, which swallowed the whole
+  union.
+- **`modules`, `seeds`, `bin` and `lib` are refused as feature names**, like `main`,
+  `router`, `openapi`, `state` and `health` before them. `rbs generate crud modules` used
+  to succeed, turn `src/modules/mod.rs` into a CRUD, and break every `rbs add` that
+  followed on a missing `<rbs:modules>` anchor.
+- **`rbs doctor` and `rbs migrate status` no longer print cargo's `Compiling` lines
+  before their verdict**, `doctor --json` included. When the CLI captures cargo's standard
+  output to read it, it now captures its error output too and only replays it when the
+  build fails. `migrate up`, `seed` and `dev` still show the build progress.
 - **`rbs add webhooks` on a project generated before this version no longer leaves it
   unable to compile.** Such a project carries `// <rbs:state_init>` below
   `core: CoreState::new(db, config)`, which has already consumed `config` by the time
@@ -73,6 +107,9 @@ reads `timestamp` on MySQL and `timestamp_with_timezone_text` on SQLite, which i
   accounts differ only by case, which is the case to settle by hand — then `normalise`
   from `service/mod.rs` and its four call sites (`register`, `login`,
   `password::request_reset`, `verification::request`).
+- `scheduler`: copy `sync.rs` from the fragment (and the two new tests of `tests.rs`) so
+  that a changed cron expression takes effect at the next start. Nothing else changes;
+  the table keeps its shape.
 - Before `rbs add webhooks`: move the `// <rbs:state_init>` … `// </rbs:state_init>` block
   above `core: CoreState::new(db, config),` in `src/state.rs`. The command refuses and
   prints that block as long as it stays below the line; `rbs doctor --fix` only restores

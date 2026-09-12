@@ -41,9 +41,37 @@ pub async fn reconcilier(db: &DatabaseConnection, schedules: &[Schedule]) -> any
     let maintenant = super::a_la_seconde(Utc::now().fixed_offset());
 
     for (kind, prochaine) in prochaines {
-        // Une échéance déjà connue garde son `next_run_at` : un redémarrage ne rejoue pas
-        // une occurrence passée et ne repousse pas une occurrence imminente.
-        if Entity::find_by_id(kind).one(db).await?.is_some() {
+        if let Some(connue) = Entity::find_by_id(kind).one(db).await? {
+            // Une échéance échue appartient au tick : la déplacer effacerait une occurrence
+            // que le processus a déjà gagnée, alors que la réservation la jouera puis
+            // l'avancera d'elle-même selon l'expression nouvelle. Une échéance à venir qui
+            // tombe sur l'occurrence recalculée est un redéploiement sans changement, et
+            // rien ne doit bouger. Ne reste que l'échéance à venir qui diverge : c'est la
+            // seule trace qu'une expression a changé, la table ne la stockant pas, et sans
+            // ce recalcul le code ne ferait foi qu'après l'occurrence de l'ancienne — un
+            // mois, pour un `0 3 1 * *` devenu `*/5 * * * *`.
+            if connue.next_run_at <= maintenant || connue.next_run_at == prochaine {
+                continue;
+            }
+
+            // L'`UPDATE` ne touche que ces deux colonnes et exige l'échéance relue : un
+            // ticker qui l'aurait réservée entre la lecture et l'écriture a déjà avancé la
+            // ligne, et la réécrire en entier effacerait son `last_run_at`.
+            Entity::update_many()
+                .col_expr(Column::NextRunAt, prochaine.into())
+                .col_expr(Column::UpdatedAt, maintenant.into())
+                .filter(Column::Kind.eq(kind))
+                .filter(Column::NextRunAt.eq(connue.next_run_at))
+                .exec(db)
+                .await?;
+
+            tracing::info!(
+                kind,
+                ancienne = %connue.next_run_at,
+                nouvelle = %prochaine,
+                "échéance recalculée : l'expression a changé"
+            );
+
             continue;
         }
 

@@ -57,6 +57,7 @@ Arguments:
 
 Options:
       --fields <CHAMPS>    Champs de l'entité, ex. "name:string,email:string:unique"
+      --singular <NOM>     Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force              Écrit même si le working tree Git est sale
       --dry-run            Affiche le plan sans rien écrire
       --has-many <ENTITE>  Entité enfant dont ce modèle doit porter la variante inverse, répétable
@@ -70,12 +71,13 @@ Options:
 | Flag | Effet |
 |---|---|
 | `--fields <CHAMPS>` | Les colonnes de l'entité, dans la grammaire décrite plus bas. Omis, la feature est générée sans colonne propre. |
+| `--singular <NOM>` | La forme singulière du nom, quand l'heuristique intégrée se trompe. Elle nomme l'entité, les DTO et les variables locales — `CreateNewsItem` et `let news_item` pour `rbs generate crud news --singular news_item` — tandis que le module, la table et les routes gardent le pluriel. L'heuristique laisse déjà `news`, `series` et `species` intacts ; pour tout autre pluriel invariable ou irrégulier, ce flag est le remède. Doit être en snake_case, et n'être ni un mot-clé Rust ni un module du squelette, vérifié avant toute écriture. |
 | `--force` | Écrit même si le working tree Git est sale, et écrase les fichiers signalés en conflit. |
 | `--dry-run` | Affiche le plan et s'arrête. Rien n'est écrit. |
 | `--has-many <ENTITE>` | Répare le côté lointain d'une relation : écrit dans le modèle d'une feature déjà générée la variante `has_many` qui vise l'enfant nommé, et rien d'autre. Répétable. [Le guide des relations](../guides/relations.md) dit quand c'est nécessaire. |
 | `--role <ROLE>` | Relève le seuil des écritures — `create`, `update`, `delete`, et le `PUT` de la route de contenu quand `--with-upload` l'accompagne — à ce rôle plutôt qu'au `Role::User` par défaut. Il n'ouvre ni ne ferme rien : sur un projet portant `auth`, *toutes* les routes engendrées prennent déjà une `Identity` et appellent `require_role`, et les lectures (`list`, `find`, `filter`, et les `GET` et `HEAD` de la route de contenu) gardent simplement le seuil par défaut. Exige la feature [`auth`](../guides/auth.md), et un rôle que son enum `Role` déclare — les deux sont vérifiés avant toute écriture. [Le guide de l'authentification](../guides/auth.md#fermées-par-défaut-à-la-génération) dit ce qu'il faut retirer pour rouvrir une route. |
 | `--soft-delete` | Rend `DELETE` logique plutôt que de retirer la ligne. Le contrat HTTP ne change pas, et la contrainte d'un champ `unique` se restreint aux lignes vivantes — sur MySQL elle reste globale, si bien qu'une valeur supprimée y reste réservée. [Le guide des migrations](../guides/migrations.md#suppression-logique) a le reste. |
-| `--with-upload` | Monte trois routes sur `/<ressource>/{id}/content` — `PUT`, `GET`, `HEAD` — contre le trait du fragment `storage`. Exige la feature [`storage`](../guides/storage.md), vérifiée avant toute écriture. Avec `--role`, le `PUT` rejoint les écritures dont le drapeau relève le seuil ; avec `--soft-delete`, le contenu survit à la ligne que le `DELETE` se contente d'estampiller. [Le guide du stockage](../guides/storage.md#les-routes-de-contenu-engendrées) a les deux. |
+| `--with-upload` | Monte trois routes sur `/<ressource>/{id}/content` — `PUT`, `GET`, `HEAD` — contre le trait du fragment `storage`. Exige la feature [`storage`](../guides/storage.md), et le fragment sous `src/modules/storage/`, là où `rbs add` le pose depuis la 1.3.0 — les deux sont vérifiés avant toute écriture, et un projet qui porte encore `src/storage/` est refusé tant que le répertoire n'est pas déplacé et ses `use` corrigés. Avec `--role`, le `PUT` rejoint les écritures dont le drapeau relève le seuil ; avec `--soft-delete`, le contenu survit à la ligne que le `DELETE` se contente d'estampiller. [Le guide du stockage](../guides/storage.md#les-routes-de-contenu-engendrées) a les deux. |
 
 ## `rbs generate feature`
 
@@ -90,15 +92,17 @@ Arguments:
   <NAME>  Nom de la feature
 
 Options:
-      --force    Écrit même si le working tree Git est sale
-      --dry-run  Affiche le plan sans rien écrire
-  -h, --help     Print help
-  -V, --version  Print version
+      --singular <NOM>  Forme singulière du nom, quand l'heuristique se trompe (ex. news)
+      --force           Écrit même si le working tree Git est sale
+      --dry-run         Affiche le plan sans rien écrire
+  -h, --help            Print help
+  -V, --version         Print version
 ```
 
 Les mêmes flags moins `--fields`, `--has-many` et `--role` : une feature vide n'a pas de
 colonne, donc ni entité digne de ce nom, ni migration, ni relation à réparer ; et elle ne
-porte aucun handler qu'une garde protégerait.
+porte aucun handler qu'une garde protégerait. `--singular` reste : le squelette nomme
+toujours son service et ses DTO d'après le singulier.
 
 ## La grammaire de `--fields`
 

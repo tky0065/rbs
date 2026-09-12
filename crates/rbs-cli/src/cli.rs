@@ -145,6 +145,10 @@ pub enum GenerateCommands {
         #[arg(long, value_name = "CHAMPS")]
         fields: Option<String>,
 
+        /// Forme singulière du nom, quand l'heuristique se trompe (ex. news).
+        #[arg(long, value_name = "NOM")]
+        singular: Option<String>,
+
         /// Écrit même si le working tree Git est sale.
         #[arg(long)]
         force: bool,
@@ -174,6 +178,10 @@ pub enum GenerateCommands {
     Feature {
         /// Nom de la feature.
         name: String,
+
+        /// Forme singulière du nom, quand l'heuristique se trompe (ex. news).
+        #[arg(long, value_name = "NOM")]
+        singular: Option<String>,
 
         /// Écrit même si le working tree Git est sale.
         #[arg(long)]
@@ -335,6 +343,46 @@ mod tests {
         };
 
         assert!(with_upload);
+    }
+
+    #[test]
+    fn generate_crud_accepts_singular() {
+        let cli =
+            Cli::try_parse_from(["rbs", "generate", "crud", "news", "--singular", "news_item"])
+                .expect("la ligne doit être acceptée");
+
+        let Commands::Generate {
+            command: GenerateCommands::Crud { singular, .. },
+        } = cli.command
+        else {
+            panic!("la sous-commande doit être `generate crud`");
+        };
+
+        assert_eq!(singular.as_deref(), Some("news_item"));
+    }
+
+    /// `feature` passe par la même dérivation du singulier que `crud` : le flag y a le
+    /// même sens.
+    #[test]
+    fn generate_feature_accepts_singular() {
+        let cli = Cli::try_parse_from([
+            "rbs",
+            "generate",
+            "feature",
+            "news",
+            "--singular",
+            "news_item",
+        ])
+        .expect("la ligne doit être acceptée");
+
+        let Commands::Generate {
+            command: GenerateCommands::Feature { singular, .. },
+        } = cli.command
+        else {
+            panic!("la sous-commande doit être `generate feature`");
+        };
+
+        assert_eq!(singular.as_deref(), Some("news_item"));
     }
 
     /// Le flag doit accepter les deux langues et rester absent par défaut : c'est cette

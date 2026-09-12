@@ -41,6 +41,8 @@ pub(crate) struct Options {
     pub soft_delete: bool,
     /// Ajoute au CRUD trois routes de contenu binaire, adossées au fragment `storage`.
     pub with_upload: bool,
+    /// Forme singulière du nom, quand l'heuristique se trompe : `news_item` pour `news`.
+    pub singular: Option<String>,
 }
 
 /// Un fichier à écrire : son chemin, relatif à la racine du projet, et son contenu.
@@ -167,6 +169,15 @@ pub(crate) enum Error {
     )]
     UploadSansStorage,
 
+    /// `--with-upload` sur un projet qui porte `storage`, mais à la racine de `src/` : le
+    /// service engendré importe `crate::modules::storage`, et ne compilerait pas.
+    #[error(
+        "`--with-upload` importe `crate::modules::storage`, mais src/modules/storage/mod.rs \
+         manque : ce projet a reçu `storage` avant la 1.3.0. Déplacez `src/storage/` sous \
+         `src/modules/` et corrigez ses `use`, puis relancez la génération"
+    )]
+    UploadStorageHorsModules,
+
     /// `--soft-delete` sur une entité qui déclare déjà la colonne que le drapeau injecte.
     #[error(
         "`--soft-delete` pose lui-même la colonne `{colonne}` : retirez-la de `--fields`, \
@@ -234,6 +245,12 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     name::validate(&options.name).map_err(Error::Nom)?;
 
+    // La forme imposée devient un nom de type et de variable : elle subit les refus du
+    // nom lui-même, un mot-clé Rust y ferait le même dégât.
+    if let Some(singular) = &options.singular {
+        name::validate(singular).map_err(Error::Nom)?;
+    }
+
     // Avant tout rendu : un garde posé sur un projet sans `auth` produirait un contrôleur
     // qui importe `crate::auth::guard`, et le projet ne compilerait plus.
     if let Some(role) = &options.role {
@@ -250,6 +267,13 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
             .any(|feature| feature == "storage")
     {
         return Err(Error::UploadSansStorage);
+    }
+
+    // Le manifeste ne suffit pas : un projet d'avant 1.3.0 déclare `storage` et le porte
+    // en `src/storage/`, là où la template écrit `crate::modules::storage` en dur. `rbs
+    // upgrade` ne déplace aucun module, et le refus nomme donc le geste manuel.
+    if options.with_upload && !root.join("src/modules/storage/mod.rs").exists() {
+        return Err(Error::UploadStorageHorsModules);
     }
 
     // `--has-many` ne génère rien : il répare le côté inverse d'une feature déjà
@@ -281,7 +305,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // La présence du fragment suffit : aucun drapeau ne la demande, et c'est le sens du
     // défaut fermé — un projet qui a installé de quoi fermer ne rend pas des routes
     // anonymes au premier `generate crud`.
-    let feature = Feature::fresh(&options.name, fields);
+    let feature = Feature::fresh(&options.name, fields).with_singular(options.singular.clone());
     let feature = if metadonnees.features.iter().any(|feature| feature == "auth") {
         feature.authenticated()
     } else {
@@ -686,6 +710,7 @@ mod tests {
             role: None,
             soft_delete: false,
             with_upload: false,
+            singular: None,
         }
     }
 
@@ -783,6 +808,43 @@ mod tests {
         assert!(entites.contains("comments"), "{entites}");
     }
 
+    /// La forme imposée devient un nom de type : un libellé hors snake_case est refusé
+    /// avant le rendu, comme le nom lui-même.
+    #[test]
+    fn a_singular_that_is_not_snake_case_is_refused_before_anything_is_written() {
+        let (_parent, root) = project();
+        let avant = fingerprint(&root);
+
+        let error = run(&Options {
+            singular: Some("NewsItem".to_string()),
+            ..options(&root, "news", Some("title:string"), true)
+        })
+        .expect_err("`NewsItem` n'est pas en snake_case");
+
+        assert!(error.to_string().contains("snake_case"), "{error}");
+        assert_eq!(fingerprint(&root), avant, "rien ne doit avoir été écrit");
+    }
+
+    /// De bout en bout : le singulier imposé nomme l'entité, les DTO et la variable
+    /// locale du service, là où l'heuristique écrivait `CreateNew` et `let new`.
+    #[test]
+    fn an_imposed_singular_names_the_entity_and_the_dtos() {
+        let (_parent, root) = project();
+
+        run(&Options {
+            singular: Some("news_item".to_string()),
+            ..options(&root, "news", Some("title:string"), true)
+        })
+        .expect("news doit se générer");
+
+        let dto = read(&root.join("src/news/dto.rs"));
+        let service = read(&root.join("src/news/service.rs"));
+
+        assert!(dto.contains("pub struct CreateNewsItem"), "{dto}");
+        assert!(!dto.contains("CreateNew "), "{dto}");
+        assert!(service.contains("news_item"), "{service}");
+    }
+
     #[test]
     fn a_field_named_deleted_at_is_refused_under_soft_delete() {
         let message = Error::SoftDeleteColonneReservee {
@@ -824,6 +886,39 @@ mod tests {
             message.contains("storage"),
             "le refus doit nommer la feature attendue : {message}"
         );
+    }
+
+    /// Un projet d'avant 1.3.0 porte `storage` en `src/storage/` : le manifeste le déclare,
+    /// mais le service engendré importe `crate::modules::storage`, et le projet ne
+    /// compilerait plus. Le refus doit dire où le fragment est attendu, et comment l'y
+    /// mettre.
+    #[test]
+    fn upload_on_a_storage_fragment_left_at_the_root_is_refused_and_names_the_expected_path() {
+        let (_parent, root) = Project::new().features(&["storage"]).create();
+        assert!(
+            root.join("src/modules/storage/mod.rs").exists(),
+            "le fragment `storage` s'installe sous src/modules/ depuis 1.3.0"
+        );
+        fs::rename(root.join("src/modules/storage"), root.join("src/storage"))
+            .expect("le fragment se déplace à la racine de src/");
+        let avant = fingerprint(&root);
+
+        let error = run(&Options {
+            with_upload: true,
+            ..options(&root, "documents", Some("title:string"), true)
+        })
+        .expect_err("`storage` n'est pas sous src/modules/");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("src/modules/storage/mod.rs"),
+            "le refus doit nommer le chemin attendu : {message}"
+        );
+        assert!(
+            message.contains("src/modules/") && message.contains("use"),
+            "le refus doit dire comment déplacer le fragment : {message}"
+        );
+        assert_eq!(fingerprint(&root), avant, "rien ne doit avoir été écrit");
     }
 
     #[test]
