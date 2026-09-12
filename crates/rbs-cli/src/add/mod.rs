@@ -183,20 +183,25 @@ pub(crate) enum Error {
 crate::errors::depuis_la_racine!(Error);
 
 impl Error {
-    /// Ce que le développeur peut coller pour réparer, quand la panne se répare ainsi.
+    /// Ce que le développeur peut coller ou déplacer pour réparer, quand la panne se
+    /// répare ainsi.
     ///
-    /// Seule une ancre disparue a un remède tenant en un bloc de texte : les autres pannes
-    /// se règlent par une décision — commiter, corriger le manifeste du fragment.
+    /// Seule une ancre disparue ou mal placée a un remède tenant en un bloc de texte :
+    /// les autres pannes se règlent par une décision — commiter, corriger le manifeste du
+    /// fragment.
     pub(crate) fn remedy(&self) -> Option<String> {
-        let plan::Error::Anchor(absente) = self.plan()? else {
-            return None;
-        };
-
-        Some(format!(
-            "dans {} :\n{}",
-            absente.anchor.file,
-            absente.anchor.block()
-        ))
+        match self.plan()? {
+            plan::Error::Anchor(absente) => Some(format!(
+                "dans {} :\n{}",
+                absente.anchor.file,
+                absente.anchor.block()
+            )),
+            plan::Error::MalPlacee(placee) => Some(format!(
+                "dans {}, remontez ce bloc au-dessus de `{}` :\n{}",
+                placee.anchor.file, placee.before, placee.block
+            )),
+            _ => None,
+        }
     }
 
     /// L'erreur de planification que celle-ci porte, directement ou par l'installation.
@@ -1540,6 +1545,62 @@ mod tests {
             "docker ne ferme aucune route : {:?}",
             planned.remedy()
         );
+    }
+
+    /// Ramène `src/state.rs` à ce qu'était un projet créé avant la 1.5.0 : l'ancre
+    /// `state_init` sous `core: CoreState::new(db, config)`, qui a déjà consommé `config`.
+    fn ancre_state_init_sous_core(root: &Path) {
+        let state = root.join("src/state.rs");
+        let source = fs::read_to_string(&state).expect("state.rs doit exister");
+        let bloc = "            // <rbs:state_init>\n            // </rbs:state_init>\n";
+        let core = "            core: CoreState::new(db, config),\n";
+        let courant = format!("{bloc}{core}");
+
+        assert!(
+            source.contains(&courant),
+            "le squelette doit poser l'ancre juste au-dessus de `core:` :\n{source}"
+        );
+        fs::write(&state, source.replace(&courant, &format!("{core}{bloc}")))
+            .expect("state.rs doit se réécrire");
+    }
+
+    /// Sur un projet d'avant 1.5.0, `webhooks` lirait `config` après que `core:` l'a
+    /// consommé : le projet ne compilerait plus, et seul `cargo build` le dirait. Le plan
+    /// refuse, en nommant la ligne à faire précéder et le bloc à remonter.
+    #[test]
+    fn webhooks_refuses_a_state_init_anchor_left_below_core_and_shows_the_block_to_move() {
+        let (_parent, root) = project();
+        ancre_state_init_sous_core(&root);
+
+        let error = plan_for(&options(&root, "webhooks")).expect_err("le plan doit refuser");
+
+        assert!(
+            matches!(
+                error,
+                Error::Installation(installation::Error::Plan(plan::Error::MalPlacee(_)))
+            ),
+            "{error:?}"
+        );
+        assert_eq!(
+            error.to_string(),
+            "ancre // <rbs:state_init> placée sous `core: CoreState::new(` dans src/state.rs, \
+             qu'elle doit précéder"
+        );
+        let remedy = error.remedy().expect("le remède tient en un bloc");
+        assert_eq!(
+            remedy,
+            "dans src/state.rs, remontez ce bloc au-dessus de `core: CoreState::new(` :\n\
+             // <rbs:state_init>\n// </rbs:state_init>"
+        );
+    }
+
+    /// Le même projet, l'ancre à sa place : rien ne change pour les fragments qui ne
+    /// lisent pas `config`, ni pour `webhooks` sur un projet courant.
+    #[test]
+    fn webhooks_plans_on_a_project_whose_state_init_anchor_precedes_core() {
+        let (_parent, root) = project();
+
+        plan_for(&options(&root, "webhooks")).expect("le plan doit se calculer");
     }
 
     /// `webhooks` entraîne `auth` : un CRUD déjà présent reste ouvert par ce chemin

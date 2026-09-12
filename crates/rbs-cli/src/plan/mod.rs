@@ -109,6 +109,12 @@ pub(crate) enum Error {
     /// Une ancre attendue a disparu du projet.
     #[error("{0}")]
     Anchor(#[source] crate::anchors::Missing),
+    /// Une ancre est là, mais sous une ligne que l'insertion doit précéder.
+    ///
+    /// Distincte d'`Anchor` : l'ancre existe, et la reposer n'y changerait rien. C'est sa
+    /// place qui est en cause, et le remède est un bloc à remonter, non à coller.
+    #[error("{0}")]
+    MalPlacee(#[source] Box<crate::anchors::Misplaced>),
     /// Le fichier qui porte l'ancre visée n'existe pas.
     ///
     /// Distincte d'`Anchor`, qui suppose au contraire un fichier présent mais dépourvu de
@@ -243,6 +249,21 @@ impl Builder {
         });
 
         Ok(())
+    }
+
+    /// Vérifie que `anchor` précède, dans son fichier, toute ligne commençant par `line`.
+    ///
+    /// Sur le fichier tel que le plan l'a trouvé, et non tel qu'il le laissera : le bloc
+    /// que le remède affiche est celui que le développeur doit déplacer, sans les lignes
+    /// que ce plan, refusé, n'écrira pas. Un fichier absent du disque ne dit rien — s'il
+    /// naît de ce plan, sa template le rend en place ; sinon c'est l'insertion qui le
+    /// signale, ou la saute si l'ancre est optionnelle.
+    pub fn require_before(&self, anchor: &Anchor, line: &str) -> Result<(), Error> {
+        let Some(origine) = self.states(anchor.file.as_ref())?.origin else {
+            return Ok(());
+        };
+
+        crate::anchors::precedes(&origine, anchor, line).map_err(Error::MalPlacee)
     }
 
     /// Planifie la remise en place de `anchor`, disparue de son fichier.

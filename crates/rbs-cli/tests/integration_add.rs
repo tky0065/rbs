@@ -391,6 +391,59 @@ fn a_missing_state_anchor_stops_the_install_without_writing_anything() {
     );
 }
 
+/// Un projet créé avant la 1.5.0 porte `// <rbs:state_init>` sous
+/// `core: CoreState::new(db, config)`, qui a déjà consommé `config` quand `webhooks` la
+/// lit : le projet ne compilerait plus, et seul `cargo build` le dirait. La commande
+/// refuse avant d'écrire, nomme la ligne et affiche le bloc à remonter.
+#[test]
+fn webhooks_on_a_project_whose_state_init_anchor_follows_core_refuses_and_shows_the_block() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = committed_project(&parent);
+
+    let state = racine.join("src/state.rs");
+    let source = fs::read_to_string(&state).expect("state.rs est lisible");
+    let bloc = "            // <rbs:state_init>\n            // </rbs:state_init>\n";
+    let core = "            core: CoreState::new(db, config),\n";
+    let courant = format!("{bloc}{core}");
+    assert!(
+        source.contains(&courant),
+        "le squelette doit poser l'ancre juste au-dessus de `core:`, sans quoi le test ne \
+         prouve rien :\n{source}"
+    );
+    fs::write(&state, source.replace(&courant, &format!("{core}{bloc}")))
+        .expect("state.rs s'écrit");
+    common::commiter(&racine, "état d'avant 1.5.0");
+
+    let avant = common::empreinte(&racine);
+    let output = Sortie::de(rbs(&racine).args(["add", "webhooks"]));
+
+    assert!(
+        !output.succes,
+        "l'installation doit sortir en erreur :\n{}",
+        output.stdout
+    );
+    assert!(
+        output.stderr.contains(
+            "ancre // <rbs:state_init> placée sous `core: CoreState::new(` dans src/state.rs"
+        ),
+        "l'erreur doit nommer l'ancre, la ligne et le fichier :\n{}",
+        output.stderr
+    );
+    assert!(
+        output.stdout.contains(
+            "remontez ce bloc au-dessus de `core: CoreState::new(` :\n// <rbs:state_init>\n\
+             // </rbs:state_init>"
+        ),
+        "le bloc à remonter doit être affiché :\n{}",
+        output.stdout
+    );
+    common::assert_intact(
+        &avant,
+        &racine,
+        "l'ancre mal placée n'a pas empêché l'écriture",
+    );
+}
+
 /// L'installation d'un fragment à code Rust ne se rejoue pas.
 ///
 /// La vérification porte sur `[package.metadata.rbs]` et non sur la présence des

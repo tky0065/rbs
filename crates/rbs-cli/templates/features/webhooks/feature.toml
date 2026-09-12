@@ -83,9 +83,13 @@ content = "registre = registre.register::<crate::modules::webhooks::delivery::De
 anchor  = "state_champs"
 content = "pub webhooks: crate::modules::webhooks::Sender,"
 
+# `config` part par valeur dans `core: CoreState::new(db, config)` : l'insertion doit
+# la précéder, ce que le squelette garantit depuis 1.5.0 et qu'un projet antérieur ne
+# garantit pas.
 [[anchors]]
 anchor  = "state_init"
 content = "webhooks: crate::modules::webhooks::Sender::from_config(&config)?,"
+before  = "core: CoreState::new("
 
 [migration]
 source = "migration.rs.jinja"

@@ -463,6 +463,13 @@ touche à aucun fichier source qui appartient au développeur. `rbs doctor` sign
 absente avec le bloc à coller, et `rbs add cors` refuse de la même façon — rien d'écrit,
 le bloc affiché.
 
+Une ancre peut aussi être présente, mais au mauvais endroit. Un projet engendré avant la
+1.5.0 porte `// <rbs:state_init>` sous `core: CoreState::new(db, config)`, qui consomme
+`config` avant que `webhooks` ne la lise : `rbs add webhooks` refuse de la même façon,
+nomme la ligne et affiche le bloc à remonter au-dessus, avec ce que d'autres fragments y
+ont déjà posé. Aucun autre fragment ne lit `config` à cet endroit, et aucun n'est refusé
+sur un tel projet.
+
 ## Les échecs
 
 Hors d'un projet :
