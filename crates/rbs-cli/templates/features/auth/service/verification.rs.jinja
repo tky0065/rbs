@@ -4,6 +4,7 @@ use sea_orm::DatabaseConnection;
 
 use super::super::model::TokenPurpose;
 use super::super::repository;
+use super::normalise;
 
 /// Ouvre un jeton de vérification, et rend le compte avec le jeton **en clair**.
 ///
@@ -16,7 +17,7 @@ pub async fn request(
     ttl_secs: u64,
     email: &str,
 ) -> Result<Option<(repository::Model, String)>> {
-    let Some(utilisateur) = repository::find_by_email(db, email).await? else {
+    let Some(utilisateur) = repository::find_by_email(db, &normalise(email)).await? else {
         return Ok(None);
     };
 

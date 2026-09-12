@@ -105,6 +105,59 @@ async fn an_email_already_taken_returns_409_without_repeating_it() {
     );
 }
 
+/// La casse ne fait pas deux comptes : sans cela, l'attaquant inscrit `Victime@ex.fr`,
+/// la victime clique le lien de vérification qu'elle reçoit, et le compte de l'attaquant
+/// porte son adresse, vérifiée.
+///
+/// Les blancs, eux, n'atteignent pas la route : `#[validate(email)]` les refuse avant le
+/// service. Le test unitaire de `normalise`, plus bas, couvre ce que la route ne peut pas
+/// montrer.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn registration_lowercases_the_address() {
+    let api = application().await;
+    let base = fresh_email();
+
+    let (status, profile) = register(&api, &base.to_uppercase()).await;
+
+    assert_eq!(status, StatusCode::CREATED, "{profile}");
+    assert_eq!(profile["email"], base);
+}
+
+/// Ce que la base voit d'une adresse : ni casse ni blancs, quel que soit le parcours
+/// qui la reçoit.
+#[test]
+fn an_address_is_trimmed_and_lowercased_before_the_table() {
+    assert_eq!(
+        crate::auth::service::normalise("  Victime@Exemple.TEST \n"),
+        "victime@exemple.test"
+    );
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn login_ignores_the_case_of_the_address() {
+    let api = application().await;
+    let email = fresh_email();
+    register(&api, &email).await;
+
+    let (status, paire) = authenticate(&api, &email.to_uppercase(), PASSWORD).await;
+
+    assert_eq!(status, StatusCode::OK, "{paire}");
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_address_taken_in_another_case_is_a_conflict() {
+    let api = application().await;
+    let email = fresh_email();
+    register(&api, &email).await;
+
+    let (status, body) = register(&api, &email.to_uppercase()).await;
+
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+}
+
 /// Les deux échecs sont indiscernables : un corps qui différerait dirait à un attaquant
 /// quelles adresses sont inscrites.
 ///

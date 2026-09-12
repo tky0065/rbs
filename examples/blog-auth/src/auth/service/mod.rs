@@ -81,6 +81,15 @@ pub(super) async fn close_every_session(db: &DatabaseConnection, user_id: Uuid) 
     Ok(fermees)
 }
 
+/// L'adresse telle que la base la voit.
+///
+/// Minuscules et sans blancs : la partie locale est théoriquement sensible à la casse
+/// (RFC 5321 §2.4), aucun fournisseur ne l'honore, et c'est l'attaquant qui en
+/// profiterait — deux comptes pour une boîte, dont un vérifié par l'autre.
+pub(super) fn normalise(email: &str) -> String {
+    email.trim().to_lowercase()
+}
+
 /// La vue publique d'un utilisateur.
 ///
 /// Le hash n'a aucun chemin vers le client : `UserResponse` ne porte pas le champ, et

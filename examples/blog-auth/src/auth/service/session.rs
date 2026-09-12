@@ -10,7 +10,7 @@ use super::super::dto::{
     LoginRequest, RefreshRequest, RegisterRequest, SessionResponse, TokenPair, UserResponse,
 };
 use super::super::repository::{self, ADRESSE_PRISE, refresh_token::Rotation};
-use super::{close_every_session, issue, profile};
+use super::{close_every_session, issue, normalise, profile};
 
 /// Le hash vérifié quand l'adresse est inconnue.
 ///
@@ -23,12 +23,14 @@ static HASH_DE_COMPARAISON: LazyLock<String> = LazyLock::new(|| {
 });
 
 pub async fn register(db: &DatabaseConnection, input: RegisterRequest) -> Result<UserResponse> {
-    if repository::find_by_email(db, &input.email).await?.is_some() {
+    let email = normalise(&input.email);
+
+    if repository::find_by_email(db, &email).await?.is_some() {
         return Err(Error::Conflict(ADRESSE_PRISE.to_owned()));
     }
 
     let hash = hash::hash_password(&input.password)?;
-    let cree = repository::create(db, &input.email, &hash).await?;
+    let cree = repository::create(db, &email, &hash).await?;
 
     Ok(profile(cree))
 }
@@ -38,7 +40,7 @@ pub async fn login(
     auth: &AuthConfig,
     input: LoginRequest,
 ) -> Result<TokenPair> {
-    let utilisateur = repository::find_by_email(db, &input.email).await?;
+    let utilisateur = repository::find_by_email(db, &normalise(&input.email)).await?;
 
     // Le mot de passe est vérifié même lorsqu'aucun compte ne répond : sortir plus tôt
     // ici distinguerait une adresse inscrite d'une autre par le seul temps de réponse.
