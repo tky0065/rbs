@@ -74,6 +74,19 @@ pub trait HasAuth: HasCoreState {
     fn auth(&self) -> &crate::config::AuthConfig {
         &self.core().config().auth
     }
+
+    /// Dernier mot du projet sur un jeton dont la signature est bonne.
+    ///
+    /// Le noyau ne connaît ni la table des comptes ni ce qu'une révocation y écrit : il
+    /// vérifie la signature, puis demande. Le défaut accepte tout, et c'est ce qu'un
+    /// projet sans révocation obtient sans rien écrire.
+    fn accept(
+        &self,
+        claims: &crate::jwt::Claims,
+    ) -> impl std::future::Future<Output = Result<(), crate::Error>> + Send {
+        let _ = claims;
+        async { Ok(()) }
+    }
 }
 
 #[cfg(feature = "auth")]
