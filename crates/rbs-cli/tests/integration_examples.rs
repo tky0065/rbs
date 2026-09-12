@@ -606,9 +606,9 @@ fn each_example_file_is_tracked_by_git() {
 /// Le seul fichier exclu de la comparaison porte-t-il encore ce pour quoi il l'est ?
 ///
 /// `generate crud` pose désormais la garde lui-même : de l'inventaire d'hier il ne reste
-/// que le 403, qu'aucune commande n'engendre — le `tests.rs` généré ne signe qu'un jeton
-/// `admin`, et ne sait donc rien refuser à un rôle trop court. Ce test sorti de la
-/// comparaison, rien ne verrait ce refus disparaître au fil d'une régénération.
+/// que le 403, qu'aucune commande n'engendre — le `tests.rs` généré n'inscrit qu'un
+/// compte `admin`, et ne sait donc rien refuser à un rôle trop court. Ce test sorti de
+/// la comparaison, rien ne verrait ce refus disparaître au fil d'une régénération.
 #[test]
 fn the_hand_edits_of_blog_auth_are_in_place() {
     let racine = common::depot().join("examples").join("blog-auth");
@@ -620,7 +620,7 @@ fn the_hand_edits_of_blog_auth_are_in_place() {
         "`a_non_admin_write_returns_403` a disparu de l'exemple"
     );
     assert!(
-        tests.contains(r#"token("user")"#),
+        tests.contains(r#"token(&db, "user")"#),
         "le 403 ne prouve le seuil que si la requête présente un jeton d'un rôle plus court"
     );
 }

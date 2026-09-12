@@ -144,11 +144,9 @@ async fn changing_the_password_returns_a_usable_pair_and_closes_the_others() {
 
     assert_eq!(statut, StatusCode::OK, "corps : {corps}");
 
-    // L'ordre compte : rejouer le jeton de `premiere` arme la défense anti-rejeu de
-    // `refresh`, qui referme *toutes* les sessions ouvertes du compte — y compris celle
-    // que le changement de mot de passe vient d'émettre. Vérifier la nouvelle paire
-    // d'abord la prouve donc avant que le rejeu de l'ancienne ne la fasse tomber à son
-    // tour ; l'inverser ferait échouer ce deuxième appel sans rapport avec ce qu'il teste.
+    // La nouvelle paire d'abord, puis l'ancienne : l'ordre n'importe plus depuis qu'un
+    // jeton fermé rejoué ne ferme rien d'autre, mais lire le succès avant le refus est ce
+    // qu'un lecteur attend.
 
     // Celle que le changement vient de rendre tourne.
     let (accepte, _) = call(
@@ -160,6 +158,18 @@ async fn changing_the_password_returns_a_usable_pair_and_closes_the_others() {
     )
     .await;
     assert_eq!(accepte, StatusCode::OK);
+
+    // Et son jeton d'accès ouvre : émis dans la seconde même de la révocation, il n'est
+    // pas né mort — c'est le plancher d'`issue` qui le garantit.
+    let (ouvre, profil) = call(
+        &api,
+        get_authenticated(
+            "/auth/me",
+            corps["access_token"].as_str().expect("jeton d'accès"),
+        ),
+    )
+    .await;
+    assert_eq!(ouvre, StatusCode::OK, "{profil}");
 
     // L'ancienne session est fermée : son jeton de rafraîchissement ne tourne plus.
     let (rejet, _) = call(
@@ -308,6 +318,40 @@ async fn a_reset_token_sets_a_new_password_and_closes_every_session() {
     )
     .await;
     assert_eq!(rejet, StatusCode::UNAUTHORIZED);
+}
+
+/// Le jeton d'accès de l'attaquant tombe avec les sessions : « toutes révoquées » ne
+/// voulait rien dire tant qu'un Bearer émis avant restait bon un quart d'heure.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_access_token_issued_before_a_reset_is_refused() {
+    let api = application().await;
+    let db = connection().await;
+    let email = fresh_email();
+    register(&api, &email).await;
+    let avant = login(&api, &email, PASSWORD).await;
+    let acces = avant["access_token"].as_str().expect("jeton d'accès");
+
+    let (ok, _) = call(&api, get_authenticated("/auth/me", acces)).await;
+    assert_eq!(ok, StatusCode::OK);
+
+    // Le jeton de réinitialisation est tiré par le service, comme les tests voisins.
+    let (_, jeton) = crate::auth::service::password::request_reset(&db, 600, &email)
+        .await
+        .expect("la demande aboutit")
+        .expect("le compte existe");
+    let (statut, corps) = call(
+        &api,
+        post_json(
+            "/auth/reset-password",
+            json!({ "token": jeton, "new_password": "un autre mot de passe assez long" }),
+        ),
+    )
+    .await;
+    assert_eq!(statut, StatusCode::NO_CONTENT, "{corps}");
+
+    let (refus, corps) = call(&api, get_authenticated("/auth/me", acces)).await;
+    assert_eq!(refus, StatusCode::UNAUTHORIZED, "{corps}");
 }
 
 /// Le même jeton, deux fois : la seconde est refusée.

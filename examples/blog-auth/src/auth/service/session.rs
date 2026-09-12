@@ -9,8 +9,8 @@ use sea_orm::prelude::Uuid;
 use super::super::dto::{
     LoginRequest, RefreshRequest, RegisterRequest, SessionResponse, TokenPair, UserResponse,
 };
-use super::super::repository::{self, ADRESSE_PRISE};
-use super::{issue, profile};
+use super::super::repository::{self, ADRESSE_PRISE, refresh_token::Rotation};
+use super::{close_every_session, issue, normalise, profile};
 
 /// Le hash vérifié quand l'adresse est inconnue.
 ///
@@ -23,12 +23,14 @@ static HASH_DE_COMPARAISON: LazyLock<String> = LazyLock::new(|| {
 });
 
 pub async fn register(db: &DatabaseConnection, input: RegisterRequest) -> Result<UserResponse> {
-    if repository::find_by_email(db, &input.email).await?.is_some() {
+    let email = normalise(&input.email);
+
+    if repository::find_by_email(db, &email).await?.is_some() {
         return Err(Error::Conflict(ADRESSE_PRISE.to_owned()));
     }
 
     let hash = hash::hash_password(&input.password)?;
-    let cree = repository::create(db, &input.email, &hash).await?;
+    let cree = repository::create(db, &email, &hash).await?;
 
     Ok(profile(cree))
 }
@@ -38,7 +40,7 @@ pub async fn login(
     auth: &AuthConfig,
     input: LoginRequest,
 ) -> Result<TokenPair> {
-    let utilisateur = repository::find_by_email(db, &input.email).await?;
+    let utilisateur = repository::find_by_email(db, &normalise(&input.email)).await?;
 
     // Le mot de passe est vérifié même lorsqu'aucun compte ne répond : sortir plus tôt
     // ici distinguerait une adresse inscrite d'une autre par le seul temps de réponse.
@@ -66,31 +68,46 @@ pub async fn refresh(
     let fingerprint = token::fingerprint(&input.refresh_token);
     let maintenant = Utc::now().fixed_offset();
 
-    // Jeton inconnu, déjà tourné ou périmé : la même erreur pour les trois. Les
-    // distinguer renseignerait sur l'état des sessions.
+    // Jeton inconnu ou périmé : la même erreur pour les deux. Les distinguer
+    // renseignerait sur l'état des sessions ; ce qu'un jeton connu mais fermé ou tourné
+    // vaut se décide juste en dessous.
     let session = repository::find_refresh_token(db, &fingerprint)
         .await?
         .filter(|session| session.expires_at > maintenant)
         .ok_or(Error::Unauthorized)?;
 
-    // Rien ici ne relit `revoked_at` : c'est `consume` qui porte la condition, et elle
-    // seule peut la porter sans laisser passer deux rafraîchissements concurrents.
-    if !repository::consume(db, session.id).await? {
-        // La ligne existe et était déjà fermée : ce jeton a servi deux fois. L'un de ses
-        // deux porteurs n'est pas le titulaire du compte, et rien ne dit lequel — un
-        // jeton volé et joué avant la rotation légitime laisserait sinon le voleur avec
-        // une paire valide, renouvelée indéfiniment. Tout le compte se reconnecte.
-        let fermees = repository::revoke_sessions_of(db, session.user_id).await?;
+    // Rien ici ne relit les deux colonnes : c'est `rotate` qui porte la condition, et
+    // elle seule peut la porter sans laisser passer deux rafraîchissements concurrents.
+    match repository::refresh_token::rotate(db, session.id).await? {
+        Rotation::Done => {}
+        // La ligne avait tourné : ce jeton a servi deux fois. L'un de ses deux porteurs
+        // n'est pas le titulaire du compte, et rien ne dit lequel — un jeton volé et joué
+        // avant la rotation légitime laisserait sinon le voleur avec une paire valide,
+        // renouvelée indéfiniment. Tout le compte se reconnecte.
+        Rotation::Replayed => {
+            let fermees = close_every_session(db, session.user_id).await?;
 
-        // Ni l'adresse ni le jeton : le journal ne porte pas ce que la réponse tait, et
-        // l'identifiant du compte suffit à retrouver ce qui s'est passé.
-        tracing::warn!(
-            user_id = %session.user_id,
-            sessions_revoquees = fermees,
-            "jeton de rafraîchissement rejoué : les sessions du compte sont révoquées"
-        );
+            // Ni l'adresse ni le jeton : le journal ne porte pas ce que la réponse tait,
+            // et l'identifiant du compte suffit à retrouver ce qui s'est passé.
+            tracing::warn!(
+                user_id = %session.user_id,
+                sessions_revoquees = fermees,
+                "jeton de rafraîchissement rejoué : les sessions du compte sont révoquées"
+            );
 
-        return Err(Error::Unauthorized);
+            return Err(Error::Unauthorized);
+        }
+        // Fermée par une déconnexion, une révocation, ou un rejeu déjà instruit : un
+        // client qui réessaie, pas un jeton qui circule pour la première fois. Le même
+        // 401 qu'un jeton inconnu, et rien d'autre.
+        Rotation::Closed => {
+            tracing::debug!(
+                user_id = %session.user_id,
+                "jeton de rafraîchissement fermé rejoué"
+            );
+
+            return Err(Error::Unauthorized);
+        }
     }
 
     let utilisateur = repository::find(db, session.user_id)
@@ -108,10 +125,8 @@ pub async fn logout(db: &DatabaseConnection, input: RefreshRequest) -> Result<()
         .ok_or(Error::Unauthorized)?;
 
     // La session ferme la ligne présentée, et elle seule : les autres appareils du même
-    // compte gardent la leur. Un jeton déjà fermé ne l'est pas deux fois, et ne fait pas
-    // tomber le compte comme un rafraîchissement rejoué : redemander une déconnexion est
-    // le fait d'un client qui réessaie, non celui d'un jeton qui circule.
-    if !repository::consume(db, session.id).await? {
+    // compte gardent la leur. Un jeton déjà fermé ne l'est pas deux fois.
+    if !repository::refresh_token::close(db, session.id).await? {
         return Err(Error::Unauthorized);
     }
 
@@ -161,7 +176,7 @@ pub async fn revoke_session(db: &DatabaseConnection, id: Uuid, user_id: Uuid) ->
 }
 
 pub async fn revoke_sessions(db: &DatabaseConnection, user_id: Uuid) -> Result<()> {
-    repository::revoke_sessions_of(db, user_id).await?;
+    close_every_session(db, user_id).await?;
 
     Ok(())
 }

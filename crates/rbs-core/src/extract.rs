@@ -48,6 +48,7 @@ impl<S: HasAuth> FromRequestParts<S> for Identity {
             .ok_or(Error::Unauthorized)?;
 
         let claims = crate::jwt::verify(token, &state.auth().secret)?;
+        state.accept(&claims).await?;
 
         Ok(Self {
             user_id: claims.sub,
@@ -346,6 +347,48 @@ mod tests {
 
             assert_eq!(status, StatusCode::OK, "obtenu : {body}");
             assert_eq!(body, "u1 admin");
+        }
+
+        /// Un état qui refuse tout jeton, quelle que soit sa signature : ce que le projet
+        /// écrit quand il relit le compte et que la révocation l'a vidé.
+        #[derive(Clone)]
+        struct Refusant(AppState);
+
+        impl HasCoreState for Refusant {
+            fn core(&self) -> &CoreState {
+                self.0.core()
+            }
+        }
+
+        impl HasAuth for Refusant {
+            async fn accept(&self, _: &Claims) -> Result<(), crate::Error> {
+                Err(crate::Error::Unauthorized)
+            }
+        }
+
+        #[tokio::test]
+        async fn a_state_that_refuses_a_claim_turns_a_signed_token_into_401() {
+            async fn handler(identite: Identity) -> String {
+                identite.user_id
+            }
+
+            let response = Router::new()
+                .route("/", get(handler))
+                .with_state(Refusant(state()))
+                .oneshot(
+                    Request::builder()
+                        .uri("/")
+                        .header(
+                            header::AUTHORIZATION,
+                            format!("Bearer {}", token(LATER, SECRET)),
+                        )
+                        .body(Body::empty())
+                        .expect("requête valide"),
+                )
+                .await
+                .expect("le router doit répondre");
+
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
 
         #[tokio::test]

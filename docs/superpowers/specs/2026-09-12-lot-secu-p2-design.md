@@ -107,9 +107,12 @@ nulles ; c'est la condition de `open_sessions_of`, de `revoke_sessions_of` et de
 `consume(db, id)` se scinde :
 
 - `rotate(db, id) -> Result<Rotation>` pose `replaced_at` où les deux colonnes sont nulles.
-  Quand l'`UPDATE` ne touche rien, la fonction relit la ligne et rend `Rotation::Replayed`
-  si `replaced_at` est posé, `Rotation::Closed` si `revoked_at` l'est — le `SELECT` qui
-  suit l'`UPDATE` ne décide de rien, il ne fait que nommer l'état déjà écrit.
+  Quand l'`UPDATE` ne touche rien, la fonction relit la ligne : `Rotation::Closed` si
+  `revoked_at` est posé, sinon `Rotation::Replayed` si `replaced_at` l'est — et dans ce
+  cas elle ferme aussi la ligne rejouée, pour que le rejeu ne soit instruit qu'une fois.
+  Sans cette fermeture, un jeton tourné puis rejoué resterait un bouton pour déconnecter
+  le titulaire à chaque reconnexion : le trou du point 2, déplacé d'une colonne. Le
+  `SELECT` qui suit l'`UPDATE` ne décide de rien, il ne fait que nommer l'état déjà écrit.
 - `close(db, id) -> Result<bool>` pose `revoked_at` sous la même condition, pour `logout`.
 
 ### Service

@@ -70,7 +70,7 @@ Thirteen routes come with it. Five open the core cycle:
 |---|---|
 | `POST /auth/register` | Creates an account. 201 with the profile, 409 if the address is taken. |
 | `POST /auth/login` | Exchanges credentials for an access/refresh pair. |
-| `POST /auth/refresh` | Rotates the pair. The refresh token presented is spent. |
+| `POST /auth/refresh` | Rotates the pair. The token presented is marked replaced. |
 | `POST /auth/logout` | Revokes one session. 204. |
 | `GET /auth/me` | The caller's profile. |
 
@@ -121,22 +121,39 @@ is appended by `rbs add auth`; everything above it was already there.
 
 Two tokens, with two different jobs.
 
-The **access token** is a signed JWT (HS256). It carries the account id and its role, it
-is not stored anywhere, and it is verified by signature alone — which is what makes it
-cheap. It is short-lived because it cannot be revoked.
+The **access token** is a signed JWT (HS256). It carries the account id and its role and
+is not stored anywhere. Its signature is verified first; then the account row is read —
+one query per authenticated request — and the token is refused if the account is gone,
+if every session was closed after it was issued (`users.sessions_revoked_at`), or if the
+role it carries is no longer the account's. Closing a *single* session does not reach
+its access token: nothing links the two, and the token lives until `exp`. That is why
+it stays short-lived.
 
 The **refresh token** is 256 random bits, opaque, with no structure to read. It is stored
 in `refresh_tokens` as a SHA-256 fingerprint, never in clear: a dump of that table hands
 an attacker nothing usable. It is deliberately not hashed with Argon2 — a random token has
 nothing to brute-force, and a slow KDF on every refresh would buy nothing.
 
-Refreshing **rotates** the pair: the token presented is marked spent in the same
-conditional `UPDATE` that reads it, so replaying it a second time gets a 401. Logging out
-spends it the same way, without issuing a new one — which is why the two operations share
-their repository call.
+Refreshing **rotates** the pair: the token presented is marked replaced (`replaced_at`)
+in the same conditional `UPDATE` that reads it, so two concurrent refreshes cannot both
+win. A replaced token presented again has been used twice — one of its two holders is not
+the account owner — and every session of the account is closed. Logging out, revoking a
+session, resetting or changing the password close a token instead, in a separate column
+(`revoked_at`): a closed token presented again gets a 401 and nothing else, because a
+client retrying a logout is not a stolen token circulating. Resetting or changing the
+password and `DELETE /auth/sessions` also stamp `users.sessions_revoked_at`: every access
+token issued before that second dies with the sessions.
+
+A client that resubmits the same refresh token — a retry after a timeout, a doubled
+request — looks exactly like a replay and pays the same price, every session closed. That
+is the cost of detecting reuse: only retry a refresh you never got a response for.
 
 Passwords are hashed with Argon2id, salted per call. Neither the hash nor the password
 appears in a response or in the logs.
+
+Addresses are trimmed and lowercased before they reach the table: `Alice@Example.test`
+and `alice@example.test` are one account, at registration as at login, and the profile
+carries the lowercased form. The DTO still validates what the client sent.
 
 Login answers **the same 401** whether the address is unknown or the password wrong, and
 it hashes a comparison value even for an unknown address. Skipping that comparison would
@@ -395,9 +412,10 @@ promotion would carry the old role:
 
 ## Testing a protected route
 
-A feature's own tests need no account at all. `Identity` verifies a signature and nothing
-else, so the generated `tests.rs` signs the token it presents, and the file has no row to
-create and none to clean up:
+A feature's own tests create one account. `Identity` verifies the signature, then reads
+the account row, so a token signed for an invented `sub` is refused: the generated
+`tests.rs` registers an account at the role its routes require the first time
+`application()` runs, signs a token for it, and every request carries that token:
 
 ```rust file=examples/blog-auth/src/posts/tests.rs region=jeton
 ```

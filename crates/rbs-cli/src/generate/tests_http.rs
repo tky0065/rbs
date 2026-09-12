@@ -184,8 +184,9 @@ mod tests {
         render(&Feature::fresh(name, fields)).expect("les tests doivent se rendre")
     }
 
-    /// Sous `auth`, le harnais signe son propre jeton et les scénarios qui écrivent
-    /// restent rendus : un fichier réduit aux refus perdrait tout ce qu'il éprouvait.
+    /// Sous `auth`, le harnais inscrit son propre compte et signe son jeton, et les
+    /// scénarios qui écrivent restent rendus : un fichier réduit aux refus perdrait tout
+    /// ce qu'il éprouvait.
     #[test]
     fn under_auth_the_harness_signs_its_own_token() {
         let fields = fields::parse("title:string").expect("champs valides");
@@ -193,12 +194,13 @@ mod tests {
             .expect("les tests doivent se rendre");
 
         assert!(
-            rendered.contains("fn token(role: &str) -> String"),
-            "le harnais doit savoir signer un jeton :\n{rendered}"
+            rendered.contains("async fn token(db: &DatabaseConnection, role: &str) -> String"),
+            "le harnais doit savoir inscrire un compte et signer son jeton :\n{rendered}"
         );
         assert!(
-            rendered.contains("rbs_core::jwt::sign"),
-            "le jeton se signe par le noyau, sans passer par la base :\n{rendered}"
+            rendered.contains("crate::auth::repository::create(")
+                && rendered.contains("rbs_core::jwt::sign"),
+            "le compte s'inscrit par le dépôt du projet et le jeton se signe par le noyau :\n{rendered}"
         );
         assert!(
             rendered.contains("the_full_lifecycle_goes_through_the_api"),
@@ -275,7 +277,7 @@ mod tests {
         .expect("les tests doivent se rendre");
 
         assert!(
-            rendered.contains(r#"token("admin")"#),
+            rendered.contains(r#"token(&db, "admin")"#),
             "les écritures gardées exigent un jeton du rôle demandé :\n{rendered}"
         );
     }

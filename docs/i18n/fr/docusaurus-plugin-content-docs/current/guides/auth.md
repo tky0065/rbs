@@ -71,7 +71,7 @@ Treize routes viennent avec. Cinq ouvrent le cycle central :
 |---|---|
 | `POST /auth/register` | Crée un compte. 201 avec le profil, 409 si l'adresse est prise. |
 | `POST /auth/login` | Échange les identifiants contre une paire accès/rafraîchissement. |
-| `POST /auth/refresh` | Fait tourner la paire. Le jeton de rafraîchissement présenté est consommé. |
+| `POST /auth/refresh` | Fait tourner la paire : le jeton présenté est marqué remplacé. |
 | `POST /auth/logout` | Révoque une session. 204. |
 | `GET /auth/me` | Le profil de l'appelant. |
 
@@ -125,8 +125,12 @@ est ajoutée par `rbs add auth` ; tout ce qui la précède était déjà là.
 Deux jetons, deux métiers différents.
 
 Le **jeton d'accès** est un JWT signé (HS256). Il porte l'identifiant du compte et son
-rôle, il n'est stocké nulle part, et il se vérifie par sa seule signature — ce qui le rend
-peu coûteux. Il est de courte durée parce qu'il ne peut pas être révoqué.
+rôle, et n'est stocké nulle part. Sa signature est vérifiée d'abord ; puis la ligne du
+compte est relue — une requête par appel authentifié — et le jeton est refusé si le compte
+a disparu, si toutes les sessions ont été fermées après son émission
+(`users.sessions_revoked_at`), ou si le rôle qu'il porte n'est plus celui du compte.
+Fermer une *seule* session n'atteint pas son jeton d'accès : rien ne relie les deux, et
+le jeton vit jusqu'à `exp`. C'est pourquoi il reste de courte durée.
 
 Le **jeton de rafraîchissement** est fait de 256 bits tirés au hasard, opaque, sans
 structure à lire. Il est stocké dans `refresh_tokens` sous forme d'empreinte SHA-256,
@@ -134,13 +138,30 @@ jamais en clair : un vol de cette table ne remet rien d'utilisable à un attaqua
 délibérément pas haché par Argon2 — un jeton aléatoire n'offre rien à une recherche
 exhaustive, et un KDF lent à chaque rafraîchissement ne s'achèterait rien.
 
-Rafraîchir fait **tourner** la paire : le jeton présenté est marqué consommé par l'`UPDATE`
-conditionnel qui le lit, si bien que le rejouer une seconde fois vaut 401. Se déconnecter
-le consomme de la même façon, sans en réémettre — c'est pourquoi les deux opérations
-partagent leur appel au repository.
+Rafraîchir fait **tourner** la paire : le jeton présenté est marqué remplacé
+(`replaced_at`) par le même `UPDATE` conditionnel qui le lit, si bien que deux
+rafraîchissements concurrents ne peuvent pas gagner tous les deux. Un jeton remplacé
+présenté à nouveau a servi deux fois — un de ses deux détenteurs n'est pas le titulaire du
+compte — et toutes les sessions du compte sont fermées. Se déconnecter, révoquer une
+session, réinitialiser ou changer le mot de passe ferment un jeton à la place, dans une
+colonne séparée (`revoked_at`) : un jeton fermé présenté à nouveau vaut 401 et rien de
+plus, parce qu'un client qui rejoue une déconnexion n'est pas un jeton volé qui circule.
+Réinitialiser ou changer le mot de passe et `DELETE /auth/sessions` estampillent aussi
+`users.sessions_revoked_at` : tout jeton d'accès émis avant cette seconde meurt avec les
+sessions.
+
+Un client qui resoumet le même jeton de rafraîchissement — un retry après un délai, un
+double envoi — est indiscernable d'un rejeu et paie le même prix : toutes les sessions se
+ferment. C'est le prix de la détection du rejeu : ne rejouer un rafraîchissement que si
+aucune réponse n'a été reçue.
 
 Les mots de passe sont hachés par Argon2id, avec un sel tiré à chaque appel. Ni le hash ni
 le mot de passe n'apparaissent dans une réponse ou dans les logs.
+
+Les adresses sont débarrassées de leurs blancs et passées en minuscules avant d'atteindre
+la table : `Alice@Exemple.test` et `alice@exemple.test` sont un seul compte, à
+l'inscription comme à la connexion, et le profil porte la forme en minuscules. Le DTO
+valide toujours ce que le client a envoyé.
 
 La connexion répond **la même 401** que l'adresse soit inconnue ou le mot de passe erroné,
 et elle hache une valeur de comparaison même pour une adresse inconnue. Sauter cette
@@ -407,9 +428,10 @@ avant la promotion porterait l'ancien rôle :
 
 ## Tester une route protégée
 
-Les tests d'une feature n'ont besoin d'aucun compte. `Identity` ne vérifie qu'une
-signature : le `tests.rs` engendré signe le jeton qu'il présente, et le fichier n'a ni
-ligne à créer ni ligne à nettoyer :
+Les tests d'une feature créent un compte. `Identity` vérifie la signature, puis relit la
+ligne du compte : un jeton signé pour un `sub` inventé est refusé. Le `tests.rs` engendré
+inscrit donc un compte au rôle que ses routes exigent, à la première montée de
+`application()`, signe un jeton pour lui, et chaque requête le porte :
 
 ```rust file=examples/blog-auth/src/posts/tests.rs region=jeton
 ```

@@ -1,6 +1,7 @@
 use axum::Router;
 use axum::body::{Body, to_bytes};
 use axum::http::{Request, StatusCode};
+use sea_orm::DatabaseConnection;
 use serde_json::{Value, json};
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -20,6 +21,13 @@ async fn application() -> Router {
     let db = rbs_core::db::connect(&config.database)
         .await
         .expect("base joignable — les migrations doivent avoir été appliquées");
+
+    // Deux tests montent l'application en parallèle : le premier jeton posé sert à tous,
+    // et le compte de l'autre reste simplement sans usage.
+    if JETON.get().is_none() {
+        let jeton = token(&db, "admin").await;
+        let _ = JETON.set(jeton);
+    }
 
     router(AppState::new(db, config).expect("état partagé constructible"))
 }
@@ -43,16 +51,33 @@ async fn call(api: &Router, request: Request<Body>) -> (StatusCode, Value) {
 }
 
 // region: jeton
-/// Signe un jeton portant `role`, sans passer par la base.
+/// Le jeton d'accès de ce binaire de test, posé par `application()`.
 ///
-/// L'extracteur `Identity` ne vérifie que la signature : le compte n'a pas à exister
-/// pour qu'elle tienne, et le fichier n'a donc ni compte à créer ni ligne à nettoyer.
-fn token(role: &str) -> String {
-    let config = rbs_core::Config::load().expect("configuration lisible");
-    let maintenant = chrono::Utc::now().timestamp();
+/// Un seul compte pour tous les tests : `Identity` relit la ligne du compte à chaque
+/// requête — rôle et révocations — et un jeton signé pour un `sub` inventé est refusé.
+static JETON: std::sync::OnceLock<String> = std::sync::OnceLock::new();
 
+/// Inscrit un compte au rôle voulu et signe un jeton pour lui.
+async fn token(db: &DatabaseConnection, role: &str) -> String {
+    use sea_orm::{ActiveModelTrait, ActiveValue::Set};
+
+    let config = rbs_core::Config::load().expect("configuration lisible");
+    let compte = crate::auth::repository::create(
+        db,
+        &format!("{}@exemple.test", Uuid::new_v4()),
+        "hash sans valeur",
+    )
+    .await
+    .expect("le compte s'insère");
+    let role_connu: crate::auth::model::Role =
+        sea_orm::ActiveEnum::try_from_value(&role.to_owned()).expect("rôle connu");
+    let mut promu: crate::auth::model::user::ActiveModel = compte.into();
+    promu.role = Set(role_connu);
+    let compte = promu.update(db).await.expect("rôle posé");
+
+    let maintenant = chrono::Utc::now().timestamp();
     let claims = rbs_core::jwt::Claims {
-        sub: Uuid::new_v4().to_string(),
+        sub: compte.id.to_string(),
         role: role.to_string(),
         exp: maintenant + 300,
         iat: maintenant,
@@ -61,6 +86,16 @@ fn token(role: &str) -> String {
 
     rbs_core::jwt::sign(&claims, &config.auth.secret).expect("jeton signable")
 }
+
+/// L'en-tête `Authorization` des requêtes de ce fichier.
+fn bearer() -> String {
+    format!(
+        "Bearer {}",
+        JETON
+            .get()
+            .expect("`application()` inscrit le compte avant toute requête")
+    )
+}
 // endregion: jeton
 
 fn request(method: &str, path: &str, body: Value) -> Request<Body> {
@@ -68,7 +103,7 @@ fn request(method: &str, path: &str, body: Value) -> Request<Body> {
         .method(method)
         .uri(path)
         .header("content-type", "application/json")
-        .header("authorization", format!("Bearer {}", token("admin")))
+        .header("authorization", bearer())
         .body(Body::from(body.to_string()))
         .expect("requête bien formée")
 }
@@ -77,7 +112,7 @@ fn without_body(method: &str, path: &str) -> Request<Body> {
     Request::builder()
         .method(method)
         .uri(path)
-        .header("authorization", format!("Bearer {}", token("admin")))
+        .header("authorization", bearer())
         .body(Body::empty())
         .expect("requête bien formée")
 }
@@ -290,7 +325,7 @@ async fn an_unreadable_body_returns_400() {
         .method("POST")
         .uri("/posts")
         .header("content-type", "application/json")
-        .header("authorization", format!("Bearer {}", token("admin")))
+        .header("authorization", bearer())
         .body(Body::from("{"))
         .expect("requête bien formée");
 
@@ -351,11 +386,18 @@ async fn an_anonymous_read_returns_401() {
 #[ignore = "joint la base du projet"]
 async fn a_non_admin_write_returns_403() {
     let api = application().await;
+    // Un compte `user` réel, à côté de l'`admin` que `application()` a inscrit : c'est
+    // la ligne, et non le jeton, que `Identity` relit pour connaître le rôle.
+    let config = rbs_core::Config::load().expect("configuration lisible");
+    let db = rbs_core::db::connect(&config.database)
+        .await
+        .expect("base joignable");
+    let jeton = token(&db, "user").await;
     let ordinaire = Request::builder()
         .method("POST")
         .uri("/posts")
         .header("content-type", "application/json")
-        .header("authorization", format!("Bearer {}", token("user")))
+        .header("authorization", format!("Bearer {jeton}"))
         .body(Body::from(creation().to_string()))
         .expect("requête bien formée");
 
@@ -367,7 +409,7 @@ async fn a_non_admin_write_returns_403() {
     let lecture = Request::builder()
         .method("GET")
         .uri("/posts?per_page=1")
-        .header("authorization", format!("Bearer {}", token("user")))
+        .header("authorization", format!("Bearer {jeton}"))
         .body(Body::empty())
         .expect("requête bien formée");
 

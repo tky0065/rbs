@@ -14,8 +14,8 @@ pub use super::super::model::refresh_token::Model;
 // L'instant vient de Rust et se lie en paramètre, jamais de `CURRENT_TIMESTAMP` : sqlx
 // écrit la colonne en RFC 3339 (`2026-01-01T…+00:00`) là où l'horloge de SQLite rend
 // `2026-01-01 23:59:59`, et SQLite compare le texte — `'T' > ' '`, toute échéance du jour
-// passait pour future. L'écriture de `revoked_at` suit la même règle pour que la colonne
-// ne mélange pas deux formats.
+// passait pour future. L'écriture de `revoked_at` et de `replaced_at` suit la même règle
+// pour qu'aucune des deux colonnes ne mélange deux formats.
 
 /// Ouvre une session de rafraîchissement.
 ///
@@ -53,18 +53,76 @@ pub async fn find_refresh_token(
         .await?)
 }
 
-/// Consomme une session, et dit si c'est bien cet appel qui l'a fait.
+/// Ce qu'une rotation a trouvé.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rotation {
+    /// La ligne était ouverte : c'est cet appel qui l'a tournée.
+    Done,
+    /// La ligne avait déjà tourné et n'avait pas encore été fermée : c'est cet appel qui
+    /// l'a fait, sur ce rejeu.
+    Replayed,
+    /// La ligne avait été fermée — un rejeu déjà instruit, une déconnexion, une
+    /// révocation, un mot de passe changé.
+    Closed,
+}
+
+/// Tourne une session, et dit si c'est bien cet appel qui l'a fait.
 ///
 /// L'`UPDATE` porte sa propre condition plutôt que de suivre une lecture : deux
 /// rafraîchissements simultanés du même jeton franchiraient tous deux la lecture avant
-/// que l'un ait écrit, et repartiraient chacun avec une paire valide.
-pub async fn consume(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
+/// que l'un ait écrit, et repartiraient chacun avec une paire valide. La lecture qui suit
+/// un `UPDATE` sans effet ne décide de rien : elle nomme l'état déjà écrit.
+pub async fn rotate(db: &DatabaseConnection, id: Uuid) -> Result<Rotation> {
+    let touchees = refresh_token::Entity::update_many()
+        .col_expr(
+            refresh_token::Column::ReplacedAt,
+            Expr::value(Utc::now().fixed_offset()),
+        )
+        .filter(refresh_token::Column::Id.eq(id))
+        .filter(refresh_token::Column::ReplacedAt.is_null())
+        .filter(refresh_token::Column::RevokedAt.is_null())
+        .exec(db)
+        .await?;
+
+    if touchees.rows_affected == 1 {
+        return Ok(Rotation::Done);
+    }
+
+    let ligne = refresh_token::Entity::find_by_id(id).one(db).await?;
+
+    // Le rejeu d'une ligne tournée est instruit une fois — la famille tombe — et la ligne
+    // est fermée à son tour ; un rejeu répété de la même ligne n'apprend rien de plus et
+    // ne ferait qu'offrir à qui tient un jeton mort un bouton pour déconnecter le
+    // titulaire à chaque reconnexion. L'ordre des gardes met donc `revoked_at` avant
+    // `replaced_at` : les deux colonnes posées signifient « rejeu déjà instruit ».
+    match ligne {
+        Some(ligne) if ligne.revoked_at.is_some() => Ok(Rotation::Closed),
+        Some(ligne) if ligne.replaced_at.is_some() => {
+            refresh_token::Entity::update_many()
+                .col_expr(
+                    refresh_token::Column::RevokedAt,
+                    Expr::value(Utc::now().fixed_offset()),
+                )
+                .filter(refresh_token::Column::Id.eq(id))
+                .filter(refresh_token::Column::RevokedAt.is_null())
+                .exec(db)
+                .await?;
+
+            Ok(Rotation::Replayed)
+        }
+        _ => Ok(Rotation::Closed),
+    }
+}
+
+/// Ferme une session présentée, et dit si c'est bien cet appel qui l'a fait.
+pub async fn close(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
     let touchees = refresh_token::Entity::update_many()
         .col_expr(
             refresh_token::Column::RevokedAt,
             Expr::value(Utc::now().fixed_offset()),
         )
         .filter(refresh_token::Column::Id.eq(id))
+        .filter(refresh_token::Column::ReplacedAt.is_null())
         .filter(refresh_token::Column::RevokedAt.is_null())
         .exec(db)
         .await?;
@@ -85,6 +143,7 @@ pub async fn revoke_sessions_of(db: &DatabaseConnection, user_id: Uuid) -> Resul
             Expr::value(Utc::now().fixed_offset()),
         )
         .filter(refresh_token::Column::UserId.eq(user_id))
+        .filter(refresh_token::Column::ReplacedAt.is_null())
         .filter(refresh_token::Column::RevokedAt.is_null())
         .exec(db)
         .await?;
@@ -94,13 +153,15 @@ pub async fn revoke_sessions_of(db: &DatabaseConnection, user_id: Uuid) -> Resul
 
 /// Les sessions encore ouvertes d'un compte, la plus récente d'abord.
 ///
-/// Ni révoquées ni périmées : ce que la liste montre est ce qu'une révocation fermerait.
+/// Ni tournées, ni révoquées, ni périmées : ce que la liste montre est ce qu'une
+/// révocation fermerait.
 pub async fn open_sessions_of(
     db: &DatabaseConnection,
     user_id: Uuid,
 ) -> Result<Vec<refresh_token::Model>> {
     Ok(refresh_token::Entity::find()
         .filter(refresh_token::Column::UserId.eq(user_id))
+        .filter(refresh_token::Column::ReplacedAt.is_null())
         .filter(refresh_token::Column::RevokedAt.is_null())
         .filter(refresh_token::Column::ExpiresAt.gt(Utc::now().fixed_offset()))
         .order_by_desc(refresh_token::Column::CreatedAt)
@@ -121,6 +182,7 @@ pub async fn revoke_session(db: &DatabaseConnection, id: Uuid, user_id: Uuid) ->
         )
         .filter(refresh_token::Column::Id.eq(id))
         .filter(refresh_token::Column::UserId.eq(user_id))
+        .filter(refresh_token::Column::ReplacedAt.is_null())
         .filter(refresh_token::Column::RevokedAt.is_null())
         .exec(db)
         .await?;

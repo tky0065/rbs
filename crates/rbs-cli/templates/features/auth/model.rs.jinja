@@ -47,6 +47,7 @@ pub mod user {
         pub password_hash: String,
         pub role: Role,
         pub email_verified_at: Option<DateTimeWithTimeZone>,
+        pub sessions_revoked_at: Option<DateTimeWithTimeZone>,
         pub created_at: DateTimeWithTimeZone,
         pub updated_at: DateTimeWithTimeZone,
     }
@@ -90,6 +91,7 @@ pub mod refresh_token {
         pub token_hash: String,
         pub expires_at: DateTimeWithTimeZone,
         pub revoked_at: Option<DateTimeWithTimeZone>,
+        pub replaced_at: Option<DateTimeWithTimeZone>,
         pub created_at: DateTimeWithTimeZone,
         pub updated_at: DateTimeWithTimeZone,
     }

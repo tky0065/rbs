@@ -105,6 +105,59 @@ async fn an_email_already_taken_returns_409_without_repeating_it() {
     );
 }
 
+/// La casse ne fait pas deux comptes : sans cela, l'attaquant inscrit `Victime@ex.fr`,
+/// la victime clique le lien de vérification qu'elle reçoit, et le compte de l'attaquant
+/// porte son adresse, vérifiée.
+///
+/// Les blancs, eux, n'atteignent pas la route : `#[validate(email)]` les refuse avant le
+/// service. Le test unitaire de `normalise`, plus bas, couvre ce que la route ne peut pas
+/// montrer.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn registration_lowercases_the_address() {
+    let api = application().await;
+    let base = fresh_email();
+
+    let (status, profile) = register(&api, &base.to_uppercase()).await;
+
+    assert_eq!(status, StatusCode::CREATED, "{profile}");
+    assert_eq!(profile["email"], base);
+}
+
+/// Ce que la base voit d'une adresse : ni casse ni blancs, quel que soit le parcours
+/// qui la reçoit.
+#[test]
+fn an_address_is_trimmed_and_lowercased_before_the_table() {
+    assert_eq!(
+        crate::auth::service::normalise("  Victime@Exemple.TEST \n"),
+        "victime@exemple.test"
+    );
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn login_ignores_the_case_of_the_address() {
+    let api = application().await;
+    let email = fresh_email();
+    register(&api, &email).await;
+
+    let (status, paire) = authenticate(&api, &email.to_uppercase(), PASSWORD).await;
+
+    assert_eq!(status, StatusCode::OK, "{paire}");
+}
+
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_address_taken_in_another_case_is_a_conflict() {
+    let api = application().await;
+    let email = fresh_email();
+    register(&api, &email).await;
+
+    let (status, body) = register(&api, &email.to_uppercase()).await;
+
+    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+}
+
 /// Les deux échecs sont indiscernables : un corps qui différerait dirait à un attaquant
 /// quelles adresses sont inscrites.
 ///
@@ -336,6 +389,67 @@ async fn replaying_a_refresh_closes_the_other_sessions_of_the_account() {
     );
 }
 
+/// Le rejeu d'un jeton tourné est instruit une fois : la famille tombe, la ligne se ferme.
+/// Le rejouer encore ne ferme plus rien — sinon qui tient un jeton mort déconnecterait le
+/// titulaire à chaque reconnexion, jusqu'à l'échéance du jeton.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_replayed_token_presented_again_leaves_the_sessions_opened_since_alive() {
+    let api = application().await;
+    let email = fresh_email();
+    register(&api, &email).await;
+
+    let (_, premiere) = authenticate(&api, &email, PASSWORD).await;
+    let ancien = refresh_for(&premiere);
+    let (status, _) = refresh(&api, &ancien).await;
+    assert_eq!(status, StatusCode::OK);
+
+    let (rejeu, body) = refresh(&api, &ancien).await;
+    assert_eq!(rejeu, StatusCode::UNAUTHORIZED, "{body}");
+
+    // Le titulaire se reconnecte après l'expulsion.
+    let (_, reconnexion) = authenticate(&api, &email, PASSWORD).await;
+
+    let (rejeu, body) = refresh(&api, &ancien).await;
+    assert_eq!(rejeu, StatusCode::UNAUTHORIZED, "{body}");
+
+    let (status, body) = refresh(&api, &refresh_for(&reconnexion)).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "la session ouverte après le rejeu est tombée sur un second rejeu : {body}"
+    );
+}
+
+/// Une ligne tournée n'est pas une session ouverte : sans le filtre sur `replaced_at`,
+/// la liste grossirait d'une ligne à chaque rafraîchissement, trente jours durant.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_rotated_session_is_listed_once_after_two_refreshes() {
+    let api = application().await;
+    let email = fresh_email();
+    register(&api, &email).await;
+
+    let (_, paire) = authenticate(&api, &email, PASSWORD).await;
+    let (status, tournee) = refresh(&api, &refresh_for(&paire)).await;
+    assert_eq!(status, StatusCode::OK, "{tournee}");
+    let (status, retournee) = refresh(&api, &refresh_for(&tournee)).await;
+    assert_eq!(status, StatusCode::OK, "{retournee}");
+
+    let (status, sessions) = call(
+        &api,
+        get_authenticated("/auth/sessions", &access_for(&retournee)),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK, "{sessions}");
+    assert_eq!(
+        sessions.as_array().map(Vec::len),
+        Some(1),
+        "les lignes tournées sont listées : {sessions}"
+    );
+}
+
 #[tokio::test]
 #[ignore = "joint la base du projet"]
 async fn the_old_refresh_is_then_rejected() {
@@ -466,6 +580,33 @@ async fn a_revoked_refresh_returns_401() {
     let (status, body) = refresh(&api, &token).await;
 
     assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
+}
+
+/// Un jeton fermé par `logout` puis rejoué n'est pas un jeton volé : c'est un client qui
+/// réessaie. Le traiter comme un rejeu fermerait toutes les sessions du compte à la
+/// demande de qui tient un jeton mort — trente jours durant.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_refresh_closed_by_logout_when_replayed_leaves_the_other_sessions_open() {
+    let api = application().await;
+    let email = fresh_email();
+    register(&api, &email).await;
+
+    let (_, fermee) = authenticate(&api, &email, PASSWORD).await;
+    let (_, vivante) = authenticate(&api, &email, PASSWORD).await;
+
+    let (status, _) = logout(&api, &refresh_for(&fermee)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let (rejeu, body) = refresh(&api, &refresh_for(&fermee)).await;
+    assert_eq!(rejeu, StatusCode::UNAUTHORIZED, "{body}");
+
+    let (status, body) = refresh(&api, &refresh_for(&vivante)).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "la session sœur est tombée sur le rejeu d'un jeton fermé : {body}"
+    );
 }
 
 /// Se déconnecter d'un appareil ne déconnecte pas les autres.
@@ -654,6 +795,41 @@ async fn an_admin_satisfies_a_user_requirement() {
         StatusCode::OK,
         "un admin doit satisfaire une exigence User : {body}"
     );
+}
+
+/// Un rôle retiré en base cesse d'ouvrir la route à la requête suivante, pas au bout du
+/// jeton : le rôle du Bearer est comparé à celui de la ligne à chaque requête.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_demoted_admin_is_refused_with_its_old_token() {
+    let api = application().await;
+    let db = connection().await;
+    let restricted = admin_only_route().await;
+    let paire = login_as_admin(&api, &db).await;
+    let acces = access_for(&paire);
+
+    let (ok, _) = call(&restricted, with_token("GET", "/reserve", &acces)).await;
+    assert_eq!(ok, StatusCode::OK);
+
+    let secret = rbs_core::Config::load()
+        .expect("configuration lisible")
+        .auth
+        .secret;
+    let sub = rbs_core::jwt::verify(&acces, &secret)
+        .expect("jeton lisible")
+        .sub;
+    let compte =
+        crate::auth::model::user::Entity::find_by_id(Uuid::parse_str(&sub).expect("sub lisible"))
+            .one(&db)
+            .await
+            .expect("la table doit être interrogeable")
+            .expect("le compte promu doit exister");
+    let mut retrograde: crate::auth::model::user::ActiveModel = compte.into();
+    retrograde.role = Set(Role::User);
+    retrograde.update(&db).await.expect("compte rétrogradé");
+
+    let (refus, body) = call(&restricted, with_token("GET", "/reserve", &acces)).await;
+    assert_eq!(refus, StatusCode::UNAUTHORIZED, "{body}");
 }
 
 #[tokio::test]

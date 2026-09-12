@@ -1046,14 +1046,24 @@ mod tests {
         let repository =
             read(&Path::new(RACINE_FEATURES).join("auth/repository/refresh_token.rs.jinja"));
         let service = read(&Path::new(RACINE_FEATURES).join("auth/service/session.rs.jinja"));
+        let commun = read(&Path::new(RACINE_FEATURES).join("auth/service/mod.rs.jinja"));
 
         assert!(
             repository.contains("pub async fn revoke_sessions_of("),
             "le repository n'offre aucun moyen de fermer les sessions d'un compte :\n{repository}"
         );
+        // Le rejeu passe par le chemin commun aux quatre fermetures : c'est lui qui ferme
+        // les rafraîchissements et estampille les accès, et un rejeu qui l'éviterait
+        // laisserait l'un des deux vivant.
         assert!(
-            service.contains("repository::revoke_sessions_of("),
+            service.contains("Rotation::Replayed => {")
+                && service.contains("close_every_session(db, session.user_id)"),
             "le service laisse les sessions sœurs ouvertes après un rejeu :\n{service}"
+        );
+        assert!(
+            commun.contains("repository::revoke_sessions_of(")
+                && commun.contains("stamp_sessions_revoked("),
+            "la fermeture commune n'écrit pas les deux colonnes :\n{commun}"
         );
     }
 

@@ -27,7 +27,7 @@
 - Modify: `service/session.rs.jinja:25-41` (`register`, `login`), `service/password.rs.jinja:68-73` (`request_reset`), `service/verification.rs.jinja` (`request`, lire ses premières lignes pour trouver l'appel à `find_by_email`)
 - Test: `tests/session.rs.jinja`
 
-- [ ] **Step 1: Tests rouges**, après `an_email_already_taken_returns_409_without_repeating_it` :
+- [x] **Step 1: Tests rouges** — avec `normalise` rendue identité sur le projet jetable : `login_ignores_the_case_of_the_address` et `an_address_taken_in_another_case_is_a_conflict` FAILED (`401/200`, `201/409`). Le test des blancs par la route rend 422 (`#[validate(email)]` refuse les blancs) : il ne fait varier que la casse (`registration_lowercases_the_address`), et un test unitaire non `#[ignore]`, `an_address_is_trimmed_and_lowercased_before_the_table`, prouve le `trim`, après `an_email_already_taken_returns_409_without_repeating_it` :
 
 ```rust
 /// La casse et les blancs ne font pas deux comptes : sans cela, l'attaquant inscrit
@@ -73,7 +73,7 @@ async fn an_address_taken_in_another_case_is_a_conflict() {
 
 `fresh_email()` rend `<uuid>@exemple.test`, en minuscules : `to_uppercase()` en fait bien une autre chaîne.
 
-- [ ] **Step 2: `normalise`** dans `service/mod.rs.jinja` :
+- [x] **Step 2: `normalise`** dans `service/mod.rs.jinja` (`use super::normalise;` se place après `super::super::…`, rustfmt l'exige) :
 
 ```rust
 /// L'adresse telle que la base la voit.
@@ -95,13 +95,13 @@ Appliquer :
 
 Les quatre imports : `use super::normalise;` (`session.rs`, `password.rs`, `verification.rs` sont des sous-modules de `service`).
 
-- [ ] **Step 3: Vérifier** — `cargo check` sur projet jetable, puis `cargo test --lib -- --ignored auth::tests` avec base : les trois tests neufs passent, `an_email_already_taken_returns_409_without_repeating_it` et les tests de temps constant aussi.
+- [x] **Step 3: Vérifier** — `cargo check` vert ; `cargo test --lib -- --include-ignored auth::tests` → 52 passed; 0 failed — `cargo check` sur projet jetable, puis `cargo test --lib -- --ignored auth::tests` avec base : les trois tests neufs passent, `an_email_already_taken_returns_409_without_repeating_it` et les tests de temps constant aussi.
 
-- [ ] **Step 4: Régénérer `examples/blog-auth` par diff**, `cargo clippy --all-targets -- -D warnings` dans l'exemple, `cargo test -p rbs-cli --test integration_examples`.
+- [x] **Step 4: Régénérer `examples/blog-auth` par diff** — patch des cinq templates (sans tag), miroir identique ; clippy de l'exemple vert ; `integration_examples` → 19 passed, `cargo clippy --all-targets -- -D warnings` dans l'exemple, `cargo test -p rbs-cli --test integration_examples`.
 
-- [ ] **Step 5: Passe lente** `integration_auth` ; `cargo fmt --all --check` ; `cargo clippy --workspace --all-targets -- -D warnings` ; `cargo test -p rbs-cli --lib`.
+- [x] **Step 5: Passe lente** — `auth-lent-12.log` : 8 passed; 0 failed (206 s), dont le banc SQLite ; `fmt --check` vert ; clippy workspace 0 ; `rbs-cli --lib` 1151 passed `integration_auth` ; `cargo fmt --all --check` ; `cargo clippy --workspace --all-targets -- -D warnings` ; `cargo test -p rbs-cli --lib`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit** — 9019622
 
 ```bash
 git add crates/rbs-cli/templates/features/auth/ examples/blog-auth/
@@ -116,7 +116,7 @@ git commit -m "fix(auth): normalise l'adresse avant l'inscription, la connexion 
 - Modify: `CHANGELOG.md`, `CHANGELOG.fr.md`
 - Modify: `docs/docs/guides/auth.md` (+ FR) : une phrase dans la section des routes `register`/`login`, ou là où `#[validate(email)]` est cité (`grep -n 'validate(email)\|lowercase' docs/docs/guides/auth.md`)
 
-- [ ] **Step 1: CHANGELOG**, `### Fixed` de 1.5.0 :
+- [x] **Step 1: CHANGELOG**, `### Fixed` de 1.5.0 (EN + FR ; les trois ALTER/UPDATE regroupés sous « Projets déjà générés », comme le spec le demande) :
 
 ```markdown
 - **Email addresses are trimmed and lowercased** before `register`, `login`,
@@ -127,9 +127,9 @@ git commit -m "fix(auth): normalise l'adresse avant l'inscription, la connexion 
   settle by hand — then copy `normalise` and its four call sites from the fragment.
 ```
 
-- [ ] **Step 2: Guide** — une phrase : « Addresses are trimmed and lowercased before they reach the table; `Alice@Example.test` and `alice@example.test` are one account. »
+- [x] **Step 2: Guide** — EN + FR, paragraphe avant « the same 401 » — une phrase : « Addresses are trimmed and lowercased before they reach the table; `Alice@Example.test` and `alice@example.test` are one account. »
 
-- [ ] **Step 3: `cargo test -p rbs-cli --test integration_docs`** → vert. Commit :
+- [x] **Step 3: `cargo test -p rbs-cli --test integration_docs`** → 13 passed; 0 failed; 1 ignored (223 s). Commit :
 
 ```bash
 git commit -am "docs(auth): dit que l'adresse est normalisée avant la table"

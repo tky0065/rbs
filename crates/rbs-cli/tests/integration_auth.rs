@@ -551,8 +551,9 @@ fn the_auth_tests_of_the_generated_project_pass_on_sqlite() {
 ///
 /// Ici plutôt que dans `integration_crud` : ce que ce test éprouve n'est pas le CRUD mais
 /// le `fn token()` de son fichier de tests, qui appelle trois contrats de `rbs-core` —
-/// `Config::load`, `jwt::Claims`, `jwt::sign`. Un changement de l'un d'eux ne compile plus
-/// chez l'utilisateur sans qu'aucune autre suite ne s'en aperçoive : `integration_crud`
+/// `Config::load`, `jwt::Claims`, `jwt::sign` — et, depuis qu'`Identity` relit le compte,
+/// le dépôt `auth` du projet. Un changement de l'un d'eux ne compile plus chez
+/// l'utilisateur sans qu'aucune autre suite ne s'en aperçoive : `integration_crud`
 /// engendre sans `auth`, le test ci-dessus porte `auth` sans CRUD, et `integration_examples`
 /// ne fait que comparer des octets. C'est aussi ici que vivent le secret posé dans le
 /// `.env` et le verrou de la cible partagée.

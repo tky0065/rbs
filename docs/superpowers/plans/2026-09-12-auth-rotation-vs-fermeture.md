@@ -27,7 +27,7 @@
 - Modify: `migration.rs.jinja:72-78` (colonne `replaced_at` après `revoked_at`, enum `RefreshTokens`)
 - Modify: `model.rs.jinja:85-94` (champ `replaced_at`)
 
-- [ ] **Step 1: Migration**
+- [x] **Step 1: Migration** — commit 7a0a91c ; `\d refresh_tokens` sur le projet jetable liste `replaced_at | timestamp with time zone | nullable`
 
 Après le bloc `RevokedAt` :
 
@@ -45,9 +45,9 @@ Après le bloc `RevokedAt` :
 
 et `ReplacedAt,` dans l'enum `RefreshTokens` après `RevokedAt,`.
 
-- [ ] **Step 2: Modèle** — dans `model.rs.jinja`, module `refresh_token`, après `pub revoked_at: Option<DateTimeWithTimeZone>,` : `pub replaced_at: Option<DateTimeWithTimeZone>,`.
+- [x] **Step 2: Modèle** — commit 7a0a91c ; `cargo check --workspace --all-targets` vert sur le projet jetable — dans `model.rs.jinja`, module `refresh_token`, après `pub revoked_at: Option<DateTimeWithTimeZone>,` : `pub replaced_at: Option<DateTimeWithTimeZone>,`.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit** — 7a0a91c
 
 ```bash
 git add crates/rbs-cli/templates/features/auth/
@@ -65,7 +65,7 @@ git commit -m "feat(auth): distingue en table un jeton tourné d'un jeton fermé
 **Interfaces:**
 - Produces: `pub enum Rotation { Done, Replayed, Closed }`, `pub async fn rotate(db, id: Uuid) -> Result<Rotation>`, `pub async fn close(db, id: Uuid) -> Result<bool>`.
 
-- [ ] **Step 1: Remplacer `consume`**
+- [x] **Step 1: Remplacer `consume`** — commit 32c987e ; `cargo check --workspace --all-targets` vert sur le projet jetable, plus aucun `consume` sur `refresh_token`
 
 ```rust
 /// Ce qu'une rotation a trouvé.
@@ -126,9 +126,9 @@ pub async fn close(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
 }
 ```
 
-- [ ] **Step 2: Les trois autres requêtes** — ajouter `.filter(refresh_token::Column::ReplacedAt.is_null())` à `revoke_sessions_of`, `open_sessions_of`, `revoke_session`. Mettre à jour le commentaire de `revoke_sessions_of` (la phrase « distinguer les chaînes demanderait une colonne de famille, qu'un projet déjà migré ne recevrait jamais » reste vraie : la granularité reste le compte).
+- [x] **Step 2: Les trois autres requêtes** — commit 32c987e ; `cargo test --lib -- --include-ignored auth::tests` : 44 passed, 0 failed (projet jetable, PostgreSQL) — ajouter `.filter(refresh_token::Column::ReplacedAt.is_null())` à `revoke_sessions_of`, `open_sessions_of`, `revoke_session`. Mettre à jour le commentaire de `revoke_sessions_of` (la phrase « distinguer les chaînes demanderait une colonne de famille, qu'un projet déjà migré ne recevrait jamais » reste vraie : la granularité reste le compte).
 
-- [ ] **Step 3: Commit** (le service ne compile pas encore ; le commit suivant le répare — regrouper les deux si l'on préfère un arbre compilable à chaque commit : **préférer regrouper** avec la tâche 3).
+- [x] **Step 3: Commit** — regroupé avec la tâche 3 dans 32c987e (le service ne compile pas encore ; le commit suivant le répare — regrouper les deux si l'on préfère un arbre compilable à chaque commit : **préférer regrouper** avec la tâche 3).
 
 ---
 
@@ -138,7 +138,7 @@ pub async fn close(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
 - Modify: `service/session.rs.jinja:61-119` (`refresh`, `logout`)
 - Modify: `tests/session.rs.jinja` (test neuf), `tests/password.rs.jinja:125-179` (commentaire périmé)
 
-- [ ] **Step 1: Test rouge dans `tests/session.rs.jinja`**, après `a_revoked_refresh_returns_401` :
+- [x] **Step 1: Test rouge dans `tests/session.rs.jinja`** — rouge observé sur le dépôt pré-correctif (`left: 401, right: 200`, « la session sœur est tombée sur le rejeu d'un jeton fermé »), vert après : 44 passed, après `a_revoked_refresh_returns_401` :
 
 ```rust
 /// Un jeton fermé par `logout` puis rejoué n'est pas un jeton volé : c'est un client qui
@@ -169,7 +169,7 @@ async fn a_refresh_closed_by_logout_when_replayed_leaves_the_other_sessions_open
 }
 ```
 
-- [ ] **Step 2: `refresh` et `logout`**
+- [x] **Step 2: `refresh` et `logout`** — commit 32c987e ; `replaying_a_refresh_closes_the_other_sessions_of_the_account` et le test neuf verts
 
 ```rust
 use super::super::repository::{self, ADRESSE_PRISE, refresh_token::Rotation};
@@ -205,13 +205,13 @@ use super::super::repository::{self, ADRESSE_PRISE, refresh_token::Rotation};
 
 Vérifier comment `repository/mod.rs.jinja` réexporte (`pub use refresh_token::{...}`) et aligner les chemins.
 
-- [ ] **Step 3: Commentaire périmé** dans `tests/password.rs.jinja` (`changing_the_password_returns_a_usable_pair_and_closes_the_others`) : le paragraphe « L'ordre compte : rejouer le jeton de `premiere` arme la défense anti-rejeu… » est faux désormais — un jeton fermé rejoué ne ferme rien. Le remplacer par : « La nouvelle paire d'abord, puis l'ancienne : l'ordre n'importe plus depuis qu'un jeton fermé rejoué ne ferme rien d'autre, mais lire le succès avant le refus est ce qu'un lecteur attend. »
+- [x] **Step 3: Commentaire périmé** — commit 32c987e dans `tests/password.rs.jinja` (`changing_the_password_returns_a_usable_pair_and_closes_the_others`) : le paragraphe « L'ordre compte : rejouer le jeton de `premiere` arme la défense anti-rejeu… » est faux désormais — un jeton fermé rejoué ne ferme rien. Le remplacer par : « La nouvelle paire d'abord, puis l'ancienne : l'ordre n'importe plus depuis qu'un jeton fermé rejoué ne ferme rien d'autre, mais lire le succès avant le refus est ce qu'un lecteur attend. »
 
-- [ ] **Step 4: Régénérer `examples/blog-auth` par diff** — générer deux fois (avant/après les templates, ou `git stash` des templates) dans le scratchpad, `diff -ru` des deux sorties, appliquer le diff sur `examples/blog-auth` (`patch -p1`). Puis, dans `examples/blog-auth` : `cargo clippy --all-targets -- -D warnings` (nécessite le noyau : `--core-path`, déjà relatif dans son `Cargo.toml`).
+- [x] **Step 4: Régénérer `examples/blog-auth` par diff** — diff 8c71ad2 → 32c987e appliqué sans `.rej`, `migration/src/lib.rs` inchangé ; `cargo clippy --all-targets -- -D warnings` vert dans l'exemple — générer deux fois (avant/après les templates, ou `git stash` des templates) dans le scratchpad, `diff -ru` des deux sorties, appliquer le diff sur `examples/blog-auth` (`patch -p1`). Puis, dans `examples/blog-auth` : `cargo clippy --all-targets -- -D warnings` (nécessite le noyau : `--core-path`, déjà relatif dans son `Cargo.toml`).
 
-- [ ] **Step 5: Vérifier** — `cargo test -p rbs-cli --test integration_examples` → vert ; passe lente `integration_auth` (voir les contraintes) → tous verts, dont le banc SQLite ; `cargo fmt --all --check` ; `cargo clippy --workspace --all-targets -- -D warnings`.
+- [x] **Step 5: Vérifier** — `integration_examples` 19 passed ; `auth-lent-10.log` : 8 passed, 0 failed (dont le banc SQLite, 191 s) ; `fmt --check` et `clippy --workspace` verts — `cargo test -p rbs-cli --test integration_examples` → vert ; passe lente `integration_auth` (voir les contraintes) → tous verts, dont le banc SQLite ; `cargo fmt --all --check` ; `cargo clippy --workspace --all-targets -- -D warnings`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit** — 32c987e
 
 ```bash
 git add crates/rbs-cli/templates/features/auth/ examples/blog-auth/
@@ -228,7 +228,7 @@ Corps : le pourquoi (un attaquant expulsé rejouait son jeton mort à chaque rec
 - Modify: `docs/docs/guides/auth.md:132-136` et l'équivalent FR (`docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/auth.md`)
 - Modify: `CHANGELOG.md`, `CHANGELOG.fr.md`
 
-- [ ] **Step 1: Guide** — remplacer le paragraphe « Refreshing **rotates** the pair … which is why the two operations share their repository call. » par :
+- [x] **Step 1: Guide** — commit 2183d2b (EN + FR) — remplacer le paragraphe « Refreshing **rotates** the pair … which is why the two operations share their repository call. » par :
 
 ```markdown
 Refreshing **rotates** the pair: the token presented is marked replaced in the same
@@ -242,7 +242,7 @@ retrying a logout is not a stolen token circulating.
 
 FR : même sens, même emplacement.
 
-- [ ] **Step 2: CHANGELOG** — sous `## [1.5.0] — 2026-09-12` (créer l'entrée si absente), `### Fixed` :
+- [x] **Step 2: CHANGELOG** — commit 2183d2b, entrée 1.5.0 créée (EN `### Fixed`, FR `### Corrigé`) — sous `## [1.5.0] — 2026-09-12` (créer l'entrée si absente), `### Fixed` :
 
 ```markdown
 - **A refresh token closed by logout, replayed, no longer closes the whole account.**
@@ -256,7 +256,7 @@ FR : même sens, même emplacement.
   pair from the fragment.
 ```
 
-- [ ] **Step 3: `cargo test -p rbs-cli --test integration_docs`** → vert. Commit :
+- [x] **Step 3: `cargo test -p rbs-cli --test integration_docs`** → 13 passed; 0 failed; 1 ignored (commit 2183d2b). Commit :
 
 ```bash
 git commit -am "docs(auth): sépare rotation et fermeture dans le cycle des jetons"

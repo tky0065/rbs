@@ -25,10 +25,54 @@ dépréciation.
   dans la configuration que reçoit `AppState::new` : le squelette joue donc l'ancre
   `// <rbs:state_init>` avant que `core: CoreState::new(db, config)` ne la consomme, et
   `rbs doctor --fix` repose cette ancre à sa place quand le fichier ne la porte plus du
-  tout. `--fix` ne fait que restaurer une ancre absente — il n'en déplace jamais une déjà
-  présente : un projet engendré avant cette version doit donc remonter à la main le bloc
-  de l'ancre au-dessus de cette ligne dans `src/state.rs` avant `rbs add webhooks`, sans
-  quoi `config` est déjà parti quand `Sender::from_config(&config)` le demande.
+  tout.
+
+### Corrigé
+
+- **Un jeton de rafraîchissement fermé par une déconnexion, rejoué, ne ferme plus tout le
+  compte.** `refresh_tokens` gagne `replaced_at` : la rotation le pose, fermer (`logout`,
+  `DELETE /auth/sessions`, réinitialisation ou changement de mot de passe) pose
+  `revoked_at`, et seul un jeton *remplacé* présenté à nouveau déclenche la révocation de
+  la famille — une fois : la ligne rejouée est fermée à son tour, et la présenter encore
+  vaut 401 et rien de plus. Un attaquant chassé par une réinitialisation pouvait sinon
+  déconnecter la victime à volonté pendant trente jours en rejouant un jeton mort.
+- **Un jeton d'accès ne survit plus à la révocation de ses sessions.** `HasAuth`, dans
+  `rbs-core`, gagne une méthode fournie `accept(&claims)` qu'`Identity` appelle après la
+  vérification de signature ; le fragment `auth` l'implémente en relisant le compte :
+  disparu, sessions fermées après `iat` (`users.sessions_revoked_at`, estampillée par la
+  réinitialisation, le changement de mot de passe et `DELETE /auth/sessions`), ou rôle
+  changé → 401. Les jetons sont émis après la seconde de la révocation, si bien que la
+  paire rendue par `change-password` sert aussitôt. Les tests engendrés qui signaient un
+  jeton pour un `sub` tiré au hasard créent désormais un compte.
+- **Les adresses sont débarrassées de leurs blancs et passées en minuscules** avant
+  `register`, `login`, `forgot-password` et `resend-verification`. Deux inscriptions ne
+  différant que par la casse faisaient deux comptes — et le lien de vérification de l'un
+  arrivait dans la boîte de l'autre.
+
+#### Projets déjà générés
+
+La migration `create_auth_tables` ne change que pour un `rbs add auth` neuf ; elle
+n'altère toujours rien. Un projet déjà migré joue lui-même les ordres — `timestamptz` se
+lit `timestamp` sur MySQL et `timestamp_with_timezone_text` sur SQLite, ce que
+`rbs migrate` écrit pour ce type de colonne — puis reprend du fragment les fichiers nommés :
+
+- `ALTER TABLE refresh_tokens ADD COLUMN replaced_at timestamptz NULL;`, puis `model.rs`
+  (le champ `replaced_at`), le fichier entier `repository/refresh_token.rs` (`rotate`,
+  `close`, et le filtre `replaced_at IS NULL` de `open_sessions_of`, `revoke_sessions_of`
+  et `revoke_session` — sans lui, `GET /auth/sessions` gagne une ligne à chaque
+  rafraîchissement) et `service/session.rs` (`refresh` et `logout`).
+- `ALTER TABLE users ADD COLUMN sessions_revoked_at timestamptz NULL;`, puis
+  `impl HasAuth for AppState` du `mod.rs` du fragment, `stamp_sessions_revoked` de
+  `repository/user.rs` et `close_every_session` de `service/mod.rs`. Sans cela,
+  `rbs-core` 1.5.0 compile tel quel et rien ne change.
+- `UPDATE users SET email = lower(trim(email));` — la clé unique le refuse si deux comptes
+  ne diffèrent que par la casse, et c'est le cas à trancher à la main — puis `normalise`
+  de `service/mod.rs` et ses quatre appels (`register`, `login`,
+  `password::request_reset`, `verification::request`).
+- Avant `rbs add webhooks` : remonter le bloc `// <rbs:state_init>` … `// </rbs:state_init>`
+  au-dessus de `core: CoreState::new(db, config),` dans `src/state.rs`. `rbs doctor --fix`
+  ne fait que restaurer une ancre absente, il n'en déplace jamais une déjà présente ; laissée
+  sous cette ligne, `config` est déjà parti quand `Sender::from_config(&config)` le demande.
 
 ## [1.4.0] — 2026-09-11
 
@@ -542,6 +586,7 @@ démarrage, architecture, référence du CLI et guides, en français et en angla
 Rust 1.85 ou plus, édition 2024. Un projet généré tourne sur PostgreSQL 14 ou plus,
 MySQL 8.0 ou plus, ou SQLite 3.35 ou plus — `rbs doctor` refuse tout ce qui est en dessous.
 
+[1.5.0]: https://github.com/tky0065/rbs/releases/tag/v1.5.0
 [1.4.0]: https://github.com/tky0065/rbs/releases/tag/v1.4.0
 [1.3.1]: https://github.com/tky0065/rbs/releases/tag/v1.3.1
 [1.3.0]: https://github.com/tky0065/rbs/releases/tag/v1.3.0

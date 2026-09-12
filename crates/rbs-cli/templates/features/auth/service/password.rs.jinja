@@ -7,7 +7,7 @@ use sea_orm::prelude::Uuid;
 use super::super::dto::{ChangePasswordRequest, ResetPasswordRequest, TokenPair};
 use super::super::model::TokenPurpose;
 use super::super::repository;
-use super::issue;
+use super::{close_every_session, issue, normalise};
 
 /// Change le mot de passe d'un compte identifié, et rend une paire neuve.
 ///
@@ -44,7 +44,13 @@ pub async fn change(
     repository::one_time_token::invalidate_pending(db, user_id, TokenPurpose::PasswordReset)
         .await?;
 
-    let fermees = repository::revoke_sessions_of(db, user_id).await?;
+    let fermees = close_every_session(db, user_id).await?;
+
+    // Rechargé : `issue` lit l'estampille que la fermeture vient de poser, et n'émettrait
+    // sinon qu'un jeton né dans la seconde qu'elle vient de tuer.
+    let utilisateur = repository::find(db, user_id)
+        .await?
+        .ok_or(Error::Unauthorized)?;
 
     // Ni l'adresse ni les jetons : l'identifiant du compte suffit à retrouver ce qui s'est
     // passé, et le journal ne porte pas ce que la réponse tait.
@@ -70,7 +76,7 @@ pub async fn request_reset(
     ttl_secs: u64,
     email: &str,
 ) -> Result<Option<(repository::Model, String)>> {
-    let Some(utilisateur) = repository::find_by_email(db, email).await? else {
+    let Some(utilisateur) = repository::find_by_email(db, &normalise(email)).await? else {
         return Ok(None);
     };
 
@@ -119,7 +125,7 @@ pub async fn reset(db: &DatabaseConnection, input: ResetPasswordRequest) -> Resu
     repository::one_time_token::invalidate_pending(db, ligne.user_id, TokenPurpose::PasswordReset)
         .await?;
 
-    let fermees = repository::revoke_sessions_of(db, ligne.user_id).await?;
+    let fermees = close_every_session(db, ligne.user_id).await?;
 
     tracing::info!(
         user_id = %ligne.user_id,
