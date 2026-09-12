@@ -543,3 +543,55 @@ async fn the_resolver_drops_localhost_outside_development_and_keeps_it_in_develo
         "chaque adresse résolue pour localhost doit être en boucle locale"
     );
 }
+
+/// Le profil des tests est `development`, qui tolère tout : la politique ne se lit que du
+/// profil actif, donc éprouver un refus exige un état dont la configuration porte
+/// `production`, et non celui que rend `table_a_soi`.
+async fn table_a_soi_stricte() -> (MutexGuard<'static, ()>, AppState) {
+    let (garde, state) = table_a_soi().await;
+    let db = state.core().db().clone();
+    let mut config = state.core().config().clone();
+    config.env = "production".to_string();
+
+    (
+        garde,
+        AppState::new(db, config).expect("état constructible"),
+    )
+}
+
+/// La route refuse une URL interne avant d'inscrire quoi que ce soit, qu'elle enfreigne
+/// `Https` (un `http` hors développement) ou `PrivateHost` (un littéral privé, même en
+/// `https`) : le contrôleur ne construit rien lui-même, il transmet
+/// `state.webhooks().policy()` au service, qui refuse les deux de la même façon.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_admin_subscribing_a_private_url_gets_400() {
+    let (_garde, state) = table_a_soi_stricte().await;
+    let db = state.core().db().clone();
+    let api = crate::router::router(state);
+
+    let corps = json!({ "url": "http://169.254.169.254/latest/meta-data", "events": ["*"] });
+    let (statut, reponse) = call(
+        &api,
+        request("POST", "/webhooks/subscriptions", "admin", Some(corps)),
+    )
+    .await;
+    assert_eq!(statut, StatusCode::BAD_REQUEST, "{reponse}");
+    assert!(
+        reponse["detail"]
+            .as_str()
+            .unwrap_or_default()
+            .contains("https"),
+        "le message doit nommer la règle enfreinte : {reponse}"
+    );
+
+    let corps = json!({ "url": "https://10.0.0.5/hooks", "events": ["*"] });
+    let (statut, reponse) = call(
+        &api,
+        request("POST", "/webhooks/subscriptions", "admin", Some(corps)),
+    )
+    .await;
+    assert_eq!(statut, StatusCode::BAD_REQUEST, "{reponse}");
+
+    assert_eq!(livraisons(&db).await, 0);
+}

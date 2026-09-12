@@ -6,6 +6,7 @@ use serde::Serialize;
 
 use super::delivery::{Delivery, Event};
 use super::dto::{CreateSubscription, SubscriptionCreated, SubscriptionResponse};
+use super::target::Policy;
 use super::{matches, repository};
 use crate::modules::jobs;
 
@@ -61,8 +62,14 @@ where
 /// chaque abonné de quoi contrefaire les événements livrés à tous les autres.
 pub async fn subscribe(
     db: &DatabaseConnection,
+    policy: Policy,
     input: CreateSubscription,
 ) -> Result<SubscriptionCreated> {
+    // `#[validate(url)]` a dit que c'est une URL ; ceci dit où elle a le droit de mener.
+    policy
+        .check(&input.url)
+        .map_err(|refus| Error::BadRequest(refus.to_string()))?;
+
     for motif in &input.events {
         if motif.trim().is_empty() {
             return Err(Error::BadRequest(

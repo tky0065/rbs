@@ -85,7 +85,7 @@ content = "pub webhooks: crate::modules::webhooks::Sender,"
 
 [[anchors]]
 anchor  = "state_init"
-content = "webhooks: crate::modules::webhooks::Sender::from_config()?,"
+content = "webhooks: crate::modules::webhooks::Sender::from_config(&config)?,"
 
 [migration]
 source = "migration.rs.jinja"

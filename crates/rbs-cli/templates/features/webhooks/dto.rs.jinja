@@ -5,8 +5,9 @@ use validator::Validate;
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct CreateSubscription {
-    /// L'URL du receveur. `https` en production : la signature authentifie l'émetteur,
-    /// elle ne chiffre pas ce qui est livré.
+    /// L'URL du receveur. `https` obligatoire hors développement, et jamais vers une
+    /// adresse interne : la signature authentifie l'émetteur, elle ne chiffre pas ce qui
+    /// est livré, et une livraison n'a rien à faire sur le réseau du projet.
     #[validate(url)]
     pub url: String,
     /// Les motifs écoutés. `*` pour tout, `user.*` pour une famille, `user.created` pour un

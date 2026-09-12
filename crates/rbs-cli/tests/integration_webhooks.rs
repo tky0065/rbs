@@ -19,17 +19,22 @@ use tempfile::TempDir;
 mod common;
 
 /// Ce que le fragment livre et que `cargo test` joue sans base.
-const TESTS_ORDINAIRES: [&str; 6] = [
+const TESTS_ORDINAIRES: [&str; 11] = [
     "the_signature_matches_an_independently_computed_vector",
     "the_signature_changes_with_the_timestamp",
     "the_signature_header_carries_the_timestamp_and_the_v1_digest",
     "an_exact_pattern_matches_only_its_own_event",
     "a_prefix_pattern_matches_every_event_of_its_family",
     "the_star_pattern_matches_every_event",
+    "private_loopback_and_link_local_addresses_are_not_public",
+    "public_addresses_are_public",
+    "outside_development_only_https_to_a_public_host_passes",
+    "in_development_http_and_private_hosts_pass_but_not_other_schemes",
+    "the_resolver_drops_localhost_outside_development_and_keeps_it_in_development",
 ];
 
 /// Ce qu'il livre et qui joint la base.
-const TESTS_SOUS_CONTENEUR: [&str; 7] = [
+const TESTS_SOUS_CONTENEUR: [&str; 8] = [
     "emitting_an_event_enqueues_one_delivery_per_listening_subscription",
     "a_revoked_subscription_is_not_delivered_to",
     "a_subscription_that_does_not_listen_receives_nothing",
@@ -37,6 +42,7 @@ const TESTS_SOUS_CONTENEUR: [&str; 7] = [
     "an_emission_rolled_back_with_its_transaction_enqueues_nothing",
     "a_user_role_is_refused_on_the_three_routes",
     "an_admin_subscribes_then_reads_and_revokes",
+    "an_admin_subscribing_a_private_url_gets_400",
 ];
 
 #[test]
@@ -52,8 +58,8 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
 
     migrate_dans(&racine, &common::cible());
 
-    // Les deux flux sont exigés séparément : six des treize tests livrés n'ont besoin
-    // d'aucune base et sortent sous `cargo test` ordinaire, les sept autres sous
+    // Les deux flux sont exigés séparément : onze des dix-neuf tests livrés n'ont besoin
+    // d'aucune base et sortent sous `cargo test` ordinaire, les huit autres sous
     // `--ignored`. Les confondre ferait passer ce test sans qu'un seul des deux groupes
     // soit vraiment joué.
     let (abouti, ordinaires) = cargo_test_brut(&racine, &common::cible(), &[]);

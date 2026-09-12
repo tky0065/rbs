@@ -192,7 +192,10 @@ pub(crate) const STATE_INIT: Anchor = Anchor {
     comment: "//",
     sorted: false,
     optional: false,
-    after: "core: CoreState::new(db, config),",
+    // Avant `core: CoreState::new(db, config)`, et non après : ce dernier engloutit
+    // `config` par valeur, et un fragment posé par l'ancre peut avoir besoin d'en lire un
+    // champ avant qu'il ne parte.
+    after: "Ok(Self {",
 };
 
 /// Tâches de fond lancées au démarrage, l'état construit et le serveur pas encore lié.

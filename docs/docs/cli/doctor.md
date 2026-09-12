@@ -263,7 +263,7 @@ script has to be able to tell it apart from a healthy project, so the status dif
 
 An anchor is two comment lines, and nothing tells you where they used to be once they are
 gone. `--fix` puts them back: each anchor declares the line it sits under — `.merge(docs)`
-for `// <rbs:layers>`, `core: CoreState::new(db, config),` for `// <rbs:state_init>` — and
+for `// <rbs:layers>`, `Ok(Self {` for `// <rbs:state_init>` — and
 the block goes back beneath that line, in the column it had.
 
 Repairing comes before diagnosing, so the `ancres` check of the same report counts what

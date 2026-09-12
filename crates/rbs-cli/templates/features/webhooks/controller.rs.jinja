@@ -37,7 +37,7 @@ pub async fn subscribe(
 ) -> Result<(StatusCode, Json<SubscriptionCreated>)> {
     identite.require_role(Role::Admin)?;
 
-    let inscrit = service::subscribe(state.core().db(), input).await?;
+    let inscrit = service::subscribe(state.core().db(), state.webhooks().policy(), input).await?;
 
     Ok((StatusCode::CREATED, Json(inscrit)))
 }
