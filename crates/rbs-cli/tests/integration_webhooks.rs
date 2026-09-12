@@ -34,7 +34,7 @@ const TESTS_ORDINAIRES: [&str; 11] = [
 ];
 
 /// Ce qu'il livre et qui joint la base.
-const TESTS_SOUS_CONTENEUR: [&str; 8] = [
+const TESTS_SOUS_CONTENEUR: [&str; 11] = [
     "emitting_an_event_enqueues_one_delivery_per_listening_subscription",
     "a_revoked_subscription_is_not_delivered_to",
     "a_subscription_that_does_not_listen_receives_nothing",
@@ -43,6 +43,9 @@ const TESTS_SOUS_CONTENEUR: [&str; 8] = [
     "a_user_role_is_refused_on_the_three_routes",
     "an_admin_subscribes_then_reads_and_revokes",
     "an_admin_subscribing_a_private_url_gets_400",
+    "post_refuses_a_blocked_target_before_sending",
+    "a_delivery_to_a_blocked_target_is_abandoned_not_retried",
+    "in_development_a_local_receiver_is_reached",
 ];
 
 #[test]
@@ -58,8 +61,8 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
 
     migrate_dans(&racine, &common::cible());
 
-    // Les deux flux sont exigés séparément : onze des dix-neuf tests livrés n'ont besoin
-    // d'aucune base et sortent sous `cargo test` ordinaire, les huit autres sous
+    // Les deux flux sont exigés séparément : onze des vingt-deux tests livrés n'ont besoin
+    // d'aucune base et sortent sous `cargo test` ordinaire, les onze autres sous
     // `--ignored`. Les confondre ferait passer ce test sans qu'un seul des deux groupes
     // soit vraiment joué.
     let (abouti, ordinaires) = cargo_test_brut(&racine, &common::cible(), &[]);

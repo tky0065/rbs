@@ -595,3 +595,110 @@ async fn an_admin_subscribing_a_private_url_gets_400() {
 
     assert_eq!(livraisons(&db).await, 0);
 }
+
+/// `post` rend le type de refus, ce que `run` ne laisse plus voir : pour une URL en clair,
+/// la première règle enfreinte est le schéma, avant même que l'hôte soit regardé.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn post_refuses_a_blocked_target_before_sending() {
+    let (_garde, state) = table_a_soi_stricte().await;
+    let db = state.core().db();
+    let abonnement = abonne(db, "http://169.254.169.254/latest", &["*"]).await;
+
+    let resultat = state
+        .webhooks()
+        .post(
+            &abonnement.url,
+            "t=0,v1=0",
+            "user.created",
+            Uuid::now_v7(),
+            Vec::new(),
+        )
+        .await;
+
+    assert!(
+        matches!(
+            resultat,
+            Err(super::delivery::PostError::Blocked(Refusal::Https))
+        ),
+        "{resultat:?}"
+    );
+}
+
+/// Une cible interdite ne se réessaie pas : cinq tentatives de plus n'y changeraient rien, et
+/// `run` le dit en rendant `Ok` après un simple avertissement, sans qu'aucune requête ne
+/// parte.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_delivery_to_a_blocked_target_is_abandoned_not_retried() {
+    let (_garde, state) = table_a_soi_stricte().await;
+    let db = state.core().db();
+    let (port, recu) = receveur_local().await;
+
+    let abonnement = abonne(db, &format!("https://127.0.0.1:{port}/hook"), &["*"]).await;
+    let livraison = Delivery {
+        subscription: abonnement.id,
+        event: Event {
+            id: Uuid::now_v7(),
+            event: "user.created".to_string(),
+            created_at: chrono::Utc::now().fixed_offset(),
+            data: donnees(),
+        },
+    };
+
+    livraison
+        .run(&state)
+        .await
+        .expect("une cible interdite n'a rien à réessayer");
+    assert_eq!(recu.load(std::sync::atomic::Ordering::SeqCst), 0);
+}
+
+/// En développement, un receveur local est joint : c'est le chemin nominal du poste de
+/// travail, et il traverse le résolveur filtrant du client — qui doit laisser passer.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn in_development_a_local_receiver_is_reached() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+    let (port, recu) = receveur_local().await;
+
+    let abonnement = abonne(db, &format!("http://localhost:{port}/hook"), &["*"]).await;
+    let livraison = Delivery {
+        subscription: abonnement.id,
+        event: Event {
+            id: Uuid::now_v7(),
+            event: "user.created".to_string(),
+            created_at: chrono::Utc::now().fixed_offset(),
+            data: donnees(),
+        },
+    };
+
+    livraison.run(&state).await.expect("livraison acceptée");
+    assert_eq!(recu.load(std::sync::atomic::Ordering::SeqCst), 1);
+}
+
+/// Un receveur HTTP sur un port éphémère de la boucle locale, et le compteur des requêtes
+/// qu'il a reçues — partagé par les deux tests qui joignent une vraie cible.
+async fn receveur_local() -> (u16, std::sync::Arc<std::sync::atomic::AtomicUsize>) {
+    use axum::routing::post;
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("port libre");
+    let port = listener.local_addr().expect("adresse locale").port();
+    let recu = std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let compteur = recu.clone();
+
+    tokio::spawn(async move {
+        let app = Router::new().route(
+            "/hook",
+            post(move || {
+                compteur.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+                async { StatusCode::NO_CONTENT }
+            }),
+        );
+        axum::serve(listener, app).await.expect("receveur");
+    });
+
+    (port, recu)
+}

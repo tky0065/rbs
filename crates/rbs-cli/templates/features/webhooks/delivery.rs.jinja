@@ -4,7 +4,7 @@ use rbs_core::HasCoreState;
 use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 use serde::{Deserialize, Serialize};
 
-use super::target::{Policy, Resolver};
+use super::target::{Policy, Refusal, Resolver};
 use super::{Config, repository, signature};
 use crate::modules::jobs::Job;
 use crate::state::AppState;
@@ -68,7 +68,7 @@ impl Job for Delivery {
         let corps = serde_json::to_vec(&self.event)?;
         let horodatage = chrono::Utc::now().timestamp();
 
-        state
+        match state
             .webhooks()
             .post(
                 &abonnement.url,
@@ -78,6 +78,21 @@ impl Job for Delivery {
                 corps,
             )
             .await
+        {
+            Ok(()) => Ok(()),
+            // Une cible interdite le restera : réessayer ne ferait que cinq lignes de
+            // journal de plus. Le job se termine, et l'abonnement reste à révoquer.
+            Err(PostError::Blocked(refus)) => {
+                tracing::warn!(
+                    subscription = %abonnement.id,
+                    event = %self.event.event,
+                    %refus,
+                    "livraison vers une cible interdite : abandonnée"
+                );
+                Ok(())
+            }
+            Err(PostError::Transport(source)) => Err(source),
+        }
     }
 }
 
@@ -119,11 +134,12 @@ impl Sender {
         self.policy
     }
 
-    /// POSTe un corps signé, et fait d'un refus une erreur — donc un réessai de la file.
+    /// POSTe un corps signé, en refusant la cible avant tout envoi plutôt qu'en laissant le
+    /// transport échouer sur elle.
     ///
-    /// Toute réponse hors 2xx vaut échec, 4xx comprises : un receveur qui répond 400 à une
-    /// livraison bien formée est en panne, et le distinguer d'un 503 demanderait de deviner
-    /// laquelle des deux parties a tort.
+    /// Toute réponse hors 2xx vaut échec de transport, 4xx comprises : un receveur qui
+    /// répond 400 à une livraison bien formée est en panne, et le distinguer d'un 503
+    /// demanderait de deviner laquelle des deux parties a tort.
     pub(super) async fn post(
         &self,
         url: &str,
@@ -131,17 +147,31 @@ impl Sender {
         event: &str,
         delivery: Uuid,
         body: Vec<u8>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), PostError> {
+        let cible = self.policy.check(url).map_err(PostError::Blocked)?;
+
+        // Résolue avant l'envoi pour que le refus soit nommé — le résolveur du client
+        // refiltre à la connexion, mais son erreur arrive noyée dans celle du transport.
+        let adresses = self
+            .policy
+            .resolve(&cible)
+            .await
+            .map_err(|source| PostError::Transport(source.into()))?;
+        if adresses.is_empty() {
+            return Err(PostError::Blocked(Refusal::PrivateHost));
+        }
+
         let reponse = self
             .client
-            .post(url)
+            .post(cible)
             .header(reqwest::header::CONTENT_TYPE, "application/json")
             .header(signature::HEADER, signature)
             .header(signature::HEADER_EVENT, event)
             .header(signature::HEADER_DELIVERY, delivery.to_string())
             .body(body)
             .send()
-            .await?;
+            .await
+            .map_err(|source| PostError::Transport(source.into()))?;
 
         let statut = reponse.status();
 
@@ -150,6 +180,17 @@ impl Sender {
             return Ok(());
         }
 
-        anyhow::bail!("{url} a répondu {statut}");
+        Err(PostError::Transport(anyhow::anyhow!(
+            "{url} a répondu {statut}"
+        )))
     }
+}
+
+/// Ce qui empêche une livraison, et ce que la file doit en faire.
+#[derive(Debug)]
+pub enum PostError {
+    /// La cible est interdite : rien ne changera au prochain essai.
+    Blocked(Refusal),
+    /// Le transport ou le receveur a échoué : la file réessaie.
+    Transport(anyhow::Error),
 }
