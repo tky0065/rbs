@@ -55,6 +55,7 @@ Arguments:
 
 Options:
       --fields <CHAMPS>    Champs de l'entité, ex. "name:string,email:string:unique"
+      --singular <NOM>     Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force              Écrit même si le working tree Git est sale
       --dry-run            Affiche le plan sans rien écrire
       --has-many <ENTITE>  Entité enfant dont ce modèle doit porter la variante inverse, répétable
@@ -68,12 +69,13 @@ Options:
 | Flag | Effect |
 |---|---|
 | `--fields <CHAMPS>` | The entity's columns, in the grammar below. Omitted, the feature is generated with no column of its own. |
+| `--singular <NOM>` | The singular form of the name, when the built-in heuristic gets it wrong. It names the entity, the DTOs and the local variables — `CreateNewsItem` and `let news_item` for `rbs generate crud news --singular news_item` — while the module, the table and the routes keep the plural. The heuristic already leaves `news`, `series` and `species` untouched; for any other invariable or irregular plural, this flag is the fix. Must be snake_case, and neither a Rust keyword nor a skeleton module, checked before anything is written. |
 | `--force` | Writes even though the Git working tree is dirty, and overwrites files reported as conflicting. |
 | `--dry-run` | Prints the plan and stops. Nothing is written. |
 | `--has-many <ENTITE>` | Repairs the far side of a relation: writes into the model of an already generated feature the `has_many` variant pointing at the named child, and nothing else. Repeatable. [The relations guide](../guides/relations.md) covers when it is needed. |
 | `--role <ROLE>` | Raises the threshold on the writes — `create`, `update`, `delete`, and the `PUT` of the content route when `--with-upload` comes along — to that role instead of the default `Role::User`. It opens nothing and closes nothing: on a project carrying `auth`, *every* generated route already takes an `Identity` and calls `require_role`, and the reads (`list`, `find`, `filter`, and the content route's `GET` and `HEAD`) simply keep the default threshold. Requires the [`auth`](../guides/auth.md) feature, and a role its `Role` enum declares — both are checked before anything is written. [The authentication guide](../guides/auth.md#closed-by-default-at-generation-time) explains what to remove to reopen a route. |
 | `--soft-delete` | Makes `DELETE` logical instead of removing the row. The HTTP contract does not change, and a `unique` field's constraint narrows to live rows — on MySQL it stays global, so a deleted value stays reserved there. [The migrations guide](../guides/migrations.md#soft-delete) has the rest. |
-| `--with-upload` | Mounts three routes on `/<resource>/{id}/content` — `PUT`, `GET`, `HEAD` — against the `storage` fragment's trait. Requires the [`storage`](../guides/storage.md) feature, checked before anything is written. With `--role`, the `PUT` joins the writes whose threshold the flag raises; with `--soft-delete`, the content outlives the row that `DELETE` only stamps. [The storage guide](../guides/storage.md#generated-content-routes) has both. |
+| `--with-upload` | Mounts three routes on `/<resource>/{id}/content` — `PUT`, `GET`, `HEAD` — against the `storage` fragment's trait. Requires the [`storage`](../guides/storage.md) feature, and the fragment under `src/modules/storage/` where `rbs add` has laid it out since 1.3.0 — both are checked before anything is written, and a project that still carries `src/storage/` is refused until the directory is moved and its `use` statements fixed. With `--role`, the `PUT` joins the writes whose threshold the flag raises; with `--soft-delete`, the content outlives the row that `DELETE` only stamps. [The storage guide](../guides/storage.md#generated-content-routes) has both. |
 
 ## `rbs generate feature`
 
@@ -88,15 +90,17 @@ Arguments:
   <NAME>  Nom de la feature
 
 Options:
-      --force    Écrit même si le working tree Git est sale
-      --dry-run  Affiche le plan sans rien écrire
-  -h, --help     Print help
-  -V, --version  Print version
+      --singular <NOM>  Forme singulière du nom, quand l'heuristique se trompe (ex. news)
+      --force           Écrit même si le working tree Git est sale
+      --dry-run         Affiche le plan sans rien écrire
+  -h, --help            Print help
+  -V, --version         Print version
 ```
 
 Same flags minus `--fields`, `--has-many` and `--role`: an empty feature has no columns, so
 it gets neither an entity worth the name, nor a migration, nor a relation to repair; and it
-carries no handler for a guard to protect.
+carries no handler for a guard to protect. `--singular` stays: the skeleton still names its
+service and its DTOs after the singular.
 
 ## The `--fields` grammar
 

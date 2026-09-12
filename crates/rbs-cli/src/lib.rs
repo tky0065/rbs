@@ -104,6 +104,7 @@ pub fn run() {
                     role,
                     soft_delete,
                     with_upload,
+                    singular,
                 } => GenerateArgs {
                     name,
                     fields,
@@ -114,9 +115,11 @@ pub fn run() {
                     role,
                     soft_delete,
                     with_upload,
+                    singular,
                 },
                 GenerateCommands::Feature {
                     name,
+                    singular,
                     force,
                     dry_run,
                 } => GenerateArgs {
@@ -129,6 +132,7 @@ pub fn run() {
                     role: None,
                     soft_delete: false,
                     with_upload: false,
+                    singular,
                 },
 
                 // Le client ne partage ni les options ni l'erreur des deux autres : il se
@@ -545,6 +549,7 @@ struct GenerateArgs {
     role: Option<String>,
     soft_delete: bool,
     with_upload: bool,
+    singular: Option<String>,
 }
 
 fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
@@ -558,6 +563,7 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
         role,
         soft_delete,
         with_upload,
+        singular,
     } = args;
 
     let feature = name.clone();
@@ -576,6 +582,7 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
         role,
         soft_delete,
         with_upload,
+        singular,
     })?;
 
     // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande

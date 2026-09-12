@@ -35,6 +35,8 @@ pub(crate) struct Feature {
     pub soft_delete: bool,
     /// Le CRUD porte des routes de contenu binaire.
     pub with_upload: bool,
+    /// Forme singulière imposée par `--singular`, quand l'heuristique se trompe.
+    pub singular: Option<String>,
 }
 
 impl Feature {
@@ -47,7 +49,17 @@ impl Feature {
             auth: false,
             soft_delete: false,
             with_upload: false,
+            singular: None,
         }
+    }
+
+    /// La même feature, sa forme singulière imposée plutôt que devinée.
+    ///
+    /// `None` laisse l'heuristique décider : l'appelant passe l'option telle qu'il l'a
+    /// reçue, sans avoir à la déballer.
+    pub(crate) fn with_singular(mut self, singular: Option<String>) -> Self {
+        self.singular = singular;
+        self
     }
 
     /// La même feature, ses écritures réservées au rôle `role`.
@@ -96,9 +108,11 @@ impl Feature {
         to_pascal_case(&self.name)
     }
 
-    /// Nom singulier en snake_case : `blog_posts` donne `blog_post`.
+    /// Nom singulier en snake_case : `blog_posts` donne `blog_post`, sauf forme imposée.
     pub(crate) fn singular(&self) -> String {
-        to_singular(&self.name)
+        self.singular
+            .clone()
+            .unwrap_or_else(|| to_singular(&self.name))
     }
 
     /// La première référence requise de la feature, s'il y en a une.
@@ -290,7 +304,10 @@ pub(crate) fn to_singular(name: &str) -> String {
         None => ("", name),
     };
 
-    let singular = if let Some(root) = dernier.strip_suffix("ies") {
+    // Avant `ies` : `series` et `species` y perdraient leurs trois dernières lettres.
+    let singular = if INVARIABLES.contains(&dernier) {
+        dernier.to_string()
+    } else if let Some(root) = dernier.strip_suffix("ies") {
         // `ies` sur un mot d'une syllabe — `ties`, `pies` — ne vient pas d'un `y`.
         if root.is_empty() {
             dernier.to_string()
@@ -317,6 +334,9 @@ const SIFFLANTES: [&str; 5] = ["s", "x", "z", "ch", "sh"];
 
 /// Terminaisons en `s` qui ne sont pas des marques de pluriel : `status`, `class`.
 const FINALES_NON_PLURIELLES: [&str; 3] = ["ss", "us", "is"];
+
+/// Pluriels qui s'écrivent comme leur singulier, mot entier : leur `s` ne se retire pas.
+const INVARIABLES: [&str; 3] = ["news", "series", "species"];
 
 #[cfg(test)]
 mod tests {
@@ -357,6 +377,16 @@ mod tests {
         assert_eq!(to_singular("dishes"), "dish");
     }
 
+    /// Un pluriel invariable n'a pas de singulier à retrouver : `news` moins son `s` est
+    /// un adjectif, et `CreateNew` un type que personne n'a demandé.
+    #[test]
+    fn an_invariable_plural_keeps_its_s() {
+        assert_eq!(to_singular("news"), "news");
+        assert_eq!(to_singular("series"), "series");
+        assert_eq!(to_singular("species"), "species");
+        assert_eq!(to_singular("latest_news"), "latest_news");
+    }
+
     #[test]
     fn an_already_singular_name_passes_through_intact() {
         assert_eq!(to_singular("status"), "status");
@@ -368,6 +398,40 @@ mod tests {
     fn only_the_last_word_is_singularised() {
         assert_eq!(to_singular("blog_posts"), "blog_post");
         assert_eq!(to_singular("users_categories"), "users_category");
+    }
+
+    /// Le singulier imposé remplace l'heuristique partout où elle sert : l'entité, et
+    /// la clé `singular` que les templates lisent.
+    #[test]
+    fn an_imposed_singular_overrides_the_heuristic() {
+        let feature =
+            Feature::fresh("news", Vec::new()).with_singular(Some("news_item".to_string()));
+
+        assert_eq!(feature.entity(), "NewsItem");
+        assert_eq!(feature.singular(), "news_item");
+        assert_eq!(feature.module(), "news");
+
+        let rendered = minijinja::Value::from_serialize(&feature);
+
+        assert_eq!(
+            rendered
+                .get_attr("singular")
+                .expect("la clé singular doit exister"),
+            minijinja::Value::from("news_item")
+        );
+        assert_eq!(
+            rendered
+                .get_attr("entity")
+                .expect("la clé entity doit exister"),
+            minijinja::Value::from("NewsItem")
+        );
+    }
+
+    #[test]
+    fn without_an_imposed_singular_the_heuristic_decides() {
+        let feature = Feature::fresh("articles", Vec::new()).with_singular(None);
+
+        assert_eq!(feature.entity(), "Article");
     }
 
     #[test]
