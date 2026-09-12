@@ -167,6 +167,15 @@ pub(crate) enum Error {
     )]
     UploadSansStorage,
 
+    /// `--with-upload` sur un projet qui porte `storage`, mais à la racine de `src/` : le
+    /// service engendré importe `crate::modules::storage`, et ne compilerait pas.
+    #[error(
+        "`--with-upload` importe `crate::modules::storage`, mais src/modules/storage/mod.rs \
+         manque : ce projet a reçu `storage` avant la 1.3.0. Déplacez `src/storage/` sous \
+         `src/modules/` et corrigez ses `use`, puis relancez la génération"
+    )]
+    UploadStorageHorsModules,
+
     /// `--soft-delete` sur une entité qui déclare déjà la colonne que le drapeau injecte.
     #[error(
         "`--soft-delete` pose lui-même la colonne `{colonne}` : retirez-la de `--fields`, \
@@ -250,6 +259,13 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
             .any(|feature| feature == "storage")
     {
         return Err(Error::UploadSansStorage);
+    }
+
+    // Le manifeste ne suffit pas : un projet d'avant 1.3.0 déclare `storage` et le porte
+    // en `src/storage/`, là où la template écrit `crate::modules::storage` en dur. `rbs
+    // upgrade` ne déplace aucun module, et le refus nomme donc le geste manuel.
+    if options.with_upload && !root.join("src/modules/storage/mod.rs").exists() {
+        return Err(Error::UploadStorageHorsModules);
     }
 
     // `--has-many` ne génère rien : il répare le côté inverse d'une feature déjà
@@ -824,6 +840,39 @@ mod tests {
             message.contains("storage"),
             "le refus doit nommer la feature attendue : {message}"
         );
+    }
+
+    /// Un projet d'avant 1.3.0 porte `storage` en `src/storage/` : le manifeste le déclare,
+    /// mais le service engendré importe `crate::modules::storage`, et le projet ne
+    /// compilerait plus. Le refus doit dire où le fragment est attendu, et comment l'y
+    /// mettre.
+    #[test]
+    fn upload_on_a_storage_fragment_left_at_the_root_is_refused_and_names_the_expected_path() {
+        let (_parent, root) = Project::new().features(&["storage"]).create();
+        assert!(
+            root.join("src/modules/storage/mod.rs").exists(),
+            "le fragment `storage` s'installe sous src/modules/ depuis 1.3.0"
+        );
+        fs::rename(root.join("src/modules/storage"), root.join("src/storage"))
+            .expect("le fragment se déplace à la racine de src/");
+        let avant = fingerprint(&root);
+
+        let error = run(&Options {
+            with_upload: true,
+            ..options(&root, "documents", Some("title:string"), true)
+        })
+        .expect_err("`storage` n'est pas sous src/modules/");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("src/modules/storage/mod.rs"),
+            "le refus doit nommer le chemin attendu : {message}"
+        );
+        assert!(
+            message.contains("src/modules/") && message.contains("use"),
+            "le refus doit dire comment déplacer le fragment : {message}"
+        );
+        assert_eq!(fingerprint(&root), avant, "rien ne doit avoir été écrit");
     }
 
     #[test]
