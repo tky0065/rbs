@@ -632,7 +632,7 @@ async fn an_admin_subscribing_a_private_url_gets_400() {
     let corps = json!({ "url": "http://169.254.169.254/latest/meta-data", "events": ["*"] });
     let (statut, reponse) = call(
         &api,
-        request("POST", "/webhooks/subscriptions", "admin", Some(corps)),
+        request(&db, "POST", "/webhooks/subscriptions", "admin", Some(corps)).await,
     )
     .await;
     assert_eq!(statut, StatusCode::BAD_REQUEST, "{reponse}");
@@ -647,12 +647,18 @@ async fn an_admin_subscribing_a_private_url_gets_400() {
     let corps = json!({ "url": "https://10.0.0.5/hooks", "events": ["*"] });
     let (statut, reponse) = call(
         &api,
-        request("POST", "/webhooks/subscriptions", "admin", Some(corps)),
+        request(&db, "POST", "/webhooks/subscriptions", "admin", Some(corps)).await,
     )
     .await;
     assert_eq!(statut, StatusCode::BAD_REQUEST, "{reponse}");
 
-    assert_eq!(livraisons(&db).await, 0);
+    // Rien n'a été inscrit : c'est la table des abonnements qui le dit, pas la file, où
+    // rien n'entre sans `emit`.
+    let inscrits = Entity::find().all(&db).await.expect("lecture possible");
+    assert!(
+        inscrits.is_empty(),
+        "un abonnement refusé a été inscrit : {inscrits:?}"
+    );
 }
 
 /// `post` rend le type de refus, ce que `run` ne laisse plus voir : pour une URL en clair,
