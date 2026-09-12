@@ -86,6 +86,15 @@ between minor versions with no deprecation cycle.
   `forgot-password` and `resend-verification`. Two registrations differing only by case
   used to make two accounts — and the verification link of one landed in the other's
   mailbox.
+- **`change-password`, `reset-password`, `refresh`, `verify-email` and
+  `DELETE /auth/sessions` write everything or nothing.** Each used to chain its writes on
+  separate connections of the pool: a failure between consuming a reset token and setting
+  the password burnt the token for nothing; one between the new password and the
+  revocation left the sessions of a possibly compromised account open; one between
+  rotating a refresh token and issuing the new pair left the client with a dead token and
+  no replacement — and its next attempt counted as a replay. Every `auth` repository now
+  takes `&impl ConnectionTrait`, like `jobs::enqueue`, and the five services open one
+  transaction each, committed after the last write.
 
 #### Projects already generated
 
@@ -107,6 +116,10 @@ reads `timestamp` on MySQL and `timestamp_with_timezone_text` on SQLite, which i
   accounts differ only by case, which is the case to settle by hand — then `normalise`
   from `service/mod.rs` and its four call sites (`register`, `login`,
   `password::request_reset`, `verification::request`).
+- No statement: copy the fragment's `repository/` and `service/` directories whole (and
+  the two new tests of `tests/password.rs` and `tests/session.rs`) so that the five
+  flows write everything or nothing. A caller that passed the connection to a
+  repository compiles unchanged.
 - `scheduler`: copy `sync.rs` from the fragment (and the two new tests of `tests.rs`) so
   that a changed cron expression takes effect at the next start. Nothing else changes;
   the table keeps its shape.
