@@ -160,26 +160,25 @@ Au démarrage, le ticker réconcilie la table avec `schedules()` :
   posé à la prochaine occurrence de son expression ;
 - un `kind` présent dans la table et **plus déclaré** est supprimé — sans quoi une échéance
   retirée du code resterait due pour toujours, réservée par personne ;
-- un `kind` déjà connu **garde son `next_run_at`**. Un redémarrage ne rejoue pas une
-  occurrence passée et ne repousse pas une occurrence imminente, ce qui rend un déploiement
-  invisible pour le calendrier.
+- un `kind` déjà connu dont le `next_run_at` est **échu** est laissé tel quel : le
+  prochain tick le réserve, puis l'avance selon l'expression que le code porte désormais.
+  Un redémarrage ne rejoue jamais une occurrence passée, et n'en perd jamais une non plus ;
+- un `kind` déjà connu dont le `next_run_at` est **encore à venir** est comparé à la
+  prochaine occurrence de son expression, calculée à l'instant. Égale — le redéploiement
+  ordinaire — rien ne bouge ; différente, la ligne est déplacée sur la nouvelle occurrence
+  et un log `info` nomme le `kind`, l'ancienne échéance et la nouvelle.
 
 ## Changer une expression
 
-La troisième règle vaut d'être dite à l'envers : **changer l'expression d'une échéance
-existante ne prend effet qu'à son prochain déclenchement.** La table garde l'ancienne date
-jusque-là, et la réconciliation la laisse délibérément intacte — elle ne peut pas
-distinguer une reprogrammation d'un redéploiement, et se tromper reviendrait soit à rejouer
-une tâche, soit à la retarder.
+La dernière règle est ce qui fait qu'un changement de `schedules()` prend effet **au
+démarrage suivant**. Avant elle, la table gardait l'ancienne date jusqu'au déclenchement de
+l'ancienne expression : passer de `0 3 1 * *` à `*/5 * * * *` laissait le prochain tick au
+premier du mois, sans un log.
 
-Pour imposer la nouvelle expression tout de suite, supprimez la ligne et redémarrez :
-
-```sql
-DELETE FROM schedules WHERE kind = 'nightly_purge';
-```
-
-Le démarrage suivant trouve le `kind` manquant et l'insère à la prochaine occurrence de
-l'expression que le code porte désormais.
+Le seul cas que le démarrage laisse intact est une échéance déjà due quand il survient —
+un `0 3 * * *` redémarré à 3 h 10 part au premier tick, comme il l'aurait fait sans le
+changement, et ne suit la nouvelle expression qu'ensuite. La déplacer effacerait en
+silence une occurrence que le processus avait déjà gagnée.
 
 ## La configuration
 
@@ -202,8 +201,9 @@ la peine de garder si vous éditez le fragment :
 
 - une expression à cinq champs et sa forme à six donnent la même prochaine occurrence, et
   toute autre longueur est refusée ;
-- la réconciliation insère un `kind` nouveau, supprime un `kind` retiré, et laisse intact
-  le `next_run_at` d'un `kind` connu ;
+- la réconciliation insère un `kind` nouveau, supprime un `kind` retiré, laisse intact le
+  `next_run_at` d'un `kind` connu dont l'expression n'a pas changé, le déplace quand elle
+  a changé, et laisse une échéance échue où elle est ;
 - une échéance due est réservée — `next_run_at` avance, `last_run_at` est posé, et un job
   du bon `kind` est apparu dans la file ;
 - **deux réservations concurrentes de la même échéance : une seule gagne**, et la file ne

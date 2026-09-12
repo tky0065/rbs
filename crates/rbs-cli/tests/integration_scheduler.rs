@@ -23,10 +23,12 @@ const TESTS_ORDINAIRES: [&str; 3] = [
 ];
 
 /// Ce qu'il livre et qui joint la base.
-const TESTS_SOUS_CONTENEUR: [&str; 7] = [
+const TESTS_SOUS_CONTENEUR: [&str; 9] = [
     "a_newly_declared_schedule_is_inserted_with_its_next_occurrence",
     "a_schedule_removed_from_the_code_is_removed_from_the_table",
     "a_redeploy_does_not_move_the_next_occurrence_of_a_known_schedule",
+    "a_changed_expression_moves_the_next_occurrence",
+    "a_due_schedule_is_not_moved_by_a_changed_expression",
     "an_unparsable_expression_stops_the_reconciliation",
     "a_due_schedule_enqueues_its_job_and_moves_on",
     "a_schedule_that_is_not_due_is_left_alone",
@@ -49,8 +51,8 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
 
     migrate_dans(&racine, &common::cible());
 
-    // Les deux flux sont exigés séparément : trois des dix tests livrés n'ont besoin
-    // d'aucune base et sortent sous `cargo test` ordinaire, les sept autres sous
+    // Les deux flux sont exigés séparément : trois des douze tests livrés n'ont besoin
+    // d'aucune base et sortent sous `cargo test` ordinaire, les neuf autres sous
     // `--ignored`. Les confondre ferait passer ce test sans qu'un seul des deux groupes
     // soit vraiment joué.
     let (abouti, ordinaires) = cargo_test_brut(&racine, &common::cible(), &[]);
@@ -69,7 +71,7 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     );
 
     // `cargo test -- --ignored` sort en 0 même quand il ne filtre **aucun** test : sans
-    // ces sept lignes, un fragment qui cesserait de livrer ses tests laisserait celui-ci
+    // ces neuf lignes, un fragment qui cesserait de livrer ses tests laisserait celui-ci
     // au vert sans qu'une seule transaction ait été ouverte.
     for test in TESTS_SOUS_CONTENEUR {
         assert!(

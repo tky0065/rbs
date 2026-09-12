@@ -157,25 +157,24 @@ At boot the ticker reconciles the table with `schedules()`:
   `next_run_at` set to the next occurrence of its expression;
 - a `kind` present in the table and **no longer declared** is deleted — otherwise a
   schedule removed from the code would stay due forever, reserved by nobody;
-- a `kind` already known **keeps its `next_run_at`**. A restart neither replays a past
-  occurrence nor pushes back an imminent one, which is what makes a deployment invisible to
-  the calendar.
+- a `kind` already known whose `next_run_at` is **due** is left alone: the next tick
+  reserves it, then moves it on by the expression the code now carries. A restart never
+  replays a past occurrence, and never loses one either;
+- a `kind` already known whose `next_run_at` is **still ahead** is compared to the next
+  occurrence of its expression, computed now. Equal — the ordinary redeploy — nothing
+  moves; different, the row is moved to the new occurrence and an `info` log names the
+  `kind`, the old due date and the new one.
 
 ## Changing an expression
 
-The third rule is worth stating the other way round: **changing the expression of an
-existing schedule only takes effect at its next trigger.** The table keeps the old due date
-until then, and the reconciliation deliberately leaves it alone — it cannot tell a
-rescheduling from a redeploy, and guessing wrong would either replay a task or delay it.
+The last rule is what makes a change to `schedules()` take effect **at the next boot**.
+Before it, the table kept the old due date until the old expression fired: going from
+`0 3 1 * *` to `*/5 * * * *` left the next tick on the first of the month, without a log.
 
-To force the new expression immediately, delete the row and restart:
-
-```sql
-DELETE FROM schedules WHERE kind = 'nightly_purge';
-```
-
-The next boot finds the `kind` missing, and inserts it at the next occurrence of the
-expression the code now carries.
+The one case the boot leaves alone is a schedule that was already due when it happened —
+a `0 3 * * *` restarted at 03:10 fires at the first tick, as it would have without the
+change, and only then follows the new expression. Moving it would silently drop an
+occurrence the process had already earned.
 
 ## Configuration
 
@@ -198,8 +197,9 @@ keeping when you edit the fragment:
 
 - a five-field expression and its six-field form give the same next occurrence, and any
   other length is refused;
-- reconciliation inserts a new `kind`, deletes a withdrawn one, and leaves the
-  `next_run_at` of a known one untouched;
+- reconciliation inserts a new `kind`, deletes a withdrawn one, leaves the `next_run_at`
+  of a known one untouched when its expression has not changed, moves it when the
+  expression has, and leaves a due one where it is;
 - a due schedule is reserved — `next_run_at` moves on, `last_run_at` is set, and a job of
   the right `kind` has appeared in the queue;
 - **two concurrent reservations of the same schedule: only one wins**, and the queue holds

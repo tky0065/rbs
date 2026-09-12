@@ -27,23 +27,23 @@ d'être).
 
 ## Étapes (TDD)
 
-- [ ] 1. `tests.rs.jinja` : `a_changed_expression_moves_the_next_occurrence` — réconcilie
+- [x] 1. `tests.rs.jinja` : `a_changed_expression_moves_the_next_occurrence` — réconcilie
   avec `0 3 1 * *`, lit `next_run_at`, réconcilie avec `*/5 * * * *`, exige une échéance
   différente et à moins de cinq minutes de `Utc::now()`.
-- [ ] 2. `tests.rs.jinja` : `a_due_schedule_is_not_moved_by_a_changed_expression` —
+- [x] 2. `tests.rs.jinja` : `a_due_schedule_is_not_moved_by_a_changed_expression` —
   `echeance_due` (ligne à `now - 1 h`), réconcilie avec `*/5 * * * *`, exige
   `next_run_at` inchangé : c'est le tick, pas la réconciliation, qui la rejoue.
-- [ ] 3. `integration_scheduler.rs` : `TESTS_SOUS_CONTENEUR` passe à 9 entrées avec les
+- [x] 3. `integration_scheduler.rs` : `TESTS_SOUS_CONTENEUR` passe à 9 entrées avec les
   deux noms ; le commentaire « trois des dix… les sept autres » suit (douze, neuf).
-- [ ] 4. Rouge : `cargo test -p rbs-cli --test integration_scheduler --no-fail-fast`
+- [x] 4. Rouge : `cargo test -p rbs-cli --test integration_scheduler --no-fail-fast`
   redirigé vers le scratchpad — `the_tests_shipped_with_the_fragment_run_against_a_real_database`
   doit échouer sur le premier nouveau test.
-- [ ] 5. `sync.rs.jinja` : la boucle devient `if let Some(connue) = find_by_id…` avec les
+- [x] 5. `sync.rs.jinja` : la boucle devient `if let Some(connue) = find_by_id…` avec les
   trois cas ci-dessus, et le commentaire « Une échéance déjà connue garde… » est réécrit
   pour dire pourquoi seule une échéance à venir et divergente bouge.
-- [ ] 6. Vert : même commande, les deux tests d'intégration passés, les neuf noms exigés.
-- [ ] 7. `docs/docs/guides/scheduler.md` + FR : « What a restart does » et « Changing an
+- [x] 6. Vert : même commande, les deux tests d'intégration passés, les neuf noms exigés.
+- [x] 7. `docs/docs/guides/scheduler.md` + FR : « What a restart does » et « Changing an
   expression » disent la règle nouvelle ; le `DELETE` disparaît.
-- [ ] 8. `cargo test -p rbs-cli --lib scheduler`, `cargo clippy --workspace --all-targets
+- [x] 8. `cargo test -p rbs-cli --lib scheduler`, `cargo clippy --workspace --all-targets
   -- -D warnings`, `cargo fmt --all --check`, `cargo test -p rbs-cli --test
   integration_examples` (aucun exemple ne porte `scheduler` : confirme qu'il reste vert).
