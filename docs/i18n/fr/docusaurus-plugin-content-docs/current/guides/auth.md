@@ -134,10 +134,14 @@ jamais en clair : un vol de cette table ne remet rien d'utilisable à un attaqua
 délibérément pas haché par Argon2 — un jeton aléatoire n'offre rien à une recherche
 exhaustive, et un KDF lent à chaque rafraîchissement ne s'achèterait rien.
 
-Rafraîchir fait **tourner** la paire : le jeton présenté est marqué consommé par l'`UPDATE`
-conditionnel qui le lit, si bien que le rejouer une seconde fois vaut 401. Se déconnecter
-le consomme de la même façon, sans en réémettre — c'est pourquoi les deux opérations
-partagent leur appel au repository.
+Rafraîchir fait **tourner** la paire : le jeton présenté est marqué remplacé par le même
+`UPDATE` conditionnel qui le lit, si bien que deux rafraîchissements concurrents ne peuvent
+pas gagner tous les deux. Un jeton remplacé présenté à nouveau a servi deux fois — un de
+ses deux détenteurs n'est pas le titulaire du compte — et toutes les sessions du compte
+sont fermées. Se déconnecter, révoquer une session, réinitialiser ou changer le mot de
+passe **ferment** un jeton à la place, dans une colonne séparée : un jeton fermé présenté à
+nouveau vaut 401 et rien de plus, parce qu'un client qui rejoue une déconnexion n'est pas un
+jeton volé qui circule.
 
 Les mots de passe sont hachés par Argon2id, avec un sel tiré à chaque appel. Ni le hash ni
 le mot de passe n'apparaissent dans une réponse ou dans les logs.

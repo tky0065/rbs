@@ -130,10 +130,13 @@ in `refresh_tokens` as a SHA-256 fingerprint, never in clear: a dump of that tab
 an attacker nothing usable. It is deliberately not hashed with Argon2 — a random token has
 nothing to brute-force, and a slow KDF on every refresh would buy nothing.
 
-Refreshing **rotates** the pair: the token presented is marked spent in the same
-conditional `UPDATE` that reads it, so replaying it a second time gets a 401. Logging out
-spends it the same way, without issuing a new one — which is why the two operations share
-their repository call.
+Refreshing **rotates** the pair: the token presented is marked replaced in the same
+conditional `UPDATE` that reads it, so two concurrent refreshes cannot both win. A
+replaced token presented again has been used twice — one of its two holders is not the
+account owner — and every session of the account is closed. Logging out, revoking a
+session, resetting or changing the password **close** a token instead, in a separate
+column: a closed token presented again gets a 401 and nothing else, because a client
+retrying a logout is not a stolen token circulating.
 
 Passwords are hashed with Argon2id, salted per call. Neither the hash nor the password
 appears in a response or in the logs.

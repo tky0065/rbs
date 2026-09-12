@@ -10,6 +10,20 @@ between minor versions with no deprecation cycle.
 
 *[Version française](CHANGELOG.fr.md).*
 
+## [1.5.0] — 2026-09-12
+
+### Fixed
+
+- **A refresh token closed by logout, replayed, no longer closes the whole account.**
+  `refresh_tokens` gains `replaced_at`: rotation sets it, closing (`logout`,
+  `DELETE /auth/sessions`, password reset or change) sets `revoked_at`, and only a
+  *replaced* token presented again triggers the family revocation. An attacker thrown out
+  by a reset could otherwise log the victim out at will for thirty days by replaying a
+  dead token. **Projects generated before 1.5.0:** the migration only changes for a fresh
+  `rbs add auth`; run `ALTER TABLE refresh_tokens ADD COLUMN replaced_at timestamptz NULL;`
+  (`datetime NULL` on MySQL, `TEXT NULL` on SQLite) and copy the new `rotate`/`close`
+  pair from the fragment.
+
 ## [1.4.0] — 2026-09-11
 
 ### Added

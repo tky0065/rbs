@@ -11,6 +11,21 @@ dépréciation.
 
 *[English version](CHANGELOG.md).*
 
+## [1.5.0] — 2026-09-12
+
+### Corrigé
+
+- **Un jeton de rafraîchissement fermé par une déconnexion, rejoué, ne ferme plus tout le
+  compte.** `refresh_tokens` gagne `replaced_at` : la rotation le pose, fermer (`logout`,
+  `DELETE /auth/sessions`, réinitialisation ou changement de mot de passe) pose
+  `revoked_at`, et seul un jeton *remplacé* présenté à nouveau déclenche la révocation de
+  la famille. Un attaquant chassé par une réinitialisation pouvait sinon déconnecter la
+  victime à volonté pendant trente jours en rejouant un jeton mort. **Projets générés
+  avant la 1.5.0 :** la migration ne change que pour un `rbs add auth` neuf ; exécuter
+  `ALTER TABLE refresh_tokens ADD COLUMN replaced_at timestamptz NULL;` (`datetime NULL`
+  sur MySQL, `TEXT NULL` sur SQLite) et copier depuis le fragment la nouvelle paire
+  `rotate`/`close`.
+
 ## [1.4.0] — 2026-09-11
 
 ### Ajouté
