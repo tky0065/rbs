@@ -32,7 +32,7 @@
 **Interfaces:**
 - Produces: `pub struct Policy { strict: bool }` (`Copy`), `Policy::for_env(env: &str) -> Policy`, `Policy::allows(self, ip: IpAddr) -> bool`, `Policy::check(self, url: &str) -> Result<reqwest::Url, Refusal>`, `pub enum Refusal { Scheme, Https, PrivateHost }` avec `Display` en français, `pub fn is_public(ip: IpAddr) -> bool`.
 
-- [ ] **Step 1: Écrire les tests rouges dans `tests.rs.jinja`** (après les tests de `matches`, avant `table_a_soi`)
+- [x] **Step 1: Écrire les tests rouges dans `tests.rs.jinja`** — fait, en fin de fichier (section « Cibles », cinq tests dont celui du résolveur exigé par le spec) ; RED sur le projet jetable : `cargo test --lib -- modules::webhooks::tests` → `error[E0432]: unresolved import `super::target`` (après les tests de `matches`, avant `table_a_soi`)
 
 ```rust
 // ── Cibles ───────────────────────────────────────────────────────────────────
@@ -84,7 +84,7 @@ fn in_development_http_and_private_hosts_pass_but_not_other_schemes() {
 }
 ```
 
-- [ ] **Step 2: Écrire `target.rs.jinja`**
+- [x] **Step 2: Écrire `target.rs.jinja`** — fait ; `host_str()` + `trim_matches(['[', ']'])` + `parse::<IpAddr>()`, sans dépendance `url` ; `Ipv6Addr` non importé
 
 ```rust
 use std::fmt;
@@ -282,7 +282,7 @@ impl Resolve for Resolver {
         Ok(url)
 ```
 
-- [ ] **Step 3: Déclarer le module et le fichier**
+- [x] **Step 3: Déclarer le module et le fichier** — fait ; `cargo test -p rbs-cli --test integration_webhooks` → `1 passed; 0 failed; 1 ignored`
 
 `mod.rs.jinja` : ajouter `pub mod target;` après `pub mod signature;`.
 
@@ -304,7 +304,7 @@ et remplacer la section tokio :
 features = ["sync", "net"]
 ```
 
-- [ ] **Step 4: Vérifier sur un projet jetable**
+- [x] **Step 4: Vérifier sur un projet jetable** — fait sur `$SCRATCHPAD/wh-jetable` : `cargo test --lib -- modules::webhooks::tests` → `11 passed; 0 failed; 7 ignored` ; `cargo test -p rbs-cli --lib` → `1151 passed` ; `cargo fmt --all --check` et `cargo clippy --workspace --all-targets -- -D warnings` propres
 
 ```bash
 S=/private/tmp/claude-501/-Users-yacoubakone-dev-rs/*/scratchpad; cd $S && rm -rf wh && \
@@ -316,7 +316,7 @@ cargo test --lib -- modules::webhooks::tests 2>&1 | tail -20
 
 Attendu : les quatre tests neufs passent, les six anciens aussi (les `#[ignore]` sont ignorés). Si `add auth` refuse faute de compose, jouer `add` avec l'option que `integration_webhooks.rs::project_with_webhooks_on` emploie.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit** — commit `4904a6e`
 
 ```bash
 git add crates/rbs-cli/templates/features/webhooks/
@@ -339,7 +339,7 @@ git commit -m "feat(webhooks): classe les cibles de livraison par une politique 
 - Consumes: `Policy`, `Refusal` de la tâche 1.
 - Produces: `Sender::from_config(config: &rbs_core::Config) -> anyhow::Result<Self>`, `Sender::policy(&self) -> Policy`, `service::subscribe(db, policy: Policy, input) -> Result<SubscriptionCreated>`.
 
-- [ ] **Step 1: Test rouge (sous conteneur) dans `tests.rs.jinja`**
+- [x] **Step 1: Test rouge (sous conteneur) dans `tests.rs.jinja`** — fait, mais par la route et non par le service (le spec l'exige : `an_admin_subscribing_a_private_url_gets_400`, sur un état dont `config.env = "production"`, aide `table_a_soi_stricte()`) ; `TESTS_ORDINAIRES` → `[&str; 11]`, `TESTS_SOUS_CONTENEUR` → `[&str; 8]`
 
 ```rust
 /// Le profil des tests est `development`, qui tolère tout : le refus s'observe sur un
@@ -370,7 +370,7 @@ async fn a_private_url_is_refused_outside_development() {
 
 Ajouter le nom à `TESTS_SOUS_CONTENEUR` dans `crates/rbs-cli/tests/integration_webhooks.rs` (le tableau passe à `[&str; 8]`) et les quatre noms de la tâche 1 à `TESTS_ORDINAIRES` (`[&str; 10]`).
 
-- [ ] **Step 2: `service::subscribe` prend la politique**
+- [x] **Step 2: `service::subscribe` prend la politique** — fait (`service.rs.jinja`, `policy.check(&input.url)` → `Error::BadRequest`)
 
 ```rust
 use super::target::Policy;
@@ -388,7 +388,7 @@ pub async fn subscribe(
     for motif in &input.events {
 ```
 
-- [ ] **Step 3: `Sender` porte la politique**
+- [x] **Step 3: `Sender` porte la politique** — fait ; `AppState::new` déplaçait `config` dans `CoreState::new` avant l'ancre : `state.rs.jinja` joue désormais `state_init` avant `core`, `anchors.rs::STATE_INIT.after = "Ok(Self {"`, doctor.md EN/FR et les quatre `examples/*/src/state.rs` suivent
 
 Dans `delivery.rs.jinja` :
 
@@ -441,9 +441,9 @@ impl Sender {
     /// est livré, et une livraison n'a rien à faire sur le réseau du projet.
 ```
 
-- [ ] **Step 4: Vérifier** — `cargo test --lib -- modules::webhooks::tests` sur le projet jetable (régénérer le projet ou recopier les fichiers touchés), puis `cargo test --lib -- --ignored modules::webhooks::tests` avec la base du compose démarrée (`docker compose up -d`, `cargo run -p migration`), attendu : le test neuf passe.
+- [x] **Step 4: Vérifier** — fait sur le jetable régénéré : `cargo test --lib -- modules::webhooks::tests` → `11 passed; 8 ignored` ; `cargo test --lib -- --ignored modules::webhooks::tests` (PostgreSQL du compose, migré) → `8 passed; 0 failed` ; `cargo test -p rbs-cli --test integration_examples` → `19 passed` ; `--test integration_docs` → `13 passed; 1 ignored` ; `cargo test -p rbs-cli` → 0 failed ; `cargo check --all-targets` dans `examples/blog-auth` ok — `cargo test --lib -- modules::webhooks::tests` sur le projet jetable (régénérer le projet ou recopier les fichiers touchés), puis `cargo test --lib -- --ignored modules::webhooks::tests` avec la base du compose démarrée (`docker compose up -d`, `cargo run -p migration`), attendu : le test neuf passe.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit** — commit `6de3ae0` (amendé pour porter la cascade de `state.rs.jinja`)
 
 ```bash
 git commit -am "feat(webhooks): refuse à l'inscription une URL interne, en http hors développement"
@@ -461,7 +461,7 @@ git commit -am "feat(webhooks): refuse à l'inscription une URL interne, en http
 - Consumes: `Policy::check`, `Policy::resolve`.
 - Produces: `pub(super) enum Outcome`? Non : `post` rend `Result<(), PostError>` avec `enum PostError { Blocked(Refusal), Transport(anyhow::Error) }`.
 
-- [ ] **Step 1: Tests rouges (sous conteneur)**
+- [x] **Step 1: Tests rouges (sous conteneur)** — fait, en fin de fichier : `post_refuses_a_blocked_target_before_sending` (le test du brief sur `post`, renommé), `a_delivery_to_a_blocked_target_is_abandoned_not_retried` (sur `Delivery::run`, receveur local à 0 requête), `in_development_a_local_receiver_is_reached` ; `Sender::with_policy` non écrit, l'état strict de `table_a_soi_stricte()` suffit ; `TESTS_SOUS_CONTENEUR` → `[&str; 11]` ; RED : `error[E0433]: cannot find `PostError` in `delivery``
 
 ```rust
 /// Une cible interdite ne se réessaie pas : cinq tentatives de plus n'y changeraient
@@ -530,7 +530,7 @@ async fn in_development_a_local_receiver_is_reached() {
 
 Ajouter les deux noms à `TESTS_SOUS_CONTENEUR` (`[&str; 10]`).
 
-- [ ] **Step 2: `Sender::post` refuse avant d'envoyer**
+- [x] **Step 2: `Sender::post` refuse avant d'envoyer** — fait (`PostError { Blocked, Transport }`, `check` → `resolve` → envoi)
 
 ```rust
 /// Ce qui empêche une livraison, et ce que la file doit en faire.
@@ -602,7 +602,7 @@ impl Sender {
 }
 ```
 
-- [ ] **Step 3: `Delivery::run` abandonne une cible refusée**
+- [x] **Step 3: `Delivery::run` abandonne une cible refusée** — fait (`Blocked` → `warn` + `Ok(())`, `Transport` → `Err`)
 
 Remplacer la fin de `run` :
 
@@ -634,9 +634,9 @@ Remplacer la fin de `run` :
         }
 ```
 
-- [ ] **Step 4: `cargo check` + tests sur le projet jetable**, ordinaires puis `--ignored`. Attendu : 10 ordinaires, 10 sous conteneur, tous verts.
+- [x] **Step 4: `cargo check` + tests sur le projet jetable** — fait sur le jetable : `cargo test --lib -- modules::webhooks::tests` → `11 passed; 0 failed; 11 ignored` ; `cargo test --lib -- --ignored modules::webhooks::tests` → `11 passed; 0 failed` ; clippy du jetable propre ; worktree : lib `1151 passed`, integration_webhooks rapide `1 passed`, fmt exit 0, clippy exit 0, ordinaires puis `--ignored`. Attendu : 10 ordinaires, 10 sous conteneur, tous verts.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit** — commit `de84041`
 
 ```bash
 git commit -am "feat(webhooks): interdit redirections et cibles internes à la livraison, sans réessai"
@@ -651,7 +651,7 @@ git commit -am "feat(webhooks): interdit redirections et cibles internes à la l
 - Modify: `CHANGELOG.md`, `CHANGELOG.fr.md` (sous `## [1.5.0]`, section `Changed`/`Modifié` — créer l'entrée `[1.5.0] — 2026-09-12` si l'autre branche ne l'a pas encore posée ; au merge, les deux entrées fusionnent)
 - Modify: `IMPROVE.md` ligne de la tâche 9 — **non** : le cochage est fait par l'orchestrateur après vérification.
 
-- [ ] **Step 1: Guide EN** — après le tableau des routes (ligne ~91, l'exemple `{ "url": "https://example.test/hooks" ... }`), ajouter :
+- [x] **Step 1: Guide EN** — fait, en fin de la section « Subscribing », avant « Event patterns » (et non entre l'exemple JSON et les paragraphes sur le secret) ; FR au même endroit ; `cargo test -p rbs-cli --test integration_docs` → `13 passed; 0 failed; 1 ignored` — après le tableau des routes (ligne ~91, l'exemple `{ "url": "https://example.test/hooks" ... }`), ajouter :
 
 ```markdown
 ### Where a delivery may go
@@ -671,7 +671,7 @@ case on a workstation.
 
 FR équivalent dans le fichier i18n, même emplacement.
 
-- [ ] **Step 2: CHANGELOG** (EN puis FR) :
+- [x] **Step 2: CHANGELOG** — fait, EN et FR, une seule puce sous `[1.5.0] — 2026-09-12` ; elle dit aussi à un projet déjà engendré de remonter l'ancre `state_init` avant `rbs add webhooks` (EN puis FR) :
 
 ```markdown
 ## [1.5.0] — 2026-09-12
@@ -687,7 +687,7 @@ FR équivalent dans le fichier i18n, même emplacement.
   at delivery by the same rule.
 ```
 
-- [ ] **Step 3: Passe lente**
+- [x] **Step 3: Passe lente** — fait : `cargo test -p rbs-cli --test integration_webhooks --no-fail-fast -- --ignored` → `1 passed; 0 failed; finished in 166.71s` (scratchpad/webhooks-lent.log) ; `--test integration_examples` → `19 passed` ; `--lib` → `1151 passed` ; fmt exit 0 ; clippy exit 0
 
 ```bash
 cargo test -p rbs-cli --test integration_webhooks --no-fail-fast -- --ignored > $SCRATCHPAD/webhooks-lent.log 2>&1; tail -5 $SCRATCHPAD/webhooks-lent.log
@@ -695,7 +695,7 @@ cargo test -p rbs-cli --test integration_webhooks --no-fail-fast -- --ignored > 
 
 Attendu : `1 passed`. Puis `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p rbs-cli --lib`, `cargo test -p rbs-cli --test integration_docs` (les transcriptions), `cargo test -p rbs-cli --test integration_examples`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit** — commit `fc369f0`
 
 ```bash
 git commit -am "docs(webhooks): dit où une livraison a le droit d'aller"
