@@ -55,6 +55,7 @@ Arguments:
 
 Options:
       --fields <CHAMPS>    Champs de l'entité, ex. "name:string,email:string:unique"
+      --singular <NOM>     Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force              Écrit même si le working tree Git est sale
       --dry-run            Affiche le plan sans rien écrire
       --has-many <ENTITE>  Entité enfant dont ce modèle doit porter la variante inverse, répétable
@@ -68,6 +69,7 @@ Options:
 | Flag | Effect |
 |---|---|
 | `--fields <CHAMPS>` | The entity's columns, in the grammar below. Omitted, the feature is generated with no column of its own. |
+| `--singular <NOM>` | The singular form of the name, when the built-in heuristic gets it wrong. It names the entity, the DTOs and the local variables — `CreateNewsItem` and `let news_item` for `rbs generate crud news --singular news_item` — while the module, the table and the routes keep the plural. The heuristic already leaves `news`, `series` and `species` untouched; for any other invariable or irregular plural, this flag is the fix. Must be snake_case, and neither a Rust keyword nor a skeleton module, checked before anything is written. |
 | `--force` | Writes even though the Git working tree is dirty, and overwrites files reported as conflicting. |
 | `--dry-run` | Prints the plan and stops. Nothing is written. |
 | `--has-many <ENTITE>` | Repairs the far side of a relation: writes into the model of an already generated feature the `has_many` variant pointing at the named child, and nothing else. Repeatable. [The relations guide](../guides/relations.md) covers when it is needed. |
@@ -88,15 +90,17 @@ Arguments:
   <NAME>  Nom de la feature
 
 Options:
-      --force    Écrit même si le working tree Git est sale
-      --dry-run  Affiche le plan sans rien écrire
-  -h, --help     Print help
-  -V, --version  Print version
+      --singular <NOM>  Forme singulière du nom, quand l'heuristique se trompe (ex. news)
+      --force           Écrit même si le working tree Git est sale
+      --dry-run         Affiche le plan sans rien écrire
+  -h, --help            Print help
+  -V, --version         Print version
 ```
 
 Same flags minus `--fields`, `--has-many` and `--role`: an empty feature has no columns, so
 it gets neither an entity worth the name, nor a migration, nor a relation to repair; and it
-carries no handler for a guard to protect.
+carries no handler for a guard to protect. `--singular` stays: the skeleton still names its
+service and its DTOs after the singular.
 
 ## The `--fields` grammar
 

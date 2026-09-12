@@ -41,6 +41,8 @@ pub(crate) struct Options {
     pub soft_delete: bool,
     /// Ajoute au CRUD trois routes de contenu binaire, adossées au fragment `storage`.
     pub with_upload: bool,
+    /// Forme singulière du nom, quand l'heuristique se trompe : `news_item` pour `news`.
+    pub singular: Option<String>,
 }
 
 /// Un fichier à écrire : son chemin, relatif à la racine du projet, et son contenu.
@@ -243,6 +245,12 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     name::validate(&options.name).map_err(Error::Nom)?;
 
+    // La forme imposée devient un nom de type et de variable : elle subit les refus du
+    // nom lui-même, un mot-clé Rust y ferait le même dégât.
+    if let Some(singular) = &options.singular {
+        name::validate(singular).map_err(Error::Nom)?;
+    }
+
     // Avant tout rendu : un garde posé sur un projet sans `auth` produirait un contrôleur
     // qui importe `crate::auth::guard`, et le projet ne compilerait plus.
     if let Some(role) = &options.role {
@@ -297,7 +305,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // La présence du fragment suffit : aucun drapeau ne la demande, et c'est le sens du
     // défaut fermé — un projet qui a installé de quoi fermer ne rend pas des routes
     // anonymes au premier `generate crud`.
-    let feature = Feature::fresh(&options.name, fields);
+    let feature = Feature::fresh(&options.name, fields).with_singular(options.singular.clone());
     let feature = if metadonnees.features.iter().any(|feature| feature == "auth") {
         feature.authenticated()
     } else {
@@ -702,6 +710,7 @@ mod tests {
             role: None,
             soft_delete: false,
             with_upload: false,
+            singular: None,
         }
     }
 
@@ -797,6 +806,43 @@ mod tests {
 
         assert_eq!(entites.matches("articles").count(), 1, "{entites}");
         assert!(entites.contains("comments"), "{entites}");
+    }
+
+    /// La forme imposée devient un nom de type : un libellé hors snake_case est refusé
+    /// avant le rendu, comme le nom lui-même.
+    #[test]
+    fn a_singular_that_is_not_snake_case_is_refused_before_anything_is_written() {
+        let (_parent, root) = project();
+        let avant = fingerprint(&root);
+
+        let error = run(&Options {
+            singular: Some("NewsItem".to_string()),
+            ..options(&root, "news", Some("title:string"), true)
+        })
+        .expect_err("`NewsItem` n'est pas en snake_case");
+
+        assert!(error.to_string().contains("snake_case"), "{error}");
+        assert_eq!(fingerprint(&root), avant, "rien ne doit avoir été écrit");
+    }
+
+    /// De bout en bout : le singulier imposé nomme l'entité, les DTO et la variable
+    /// locale du service, là où l'heuristique écrivait `CreateNew` et `let new`.
+    #[test]
+    fn an_imposed_singular_names_the_entity_and_the_dtos() {
+        let (_parent, root) = project();
+
+        run(&Options {
+            singular: Some("news_item".to_string()),
+            ..options(&root, "news", Some("title:string"), true)
+        })
+        .expect("news doit se générer");
+
+        let dto = read(&root.join("src/news/dto.rs"));
+        let service = read(&root.join("src/news/service.rs"));
+
+        assert!(dto.contains("pub struct CreateNewsItem"), "{dto}");
+        assert!(!dto.contains("CreateNew "), "{dto}");
+        assert!(service.contains("news_item"), "{service}");
     }
 
     #[test]

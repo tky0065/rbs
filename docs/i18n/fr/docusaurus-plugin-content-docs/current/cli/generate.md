@@ -57,6 +57,7 @@ Arguments:
 
 Options:
       --fields <CHAMPS>    Champs de l'entité, ex. "name:string,email:string:unique"
+      --singular <NOM>     Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force              Écrit même si le working tree Git est sale
       --dry-run            Affiche le plan sans rien écrire
       --has-many <ENTITE>  Entité enfant dont ce modèle doit porter la variante inverse, répétable
@@ -70,6 +71,7 @@ Options:
 | Flag | Effet |
 |---|---|
 | `--fields <CHAMPS>` | Les colonnes de l'entité, dans la grammaire décrite plus bas. Omis, la feature est générée sans colonne propre. |
+| `--singular <NOM>` | La forme singulière du nom, quand l'heuristique intégrée se trompe. Elle nomme l'entité, les DTO et les variables locales — `CreateNewsItem` et `let news_item` pour `rbs generate crud news --singular news_item` — tandis que le module, la table et les routes gardent le pluriel. L'heuristique laisse déjà `news`, `series` et `species` intacts ; pour tout autre pluriel invariable ou irrégulier, ce flag est le remède. Doit être en snake_case, et n'être ni un mot-clé Rust ni un module du squelette, vérifié avant toute écriture. |
 | `--force` | Écrit même si le working tree Git est sale, et écrase les fichiers signalés en conflit. |
 | `--dry-run` | Affiche le plan et s'arrête. Rien n'est écrit. |
 | `--has-many <ENTITE>` | Répare le côté lointain d'une relation : écrit dans le modèle d'une feature déjà générée la variante `has_many` qui vise l'enfant nommé, et rien d'autre. Répétable. [Le guide des relations](../guides/relations.md) dit quand c'est nécessaire. |
@@ -90,15 +92,17 @@ Arguments:
   <NAME>  Nom de la feature
 
 Options:
-      --force    Écrit même si le working tree Git est sale
-      --dry-run  Affiche le plan sans rien écrire
-  -h, --help     Print help
-  -V, --version  Print version
+      --singular <NOM>  Forme singulière du nom, quand l'heuristique se trompe (ex. news)
+      --force           Écrit même si le working tree Git est sale
+      --dry-run         Affiche le plan sans rien écrire
+  -h, --help            Print help
+  -V, --version         Print version
 ```
 
 Les mêmes flags moins `--fields`, `--has-many` et `--role` : une feature vide n'a pas de
 colonne, donc ni entité digne de ce nom, ni migration, ni relation à réparer ; et elle ne
-porte aucun handler qu'une garde protégerait.
+porte aucun handler qu'une garde protégerait. `--singular` reste : le squelette nomme
+toujours son service et ses DTO d'après le singulier.
 
 ## La grammaire de `--fields`
 
