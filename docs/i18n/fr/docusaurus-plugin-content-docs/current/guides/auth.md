@@ -158,6 +158,11 @@ aucune réponse n'a été reçue.
 Les mots de passe sont hachés par Argon2id, avec un sel tiré à chaque appel. Ni le hash ni
 le mot de passe n'apparaissent dans une réponse ou dans les logs.
 
+Les adresses sont débarrassées de leurs blancs et passées en minuscules avant d'atteindre
+la table : `Alice@Exemple.test` et `alice@exemple.test` sont un seul compte, à
+l'inscription comme à la connexion, et le profil porte la forme en minuscules. Le DTO
+valide toujours ce que le client a envoyé.
+
 La connexion répond **la même 401** que l'adresse soit inconnue ou le mot de passe erroné,
 et elle hache une valeur de comparaison même pour une adresse inconnue. Sauter cette
 comparaison répondrait aux adresses inconnues en deux millisecondes et aux autres en deux

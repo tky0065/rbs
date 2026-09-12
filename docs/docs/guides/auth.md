@@ -151,6 +151,10 @@ is the cost of detecting reuse: only retry a refresh you never got a response fo
 Passwords are hashed with Argon2id, salted per call. Neither the hash nor the password
 appears in a response or in the logs.
 
+Addresses are trimmed and lowercased before they reach the table: `Alice@Example.test`
+and `alice@example.test` are one account, at registration as at login, and the profile
+carries the lowercased form. The DTO still validates what the client sent.
+
 Login answers **the same 401** whether the address is unknown or the password wrong, and
 it hashes a comparison value even for an unknown address. Skipping that comparison would
 answer unknown addresses in two milliseconds and known ones in two hundred and forty —

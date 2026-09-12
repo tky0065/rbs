@@ -17,28 +17,42 @@ between minor versions with no deprecation cycle.
 - **A refresh token closed by logout, replayed, no longer closes the whole account.**
   `refresh_tokens` gains `replaced_at`: rotation sets it, closing (`logout`,
   `DELETE /auth/sessions`, password reset or change) sets `revoked_at`, and only a
-  *replaced* token presented again triggers the family revocation. An attacker thrown out
-  by a reset could otherwise log the victim out at will for thirty days by replaying a
-  dead token. **Projects generated before 1.5.0:** the migration only changes for a fresh
-  `rbs add auth`; run `ALTER TABLE refresh_tokens ADD COLUMN replaced_at timestamptz NULL;`
-  (`timestamp NULL` on MySQL, `timestamp_with_timezone_text NULL` on SQLite — what
-  `rbs migrate` itself writes for this column type) and carry over from the fragment:
-  `model.rs` (the `replaced_at` field), the whole of `repository/refresh_token.rs`
-  (`rotate`, `close`, and the `replaced_at IS NULL` filter on `open_sessions_of`,
-  `revoke_sessions_of` and `revoke_session` — without it, `GET /auth/sessions` gains a row
-  on every refresh), and `service/session.rs` (`refresh` and `logout`).
+  *replaced* token presented again triggers the family revocation — once: the replayed
+  row is closed in turn, and presenting it again gets a 401 and nothing else. An attacker
+  thrown out by a reset could otherwise log the victim out at will for thirty days by
+  replaying a dead token.
 - **An access token no longer survives the revocation of its sessions.** `rbs-core`'s
   `HasAuth` gains a provided `accept(&claims)` method that `Identity` calls after the
   signature check; the `auth` fragment implements it by reading the account: gone,
   sessions closed after `iat` (`users.sessions_revoked_at`, stamped by reset, change and
   `DELETE /auth/sessions`), or role changed → 401. Tokens are issued past the revocation
   second so the pair returned by `change-password` works at once. Generated tests that
-  signed a token for a random `sub` now create an account. **Projects generated before
-  1.5.0:** `ALTER TABLE users ADD COLUMN sessions_revoked_at timestamptz NULL;`
-  (`timestamp NULL` on MySQL, `timestamp_with_timezone_text NULL` on SQLite), then copy
+  signed a token for a random `sub` now create an account.
+- **Email addresses are trimmed and lowercased** before `register`, `login`,
+  `forgot-password` and `resend-verification`. Two registrations differing only by case
+  used to make two accounts — and the verification link of one landed in the other's
+  mailbox.
+
+#### Projects already generated
+
+The `create_auth_tables` migration only changes for a fresh `rbs add auth`; it still
+alters nothing. A project already migrated runs the statements itself — `timestamptz`
+reads `timestamp` on MySQL and `timestamp_with_timezone_text` on SQLite, which is what
+`rbs migrate` writes for this column type — then copies the named files from the fragment:
+
+- `ALTER TABLE refresh_tokens ADD COLUMN replaced_at timestamptz NULL;`, then `model.rs`
+  (the `replaced_at` field), the whole of `repository/refresh_token.rs` (`rotate`, `close`,
+  and the `replaced_at IS NULL` filter on `open_sessions_of`, `revoke_sessions_of` and
+  `revoke_session` — without it, `GET /auth/sessions` gains a row on every refresh) and
+  `service/session.rs` (`refresh` and `logout`).
+- `ALTER TABLE users ADD COLUMN sessions_revoked_at timestamptz NULL;`, then
   `impl HasAuth for AppState` from the fragment's `mod.rs`, `stamp_sessions_revoked` from
-  `repository/user.rs` and `close_every_session` from `service/mod.rs`; without it nothing
-  changes.
+  `repository/user.rs` and `close_every_session` from `service/mod.rs`. Without it,
+  `rbs-core` 1.5.0 compiles unchanged and nothing changes.
+- `UPDATE users SET email = lower(trim(email));` — the unique key refuses it if two
+  accounts differ only by case, which is the case to settle by hand — then `normalise`
+  from `service/mod.rs` and its four call sites (`register`, `login`,
+  `password::request_reset`, `verification::request`).
 
 ## [1.4.0] — 2026-09-11
 
