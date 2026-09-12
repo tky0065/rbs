@@ -64,6 +64,15 @@ pub(crate) struct DeclaredFile {
 pub(crate) struct DeclaredInsertion {
     pub anchor: String,
     pub content: String,
+    /// La ligne que l'insertion doit précéder dans le fichier de l'ancre — en préfixe,
+    /// indentation ôtée.
+    ///
+    /// Une ancre peut avoir bougé dans le squelette : `state_init` est passée au-dessus
+    /// de `core: CoreState::new(db, config)` en 1.5.0, et un fragment qui lit `config` à
+    /// cet endroit ne compile pas sur un projet antérieur. Sans ce champ, la faute n'est
+    /// connue qu'à `cargo build`, après que le plan a écrit.
+    #[serde(default)]
+    pub before: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -297,6 +306,26 @@ comment = "Secret de signature HS256, au moins 32 octets"
             manifest.env[0].when.as_deref(),
             Some("database == 'postgres'")
         );
+    }
+
+    /// Une insertion peut nommer la ligne qu'elle doit précéder ; sans le dire, elle ne
+    /// précède rien en particulier.
+    #[test]
+    fn an_insertion_can_name_the_line_it_must_precede() {
+        let manifest = read(
+            "[feature]\ndescription = \"webhooks\"\n\n\
+             [[anchors]]\nanchor = \"state_init\"\ncontent = \"x: y(&config)?,\"\n\
+             before = \"core: CoreState::new(\"\n\n\
+             [[anchors]]\nanchor = \"state_champs\"\ncontent = \"x: Y,\"\n",
+            "features/webhooks/feature.toml",
+        )
+        .expect("le manifeste est valide");
+
+        assert_eq!(
+            manifest.anchors[0].before.as_deref(),
+            Some("core: CoreState::new(")
+        );
+        assert_eq!(manifest.anchors[1].before, None);
     }
 
     #[test]

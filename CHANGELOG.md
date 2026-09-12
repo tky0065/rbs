@@ -27,6 +27,13 @@ between minor versions with no deprecation cycle.
 
 ### Fixed
 
+- **`rbs add webhooks` on a project generated before this version no longer leaves it
+  unable to compile.** Such a project carries `// <rbs:state_init>` below
+  `core: CoreState::new(db, config)`, which has already consumed `config` by the time
+  `Sender::from_config(&config)` reads it. The command now refuses at planning time,
+  writes nothing, names the line and prints the block to move above it. A fragment
+  declares the line its insertion must precede with `before` on its `[[anchors]]` entry;
+  `webhooks` is the only one that does.
 - **A refresh token closed by logout, replayed, no longer closes the whole account.**
   `refresh_tokens` gains `replaced_at`: rotation sets it, closing (`logout`,
   `DELETE /auth/sessions`, password reset or change) sets `revoked_at`, and only a
@@ -67,9 +74,9 @@ reads `timestamp` on MySQL and `timestamp_with_timezone_text` on SQLite, which i
   from `service/mod.rs` and its four call sites (`register`, `login`,
   `password::request_reset`, `verification::request`).
 - Before `rbs add webhooks`: move the `// <rbs:state_init>` … `// </rbs:state_init>` block
-  above `core: CoreState::new(db, config),` in `src/state.rs`. `rbs doctor --fix` only
-  restores a missing anchor, it never relocates one that is still present; left below
-  that line, `config` is already gone when `Sender::from_config(&config)` asks for it.
+  above `core: CoreState::new(db, config),` in `src/state.rs`. The command refuses and
+  prints that block as long as it stays below the line; `rbs doctor --fix` only restores
+  a missing anchor, it never relocates one that is still present.
 
 ## [1.4.0] — 2026-09-11
 

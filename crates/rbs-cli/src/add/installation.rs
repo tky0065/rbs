@@ -138,6 +138,9 @@ pub(crate) fn actions(
 
     for insertion in &fragment.manifest.anchors {
         let anchor = anchor(fragment, &insertion.anchor, builder)?;
+        if let Some(before) = &insertion.before {
+            builder.require_before(&anchor, before)?;
+        }
         // Une ancre reçoit du contenu de manifeste, pas une template : sans ce rendu,
         // une variable comme `{@ database_url_compose @}` atterrirait littéralement dans
         // le fichier plutôt que sa valeur.

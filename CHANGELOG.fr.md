@@ -29,6 +29,13 @@ dépréciation.
 
 ### Corrigé
 
+- **`rbs add webhooks` sur un projet engendré avant cette version ne le laisse plus
+  incompilable.** Un tel projet porte `// <rbs:state_init>` sous
+  `core: CoreState::new(db, config)`, qui a déjà consommé `config` quand
+  `Sender::from_config(&config)` le lit. La commande refuse désormais à la planification,
+  n'écrit rien, nomme la ligne et affiche le bloc à remonter au-dessus. Un fragment
+  déclare la ligne que son insertion doit précéder par `before` sur son entrée
+  `[[anchors]]` ; `webhooks` est le seul à le faire.
 - **Un jeton de rafraîchissement fermé par une déconnexion, rejoué, ne ferme plus tout le
   compte.** `refresh_tokens` gagne `replaced_at` : la rotation le pose, fermer (`logout`,
   `DELETE /auth/sessions`, réinitialisation ou changement de mot de passe) pose
@@ -70,9 +77,9 @@ lit `timestamp` sur MySQL et `timestamp_with_timezone_text` sur SQLite, ce que
   de `service/mod.rs` et ses quatre appels (`register`, `login`,
   `password::request_reset`, `verification::request`).
 - Avant `rbs add webhooks` : remonter le bloc `// <rbs:state_init>` … `// </rbs:state_init>`
-  au-dessus de `core: CoreState::new(db, config),` dans `src/state.rs`. `rbs doctor --fix`
-  ne fait que restaurer une ancre absente, il n'en déplace jamais une déjà présente ; laissée
-  sous cette ligne, `config` est déjà parti quand `Sender::from_config(&config)` le demande.
+  au-dessus de `core: CoreState::new(db, config),` dans `src/state.rs`. La commande refuse
+  et affiche ce bloc tant qu'il reste sous la ligne ; `rbs doctor --fix` ne fait que
+  restaurer une ancre absente, il n'en déplace jamais une déjà présente.
 
 ## [1.4.0] — 2026-09-11
 

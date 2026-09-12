@@ -384,6 +384,76 @@ impl fmt::Display for Missing {
 
 impl std::error::Error for Missing {}
 
+/// Une ancre présente, mais sous une ligne que l'insertion doit précéder.
+///
+/// Distincte de [`Missing`] : reposer l'ancre n'y changerait rien, c'est sa place qui
+/// est en cause, et seul le développeur peut la déplacer — le CLI ne réordonne jamais un
+/// fichier qu'il a déjà écrit.
+///
+/// Rendue boxée : elle porte le bloc tel qu'il est dans le fichier, et chaque `Result`
+/// qui la relaie prendrait sa taille.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Misplaced {
+    pub anchor: Anchor,
+    /// La ligne que l'ancre aurait dû précéder, telle que le fragment la déclare.
+    pub before: String,
+    /// Le bloc tel qu'il est dans le fichier, balises comprises, indentation ôtée : c'est
+    /// ce que le développeur doit remonter, et il peut porter ce que d'autres fragments y
+    /// ont déjà posé.
+    pub block: String,
+}
+
+impl fmt::Display for Misplaced {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "ancre {} placée sous `{}` dans {}, qu'elle doit précéder",
+            self.anchor.opening(),
+            self.before,
+            self.anchor.file
+        )
+    }
+}
+
+impl std::error::Error for Misplaced {}
+
+/// Vérifie que `anchor` précède, dans `source`, toute ligne commençant par `before`.
+///
+/// La comparaison se fait sur la ligne sans son indentation, en préfixe : `core:
+/// CoreState::new(` reconnaît `core: CoreState::new(db, config),` quel que soit ce que le
+/// développeur a passé au constructeur. Une ancre absente n'est pas jugée ici — c'est
+/// l'insertion qui la signale, avec le bloc à coller — et une ligne absente non plus : un
+/// `state.rs` réécrit sans elle n'a plus le problème que ce contrôle cherche.
+pub(crate) fn precedes(source: &str, anchor: &Anchor, before: &str) -> Result<(), Box<Misplaced>> {
+    let lines: Vec<&str> = source.lines().collect();
+    let position = |balise: &str| lines.iter().position(|line| line.trim() == balise);
+
+    let (Some(opening), Some(closing)) = (position(&anchor.opening()), position(&anchor.closing()))
+    else {
+        return Ok(());
+    };
+    let Some(ligne) = lines
+        .iter()
+        .position(|line| line.trim().starts_with(before))
+    else {
+        return Ok(());
+    };
+
+    if ligne > opening {
+        return Ok(());
+    }
+
+    Err(Box::new(Misplaced {
+        anchor: anchor.clone(),
+        before: before.to_string(),
+        block: lines[opening..=closing.max(opening)]
+            .iter()
+            .map(|line| line.trim())
+            .collect::<Vec<_>>()
+            .join("\n"),
+    }))
+}
+
 /// Ce qui empêche de reposer une ancre disparue.
 ///
 /// Chaque variante est une raison de s'abstenir, jamais un échec de la commande : une
@@ -982,6 +1052,49 @@ services:
         let error = insert(cite, ROUTES, &lines(&["peu importe"])).expect_err("aucune ancre");
 
         assert_eq!(error.anchor, ROUTES);
+    }
+
+    /// `src/state.rs` d'un projet d'avant 1.5.0 : l'ancre suit `core:`, qui a déjà
+    /// consommé `config`.
+    const ETAT_ANCIEN: &str = "impl AppState {\n    pub fn new(db: DatabaseConnection, config: Config) -> anyhow::Result<Self> {\n        Ok(Self {\n            core: CoreState::new(db, config),\n            // <rbs:state_init>\n            mail: crate::modules::mail::Mailer::from_config()?,\n            // </rbs:state_init>\n        })\n    }\n}\n";
+
+    /// Le même, tel que le squelette le rend depuis 1.5.0.
+    const ETAT_COURANT: &str = "impl AppState {\n    pub fn new(db: DatabaseConnection, config: Config) -> anyhow::Result<Self> {\n        Ok(Self {\n            // <rbs:state_init>\n            mail: crate::modules::mail::Mailer::from_config()?,\n            // </rbs:state_init>\n            core: CoreState::new(db, config),\n        })\n    }\n}\n";
+
+    const CORE: &str = "core: CoreState::new(";
+
+    #[test]
+    fn an_anchor_below_the_line_it_must_precede_is_misplaced_with_its_block() {
+        let error =
+            precedes(ETAT_ANCIEN, &STATE_INIT, CORE).expect_err("l'ancre est sous la ligne");
+
+        assert_eq!(error.anchor, STATE_INIT);
+        assert_eq!(error.before, CORE);
+        assert_eq!(
+            error.block,
+            "// <rbs:state_init>\nmail: crate::modules::mail::Mailer::from_config()?,\n// </rbs:state_init>"
+        );
+        assert_eq!(
+            error.to_string(),
+            "ancre // <rbs:state_init> placée sous `core: CoreState::new(` dans src/state.rs, \
+             qu'elle doit précéder"
+        );
+    }
+
+    #[test]
+    fn an_anchor_above_the_line_is_in_its_place() {
+        precedes(ETAT_COURANT, &STATE_INIT, CORE).expect("l'ancre précède la ligne");
+    }
+
+    /// Ni l'ancre ni la ligne absentes ne sont l'affaire de ce contrôle : la première est
+    /// signalée par l'insertion, la seconde est un fichier réécrit que rien ici ne sait
+    /// juger.
+    #[test]
+    fn a_missing_anchor_or_a_missing_line_is_not_a_misplacement() {
+        precedes("fn main() {}\n", &STATE_INIT, CORE).expect("ni ancre ni ligne");
+
+        let sans_ligne = ETAT_ANCIEN.replace("core: CoreState::new(db, config),", "core,");
+        precedes(&sans_ligne, &STATE_INIT, CORE).expect("la ligne est absente");
     }
 
     /// Le prédicat qu'interroge `doctor` répond comme l'insertion : indentation tolérée,

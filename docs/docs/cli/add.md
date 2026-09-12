@@ -459,6 +459,12 @@ no source file the developer owns. `rbs doctor` reports the anchor as missing wi
 block to paste, and `rbs add cors` refuses the same way — nothing written, the block
 printed.
 
+An anchor can also be present but in the wrong place. A project generated before 1.5.0
+carries `// <rbs:state_init>` below `core: CoreState::new(db, config)`, which consumes
+`config` before `webhooks` reads it: `rbs add webhooks` refuses the same way, names the
+line and prints the block to move above it, with whatever other fragments have already
+put in it. No other fragment reads `config` there, and none is refused on such a project.
+
 ## Failures
 
 Outside a project:
