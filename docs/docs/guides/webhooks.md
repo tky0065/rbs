@@ -114,7 +114,9 @@ answer between the two never reaches an internal service. Redirects are never fo
 abandoned, not retried — nothing would change on the fifth attempt.
 
 In `development` every rule is lifted: a receiver on `http://localhost:4000` is the normal
-case on a workstation.
+case on a workstation. `development` is also what a process gets when `RBS_ENV` is unset
+anywhere — an unconfigured host is a silent one, not a strict one — so a deployment must
+set it explicitly, to `production` or to any other profile name.
 
 ## Event patterns
 

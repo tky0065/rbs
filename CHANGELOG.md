@@ -23,9 +23,11 @@ between minor versions with no deprecation cycle.
   at delivery by the same rule. The policy reads the profile from the configuration that
   `AppState::new` receives, so the skeleton now runs the `// <rbs:state_init>` anchor
   before `core: CoreState::new(db, config)` consumes it, and `rbs doctor --fix` puts that
-  anchor back under `Ok(Self {`. A project generated before this version must move the
-  anchor block above that line in `src/state.rs` before `rbs add webhooks`, or `config`
-  is already gone when `Sender::from_config(&config)` asks for it.
+  anchor back where it belongs when the file no longer has it at all. `--fix` only
+  restores a missing anchor — it never relocates one that is still present, so a project
+  generated before this version must move the anchor block above that line in
+  `src/state.rs` by hand before `rbs add webhooks`, or `config` is already gone when
+  `Sender::from_config(&config)` asks for it.
 
 ## [1.4.0] — 2026-09-11
 

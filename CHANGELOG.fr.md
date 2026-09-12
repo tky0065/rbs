@@ -24,10 +24,11 @@ dépréciation.
   cette version sont jugés à la livraison par la même règle. La politique lit le profil
   dans la configuration que reçoit `AppState::new` : le squelette joue donc l'ancre
   `// <rbs:state_init>` avant que `core: CoreState::new(db, config)` ne la consomme, et
-  `rbs doctor --fix` repose cette ancre sous `Ok(Self {`. Un projet engendré avant cette
-  version doit remonter le bloc de l'ancre au-dessus de cette ligne dans `src/state.rs`
-  avant `rbs add webhooks`, sans quoi `config` est déjà parti quand
-  `Sender::from_config(&config)` le demande.
+  `rbs doctor --fix` repose cette ancre à sa place quand le fichier ne la porte plus du
+  tout. `--fix` ne fait que restaurer une ancre absente — il n'en déplace jamais une déjà
+  présente : un projet engendré avant cette version doit donc remonter à la main le bloc
+  de l'ancre au-dessus de cette ligne dans `src/state.rs` avant `rbs add webhooks`, sans
+  quoi `config` est déjà parti quand `Sender::from_config(&config)` le demande.
 
 ## [1.4.0] — 2026-09-11
 

@@ -115,7 +115,10 @@ hors 2xx. Une livraison dont la cible est interdite est abandonnée, non réessa
 changerait au cinquième essai.
 
 En `development`, toutes ces règles sont levées : un receveur sur `http://localhost:4000`
-est le cas nominal d'un poste de travail.
+est le cas nominal d'un poste de travail. `development` est aussi le profil que reçoit un
+processus quand `RBS_ENV` n'est posé nulle part — un hôte mal configuré devient silencieux,
+pas strict — un déploiement doit donc le poser explicitement, en `production` ou sous tout
+autre nom de profil.
 
 ## Les motifs d'événement
 

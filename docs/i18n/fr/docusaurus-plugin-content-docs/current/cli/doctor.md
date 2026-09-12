@@ -272,8 +272,8 @@ mais un script doit pouvoir le distinguer d'un projet sain : le code diffère.
 ## Reposer les ancres
 
 Une ancre, ce sont deux lignes de commentaire, et rien ne dit où elles vivaient une fois
-qu'elles ont disparu. `--fix` les repose : chaque ancre déclare la ligne sous laquelle elle
-se tient — `.merge(docs)` pour `// <rbs:layers>`, `Ok(Self {` pour
+qu'elles ont disparu. `--fix` les repose : chaque ancre déclare la ligne sous laquelle
+elle se tient — `.merge(docs)` pour `// <rbs:layers>`, `Ok(Self {` pour
 `// <rbs:state_init>` — et le bloc revient sous cette ligne, à la colonne qui était la
 sienne.
 
