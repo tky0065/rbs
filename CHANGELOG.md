@@ -36,6 +36,17 @@ between minor versions with no deprecation cycle.
 
 ### Fixed
 
+- **The `fs` backend of `storage` no longer writes an object in place.** `put` used to
+  `fs::write` the final path, which truncates it before filling it: a concurrent `GET` was
+  served an empty or truncated body, and a crash mid-write left the truncated file under
+  the final name. The bytes now go to a temporary file next to the target, one UUID per
+  deposit, synced to disk and then `rename`d onto it. The root is created when the storage
+  is built — a root that cannot be created fails at startup, naming the path — and the
+  `/health` probe only checks that it is still a directory, instead of a `create_dir_all`
+  that silently recreated a vanished root and kept the probe green on an empty store. A
+  project that already carries `storage` gets the rule by copying `files.rs` from the
+  fragment and adding `?` to `FileStorage::new` in `mod.rs`.
+
 - **`rbs generate crud --with-upload` refuses a project whose `storage` fragment still
   lives at `src/storage/`** — one that received the fragment before 1.3.0 and never
   moved it under `src/modules/`. The generated service imports `crate::modules::storage`,

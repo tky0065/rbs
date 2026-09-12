@@ -38,6 +38,18 @@ dépréciation.
 
 ### Corrigé
 
+- **Le backend `fs` de `storage` n'écrit plus un objet en place.** `put` faisait un
+  `fs::write` sur le chemin final, qui le tronque avant de le remplir : un `GET` concurrent
+  recevait un corps vide ou tronqué, et un crash en pleine écriture laissait le fichier
+  tronqué sous le nom final. Les octets vont désormais dans un fichier temporaire à côté
+  de la cible, un UUID par dépôt, synchronisé sur le disque puis `rename` sur elle. La
+  racine est créée à la construction du stockage — une racine qui ne se crée pas échoue au
+  démarrage, en nommant le chemin — et la sonde de `/health` vérifie seulement qu'elle est
+  toujours un répertoire, au lieu d'un `create_dir_all` qui recréait en silence une racine
+  disparue et gardait la sonde verte sur un magasin vide. Un projet qui porte déjà
+  `storage` reçoit la règle en recopiant `files.rs` depuis le fragment et en ajoutant `?` à
+  `FileStorage::new` dans `mod.rs`.
+
 - **`rbs generate crud --with-upload` refuse un projet dont le fragment `storage` vit
   encore en `src/storage/`** — reçu avant la 1.3.0 et jamais déplacé sous
   `src/modules/`. Le service engendré importe `crate::modules::storage` : la génération

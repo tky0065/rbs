@@ -70,7 +70,7 @@ pub struct StorageConfig {
     #[serde(default = "default_backend")]
     pub backend: String,
 
-    /// Racine du backend `fs`, créée au premier dépôt.
+    /// Racine du backend `fs`, créée au démarrage.
     #[serde(default = "default_root")]
     pub root: PathBuf,
 
@@ -120,7 +120,7 @@ pub fn from_config() -> anyhow::Result<Arc<dyn Storage>> {
 /// Le stockage décrit par `config`, sans toucher ni à la configuration ni au réseau.
 fn build(config: StorageConfig) -> anyhow::Result<Arc<dyn Storage>> {
     match config.backend.as_str() {
-        "fs" => Ok(Arc::new(files::FileStorage::new(config.root))),
+        "fs" => Ok(Arc::new(files::FileStorage::new(config.root)?)),
         "s3" => Ok(Arc::new(s3::S3Storage::new(&config))),
         inconnu => anyhow::bail!(
             "storage.backend = \"{inconnu}\" : les valeurs admises sont \"fs\" et \"s3\""
