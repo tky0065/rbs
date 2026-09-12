@@ -21,8 +21,12 @@ between minor versions with no deprecation cycle.
   by a reset could otherwise log the victim out at will for thirty days by replaying a
   dead token. **Projects generated before 1.5.0:** the migration only changes for a fresh
   `rbs add auth`; run `ALTER TABLE refresh_tokens ADD COLUMN replaced_at timestamptz NULL;`
-  (`datetime NULL` on MySQL, `TEXT NULL` on SQLite) and copy the new `rotate`/`close`
-  pair from the fragment.
+  (`timestamp NULL` on MySQL, `timestamp_with_timezone_text NULL` on SQLite — what
+  `rbs migrate` itself writes for this column type) and carry over from the fragment:
+  `model.rs` (the `replaced_at` field), the whole of `repository/refresh_token.rs`
+  (`rotate`, `close`, and the `replaced_at IS NULL` filter on `open_sessions_of`,
+  `revoke_sessions_of` and `revoke_session` — without it, `GET /auth/sessions` gains a row
+  on every refresh), and `service/session.rs` (`refresh` and `logout`).
 
 ## [1.4.0] — 2026-09-11
 
@@ -512,6 +516,7 @@ architecture, CLI reference and guides, in English and French.
 Rust 1.85 or later, Rust edition 2024. A generated project runs on PostgreSQL 14 or later,
 MySQL 8.0 or later, or SQLite 3.35 or later — `rbs doctor` refuses anything below those.
 
+[1.5.0]: https://github.com/tky0065/rbs/releases/tag/v1.5.0
 [1.4.0]: https://github.com/tky0065/rbs/releases/tag/v1.4.0
 [1.3.1]: https://github.com/tky0065/rbs/releases/tag/v1.3.1
 [1.3.0]: https://github.com/tky0065/rbs/releases/tag/v1.3.0

@@ -22,9 +22,13 @@ dépréciation.
   la famille. Un attaquant chassé par une réinitialisation pouvait sinon déconnecter la
   victime à volonté pendant trente jours en rejouant un jeton mort. **Projets générés
   avant la 1.5.0 :** la migration ne change que pour un `rbs add auth` neuf ; exécuter
-  `ALTER TABLE refresh_tokens ADD COLUMN replaced_at timestamptz NULL;` (`datetime NULL`
-  sur MySQL, `TEXT NULL` sur SQLite) et copier depuis le fragment la nouvelle paire
-  `rotate`/`close`.
+  `ALTER TABLE refresh_tokens ADD COLUMN replaced_at timestamptz NULL;` (`timestamp NULL`
+  sur MySQL, `timestamp_with_timezone_text NULL` sur SQLite — ce que `rbs migrate` écrit
+  lui-même pour ce type de colonne) et reprendre depuis le fragment : `model.rs` (le champ
+  `replaced_at`), le fichier entier `repository/refresh_token.rs` (`rotate`, `close`, et le
+  filtre `replaced_at IS NULL` de `open_sessions_of`, `revoke_sessions_of` et
+  `revoke_session` — sans lui, `GET /auth/sessions` gagne une ligne à chaque
+  rafraîchissement), et `service/session.rs` (`refresh` et `logout`).
 
 ## [1.4.0] — 2026-09-11
 
@@ -538,6 +542,7 @@ démarrage, architecture, référence du CLI et guides, en français et en angla
 Rust 1.85 ou plus, édition 2024. Un projet généré tourne sur PostgreSQL 14 ou plus,
 MySQL 8.0 ou plus, ou SQLite 3.35 ou plus — `rbs doctor` refuse tout ce qui est en dessous.
 
+[1.5.0]: https://github.com/tky0065/rbs/releases/tag/v1.5.0
 [1.4.0]: https://github.com/tky0065/rbs/releases/tag/v1.4.0
 [1.3.1]: https://github.com/tky0065/rbs/releases/tag/v1.3.1
 [1.3.0]: https://github.com/tky0065/rbs/releases/tag/v1.3.0

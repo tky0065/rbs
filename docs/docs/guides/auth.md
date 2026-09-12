@@ -70,7 +70,7 @@ Thirteen routes come with it. Five open the core cycle:
 |---|---|
 | `POST /auth/register` | Creates an account. 201 with the profile, 409 if the address is taken. |
 | `POST /auth/login` | Exchanges credentials for an access/refresh pair. |
-| `POST /auth/refresh` | Rotates the pair. The refresh token presented is spent. |
+| `POST /auth/refresh` | Rotates the pair. The token presented is marked replaced. |
 | `POST /auth/logout` | Revokes one session. 204. |
 | `GET /auth/me` | The caller's profile. |
 
@@ -130,13 +130,17 @@ in `refresh_tokens` as a SHA-256 fingerprint, never in clear: a dump of that tab
 an attacker nothing usable. It is deliberately not hashed with Argon2 — a random token has
 nothing to brute-force, and a slow KDF on every refresh would buy nothing.
 
-Refreshing **rotates** the pair: the token presented is marked replaced in the same
-conditional `UPDATE` that reads it, so two concurrent refreshes cannot both win. A
-replaced token presented again has been used twice — one of its two holders is not the
-account owner — and every session of the account is closed. Logging out, revoking a
-session, resetting or changing the password **close** a token instead, in a separate
-column: a closed token presented again gets a 401 and nothing else, because a client
-retrying a logout is not a stolen token circulating.
+Refreshing **rotates** the pair: the token presented is marked replaced (`replaced_at`)
+in the same conditional `UPDATE` that reads it, so two concurrent refreshes cannot both
+win. A replaced token presented again has been used twice — one of its two holders is not
+the account owner — and every session of the account is closed. Logging out, revoking a
+session, resetting or changing the password close a token instead, in a separate column
+(`revoked_at`): a closed token presented again gets a 401 and nothing else, because a
+client retrying a logout is not a stolen token circulating.
+
+A client that resubmits the same refresh token — a retry after a timeout, a doubled
+request — looks exactly like a replay and pays the same price, every session closed. That
+is the cost of detecting reuse: only retry a refresh you never got a response for.
 
 Passwords are hashed with Argon2id, salted per call. Neither the hash nor the password
 appears in a response or in the logs.
