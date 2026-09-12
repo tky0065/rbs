@@ -240,6 +240,7 @@ mod tests {
                     host: "127.0.0.1".to_owned(),
                     port: 8080,
                     timeout_secs: 30,
+                    shutdown_timeout_secs: 30,
                 },
                 database: DatabaseConfig {
                     url: "postgres://localhost/app".to_owned(),
