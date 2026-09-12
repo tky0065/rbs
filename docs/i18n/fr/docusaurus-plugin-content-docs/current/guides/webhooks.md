@@ -102,6 +102,21 @@ pourrait se faire livrer tous les événements, ou révoquer l'abonnement d'un a
 ouvrir une route à tout compte, remplacez `Role::Admin` par `Role::User` sur son appel à
 `require_role` — voir le [guide auth](./auth.md) pour la garde.
 
+### Où une livraison peut aller
+
+L'URL d'un abonnement est vérifiée deux fois. À l'inscription, hors du profil
+`development`, elle doit être en `https` et son hôte ne peut être ni une adresse de
+boucle locale, privée, de lien local ou de CGNAT, ni `localhost` ; la requête reçoit un
+400 qui nomme la règle. À la livraison, l'hôte est résolu et toute adresse non publique
+est écartée, avant l'envoi puis de nouveau dans le résolveur du client HTTP, si bien qu'un
+nom qui change de réponse entre les deux n'atteint jamais un service interne. Les
+redirections ne sont jamais suivies : un 3xx est une livraison échouée comme tout autre
+hors 2xx. Une livraison dont la cible est interdite est abandonnée, non réessayée — rien ne
+changerait au cinquième essai.
+
+En `development`, toutes ces règles sont levées : un receveur sur `http://localhost:4000`
+est le cas nominal d'un poste de travail.
+
 ## Les motifs d'événement
 
 Trois formes, et pas une de plus :

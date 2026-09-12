@@ -102,6 +102,20 @@ have every event delivered to them, or revoke someone else's subscription. To op
 to any account, replace `Role::Admin` with `Role::User` on its `require_role` call — see
 the [auth guide](./auth.md) for the guard.
 
+### Where a delivery may go
+
+A subscription URL is checked twice. At registration, outside the `development` profile,
+it must be `https` and its host must not be a loopback, private, link-local or
+carrier-grade NAT address — nor `localhost`; the request gets a 400 naming the rule. At
+delivery, the host is resolved and every non-public address is dropped, both before the
+request is sent and again inside the HTTP client's resolver, so a name that changes its
+answer between the two never reaches an internal service. Redirects are never followed: a
+3xx is a failed delivery like any other non-2xx. A delivery whose target is blocked is
+abandoned, not retried — nothing would change on the fifth attempt.
+
+In `development` every rule is lifted: a receiver on `http://localhost:4000` is the normal
+case on a workstation.
+
 ## Event patterns
 
 Three forms, and not one more:

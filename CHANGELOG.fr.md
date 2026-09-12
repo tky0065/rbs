@@ -11,6 +11,24 @@ dépréciation.
 
 *[English version](CHANGELOG.md).*
 
+## [1.5.0] — 2026-09-12
+
+### Modifié
+
+- **Un abonnement webhook ne peut plus atteindre le réseau du projet.** Hors du profil
+  `development`, `POST /webhooks/subscriptions` rend 400 à une URL qui n'est pas en
+  `https` et à tout hôte qui est une adresse de boucle locale, privée, de lien local ou de
+  CGNAT, ou `localhost`. À la livraison, l'hôte est résolu et filtré de nouveau, dans le
+  résolveur du client HTTP aussi, et les redirections ne sont jamais suivies. Une
+  livraison interdite est abandonnée plutôt que réessayée. Les abonnements inscrits avant
+  cette version sont jugés à la livraison par la même règle. La politique lit le profil
+  dans la configuration que reçoit `AppState::new` : le squelette joue donc l'ancre
+  `// <rbs:state_init>` avant que `core: CoreState::new(db, config)` ne la consomme, et
+  `rbs doctor --fix` repose cette ancre sous `Ok(Self {`. Un projet engendré avant cette
+  version doit remonter le bloc de l'ancre au-dessus de cette ligne dans `src/state.rs`
+  avant `rbs add webhooks`, sans quoi `config` est déjà parti quand
+  `Sender::from_config(&config)` le demande.
+
 ## [1.4.0] — 2026-09-11
 
 ### Ajouté

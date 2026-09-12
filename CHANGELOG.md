@@ -10,6 +10,23 @@ between minor versions with no deprecation cycle.
 
 *[Version française](CHANGELOG.fr.md).*
 
+## [1.5.0] — 2026-09-12
+
+### Changed
+
+- **A webhook subscription can no longer reach the project's own network.** Outside the
+  `development` profile, `POST /webhooks/subscriptions` answers 400 to a non-`https` URL
+  and to any host that is a loopback, private, link-local or CGNAT address, or
+  `localhost`. At delivery the host is resolved and filtered again, inside the HTTP
+  client's resolver as well, and redirects are never followed. A blocked delivery is
+  abandoned rather than retried. Subscriptions registered before this version are judged
+  at delivery by the same rule. The policy reads the profile from the configuration that
+  `AppState::new` receives, so the skeleton now runs the `// <rbs:state_init>` anchor
+  before `core: CoreState::new(db, config)` consumes it, and `rbs doctor --fix` puts that
+  anchor back under `Ok(Self {`. A project generated before this version must move the
+  anchor block above that line in `src/state.rs` before `rbs add webhooks`, or `config`
+  is already gone when `Sender::from_config(&config)` asks for it.
+
 ## [1.4.0] — 2026-09-11
 
 ### Added
