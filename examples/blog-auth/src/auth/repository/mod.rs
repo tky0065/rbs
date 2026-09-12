@@ -8,7 +8,6 @@ pub mod refresh_token;
 pub mod user;
 
 pub use refresh_token::{
-    close, create_refresh_token, find_refresh_token, open_sessions_of, revoke_session,
-    revoke_sessions_of, rotate,
+    create_refresh_token, find_refresh_token, open_sessions_of, revoke_session, revoke_sessions_of,
 };
 pub use user::{ADRESSE_PRISE, Model, create, find, find_by_email};

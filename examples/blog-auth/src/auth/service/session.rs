@@ -66,8 +66,9 @@ pub async fn refresh(
     let fingerprint = token::fingerprint(&input.refresh_token);
     let maintenant = Utc::now().fixed_offset();
 
-    // Jeton inconnu, déjà tourné ou périmé : la même erreur pour les trois. Les
-    // distinguer renseignerait sur l'état des sessions.
+    // Jeton inconnu ou périmé : la même erreur pour les deux. Les distinguer
+    // renseignerait sur l'état des sessions ; ce qu'un jeton connu mais fermé ou tourné
+    // vaut se décide juste en dessous.
     let session = repository::find_refresh_token(db, &fingerprint)
         .await?
         .filter(|session| session.expires_at > maintenant)
@@ -94,9 +95,17 @@ pub async fn refresh(
 
             return Err(Error::Unauthorized);
         }
-        // Fermée par une déconnexion ou une révocation : un client qui réessaie, pas un
-        // jeton qui circule. Le même 401 qu'un jeton inconnu, et rien d'autre.
-        Rotation::Closed => return Err(Error::Unauthorized),
+        // Fermée par une déconnexion, une révocation, ou un rejeu déjà instruit : un
+        // client qui réessaie, pas un jeton qui circule pour la première fois. Le même
+        // 401 qu'un jeton inconnu, et rien d'autre.
+        Rotation::Closed => {
+            tracing::debug!(
+                user_id = %session.user_id,
+                "jeton de rafraîchissement fermé rejoué"
+            );
+
+            return Err(Error::Unauthorized);
+        }
     }
 
     let utilisateur = repository::find(db, session.user_id)

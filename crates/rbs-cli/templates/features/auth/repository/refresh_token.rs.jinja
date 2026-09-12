@@ -14,8 +14,8 @@ pub use super::super::model::refresh_token::Model;
 // L'instant vient de Rust et se lie en paramètre, jamais de `CURRENT_TIMESTAMP` : sqlx
 // écrit la colonne en RFC 3339 (`2026-01-01T…+00:00`) là où l'horloge de SQLite rend
 // `2026-01-01 23:59:59`, et SQLite compare le texte — `'T' > ' '`, toute échéance du jour
-// passait pour future. L'écriture de `revoked_at` suit la même règle pour que la colonne
-// ne mélange pas deux formats.
+// passait pour future. L'écriture de `revoked_at` et de `replaced_at` suit la même règle
+// pour qu'aucune des deux colonnes ne mélange deux formats.
 
 /// Ouvre une session de rafraîchissement.
 ///
@@ -58,9 +58,11 @@ pub async fn find_refresh_token(
 pub enum Rotation {
     /// La ligne était ouverte : c'est cet appel qui l'a tournée.
     Done,
-    /// La ligne avait déjà tourné : le jeton a servi deux fois.
+    /// La ligne avait déjà tourné et n'avait pas encore été fermée : c'est cet appel qui
+    /// l'a fait, sur ce rejeu.
     Replayed,
-    /// La ligne avait été fermée — déconnexion, révocation, mot de passe changé.
+    /// La ligne avait été fermée — un rejeu déjà instruit, une déconnexion, une
+    /// révocation, un mot de passe changé.
     Closed,
 }
 
@@ -88,10 +90,28 @@ pub async fn rotate(db: &DatabaseConnection, id: Uuid) -> Result<Rotation> {
 
     let ligne = refresh_token::Entity::find_by_id(id).one(db).await?;
 
-    Ok(match ligne {
-        Some(ligne) if ligne.replaced_at.is_some() => Rotation::Replayed,
-        _ => Rotation::Closed,
-    })
+    // Le rejeu d'une ligne tournée est instruit une fois — la famille tombe — et la ligne
+    // est fermée à son tour ; un rejeu répété de la même ligne n'apprend rien de plus et
+    // ne ferait qu'offrir à qui tient un jeton mort un bouton pour déconnecter le
+    // titulaire à chaque reconnexion. L'ordre des gardes met donc `revoked_at` avant
+    // `replaced_at` : les deux colonnes posées signifient « rejeu déjà instruit ».
+    match ligne {
+        Some(ligne) if ligne.revoked_at.is_some() => Ok(Rotation::Closed),
+        Some(ligne) if ligne.replaced_at.is_some() => {
+            refresh_token::Entity::update_many()
+                .col_expr(
+                    refresh_token::Column::RevokedAt,
+                    Expr::value(Utc::now().fixed_offset()),
+                )
+                .filter(refresh_token::Column::Id.eq(id))
+                .filter(refresh_token::Column::RevokedAt.is_null())
+                .exec(db)
+                .await?;
+
+            Ok(Rotation::Replayed)
+        }
+        _ => Ok(Rotation::Closed),
+    }
 }
 
 /// Ferme une session présentée, et dit si c'est bien cet appel qui l'a fait.
