@@ -2,7 +2,7 @@ use chrono::Utc;
 use rbs_core::Result;
 use sea_orm::prelude::{DateTimeWithTimeZone, Expr, Uuid};
 use sea_orm::{
-    ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, QueryOrder, Set,
+    ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, Set,
 };
 
 use super::super::model::refresh_token;
@@ -22,7 +22,7 @@ pub use super::super::model::refresh_token::Model;
 /// `fingerprint` et non le jeton : c'est ce que la table doit porter pour qu'une base lue
 /// par un tiers ne lui donne aucune session utilisable.
 pub async fn create_refresh_token(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     user_id: Uuid,
     fingerprint: String,
     expire_a: DateTimeWithTimeZone,
@@ -44,7 +44,7 @@ pub async fn create_refresh_token(
 }
 
 pub async fn find_refresh_token(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     fingerprint: &str,
 ) -> Result<Option<refresh_token::Model>> {
     Ok(refresh_token::Entity::find()
@@ -72,7 +72,7 @@ pub enum Rotation {
 /// rafraîchissements simultanés du même jeton franchiraient tous deux la lecture avant
 /// que l'un ait écrit, et repartiraient chacun avec une paire valide. La lecture qui suit
 /// un `UPDATE` sans effet ne décide de rien : elle nomme l'état déjà écrit.
-pub async fn rotate(db: &DatabaseConnection, id: Uuid) -> Result<Rotation> {
+pub async fn rotate(db: &impl ConnectionTrait, id: Uuid) -> Result<Rotation> {
     let touchees = refresh_token::Entity::update_many()
         .col_expr(
             refresh_token::Column::ReplacedAt,
@@ -115,7 +115,7 @@ pub async fn rotate(db: &DatabaseConnection, id: Uuid) -> Result<Rotation> {
 }
 
 /// Ferme une session présentée, et dit si c'est bien cet appel qui l'a fait.
-pub async fn close(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
+pub async fn close(db: &impl ConnectionTrait, id: Uuid) -> Result<bool> {
     let touchees = refresh_token::Entity::update_many()
         .col_expr(
             refresh_token::Column::RevokedAt,
@@ -136,7 +136,7 @@ pub async fn close(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
 /// demanderait à la table une colonne de famille, qu'un projet déjà migré ne recevrait
 /// jamais. Fermer trop large coûte une reconnexion ; fermer trop étroit laisse une paire
 /// volée en circulation.
-pub async fn revoke_sessions_of(db: &DatabaseConnection, user_id: Uuid) -> Result<u64> {
+pub async fn revoke_sessions_of(db: &impl ConnectionTrait, user_id: Uuid) -> Result<u64> {
     let touchees = refresh_token::Entity::update_many()
         .col_expr(
             refresh_token::Column::RevokedAt,
@@ -156,7 +156,7 @@ pub async fn revoke_sessions_of(db: &DatabaseConnection, user_id: Uuid) -> Resul
 /// Ni tournées, ni révoquées, ni périmées : ce que la liste montre est ce qu'une
 /// révocation fermerait.
 pub async fn open_sessions_of(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     user_id: Uuid,
 ) -> Result<Vec<refresh_token::Model>> {
     Ok(refresh_token::Entity::find()
@@ -174,7 +174,7 @@ pub async fn open_sessions_of(
 /// Le propriétaire est dans la condition de l'`UPDATE` et non dans une lecture qui le
 /// précède : comparer après avoir lu laisserait la révocation de la session d'autrui à
 /// portée d'une course.
-pub async fn revoke_session(db: &DatabaseConnection, id: Uuid, user_id: Uuid) -> Result<bool> {
+pub async fn revoke_session(db: &impl ConnectionTrait, id: Uuid, user_id: Uuid) -> Result<bool> {
     let touchees = refresh_token::Entity::update_many()
         .col_expr(
             refresh_token::Column::RevokedAt,

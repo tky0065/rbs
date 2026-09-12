@@ -2,7 +2,7 @@ use chrono::Utc;
 use rbs_core::{Error, Result};
 use sea_orm::error::SqlErr;
 use sea_orm::prelude::{DateTimeWithTimeZone, Expr, Uuid};
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set};
 
 use super::super::model::user::{self, Entity};
 
@@ -10,11 +10,11 @@ use super::super::model::user::{self, Entity};
 // base reste la seule à connaître l'entité.
 pub use super::super::model::user::Model;
 
-pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>> {
+pub async fn find(db: &impl ConnectionTrait, id: Uuid) -> Result<Option<Model>> {
     Ok(Entity::find_by_id(id).one(db).await?)
 }
 
-pub async fn find_by_email(db: &DatabaseConnection, email: &str) -> Result<Option<Model>> {
+pub async fn find_by_email(db: &impl ConnectionTrait, email: &str) -> Result<Option<Model>> {
     Ok(Entity::find()
         .filter(user::Column::Email.eq(email))
         .one(db)
@@ -33,7 +33,7 @@ pub const ADRESSE_PRISE: &str = "cette adresse est déjà inscrite";
 /// La violation de la contrainte d'unicité devient un conflit plutôt qu'une erreur
 /// interne : sans cela, deux inscriptions simultanées de la même adresse rendraient une
 /// 409 et une 500 selon celle qui gagne la course.
-pub async fn create(db: &DatabaseConnection, email: &str, password_hash: &str) -> Result<Model> {
+pub async fn create(db: &impl ConnectionTrait, email: &str, password_hash: &str) -> Result<Model> {
     let nouveau = user::ActiveModel {
         email: Set(email.to_owned()),
         password_hash: Set(password_hash.to_owned()),
@@ -53,7 +53,7 @@ pub async fn create(db: &DatabaseConnection, email: &str, password_hash: &str) -
 ///
 /// L'`UPDATE` ne touche que cette colonne : charger le modèle pour le réécrire en entier
 /// écraserait ce qu'une autre requête a changé entre-temps.
-pub async fn set_password(db: &DatabaseConnection, id: Uuid, hash: &str) -> Result<()> {
+pub async fn set_password(db: &impl ConnectionTrait, id: Uuid, hash: &str) -> Result<()> {
     Entity::update_many()
         .col_expr(user::Column::PasswordHash, Expr::value(hash))
         .filter(user::Column::Id.eq(id))
@@ -67,7 +67,7 @@ pub async fn set_password(db: &DatabaseConnection, id: Uuid, hash: &str) -> Resu
 ///
 /// La date et non un booléen : savoir *quand* une adresse a été prouvée est ce qui
 /// permet, un jour, d'en redemander la preuve aux plus anciennes.
-pub async fn mark_verified(db: &DatabaseConnection, id: Uuid) -> Result<()> {
+pub async fn mark_verified(db: &impl ConnectionTrait, id: Uuid) -> Result<()> {
     Entity::update_many()
         .col_expr(user::Column::EmailVerifiedAt, Expr::current_timestamp())
         .filter(user::Column::Id.eq(id))
@@ -84,7 +84,7 @@ pub async fn mark_verified(db: &DatabaseConnection, id: Uuid) -> Result<()> {
 /// la même seconde. Rendu plutôt que relu : une relecture ne dirait pas mieux que ce que
 /// cet appel vient de lier.
 pub async fn stamp_sessions_revoked(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     id: Uuid,
 ) -> Result<DateTimeWithTimeZone> {
     let maintenant = Utc::now().fixed_offset();
