@@ -147,8 +147,6 @@ $ rbs doctor
   ✓ versions      projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
   … base          compilation de la crate migration, peut prendre
                   une minute au premier lancement…
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.24s
-     Running `target/debug/migration version`
   ✓ base          postgres 18.6 répond sur localhost:55502
   ✓ disposition   aucun module ne mélange les deux dispositions
 ✓ le projet est sain

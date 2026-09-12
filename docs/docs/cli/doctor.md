@@ -191,16 +191,14 @@ rbs doctor --json | jq -r '.checks[] | select(.status != "ok") | "\(.name): \(.d
 The `base` check runs the project's own migration binary, which means cargo builds the
 `migration` crate first — a minute or more on a cold target directory. `doctor` announces
 that line before it blocks rather than after, so a silent wait is never mistaken for a
-hang:
+hang. Cargo's own progress stays out of the report: it is captured, and replayed only when
+the build fails, as the last example on this page shows.
 
 ```text
   ✓ .env        les 7 variables de .env.example sont renseignées
   ✓ versions    projet et rbs-core alignés sur le CLI 1.2.0
   … base        compilation de la crate migration, peut prendre
                 une minute au premier lancement…
-   Compiling sea-orm v2.0.2
-   Compiling migration v0.1.0 (/tmp/demo/migration)
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 31.57s
   ✓ base        postgres 18.6 répond sur 127.0.0.1:5432
 ✓ le projet est sain
 ```
@@ -219,8 +217,6 @@ $ rbs doctor
   ✓ versions      projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
   … base          compilation de la crate migration, peut prendre
                   une minute au premier lancement…
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.30s
-     Running `target/debug/migration version`
   ✓ base          postgres 18.6 répond sur localhost:55501
   ✓ disposition   aucun module ne mélange les deux dispositions
   ✓ jobs          la configuration de la file est en place
@@ -290,8 +286,6 @@ plan pour /private/tmp/rbs-demo/demo
   ✓ versions      projet et rbs-core 1.2.0 alignés sur le CLI 1.2.0
   … base          compilation de la crate migration, peut prendre
                   une minute au premier lancement…
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.09s
-     Running `target/debug/migration version`
   ✓ base          sqlite 3.51 répond sur demo.db
   ✓ disposition   aucun module ne mélange les deux dispositions
 ✓ le projet est sain

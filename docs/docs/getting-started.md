@@ -269,8 +269,6 @@ rbs migrate status
 ```
 
 ```text
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.10s
-     Running `target/debug/migration status`
   ✓ m20260829_100554_create_articles   appliquée
 ```
 
@@ -399,8 +397,6 @@ rbs doctor
   ✓ versions      projet et rbs-core pris d'un chemin local alignés sur le CLI 1.2.0
   … base          compilation de la crate migration, peut prendre
                   une minute au premier lancement…
-    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.11s
-     Running `target/debug/migration version`
   ✓ base          postgres 18.6 répond sur localhost:5432
   ✓ disposition   aucun module ne mélange les deux dispositions
 ✓ le projet est sain
