@@ -405,3 +405,25 @@ async fn concurrent_tickers_trigger_a_due_schedule_exactly_once() {
     let jobs = jobs_declenches(state.core().db()).await;
     assert_eq!(jobs.len(), 1, "l'échéance a enfilé {} job(s)", jobs.len());
 }
+
+/// Le ticker que `spawn` détache rend la main quand l'arrêt est demandé : sans cela,
+/// `main` l'attendrait jusqu'à l'échéance de `server.shutdown_timeout_secs`.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn the_ticker_stops_when_shutdown_is_requested() {
+    let (_garde, state) = table_a_soi().await;
+
+    super::spawn(state.clone())
+        .await
+        .expect("le calendrier du projet se réconcilie");
+
+    assert_eq!(
+        state
+            .core()
+            .shutdown()
+            .wait(std::time::Duration::from_secs(5))
+            .await,
+        0,
+        "le ticker n'a pas rendu la main"
+    );
+}

@@ -135,13 +135,15 @@ pub fn schedules() -> Vec<Schedule> {
 /// HTTP qui est en jeu ; ici, une liste statique que le développeur vient d'écrire.
 ///
 /// Une fois le calendrier validé, la boucle est détachée : au-delà du démarrage, une base
-/// momentanément injoignable ne doit plus emporter le serveur.
+/// momentanément injoignable ne doit plus emporter le serveur. Détachée par le signal
+/// d'arrêt de l'état, pour que `main` l'attende avant de sortir.
 pub async fn spawn(state: AppState) -> anyhow::Result<()> {
     let schedules = schedules();
 
     sync::reconcilier(state.core().db(), &schedules).await?;
 
-    tokio::spawn(async move { ticker::run(state, schedules).await });
+    let shutdown = state.core().shutdown().clone();
+    shutdown.spawn(async move { ticker::run(state, schedules).await });
 
     Ok(())
 }
