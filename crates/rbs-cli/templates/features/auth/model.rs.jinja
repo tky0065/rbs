@@ -90,6 +90,7 @@ pub mod refresh_token {
         pub token_hash: String,
         pub expires_at: DateTimeWithTimeZone,
         pub revoked_at: Option<DateTimeWithTimeZone>,
+        pub replaced_at: Option<DateTimeWithTimeZone>,
         pub created_at: DateTimeWithTimeZone,
         pub updated_at: DateTimeWithTimeZone,
     }

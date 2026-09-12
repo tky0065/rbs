@@ -76,6 +76,15 @@ impl MigrationTrait for Migration {
                             .timestamp_with_time_zone()
                             .null(),
                     )
+                    // Nul tant que le jeton n'a pas tourné. Distinct de `revoked_at` :
+                    // un jeton tourné qui reparaît a été volé, un jeton fermé qui
+                    // reparaît n'est qu'un client qui réessaie — et seul le premier
+                    // justifie de fermer tout le compte.
+                    .col(
+                        ColumnDef::new(RefreshTokens::ReplacedAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .col(
                         ColumnDef::new(RefreshTokens::CreatedAt)
                             .timestamp_with_time_zone()
@@ -213,6 +222,7 @@ enum RefreshTokens {
     TokenHash,
     ExpiresAt,
     RevokedAt,
+    ReplacedAt,
     CreatedAt,
     UpdatedAt,
 }
