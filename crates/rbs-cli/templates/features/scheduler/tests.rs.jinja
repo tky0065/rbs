@@ -253,7 +253,10 @@ async fn a_changed_expression_moves_the_next_occurrence() {
         .expect("l'échéance existe")
         .next_run_at;
 
-    assert_ne!(avant, apres, "l'échéance est restée sur l'ancienne expression");
+    assert_ne!(
+        avant, apres,
+        "l'échéance est restée sur l'ancienne expression"
+    );
     assert!(
         apres <= chrono::Utc::now() + chrono::TimeDelta::minutes(5),
         "{apres} n'est pas une occurrence de `*/5 * * * *`"
@@ -315,7 +318,10 @@ async fn a_due_schedule_is_not_moved_by_a_changed_expression() {
         .expect("l'échéance existe")
         .next_run_at;
 
-    assert_eq!(avant, apres, "l'échéance échue a été déplacée sans avoir été jouée");
+    assert_eq!(
+        avant, apres,
+        "l'échéance échue a été déplacée sans avoir été jouée"
+    );
 }
 
 #[tokio::test]
