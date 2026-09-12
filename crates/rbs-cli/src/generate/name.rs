@@ -24,10 +24,17 @@ enum Kind {
     ModuleDuSquelette,
 }
 
-/// Modules que `rbs new` pose à la racine de `src/` : une feature qui en porte le nom
-/// écraserait le module existant. `health` est un répertoire, les quatre autres des
-/// fichiers — la collision est la même.
-const MODULES_DU_SQUELETTE: [&str; 5] = ["main", "router", "openapi", "state", "health"];
+/// Noms que `src/` occupe déjà sur un projet engendré : une feature qui en porte un
+/// écraserait ou rendrait ambigu ce qui s'y trouve. Les cinq premiers sont les modules
+/// déclarés par `src/main.rs`. `modules` est le point de montage des fragments, que le
+/// premier `rbs add` crée : sur un projet frais, `src/modules/` n'existe pas encore, le
+/// garde-fou de `generate` sur un répertoire présent ne le voit pas, et un CRUD posé là
+/// prive tout `rbs add` suivant de son ancre `<rbs:modules>`. `seeds` et `bin` sont des
+/// répertoires du squelette ; `lib` créerait `src/lib/mod.rs` à côté de `src/lib.rs`,
+/// deux candidats pour un même module aux yeux de rustc.
+const MODULES_DU_SQUELETTE: [&str; 9] = [
+    "main", "router", "openapi", "state", "health", "modules", "seeds", "bin", "lib",
+];
 
 /// Vérifie qu'une feature peut porter ce nom sans casser le projet.
 pub(crate) fn validate(name: &str) -> Result<(), NameError> {
@@ -136,7 +143,9 @@ mod tests {
 
     #[test]
     fn a_skeleton_module_is_rejected_by_naming_it() {
-        for name in ["main", "router", "openapi", "state", "health"] {
+        for name in [
+            "main", "router", "openapi", "state", "health", "modules", "seeds", "bin", "lib",
+        ] {
             let Err(error) = validate(name) else {
                 panic!("« {name} » doit être refusé");
             };
