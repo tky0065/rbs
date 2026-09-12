@@ -433,6 +433,16 @@ fn private_loopback_and_link_local_addresses_are_not_public() {
         "fe80::1",
         "::ffff:10.0.0.1",
         "ff02::1",
+        "64:ff9b::a00:5",
+        "::7f00:1",
+        "2002:a00:5::",
+        "2001:0:4136:e378:8000:63bf:3fff:fdd2",
+        "fec0::1",
+        "0.0.0.1",
+        "240.0.0.1",
+        "192.0.0.9",
+        "198.18.0.1",
+        "192.88.99.1",
     ] {
         let ip: IpAddr = adresse.parse().expect("adresse lisible");
         assert!(!is_public(ip), "{adresse} devrait être refusée");
@@ -446,6 +456,11 @@ fn public_addresses_are_public() {
         "8.8.8.8",
         "172.32.0.1",
         "2606:2800:220:1:248:1893:25c8:1946",
+        "100.128.0.0",
+        "192.0.1.1",
+        "198.20.0.1",
+        "64:ff9c::1",
+        "2001:4860:4860::8888",
     ] {
         let ip: IpAddr = adresse.parse().expect("adresse lisible");
         assert!(is_public(ip), "{adresse} devrait être acceptée");
@@ -479,6 +494,24 @@ fn outside_development_only_https_to_a_public_host_passes() {
     );
     assert_eq!(
         stricte.check("https://169.254.169.254/latest").unwrap_err(),
+        Refusal::PrivateHost
+    );
+    assert_eq!(
+        stricte
+            .check("https://[::ffff:10.0.0.1]/hooks")
+            .unwrap_err(),
+        Refusal::PrivateHost
+    );
+    assert_eq!(
+        stricte.check("https://[64:ff9b::a00:5]/hooks").unwrap_err(),
+        Refusal::PrivateHost
+    );
+    assert_eq!(
+        stricte.check("https://localhost./hooks").unwrap_err(),
+        Refusal::PrivateHost
+    );
+    assert_eq!(
+        stricte.check("https://api.localhost/hooks").unwrap_err(),
         Refusal::PrivateHost
     );
 }
