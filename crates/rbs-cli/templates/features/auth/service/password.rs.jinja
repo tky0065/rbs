@@ -1,8 +1,8 @@
 use chrono::{Duration, Utc};
 use rbs_core::config::AuthConfig;
 use rbs_core::{Error, Result, hash, token};
-use sea_orm::DatabaseConnection;
 use sea_orm::prelude::Uuid;
+use sea_orm::{DatabaseConnection, TransactionTrait};
 
 use super::super::dto::{ChangePasswordRequest, ResetPasswordRequest, TokenPair};
 use super::super::model::TokenPurpose;
@@ -34,23 +34,37 @@ pub async fn change(
     }
 
     let nouveau = hash::hash_password(&input.new_password)?;
-    repository::user::set_password(db, user_id, &nouveau).await?;
+
+    // Tout ou rien : un mot de passe changé dont les sessions resteraient ouvertes
+    // laisserait tourner celles d'un compte que ce changement vient peut-être de
+    // reprendre. Le hachage est fait avant : Argon2 coûte des dizaines de millisecondes,
+    // et un verrou d'écriture ne se tient pas pendant un calcul.
+    let transaction = db.begin().await?;
+
+    repository::user::set_password(&transaction, user_id, &nouveau).await?;
 
     // Une boîte compromise a pu recevoir une demande de réinitialisation d'un attaquant
     // avant que son titulaire ne s'en aperçoive et ne change ici son mot de passe pour
     // reprendre la main : laisser ce lien-là vivant jusqu'à son terme le rendrait à
     // l'attaquant malgré le geste qui devait l'en priver. C'est le scénario que ce champ
     // existe déjà pour fermer à l'émission d'un nouveau jeton ; il vaut tout autant ici.
-    repository::one_time_token::invalidate_pending(db, user_id, TokenPurpose::PasswordReset)
-        .await?;
+    repository::one_time_token::invalidate_pending(
+        &transaction,
+        user_id,
+        TokenPurpose::PasswordReset,
+    )
+    .await?;
 
-    let fermees = close_every_session(db, user_id).await?;
+    let fermees = close_every_session(&transaction, user_id).await?;
 
     // Rechargé : `issue` lit l'estampille que la fermeture vient de poser, et n'émettrait
     // sinon qu'un jeton né dans la seconde qu'elle vient de tuer.
-    let utilisateur = repository::find(db, user_id)
+    let utilisateur = repository::find(&transaction, user_id)
         .await?
         .ok_or(Error::Unauthorized)?;
+
+    let paire = issue(&transaction, auth, &utilisateur).await?;
+    transaction.commit().await?;
 
     // Ni l'adresse ni les jetons : l'identifiant du compte suffit à retrouver ce qui s'est
     // passé, et le journal ne porte pas ce que la réponse tait.
@@ -60,7 +74,7 @@ pub async fn change(
         "mot de passe changé : les sessions du compte sont révoquées"
     );
 
-    issue(db, auth, &utilisateur).await
+    Ok(paire)
 }
 
 /// Ouvre un jeton de réinitialisation, et rend le compte avec le jeton **en clair**.
@@ -109,23 +123,34 @@ pub async fn reset(db: &DatabaseConnection, input: ResetPasswordRequest) -> Resu
         .await?
         .ok_or(Error::Unauthorized)?;
 
+    let nouveau = hash::hash_password(&input.new_password)?;
+
+    // Tout ou rien : un jeton consommé sans que le mot de passe suive serait brûlé pour
+    // rien, et l'utilisateur devrait en redemander un. Le hachage est fait avant, comme
+    // dans `change`.
+    let transaction = db.begin().await?;
+
     // Rien ici ne relit `consumed_at` ni `expires_at` : c'est `consume` qui porte les deux
     // conditions, et elle seule peut les porter sans laisser passer deux
     // réinitialisations concurrentes.
-    if !repository::one_time_token::consume(db, ligne.id).await? {
+    if !repository::one_time_token::consume(&transaction, ligne.id).await? {
         return Err(Error::Unauthorized);
     }
 
-    let nouveau = hash::hash_password(&input.new_password)?;
-    repository::user::set_password(db, ligne.user_id, &nouveau).await?;
+    repository::user::set_password(&transaction, ligne.user_id, &nouveau).await?;
 
     // Symétrique à `change` : un mot de passe qui vient d'être posé rend caducs les
     // autres liens de réinitialisation en attente, plutôt que d'en laisser un survivre à
     // côté du mot de passe qu'il prétendait remplacer.
-    repository::one_time_token::invalidate_pending(db, ligne.user_id, TokenPurpose::PasswordReset)
-        .await?;
+    repository::one_time_token::invalidate_pending(
+        &transaction,
+        ligne.user_id,
+        TokenPurpose::PasswordReset,
+    )
+    .await?;
 
-    let fermees = close_every_session(db, ligne.user_id).await?;
+    let fermees = close_every_session(&transaction, ligne.user_id).await?;
+    transaction.commit().await?;
 
     tracing::info!(
         user_id = %ligne.user_id,
