@@ -144,11 +144,9 @@ async fn changing_the_password_returns_a_usable_pair_and_closes_the_others() {
 
     assert_eq!(statut, StatusCode::OK, "corps : {corps}");
 
-    // L'ordre compte : rejouer le jeton de `premiere` arme la défense anti-rejeu de
-    // `refresh`, qui referme *toutes* les sessions ouvertes du compte — y compris celle
-    // que le changement de mot de passe vient d'émettre. Vérifier la nouvelle paire
-    // d'abord la prouve donc avant que le rejeu de l'ancienne ne la fasse tomber à son
-    // tour ; l'inverser ferait échouer ce deuxième appel sans rapport avec ce qu'il teste.
+    // La nouvelle paire d'abord, puis l'ancienne : l'ordre n'importe plus depuis qu'un
+    // jeton fermé rejoué ne ferme rien d'autre, mais lire le succès avant le refus est ce
+    // qu'un lecteur attend.
 
     // Celle que le changement vient de rendre tourne.
     let (accepte, _) = call(

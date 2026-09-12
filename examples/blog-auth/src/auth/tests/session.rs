@@ -468,6 +468,33 @@ async fn a_revoked_refresh_returns_401() {
     assert_eq!(status, StatusCode::UNAUTHORIZED, "{body}");
 }
 
+/// Un jeton fermé par `logout` puis rejoué n'est pas un jeton volé : c'est un client qui
+/// réessaie. Le traiter comme un rejeu fermerait toutes les sessions du compte à la
+/// demande de qui tient un jeton mort — trente jours durant.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_refresh_closed_by_logout_when_replayed_leaves_the_other_sessions_open() {
+    let api = application().await;
+    let email = fresh_email();
+    register(&api, &email).await;
+
+    let (_, fermee) = authenticate(&api, &email, PASSWORD).await;
+    let (_, vivante) = authenticate(&api, &email, PASSWORD).await;
+
+    let (status, _) = logout(&api, &refresh_for(&fermee)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let (rejeu, body) = refresh(&api, &refresh_for(&fermee)).await;
+    assert_eq!(rejeu, StatusCode::UNAUTHORIZED, "{body}");
+
+    let (status, body) = refresh(&api, &refresh_for(&vivante)).await;
+    assert_eq!(
+        status,
+        StatusCode::OK,
+        "la session sœur est tombée sur le rejeu d'un jeton fermé : {body}"
+    );
+}
+
 /// Se déconnecter d'un appareil ne déconnecte pas les autres.
 ///
 /// C'est la garantie que ce lot ajoute : la révocation porte sur la ligne présentée, et

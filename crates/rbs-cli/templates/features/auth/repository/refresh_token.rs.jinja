@@ -53,18 +53,56 @@ pub async fn find_refresh_token(
         .await?)
 }
 
-/// Consomme une session, et dit si c'est bien cet appel qui l'a fait.
+/// Ce qu'une rotation a trouvé.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Rotation {
+    /// La ligne était ouverte : c'est cet appel qui l'a tournée.
+    Done,
+    /// La ligne avait déjà tourné : le jeton a servi deux fois.
+    Replayed,
+    /// La ligne avait été fermée — déconnexion, révocation, mot de passe changé.
+    Closed,
+}
+
+/// Tourne une session, et dit si c'est bien cet appel qui l'a fait.
 ///
 /// L'`UPDATE` porte sa propre condition plutôt que de suivre une lecture : deux
 /// rafraîchissements simultanés du même jeton franchiraient tous deux la lecture avant
-/// que l'un ait écrit, et repartiraient chacun avec une paire valide.
-pub async fn consume(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
+/// que l'un ait écrit, et repartiraient chacun avec une paire valide. La lecture qui suit
+/// un `UPDATE` sans effet ne décide de rien : elle nomme l'état déjà écrit.
+pub async fn rotate(db: &DatabaseConnection, id: Uuid) -> Result<Rotation> {
+    let touchees = refresh_token::Entity::update_many()
+        .col_expr(
+            refresh_token::Column::ReplacedAt,
+            Expr::value(Utc::now().fixed_offset()),
+        )
+        .filter(refresh_token::Column::Id.eq(id))
+        .filter(refresh_token::Column::ReplacedAt.is_null())
+        .filter(refresh_token::Column::RevokedAt.is_null())
+        .exec(db)
+        .await?;
+
+    if touchees.rows_affected == 1 {
+        return Ok(Rotation::Done);
+    }
+
+    let ligne = refresh_token::Entity::find_by_id(id).one(db).await?;
+
+    Ok(match ligne {
+        Some(ligne) if ligne.replaced_at.is_some() => Rotation::Replayed,
+        _ => Rotation::Closed,
+    })
+}
+
+/// Ferme une session présentée, et dit si c'est bien cet appel qui l'a fait.
+pub async fn close(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
     let touchees = refresh_token::Entity::update_many()
         .col_expr(
             refresh_token::Column::RevokedAt,
             Expr::value(Utc::now().fixed_offset()),
         )
         .filter(refresh_token::Column::Id.eq(id))
+        .filter(refresh_token::Column::ReplacedAt.is_null())
         .filter(refresh_token::Column::RevokedAt.is_null())
         .exec(db)
         .await?;
@@ -85,6 +123,7 @@ pub async fn revoke_sessions_of(db: &DatabaseConnection, user_id: Uuid) -> Resul
             Expr::value(Utc::now().fixed_offset()),
         )
         .filter(refresh_token::Column::UserId.eq(user_id))
+        .filter(refresh_token::Column::ReplacedAt.is_null())
         .filter(refresh_token::Column::RevokedAt.is_null())
         .exec(db)
         .await?;
@@ -94,13 +133,15 @@ pub async fn revoke_sessions_of(db: &DatabaseConnection, user_id: Uuid) -> Resul
 
 /// Les sessions encore ouvertes d'un compte, la plus récente d'abord.
 ///
-/// Ni révoquées ni périmées : ce que la liste montre est ce qu'une révocation fermerait.
+/// Ni tournées, ni révoquées, ni périmées : ce que la liste montre est ce qu'une
+/// révocation fermerait.
 pub async fn open_sessions_of(
     db: &DatabaseConnection,
     user_id: Uuid,
 ) -> Result<Vec<refresh_token::Model>> {
     Ok(refresh_token::Entity::find()
         .filter(refresh_token::Column::UserId.eq(user_id))
+        .filter(refresh_token::Column::ReplacedAt.is_null())
         .filter(refresh_token::Column::RevokedAt.is_null())
         .filter(refresh_token::Column::ExpiresAt.gt(Utc::now().fixed_offset()))
         .order_by_desc(refresh_token::Column::CreatedAt)
@@ -121,6 +162,7 @@ pub async fn revoke_session(db: &DatabaseConnection, id: Uuid, user_id: Uuid) ->
         )
         .filter(refresh_token::Column::Id.eq(id))
         .filter(refresh_token::Column::UserId.eq(user_id))
+        .filter(refresh_token::Column::ReplacedAt.is_null())
         .filter(refresh_token::Column::RevokedAt.is_null())
         .exec(db)
         .await?;

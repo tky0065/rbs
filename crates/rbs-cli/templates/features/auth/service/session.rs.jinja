@@ -9,7 +9,7 @@ use sea_orm::prelude::Uuid;
 use super::super::dto::{
     LoginRequest, RefreshRequest, RegisterRequest, SessionResponse, TokenPair, UserResponse,
 };
-use super::super::repository::{self, ADRESSE_PRISE};
+use super::super::repository::{self, ADRESSE_PRISE, refresh_token::Rotation};
 use super::{issue, profile};
 
 /// Le hash vérifié quand l'adresse est inconnue.
@@ -73,24 +73,30 @@ pub async fn refresh(
         .filter(|session| session.expires_at > maintenant)
         .ok_or(Error::Unauthorized)?;
 
-    // Rien ici ne relit `revoked_at` : c'est `consume` qui porte la condition, et elle
-    // seule peut la porter sans laisser passer deux rafraîchissements concurrents.
-    if !repository::consume(db, session.id).await? {
-        // La ligne existe et était déjà fermée : ce jeton a servi deux fois. L'un de ses
-        // deux porteurs n'est pas le titulaire du compte, et rien ne dit lequel — un
-        // jeton volé et joué avant la rotation légitime laisserait sinon le voleur avec
-        // une paire valide, renouvelée indéfiniment. Tout le compte se reconnecte.
-        let fermees = repository::revoke_sessions_of(db, session.user_id).await?;
+    // Rien ici ne relit les deux colonnes : c'est `rotate` qui porte la condition, et
+    // elle seule peut la porter sans laisser passer deux rafraîchissements concurrents.
+    match repository::refresh_token::rotate(db, session.id).await? {
+        Rotation::Done => {}
+        // La ligne avait tourné : ce jeton a servi deux fois. L'un de ses deux porteurs
+        // n'est pas le titulaire du compte, et rien ne dit lequel — un jeton volé et joué
+        // avant la rotation légitime laisserait sinon le voleur avec une paire valide,
+        // renouvelée indéfiniment. Tout le compte se reconnecte.
+        Rotation::Replayed => {
+            let fermees = repository::revoke_sessions_of(db, session.user_id).await?;
 
-        // Ni l'adresse ni le jeton : le journal ne porte pas ce que la réponse tait, et
-        // l'identifiant du compte suffit à retrouver ce qui s'est passé.
-        tracing::warn!(
-            user_id = %session.user_id,
-            sessions_revoquees = fermees,
-            "jeton de rafraîchissement rejoué : les sessions du compte sont révoquées"
-        );
+            // Ni l'adresse ni le jeton : le journal ne porte pas ce que la réponse tait,
+            // et l'identifiant du compte suffit à retrouver ce qui s'est passé.
+            tracing::warn!(
+                user_id = %session.user_id,
+                sessions_revoquees = fermees,
+                "jeton de rafraîchissement rejoué : les sessions du compte sont révoquées"
+            );
 
-        return Err(Error::Unauthorized);
+            return Err(Error::Unauthorized);
+        }
+        // Fermée par une déconnexion ou une révocation : un client qui réessaie, pas un
+        // jeton qui circule. Le même 401 qu'un jeton inconnu, et rien d'autre.
+        Rotation::Closed => return Err(Error::Unauthorized),
     }
 
     let utilisateur = repository::find(db, session.user_id)
@@ -108,10 +114,8 @@ pub async fn logout(db: &DatabaseConnection, input: RefreshRequest) -> Result<()
         .ok_or(Error::Unauthorized)?;
 
     // La session ferme la ligne présentée, et elle seule : les autres appareils du même
-    // compte gardent la leur. Un jeton déjà fermé ne l'est pas deux fois, et ne fait pas
-    // tomber le compte comme un rafraîchissement rejoué : redemander une déconnexion est
-    // le fait d'un client qui réessaie, non celui d'un jeton qui circule.
-    if !repository::consume(db, session.id).await? {
+    // compte gardent la leur. Un jeton déjà fermé ne l'est pas deux fois.
+    if !repository::refresh_token::close(db, session.id).await? {
         return Err(Error::Unauthorized);
     }
 
