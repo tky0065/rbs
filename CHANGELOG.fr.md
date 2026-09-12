@@ -29,6 +29,19 @@ dépréciation.
   filtre `replaced_at IS NULL` de `open_sessions_of`, `revoke_sessions_of` et
   `revoke_session` — sans lui, `GET /auth/sessions` gagne une ligne à chaque
   rafraîchissement), et `service/session.rs` (`refresh` et `logout`).
+- **Un jeton d'accès ne survit plus à la révocation de ses sessions.** `HasAuth`, dans
+  `rbs-core`, gagne une méthode fournie `accept(&claims)` qu'`Identity` appelle après la
+  vérification de signature ; le fragment `auth` l'implémente en relisant le compte :
+  disparu, sessions fermées après `iat` (`users.sessions_revoked_at`, estampillée par la
+  réinitialisation, le changement de mot de passe et `DELETE /auth/sessions`), ou rôle
+  changé → 401. Les jetons sont émis après la seconde de la révocation, si bien que la
+  paire rendue par `change-password` sert aussitôt. Les tests engendrés qui signaient un
+  jeton pour un `sub` tiré au hasard créent désormais un compte. **Projets générés avant
+  la 1.5.0 :** `ALTER TABLE users ADD COLUMN sessions_revoked_at timestamptz NULL;`
+  (`timestamp NULL` sur MySQL, `timestamp_with_timezone_text NULL` sur SQLite), puis
+  reprendre `impl HasAuth for AppState` du `mod.rs` du fragment, `stamp_sessions_revoked`
+  de `repository/user.rs` et `close_every_session` de `service/mod.rs` ; sans cela, rien
+  ne change.
 
 ## [1.4.0] — 2026-09-11
 

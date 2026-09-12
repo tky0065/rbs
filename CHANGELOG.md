@@ -27,6 +27,18 @@ between minor versions with no deprecation cycle.
   (`rotate`, `close`, and the `replaced_at IS NULL` filter on `open_sessions_of`,
   `revoke_sessions_of` and `revoke_session` — without it, `GET /auth/sessions` gains a row
   on every refresh), and `service/session.rs` (`refresh` and `logout`).
+- **An access token no longer survives the revocation of its sessions.** `rbs-core`'s
+  `HasAuth` gains a provided `accept(&claims)` method that `Identity` calls after the
+  signature check; the `auth` fragment implements it by reading the account: gone,
+  sessions closed after `iat` (`users.sessions_revoked_at`, stamped by reset, change and
+  `DELETE /auth/sessions`), or role changed → 401. Tokens are issued past the revocation
+  second so the pair returned by `change-password` works at once. Generated tests that
+  signed a token for a random `sub` now create an account. **Projects generated before
+  1.5.0:** `ALTER TABLE users ADD COLUMN sessions_revoked_at timestamptz NULL;`
+  (`timestamp NULL` on MySQL, `timestamp_with_timezone_text NULL` on SQLite), then copy
+  `impl HasAuth for AppState` from the fragment's `mod.rs`, `stamp_sessions_revoked` from
+  `repository/user.rs` and `close_every_session` from `service/mod.rs`; without it nothing
+  changes.
 
 ## [1.4.0] — 2026-09-11
 

@@ -32,7 +32,7 @@
 **Interfaces:**
 - Produces: `fn accept(&self, claims: &crate::jwt::Claims) -> impl Future<Output = Result<(), Error>> + Send` sur `HasAuth`, corps par défaut `async { Ok(()) }`.
 
-- [ ] **Step 1: Test rouge dans `extract.rs`** (module `tests`, derrière `#[cfg(feature = "auth")]` comme les tests `Identity` voisins — lire d'abord ceux-ci, lignes ~200-300, pour reprendre leur `state()` et leur signature de jeton) :
+- [x] **Step 1: Test rouge dans `extract.rs`** — rouge observé : `error[E0407]: method accept is not a member of trait HasAuth` ; aides réelles `state()`/`token(LATER, SECRET)` reprises (commit 473cb04) (module `tests`, derrière `#[cfg(feature = "auth")]` comme les tests `Identity` voisins — lire d'abord ceux-ci, lignes ~200-300, pour reprendre leur `state()` et leur signature de jeton) :
 
 ```rust
     /// Un état qui refuse tout jeton, quelle que soit sa signature.
@@ -83,7 +83,7 @@
 
 Les noms `state_with_auth` et `signed_token` désignent ce que le module de tests d'`extract.rs` fournit déjà pour ses tests `Identity` (vers la ligne 237, `env: "development"`) ; reprendre les noms réels.
 
-- [ ] **Step 2: `HasAuth::accept`**
+- [x] **Step 2: `HasAuth::accept`** — commit 473cb04
 
 ```rust
 #[cfg(feature = "auth")]
@@ -115,11 +115,11 @@ pub trait HasAuth: HasCoreState {
         state.accept(&claims).await?;
 ```
 
-- [ ] **Step 3: `cargo test -p rbs-core --all-features`** → vert, dont le test neuf ; `cargo clippy -p rbs-core --all-targets --all-features -- -D warnings` → 0 (si `async_fn_in_trait` ou `manual_async_fn` se plaint, garder la forme `impl Future + Send`, qui est celle que le lint recommande pour un trait public).
+- [x] **Step 3: `cargo test -p rbs-core --all-features`** → 138 passed; 0 failed ; clippy `-D warnings --all-features` → 0 (l'impl de test s'écrit en `async fn`, forme que `manual_async_fn` exige) → vert, dont le test neuf ; `cargo clippy -p rbs-core --all-targets --all-features -- -D warnings` → 0 (si `async_fn_in_trait` ou `manual_async_fn` se plaint, garder la forme `impl Future + Send`, qui est celle que le lint recommande pour un trait public).
 
-- [ ] **Step 4: Version** — `Cargo.toml` racine : `version = "1.5.0"`. `cargo build --workspace` pour rafraîchir `Cargo.lock`. Vérifier `grep -rn '1\.4\.0' README.md README.fr.md docs/docs --include=*.md | head` : les mentions masquées par `integration_docs` ne se touchent pas ; celles qui affirment « Version 1.4.0 » se mettent à jour (tâche 27 du backlog dit que README affiche 1.2.0 : ne pas la corriger ici, la noter).
+- [x] **Step 4: Version** — commit 7b0a91c (1.5.0, note `crates/rbs-cli/notes/1.5.0.md`, version figée des quatre exemples) ; `cargo test --workspace` exit 0 ; README affiche 1.2.0 : noté, non corrigé — `Cargo.toml` racine : `version = "1.5.0"`. `cargo build --workspace` pour rafraîchir `Cargo.lock`. Vérifier `grep -rn '1\.4\.0' README.md README.fr.md docs/docs --include=*.md | head` : les mentions masquées par `integration_docs` ne se touchent pas ; celles qui affirment « Version 1.4.0 » se mettent à jour (tâche 27 du backlog dit que README affiche 1.2.0 : ne pas la corriger ici, la noter).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit** — 473cb04 puis 7b0a91c
 
 ```bash
 git add crates/rbs-core Cargo.toml Cargo.lock
@@ -140,7 +140,7 @@ git commit -m "feat(core): laisse le projet refuser un jeton signé par HasAuth:
 **Interfaces:**
 - Produces: `repository::user::stamp_sessions_revoked(db, id) -> Result<DateTimeWithTimeZone>`, `service::close_every_session(db, user_id) -> Result<u64>`.
 
-- [ ] **Step 1: Migration et modèle**
+- [x] **Step 1: Migration et modèle** — commit fa720fd ; `\d users` du projet jetable liste `sessions_revoked_at | timestamp with time zone`
 
 ```rust
                     // Estampillée à chaque fermeture de toutes les sessions : un jeton
@@ -154,7 +154,7 @@ git commit -m "feat(core): laisse le projet refuser un jeton signé par HasAuth:
 
 `SessionsRevokedAt,` dans l'enum `Users` ; `pub sessions_revoked_at: Option<DateTimeWithTimeZone>,` dans `user::Model` après `email_verified_at`.
 
-- [ ] **Step 2: Dépôt**
+- [x] **Step 2: Dépôt** — commit fa720fd
 
 ```rust
 /// Date la fermeture de toutes les sessions, et rend l'instant écrit.
@@ -179,7 +179,7 @@ pub async fn stamp_sessions_revoked(
 
 (`use chrono::Utc;` et `DateTimeWithTimeZone` dans les imports.)
 
-- [ ] **Step 3: Service — un seul chemin pour fermer tout**
+- [x] **Step 3: Service — un seul chemin pour fermer tout** — commit fa720fd ; `templates::tests::a_replayed_refresh_closes_every_session_of_the_account` suit `close_every_session`
 
 Dans `service/mod.rs.jinja` :
 
@@ -209,7 +209,7 @@ Dans `change` (`password.rs.jinja`), recharger le compte après la fermeture, av
         .ok_or(Error::Unauthorized)?;
 ```
 
-- [ ] **Step 4: `issue` borne `iat`**
+- [x] **Step 4: `issue` borne `iat`** — commit fa720fd ; prouvé par le `GET /auth/me` ajouté à `changing_the_password_returns_a_usable_pair_and_closes_the_others` (200)
 
 ```rust
     // Jamais dans la seconde d'une révocation : `iat` n'a pas mieux que la seconde, et
@@ -231,7 +231,7 @@ Dans `change` (`password.rs.jinja`), recharger le compte après la fermeture, av
 
 `maintenant` reste utilisé pour l'échéance du rafraîchissement.
 
-- [ ] **Step 5: Commit** (avec la tâche 3 si l'on veut un arbre compilable : le fragment ne compile qu'à la tâche 3 de toute façon, `cargo check` sur projet jetable).
+- [x] **Step 5: Commit** — regroupé avec les tâches 3 et 4 dans fa720fd (avec la tâche 3 si l'on veut un arbre compilable : le fragment ne compile qu'à la tâche 3 de toute façon, `cargo check` sur projet jetable).
 
 ---
 
@@ -241,7 +241,7 @@ Dans `change` (`password.rs.jinja`), recharger le compte après la fermeture, av
 - Modify: `mod.rs.jinja:22` (`impl HasAuth for AppState`)
 - Test: `tests/session.rs.jinja`, `tests/password.rs.jinja`
 
-- [ ] **Step 1: Tests rouges**
+- [x] **Step 1: Tests rouges** — sans `accept` : `an_access_token_issued_before_a_reset_is_refused` et `a_demoted_admin_is_refused_with_its_old_token` FAILED (`left: 200, right: 401`) ; le test de rétrogradation se connecte par `application()` et n'appelle `admin_only_route()` que pour la route gardée
 
 Dans `tests/password.rs.jinja`, après `a_reset_token_sets_a_new_password_and_closes_every_session` :
 
@@ -320,7 +320,7 @@ async fn a_demoted_admin_is_refused_with_its_old_token() {
 
 Le test existant `changing_the_password_returns_a_usable_pair_and_closes_the_others` rejoue déjà la paire rendue sur `/auth/refresh` ; ajouter un appel `GET /auth/me` avec `corps["access_token"]` attendu 200 — c'est lui qui prouve le plancher d'`issue`.
 
-- [ ] **Step 2: L'implémentation dans `mod.rs.jinja`**
+- [x] **Step 2: L'implémentation dans `mod.rs.jinja`** — commit fa720fd, en `async fn accept` (Rust accepte une `async fn` pour une méthode déclarée `impl Future + Send`, et clippy l'exige)
 
 ```rust
 impl HasAuth for AppState {
@@ -366,7 +366,7 @@ impl HasAuth for AppState {
 
 Imports à ajouter dans `mod.rs.jinja` : `rbs_core::{Error, HasCoreState}`, `sea_orm::ActiveEnum`, `sea_orm::prelude::Uuid`. Si la capture de `self` dans `async move` pose un problème de durée de vie, cloner le `DatabaseConnection` (c'est un `Arc` interne) avant le bloc : `let db = self.core().db().clone();`.
 
-- [ ] **Step 3: `cargo check` sur projet jetable** puis `cargo test --lib -- --ignored auth::tests` avec base : les deux tests neufs passent, tous les anciens aussi.
+- [x] **Step 3: `cargo check` sur projet jetable** → vert ; `cargo test --lib -- --include-ignored auth::tests` → 48 passed; 0 failed puis `cargo test --lib -- --ignored auth::tests` avec base : les deux tests neufs passent, tous les anciens aussi.
 
 ---
 
@@ -380,7 +380,7 @@ Imports à ajouter dans `mod.rs.jinja` : `rbs_core::{Error, HasCoreState}`, `sea
 **Interfaces:**
 - Produces: dans les deux fichiers de tests, `async fn token(db: &DatabaseConnection, role: &str) -> String` qui inscrit un compte au rôle voulu et signe pour lui.
 
-- [ ] **Step 1: `feature/tests.rs.jinja`** — remplacer `token` :
+- [x] **Step 1: `feature/tests.rs.jinja`** — commit fa720fd ; `token(db, role)` async, un seul compte par binaire posé par `application()` dans un `OnceLock` et lu par `bearer()` : les 21 appels de `request`/`without_body` restent tels quels (ruling, voir le ledger) ; fixture `fixtures/posts/tests.rs` reposée par `RBS_FIGE=1` — remplacer `token` :
 
 ```rust
 /// Inscrit un compte au rôle voulu et signe un jeton pour lui.
@@ -417,15 +417,15 @@ async fn token(db: &DatabaseConnection, role: &str) -> String {
 
 Lire ensuite chaque appel de `token(` dans le fichier (`grep -n 'token(' feature/tests.rs.jinja`) : ils deviennent `token(&db, "admin").await`, `db` étant la connexion que les tests obtiennent déjà (vérifier le nom de l'aide qui l'ouvre, sinon en ajouter une sur le modèle de `auth/tests/mod.rs.jinja::connection`). Le type de `Role::try_from_value` : `sea_orm::ActiveEnum::try_from_value(&role.to_owned())` rend `Result<Role, DbErr>` ; annoter `let role_enum: crate::auth::model::Role = …`.
 
-- [ ] **Step 2: `webhooks/tests.rs.jinja`** — même remplacement de `token`, et `request(method, path, role, body)` devient `async fn request(db: &DatabaseConnection, …)` qui appelle `token(db, role).await` ; adapter ses deux appelants (`a_user_role_is_refused_on_the_three_routes`, `an_admin_subscribes_then_reads_and_revokes`), qui disposent de `state.core().db()`.
+- [x] **Step 2: `webhooks/tests.rs.jinja`** — commit fa720fd ; `rustfmt --check` du rendu vert ; `integration_webhooks --ignored` → 1 passed — même remplacement de `token`, et `request(method, path, role, body)` devient `async fn request(db: &DatabaseConnection, …)` qui appelle `token(db, role).await` ; adapter ses deux appelants (`a_user_role_is_refused_on_the_three_routes`, `an_admin_subscribes_then_reads_and_revokes`), qui disposent de `state.core().db()`.
 
-- [ ] **Step 3: `integration_auth.rs`** — le commentaire de `the_tests_of_a_crud_generated_under_auth_pass` reste vrai (trois contrats du noyau) ; ajouter une phrase : « et, depuis que `Identity` relit le compte, le dépôt `auth` du projet ». Vérifier que le test passe toujours (passe lente).
+- [x] **Step 3: `integration_auth.rs`** — commit fa720fd ; `the_tests_of_a_crud_generated_under_auth_pass ... ok` (auth-lent-11.log) — le commentaire de `the_tests_of_a_crud_generated_under_auth_pass` reste vrai (trois contrats du noyau) ; ajouter une phrase : « et, depuis que `Identity` relit le compte, le dépôt `auth` du projet ». Vérifier que le test passe toujours (passe lente).
 
-- [ ] **Step 4: Régénérer `examples/blog-auth` par diff** (`src/auth/*`, `migration/src/*`, `src/posts/tests.rs`), `cargo clippy --all-targets -- -D warnings` dans l'exemple, `cargo test -p rbs-cli --test integration_examples`.
+- [x] **Step 4: Régénérer `examples/blog-auth` par diff** — patch des templates (sans tag) et diff des deux fixtures pour `posts/tests.rs`, hunk `token` reporté à la main dans la région `jeton`, test manuel adapté ; clippy de l'exemple vert ; `integration_examples` → 19 passed (`src/auth/*`, `migration/src/*`, `src/posts/tests.rs`), `cargo clippy --all-targets -- -D warnings` dans l'exemple, `cargo test -p rbs-cli --test integration_examples`.
 
-- [ ] **Step 5: Passe lente** `integration_auth` (voir contraintes) + `integration_webhooks` (le `token()` des webhooks a changé) : tout vert. `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p rbs-cli --lib`.
+- [x] **Step 5: Passe lente** — `auth-lent-11.log` : 8 passed; 0 failed (153 s) ; `auth-webhooks-lent.log` : 1 passed ; fmt vert ; clippy workspace 0 ; `rbs-cli --lib` 1151 passed `integration_auth` (voir contraintes) + `integration_webhooks` (le `token()` des webhooks a changé) : tout vert. `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test -p rbs-cli --lib`.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit** — fa720fd
 
 ```bash
 git add crates/rbs-cli/templates crates/rbs-cli/tests examples/blog-auth
@@ -440,7 +440,7 @@ git commit -m "fix(auth): refuse un jeton d'accès émis avant la révocation de
 - Modify: `docs/docs/guides/auth.md:124-126` (+ FR)
 - Modify: `CHANGELOG.md`, `CHANGELOG.fr.md`
 
-- [ ] **Step 1: Guide** — remplacer « It carries the account id and its role, it is not stored anywhere, and it is verified by signature alone — which is what makes it cheap. It is short-lived because it cannot be revoked. » par :
+- [x] **Step 1: Guide** — EN + FR : jeton d'accès, estampille dans le cycle, « Testing a protected route » (le `tests.rs` engendré crée un compte) — remplacer « It carries the account id and its role, it is not stored anywhere, and it is verified by signature alone — which is what makes it cheap. It is short-lived because it cannot be revoked. » par :
 
 ```markdown
 The **access token** is a signed JWT (HS256). It carries the account id and its role and
@@ -454,7 +454,7 @@ it stays short-lived.
 
 FR équivalent. Dans le paragraphe « The token cycle », ajouter une phrase sur `sessions_revoked_at` là où sont décrits reset et change.
 
-- [ ] **Step 2: CHANGELOG**, `### Fixed` de 1.5.0 :
+- [x] **Step 2: CHANGELOG**, `### Fixed` de 1.5.0 (EN + FR `### Corrigé`) :
 
 ```markdown
 - **An access token no longer survives the revocation of its sessions.** `rbs-core`'s
@@ -468,7 +468,7 @@ FR équivalent. Dans le paragraphe « The token cycle », ajouter une phrase sur
   copy `impl HasAuth for AppState` from the fragment; without it nothing changes.
 ```
 
-- [ ] **Step 3: `cargo test -p rbs-cli --test integration_docs`** → vert. Commit :
+- [x] **Step 3: `cargo test -p rbs-cli --test integration_docs`** → 13 passed; 0 failed; 1 ignored (199 s). Commit :
 
 ```bash
 git commit -am "docs(auth): dit ce que la lecture du compte ajoute à la signature du jeton"
