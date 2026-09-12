@@ -744,6 +744,41 @@ async fn an_admin_satisfies_a_user_requirement() {
     );
 }
 
+/// Un rôle retiré en base cesse d'ouvrir la route à la requête suivante, pas au bout du
+/// jeton : le rôle du Bearer est comparé à celui de la ligne à chaque requête.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_demoted_admin_is_refused_with_its_old_token() {
+    let api = application().await;
+    let db = connection().await;
+    let restricted = admin_only_route().await;
+    let paire = login_as_admin(&api, &db).await;
+    let acces = access_for(&paire);
+
+    let (ok, _) = call(&restricted, with_token("GET", "/reserve", &acces)).await;
+    assert_eq!(ok, StatusCode::OK);
+
+    let secret = rbs_core::Config::load()
+        .expect("configuration lisible")
+        .auth
+        .secret;
+    let sub = rbs_core::jwt::verify(&acces, &secret)
+        .expect("jeton lisible")
+        .sub;
+    let compte =
+        crate::auth::model::user::Entity::find_by_id(Uuid::parse_str(&sub).expect("sub lisible"))
+            .one(&db)
+            .await
+            .expect("la table doit être interrogeable")
+            .expect("le compte promu doit exister");
+    let mut retrograde: crate::auth::model::user::ActiveModel = compte.into();
+    retrograde.role = Set(Role::User);
+    retrograde.update(&db).await.expect("compte rétrogradé");
+
+    let (refus, body) = call(&restricted, with_token("GET", "/reserve", &acces)).await;
+    assert_eq!(refus, StatusCode::UNAUTHORIZED, "{body}");
+}
+
 #[tokio::test]
 #[ignore = "joint la base du projet"]
 async fn me_returns_the_callers_profile() {

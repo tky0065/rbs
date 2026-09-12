@@ -10,7 +10,7 @@ use super::super::dto::{
     LoginRequest, RefreshRequest, RegisterRequest, SessionResponse, TokenPair, UserResponse,
 };
 use super::super::repository::{self, ADRESSE_PRISE, refresh_token::Rotation};
-use super::{issue, profile};
+use super::{close_every_session, issue, profile};
 
 /// Le hash vérifié quand l'adresse est inconnue.
 ///
@@ -83,7 +83,7 @@ pub async fn refresh(
         // avant la rotation légitime laisserait sinon le voleur avec une paire valide,
         // renouvelée indéfiniment. Tout le compte se reconnecte.
         Rotation::Replayed => {
-            let fermees = repository::revoke_sessions_of(db, session.user_id).await?;
+            let fermees = close_every_session(db, session.user_id).await?;
 
             // Ni l'adresse ni le jeton : le journal ne porte pas ce que la réponse tait,
             // et l'identifiant du compte suffit à retrouver ce qui s'est passé.
@@ -174,7 +174,7 @@ pub async fn revoke_session(db: &DatabaseConnection, id: Uuid, user_id: Uuid) ->
 }
 
 pub async fn revoke_sessions(db: &DatabaseConnection, user_id: Uuid) -> Result<()> {
-    repository::revoke_sessions_of(db, user_id).await?;
+    close_every_session(db, user_id).await?;
 
     Ok(())
 }

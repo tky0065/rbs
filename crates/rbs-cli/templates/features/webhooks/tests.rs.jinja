@@ -164,14 +164,28 @@ fn donnees() -> serde_json::Value {
     serde_json::json!({ "id": 1 })
 }
 
-/// Signe un jeton portant `role`, sans passer par la base : `Identity` ne vérifie que la
-/// signature, le compte n'a pas à exister.
-fn token(role: &str) -> String {
+/// Inscrit un compte au rôle voulu et signe un jeton pour lui.
+///
+/// Un compte réel, et non un `sub` tiré au hasard : `Identity` relit la ligne du compte
+/// à chaque requête — rôle et révocations — et un jeton sans compte est refusé.
+async fn token(db: &DatabaseConnection, role: &str) -> String {
     let config = rbs_core::Config::load().expect("configuration lisible");
-    let maintenant = chrono::Utc::now().timestamp();
+    let compte = crate::auth::repository::create(
+        db,
+        &format!("{}@exemple.test", Uuid::new_v4()),
+        "hash sans valeur",
+    )
+    .await
+    .expect("le compte s'insère");
+    let role_connu: crate::auth::model::Role =
+        sea_orm::ActiveEnum::try_from_value(&role.to_owned()).expect("rôle connu");
+    let mut promu: crate::auth::model::user::ActiveModel = compte.into();
+    promu.role = Set(role_connu);
+    let compte = promu.update(db).await.expect("rôle posé");
 
+    let maintenant = chrono::Utc::now().timestamp();
     let claims = rbs_core::jwt::Claims {
-        sub: Uuid::new_v4().to_string(),
+        sub: compte.id.to_string(),
         role: role.to_string(),
         exp: maintenant + 300,
         iat: maintenant,
@@ -181,11 +195,17 @@ fn token(role: &str) -> String {
     rbs_core::jwt::sign(&claims, &config.auth.secret).expect("jeton signable")
 }
 
-fn request(method: &str, path: &str, role: &str, body: Option<Value>) -> Request<Body> {
+async fn request(
+    db: &DatabaseConnection,
+    method: &str,
+    path: &str,
+    role: &str,
+    body: Option<Value>,
+) -> Request<Body> {
     let builder = Request::builder()
         .method(method)
         .uri(path)
-        .header("authorization", format!("Bearer {}", token(role)));
+        .header("authorization", format!("Bearer {}", token(db, role).await));
     match body {
         Some(corps) => builder
             .header("content-type", "application/json")
@@ -337,28 +357,31 @@ async fn an_emission_rolled_back_with_its_transaction_enqueues_nothing() {
 #[ignore = "joint la base du projet"]
 async fn a_user_role_is_refused_on_the_three_routes() {
     let (_garde, state) = table_a_soi().await;
-    let existant = abonne(state.core().db(), "https://example.test/hooks", &["*"]).await;
+    let db = state.core().db().clone();
+    let existant = abonne(&db, "https://example.test/hooks", &["*"]).await;
     let api = crate::router::router(state);
 
     let corps = json!({ "url": "https://example.test/mine", "events": ["*"] });
     let (creation, _) = call(
         &api,
-        request("POST", "/webhooks/subscriptions", "user", Some(corps)),
+        request(&db, "POST", "/webhooks/subscriptions", "user", Some(corps)).await,
     )
     .await;
     let (liste, _) = call(
         &api,
-        request("GET", "/webhooks/subscriptions", "user", None),
+        request(&db, "GET", "/webhooks/subscriptions", "user", None).await,
     )
     .await;
     let (revocation, _) = call(
         &api,
         request(
+            &db,
             "DELETE",
             &format!("/webhooks/subscriptions/{}", existant.id),
             "user",
             None,
-        ),
+        )
+        .await,
     )
     .await;
 
@@ -371,12 +394,13 @@ async fn a_user_role_is_refused_on_the_three_routes() {
 #[ignore = "joint la base du projet"]
 async fn an_admin_subscribes_then_reads_and_revokes() {
     let (_garde, state) = table_a_soi().await;
+    let db = state.core().db().clone();
     let api = crate::router::router(state);
 
     let corps = json!({ "url": "https://example.test/hooks", "events": ["user.*"] });
     let (creation, cree) = call(
         &api,
-        request("POST", "/webhooks/subscriptions", "admin", Some(corps)),
+        request(&db, "POST", "/webhooks/subscriptions", "admin", Some(corps)).await,
     )
     .await;
     assert_eq!(creation, StatusCode::CREATED, "{cree}");
@@ -386,7 +410,7 @@ async fn an_admin_subscribes_then_reads_and_revokes() {
 
     let (liste, abonnements) = call(
         &api,
-        request("GET", "/webhooks/subscriptions", "admin", None),
+        request(&db, "GET", "/webhooks/subscriptions", "admin", None).await,
     )
     .await;
     assert_eq!(liste, StatusCode::OK);
@@ -395,11 +419,13 @@ async fn an_admin_subscribes_then_reads_and_revokes() {
     let (revocation, _) = call(
         &api,
         request(
+            &db,
             "DELETE",
             &format!("/webhooks/subscriptions/{id}"),
             "admin",
             None,
-        ),
+        )
+        .await,
     )
     .await;
     assert_eq!(revocation, StatusCode::NO_CONTENT);

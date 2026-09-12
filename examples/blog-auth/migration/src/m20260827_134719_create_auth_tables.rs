@@ -33,6 +33,13 @@ impl MigrationTrait for Migration {
                             .timestamp_with_time_zone()
                             .null(),
                     )
+                    // Estampillée à chaque fermeture de toutes les sessions : un jeton
+                    // d'accès émis avant, signature bonne ou pas, ne vaut plus rien.
+                    .col(
+                        ColumnDef::new(Users::SessionsRevokedAt)
+                            .timestamp_with_time_zone()
+                            .null(),
+                    )
                     .col(
                         ColumnDef::new(Users::CreatedAt)
                             .timestamp_with_time_zone()
@@ -210,6 +217,7 @@ enum Users {
     PasswordHash,
     Role,
     EmailVerifiedAt,
+    SessionsRevokedAt,
     CreatedAt,
     UpdatedAt,
 }

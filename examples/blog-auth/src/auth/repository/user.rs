@@ -1,6 +1,7 @@
+use chrono::Utc;
 use rbs_core::{Error, Result};
 use sea_orm::error::SqlErr;
-use sea_orm::prelude::{Expr, Uuid};
+use sea_orm::prelude::{DateTimeWithTimeZone, Expr, Uuid};
 use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
 
 use super::super::model::user::{self, Entity};
@@ -74,4 +75,25 @@ pub async fn mark_verified(db: &DatabaseConnection, id: Uuid) -> Result<()> {
         .await?;
 
     Ok(())
+}
+
+/// Date la fermeture de toutes les sessions, et rend l'instant écrit.
+///
+/// L'instant vient de Rust et se lie en paramètre, comme toute date de ces dépôts : c'est
+/// à lui qu'`issue` compare le `iat` du prochain jeton, et une horloge SQL ne rendrait pas
+/// la même seconde. Rendu plutôt que relu : une relecture ne dirait pas mieux que ce que
+/// cet appel vient de lier.
+pub async fn stamp_sessions_revoked(
+    db: &DatabaseConnection,
+    id: Uuid,
+) -> Result<DateTimeWithTimeZone> {
+    let maintenant = Utc::now().fixed_offset();
+
+    Entity::update_many()
+        .col_expr(user::Column::SessionsRevokedAt, Expr::value(maintenant))
+        .filter(user::Column::Id.eq(id))
+        .exec(db)
+        .await?;
+
+    Ok(maintenant)
 }
