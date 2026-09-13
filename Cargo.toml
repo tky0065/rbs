@@ -27,6 +27,10 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
 clap = { version = "4.6.6", features = ["derive", "string"] }
 clap_complete = "4.6.9"
 console = "0.16.4"
+# `0.17` et non une version complète : la requête même que déclare le fragment
+# `scheduler`, pour que `rbs doctor` et `rbs generate job` jugent une expression avec la
+# crate que le projet engendré compilera.
+cron = "0.17"
 dotenvy = "0.15.7"
 figment = { version = "0.10.19", features = ["toml", "env"] }
 include_dir = "0.7.4"

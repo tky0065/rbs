@@ -18,6 +18,7 @@ pub mod observability;
 pub mod redis;
 pub mod relations;
 pub mod render;
+pub mod scheduler;
 pub mod storage;
 pub mod versions;
 
@@ -300,7 +301,7 @@ fn plan(manifeste: &Manifeste) -> Vec<Controle> {
 ///
 /// Une feature peut y figurer deux fois : `auth` amène de quoi vérifier son secret, et de
 /// quoi juger les routes que les rôles qu'elle installe pourraient protéger.
-const FEATURE_CHECKS: [(&str, Controle); 7] = [
+const FEATURE_CHECKS: [(&str, Controle); 8] = [
     (
         "auth",
         Controle {
@@ -348,6 +349,13 @@ const FEATURE_CHECKS: [(&str, Controle); 7] = [
         Controle {
             titre: observability::TITRE,
             executer: |projet, _| observability::check(&projet.config),
+        },
+    ),
+    (
+        "scheduler",
+        Controle {
+            titre: scheduler::TITRE,
+            executer: |projet, _| scheduler::check(&projet.root),
         },
     ),
 ];
@@ -755,6 +763,20 @@ mod tests {
             "la feature est déclarée, son contrôle doit figurer : {:?}",
             titles(&report)
         );
+    }
+
+    /// Le calendrier ne se juge que sur un projet qui l'a installé : ailleurs, son fichier
+    /// manque légitimement.
+    #[test]
+    fn only_a_project_declaring_scheduler_receives_its_check() {
+        let (_parent, avec) = project(&["health", "scheduler"]);
+        let (_autre, sans) = project(&["health"]);
+
+        let avec = run_with(&avec, &mut Muet).expect("c'est un projet rbs");
+        let sans = run_with(&sans, &mut Muet).expect("c'est un projet rbs");
+
+        assert!(titles(&avec).contains(&"scheduler"), "{:?}", titles(&avec));
+        assert!(!titles(&sans).contains(&"scheduler"), "{:?}", titles(&sans));
     }
 
     /// Le contrôle de section, tel que `redis` et `jobs` l'appellent.
