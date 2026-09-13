@@ -220,3 +220,53 @@ fn add_json_outside_a_project_renders_pas_un_projet() {
     assert_eq!(erreur["code"], "pas_un_projet", "{erreur:#}");
     assert_eq!(erreur["bloc"], Value::Null, "{erreur:#}");
 }
+
+/// Sans `--dry-run`, le plan s'écrit et le document le dit : c'est le chemin qu'un agent
+/// prend pour installer, et le seul où `applique` vaut `true`.
+#[test]
+fn add_json_without_dry_run_writes_the_plan_and_says_it_was_applied() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = projet_neuf(&parent);
+
+    let sortie = lancer(&racine, &["add", "cors", "--json", "--force"]);
+
+    assert_eq!(sortie.code, Some(0), "{}", sortie.stderr);
+    assert_eq!(
+        sortie.stderr, "",
+        "cors n'a rien à dire sur la sortie d'erreur"
+    );
+    let plan = document(&sortie);
+    assert_eq!(plan["commande"], "add");
+    assert_eq!(plan["applique"], true, "{plan:#}");
+
+    assert!(
+        racine.join("src/modules/cors/mod.rs").is_file(),
+        "le document dit le plan appliqué, mais le module cors n'est pas écrit"
+    );
+    let router = fs::read_to_string(racine.join("src/router.rs")).expect("router.rs lisible");
+    assert!(
+        router.contains(".layer(crate::modules::cors::layer())"),
+        "la couche cors n'a pas été insérée :\n{router}"
+    );
+}
+
+/// Un `AGENTS.md` supprimé est ce qu'`upgrade` a toujours à rétablir, même sur un projet
+/// à jour : sans lui, le plan n'aurait rien à écrire et `applique` resterait à `false`.
+#[test]
+fn upgrade_json_without_dry_run_restores_the_guide_and_says_it_was_applied() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = projet_neuf(&parent);
+    let guide = racine.join("AGENTS.md");
+    fs::remove_file(&guide).expect("le guide est là");
+
+    let sortie = lancer(&racine, &["upgrade", "--json"]);
+
+    assert_eq!(sortie.code, Some(0), "{}", sortie.stderr);
+    let plan = document(&sortie);
+    assert_eq!(plan["commande"], "upgrade");
+    assert_eq!(plan["applique"], true, "{plan:#}");
+    assert!(
+        guide.is_file(),
+        "le document dit le plan appliqué, mais AGENTS.md n'est pas rétabli"
+    );
+}
