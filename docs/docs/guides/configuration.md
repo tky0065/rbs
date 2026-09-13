@@ -70,6 +70,12 @@ project whose compose carries a database — the identifiers that compose interp
 `database.url` is the only key without a default. Nothing sensible can be guessed for it,
 so its absence stops the process at startup with a message naming the field.
 
+`server.lang` is also what `rbs add` and `rbs generate crud` read to choose the language
+of the client-facing messages they write into your code — from `config/default.toml`
+only, never from `RBS_SERVER__LANG` or any other layer: a generation must not depend on
+the shell of whoever runs it. See [the errors guide](./errors.md#the-language-of-the-body)
+for the full list of what each language decides.
+
 ### Why `docs.swagger_ui` and `docs.openapi_json` are two settings
 
 The two needs are not symmetrical. Turning the interface off while keeping the document

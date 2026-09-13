@@ -73,28 +73,30 @@ leaks into the body.
 
 ## The language of the body
 
-Two settings named `lang`, at two different moments, decide two different things.
+One setting, `[server] lang` in `config/default.toml` — `fr` by default, or `en` —
+decides the language of everything in this section, both at run time and at generation
+time.
 
-At *run time*, `[server] lang` — `fr` by default, or `en`; `RBS_SERVER__LANG` overrides
-it — decides what `rbs-core` itself writes into the response: the `title` of every
-`problem+json` body, the fixed `detail` of the 404 (`{resource} not found` /
-`{resource} introuvable`) and of the 500, and the common response descriptions of the
-OpenAPI document — the six named responses under `components/responses` and the 422/500
-added to every operation. That is `Error::parts` in `crates/rbs-core/src/error.rs`,
-`crates/rbs-core/src/openapi.rs`, and the resolution in `crates/rbs-core/src/lang.rs`:
+At *run time*, `RBS_SERVER__LANG` can override it: `rbs-core` reads the resolved value to
+decide what it writes into the response — the `title` of every `problem+json` body, the
+fixed `detail` of the 404 (`{resource} not found` / `{resource} introuvable`) and of the
+500, and the common response descriptions of the OpenAPI document — the six named
+responses under `components/responses` and the 422/500 added to every operation. That is
+`Error::parts` in `crates/rbs-core/src/error.rs`, `crates/rbs-core/src/openapi.rs`, and
+the resolution in `crates/rbs-core/src/lang.rs`:
 
 ```toml
 [server]
 lang = "en"
 ```
 
-At *generation time*, the project language — chosen once by `rbs new --lang` and recorded
-as `lang` under `[package.metadata.rbs]` in `Cargo.toml` — decides the language in which
-`rbs add` and `rbs generate crud` write the messages they hand to the client. Those become
-plain string literals in your generated code, and `[server] lang` does not touch them
-afterwards: the `lang` context read in `crates/rbs-cli/src/add/mod.rs` and the
-`.speaking(metadonnees.lang)` call in `crates/rbs-cli/src/generate/command.rs` pick one of
-two literals at render time, once and for all.
+At *generation time*, `rbs add` and `rbs generate crud` read that same key straight out
+of `config/default.toml` — never the environment, and never
+`[package.metadata.rbs] lang`, which only governs `AGENTS.md` — to decide the language in
+which they write the messages they hand to the client. Those become plain string
+literals in your generated code, and `[server] lang` does not touch them again
+afterwards: `Lang::of_project` in `crates/rbs-cli/src/lang.rs` reads the file once, at
+render time, and picks one of two literals, once and for all.
 
 Those generated messages, file by file:
 
@@ -126,18 +128,10 @@ and summaries written into the generated handlers (`#[utoipa::path(… descripti
 and doc comments); and the schema descriptions carried by `rbs-core`'s own types
 (`ProblemDetails`'s fields, `Page`, `CursorPage`, the filter schemas).
 
-Switching an existing project to English takes two edits, both by hand: `lang = "en"`
-under `[server]` in `config/default.toml` (run time) and `lang = "en"` under
-`[package.metadata.rbs]` in `Cargo.toml` (so a future `add`/`generate` writes English) —
-then translate by hand the messages already generated, listed above. `rbs upgrade`
-rewrites none of them.
-
-A divergence to watch on an older project: one generated before 1.5.0 without `--lang`
-recorded `[package.metadata.rbs] lang` from the locale — `en` for any non-French locale,
-including the `C.UTF-8` of CI runners and Docker images (see `from_locale` in
-`crates/rbs-cli/src/lang.rs`) — while its runtime, with no `[server] lang` set, speaks
-French. From 1.5.0, `add` and `generate` write their messages in the metadata's language:
-align the two keys, one way or the other, before generating into such a project.
+Switching an existing project to English is one edit: `lang = "en"` under `[server]` in
+`config/default.toml`. It takes effect at run time immediately, and the next `add` or
+`generate` in that project follows it too — then translate by hand the messages already
+generated, listed above. `rbs upgrade` rewrites none of them.
 
 ## How an error becomes a response
 

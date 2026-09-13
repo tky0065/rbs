@@ -194,12 +194,13 @@ English, and no value at all giving French. Either way the choice is recorded as
 [`rbs upgrade`](./upgrade.md) keep writing the file in the project's language rather than
 in the language of whoever happens to run the command next.
 
-The same choice does two more things. It is written as `lang` under `[server]` in
-`config/default.toml`, which a generated project reads at run time to decide the language
-of its HTTP responses; and `add` and `generate` read it back from
-`[package.metadata.rbs]` to write, in that language, the client-facing messages they
-generate. See [the errors guide](../guides/errors.md#the-language-of-the-body) for which
-HTTP responses each of those two settings actually decides.
+The same choice is also written as `lang` under `[server]` in `config/default.toml`,
+which a generated project reads at run time to decide the language of its HTTP
+responses — and which `add` and `generate` read back from the same file, not from
+`[package.metadata.rbs]`, to write client-facing messages in that language when they
+scaffold something later. See [the errors guide](../guides/errors.md#the-language-of-the-body)
+for which HTTP responses and generated messages each of those two settings actually
+decides.
 
 ## The three questions
 
