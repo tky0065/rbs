@@ -75,29 +75,29 @@ source fuiterait dans le corps.
 
 ## La langue du corps
 
-Deux réglages nommés `lang`, à deux moments différents, décident deux choses distinctes.
+Un seul réglage, `[server] lang` dans `config/default.toml` — `fr` par défaut, ou `en` —
+décide la langue de tout ce qui suit, à l'exécution comme à la génération.
 
-À *l'exécution*, `[server] lang` — `fr` par défaut, ou `en` ; `RBS_SERVER__LANG` le
-surcharge — décide ce que `rbs-core` lui-même écrit dans la réponse : le `title` de tout
-corps `problem+json`, le `detail` fixe du 404 (`{ressource} not found` /
-`{ressource} introuvable`) et du 500, et les descriptions communes du document OpenAPI —
-les six réponses nommées sous `components/responses` et les 422/500 ajoutées à chaque
-opération. C'est `Error::parts` dans `crates/rbs-core/src/error.rs`,
-`crates/rbs-core/src/openapi.rs`, et la résolution dans `crates/rbs-core/src/lang.rs` :
+À *l'exécution*, `RBS_SERVER__LANG` peut le surcharger : `rbs-core` lit la valeur résolue
+pour décider ce qu'il écrit dans la réponse — le `title` de tout corps `problem+json`, le
+`detail` fixe du 404 (`{ressource} not found` / `{ressource} introuvable`) et du 500, et
+les descriptions communes du document OpenAPI — les six réponses nommées sous
+`components/responses` et les 422/500 ajoutées à chaque opération. C'est `Error::parts`
+dans `crates/rbs-core/src/error.rs`, `crates/rbs-core/src/openapi.rs`, et la résolution
+dans `crates/rbs-core/src/lang.rs` :
 
 ```toml
 [server]
 lang = "en"
 ```
 
-À *la génération*, la langue du projet — choisie une fois par `rbs new --lang` et inscrite
-comme `lang` sous `[package.metadata.rbs]` dans `Cargo.toml` — décide la langue dans
-laquelle `rbs add` et `rbs generate crud` écrivent les messages qu'ils remettent au
-client. Ceux-ci deviennent de simples littéraux de chaîne dans votre code engendré, et
-`[server] lang` ne les touche plus ensuite : le contexte `lang` lu dans
-`crates/rbs-cli/src/add/mod.rs` et l'appel `.speaking(metadonnees.lang)` dans
-`crates/rbs-cli/src/generate/command.rs` choisissent l'un des deux littéraux au rendu,
-une fois pour toutes.
+À *la génération*, `rbs add` et `rbs generate crud` lisent cette même clé directement
+dans `config/default.toml` — jamais dans l'environnement, jamais dans
+`[package.metadata.rbs] lang`, qui ne gouverne plus que `AGENTS.md` — pour décider la
+langue dans laquelle ils écrivent les messages qu'ils remettent au client. Ceux-ci
+deviennent de simples littéraux de chaîne dans votre code engendré, et `[server] lang` ne
+les touche plus ensuite : `Lang::of_project` dans `crates/rbs-cli/src/lang.rs` lit le
+fichier une fois, au rendu, et choisit l'un des deux littéraux, une fois pour toutes.
 
 Ces messages engendrés, fichier par fichier :
 
@@ -132,19 +132,10 @@ engendrés (`#[utoipa::path(… description = …)]` et les commentaires de docu
 les descriptions de schéma que portent les types de `rbs-core` eux-mêmes (les champs de
 `ProblemDetails`, `Page`, `CursorPage`, les schémas de filtre).
 
-Basculer un projet existant vers l'anglais tient en deux modifications, toutes deux à la
-main : `lang = "en"` sous `[server]` dans `config/default.toml` (exécution) et
-`lang = "en"` sous `[package.metadata.rbs]` dans `Cargo.toml` (pour qu'un futur
-`add`/`generate` écrive en anglais) — puis traduire à la main les messages déjà engendrés,
-listés ci-dessus. `rbs upgrade` n'en réécrit aucun.
-
-Une divergence à surveiller sur un projet plus ancien : un projet engendré avant 1.5.0
-sans `--lang` inscrivait `[package.metadata.rbs] lang` d'après la locale — `en` pour
-toute locale non française, y compris le `C.UTF-8` des runners CI et des images Docker
-(voir `from_locale` dans `crates/rbs-cli/src/lang.rs`) — alors que son exécution, sans
-`[server] lang`, parle français. Depuis 1.5.0, `add` et `generate` écrivent leurs messages
-dans la langue de la métadonnée : aligner les deux clés, dans un sens ou dans l'autre,
-avant de générer dans un tel projet.
+Basculer un projet existant vers l'anglais tient en une seule modification : `lang = "en"`
+sous `[server]` dans `config/default.toml`. Elle s'applique à l'exécution immédiatement,
+et le prochain `add` ou `generate` de ce projet la suit aussi — puis traduire à la main
+les messages déjà engendrés, listés ci-dessus. `rbs upgrade` n'en réécrit aucun.
 
 ## Comment une erreur devient une réponse
 

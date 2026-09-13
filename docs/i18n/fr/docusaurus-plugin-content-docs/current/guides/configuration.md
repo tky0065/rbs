@@ -72,6 +72,13 @@ un projet dont le compose porte une base — des identifiants que celui-ci inter
 `database.url` est la seule clé sans défaut. Rien de sensé ne peut être deviné à sa
 place : son absence arrête le processus au démarrage, avec un message qui nomme le champ.
 
+`server.lang` est aussi ce que lisent `rbs add` et `rbs generate crud` pour choisir la
+langue des messages destinés au client qu'ils écrivent dans votre code — depuis
+`config/default.toml` seul, jamais depuis `RBS_SERVER__LANG` ni aucune autre couche : une
+génération ne doit rien devoir au shell de celui qui la lance. Voir
+[le guide des erreurs](./errors.md#la-langue-du-corps) pour la liste complète de ce que
+chaque langue décide.
+
 ### Pourquoi `docs.swagger_ui` et `docs.openapi_json` font deux réglages
 
 Les deux besoins ne sont pas symétriques. Couper l'interface en gardant le document est ce
