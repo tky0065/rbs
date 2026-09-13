@@ -161,6 +161,12 @@ are handled where they happen, and each answer is deliberate:
   runs out, and is then replayed. Saying so is all the worker can do; the database is not
   answering.
 
+A fourth case is not a failure: the process is asked to stop. Ctrl-C or SIGTERM reaches
+the worker through the shutdown signal the state carries — the job being executed runs
+to completion and its fate is written, no new job is reserved, and `main` waits for the
+worker before exiting, up to `server.shutdown_timeout_secs`. The lease is for the process
+that is killed rather than stopped.
+
 :::note
 There is one worker per process, and it polls. Several processes can run one each: the
 dequeue reserves a row and increments its counter in a single statement — with

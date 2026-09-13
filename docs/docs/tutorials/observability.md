@@ -41,7 +41,7 @@ plan pour …/demo
   11 fichiers à écrire
 ✓ observability installée — 4 fichiers
 
-  les métriques sont sur http://localhost:9090/metrics ; pour les traces, nommez un collecteur dans OTEL_EXPORTER_OTLP_ENDPOINT et videz le dernier lot par rbs_core::logs::shutdown() avant la fin du processus
+  les métriques sont sur http://localhost:9090/metrics ; pour les traces, nommez un collecteur dans OTEL_EXPORTER_OTLP_ENDPOINT
 ```
 
 Unlike the bricks before it, `observability` does not wait for you to wire anything: a

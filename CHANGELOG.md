@@ -20,6 +20,17 @@ between minor versions with no deprecation cycle.
   included. `news`, `series` and `species` are now recognised as invariable without the
   flag; anything else is one `--singular news_item` away. The value must be in
   snake_case, like the feature name.
+- **A generated project stops gracefully on Ctrl-C or SIGTERM.** `main.rs` now serves
+  with `with_graceful_shutdown`: the listener stops accepting, in-flight requests finish,
+  the `jobs` worker completes the job it is running and the `scheduler` ticker its tour,
+  `main` waits for them up to the new `server.shutdown_timeout_secs` (default `30`), then
+  calls `rbs_core::logs::shutdown()` itself — no more last batch of spans lost on
+  `docker stop`, and no more job left `running` until the lease expires. The signal comes
+  from `rbs-core`: `CoreState::shutdown()` returns a `Shutdown` any background task can
+  be spawned under and listen to, so no anchor was added and the `startup` anchor's
+  content is unchanged. The message of `rbs add observability` no longer asks you to call
+  `logs::shutdown()` yourself. A project generated before 1.5.0 keeps its old `main.rs`,
+  which `rbs upgrade` does not rewrite; the upgrade note says what to paste.
 
 ### Changed
 

@@ -1,6 +1,7 @@
 use std::time::Duration;
 
 use rbs_core::HasCoreState;
+use rbs_core::shutdown::Shutdown;
 use sea_orm::DatabaseConnection;
 
 use super::Config;
@@ -12,8 +13,13 @@ use crate::state::AppState;
 ///
 /// Une configuration illisible retire le worker en le disant, plutôt que d'emporter le
 /// serveur avec lui : l'API répond encore, et la file se remplit sans se vider.
+///
+/// Détaché par le signal d'arrêt de l'état, et non par `tokio::spawn` : c'est ce qui fait
+/// que `main` l'attend, job en cours compris, avant de sortir.
 pub fn spawn(state: AppState) {
-    tokio::spawn(async move {
+    let shutdown = state.core().shutdown().clone();
+
+    shutdown.spawn(async move {
         if let Err(error) = run(state).await {
             tracing::error!(%error, "le worker de la file ne démarre pas");
         }
@@ -23,7 +29,21 @@ pub fn spawn(state: AppState) {
 /// Dépile jusqu'à l'arrêt du processus.
 pub async fn run(state: AppState) -> anyhow::Result<()> {
     let config = Config::load()?;
-    let registry = registry();
+
+    run_with(state, registry(), config).await;
+
+    Ok(())
+}
+
+/// La boucle, sur un registre et une configuration reçus.
+///
+/// Séparée de `run` pour que les tests du fragment la jouent sur un registre à eux :
+/// celui du projet ne connaît pas leurs jobs.
+///
+/// Un job réservé est toujours exécuté jusqu'au bout et son sort inscrit, arrêt demandé ou
+/// non : c'est ce qui rend le bail de `lease_secs` inutile en temps normal.
+pub(super) async fn run_with(state: AppState, registry: Registry, config: Config) {
+    let shutdown = state.core().shutdown().clone();
     let attente = Duration::from_secs(config.poll_interval_secs);
 
     tracing::info!(
@@ -32,19 +52,29 @@ pub async fn run(state: AppState) -> anyhow::Result<()> {
         "worker prêt"
     );
 
-    loop {
+    while !shutdown.is_requested() {
         reprendre_les_abandonnes(state.core().db(), &config).await;
 
         match queue::reserver_prochain_job(state.core().db()).await {
             Ok(Some(job)) => execute(&state, &registry, &config, job).await,
-            Ok(None) => tokio::time::sleep(attente).await,
+            Ok(None) => pause(&shutdown, attente).await,
             // Une base momentanément injoignable ne condamne pas la file : le worker
             // retente au tour suivant plutôt que de rendre la main pour de bon.
             Err(error) => {
                 tracing::error!(%error, "dépilage impossible");
-                tokio::time::sleep(attente).await;
+                pause(&shutdown, attente).await;
             }
         }
+    }
+
+    tracing::info!("worker arrêté");
+}
+
+/// Dort `duree`, ou moins si l'arrêt est demandé entre-temps.
+async fn pause(shutdown: &Shutdown, duree: Duration) {
+    tokio::select! {
+        _ = tokio::time::sleep(duree) => {}
+        _ = shutdown.requested() => {}
     }
 }
 

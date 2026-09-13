@@ -177,7 +177,7 @@ the wiring.
 `the_hand_edits_of_file_drop_are_in_place` asserts every one of them. Without it those
 eight paths would sit outside any surveillance, and the wiring could vanish silently.
 
-`newsletter-queue` carries fifteen more, and they are the point of the example — the
+`newsletter-queue` carries fourteen more, and they are the point of the example — the
 fragments ship a queue, a mailer and a metrics module, and none of them a route; a job that
 nothing enqueues proves nothing about the queue.
 
@@ -203,10 +203,6 @@ nothing enqueues proves nothing about the queue.
   `allow(dead_code)` falls with the first call, and `send_detached` keeps a targeted one
   of its own — the function is kept, a message whose loss costs nothing having no need of
   a row in the database.
-- `src/main.rs`: `rbs_core::logs::shutdown()` before returning, which pushes the last batch
-  of spans instead of losing it. Nothing in the skeleton calls it, the cost of forgetting
-  being that batch and not an outage — so an example is the only place the call can be
-  read.
 - `prometheus.yml`: no command writes it, and a `/metrics` nobody scrapes proves nothing
   either. It targets `metrics_port`, not `server.port`, and the drift test reads the port
   back from `config/default.toml` rather than trusting a second literal.

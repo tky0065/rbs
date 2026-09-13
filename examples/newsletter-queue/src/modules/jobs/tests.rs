@@ -22,6 +22,10 @@ struct Succeeds {
 #[derive(Debug, Serialize, Deserialize)]
 struct AlwaysFails;
 
+/// Un job qui dure : c'est le seul moyen d'observer un arrêt demandé en plein job.
+#[derive(Debug, Serialize, Deserialize)]
+struct Slow;
+
 #[async_trait::async_trait]
 impl Job for Succeeds {
     const KIND: &'static str = "tests::succeeds";
@@ -40,10 +44,22 @@ impl Job for AlwaysFails {
     }
 }
 
+#[async_trait::async_trait]
+impl Job for Slow {
+    const KIND: &'static str = "tests::slow";
+
+    async fn run(&self, _state: &AppState) -> anyhow::Result<()> {
+        tokio::time::sleep(Duration::from_secs(1)).await;
+
+        Ok(())
+    }
+}
+
 fn registry() -> Registry {
     Registry::new()
         .register::<Succeeds>()
         .register::<AlwaysFails>()
+        .register::<Slow>()
 }
 
 /// Un état dont la connexion n'est jamais ouverte : ces tests-là n'interrogent rien.
@@ -432,4 +448,60 @@ async fn a_job_abandoned_on_its_last_attempt_is_failed_rather_than_requeued() {
             .is_none(),
         "un job condamné est revenu dans la file"
     );
+}
+
+/// Attend que la ligne `id` atteigne `attendu`, et échoue passé `limite`.
+async fn attendre_le_statut(db: &DatabaseConnection, id: Uuid, attendu: Status, limite: Duration) {
+    let fin = tokio::time::Instant::now() + limite;
+
+    loop {
+        let ligne = Entity::find_by_id(id)
+            .one(db)
+            .await
+            .expect("lecture possible")
+            .expect("la ligne survit");
+        if ligne.status == attendu {
+            return;
+        }
+        assert!(
+            tokio::time::Instant::now() < fin,
+            "la ligne est restée `{}` au lieu de passer `{}`",
+            ligne.status.as_str(),
+            attendu.as_str()
+        );
+        tokio::time::sleep(Duration::from_millis(50)).await;
+    }
+}
+
+/// Un arrêt demandé pendant un job le laisse finir, puis le worker rend la main : c'est
+/// ce qui rend le bail inutile en temps normal.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn the_worker_finishes_its_job_and_stops_when_shutdown_is_requested() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    let id = queue::enqueue(db, &Slow).await.expect("le job s'enfile");
+
+    let shutdown = state.core().shutdown().clone();
+    shutdown.spawn(worker::run_with(state.clone(), registry(), config(5)));
+    attendre_le_statut(db, id, Status::Running, Duration::from_secs(5)).await;
+
+    assert_eq!(
+        shutdown.wait(Duration::from_secs(10)).await,
+        0,
+        "le worker n'a pas rendu la main"
+    );
+
+    let ligne = Entity::find_by_id(id)
+        .one(db)
+        .await
+        .expect("lecture possible")
+        .expect("la ligne survit");
+    assert_eq!(
+        ligne.status,
+        Status::Done,
+        "le job en cours n'a pas été mené à son terme"
+    );
+    assert_eq!(ligne.attempts, 1);
 }

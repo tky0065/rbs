@@ -131,7 +131,6 @@ const EXEMPLES: &[Exemple] = &[
             "src/modules/jobs/newsletter.rs",
             "src/modules/mail/mod.rs",
             "src/modules/mail/service.rs",
-            "src/main.rs",
             "src/openapi.rs",
             "src/subscribers/dto.rs",
             "src/subscribers/repository.rs",
@@ -761,8 +760,8 @@ fn the_hand_edits_of_file_drop_are_in_place() {
 
 /// Ce que `newsletter-queue` porte et qu'aucune commande n'écrit.
 ///
-/// Quinze de ses fichiers sortent de la comparaison octet à octet, qui signalerait
-/// l'édition elle-même. Sans ce test, ces quinze chemins ne seraient sous aucune
+/// Quatorze de ses fichiers sortent de la comparaison octet à octet, qui signalerait
+/// l'édition elle-même. Sans ce test, ces quatorze chemins ne seraient sous aucune
 /// surveillance et le câblage pourrait disparaître en silence.
 #[test]
 fn the_hand_edits_of_newsletter_queue_are_in_place() {
@@ -891,21 +890,6 @@ fn the_hand_edits_of_newsletter_queue_are_in_place() {
         gabarit.contains("{{ name }}") && gabarit.contains("{{ body }}"),
         "templates/mail/newsletter.html : les deux variables du contexte doivent y être"
     );
-
-    // `src/main.rs` sort de la comparaison depuis qu'il appelle `logs::shutdown()` : ce
-    // qu'il portait d'engendré — les deux lignes de l'ancre `startup` — se vérifie donc
-    // ici, faute de quoi l'exclusion les ferait disparaître sans bruit.
-    let main = lire("src/main.rs");
-    for extrait in [
-        "newsletter_queue::modules::jobs::worker::spawn(state.clone());",
-        "newsletter_queue::modules::observability::serve(&state).await?;",
-        "rbs_core::logs::shutdown();",
-    ] {
-        assert!(
-            main.contains(extrait),
-            "src/main.rs : « {extrait} » absent :\n{main}"
-        );
-    }
 
     // La configuration Prometheus vise le second listener, et non l'API : deux littéraux
     // `9090` qui dériveraient l'un de l'autre feraient d'un exemple compilé un exemple

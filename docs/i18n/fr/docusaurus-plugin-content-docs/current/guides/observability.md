@@ -59,16 +59,19 @@ exportateur qui compose une adresse où rien ne répond.
 
 ### Vider le dernier lot
 
-Les spans partent par lots. Un processus qui meurt entre deux lots emporte le dernier :
-appelez donc ceci avant de sortir de `main` — c'est ce que fait l'exemple, à la toute fin
-du sien :
+Les spans partent par lots, et un processus qui meurt entre deux lots emporte le dernier.
+Le squelette s'en charge : `main` sert avec un arrêt gracieux, attend les tâches de fond,
+puis appelle `rbs_core::logs::shutdown()` en dernier — le `main.rs` de l'exemple finit
+comme tout `main.rs` engendré :
 
 ```rust file=examples/newsletter-queue/src/main.rs region=arret
 ```
 
 Sans la feature `observability`, l'appel ne fait rien, et l'appeler alors que rien n'a
-jamais été installé n'est pas une faute. Le coût d'un oubli est ce dernier lot — pas une
-panne, et c'est pourquoi rien dans le squelette ne l'appelle à votre place.
+jamais été installé n'est pas une faute. Ce qui compte encore, c'est le signal : `docker
+stop`, systemd et Kubernetes envoient SIGTERM, et le squelette l'écoute avec Ctrl-C — un
+`kill -9` saute tout cela et perd le lot. `server.shutdown_timeout_secs` borne l'attente
+des tâches de fond, voir le [guide de configuration](./configuration.md).
 
 ## Les métriques : trois séries, et une étiquette qui décide de tout
 

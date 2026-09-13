@@ -165,6 +165,12 @@ sont traitées là où elles surviennent, et chaque réponse est délibérée :
   du bail, puis est rejouée. Le dire est tout ce que le worker peut faire ; la base ne
   répond pas.
 
+Un quatrième cas n'est pas une défaillance : on demande au processus de s'arrêter. Ctrl-C
+ou SIGTERM atteint le worker par le signal d'arrêt que porte l'état — le job en cours
+d'exécution va jusqu'au bout et son sort est inscrit, aucun nouveau job n'est réservé, et
+`main` attend le worker avant de sortir, au plus `server.shutdown_timeout_secs`. Le bail
+est pour le processus tué, non pour celui qu'on arrête.
+
 :::note
 Il y a un worker par processus, et il scrute. Plusieurs processus peuvent en faire tourner
 un chacun : le dépilage réserve une ligne et incrémente son compteur en une seule requête —
