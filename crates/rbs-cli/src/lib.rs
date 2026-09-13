@@ -27,6 +27,7 @@ mod secret;
 mod seed;
 mod template;
 mod templates;
+mod test;
 // Partagés avec `tests/common` par `#[path]` : voir l'en-tête de chaque fichier.
 #[cfg(test)]
 mod test_cible;
@@ -199,6 +200,20 @@ pub fn run() {
                     ui::info(&format!("\n{remedy}"));
                 }
                 std::process::exit(1);
+            }
+        }
+
+        Commands::Test { filtre, libtest } => {
+            let resultat = std::env::current_dir()
+                .map_err(dev::Error::Cwd)
+                .and_then(|directory| test::run(&directory, filtre.as_deref(), &libtest));
+
+            if let Err(error) = resultat {
+                ui::error(&error.to_string());
+                if let Some(remedy) = error.remedy() {
+                    ui::info(&format!("\n{remedy}"));
+                }
+                std::process::exit(error.exit_code());
             }
         }
 

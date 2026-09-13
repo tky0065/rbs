@@ -98,6 +98,17 @@ pub enum Commands {
     /// Démarre le projet : services, migrations, serveur relancé à chaque changement.
     Dev,
 
+    /// Lance les tests du projet : services, migrations, puis cargo test sur tout le workspace.
+    Test {
+        /// Ne lance que les tests dont le chemin contient ce motif.
+        #[arg(value_name = "FILTRE")]
+        filtre: Option<String>,
+
+        /// Arguments du harnais de test, passés après `--` (ex. --nocapture).
+        #[arg(last = true, value_name = "ARGS")]
+        libtest: Vec<String>,
+    },
+
     /// Diagnostique le projet : ancres, .env, base joignable, versions.
     Doctor {
         /// Rend le rapport en JSON sur la sortie standard, pour un script ou une CI.
@@ -252,6 +263,7 @@ mod tests {
             "migrate",
             "seed",
             "dev",
+            "test",
             "doctor",
             "upgrade",
             "completions",
@@ -573,5 +585,19 @@ mod tests {
                 "le refus doit nommer le drapeau — {commande:?} : {refus}"
             );
         }
+    }
+
+    /// Le filtre précède `--`, les arguments du harnais de test le suivent : la même
+    /// convention que `cargo test`.
+    #[test]
+    fn test_parses_a_filter_and_libtest_arguments() {
+        let cli = Cli::try_parse_from(["rbs", "test", "articles", "--", "--nocapture"])
+            .expect("commande valide");
+        let Commands::Test { filtre, libtest } = cli.command else {
+            panic!("`test` attendue");
+        };
+
+        assert_eq!(filtre.as_deref(), Some("articles"));
+        assert_eq!(libtest, vec!["--nocapture".to_string()]);
     }
 }
