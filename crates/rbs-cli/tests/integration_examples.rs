@@ -1014,7 +1014,7 @@ fn the_hand_edits_of_newsletter_queue_are_in_place() {
 /// Ce que `event-hub` porte et qu'aucune commande n'écrit.
 ///
 /// Les trois fichiers de `orders` sortent de la comparaison octet à octet. Sans ce test, la
-/// transaction que trois guides citent pourrait se défaire en silence : l'exemple
+/// transaction que deux guides citent pourrait se défaire en silence : l'exemple
 /// compilerait encore, et les pages montreraient un contrat que plus rien ne tient.
 #[test]
 fn the_hand_edits_of_event_hub_are_in_place() {

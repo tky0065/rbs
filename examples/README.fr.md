@@ -247,7 +247,7 @@ route ; un job que rien n'enfile ne prouve rien de la file.
 `the_hand_edits_of_newsletter_queue_are_in_place` les atteste toutes.
 
 `event-hub` en porte trois de plus, une par fichier, et ensemble elles forment la
-création de commande tracée et transactionnelle que trois guides citent :
+création de commande tracée et transactionnelle que citent les guides `audit` et `webhooks` :
 
 - `src/orders/repository.rs` : `create` est générique sur `ConnectionTrait` plutôt que
   sur `DatabaseConnection` — une transaction n'en est pas une.

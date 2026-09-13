@@ -244,7 +244,7 @@ nothing enqueues proves nothing about the queue.
 `the_hand_edits_of_newsletter_queue_are_in_place` asserts every one of them.
 
 `event-hub` carries three more, one per file, and together they are the traced,
-transactional order creation that three guides quote:
+transactional order creation that the `audit` and `webhooks` guides quote:
 
 - `src/orders/repository.rs`: `create` is generic over `ConnectionTrait` rather than
   `DatabaseConnection` — a transaction is not one.
