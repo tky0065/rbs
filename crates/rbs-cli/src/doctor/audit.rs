@@ -63,8 +63,11 @@ pub(crate) fn check(root: &Path) -> Check {
                 TITRE,
                 "aucune migration create_audit_log dans migration/src/ : la table audit_log \
                  ne sera jamais créée",
-                "restaurez-la depuis Git (`git checkout -- migration/src/`) : `rbs add` ne \
-                 rejoue pas une feature déjà installée",
+                // Le seul fichier de la migration, et non le répertoire : `git checkout` y
+                // écraserait sans demander `lib.rs` et toute migration en cours d'écriture.
+                "restaurez-la depuis Git (`git checkout -- \
+                 'migration/src/*_create_audit_log.rs'`) : `rbs add` ne rejoue pas une \
+                 feature déjà installée",
             ),
         },
     }
@@ -179,14 +182,13 @@ mod tests {
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(check.detail.contains("audit_log"), "{}", check.detail);
+        let remede = check.remedy.expect("un échec porte son remède");
         assert!(
-            check
-                .remedy
-                .as_deref()
-                .is_some_and(|remede| remede.contains("git")),
-            "{:?}",
-            check.remedy
+            remede.contains("`git checkout -- 'migration/src/*_create_audit_log.rs'`"),
+            "{remede}"
         );
+        // Le répertoire nu écraserait `lib.rs` et toute migration en cours d'écriture.
+        assert!(!remede.contains("-- migration/src/`"), "{remede}");
     }
 
     #[test]

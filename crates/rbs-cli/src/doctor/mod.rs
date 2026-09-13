@@ -439,6 +439,19 @@ fn restaurer(fichier: &str) -> String {
     )
 }
 
+/// Le module de fragment `module` est-il resté à la racine de `src/`, où `rbs add` le posait
+/// avant la 1.3.0 ?
+///
+/// `rbs upgrade` ne déplace aucun module : sans ce repli, celui qu'`anchors::resolve_features`
+/// fait pour l'ancre des features, un contrôle déclarerait absent, et à restaurer depuis Git,
+/// un fichier qui n'a jamais quitté sa place. Le répertoire suffit à trancher : son `mod.rs`
+/// disparu, c'est à cette place-là que Git doit le rendre.
+fn module_d_avant(root: &Path, module: &str) -> bool {
+    let actuel = root.join(format!("src/modules/{module}/mod.rs"));
+
+    !actuel.exists() && root.join("src").join(module).is_dir()
+}
+
 /// Le fichier de configuration que les contrôles de feature interrogent.
 const CONFIG: &str = "config/default.toml";
 

@@ -11,8 +11,10 @@ use std::str::FromStr;
 
 /// Ce qui rend une expression cron illisible.
 ///
-/// Les deux messages sont ceux du fragment, mot pour mot : c'est la même expression, et
-/// l'utilisateur ne doit pas en lire deux descriptions.
+/// Le message du nombre de champs est celui du fragment, mot pour mot : c'est la même
+/// expression, et l'utilisateur ne doit pas en lire deux descriptions. Le refus de la crate,
+/// lui, est réduit à sa dernière ligne — les deux premières ne font que répéter
+/// l'expression, et un rapport n'écrit qu'une ligne par constat.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum Erreur {
     /// Ni cinq champs ni six.

@@ -16,11 +16,19 @@ use super::Check;
 /// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
 pub(crate) const TITRE: &str = "scheduler";
 const FICHIER: &str = "src/modules/scheduler/mod.rs";
+/// Le même, sur un projet qui a reçu `scheduler` avant la 1.3.0.
+const FICHIER_ANCIEN: &str = "src/scheduler/mod.rs";
 const APPEL: &str = "Schedule::every::<";
 
 /// Vérifie que chaque expression littérale du calendrier se lit.
 pub(crate) fn check(root: &Path) -> Check {
-    let source = match super::lire(root, TITRE, FICHIER) {
+    let fichier = if super::module_d_avant(root, "scheduler") {
+        FICHIER_ANCIEN
+    } else {
+        FICHIER
+    };
+
+    let source = match super::lire(root, TITRE, fichier) {
         Ok(source) => source,
         Err(constat) => return constat,
     };
@@ -37,7 +45,7 @@ pub(crate) fn check(root: &Path) -> Check {
             TITRE,
             fautes.join(" ; "),
             format!(
-                "corrigez-les dans {FICHIER} : cinq champs (minute heure jour mois \
+                "corrigez-les dans {fichier} : cinq champs (minute heure jour mois \
                  jour-de-semaine) ou six, la seconde en tête — le démarrage s'arrête sur la \
                  première qu'il ne lit pas"
             ),
@@ -109,6 +117,9 @@ mod tests {
         "/templates/features/scheduler/mod.rs.jinja"
     ));
 
+    /// Où vit le calendrier d'un projet qui a reçu `scheduler` avant la 1.3.0.
+    const ANCIEN: &str = "src/scheduler/mod.rs";
+
     /// Un projet réduit au fichier que ce contrôle lit.
     fn projet(source: &str) -> TempDir {
         let racine = TempDir::new().expect("répertoire temporaire créable");
@@ -164,6 +175,48 @@ mod tests {
                 .remedy
                 .as_deref()
                 .is_some_and(|remede| remede.contains("git checkout")),
+            "{:?}",
+            check.remedy
+        );
+    }
+
+    /// `rbs upgrade` ne déplace aucun module : sur un projet qui a reçu `scheduler` avant la
+    /// 1.3.0, le calendrier est resté à la racine de `src/`, et c'est là qu'il se lit.
+    #[test]
+    fn a_calendar_of_the_layout_before_1_3_0_is_read_where_it_lives() {
+        let racine = TempDir::new().expect("répertoire temporaire créable");
+        let fichier = racine.path().join(ANCIEN);
+        fs::create_dir_all(fichier.parent().expect("le fichier a un parent"))
+            .expect("répertoire du module créable");
+        fs::write(&fichier, LIVRE.replace("\"0 3 * * *\"", "\"0 99 * * *\""))
+            .expect("fichier du module inscriptible");
+
+        let check = check(racine.path());
+
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
+        assert!(check.detail.contains("`0 99 * * *`"), "{}", check.detail);
+        let remede = check.remedy.expect("un échec porte son remède");
+        assert!(remede.contains(ANCIEN), "{remede}");
+        assert!(!remede.contains("src/modules/"), "{remede}");
+    }
+
+    /// Le module est resté à l'ancienne place sans son fichier : Git restaure celui-là, et
+    /// non un `src/modules/scheduler/mod.rs` que le projet n'a jamais porté.
+    #[test]
+    fn a_vanished_calendar_of_the_layout_before_1_3_0_is_restored_where_it_lived() {
+        let racine = TempDir::new().expect("répertoire temporaire créable");
+        fs::create_dir_all(racine.path().join("src/scheduler"))
+            .expect("répertoire du module créable");
+
+        let check = check(racine.path());
+
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
+        assert!(check.detail.contains(ANCIEN), "{}", check.detail);
+        assert!(
+            check
+                .remedy
+                .as_deref()
+                .is_some_and(|remede| remede.contains(&format!("git checkout -- {ANCIEN}`"))),
             "{:?}",
             check.remedy
         );

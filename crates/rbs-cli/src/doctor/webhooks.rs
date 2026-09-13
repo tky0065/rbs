@@ -12,26 +12,48 @@ use super::Check;
 /// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
 pub(crate) const TITRE: &str = "webhooks";
 const FICHIER: &str = "src/modules/jobs/mod.rs";
+/// Le même, sur un projet qui a reçu la file avant la 1.3.0.
+const FICHIER_ANCIEN: &str = "src/jobs/mod.rs";
 const INSCRIPTION: &str =
     "registre = registre.register::<crate::modules::webhooks::delivery::Delivery>();";
+/// Celle que `add webhooks` insérait avant la 1.3.0, le module vivant à la racine de `src/`.
+const INSCRIPTION_ANCIENNE: &str =
+    "registre = registre.register::<crate::webhooks::delivery::Delivery>();";
 
 /// Vérifie que le registre de la file porte la livraison des webhooks.
 pub(crate) fn check(root: &Path) -> Check {
-    let source = match super::lire(root, TITRE, FICHIER) {
+    let fichier = if super::module_d_avant(root, "jobs") {
+        FICHIER_ANCIEN
+    } else {
+        FICHIER
+    };
+
+    let source = match super::lire(root, TITRE, fichier) {
         Ok(source) => source,
         Err(constat) => return constat,
     };
 
-    // Ligne entière, indentation ôtée : une inscription en commentaire n'inscrit rien.
-    if source.lines().any(|ligne| ligne.trim() == INSCRIPTION) {
+    // Ligne entière, indentation ôtée : une inscription en commentaire n'inscrit rien. Les
+    // deux formes comptent, un projet pouvant avoir déplacé l'un des modules sans l'autre.
+    if source
+        .lines()
+        .any(|ligne| [INSCRIPTION, INSCRIPTION_ANCIENNE].contains(&ligne.trim()))
+    {
         return Check::ok(TITRE, "la livraison est inscrite au registre de la file");
     }
+
+    // La ligne à coller nomme le module là où il vit : l'autre forme ne compilerait pas.
+    let inscription = if super::module_d_avant(root, "webhooks") {
+        INSCRIPTION_ANCIENNE
+    } else {
+        INSCRIPTION
+    };
 
     Check::failed(
         TITRE,
         "la livraison des webhooks n'est pas inscrite au registre de la file : chaque \
          livraison partira en échec",
-        format!("dans {FICHIER}, entre les balises de `// <rbs:jobs>` :\n{INSCRIPTION}"),
+        format!("dans {fichier}, entre les balises de `// <rbs:jobs>` :\n{inscription}"),
     )
 }
 
@@ -106,6 +128,52 @@ mod tests {
 
         assert_eq!(check.state, State::Echec, "{}", check.detail);
         assert!(check.detail.contains(FICHIER), "{}", check.detail);
+    }
+
+    /// Le registre d'un projet qui a reçu la file et les webhooks avant la 1.3.0.
+    const ANCIEN: &str = "src/jobs/mod.rs";
+
+    /// La ligne que `add webhooks` insérait alors, le module vivant à la racine de `src/`.
+    const INSCRIPTION_D_AVANT: &str =
+        "registre = registre.register::<crate::webhooks::delivery::Delivery>();";
+
+    /// Un projet à l'ancienne disposition : `src/jobs/mod.rs` porte `registre`, et
+    /// `src/webhooks/` existe.
+    fn projet_d_avant(registre: &str) -> TempDir {
+        let racine = TempDir::new().expect("répertoire temporaire créable");
+        fs::create_dir_all(racine.path().join("src/webhooks"))
+            .expect("répertoire des webhooks créable");
+        let fichier = racine.path().join(ANCIEN);
+        fs::create_dir_all(fichier.parent().expect("le fichier a un parent"))
+            .expect("répertoire de la file créable");
+        fs::write(&fichier, registre).expect("registre inscriptible");
+
+        racine
+    }
+
+    /// `rbs upgrade` ne déplace aucun module : la livraison inscrite en `crate::webhooks`
+    /// dans `src/jobs/mod.rs` est inscrite, et le dire absente enverrait restaurer un
+    /// fichier que le projet n'a jamais porté.
+    #[test]
+    fn a_registration_of_the_layout_before_1_3_0_counts() {
+        let racine = projet_d_avant(&registre(&format!("    {INSCRIPTION_D_AVANT}\n")));
+
+        let check = check(racine.path());
+
+        assert_eq!(check.state, State::Bon, "{}", check.detail);
+    }
+
+    #[test]
+    fn a_missing_registration_of_the_layout_before_1_3_0_names_its_file_and_its_line() {
+        let racine = projet_d_avant(&registre(""));
+
+        let check = check(racine.path());
+
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
+        let remede = check.remedy.expect("un échec porte son remède");
+        assert!(remede.contains(&format!("dans {ANCIEN},")), "{remede}");
+        assert!(remede.contains(INSCRIPTION_D_AVANT), "{remede}");
+        assert!(!remede.contains("src/modules/"), "{remede}");
     }
 
     /// La ligne cherchée est celle que le fragment insère : l'ancre `jobs` de son manifeste.
