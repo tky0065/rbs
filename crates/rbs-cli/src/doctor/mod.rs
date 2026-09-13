@@ -9,8 +9,10 @@ pub mod anchors;
 pub mod audit;
 pub mod auth;
 pub mod base;
+pub mod ci;
 pub mod cors;
 mod disposition;
+pub mod docker;
 pub mod env;
 pub mod guards;
 pub mod jobs;
@@ -305,7 +307,7 @@ fn plan(manifeste: &Manifeste) -> Vec<Controle> {
 ///
 /// Une feature peut y figurer deux fois : `auth` amène de quoi vérifier son secret, et de
 /// quoi juger les routes que les rôles qu'elle installe pourraient protéger.
-const FEATURE_CHECKS: [(&str, Controle); 12] = [
+const FEATURE_CHECKS: [(&str, Controle); 14] = [
     (
         "auth",
         Controle {
@@ -388,6 +390,20 @@ const FEATURE_CHECKS: [(&str, Controle); 12] = [
         Controle {
             titre: audit::TITRE,
             executer: |projet, _| audit::check(&projet.root),
+        },
+    ),
+    (
+        "docker",
+        Controle {
+            titre: docker::TITRE,
+            executer: |projet, _| docker::check(&projet.root),
+        },
+    ),
+    (
+        "ci",
+        Controle {
+            titre: ci::TITRE,
+            executer: |projet, _| ci::check(&projet.root),
         },
     ),
 ];
@@ -878,9 +894,19 @@ mod tests {
     /// portant les mêmes fragments se lisent pareil.
     #[test]
     fn the_fragment_checks_follow_the_order_of_the_table() {
-        const ORDRE: [&str; 5] = ["cors", "rate-limit", "scheduler", "webhooks", "audit"];
+        const ORDRE: [&str; 7] = [
+            "cors",
+            "rate-limit",
+            "scheduler",
+            "webhooks",
+            "audit",
+            "docker",
+            "ci",
+        ];
         let (_parent, root) = project(&[
             "health",
+            "ci",
+            "docker",
             "audit",
             "webhooks",
             "scheduler",
