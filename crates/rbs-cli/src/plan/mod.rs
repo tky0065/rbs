@@ -6,6 +6,7 @@
 
 mod action;
 pub(crate) mod application;
+pub(crate) mod json;
 pub(crate) mod render;
 mod text;
 
@@ -51,10 +52,8 @@ pub(crate) struct Sautee {
 #[derive(Debug, Clone)]
 pub(crate) struct Plan {
     root: PathBuf,
-    /// La production ne lit que `files` ; cette trace n'existe que pour les tests, d'où
-    /// l'exemption portée sur le champ et bornée à `not(test)` : sur l'accesseur, elle
-    /// vaudrait aussi en tests et n'y signalerait plus rien.
-    #[cfg_attr(not(test), expect(dead_code))]
+    /// Trace du calcul des statuts, action par action : la vue JSON (`plan::json::plan`)
+    /// la lit en production, les tests du modèle la vérifient dans le même ordre.
     actions: Vec<Action>,
     files: Vec<File>,
     sautees: Vec<Sautee>,
@@ -63,10 +62,9 @@ pub(crate) struct Plan {
 impl Plan {
     /// Les actions dans l'ordre où elles ont été planifiées.
     ///
-    /// Trace du calcul des statuts, action par action, que les tests du modèle vérifient.
-    /// L'affichage et l'application travaillent par fichier : un fichier peut recevoir
-    /// plusieurs actions, et seul son statut agrégé décide de ce qui lui arrivera.
-    #[cfg(test)]
+    /// L'affichage humain et l'application travaillent par fichier : un fichier peut
+    /// recevoir plusieurs actions, et seul son statut agrégé décide de ce qui lui
+    /// arrivera. La vue JSON, elle, rend chaque action séparément — d'où cet accesseur.
     pub fn actions(&self) -> &[Action] {
         &self.actions
     }
