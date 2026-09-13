@@ -223,10 +223,17 @@ other route:
 ```rust file=examples/blog-auth/src/auth/controller/password.rs region=forgot_password
 ```
 
-The email itself goes out through `mail().send_template_detached`, which renders the
-template right away — a missing one fails the request — then hands delivery to a detached
-task rather than awaiting it: waiting on SMTP would let the response time say what the
-status code refuses to.
+The handler hands the address to `service::password::send_reset_link`, which opens the
+token and passes the email to `notify` — the one place in the feature that sends one:
+
+```rust file=examples/blog-auth/src/auth/service/mod.rs region=notify
+```
+
+`mail().send_template_detached` renders the template right away, then hands delivery to a
+detached task rather than awaiting it: waiting on SMTP would let the response time say what
+the status code refuses to. A render that fails — a missing template, an address `lettre`
+cannot parse — is logged with the account id and never reaches the response: a 500 on the
+only branch that runs when the address is registered would say what the 202 exists to hide.
 
 A second request closes the first: only one reset token stays live per account, so a link
 sent to an inbox no longer controlled stops working the moment a fresh one is requested.
@@ -275,10 +282,11 @@ purpose as much as on fingerprint, so a password-reset link can never verify an 
 ```rust file=examples/blog-auth/src/auth/controller/verification.rs region=verify_email
 ```
 
-Registering and resending share one service function rather than two, because both start
-from an address and hand back the same thing — the account and the token in clear:
+Registering and resending share one service function rather than two,
+`verification::send_link`, because both start from an address. `register` calls it once
+the account is written, so whatever becomes of the email, the account stands:
 
-```rust file=examples/blog-auth/src/auth/controller/session.rs region=register
+```rust file=examples/blog-auth/src/auth/service/verification.rs region=send_link
 ```
 
 **`login` does not require a verified address.** An account that never clicks its link

@@ -232,10 +232,18 @@ l'autre côté :
 ```rust file=examples/blog-auth/src/auth/controller/password.rs region=forgot_password
 ```
 
-L'envoi du courriel lui-même passe par `mail().send_template_detached`, qui rend le
-gabarit tout de suite — un gabarit absent fait échouer la requête — puis confie l'envoi à
-une tâche détachée plutôt que de l'attendre : attendre le SMTP ferait dire au temps de
-réponse ce que le code de statut refuse de dire.
+Le handler passe l'adresse à `service::password::send_reset_link`, qui ouvre le jeton et
+confie le courriel à `notify` — le seul endroit de la feature qui en envoie un :
+
+```rust file=examples/blog-auth/src/auth/service/mod.rs region=notify
+```
+
+`mail().send_template_detached` rend le gabarit tout de suite, puis confie l'envoi à une
+tâche détachée plutôt que de l'attendre : attendre le SMTP ferait dire au temps de réponse
+ce que le code de statut refuse de dire. Un rendu qui échoue — gabarit absent, adresse que
+`lettre` ne sait pas analyser — est journalisé avec l'identifiant du compte et n'atteint
+jamais la réponse : un 500 sur la seule branche qui s'exécute quand l'adresse est inscrite
+dirait ce que le 202 existe pour taire.
 
 Une seconde demande ferme la première : un seul jeton de réinitialisation reste vivant par
 compte, si bien qu'un lien parti dans une boîte qu'on ne contrôle plus cesse de valoir dès
@@ -287,11 +295,11 @@ une adresse :
 ```rust file=examples/blog-auth/src/auth/controller/verification.rs region=verify_email
 ```
 
-L'inscription et le renvoi partagent une seule fonction de service plutôt que deux, parce
-que les deux partent d'une adresse et rendent la même chose — le compte et le jeton en
-clair :
+L'inscription et le renvoi partagent une seule fonction de service plutôt que deux,
+`verification::send_link`, parce que les deux partent d'une adresse. `register` l'appelle
+une fois le compte écrit, si bien que le compte tient quoi qu'il advienne du courriel :
 
-```rust file=examples/blog-auth/src/auth/controller/session.rs region=register
+```rust file=examples/blog-auth/src/auth/service/verification.rs region=send_link
 ```
 
 **`login` n'exige pas une adresse vérifiée.** Un compte qui ne clique jamais son lien se

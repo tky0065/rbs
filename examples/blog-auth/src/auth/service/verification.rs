@@ -41,6 +41,7 @@ pub async fn request(
     Ok(Some((utilisateur, jeton)))
 }
 
+// region: send_link
 /// Envoie un lien de vérification neuf, si un compte porte l'adresse.
 ///
 /// Une seule fonction pour l'inscription et pour le renvoi : les deux partent d'une
@@ -63,6 +64,7 @@ pub async fn send_link(
 
     Ok(())
 }
+// endregion: send_link
 
 /// Consomme un jeton et date la vérification.
 ///

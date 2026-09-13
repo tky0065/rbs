@@ -119,6 +119,7 @@ fn session_view(session: repository::refresh_token::Model) -> SessionResponse {
     }
 }
 
+// region: notify
 /// Envoie un courriel à un compte, sans que son échec atteigne la réponse.
 pub(super) fn notify(
     mail: &Mailer,
@@ -145,3 +146,4 @@ pub(super) fn notify(
         );
     }
 }
+// endregion: notify

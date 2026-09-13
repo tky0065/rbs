@@ -22,7 +22,6 @@ use crate::state::AppState;
         (status = 422, description = "entrée invalide", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
-// region: register
 pub async fn register(
     State(state): State<AppState>,
     ValidatedJson(input): ValidatedJson<RegisterRequest>,
@@ -31,7 +30,6 @@ pub async fn register(
 
     Ok((StatusCode::CREATED, Json(cree)))
 }
-// endregion: register
 
 // Un mot de passe erroné et un email inconnu rendent la même réponse : distinguer les
 // deux dirait à un attaquant quels emails sont inscrits.
