@@ -102,6 +102,39 @@ ne couvre pas reste légitime.
 **Critère de sortie** — un agent partant d'un projet fraîchement engendré produit une
 feature complète en passant par le CLI, `rbs doctor` restant vert.
 
+Les versions qui suivent n'ont pas été planifiées comme des jalons à critère de sortie :
+elles viennent des backlogs ouverts après la v1.1, et le détail de chacune est dans
+`CHANGELOG.md`.
+
+### v1.2 — Intégrations sortantes
+
+Le client TypeScript typé (`rbs generate client --lang ts`) et `rbs new --preset
+api|worker|full`. Six fragments de plus : `webhooks` (abonnements signés, livraison par
+les jobs), `scheduler` (déclenchement calendaire), `audit` (journal des écritures),
+`observability` (traces OTLP et `/metrics`), `cors`, `rate-limit`. Côté CRUD :
+`--with-upload`, `--soft-delete` et la pagination par curseur (`Cursor`, `CursorPage` dans
+`rbs-core`). Une ancre `<rbs:layers>` pour empiler les middlewares, et un
+`config/production.toml` qui ferme Swagger UI.
+
+### v1.3 — Routes fermées
+
+Sur un projet qui porte `auth`, `rbs generate crud` écrit des routes fermées ;
+`require_role` compare un seuil au lieu d'une égalité ; `rbs add` range ses modules sous
+`src/modules/`. La 1.3.1 documente chaque colonne d'un filtre engendré par son type.
+
+### v1.4 — Parcours de compte
+
+Le fragment `auth` passe de cinq routes à treize : changement et réinitialisation du mot
+de passe, vérification de l'adresse, sessions listées et fermées. Une table
+`one_time_tokens` partagée, un garde `VerifiedIdentity`, et `auth` exige désormais `mail`.
+
+### v1.5 — Robustesse
+
+L'arrêt gracieux sur Ctrl-C ou SIGTERM, un worker de jobs concurrent dont le délai de
+reprise croît, `--singular` pour les pluriels irréguliers, la fermeture du SSRF des
+webhooks, les correctifs de sécurité d'`auth` (rejeu des jetons, révocation effective,
+adresses normalisées, parcours transactionnels) et le dépôt atomique de `storage`.
+
 ---
 
 ## Hors périmètre
@@ -126,3 +159,7 @@ servis par des crates dédiées que par un générateur généraliste.
 | v0.4 Confort | ✅ livré — publiée sur crates.io le 2026-08-28 |
 | v1.0 Stabilité | ✅ livré — publiée le 2026-08-29, API de `rbs-core` figée |
 | v1.1 Agents | ✅ livré — publiée le 2026-08-30 ; critère de sortie non encore éprouvé sur un agent réel |
+| v1.2 Intégrations sortantes | ✅ livré — publiée le 2026-09-04 |
+| v1.3 Routes fermées | ✅ livré — publiée le 2026-09-08, corrigée par la 1.3.1 le 2026-09-09 |
+| v1.4 Parcours de compte | ✅ livré — publiée le 2026-09-11 |
+| v1.5 Robustesse | prête, non publiée |
