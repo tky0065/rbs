@@ -54,6 +54,17 @@ between minor versions with no deprecation cycle.
   before `core: CoreState::new(db, config)` consumes it, and `rbs doctor --fix` puts that
   anchor back where it belongs when the file no longer has it at all.
 
+- **`rbs-core` moves to argon2 0.6 and jsonwebtoken 11**, behind its `auth` feature, with
+  no change to its public API. A password hashed before the upgrade still verifies and a
+  token issued before it is still accepted; a token signed afterwards is byte-identical to
+  one signed before, so a rolling deploy or a rollback keeps every session open. `rsa`
+  still enters the lockfile through jsonwebtoken's `rust_crypto` backend, so the
+  `RUSTSEC-2023-0071` exception stays.
+- **`rbs add redis` writes `redis = "1.7"` and `rbs add storage` `aws-sdk-s3 = "1.146"`**
+  (were `"1.6"` and `"1.144"`). A project generated earlier already resolves these
+  versions through its own requirement; raising the floor in its `Cargo.toml` makes it
+  explicit.
+
 ### Fixed
 
 - **`rbs generate crud --with-upload` writes the tests of its three content routes.** The
@@ -135,6 +146,14 @@ between minor versions with no deprecation cycle.
   no replacement — and its next attempt counted as a replay. Every `auth` repository now
   takes `&impl ConnectionTrait`, like `jobs::enqueue`, and the five services open one
   transaction each, committed after the last write.
+- **The `AGENTS.md` guide stops miscounting, and says how to close a route by hand.** It
+  gave six files for `rbs generate feature` and seven for `rbs generate crud`, one short
+  each since `filter.rs`; it suggested `rbs generate feature webhooks`, a name `rbs add`
+  now installs; it pointed at `clippy` as the line of its checklist that matters instead
+  of `cargo test -- --ignored`; and on a project carrying `auth` it said nothing of the
+  `Identity` argument, `require_role`, `security(("bearer" = []))` and the 401 and 403
+  responses a hand-written route needs. `rbs upgrade` rewrites the guide zone of an
+  existing project.
 
 #### Projects already generated
 

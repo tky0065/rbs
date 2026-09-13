@@ -58,6 +58,17 @@ dépréciation.
   `rbs doctor --fix` repose cette ancre à sa place quand le fichier ne la porte plus du
   tout.
 
+- **`rbs-core` passe à argon2 0.6 et jsonwebtoken 11**, derrière sa feature `auth`, sans
+  changement d'API publique. Un mot de passe haché avant la montée reste vérifiable et un
+  jeton émis avant reste accepté ; un jeton signé après est identique octet pour octet à
+  celui d'avant, si bien qu'un déploiement progressif ou un retour arrière garde toutes
+  les sessions ouvertes. `rsa` entre toujours dans le verrou par le backend `rust_crypto`
+  de jsonwebtoken : l'exception `RUSTSEC-2023-0071` demeure.
+- **`rbs add redis` écrit `redis = "1.7"` et `rbs add storage` `aws-sdk-s3 = "1.146"`**
+  (au lieu de `"1.6"` et `"1.144"`). Un projet engendré auparavant résout déjà ces
+  versions par sa propre exigence ; relever le plancher dans son `Cargo.toml` la rend
+  explicite.
+
 ### Corrigé
 
 - **`rbs generate crud --with-upload` écrit les tests de ses trois routes de contenu.** Le
@@ -141,6 +152,14 @@ dépréciation.
   — et son essai suivant comptait pour un rejeu. Chaque dépôt d'`auth` prend désormais
   `&impl ConnectionTrait`, comme `jobs::enqueue`, et les cinq services ouvrent chacun une
   transaction, committée après la dernière écriture.
+- **Le guide `AGENTS.md` ne se trompe plus de compte, et dit comment fermer une route à la
+  main.** Il annonçait six fichiers pour `rbs generate feature` et sept pour
+  `rbs generate crud`, un de moins chacun depuis `filter.rs` ; il proposait
+  `rbs generate feature webhooks`, un nom qu'installe désormais `rbs add` ; il désignait
+  `clippy` comme la ligne de sa liste qui compte au lieu de `cargo test -- --ignored` ; et
+  sur un projet qui porte `auth` il taisait l'argument `Identity`, `require_role`,
+  `security(("bearer" = []))` et les réponses 401 et 403 qu'exige une route écrite à la
+  main. `rbs upgrade` réécrit la zone du guide d'un projet existant.
 
 #### Projets déjà générés
 
