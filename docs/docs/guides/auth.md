@@ -229,7 +229,7 @@ token and passes the email to `notify` — the one place in the feature that sen
 ```rust file=examples/blog-auth/src/auth/service/mod.rs region=notify
 ```
 
-`mail().send_template_detached` renders the template right away, then hands delivery to a
+`Mailer::send_template_detached` renders the template right away, then hands delivery to a
 detached task rather than awaiting it: waiting on SMTP would let the response time say what
 the status code refuses to. A render that fails — a missing template, an address `lettre`
 cannot parse — is logged with the account id and never reaches the response: a 500 on the
@@ -267,8 +267,9 @@ email. Two routes close that loop, both public — no bearer token:
 | `POST /auth/resend-verification` | Emails a fresh verification link. Always 202, exactly like `forgot-password`. |
 | `POST /auth/verify-email` | Spends the token from that link and dates `email_verified_at`. 204. |
 
-`resend-verification` answers the same 202 whether or not the address carries an account,
-and the send is detached the same way `forgot-password`'s is — a `.await` on it would leak
+`resend-verification` answers the same 202 whether or not the address carries an account.
+Its email goes through the same `notify` as `forgot-password`'s: the `.await` in the
+handler covers the token write, never the SMTP exchange — waiting on that would leak
 through response time what the status code refuses to say:
 
 ```rust file=examples/blog-auth/src/auth/controller/verification.rs region=resend_verification

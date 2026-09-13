@@ -238,7 +238,7 @@ confie le courriel à `notify` — le seul endroit de la feature qui en envoie u
 ```rust file=examples/blog-auth/src/auth/service/mod.rs region=notify
 ```
 
-`mail().send_template_detached` rend le gabarit tout de suite, puis confie l'envoi à une
+`Mailer::send_template_detached` rend le gabarit tout de suite, puis confie l'envoi à une
 tâche détachée plutôt que de l'attendre : attendre le SMTP ferait dire au temps de réponse
 ce que le code de statut refuse de dire. Un rendu qui échoue — gabarit absent, adresse que
 `lettre` ne sait pas analyser — est journalisé avec l'identifiant du compte et n'atteint
@@ -279,9 +279,10 @@ publiques toutes deux — sans jeton porteur :
 | `POST /auth/resend-verification` | Envoie un lien de vérification neuf. Toujours 202, exactement comme `forgot-password`. |
 | `POST /auth/verify-email` | Consomme le jeton de ce lien et date `email_verified_at`. 204. |
 
-`resend-verification` rend le même 202 que l'adresse porte un compte ou non, et l'envoi
-part détaché de la même façon que celui de `forgot-password` — un `.await` dessus
-laisserait le temps de réponse dire ce que le code de statut refuse de dire :
+`resend-verification` rend le même 202 que l'adresse porte un compte ou non. Son courriel
+passe par le même `notify` que celui de `forgot-password` : le `.await` du handler couvre
+l'écriture du jeton, jamais l'échange SMTP — l'attendre laisserait le temps de réponse
+dire ce que le code de statut refuse de dire :
 
 ```rust file=examples/blog-auth/src/auth/controller/verification.rs region=resend_verification
 ```
