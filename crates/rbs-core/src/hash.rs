@@ -78,4 +78,18 @@ mod tests {
         );
         assert!(!verify_password("un autre mot de passe", HASH_ARGON2_0_5).expect("vérification"));
     }
+
+    // Une instance restée sur l'ancienne version doit pouvoir vérifier un hash écrit par
+    // la nouvelle, ce qui suppose le même algorithme et la même version. Les paramètres
+    // (`m=…,t=…,p=…`) ne sont pas fixés ici : toute version les relit depuis la chaîne
+    // PHC, donc les figer ferait échouer ce test à la moindre hausse anodine des
+    // paramètres par défaut de la crate.
+    #[test]
+    fn a_new_hash_keeps_the_argon2id_v19_format() {
+        assert!(
+            hash_password("mot de passe quelconque")
+                .expect("hachage")
+                .starts_with("$argon2id$v=19$")
+        );
+    }
 }
