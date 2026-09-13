@@ -306,6 +306,25 @@ pub async fn mark_done(db: &DatabaseConnection, job: &Model) -> anyhow::Result<(
     Ok(())
 }
 
+/// Le délai avant qu'un job raté redevienne dépilable : `retry_delay_secs`, doublé à
+/// chaque tentative, sous `retry_max_delay_secs`.
+///
+/// `attempts` est celui de la ligne, déjà incrémenté à la réservation : la première
+/// tentative ratée attend le délai de base. Un receveur en panne est ainsi sollicité de
+/// moins en moins souvent, au lieu de l'être à cadence fixe jusqu'à l'échec définitif.
+/// La multiplication sature avant d'être bornée : un `max_attempts` élevé ne fait pas
+/// déborder le calcul.
+pub(super) fn retry_delay(config: &Config, attempts: i32) -> Duration {
+    let doublements = u32::try_from(attempts.saturating_sub(1)).unwrap_or(0);
+    let facteur = 2u64.checked_pow(doublements).unwrap_or(u64::MAX);
+    let secondes = config
+        .retry_delay_secs
+        .saturating_mul(facteur)
+        .min(config.retry_max_delay_secs);
+
+    Duration::from_secs(secondes)
+}
+
 /// Replace un job raté dans la file, ou le condamne s'il a épuisé ses tentatives, et rend
 /// le statut retenu.
 ///
@@ -323,8 +342,8 @@ pub async fn retry_or_fail(
         Status::Pending
     };
 
-    let attente = TimeDelta::try_seconds(config.retry_delay_secs as i64)
-        .unwrap_or_else(|| TimeDelta::seconds(0));
+    let attente = TimeDelta::from_std(retry_delay(config, job.attempts))
+        .unwrap_or_else(|_| TimeDelta::seconds(0));
 
     let mut ligne: ActiveModel = job.clone().into();
     ligne.status = Set(status);

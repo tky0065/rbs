@@ -1,6 +1,6 @@
 use chrono::{Duration, Utc};
 use rbs_core::{Error, Result, token};
-use sea_orm::DatabaseConnection;
+use sea_orm::{DatabaseConnection, TransactionTrait};
 
 use super::super::model::TokenPurpose;
 use super::super::repository;
@@ -52,9 +52,16 @@ pub async fn verify(db: &DatabaseConnection, token_clair: &str) -> Result<()> {
         .await?
         .ok_or(Error::Unauthorized)?;
 
-    if !repository::one_time_token::consume(db, ligne.id).await? {
+    // Tout ou rien : un jeton consommé sans que l'adresse soit datée serait brûlé pour
+    // rien, et l'utilisateur devrait en redemander un.
+    let transaction = db.begin().await?;
+
+    if !repository::one_time_token::consume(&transaction, ligne.id).await? {
         return Err(Error::Unauthorized);
     }
 
-    repository::user::mark_verified(db, ligne.user_id).await
+    repository::user::mark_verified(&transaction, ligne.user_id).await?;
+    transaction.commit().await?;
+
+    Ok(())
 }

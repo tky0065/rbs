@@ -10,9 +10,13 @@ pub struct Config {
     /// Tentatives d'un job avant l'échec définitif.
     #[serde(default = "default_max_attempts")]
     pub max_attempts: i32,
-    /// Attente avant qu'une tentative ratée redevienne exécutable, en secondes.
+    /// Attente avant qu'une tentative ratée redevienne exécutable, en secondes — doublée
+    /// à chaque tentative, jusqu'à `retry_max_delay_secs`.
     #[serde(default = "default_retry_delay")]
     pub retry_delay_secs: u64,
+    /// Plafond du délai de reprise, en secondes.
+    #[serde(default = "default_retry_max_delay")]
+    pub retry_max_delay_secs: u64,
     /// Attente du worker quand la file est vide, en secondes.
     #[serde(default = "default_poll_interval")]
     pub poll_interval_secs: u64,
@@ -21,6 +25,9 @@ pub struct Config {
     /// du bail est rendu à la file, et rejoué.
     #[serde(default = "default_lease")]
     pub lease_secs: u64,
+    /// Jobs exécutés de front par ce worker. Zéro vaut un.
+    #[serde(default = "default_concurrency")]
+    pub concurrency: usize,
 }
 
 impl Config {
@@ -36,6 +43,14 @@ fn default_max_attempts() -> i32 {
 
 fn default_retry_delay() -> u64 {
     30
+}
+
+fn default_retry_max_delay() -> u64 {
+    3600
+}
+
+fn default_concurrency() -> usize {
+    4
 }
 
 fn default_poll_interval() -> u64 {

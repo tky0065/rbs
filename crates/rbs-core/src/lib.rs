@@ -45,6 +45,8 @@ pub mod openapi;
 pub mod pagination;
 /// Identifiant de corrélation de la requête courante.
 pub mod request_id;
+/// Arrêt gracieux du processus : le signal, et les tâches de fond qu'il doit attendre.
+pub mod shutdown;
 /// État partagé du runtime.
 pub mod state;
 /// Tirage et empreinte des jetons opaques.

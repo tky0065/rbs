@@ -84,6 +84,20 @@ Le backend local est assez court pour être lu en entier :
 ```rust file=examples/file-drop/src/modules/storage/files.rs
 ```
 
+Deux choses y sont voulues. `put` n'écrit jamais l'objet en place : les octets vont dans
+un fichier temporaire **à côté** de la cible — même répertoire, donc même système de
+fichiers — et un `rename` les pose sur elle, si bien qu'un `get` concurrent voit l'ancien
+objet ou le nouveau, entier, jamais un fichier tronqué ; le temporaire porte un UUID par
+dépôt, deux dépôts sur la même clé ne se le partagent donc jamais, et le contenu est
+synchronisé sur le disque avant le renommage pour qu'une coupure ne laisse pas un fichier
+vide sous le nom final. Et la racine est créée **à la construction**, non au premier
+dépôt : une racine qui ne se crée pas est une erreur de configuration, signalée au
+démarrage plutôt qu'en 500 plus tard — c'est ce qui permet à `available` de répondre sans
+rien écrire. Elle vérifie seulement que la racine est toujours un répertoire ; une racine
+disparue met `/health` au rouge au lieu d'être recréée vide en silence. Un droit d'écriture
+retiré, ou un volume remonté en lecture seule, ne s'y voient pas : ils se voient au premier
+`put`, en 500 dans le journal.
+
 Le backend S3 est `src/modules/storage/s3.rs`. Sa seule décision qui mérite d'être connue : les
 identifiants viennent de la configuration, non de la chaîne de fournisseurs par défaut du
 SDK. Cette chaîne est asynchrone et interroge le service de métadonnées de l'instance, ce
@@ -131,6 +145,14 @@ aucun bucket n'est nommé nulle part — et ne dit rien de tout cela tant que le
 | `PUT` | 204, contenu remplacé | 204, contenu déposé | 404 |
 | `GET` | 200, `application/octet-stream` | 404 | 404 |
 | `HEAD` | 204 | 404 | 404 |
+
+Le drapeau écrit aussi leurs tests dans le `tests.rs` de la ressource, `#[ignore]` comme
+les autres et joués par `cargo test -- --include-ignored` : le cycle — `PUT` d'un corps
+binaire, `GET` rendu octet pour octet en `application/octet-stream`, `HEAD` avant et
+après, un second `PUT` qui remplace —, le 404 d'un identifiant inconnu sur les trois
+verbes, le 413 un octet au-delà de `TAILLE_MAX`, et sous `auth` le 401 d'une requête sans
+jeton. Une modification de l'un des trois handlers se voit dans votre projet, et non
+seulement dans la suite de rbs.
 
 Sur un projet portant [`auth`](./auth.md), les trois sont fermées comme le reste du CRUD :
 elles prennent une `Identity`, appellent `require_role(Role::User)` et portent le cadenas
@@ -205,7 +227,12 @@ C'est la conception même du fichier. `cargo test` joue la ronde contre le backe
 avec un test de traversée qui éprouve quatre clés fuyantes et assertent à la fois la
 variante `RejectedKey` *et* l'absence de fichiers témoins hors de la racine ; il bâtit aussi
 un client S3 sans toucher au réseau, et vérifie qu'un backend inconnu est refusé en le
-nommant.
+nommant. Trois tests de plus ne portent que sur le backend fichiers : un dépôt ne laisse
+aucun fichier temporaire derrière lui ; quatre lecteurs qui relisent une clé pendant qu'un
+écrivain la remplace deux cents fois ne voient jamais que l'un des deux contenus, entier —
+sur une écriture en place, ils attrapent un corps vide ou tronqué dès les premières
+lectures ; et la sonde signale une racine retirée sous le stockage vivant au lieu de la
+recréer.
 
 Deux tests `#[ignore]` joignent le service de la section `[storage]` — MinIO en
 développement. Le premier rejoue **la même** `round`, appelée sans une ligne de différence :

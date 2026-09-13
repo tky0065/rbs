@@ -70,8 +70,14 @@ content = """
 # l'usage : elles sont ici pour ne pas avoir à rouvrir le fragment.
 max_attempts = 5
 retry_delay_secs = 30
+# Le délai double à chaque tentative ratée, jusqu'à ce plafond : un receveur en panne est
+# sollicité de moins en moins souvent.
+retry_max_delay_secs = 3600
 poll_interval_secs = 1
 # Passé ce délai, un job réservé par un worker qui n'en a jamais inscrit le sort — tué en
 # plein travail — redevient dépilable. À tenir au-dessus de la durée du plus long job.
 lease_secs = 300
+# Jobs exécutés de front par le worker. Quatre laisse plus de la moitié du pool de
+# connexions à l'API ; un retrouve l'exécution strictement séquentielle.
+concurrency = 4
 """

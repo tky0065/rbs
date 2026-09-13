@@ -178,7 +178,7 @@ rien n'appelle ne prouve rien du câblage.
 `the_hand_edits_of_file_drop_are_in_place` les atteste toutes. Sans lui, ces huit chemins
 resteraient hors de toute surveillance, et le câblage pourrait disparaître en silence.
 
-`newsletter-queue` en porte quinze de plus, et elles sont tout l'intérêt de l'exemple — les
+`newsletter-queue` en porte quatorze de plus, et elles sont tout l'intérêt de l'exemple — les
 fragments livrent une file, un expéditeur et un module de métriques, et aucun d'eux une
 route ; un job que rien n'enfile ne prouve rien de la file.
 
@@ -205,9 +205,6 @@ route ; un job que rien n'enfile ne prouve rien de la file.
   de module tombe avec le premier appel, et `send_detached` en garde une pour elle seule —
   la fonction est conservée, un message dont la perte ne coûte rien n'ayant pas besoin
   d'une ligne en base.
-- `src/main.rs` : `rbs_core::logs::shutdown()` avant de sortir, qui pousse le dernier lot de
-  spans au lieu de le perdre. Rien dans le squelette ne l'appelle, le coût d'un oubli étant
-  ce lot et non une panne — un exemple est donc le seul endroit où l'appel se lise.
 - `prometheus.yml` : aucune commande ne l'écrit, et un `/metrics` que personne ne scrute ne
   prouve rien non plus. Il vise `metrics_port`, et non `server.port` ; le test de non-dérive
   relit le port dans `config/default.toml` plutôt que de faire confiance à un second

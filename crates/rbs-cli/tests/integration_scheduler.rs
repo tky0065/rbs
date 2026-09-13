@@ -23,7 +23,7 @@ const TESTS_ORDINAIRES: [&str; 3] = [
 ];
 
 /// Ce qu'il livre et qui joint la base.
-const TESTS_SOUS_CONTENEUR: [&str; 9] = [
+const TESTS_SOUS_CONTENEUR: [&str; 10] = [
     "a_newly_declared_schedule_is_inserted_with_its_next_occurrence",
     "a_schedule_removed_from_the_code_is_removed_from_the_table",
     "a_redeploy_does_not_move_the_next_occurrence_of_a_known_schedule",
@@ -33,6 +33,7 @@ const TESTS_SOUS_CONTENEUR: [&str; 9] = [
     "a_due_schedule_enqueues_its_job_and_moves_on",
     "a_schedule_that_is_not_due_is_left_alone",
     "concurrent_tickers_trigger_a_due_schedule_exactly_once",
+    "the_ticker_stops_when_shutdown_is_requested",
 ];
 
 /// Le test de concurrence, exigé nommément sur chacun des trois moteurs.

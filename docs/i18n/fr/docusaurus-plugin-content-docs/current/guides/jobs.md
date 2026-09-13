@@ -71,20 +71,25 @@ l'exemple `newsletter-queue` est bâti autour de lui.
 ```rust file=examples/newsletter-queue/src/modules/jobs/config.rs
 ```
 
-Quatre réglages, chacun avec un défaut écrit là où la section est déclarée plutôt que dans
+Six réglages, chacun avec un défaut écrit là où la section est déclarée plutôt que dans
 le noyau, de sorte que vous les lisiez et les changiez au même endroit :
 
 ```toml
 [jobs]
 max_attempts = 5
 retry_delay_secs = 30
+retry_max_delay_secs = 3600
 poll_interval_secs = 1
 lease_secs = 300
+concurrency = 4
 ```
 
 `lease_secs` est le délai passé lequel une réservation dont personne n'a inscrit le sort —
 le worker est mort en plein job — est rendue à la file ; tenez-le au-dessus de votre plus
-long job.
+long job. `concurrency` est le nombre de jobs qu'un worker exécute de front : quatre laisse
+plus de la moitié du pool de connexions par défaut à l'API, et un vous rend un worker
+strictement séquentiel. `retry_delay_secs` double à chaque tentative ratée, jusqu'à
+`retry_max_delay_secs`.
 
 `config/{env}.toml` et les variables `RBS_JOBS__*` les surchargent comme celles de toute
 autre section — voir le [guide de la configuration](./configuration.md).
@@ -165,9 +170,18 @@ sont traitées là où elles surviennent, et chaque réponse est délibérée :
   du bail, puis est rejouée. Le dire est tout ce que le worker peut faire ; la base ne
   répond pas.
 
+Un quatrième cas n'est pas une défaillance : on demande au processus de s'arrêter. Ctrl-C
+ou SIGTERM atteint le worker par le signal d'arrêt que porte l'état — le job en cours
+d'exécution va jusqu'au bout et son sort est inscrit, aucun nouveau job n'est réservé, et
+`main` attend le worker avant de sortir, au plus `server.shutdown_timeout_secs`. Le bail
+est pour le processus tué, non pour celui qu'on arrête.
+
+Un job qui panique n'emporte que lui : il tourne dans une tâche à lui, le worker consigne
+la panique et continue, et la ligne reste `running` jusqu'à ce que le bail la rende.
+
 :::note
-Il y a un worker par processus, et il scrute. Plusieurs processus peuvent en faire tourner
-un chacun : le dépilage réserve une ligne et incrémente son compteur en une seule requête —
+Il y a un worker par processus, qui exécute jusqu'à `concurrency` jobs de front, et il
+scrute. Plusieurs processus peuvent en faire tourner un chacun : le dépilage réserve une ligne et incrémente son compteur en une seule requête —
 avec `FOR UPDATE SKIP LOCKED` sur PostgreSQL et MySQL 8, une transaction immédiate sur
 SQLite — de sorte que deux workers n'obtiennent jamais la même ligne, quel que soit leur
 entrelacement.
@@ -175,8 +189,10 @@ entrelacement.
 
 ## Réessai et échec définitif
 
-Un job qui rend une erreur est réessayé après `retry_delay_secs`, jusqu'à `max_attempts`
-fois, puis marqué `failed` avec sa dernière erreur conservée dans la ligne. Plus rien ne le
+Un job qui rend une erreur est réessayé après `retry_delay_secs`, puis le double, puis le
+quadruple — le délai double à chaque tentative ratée, jusqu'à `retry_max_delay_secs` —
+jusqu'à `max_attempts` tentatives, puis marqué `failed` avec sa dernière erreur conservée
+dans la ligne. Plus rien ne le
 réessaie ensuite, et rien ne vous en avertit non plus — `status = 'failed'` dans la table
 `jobs` est là qu'ils vivent, et les surveiller vous appartient.
 

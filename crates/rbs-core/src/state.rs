@@ -10,11 +10,12 @@ use std::sync::Arc;
 use sea_orm::DatabaseConnection;
 
 use crate::config::Config;
+use crate::shutdown::Shutdown;
 
-/// Pool et configuration, partagés par toutes les requêtes.
+/// Pool, configuration et signal d'arrêt, partagés par toutes les requêtes.
 ///
-/// Clonable à coût nul : `DatabaseConnection` clone un `Arc` interne, et la
-/// configuration n'est jamais recopiée.
+/// Clonable à coût nul : `DatabaseConnection` clone un `Arc` interne, la configuration
+/// n'est jamais recopiée, et tous les clones portent le même signal.
 #[derive(Debug, Clone)]
 #[non_exhaustive]
 pub struct CoreState {
@@ -22,6 +23,7 @@ pub struct CoreState {
     // l'ont composé. Un accès direct figerait sa disposition interne.
     db: DatabaseConnection,
     config: Arc<Config>,
+    shutdown: Shutdown,
 }
 
 impl CoreState {
@@ -32,6 +34,7 @@ impl CoreState {
         Self {
             db,
             config: Arc::new(config),
+            shutdown: Shutdown::new(),
         }
     }
 
@@ -43,6 +46,12 @@ impl CoreState {
     /// Configuration de l'application.
     pub fn config(&self) -> &Config {
         &self.config
+    }
+
+    /// Signal d'arrêt du processus, par lequel les tâches de fond apprennent qu'il faut
+    /// rendre la main et par lequel `main` les attend.
+    pub fn shutdown(&self) -> &Shutdown {
+        &self.shutdown
     }
 }
 
@@ -125,6 +134,7 @@ mod tests {
                 host: "127.0.0.1".to_owned(),
                 port: 8080,
                 timeout_secs: 30,
+                shutdown_timeout_secs: 30,
             },
             database: DatabaseConfig {
                 url: "postgres://localhost/app".to_owned(),
@@ -187,6 +197,19 @@ mod tests {
         assert!(
             Arc::ptr_eq(&state.core.config, &clone.core.config),
             "le clone doit partager la configuration, pas la recopier"
+        );
+    }
+
+    #[test]
+    fn the_shutdown_signal_is_shared_by_the_clones_of_the_state() {
+        let state = state("bonjour");
+        let clone = state.clone();
+
+        state.core().shutdown().request();
+
+        assert!(
+            clone.core().shutdown().is_requested(),
+            "le clone doit porter le même signal, pas un signal à lui"
         );
     }
 

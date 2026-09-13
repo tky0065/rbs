@@ -21,7 +21,8 @@ use testcontainers::{Container, GenericImage};
 mod common;
 
 /// Les tests que le fragment livre au projet et qui joignent la base.
-const TESTS: [&str; 7] = [
+const TESTS: [&str; 9] = [
+    "jobs_run_side_by_side_up_to_the_configured_concurrency",
     "a_job_enqueued_in_a_rolled_back_transaction_does_not_exist",
     "a_job_enqueued_in_a_committed_transaction_is_visible_to_the_worker",
     "two_concurrent_workers_never_reserve_the_same_job",
@@ -29,6 +30,7 @@ const TESTS: [&str; 7] = [
     "a_job_left_running_past_the_lease_returns_to_the_queue",
     "a_job_running_within_the_lease_is_left_alone",
     "a_job_abandoned_on_its_last_attempt_is_failed_rather_than_requeued",
+    "the_worker_finishes_its_job_and_stops_when_shutdown_is_requested",
 ];
 
 /// Le message du job d'exemple, par lequel la ligne se retrouve dans la table.
@@ -207,6 +209,69 @@ fn a_job_enqueued_before_the_process_is_killed_runs_after_the_restart() {
         "1",
         "le job a été tenté plus d'une fois :\n{journal}"
     );
+}
+
+/// Le critère de l'arrêt gracieux : SIGTERM reçu en plein job, le job finit et le
+/// processus sort en 0 — sans lui, la ligne restait `running` jusqu'au bail.
+///
+/// Le job d'exemple du projet est ralenti à trois secondes : c'est la seule façon d'être
+/// sûr que le signal arrive pendant son exécution et non entre deux tours.
+#[test]
+#[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn a_sigterm_lets_the_job_in_progress_finish_before_the_process_exits() {
+    let postgres = common::start_postgres();
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_jobs(&common::url_of(&postgres), &parent);
+
+    let _cible = common::verrou(&common::cible());
+
+    // Sous le verrou, et non avant : les projets de ce binaire de test sont identiques
+    // et partagent la cible, où cargo les tient pour un seul paquet. Un `demo-api` bâti
+    // par le test voisin après l'écriture du job ralenti serait plus récent qu'elle, et
+    // cargo le tiendrait pour à jour — le serveur lancé ici exécuterait un job instantané.
+    slow_down_the_demo_job(&racine);
+    migrate(&racine);
+    compile(&racine);
+
+    let serveur = Serveur::lancer(&racine, "demo-api", 1);
+    enqueue(&postgres);
+    if !wait_for_status(&postgres, "running", Duration::from_secs(15)) {
+        let statut = status(&postgres);
+        let journal = serveur.tuer();
+        panic!("le job n'a jamais été vu réservé — statut « {statut} » :\n{journal}");
+    }
+
+    let (sorti_en_zero, journal) = serveur.terminer();
+
+    assert!(
+        sorti_en_zero,
+        "le processus n'est pas sorti proprement après SIGTERM :\n{journal}"
+    );
+    assert_eq!(
+        status(&postgres),
+        "done",
+        "le job en cours n'a pas été mené à son terme avant la sortie :\n{journal}"
+    );
+    assert_eq!(
+        attempts(&postgres),
+        "1",
+        "le job a été tenté plus d'une fois :\n{journal}"
+    );
+}
+
+/// Fait dormir trois secondes le job `log` du projet, avant qu'il n'écrive son message.
+fn slow_down_the_demo_job(racine: &Path) {
+    let demo = racine.join("src/modules/jobs/demo.rs");
+    let source = fs::read_to_string(&demo).expect("le job d'exemple se lit");
+    let ralenti = source.replace(
+        "        tracing::info!(message = %self.message, \"job `log`\");",
+        "        tokio::time::sleep(std::time::Duration::from_secs(3)).await;\n        tracing::info!(message = %self.message, \"job `log`\");",
+    );
+    assert_ne!(
+        source, ralenti,
+        "le job d'exemple n'a plus la ligne attendue :\n{source}"
+    );
+    fs::write(&demo, ralenti).expect("le job d'exemple se réécrit");
 }
 
 /// Un projet neuf portant `jobs`, sa base pointée sur `url`.
@@ -424,6 +489,47 @@ impl Serveur {
         Self {
             processus: Some(processus),
         }
+    }
+
+    /// Envoie SIGTERM au serveur, l'attend jusqu'à trente secondes, et rend s'il est
+    /// sorti en 0 avec ce qu'il a écrit sur ses deux flux.
+    ///
+    /// Trente secondes : la borne que `server.shutdown_timeout_secs` pose au drainage,
+    /// plus rien — un serveur qui la dépasse n'a pas d'arrêt gracieux, et il est tué pour
+    /// que le test rende un verdict plutôt qu'il ne pende.
+    fn terminer(mut self) -> (bool, String) {
+        let mut processus = self.processus.take().expect("le serveur tourne encore");
+
+        let statut = std::process::Command::new("kill")
+            .args(["-TERM", &processus.id().to_string()])
+            .status()
+            .expect("kill doit se lancer");
+        assert!(statut.success(), "SIGTERM n'a pas pu être envoyé");
+
+        let fin = Instant::now() + Duration::from_secs(30);
+        let sorti_en_zero = loop {
+            match processus.try_wait().expect("l'état du serveur se lit") {
+                Some(statut) => break statut.success(),
+                None if Instant::now() < fin => std::thread::sleep(Duration::from_millis(100)),
+                None => {
+                    let _ = processus.kill();
+                    break false;
+                }
+            }
+        };
+
+        let output = processus
+            .wait_with_output()
+            .expect("la sortie du serveur doit être lisible");
+
+        (
+            sorti_en_zero,
+            format!(
+                "{}{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            ),
+        )
     }
 
     /// Tue le serveur et rend ce qu'il a écrit sur ses deux flux.

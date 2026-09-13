@@ -509,11 +509,11 @@ fn suite(feature: &str) -> Option<&'static str> {
         ),
         // Les métriques sortent d'elles-mêmes ; les traces attendent qu'un collecteur
         // soit nommé, et l'absence de cette variable est le seul écart entre une feature
-        // installée et une feature qui sert.
+        // installée et une feature qui sert. Le dernier lot part de lui-même : le
+        // squelette appelle `logs::shutdown()` à l'arrêt.
         "observability" => Some(
             "les métriques sont sur http://localhost:9090/metrics ; pour les traces, \
-             nommez un collecteur dans OTEL_EXPORTER_OTLP_ENDPOINT et videz le dernier \
-             lot par rbs_core::logs::shutdown() avant la fin du processus",
+             nommez un collecteur dans OTEL_EXPORTER_OTLP_ENDPOINT",
         ),
         // Le compteur ne voit un client que si le serveur lui donne son adresse : un
         // projet derrière un proxy compte tout le monde ensemble tant que le drapeau

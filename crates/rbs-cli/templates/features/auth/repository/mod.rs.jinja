@@ -2,6 +2,10 @@
 //!
 //! Le service passe par cette porte plutôt que par `model.rs` : la couche qui parle à la
 //! base reste la seule à connaître l'entité.
+//!
+//! Chaque fonction prend un `ConnectionTrait` et non la connexion : une transaction en
+//! est un, et c'est le service qui décide si l'écriture qu'il demande vit seule ou dans
+//! la suite d'un parcours.
 
 pub mod one_time_token;
 pub mod refresh_token;

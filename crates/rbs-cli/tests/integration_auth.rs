@@ -165,6 +165,36 @@ fn the_one_time_token_repository_is_written() {
     }
 }
 
+/// Les services qui enchaînent plusieurs écritures les font en une transaction, que les
+/// dépôts acceptent au même titre que la connexion.
+#[test]
+fn the_services_chaining_writes_open_one_transaction() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_auth(&parent);
+
+    for service in ["password", "session", "verification"] {
+        let chemin = format!("src/auth/service/{service}.rs");
+        let source = fs::read_to_string(racine.join(&chemin)).expect("service lisible");
+
+        for attendu in ["db.begin().await?", ".commit().await?"] {
+            assert!(
+                source.contains(attendu),
+                "`{chemin}` ne porte pas `{attendu}`"
+            );
+        }
+    }
+
+    for depot in ["user", "one_time_token", "refresh_token"] {
+        let chemin = format!("src/auth/repository/{depot}.rs");
+        let source = fs::read_to_string(racine.join(&chemin)).expect("dépôt lisible");
+
+        assert!(
+            source.contains("db: &impl ConnectionTrait") && !source.contains("&DatabaseConnection"),
+            "`{chemin}` prend encore la connexion plutôt qu'un `ConnectionTrait`"
+        );
+    }
+}
+
 /// Les chemins sont montés dès l'installation, un de plus à chaque tâche jusqu'à treize.
 #[test]
 fn the_auth_paths_are_mounted() {
@@ -561,6 +591,9 @@ fn the_auth_tests_of_the_generated_project_pass_on_sqlite() {
 /// `--role admin` fait passer les deux seuils dans la même exécution : le jeton signé est
 /// un `admin`, il franchit les écritures qui exigent `Role::Admin` comme les lectures qui
 /// exigent `Role::User`.
+///
+/// `--with-upload` par-dessus, avec `storage` : c'est le seul banc où la branche `auth`
+/// des scénarios de contenu compile et joue — `integration_crud` les engendre sans `auth`.
 #[test]
 #[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
 fn the_tests_of_a_crud_generated_under_auth_pass() {
@@ -569,9 +602,18 @@ fn the_tests_of_a_crud_generated_under_auth_pass() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = project_with_auth_on(&url_of(&postgres), &parent);
 
-    // `generate` garde le working tree comme `add` : l'installation d'`auth` vient de le
-    // salir, et la commande refuserait d'écrire.
+    // `add` et `generate` gardent le working tree : chaque installation vient de le
+    // salir, et la commande suivante refuserait d'écrire.
     common::commiter(&racine, "auth installée");
+
+    Command::cargo_bin("rbs")
+        .expect("le binaire rbs doit être compilé")
+        .current_dir(&racine)
+        .args(["add", "storage"])
+        .assert()
+        .success();
+
+    common::commiter(&racine, "storage installée");
 
     Command::cargo_bin("rbs")
         .expect("le binaire rbs doit être compilé")
@@ -584,16 +626,28 @@ fn the_tests_of_a_crud_generated_under_auth_pass() {
             "titre:string,vues:int,publie:bool",
             "--role",
             "admin",
+            "--with-upload",
         ])
         .assert()
         .success();
 
     migrate(&racine);
 
+    // Les deux tests S3 du fragment `storage` joignent le service de sa section, que ce
+    // banc ne démarre pas ; `integration_storage` les joue contre MinIO.
     let sortie = Command::new("cargo")
         .current_dir(&racine)
         .env("CARGO_TARGET_DIR", common::cible())
-        .args(["test", "--workspace", "--", "--include-ignored"])
+        .args([
+            "test",
+            "--workspace",
+            "--",
+            "--include-ignored",
+            "--skip",
+            "the_s3_backend_passes_the_same_round_as_the_file_backend",
+            "--skip",
+            "an_object_put_by_the_trait_reads_back_through_the_s3_client",
+        ])
         .output()
         .expect("cargo doit être lançable");
 
@@ -608,13 +662,15 @@ fn the_tests_of_a_crud_generated_under_auth_pass() {
         "la suite du projet engendré échoue :\n{rendu}"
     );
 
-    // Trois scénarios nommés, et non le seul code de sortie : `cargo test` sort en 0 sur
+    // Cinq scénarios nommés, et non le seul code de sortie : `cargo test` sort en 0 sur
     // une suite amputée, et c'est précisément une suite amputée qu'une template cassée
     // livrerait.
     for scenario in [
         "articles::tests::the_full_lifecycle_goes_through_the_api ... ok",
         "articles::tests::an_anonymous_request_returns_401 ... ok",
         "articles::tests::an_anonymous_read_returns_401 ... ok",
+        "articles::tests::the_content_round_trips_through_put_get_and_head ... ok",
+        "articles::tests::an_anonymous_content_request_returns_401 ... ok",
     ] {
         assert!(
             rendu.contains(scenario),

@@ -31,11 +31,19 @@ pub async fn run(state: AppState, schedules: Vec<Schedule>) {
         "calendrier prêt"
     );
 
-    loop {
+    // Un tour commencé finit — chaque échéance est une transaction courte — et aucun
+    // nouveau tour ne commence une fois l'arrêt demandé.
+    let shutdown = state.core().shutdown().clone();
+    while !shutdown.is_requested() {
         tick(state.core().db(), &schedules).await;
 
-        tokio::time::sleep(attente).await;
+        tokio::select! {
+            _ = tokio::time::sleep(attente) => {}
+            _ = shutdown.requested() => {}
+        }
     }
+
+    tracing::info!("calendrier arrêté");
 }
 
 /// Réserve puis déclenche toutes les échéances dues, et rend leur nombre.

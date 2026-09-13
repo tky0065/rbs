@@ -68,7 +68,10 @@ serde = { workspace = true, features = ["derive"] }
 serde_json.workspace = true
 sha2 = { workspace = true, optional = true }
 thiserror.workspace = true
-tokio = { workspace = true, features = ["rt", "time"] }
+tokio = { workspace = true, features = ["macros", "rt", "signal", "sync", "time"] }
+# `CancellationToken` et `TaskTracker` : le signal d'arrêt et l'attente des tâches de fond.
+# Déjà dans l'arbre de tout projet engendré, par `h2` → `hyper` → `axum`.
+tokio-util = { workspace = true, features = ["rt"] }
 tracing.workspace = true
 tracing-opentelemetry = { workspace = true, optional = true }
 tracing-subscriber = { workspace = true, features = ["fmt", "ansi", "chrono", "env-filter"] }

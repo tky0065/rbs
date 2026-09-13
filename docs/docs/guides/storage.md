@@ -83,6 +83,19 @@ The local backend is small enough to read in full:
 ```rust file=examples/file-drop/src/modules/storage/files.rs
 ```
 
+Two things in it are deliberate. `put` never writes the object in place: the bytes go to a
+temporary file **next to** the target — same directory, hence same filesystem — and a
+`rename` moves them onto it, so a concurrent `get` sees either the previous object or the
+new one, whole, never a truncated file; the temporary carries a UUID per deposit, so two
+deposits on the same key never share it, and the content is synced to disk before the
+rename so a power cut cannot leave an empty file under the final name. And the root is
+created **at construction**, not at the first deposit: a root that cannot be created is a
+configuration error, reported at startup rather than as a 500 later — which is what lets
+`available` report without writing anything. It only checks that the root is still a
+directory; a root that vanished turns `/health` red instead of being silently recreated
+empty. A write permission taken away, or a volume remounted read-only, is not seen there:
+it shows at the first `put`, as a 500 in the log.
+
 The S3 backend is `src/modules/storage/s3.rs`. Its one decision worth knowing: credentials come
 from the configuration, not from the SDK's default provider chain. That chain is async and
 interrogates the instance metadata service, which a synchronous `AppState::new` can neither
@@ -128,6 +141,13 @@ the backend is `fs`, which needs none of it.
 | `PUT` | 204, content replaced | 204, content deposited | 404 |
 | `GET` | 200, `application/octet-stream` | 404 | 404 |
 | `HEAD` | 204 | 404 | 404 |
+
+The flag writes their tests into the resource's `tests.rs` as well, `#[ignore]`d like the
+others and played by `cargo test -- --include-ignored`: the round trip — `PUT` a binary
+body, `GET` it back byte for byte as `application/octet-stream`, `HEAD` before and after,
+a second `PUT` that replaces —, the 404 of an unknown id on all three verbs, the 413 one
+byte past `TAILLE_MAX`, and under `auth` the 401 of a request without a token. A change to
+one of the three handlers is caught in your project, not only in rbs's own suite.
 
 On a project carrying [`auth`](./auth.md), all three are closed like the rest of the CRUD:
 they take an `Identity`, call `require_role(Role::User)`, and carry the padlock in the
@@ -199,7 +219,11 @@ That is the design of the file. `cargo test` plays the round against the file ba
 along with a traversal test that tries four escaping keys and asserts both the
 `RejectedKey` variant *and* the absence of witness files outside the root; it also builds
 an S3 client without touching the network, and checks that an unknown backend is refused by
-name.
+name. Three more tests pin down the file backend alone: a deposit leaves no temporary file
+behind; four readers re-reading a key while a writer replaces it two hundred times only
+ever see one of the two contents, whole — on an in-place write, they catch an empty or
+truncated body within the first few reads; and the probe reports a root removed under the
+running store rather than recreating it.
 
 Two `#[ignore]`d tests join the service of the `[storage]` section — MinIO in development.
 The first replays **the same** `round`, called without a line of difference: a suite

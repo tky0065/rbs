@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use super::files::FileStorage;
@@ -50,7 +50,7 @@ async fn round(storage: &dyn Storage) {
 async fn the_file_backend_puts_gets_attests_then_deletes() {
     let root = root("ronde");
 
-    round(&FileStorage::new(root.join("objets"))).await;
+    round(&FileStorage::new(root.join("objets")).expect("la racine doit se créer")).await;
 
     fs::remove_dir_all(&root).expect("le répertoire du test doit se nettoyer");
 }
@@ -59,7 +59,7 @@ async fn the_file_backend_puts_gets_attests_then_deletes() {
 #[tokio::test]
 async fn a_key_escaping_the_root_is_rejected() {
     let root = root("traversee");
-    let storage = FileStorage::new(root.join("depot/objets"));
+    let storage = FileStorage::new(root.join("depot/objets")).expect("la racine doit se créer");
 
     let witnesses = [root.join("depot/vole.txt"), root.join("vole.txt")];
     let absolute = witnesses[0]
@@ -105,6 +105,132 @@ async fn a_key_escaping_the_root_is_rejected() {
             .expect("la clé normalisée doit se relire"),
         b"charge utile"
     );
+
+    fs::remove_dir_all(&root).expect("le répertoire du test doit se nettoyer");
+}
+
+/// Les fichiers réguliers sous `dir`, à toute profondeur.
+fn files_under(dir: &Path) -> Vec<PathBuf> {
+    let mut files = Vec::new();
+    for entry in fs::read_dir(dir).expect("le répertoire doit se lire") {
+        let path = entry.expect("l'entrée doit se lire").path();
+        if path.is_dir() {
+            files.extend(files_under(&path));
+        } else {
+            files.push(path);
+        }
+    }
+    files
+}
+
+/// Le dépôt passe par un fichier temporaire, qui ne doit pas lui survivre.
+#[tokio::test]
+async fn a_put_leaves_no_temporary_file_behind() {
+    let root = root("temporaire");
+    let storage = FileStorage::new(root.join("objets")).expect("la racine doit se créer");
+
+    storage
+        .put("dossier/objet.bin", b"charge utile".to_vec())
+        .await
+        .expect("le dépôt doit aboutir");
+
+    assert_eq!(
+        files_under(&root),
+        vec![root.join("objets/dossier/objet.bin")],
+        "seul l'objet doit rester sous la racine"
+    );
+
+    fs::remove_dir_all(&root).expect("le répertoire du test doit se nettoyer");
+}
+
+/// Des lecteurs qui relisent une clé pendant qu'on la remplace voient l'ancien objet ou
+/// le nouveau, entiers — jamais un corps vide ni tronqué.
+///
+/// Sur une écriture en place, `fs::write` tronque le fichier avant de le remplir, et une
+/// lecture concurrente tombe dans la fenêtre. Quatre lecteurs et des contenus d'un
+/// mébioctet l'échantillonnent assez pour que le test la voie à chaque exécution.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_put_on_an_existing_key_never_exposes_an_empty_object() {
+    let root = root("remplacement");
+    let storage = FileStorage::new(root.join("objets")).expect("la racine doit se créer");
+    let key = "objet.bin";
+    let (first, second) = (vec![b'a'; 1 << 20], vec![b'b'; 1 << 20]);
+
+    storage
+        .put(key, first.clone())
+        .await
+        .expect("le dépôt doit aboutir");
+
+    let writer = {
+        let storage = storage.clone();
+        let (first, second) = (first.clone(), second.clone());
+        tokio::spawn(async move {
+            for round in 0..200 {
+                let content = if round % 2 == 0 { &second } else { &first };
+                storage
+                    .put(key, content.clone())
+                    .await
+                    .expect("le dépôt doit aboutir");
+            }
+        })
+    };
+
+    let readers: Vec<_> = (0..4)
+        .map(|_| {
+            let storage = storage.clone();
+            let (first, second) = (first.clone(), second.clone());
+            let writer = writer.abort_handle();
+            tokio::spawn(async move {
+                let mut reads = 0;
+                while !writer.is_finished() {
+                    let read = storage.get(key).await.expect("la relecture doit aboutir");
+                    assert!(
+                        read == first || read == second,
+                        "lecture n°{reads} : {} octets, ni l'un ni l'autre des contenus déposés",
+                        read.len()
+                    );
+                    reads += 1;
+                }
+                reads
+            })
+        })
+        .collect();
+
+    writer.await.expect("l'écrivain doit finir");
+    for reader in readers {
+        let reads = reader.await.expect("le lecteur doit finir");
+        assert!(reads > 0, "aucune lecture n'a eu lieu pendant les dépôts");
+    }
+
+    fs::remove_dir_all(&root).expect("le répertoire du test doit se nettoyer");
+}
+
+/// La racine existe dès la construction, et la sonde constate sa présence sans la recréer.
+///
+/// Une sonde qui recréerait une racine disparue resterait verte sur un magasin qui vient
+/// de perdre tous ses objets.
+#[tokio::test]
+async fn the_probe_reports_a_root_that_vanished() {
+    let root = root("sonde");
+    let objets = root.join("objets");
+    let storage = FileStorage::new(objets.clone()).expect("la racine doit se créer");
+
+    assert!(
+        objets.is_dir(),
+        "la racine doit exister dès la construction"
+    );
+    assert!(
+        storage.available().await,
+        "la sonde doit être verte sur une racine présente"
+    );
+
+    fs::remove_dir_all(&objets).expect("la racine doit se retirer");
+
+    assert!(
+        !storage.available().await,
+        "une racine disparue doit rendre la sonde rouge"
+    );
+    assert!(!objets.exists(), "la sonde ne doit pas recréer la racine");
 
     fs::remove_dir_all(&root).expect("le répertoire du test doit se nettoyer");
 }

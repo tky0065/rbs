@@ -137,8 +137,10 @@ le contrôle `gardes` ci-dessus. `jobs` est celle que ce jalon a ajoutée :
       [jobs]
       max_attempts = 5
       retry_delay_secs = 30
+      retry_max_delay_secs = 3600
       poll_interval_secs = 1
       lease_secs = 300
+      concurrency = 4
 ```
 
 Une feature déclarée dans `[package.metadata.rbs]` dont la section a disparu de la

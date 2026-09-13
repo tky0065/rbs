@@ -189,6 +189,10 @@ bound how late a trigger can be to thirty seconds. `config/{env}.toml` and
 `RBS_SCHEDULER__POLL_INTERVAL_SECS` override it like any other section — see the
 [configuration guide](./configuration.md).
 
+The sleep is interruptible: on Ctrl-C or SIGTERM the ticker finishes the tour it has
+started — each schedule is a short transaction — starts no other, and returns, so `main`
+does not wait thirty seconds for it before exiting.
+
 ## Testing
 
 The generated `src/modules/scheduler/tests.rs` runs against a real database, like every test that

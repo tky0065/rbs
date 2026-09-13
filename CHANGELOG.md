@@ -20,6 +20,26 @@ between minor versions with no deprecation cycle.
   included. `news`, `series` and `species` are now recognised as invariable without the
   flag; anything else is one `--singular news_item` away. The value must be in
   snake_case, like the feature name.
+- **A generated project stops gracefully on Ctrl-C or SIGTERM.** `main.rs` now serves
+  with `with_graceful_shutdown`: the listener stops accepting, in-flight requests finish,
+  the `jobs` worker completes the job it is running and the `scheduler` ticker its tour,
+  `main` waits for them up to the new `server.shutdown_timeout_secs` (default `30`), then
+  calls `rbs_core::logs::shutdown()` itself — no more last batch of spans lost on
+  `docker stop`, and no more job left `running` until the lease expires. The signal comes
+  from `rbs-core`: `CoreState::shutdown()` returns a `Shutdown` any background task can
+  be spawned under and listen to, so no anchor was added and the `startup` anchor's
+  content is unchanged. The message of `rbs add observability` no longer asks you to call
+  `logs::shutdown()` yourself. A project generated before 1.5.0 keeps its old `main.rs`,
+  which `rbs upgrade` does not rewrite; the upgrade note says what to paste.
+- **The `jobs` worker runs several jobs side by side, and a failed job waits longer each
+  time.** `[jobs] concurrency` (default `4`) bounds how many jobs one worker executes at
+  once — one webhook delivery waiting on a slow receiver no longer holds the whole queue —
+  and each job runs in a task of its own, so a panicking job no longer kills the worker.
+  The retry delay is now `retry_delay_secs × 2^(attempt − 1)`, capped by the new
+  `retry_max_delay_secs` (default `3600`). Both keys have a default: a project generated
+  before 1.5.0 keeps working without them, and takes `src/modules/jobs/worker.rs` and
+  `queue.rs` from the fragment when it wants the behaviour. `rbs doctor` proposes both
+  keys in the block it prints when the section is missing.
 
 ### Changed
 
@@ -35,6 +55,26 @@ between minor versions with no deprecation cycle.
   anchor back where it belongs when the file no longer has it at all.
 
 ### Fixed
+
+- **`rbs generate crud --with-upload` writes the tests of its three content routes.** The
+  flag used to mount `PUT`, `GET` and `HEAD` on `/<name>/{id}/content` and leave
+  `tests.rs` without a single `/content`: a regression in one of the three handlers went
+  unseen by the project's own `cargo test -- --include-ignored`. The generated file now
+  carries the round trip — a binary body deposited, read back byte for byte as
+  `application/octet-stream`, `HEAD` before and after, replaced by a second `PUT` —, the
+  404 of an unknown id on all three verbs, the 413 one byte past `TAILLE_MAX`, and under
+  `auth` the 401 of a request without a token.
+
+- **The `fs` backend of `storage` no longer writes an object in place.** `put` used to
+  `fs::write` the final path, which truncates it before filling it: a concurrent `GET` was
+  served an empty or truncated body, and a crash mid-write left the truncated file under
+  the final name. The bytes now go to a temporary file next to the target, one UUID per
+  deposit, synced to disk and then `rename`d onto it. The root is created when the storage
+  is built — a root that cannot be created fails at startup, naming the path — and the
+  `/health` probe only checks that it is still a directory, instead of a `create_dir_all`
+  that silently recreated a vanished root and kept the probe green on an empty store. A
+  project that already carries `storage` gets the rule by copying `files.rs` from the
+  fragment and adding `?` to `FileStorage::new` in `mod.rs`.
 
 - **`rbs generate crud --with-upload` refuses a project whose `storage` fragment still
   lives at `src/storage/`** — one that received the fragment before 1.3.0 and never
@@ -86,6 +126,15 @@ between minor versions with no deprecation cycle.
   `forgot-password` and `resend-verification`. Two registrations differing only by case
   used to make two accounts — and the verification link of one landed in the other's
   mailbox.
+- **`change-password`, `reset-password`, `refresh`, `verify-email` and
+  `DELETE /auth/sessions` write everything or nothing.** Each used to chain its writes on
+  separate connections of the pool: a failure between consuming a reset token and setting
+  the password burnt the token for nothing; one between the new password and the
+  revocation left the sessions of a possibly compromised account open; one between
+  rotating a refresh token and issuing the new pair left the client with a dead token and
+  no replacement — and its next attempt counted as a replay. Every `auth` repository now
+  takes `&impl ConnectionTrait`, like `jobs::enqueue`, and the five services open one
+  transaction each, committed after the last write.
 
 #### Projects already generated
 
@@ -107,6 +156,10 @@ reads `timestamp` on MySQL and `timestamp_with_timezone_text` on SQLite, which i
   accounts differ only by case, which is the case to settle by hand — then `normalise`
   from `service/mod.rs` and its four call sites (`register`, `login`,
   `password::request_reset`, `verification::request`).
+- No statement: copy the fragment's `repository/` and `service/` directories whole (and
+  the two new tests of `tests/password.rs` and `tests/session.rs`) so that the five
+  flows write everything or nothing. A caller that passed the connection to a
+  repository compiles unchanged.
 - `scheduler`: copy `sync.rs` from the fragment (and the two new tests of `tests.rs`) so
   that a changed cron expression takes effect at the next start. Nothing else changes;
   the table keeps its shape.
