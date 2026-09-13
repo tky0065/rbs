@@ -64,6 +64,7 @@ Options:
       --role <ROLE>        Relève à ce rôle le seuil des écritures ; exige la feature auth
       --soft-delete        Rend le DELETE logique : la ligne reste, marquée d'une date de suppression
       --with-upload        Ajoute trois routes de contenu binaire ; exige la feature storage
+      --cursor             Pagine GET /<ressource> par curseur ; la route de filtre garde ses pages
   -h, --help               Print help
   -V, --version            Print version
 ```
