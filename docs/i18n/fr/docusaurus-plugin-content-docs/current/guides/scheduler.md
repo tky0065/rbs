@@ -193,6 +193,10 @@ trente secondes le retard d'un déclenchement. `config/{env}.toml` et
 `RBS_SCHEDULER__POLL_INTERVAL_SECS` le surchargent comme toute autre section — voir le
 [guide de la configuration](./configuration.md).
 
+Le sommeil est interruptible : sur Ctrl-C ou SIGTERM, le ticker finit le tour qu'il a
+commencé — chaque échéance est une transaction courte —, n'en commence aucun autre et rend
+la main, si bien que `main` ne l'attend pas trente secondes avant de sortir.
+
 ## Les tests
 
 Le `src/modules/scheduler/tests.rs` engendré tourne contre une vraie base, comme tout test qui en

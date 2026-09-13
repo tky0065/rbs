@@ -1387,8 +1387,10 @@ mod tests {
         for cle in [
             "max_attempts",
             "retry_delay_secs",
+            "retry_max_delay_secs",
             "poll_interval_secs",
             "lease_secs",
+            "concurrency",
         ] {
             assert!(
                 configuration.contains(cle),

@@ -57,16 +57,19 @@ answers nothing.
 
 ### Flushing the last batch
 
-Spans are exported in batches. A process that dies between two batches takes the last one
-with it, so call this before returning from `main` — the example does, at the very end of
-its own:
+Spans are exported in batches, and a process that dies between two batches takes the last
+one with it. The skeleton takes care of it: `main` serves with a graceful shutdown, waits
+for the background tasks, then calls `rbs_core::logs::shutdown()` last — the example's
+`main.rs` ends like every generated one:
 
 ```rust file=examples/newsletter-queue/src/main.rs region=arret
 ```
 
-Without the `observability` feature it does nothing, and calling it when nothing was ever
-installed is not an error. The cost of forgetting it is that last batch — not an outage,
-which is why nothing in the skeleton calls it for you.
+Without the `observability` feature the call does nothing, and calling it when nothing was
+ever installed is not an error. What still matters is the signal: `docker stop`, systemd
+and Kubernetes send SIGTERM, and the skeleton listens for it along with Ctrl-C — a
+`kill -9` skips all of this and loses the batch. `server.shutdown_timeout_secs` bounds the
+wait on the background tasks, see the [configuration guide](./configuration.md).
 
 ## Metrics: three series, and one label that decides everything
 

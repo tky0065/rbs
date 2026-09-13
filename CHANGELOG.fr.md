@@ -21,6 +21,28 @@ dépréciation.
   compris. `news`, `series` et `species` sont désormais reconnus invariables sans le
   drapeau ; tout autre cas se règle par `--singular news_item`. La valeur doit être en
   snake_case, comme le nom de la feature.
+- **Un projet engendré s'arrête proprement sur Ctrl-C ou SIGTERM.** `main.rs` sert
+  désormais avec `with_graceful_shutdown` : l'écoute cesse d'accepter, les requêtes en vol
+  finissent, le worker de `jobs` achève le job qu'il exécute et le ticker de `scheduler`
+  son tour, `main` les attend au plus la nouvelle clé `server.shutdown_timeout_secs`
+  (défaut `30`), puis appelle lui-même `rbs_core::logs::shutdown()` — plus de dernier lot
+  de spans perdu à `docker stop`, ni de job laissé `running` jusqu'à l'échéance du bail.
+  Le signal vient de `rbs-core` : `CoreState::shutdown()` rend un `Shutdown` sous lequel
+  toute tâche de fond se détache et qu'elle écoute, si bien qu'aucune ancre n'est ajoutée
+  et que le contenu de l'ancre `startup` ne change pas. Le message de `rbs add
+  observability` ne demande plus d'appeler `logs::shutdown()` soi-même. Un projet engendré
+  avant 1.5.0 garde son ancien `main.rs`, que `rbs upgrade` ne réécrit pas ; la note de
+  montée de version dit quoi coller.
+- **Le worker de `jobs` exécute plusieurs jobs de front, et un job raté attend plus
+  longtemps à chaque fois.** `[jobs] concurrency` (défaut `4`) borne le nombre de jobs
+  qu'un worker exécute à la fois — une livraison webhook qui attend un receveur lent ne
+  retient plus toute la file — et chaque job tourne dans une tâche à lui, si bien qu'un
+  job qui panique ne tue plus le worker. Le délai de reprise vaut désormais
+  `retry_delay_secs × 2^(tentative − 1)`, plafonné par la nouvelle clé
+  `retry_max_delay_secs` (défaut `3600`). Les deux clés ont un défaut : un projet engendré
+  avant 1.5.0 continue de fonctionner sans elles, et reprend `src/modules/jobs/worker.rs`
+  et `queue.rs` du fragment quand il veut le comportement. `rbs doctor` propose les deux
+  clés dans le bloc qu'il imprime quand la section manque.
 
 ### Modifié
 

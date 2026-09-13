@@ -18,7 +18,7 @@ pub(crate) fn check(config: &Config) -> Check {
         TITRE,
         SECTION,
         "la configuration de la file est en place",
-        "max_attempts = 5\nretry_delay_secs = 30\npoll_interval_secs = 1\nlease_secs = 300",
+        "max_attempts = 5\nretry_delay_secs = 30\nretry_max_delay_secs = 3600\npoll_interval_secs = 1\nlease_secs = 300\nconcurrency = 4",
     )
 }
 
@@ -43,7 +43,7 @@ mod tests {
         fs::write(
             &config,
             format!(
-                "{source}\n[jobs]\nmax_attempts = 5\nretry_delay_secs = 30\npoll_interval_secs = 1\nlease_secs = 300\n"
+                "{source}\n[jobs]\nmax_attempts = 5\nretry_delay_secs = 30\nretry_max_delay_secs = 3600\npoll_interval_secs = 1\nlease_secs = 300\nconcurrency = 4\n"
             ),
         )
         .expect("config inscriptible");
@@ -84,9 +84,9 @@ mod tests {
         assert_eq!(check.state, State::Echec, "{}", check.detail);
     }
 
-    /// Le remède se colle tel quel : les quatre clés que `add jobs` pose y figurent.
+    /// Le remède se colle tel quel : les six clés que `add jobs` pose y figurent.
     #[test]
-    fn the_remedy_carries_the_four_settings_of_the_fragment() {
+    fn the_remedy_carries_the_six_settings_of_the_fragment() {
         let (_parent, root) = project_with_jobs();
         rewrite(&root, "[jobs]", "# [jobs]");
 
@@ -97,8 +97,10 @@ mod tests {
         for key in [
             "max_attempts",
             "retry_delay_secs",
+            "retry_max_delay_secs",
             "poll_interval_secs",
             "lease_secs",
+            "concurrency",
         ] {
             assert!(remedy.contains(key), "`{key}` manque au remède : {remedy}");
         }

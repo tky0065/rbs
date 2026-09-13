@@ -63,6 +63,10 @@ pub struct ServerConfig {
     pub port: u16,
     /// Délai au terme duquel une requête est abandonnée, en secondes.
     pub timeout_secs: u64,
+    /// Délai accordé aux tâches de fond pour finir après un signal d'arrêt, en secondes.
+    ///
+    /// Distinct de `timeout_secs` : un job a le droit de durer plus qu'une requête.
+    pub shutdown_timeout_secs: u64,
 }
 
 /// Accès à la base de données.
@@ -199,6 +203,9 @@ fn figment() -> Result<Figment, ConfigError> {
         // Trente secondes : au-delà, une requête qui n'a pas rendu la main ne le fera
         // plus, et la connexion qu'elle retient manque au reste du trafic.
         .merge(Serialized::default("server.timeout_secs", 30))
+        // La grâce que Kubernetes accorde avant SIGKILL : attendre plus longtemps, c'est
+        // attendre un signal qui ne viendra pas.
+        .merge(Serialized::default("server.shutdown_timeout_secs", 30))
         .merge(Serialized::default("database.max_connections", 10))
         .merge(Serialized::default("database.min_connections", 0))
         .merge(Serialized::default("database.connect_timeout_secs", 5))
@@ -410,6 +417,22 @@ mod tests {
             let config = Config::load().expect("la configuration doit se charger");
 
             assert_eq!(config.server.timeout_secs, 30);
+            assert_eq!(config.server.shutdown_timeout_secs, 30);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn the_shutdown_timeout_is_overridden_by_the_environment() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            test_secret(jail);
+            jail.set_env("RBS_DATABASE__URL", "postgres://localhost/app");
+            jail.set_env("RBS_SERVER__SHUTDOWN_TIMEOUT_SECS", "5");
+
+            let config = Config::load().expect("la configuration doit se charger");
+
+            assert_eq!(config.server.shutdown_timeout_secs, 5);
             Ok(())
         });
     }
