@@ -149,7 +149,11 @@ pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
 fn conflict_on_duplicate(error: DbErr) -> Error {
     match error.sql_err() {
         Some(SqlErr::UniqueConstraintViolation(_)) => {
+{%- if lang == "en" %}
+            Error::Conflict("this value is already taken".to_owned())
+{%- else %}
             Error::Conflict("cette valeur est déjà prise".to_owned())
+{%- endif %}
         }
         _ => Error::from(error),
     }

@@ -65,7 +65,11 @@ pub async fn revoke<C: ConnectionTrait>(
     id: Uuid,
     quand: DateTimeWithTimeZone,
 ) -> Result<Model> {
+{%- if lang == "en" %}
+    let abonnement = find(db, id).await?.ok_or(Error::NotFound("subscription"))?;
+{%- else %}
     let abonnement = find(db, id).await?.ok_or(Error::NotFound("abonnement"))?;
+{%- endif %}
 
     if abonnement.revoked_at.is_some() {
         return Ok(abonnement);

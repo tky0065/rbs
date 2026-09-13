@@ -45,7 +45,11 @@ fn column_of(name: &str) -> Result<Column> {
 {%- endfor %}
         inconnue => {
             return Err(Error::BadRequest(format!(
+{%- if lang == "en" %}
+                "unknown sort column '{inconnue}' — {@ colonnes @}"
+{%- else %}
                 "colonne de tri inconnue « {inconnue} » — {@ colonnes @}"
+{%- endif %}
             )));
         }
     })
