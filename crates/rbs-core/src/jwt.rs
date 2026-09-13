@@ -162,4 +162,25 @@ mod tests {
             "l'algorithme attendu doit être imposé, pas lu dans l'en-tête"
         );
     }
+
+    /// Signé par `sign` sous jsonwebtoken 10.3.0, avec `SECRET`. Un jeton émis avant une
+    /// montée de la crate doit rester accepté jusqu'à son expiration : sinon chaque
+    /// redéploiement déconnecterait tous les utilisateurs.
+    const TOKEN_JSONWEBTOKEN_10: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1MSIsInJvbGUiOiJ1c2VyIiwiZXhwIjo0MTAyNDQ0ODAwLCJpYXQiOjE3NTc3MjE2MDAsImp0aSI6ImpldG9uLWQtYXZhbnQtbGEtbW9udGVlIn0.1cV7nL6cDoBmccJzloNGeTmnPiyCIwOwy2uSHteEQ8Q";
+
+    #[test]
+    fn a_token_signed_by_jsonwebtoken_10_is_still_accepted() {
+        let expected = Claims {
+            sub: "u1".to_owned(),
+            role: "user".to_owned(),
+            exp: LATER,
+            iat: 1_757_721_600,
+            jti: "jeton-d-avant-la-montee".to_owned(),
+        };
+
+        assert_eq!(
+            verify(TOKEN_JSONWEBTOKEN_10, SECRET).expect("vérification"),
+            expected
+        );
+    }
 }

@@ -67,4 +67,18 @@ mod tests {
     fn a_malformed_hash_returns_an_error_without_panicking() {
         assert!(verify_password("s3cr3t", "pas un hash PHC").is_err());
     }
+
+    /// Produit par `hash_password` sous argon2 0.5.3. Un hash stocké survit à toutes les
+    /// montées de la crate : s'il cessait d'être vérifiable, chaque compte existant
+    /// resterait à la porte.
+    const HASH_ARGON2_0_5: &str = "$argon2id$v=19$m=19456,t=2,p=1$25RrSvatxiDwqIo1EoA4tg$rgrgr+jlp/HLwVgJZcn/wVlPr4Vl3d05n9sPcxXZCIg";
+
+    #[test]
+    fn a_hash_produced_by_argon2_0_5_still_verifies() {
+        assert!(
+            verify_password("mot de passe d'avant la montée", HASH_ARGON2_0_5)
+                .expect("vérification")
+        );
+        assert!(!verify_password("un autre mot de passe", HASH_ARGON2_0_5).expect("vérification"));
+    }
 }
