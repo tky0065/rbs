@@ -5,9 +5,8 @@
 //! (`$argon2id$v=19$...`) qui porte son sel et ses paramètres : rehacher un mot de passe
 //! stocké sous d'anciens paramètres reste possible sans migration de schéma.
 
-use argon2::Argon2;
-use argon2::password_hash::rand_core::OsRng;
-use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::password_hash::Error as HashError;
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 
 use crate::Error;
 
@@ -17,10 +16,8 @@ use crate::Error;
 ///
 /// Échoue si le générateur du système ou Argon2 défaille — jamais du fait de l'entrée.
 pub fn hash_password(password: &str) -> crate::Result<String> {
-    let salt = SaltString::generate(&mut OsRng);
-
     Argon2::default()
-        .hash_password(password.as_bytes(), &salt)
+        .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
         .map_err(|error| Error::Internal(anyhow::anyhow!("hachage Argon2 : {error}")))
 }
@@ -38,7 +35,7 @@ pub fn verify_password(password: &str, hash: &str) -> crate::Result<bool> {
     match Argon2::default().verify_password(password.as_bytes(), &expected) {
         Ok(()) => Ok(true),
         // Le seul cas où l'échec vient du client : il ne doit pas devenir un 500.
-        Err(argon2::password_hash::Error::Password) => Ok(false),
+        Err(HashError::PasswordInvalid) => Ok(false),
         Err(error) => Err(Error::Internal(anyhow::anyhow!(
             "vérification Argon2 : {error}"
         ))),
@@ -66,5 +63,33 @@ mod tests {
     #[test]
     fn a_malformed_hash_returns_an_error_without_panicking() {
         assert!(verify_password("s3cr3t", "pas un hash PHC").is_err());
+    }
+
+    /// Produit par `hash_password` sous argon2 0.5.3. Un hash stocké survit à toutes les
+    /// montées de la crate : s'il cessait d'être vérifiable, chaque compte existant
+    /// resterait à la porte.
+    const HASH_ARGON2_0_5: &str = "$argon2id$v=19$m=19456,t=2,p=1$25RrSvatxiDwqIo1EoA4tg$rgrgr+jlp/HLwVgJZcn/wVlPr4Vl3d05n9sPcxXZCIg";
+
+    #[test]
+    fn a_hash_produced_by_argon2_0_5_still_verifies() {
+        assert!(
+            verify_password("mot de passe d'avant la montée", HASH_ARGON2_0_5)
+                .expect("vérification")
+        );
+        assert!(!verify_password("un autre mot de passe", HASH_ARGON2_0_5).expect("vérification"));
+    }
+
+    // Une instance restée sur l'ancienne version doit pouvoir vérifier un hash écrit par
+    // la nouvelle, ce qui suppose le même algorithme et la même version. Les paramètres
+    // (`m=…,t=…,p=…`) ne sont pas fixés ici : toute version les relit depuis la chaîne
+    // PHC, donc les figer ferait échouer ce test à la moindre hausse anodine des
+    // paramètres par défaut de la crate.
+    #[test]
+    fn a_new_hash_keeps_the_argon2id_v19_format() {
+        assert!(
+            hash_password("mot de passe quelconque")
+                .expect("hachage")
+                .starts_with("$argon2id$v=19$")
+        );
     }
 }

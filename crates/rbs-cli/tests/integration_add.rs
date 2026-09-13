@@ -634,7 +634,7 @@ fn the_redis_fragment_writes_the_state_anchors_the_dependencies_and_the_cache_se
     let manifeste =
         fs::read_to_string(racine.join("Cargo.toml")).expect("le manifeste est lisible");
     assert!(
-        manifeste.contains("redis = { version = \"1.6\", features = [\"tokio-comp\"] }"),
+        manifeste.contains("redis = { version = \"1.7\", features = [\"tokio-comp\"] }"),
         "la crate `redis` manque au manifeste :\n{manifeste}"
     );
     assert!(
