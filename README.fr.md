@@ -33,7 +33,16 @@ cargo install rbs-cli
 
 Le paquet s'appelle `rbs-cli` ; le binaire installé s'appelle `rbs`.
 
-Cette commande vous donne le binaire, et rien d'autre : le
+À partir de la 1.5.0, chaque [release GitHub](https://github.com/tky0065/rbs/releases)
+porte des binaires précompilés pour Linux, macOS et Windows, et
+[`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) télécharge celui de votre
+plateforme au lieu de le compiler :
+
+```bash
+cargo binstall rbs-cli
+```
+
+L'une ou l'autre commande vous donne le binaire, et rien d'autre : le
 **[guide de démarrage](https://tky0065.github.io/rbs/fr/getting-started)** porte la base de
 données que les commandes attendent, et la sortie de chacune d'elles. Suivez-le plutôt que
 l'esquisse ci-dessous, qui laisse les deux de côté.

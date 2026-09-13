@@ -45,3 +45,70 @@ jobs:
         run: |
           cargo publish --locked -p rbs-core
           cargo publish --locked -p rbs-cli
+
+  # Une release GitHub par tag, que le job suivant garnit de binaires. Après crates.io et
+  # non avant : une release dont le paquet n'est pas publié annoncerait une version que
+  # `cargo install` ne trouve pas.
+  release-github:
+    name: release GitHub
+    needs: publier
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+
+      # Les notes sont la section de CHANGELOG.md qui porte la version du tag : le fichier
+      # reste la seule source, la release n'en est qu'une copie.
+      - uses: taiki-e/create-gh-release-action@v1
+        with:
+          changelog: CHANGELOG.md
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+  # Des binaires précompilés, pour qu'installer rbs sur un runner — `rbs doctor --json` en
+  # CI — ne coûte plus la compilation d'axum, de sea-orm et de watchexec. `cargo binstall
+  # rbs-cli` les trouve par la section `[package.metadata.binstall]` du manifeste du CLI.
+  binaires:
+    name: binaire ${{ matrix.target }}
+    needs: release-github
+    permissions:
+      contents: write
+    strategy:
+      # Une cible en échec n'annule pas les autres : chacune épargne une compilation à
+      # ceux qui l'utilisent, et la release garde ce qui a réussi.
+      fail-fast: false
+      matrix:
+        include:
+          # Ubuntu 22.04 plutôt que `latest` : un binaire lié à la glibc de 24.04 refuse de
+          # démarrer sur une distribution plus ancienne, runners compris.
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-22.04
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-22.04-arm
+          - target: x86_64-apple-darwin
+            os: macos-latest
+          - target: aarch64-apple-darwin
+            os: macos-latest
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      # Les deux binaires, comme `cargo install` : `rbs-cli` est le nom de repli quand le
+      # `rbs` de Ruby gagne sur le PATH. `rbs-$target` est le nom que la `pkg-url` de
+      # binstall reconstruit : l'un ne change pas sans l'autre.
+      - uses: taiki-e/upload-rust-binary-action@v1
+        with:
+          bin: rbs,rbs-cli
+          target: ${{ matrix.target }}
+          archive: rbs-$target
+          tar: unix
+          zip: windows
+          checksum: sha256
+          locked: true
+          token: ${{ secrets.GITHUB_TOKEN }}

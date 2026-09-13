@@ -36,7 +36,17 @@ crates.io belongs to an unrelated project:
 cargo install rbs-cli
 ```
 
-That drops an `rbs` executable in `~/.cargo/bin`, and a second copy of it named
+That compiles rbs from source, which takes a few minutes. From 1.5.0 on, each
+[GitHub release](https://github.com/tky0065/rbs/releases) also carries prebuilt binaries
+for Linux, macOS and Windows, and
+[`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) downloads the one for
+your platform instead:
+
+```bash
+cargo binstall rbs-cli
+```
+
+Either way, that drops an `rbs` executable in `~/.cargo/bin`, and a second copy of it named
 `rbs-cli`, for the case the note below describes. Check the binary answers:
 
 ```bash

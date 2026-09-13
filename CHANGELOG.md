@@ -40,6 +40,13 @@ between minor versions with no deprecation cycle.
   before 1.5.0 keeps working without them, and takes `src/modules/jobs/worker.rs` and
   `queue.rs` from the fragment when it wants the behaviour. `rbs doctor` proposes both
   keys in the block it prints when the section is missing.
+- **Every GitHub release carries prebuilt binaries, and `cargo binstall rbs-cli` finds
+  them.** A tag now attaches `rbs` and `rbs-cli` for Linux (x86_64 and aarch64, built
+  against the glibc of Ubuntu 22.04), macOS (Intel and Apple silicon) and Windows
+  (x86_64), each archive with its SHA-256 checksum, to a GitHub release whose notes are
+  this file's section for the version. `rbs-cli` declares `[package.metadata.binstall]`,
+  so `cargo binstall rbs-cli` downloads the archive for your platform instead of
+  compiling — installing rbs on a CI runner no longer costs a build of axum and sea-orm.
 
 ### Changed
 

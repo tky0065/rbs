@@ -43,6 +43,14 @@ dépréciation.
   avant 1.5.0 continue de fonctionner sans elles, et reprend `src/modules/jobs/worker.rs`
   et `queue.rs` du fragment quand il veut le comportement. `rbs doctor` propose les deux
   clés dans le bloc qu'il imprime quand la section manque.
+- **Chaque release GitHub porte des binaires précompilés, que `cargo binstall rbs-cli`
+  trouve.** Un tag joint désormais `rbs` et `rbs-cli` pour Linux (x86_64 et aarch64,
+  compilés contre la glibc d'Ubuntu 22.04), macOS (Intel et Apple silicon) et Windows
+  (x86_64), chaque archive avec sa somme SHA-256, à une release GitHub dont les notes
+  sont la section de ce fichier pour la version. `rbs-cli` déclare
+  `[package.metadata.binstall]` : `cargo binstall rbs-cli` télécharge l'archive de votre
+  plateforme au lieu de compiler — installer rbs sur un runner de CI ne coûte plus une
+  compilation d'axum et de sea-orm.
 
 ### Modifié
 
