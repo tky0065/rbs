@@ -21,6 +21,13 @@ pub(crate) const INVENTORY: &str = "inventory";
 /// Nom du fichier, à la racine du projet.
 pub(crate) const FICHIER: &str = "AGENTS.md";
 
+/// Le fichier que lit Claude Code, à la racine du projet : il n'y lit `AGENTS.md` que par
+/// l'import que celui-ci déclare.
+pub(crate) const CLAUDE: &str = "CLAUDE.md";
+
+/// Le contenu entier de [`CLAUDE`] : l'import, et rien qui puisse diverger du guide.
+pub(crate) const CLAUDE_CONTENU: &str = "@AGENTS.md\n";
+
 /// Version du CLI qui écrit le guide.
 pub(crate) const VERSION: &str = env!("CARGO_PKG_VERSION");
 

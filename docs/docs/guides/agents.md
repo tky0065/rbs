@@ -12,8 +12,12 @@ The CLI is right there, and nothing tells the agent to reach for it.
 
 `rbs new` answers this by writing `AGENTS.md` at the project root — the manual for rbs,
 written for an agent rather than a human. `AGENTS.md` is a plain, tool-neutral format that
-Claude Code, Codex, Cursor and Copilot already read on their own; rbs generates no file
-tied to a particular tool.
+Codex, Cursor and Copilot read on their own. Claude Code does not: it reads `CLAUDE.md`,
+and reaches `AGENTS.md` only through an import declared there. So `rbs new` also writes
+`CLAUDE.md`, the one file it generates for a particular tool, and a single line long —
+`@AGENTS.md` — so that the handbook keeps one source and nothing in `CLAUDE.md` can drift
+from it. That file is yours from the moment it exists: add your own instructions below the
+import, and no command will ever rewrite them.
 
 ## The two zones rbs owns
 
@@ -91,6 +95,10 @@ CLI, which is why it is also the only one that recreates a deleted file. `add` a
 `generate` regenerate only the inventory: they know the feature or entity they just
 installed, not whether the CLI itself has moved to a new version — that comparison is
 `upgrade`'s alone.
+
+`CLAUDE.md` follows a shorter rule of its own. `rbs new` writes it; `rbs upgrade` writes it
+back only when it is missing — the case of every project generated before rbs wrote it —
+and no command ever rewrites one that exists, whatever it holds.
 
 ## Choosing the language
 

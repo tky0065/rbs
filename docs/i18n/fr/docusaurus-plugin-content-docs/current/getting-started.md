@@ -11,7 +11,7 @@ si votre terminal affiche la même chose, vous n'avez pas dévié — aux durée
 identifiants et aux dates près, qui sont les vôtres. Une seule chose a été retirée des
 blocs : le chemin absolu du répertoire où l'exécution a eu lieu, noté `…/demo`.
 
-Le CLI parle français : `✓ demo créé — 21 fichiers` est une ligne de succès. Les
+Le CLI parle français : `✓ demo créé — 22 fichiers` est une ligne de succès. Les
 options, les noms de fichiers et le code généré, eux, sont les mêmes quelle que soit la
 langue.
 
@@ -74,7 +74,7 @@ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 
 {/* rbs:transcript cmd="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" */}
 ```text
-✓ demo créé — 21 fichiers
+✓ demo créé — 22 fichiers
 
   cd demo
   docker compose up -d   # la base du .env, montée
@@ -96,7 +96,7 @@ terminal où poser ses questions : c'est pourquoi un script ou un job de CI a be
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
 ```
 
-Vingt fichiers, et aucun n'est une boîte noire :
+Vingt-deux fichiers, et aucun n'est une boîte noire :
 
 - `src/main.rs`, `src/router.rs`, `src/state.rs`, `src/openapi.rs` — le montage.
 - `src/lib.rs` — la bibliothèque sur laquelle s'appuient `src/main.rs` et
@@ -111,6 +111,8 @@ Vingt fichiers, et aucun n'est une boîte noire :
 - `docker-compose.yml` — la base du projet, construite depuis l'URL ci-dessous.
 - `.env` — l'URL de la base et les réglages de logs, tenus hors de Git.
 - `.env.example` — les mêmes clés sans secret, versionnées.
+- `AGENTS.md` et `CLAUDE.md` — le mode d'emploi qu'un agent lit avant de toucher au
+  projet, et l'import d'une ligne par lequel Claude Code l'atteint.
 
 Le `.env` écrit par la commande porte l'URL que vous avez passée :
 

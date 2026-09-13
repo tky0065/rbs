@@ -10,7 +10,9 @@ version consignée dans `[package.metadata.rbs]`. Il affiche ensuite les notes d
 que le saut traverse.
 
 Il n'écrit que dans `Cargo.toml`, et dans les deux zones réservées d'
-[`AGENTS.md`](../guides/agents.md) — nulle part ailleurs. Le reste du projet —
+[`AGENTS.md`](../guides/agents.md) ; il crée aussi le `CLAUDE.md` d'une ligne qui importe ce
+guide quand le projet n'en a pas, et ne réécrit jamais celui qui existe — nulle part
+ailleurs. Le reste du projet —
 contrôleurs, configuration, migrations, et tout ce que vous écrivez hors de ces deux
 zones — vous appartient dès l'instant où [`rbs new`](./new.md) l'a posé, et le re-rendre
 sur une version plus récente effacerait votre travail sans que vous l'ayez demandé
