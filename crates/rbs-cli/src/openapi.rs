@@ -64,6 +64,19 @@ impl Obtention {
             _ => None,
         }
     }
+
+    /// Code stable de la faute, en snake_case ASCII.
+    // Tombe avec le branchement de `--json` : sans lui, seuls les tests et
+    // `client::Error`, qui délègue à celle-ci, l'appellent.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Obtention::SansBibliotheque => "sans_bibliotheque",
+            Obtention::SansBinaire => "sans_binaire_openapi",
+            Obtention::Cargo(_) => "cargo_introuvable",
+            Obtention::BinaireEnEchec { .. } => "projet_ne_compile_pas",
+        }
+    }
 }
 
 /// Lance le binaire `openapi` du projet enraciné en `root` et rend ce qu'il a imprimé.

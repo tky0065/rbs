@@ -95,6 +95,21 @@ pub(crate) enum Error {
     Plan(#[from] plan::Error),
 }
 
+impl Error {
+    /// Code stable de la faute, en snake_case ASCII.
+    // Tombe avec le branchement de `--json` : sans lui, seuls les tests et `add::Error`,
+    // qui délègue à celle-ci, l'appellent.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Error::TemplateAbsente { .. } => "template_absente",
+            Error::AncreInconnue { .. } => "ancre_inconnue",
+            Error::Rendu { .. } => "rendu_impossible",
+            Error::Plan(erreur) => erreur.code(),
+        }
+    }
+}
+
 /// Ajoute au plan ce que le manifeste déclare, et rend les chemins déposés.
 pub(crate) fn actions(
     fragment: &Fragment,

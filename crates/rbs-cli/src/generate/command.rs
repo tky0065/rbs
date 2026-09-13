@@ -9,6 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::anchors;
+use crate::errors::Codee;
 use crate::git;
 use crate::metadata;
 use crate::plan;
@@ -229,6 +230,44 @@ impl Error {
                 absente.anchor.file,
                 absente.anchor.block()
             )),
+            _ => None,
+        }
+    }
+}
+
+impl Codee for Error {
+    fn code(&self) -> &'static str {
+        match self {
+            Error::PasUnProjet => "pas_un_projet",
+            Error::Nom(_) => "nom_invalide",
+            Error::Fields(_) => "champs_invalides",
+            Error::DejaPresente { .. } => "feature_deja_presente",
+            Error::Rendu { .. } => "rendu_impossible",
+            Error::Acces(_) => "fichier_inaccessible",
+            Error::WorkingTreeSale(_) => "arbre_sale",
+            Error::Plan(erreur) => erreur.code(),
+            Error::Application(erreur) => erreur.code(),
+            Error::Metadata(_) => "manifeste_illisible",
+            Error::Relations(_) => "relation_invalide",
+            Error::MigrationsAbsentes(_) => "migration_absente",
+            Error::Homonyme { .. } => "homonyme",
+            Error::Absente { .. } => "feature_absente",
+            Error::RoleSansAuth { .. } => "role_sans_auth",
+            Error::UploadSansStorage => "upload_sans_storage",
+            Error::UploadStorageHorsModules => "storage_hors_modules",
+            Error::SoftDeleteColonneReservee { .. } => "colonne_reservee",
+            Error::RoleInconnu { .. } => "role_inconnu",
+            Error::EnfantSansCle { .. } => "enfant_sans_cle",
+        }
+    }
+
+    fn remede(&self) -> Option<String> {
+        self.remedy()
+    }
+
+    fn bloc(&self) -> Option<String> {
+        match self {
+            Error::Plan(erreur) => erreur.bloc(),
             _ => None,
         }
     }
@@ -1561,6 +1600,16 @@ mod tests {
     #[test]
     fn an_error_without_a_known_remedy_does_not_invent_one() {
         assert_eq!(Error::PasUnProjet.remedy(), None);
+    }
+
+    #[test]
+    fn a_vanished_anchor_carries_its_code_and_the_block_to_paste() {
+        let error = Error::Plan(crate::plan::Error::Anchor(crate::anchors::Missing {
+            anchor: crate::anchors::ROUTES,
+        }));
+
+        assert_eq!(error.code(), "ancre_absente");
+        assert_eq!(error.bloc(), Some(crate::anchors::ROUTES.block()));
     }
 
     /// Le plan montré est celui qui sera exécuté : c'est ce qui rend `--dry-run` digne de

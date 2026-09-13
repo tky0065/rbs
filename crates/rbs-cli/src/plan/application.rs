@@ -25,6 +25,19 @@ pub(crate) enum Error {
     },
 }
 
+impl Error {
+    /// Code stable de la faute, en snake_case ASCII.
+    // Tombe avec le branchement de `--json` : sans lui, seuls les tests et les quatre
+    // commandes qui délèguent à `Error` l'appellent.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Error::Ecriture { .. } => "ecriture_impossible",
+            Error::Conflit { .. } => "conflit",
+        }
+    }
+}
+
 /// Écrit les fichiers du plan, ou n'en laisse aucun.
 ///
 /// Les conflits s'arbitrent avant la première écriture : un plan refusé à mi-chemin aurait
@@ -357,6 +370,25 @@ mod tests {
         assert!(
             !project.path().join("src").exists(),
             "`src/` a été créé par le plan : il doit disparaître avec lui"
+        );
+    }
+
+    #[test]
+    fn a_conflict_and_a_write_failure_carry_distinct_codes() {
+        assert_eq!(
+            Error::Conflit {
+                chemins: "src.rs".to_string()
+            }
+            .code(),
+            "conflit"
+        );
+        assert_eq!(
+            Error::Ecriture {
+                path: "src.rs".to_string(),
+                source: io::Error::other("panne"),
+            }
+            .code(),
+            "ecriture_impossible"
         );
     }
 }

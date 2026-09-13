@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use minijinja::context;
 
 use crate::dotenv;
+use crate::errors::Codee;
 use crate::git;
 use crate::manifest;
 use crate::metadata;
@@ -212,6 +213,33 @@ impl Error {
             }
             _ => None,
         }
+    }
+}
+
+impl Codee for Error {
+    fn code(&self) -> &'static str {
+        match self {
+            Error::PasUnProjet => "pas_un_projet",
+            Error::Unknown(_) => "feature_inconnue",
+            Error::Acces(_) => "fichier_inaccessible",
+            Error::SansManifeste { .. } => "fragment_sans_manifeste",
+            Error::Manifest(_) => "fragment_invalide",
+            Error::Installation(erreur) => erreur.code(),
+            Error::WorkingTreeSale(_) => "arbre_sale",
+            Error::Metadata(_) => "manifeste_illisible",
+            Error::Env(_) => "env_illisible",
+            Error::UrlIndecomposable { .. } => "url_indecomposable",
+            Error::Plan(erreur) => erreur.code(),
+            Error::Application(erreur) => erreur.code(),
+        }
+    }
+
+    fn remede(&self) -> Option<String> {
+        self.remedy()
+    }
+
+    fn bloc(&self) -> Option<String> {
+        self.plan().and_then(plan::Error::bloc)
     }
 }
 
@@ -2788,5 +2816,29 @@ mod tests {
             Some("demo_api"),
             "{env}"
         );
+    }
+
+    /// L'ancre disparue arrive ici par l'installation d'un fragment, et non par un plan
+    /// direct : le code et le bloc doivent tout de même se lire, sans descendre dans
+    /// `installation::Error` à la main.
+    #[test]
+    fn a_vanished_anchor_carries_its_code_and_block_through_the_installation() {
+        let error = Error::Installation(installation::Error::Plan(plan::Error::Anchor(
+            crate::anchors::Missing {
+                anchor: crate::anchors::ROUTES,
+            },
+        )));
+
+        assert_eq!(error.code(), "ancre_absente");
+        assert_eq!(error.bloc(), Some(crate::anchors::ROUTES.block()));
+    }
+
+    #[test]
+    fn a_dirty_working_tree_has_a_stable_code() {
+        let error = Error::WorkingTreeSale(crate::errors::WorkingTreeSale {
+            files: "src/main.rs".to_string(),
+        });
+
+        assert_eq!(error.code(), "arbre_sale");
     }
 }

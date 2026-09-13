@@ -6,6 +6,7 @@
 
 use std::path::{Path, PathBuf};
 
+use crate::errors::Codee;
 use crate::{git, metadata, openapi, plan};
 
 pub(crate) mod document;
@@ -112,6 +113,33 @@ impl Error {
     }
 }
 
+impl Codee for Error {
+    fn code(&self) -> &'static str {
+        match self {
+            Error::PasUnProjet => "pas_un_projet",
+            Error::Openapi(obtention) => obtention.code(),
+            Error::Document(_) => "document_illisible",
+            Error::Rendu(_) => "client_irrendable",
+            Error::Acces(_) => "fichier_inaccessible",
+            Error::WorkingTreeSale(_) => "arbre_sale",
+            Error::Plan(erreur) => erreur.code(),
+            Error::Application(erreur) => erreur.code(),
+            Error::Metadata(_) => "manifeste_illisible",
+        }
+    }
+
+    fn remede(&self) -> Option<String> {
+        self.remedy()
+    }
+
+    fn bloc(&self) -> Option<String> {
+        match self {
+            Error::Plan(erreur) => erreur.bloc(),
+            _ => None,
+        }
+    }
+}
+
 /// Le chemin du client, relatif à la racine du projet.
 ///
 /// `--out` remplace le répertoire, jamais le nom du fichier : c'est le nom que le client
@@ -195,6 +223,15 @@ mod tests {
         assert!(remede.contains("[[bin]]"), "{remede}");
         assert!(remede.contains(BINAIRE), "{remede}");
         assert!(remede.contains("ApiDoc::openapi()"), "{remede}");
+    }
+
+    #[test]
+    fn a_missing_openapi_binary_carries_a_stable_code_and_the_same_remedy() {
+        let error = Error::Openapi(crate::openapi::Obtention::SansBinaire);
+
+        assert_eq!(error.code(), "sans_binaire_openapi");
+        let remede = error.remede().expect("le refus doit porter un remède");
+        assert!(remede.contains("[[bin]]"), "{remede}");
     }
 
     #[test]

@@ -156,6 +156,42 @@ pub(crate) enum Error {
     },
 }
 
+impl Error {
+    /// Code stable de la faute, en snake_case ASCII.
+    ///
+    /// `match` exhaustif, sans bras `_` : une variante ajoutée à `Error` ne compile plus
+    /// tant qu'elle n'a pas le sien.
+    // Tombe avec le branchement de `--json` : sans lui, seuls les tests et les quatre
+    // commandes qui délèguent à `Error` l'appellent.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Error::Acces(_) => "fichier_inaccessible",
+            Error::DejaProjete { .. } => "plan_incoherent",
+            Error::Anchor(_) => "ancre_absente",
+            Error::MalPlacee(_) => "ancre_mal_placee",
+            Error::FichierAbsent { .. } => "fichier_absent",
+            Error::Metadata(_) => "manifeste_illisible",
+            Error::Toml { .. } => "toml_invalide",
+            Error::ManifesteAbsent { .. } => "manifeste_absent",
+            Error::ZoneAbsente { .. } => "zone_absente",
+        }
+    }
+
+    /// Le bloc à coller, quand la faute est une ancre disparue, mal placée, ou une zone
+    /// absente d'`AGENTS.md` — les seules dont le remède tient dans un extrait de
+    /// fichier plutôt que dans une décision du développeur.
+    #[cfg_attr(not(test), expect(dead_code))]
+    pub(crate) fn bloc(&self) -> Option<String> {
+        match self {
+            Error::Anchor(absente) => Some(absente.anchor.block()),
+            Error::MalPlacee(placee) => Some(placee.block.clone()),
+            Error::ZoneAbsente { zone, .. } => Some(zone.block()),
+            _ => None,
+        }
+    }
+}
+
 /// Accumule les actions d'un plan en calculant, pour chaque fichier, son contenu final.
 pub(crate) struct Builder {
     root: PathBuf,
@@ -1452,5 +1488,18 @@ mod tests {
         );
         assert_eq!(plan.actions().len(), 4);
         assert_eq!(plan.files().len(), 4);
+    }
+
+    #[test]
+    fn a_vanished_anchor_carries_its_code_and_the_block_to_paste() {
+        let error = Error::Anchor(anchors::Missing {
+            anchor: anchors::ROUTES,
+        });
+
+        assert_eq!(error.code(), "ancre_absente");
+        let Error::Anchor(absente) = &error else {
+            unreachable!()
+        };
+        assert_eq!(error.bloc(), Some(absente.anchor.block()));
     }
 }
