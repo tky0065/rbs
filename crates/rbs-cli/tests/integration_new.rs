@@ -2,8 +2,11 @@
 //! `new::creer`, et compile ce que ce binaire a produit.
 
 use std::fs;
-use std::net::TcpListener;
+use std::io::{Read, Write};
+use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
+use std::process::{Child, Stdio};
+use std::time::{Duration, Instant};
 
 use assert_cmd::Command;
 use tempfile::TempDir;
@@ -569,6 +572,149 @@ fn the_created_project_carries_an_agents_file_naming_the_cli() {
     assert!(agents.contains("rbs generate crud"), "{agents}");
     assert!(agents.contains("<!-- rbs:inventory -->"), "{agents}");
     assert!(agents.contains("postgres"), "{agents}");
+}
+
+/// `/health/live` répond tant que le processus tourne, base ou non ; `/health` passe au
+/// 503 dès qu'elle manque. C'est la distinction qu'un orchestrateur lit : sonder la vie
+/// sur la base ferait redémarrer l'API en boucle le jour où c'est la base qui tombe.
+///
+/// La base est présente au démarrage — `main` s'y connecte avant d'écouter — puis arrêtée
+/// sous le serveur qui tourne.
+#[test]
+#[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn the_liveness_route_outlives_the_database() {
+    let postgres = common::start_postgres();
+    let url = common::url_of(&postgres);
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let noyau = common::noyau();
+
+    // Un nom qu'aucune autre suite n'emploie : deux projets homonymes compilés dans la
+    // cible partagée se disputent leurs artefacts.
+    rbs(parent.path())
+        .args(["new", "sonde-vie", "--yes", "--database-url", &url])
+        .args([
+            "--core-path",
+            noyau.to_str().expect("chemin du noyau représentable"),
+        ])
+        .assert()
+        .success();
+
+    let root = parent.path().join("sonde-vie");
+
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
+    rbs(&root)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .args(["migrate", "up"])
+        .assert()
+        .success();
+
+    Command::new("cargo")
+        .current_dir(&root)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .arg("build")
+        .assert()
+        .success();
+
+    let serveur = Serveur::lancer(&root, "sonde-vie");
+
+    assert_eq!(get(serveur.port, "/health/live").0, 200);
+    assert_eq!(get(serveur.port, "/health").0, 200);
+
+    let (code, document) = get(serveur.port, "/api-docs/openapi.json");
+    assert_eq!(code, 200, "{document}");
+    for chemin in ["\"/health/live\"", "\"/health\""] {
+        assert!(
+            document.contains(chemin),
+            "{chemin} absent du document OpenAPI :\n{document}"
+        );
+    }
+
+    postgres.stop().expect("PostgreSQL doit s'arrêter");
+
+    let (code, corps) = get(serveur.port, "/health");
+    assert_eq!(code, 503, "la readiness ignore la base arrêtée :\n{corps}");
+
+    let (code, corps) = get(serveur.port, "/health/live");
+    assert_eq!(code, 200, "la liveness a suivi la base :\n{corps}");
+}
+
+/// Le binaire d'un projet, lancé sur un port libre, arrêté quand ce garde tombe.
+///
+/// `Drop` plutôt qu'un `kill` en fin de test : une assertion qui échoue déroule la pile
+/// sans jamais l'atteindre, et laisserait derrière elle un serveur qui écoute.
+struct Serveur {
+    processus: Child,
+    port: u16,
+}
+
+impl Serveur {
+    fn lancer(racine: &Path, binaire: &str) -> Self {
+        let port = free_port();
+        let processus = std::process::Command::new(common::cible().join("debug").join(binaire))
+            .current_dir(racine)
+            .env("RBS_SERVER__PORT", port.to_string())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("le binaire du projet doit être lançable");
+
+        // Construit avant l'attente : un serveur qui ne se met jamais à écouter est tué
+        // par le `Drop` de la panique, au lieu de survivre au test.
+        let mut serveur = Self { processus, port };
+        let limite = Instant::now() + Duration::from_secs(60);
+
+        while TcpStream::connect(("127.0.0.1", port)).is_err() {
+            if let Ok(Some(sortie)) = serveur.processus.try_wait() {
+                panic!("le serveur s'est arrêté avant d'écouter : {sortie}");
+            }
+            assert!(
+                Instant::now() < limite,
+                "le serveur n'écoute toujours pas sur {port} après 60 s"
+            );
+            std::thread::sleep(Duration::from_millis(100));
+        }
+
+        serveur
+    }
+}
+
+impl Drop for Serveur {
+    fn drop(&mut self) {
+        let _ = self.processus.kill();
+        let _ = self.processus.wait();
+    }
+}
+
+/// Joue `GET chemin` sur le serveur local, et rend le statut avec le corps brut.
+///
+/// Écrite à la main plutôt que par un client HTTP : un statut et un corps suffisent ici,
+/// et la dépendance se paierait sur toute la CI.
+fn get(port: u16, chemin: &str) -> (u16, String) {
+    let mut flux = TcpStream::connect(("127.0.0.1", port)).expect("le serveur doit répondre");
+    write!(
+        flux,
+        "GET {chemin} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n"
+    )
+    .expect("la requête doit partir");
+
+    let mut reponse = String::new();
+    flux.read_to_string(&mut reponse)
+        .expect("la réponse doit être lisible");
+
+    let code = reponse
+        .split_whitespace()
+        .nth(1)
+        .and_then(|code| code.parse().ok())
+        .unwrap_or_else(|| panic!("réponse sans ligne de statut lisible :\n{reponse}"));
+    let corps = reponse
+        .split_once("\r\n\r\n")
+        .map(|(_, corps)| corps.to_string())
+        .unwrap_or_default();
+
+    (code, corps)
 }
 
 /// Le binaire livré, lancé depuis `repertoire`.

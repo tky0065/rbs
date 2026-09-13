@@ -5,8 +5,8 @@ title: rbs new
 
 # `rbs new`
 
-Crée un projet qui tourne tel quel : un workspace Cargo, une crate `migration`, une route
-`/health`, un `.env` et un dépôt Git. Rien n'est compilé, aucune base n'est contactée — la
+Crée un projet qui tourne tel quel : un workspace Cargo, une crate `migration`, les routes
+`/health` et `/health/live`, un `.env` et un dépôt Git. Rien n'est compilé, aucune base n'est contactée — la
 commande écrit des fichiers, et s'arrête là.
 
 :::note
@@ -101,20 +101,21 @@ attente de la base dans [`rbs dev`](./dev.md), et une URL sans hôte ni port.
 {/* rbs:transcript cmd="rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes" */}
 ```text
 $ rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes
-✓ blog créé — 21 fichiers
+✓ blog créé — 22 fichiers
 
   cd blog
   docker compose up -d   # la base du .env, montée
   cargo run              # ou `rbs dev`, qui enchaîne les deux
 ```
 
-Les vingt fichiers :
+Les vingt-deux fichiers :
 
 ```text
 blog/.env
 blog/.env.example
 blog/.gitignore
 blog/AGENTS.md
+blog/CLAUDE.md
 blog/Cargo.toml
 blog/config/default.toml
 blog/config/development.toml
@@ -182,7 +183,7 @@ dans laquelle il est écrit :
 
 ```text
 $ rbs new demo-api --database-url postgres://rbs:rbs@localhost:5432/demo_api --lang en --yes
-✓ demo-api créé — 21 fichiers
+✓ demo-api créé — 22 fichiers
 
 $ grep lang demo-api/Cargo.toml
 lang = "en"
@@ -233,7 +234,7 @@ crate :
 
 ```text
 $ rbs new blog --core-path /private/tmp/rbs-core --yes
-✓ blog créé — 21 fichiers
+✓ blog créé — 22 fichiers
 
   cd blog
   docker compose up -d   # la base du .env, montée
@@ -261,7 +262,7 @@ du squelette dont le `.env.jinja` porte une ligne de plus :
 
 ```text
 $ rbs new maison --template-dir /private/tmp/rbs-demo/mes-templates --yes
-✓ maison créé — 21 fichiers
+✓ maison créé — 22 fichiers
 
   cd maison
   docker compose up -d   # la base du .env, montée
@@ -282,7 +283,7 @@ installe chacune des nommées, dans la même passe qui écrit le projet :
 {/* rbs:transcript cmd="rbs new site --with auth --yes" */}
 ```text
 $ rbs new site --with auth --yes
-✓ site créé — 21 fichiers
+✓ site créé — 22 fichiers
   + mail       6 fichiers
   + rate-limit 4 fichiers
   + auth       24 fichiers, 1 migration
@@ -310,7 +311,7 @@ features s'installent en une seule passe, et chaque fragment voit celles posées
 
 ```text
 $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes
-✓ with-demo créé — 21 fichiers
+✓ with-demo créé — 22 fichiers
   + docker     2 fichiers
   + mail       6 fichiers
   + rate-limit 4 fichiers
@@ -437,7 +438,7 @@ Quatre cas n'écrivent rien :
 
 ```text
 $ rbs new sqlite-demo --database sqlite --yes
-✓ sqlite-demo créé — 20 fichiers
+✓ sqlite-demo créé — 21 fichiers
 
   cd sqlite-demo
   cargo run          # la base visée est dans .env

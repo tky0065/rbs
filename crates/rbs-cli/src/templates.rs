@@ -1489,6 +1489,28 @@ mod tests {
         );
     }
 
+    /// L'image ne porte ni curl ni wget : la sonde passe par bash et `/dev/tcp`, et vise
+    /// `/health/live` — une sonde sur `/health` tuerait le conteneur quand la base tombe.
+    #[test]
+    fn the_docker_runtime_probes_the_liveness_route() {
+        let source = read(&Path::new(RACINE_FEATURES).join("docker/Dockerfile.jinja"));
+        let runtime = source
+            .split("AS runtime")
+            .nth(1)
+            .expect("le Dockerfile doit avoir une étape runtime");
+
+        let sonde = runtime
+            .lines()
+            .skip_while(|ligne| !ligne.starts_with("HEALTHCHECK"))
+            .take(2)
+            .collect::<Vec<_>>()
+            .join("\n");
+
+        assert!(sonde.contains("\"bash\", \"-c\""), "{runtime}");
+        assert!(sonde.contains("/dev/tcp/127.0.0.1/8080"), "{sonde}");
+        assert!(sonde.contains("GET /health/live HTTP/1.1"), "{sonde}");
+    }
+
     /// Le dépilage porte ses trois moteurs, et lui seul.
     ///
     /// `SKIP LOCKED` est du PostgreSQL et du MySQL 8 ; SQLite ne le connaît pas et n'en a

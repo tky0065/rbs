@@ -13,8 +13,12 @@ servir.
 
 `rbs new` répond à cela en écrivant `AGENTS.md` à la racine du projet — le mode d'emploi
 de rbs, écrit pour un agent plutôt que pour un humain. `AGENTS.md` est un format neutre,
-déjà lu tel quel par Claude Code, Codex, Cursor et Copilot ; rbs n'engendre aucun fichier
-propre à un outil en particulier.
+que Codex, Cursor et Copilot lisent tel quel. Claude Code, lui, ne le lit pas : il lit
+`CLAUDE.md`, et n'atteint `AGENTS.md` que par un import qui y est déclaré. `rbs new` écrit
+donc aussi `CLAUDE.md`, le seul fichier qu'il engendre pour un outil en particulier, et
+long d'une ligne — `@AGENTS.md` — pour que le mode d'emploi garde une seule source et que
+rien dans `CLAUDE.md` ne puisse s'en écarter. Ce fichier vous appartient dès qu'il existe :
+ajoutez vos propres consignes sous l'import, aucune commande ne les réécrira.
 
 ## Les deux zones que rbs possède
 
@@ -94,6 +98,10 @@ et c'est pourquoi elle est aussi la seule à recréer un fichier supprimé. `add
 `generate` ne régénèrent que l'inventaire : elles connaissent la feature ou l'entité
 qu'elles viennent d'installer, pas si le CLI lui-même a changé de version — cette
 comparaison n'appartient qu'à `upgrade`.
+
+`CLAUDE.md` suit une règle à lui, plus courte. `rbs new` l'écrit ; `rbs upgrade` ne le
+réécrit que s'il manque — le cas de tout projet engendré avant que rbs ne l'écrive — et
+aucune commande ne réécrit jamais celui qui existe, quoi qu'il contienne.
 
 ## Choisir la langue
 

@@ -31,16 +31,16 @@ plan pour …/demo
   + clients/ts/client.ts   créé
 
   1 fichier à écrire
-✓ client engendré — clients/ts/client.ts porte 7 opérations
+✓ client engendré — clients/ts/client.ts porte 8 opérations
 ```
 
 Nothing here reads `src/articles/` directly, and nothing guesses a route's shape from its
 handler: the command runs `src/bin/openapi.rs` — the third binary `rbs new` wrote
 alongside `demo` itself and the seed runner — and reads what `ApiDoc::openapi()` prints on
 its standard output. That is what makes the command work with no server listening and no
-database reachable: the document is a build artifact, not a network response. Seven
-operations is `articles`'s five routes, `POST /articles/filter`, and `GET /health` — every
-handler that carries an `operationId`, which every one `rbs generate crud` writes does by
+database reachable: the document is a build artifact, not a network response. Eight
+operations is `articles`'s five routes, `POST /articles/filter`, `GET /health` and
+`GET /health/live` — every handler that carries an `operationId`, which every one `rbs generate crud` writes does by
 default.
 
 The point that carries the rest of this page: the client is read off a document the
@@ -67,12 +67,12 @@ plan pour …/demo
   · clients/ts/client.ts   inchangé
 
   1 inchangé
-✓ client engendré — clients/ts/client.ts porte 7 opérations
+✓ client engendré — clients/ts/client.ts porte 8 opérations
 ```
 
 `inchangé` is proof by idempotence: reading the same OpenAPI document a second time
 produces the same file byte for byte, so nothing was left for the second run to write.
-The operation count printed again is the same seven — not recomputed from the file on
+The operation count printed again is the same eight — not recomputed from the file on
 disk, but read fresh from `ApiDoc::openapi()` each time, which is what makes this
 command safe to run after every `rbs generate crud` rather than only once.
 
@@ -95,7 +95,8 @@ the headers are set once, at construction, instead of threaded through every cal
 
 One method per operation, named after its `operationId` in camelCase. `articlesFilter`
 posts rather than gets, because the conditions it carries would not fit in a URL; `health`
-returns `Promise<void>`, since `GET /health` answers with no body to parse.
+and `healthLive` return `Promise<void>`, since neither health route declares a body to
+parse.
 
 ```typescript file=examples/hello-crud/clients/ts/client.ts region=methodes
 ```

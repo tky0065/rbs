@@ -94,6 +94,15 @@ plan pour /private/tmp/rbs-demo/blog
 démarre. `docker compose up -d` seul — ce que [`rbs dev`](./dev.md) lance — laisse
 l'infrastructure tranquille.
 
+Le `Dockerfile` porte son propre `HEALTHCHECK`, et c'est lui qui fait afficher `healthy`
+au conteneur `api` dans `docker ps` — sous le compose comme sous un `docker run` nu. Il
+sonde `/health/live`, et non `/health` : la route de vie n'interroge rien, si bien qu'une
+base tombée fait passer `/health` au `503` sans rendre le conteneur malade — redémarrer
+l'API ne ramènerait pas la base. L'image ne porte ni `curl` ni `wget` : la sonde parle
+HTTP par le `/dev/tcp` de bash, sur le port `8080`, celui que déclare `EXPOSE` ; l'un ne
+bouge pas sans l'autre. Kubernetes ignore tout `HEALTHCHECK` : ses sondes se déclarent
+dans le manifeste, `livenessProbe` sur `/health/live` et `readinessProbe` sur `/health`.
+
 Un projet sans compose où insérer — SQLite, ou créé avant rbs 1.1.0 — en reçoit un entier :
 
 ```text

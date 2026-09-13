@@ -93,7 +93,7 @@ INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
 
 Un démarrage propre ici prouve que `src/articles/` compile dans le routeur : `demo`
-écoute désormais avec six nouvelles opérations ajoutées à `/health` — `GET` et `POST` sur
+écoute désormais avec six nouvelles opérations ajoutées à `/health` et `/health/live` — `GET` et `POST` sur
 `/articles`, `POST` sur `/articles/filter`, et `GET`, `PATCH` et `DELETE` sur
 `/articles/{id}` — si le module avait échoué à compiler, cette ligne ne se serait jamais
 affichée.

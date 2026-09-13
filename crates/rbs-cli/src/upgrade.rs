@@ -1,8 +1,9 @@
 //! `rbs upgrade` : le projet aligné sur la version du CLI, et rien d'autre.
 //!
 //! La commande n'écrit que dans `Cargo.toml` et dans les deux zones réservées de
-//! `AGENTS.md`. Le reste du projet — contrôleurs, configuration, migrations, et tout ce
-//! que le développeur écrit hors de ces zones — appartient au développeur dès que
+//! `AGENTS.md`, et crée le `CLAUDE.md` qui l'importe quand il manque. Le reste du projet
+//! — contrôleurs, configuration, migrations, tout ce que le développeur écrit hors de ces
+//! zones, et un `CLAUDE.md` existant — appartient au développeur dès que
 //! `rbs new` l'a posé : le re-rendre sur une version plus récente effacerait son travail
 //! sans qu'il l'ait demandé nommément. Le guide, lui, est du texte que rbs produit et
 //! versionne : un projet mis à niveau doit recevoir le mode d'emploi de sa nouvelle
@@ -171,6 +172,12 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
         builder.create(crate::agents::FICHIER, &document)?;
         None
     };
+
+    // Un `CLAUDE.md` présent appartient au développeur, quel que soit son contenu : il
+    // n'est posé que s'il manque — le parc engendré avant lui — et jamais réécrit.
+    if !builder.exists(crate::agents::CLAUDE)? {
+        builder.create(crate::agents::CLAUDE, crate::agents::CLAUDE_CONTENU)?;
+    }
 
     let plan = builder.finir();
 
@@ -640,5 +647,81 @@ mod tests {
         .expect("le plan doit se calculer");
 
         assert!(planned.deja_a_jour, "{:?}", planned.plan.files());
+    }
+
+    /// Le parc déjà engendré n'a pas de `CLAUDE.md` : la mise à niveau le lui donne, sans
+    /// quoi Claude Code n'y lirait jamais le guide.
+    #[test]
+    fn upgrading_creates_a_missing_claude_file() {
+        let (_parent, root) = project(None);
+        fs::remove_file(root.join("CLAUDE.md")).expect("le fichier existe");
+
+        let planned = plan_for_with(
+            &Options {
+                directory: root.clone(),
+                force: true,
+            },
+            "2.0.0",
+        )
+        .expect("le plan doit se calculer");
+
+        let projete = planned
+            .plan
+            .files()
+            .iter()
+            .find(|file| file.path == "CLAUDE.md")
+            .expect("le plan crée CLAUDE.md");
+        assert_eq!(projete.after, "@AGENTS.md\n");
+    }
+
+    /// C'est l'absence du fichier qui motive l'écriture, non l'écart de version : un
+    /// projet déjà à la version du CLI le reçoit aussi, comme il recevrait son `AGENTS.md`.
+    #[test]
+    fn a_project_on_the_target_without_a_claude_file_is_not_up_to_date() {
+        let (_parent, root) = project(None);
+        fs::remove_file(root.join("CLAUDE.md")).expect("le fichier existe");
+
+        let planned = plan_for_with(
+            &Options {
+                directory: root,
+                force: true,
+            },
+            crate::agents::VERSION,
+        )
+        .expect("le plan doit se calculer");
+
+        assert!(!planned.deja_a_jour, "{:?}", planned.plan.files());
+        assert!(
+            planned
+                .plan
+                .files()
+                .iter()
+                .any(|file| file.path == "CLAUDE.md"),
+            "{:?}",
+            planned.plan.files()
+        );
+    }
+
+    /// Un `CLAUDE.md` présent appartient au développeur, même s'il n'importe plus rien.
+    #[test]
+    fn upgrading_never_rewrites_an_existing_claude_file() {
+        let (_parent, root) = project(None);
+        fs::write(root.join("CLAUDE.md"), "# nos règles\n").expect("l'écriture aboutit");
+
+        let planned = upgrade(&root, futur());
+
+        assert!(
+            !planned
+                .plan
+                .files()
+                .iter()
+                .any(|file| file.path == "CLAUDE.md"),
+            "{:?}",
+            planned.plan.files()
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("CLAUDE.md")).expect("CLAUDE.md est lisible"),
+            "# nos règles\n"
+        );
     }
 }

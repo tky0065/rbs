@@ -32,7 +32,7 @@ plan pour …/demo
   + clients/ts/client.ts   créé
 
   1 fichier à écrire
-✓ client engendré — clients/ts/client.ts porte 7 opérations
+✓ client engendré — clients/ts/client.ts porte 8 opérations
 ```
 
 Rien ici ne lit `src/articles/` directement, et rien ne devine la forme d'une route
@@ -40,8 +40,9 @@ depuis son gestionnaire : la commande lance `src/bin/openapi.rs` — le troisiè
 que `rbs new` a écrit aux côtés de `demo` lui-même et du lanceur de graines — et lit ce
 que `ApiDoc::openapi()` imprime sur sa sortie standard. C'est ce qui permet à la commande
 de fonctionner sans aucun serveur à l'écoute ni aucune base joignable : le document est
-un artefact de build, pas une réponse réseau. Sept opérations, c'est les cinq routes
-d'`articles`, `POST /articles/filter`, et `GET /health` — chaque gestionnaire qui porte
+un artefact de build, pas une réponse réseau. Huit opérations, c'est les cinq routes
+d'`articles`, `POST /articles/filter`, `GET /health` et `GET /health/live` — chaque
+gestionnaire qui porte
 un `operationId`, ce que chacun de ceux que `rbs generate crud` écrit fait par défaut.
 
 Le point qui porte le reste de cette page : le client est lu depuis un document que le
@@ -69,12 +70,12 @@ plan pour …/demo
   · clients/ts/client.ts   inchangé
 
   1 inchangé
-✓ client engendré — clients/ts/client.ts porte 7 opérations
+✓ client engendré — clients/ts/client.ts porte 8 opérations
 ```
 
 `inchangé` est une preuve par idempotence : lire le même document OpenAPI une seconde
 fois produit le même fichier, octet pour octet, si bien qu'il ne restait rien à écrire
-au second passage. Le compte d'opérations réimprimé est le même sept — pas recalculé
+au second passage. Le compte d'opérations réimprimé est le même huit — pas recalculé
 depuis le fichier sur disque, mais relu à neuf depuis `ApiDoc::openapi()` à chaque fois,
 ce qui rend cette commande sûre à relancer après chaque `rbs generate crud`, et non une
 seule fois pour toutes.
@@ -99,8 +100,8 @@ chaque appel.
 
 Une méthode par opération, nommée d'après son `operationId` en camelCase.
 `articlesFilter` poste plutôt qu'il ne lit, parce que les conditions qu'il porte
-n'entreraient pas dans une URL ; `health` rend `Promise<void>`, puisque `GET /health`
-répond sans corps à analyser.
+n'entreraient pas dans une URL ; `health` et `healthLive` rendent `Promise<void>`,
+puisqu'aucune des deux routes de santé ne déclare de corps à analyser.
 
 ```typescript file=examples/hello-crud/clients/ts/client.ts region=methodes
 ```
