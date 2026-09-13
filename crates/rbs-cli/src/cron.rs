@@ -27,13 +27,26 @@ pub(crate) enum Erreur {
         champs: usize,
     },
     /// Le bon nombre de champs, mais une valeur que la crate refuse.
-    #[error("`{expression}` : {cause}")]
+    #[error("`{expression}` : {}", explication(.cause))]
     Illisible {
         /// L'expression, telle qu'elle a été écrite.
         expression: String,
-        /// Le refus de la crate.
+        /// Le refus de la crate, tel qu'elle le rend.
         cause: String,
     },
+}
+
+/// Ce que la crate `cron` dit d'une expression qu'elle refuse, sur une ligne.
+///
+/// Elle rend trois lignes — la forme soumise, un curseur sous la faute, puis l'explication —
+/// quand un rapport n'en écrit qu'une par constat. La première n'est qu'un écho de ce qu'on
+/// lui a soumis : c'est la dernière qui dit ce qui ne va pas.
+fn explication(cause: &str) -> &str {
+    cause
+        .lines()
+        .map(str::trim)
+        .rfind(|ligne| !ligne.is_empty())
+        .unwrap_or(cause)
 }
 
 /// Valide `expression` et la rend sous la forme que la crate `cron` attend.
@@ -95,10 +108,32 @@ mod tests {
 
     #[test]
     fn an_out_of_range_value_is_refused_by_the_crate() {
-        let erreur = valider("0 99 * * *").expect_err("99 n'est pas une minute");
+        let erreur = valider("0 99 * * *").expect_err("99 n'est pas une heure");
 
         assert!(matches!(erreur, Erreur::Illisible { .. }), "{erreur:?}");
         assert!(erreur.to_string().contains("`0 99 * * *`"), "{erreur}");
+    }
+
+    /// La crate rend trois lignes — la forme soumise, un curseur sous la faute, puis
+    /// l'explication — quand un rapport n'en écrit qu'une par constat : c'est l'explication
+    /// qui y va, et non l'écho de la forme soumise.
+    #[test]
+    fn a_refusal_keeps_the_explanation_of_the_crate_on_one_line() {
+        for expression in ["0 99 * * *", "0 0 99 * * *"] {
+            let message = valider(expression)
+                .expect_err("99 n'est pas une heure")
+                .to_string();
+
+            assert!(
+                message.starts_with(&format!("`{expression}` : ")),
+                "{message}"
+            );
+            assert!(
+                message.contains("'99'"),
+                "l'explication doit nommer la valeur fautive : {message}"
+            );
+            assert!(!message.contains('\n'), "{message}");
+        }
     }
 
     /// Le refus d'un mauvais nombre de champs dit ce que dit le démarrage : le message est
