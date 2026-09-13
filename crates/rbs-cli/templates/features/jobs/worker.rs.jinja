@@ -1,8 +1,9 @@
+use std::sync::Arc;
 use std::time::Duration;
 
 use rbs_core::HasCoreState;
-use rbs_core::shutdown::Shutdown;
 use sea_orm::DatabaseConnection;
+use tokio::task::{JoinError, JoinSet};
 
 use super::Config;
 use super::model::{Model, Status};
@@ -15,7 +16,7 @@ use crate::state::AppState;
 /// serveur avec lui : l'API répond encore, et la file se remplit sans se vider.
 ///
 /// Détaché par le signal d'arrêt de l'état, et non par `tokio::spawn` : c'est ce qui fait
-/// que `main` l'attend, job en cours compris, avant de sortir.
+/// que `main` l'attend, jobs en cours compris, avant de sortir.
 pub fn spawn(state: AppState) {
     let shutdown = state.core().shutdown().clone();
 
@@ -40,41 +41,76 @@ pub async fn run(state: AppState) -> anyhow::Result<()> {
 /// Séparée de `run` pour que les tests du fragment la jouent sur un registre à eux :
 /// celui du projet ne connaît pas leurs jobs.
 ///
-/// Un job réservé est toujours exécuté jusqu'au bout et son sort inscrit, arrêt demandé ou
-/// non : c'est ce qui rend le bail de `lease_secs` inutile en temps normal.
+/// Jusqu'à `concurrency` jobs tournent de front, chacun dans une tâche à lui : un job qui
+/// attend un receveur lent ne retient pas les autres, et un job qui panique n'emporte que
+/// lui. Un job réservé est toujours exécuté jusqu'au bout et son sort inscrit, arrêt
+/// demandé ou non : c'est ce qui rend le bail de `lease_secs` inutile en temps normal.
 pub(super) async fn run_with(state: AppState, registry: Registry, config: Config) {
     let shutdown = state.core().shutdown().clone();
+    let registry = Arc::new(registry);
     let attente = Duration::from_secs(config.poll_interval_secs);
+    // Zéro vaut un : un worker qui ne réserve rien n'est pas un réglage, c'est une panne
+    // muette.
+    let concurrency = config.concurrency.max(1);
+    let mut en_cours = JoinSet::new();
 
     tracing::info!(
         poll_interval_secs = config.poll_interval_secs,
         lease_secs = config.lease_secs,
+        concurrency,
         "worker prêt"
     );
 
     while !shutdown.is_requested() {
         reprendre_les_abandonnes(state.core().db(), &config).await;
 
-        match queue::reserver_prochain_job(state.core().db()).await {
-            Ok(Some(job)) => execute(&state, &registry, &config, job).await,
-            Ok(None) => pause(&shutdown, attente).await,
-            // Une base momentanément injoignable ne condamne pas la file : le worker
-            // retente au tour suivant plutôt que de rendre la main pour de bon.
-            Err(error) => {
-                tracing::error!(%error, "dépilage impossible");
-                pause(&shutdown, attente).await;
+        // La borne est lue ici et non au `spawn` : aucune réservation n'est faite avec
+        // l'ensemble plein, sans quoi un job réservé attendrait une place en `running`.
+        let mut vide = false;
+        while en_cours.len() < concurrency && !shutdown.is_requested() {
+            match queue::reserver_prochain_job(state.core().db()).await {
+                Ok(Some(job)) => {
+                    let state = state.clone();
+                    let registry = Arc::clone(&registry);
+                    let config = config.clone();
+                    en_cours.spawn(async move { execute(&state, &registry, &config, job).await });
+                }
+                Ok(None) => {
+                    vide = true;
+                    break;
+                }
+                // Une base momentanément injoignable ne condamne pas la file : le worker
+                // retente au tour suivant plutôt que de rendre la main pour de bon.
+                Err(error) => {
+                    tracing::error!(%error, "dépilage impossible");
+                    vide = true;
+                    break;
+                }
             }
         }
+
+        // L'ensemble plein attend la fin d'un job ; la file vide attend le tour suivant
+        // ou la fin d'un job ; l'arrêt sort dans tous les cas.
+        tokio::select! {
+            Some(fini) = en_cours.join_next(), if !en_cours.is_empty() => dire_si_panique(fini),
+            _ = tokio::time::sleep(attente), if vide => {}
+            _ = shutdown.requested() => {}
+        }
+    }
+
+    // Ce qui est en main finit : l'arrêt attend, il n'interrompt pas.
+    while let Some(fini) = en_cours.join_next().await {
+        dire_si_panique(fini);
     }
 
     tracing::info!("worker arrêté");
 }
 
-/// Dort `duree`, ou moins si l'arrêt est demandé entre-temps.
-async fn pause(shutdown: &Shutdown, duree: Duration) {
-    tokio::select! {
-        _ = tokio::time::sleep(duree) => {}
-        _ = shutdown.requested() => {}
+/// Une tâche qui panique n'emporte que son job, dont la ligne reste `running` jusqu'au
+/// bail — c'est le cas pour lequel il existe.
+fn dire_si_panique(fini: Result<(), JoinError>) {
+    if let Err(error) = fini {
+        tracing::error!(%error, "un job a paniqué");
     }
 }
 

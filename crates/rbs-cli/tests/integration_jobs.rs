@@ -21,7 +21,8 @@ use testcontainers::{Container, GenericImage};
 mod common;
 
 /// Les tests que le fragment livre au projet et qui joignent la base.
-const TESTS: [&str; 8] = [
+const TESTS: [&str; 9] = [
+    "jobs_run_side_by_side_up_to_the_configured_concurrency",
     "a_job_enqueued_in_a_rolled_back_transaction_does_not_exist",
     "a_job_enqueued_in_a_committed_transaction_is_visible_to_the_worker",
     "two_concurrent_workers_never_reserve_the_same_job",
@@ -221,20 +222,24 @@ fn a_sigterm_lets_the_job_in_progress_finish_before_the_process_exits() {
     let postgres = common::start_postgres();
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let racine = project_with_jobs(&common::url_of(&postgres), &parent);
-    slow_down_the_demo_job(&racine);
 
     let _cible = common::verrou(&common::cible());
 
+    // Sous le verrou, et non avant : les projets de ce binaire de test sont identiques
+    // et partagent la cible, où cargo les tient pour un seul paquet. Un `demo-api` bâti
+    // par le test voisin après l'écriture du job ralenti serait plus récent qu'elle, et
+    // cargo le tiendrait pour à jour — le serveur lancé ici exécuterait un job instantané.
+    slow_down_the_demo_job(&racine);
     migrate(&racine);
     compile(&racine);
 
     let serveur = Serveur::lancer(&racine, "demo-api", 1);
     enqueue(&postgres);
-    assert!(
-        wait_for_status(&postgres, "running", Duration::from_secs(15)),
-        "le job n'a jamais été réservé — statut « {} »",
-        status(&postgres)
-    );
+    if !wait_for_status(&postgres, "running", Duration::from_secs(15)) {
+        let statut = status(&postgres);
+        let journal = serveur.tuer();
+        panic!("le job n'a jamais été vu réservé — statut « {statut} » :\n{journal}");
+    }
 
     let (sorti_en_zero, journal) = serveur.terminer();
 

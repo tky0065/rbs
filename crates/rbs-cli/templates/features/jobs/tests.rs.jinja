@@ -6,7 +6,7 @@ use rbs_core::HasCoreState;
 use sea_orm::prelude::{Expr, Uuid};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, TransactionTrait};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{Mutex, MutexGuard};
+use tokio::sync::{Barrier, Mutex, MutexGuard};
 
 use super::model::{Column, Entity, Status};
 use super::{Config, Job, Registry, queue, worker};
@@ -25,6 +25,17 @@ struct AlwaysFails;
 /// Un job qui dure : c'est le seul moyen d'observer un arrêt demandé en plein job.
 #[derive(Debug, Serialize, Deserialize)]
 struct Slow;
+
+/// Un job qui n'avance que si un second est en cours au même instant : c'est le seul
+/// moyen d'observer que le worker en exécute plusieurs de front.
+#[derive(Debug, Serialize, Deserialize)]
+struct Meet;
+
+fn rendez_vous() -> &'static Barrier {
+    static RENDEZ_VOUS: OnceLock<Barrier> = OnceLock::new();
+
+    RENDEZ_VOUS.get_or_init(|| Barrier::new(2))
+}
 
 #[async_trait::async_trait]
 impl Job for Succeeds {
@@ -55,11 +66,23 @@ impl Job for Slow {
     }
 }
 
+#[async_trait::async_trait]
+impl Job for Meet {
+    const KIND: &'static str = "tests::meet";
+
+    async fn run(&self, _state: &AppState) -> anyhow::Result<()> {
+        rendez_vous().wait().await;
+
+        Ok(())
+    }
+}
+
 fn registry() -> Registry {
     Registry::new()
         .register::<Succeeds>()
         .register::<AlwaysFails>()
         .register::<Slow>()
+        .register::<Meet>()
 }
 
 /// Un état dont la connexion n'est jamais ouverte : ces tests-là n'interrogent rien.
@@ -142,9 +165,43 @@ fn config(max_attempts: i32) -> Config {
         max_attempts,
         // Aucun délai : le test rejoue la tentative suivante tout de suite.
         retry_delay_secs: 0,
+        retry_max_delay_secs: 3600,
         poll_interval_secs: 1,
         lease_secs: 300,
+        concurrency: 1,
     }
+}
+
+/// Une configuration dont seul le délai de reprise compte.
+fn delai(retry_delay_secs: u64, retry_max_delay_secs: u64) -> Config {
+    Config {
+        retry_delay_secs,
+        retry_max_delay_secs,
+        ..config(5)
+    }
+}
+
+#[test]
+fn the_retry_delay_doubles_with_each_attempt() {
+    let config = delai(30, 3600);
+
+    assert_eq!(queue::retry_delay(&config, 1), Duration::from_secs(30));
+    assert_eq!(queue::retry_delay(&config, 2), Duration::from_secs(60));
+    assert_eq!(queue::retry_delay(&config, 5), Duration::from_secs(480));
+}
+
+#[test]
+fn the_retry_delay_is_capped_and_saturates_rather_than_overflowing() {
+    let config = delai(30, 3600);
+
+    assert_eq!(queue::retry_delay(&config, 20), Duration::from_secs(3600));
+    // 2^199 déborde un u64 : le calcul doit saturer, pas paniquer.
+    assert_eq!(queue::retry_delay(&config, 200), Duration::from_secs(3600));
+}
+
+#[test]
+fn a_zero_retry_delay_stays_zero() {
+    assert_eq!(queue::retry_delay(&delai(0, 3600), 7), Duration::ZERO);
 }
 
 /// Vieillit la réservation de `id` : ce que ferait le temps, sans attendre le bail.
@@ -504,4 +561,31 @@ async fn the_worker_finishes_its_job_and_stops_when_shutdown_is_requested() {
         "le job en cours n'a pas été mené à son terme"
     );
     assert_eq!(ligne.attempts, 1);
+}
+
+/// Deux jobs qui doivent se rencontrer ne le peuvent que si le worker les exécute de
+/// front : un worker strictement séquentiel bloque le premier sur la barrière, et le
+/// second n'est jamais réservé.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn jobs_run_side_by_side_up_to_the_configured_concurrency() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+
+    let premier = queue::enqueue(db, &Meet).await.expect("le job s'enfile");
+    let second = queue::enqueue(db, &Meet).await.expect("le job s'enfile");
+
+    let mut config = config(5);
+    config.concurrency = 2;
+    let shutdown = state.core().shutdown().clone();
+    shutdown.spawn(worker::run_with(state.clone(), registry(), config));
+
+    attendre_le_statut(db, premier, Status::Done, Duration::from_secs(10)).await;
+    attendre_le_statut(db, second, Status::Done, Duration::from_secs(10)).await;
+
+    assert_eq!(
+        shutdown.wait(Duration::from_secs(10)).await,
+        0,
+        "le worker n'a pas rendu la main"
+    );
 }
