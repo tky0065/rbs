@@ -20,12 +20,13 @@ That is why the fragment requires `jobs`, and it is the only one in the
 besides `auth`. On a bare project, `rbs add scheduler` lays down `jobs` first and
 `scheduler` second, in a single plan:
 
+{/* rbs:transcript cmd="rbs add scheduler" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add scheduler
 scheduler : déclenchement calendaire : une échéance due enfile un job, une seule fois entre réplicas
 scheduler exige jobs : posée avec elle
 
-plan pour /private/tmp/rbs-demo/blog
+plan pour …/demo
 
   + src/modules/jobs/mod.rs                              créé
   + src/modules/jobs/config.rs                           créé
@@ -34,7 +35,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/modules/jobs/worker.rs                           créé
   + src/modules/jobs/demo.rs                             créé
   + src/modules/jobs/tests.rs                            créé
-  + migration/src/m20260903_173943_create_jobs.rs        créé
+  + migration/src/m20260913_132217_create_jobs.rs        créé
   ~ migration/src/lib.rs                                 modifié
   + src/modules/mod.rs                                   créé
   ~ src/lib.rs                                           modifié
@@ -47,7 +48,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/modules/scheduler/sync.rs                        créé
   + src/modules/scheduler/ticker.rs                      créé
   + src/modules/scheduler/tests.rs                       créé
-  + migration/src/m20260903_173943_create_schedules.rs   créé
+  + migration/src/m20260913_132217_create_schedules.rs   créé
   ~ AGENTS.md                                            modifié
 
   22 fichiers à écrire
@@ -63,17 +64,10 @@ until both tables exist, neither the ticker nor the worker has anything to read.
 
 The calendar is declared in code, in `src/modules/scheduler/mod.rs`, and the database holds nothing
 but its state. `schedules()` is to the ticker what `registry()` is to the worker — the one
-list you edit:
+list you edit. The example keeps the demonstration schedule exactly as the fragment lays it
+down:
 
-```rust
-pub fn schedules() -> Vec<Schedule> {
-    vec![Schedule::every::<crate::modules::jobs::demo::Log>(
-        "0 3 * * *",
-        || crate::modules::jobs::demo::Log {
-            message: "échéance quotidienne".to_string(),
-        },
-    )]
-}
+```rust file=examples/event-hub/src/modules/scheduler/mod.rs region=schedules
 ```
 
 `Schedule::every::<J>` takes the job as a type parameter, and reads the `kind` from
@@ -95,8 +89,7 @@ and `0 3 * * *` is what everybody has in their fingers. The fragment accepts bot
 fields are prefixed with `0 `, which is what a crontab line means anyway, and six pass
 through untouched. Any other length is refused by name:
 
-```text
-`0 3 * *` porte 4 champ(s) : une expression cron en compte cinq (minute heure jour mois jour-de-semaine) ou six, la seconde en tête
+```rust file=examples/event-hub/src/modules/scheduler/mod.rs region=normaliser
 ```
 
 ## Everything is UTC
@@ -119,12 +112,9 @@ Three instances of the API are three tickers, and the nightly purge has to run o
 is the whole reason the `schedules` table exists: it is the shared state the replicas
 arbitrate through.
 
-A schedule is reserved by a conditional `UPDATE`:
+A schedule is reserved by a conditional `UPDATE` — `WHERE kind = ? AND next_run_at <= ?`:
 
-```sql
-UPDATE schedules
-SET next_run_at = ?, last_run_at = ?, updated_at = ?
-WHERE kind = ? AND next_run_at <= ?
+```rust file=examples/event-hub/src/modules/scheduler/ticker.rs region=reserve
 ```
 
 `rows_affected == 1` designates the winner; the losers see zero. The condition is evaluated
@@ -178,9 +168,7 @@ occurrence the process had already earned.
 
 ## Configuration
 
-```toml
-[scheduler]
-poll_interval_secs = 30
+```toml file=examples/event-hub/config/default.toml region=scheduler
 ```
 
 One setting: how long the ticker sleeps between two examinations of the calendar. A

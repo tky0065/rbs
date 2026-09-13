@@ -1,0 +1,90 @@
+use axum::Json;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use rbs_core::{HasCoreState, Identity, ProblemDetails, Result, ValidatedJson};
+use sea_orm::prelude::Uuid;
+
+use super::dto::{CreateSubscription, SubscriptionCreated, SubscriptionResponse};
+use super::service;
+use crate::auth::guard::RequireRole;
+use crate::auth::model::Role;
+use crate::state::AppState;
+
+// Les trois routes sont réservées à `Role::Admin`. Un abonnement livre chez son auteur
+// les événements du projet — `user.created` porte des adresses — et `/auth/register`
+// est ouvert : sous un simple jeton valide, n'importe qui pourrait se faire livrer
+// tout le projet, ou révoquer l'abonnement d'un autre. Pour ouvrir une route à tout
+// compte, remplacez `Role::Admin` par `Role::User` sur son `require_role`.
+
+#[utoipa::path(
+    post,
+    path = "/webhooks/subscriptions",
+    tag = "webhooks",
+    operation_id = "webhooks_subscribe",
+    security(("bearer" = [])),
+    request_body = CreateSubscription,
+    responses(
+        (status = 201, description = "abonnement inscrit, secret rendu cette seule fois", body = SubscriptionCreated),
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 422, description = "entrée invalide", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn subscribe(
+    State(state): State<AppState>,
+    identite: Identity,
+    ValidatedJson(input): ValidatedJson<CreateSubscription>,
+) -> Result<(StatusCode, Json<SubscriptionCreated>)> {
+    identite.require_role(Role::Admin)?;
+
+    let inscrit = service::subscribe(state.core().db(), state.webhooks().policy(), input).await?;
+
+    Ok((StatusCode::CREATED, Json(inscrit)))
+}
+
+#[utoipa::path(
+    get,
+    path = "/webhooks/subscriptions",
+    tag = "webhooks",
+    operation_id = "webhooks_list",
+    security(("bearer" = [])),
+    responses(
+        (status = 200, description = "tous les abonnements, révoqués compris, sans leurs secrets", body = Vec<SubscriptionResponse>),
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn list(
+    State(state): State<AppState>,
+    identite: Identity,
+) -> Result<Json<Vec<SubscriptionResponse>>> {
+    identite.require_role(Role::Admin)?;
+
+    Ok(Json(service::list(state.core().db()).await?))
+}
+
+#[utoipa::path(
+    delete,
+    path = "/webhooks/subscriptions/{id}",
+    tag = "webhooks",
+    operation_id = "webhooks_revoke",
+    security(("bearer" = [])),
+    params(("id" = Uuid, Path, description = "identifiant de l'abonnement")),
+    responses(
+        (status = 204, description = "abonnement révoqué"),
+        (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 404, description = "abonnement inconnu", body = ProblemDetails, content_type = "application/problem+json")
+    )
+)]
+pub async fn revoke(
+    State(state): State<AppState>,
+    identite: Identity,
+    Path(id): Path<Uuid>,
+) -> Result<StatusCode> {
+    identite.require_role(Role::Admin)?;
+
+    service::revoke(state.core().db(), id).await?;
+
+    Ok(StatusCode::NO_CONTENT)
+}

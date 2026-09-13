@@ -143,6 +143,27 @@ const EXEMPLES: &[Exemple] = &[
         ],
         engendre_a_part: &[],
     },
+    Exemple {
+        nom: "event-hub",
+        database_url: "postgres://rbs:rbs@localhost:5432/event_hub",
+        // `webhooks` tire `jobs` et `auth`, et par elle `mail` et `rate-limit` : les cinq
+        // descendent d'un seul plan, dont les trois migrations portent le même horodatage.
+        // C'est le seul exemple où l'ancre `migration_modules` doit trier des noms nés dans
+        // la même seconde.
+        features: &["webhooks", "scheduler", "audit", "cors", "docker", "ci"],
+        crud: "orders",
+        champs: "reference:string,amount:int",
+        role: None,
+        with_upload: false,
+        // La création d'une commande trace et émet dans sa propre transaction : c'est ce
+        // que ce projet montre, et `the_hand_edits_of_event_hub_are_in_place` en répond.
+        edite_a_la_main: &[
+            "src/orders/repository.rs",
+            "src/orders/service.rs",
+            "src/orders/controller.rs",
+        ],
+        engendre_a_part: &[],
+    },
 ];
 
 const REGENERER: &str = "examples/README.md donne la commande de régénération";
@@ -172,6 +193,11 @@ fn file_drop_is_what_the_cli_produces_today() {
 #[test]
 fn newsletter_queue_is_what_the_cli_produces_today() {
     assert_no_drift(example("newsletter-queue"));
+}
+
+#[test]
+fn event_hub_is_what_the_cli_produces_today() {
+    assert_no_drift(example("event-hub"));
 }
 
 fn assert_no_drift(example: &Exemple) {
@@ -283,14 +309,16 @@ fn normalize_fingerprint(
         .map(|(chemin, contenu)| {
             (
                 PathBuf::from(mask_timestamp(&chemin.to_string_lossy())),
-                normalize(contenu),
+                sort_migration_modules(&normalize(contenu)),
             )
         })
         .collect()
 }
 
-/// Quatre différences sont attendues entre l'exemple du dépôt et une génération fraîche,
-/// et aucune ne trahit une dérive des templates.
+/// Cinq différences sont attendues entre l'exemple du dépôt et une génération fraîche, et
+/// aucune ne trahit une dérive des templates : les quatre que masque cette fonction, plus
+/// l'ordre des `mod` de migration, que [`sort_migration_modules`] neutralise à son tour
+/// dans `normalize_fingerprint`.
 fn normalize(contenu: &str) -> String {
     contenu
         .lines()
@@ -411,6 +439,40 @@ fn mask_timestamp(texte: &str) -> String {
     output
 }
 
+/// Neutralise l'ordre des lignes `mod m<STAMP>_…;` de l'ancre `migration_modules`, que
+/// rustfmt trie déjà par nom complet — donc par horodatage d'abord. Deux générations ne
+/// tombent jamais dans les mêmes secondes : quand deux commandes partagent la leur,
+/// `create_audit_log` passe devant `create_schedules`, une minute d'écart plus tard il
+/// passe derrière. L'horodatage étant déjà masqué par [`mask_timestamp`], l'ordre qu'il
+/// dicte doit l'être aussi, sans quoi la comparaison verrait une dérive là où seule
+/// l'horloge a tourné différemment entre deux régénérations. L'ordre d'exécution, lui, vit
+/// dans le `vec!` du `Migrator` — anchor `migrations`, non triée — et reste comparé tel
+/// quel ; `each_example_passes_cargo_fmt` répond du tri de l'exemple committé.
+fn sort_migration_modules(contenu: &str) -> String {
+    const PREFIXE: &str = "mod m<STAMP>_";
+
+    let lignes: Vec<&str> = contenu.lines().collect();
+    let mut resultat: Vec<&str> = Vec::with_capacity(lignes.len());
+    let mut i = 0;
+
+    while i < lignes.len() {
+        if lignes[i].starts_with(PREFIXE) {
+            let debut = i;
+            while i < lignes.len() && lignes[i].starts_with(PREFIXE) {
+                i += 1;
+            }
+            let mut groupe = lignes[debut..i].to_vec();
+            groupe.sort_unstable();
+            resultat.extend(groupe);
+        } else {
+            resultat.push(lignes[i]);
+            i += 1;
+        }
+    }
+
+    resultat.join("\n")
+}
+
 /// Ne montre que ce qui diffère : déverser deux projets entiers noierait l'écart.
 fn compare(attendu: &BTreeMap<PathBuf, String>, obtenu: &BTreeMap<PathBuf, String>) -> Vec<String> {
     let mut ecarts = Vec::new();
@@ -471,6 +533,50 @@ fn a_migration_timestamp_is_properly_masked() {
     );
     assert_eq!(mask_timestamp("marge_20260826"), "marge_20260826");
     assert_eq!(mask_timestamp("m2026_court"), "m2026_court");
+}
+
+/// L'ancre `migration_modules` trie ses `mod` par nom complet, donc par horodatage
+/// d'abord : trois migrations nées à trois secondes distinctes ne se trient pas comme
+/// trois migrations nées à la même seconde, bien que ce ne soit là qu'un effet de
+/// l'horloge. La comparaison doit voir les deux comme identiques. L'ordre d'exécution du
+/// `Migrator`, lui, ne dépend d'aucune horloge : une inversion y reste une dérive.
+#[test]
+fn the_order_of_migration_modules_is_masked_with_their_timestamp() {
+    let committed = "\
+mod m20260913_131801_create_auth_tables;
+mod m20260913_131808_create_schedules;
+mod m20260913_131820_create_audit_log;
+
+Box::new(m20260913_131801_create_auth_tables::Migration),
+Box::new(m20260913_131820_create_audit_log::Migration),
+";
+    let fresh = "\
+mod m20260913_131801_create_audit_log;
+mod m20260913_131801_create_auth_tables;
+mod m20260913_131801_create_schedules;
+
+Box::new(m20260913_131801_create_auth_tables::Migration),
+Box::new(m20260913_131801_create_audit_log::Migration),
+";
+
+    assert_eq!(
+        sort_migration_modules(&normalize(committed)),
+        sort_migration_modules(&normalize(fresh))
+    );
+
+    let execution_inversee = "\
+mod m20260913_131801_create_audit_log;
+mod m20260913_131801_create_auth_tables;
+mod m20260913_131801_create_schedules;
+
+Box::new(m20260913_131820_create_audit_log::Migration),
+Box::new(m20260913_131801_create_auth_tables::Migration),
+";
+
+    assert_ne!(
+        sort_migration_modules(&normalize(fresh)),
+        sort_migration_modules(&normalize(execution_inversee))
+    );
 }
 
 #[test]
@@ -902,6 +1008,62 @@ fn the_hand_edits_of_newsletter_queue_are_in_place() {
     assert!(
         prometheus.contains(&format!("\"localhost:{port}\"")),
         "prometheus.yml : la cible doit être le port {port} de `[observability]` :\n{prometheus}"
+    );
+}
+
+/// Ce que `event-hub` porte et qu'aucune commande n'écrit.
+///
+/// Les trois fichiers de `orders` sortent de la comparaison octet à octet. Sans ce test, la
+/// transaction que deux guides citent pourrait se défaire en silence : l'exemple
+/// compilerait encore, et les pages montreraient un contrat que plus rien ne tient.
+#[test]
+fn the_hand_edits_of_event_hub_are_in_place() {
+    let racine = common::depot().join("examples").join("event-hub");
+    let lire = |relatif: &str| {
+        std::fs::read_to_string(racine.join(relatif))
+            .unwrap_or_else(|erreur| panic!("{relatif} illisible : {erreur}"))
+    };
+
+    // Dans cet ordre, et non seulement présents : une trace ou une émission posée après le
+    // commit survivrait au rollback qu'elle doit suivre, et c'est ce que les guides réfutent.
+    let service = lire("src/orders/service.rs");
+    let mut depuis = 0;
+    for (raison, extrait) in [
+        ("la transaction n'est pas ouverte", "db.begin().await?"),
+        (
+            "la commande ne s'écrit pas dans la transaction",
+            "repository::create(&transaction, order)",
+        ),
+        (
+            "la trace ne partage pas la transaction",
+            "audit::record(\n        &transaction,",
+        ),
+        (
+            "l'événement ne partage pas la transaction",
+            "webhooks::emit(&transaction, \"order.created\", &order)",
+        ),
+        ("rien ne la commite", "transaction.commit().await?"),
+    ] {
+        let Some(position) = service[depuis..].find(extrait) else {
+            panic!(
+                "src/orders/service.rs : {raison} — « {extrait} » absent ou hors d'ordre :\n{service}"
+            );
+        };
+        depuis += position + extrait.len();
+    }
+
+    // Générique sur la connexion : une transaction n'est pas un `DatabaseConnection`.
+    let repository = lire("src/orders/repository.rs");
+    assert!(
+        repository.contains("pub async fn create<C: ConnectionTrait>(db: &C, order: ActiveModel)"),
+        "src/orders/repository.rs : la création doit accepter une transaction :\n{repository}"
+    );
+
+    // L'acteur vient du jeton : sans lui, le journal ne dirait pas qui a créé la commande.
+    let controller = lire("src/orders/controller.rs");
+    assert!(
+        controller.contains("service::create(state.core().db(), input, &identite.user_id)"),
+        "src/orders/controller.rs : l'identité doit descendre jusqu'au journal :\n{controller}"
     );
 }
 

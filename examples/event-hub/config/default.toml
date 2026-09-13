@@ -1,0 +1,118 @@
+[server]
+host = "127.0.0.1"
+port = 8080
+timeout_secs = 30
+shutdown_timeout_secs = 30
+lang = "fr"
+
+[database]
+max_connections = 10
+min_connections = 0
+connect_timeout_secs = 5
+acquire_timeout_secs = 5
+idle_timeout_secs = 600
+max_lifetime_secs = 1800
+
+[docs]
+swagger_ui = true
+openapi_json = true
+
+[jobs]
+# Tentatives d'un job avant qu'il soit tenu pour définitivement en échec, et attente
+# avant qu'une tentative ratée redevienne exécutable. Ces deux valeurs se règlent à
+# l'usage : elles sont ici pour ne pas avoir à rouvrir le fragment.
+max_attempts = 5
+retry_delay_secs = 30
+# Le délai double à chaque tentative ratée, jusqu'à ce plafond : un receveur en panne est
+# sollicité de moins en moins souvent.
+retry_max_delay_secs = 3600
+poll_interval_secs = 1
+# Passé ce délai, un job réservé par un worker qui n'en a jamais inscrit le sort — tué en
+# plein travail — redevient dépilable. À tenir au-dessus de la durée du plus long job.
+lease_secs = 300
+# Jobs exécutés de front par le worker. Quatre laisse plus de la moitié du pool de
+# connexions à l'API ; un retrouve l'exécution strictement séquentielle.
+concurrency = 4
+
+[mail]
+# Mailpit et MailHog écoutent sur 1025, en clair : c'est le serveur de développement.
+# En production, `tls = "starttls"` et un `smtp_user` — dont le mot de passe vient de
+# RBS_MAIL__SMTP_PASSWORD, et jamais de ce fichier, qui est versionné.
+smtp_host = "localhost"
+smtp_port = 1025
+smtp_user = ""
+tls = "none"
+from = "no-reply@localhost"
+timeout_secs = 10
+templates = "templates/mail"
+
+[rate_limit]
+# Limite globale, comptée par adresse cliente : `limit` requêtes par fenêtre de
+# `window_secs` secondes. Au-delà, un 429 `application/problem+json` avec un `Retry-After`.
+limit = 120
+window_secs = 60
+
+# Derrière un reverse proxy, l'adresse du pair est celle du proxy : sans ce drapeau tous
+# les clients partagent un même compteur, et le garde-fou devient le déni de service.
+# L'adresse lue est le dernier élément de l'en-tête, celui que le proxy appose ; ce que le
+# client y a écrit avant ne compte pas. Ne le lever qu'avec un proxy devant : exposée en
+# direct, une API qui le croit laisse n'importe quel client se choisir une identité par
+# requête.
+trust_forwarded_for = false
+
+# Limites plus strictes, par préfixe de chemin ; la première qui correspond l'emporte.
+# `/auth/login` hache un Argon2 même pour un email inconnu — c'est ce qui empêche
+# d'énumérer les comptes — et chaque requête anonyme y coûte donc 19 Mio : sans cette
+# ligne, une seule adresse épuise la mémoire du serveur.
+routes = [
+  { path = "/auth/login", limit = 5, window_secs = 60 },
+  # Ces trois routes envoient un courriel à une adresse que l'appelant choisit. Sans
+  # borne, elles font du projet un relais de harcèlement — et le coût est payé par le
+  # titulaire de l'adresse, qui n'a rien demandé.
+  { path = "/auth/forgot-password", limit = 3, window_secs = 3600 },
+  { path = "/auth/resend-verification", limit = 3, window_secs = 3600 },
+  # `register` tolère plus large que les deux autres : s'inscrire est un geste plus
+  # fréquent qu'oublier son mot de passe, et une borne trop serrée empêcherait une
+  # famille derrière une même adresse IP de créer chacun son compte. Elle borne quand
+  # même : chaque appel envoie un courriel *et* écrit un compte et un jeton, plus coûteux
+  # qu'une simple demande de réinitialisation.
+  { path = "/auth/register", limit = 10, window_secs = 3600 },
+]
+
+[auth]
+access_ttl_secs = 900
+refresh_ttl_secs = 2592000
+
+# Une heure : le lien de réinitialisation est urgent, et sa fenêtre est la durée pendant
+# laquelle une boîte compromise vaut le compte.
+reset_ttl_secs = 3600
+
+# Un jour : la vérification ne l'est pas, et un lien trop court fait revenir l'utilisateur
+# sur `resend-verification` plus souvent qu'il n'ouvre son courrier.
+verification_ttl_secs = 86400
+
+# L'application du client, et non ce serveur : rbs engendre une API, et le lien du
+# courriel mène à l'écran qui postera le jeton.
+app_url = "http://localhost:3000"
+
+# region: webhooks
+[webhooks]
+# Temps laissé au receveur pour répondre. Au-delà, la livraison compte pour un échec et
+# repart en réessai : un endpoint lent ne doit pas retenir un worker.
+timeout_secs = 10
+# endregion: webhooks
+
+# region: scheduler
+[scheduler]
+# Attente entre deux examens du calendrier. Une échéance à la minute n'a pas besoin d'un
+# réveil par seconde ; trente secondes bornent le retard de déclenchement à trente
+# secondes.
+poll_interval_secs = 30
+# endregion: scheduler
+
+[cors]
+origins = []
+methods = ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+headers = ["authorization", "content-type"]
+credentials = false
+max_age_secs = 3600

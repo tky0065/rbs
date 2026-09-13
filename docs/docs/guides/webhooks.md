@@ -5,9 +5,10 @@ title: Webhooks
 
 # Outgoing webhooks
 
-`rbs add webhooks` gives a project a way to tell the outside world what just happened: ten
-files under `src/modules/webhooks/`, a migration for the `webhook_subscriptions` table, three
-routes, and a signed HTTP POST for every subscriber that listens.
+`rbs add webhooks` gives a project a way to tell the outside world what just happened:
+eleven files under `src/modules/webhooks/` — `target.rs` included — a migration for the
+`webhook_subscriptions` table, three routes, and a signed HTTP POST for every subscriber
+that listens.
 
 **The fragment delivers; it does not decide what is worth telling.** Nothing is emitted
 until your own code calls `webhooks::emit`. Installed and never called, the feature has no
@@ -19,23 +20,21 @@ a row without double-dequeuing, `attempts`, `available_at`, `last_error` — and
 retry mechanism would have left two loops to maintain instead of one. It requires `auth`
 too, which in turn pulls `mail` and `rate-limit`: a subscription endpoint left open would
 let anyone have the project's events delivered to their own server, and `user.created`
-carries addresses. On a bare project all five go down in a single plan:
+carries addresses. On a bare project all five go down in a single plan — here is an excerpt
+of it:
 
+{/* rbs:transcript cmd="rbs add webhooks" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
 ```text
 $ rbs add webhooks
 webhooks : webhooks sortants : abonnements, signature HMAC horodatée, livraison par la file
-webhooks exige auth, jobs, mail, rate-limit : posée avec elle
+webhooks exige jobs, mail, rate-limit, auth : posée avec elle
 
-plan pour /private/tmp/rbs-demo/blog
+plan pour …/demo
 
-  + src/auth/mod.rs                                                  créé
-  …
   + src/modules/jobs/mod.rs                                          créé
-  …
   + src/modules/mail/mod.rs                                          créé
-  …
   + src/modules/rate_limit/mod.rs                                    créé
-  …
+  + src/auth/mod.rs                                                  créé
   + src/modules/webhooks/mod.rs                                      créé
   + src/modules/webhooks/config.rs                                   créé
   + src/modules/webhooks/model.rs                                    créé
@@ -44,13 +43,14 @@ plan pour /private/tmp/rbs-demo/blog
   + src/modules/webhooks/service.rs                                  créé
   + src/modules/webhooks/controller.rs                               créé
   + src/modules/webhooks/signature.rs                                créé
+  + src/modules/webhooks/target.rs                                   créé
   + src/modules/webhooks/delivery.rs                                 créé
   + src/modules/webhooks/tests.rs                                    créé
-  + migration/src/m20260910_162606_create_webhook_subscriptions.rs   créé
+  + migration/src/m20260913_132216_create_webhook_subscriptions.rs   créé
   ~ AGENTS.md                                                        modifié
 
-  66 fichiers à écrire
-✓ webhooks installée — 53 fichiers
+  67 fichiers à écrire
+✓ webhooks installée — 54 fichiers
 
   rbs migrate up, inscrivez un abonné par POST /webhooks/subscriptions — son secret n'est rendu qu'à cet instant — puis appelez webhooks::emit dans vos services
 ```
@@ -60,9 +60,11 @@ Three migrations come with it — `mail` writes none — so
 
 ## Emitting an event
 
-```rust
-webhooks::emit(&transaction, "user.created", &dto).await?;
+```rust file=examples/event-hub/src/orders/service.rs region=create
 ```
+
+Here the event is `order.created`, emitted in the same transaction that records the
+creation in the audit log — see the [audit guide](./audit.md) for the trace it shares.
 
 `emit` takes a `&C: ConnectionTrait` rather than a connection, and that is the whole point:
 **hand it the transaction carrying your change, and the deliveries exist if and only if
@@ -223,9 +225,7 @@ nothing while costing every write.
 
 ## Configuration
 
-```toml
-[webhooks]
-timeout_secs = 10
+```toml file=examples/event-hub/config/default.toml region=webhooks
 ```
 
 One setting: how long a receiver is given to answer. Past that, the delivery counts as a

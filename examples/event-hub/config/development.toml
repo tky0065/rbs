@@ -1,0 +1,3 @@
+[database]
+max_connections = 5
+min_connections = 1
