@@ -1,0 +1,59 @@
+[workspace]
+members = ["migration"]
+resolver = "3"
+
+[package]
+name = "event-hub"
+version = "0.1.0"
+edition = "2024"
+# Le paquet porte trois binaires : sans ce choix, `cargo run` ne saurait plus lequel lancer.
+default-run = "event-hub"
+
+[package.metadata.rbs]
+version = "1.5.0"
+features = ["health", "jobs", "mail", "rate-limit", "auth", "webhooks", "scheduler", "audit", "cors", "docker", "ci", "orders"]
+database = "postgres"
+lang = "fr"
+
+[[bin]]
+name = "event-hub"
+path = "src/main.rs"
+
+[[bin]]
+name = "seed"
+path = "src/seeds/main.rs"
+
+[[bin]]
+name = "openapi"
+path = "src/bin/openapi.rs"
+
+[dependencies]
+rbs-core = { path = "../../crates/rbs-core", default-features = false, features = ["postgres", "auth"] }
+anyhow = "1.0"
+axum = "0.8"
+chrono = "0.4"
+sea-orm = { version = "2.0", features = ["sqlx-postgres", "runtime-tokio-rustls", "macros", "with-chrono", "with-uuid", "with-json"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+tokio = { version = "1.53", features = ["macros", "rt-multi-thread", "time", "sync", "net"] }
+tower-http = { version = "0.7", features = ["timeout", "cors"] }
+tracing = "0.1"
+utoipa = { version = "5.5", features = ["axum_extras", "chrono", "uuid"] }
+utoipa-swagger-ui = { version = "9.0", features = ["axum"] }
+validator = { version = "0.21", features = ["derive"] }
+
+# sea-orm expose bien `Uuid`, mais sans son générateur. `v7` sert au code de production :
+# les modèles posent eux-mêmes l'identifiant, `uuidv7()` n'ayant d'équivalent à écrire ni
+# en MySQL ni en SQLite. `v4` reste pour les valeurs aléatoires des tests générés.
+uuid = { version = "1.26", features = ["v4", "v7"] }
+async-trait = "0.1"
+lettre = { version = "0.11", default-features = false, features = ["smtp-transport", "builder", "pool", "tokio1-rustls", "ring", "webpki-roots"] }
+minijinja = { version = "2.24", features = ["loader"] }
+reqwest = "0.13"
+hmac = "0.13"
+sha2 = "0.11"
+cron = "0.17"
+thiserror = "2.0"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }

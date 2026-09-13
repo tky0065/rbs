@@ -1,0 +1,62 @@
+name: event-hub
+
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: "${POSTGRES_USER}"
+      POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}"
+      POSTGRES_DB: "${POSTGRES_DB}"
+    # Le port publié est celui du .env : c'est ce qui rend `docker compose up -d` suivi
+    # de `cargo run` vrai sans recopier une valeur d'un fichier à l'autre. Le conflit
+    # avec un PostgreSQL déjà installé sur la machine se règle en changeant les deux.
+    ports:
+      - "5432:5432"
+    # PostgreSQL 18 place ses données sous /var/lib/postgresql/18/docker : c'est le
+    # répertoire parent qui se monte, et non le /var/lib/postgresql/data des versions
+    # précédentes, qui ne persisterait rien.
+    volumes:
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # <rbs:services>
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+  # Les migrations tournent une fois, à part : l'API ne démarre pas sur un schéma absent,
+  # et n'a pas à porter cette responsabilité au démarrage.
+  migrate:
+    profiles: ["app"]
+    build: .
+    command: ["migration", "up"]
+    environment:
+      RBS_DATABASE__URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+    restart: "no"
+  api:
+    profiles: ["app"]
+    build: .
+    environment:
+      # config/default.toml écoute sur 127.0.0.1, ce qui rend le conteneur injoignable
+      # depuis l'hôte. L'environnement l'emporte sur le TOML.
+      RBS_SERVER__HOST: 0.0.0.0
+      # Le profil retenu désigne config/production.toml, qui coupe `/docs` et le document
+      # OpenAPI : ce compose est le déploiement, et non le poste de travail.
+      RBS_ENV: production
+      RBS_DATABASE__URL: "postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}"
+      RBS_LOG_FORMAT: json
+      RUST_LOG: info
+    ports:
+      - "8080:8080"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
+  # </rbs:services>
+
+volumes:
+  pgdata:
