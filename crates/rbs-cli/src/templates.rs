@@ -1215,16 +1215,23 @@ mod tests {
     /// fragment, avant d'être formatés : `rustfmt` suit les déclarations de modules, et un
     /// `mod.rs` seul ne résout pas ses `mod`.
     ///
-    /// Deux contextes, comme `each_feature_template_renders_with_its_context` : le
-    /// compteur de `rate-limit` a deux rendus selon que `redis` est posée, et celui qu'on
-    /// ne déroule pas est celui qui casse.
+    /// Quatre contextes, comme `each_feature_template_renders_with_its_context` : le
+    /// compteur de `rate-limit` a deux rendus selon que `redis` est posée, et un message
+    /// destiné au client a deux rendus selon la langue du projet — celui qu'on ne déroule
+    /// pas est celui qui casse.
     #[test]
     fn each_rust_template_of_each_fragment_conforms_to_rustfmt() {
         let renderer = Renderer::new();
         let temp = tempfile::tempdir().expect("répertoire temporaire créable");
 
         let mut sources = Vec::new();
-        for (rang, installees) in [&[][..], &["redis"][..]].into_iter().enumerate() {
+        let cas = [
+            (&[][..], "fr"),
+            (&[][..], "en"),
+            (&["redis"][..], "fr"),
+            (&["redis"][..], "en"),
+        ];
+        for (rang, (installees, lang)) in cas.into_iter().enumerate() {
             for feature in crate::templates::embedded_names() {
                 let root = temp.path().join(rang.to_string()).join(&feature);
 
@@ -1240,10 +1247,10 @@ mod tests {
                     }
 
                     let rendered = renderer
-                        .render(&file.source, feature_context(installees))
+                        .render(&file.source, feature_context_in(installees, lang))
                         .unwrap_or_else(|error| {
                             panic!(
-                                "{feature}/{} ne se rend pas sur {installees:?} : {error}",
+                                "{feature}/{} ne se rend pas sur {installees:?} en {lang} : {error}",
                                 file.destination.display()
                             )
                         });
@@ -1255,7 +1262,7 @@ mod tests {
                     {
                         sources.push((
                             format!(
-                                "{feature}/{} sur {installees:?}",
+                                "{feature}/{} sur {installees:?} en {lang}",
                                 file.destination.display()
                             ),
                             destination,

@@ -72,13 +72,9 @@ pub async fn subscribe(
 
     for motif in &input.events {
         if motif.trim().is_empty() {
-{%- if lang == "en" %}
-            return Err(Error::BadRequest("an event pattern cannot be empty".to_string()));
-{%- else %}
             return Err(Error::BadRequest(
-                "un motif d'événement ne peut pas être vide".to_string(),
+                {% if lang == "en" %}"an event pattern cannot be empty"{% else %}"un motif d'événement ne peut pas être vide"{% endif %}.to_string(),
             ));
-{%- endif %}
         }
     }
 
