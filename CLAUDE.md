@@ -121,11 +121,12 @@ total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est 
 | `// <rbs:job_modules>` | `src/modules/jobs/mod.rs` — la déclaration du module qu'engendre `rbs generate job`, optionnelle |
 | `// <rbs:schedules>` | `src/modules/scheduler/mod.rs` — l'échéance qu'engendre `rbs generate job --every`, optionnelle |
 
-Cinq sont optionnelles — `modules`, `services`, `jobs`, `job_modules`, `schedules` — leur
-fichier porteur n'existant que sur un projet qui a installé le fragment correspondant.
-`generate crud` en emploie six ; `generate job` en emploie trois des siennes
-(`job_modules`, `jobs`, `schedules`) ; les autres appartiennent aux fragments qu'installe
-`add`. Une ancre insérée dans `<rbs:layers>` est *intérieure* à `trace` et `request_id` :
+Cinq sont optionnelles, leur fichier porteur pouvant manquer : `modules`, sur un projet qui
+n'a encore reçu aucun fragment ; `services`, sur un projet sans compose ; `jobs` et
+`job_modules`, sans le fragment `jobs` ; `schedules`, sans le fragment `scheduler`.
+`generate crud` en emploie six ; `generate job` en emploie trois — `job_modules` et
+`schedules`, qui ne servent qu'à lui, et `jobs`, où le fragment `webhooks` inscrit aussi sa
+livraison ; les autres appartiennent aux fragments qu'installe `add`. Une ancre insérée dans `<rbs:layers>` est *intérieure* à `trace` et `request_id` :
 un `.layer()` enveloppe ce qui le précède, si bien qu'un middleware posé là voit le
 `request_id` et que ses propres réponses courtes — un 429, un préflight refusé — restent
 dans la trace.

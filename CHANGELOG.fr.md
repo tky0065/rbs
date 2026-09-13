@@ -43,8 +43,37 @@ dépréciation.
   avant 1.5.0 continue de fonctionner sans elles, et reprend `src/modules/jobs/worker.rs`
   et `queue.rs` du fragment quand il veut le comportement. `rbs doctor` propose les deux
   clés dans le bloc qu'il imprime quand la section manque.
+- **`rbs generate job <nom>` écrit un job de la file, et `--every "<cron>"` son
+  échéance.** Un seul plan crée `src/modules/jobs/<nom>.rs`, déclare le module entre les
+  nouvelles balises `// <rbs:job_modules>`, l'inscrit dans `// <rbs:jobs>` et, sous
+  `--every`, le pousse dans le calendrier par la nouvelle `// <rbs:schedules>`.
+  L'expression est jugée avec la crate et la normalisation du démarrage du projet, avant
+  toute écriture. La commande exige `jobs` (et `scheduler` sous `--every`), et refuse un
+  nom qui est un mot-clé Rust, un module de la file, `jobs`, ou une crate que nomme le code
+  de la file — déclaré dans `src/modules/jobs/mod.rs`, il masquerait cette crate. Sur un projet engendré avant 1.5.0, les ancres manquent : le
+  fichier du job s'écrit, et la déclaration, l'inscription et l'échéance — chacune
+  suppose la précédente — s'affichent à reporter plutôt que de s'écrire sans ce qu'elles
+  nomment. Un projet qui a reçu `jobs` ou `scheduler` avant 1.3.0 est refusé, avec le
+  déplacement à faire à la main.
+- **`rbs doctor` contrôle sept fragments de plus.** `cors` avertit d'un `origins` vide,
+  `rate-limit` veut sa section, `scheduler` lit chaque expression littérale du calendrier
+  comme le démarrage la lira, `webhooks` veut la livraison inscrite à la file, `audit` sa
+  migration déclarée et dans le `Migrator`, `docker` le `config/production.toml` que son
+  compose sélectionne, `ci` son workflow. Chacun nomme un projet qui compile puis se
+  comporte mal. `scheduler` et `webhooks` lisent un projet qui les a reçus avant 1.3.0 là
+  où il les porte encore, sous `src/`. Après la montée, un projet qui porte `cors` voit un
+  nouvel avertissement tant qu'il n'a pas énuméré les origines de son front.
 
 ### Modifié
+
+- **`rbs add jobs` et `rbs add scheduler` portent chacun une ancre de plus, et
+  `schedules()` s'écrit en instructions.** `// <rbs:job_modules>` se tient sous
+  `pub mod worker;`, et `// <rbs:schedules>` sous `let mut calendrier = Vec::new();` — le
+  calendrier a quitté son littéral `vec![]`, où une ancre ne survit pas à rustfmt dès
+  qu'un second élément s'y ajoute. Après la montée, `rbs doctor` signale les deux absentes
+  sur un projet engendré plus tôt : `rbs doctor --fix` repose `job_modules`, tandis que
+  `schedules()` doit d'abord être réécrite à la main. La note de montée donne la forme à
+  coller.
 
 - **Un abonnement webhook ne peut plus atteindre le réseau du projet.** Hors du profil
   `development`, `POST /webhooks/subscriptions` rend 400 à une URL qui n'est pas en

@@ -92,7 +92,7 @@ the row is keyed by `kind`, and the command will not silently pick one over the 
 
 ### A calendar predating the anchor
 
-A project generated before this milestone still declares `schedules()` as a `vec![]`
+A project generated before 1.5.0 still declares `schedules()` as a `vec![]`
 literal, with no `// <rbs:schedules>` markers inside it:
 
 ```rust
@@ -109,9 +109,11 @@ pub fn schedules() -> Vec<Schedule> {
 `rbs doctor --fix` cannot put the anchor back on such a project: an anchor is restored
 beneath the line it declares as its hook, and this function's hook —
 `let mut calendrier = Vec::new();` — does not exist in it yet. `rbs doctor` reports the
-anchor missing, same as always, but the remedy here is a hand edit rather than a rerun:
-rewrite the function to instructions, the same way [`jobs::registry`](./jobs.md#registering-it)
-already had to move off a `vec![]` for `// <rbs:jobs>`, and add the markers yourself:
+anchor missing, same as always, but the remedy here is a hand edit rather than a rerun. An
+anchor placed inside an expression does not survive rustfmt once a second element joins it
+— which is what moved [`jobs::registry`](./jobs.md#registering-it) off its chain of
+`.register()` calls for `// <rbs:jobs>` — so rewrite the function to instructions, and add
+the markers yourself:
 
 ```rust
 #[allow(clippy::vec_init_then_push)]

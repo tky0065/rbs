@@ -131,10 +131,16 @@ jamais trace de son nom. `<NAME>` est à la fois le module sous `src/modules/job
 sinon, tout comme un mot-clé Rust ou un nom qui entre en collision avec l'un des six
 fichiers que le fragment `jobs` porte déjà (`config`, `demo`, `model`, `queue`, `worker`,
 `tests`), ou avec `jobs` lui-même — `pub mod jobs;` dans `src/modules/jobs/mod.rs`
-nommerait le module comme son propre dossier, ce que `clippy::module_inception` refuse.
+nommerait le module comme son propre dossier, ce que `clippy::module_inception` refuse. Le
+nom d'une crate que ce fichier ou la template du job emploie l'est aussi — `std`, `core`,
+`alloc`, `serde`, `serde_json`, `anyhow`, `async_trait`, `tracing` : déclaré là, le module
+masquerait la crate à chaque chemin `serde::…` du fichier.
 
 La commande exige la feature `jobs`, et `--every` exige en plus `scheduler` — chaque refus
-nomme la commande qui installe ce qui manque. Sur un projet qui porte `jobs` :
+nomme la commande qui installe ce qui manque. Un projet qui a reçu l'une ou l'autre avant
+1.3.0 la porte encore sous `src/jobs/` ou `src/scheduler/`, que `rbs upgrade` ne déplace
+pas : la commande le refuse aussi, en nommant le déplacement à faire à la main. Sur un
+projet qui porte `jobs` :
 
 {/* rbs:transcript cmd="rbs generate job purge_sessions --dry-run" setup="rbs new demo --yes --with jobs --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
@@ -169,6 +175,16 @@ plan pour /private/tmp/rbs-demo/demo
 
 Relancer l'une ou l'autre commande ne change rien : un fichier de job déjà présent n'est
 jamais réécrit, `--force` compris, et le plan le signale inchangé.
+
+Sur un projet engendré avant 1.5.0, `src/modules/jobs/mod.rs` n'a pas
+`// <rbs:job_modules>`. Le fichier du job s'écrit quand même, mais pas sa déclaration — ni
+l'inscription et l'échéance, qui nomment le module et empêcheraient le projet de compiler
+sans elle : le plan affiche les trois blocs à la place. `rbs doctor --fix` repose cette
+ancre, après quoi relancer la commande écrit le reste. Un calendrier encore écrit en
+`vec![]` n'a pas de ligne où accrocher `// <rbs:schedules>` ; le plan le dit plutôt que de
+promettre `--fix`, et le
+[guide scheduler](../guides/scheduler.md#un-calendrier-antérieur-à-lancre) montre la
+réécriture.
 
 ## La grammaire de `--fields`
 
@@ -444,9 +460,9 @@ fragments qu'installe [`rbs add`](./add.md) :
 | `// <rbs:migrations>` | `migration/src/lib.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
 
-`rbs generate job` en emploie trois qui lui sont propres, sans en partager aucune avec les
-deux commandes ci-dessus ni avec le squelette : chacune vit dans un fichier qu'un fragment
-dépose :
+`rbs generate job` en emploie trois, sans en partager aucune avec les deux commandes
+ci-dessus ni avec le squelette : chacune vit dans un fichier qu'un fragment dépose, et
+`// <rbs:jobs>` reçoit aussi la livraison du fragment `webhooks` :
 
 | Ancre | Fichier |
 |---|---|

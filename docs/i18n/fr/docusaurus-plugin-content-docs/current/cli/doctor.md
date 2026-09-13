@@ -174,8 +174,8 @@ qui se construit, puis se conduit mal.
 |---|---|
 | `cors` | La section `[cors]`, puis `origins`. Une liste vide — ce que le fragment écrit, à dessein — est un avertissement plutôt qu'un échec : c'est le défaut sûr, et aussi le premier obstacle que rencontre un front. |
 | `rate-limit` | La section `[rate_limit]`. |
-| `scheduler` | Chaque expression littérale passée à `Schedule::every` dans `src/modules/scheduler/mod.rs`, lue avec la crate et la normalisation du démarrage du projet — cinq champs gagnent la seconde zéro, six passent, tout autre nombre est refusé. Une expression tirée d'une constante reste au jugement du démarrage. |
-| `webhooks` | La ligne qui inscrit `Delivery` dans `// <rbs:jobs>` de `src/modules/jobs/mod.rs`. Sans elle, chaque livraison part en réessai, puis en échec. |
+| `scheduler` | Chaque expression littérale passée à `Schedule::every` dans `src/modules/scheduler/mod.rs` — ou `src/scheduler/mod.rs`, sur un projet qui a reçu le fragment avant 1.3.0 et l'y porte encore —, lue avec la crate et la normalisation du démarrage du projet — cinq champs gagnent la seconde zéro, six passent, tout autre nombre est refusé. Une expression tirée d'une constante reste au jugement du démarrage. |
+| `webhooks` | La ligne qui inscrit `Delivery` dans `// <rbs:jobs>` de `src/modules/jobs/mod.rs` — `src/jobs/mod.rs` avant 1.3.0, où la ligne nomme `crate::webhooks` plutôt que `crate::modules::webhooks`. Sans elle, chaque livraison part en réessai, puis en échec. |
 | `audit` | La migration `create_audit_log`, déclarée et inscrite dans `migration/src/lib.rs`. |
 | `docker` | `config/production.toml`, le profil que le service `api` du compose retient par `RBS_ENV: production` — celui qui coupe `/docs`. |
 | `ci` | `.github/workflows/ci.yml`, seul fichier que pose le fragment. |

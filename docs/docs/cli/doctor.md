@@ -165,8 +165,8 @@ misbehaves.
 |---|---|
 | `cors` | The `[cors]` section, then `origins`. An empty list — what the fragment writes, on purpose — is a warning rather than a failure: it is the safe default, and also the first thing a front end runs into. |
 | `rate-limit` | The `[rate_limit]` section. |
-| `scheduler` | Every literal expression passed to `Schedule::every` in `src/modules/scheduler/mod.rs`, read with the crate and the normalisation the project's own startup uses — five fields gain second zero, six pass, any other count is refused. An expression taken from a constant is left to the startup. |
-| `webhooks` | The line registering `Delivery` in `// <rbs:jobs>` of `src/modules/jobs/mod.rs`. Without it, every delivery retries and then fails. |
+| `scheduler` | Every literal expression passed to `Schedule::every` in `src/modules/scheduler/mod.rs` — or `src/scheduler/mod.rs`, on a project that received the fragment before 1.3.0 and still carries it there — read with the crate and the normalisation the project's own startup uses — five fields gain second zero, six pass, any other count is refused. An expression taken from a constant is left to the startup. |
+| `webhooks` | The line registering `Delivery` in `// <rbs:jobs>` of `src/modules/jobs/mod.rs` — `src/jobs/mod.rs` before 1.3.0, where the line names `crate::webhooks` rather than `crate::modules::webhooks`. Without it, every delivery retries and then fails. |
 | `audit` | The `create_audit_log` migration, declared and registered in `migration/src/lib.rs`. |
 | `docker` | `config/production.toml`, the profile the compose's `api` service selects with `RBS_ENV: production` — the one that turns `/docs` off. |
 | `ci` | `.github/workflows/ci.yml`, the only file the fragment writes. |

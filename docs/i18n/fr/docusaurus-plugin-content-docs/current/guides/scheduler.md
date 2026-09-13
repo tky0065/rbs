@@ -82,7 +82,7 @@ déploiement.
 Changer le calendrier passe par un déploiement. C'est le prix ordinaire d'une configuration
 versionnée, et c'est ce qui rend la liste relisible dans un diff.
 
-[`rbs generate job <nom> --every "<cron>"`](../cli/generate.md) est la commande qui écrit
+[`rbs generate job <nom> --every "<cron>"`](../cli/generate.md#rbs-generate-job) est la commande qui écrit
 une entrée comme celle ci-dessus : le fichier du job sous `src/modules/jobs/`, son
 inscription au worker, et — à cause de `--every` — la ligne `calendrier.push(…)` entre les
 balises `// <rbs:schedules>`, les trois dans un seul plan. `--every` refuse une expression
@@ -92,7 +92,7 @@ choisit jamais l'une des deux à votre place.
 
 ### Un calendrier antérieur à l'ancre
 
-Un projet engendré avant ce jalon déclare encore `schedules()` comme un littéral `vec![]`,
+Un projet engendré avant 1.5.0 déclare encore `schedules()` comme un littéral `vec![]`,
 sans balises `// <rbs:schedules>` à l'intérieur :
 
 ```rust
@@ -110,9 +110,10 @@ pub fn schedules() -> Vec<Schedule> {
 la ligne qu'elle déclare comme accroche, et celle de cette fonction —
 `let mut calendrier = Vec::new();` — n'y existe pas encore. `rbs doctor` signale l'ancre
 absente comme toujours, mais le remède ici est une retouche à la main plutôt qu'une
-relance : réécrivez la fonction en instructions, de la même façon que
-[`jobs::registry`](./jobs.md#linscrire) a dû quitter son `vec![]` pour `// <rbs:jobs>`, et
-posez vous-même les balises :
+relance. Une ancre posée à l'intérieur d'une expression ne survit pas à rustfmt dès qu'un
+second élément s'y ajoute — c'est ce qui a fait quitter à [`jobs::registry`](./jobs.md#linscrire)
+sa chaîne d'appels `.register()` pour `// <rbs:jobs>`. Réécrivez donc la fonction en
+instructions, et posez vous-même les balises :
 
 ```rust
 #[allow(clippy::vec_init_then_push)]
