@@ -109,6 +109,40 @@ async fn resending_to_an_unknown_address_is_accepted() {
     assert_eq!(statut, StatusCode::ACCEPTED);
 }
 
+/// Une adresse inscrite rend le même 202, et le renvoi émet un jeton neuf.
+///
+/// C'est la branche qui envoie le courriel : un échec d'envoi y rendrait un 500 que
+/// l'adresse inconnue ne rend jamais, et l'écart dirait lesquelles sont inscrites.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn resending_to_a_registered_address_is_accepted() {
+    let api = application().await;
+    let db = connection().await;
+    let email = fresh_email();
+
+    register(&api, &email).await;
+
+    let (statut, _) = call(
+        &api,
+        post_json("/auth/resend-verification", json!({ "email": email })),
+    )
+    .await;
+
+    assert_eq!(statut, StatusCode::ACCEPTED);
+
+    let compte = crate::auth::repository::find_by_email(&db, &email)
+        .await
+        .expect("la lecture aboutit")
+        .expect("le compte vient d'être créé");
+
+    // Deux lignes : celle de l'inscription, que le renvoi a close, et la neuve.
+    assert_eq!(
+        one_time_tokens_count_for(&db, compte.id).await,
+        2,
+        "le renvoi n'a ouvert aucun jeton"
+    );
+}
+
 /// La garde rejette avant la vérification et laisse passer après.
 ///
 /// La route est montée ici et nulle part ailleurs : le fragment livre la garde sans

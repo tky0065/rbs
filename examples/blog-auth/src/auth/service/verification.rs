@@ -2,16 +2,16 @@ use chrono::{Duration, Utc};
 use rbs_core::{Error, Result, token};
 use sea_orm::{DatabaseConnection, TransactionTrait};
 
+use super::super::config::FlowConfig;
 use super::super::model::TokenPurpose;
 use super::super::repository;
-use super::normalise;
+use super::{normalise, notify};
+use crate::modules::mail::Mailer;
 
 /// Ouvre un jeton de vérification, et rend le compte avec le jeton **en clair**.
 ///
-/// Une seule fonction pour l'inscription et pour le renvoi : les deux partent d'une
-/// adresse et rendent la même chose. En écrire une seconde qui prendrait le modèle ferait
-/// appeler le repository depuis le contrôleur de `register`, et la dépendance des couches
-/// ne le permet pas.
+/// Le jeton sort en clair pour `send_link`, qui le met dans un courriel, et pour les tests
+/// du projet, qui déroulent le parcours sans qu'aucun SMTP soit joignable.
 pub async fn request(
     db: &DatabaseConnection,
     ttl_secs: u64,
@@ -39,6 +39,29 @@ pub async fn request(
     .await?;
 
     Ok(Some((utilisateur, jeton)))
+}
+
+/// Envoie un lien de vérification neuf, si un compte porte l'adresse.
+///
+/// Une seule fonction pour l'inscription et pour le renvoi : les deux partent d'une
+/// adresse. Une adresse inconnue ne reçoit rien, et l'appelant n'en sait rien.
+pub async fn send_link(
+    db: &DatabaseConnection,
+    mail: &Mailer,
+    flows: &FlowConfig,
+    email: &str,
+) -> Result<()> {
+    if let Some((utilisateur, jeton)) = request(db, flows.verification_ttl_secs, email).await? {
+        notify(
+            mail,
+            &utilisateur,
+            "Confirmez votre adresse",
+            "verification.html",
+            minijinja::context! { link => flows.link("verify-email", &jeton) },
+        );
+    }
+
+    Ok(())
 }
 
 /// Consomme un jeton et date la vérification.

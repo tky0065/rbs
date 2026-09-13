@@ -495,3 +495,35 @@ async fn forgetting_an_unknown_address_is_accepted_and_writes_nothing() {
         "la demande a créé un compte"
     );
 }
+
+/// Une adresse inscrite rend le même 202 qu'une adresse inconnue, et un jeton est émis.
+///
+/// C'est la branche qui envoie le courriel : un échec d'envoi y rendrait un 500 que
+/// l'adresse inconnue ne rend jamais, et l'écart dirait lesquelles sont inscrites.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn forgetting_a_registered_address_is_accepted_and_opens_a_token() {
+    let api = application().await;
+    let db = connection().await;
+    let email = fresh_email();
+
+    register(&api, &email).await;
+    let compte = crate::auth::repository::find_by_email(&db, &email)
+        .await
+        .expect("la lecture aboutit")
+        .expect("le compte vient d'être créé");
+    let avant = one_time_tokens_count_for(&db, compte.id).await;
+
+    let (statut, _) = call(
+        &api,
+        post_json("/auth/forgot-password", json!({ "email": email })),
+    )
+    .await;
+
+    assert_eq!(statut, StatusCode::ACCEPTED);
+    assert_eq!(
+        one_time_tokens_count_for(&db, compte.id).await,
+        avant + 1,
+        "la demande n'a ouvert aucun jeton de réinitialisation"
+    );
+}
