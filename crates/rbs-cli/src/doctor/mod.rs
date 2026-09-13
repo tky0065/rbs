@@ -8,6 +8,7 @@ pub mod agents;
 pub mod anchors;
 pub mod auth;
 pub mod base;
+pub mod cors;
 mod disposition;
 pub mod env;
 pub mod guards;
@@ -15,6 +16,7 @@ pub mod jobs;
 pub mod json;
 pub mod mail;
 pub mod observability;
+pub mod rate_limit;
 pub mod redis;
 pub mod relations;
 pub mod render;
@@ -301,7 +303,7 @@ fn plan(manifeste: &Manifeste) -> Vec<Controle> {
 ///
 /// Une feature peut y figurer deux fois : `auth` amène de quoi vérifier son secret, et de
 /// quoi juger les routes que les rôles qu'elle installe pourraient protéger.
-const FEATURE_CHECKS: [(&str, Controle); 8] = [
+const FEATURE_CHECKS: [(&str, Controle); 10] = [
     (
         "auth",
         Controle {
@@ -349,6 +351,20 @@ const FEATURE_CHECKS: [(&str, Controle); 8] = [
         Controle {
             titre: observability::TITRE,
             executer: |projet, _| observability::check(&projet.config),
+        },
+    ),
+    (
+        "cors",
+        Controle {
+            titre: cors::TITRE,
+            executer: |projet, _| cors::check(&projet.config),
+        },
+    ),
+    (
+        "rate-limit",
+        Controle {
+            titre: rate_limit::TITRE,
+            executer: |projet, _| rate_limit::check(&projet.config),
         },
     ),
     (
@@ -499,6 +515,17 @@ impl Config {
                 .get(section)
                 .and_then(|table| table.get(key))
                 .and_then(toml_edit::Item::as_integer)
+        })
+    }
+
+    /// Nombre d'éléments d'un tableau, s'il est renseigné et qu'il en est un.
+    pub(crate) fn array_len(&self, section: &str, key: &str) -> Option<usize> {
+        self.document().and_then(|document| {
+            document
+                .get(section)
+                .and_then(|table| table.get(key))
+                .and_then(toml_edit::Item::as_array)
+                .map(toml_edit::Array::len)
         })
     }
 
@@ -685,6 +712,41 @@ mod tests {
         (parent, root)
     }
 
+    /// Les réglages qu'un fragment inscrit dans `section`, tels qu'un remède les recopie :
+    /// lignes vides et commentaires ôtés.
+    ///
+    /// `pub(super)` : les contrôles de feature y comparent leur remède, qui se colle tel quel
+    /// et ne doit pas dériver de ce que `rbs add` écrit.
+    pub(super) fn reglages_du_fragment(feature: &str, section: &str) -> String {
+        let chemin = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("templates/features")
+            .join(feature)
+            .join("feature.toml");
+        let manifeste: toml_edit::DocumentMut = std::fs::read_to_string(&chemin)
+            .unwrap_or_else(|faute| panic!("{} illisible : {faute}", chemin.display()))
+            .parse()
+            .unwrap_or_else(|faute| panic!("{} mal formé : {faute}", chemin.display()));
+
+        let contenu = manifeste
+            .get("config")
+            .and_then(toml_edit::Item::as_array_of_tables)
+            .and_then(|configs| {
+                configs.iter().find(|config| {
+                    config.get("section").and_then(toml_edit::Item::as_str) == Some(section)
+                })
+            })
+            .and_then(|config| config.get("content"))
+            .and_then(toml_edit::Item::as_str)
+            .unwrap_or_else(|| panic!("{feature} n'inscrit pas de section `[{section}]`"));
+
+        contenu
+            .lines()
+            .map(str::trim_end)
+            .filter(|ligne| !ligne.trim().is_empty() && !ligne.trim_start().starts_with('#'))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     fn titles(report: &Report) -> Vec<&'static str> {
         report.checks.iter().map(|c| c.title).collect()
     }
@@ -763,6 +825,22 @@ mod tests {
             "la feature est déclarée, son contrôle doit figurer : {:?}",
             titles(&report)
         );
+    }
+
+    /// L'ordre du rapport est celui du tableau, et non celui du manifeste : deux projets
+    /// portant les mêmes fragments se lisent pareil.
+    #[test]
+    fn the_fragment_checks_follow_the_order_of_the_table() {
+        const ORDRE: [&str; 3] = ["cors", "rate-limit", "scheduler"];
+        let (_parent, root) = project(&["health", "scheduler", "rate-limit", "cors"]);
+
+        let report = run_with(&root, &mut Muet).expect("c'est un projet rbs");
+
+        let installes: Vec<&str> = titles(&report)
+            .into_iter()
+            .filter(|title| ORDRE.contains(title))
+            .collect();
+        assert_eq!(installes, ORDRE, "{:?}", titles(&report));
     }
 
     /// Le calendrier ne se juge que sur un projet qui l'a installé : ailleurs, son fichier
