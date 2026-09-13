@@ -21,7 +21,7 @@ du projet », en bas, est faite pour l'accueillir.
 
 | Commande | Ce qu'elle fait | Ce qu'elle dispense d'écrire |
 |---|---|---|
-| `rbs new <nom>` | crée un projet ; `--lang fr\|en` fixe la langue de ce fichier | tout le squelette |
+| `rbs new <nom>` | crée un projet ; `--lang fr\|en` fixe la langue du projet — ce fichier et les réponses HTTP | tout le squelette |
 | `rbs add <feature>` | installe audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks | le câblage de la feature |
 | `rbs generate crud <nom> --fields "..."` | une feature CRUD complète | huit fichiers, le seed et la migration |
 | `rbs generate feature <nom>` | une feature vide | sept fichiers |
