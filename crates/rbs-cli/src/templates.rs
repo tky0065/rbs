@@ -677,8 +677,8 @@ mod tests {
     /// Contexte de rendu d'un fragment : les deux variables qu'un projet existant fournit.
     /// Le contexte que `add::plan_for` construit, recopié ici.
     ///
-    /// En français par défaut : c'est la langue d'un projet qui ne porte pas de clé
-    /// `[package.metadata.rbs] lang`, le cas le plus courant des tests de ce module.
+    /// En français par défaut : c'est la langue d'un projet dont `config/default.toml`
+    /// ne porte pas de `[server] lang`, le cas le plus courant des tests de ce module.
     fn feature_context(installees: &[&str]) -> Value {
         feature_context_in(installees, "fr")
     }

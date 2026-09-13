@@ -501,8 +501,8 @@ mod tests {
         assert_eq!(rendu["with_upload"], true);
     }
 
-    /// Sans `speaking`, une feature reste française : un projet existant, dont la clé
-    /// `[package.metadata.rbs] lang` est absente, ne doit rien voir changer.
+    /// Sans `speaking`, une feature reste française : un projet existant, dont
+    /// `[server] lang` de `config/default.toml` est absent, ne doit rien voir changer.
     #[test]
     fn a_fresh_feature_speaks_french() {
         let feature = Feature::fresh("articles", Vec::new());

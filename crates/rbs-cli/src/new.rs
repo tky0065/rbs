@@ -1601,6 +1601,41 @@ mod tests {
         assert!(agents.contains("## CLI first"), "{agents}");
     }
 
+    /// `create` écrit le squelette — donc `config/default.toml` et son `[server] lang` —
+    /// avant de poser les fragments de `--with` : `add::plan_for`, qui lit cette clé pour
+    /// choisir la langue de ses messages, la trouve déjà à sa place. Sans cet ordre, un
+    /// `rbs new --lang en --with rate-limit` engendrerait un message 429 français.
+    #[test]
+    fn a_fragment_installed_by_with_speaks_the_language_the_flag_chose() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+
+        let project = create(
+            &Options {
+                name: "demo-api".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
+                database: Default::default(),
+                features: vec!["rate-limit".to_string()],
+                core_path: None,
+                template_dir: None,
+                lang: crate::lang::Lang::En,
+            },
+            parent.path(),
+        )
+        .expect("le projet doit se créer");
+
+        let module = std::fs::read_to_string(project.root.join("src/modules/rate_limit/mod.rs"))
+            .expect("le fragment rate-limit doit s'être posé");
+
+        assert!(
+            module.contains("too many requests: try again later"),
+            "{module}"
+        );
+        assert!(
+            !module.contains("trop de requêtes : réessayez plus tard"),
+            "{module}"
+        );
+    }
+
     /// `--template-dir` ne remplace que le squelette de projet : les guides `AGENTS.md`
     /// n'en font pas partie, et rien n'oblige un répertoire de substitution à les fournir.
     /// Sans ce test, une régression qui referait lire `template_dir` par
