@@ -20,8 +20,8 @@ du projet », en bas, est faite pour l'accueillir.
 |---|---|---|
 | `rbs new <nom>` | crée un projet ; `--lang fr\|en` fixe la langue de ce fichier | tout le squelette |
 | `rbs add <feature>` | installe audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks | le câblage de la feature |
-| `rbs generate crud <nom> --fields "..."` | une feature CRUD complète | sept fichiers, le seed et la migration |
-| `rbs generate feature <nom>` | une feature vide | six fichiers |
+| `rbs generate crud <nom> --fields "..."` | une feature CRUD complète | huit fichiers, le seed et la migration |
+| `rbs generate feature <nom>` | une feature vide | sept fichiers |
 | `rbs migrate up\|down\|status` | pilote les migrations | — |
 | `rbs migrate new <nom>` | un fichier de migration vide | le squelette de la migration |
 | `rbs seed` | insère les données de démonstration | — |
@@ -37,21 +37,21 @@ du projet », en bas, est faite pour l'accueillir.
 - Une entité et son CRUD : `rbs generate crud posts --fields "title:string,body:text"`
 - Une référence vers une autre entité : `--fields "author:references:users"`
 - Le côté inverse d'une relation : `rbs generate crud users --has-many posts`
-- Une feature sans champs : `rbs generate feature webhooks`
+- Une feature sans champs : `rbs generate feature reports`
 - L'authentification JWT : `rbs add auth`, puis recopier `RBS_AUTH__SECRET`
 - Une migration écrite à la main : `rbs migrate new ajoute_index_sur_slug`
 
 ## Architecture imposée
 
 ```
-src/<nom>/  mod · model · dto · repository · service · controller
+src/<nom>/  mod · model · dto · filter · repository · service · controller
 controller → service → repository → model
 ```
 
 La dépendance est unidirectionnelle et stricte : un `service` n'accède jamais
 *directement* à `DatabaseConnection` — il la reçoit et la passe au `repository`, seul à
 construire une requête SeaORM ; un `controller` n'en construit jamais. `rbs generate
-crud` ajoute à ces six fichiers un `tests.rs` et, quand l'entité est semable, le seed
+crud` ajoute à ces sept fichiers un `tests.rs` et, quand l'entité est semable, le seed
 `src/seeds/<nom>.rs`. Un fichier de feature au-delà de ~200 lignes signale une feature à
 scinder.
 
@@ -73,6 +73,11 @@ engendre pas, et il est légitime de les écrire à la main. Alors :
   repository ;
 - si le code ajoute une route, l'inscrire dans `<rbs:routes>` et `<rbs:openapi>` à la
   main ;
+- sur un projet qui porte `auth`, une route écrite à la main se ferme comme celles du
+  CLI : un argument `Identity` dans le handler (401 sans jeton valide), `require_role`
+  pour exiger un rôle (403 en deçà), `security(("bearer" = []))` et les réponses 401 et
+  403 dans son `#[utoipa::path]` — sans eux, la route reste ouverte et le document
+  OpenAPI le tait ;
 - `rbs doctor` signale un module écrit hors du CLI par un avertissement `!`, jamais par un
   échec : c'est un constat, et la commande reste bonne.
 
@@ -86,6 +91,6 @@ cargo test --workspace -- --ignored
 rbs doctor
 ```
 
-La seconde ligne est celle qui compte : les tests qui joignent la base sont `#[ignore]`,
+La quatrième ligne est celle qui compte : les tests qui joignent la base sont `#[ignore]`,
 et `cargo test` seul ne les lance pas. Ils demandent la base du `.env` démarrée —
 `docker compose up -d`, ou `rbs dev` qui l'enchaîne.
