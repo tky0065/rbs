@@ -162,6 +162,12 @@ between minor versions with no deprecation cycle.
   `Identity` argument, `require_role`, `security(("bearer" = []))` and the 401 and 403
   responses a hand-written route needs. `rbs upgrade` rewrites the guide zone of an
   existing project.
+- **`rbs add webhooks` no longer leaves a project that `cargo fmt --check` rejects.** It
+  writes three migrations under a single timestamp, and their `mod` lines were declared
+  in install order, which rustfmt rewrites: the CI that `rbs add ci` generates failed on
+  its first push. The `migration_modules` anchor now keeps its block sorted; the run order
+  still lives in the `Migrator`'s `vec!`, which nothing reorders. A project already
+  affected runs `cargo fmt` once.
 
 #### Projects already generated
 

@@ -153,11 +153,15 @@ pub(crate) const OPENAPI: Anchor = Anchor {
 ///
 /// Distincte de [`MIGRATIONS`] : Rust interdit un `mod` non-inline dans un bloc, et la
 /// déclaration ne peut donc pas tenir dans le `vec!` du `Migrator`.
+///
+/// Triée, à la différence de [`MIGRATIONS`] : rustfmt ordonne les `mod`, et une même
+/// commande pose plusieurs migrations sous un seul horodatage — `add webhooks` en écrit
+/// trois. L'ordre d'exécution vit dans le `vec!`, que rustfmt laisse tel quel.
 pub(crate) const MIGRATION_MODULES: Anchor = Anchor {
     name: Cow::Borrowed("migration_modules"),
     file: Cow::Borrowed("migration/src/lib.rs"),
     comment: "//",
-    sorted: false,
+    sorted: true,
     optional: false,
     after: "pub use sea_orm_migration::prelude::*;",
 };
@@ -764,6 +768,36 @@ pub fn router(state: AppState) -> Router {
             obtenu,
             "// <rbs:features>\npub mod auth;\npub mod posts;\npub mod rate_limit;\n// </rbs:features>\n",
             "le bloc doit rester dans l'ordre que rustfmt impose : {obtenu}"
+        );
+    }
+
+    /// `add webhooks` pose trois migrations sous un seul horodatage, dans l'ordre où il
+    /// installe leurs fragments ; rustfmt, lui, trie les `mod`. Laissé dans l'ordre
+    /// d'arrivée, le bloc rendait `cargo fmt --check` rouge, et la CI engendrée avec lui.
+    #[test]
+    fn the_migration_modules_of_one_command_stay_in_rustfmt_order() {
+        let source = "// <rbs:migration_modules>\nmod m20260101_000000_create_users;\n// </rbs:migration_modules>\n";
+
+        let obtenu = insert(
+            source,
+            MIGRATION_MODULES,
+            &lines(&[
+                "mod m20260913_130735_create_jobs;",
+                "mod m20260913_130735_create_auth_tables;",
+                "mod m20260913_130735_create_webhook_subscriptions;",
+            ]),
+        )
+        .expect("l'ancre est présente");
+
+        assert_eq!(
+            obtenu,
+            "// <rbs:migration_modules>\n\
+             mod m20260101_000000_create_users;\n\
+             mod m20260913_130735_create_auth_tables;\n\
+             mod m20260913_130735_create_jobs;\n\
+             mod m20260913_130735_create_webhook_subscriptions;\n\
+             // </rbs:migration_modules>\n",
+            "le bloc doit suivre l'ordre de rustfmt : {obtenu}"
         );
     }
 

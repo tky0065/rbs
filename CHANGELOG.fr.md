@@ -169,6 +169,12 @@ dépréciation.
   sur un projet qui porte `auth` il taisait l'argument `Identity`, `require_role`,
   `security(("bearer" = []))` et les réponses 401 et 403 qu'exige une route écrite à la
   main. `rbs upgrade` réécrit la zone du guide d'un projet existant.
+- **`rbs add webhooks` ne laisse plus un projet que `cargo fmt --check` refuse.** Il écrit
+  trois migrations sous un seul horodatage, et leurs lignes `mod` se déclaraient dans
+  l'ordre d'installation, que rustfmt réécrit : la CI qu'engendre `rbs add ci` échouait
+  dès son premier push. L'ancre `migration_modules` garde désormais son bloc trié ;
+  l'ordre d'exécution vit toujours dans le `vec!` du `Migrator`, que rien ne réordonne. Un
+  projet déjà touché lance `cargo fmt` une fois.
 
 #### Projets déjà générés
 
