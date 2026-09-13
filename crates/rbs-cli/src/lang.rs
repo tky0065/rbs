@@ -1,12 +1,13 @@
-//! La langue dans laquelle le projet reçoit son `AGENTS.md`.
+//! La langue du projet : son `AGENTS.md` et ses réponses HTTP.
 //!
 //! Le choix est celui du projet, non celui de la session : il s'inscrit dans
 //! `[package.metadata.rbs]`, sans quoi `add` et `upgrade` réécriraient un guide français
-//! par-dessus un guide anglais selon l'environnement de celui qui les lance.
+//! par-dessus un guide anglais selon l'environnement de celui qui les lance, et rend aussi
+//! `lang` dans `[server]` de `config/default.toml`, que `rbs-core` lit au démarrage.
 
 use std::fmt;
 
-/// Langue du guide engendré dans le projet.
+/// Langue du projet : son `AGENTS.md` et ses réponses HTTP.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
 pub enum Lang {
     /// Français, la langue du dépôt et du code engendré.

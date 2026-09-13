@@ -340,6 +340,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         database_user_par_defaut => demonstration.as_ref().map(|c| c.user.clone()).unwrap_or_default(),
         database_password_par_defaut => demonstration.as_ref().map(|c| c.password.clone()).unwrap_or_default(),
         database_name_par_defaut => demonstration.as_ref().map(|c| c.database.clone()).unwrap_or_default(),
+        lang => metadonnees.lang.name(),
     };
 
     let mut builder = plan::Builder::new(root.clone());
