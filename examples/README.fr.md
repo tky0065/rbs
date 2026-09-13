@@ -12,6 +12,7 @@ lit ces fichiers, et la CI les compile.
 | `blog-auth` | Le même, plus `rbs add auth` : des billets que tout compte identifié peut lire, et que seul un administrateur peut écrire. |
 | `file-drop` | Les trois features de la v0.3 sur un même projet — `redis`, `mail`, `storage` — câblées dans un CRUD `uploads`. |
 | `newsletter-queue` | `jobs`, `mail` et `observability` : une route de diffusion qui enfile une lettre par abonné confirmé, dans la transaction qui les lit — et un listener `/metrics` à lui. |
+| `event-hub` | `webhooks`, `scheduler`, `audit`, `cors`, `docker` et `ci` : la création d'une commande écrit sa trace d'audit et émet `order.created` dans la transaction qui l'insère. |
 
 Ils ne sont pas membres du workspace racine — un projet engendré déclare son propre
 `[workspace]`, et Cargo interdit l'imbrication. Le manifeste racine les exclut et la CI
@@ -111,9 +112,38 @@ cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
 cd .. && mv newsletter-queue examples/newsletter-queue
 ```
 
+### `event-hub`
+
+`add` refuse un arbre de travail sale, et chaque feature en laisse un derrière elle : le
+commit est pris avant **chacune** des six, et non une fois pour toutes.
+
+```bash
+cargo run -p rbs-cli --bin rbs -- new event-hub --yes \
+  --core-path ./crates/rbs-core \
+  --database-url 'postgres://rbs:rbs@localhost:5432/event_hub' \
+  --lang fr
+cd event-hub
+for f in webhooks scheduler audit cors docker ci; do
+  git add -A && git commit -q -m "before $f"
+  cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add "$f"
+done
+cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
+  generate crud orders --fields 'reference:string,amount:int' --force
+cd .. && mv event-hub examples/event-hub
+```
+
+`add webhooks` tire `jobs` et `auth`, et par elle `mail` et `rate-limit` : les cinq
+descendent d'un seul plan, et ses trois migrations — `create_auth_tables`,
+`create_jobs`, `create_webhook_subscriptions` — naissent dans la même seconde. L'ancre
+`migration_modules` trie leurs déclarations `mod` comme le ferait rustfmt ; l'ordre
+d'exécution, lui, ne bouge pas à ce tri et reste l'ordre d'installation, dans le `vec!`
+du `Migrator`. `.github/workflows/ci.yml` et `Dockerfile` ne sont lus par aucune CI de ce
+dépôt — GitHub ne lit les workflows qu'à la racine — et restent là pour être cités par la
+documentation et pour ne pas dériver.
+
 ## Les retouches que le CLI ne produit pas
 
-Trois s'appliquent aux quatre projets :
+Trois s'appliquent aux cinq projets :
 
 - supprimer le `.git` que `rbs new` initialise — un dépôt imbriqué n'a rien à faire ici ;
 - réécrire la dépendance `rbs-core` en `{ path = "../../crates/rbs-core" }`, puisque
@@ -216,6 +246,20 @@ route ; un job que rien n'enfile ne prouve rien de la file.
 
 `the_hand_edits_of_newsletter_queue_are_in_place` les atteste toutes.
 
+`event-hub` en porte trois de plus, une par fichier, et ensemble elles forment la
+création de commande tracée et transactionnelle que trois guides citent :
+
+- `src/orders/repository.rs` : `create` est générique sur `ConnectionTrait` plutôt que
+  sur `DatabaseConnection` — une transaction n'en est pas une.
+- `src/orders/service.rs` : `create` ouvre une transaction, insère la commande,
+  enregistre sa trace d'audit et émet `order.created` via `webhooks::emit`, puis
+  commite — un rollback emporte les trois avec lui.
+- `src/orders/controller.rs` : passe `&identite.user_id` au service comme acteur de la
+  trace d'audit.
+
+`the_hand_edits_of_event_hub_are_in_place` atteste les trois, dans cet ordre : une trace
+ou une émission enregistrée après le commit survivrait au rollback qu'elle doit suivre.
+
 Un fichier est suivi contre son propre `.gitignore`. `rbs new` écrit un `.env`, et le
 `.gitignore` qu'il pose à côté l'ignore — correct pour un vrai projet, fatal pour une
 fixture. Laissé hors du suivi, `.env` reste sur la machine qui a engendré l'exemple et
@@ -224,18 +268,32 @@ ajouté de force (`git add -f`). Le `.gitignore`, lui, n'est pas touché : il es
 octet pour octet à la template, et l'éditer s'enregistrerait comme la dérive même que cette
 comparaison traque.
 
-Ce `.env` ne porte **pas** `RBS_AUTH__SECRET`. `add auth` ne l'écrit que dans
-`.env.example`, et l'exemple est gardé exactement tel que le CLI le produit — recopier la
-variable est la première chose que l'on fait dans un vrai projet, et rien ici ne démarre le
-serveur.
+Sur les deux exemples qui portent `auth` — `blog-auth` directement, `event-hub` par
+`webhooks` — ce `.env` porte **bien** `RBS_AUTH__SECRET`. Le fragment marque la variable
+comme secrète, ce qui lui tire une valeur au hasard à chaque génération ; `.env.example`
+garde à la place la valeur de substitution qu'`add auth` y écrit, et recopier la vraie
+valeur est la première chose que l'on fait dans un vrai projet. Le test de non-dérive
+masque cette valeur plutôt que de la comparer, deux générations n'en tirant jamais la
+même.
 
 ## Le test de non-dérive
 
-`cargo test -p rbs-cli --test integration_examples` régénère les quatre projets et les
+`cargo test -p rbs-cli --test integration_examples` régénère les cinq projets et les
 compare aux versions versionnées ici, en ignorant exactement les différences énumérées
 ci-dessus. Il échoue quand une template change sans que l'exemple ait suivi — et c'est tout
 son intérêt : un exemple périmé fait mentir la documentation, et rien d'autre ne s'en
 apercevrait.
+
+La comparaison ignore aussi l'ordre des déclarations `mod` de migration d'`event-hub`,
+une fois leur horodatage masqué : cet ordre est fonction de l'horodatage, et deux
+générations ne tombent jamais dans la même seconde — une régénération rapide y met
+plusieurs commandes séparées, et `create_audit_log` échange sa place avec
+`create_schedules` selon la seconde tombée. Ce qui reste comparé est l'ordre
+d'exécution, que ce tri ne touche pas : les appels `Box::new` dans le `vec!` du
+`Migrator`, dans l'ordre d'installation. Ce qui garde le tri committé lui-même — celui que
+cette comparaison ignore — c'est `each_example_passes_cargo_fmt`, qui lance `cargo fmt
+--check` sur chaque exemple et échouerait si les lignes `mod` qu'il committe n'étaient
+pas ce que produit rustfmt.
 
 Le seul fichier de `blog-auth` retouché à la main est exclu de cette comparaison octet à
 octet, qui signalerait sinon la retouche elle-même. Ce qu'il porte est attesté à part, par

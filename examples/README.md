@@ -12,6 +12,7 @@ the site reads these files, and CI compiles them.
 | `blog-auth` | The same, plus `rbs add auth`: posts any signed-in caller can read, and only an admin can write. |
 | `file-drop` | The three v0.3 features on one project — `redis`, `mail`, `storage` — wired into an `uploads` CRUD. |
 | `newsletter-queue` | `jobs`, `mail` and `observability`: a broadcast route that enqueues one letter per confirmed subscriber, inside the transaction that reads them — and a `/metrics` listener of its own. |
+| `event-hub` | `webhooks`, `scheduler`, `audit`, `cors`, `docker` and `ci`: creating an order writes its audit entry and emits `order.created` inside the transaction that inserts it. |
 
 They are not members of the root workspace — a generated project declares its own
 `[workspace]`, and Cargo forbids nesting. The root manifest excludes them and CI compiles
@@ -112,9 +113,38 @@ cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
 cd .. && mv newsletter-queue examples/newsletter-queue
 ```
 
+### `event-hub`
+
+`add` refuses a dirty working tree, and each feature leaves one behind: the commit is
+taken before **each** of the six, not once for all of them.
+
+```bash
+cargo run -p rbs-cli --bin rbs -- new event-hub --yes \
+  --core-path ./crates/rbs-core \
+  --database-url 'postgres://rbs:rbs@localhost:5432/event_hub' \
+  --lang fr
+cd event-hub
+for f in webhooks scheduler audit cors docker ci; do
+  git add -A && git commit -q -m "before $f"
+  cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add "$f"
+done
+cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
+  generate crud orders --fields 'reference:string,amount:int' --force
+cd .. && mv event-hub examples/event-hub
+```
+
+`add webhooks` pulls in `jobs` and `auth`, and through `auth`, `mail` and `rate-limit`:
+all five come down from a single plan, and their three migrations —
+`create_auth_tables`, `create_jobs`, `create_webhook_subscriptions` — are born in the
+same second. The `migration_modules` anchor sorts their `mod` declarations the way
+rustfmt would; execution order is untouched by that sort and stays the install order, in
+the `Migrator`'s `vec!`. `.github/workflows/ci.yml` and `Dockerfile` are read by no CI of
+this repository — GitHub only reads workflows at the root — and are kept here to be
+quoted by the documentation and to stay free of drift.
+
 ## Edits the CLI does not produce
 
-Three apply to all four projects:
+Three apply to all five projects:
 
 - delete the `.git` that `rbs new` initialises — nested repositories do not belong here;
 - rewrite the `rbs-core` dependency to `{ path = "../../crates/rbs-core" }`, since
@@ -213,6 +243,20 @@ nothing enqueues proves nothing about the queue.
 
 `the_hand_edits_of_newsletter_queue_are_in_place` asserts every one of them.
 
+`event-hub` carries three more, one per file, and together they are the traced,
+transactional order creation that three guides quote:
+
+- `src/orders/repository.rs`: `create` is generic over `ConnectionTrait` rather than
+  `DatabaseConnection` — a transaction is not one.
+- `src/orders/service.rs`: `create` opens a transaction, inserts the order, records its
+  audit entry and emits `order.created` through `webhooks::emit`, then commits — a
+  rollback takes all three with it.
+- `src/orders/controller.rs`: passes `&identite.user_id` down to the service as the
+  audit actor.
+
+`the_hand_edits_of_event_hub_are_in_place` asserts all three, in that order: a trace or
+an emission recorded after the commit would survive the rollback it is meant to follow.
+
 One file is tracked against its own `.gitignore`. `rbs new` writes a `.env`, and the
 `.gitignore` it writes alongside ignores it — correct for a real project, fatal for a
 fixture. Left untracked, `.env` sits on the machine that generated the example and is
@@ -220,16 +264,29 @@ absent from every clone, so the comparison passes locally and fails in CI. It is
 force-added (`git add -f`). The `.gitignore` itself is left alone: it is byte-identical to
 the template, and editing it would register as the very drift this compares for.
 
-That `.env` does **not** carry `RBS_AUTH__SECRET`. `add auth` writes it to `.env.example`
-only, and the example is kept exactly as the CLI produces it — copying the variable over is
-the first thing you do in a real project, and nothing here starts the server.
+On the two examples that carry `auth` — `blog-auth` directly, `event-hub` through
+`webhooks` — that `.env` **does** carry `RBS_AUTH__SECRET`. The fragment marks the
+variable a secret, which draws it a random value on every generation; `.env.example`
+keeps the placeholder `add auth` writes there instead, and copying the real value over is
+the first thing you do in a real project. The drift test masks that value rather than
+comparing it, since no two generations draw the same one.
 
 ## The drift test
 
-`cargo test -p rbs-cli --test integration_examples` regenerates all four projects and compares
+`cargo test -p rbs-cli --test integration_examples` regenerates all five projects and compares
 them to the versions committed here, ignoring exactly the differences listed above. It
 fails when a template changes without the example following — which is the point: a stale
 example makes the documentation lie, and nothing else would notice.
+
+The comparison also ignores the order of `event-hub`'s migration `mod` declarations,
+after masking their timestamps: that order is a function of the timestamp, and two
+generations never land in the same second — a fast regeneration puts separate commands
+in one second, `create_audit_log` and `create_schedules` swapping places depending on
+which second that is. What still gets compared is the execution order, untouched by that
+sort: the `Box::new` calls in the `Migrator`'s `vec!`, in install order. What guards the
+committed sort itself — the one this ignores — is `each_example_passes_cargo_fmt`, which
+runs `cargo fmt --check` on every example and would fail if the `mod` lines it committed
+were not what rustfmt produces.
 
 `blog-auth`'s one hand-edited file is excluded from that byte-for-byte comparison, which
 would otherwise flag the edit itself. What it carries is asserted separately, by
