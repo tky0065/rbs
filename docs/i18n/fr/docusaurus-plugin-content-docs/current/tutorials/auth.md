@@ -221,10 +221,10 @@ curl -i -X POST http://127.0.0.1:8080/posts \
 HTTP/1.1 401 Unauthorized
 content-type: application/problem+json
 x-request-id: 01M22R73CRW027SYBNBTYJYDBA
-content-length: 100
+content-length: 112
 date: Wed, 09 Sep 2026 09:33:06 GMT
 
-{"type":"about:blank","title":"Unauthorized","status":401,"request_id":"01M22R73CRW027SYBNBTYJYDBA"}
+{"type":"about:blank","title":"Authentification requise","status":401,"request_id":"01M22R73CRW027SYBNBTYJYDBA"}
 ```
 
 L'extracteur refuse celle-ci avant qu'aucun gestionnaire ne tourne — la preuve qu'un
@@ -242,10 +242,10 @@ curl -i -X POST http://127.0.0.1:8080/posts \
 HTTP/1.1 403 Forbidden
 content-type: application/problem+json
 x-request-id: 01M22R73CYV34S5K7MFAKGHTFY
-content-length: 97
+content-length: 103
 date: Wed, 09 Sep 2026 09:33:06 GMT
 
-{"type":"about:blank","title":"Forbidden","status":403,"request_id":"01M22R73CYV34S5K7MFAKGHTFY"}
+{"type":"about:blank","title":"Accès interdit","status":403,"request_id":"01M22R73CYV34S5K7MFAKGHTFY"}
 ```
 
 `401` est devenu `403` — la preuve que l'appelant est désormais identifié, et refusé par

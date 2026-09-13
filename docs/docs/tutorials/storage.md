@@ -141,10 +141,10 @@ curl -i -X POST http://127.0.0.1:8080/uploads \
 HTTP/1.1 422 Unprocessable Entity
 content-type: application/problem+json
 x-request-id: 01M22SF8V7N4F6RP5DQWPQCBVP
-content-length: 140
+content-length: 143
 date: Wed, 09 Sep 2026 09:55:02 GMT
 
-{"type":"about:blank","title":"Validation failed","status":422,"errors":{"owner_email":["email"]},"request_id":"01M22SF8V7N4F6RP5DQWPQCBVP"}
+{"type":"about:blank","title":"Validation échouée","status":422,"errors":{"owner_email":["email"]},"request_id":"01M22SF8V7N4F6RP5DQWPQCBVP"}
 ```
 
 Proof that `_email` earns its constraint without anyone declaring it: nothing in
@@ -168,7 +168,7 @@ curl -i -I http://127.0.0.1:8080/uploads/$ID/content
 HTTP/1.1 404 Not Found
 content-type: application/problem+json
 x-request-id: 01M22SFC21MJ86CC06CZC804JP
-content-length: 128
+content-length: 130
 date: Wed, 09 Sep 2026 09:55:05 GMT
 ```
 
@@ -203,7 +203,7 @@ date: Wed, 09 Sep 2026 09:55:05 GMT
 ```
 
 Proof that presence and absence read differently even through `HEAD` alone:
-`content-length` drops from `128` — the size of the JSON problem a `GET` would have
+`content-length` drops from `130` — the size of the JSON problem a `GET` would have
 returned a moment ago — to a flat `0`, so a caller can tell the two apart from the
 header, without ever fetching a body. And reading it back:
 

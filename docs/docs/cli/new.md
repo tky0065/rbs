@@ -31,7 +31,7 @@ Options:
       --with <FEATURES>        Features à installer sans passer par les questions, séparées par des virgules
       --preset <PRESET>        Jeu de features nommé, cumulable avec `--with` [possible values: api, worker, full]
       --core-path <CHEMIN>     Crate `rbs-core` locale à utiliser au lieu de la version publiée
-      --lang <LANGUE>          Langue de l'`AGENTS.md` engendré. À défaut, celle de l'environnement [possible values: fr, en]
+      --lang <LANGUE>          Langue du projet : `AGENTS.md` et réponses HTTP. À défaut, celle de l'environnement [possible values: fr, en]
       --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
   -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
   -h, --help                   Print help (see more with '--help')
@@ -51,7 +51,7 @@ letter and hold only letters, digits, `-` and `_`. Left out, it becomes the firs
 | `--with <FEATURES>` | Features to install at creation, comma-separated. Installed for real — see below. |
 | `--preset <PRESET>` | A named set of features: `api`, `worker` or `full`. It adds to `--with` rather than replacing it — see [below](#a-preset-names-a-set). |
 | `--core-path <CHEMIN>` | Points the generated manifest at a local `rbs-core` checkout instead of the published crate — the mode rbs is developed in, described [below](#building-against-a-local-core). |
-| `--lang <LANGUE>` | Language of the generated [`AGENTS.md`](../guides/agents.md): `fr` or `en`. Absent, deduced from `LC_ALL`, then `LANG`. |
+| `--lang <LANGUE>` | Language of the project: the generated [`AGENTS.md`](../guides/agents.md) and the HTTP response language (`[server] lang`, see [the errors guide](../guides/errors.md#the-language-of-the-body)). `fr` or `en`. Absent, deduced from `LC_ALL`, then `LANG`. |
 | `--template-dir <CHEMIN>` | Renders the project from a directory of templates instead of the ones embedded in the binary. |
 | `-y`, `--yes` | Asks nothing: takes the defaults and runs. The project name must then be given as an argument — it is the one answer with no default. |
 
@@ -193,6 +193,13 @@ English, and no value at all giving French. Either way the choice is recorded as
 `[package.metadata.rbs]` above, which is what lets [`rbs add`](./add.md) and
 [`rbs upgrade`](./upgrade.md) keep writing the file in the project's language rather than
 in the language of whoever happens to run the command next.
+
+The same value is also written as `lang` under `[server]` in `config/default.toml`, and it
+is what a generated project reads at runtime to decide the language of an HTTP error body —
+`title`, `detail` and the messages a fragment writes. `AGENTS.md` and the responses a
+running project sends therefore start out in the same language; see
+[the errors guide](../guides/errors.md#the-language-of-the-body) for what follows `lang`
+and what does not.
 
 ## The three questions
 

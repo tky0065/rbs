@@ -12,17 +12,21 @@ return it with `?`, and the response is written for you: the right status, an
 
 ## The variants and their status
 
-| Variant | Status | `title` | Body |
-|---|---|---|---|
-| `NotFound(&'static str)` | 404 | `Not Found` | `detail` names the resource |
-| `BadRequest(String)` | 400 | `Bad Request` | `detail` carries the cause |
-| `Validation(ValidationErrors)` | 422 | `Validation failed` | `errors`, field by field |
-| `Unauthorized` | 401 | `Unauthorized` | — |
-| `Forbidden` | 403 | `Forbidden` | — |
-| `Conflict(String)` | 409 | `Conflict` | `detail` carries the message |
-| `Domain { status, code, message }` | yours | the `code` | `detail` carries the message |
-| `Database(DbErr)` | 500 | `Internal Server Error` | a fixed sentence |
-| `Internal(anyhow::Error)` | 500 | `Internal Server Error` | a fixed sentence |
+| Variant | Status | `title` en | `title` fr | Body |
+|---|---|---|---|---|
+| `NotFound(&'static str)` | 404 | `Not Found` | `Introuvable` | `detail` names the resource |
+| `BadRequest(String)` | 400 | `Bad Request` | `Requête invalide` | `detail` carries the cause |
+| `Validation(ValidationErrors)` | 422 | `Validation failed` | `Validation échouée` | `errors`, field by field |
+| `Unauthorized` | 401 | `Unauthorized` | `Authentification requise` | — |
+| `Forbidden` | 403 | `Forbidden` | `Accès interdit` | — |
+| `Conflict(String)` | 409 | `Conflict` | `Conflit` | `detail` carries the message |
+| `Domain { status, code, message }` | yours | the `code` | the `code` | `detail` carries the message |
+| `Database(DbErr)` | 500 | `Internal Server Error` | `Erreur interne` | a fixed sentence |
+| `Internal(anyhow::Error)` | 500 | `Internal Server Error` | `Erreur interne` | a fixed sentence |
+
+`title` is the one column above that changes with [`[server] lang`](#the-language-of-the-body):
+`Domain`'s is not — it is always the `code` you chose, whichever language the rest of the
+body is in.
 
 Three of them are reached without ever being named: `DbErr`, `anyhow::Error` and
 `ValidationErrors` all have a `From` impl, so `?` converts them on the way out.
@@ -36,7 +40,7 @@ not read your body*, 422 means *I read it, and it breaks a rule*.
 ## The body
 
 Responses follow RFC 9457, with the `application/problem+json` content type. A validation
-failure looks like this:
+failure looks like this, on a project with `[server] lang = "en"`:
 
 ```json
 {
@@ -55,11 +59,48 @@ there is nothing to put in them. `request_id` is filled from the middleware moun
 the generated router, which is also what stamps the log lines — so a client holding an id
 gives you the exact line to look at.
 
+`title` moved with `[server] lang` above; the field message under `errors` did not — it is
+whichever string the `validator` rule on that DTO field was given, and that string is not
+rbs's to translate (more on the distinction [below](#the-language-of-the-body)).
+
 `Database` and `Internal` are the two variants that say nothing. Their source is written
-to the server log at `ERROR` level and stops there; the client gets `"une erreur interne
-est survenue"` and the request id. That is deliberate: a connection string, a host, a
-missing secret are all things an error message will happily hand to whoever asked. Two
-tests exist for the sole purpose of failing if a source ever leaks into the body.
+to the server log at `ERROR` level and stops there; the client gets a fixed sentence —
+`"an internal error occurred"` in English, `"une erreur interne est survenue"` in French,
+see [below](#the-language-of-the-body) — and the request id. That is deliberate: a
+connection string, a host, a missing secret are all things an error message will happily
+hand to whoever asked. Two tests exist for the sole purpose of failing if a source ever
+leaks into the body.
+
+## The language of the body
+
+`title`, the fixed `detail` of the variants above, the messages a fragment writes into a
+`Domain` error or a `validator` rule, and the common OpenAPI descriptions shared by every
+operation of a given status all follow `[server] lang` — `fr` by default, or `en`:
+
+```toml
+[server]
+lang = "en"
+```
+
+Setting it is the whole change; no handler, no template, no OpenAPI annotation reads it
+itself.
+
+What does not follow `lang`:
+
+- `Domain`'s own `title` — the `code` you chose, not a word rbs picked for you;
+- the codes a `validator` rule reports in `errors` (`email`, `length`, …) — a client is
+  meant to match on these, not read them;
+- the `message` you pass to `BadRequest`, `Conflict`, `Domain` and the rest — you wrote
+  it, so translating it is on you.
+
+What stays French regardless of `lang`: log lines, code comments, and the mail sent by
+`mail` and `auth` — a password reset, an email verification. None of them is
+`[server] lang`'s concern.
+
+Switching an existing project is one line — `lang = "en"` under `[server]` — but it only
+changes what the runtime renders from here on. A message a fragment already wrote into
+your code (a `Domain` error, a `validator` message) keeps whatever language you wrote it
+in; only your own edit translates those.
 
 ## How an error becomes a response
 
