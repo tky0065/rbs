@@ -1,8 +1,9 @@
 //! La couche qui porte les règles, un fichier par parcours.
 //!
-//! `issue()` et `profile()` vivent ici plutôt que dans l'un des parcours : les trois s'en
-//! servent, et les descendre dans l'un d'eux ferait dépendre les deux autres de ce
-//! voisin-là.
+//! `issue()` et `notify()` vivent ici plutôt que dans l'un des parcours : plusieurs s'en
+//! servent, et les descendre dans l'un d'eux ferait dépendre les autres de ce voisin-là.
+//! `profile()` et `session_view()` y sont aussi : ce sont les deux seuls passages du
+//! modèle vers la réponse, et les garder côte à côte tient cette règle en un endroit.
 
 use chrono::{Duration, Utc};
 use rbs_core::Result;
@@ -12,9 +13,11 @@ use rbs_core::{jwt, token};
 use sea_orm::ActiveEnum;
 use sea_orm::ConnectionTrait;
 use sea_orm::prelude::Uuid;
+use serde::Serialize;
 
-use super::dto::{TokenPair, UserResponse};
+use super::dto::{SessionResponse, TokenPair, UserResponse};
 use super::repository::{self, Model};
+use crate::modules::mail::Mailer;
 
 pub mod password;
 pub mod session;
@@ -101,5 +104,44 @@ fn profile(utilisateur: Model) -> UserResponse {
         role: utilisateur.role.to_value(),
         email_verified_at: utilisateur.email_verified_at,
         created_at: utilisateur.created_at,
+    }
+}
+
+/// La vue publique d'une session.
+///
+/// Même règle que `profile()` pour `UserResponse` : `SessionResponse` ne porte pas
+/// `token_hash`, et cette fonction est le seul passage du modèle vers la réponse.
+fn session_view(session: repository::refresh_token::Model) -> SessionResponse {
+    SessionResponse {
+        id: session.id,
+        created_at: session.created_at,
+        expires_at: session.expires_at,
+    }
+}
+
+/// Envoie un courriel à un compte, sans que son échec atteigne la réponse.
+fn notify(
+    mail: &Mailer,
+    destinataire: &Model,
+    objet: &str,
+    gabarit: &str,
+    contexte: impl Serialize,
+) {
+    // `send_template_detached` rend le gabarit sur-le-champ et peut donc échouer —
+    // gabarit absent, mal formé, ou adresse que `lettre` refuse d'analyser. L'échec reste
+    // au journal, pour deux raisons. Ce qui précède l'envoi est écrit et ne se défait
+    // plus : le propager rendrait un 500 après coup, là où `register` promet « toujours
+    // 201 ». Et on n'arrive ici que si l'adresse porte un compte : un 500 ferait de cette
+    // branche la seule à se distinguer, et dirait à qui essaie plusieurs adresses
+    // lesquelles sont inscrites — ce que le 202 de `forgot-password` et de
+    // `resend-verification` existe pour taire. Ces deux routes sont aussi le rattrapage
+    // d'un courriel qui ne part pas.
+    if let Err(error) = mail.send_template_detached(&destinataire.email, objet, gabarit, contexte) {
+        tracing::error!(
+            user_id = %destinataire.id,
+            gabarit,
+            %error,
+            "préparation du courriel échouée"
+        );
     }
 }

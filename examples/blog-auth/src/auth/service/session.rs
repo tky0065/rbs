@@ -6,11 +6,13 @@ use rbs_core::{Error, Result, hash, token};
 use sea_orm::prelude::Uuid;
 use sea_orm::{DatabaseConnection, TransactionTrait};
 
+use super::super::config::FlowConfig;
 use super::super::dto::{
     LoginRequest, RefreshRequest, RegisterRequest, SessionResponse, TokenPair, UserResponse,
 };
 use super::super::repository::{self, ADRESSE_PRISE, refresh_token::Rotation};
-use super::{close_every_session, issue, normalise, profile};
+use super::{close_every_session, issue, normalise, profile, session_view};
+use crate::modules::mail::Mailer;
 
 /// Le hash vérifié quand l'adresse est inconnue.
 ///
@@ -22,7 +24,12 @@ static HASH_DE_COMPARAISON: LazyLock<String> = LazyLock::new(|| {
     hash::hash_password("aucun compte ne porte ce mot de passe").expect("hachage du hash témoin")
 });
 
-pub async fn register(db: &DatabaseConnection, input: RegisterRequest) -> Result<UserResponse> {
+pub async fn register(
+    db: &DatabaseConnection,
+    mail: &Mailer,
+    flows: &FlowConfig,
+    input: RegisterRequest,
+) -> Result<UserResponse> {
     let email = normalise(&input.email);
 
     if repository::find_by_email(db, &email).await?.is_some() {
@@ -31,6 +38,7 @@ pub async fn register(db: &DatabaseConnection, input: RegisterRequest) -> Result
 
     let hash = hash::hash_password(&input.password)?;
     let cree = repository::create(db, &email, &hash).await?;
+    super::verification::send_link(db, mail, flows, &cree.email).await?;
 
     Ok(profile(cree))
 }
@@ -161,18 +169,6 @@ pub async fn sessions(db: &DatabaseConnection, user_id: Uuid) -> Result<Vec<Sess
         .into_iter()
         .map(session_view)
         .collect())
-}
-
-/// La vue publique d'une session.
-///
-/// Même règle que `profile()` pour `UserResponse` : `SessionResponse` ne porte pas
-/// `token_hash`, et cette fonction est le seul passage du modèle vers la réponse.
-fn session_view(session: repository::refresh_token::Model) -> SessionResponse {
-    SessionResponse {
-        id: session.id,
-        created_at: session.created_at,
-        expires_at: session.expires_at,
-    }
 }
 
 /// Ferme une session nommée du compte appelant.

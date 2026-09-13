@@ -1039,6 +1039,48 @@ mod tests {
         }
     }
 
+    /// Le courriel du fragment `auth` part de la couche service, et d'un seul endroit.
+    ///
+    /// Un contrôleur qui ouvre le jeton puis envoie le courriel enchaîne deux services, ce
+    /// que la dépendance des couches réserve au service — et chaque copie de l'envoi
+    /// portait sa propre raison de ne pas propager l'échec.
+    #[test]
+    fn the_auth_mail_leaves_from_the_service_layer_only() {
+        let racine = Path::new(RACINE_FEATURES).join("auth");
+
+        for controleur in ["session", "password", "verification"] {
+            let source = read(&racine.join(format!("controller/{controleur}.rs.jinja")));
+
+            for orchestration in [
+                "send_template_detached",
+                "::request(",
+                "request_reset(",
+                "state.mail().",
+            ] {
+                assert!(
+                    !source.contains(orchestration),
+                    "controller/{controleur}.rs appelle `{orchestration}` :\n{source}"
+                );
+            }
+        }
+
+        let envois: usize = ["mod", "session", "password", "verification"]
+            .into_iter()
+            .map(|parcours| {
+                read(&racine.join(format!("service/{parcours}.rs.jinja")))
+                    .matches("send_template_detached(")
+                    .count()
+            })
+            .sum();
+        assert_eq!(envois, 1, "l'envoi doit passer par le seul `notify`");
+
+        let commun = read(&racine.join("service/mod.rs.jinja"));
+        assert!(
+            commun.contains("\nfn notify("),
+            "service/mod.rs ne porte pas `notify`, ou l'expose au-delà du module :\n{commun}"
+        );
+    }
+
     /// Un jeton rejoué a fuité : révoquer la seule ligne présentée laisse celui qui a
     /// devancé la rotation légitime avec une paire valide, renouvelée indéfiniment.
     #[test]
