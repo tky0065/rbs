@@ -5,8 +5,8 @@ title: rbs new
 
 # `rbs new`
 
-Crée un projet qui tourne tel quel : un workspace Cargo, une crate `migration`, une route
-`/health`, un `.env` et un dépôt Git. Rien n'est compilé, aucune base n'est contactée — la
+Crée un projet qui tourne tel quel : un workspace Cargo, une crate `migration`, les routes
+`/health` et `/health/live`, un `.env` et un dépôt Git. Rien n'est compilé, aucune base n'est contactée — la
 commande écrit des fichiers, et s'arrête là.
 
 :::note

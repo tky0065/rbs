@@ -93,6 +93,16 @@ plan pour /private/tmp/rbs-demo/blog
 `docker compose up -d` on its own — the one [`rbs dev`](./dev.md) runs — leaves the
 infrastructure alone.
 
+The `Dockerfile` carries a `HEALTHCHECK` of its own, which is what makes `docker ps` show
+the `api` container `healthy` — under the compose and under a bare `docker run` alike. It
+probes `/health/live`, not `/health`: the liveness route checks nothing, so a database
+that goes down turns `/health` into a `503` without marking the container unhealthy,
+since restarting the API would not bring the database back. The image carries neither
+`curl` nor `wget`, so the probe speaks HTTP through bash's `/dev/tcp`, on port `8080` —
+the one `EXPOSE` declares; move one and you move the other. Kubernetes ignores a
+`HEALTHCHECK` altogether: declare its probes in the manifest instead, `livenessProbe` on
+`/health/live` and `readinessProbe` on `/health`.
+
 A project with no compose to insert into — SQLite, or created before rbs 1.1.0 — gets a
 whole one instead:
 

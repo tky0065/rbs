@@ -731,6 +731,49 @@ mod tests {
         assert!(controleur.contains("tag = \"health\""), "{controleur}");
     }
 
+    /// Une liveness qui sonde la base fait redémarrer l'API en boucle quand c'est la base
+    /// qui tombe : `/health/live` ne prend pas l'état, et ne peut donc rien interroger.
+    #[test]
+    fn the_liveness_route_is_mounted_documented_and_queries_nothing() {
+        let parent = parent();
+
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+
+        let controleur = read(&project.root.join("src/health/controller.rs"));
+        assert!(
+            controleur.contains("pub async fn live() -> StatusCode"),
+            "{controleur}"
+        );
+        assert!(
+            controleur.contains("path = \"/health/live\""),
+            "{controleur}"
+        );
+        assert!(
+            controleur.contains("operation_id = \"health_live\""),
+            "{controleur}"
+        );
+
+        let routes = read(&project.root.join("src/health/mod.rs"));
+        assert!(
+            routes.contains(".route(\"/health/live\", get(controller::live))"),
+            "{routes}"
+        );
+        assert!(
+            routes.contains(".route(\"/health\", get(controller::health))"),
+            "{routes}"
+        );
+
+        // `health` reste la ligne d'accroche de `<rbs:openapi>` : `live` passe avant elle.
+        let openapi = read(&project.root.join("src/openapi.rs"));
+        assert!(
+            openapi.contains(
+                "crate::health::controller::live,\n        \
+                 crate::health::controller::health,\n        // <rbs:openapi>"
+            ),
+            "{openapi}"
+        );
+    }
+
     #[test]
     fn the_project_name_becomes_the_package_and_crate_name() {
         let parent = parent();

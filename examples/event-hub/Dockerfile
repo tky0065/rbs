@@ -35,6 +35,14 @@ COPY --from=builder /build/templates* ./templates/
 USER api
 EXPOSE 8080
 
+# L'image ne porte ni curl ni wget : la sonde parle HTTP par le `/dev/tcp` de bash. Elle
+# vise `/health/live`, qui n'interroge rien, et non `/health` : une base tombée rendrait
+# sinon le conteneur malade, et un orchestrateur qui lit ce verdict le remplacerait en
+# boucle sans rien réparer. Posée ici plutôt que dans le compose, elle vaut aussi pour un
+# `docker run` ; le port est celui d'`EXPOSE`, et l'un ne bouge pas sans l'autre.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=10s --retries=3 \
+  CMD ["bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8080 && printf 'GET /health/live HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && head -n1 <&3 | grep -q ' 200 '"]
+
 # Les deux binaires sont dans le PATH, et rien n'est figé par un ENTRYPOINT : le
 # `command:` du compose y substitue `migration up`.
 CMD ["event-hub"]

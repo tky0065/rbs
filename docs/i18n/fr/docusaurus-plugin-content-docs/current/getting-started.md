@@ -328,7 +328,11 @@ date: Sat, 29 Aug 2026 10:06:30 GMT
 {"status":"ok","checks":{"database":"ok"}}
 ```
 
-`/health` est venu avec le projet et vérifie la base, pas seulement le processus. Chaque
+`/health` est venu avec le projet et vérifie la base, pas seulement le processus : il
+répond à la question de la disponibilité, le service peut-il recevoir du trafic. Sa voisine
+`/health/live` répond à celle de la vie — le processus tourne-t-il — et n'interroge rien :
+liée à la base, elle ferait redémarrer l'API en boucle par un orchestrateur, pour une panne
+qu'aucun redémarrage ne répare. Chaque
 fragment qui apporte une dépendance y ajoute sa sonde — `rbs add redis` met une clé
 `cache` dans `checks`, `rbs add storage` une clé `storage` — et il suffit qu'une seule se
 taise pour que la réponse entière devienne un `503`, ce qui sort le pod de la rotation au
@@ -384,7 +388,7 @@ donc les routes qui existent, et non celles dont quelqu'un s'est souvenu. Ouvrez
 curl http://127.0.0.1:8080/api-docs/openapi.json
 ```
 
-Son `paths` contient désormais `/health`, `/articles` et `/articles/{id}`. Les deux
+Son `paths` contient désormais `/health`, `/health/live`, `/articles` et `/articles/{id}`. Les deux
 routes se coupent depuis `[docs]` dans `config/default.toml` ; désactivez-les en
 production.
 

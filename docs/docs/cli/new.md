@@ -5,8 +5,8 @@ title: rbs new
 
 # `rbs new`
 
-Creates a project that runs as it is: a Cargo workspace, a `migration` crate, a `/health`
-route, a `.env` and a Git repository. Nothing is compiled and no database is contacted —
+Creates a project that runs as it is: a Cargo workspace, a `migration` crate, the
+`/health` and `/health/live` routes, a `.env` and a Git repository. Nothing is compiled and no database is contacted —
 the command writes files and stops.
 
 :::note

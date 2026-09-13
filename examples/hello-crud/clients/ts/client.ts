@@ -205,6 +205,11 @@ Le garde de rôle ne s'y applique donc pas, pas plus qu'à `list` ou `find`.
     return this.request<void>("GET", "/health");
   }
 
+  /** GET /health/live */
+  healthLive(): Promise<void> {
+    return this.request<void>("GET", "/health/live");
+  }
+
 // endregion: methodes
   private async request<T>(
     method: string,

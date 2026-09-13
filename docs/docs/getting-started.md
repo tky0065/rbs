@@ -321,7 +321,10 @@ date: Sat, 29 Aug 2026 10:06:30 GMT
 {"status":"ok","checks":{"database":"ok"}}
 ```
 
-`/health` came with the project and checks the database, not just the process. Every
+`/health` came with the project and checks the database, not just the process: it answers
+the readiness question, whether the service can take traffic. Its sibling `/health/live`
+answers the liveness one — is the process up — and checks nothing: tied to the database, it
+would have an orchestrator restart the API in a loop over an outage no restart can fix. Every
 fragment that brings a dependency of its own adds a probe beside it — `rbs add redis` puts
 a `cache` key into `checks`, `rbs add storage` a `storage` one — and one silent dependency
 is enough to turn the whole answer into a `503`, which is what takes the pod out of
@@ -377,7 +380,7 @@ that exist rather than the ones someone remembered to write down. Open
 curl http://127.0.0.1:8080/api-docs/openapi.json
 ```
 
-Its `paths` now holds `/health`, `/articles` and `/articles/{id}`. Both routes are
+Its `paths` now holds `/health`, `/health/live`, `/articles` and `/articles/{id}`. Both routes are
 switched by `[docs]` in `config/default.toml`; turn them off in production.
 
 ## Checking a project
