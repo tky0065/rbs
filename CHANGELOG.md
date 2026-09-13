@@ -64,6 +64,14 @@ between minor versions with no deprecation cycle.
   (were `"1.6"` and `"1.144"`). A project generated earlier already resolves these
   versions through its own requirement; raising the floor in its `Cargo.toml` makes it
   explicit.
+- **The `auth` controllers no longer send email themselves.** A single `notify` helper in
+  the service layer renders and dispatches every message; `verification::send_link` and
+  `password::send_reset_link` wrap the existing `request` and `request_reset`, and
+  `service::register` now receives the mailer and the flow settings. Responses do not
+  change — 201 on `register`, 202 on `forgot-password` and `resend-verification`, same
+  subjects, templates and links. A render that fails is logged once as « préparation du
+  courriel échouée » with a `gabarit` field, instead of one message per flow. Only a
+  fresh `rbs add auth` writes the new layout; an existing project keeps its own.
 
 ### Fixed
 

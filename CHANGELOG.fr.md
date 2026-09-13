@@ -68,6 +68,15 @@ dépréciation.
   (au lieu de `"1.6"` et `"1.144"`). Un projet engendré auparavant résout déjà ces
   versions par sa propre exigence ; relever le plancher dans son `Cargo.toml` la rend
   explicite.
+- **Les contrôleurs d'`auth` n'envoient plus eux-mêmes de courriel.** Un helper unique
+  `notify`, dans la couche service, rend et expédie chaque message ;
+  `verification::send_link` et `password::send_reset_link` enveloppent les `request` et
+  `request_reset` existants, et `service::register` reçoit désormais le client mail et les
+  réglages des parcours. Les réponses ne changent pas — 201 à `register`, 202 à
+  `forgot-password` et `resend-verification`, mêmes objets, gabarits et liens. Un rendu en
+  échec est journalisé une fois, sous « préparation du courriel échouée » avec un champ
+  `gabarit`, au lieu d'un message par parcours. Seul un `rbs add auth` neuf écrit cette
+  disposition ; un projet existant garde la sienne.
 
 ### Corrigé
 
