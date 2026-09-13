@@ -18,10 +18,10 @@ written between their markers is lost, without warning, on the next `rbs upgrade
 
 | Command | What it does | What it saves you from writing |
 |---|---|---|
-| `rbs new <name>` | creates a project; `--lang fr\|en` sets this file's language | the whole skeleton |
+| `rbs new <name>` | creates a project; `--lang fr\|en` sets the project's language — this file and the HTTP responses | the whole skeleton |
 | `rbs add <feature>` | installs audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks | the feature's wiring |
-| `rbs generate crud <name> --fields "..."` | a full CRUD feature | seven files, the seed and the migration |
-| `rbs generate feature <name>` | an empty feature | six files |
+| `rbs generate crud <name> --fields "..."` | a full CRUD feature | eight files, the seed and the migration |
+| `rbs generate feature <name>` | an empty feature | seven files |
 | `rbs migrate up\|down\|status` | drives migrations | — |
 | `rbs migrate new <name>` | an empty migration file | the migration's skeleton |
 | `rbs seed` | inserts demo data | — |
@@ -37,21 +37,21 @@ written between their markers is lost, without warning, on the next `rbs upgrade
 - An entity and its CRUD: `rbs generate crud posts --fields "title:string,body:text"`
 - A reference to another entity: `--fields "author:references:users"`
 - The reverse side of a relation: `rbs generate crud users --has-many posts`
-- A feature with no fields: `rbs generate feature webhooks`
+- A feature with no fields: `rbs generate feature reports`
 - JWT authentication: `rbs add auth`, then copy `RBS_AUTH__SECRET` over
 - A hand-written migration: `rbs migrate new add_index_on_slug`
 
 ## Enforced architecture
 
 ```
-src/<name>/  mod · model · dto · repository · service · controller
+src/<name>/  mod · model · dto · filter · repository · service · controller
 controller → service → repository → model
 ```
 
 The dependency is one-directional and strict: a `service` never reaches for
 `DatabaseConnection` *itself* — it receives it and hands it to the `repository`, the only
 layer that builds a SeaORM query; a `controller` never builds one. `rbs generate crud` adds
-a `tests.rs` to those six files and, when the entity can be seeded, the seed
+a `tests.rs` to those seven files and, when the entity can be seeded, the seed
 `src/seeds/<name>.rs`. A feature file past ~200 lines is a sign that the feature should be
 split.
 
@@ -72,6 +72,11 @@ generate these, and writing them by hand is legitimate. When you do:
 - respect the layers — the controller calls the service, the service calls the
   repository;
 - if the code adds a route, register it in `<rbs:routes>` and `<rbs:openapi>` by hand;
+- on a project that carries `auth`, a hand-written route is closed the way the CLI
+  closes its own: an `Identity` argument in the handler (401 without a valid token),
+  `require_role` to demand a role (403 below it), `security(("bearer" = []))` and the 401
+  and 403 responses in its `#[utoipa::path]` — without them the route stays open and the
+  OpenAPI document says nothing about it;
 - `rbs doctor` reports a module written outside the CLI as a `!` warning, never as a
   failure: it is an observation, and the command still passes.
 
@@ -85,6 +90,6 @@ cargo test --workspace -- --ignored
 rbs doctor
 ```
 
-The second line is the one that matters: the tests that reach the database are `#[ignore]`,
+The fourth line is the one that matters: the tests that reach the database are `#[ignore]`,
 and `cargo test` alone does not run them. They need the `.env` database running —
 `docker compose up -d`, or `rbs dev`, which chains it.

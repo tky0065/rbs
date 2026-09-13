@@ -374,7 +374,11 @@ pub async fn head_content(
     if service::has_content(state.storage().as_ref(), id).await? {
         Ok(StatusCode::NO_CONTENT)
     } else {
+{%- if lang == "en" %}
+        Err(rbs_core::Error::NotFound("content"))
+{%- else %}
         Err(rbs_core::Error::NotFound("contenu"))
+{%- endif %}
     }
 }
 {%- endif %}

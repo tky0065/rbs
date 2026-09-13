@@ -32,7 +32,7 @@ Options:
       --with <FEATURES>        Features à installer sans passer par les questions, séparées par des virgules
       --preset <PRESET>        Jeu de features nommé, cumulable avec `--with` [possible values: api, worker, full]
       --core-path <CHEMIN>     Crate `rbs-core` locale à utiliser au lieu de la version publiée
-      --lang <LANGUE>          Langue de l'`AGENTS.md` engendré. À défaut, celle de l'environnement [possible values: fr, en]
+      --lang <LANGUE>          Langue du projet : `AGENTS.md` et réponses HTTP. À défaut, celle de l'environnement [possible values: fr, en]
       --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
   -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
   -h, --help                   Print help (see more with '--help')
@@ -52,7 +52,7 @@ première des [trois questions](#les-trois-questions).
 | `--with <FEATURES>` | Features à installer à la création, séparées par des virgules. Réellement installées — voir plus bas. |
 | `--preset <PRESET>` | Un jeu de features nommé : `api`, `worker` ou `full`. Il s'ajoute à `--with` plutôt que de le remplacer — voir [plus bas](#un-preset-nomme-un-jeu). |
 | `--core-path <CHEMIN>` | Fait pointer le manifeste généré vers une crate `rbs-core` locale plutôt que vers la version publiée — le mode dans lequel rbs se développe, décrit [plus bas](#construire-contre-un-noyau-local). |
-| `--lang <LANGUE>` | Langue de l'[`AGENTS.md`](../guides/agents.md) engendré : `fr` ou `en`. Absent, déduite de `LC_ALL`, puis de `LANG`. |
+| `--lang <LANGUE>` | Langue du projet : l'[`AGENTS.md`](../guides/agents.md) engendré et la langue des réponses HTTP (`[server] lang`, voir [le guide des erreurs](../guides/errors.md#la-langue-du-corps)). `fr` ou `en`. Absent, déduite de `LC_ALL`, puis de `LANG`. |
 | `--template-dir <CHEMIN>` | Rend le projet depuis un répertoire de templates, au lieu de celles embarquées dans le binaire. |
 | `-y`, `--yes` | Ne demande rien : prend les valeurs par défaut et exécute. Le nom du projet doit alors être donné en argument — c'est la seule réponse sans valeur par défaut. |
 
@@ -194,6 +194,14 @@ donnant l'anglais, et l'absence de valeur donnant le français. Le choix s'inscr
 tous les cas dans `lang`, dans `[package.metadata.rbs]` ci-dessus, ce qui permet à
 [`rbs add`](./add.md) et [`rbs upgrade`](./upgrade.md) de continuer à écrire le fichier
 dans la langue du projet plutôt que dans celle de qui lance la commande ensuite.
+
+Ce même choix s'inscrit aussi comme `lang` sous `[server]` dans `config/default.toml`,
+que le projet engendré lit à l'exécution pour choisir la langue de ses réponses HTTP —
+et que `add` et `generate` relisent dans ce même fichier, non dans
+`[package.metadata.rbs]`, pour écrire dans cette langue les messages destinés au client
+qu'un futur scaffolding y engendre. Voir
+[le guide des erreurs](../guides/errors.md#la-langue-du-corps) pour savoir quelles
+réponses HTTP et quels messages engendrés chacun de ces deux réglages décide réellement.
 
 ## Les trois questions
 

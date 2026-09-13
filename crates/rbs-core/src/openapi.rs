@@ -5,6 +5,7 @@
 
 use std::collections::BTreeMap;
 
+use crate::lang::{self, Lang};
 use serde::Serialize;
 use utoipa::openapi::path::Operation;
 #[cfg(feature = "auth")]
@@ -47,80 +48,111 @@ pub struct ProblemDetails {
 #[derive(Debug, Clone, Copy)]
 pub struct CommonResponses;
 
-/// Réponses enregistrées sous `components/responses`, avec leur description.
-const NAMED: [(&str, &str); 6] = [
-    ("BadRequest", "requête mal formée"),
-    ("Unauthorized", "authentification requise"),
-    ("Forbidden", "accès interdit"),
-    ("NotFound", "ressource introuvable"),
-    ("Conflict", "conflit avec l'état courant de la ressource"),
-    ("TooManyRequests", "trop de requêtes"),
-];
+/// Réponses enregistrées sous `components/responses`, avec leur description dans `lang`.
+fn named(lang: Lang) -> [(&'static str, &'static str); 6] {
+    match lang {
+        Lang::En => [
+            ("BadRequest", "malformed request"),
+            ("Unauthorized", "authentication required"),
+            ("Forbidden", "access forbidden"),
+            ("NotFound", "resource not found"),
+            (
+                "Conflict",
+                "conflict with the current state of the resource",
+            ),
+            ("TooManyRequests", "too many requests"),
+        ],
+        Lang::Fr => [
+            ("BadRequest", "requête mal formée"),
+            ("Unauthorized", "authentification requise"),
+            ("Forbidden", "accès interdit"),
+            ("NotFound", "ressource introuvable"),
+            ("Conflict", "conflit avec l'état courant de la ressource"),
+            ("TooManyRequests", "trop de requêtes"),
+        ],
+    }
+}
 
 /// Nom du schéma de sécurité, tel que les handlers le référencent dans `security(...)`.
 #[cfg(feature = "auth")]
 pub const SCHEME_NAME: &str = "bearer";
 
-/// Réponses ajoutées d'office à chaque opération.
-const UNIVERSAL: [(&str, &str); 2] = [
-    ("422", "échec de validation, détaillé par champ"),
-    ("500", "erreur interne"),
-];
+/// Réponses ajoutées d'office à chaque opération, avec leur description dans `lang`.
+fn universal(lang: Lang) -> [(&'static str, &'static str); 2] {
+    match lang {
+        Lang::En => [
+            ("422", "validation failed, detailed per field"),
+            ("500", "internal error"),
+        ],
+        Lang::Fr => [
+            ("422", "échec de validation, détaillé par champ"),
+            ("500", "erreur interne"),
+        ],
+    }
+}
 
 impl Modify for CommonResponses {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
-        let composants = openapi.components.get_or_insert_with(Default::default);
+        declare(openapi, lang::current());
+    }
+}
+
+/// Applique à `openapi` les réponses communes et les descriptions dans `lang`.
+///
+/// Séparée de [`Modify::modify`] pour rester testable dans une langue choisie, sans
+/// passer par le global de processus que les tests parallèles partagent.
+fn declare(openapi: &mut utoipa::openapi::OpenApi, lang: Lang) {
+    let composants = openapi.components.get_or_insert_with(Default::default);
+    composants
+        .schemas
+        .entry(ProblemDetails::name().into_owned())
+        .or_insert_with(ProblemDetails::schema);
+    for (name, description) in named(lang) {
         composants
-            .schemas
-            .entry(ProblemDetails::name().into_owned())
-            .or_insert_with(ProblemDetails::schema);
-        for (name, description) in NAMED {
-            composants
-                .responses
-                .entry(name.to_owned())
-                .or_insert_with(|| problem(description).into());
-        }
+            .responses
+            .entry(name.to_owned())
+            .or_insert_with(|| problem(description).into());
+    }
 
-        // Le schéma accompagne les réponses 401 et 403 déclarées juste au-dessus : un
-        // document qui les annonce sans dire comment s'authentifier laisse le client
-        // deviner. Il ne s'ajoute que si l'authentification est compilée.
-        #[cfg(feature = "auth")]
-        composants.add_security_scheme(
-            SCHEME_NAME,
-            SecurityScheme::Http(
-                HttpBuilder::new()
-                    .scheme(HttpAuthScheme::Bearer)
-                    .bearer_format("JWT")
-                    .build(),
-            ),
-        );
+    // Le schéma accompagne les réponses 401 et 403 déclarées juste au-dessus : un
+    // document qui les annonce sans dire comment s'authentifier laisse le client
+    // deviner. Il ne s'ajoute que si l'authentification est compilée.
+    #[cfg(feature = "auth")]
+    composants.add_security_scheme(
+        SCHEME_NAME,
+        SecurityScheme::Http(
+            HttpBuilder::new()
+                .scheme(HttpAuthScheme::Bearer)
+                .bearer_format("JWT")
+                .build(),
+        ),
+    );
 
-        for path in openapi.paths.paths.values_mut() {
-            // `PathItem` expose une option par verbe plutôt qu'une table : les parcourir
-            // tous est le seul moyen d'atteindre chaque opération déclarée.
-            let operations = [
-                &mut path.get,
-                &mut path.put,
-                &mut path.post,
-                &mut path.delete,
-                &mut path.options,
-                &mut path.head,
-                &mut path.patch,
-                &mut path.trace,
-            ];
-            for operation in operations.into_iter().flatten() {
-                complete(operation);
-            }
+    for path in openapi.paths.paths.values_mut() {
+        // `PathItem` expose une option par verbe plutôt qu'une table : les parcourir
+        // tous est le seul moyen d'atteindre chaque opération déclarée.
+        let operations = [
+            &mut path.get,
+            &mut path.put,
+            &mut path.post,
+            &mut path.delete,
+            &mut path.options,
+            &mut path.head,
+            &mut path.patch,
+            &mut path.trace,
+        ];
+        for operation in operations.into_iter().flatten() {
+            complete(operation, lang);
         }
     }
 }
 
-/// Ajoute à `operation` les réponses universelles qui lui manquent.
+/// Ajoute à `operation` les réponses universelles qui lui manquent, décrites dans `lang`.
 ///
 /// Seulement celles qui manquent : un handler qui documente son propre 422 en sait plus
 /// sur son cas que le noyau, et sa description ne doit pas être écrasée.
-fn complete(operation: &mut Operation) {
-    for (statut, description) in UNIVERSAL {
+fn complete(operation: &mut Operation, lang: Lang) {
+    for (statut, description) in universal(lang) {
         if operation.responses.responses.contains_key(statut) {
             continue;
         }
@@ -173,6 +205,52 @@ mod tests {
 
     fn document() -> Value {
         serde_json::to_value(Doc::openapi()).expect("document sérialisable")
+    }
+
+    /// Le même handler, sans le modificateur : `declare` s'y applique à la main, dans la
+    /// langue voulue, sans passer par le global que les tests parallèles partagent.
+    #[derive(OpenApi)]
+    #[openapi(paths(list_all))]
+    struct Bare;
+
+    fn declared(lang: Lang) -> Value {
+        let mut openapi = Bare::openapi();
+        declare(&mut openapi, lang);
+        serde_json::to_value(openapi).expect("document sérialisable")
+    }
+
+    #[test]
+    fn in_english_the_common_descriptions_are_english() {
+        let doc = declared(Lang::En);
+        assert_eq!(
+            doc["components"]["responses"]["NotFound"]["description"],
+            "resource not found"
+        );
+        assert_eq!(
+            doc["components"]["responses"]["TooManyRequests"]["description"],
+            "too many requests"
+        );
+        assert_eq!(
+            doc["paths"]["/things"]["get"]["responses"]["422"]["description"],
+            "validation failed, detailed per field"
+        );
+        assert_eq!(
+            doc["paths"]["/things"]["get"]["responses"]["500"]["description"],
+            "internal error"
+        );
+    }
+
+    #[test]
+    fn in_french_the_common_descriptions_are_unchanged() {
+        let doc = declared(Lang::Fr);
+        assert_eq!(
+            doc["components"]["responses"]["NotFound"]["description"],
+            "ressource introuvable"
+        );
+        assert_eq!(
+            doc["paths"]["/things"]["get"]["responses"]["422"]["description"],
+            "échec de validation, détaillé par champ"
+        );
     }
 
     #[test]

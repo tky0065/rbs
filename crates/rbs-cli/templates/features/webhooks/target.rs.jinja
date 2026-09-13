@@ -27,9 +27,15 @@ pub enum Refusal {
 impl fmt::Display for Refusal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(match self {
+{%- if lang == "en" %}
+            Self::Scheme => "a webhook URL must use http or https",
+            Self::Https => "a webhook URL must use https",
+            Self::PrivateHost => "the URL host is not a public address",
+{%- else %}
             Self::Scheme => "une URL de webhook doit être en http ou en https",
             Self::Https => "une URL de webhook doit être en https",
             Self::PrivateHost => "l'hôte de l'URL n'est pas une adresse publique",
+{%- endif %}
         })
     }
 }

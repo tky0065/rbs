@@ -22,44 +22,14 @@ use crate::state::AppState;
         (status = 422, description = "entrée invalide", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
-// region: register
 pub async fn register(
     State(state): State<AppState>,
     ValidatedJson(input): ValidatedJson<RegisterRequest>,
 ) -> Result<(StatusCode, Json<UserResponse>)> {
-    let cree = service::register(state.core().db(), input).await?;
-    let flows = state.flows();
-
-    // Le compte est ouvert avant l'envoi, et l'envoi ne peut plus le défaire : une panne
-    // de SMTP à cet instant laisserait sinon une inscription à moitié faite, sans compte
-    // et sans message. `resend-verification` est le rattrapage, et il est à la portée de
-    // l'utilisateur.
-    if let Some((utilisateur, jeton)) =
-        service::verification::request(state.core().db(), flows.verification_ttl_secs, &cree.email)
-            .await?
-    {
-        // `send_template_detached` rend le gabarit sur-le-champ et peut donc échouer —
-        // gabarit absent, mal formé, ou adresse que `lettre` refuse d'analyser. Le compte
-        // vient d'être ouvert : propager cette erreur rendrait un 500 après coup, là où
-        // le contrat dit « toujours 201 ». `resend-verification` est déjà le rattrapage
-        // prévu si le courriel ne part pas.
-        if let Err(error) = state.mail().send_template_detached(
-            &utilisateur.email,
-            "Confirmez votre adresse",
-            "verification.html",
-            minijinja::context! { link => flows.link("verify-email", &jeton) },
-        ) {
-            tracing::error!(
-                user_id = %utilisateur.id,
-                %error,
-                "envoi du courriel de vérification échoué"
-            );
-        }
-    }
+    let cree = service::register(state.core().db(), state.mail(), state.flows(), input).await?;
 
     Ok((StatusCode::CREATED, Json(cree)))
 }
-// endregion: register
 
 // Un mot de passe erroné et un email inconnu rendent la même réponse : distinguer les
 // deux dirait à un attaquant quels emails sont inscrits.

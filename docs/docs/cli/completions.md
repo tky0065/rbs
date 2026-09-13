@@ -82,18 +82,20 @@ Subcommands, their flags, and the values of every option whose values are known:
 One list is not in the declaration the parser uses, and is added for the completion
 alone — the features [`rbs add`](./add.md) installs:
 
+{/* rbs:transcript cmd="rbs completions bash" extrait="oui" */}
 ```text
-$ rbs completions bash | grep -A1 'rbs__subcmd__add)'
+$ rbs completions bash
         rbs__subcmd__add)
-            opts="-h -V --force --dry-run --template-dir --help --version audit auth ci cors docker jobs mail observability rate-limit redis storage"
+            opts="-h -V --force --dry-run --template-dir --help --version audit auth ci cors docker jobs mail observability rate-limit redis scheduler storage webhooks"
 ```
 
+{/* rbs:transcript cmd="rbs completions zsh" extrait="oui" */}
 ```text
-$ rbs completions zsh | grep "':feature"
-':feature -- Feature à installer:(audit auth ci cors docker jobs mail observability rate-limit redis storage)' \
+$ rbs completions zsh
+':feature -- Feature à installer:(audit auth ci cors docker jobs mail observability rate-limit redis scheduler storage webhooks)' \
 ```
 
-The eleven names come from the fragments embedded in the binary, and are the ones a shell
+These names come from the fragments embedded in the binary, and are the ones a shell
 has no way of guessing.
 
 They are proposed, not required. `rbs add` itself accepts a name no binary carries — that

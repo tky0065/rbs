@@ -4,9 +4,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## État du dépôt
 
-Le workspace est en place et les cinq jalons de la feuille de route, de la v0.1 à la v1.1,
-sont livrés. La racine porte deux crates publiables — `crates/rbs-core` et `crates/rbs-cli`,
-publiées séparément sur crates.io — quatre projets d'exemple compilés en CI, et le site
+Le workspace est en place et les six jalons de la feuille de route, de la v0.1 à la v1.1,
+sont livrés ; les versions 1.2 à 1.4 sont publiées et la 1.5.0 est prête (`ROADMAP.md`,
+`CHANGELOG.md`). La racine porte deux crates publiables — `crates/rbs-core` et `crates/rbs-cli`,
+publiées séparément sur crates.io — cinq projets d'exemple compilés en CI, et le site
 Docusaurus sous `docs/`. Le nom `rbs` étant déjà pris sur crates.io, le binaire s'installe
 par `cargo install rbs-cli`.
 
@@ -55,7 +56,7 @@ génèrent un projet dans un répertoire temporaire **puis le compilent** : ils 
 nécessitent Docker (`testcontainers` lance un PostgreSQL). C'est le seul test qui prouve
 réellement que rbs fonctionne.
 
-`integration_examples.rs` est à part : il régénère les quatre projets d'`examples/` et les
+`integration_examples.rs` est à part : il régénère les cinq projets d'`examples/` et les
 compare octet à octet à ce qui est versionné. Toute template modifiée le fait échouer tant
 que les exemples n'ont pas suivi — `examples/README.md` donne, projet par projet, les
 commandes exactes qui les reconstruisent. Un exemple périmé fait mentir la documentation,
@@ -67,7 +68,7 @@ Deux crates publiables, plus des templates embarquées dans le binaire :
 
 ```
 crates/rbs-core/            runtime : Error/Result, config, logs, AppState, middlewares, helpers OpenAPI
-crates/rbs-cli/             binaire `rbs` : new, add, generate, migrate, seed, dev, doctor, upgrade
+crates/rbs-cli/             binaire `rbs` : new, add, generate, migrate, seed, dev, doctor, upgrade, completions
 crates/rbs-cli/templates/   squelette de projet et fragments de features (include_dir)
 examples/                   projets réels compilés en CI, source des extraits de documentation
 docs/                       site Docusaurus (toolchain Node isolée ici)
@@ -88,7 +89,7 @@ l'utilisateur tout ce qu'il voudra lire ou modifier. Avant d'ajouter quoi que ce
 **Architecture par feature, avec dépendance unidirectionnelle stricte :**
 
 ```
-src/<nom>/  mod · model · dto · repository · service · controller
+src/<nom>/  mod · model · dto · filter · repository · service · controller
 controller → service → repository → model
 ```
 

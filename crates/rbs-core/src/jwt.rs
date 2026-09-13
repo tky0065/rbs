@@ -162,4 +162,43 @@ mod tests {
             "l'algorithme attendu doit être imposé, pas lu dans l'en-tête"
         );
     }
+
+    /// Signé par `sign` sous jsonwebtoken 10.3.0, avec `SECRET`. Un jeton émis avant une
+    /// montée de la crate doit rester accepté jusqu'à son expiration : sinon chaque
+    /// redéploiement déconnecterait tous les utilisateurs.
+    const TOKEN_JSONWEBTOKEN_10: &str = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1MSIsInJvbGUiOiJ1c2VyIiwiZXhwIjo0MTAyNDQ0ODAwLCJpYXQiOjE3NTc3MjE2MDAsImp0aSI6ImpldG9uLWQtYXZhbnQtbGEtbW9udGVlIn0.1cV7nL6cDoBmccJzloNGeTmnPiyCIwOwy2uSHteEQ8Q";
+
+    /// Les claims du jeton `TOKEN_JSONWEBTOKEN_10`, partagées par les deux tests qui
+    /// vérifient la compatibilité de version dans un sens comme dans l'autre.
+    fn fixture_claims() -> Claims {
+        Claims {
+            sub: "u1".to_owned(),
+            role: "user".to_owned(),
+            exp: LATER,
+            iat: 1_757_721_600,
+            jti: "jeton-d-avant-la-montee".to_owned(),
+        }
+    }
+
+    #[test]
+    fn a_token_signed_by_jsonwebtoken_10_is_still_accepted() {
+        assert_eq!(
+            verify(TOKEN_JSONWEBTOKEN_10, SECRET).expect("vérification"),
+            fixture_claims()
+        );
+    }
+
+    // HS256 est déterministe : mêmes claims, même secret, mêmes octets. Lors d'un
+    // déploiement progressif ou d'un retour en arrière, une instance restée sur l'ancienne
+    // version doit accepter ce qu'émet la nouvelle ; l'identité byte à byte le prouve sans
+    // faire tourner l'ancienne version. Si une future montée de version brise cette
+    // identité, vérifier que l'ancienne version accepte bien les nouveaux jetons avant de
+    // mettre à jour la fixture.
+    #[test]
+    fn a_token_signed_today_is_byte_identical_to_the_jsonwebtoken_10_fixture() {
+        assert_eq!(
+            sign(&fixture_claims(), SECRET).expect("signature"),
+            TOKEN_JSONWEBTOKEN_10
+        );
+    }
 }

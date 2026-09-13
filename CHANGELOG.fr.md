@@ -58,6 +58,48 @@ dépréciation.
   `rbs doctor --fix` repose cette ancre à sa place quand le fichier ne la porte plus du
   tout.
 
+- **`rbs-core` passe à argon2 0.6 et jsonwebtoken 11**, derrière sa feature `auth`, sans
+  changement d'API publique. Un mot de passe haché avant la montée reste vérifiable et un
+  jeton émis avant reste accepté ; un jeton signé après est identique octet pour octet à
+  celui d'avant, si bien qu'un déploiement progressif ou un retour arrière garde toutes
+  les sessions ouvertes. `rsa` entre toujours dans le verrou par le backend `rust_crypto`
+  de jsonwebtoken : l'exception `RUSTSEC-2023-0071` demeure.
+- **`rbs add redis` écrit `redis = "1.7"` et `rbs add storage` `aws-sdk-s3 = "1.146"`**
+  (au lieu de `"1.6"` et `"1.144"`). Un projet engendré auparavant résout déjà ces
+  versions par sa propre exigence ; relever le plancher dans son `Cargo.toml` la rend
+  explicite.
+- **Les contrôleurs d'`auth` n'envoient plus eux-mêmes de courriel.** Un helper unique
+  `notify`, dans la couche service, rend et expédie chaque message ;
+  `verification::send_link` et `password::send_reset_link` enveloppent les `request` et
+  `request_reset` existants, et `service::register` reçoit désormais le client mail et les
+  réglages des parcours. Les réponses ne changent pas — 201 à `register`, 202 à
+  `forgot-password` et `resend-verification`, mêmes objets, gabarits et liens. Un rendu en
+  échec est journalisé une fois, sous « préparation du courriel échouée » avec un champ
+  `gabarit`, au lieu d'un message par parcours. Seul un `rbs add auth` neuf écrit cette
+  disposition ; un projet existant garde la sienne.
+- **Les réponses d'erreur parlent la langue du projet, et `--lang` les couvre désormais.**
+  Un projet engendré répondait en deux langues à la fois — un `title` anglais
+  (`"Not Found"`) à côté d'un `detail` français (`"article introuvable"`) — quoi que dise
+  `rbs new --lang`, qui ne choisissait que la langue d'`AGENTS.md`. La nouvelle clé
+  `[server] lang` de `config/default.toml` (`"fr"` par défaut, ou `"en"`) est désormais la
+  langue du projet pour tout ce que voit un client : à l'exécution, `rbs-core` y écrit le
+  `title` et le `detail` fixe de chaque corps `application/problem+json` et les
+  descriptions communes du document OpenAPI (`RBS_SERVER__LANG` la surcharge là), et
+  `rbs add` et `rbs generate crud` la lisent — dans `config/default.toml` seul, jamais
+  dans l'environnement — pour écrire les messages qu'ils adressent au client
+  (`"this address is already registered"`, `"too many requests: try again later"`,
+  `"this value is already taken"`…). `rbs new --lang` l'écrit à côté de
+  `[package.metadata.rbs] lang`, qui ne décide plus que de la langue d'`AGENTS.md`.
+  `Error::Domain` garde son `code` pour `title`, les codes de validation restent ceux de
+  `validator` ; les journaux, les commentaires, les courriels et les textes OpenAPI par
+  opération restent en français. **Les `title` d'un projet français passent eux aussi en
+  français** (`"Introuvable"`, `"Conflit"`, `"Validation échouée"`…) : un client qui
+  compare le `title` plutôt que le `status` doit suivre. Un projet engendré avant cette
+  version n'a pas la clé et reste en français ; `rbs upgrade` ne réécrit rien. Pour le
+  passer en anglais, poser `lang = "en"` sous `[server]` — l'exécution et tout `add` ou
+  `generate` ultérieur la suivent —, puis traduire à la main les messages déjà engendrés
+  dans `src/`.
+
 ### Corrigé
 
 - **`rbs generate crud --with-upload` écrit les tests de ses trois routes de contenu.** Le
@@ -141,6 +183,20 @@ dépréciation.
   — et son essai suivant comptait pour un rejeu. Chaque dépôt d'`auth` prend désormais
   `&impl ConnectionTrait`, comme `jobs::enqueue`, et les cinq services ouvrent chacun une
   transaction, committée après la dernière écriture.
+- **Le guide `AGENTS.md` ne se trompe plus de compte, et dit comment fermer une route à la
+  main.** Il annonçait six fichiers pour `rbs generate feature` et sept pour
+  `rbs generate crud`, un de moins chacun depuis `filter.rs` ; il proposait
+  `rbs generate feature webhooks`, un nom qu'installe désormais `rbs add` ; il désignait
+  `clippy` comme la ligne de sa liste qui compte au lieu de `cargo test -- --ignored` ; et
+  sur un projet qui porte `auth` il taisait l'argument `Identity`, `require_role`,
+  `security(("bearer" = []))` et les réponses 401 et 403 qu'exige une route écrite à la
+  main. `rbs upgrade` réécrit la zone du guide d'un projet existant.
+- **`rbs add webhooks` ne laisse plus un projet que `cargo fmt --check` refuse.** Il écrit
+  trois migrations sous un seul horodatage, et leurs lignes `mod` se déclaraient dans
+  l'ordre d'installation, que rustfmt réécrit : la CI qu'engendre `rbs add ci` échouait
+  dès son premier push. L'ancre `migration_modules` garde désormais son bloc trié ;
+  l'ordre d'exécution vit toujours dans le `vec!` du `Migrator`, que rien ne réordonne. Un
+  projet déjà touché lance `cargo fmt` une fois.
 
 #### Projets déjà générés
 

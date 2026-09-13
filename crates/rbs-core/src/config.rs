@@ -67,6 +67,10 @@ pub struct ServerConfig {
     ///
     /// Distinct de `timeout_secs` : un job a le droit de durer plus qu'une requête.
     pub shutdown_timeout_secs: u64,
+    /// Langue des réponses HTTP : `title` et `detail` des erreurs, descriptions communes
+    /// du document OpenAPI.
+    #[serde(default)]
+    pub lang: crate::lang::Lang,
 }
 
 /// Accès à la base de données.
@@ -164,6 +168,10 @@ impl Config {
         if config.auth.secret.len() < SECRET_MINIMUM {
             return Err(ConfigError::SecretTropCourt(config.auth.secret.len()));
         }
+
+        // Posée au terme d'un chargement réussi seulement : un chargement refusé ne laisse
+        // aucune trace dans le processus.
+        crate::lang::set(config.server.lang);
 
         Ok(config)
     }
@@ -479,6 +487,46 @@ mod tests {
             assert_eq!(config.env, "development");
             assert_eq!(config.server.host, "127.0.0.1");
             assert_eq!(config.server.port, 8080);
+            Ok(())
+        });
+    }
+
+    #[test]
+    fn without_a_language_the_server_speaks_french() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            test_secret(jail);
+            jail.create_dir("config")?;
+            jail.create_file("config/default.toml", DEFAULT_TOML)?;
+
+            let config = Config::load().expect("la configuration doit se charger");
+
+            assert_eq!(config.server.lang, crate::lang::Lang::Fr);
+            Ok(())
+        });
+    }
+
+    /// Le serveur, le worker et les tests engendrés passent tous par `load()` : c'est lui
+    /// qui doit poser la langue que `Error::into_response` lira.
+    #[test]
+    fn load_sets_the_language_of_the_process() {
+        Jail::expect_with(|jail| {
+            jail.clear_env();
+            test_secret(jail);
+            jail.create_dir("config")?;
+            jail.create_file(
+                "config/default.toml",
+                "[server]\nport = 8080\nlang = \"en\"\n\n[database]\nurl = \"postgres://localhost/app\"\n",
+            )?;
+
+            let config = Config::load().expect("la configuration doit se charger");
+            assert_eq!(config.server.lang, crate::lang::Lang::En);
+            assert_eq!(crate::lang::current(), crate::lang::Lang::En);
+
+            // Le test rend le global dans l'état où il l'a trouvé et prouve les deux sens.
+            jail.create_file("config/default.toml", DEFAULT_TOML)?;
+            Config::load().expect("la configuration doit se charger");
+            assert_eq!(crate::lang::current(), crate::lang::Lang::Fr);
             Ok(())
         });
     }

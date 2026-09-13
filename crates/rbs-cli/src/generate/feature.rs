@@ -37,6 +37,8 @@ pub(crate) struct Feature {
     pub with_upload: bool,
     /// Forme singulière imposée par `--singular`, quand l'heuristique se trompe.
     pub singular: Option<String>,
+    /// Langue du projet : celle des messages que les fichiers rendus renvoient au client.
+    pub lang: crate::lang::Lang,
 }
 
 impl Feature {
@@ -50,6 +52,7 @@ impl Feature {
             soft_delete: false,
             with_upload: false,
             singular: None,
+            lang: crate::lang::Lang::Fr,
         }
     }
 
@@ -87,6 +90,12 @@ impl Feature {
     /// La même feature, dotée de ses routes de contenu.
     pub(crate) fn uploading(mut self) -> Self {
         self.with_upload = true;
+        self
+    }
+
+    /// La même feature, ses messages destinés au client rendus dans `lang`.
+    pub(crate) fn speaking(mut self, lang: crate::lang::Lang) -> Self {
+        self.lang = lang;
         self
     }
 
@@ -273,7 +282,7 @@ fn named(variants: &[String]) -> String {
 /// templates lisent `entity` comme elles lisent `module`.
 impl Serialize for Feature {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("Feature", 14)?;
+        let mut state = serializer.serialize_struct("Feature", 15)?;
         state.serialize_field("module", self.module())?;
         state.serialize_field("table", self.module())?;
         state.serialize_field("entity", &self.entity())?;
@@ -288,6 +297,7 @@ impl Serialize for Feature {
         state.serialize_field("auth", &self.auth)?;
         state.serialize_field("soft_delete", &self.soft_delete)?;
         state.serialize_field("with_upload", &self.with_upload)?;
+        state.serialize_field("lang", self.lang.name())?;
         state.end()
     }
 }
@@ -489,6 +499,24 @@ mod tests {
         let rendu = serde_json::to_value(&feature).expect("la feature se sérialise");
 
         assert_eq!(rendu["with_upload"], true);
+    }
+
+    /// Sans `speaking`, une feature reste française : un projet existant, dont
+    /// `[server] lang` de `config/default.toml` est absent, ne doit rien voir changer.
+    #[test]
+    fn a_fresh_feature_speaks_french() {
+        let feature = Feature::fresh("articles", Vec::new());
+        let rendu = serde_json::to_value(&feature).expect("la feature se sérialise");
+
+        assert_eq!(rendu["lang"], "fr");
+    }
+
+    #[test]
+    fn speaking_english_is_carried_to_the_templates() {
+        let feature = Feature::fresh("articles", Vec::new()).speaking(crate::lang::Lang::En);
+        let rendu = serde_json::to_value(&feature).expect("la feature se sérialise");
+
+        assert_eq!(rendu["lang"], "en");
     }
 
     #[test]

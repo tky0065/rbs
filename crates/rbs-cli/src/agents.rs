@@ -782,6 +782,98 @@ mod tests {
         }
     }
 
+    /// Les comptes du tableau se tirent de l'inventaire de `generate`, non d'un chiffre
+    /// recopié : `filter.rs` était arrivé sans que le guide le compte.
+    #[test]
+    fn the_guide_counts_the_files_that_generate_writes() {
+        let feature = crate::generate::feature::Feature::fresh("articles", Vec::new());
+        let compte = |complete| {
+            crate::generate::command::fichiers(&feature, complete)
+                .expect("la feature se rend")
+                .len()
+        };
+        let (vide, crud) = (compte(false), compte(true));
+        let racine = Path::new("/aucun-projet-ici");
+
+        for (lang, fichiers, suite) in [
+            (Lang::Fr, "fichiers", "le seed et la migration"),
+            (Lang::En, "files", "the seed and the migration"),
+        ] {
+            let rendu = guide(lang, racine).expect("le guide se rend");
+            let compte_ecrit = |n| format!("{} {fichiers}", en_toutes_lettres(lang, n));
+
+            let feature_vide = format!("| {} |", compte_ecrit(vide));
+            assert!(
+                rendu.contains(&feature_vide),
+                "le guide {lang} ne dit pas `{feature_vide}` pour `generate feature`"
+            );
+
+            let feature_crud = format!("| {}, {suite} |", compte_ecrit(crud));
+            assert!(
+                rendu.contains(&feature_crud),
+                "le guide {lang} ne dit pas `{feature_crud}` pour `generate crud`"
+            );
+        }
+    }
+
+    fn en_toutes_lettres(lang: Lang, nombre: usize) -> &'static str {
+        const FR: [&str; 11] = [
+            "zéro", "un", "deux", "trois", "quatre", "cinq", "six", "sept", "huit", "neuf", "dix",
+        ];
+        const EN: [&str; 11] = [
+            "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten",
+        ];
+
+        match lang {
+            Lang::Fr => FR[nombre],
+            Lang::En => EN[nombre],
+        }
+    }
+
+    /// Une recette qui fait écrire par `generate feature` le nom d'un fragment mène l'agent
+    /// droit dans la collision avec `rbs add` : `webhooks` y a vécu après être devenu un
+    /// fragment.
+    #[test]
+    fn no_recipe_generates_a_feature_that_a_fragment_provides() {
+        let racine = Path::new("/aucun-projet-ici");
+
+        for lang in [Lang::Fr, Lang::En] {
+            let rendu = guide(lang, racine).expect("le guide se rend");
+
+            for fragment in crate::templates::embedded_names() {
+                let recette = format!("rbs generate feature {fragment}`");
+                assert!(
+                    !rendu.contains(&recette),
+                    "le guide {lang} fait engendrer `{fragment}`, qu'installe `rbs add`"
+                );
+            }
+        }
+    }
+
+    /// Une route écrite à la main sur un projet `auth` reste ouverte si l'agent ignore
+    /// comment le CLI ferme les siennes.
+    #[test]
+    fn the_guide_tells_how_to_close_a_hand_written_route() {
+        let racine = Path::new("/aucun-projet-ici");
+
+        for lang in [Lang::Fr, Lang::En] {
+            let rendu = guide(lang, racine).expect("le guide se rend");
+
+            for exige in [
+                "`Identity`",
+                "`require_role`",
+                "security((\"bearer\" = []))",
+                "401",
+                "403",
+            ] {
+                assert!(
+                    rendu.contains(exige),
+                    "le guide {lang} ne dit pas `{exige}` pour fermer une route à la main"
+                );
+            }
+        }
+    }
+
     /// La liste des ancres se calcule, elle ne se recopie pas : une ancre ajoutée au
     /// registre sans être écrite ici laisserait l'agent la piétiner.
     #[test]

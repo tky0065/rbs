@@ -54,6 +54,30 @@ impl Sortie {
     }
 }
 
+/// `add webhooks` pose d'un coup les migrations de `jobs`, `auth` et `webhooks`, sous un
+/// même horodatage. Déclarées dans l'ordre d'installation, elles laissaient à
+/// `migration/src/lib.rs` un ordre que rustfmt réécrit : `cargo fmt --check` échouait, et
+/// avec lui la CI qu'engendre `rbs add ci`.
+#[test]
+fn adding_webhooks_leaves_a_project_that_cargo_fmt_accepts() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = committed_project(&parent);
+
+    rbs(&racine).args(["add", "webhooks"]).assert().success();
+
+    let fmt = std::process::Command::new("cargo")
+        .current_dir(&racine)
+        .args(["fmt", "--all", "--check"])
+        .output()
+        .expect("cargo fmt doit être lançable");
+
+    assert!(
+        fmt.status.success(),
+        "`cargo fmt --all --check` reformate le projet après `add webhooks` :\n{}",
+        String::from_utf8_lossy(&fmt.stdout)
+    );
+}
+
 /// Installer deux fois la même feature laisse le projet exactement là où la première
 /// installation l'avait laissé.
 #[test]
@@ -634,7 +658,7 @@ fn the_redis_fragment_writes_the_state_anchors_the_dependencies_and_the_cache_se
     let manifeste =
         fs::read_to_string(racine.join("Cargo.toml")).expect("le manifeste est lisible");
     assert!(
-        manifeste.contains("redis = { version = \"1.6\", features = [\"tokio-comp\"] }"),
+        manifeste.contains("redis = { version = \"1.7\", features = [\"tokio-comp\"] }"),
         "la crate `redis` manque au manifeste :\n{manifeste}"
     );
     assert!(

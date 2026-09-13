@@ -282,6 +282,7 @@ mod tests {
                 port: 8080,
                 timeout_secs: 30,
                 shutdown_timeout_secs: 30,
+                lang: crate::lang::Lang::Fr,
             },
             database: DatabaseConfig {
                 url: "postgres://localhost/app".to_owned(),

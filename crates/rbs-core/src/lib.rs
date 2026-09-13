@@ -37,6 +37,8 @@ pub mod health;
 /// Signature et vérification des jetons d'accès.
 #[cfg(feature = "auth")]
 pub mod jwt;
+/// Langue des réponses HTTP du projet.
+pub mod lang;
 /// Formateurs de logs du runtime.
 pub mod logs;
 /// Déclaration unique des réponses d'erreur du document OpenAPI.
@@ -65,6 +67,7 @@ pub use filter::schema::{
     IntComparisonSchema, TextMatchSchema, UuidComparisonSchema,
 };
 pub use filter::{Comparison, Sort, SortKey, TextMatch};
+pub use lang::Lang;
 pub use openapi::{CommonResponses, ProblemDetails};
 pub use pagination::{Cursor, CursorPage, Page, Pagination};
 #[cfg(feature = "auth")]

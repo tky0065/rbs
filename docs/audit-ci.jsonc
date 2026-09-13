@@ -1,0 +1,17 @@
+// Garde des vulnérabilités npm du site, que `docs.yml` lance après `npm ci`. `npm audit`
+// ne sait pas tolérer une advisory précise : audit-ci le sait, et chaque tolérance dit ici
+// ce qui la lèverait — le modèle de `.cargo/audit.toml`. Tout le reste, à partir de
+// `high`, fait échouer le job.
+{
+  "$schema": "https://github.com/IBM/audit-ci/raw/main/docs/schema.json",
+  "high": true,
+  "skip-dev": true,
+  "allowlist": [
+    // image-size <= 2.0.2 : deux boucles infinies de parseur (ICNS, JXL et HEIF), tirée
+    // par @docusaurus/mdx-loader. La 2.0.2 est la dernière publiée : il n'y a rien à
+    // monter. Le parseur ne lit que les images du dépôt, au build, jamais une entrée
+    // extérieure. À retirer quand `npm audit --omit=dev` ne listera plus image-size.
+    "GHSA-w3rx-r6r6-pgpr",
+    "GHSA-5p2g-fcmc-qvqq"
+  ]
+}

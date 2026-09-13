@@ -740,6 +740,7 @@ fn access_for(paire: &Value) -> String {
         .to_owned()
 }
 
+// region: jeton_admin
 /// Inscrit un compte, le promeut administrateur, et ouvre une session à ce titre.
 ///
 /// La promotion passe par la base : l'inscription rend toujours un `user`, par défaut de
@@ -769,6 +770,7 @@ async fn login_as_admin(api: &Router, db: &DatabaseConnection) -> Value {
 
     paire
 }
+// endregion: jeton_admin
 
 /// Sans jeton, la réponse dit « identifie-toi », et non « tu n'as pas le droit ».
 ///

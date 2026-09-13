@@ -340,6 +340,10 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         database_user_par_defaut => demonstration.as_ref().map(|c| c.user.clone()).unwrap_or_default(),
         database_password_par_defaut => demonstration.as_ref().map(|c| c.password.clone()).unwrap_or_default(),
         database_name_par_defaut => demonstration.as_ref().map(|c| c.database.clone()).unwrap_or_default(),
+        // `[server] lang` de `config/default.toml`, non la métadonnée : celle-ci ne
+        // gouverne plus que `AGENTS.md`, et pouvait diverger de la langue des réponses HTTP
+        // avant 1.5.0, quand elle se remplissait de la locale.
+        lang => crate::lang::Lang::of_project(&root).name(),
     };
 
     let mut builder = plan::Builder::new(root.clone());
@@ -711,6 +715,52 @@ mod tests {
             "le .env ne porte pas d'URL :\n{source}"
         );
         fs::write(&env, reecrit).expect("le .env doit se réécrire");
+    }
+
+    /// Change `[package.metadata.rbs] lang` sans toucher au reste du manifeste : le
+    /// projet neuf en porte déjà une, `fr`, que la substitution retrouve telle quelle.
+    fn viser_lang_metadata(root: &Path, lang: &str) {
+        let manifest = root.join("Cargo.toml");
+        let source = fs::read_to_string(&manifest).expect("le Cargo.toml doit exister");
+
+        assert!(
+            source.contains("lang = \"fr\""),
+            "la clé `lang` est introuvable :\n{source}"
+        );
+        let reecrit = source.replacen("lang = \"fr\"", &format!("lang = \"{lang}\""), 1);
+        fs::write(&manifest, reecrit).expect("le Cargo.toml doit se réécrire");
+    }
+
+    /// Change `[server] lang` de `config/default.toml`, déjà présente à `fr` dans un
+    /// projet neuf.
+    fn viser_lang_server(root: &Path, lang: &str) {
+        let config = root.join("config/default.toml");
+        let source = fs::read_to_string(&config).expect("config/default.toml doit exister");
+
+        assert!(
+            source.contains("lang = \"fr\""),
+            "la clé `lang` est introuvable :\n{source}"
+        );
+        let reecrit = source.replacen("lang = \"fr\"", &format!("lang = \"{lang}\""), 1);
+        fs::write(&config, reecrit).expect("config/default.toml doit se réécrire");
+    }
+
+    /// Retire la ligne `lang` de `[server]`, comme un projet créé avant qu'elle n'existe :
+    /// la clé est absente, non vide.
+    fn retirer_lang_server(root: &Path) {
+        let config = root.join("config/default.toml");
+        let source = fs::read_to_string(&config).expect("config/default.toml doit exister");
+
+        assert!(
+            source.contains("lang = \"fr\""),
+            "la clé `lang` est introuvable :\n{source}"
+        );
+        let reecrit: String = source
+            .lines()
+            .filter(|ligne| ligne.trim() != "lang = \"fr\"")
+            .map(|ligne| format!("{ligne}\n"))
+            .collect();
+        fs::write(&config, reecrit).expect("config/default.toml doit se réécrire");
     }
 
     fn options(root: &Path, feature: &str) -> Options {
@@ -1827,6 +1877,49 @@ mod tests {
         assert!(
             configuration.contains("trust_forwarded_for"),
             "{configuration}"
+        );
+    }
+
+    /// `[package.metadata.rbs] lang` ne gouverne plus que `AGENTS.md` : un projet dont la
+    /// clé vaut `en` mais dont `config/default.toml` ne porte pas de `[server] lang`
+    /// reste français, comme le serveur qui répondrait avec la même config.
+    #[test]
+    fn a_metadata_lang_without_a_server_lang_still_renders_french_messages() {
+        let (_parent, root) = project();
+        viser_lang_metadata(&root, "en");
+        retirer_lang_server(&root);
+
+        let planned = plan_for(&options(&root, "rate-limit")).expect("le plan doit se calculer");
+        let module = projected(&planned, "src/modules/rate_limit/mod.rs");
+
+        assert!(
+            module.contains("trop de requêtes : réessayez plus tard"),
+            "{module}"
+        );
+        assert!(
+            !module.contains("too many requests: try again later"),
+            "{module}"
+        );
+    }
+
+    /// `[server] lang` décide seul, même contredite par la métadonnée : c'est elle que
+    /// `rbs-core` lira au démarrage pour la même réponse 429.
+    #[test]
+    fn a_server_lang_overrides_a_diverging_metadata_lang() {
+        let (_parent, root) = project();
+        viser_lang_metadata(&root, "fr");
+        viser_lang_server(&root, "en");
+
+        let planned = plan_for(&options(&root, "rate-limit")).expect("le plan doit se calculer");
+        let module = projected(&planned, "src/modules/rate_limit/mod.rs");
+
+        assert!(
+            module.contains("too many requests: try again later"),
+            "{module}"
+        );
+        assert!(
+            !module.contains("trop de requêtes : réessayez plus tard"),
+            "{module}"
         );
     }
 

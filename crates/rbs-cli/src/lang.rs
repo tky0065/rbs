@@ -1,12 +1,22 @@
-//! La langue dans laquelle le projet reçoit son `AGENTS.md`.
+//! La langue du projet : son `AGENTS.md` et ses réponses HTTP.
 //!
-//! Le choix est celui du projet, non celui de la session : il s'inscrit dans
-//! `[package.metadata.rbs]`, sans quoi `add` et `upgrade` réécriraient un guide français
-//! par-dessus un guide anglais selon l'environnement de celui qui les lance.
+//! Les deux se choisissent séparément. `[package.metadata.rbs] lang` ne gouverne plus que
+//! `AGENTS.md` : sans elle, `add` et `upgrade` réécriraient un guide français par-dessus un
+//! guide anglais selon l'environnement de celui qui les lance. `[server] lang` de
+//! `config/default.toml` gouverne tout le reste — les réponses HTTP que `rbs-core` lit au
+//! démarrage, et les messages destinés au client que `add` et `generate` engendrent : avant
+//! elles lisaient la métadonnée, qui pouvait diverger (elle se remplissait de la locale
+//! avant 1.5.0) et produire des messages en deux langues dans un même projet. L'environnement
+//! n'est jamais lu à la génération, pour la même raison que `from_locale` ne l'est pas pour
+//! `AGENTS.md` : une génération ne doit rien devoir au shell de celui qui la lance.
 
 use std::fmt;
+use std::path::Path;
 
-/// Langue du guide engendré dans le projet.
+/// Chemin, relatif à la racine du projet, du fichier où vit `[server] lang`.
+const CONFIG: &str = "config/default.toml";
+
+/// Langue du projet : son `AGENTS.md` et ses réponses HTTP.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, clap::ValueEnum)]
 pub enum Lang {
     /// Français, la langue du dépôt et du code engendré.
@@ -44,6 +54,28 @@ impl Lang {
             Some(locale) if !locale.is_empty() => Self::En,
             _ => Self::Fr,
         }
+    }
+
+    /// La langue des messages qu'`add` et `generate` engendrent pour le projet à `root`.
+    ///
+    /// Lue dans `[server] lang` de `config/default.toml`, la même clé que `rbs-core` lit
+    /// au démarrage pour choisir la langue des réponses HTTP — jamais dans les métadonnées
+    /// ni dans l'environnement, qui peuvent diverger de ce que le serveur rendra vraiment.
+    /// Fichier absent, illisible, mal formé, table ou clé absente, ou valeur inconnue :
+    /// French, comme la résolution paresseuse du runtime.
+    pub fn of_project(root: &Path) -> Self {
+        std::fs::read_to_string(root.join(CONFIG))
+            .ok()
+            .and_then(|source| source.parse::<toml_edit::DocumentMut>().ok())
+            .and_then(|document| {
+                document
+                    .get("server")?
+                    .get("lang")?
+                    .as_str()
+                    .map(String::from)
+            })
+            .and_then(|lang| Self::parse(&lang))
+            .unwrap_or_default()
     }
 }
 
@@ -104,5 +136,71 @@ mod tests {
     #[test]
     fn the_display_is_the_name_written_in_the_manifest() {
         assert_eq!(Lang::En.to_string(), "en");
+    }
+
+    /// Sans fichier, la résolution est celle du runtime : French, pas une panne.
+    #[test]
+    fn a_project_without_config_file_speaks_french() {
+        let root = tempfile::TempDir::new().expect("répertoire temporaire créable");
+
+        assert_eq!(Lang::of_project(root.path()), Lang::Fr);
+    }
+
+    #[test]
+    fn a_config_without_the_server_table_speaks_french() {
+        let root = tempfile::TempDir::new().expect("répertoire temporaire créable");
+        write_config(root.path(), "[docs]\nswagger_ui = true\n");
+
+        assert_eq!(Lang::of_project(root.path()), Lang::Fr);
+    }
+
+    #[test]
+    fn a_server_table_without_lang_speaks_french() {
+        let root = tempfile::TempDir::new().expect("répertoire temporaire créable");
+        write_config(root.path(), "[server]\nport = 8080\n");
+
+        assert_eq!(Lang::of_project(root.path()), Lang::Fr);
+    }
+
+    #[test]
+    fn server_lang_english_is_read_back() {
+        let root = tempfile::TempDir::new().expect("répertoire temporaire créable");
+        write_config(root.path(), "[server]\nlang = \"en\"\n");
+
+        assert_eq!(Lang::of_project(root.path()), Lang::En);
+    }
+
+    #[test]
+    fn server_lang_french_is_read_back() {
+        let root = tempfile::TempDir::new().expect("répertoire temporaire créable");
+        write_config(root.path(), "[server]\nlang = \"fr\"\n");
+
+        assert_eq!(Lang::of_project(root.path()), Lang::Fr);
+    }
+
+    /// Une valeur écrite à la main peut porter n'importe quoi : le contrôleur retombe sur
+    /// le français plutôt que de faire échouer la commande, comme le fait déjà la lecture
+    /// paresseuse du runtime.
+    #[test]
+    fn an_unknown_server_lang_falls_back_to_french() {
+        let root = tempfile::TempDir::new().expect("répertoire temporaire créable");
+        write_config(root.path(), "[server]\nlang = \"de\"\n");
+
+        assert_eq!(Lang::of_project(root.path()), Lang::Fr);
+    }
+
+    /// Un fichier mal formé ne doit pas non plus faire échouer la commande : c'est le même
+    /// arbitrage que l'absence de fichier.
+    #[test]
+    fn an_unparseable_config_speaks_french() {
+        let root = tempfile::TempDir::new().expect("répertoire temporaire créable");
+        write_config(root.path(), "[server\nlang = \"en\"\n");
+
+        assert_eq!(Lang::of_project(root.path()), Lang::Fr);
+    }
+
+    fn write_config(root: &std::path::Path, content: &str) {
+        std::fs::create_dir_all(root.join("config")).expect("le répertoire config se crée");
+        std::fs::write(root.join(CONFIG), content).expect("le fichier de configuration s'écrit");
     }
 }

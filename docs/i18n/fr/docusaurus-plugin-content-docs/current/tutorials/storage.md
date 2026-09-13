@@ -143,10 +143,10 @@ curl -i -X POST http://127.0.0.1:8080/uploads \
 HTTP/1.1 422 Unprocessable Entity
 content-type: application/problem+json
 x-request-id: 01M22SF8V7N4F6RP5DQWPQCBVP
-content-length: 140
+content-length: 143
 date: Wed, 09 Sep 2026 09:55:02 GMT
 
-{"type":"about:blank","title":"Validation failed","status":422,"errors":{"owner_email":["email"]},"request_id":"01M22SF8V7N4F6RP5DQWPQCBVP"}
+{"type":"about:blank","title":"Validation échouée","status":422,"errors":{"owner_email":["email"]},"request_id":"01M22SF8V7N4F6RP5DQWPQCBVP"}
 ```
 
 La preuve que `_email` gagne sa contrainte sans que personne ne la déclare : rien dans
@@ -170,7 +170,7 @@ curl -i -I http://127.0.0.1:8080/uploads/$ID/content
 HTTP/1.1 404 Not Found
 content-type: application/problem+json
 x-request-id: 01M22SFC21MJ86CC06CZC804JP
-content-length: 128
+content-length: 130
 date: Wed, 09 Sep 2026 09:55:05 GMT
 ```
 
@@ -205,7 +205,7 @@ date: Wed, 09 Sep 2026 09:55:05 GMT
 ```
 
 La preuve que la présence et l'absence se lisent différemment, même à travers un simple
-`HEAD` : `content-length` tombe de `128` — la taille du problème JSON qu'un `GET` aurait
+`HEAD` : `content-length` tombe de `130` — la taille du problème JSON qu'un `GET` aurait
 rendu un instant plus tôt — à un `0` sec, si bien qu'un appelant distingue les deux cas
 depuis l'en-tête seul, sans jamais récupérer de corps. Et en le relisant :
 

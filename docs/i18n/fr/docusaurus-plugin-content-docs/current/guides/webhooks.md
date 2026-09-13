@@ -5,9 +5,9 @@ title: Webhooks
 
 # Webhooks sortants
 
-`rbs add webhooks` donne au projet de quoi dire au dehors ce qui vient d'arriver : dix
-fichiers sous `src/modules/webhooks/`, une migration pour la table `webhook_subscriptions`, trois
-routes, et un POST HTTP signé vers chaque abonné qui écoute.
+`rbs add webhooks` donne au projet de quoi dire au dehors ce qui vient d'arriver : onze
+fichiers sous `src/modules/webhooks/` — `target.rs` compris —, une migration pour la table
+`webhook_subscriptions`, trois routes, et un POST HTTP signé vers chaque abonné qui écoute.
 
 **Le fragment livre ; il ne décide pas de ce qui mérite d'être dit.** Rien n'est émis tant
 que votre code n'appelle pas `webhooks::emit`. Installée et jamais appelée, la feature n'a
@@ -19,23 +19,21 @@ sans double dépilage, `attempts`, `available_at`, `last_error` — et qu'un sec
 de réessai n'aurait laissé que deux boucles à maintenir. Elle exige aussi `auth`, qui
 entraîne `mail` et `rate-limit` : une création d'abonnement laissée ouverte permettrait à
 n'importe qui de faire livrer chez lui les événements du projet, et `user.created` porte
-des adresses. Sur un projet nu, les cinq descendent dans un seul plan :
+des adresses. Sur un projet nu, les cinq descendent dans un seul plan — en voici un
+extrait :
 
+{/* rbs:transcript cmd="rbs add webhooks" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
 ```text
 $ rbs add webhooks
 webhooks : webhooks sortants : abonnements, signature HMAC horodatée, livraison par la file
-webhooks exige auth, jobs, mail, rate-limit : posée avec elle
+webhooks exige jobs, mail, rate-limit, auth : posée avec elle
 
-plan pour /private/tmp/rbs-demo/blog
+plan pour …/demo
 
-  + src/auth/mod.rs                                                  créé
-  …
   + src/modules/jobs/mod.rs                                          créé
-  …
   + src/modules/mail/mod.rs                                          créé
-  …
   + src/modules/rate_limit/mod.rs                                    créé
-  …
+  + src/auth/mod.rs                                                  créé
   + src/modules/webhooks/mod.rs                                      créé
   + src/modules/webhooks/config.rs                                   créé
   + src/modules/webhooks/model.rs                                    créé
@@ -44,13 +42,14 @@ plan pour /private/tmp/rbs-demo/blog
   + src/modules/webhooks/service.rs                                  créé
   + src/modules/webhooks/controller.rs                               créé
   + src/modules/webhooks/signature.rs                                créé
+  + src/modules/webhooks/target.rs                                   créé
   + src/modules/webhooks/delivery.rs                                 créé
   + src/modules/webhooks/tests.rs                                    créé
-  + migration/src/m20260910_162606_create_webhook_subscriptions.rs   créé
+  + migration/src/m20260913_132216_create_webhook_subscriptions.rs   créé
   ~ AGENTS.md                                                        modifié
 
-  66 fichiers à écrire
-✓ webhooks installée — 53 fichiers
+  67 fichiers à écrire
+✓ webhooks installée — 54 fichiers
 
   rbs migrate up, inscrivez un abonné par POST /webhooks/subscriptions — son secret n'est rendu qu'à cet instant — puis appelez webhooks::emit dans vos services
 ```
@@ -60,9 +59,11 @@ Trois migrations l'accompagnent, `mail` n'en écrivant aucune :
 
 ## Émettre un événement
 
-```rust
-webhooks::emit(&transaction, "user.created", &dto).await?;
+```rust file=examples/event-hub/src/orders/service.rs region=create
 ```
+
+Ici l'événement est `order.created`, émis dans la même transaction qui inscrit la création
+au journal d'audit — voir le [guide audit](./audit.md) pour la trace qu'elle partage.
 
 `emit` prend un `&C: ConnectionTrait` et non une connexion, et c'est tout l'intérêt :
 **passez-lui la transaction qui porte votre changement, et les livraisons naissent si et
@@ -227,9 +228,7 @@ rapporte rien tout en coûtant à chaque écriture.
 
 ## Configuration
 
-```toml
-[webhooks]
-timeout_secs = 10
+```toml file=examples/event-hub/config/default.toml region=webhooks
 ```
 
 Un seul réglage : le temps laissé au receveur pour répondre. Au-delà, la livraison compte

@@ -86,18 +86,20 @@ commande-ci.
 Une liste ne figure pas dans la déclaration dont le parseur se sert, et n'est ajoutée que
 pour la complétion — les features qu'installe [`rbs add`](./add.md) :
 
+{/* rbs:transcript cmd="rbs completions bash" extrait="oui" */}
 ```text
-$ rbs completions bash | grep -A1 'rbs__subcmd__add)'
+$ rbs completions bash
         rbs__subcmd__add)
-            opts="-h -V --force --dry-run --template-dir --help --version audit auth ci cors docker jobs mail observability rate-limit redis storage"
+            opts="-h -V --force --dry-run --template-dir --help --version audit auth ci cors docker jobs mail observability rate-limit redis scheduler storage webhooks"
 ```
 
+{/* rbs:transcript cmd="rbs completions zsh" extrait="oui" */}
 ```text
-$ rbs completions zsh | grep "':feature"
-':feature -- Feature à installer:(audit auth ci cors docker jobs mail observability rate-limit redis storage)' \
+$ rbs completions zsh
+':feature -- Feature à installer:(audit auth ci cors docker jobs mail observability rate-limit redis scheduler storage webhooks)' \
 ```
 
-Les onze noms viennent des fragments embarqués dans le binaire, et sont ceux qu'un shell
+Ces noms viennent des fragments embarqués dans le binaire, et sont ceux qu'un shell
 n'a aucun moyen de deviner.
 
 Ils sont proposés, non exigés. `rbs add` accepte lui-même un nom qu'aucun binaire ne

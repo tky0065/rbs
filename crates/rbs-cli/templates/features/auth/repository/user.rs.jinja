@@ -26,7 +26,11 @@ pub async fn find_by_email(db: &impl ConnectionTrait, email: &str) -> Result<Opt
 /// Citer l'adresse la confirme à qui la soumet, dans la réponse comme dans le journal :
 /// l'inscription deviendrait l'oracle d'énumération que le hash témoin de `login` écarte
 /// de l'autre côté.
+{%- if lang == "en" %}
+pub const ADRESSE_PRISE: &str = "this address is already registered";
+{%- else %}
 pub const ADRESSE_PRISE: &str = "cette adresse est déjà inscrite";
+{%- endif %}
 
 /// Inscrit un utilisateur, le rôle et les horodatages venant des défauts de la table.
 ///

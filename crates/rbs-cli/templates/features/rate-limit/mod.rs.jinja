@@ -126,7 +126,11 @@ fn refus(window: Duration) -> Response {
     let mut response = rbs_core::Error::Domain {
         status: StatusCode::TOO_MANY_REQUESTS,
         code: "too_many_requests",
+{%- if lang == "en" %}
+        message: "too many requests: try again later".to_string(),
+{%- else %}
         message: "trop de requêtes : réessayez plus tard".to_string(),
+{%- endif %}
     }
     .into_response();
 
