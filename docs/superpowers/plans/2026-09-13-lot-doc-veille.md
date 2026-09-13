@@ -121,6 +121,6 @@ puis par `integration_examples` après régénération des `examples/*/AGENTS.md
 
 ### Vérifications finales du lot doc
 
-- [ ] `cargo test -p rbs-cli --lib`, `--test integration_docs`, `--test integration_examples`,
+- [x] `cargo test -p rbs-cli --lib`, `--test integration_docs`, `--test integration_examples`,
   `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`,
   `cd docs && npm run typecheck && npm test && npm run build`, `node docs/scripts/parite.mjs`.
