@@ -159,6 +159,24 @@ jobs:
       - name: cargo audit
         run: cargo audit --deny warnings
 
+  # Ce que `cargo audit` ne voit pas : la licence et l'origine d'une dépendance entrée par
+  # transitivité dans l'une des deux crates publiées. Les advisories restent au job
+  # `audit`, d'où la liste explicite des contrôles ; `deny.toml` dit pourquoi.
+  deny:
+    name: cargo deny
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny
+
+      - name: cargo deny
+        run: cargo deny --all-features check licenses sources bans
+
   # `rust-version` est une promesse faite à qui installe, et rien ne la tenait : tous les
   # autres jobs tournent sur `stable`, qui satisfait n'importe quel plancher. Une dépendance
   # qui monte sa MSRV cassait donc les installations sans que la CI le voie.
