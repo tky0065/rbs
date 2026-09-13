@@ -278,15 +278,15 @@ them to the versions committed here, ignoring exactly the differences listed abo
 fails when a template changes without the example following — which is the point: a stale
 example makes the documentation lie, and nothing else would notice.
 
-The comparison also ignores the order of `event-hub`'s migration `mod` declarations,
-after masking their timestamps: that order is a function of the timestamp, and two
-generations never land in the same second — a fast regeneration puts separate commands
-in one second, `create_audit_log` and `create_schedules` swapping places depending on
-which second that is. What still gets compared is the execution order, untouched by that
-sort: the `Box::new` calls in the `Migrator`'s `vec!`, in install order. What guards the
-committed sort itself — the one this ignores — is `each_example_passes_cargo_fmt`, which
-runs `cargo fmt --check` on every example and would fail if the `mod` lines it committed
-were not what rustfmt produces.
+The comparison also ignores the order of migration `mod` declarations across every
+example's files, after masking their timestamps: that order is a function of the
+timestamp, and two generations never land on the same seconds — a fast regeneration puts
+separate commands in one second, `create_audit_log` and `create_schedules` swapping
+places depending on which second that is. What still gets compared is the execution
+order, untouched by that sort: the `Box::new` calls in the `Migrator`'s `vec!`, in install
+order. What guards the committed sort itself — the one this ignores — is
+`each_example_passes_cargo_fmt`, which runs `cargo fmt --check` on every example and
+would fail if the `mod` lines it committed were not what rustfmt produces.
 
 `blog-auth`'s one hand-edited file is excluded from that byte-for-byte comparison, which
 would otherwise flag the edit itself. What it carries is asserted separately, by

@@ -150,6 +150,10 @@ Relire l'histoire d'une ligne est la requête que rejoue le test livré :
 ```rust file=examples/event-hub/src/modules/audit/tests.rs region=history
 ```
 
+Le second tri n'est pas décoratif : MySQL (et SQLite) ne gardent `created_at` qu'à la
+seconde près, si bien que des entrées écrites dans la même seconde n'auraient sinon aucun
+ordre défini. L'UUIDv7 de `id` est monotone, il tranche.
+
 ## Ce que le fragment ne fait pas
 
 Il ne câble rien dans le CRUD qu'engendre `rbs generate`. Aucun handler n'appelle `record`

@@ -284,11 +284,11 @@ ci-dessus. Il échoue quand une template change sans que l'exemple ait suivi —
 son intérêt : un exemple périmé fait mentir la documentation, et rien d'autre ne s'en
 apercevrait.
 
-La comparaison ignore aussi l'ordre des déclarations `mod` de migration d'`event-hub`,
-une fois leur horodatage masqué : cet ordre est fonction de l'horodatage, et deux
-générations ne tombent jamais dans la même seconde — une régénération rapide y met
-plusieurs commandes séparées, et `create_audit_log` échange sa place avec
-`create_schedules` selon la seconde tombée. Ce qui reste comparé est l'ordre
+La comparaison ignore aussi l'ordre des déclarations `mod` de migration, dans les fichiers
+de chaque exemple, une fois leur horodatage masqué : cet ordre est fonction de
+l'horodatage, et deux générations ne tombent jamais sur les mêmes secondes — une
+régénération rapide y met plusieurs commandes séparées, et `create_audit_log` échange sa
+place avec `create_schedules` selon la seconde tombée. Ce qui reste comparé est l'ordre
 d'exécution, que ce tri ne touche pas : les appels `Box::new` dans le `vec!` du
 `Migrator`, dans l'ordre d'installation. Ce qui garde le tri committé lui-même — celui que
 cette comparaison ignore — c'est `each_example_passes_cargo_fmt`, qui lance `cargo fmt

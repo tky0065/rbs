@@ -147,6 +147,10 @@ Reading a row's history is the query the shipped test replays:
 ```rust file=examples/event-hub/src/modules/audit/tests.rs region=history
 ```
 
+The second ordering is not decorative: MySQL (and SQLite) keep `created_at` only to the
+second, so entries written within the same second would otherwise have no defined order.
+The UUIDv7 `id` is monotonic, and settles it.
+
 ## What the fragment does not do
 
 It wires nothing into the CRUD `rbs generate` produces. No handler calls `record` for you,
