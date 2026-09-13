@@ -45,6 +45,11 @@ Options:
 ce qui donne à lire ce qu'un saut toucherait avant qu'il n'y touche. Ni `--template-dir` ni `--yes` n'est accepté
 ici : chacun est déclaré sur les commandes qui le lisent.
 
+`--json` rend le plan — ou l'erreur — en un seul document JSON sur la sortie standard,
+avec `applique` pour dire si le manifeste a été écrit ; les notes de migration partent
+alors sur la sortie d'erreur. [Le guide des agents](../guides/agents.md#lire-un-plan-en-json)
+donne le document et les codes d'erreur.
+
 ## Un saut qui porte une note
 
 Un projet engendré par rbs 0.4.0, mis à niveau par un CLI en 1.0.0 :
