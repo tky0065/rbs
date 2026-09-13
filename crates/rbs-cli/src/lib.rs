@@ -107,6 +107,7 @@ pub fn run() {
                     role,
                     soft_delete,
                     with_upload,
+                    cursor,
                     singular,
                 } => GenerateArgs {
                     name,
@@ -118,6 +119,7 @@ pub fn run() {
                     role,
                     soft_delete,
                     with_upload,
+                    cursor,
                     singular,
                 },
                 GenerateCommands::Feature {
@@ -135,6 +137,7 @@ pub fn run() {
                     role: None,
                     soft_delete: false,
                     with_upload: false,
+                    cursor: false,
                     singular,
                 },
 
@@ -626,6 +629,7 @@ struct GenerateArgs {
     role: Option<String>,
     soft_delete: bool,
     with_upload: bool,
+    cursor: bool,
     singular: Option<String>,
 }
 
@@ -640,6 +644,7 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
         role,
         soft_delete,
         with_upload,
+        cursor,
         singular,
     } = args;
 
@@ -659,6 +664,7 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
         role,
         soft_delete,
         with_upload,
+        cursor,
         singular,
     })?;
 

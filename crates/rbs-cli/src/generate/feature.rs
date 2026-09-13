@@ -35,6 +35,8 @@ pub(crate) struct Feature {
     pub soft_delete: bool,
     /// Le CRUD porte des routes de contenu binaire.
     pub with_upload: bool,
+    /// La liste `GET` pagine par curseur ; la route de filtre garde `Page`/`Pagination`.
+    pub cursor: bool,
     /// Forme singulière imposée par `--singular`, quand l'heuristique se trompe.
     pub singular: Option<String>,
     /// Langue du projet : celle des messages que les fichiers rendus renvoient au client.
@@ -51,6 +53,7 @@ impl Feature {
             auth: false,
             soft_delete: false,
             with_upload: false,
+            cursor: false,
             singular: None,
             lang: crate::lang::Lang::Fr,
         }
@@ -90,6 +93,12 @@ impl Feature {
     /// La même feature, dotée de ses routes de contenu.
     pub(crate) fn uploading(mut self) -> Self {
         self.with_upload = true;
+        self
+    }
+
+    /// La même feature, dont la liste `GET` pagine par curseur.
+    pub(crate) fn paged_by_cursor(mut self) -> Self {
+        self.cursor = true;
         self
     }
 
@@ -282,7 +291,7 @@ fn named(variants: &[String]) -> String {
 /// templates lisent `entity` comme elles lisent `module`.
 impl Serialize for Feature {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("Feature", 15)?;
+        let mut state = serializer.serialize_struct("Feature", 16)?;
         state.serialize_field("module", self.module())?;
         state.serialize_field("table", self.module())?;
         state.serialize_field("entity", &self.entity())?;
@@ -297,6 +306,7 @@ impl Serialize for Feature {
         state.serialize_field("auth", &self.auth)?;
         state.serialize_field("soft_delete", &self.soft_delete)?;
         state.serialize_field("with_upload", &self.with_upload)?;
+        state.serialize_field("cursor", &self.cursor)?;
         state.serialize_field("lang", self.lang.name())?;
         state.end()
     }
@@ -499,6 +509,22 @@ mod tests {
         let rendu = serde_json::to_value(&feature).expect("la feature se sérialise");
 
         assert_eq!(rendu["with_upload"], true);
+    }
+
+    #[test]
+    fn an_ordinary_feature_is_not_paged_by_cursor() {
+        let feature = Feature::fresh("articles", Vec::new());
+        let rendu = serde_json::to_value(&feature).expect("la feature se sérialise");
+
+        assert_eq!(rendu["cursor"], false);
+    }
+
+    #[test]
+    fn paged_by_cursor_marks_the_feature() {
+        let feature = Feature::fresh("articles", Vec::new()).paged_by_cursor();
+        let rendu = serde_json::to_value(&feature).expect("la feature se sérialise");
+
+        assert_eq!(rendu["cursor"], true);
     }
 
     /// Sans `speaking`, une feature reste française : un projet existant, dont

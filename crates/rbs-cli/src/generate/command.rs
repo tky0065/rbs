@@ -41,6 +41,8 @@ pub(crate) struct Options {
     pub soft_delete: bool,
     /// Ajoute au CRUD trois routes de contenu binaire, adossées au fragment `storage`.
     pub with_upload: bool,
+    /// Pagine la liste `GET` par curseur ; la route de filtre garde `Page`/`Pagination`.
+    pub cursor: bool,
     /// Forme singulière du nom, quand l'heuristique se trompe : `news_item` pour `news`.
     pub singular: Option<String>,
 }
@@ -327,6 +329,11 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     };
     let feature = if options.with_upload {
         feature.uploading()
+    } else {
+        feature
+    };
+    let feature = if options.cursor {
+        feature.paged_by_cursor()
     } else {
         feature
     };
@@ -715,6 +722,7 @@ mod tests {
             role: None,
             soft_delete: false,
             with_upload: false,
+            cursor: false,
             singular: None,
         }
     }

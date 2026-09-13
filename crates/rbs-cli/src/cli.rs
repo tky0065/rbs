@@ -196,6 +196,10 @@ pub enum GenerateCommands {
         /// Ajoute trois routes de contenu binaire ; exige la feature storage.
         #[arg(long)]
         with_upload: bool,
+
+        /// Pagine GET /<ressource> par curseur ; la route de filtre garde ses pages.
+        #[arg(long)]
+        cursor: bool,
     },
 
     /// Génère une feature vide : six fichiers, aucun champ.
@@ -406,6 +410,21 @@ mod tests {
         };
 
         assert!(with_upload);
+    }
+
+    #[test]
+    fn generate_crud_accepts_cursor() {
+        let cli = Cli::try_parse_from(["rbs", "generate", "crud", "articles", "--cursor"])
+            .expect("la ligne doit être acceptée");
+
+        let Commands::Generate {
+            command: GenerateCommands::Crud { cursor, .. },
+        } = cli.command
+        else {
+            panic!("la sous-commande doit être `generate crud`");
+        };
+
+        assert!(cursor);
     }
 
     #[test]
