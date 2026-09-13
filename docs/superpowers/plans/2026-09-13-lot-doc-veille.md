@@ -44,7 +44,7 @@ puis par `integration_examples` après régénération des `examples/*/AGENTS.md
 - [x] `cargo test -p rbs-cli --lib agents::` vert.
 - [x] Régénérer les quatre `examples/*/AGENTS.md` (zone guide seule) ;
   `cargo test -p rbs-cli --test integration_examples` vert.
-- [ ] Après fusion de la langue des réponses : ligne `rbs new` → `--lang fr|en` fixe la
+- [x] Après fusion de la langue des réponses : ligne `rbs new` → `--lang fr|en` fixe la
   langue du projet (ce fichier et les réponses HTTP) ; régénérer à nouveau.
 - [x] Commit `docs(agents): …`.
 
@@ -95,7 +95,7 @@ puis par `integration_examples` après régénération des `examples/*/AGENTS.md
 - [x] `RACINE_MONOLINGUE` += `'IMPROVE_OLD.md'` ; `node docs/scripts/parite.mjs` → 0 écart.
 - [x] `CLAUDE.md` : « État du dépôt » réécrit (six jalons v0.1 → v1.1, puis 1.2 → 1.4
   publiées et 1.5.0 prête) ; `completions` dans la liste des commandes de l'arborescence.
-- [ ] Après la tâche 31 : « quatre projets d'exemple » → cinq (`CLAUDE.md:9,62`).
+- [x] Après la tâche 31 : « quatre projets d'exemple » → cinq (`CLAUDE.md:9,62`).
 - [x] Commit `docs: …`.
 
 ### Tâche 33 : veille des dépendances
