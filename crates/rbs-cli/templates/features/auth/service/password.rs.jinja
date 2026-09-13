@@ -4,10 +4,12 @@ use rbs_core::{Error, Result, hash, token};
 use sea_orm::prelude::Uuid;
 use sea_orm::{DatabaseConnection, TransactionTrait};
 
+use super::super::config::FlowConfig;
 use super::super::dto::{ChangePasswordRequest, ResetPasswordRequest, TokenPair};
 use super::super::model::TokenPurpose;
 use super::super::repository;
-use super::{close_every_session, issue, normalise};
+use super::{close_every_session, issue, normalise, notify};
+use crate::modules::mail::Mailer;
 
 /// Change le mot de passe d'un compte identifié, et rend une paire neuve.
 ///
@@ -80,8 +82,8 @@ pub async fn change(
 /// Ouvre un jeton de réinitialisation, et rend le compte avec le jeton **en clair**.
 ///
 /// Le jeton en clair ne se relit nulle part : la base n'en garde que l'empreinte. Le
-/// rendre ici est ce qui permet au contrôleur de le mettre dans un courriel — et aux
-/// tests du projet de dérouler le parcours entier sans qu'aucun SMTP soit joignable.
+/// rendre ici est ce qui permet à `send_reset_link` de le mettre dans un courriel — et
+/// aux tests du projet de dérouler le parcours entier sans qu'aucun SMTP soit joignable.
 ///
 /// `None` quand aucun compte ne porte l'adresse. C'est l'appelant qui décide d'en tirer
 /// une réponse indiscernable, et il le fait.
@@ -108,6 +110,29 @@ pub async fn request_reset(
     .await?;
 
     Ok(Some((utilisateur, jeton)))
+}
+
+/// Envoie un lien de réinitialisation neuf, si un compte porte l'adresse.
+pub async fn send_reset_link(
+    db: &DatabaseConnection,
+    mail: &Mailer,
+    flows: &FlowConfig,
+    email: &str,
+) -> Result<()> {
+    if let Some((utilisateur, jeton)) = request_reset(db, flows.reset_ttl_secs, email).await? {
+        notify(
+            mail,
+            &utilisateur,
+            "Réinitialisation de votre mot de passe",
+            "reinitialisation.html",
+            minijinja::context! {
+                link => flows.link("reset-password", &jeton),
+                heures => flows.reset_ttl_secs / 3600,
+            },
+        );
+    }
+
+    Ok(())
 }
 
 /// Consomme un jeton et pose le nouveau mot de passe.
