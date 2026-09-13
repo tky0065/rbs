@@ -165,6 +165,36 @@ fn the_one_time_token_repository_is_written() {
     }
 }
 
+/// Les services qui enchaînent plusieurs écritures les font en une transaction, que les
+/// dépôts acceptent au même titre que la connexion.
+#[test]
+fn the_services_chaining_writes_open_one_transaction() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_auth(&parent);
+
+    for service in ["password", "session", "verification"] {
+        let chemin = format!("src/auth/service/{service}.rs");
+        let source = fs::read_to_string(racine.join(&chemin)).expect("service lisible");
+
+        for attendu in ["db.begin().await?", ".commit().await?"] {
+            assert!(
+                source.contains(attendu),
+                "`{chemin}` ne porte pas `{attendu}`"
+            );
+        }
+    }
+
+    for depot in ["user", "one_time_token", "refresh_token"] {
+        let chemin = format!("src/auth/repository/{depot}.rs");
+        let source = fs::read_to_string(racine.join(&chemin)).expect("dépôt lisible");
+
+        assert!(
+            source.contains("db: &impl ConnectionTrait") && !source.contains("&DatabaseConnection"),
+            "`{chemin}` prend encore la connexion plutôt qu'un `ConnectionTrait`"
+        );
+    }
+}
+
 /// Les chemins sont montés dès l'installation, un de plus à chaque tâche jusqu'à treize.
 #[test]
 fn the_auth_paths_are_mounted() {

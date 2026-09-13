@@ -5,11 +5,12 @@ use std::time::Instant;
 use axum::routing::get;
 use chrono::Utc;
 use rbs_core::Identity;
-use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, EntityTrait, QueryFilter, Set, TransactionTrait};
 use uuid::Uuid;
 
 use crate::auth::guard::RequireRole;
 use crate::auth::model::{Role, refresh_token};
+use crate::auth::repository::refresh_token::Rotation;
 
 // Les tests de ce fichier joignent la base que décrit `.env`, et sont donc `#[ignore]` :
 // `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre la base du
@@ -285,6 +286,51 @@ async fn a_valid_refresh_returns_a_new_pair() {
     assert_ne!(
         nouvelle["access_token"], paire["access_token"],
         "le jeton d'accès doit être réémis"
+    );
+}
+
+/// Ce que `refresh` enchaîne — tourner la session, en ouvrir une neuve — se défait d'un
+/// bloc quand la transaction qui le porte est abandonnée : une erreur entre les deux ne
+/// laisse pas au client une session tournée sans paire pour la remplacer.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_rolled_back_rotation_leaves_the_session_open_and_opens_no_other() {
+    let api = application().await;
+    let db = connection().await;
+    let (id, _) = login_as(&api).await;
+    let session = session_row(&db, id).await;
+
+    let transaction = db.begin().await.expect("transaction ouvrable");
+    let tournee = crate::auth::repository::refresh_token::rotate(&transaction, session.id)
+        .await
+        .expect("pas d'erreur");
+    assert_eq!(tournee, Rotation::Done, "la session vient d'être ouverte");
+    crate::auth::repository::create_refresh_token(
+        &transaction,
+        id,
+        rbs_core::token::fingerprint(&rbs_core::token::random()),
+        (Utc::now() + chrono::Duration::hours(1)).fixed_offset(),
+    )
+    .await
+    .expect("pas d'erreur");
+    transaction.rollback().await.expect("transaction annulable");
+
+    let ouvertes = crate::auth::repository::open_sessions_of(&db, id)
+        .await
+        .expect("la lecture aboutit");
+    assert_eq!(
+        ouvertes.iter().map(|ligne| ligne.id).collect::<Vec<_>>(),
+        vec![session.id],
+        "une transaction annulée a tourné la session ou en a ouvert une autre"
+    );
+
+    let tournee = crate::auth::repository::refresh_token::rotate(&db, session.id)
+        .await
+        .expect("pas d'erreur");
+    assert_eq!(
+        tournee,
+        Rotation::Done,
+        "la session a été tournée par une transaction annulée"
     );
 }
 

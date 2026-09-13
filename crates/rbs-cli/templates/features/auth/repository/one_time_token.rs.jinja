@@ -1,7 +1,7 @@
 use chrono::Utc;
 use rbs_core::Result;
 use sea_orm::prelude::{DateTimeWithTimeZone, Expr, Uuid};
-use sea_orm::{ActiveModelTrait, ColumnTrait, DatabaseConnection, EntityTrait, QueryFilter, Set};
+use sea_orm::{ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, Set};
 
 use super::super::model::{TokenPurpose, one_time_token};
 
@@ -18,7 +18,7 @@ pub use one_time_token::Model;
 /// `fingerprint` et non le jeton : une base lue par un tiers ne lui donne aucun lien
 /// qu'il puisse jouer.
 pub async fn issue(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     user_id: Uuid,
     purpose: TokenPurpose,
     fingerprint: String,
@@ -43,7 +43,7 @@ pub async fn issue(
 /// L'usage fait partie de la recherche : sans lui, un jeton de vérification — plus long à
 /// périmer, et envoyé à toute inscription — vaudrait comme jeton de réinitialisation.
 pub async fn find(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     fingerprint: &str,
     purpose: TokenPurpose,
 ) -> Result<Option<Model>> {
@@ -60,7 +60,7 @@ pub async fn find(
 /// précède : deux réinitialisations concurrentes du même jeton franchiraient sinon toutes
 /// deux la lecture, et poseraient chacune leur mot de passe — la seconde gagnant sans que
 /// la première le sache.
-pub async fn consume(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
+pub async fn consume(db: &impl ConnectionTrait, id: Uuid) -> Result<bool> {
     let maintenant = Utc::now().fixed_offset();
 
     let touchees = one_time_token::Entity::update_many()
@@ -80,7 +80,7 @@ pub async fn consume(db: &DatabaseConnection, id: Uuid) -> Result<bool> {
 /// le premier est parti dans une boîte qu'il ne contrôle plus laisse ce premier lien
 /// valide jusqu'à son terme.
 pub async fn invalidate_pending(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     user_id: Uuid,
     purpose: TokenPurpose,
 ) -> Result<u64> {
@@ -105,7 +105,7 @@ pub async fn invalidate_pending(
 /// branche pas la tâche — `rbs add scheduler` vous donne où la poser, et cette fonction
 /// est ce qu'elle appellera. Retirez ce `#[allow]` en la branchant.
 #[allow(dead_code)]
-pub async fn purge_expired(db: &DatabaseConnection) -> Result<u64> {
+pub async fn purge_expired(db: &impl ConnectionTrait) -> Result<u64> {
     let supprimees = one_time_token::Entity::delete_many()
         .filter(one_time_token::Column::ExpiresAt.lt(Utc::now().fixed_offset()))
         .exec(db)

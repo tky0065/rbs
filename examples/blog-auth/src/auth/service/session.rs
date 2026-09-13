@@ -3,8 +3,8 @@ use std::sync::LazyLock;
 use chrono::Utc;
 use rbs_core::config::AuthConfig;
 use rbs_core::{Error, Result, hash, token};
-use sea_orm::DatabaseConnection;
 use sea_orm::prelude::Uuid;
+use sea_orm::{DatabaseConnection, TransactionTrait};
 
 use super::super::dto::{
     LoginRequest, RefreshRequest, RegisterRequest, SessionResponse, TokenPair, UserResponse,
@@ -76,16 +76,24 @@ pub async fn refresh(
         .filter(|session| session.expires_at > maintenant)
         .ok_or(Error::Unauthorized)?;
 
+    // Tout ou rien : une session tournée sans paire rendue laisserait le client avec un
+    // jeton mort et rien pour le remplacer — et son prochain essai serait un rejeu.
+    let transaction = db.begin().await?;
+
     // Rien ici ne relit les deux colonnes : c'est `rotate` qui porte la condition, et
     // elle seule peut la porter sans laisser passer deux rafraîchissements concurrents.
-    match repository::refresh_token::rotate(db, session.id).await? {
+    match repository::refresh_token::rotate(&transaction, session.id).await? {
         Rotation::Done => {}
         // La ligne avait tourné : ce jeton a servi deux fois. L'un de ses deux porteurs
         // n'est pas le titulaire du compte, et rien ne dit lequel — un jeton volé et joué
         // avant la rotation légitime laisserait sinon le voleur avec une paire valide,
         // renouvelée indéfiniment. Tout le compte se reconnecte.
         Rotation::Replayed => {
-            let fermees = close_every_session(db, session.user_id).await?;
+            let fermees = close_every_session(&transaction, session.user_id).await?;
+
+            // La révocation est ce qu'un rejeu doit laisser derrière lui : elle se
+            // committe avant que l'erreur ne sorte.
+            transaction.commit().await?;
 
             // Ni l'adresse ni le jeton : le journal ne porte pas ce que la réponse tait,
             // et l'identifiant du compte suffit à retrouver ce qui s'est passé.
@@ -99,7 +107,8 @@ pub async fn refresh(
         }
         // Fermée par une déconnexion, une révocation, ou un rejeu déjà instruit : un
         // client qui réessaie, pas un jeton qui circule pour la première fois. Le même
-        // 401 qu'un jeton inconnu, et rien d'autre.
+        // 401 qu'un jeton inconnu, et rien d'autre — rien n'a été écrit, et la
+        // transaction abandonnée s'annule d'elle-même.
         Rotation::Closed => {
             tracing::debug!(
                 user_id = %session.user_id,
@@ -110,11 +119,14 @@ pub async fn refresh(
         }
     }
 
-    let utilisateur = repository::find(db, session.user_id)
+    let utilisateur = repository::find(&transaction, session.user_id)
         .await?
         .ok_or(Error::Unauthorized)?;
 
-    issue(db, auth, &utilisateur).await
+    let paire = issue(&transaction, auth, &utilisateur).await?;
+    transaction.commit().await?;
+
+    Ok(paire)
 }
 
 pub async fn logout(db: &DatabaseConnection, input: RefreshRequest) -> Result<()> {
@@ -176,7 +188,11 @@ pub async fn revoke_session(db: &DatabaseConnection, id: Uuid, user_id: Uuid) ->
 }
 
 pub async fn revoke_sessions(db: &DatabaseConnection, user_id: Uuid) -> Result<()> {
-    close_every_session(db, user_id).await?;
+    // Les deux écritures de `close_every_session` ou aucune : fermer les
+    // rafraîchissements en laissant vivre les accès est ce qu'elle existe pour empêcher.
+    let transaction = db.begin().await?;
+    close_every_session(&transaction, user_id).await?;
+    transaction.commit().await?;
 
     Ok(())
 }

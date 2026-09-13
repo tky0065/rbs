@@ -10,7 +10,7 @@ use rbs_core::config::AuthConfig;
 use rbs_core::jwt::Claims;
 use rbs_core::{jwt, token};
 use sea_orm::ActiveEnum;
-use sea_orm::DatabaseConnection;
+use sea_orm::ConnectionTrait;
 use sea_orm::prelude::Uuid;
 
 use super::dto::{TokenPair, UserResponse};
@@ -26,7 +26,7 @@ pub use session::{
 
 /// Signe un jeton d'accès et ouvre la session de rafraîchissement qui l'accompagne.
 async fn issue(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     auth: &AuthConfig,
     utilisateur: &Model,
 ) -> Result<TokenPair> {
@@ -74,7 +74,7 @@ async fn issue(
 /// Deux écritures, une fonction : les quatre chemins qui ferment un compte — rejeu,
 /// changement, réinitialisation, `DELETE /auth/sessions` — passent ici, et aucun ne peut
 /// fermer les rafraîchissements en laissant vivre les accès.
-pub(super) async fn close_every_session(db: &DatabaseConnection, user_id: Uuid) -> Result<u64> {
+pub(super) async fn close_every_session(db: &impl ConnectionTrait, user_id: Uuid) -> Result<u64> {
     let fermees = repository::revoke_sessions_of(db, user_id).await?;
     repository::user::stamp_sessions_revoked(db, user_id).await?;
 

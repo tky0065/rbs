@@ -131,6 +131,16 @@ dépréciation.
   `register`, `login`, `forgot-password` et `resend-verification`. Deux inscriptions ne
   différant que par la casse faisaient deux comptes — et le lien de vérification de l'un
   arrivait dans la boîte de l'autre.
+- **`change-password`, `reset-password`, `refresh`, `verify-email` et
+  `DELETE /auth/sessions` écrivent tout ou rien.** Chacun enchaînait ses écritures sur des
+  connexions distinctes du pool : un échec entre la consommation d'un jeton de
+  réinitialisation et la pose du mot de passe brûlait le jeton pour rien ; un échec entre
+  le nouveau mot de passe et la révocation laissait ouvertes les sessions d'un compte
+  peut-être compromis ; un échec entre la rotation d'un jeton de rafraîchissement et
+  l'émission de la paire laissait le client avec un jeton mort et rien pour le remplacer
+  — et son essai suivant comptait pour un rejeu. Chaque dépôt d'`auth` prend désormais
+  `&impl ConnectionTrait`, comme `jobs::enqueue`, et les cinq services ouvrent chacun une
+  transaction, committée après la dernière écriture.
 
 #### Projets déjà générés
 
@@ -152,6 +162,10 @@ lit `timestamp` sur MySQL et `timestamp_with_timezone_text` sur SQLite, ce que
   ne diffèrent que par la casse, et c'est le cas à trancher à la main — puis `normalise`
   de `service/mod.rs` et ses quatre appels (`register`, `login`,
   `password::request_reset`, `verification::request`).
+- Aucun ordre : recopier en entier les répertoires `repository/` et `service/` du fragment
+  (et les deux tests neufs de `tests/password.rs` et `tests/session.rs`) pour que les cinq
+  parcours écrivent tout ou rien. Un appelant qui passait la connexion à un dépôt compile
+  tel quel.
 - `scheduler` : recopier `sync.rs` depuis le fragment (et les deux tests neufs de
   `tests.rs`) pour qu'une expression cron modifiée prenne effet au démarrage suivant.
   Rien d'autre ne change ; la table garde sa forme.

@@ -1057,7 +1057,7 @@ mod tests {
         // laisserait l'un des deux vivant.
         assert!(
             service.contains("Rotation::Replayed => {")
-                && service.contains("close_every_session(db, session.user_id)"),
+                && service.contains("close_every_session(&transaction, session.user_id)"),
             "le service laisse les sessions sœurs ouvertes après un rejeu :\n{service}"
         );
         assert!(
