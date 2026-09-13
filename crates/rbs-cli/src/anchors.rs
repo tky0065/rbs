@@ -262,10 +262,10 @@ pub(crate) const HEALTH_PROBES: Anchor = Anchor {
 
 /// Inscription d'un job au registre que le worker de la file consulte.
 ///
-/// Seule ancre à vivre dans un fichier qu'un fragment dépose plutôt que le squelette, avec
-/// celle du compose : `src/modules/jobs/mod.rs` n'existe que sur un projet qui a installé
-/// la file. C'est ce qui la rend optionnelle — un projet sans file n'a pas à passer pour
-/// incomplet.
+/// Vit, comme [`JOB_MODULES`] et celle du compose, dans un fichier qu'un fragment dépose
+/// plutôt que le squelette : `src/modules/jobs/mod.rs` n'existe que sur un projet qui a
+/// installé la file. C'est ce qui la rend optionnelle — un projet sans file n'a pas à
+/// passer pour incomplet.
 ///
 /// Sans elle, `registry()` ne s'écrit qu'à la main : un fragment ne peut viser qu'une ancre
 /// de ce registre, et le worker n'exécute que ce que `registry()` lui a déclaré.
@@ -280,6 +280,37 @@ pub(crate) const JOBS: Anchor = Anchor {
     // fermante finit à une autre indentation que l'ouvrante — dès qu'un fragment y ajoute
     // un second appel. La forme en instructions reste, elle, stable dans les deux états.
     after: "registre = registre.register::<demo::Log>();",
+};
+
+/// Déclaration du module d'un job engendré, dans le fichier que le fragment `jobs` dépose.
+///
+/// Partage son fichier avec [`JOBS`], sans partager son accroche : `pub mod worker;` est le
+/// dernier `pub mod` que le squelette écrit, et rustfmt ne réordonne pas des `pub mod` à
+/// travers une ligne de commentaire — l'accroche reste donc valable une fois le premier job
+/// engendré posé sous elle, ce que la ligne d'un job donné ne pourrait pas garantir.
+pub(crate) const JOB_MODULES: Anchor = Anchor {
+    name: Cow::Borrowed("job_modules"),
+    file: Cow::Borrowed("src/modules/jobs/mod.rs"),
+    comment: "//",
+    // rustfmt trie les `pub mod` de ce bloc, comme il trie ceux de `MODULES` : un second
+    // job engendré dans le désordre ferait sinon échouer le `cargo fmt --check` du projet.
+    sorted: true,
+    optional: true,
+    after: "pub mod worker;",
+};
+
+/// Échéance d'un job engendré, ajoutée au calendrier que le ticker consulte.
+///
+/// Sans elle, `schedules()` ne s'écrit qu'à la main. L'accroche est la ligne qui initialise
+/// le vecteur, et non l'échéance de démonstration qui la suit : elle seule survit au
+/// retrait de cette démonstration, que le développeur fait tôt.
+pub(crate) const SCHEDULES: Anchor = Anchor {
+    name: Cow::Borrowed("schedules"),
+    file: Cow::Borrowed("src/modules/scheduler/mod.rs"),
+    comment: "//",
+    sorted: false,
+    optional: true,
+    after: "let mut calendrier = Vec::new();",
 };
 
 /// Variantes de l'énumération `Relation` du modèle d'une entité.
@@ -312,7 +343,7 @@ pub(crate) const RELATED: Anchor = Anchor {
 ///
 /// La génération vise chaque ancre nommément ; `rbs doctor` parcourt cette liste pour
 /// vérifier qu'un projet les porte toutes.
-pub(crate) const ANCRES: [Anchor; 14] = [
+pub(crate) const ANCRES: [Anchor; 16] = [
     FEATURES,
     MODULES,
     ROUTES,
@@ -327,6 +358,8 @@ pub(crate) const ANCRES: [Anchor; 14] = [
     SERVICES,
     HEALTH_PROBES,
     JOBS,
+    JOB_MODULES,
+    SCHEDULES,
 ];
 
 /// Résout l'ancre `<rbs:features>` par repli, entre `src/lib.rs` et `src/main.rs`.
@@ -354,7 +387,7 @@ pub(crate) fn resolve(anchor: Anchor, with_library: bool) -> Anchor {
 
 /// Les ancres du registre, celle des features résolue pour `root`.
 ///
-/// Le disque n'est interrogé qu'une fois pour les treize, et non une fois par ancre.
+/// Le disque n'est interrogé qu'une fois pour toutes, et non une fois par ancre.
 pub(crate) fn resolved(root: &Path) -> Vec<Anchor> {
     let with_library = has_library(root);
 
@@ -1331,10 +1364,10 @@ struct AppState {
     }
 
     /// Une ancre optionnelle est l'exception : les onze autres décrivent un fichier que le
-    /// squelette écrit toujours, et leur absence est un défaut. Les trois qui le sont
+    /// squelette écrit toujours, et leur absence est un défaut. Les cinq qui le sont
     /// vivent dans un fichier qu'un fragment dépose — le point de montage des `modules`,
-    /// le compose de `docker`, le registre de `jobs` — et manquent légitimement à qui n'a
-    /// pas installé ce fragment.
+    /// le compose de `docker`, le registre de `jobs`, la liste de ses modules, le calendrier
+    /// du `scheduler` — et manquent légitimement à qui n'a pas installé ce fragment.
     #[test]
     fn only_the_anchors_of_a_fragment_deposited_file_are_optional() {
         let optionnelles: Vec<&str> = ANCRES
@@ -1343,7 +1376,10 @@ struct AppState {
             .map(|anchor| anchor.name.as_ref())
             .collect();
 
-        assert_eq!(optionnelles, ["modules", "services", "jobs"]);
+        assert_eq!(
+            optionnelles,
+            ["modules", "services", "jobs", "job_modules", "schedules"]
+        );
     }
 
     /// Sans elle, un fragment ne peut pas inscrire de job : le worker n'exécute que ce que
@@ -1378,24 +1414,54 @@ struct AppState {
 
     /// L'accroche d'une ancre est vérifiée contre la template qui la porte, et celle-ci
     /// vit sous `features/` : le balayage du squelette ne la rencontre jamais.
+    ///
+    /// La ligne qui suit l'accroche doit être la balise ouvrante elle-même, et non
+    /// seulement la précéder quelque part dans le fichier : c'est ce qui rend `doctor
+    /// --fix` exact à l'octet quand il repose une ancre effacée.
     #[test]
-    fn the_jobs_anchor_and_its_hook_are_in_the_queue_fragment() {
-        let source = std::fs::read_to_string(
-            Path::new(env!("CARGO_MANIFEST_DIR")).join("templates/features/jobs/mod.rs.jinja"),
-        )
-        .expect("la template du fragment jobs doit se lire");
+    fn each_optional_anchor_of_the_registry_hooks_directly_under_its_line() {
+        for (anchor, template) in [
+            (JOBS, "jobs/mod.rs.jinja"),
+            (JOB_MODULES, "jobs/mod.rs.jinja"),
+            (SCHEDULES, "scheduler/mod.rs.jinja"),
+        ] {
+            let source = std::fs::read_to_string(
+                Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join(format!("templates/features/{template}")),
+            )
+            .unwrap_or_else(|_| panic!("la template {template} doit se lire"));
 
-        assert!(source.contains(&JOBS.opening()), "{source}");
-        assert!(source.contains(&JOBS.closing()), "{source}");
-        assert_eq!(
-            source.matches(JOBS.after).count(),
-            1,
-            "l'accroche doit paraître une fois exactement"
-        );
-        assert!(
-            source.find(JOBS.after) < source.find(&JOBS.opening()),
-            "l'ancre doit suivre son accroche"
-        );
+            assert_eq!(
+                source.matches(&anchor.opening()).count(),
+                1,
+                "{} : {source}",
+                anchor.name
+            );
+            assert_eq!(
+                source.matches(&anchor.closing()).count(),
+                1,
+                "{} : {source}",
+                anchor.name
+            );
+            assert_eq!(
+                source.matches(anchor.after).count(),
+                1,
+                "{} : l'accroche doit paraître une fois exactement",
+                anchor.name
+            );
+
+            let ligne_suivante = source
+                .lines()
+                .skip_while(|ligne| !ligne.contains(anchor.after))
+                .nth(1)
+                .unwrap_or_else(|| panic!("{} : aucune ligne après l'accroche", anchor.name));
+            assert_eq!(
+                ligne_suivante.trim(),
+                anchor.opening(),
+                "{} : la ligne qui suit l'accroche doit être la balise ouvrante",
+                anchor.name
+            );
+        }
     }
 
     /// La sonde d'une dépendance vit dans le projet, et le fragment qui l'installe a
