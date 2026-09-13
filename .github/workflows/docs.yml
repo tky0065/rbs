@@ -44,6 +44,12 @@ jobs:
 
       - run: npm ci
 
+      # Les advisories des dépendances de production, à partir de `high`. Les tolérances,
+      # et ce qui lèverait chacune, vivent dans `audit-ci.jsonc` ; l'outil est épinglé,
+      # parce qu'un garde dont le verdict change avec sa propre version n'en est pas un.
+      - name: npm audit
+        run: npx --yes audit-ci@7.1.0 --config audit-ci.jsonc
+
       - name: typecheck
         run: npm run typecheck
 
