@@ -36,6 +36,15 @@ between minor versions with no deprecation cycle.
 
 ### Fixed
 
+- **`rbs generate crud --with-upload` writes the tests of its three content routes.** The
+  flag used to mount `PUT`, `GET` and `HEAD` on `/<name>/{id}/content` and leave
+  `tests.rs` without a single `/content`: a regression in one of the three handlers went
+  unseen by the project's own `cargo test -- --include-ignored`. The generated file now
+  carries the round trip — a binary body deposited, read back byte for byte as
+  `application/octet-stream`, `HEAD` before and after, replaced by a second `PUT` —, the
+  404 of an unknown id on all three verbs, the 413 one byte past `TAILLE_MAX`, and under
+  `auth` the 401 of a request without a token.
+
 - **The `fs` backend of `storage` no longer writes an object in place.** `put` used to
   `fs::write` the final path, which truncates it before filling it: a concurrent `GET` was
   served an empty or truncated body, and a crash mid-write left the truncated file under

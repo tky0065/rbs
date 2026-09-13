@@ -146,6 +146,14 @@ aucun bucket n'est nommé nulle part — et ne dit rien de tout cela tant que le
 | `GET` | 200, `application/octet-stream` | 404 | 404 |
 | `HEAD` | 204 | 404 | 404 |
 
+Le drapeau écrit aussi leurs tests dans le `tests.rs` de la ressource, `#[ignore]` comme
+les autres et joués par `cargo test -- --include-ignored` : le cycle — `PUT` d'un corps
+binaire, `GET` rendu octet pour octet en `application/octet-stream`, `HEAD` avant et
+après, un second `PUT` qui remplace —, le 404 d'un identifiant inconnu sur les trois
+verbes, le 413 un octet au-delà de `TAILLE_MAX`, et sous `auth` le 401 d'une requête sans
+jeton. Une modification de l'un des trois handlers se voit dans votre projet, et non
+seulement dans la suite de rbs.
+
 Sur un projet portant [`auth`](./auth.md), les trois sont fermées comme le reste du CRUD :
 elles prennent une `Identity`, appellent `require_role(Role::User)` et portent le cadenas
 dans le document OpenAPI. Ajoutez [`--role`](../cli/generate.md) et le `PUT` rejoint les

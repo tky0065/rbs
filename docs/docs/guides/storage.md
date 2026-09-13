@@ -142,6 +142,13 @@ the backend is `fs`, which needs none of it.
 | `GET` | 200, `application/octet-stream` | 404 | 404 |
 | `HEAD` | 204 | 404 | 404 |
 
+The flag writes their tests into the resource's `tests.rs` as well, `#[ignore]`d like the
+others and played by `cargo test -- --include-ignored`: the round trip — `PUT` a binary
+body, `GET` it back byte for byte as `application/octet-stream`, `HEAD` before and after,
+a second `PUT` that replaces —, the 404 of an unknown id on all three verbs, the 413 one
+byte past `TAILLE_MAX`, and under `auth` the 401 of a request without a token. A change to
+one of the three handlers is caught in your project, not only in rbs's own suite.
+
 On a project carrying [`auth`](./auth.md), all three are closed like the rest of the CRUD:
 they take an `Identity`, call `require_role(Role::User)`, and carry the padlock in the
 OpenAPI document. Add [`--role`](../cli/generate.md) and the `PUT` joins the writes whose

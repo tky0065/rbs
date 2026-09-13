@@ -300,3 +300,129 @@ async fn an_unreadable_body_returns_400() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert_eq!(body["status"], 400, "{body}");
 }
+
+/// La requête d'un dépôt : un corps binaire, `application/octet-stream`.
+fn binary(method: &str, path: &str, body: Vec<u8>) -> Request<Body> {
+    Request::builder()
+        .method(method)
+        .uri(path)
+        .header("content-type", "application/octet-stream")
+        .body(Body::from(body))
+        .expect("requête bien formée")
+}
+
+/// Fait traverser le routeur à `request`, et rend son statut, son `Content-Type` et son
+/// corps tel quel.
+///
+/// `call` lit le corps comme du JSON : le contenu déposé est binaire, et c'est l'octet
+/// rendu qui se compare.
+async fn call_raw(api: &Router, request: Request<Body>) -> (StatusCode, String, Vec<u8>) {
+    let response = api
+        .clone()
+        .oneshot(request)
+        .await
+        .expect("l'application doit répondre");
+    let status = response.status();
+    let content_type = response
+        .headers()
+        .get("content-type")
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or_default()
+        .to_owned();
+    let bytes = to_bytes(response.into_body(), usize::MAX)
+        .await
+        .expect("corps de réponse lisible");
+
+    (status, content_type, bytes.to_vec())
+}
+
+/// L'octet déposé par `PUT` est celui que `GET` rend, et `HEAD` reflète la présence d'un
+/// contenu — avant le dépôt, après, et après son remplacement.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn the_content_round_trips_through_put_get_and_head() {
+    let api = application().await;
+    let collection = "/uploads";
+
+    let (status, created) = call(&api, request("POST", collection, creation())).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {created}");
+    let id = created["id"].as_str().expect("identifiant rendu");
+    let resource = format!("{collection}/{id}");
+    let content = format!("{resource}/content");
+
+    let (status, _, _) = call_raw(&api, without_body("HEAD", &content)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "pas encore de contenu");
+    let (status, _, _) = call_raw(&api, without_body("GET", &content)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "pas encore de contenu");
+
+    // Des octets qui ne forment pas de l'UTF-8 : un corps lu comme du texte les perdrait.
+    let deposited = b"contenu binaire \xff\xfe\x00".to_vec();
+    let (status, _, _) = call_raw(&api, binary("PUT", &content, deposited.clone())).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "dépôt refusé");
+
+    let (status, content_type, read) = call_raw(&api, without_body("GET", &content)).await;
+    assert_eq!(status, StatusCode::OK, "le contenu déposé doit se relire");
+    assert_eq!(content_type, "application/octet-stream");
+    assert_eq!(read, deposited, "l'octet rendu diffère de l'octet déposé");
+
+    let (status, _, _) = call_raw(&api, without_body("HEAD", &content)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "HEAD doit voir le dépôt");
+
+    let replaced = b"second contenu".to_vec();
+    let (status, _, _) = call_raw(&api, binary("PUT", &content, replaced.clone())).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "remplacement refusé");
+    let (status, _, read) = call_raw(&api, without_body("GET", &content)).await;
+    assert_eq!(status, StatusCode::OK, "le contenu remplacé doit se relire");
+    assert_eq!(read, replaced, "le second dépôt doit remplacer le premier");
+
+    let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
+}
+
+/// Un octet de trop franchit `TAILLE_MAX`, et le dépôt est refusé.
+///
+/// La borne est celle que `mod.rs` engendre : la relever garde ce test juste.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_content_beyond_the_limit_returns_413() {
+    let api = application().await;
+    let collection = "/uploads";
+
+    let (status, created) = call(&api, request("POST", collection, creation())).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {created}");
+    let id = created["id"].as_str().expect("identifiant rendu");
+    let resource = format!("{collection}/{id}");
+    let content = format!("{resource}/content");
+
+    let trop_grand = vec![b'x'; super::TAILLE_MAX + 1];
+    let (status, _, _) = call_raw(&api, binary("PUT", &content, trop_grand)).await;
+    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE, "un octet de trop");
+
+    let (status, _, _) = call_raw(&api, without_body("HEAD", &content)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "rien ne doit être déposé");
+
+    let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
+}
+
+/// Un identifiant jamais créé n'a pas de contenu, et n'en reçoit pas non plus.
+///
+/// Le `PUT` surtout : sans la lecture préalable de la ligne, il déposerait un objet
+/// qu'aucune ressource ne réclame.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_unknown_id_has_no_content() {
+    let api = application().await;
+    let inconnu = Uuid::new_v4();
+    let content = format!("/uploads/{inconnu}/content");
+
+    let (status, _, _) = call_raw(&api, binary("PUT", &content, b"orphelin".to_vec())).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "PUT sur un id inconnu");
+
+    let (status, body) = call(&api, without_body("GET", &content)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "GET sur un id inconnu");
+    assert_eq!(body["status"], 404, "{body}");
+
+    let (status, _, _) = call_raw(&api, without_body("HEAD", &content)).await;
+    assert_eq!(status, StatusCode::NOT_FOUND, "HEAD sur un id inconnu");
+}

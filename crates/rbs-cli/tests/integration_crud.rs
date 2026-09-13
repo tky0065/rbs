@@ -756,6 +756,51 @@ fn the_deposited_content_round_trips_through_the_running_server() {
         .assert()
         .success();
 
+    // Les scénarios de contenu vivent dans le projet, et s'exigent nommément : un gabarit
+    // qui cesserait de les livrer laisserait ce banc au vert, `cargo test` sortant en 0
+    // sur une suite amputée. Avant le serveur : les deux partagent le fichier SQLite.
+    //
+    // Les deux tests S3 du fragment joignent le service de la section `[storage]`, que ce
+    // banc ne démarre pas ; `integration_storage` les joue contre MinIO. Ses tests du
+    // backend fichiers, eux, restent joués ici.
+    let sortie = Command::new("cargo")
+        .current_dir(&projet)
+        .env("CARGO_TARGET_DIR", &cible)
+        .args([
+            "test",
+            "--workspace",
+            "--",
+            "--include-ignored",
+            "--skip",
+            "the_s3_backend_passes_the_same_round_as_the_file_backend",
+            "--skip",
+            "an_object_put_by_the_trait_reads_back_through_the_s3_client",
+        ])
+        .output()
+        .expect("cargo doit être lançable");
+
+    let joues = format!(
+        "{}{}",
+        String::from_utf8_lossy(&sortie.stdout),
+        String::from_utf8_lossy(&sortie.stderr)
+    );
+
+    assert!(
+        sortie.status.success(),
+        "la suite du projet engendré échoue :\n{joues}"
+    );
+
+    for scenario in [
+        "attachments::tests::the_content_round_trips_through_put_get_and_head ... ok",
+        "attachments::tests::an_unknown_id_has_no_content ... ok",
+        "attachments::tests::a_content_beyond_the_limit_returns_413 ... ok",
+    ] {
+        assert!(
+            joues.contains(scenario),
+            "`{scenario}` n'a pas été joué :\n{joues}"
+        );
+    }
+
     let serveur = Serveur::lancer(&projet, &cible, "demo-api");
     let port = serveur.port;
 

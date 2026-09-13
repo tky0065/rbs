@@ -44,6 +44,7 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
             creatable,
             role => feature.role,
             auth => feature.auth,
+            with_upload => feature.with_upload,
             // Le rôle que le harnais signe, tel qu'il s'écrit en base.
             signed_role => feature.role_value.clone().unwrap_or_else(|| "user".to_string()),
             blocking_reference => blocking.map(|field| field.relation_name()),
@@ -248,6 +249,92 @@ mod tests {
                 && !rendered.contains("an_anonymous_request_returns_401"),
             "sans `auth`, le rendu ne porte rien du garde :\n{rendered}"
         );
+    }
+
+    /// Sous `--with-upload`, les trois routes de contenu ont leurs scénarios.
+    #[test]
+    fn with_upload_the_content_routes_earn_their_scenarios() {
+        let rendered = render(&bench::uploads()).expect("les tests doivent se rendre");
+
+        for scenario in [
+            "async fn the_content_round_trips_through_put_get_and_head()",
+            "async fn an_unknown_id_has_no_content()",
+            "async fn a_content_beyond_the_limit_returns_413()",
+        ] {
+            assert!(
+                rendered.contains(scenario),
+                "« {scenario} » manque :\n{rendered}"
+            );
+        }
+        assert!(
+            rendered.contains("vec![b'x'; super::TAILLE_MAX + 1]"),
+            "la borne éprouvée doit être celle que `mod.rs` engendre :\n{rendered}"
+        );
+        assert!(
+            !rendered.contains("an_anonymous_content_request_returns_401"),
+            "sans `auth`, aucun refus anonyme :\n{rendered}"
+        );
+    }
+
+    /// Témoin : sans le drapeau, rien des routes de contenu.
+    #[test]
+    fn without_upload_no_content_scenario_is_rendered() {
+        let rendered = trials("articles", CHAMPS);
+
+        assert!(
+            !rendered.contains("/content") && !rendered.contains("fn call_raw("),
+            "sans `--with-upload`, le rendu ne porte rien des routes de contenu :\n{rendered}"
+        );
+    }
+
+    /// Sous `auth`, les routes de contenu sont fermées comme les autres, et le dépôt
+    /// porte le jeton.
+    #[test]
+    fn under_auth_the_content_routes_refuse_an_anonymous_request() {
+        let rendered =
+            render(&bench::uploads().authenticated()).expect("les tests doivent se rendre");
+
+        assert!(
+            rendered.contains("async fn an_anonymous_content_request_returns_401()"),
+            "le refus anonyme du contenu doit être éprouvé :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(
+                ".header(\"content-type\", \"application/octet-stream\")\n        .header(\"authorization\", bearer())"
+            ),
+            "le dépôt doit porter le jeton :\n{rendered}"
+        );
+    }
+
+    /// Aucun exemple ne rend cette combinaison : rustfmt est son seul oracle de forme.
+    #[test]
+    fn the_content_scenarios_under_auth_are_already_what_rustfmt_would_write() {
+        let rendered =
+            render(&bench::uploads().authenticated()).expect("les tests doivent se rendre");
+
+        assert_eq!(bench::formatted(&rendered), rendered);
+    }
+
+    /// Une référence requise écarte les scénarios qui créent ; le reste du bloc demeure.
+    #[test]
+    fn a_required_reference_keeps_the_content_scenarios_that_create_nothing() {
+        let fields = fields::parse("title:string,author:references:users").expect("champs valides");
+        let rendered = render(&Feature::fresh("posts", fields).uploading())
+            .expect("les tests doivent se rendre");
+
+        assert!(
+            rendered.contains("async fn an_unknown_id_has_no_content()"),
+            "le 404 d'un identifiant inconnu ne crée rien :\n{rendered}"
+        );
+        for absent in [
+            "async fn the_content_round_trips_through_put_get_and_head()",
+            "async fn a_content_beyond_the_limit_returns_413()",
+        ] {
+            assert!(
+                !rendered.contains(absent),
+                "« {absent} » suppose une création :\n{rendered}"
+            );
+        }
     }
 
     /// Le rendu entier des tests sous `auth`, figé octet à octet.

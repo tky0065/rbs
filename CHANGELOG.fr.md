@@ -38,6 +38,15 @@ dépréciation.
 
 ### Corrigé
 
+- **`rbs generate crud --with-upload` écrit les tests de ses trois routes de contenu.** Le
+  drapeau montait `PUT`, `GET` et `HEAD` sur `/<nom>/{id}/content` et laissait `tests.rs`
+  sans un seul `/content` : une régression dans l'un des trois handlers échappait au
+  `cargo test -- --include-ignored` du projet. Le fichier engendré porte désormais le
+  cycle — un corps binaire déposé, relu octet pour octet en `application/octet-stream`,
+  `HEAD` avant et après, remplacé par un second `PUT` —, le 404 d'un identifiant inconnu
+  sur les trois verbes, le 413 un octet au-delà de `TAILLE_MAX`, et sous `auth` le 401
+  d'une requête sans jeton.
+
 - **Le backend `fs` de `storage` n'écrit plus un objet en place.** `put` faisait un
   `fs::write` sur le chemin final, qui le tronque avant de le remplir : un `GET` concurrent
   recevait un corps vide ou tronqué, et un crash en pleine écriture laissait le fichier
