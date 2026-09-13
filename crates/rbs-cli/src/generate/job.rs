@@ -87,17 +87,25 @@ pub(crate) enum Error {
         nom: String,
     },
 
+    /// Le nom est celui du dossier qui contiendrait le job.
+    #[error(
+        "« jobs » nommerait le module comme le dossier qui le contient : `pub mod jobs;` \
+         dans src/modules/jobs/mod.rs déclenche `clippy::module_inception` — choisissez un \
+         autre nom"
+    )]
+    NomDuDossier,
+
     /// Le projet n'a pas la file où le job s'inscrit.
     #[error(
-        "`rbs generate job` inscrit le job dans la file de la feature `jobs`, absente de ce \
-         projet — installez-la, puis relancez la commande"
+        "`rbs generate job` exige la feature `jobs`, absente de ce projet : lancez \
+         `rbs add jobs`, puis relancez la commande"
     )]
     SansJobs,
 
     /// `--every` sur un projet sans le calendrier où l'échéance s'inscrit.
     #[error(
-        "`--every` inscrit l'échéance au calendrier de la feature `scheduler`, absente de ce \
-         projet — installez-la, puis relancez la commande"
+        "`--every` exige la feature `scheduler`, absente de ce projet : lancez \
+         `rbs add scheduler`, puis relancez la commande"
     )]
     SansScheduler,
 
@@ -178,14 +186,12 @@ crate::errors::depuis_la_racine!(Error);
 impl Error {
     /// La commande qui répare, quand la panne se répare par une commande.
     ///
-    /// Une ancre absente n'en a pas besoin ici : les trois que vise un job sont
-    /// optionnelles, et le plan porte alors le bloc à reporter.
+    /// Aucune ne l'est ici : `SansJobs` et `SansScheduler` la nomment dans leur message,
+    /// comme `RoleSansAuth` le fait dans `command.rs` — et une ancre absente n'en a pas
+    /// besoin, les trois que vise un job sont optionnelles, le plan en porte le bloc à
+    /// reporter.
     pub(crate) fn remedy(&self) -> Option<String> {
-        match self {
-            Error::SansJobs => Some("rbs add jobs".to_string()),
-            Error::SansScheduler => Some("rbs add scheduler".to_string()),
-            _ => None,
-        }
+        None
     }
 }
 
@@ -204,6 +210,10 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         return Err(Error::ModuleDeLaFile {
             nom: nom.to_string(),
         });
+    }
+
+    if nom == "jobs" {
+        return Err(Error::NomDuDossier);
     }
 
     let installee = |feature: &str| metadonnees.features.iter().any(|f| f == feature);
@@ -565,6 +575,20 @@ mod tests {
         }
     }
 
+    /// `pub mod jobs;` dans `src/modules/jobs/mod.rs` nommerait le module comme son propre
+    /// dossier : mesuré sur une crate jetable, `clippy::module_inception` le refuse, et un
+    /// projet engendré tomberait sous son propre `clippy -D warnings`.
+    #[test]
+    fn a_job_named_after_its_containing_directory_is_refused() {
+        let (_parent, root) = project();
+
+        let error = plan_for(&options(&root, "jobs", None)).expect_err("`jobs` doit être refusé");
+
+        assert!(matches!(error, Error::NomDuDossier), "{error}");
+        assert!(error.to_string().contains("module_inception"), "{error}");
+        assert!(!root.join("src/modules/jobs/jobs.rs").exists());
+    }
+
     #[test]
     fn a_project_without_jobs_is_refused_and_names_the_command_that_installs_it() {
         let (_parent, root) = crate::fixtures::project();
@@ -572,8 +596,10 @@ mod tests {
         let error = run(&options(&root, "purge", None)).expect_err("la file manque");
 
         assert!(matches!(error, Error::SansJobs), "{error}");
-        assert!(error.to_string().contains("`jobs`"), "{error}");
-        assert_eq!(error.remedy().as_deref(), Some("rbs add jobs"));
+        assert!(
+            error.to_string().contains("rbs add jobs"),
+            "le message doit nommer la commande qui installe la feature : {error}"
+        );
         assert!(!root.join("src/modules/jobs/purge.rs").exists());
     }
 
@@ -585,8 +611,10 @@ mod tests {
             run(&options(&root, "purge", Some("0 4 * * *"))).expect_err("le calendrier manque");
 
         assert!(matches!(error, Error::SansScheduler), "{error}");
-        assert!(error.to_string().contains("`scheduler`"), "{error}");
-        assert_eq!(error.remedy().as_deref(), Some("rbs add scheduler"));
+        assert!(
+            error.to_string().contains("rbs add scheduler"),
+            "le message doit nommer la commande qui installe la feature : {error}"
+        );
         assert!(!root.join("src/modules/jobs/purge.rs").exists());
 
         run(&options(&root, "purge", None)).expect("sans --every, la file suffit");
