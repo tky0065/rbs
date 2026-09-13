@@ -1,0 +1,50 @@
+# Veille des versions. `cargo audit` (ci.yml) et le garde npm (docs.yml) disent quand une
+# version installée est vulnérable ; rien ne disait qu'une version plus récente existait,
+# si bien qu'`argon2` et `jsonwebtoken` ont pris une majeure de retard sans bruit.
+#
+# Hors de sa portée, et c'est voulu : `examples/`, dont chaque projet déclare son propre
+# workspace et que `integration_examples` tient octet à octet — une version n'y entre que
+# par une régénération —, et les versions que les `feature.toml` inscrivent dans les
+# projets engendrés, que Dependabot ne sait pas lire.
+#
+# Les mineures et correctifs arrivent groupés, une majeure seule : c'est elle qui demande
+# une note de version et, pour `rbs-core`, un examen semver.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      cargo:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /docs
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: build
+      include: scope
+    groups:
+      # Les paquets de Docusaurus se publient ensemble et ne se mélangent pas entre
+      # versions : les monter un par un casserait le build à chaque demande.
+      docusaurus:
+        patterns: ['@docusaurus/*']
+      npm:
+        patterns: ['*']
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ['*']
