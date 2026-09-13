@@ -4,6 +4,7 @@
 //! [`Result<T>`]. La conversion en réponse HTTP est portée par l'implémentation
 //! `IntoResponse` de [`Error`].
 
+use crate::lang::{self, Lang};
 use crate::openapi::ProblemDetails;
 use crate::request_id;
 use axum::Json;
@@ -94,34 +95,72 @@ fn fields(errors: &ValidationErrors) -> BTreeMap<String, Vec<String>> {
         .collect()
 }
 
-impl IntoResponse for Error {
-    fn into_response(self) -> Response {
-        let request_id = request_id::current();
+/// Statut, `title`, `detail` et détail par champ d'une réponse d'erreur.
+type Parts = (
+    StatusCode,
+    &'static str,
+    Option<String>,
+    Option<BTreeMap<String, Vec<String>>>,
+);
 
-        let (status, title, detail, errors) = match &self {
+impl Error {
+    /// La réponse d'erreur dans `lang`, sans effet de bord : ni journal, ni global lu.
+    fn parts(&self, lang: Lang) -> Parts {
+        match self {
             Error::NotFound(ressource) => (
                 StatusCode::NOT_FOUND,
-                "Not Found",
-                Some(format!("{ressource} introuvable")),
+                match lang {
+                    Lang::En => "Not Found",
+                    Lang::Fr => "Introuvable",
+                },
+                Some(match lang {
+                    Lang::En => format!("{ressource} not found"),
+                    Lang::Fr => format!("{ressource} introuvable"),
+                }),
                 None,
             ),
             Error::BadRequest(message) => (
                 StatusCode::BAD_REQUEST,
-                "Bad Request",
+                match lang {
+                    Lang::En => "Bad Request",
+                    Lang::Fr => "Requête invalide",
+                },
                 Some(message.clone()),
                 None,
             ),
             Error::Validation(source) => (
                 StatusCode::UNPROCESSABLE_ENTITY,
-                "Validation failed",
+                match lang {
+                    Lang::En => "Validation failed",
+                    Lang::Fr => "Validation échouée",
+                },
                 None,
                 Some(fields(source)),
             ),
-            Error::Unauthorized => (StatusCode::UNAUTHORIZED, "Unauthorized", None, None),
-            Error::Forbidden => (StatusCode::FORBIDDEN, "Forbidden", None, None),
+            Error::Unauthorized => (
+                StatusCode::UNAUTHORIZED,
+                match lang {
+                    Lang::En => "Unauthorized",
+                    Lang::Fr => "Authentification requise",
+                },
+                None,
+                None,
+            ),
+            Error::Forbidden => (
+                StatusCode::FORBIDDEN,
+                match lang {
+                    Lang::En => "Forbidden",
+                    Lang::Fr => "Accès interdit",
+                },
+                None,
+                None,
+            ),
             Error::Conflict(message) => (
                 StatusCode::CONFLICT,
-                "Conflict",
+                match lang {
+                    Lang::En => "Conflict",
+                    Lang::Fr => "Conflit",
+                },
                 Some(message.clone()),
                 None,
             ),
@@ -130,22 +169,40 @@ impl IntoResponse for Error {
                 code,
                 message,
             } => (*status, *code, Some(message.clone()), None),
-            Error::Database(_) | Error::Internal(_) => {
-                // La source part au journal et nulle part ailleurs : le client n'obtient
-                // que le request_id, qui suffit à retrouver cette ligne.
-                tracing::error!(
-                    request_id = request_id.as_deref().unwrap_or("-"),
-                    error = %self,
-                    "erreur interne"
-                );
-                (
-                    StatusCode::INTERNAL_SERVER_ERROR,
-                    "Internal Server Error",
-                    Some("une erreur interne est survenue".to_string()),
-                    None,
-                )
-            }
-        };
+            Error::Database(_) | Error::Internal(_) => (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                match lang {
+                    Lang::En => "Internal Server Error",
+                    Lang::Fr => "Erreur interne",
+                },
+                Some(
+                    match lang {
+                        Lang::En => "an internal error occurred",
+                        Lang::Fr => "une erreur interne est survenue",
+                    }
+                    .to_string(),
+                ),
+                None,
+            ),
+        }
+    }
+}
+
+impl IntoResponse for Error {
+    fn into_response(self) -> Response {
+        let request_id = request_id::current();
+
+        if matches!(self, Error::Database(_) | Error::Internal(_)) {
+            // La source part au journal et nulle part ailleurs : le client n'obtient que le
+            // request_id, qui suffit à retrouver cette ligne.
+            tracing::error!(
+                request_id = request_id.as_deref().unwrap_or("-"),
+                error = %self,
+                "erreur interne"
+            );
+        }
+
+        let (status, title, detail, errors) = self.parts(lang::current());
 
         let body = ProblemDetails {
             r#type: "about:blank",
@@ -254,7 +311,6 @@ mod tests {
 
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
         assert_eq!(content_type, "application/problem+json");
-        assert_eq!(body["title"], "Validation failed");
         assert_eq!(body["status"], 422);
         assert_eq!(body["errors"]["email"][0], "format invalide");
     }
@@ -266,7 +322,6 @@ mod tests {
         let (status, _, body) = response(err).await;
 
         assert_eq!(status, StatusCode::INTERNAL_SERVER_ERROR);
-        assert_eq!(body["title"], "Internal Server Error");
         let brut = body.to_string();
         assert!(
             !brut.contains("connexion refusée"),
@@ -290,11 +345,11 @@ mod tests {
 
     #[tokio::test]
     async fn not_found_names_the_resource() {
-        let (status, _, body) = response(Error::NotFound("utilisateur")).await;
+        // `title` et `detail` dépendent de la langue, prouvée par `Error::parts` : seul le
+        // statut se vérifie ici, le global étant partagé entre tests parallèles.
+        let (status, _, _) = response(Error::NotFound("utilisateur")).await;
 
         assert_eq!(status, StatusCode::NOT_FOUND);
-        assert_eq!(body["title"], "Not Found");
-        assert_eq!(body["detail"], "utilisateur introuvable");
     }
 
     #[tokio::test]
@@ -320,7 +375,6 @@ mod tests {
             response(Error::BadRequest("EOF while parsing an object".into())).await;
 
         assert_eq!(status, StatusCode::BAD_REQUEST);
-        assert_eq!(body["title"], "Bad Request");
         assert_eq!(body["detail"], "EOF while parsing an object");
     }
 
@@ -356,6 +410,174 @@ mod tests {
 
         assert_eq!(body.get("request_id"), None);
         assert_eq!(body["type"], "about:blank");
+    }
+
+    #[test]
+    fn in_english_the_parts_follow_the_table() {
+        let (status, title, detail, _) = Error::NotFound("user").parts(Lang::En);
+        assert_eq!(
+            (status, title, detail.as_deref()),
+            (StatusCode::NOT_FOUND, "Not Found", Some("user not found"))
+        );
+
+        let (status, title, detail, _) = Error::BadRequest("bad input".into()).parts(Lang::En);
+        assert_eq!(
+            (status, title, detail.as_deref()),
+            (StatusCode::BAD_REQUEST, "Bad Request", Some("bad input"))
+        );
+
+        let (status, title, detail, errors) = Error::from(validation_errors()).parts(Lang::En);
+        assert_eq!(
+            (status, title, detail),
+            (StatusCode::UNPROCESSABLE_ENTITY, "Validation failed", None)
+        );
+        assert!(errors.is_some());
+
+        let (status, title, detail, _) = Error::Unauthorized.parts(Lang::En);
+        assert_eq!(
+            (status, title, detail),
+            (StatusCode::UNAUTHORIZED, "Unauthorized", None)
+        );
+
+        let (status, title, detail, _) = Error::Forbidden.parts(Lang::En);
+        assert_eq!(
+            (status, title, detail),
+            (StatusCode::FORBIDDEN, "Forbidden", None)
+        );
+
+        let (status, title, detail, _) = Error::Conflict("already exists".into()).parts(Lang::En);
+        assert_eq!(
+            (status, title, detail.as_deref()),
+            (StatusCode::CONFLICT, "Conflict", Some("already exists"))
+        );
+
+        let domain = Error::Domain {
+            status: StatusCode::PAYMENT_REQUIRED,
+            code: "quota_depasse",
+            message: "quota exceeded".into(),
+        };
+        let (status, title, detail, _) = domain.parts(Lang::En);
+        assert_eq!(
+            (status, title, detail.as_deref()),
+            (
+                StatusCode::PAYMENT_REQUIRED,
+                "quota_depasse",
+                Some("quota exceeded")
+            )
+        );
+
+        let db_err: Error = DbErr::Custom("boom".into()).into();
+        let (status, title, detail, _) = db_err.parts(Lang::En);
+        assert_eq!(
+            (status, title, detail.as_deref()),
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal Server Error",
+                Some("an internal error occurred")
+            )
+        );
+
+        let internal: Error = anyhow::anyhow!("boom").into();
+        let (status, title, detail, _) = internal.parts(Lang::En);
+        assert_eq!(
+            (status, title, detail.as_deref()),
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal Server Error",
+                Some("an internal error occurred")
+            )
+        );
+    }
+
+    #[test]
+    fn in_french_the_parts_follow_the_table() {
+        let (status, title, detail, _) = Error::NotFound("utilisateur").parts(Lang::Fr);
+        assert_eq!(
+            (status, title, detail.as_deref()),
+            (
+                StatusCode::NOT_FOUND,
+                "Introuvable",
+                Some("utilisateur introuvable")
+            )
+        );
+
+        let (status, title, detail, _) =
+            Error::BadRequest("entrée invalide".into()).parts(Lang::Fr);
+        assert_eq!(
+            (status, title, detail.as_deref()),
+            (
+                StatusCode::BAD_REQUEST,
+                "Requête invalide",
+                Some("entrée invalide")
+            )
+        );
+
+        let (status, title, detail, errors) = Error::from(validation_errors()).parts(Lang::Fr);
+        assert_eq!(
+            (status, title, detail),
+            (StatusCode::UNPROCESSABLE_ENTITY, "Validation échouée", None)
+        );
+        assert!(errors.is_some());
+
+        let (status, title, detail, _) = Error::Unauthorized.parts(Lang::Fr);
+        assert_eq!(
+            (status, title, detail),
+            (StatusCode::UNAUTHORIZED, "Authentification requise", None)
+        );
+
+        let (status, title, detail, _) = Error::Forbidden.parts(Lang::Fr);
+        assert_eq!(
+            (status, title, detail),
+            (StatusCode::FORBIDDEN, "Accès interdit", None)
+        );
+
+        let (status, title, detail, _) =
+            Error::Conflict("cet email est déjà pris".into()).parts(Lang::Fr);
+        assert_eq!(
+            (status, title, detail.as_deref()),
+            (
+                StatusCode::CONFLICT,
+                "Conflit",
+                Some("cet email est déjà pris")
+            )
+        );
+
+        let domain = Error::Domain {
+            status: StatusCode::PAYMENT_REQUIRED,
+            code: "quota_depasse",
+            message: "le quota mensuel est atteint".into(),
+        };
+        let (status, title, detail, _) = domain.parts(Lang::Fr);
+        assert_eq!(
+            (status, title, detail.as_deref()),
+            (
+                StatusCode::PAYMENT_REQUIRED,
+                "quota_depasse",
+                Some("le quota mensuel est atteint")
+            )
+        );
+
+        let db_err: Error = DbErr::Custom("boom".into()).into();
+        let (status, title, detail, _) = db_err.parts(Lang::Fr);
+        assert_eq!(
+            (status, title, detail.as_deref()),
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Erreur interne",
+                Some("une erreur interne est survenue")
+            )
+        );
+
+        let internal: Error = anyhow::anyhow!("boom").into();
+        let (status, title, detail, _) = internal.parts(Lang::Fr);
+        assert_eq!(
+            (status, title, detail.as_deref()),
+            (
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "Erreur interne",
+                Some("une erreur interne est survenue")
+            )
+        );
     }
 
     #[test]

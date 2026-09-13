@@ -44,7 +44,7 @@ pub enum Commands {
         #[arg(long, value_name = "CHEMIN")]
         core_path: Option<PathBuf>,
 
-        /// Langue de l'`AGENTS.md` engendré. À défaut, celle de l'environnement.
+        /// Langue du projet : `AGENTS.md` et réponses HTTP. À défaut, celle de l'environnement.
         #[arg(long, value_name = "LANGUE")]
         lang: Option<crate::lang::Lang>,
 

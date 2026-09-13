@@ -554,6 +554,26 @@ mod tests {
         );
     }
 
+    /// `rbs-core` lit `[server] lang` au démarrage : sans cette ligne, un projet
+    /// `--lang en` recevrait quand même des réponses HTTP en français.
+    #[test]
+    fn the_project_language_reaches_the_server_configuration() {
+        let source = read(&Path::new(RACINE).join("config/default.toml.jinja"));
+
+        let rendered = Renderer::new()
+            .render(&source, context! { lang => "en" })
+            .expect("le fichier de configuration doit se rendre");
+
+        let document: toml_edit::DocumentMut =
+            rendered.parse().expect("le rendu doit être un TOML valide");
+
+        assert_eq!(
+            document["server"]["lang"].as_str(),
+            Some("en"),
+            "la langue doit atteindre `[server]` :\n{rendered}"
+        );
+    }
+
     #[test]
     fn the_embedded_source_yields_the_skeleton_with_its_output_paths() {
         let files = Source::fresh(None)
@@ -656,7 +676,15 @@ mod tests {
 
     /// Contexte de rendu d'un fragment : les deux variables qu'un projet existant fournit.
     /// Le contexte que `add::plan_for` construit, recopié ici.
+    ///
+    /// En français par défaut : c'est la langue d'un projet qui ne porte pas de clé
+    /// `[package.metadata.rbs] lang`, le cas le plus courant des tests de ce module.
     fn feature_context(installees: &[&str]) -> Value {
+        feature_context_in(installees, "fr")
+    }
+
+    /// Le même contexte, dans la langue donnée.
+    fn feature_context_in(installees: &[&str], lang: &str) -> Value {
         let database = Database::default();
 
         context! {
@@ -674,8 +702,39 @@ mod tests {
             database_user_par_defaut => "postgres",
             database_password_par_defaut => "postgres",
             database_name_par_defaut => "mon_api",
+            lang => lang,
         }
     }
+
+    /// Rend une template de fragment prise sur le disque, dans un contexte donné.
+    fn render_fragment(path: &Path, context: Value) -> String {
+        let source = read(path);
+        Renderer::new()
+            .render(&source, context)
+            .unwrap_or_else(|error| {
+                panic!("{} ne se rend pas : {error}", path.display());
+            })
+    }
+
+    /// Toutes les features installables, pour un contexte où chaque branche qui se
+    /// demande « telle feature est-elle posée ? » répond oui : sans ce contexte, une
+    /// chaîne anglaise cachée derrière une feature absente du `[][..]` ou `["redis"][..]`
+    /// des autres tests ne serait jamais exercée.
+    const TOUTES: [&str; 13] = [
+        "audit",
+        "auth",
+        "ci",
+        "cors",
+        "docker",
+        "jobs",
+        "mail",
+        "observability",
+        "rate-limit",
+        "redis",
+        "scheduler",
+        "storage",
+        "webhooks",
+    ];
 
     /// Toutes les templates de tous les fragments de feature.
     ///
@@ -907,6 +966,47 @@ mod tests {
                         );
                     });
             }
+        }
+    }
+
+    /// Les messages que les fragments rendent au client, dans leur version française.
+    const MESSAGES_FRANCAIS: [&str; 7] = [
+        "cette adresse est déjà inscrite",
+        "un motif d'événement ne peut pas être vide",
+        "une URL de webhook doit être en http ou en https",
+        "une URL de webhook doit être en https",
+        "l'hôte de l'URL n'est pas une adresse publique",
+        "Error::NotFound(\"abonnement\")",
+        "trop de requêtes : réessayez plus tard",
+    ];
+
+    #[test]
+    fn in_english_no_fragment_hands_a_french_message_to_the_client() {
+        for template in feature_templates() {
+            let rendu = render_fragment(&template, feature_context_in(&TOUTES, "en"));
+            for message in MESSAGES_FRANCAIS {
+                assert!(
+                    !rendu.contains(message),
+                    "{} rend « {message} » en anglais",
+                    template.display()
+                );
+            }
+        }
+    }
+
+    /// Sans ce pendant, la liste pourrait ne plus rien désigner et le test anglais passer
+    /// à vide.
+    #[test]
+    fn in_french_each_listed_message_is_still_rendered() {
+        let rendus: String = feature_templates()
+            .iter()
+            .map(|template| render_fragment(template, feature_context_in(&TOUTES, "fr")))
+            .collect();
+        for message in MESSAGES_FRANCAIS {
+            assert!(
+                rendus.contains(message),
+                "« {message} » n'est plus rendu par aucun fragment"
+            );
         }
     }
 
@@ -1157,16 +1257,23 @@ mod tests {
     /// fragment, avant d'être formatés : `rustfmt` suit les déclarations de modules, et un
     /// `mod.rs` seul ne résout pas ses `mod`.
     ///
-    /// Deux contextes, comme `each_feature_template_renders_with_its_context` : le
-    /// compteur de `rate-limit` a deux rendus selon que `redis` est posée, et celui qu'on
-    /// ne déroule pas est celui qui casse.
+    /// Quatre contextes, comme `each_feature_template_renders_with_its_context` : le
+    /// compteur de `rate-limit` a deux rendus selon que `redis` est posée, et un message
+    /// destiné au client a deux rendus selon la langue du projet — celui qu'on ne déroule
+    /// pas est celui qui casse.
     #[test]
     fn each_rust_template_of_each_fragment_conforms_to_rustfmt() {
         let renderer = Renderer::new();
         let temp = tempfile::tempdir().expect("répertoire temporaire créable");
 
         let mut sources = Vec::new();
-        for (rang, installees) in [&[][..], &["redis"][..]].into_iter().enumerate() {
+        let cas = [
+            (&[][..], "fr"),
+            (&[][..], "en"),
+            (&["redis"][..], "fr"),
+            (&["redis"][..], "en"),
+        ];
+        for (rang, (installees, lang)) in cas.into_iter().enumerate() {
             for feature in crate::templates::embedded_names() {
                 let root = temp.path().join(rang.to_string()).join(&feature);
 
@@ -1182,10 +1289,10 @@ mod tests {
                     }
 
                     let rendered = renderer
-                        .render(&file.source, feature_context(installees))
+                        .render(&file.source, feature_context_in(installees, lang))
                         .unwrap_or_else(|error| {
                             panic!(
-                                "{feature}/{} ne se rend pas sur {installees:?} : {error}",
+                                "{feature}/{} ne se rend pas sur {installees:?} en {lang} : {error}",
                                 file.destination.display()
                             )
                         });
@@ -1197,7 +1304,7 @@ mod tests {
                     {
                         sources.push((
                             format!(
-                                "{feature}/{} sur {installees:?}",
+                                "{feature}/{} sur {installees:?} en {lang}",
                                 file.destination.display()
                             ),
                             destination,

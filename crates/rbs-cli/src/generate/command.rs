@@ -305,7 +305,9 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // La présence du fragment suffit : aucun drapeau ne la demande, et c'est le sens du
     // défaut fermé — un projet qui a installé de quoi fermer ne rend pas des routes
     // anonymes au premier `generate crud`.
-    let feature = Feature::fresh(&options.name, fields).with_singular(options.singular.clone());
+    let feature = Feature::fresh(&options.name, fields)
+        .with_singular(options.singular.clone())
+        .speaking(metadonnees.lang);
     let feature = if metadonnees.features.iter().any(|feature| feature == "auth") {
         feature.authenticated()
     } else {
@@ -1119,6 +1121,67 @@ mod tests {
                     divergence(rendu, &formatted)
                 );
             }
+        }
+    }
+
+    /// Les messages destinés au client suivent la langue de la feature.
+    ///
+    /// Les recherches visent le message précis, non un mot isolé : les descriptions
+    /// OpenAPI par endpoint restent françaises (hors périmètre) et portent, elles aussi,
+    /// « contenu » ou « colonne de tri inconnue » dans leur prose, sans rapport avec la
+    /// langue du rendu.
+    #[test]
+    fn the_generated_files_speak_english_once_the_feature_does() {
+        let fields = fields::parse("title:string:unique").expect("champs valides");
+        let feature = Feature::fresh("articles", fields)
+            .uploading()
+            .speaking(crate::lang::Lang::En);
+
+        let (files, _migration) =
+            render(&feature, true, true, Some("demo_api")).expect("la génération doit aboutir");
+        let rendu: String = files.iter().map(|(_, contenu)| contenu.as_str()).collect();
+
+        for francais in [
+            "NotFound(\"contenu\")",
+            "cette valeur est déjà prise",
+            "colonne de tri inconnue «",
+        ] {
+            assert!(
+                !rendu.contains(francais),
+                "« {francais} » subsiste alors que la feature parle anglais :\n{rendu}"
+            );
+        }
+        for anglais in [
+            "NotFound(\"content\")",
+            "this value is already taken",
+            "unknown sort column '",
+        ] {
+            assert!(
+                rendu.contains(anglais),
+                "« {anglais} » absent du rendu anglais :\n{rendu}"
+            );
+        }
+    }
+
+    /// Le pendant du test précédent : sans `speaking`, une feature reste française.
+    #[test]
+    fn the_generated_files_default_to_french() {
+        let fields = fields::parse("title:string:unique").expect("champs valides");
+        let feature = Feature::fresh("articles", fields).uploading();
+
+        let (files, _migration) =
+            render(&feature, true, true, Some("demo_api")).expect("la génération doit aboutir");
+        let rendu: String = files.iter().map(|(_, contenu)| contenu.as_str()).collect();
+
+        for francais in [
+            "NotFound(\"contenu\")",
+            "cette valeur est déjà prise",
+            "colonne de tri inconnue «",
+        ] {
+            assert!(
+                rendu.contains(francais),
+                "« {francais} » absent du rendu français :\n{rendu}"
+            );
         }
     }
 

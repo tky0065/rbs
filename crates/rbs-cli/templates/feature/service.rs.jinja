@@ -186,7 +186,11 @@ pub async fn get_content(storage: &dyn Storage, id: Uuid) -> Result<Vec<u8>> {
         .await
         // `NotFound` est le seul cas qui vienne du client : les autres sont des pannes.
         .map_err(|error| match error {
+{%- if lang == "en" %}
+            StorageError::NotFound(_) => Error::NotFound("content"),
+{%- else %}
             StorageError::NotFound(_) => Error::NotFound("contenu"),
+{%- endif %}
             autre => Error::Internal(anyhow::anyhow!("{autre}")),
         })
 }

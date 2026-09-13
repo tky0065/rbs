@@ -56,6 +56,7 @@ project whose compose carries a database — the identifiers that compose interp
 | `server.port` | `RBS_SERVER__PORT` | `8080` |
 | `server.timeout_secs` | `RBS_SERVER__TIMEOUT_SECS` | `30` |
 | `server.shutdown_timeout_secs` | `RBS_SERVER__SHUTDOWN_TIMEOUT_SECS` | `30` |
+| `server.lang` | `RBS_SERVER__LANG` | `fr` |
 | `database.url` | `RBS_DATABASE__URL` | **none — required** |
 | `database.max_connections` | `RBS_DATABASE__MAX_CONNECTIONS` | `10` |
 | `database.min_connections` | `RBS_DATABASE__MIN_CONNECTIONS` | `0` |

@@ -42,6 +42,7 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
             entity => feature.entity(),
             fields => fields,
             colonnes => colonnes,
+            lang => feature.lang.name(),
         },
     )
 }
