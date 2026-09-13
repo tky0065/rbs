@@ -20,25 +20,9 @@ const APPEL: &str = "Schedule::every::<";
 
 /// Vérifie que chaque expression littérale du calendrier se lit.
 pub(crate) fn check(root: &Path) -> Check {
-    let source = match std::fs::read_to_string(root.join(FICHIER)) {
+    let source = match super::lire(root, TITRE, FICHIER) {
         Ok(source) => source,
-        Err(faute) if faute.kind() == std::io::ErrorKind::NotFound => {
-            return Check::failed(
-                TITRE,
-                format!("{FICHIER} est absent : le calendrier n'est plus déclaré"),
-                format!(
-                    "restaurez-le depuis Git (`git checkout -- {FICHIER}`) : `rbs add` ne \
-                     rejoue pas une feature déjà installée"
-                ),
-            );
-        }
-        Err(faute) => {
-            return Check::failed(
-                TITRE,
-                format!("{FICHIER} est inaccessible : {faute}"),
-                format!("rendez {FICHIER} lisible"),
-            );
-        }
+        Err(constat) => return constat,
     };
 
     let expressions = expressions(&source);

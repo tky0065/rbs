@@ -6,6 +6,7 @@
 
 pub mod agents;
 pub mod anchors;
+pub mod audit;
 pub mod auth;
 pub mod base;
 pub mod cors;
@@ -23,6 +24,7 @@ pub mod render;
 pub mod scheduler;
 pub mod storage;
 pub mod versions;
+pub mod webhooks;
 
 use std::path::{Path, PathBuf};
 
@@ -303,7 +305,7 @@ fn plan(manifeste: &Manifeste) -> Vec<Controle> {
 ///
 /// Une feature peut y figurer deux fois : `auth` amène de quoi vérifier son secret, et de
 /// quoi juger les routes que les rôles qu'elle installe pourraient protéger.
-const FEATURE_CHECKS: [(&str, Controle); 10] = [
+const FEATURE_CHECKS: [(&str, Controle); 12] = [
     (
         "auth",
         Controle {
@@ -374,7 +376,52 @@ const FEATURE_CHECKS: [(&str, Controle); 10] = [
             executer: |projet, _| scheduler::check(&projet.root),
         },
     ),
+    (
+        "webhooks",
+        Controle {
+            titre: webhooks::TITRE,
+            executer: |projet, _| webhooks::check(&projet.root),
+        },
+    ),
+    (
+        "audit",
+        Controle {
+            titre: audit::TITRE,
+            executer: |projet, _| audit::check(&projet.root),
+        },
+    ),
 ];
+
+/// Le contenu d'un fichier qu'un fragment a posé, ou le constat qui dit pourquoi il manque.
+///
+/// Trois contrôles lisent un fichier plutôt qu'une section, et nommaient chacun à sa façon
+/// la même absence.
+fn lire(root: &Path, titre: &'static str, fichier: &str) -> Result<String, Check> {
+    match std::fs::read_to_string(root.join(fichier)) {
+        Ok(source) => Ok(source),
+        Err(faute) if faute.kind() == std::io::ErrorKind::NotFound => Err(Check::failed(
+            titre,
+            format!("{fichier} est absent"),
+            restaurer(fichier),
+        )),
+        Err(faute) => Err(Check::failed(
+            titre,
+            format!("{fichier} est inaccessible : {faute}"),
+            format!("rendez {fichier} lisible"),
+        )),
+    }
+}
+
+/// Le remède d'un fichier de fragment disparu.
+///
+/// Git et non `rbs add` : la commande ne rejoue pas une feature que le manifeste déclare
+/// déjà, et le fichier ne reviendrait pas.
+fn restaurer(fichier: &str) -> String {
+    format!(
+        "restaurez-le depuis Git (`git checkout -- {fichier}`) : `rbs add` ne rejoue pas une \
+         feature déjà installée"
+    )
+}
 
 /// Le fichier de configuration que les contrôles de feature interrogent.
 const CONFIG: &str = "config/default.toml";
@@ -831,8 +878,15 @@ mod tests {
     /// portant les mêmes fragments se lisent pareil.
     #[test]
     fn the_fragment_checks_follow_the_order_of_the_table() {
-        const ORDRE: [&str; 3] = ["cors", "rate-limit", "scheduler"];
-        let (_parent, root) = project(&["health", "scheduler", "rate-limit", "cors"]);
+        const ORDRE: [&str; 5] = ["cors", "rate-limit", "scheduler", "webhooks", "audit"];
+        let (_parent, root) = project(&[
+            "health",
+            "audit",
+            "webhooks",
+            "scheduler",
+            "rate-limit",
+            "cors",
+        ]);
 
         let report = run_with(&root, &mut Muet).expect("c'est un projet rbs");
 
