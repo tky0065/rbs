@@ -64,9 +64,6 @@ pub(crate) use depuis_la_racine;
 /// sur un texte français casse à la prochaine relecture, décider sur `code()` ne casse
 /// qu'au retrait de la variante elle-même — et le `match` exhaustif de chaque
 /// implémentation s'en assure au moment de la compiler.
-// Tombe avec le branchement de `--json` sur `add`, `generate` et `upgrade` : sans lui,
-// rien n'appelle encore ce trait hors des tests.
-#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) trait Codee {
     /// Code stable, en snake_case ASCII.
     fn code(&self) -> &'static str;

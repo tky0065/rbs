@@ -161,9 +161,6 @@ impl Error {
     ///
     /// `match` exhaustif, sans bras `_` : une variante ajoutée à `Error` ne compile plus
     /// tant qu'elle n'a pas le sien.
-    // Tombe avec le branchement de `--json` : sans lui, seuls les tests et les quatre
-    // commandes qui délèguent à `Error` l'appellent.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn code(&self) -> &'static str {
         match self {
             Error::Acces(_) => "fichier_inaccessible",
@@ -181,7 +178,6 @@ impl Error {
     /// Le bloc à coller, quand la faute est une ancre disparue, mal placée, ou une zone
     /// absente d'`AGENTS.md` — les seules dont le remède tient dans un extrait de
     /// fichier plutôt que dans une décision du développeur.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn bloc(&self) -> Option<String> {
         match self {
             Error::Anchor(absente) => Some(absente.anchor.block()),
@@ -197,9 +193,6 @@ impl Error {
     ///
     /// `Some` exactement quand [`Self::bloc`] l'est : un bloc à coller sans le dire où le
     /// coller laisserait un agent deviner.
-    // Contrairement à `code()` et `bloc()`, cette méthode est déjà vivante hors des
-    // tests : `add::Error::remedy()` et `generate::command::Error::remedy()`, que
-    // l'affichage humain appelle, y délèguent.
     pub(crate) fn remede(&self) -> Option<String> {
         match self {
             Error::Anchor(absente) => Some(format!(

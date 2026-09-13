@@ -97,9 +97,6 @@ pub(crate) enum Error {
 
 impl Error {
     /// Code stable de la faute, en snake_case ASCII.
-    // Tombe avec le branchement de `--json` : sans lui, seuls les tests et `add::Error`,
-    // qui délègue à celle-ci, l'appellent.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn code(&self) -> &'static str {
         match self {
             Error::TemplateAbsente { .. } => "template_absente",

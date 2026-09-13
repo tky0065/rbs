@@ -228,9 +228,6 @@ impl From<&[File]> for Fichiers {
 }
 
 /// Rend le plan en JSON, seul document de la sortie standard sous `--json`.
-// Tombe avec le branchement de `--json` sur les commandes qui planifient : sans lui,
-// rien n'appelle encore cette fonction hors des tests.
-#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn plan(commande: &str, plan: &Plan, applique: bool) -> String {
     let document = Document {
         commande,
@@ -247,9 +244,6 @@ pub(crate) fn plan(commande: &str, plan: &Plan, applique: bool) -> String {
 }
 
 /// Rend une erreur en JSON, sur la sortie standard : le code de sortie reste inchangé.
-// Même raison que `plan` : le branchement vient avec `--json` sur les commandes qui
-// planifient.
-#[cfg_attr(not(test), expect(dead_code))]
 pub(crate) fn erreur(
     code: &str,
     message: &str,

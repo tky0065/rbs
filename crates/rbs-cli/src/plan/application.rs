@@ -27,9 +27,6 @@ pub(crate) enum Error {
 
 impl Error {
     /// Code stable de la faute, en snake_case ASCII.
-    // Tombe avec le branchement de `--json` : sans lui, seuls les tests et les quatre
-    // commandes qui délèguent à `Error` l'appellent.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn code(&self) -> &'static str {
         match self {
             Error::Ecriture { .. } => "ecriture_impossible",

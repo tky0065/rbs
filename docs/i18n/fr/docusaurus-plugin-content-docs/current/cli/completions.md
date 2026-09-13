@@ -90,7 +90,7 @@ pour la complétion — les features qu'installe [`rbs add`](./add.md) :
 ```text
 $ rbs completions bash
         rbs__subcmd__add)
-            opts="-h -V --force --dry-run --template-dir --help --version audit auth ci cors docker jobs mail observability rate-limit redis scheduler storage webhooks"
+            opts="-h -V --force --dry-run --json --template-dir --help --version audit auth ci cors docker jobs mail observability rate-limit redis scheduler storage webhooks"
 ```
 
 {/* rbs:transcript cmd="rbs completions zsh" extrait="oui" */}

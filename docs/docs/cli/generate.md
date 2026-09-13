@@ -58,6 +58,7 @@ Options:
       --singular <NOM>     Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force              Écrit même si le working tree Git est sale
       --dry-run            Affiche le plan sans rien écrire
+      --json               Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
       --has-many <ENTITE>  Entité enfant dont ce modèle doit porter la variante inverse, répétable
       --role <ROLE>        Relève à ce rôle le seuil des écritures ; exige la feature auth
       --soft-delete        Rend le DELETE logique : la ligne reste, marquée d'une date de suppression
@@ -95,6 +96,7 @@ Options:
       --singular <NOM>  Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force           Écrit même si le working tree Git est sale
       --dry-run         Affiche le plan sans rien écrire
+      --json            Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
   -h, --help            Print help
   -V, --version         Print version
 ```

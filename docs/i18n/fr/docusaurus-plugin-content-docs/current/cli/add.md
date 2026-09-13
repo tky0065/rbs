@@ -29,6 +29,7 @@ Arguments:
 Options:
       --force                  Applique les modifications même si le working tree Git est sale
       --dry-run                Affiche le plan sans rien écrire
+      --json                   Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
       --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
   -h, --help                   Print help
   -V, --version                Print version

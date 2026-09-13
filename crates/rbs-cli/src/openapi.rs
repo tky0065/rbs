@@ -66,9 +66,6 @@ impl Obtention {
     }
 
     /// Code stable de la faute, en snake_case ASCII.
-    // Tombe avec le branchement de `--json` : sans lui, seuls les tests et
-    // `client::Error`, qui délègue à celle-ci, l'appellent.
-    #[cfg_attr(not(test), expect(dead_code))]
     pub(crate) fn code(&self) -> &'static str {
         match self {
             Obtention::SansBibliotheque => "sans_bibliotheque",

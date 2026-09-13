@@ -70,6 +70,10 @@ pub enum Commands {
         #[arg(long)]
         dry_run: bool,
 
+        /// Rend le plan, ou l'erreur, en un document JSON sur la sortie standard.
+        #[arg(long)]
+        json: bool,
+
         /// Répertoire de templates remplaçant celles embarquées dans le binaire.
         #[arg(long, value_name = "CHEMIN")]
         template_dir: Option<PathBuf>,
@@ -155,6 +159,10 @@ pub enum Commands {
         /// Affiche le plan sans rien écrire.
         #[arg(long)]
         dry_run: bool,
+
+        /// Rend le plan, ou l'erreur, en un document JSON sur la sortie standard.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -180,6 +188,10 @@ pub enum GenerateCommands {
         /// Affiche le plan sans rien écrire.
         #[arg(long)]
         dry_run: bool,
+
+        /// Rend le plan, ou l'erreur, en un document JSON sur la sortie standard.
+        #[arg(long)]
+        json: bool,
 
         /// Entité enfant dont ce modèle doit porter la variante inverse, répétable.
         #[arg(long = "has-many", value_name = "ENTITE")]
@@ -218,6 +230,10 @@ pub enum GenerateCommands {
         /// Affiche le plan sans rien écrire.
         #[arg(long)]
         dry_run: bool,
+
+        /// Rend le plan, ou l'erreur, en un document JSON sur la sortie standard.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Engendre un client typé depuis le document OpenAPI du projet.
@@ -237,6 +253,10 @@ pub enum GenerateCommands {
         /// Affiche le plan sans rien écrire.
         #[arg(long)]
         dry_run: bool,
+
+        /// Rend le plan, ou l'erreur, en un document JSON sur la sortie standard.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -669,5 +689,46 @@ mod tests {
 
         assert_eq!(filtre.as_deref(), Some("articles"));
         assert_eq!(libtest, vec!["--nocapture".to_string()]);
+    }
+
+    /// Le drapeau d'une commande qui planifie, quelle qu'elle soit.
+    fn json_de(commande: &Commands) -> bool {
+        match commande {
+            Commands::Add { json, .. }
+            | Commands::Upgrade { json, .. }
+            | Commands::Generate {
+                command:
+                    GenerateCommands::Crud { json, .. }
+                    | GenerateCommands::Feature { json, .. }
+                    | GenerateCommands::Client { json, .. },
+            } => *json,
+            autre => panic!("commande qui ne planifie pas : {autre:?}"),
+        }
+    }
+
+    /// Les cinq commandes qui planifient rendent leur plan en JSON sur demande, et
+    /// seulement sur demande : sans le drapeau, le rendu humain que la documentation
+    /// transcrit reste celui qui s'affiche.
+    #[test]
+    fn the_five_planning_commands_accept_json_and_default_to_the_human_rendering() {
+        for commande in [
+            vec!["rbs", "add", "cors"],
+            vec!["rbs", "generate", "crud", "articles"],
+            vec!["rbs", "generate", "feature", "articles"],
+            vec!["rbs", "generate", "client", "--lang", "ts"],
+            vec!["rbs", "upgrade"],
+        ] {
+            let sans = Cli::try_parse_from(&commande)
+                .unwrap_or_else(|refus| panic!("{commande:?} : {refus}"));
+            assert!(
+                !json_de(&sans.command),
+                "{commande:?} : JSON sans le drapeau"
+            );
+
+            let avec_drapeau: Vec<&str> = commande.iter().copied().chain(["--json"]).collect();
+            let avec = Cli::try_parse_from(&avec_drapeau)
+                .unwrap_or_else(|refus| panic!("{avec_drapeau:?} : {refus}"));
+            assert!(json_de(&avec.command), "{avec_drapeau:?} : drapeau perdu");
+        }
     }
 }
