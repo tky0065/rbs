@@ -74,6 +74,11 @@ fn resolve() -> Lang {
         .unwrap_or_default()
 }
 
+// Aucun test n'appelle `current()` : une résolution paresseuse sur un thread hors d'un
+// `Jail` peut lire le répertoire de travail ou l'environnement d'un `Jail` d'un autre
+// test et figer une langue dans `COURANTE` pour le reste du processus de test. Les
+// valeurs qui dépendent de la langue ne sont donc éprouvées qu'à travers les fonctions
+// pures `parts` (`error.rs`), `declare` (`openapi.rs`) et `resolve` ci-dessous.
 #[cfg(test)]
 #[allow(clippy::result_large_err)]
 mod tests {
