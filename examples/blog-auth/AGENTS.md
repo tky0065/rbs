@@ -30,6 +30,8 @@ du projet », en bas, est faite pour l'accueillir.
 | `rbs seed` | insère les données de démonstration | — |
 | `rbs dev` | services, migrations, serveur rechargé | — |
 | `rbs test [filtre] [-- args]` | services, migrations, puis `cargo test --workspace` | — |
+| `rbs routes [--json]` | les routes du projet : méthode, chemin, `operation_id`, garde | — |
+| `rbs openapi export [--out <fichier>]` | le document OpenAPI, sans serveur | — |
 | `rbs doctor` | diagnostique le projet ; `--fix` repose les ancres absentes | — |
 | `rbs upgrade` | aligne le projet sur la version du CLI | — |
 | `rbs completions <shell>` | écrit le script de complétion du shell | — |

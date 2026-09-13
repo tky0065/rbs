@@ -26,8 +26,9 @@ That is what makes the client follow the code rather than an approximate reading
 sources: the document carries the routes your fragments mounted, the DTOs your `--fields`
 produced, and the `operationId` of every handler — including the ones you wrote by hand.
 
-The binary is useful on its own. Freezing the contract in CI is a `cargo run --bin openapi >
-openapi.json` followed by a `git diff` that must stay empty.
+The binary is useful on its own. Freezing the contract in CI is an
+[`rbs openapi export --out openapi.json`](./openapi.md) followed by a `git diff` that must
+stay empty.
 
 ## Flags
 

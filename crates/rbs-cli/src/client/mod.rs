@@ -5,18 +5,11 @@
 //! donc le code, et non une lecture approximative des sources.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
-use crate::{git, metadata, plan};
+use crate::{git, metadata, openapi, plan};
 
 pub(crate) mod document;
 pub(crate) mod ts;
-
-/// Le binaire du projet qui imprime le document.
-const BINAIRE: &str = "src/bin/openapi.rs";
-
-/// La bibliothèque sans laquelle ce binaire ne peut pas atteindre `ApiDoc`.
-const BIBLIOTHEQUE: &str = "src/lib.rs";
 
 /// Le langage du client demandé.
 ///
@@ -73,27 +66,9 @@ pub(crate) enum Error {
     #[error("{}", crate::errors::PAS_UN_PROJET)]
     PasUnProjet,
 
-    /// Le projet n'a pas de bibliothèque, et le binaire ne peut donc pas exister.
-    #[error(
-        "ce projet n'a pas de {BIBLIOTHEQUE} : `ApiDoc` y vit dans le binaire principal, où \
-         un second binaire ne peut pas l'atteindre"
-    )]
-    SansBibliotheque,
-
-    /// Le projet ne porte pas le binaire qui imprime le document.
-    #[error("ce projet n'a pas de {BINAIRE} : rbs n'a aucun document OpenAPI à lire")]
-    SansBinaire,
-
-    /// `cargo` n'a pas pu être lancé.
-    #[error("cargo n'a pas pu être lancé : {0}")]
-    Cargo(#[source] std::io::Error),
-
-    /// Le binaire du projet a échoué.
-    #[error("`cargo run --bin openapi` a échoué (code {code}) : le projet ne compile pas")]
-    BinaireEnEchec {
-        /// Code de sortie du sous-processus.
-        code: i32,
-    },
+    /// Le document OpenAPI du projet n'a pas pu être obtenu.
+    #[error(transparent)]
+    Openapi(#[from] openapi::Obtention),
 
     /// Le document imprimé n'a pas pu être lu.
     #[error("{0}")]
@@ -129,22 +104,9 @@ crate::errors::depuis_la_racine!(Error);
 
 impl Error {
     /// Ce que le développeur peut coller pour réparer, quand la panne se répare ainsi.
-    ///
-    /// Un projet créé avant que la template ne porte ce binaire n'a rien à lancer, et cela
-    /// se répare en deux gestes plutôt que par une décision : le remède les donne.
     pub(crate) fn remedy(&self) -> Option<String> {
         match self {
-            Error::SansBinaire => Some(format!(
-                "créez {BINAIRE} :\n\n\
-                 use utoipa::OpenApi;\n\n\
-                 fn main() -> Result<(), serde_json::Error> {{\n    \
-                 println!(\"{{}}\", <votre_crate>::openapi::ApiDoc::openapi().to_pretty_json()?);\n\n    \
-                 Ok(())\n\
-                 }}\n\n\
-                 puis déclarez-le dans Cargo.toml :\n\n\
-                 [[bin]]\nname = \"openapi\"\npath = \"{BINAIRE}\"\n\n\
-                 un projet créé par `rbs new` le porte déjà."
-            )),
+            Error::Openapi(obtention) => obtention.remedy(),
             _ => None,
         }
     }
@@ -168,18 +130,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         git::garde(&root)?;
     }
 
-    // Les deux refus précèdent cargo, et dans cet ordre : sans bibliothèque, le binaire ne
-    // peut pas exister, et annoncer son absence enverrait le lecteur écrire un fichier qui
-    // ne compilerait pas.
-    if !root.join(BIBLIOTHEQUE).exists() {
-        return Err(Error::SansBibliotheque);
-    }
-
-    if !root.join(BINAIRE).exists() {
-        return Err(Error::SansBinaire);
-    }
-
-    let json = imprime_le_document(&root)?;
+    let json = openapi::imprimer(&root)?;
     let document = document::parse(&json)?;
 
     let projet = metadonnees.package_name(&root.join("Cargo.toml"))?;
@@ -204,31 +155,11 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     })
 }
 
-/// Lance le binaire du projet et rend ce qu'il a imprimé.
-///
-/// `stderr` est hérité et non capturé : la compilation du projet passe par là, et
-/// l'escamoter laisserait la commande muette pendant une minute sur un projet froid.
-fn imprime_le_document(root: &Path) -> Result<String, Error> {
-    let sortie = Command::new("cargo")
-        .args(["run", "--quiet", "--bin", "openapi"])
-        .current_dir(root)
-        .stderr(std::process::Stdio::inherit())
-        .output()
-        .map_err(Error::Cargo)?;
-
-    if !sortie.status.success() {
-        return Err(Error::BinaireEnEchec {
-            code: sortie.status.code().unwrap_or(-1),
-        });
-    }
-
-    Ok(String::from_utf8_lossy(&sortie.stdout).into_owned())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::fixtures;
+    use crate::openapi::{BIBLIOTHEQUE, BINAIRE};
 
     #[test]
     fn a_project_without_a_library_is_refused_by_naming_it() {

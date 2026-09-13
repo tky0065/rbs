@@ -20,9 +20,11 @@ mod metadata;
 mod migrate;
 mod new;
 mod notes;
+mod openapi;
 mod plan;
 mod preset;
 mod prompts;
+mod routes;
 mod secret;
 mod seed;
 mod template;
@@ -217,6 +219,50 @@ pub fn run() {
             }
         }
 
+        Commands::Routes { json } => {
+            let resultat = std::env::current_dir()
+                .map_err(|source| {
+                    openapi::Error::from(crate::errors::Acces::new(
+                        std::path::Path::new("."),
+                        source,
+                    ))
+                })
+                .and_then(|directory| routes::run(&directory, json));
+
+            match resultat {
+                Ok(rendu) => ui::line(&rendu),
+                Err(error) => echec_openapi(&error, json),
+            }
+        }
+
+        Commands::Openapi {
+            command: cli::OpenapiCommands::Export { out },
+        } => {
+            let resultat = std::env::current_dir()
+                .map_err(|source| {
+                    openapi::Error::from(crate::errors::Acces::new(
+                        std::path::Path::new("."),
+                        source,
+                    ))
+                })
+                .and_then(|directory| openapi::exporter(&directory, out.as_deref()));
+
+            match resultat {
+                // Tel que le binaire l'a imprimé, fin de ligne comprise : un `diff` contre
+                // le fichier que `--out` écrit doit rester vide.
+                Ok(Some(document)) => {
+                    use std::io::Write as _;
+                    let _ = ui::stdout().write_all(document.as_bytes());
+                }
+                Ok(None) => {
+                    if let Some(out) = &out {
+                        ui::success(&format!("document écrit dans {}", out.display()));
+                    }
+                }
+                Err(error) => echec_openapi(&error, false),
+            }
+        }
+
         Commands::Upgrade { force, dry_run } => {
             if let Err(error) = upgrade(force, dry_run) {
                 ui::error(&error.to_string());
@@ -351,6 +397,22 @@ fn locale_from(lc_all: Option<&str>, lang: Option<&str>) -> Option<String> {
         .flatten()
         .find(|locale| !locale.is_empty())
         .map(str::to_owned)
+}
+
+/// Signale l'échec d'une commande qui lit le document OpenAPI, puis sort en 1.
+///
+/// Sous `--json`, le remède rejoint le message sur la sortie d'erreur : la sortie standard
+/// n'appartient qu'au document, et un script qui l'analyse n'a pas à y trouver du Rust.
+fn echec_openapi(error: &openapi::Error, json: bool) -> ! {
+    ui::error(&error.to_string());
+    if let Some(remedy) = error.remedy() {
+        if json {
+            ui::warn_detail(&format!("\n{remedy}"));
+        } else {
+            ui::info(&format!("\n{remedy}"));
+        }
+    }
+    std::process::exit(1);
 }
 
 /// Signale la zone de l'`AGENTS.md` qu'une commande n'a pas pu réécrire, et donne le bloc

@@ -27,8 +27,9 @@ le document porte les routes que vos fragments ont montées, les DTO que vos `--
 produits, et l'`operationId` de chaque handler — y compris ceux que vous avez écrits à la
 main.
 
-Le binaire vaut par lui-même. Figer le contrat en CI, c'est un `cargo run --bin openapi >
-openapi.json` suivi d'un `git diff` qui doit rester vide.
+Le binaire vaut par lui-même. Figer le contrat en CI, c'est un
+[`rbs openapi export --out openapi.json`](./openapi.md) suivi d'un `git diff` qui doit
+rester vide.
 
 ## Les drapeaux
 

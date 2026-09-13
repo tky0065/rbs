@@ -109,6 +109,19 @@ pub enum Commands {
         libtest: Vec<String>,
     },
 
+    /// Liste les routes du projet : méthode, chemin, operation_id et garde.
+    Routes {
+        /// Rend les routes en JSON sur la sortie standard, pour un script ou un agent.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Lit le document OpenAPI du projet, sans démarrer de serveur.
+    Openapi {
+        #[command(subcommand)]
+        command: OpenapiCommands,
+    },
+
     /// Diagnostique le projet : ancres, .env, base joignable, versions.
     Doctor {
         /// Rend le rapport en JSON sur la sortie standard, pour un script ou une CI.
@@ -241,6 +254,16 @@ pub enum MigrateCommands {
     },
 }
 
+#[derive(Debug, PartialEq, Subcommand)]
+pub enum OpenapiCommands {
+    /// Écrit le document OpenAPI du projet sur la sortie standard, ou dans un fichier.
+    Export {
+        /// Fichier à écrire, relatif au répertoire courant, au lieu de la sortie standard.
+        #[arg(long, value_name = "FICHIER")]
+        out: Option<PathBuf>,
+    },
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -267,6 +290,8 @@ mod tests {
             "doctor",
             "upgrade",
             "completions",
+            "routes",
+            "openapi",
         ] {
             let sous_commande = command
                 .get_subcommands()
@@ -317,6 +342,32 @@ mod tests {
 
         assert!(help.contains("crud"), "`crud` absente :\n{help}");
         assert!(help.contains("feature"), "`feature` absente :\n{help}");
+    }
+
+    #[test]
+    fn routes_and_openapi_export_parse_their_flags() {
+        let routes = Cli::try_parse_from(["rbs", "routes", "--json"]).expect("commande valide");
+        assert_eq!(routes.command, Commands::Routes { json: true });
+
+        let export = Cli::try_parse_from(["rbs", "openapi", "export", "--out", "doc.json"])
+            .expect("commande valide");
+        assert_eq!(
+            export.command,
+            Commands::Openapi {
+                command: OpenapiCommands::Export {
+                    out: Some(PathBuf::from("doc.json")),
+                },
+            }
+        );
+
+        let sans_fichier =
+            Cli::try_parse_from(["rbs", "openapi", "export"]).expect("commande valide");
+        assert_eq!(
+            sans_fichier.command,
+            Commands::Openapi {
+                command: OpenapiCommands::Export { out: None },
+            }
+        );
     }
 
     #[test]
