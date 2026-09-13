@@ -16,6 +16,9 @@ use serde_json::{Value, json};
 {%- else %}
 use serde_json::Value;
 {%- endif %}
+{%- if cursor and creatable %}
+use std::collections::HashSet;
+{%- endif %}
 use tower::ServiceExt;
 use uuid::Uuid;
 
@@ -247,11 +250,19 @@ async fn the_full_lifecycle_goes_through_the_api() {
     let mut decroissants = ids.clone();
     decroissants.sort_unstable_by(|gauche, droite| droite.cmp(gauche));
     assert_eq!(ids, decroissants, "la liste n'est pas triée : {page}");
+{%- if cursor %}
+
+    assert_eq!(
+        page["meta"]["per_page"], 50,
+        "la page doit annoncer la taille demandée : {page}"
+    );
+{%- else %}
 
     assert!(
         page["meta"]["total"].as_u64().unwrap_or_default() >= 1,
         "la page doit compter au moins ce qui vient d'être créé : {page}"
     );
+{%- endif %}
 
     let sent = modification();
     let mise_a_jour = request("PATCH", &resource, sent.clone());
@@ -311,6 +322,84 @@ async fn two_creations_in_a_row_carry_increasing_ids() {
     );
     assert!(second > premier, "{second} ne suit pas {premier}");
 }
+{%- if cursor %}
+
+/// La marche par curseur rend chaque ligne une fois, et s'éteint d'elle-même.
+///
+/// Trois créations lues par pages de deux franchissent au moins une frontière de page, là
+/// où une borne inclusive rendrait deux fois la même ligne ; la dernière page, plus
+/// courte, doit rendre `next` à `null`.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn the_cursor_walks_every_page_without_duplicates() {
+    let api = application().await;
+    let collection = "/{@ module @}";
+
+    let mut crees = Vec::new();
+    for _ in 0..3 {
+        let (status, created) = call(&api, request("POST", collection, creation())).await;
+        assert_eq!(status, StatusCode::CREATED, "création refusée : {created}");
+        let id = created["id"].as_str().expect("identifiant rendu");
+        crees.push(id.to_owned());
+    }
+
+    // Les tests tournent en parallèle sur la même base : une ligne qu'ils créent pendant
+    // la marche porte un `id` plus grand, et ne paraît au plus que sur la première page ;
+    // une ligne qu'ils suppriment manque, sans créer de doublon. Rien ne se conclut donc du
+    // nombre de lignes parcourues.
+    let mut vus = HashSet::new();
+    let mut doublons = Vec::new();
+    let mut marche = Vec::new();
+    let mut chemin = format!("{collection}?per_page=2");
+    let mut eteinte = false;
+
+    // La borne change en échec un `next` qui ne s'éteindrait jamais, là où le test
+    // tournerait sans fin.
+    for _ in 0..10_000 {
+        let (status, page) = call(&api, without_body("GET", &chemin)).await;
+        assert_eq!(status, StatusCode::OK, "page refusée : {page}");
+
+        for ligne in page["data"].as_array().expect("la liste rend un tableau") {
+            let id = ligne["id"].as_str().expect("identifiant rendu").to_owned();
+            if !vus.insert(id.clone()) {
+                doublons.push(id.clone());
+            }
+            marche.push(id);
+        }
+
+        match page["meta"]["next"].as_str() {
+            Some(next) => chemin = format!("{collection}?per_page=2&after={next}"),
+            None => {
+                eteinte = true;
+                break;
+            }
+        }
+    }
+
+    for id in &crees {
+        let resource = format!("{collection}/{id}");
+        let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+        assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
+    }
+
+    assert!(
+        eteinte,
+        "`next` ne s'est pas éteint en 10 000 pages : le curseur n'avance plus, ou la table \
+         dépasse 20 000 lignes"
+    );
+    assert!(
+        doublons.is_empty(),
+        "lignes rendues deux fois : {doublons:?}"
+    );
+    for id in &crees {
+        assert!(vus.contains(id), "« {id} » manque à la marche");
+    }
+
+    let mut decroissants = marche.clone();
+    decroissants.sort_unstable_by(|gauche, droite| droite.cmp(gauche));
+    assert_eq!(marche, decroissants, "la marche n'est pas décroissante");
+}
+{%- endif %}
 {% if email_field %}
 /// Un corps lisible mais non conforme rend 422, et non le 400 du corps illisible.
 ///
