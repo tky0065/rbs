@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Le workspace est en place et les six jalons de la feuille de route, de la v0.1 à la v1.1,
 sont livrés ; les versions 1.2 à 1.4 sont publiées et la 1.5.0 est prête (`ROADMAP.md`,
 `CHANGELOG.md`). La racine porte deux crates publiables — `crates/rbs-core` et `crates/rbs-cli`,
-publiées séparément sur crates.io — quatre projets d'exemple compilés en CI, et le site
+publiées séparément sur crates.io — cinq projets d'exemple compilés en CI, et le site
 Docusaurus sous `docs/`. Le nom `rbs` étant déjà pris sur crates.io, le binaire s'installe
 par `cargo install rbs-cli`.
 
@@ -56,7 +56,7 @@ génèrent un projet dans un répertoire temporaire **puis le compilent** : ils 
 nécessitent Docker (`testcontainers` lance un PostgreSQL). C'est le seul test qui prouve
 réellement que rbs fonctionne.
 
-`integration_examples.rs` est à part : il régénère les quatre projets d'`examples/` et les
+`integration_examples.rs` est à part : il régénère les cinq projets d'`examples/` et les
 compare octet à octet à ce qui est versionné. Toute template modifiée le fait échouer tant
 que les exemples n'ont pas suivi — `examples/README.md` donne, projet par projet, les
 commandes exactes qui les reconstruisent. Un exemple périmé fait mentir la documentation,
