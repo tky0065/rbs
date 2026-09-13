@@ -667,6 +667,25 @@ fn the_marked_transcripts_that_need_a_database_still_render_what_the_docs_show()
     }
 }
 
+/// Les deux README annoncent la version du dépôt, et rien d'autre ne tenait cette ligne :
+/// elle n'est dans aucun transcript, que `masque_version` effacerait de toute façon. La
+/// vitrine a ainsi vécu deux versions en retard.
+#[test]
+fn the_readmes_announce_the_version_of_the_workspace() {
+    let racine = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let annonce = format!("Version {}.", env!("CARGO_PKG_VERSION"));
+
+    for readme in ["README.md", "README.fr.md"] {
+        let contenu = std::fs::read_to_string(racine.join(readme))
+            .unwrap_or_else(|erreur| panic!("{readme} illisible : {erreur}"));
+
+        assert!(
+            contenu.lines().any(|ligne| ligne.starts_with(&annonce)),
+            "{readme} n'annonce pas « {annonce} », la version du workspace"
+        );
+    }
+}
+
 mod extraction {
     use super::*;
 
