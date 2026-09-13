@@ -305,9 +305,12 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // La présence du fragment suffit : aucun drapeau ne la demande, et c'est le sens du
     // défaut fermé — un projet qui a installé de quoi fermer ne rend pas des routes
     // anonymes au premier `generate crud`.
+    // `[server] lang` de `config/default.toml`, non la métadonnée : celle-ci ne gouverne
+    // plus que `AGENTS.md`, et pouvait diverger de la langue des réponses HTTP avant
+    // 1.5.0, quand elle se remplissait de la locale.
     let feature = Feature::fresh(&options.name, fields)
         .with_singular(options.singular.clone())
-        .speaking(metadonnees.lang);
+        .speaking(crate::lang::Lang::of_project(&root));
     let feature = if metadonnees.features.iter().any(|feature| feature == "auth") {
         feature.authenticated()
     } else {
@@ -1183,6 +1186,130 @@ mod tests {
                 "« {francais} » absent du rendu français :\n{rendu}"
             );
         }
+    }
+
+    /// Change `[package.metadata.rbs] lang` sans toucher au reste du manifeste : le
+    /// projet neuf en porte déjà une, `fr`, que la substitution retrouve telle quelle.
+    fn viser_lang_metadata(root: &Path, lang: &str) {
+        let manifest = root.join("Cargo.toml");
+        let source = fs::read_to_string(&manifest).expect("le Cargo.toml doit exister");
+
+        assert!(
+            source.contains("lang = \"fr\""),
+            "la clé `lang` est introuvable :\n{source}"
+        );
+        let reecrit = source.replacen("lang = \"fr\"", &format!("lang = \"{lang}\""), 1);
+        fs::write(&manifest, reecrit).expect("le Cargo.toml doit se réécrire");
+    }
+
+    /// Change `[server] lang` de `config/default.toml`, déjà présente à `fr` dans un
+    /// projet neuf.
+    fn viser_lang_server(root: &Path, lang: &str) {
+        let config = root.join("config/default.toml");
+        let source = fs::read_to_string(&config).expect("config/default.toml doit exister");
+
+        assert!(
+            source.contains("lang = \"fr\""),
+            "la clé `lang` est introuvable :\n{source}"
+        );
+        let reecrit = source.replacen("lang = \"fr\"", &format!("lang = \"{lang}\""), 1);
+        fs::write(&config, reecrit).expect("config/default.toml doit se réécrire");
+    }
+
+    /// Retire la ligne `lang` de `[server]`, comme un projet créé avant qu'elle n'existe :
+    /// la clé est absente, non vide.
+    fn retirer_lang_server(root: &Path) {
+        let config = root.join("config/default.toml");
+        let source = fs::read_to_string(&config).expect("config/default.toml doit exister");
+
+        assert!(
+            source.contains("lang = \"fr\""),
+            "la clé `lang` est introuvable :\n{source}"
+        );
+        let reecrit: String = source
+            .lines()
+            .filter(|ligne| ligne.trim() != "lang = \"fr\"")
+            .map(|ligne| format!("{ligne}\n"))
+            .collect();
+        fs::write(&config, reecrit).expect("config/default.toml doit se réécrire");
+    }
+
+    /// `[package.metadata.rbs] lang` ne gouverne plus que `AGENTS.md` : un projet dont la
+    /// clé vaut `en` mais dont `config/default.toml` ne porte pas de `[server] lang`
+    /// engendre malgré tout un message français.
+    #[test]
+    fn a_metadata_lang_without_a_server_lang_still_generates_french_messages() {
+        let (_parent, root) = project();
+        viser_lang_metadata(&root, "en");
+        retirer_lang_server(&root);
+
+        run(&options(
+            &root,
+            "articles",
+            Some("title:string:unique"),
+            true,
+        ))
+        .expect("la génération doit aboutir");
+
+        let repository = read(&root.join("src/articles/repository.rs"));
+        assert!(
+            repository.contains("cette valeur est déjà prise"),
+            "{repository}"
+        );
+        assert!(
+            !repository.contains("this value is already taken"),
+            "{repository}"
+        );
+    }
+
+    /// `[server] lang` décide seul, même contredite par la métadonnée : c'est elle que
+    /// `rbs-core` lira au démarrage pour la même réponse 409.
+    #[test]
+    fn a_server_lang_overrides_a_diverging_metadata_lang_for_generate() {
+        let (_parent, root) = project();
+        viser_lang_metadata(&root, "fr");
+        viser_lang_server(&root, "en");
+
+        run(&options(
+            &root,
+            "articles",
+            Some("title:string:unique"),
+            true,
+        ))
+        .expect("la génération doit aboutir");
+
+        let repository = read(&root.join("src/articles/repository.rs"));
+        assert!(
+            repository.contains("this value is already taken"),
+            "{repository}"
+        );
+        assert!(
+            !repository.contains("cette valeur est déjà prise"),
+            "{repository}"
+        );
+    }
+
+    /// Sans `config/default.toml`, la commande ne doit pas échouer : le repli est le même
+    /// français que la résolution paresseuse du runtime.
+    #[test]
+    fn a_missing_config_file_generates_french_messages() {
+        let (_parent, root) = project();
+        viser_lang_metadata(&root, "en");
+        fs::remove_file(root.join("config/default.toml")).expect("le fichier existe");
+
+        run(&options(
+            &root,
+            "articles",
+            Some("title:string:unique"),
+            true,
+        ))
+        .expect("la génération doit aboutir");
+
+        let repository = read(&root.join("src/articles/repository.rs"));
+        assert!(
+            repository.contains("cette valeur est déjà prise"),
+            "{repository}"
+        );
     }
 
     #[test]

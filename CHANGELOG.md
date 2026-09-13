@@ -72,6 +72,27 @@ between minor versions with no deprecation cycle.
   subjects, templates and links. A render that fails is logged once as « préparation du
   courriel échouée » with a `gabarit` field, instead of one message per flow. Only a
   fresh `rbs add auth` writes the new layout; an existing project keeps its own.
+- **Error responses speak the project's language, and `--lang` now covers them.** A
+  generated project used to answer in two languages at once — an English `title`
+  (`"Not Found"`) next to a French `detail` (`"article introuvable"`) — whatever
+  `rbs new --lang` said, since the flag only chose the language of `AGENTS.md`. The new
+  `[server] lang` key of `config/default.toml` (`"fr"` by default, or `"en"`) is now the
+  project's language for everything a client sees: at run time `rbs-core` writes the
+  `title` and fixed `detail` of every `application/problem+json` body and the common
+  response descriptions of the OpenAPI document in it (`RBS_SERVER__LANG` overrides it
+  there), and `rbs add` and `rbs generate crud` read it — from `config/default.toml`
+  alone, never from the environment — to write the messages they hand to the client
+  (`"this address is already registered"`, `"too many requests: try again later"`,
+  `"this value is already taken"`…). `rbs new --lang` writes it next to
+  `[package.metadata.rbs] lang`, which now only decides the language of `AGENTS.md`.
+  `Error::Domain` keeps its `code` as `title`, validation codes stay `validator`'s own;
+  logs, code comments, emails and per-operation OpenAPI texts stay in French. **A French
+  project's `title`s become French too** (`"Introuvable"`, `"Conflit"`,
+  `"Validation échouée"`…): a client matching on `title` rather than `status` must be
+  updated. A project generated before this version has no key and stays French;
+  `rbs upgrade` rewrites nothing. To switch one to English, set `lang = "en"` under
+  `[server]` — the runtime and every later `add` and `generate` follow it — then
+  translate by hand the messages already generated in `src/`.
 
 ### Fixed
 

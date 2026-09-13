@@ -77,6 +77,28 @@ dépréciation.
   échec est journalisé une fois, sous « préparation du courriel échouée » avec un champ
   `gabarit`, au lieu d'un message par parcours. Seul un `rbs add auth` neuf écrit cette
   disposition ; un projet existant garde la sienne.
+- **Les réponses d'erreur parlent la langue du projet, et `--lang` les couvre désormais.**
+  Un projet engendré répondait en deux langues à la fois — un `title` anglais
+  (`"Not Found"`) à côté d'un `detail` français (`"article introuvable"`) — quoi que dise
+  `rbs new --lang`, qui ne choisissait que la langue d'`AGENTS.md`. La nouvelle clé
+  `[server] lang` de `config/default.toml` (`"fr"` par défaut, ou `"en"`) est désormais la
+  langue du projet pour tout ce que voit un client : à l'exécution, `rbs-core` y écrit le
+  `title` et le `detail` fixe de chaque corps `application/problem+json` et les
+  descriptions communes du document OpenAPI (`RBS_SERVER__LANG` la surcharge là), et
+  `rbs add` et `rbs generate crud` la lisent — dans `config/default.toml` seul, jamais
+  dans l'environnement — pour écrire les messages qu'ils adressent au client
+  (`"this address is already registered"`, `"too many requests: try again later"`,
+  `"this value is already taken"`…). `rbs new --lang` l'écrit à côté de
+  `[package.metadata.rbs] lang`, qui ne décide plus que de la langue d'`AGENTS.md`.
+  `Error::Domain` garde son `code` pour `title`, les codes de validation restent ceux de
+  `validator` ; les journaux, les commentaires, les courriels et les textes OpenAPI par
+  opération restent en français. **Les `title` d'un projet français passent eux aussi en
+  français** (`"Introuvable"`, `"Conflit"`, `"Validation échouée"`…) : un client qui
+  compare le `title` plutôt que le `status` doit suivre. Un projet engendré avant cette
+  version n'a pas la clé et reste en français ; `rbs upgrade` ne réécrit rien. Pour le
+  passer en anglais, poser `lang = "en"` sous `[server]` — l'exécution et tout `add` ou
+  `generate` ultérieur la suivent —, puis traduire à la main les messages déjà engendrés
+  dans `src/`.
 
 ### Corrigé
 
