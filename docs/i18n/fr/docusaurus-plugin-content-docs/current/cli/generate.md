@@ -105,6 +105,71 @@ colonne, donc ni entité digne de ce nom, ni migration, ni relation à réparer 
 porte aucun handler qu'une garde protégerait. `--singular` reste : le squelette nomme
 toujours son service et ses DTO d'après le singulier.
 
+## `rbs generate job`
+
+{/* rbs:transcript cmd="rbs generate job --help" */}
+```text
+$ rbs generate job --help
+Génère un job de la file, et son échéance sous --every ; exige la feature jobs
+
+Usage: rbs generate job [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>  Nom du job, en snake_case : celui de son module et de son KIND
+
+Options:
+      --every <CRON>  Expression cron de l'échéance, à cinq ou six champs, évaluée en UTC ; exige la feature scheduler
+      --force         Écrit même si le working tree Git est sale
+      --dry-run       Affiche le plan sans rien écrire
+  -h, --help          Print help
+  -V, --version       Print version
+```
+
+Ni `--fields`, ni entité : un job n'est pas une feature CRUD, et le manifeste ne garde
+jamais trace de son nom. `<NAME>` est à la fois le module sous `src/modules/jobs/` et le
+`KIND` auquel le registre le retrouve, ce qui en fait un identifiant Rust valide — refusé
+sinon, tout comme un mot-clé Rust ou un nom qui entre en collision avec l'un des six
+fichiers que le fragment `jobs` porte déjà (`config`, `demo`, `model`, `queue`, `worker`,
+`tests`), ou avec `jobs` lui-même — `pub mod jobs;` dans `src/modules/jobs/mod.rs`
+nommerait le module comme son propre dossier, ce que `clippy::module_inception` refuse.
+
+La commande exige la feature `jobs`, et `--every` exige en plus `scheduler` — chaque refus
+nomme la commande qui installe ce qui manque. Sur un projet qui porte `jobs` :
+
+{/* rbs:transcript cmd="rbs generate job purge_sessions --dry-run" setup="rbs new demo --yes --with jobs --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+```text
+$ rbs generate job purge_sessions --dry-run
+plan pour …/demo
+
+  + src/modules/jobs/purge_sessions.rs   créé
+  ~ src/modules/jobs/mod.rs              modifié
+
+  2 fichiers à écrire
+
+  rien n'a été écrit (--dry-run)
+```
+
+Deux ancres ici, toutes deux déposées par le fragment `jobs` et non par le squelette :
+`// <rbs:job_modules>` déclare le module, `// <rbs:jobs>` l'inscrit au worker. Sur un
+projet qui porte aussi `scheduler`, `--every` ajoute un troisième fichier et une troisième
+ancre — `// <rbs:schedules>` pousse l'échéance du job dans le calendrier :
+
+```text
+$ rbs generate job purge_sessions --every "0 3 * * *" --dry-run
+plan pour /private/tmp/rbs-demo/demo
+
+  + src/modules/jobs/purge_sessions.rs   créé
+  ~ src/modules/jobs/mod.rs              modifié
+  ~ src/modules/scheduler/mod.rs         modifié
+
+  3 fichiers à écrire
+
+  rien n'a été écrit (--dry-run)
+```
+
+Relancer l'une ou l'autre commande ne change rien : un fichier de job déjà présent n'est
+jamais réécrit, `--force` compris, et le plan le signale inchangé.
+
 ## La grammaire de `--fields`
 
 Un champ par virgule ; à l'intérieur d'un champ, les deux-points séparent un nom, un type,
@@ -366,8 +431,9 @@ le message suggère et ce que l'exécution ci-dessus a utilisé.
 ## Les ancres
 
 `rbs generate` ne réécrit jamais d'AST. Il insère entre des marqueurs en commentaires que le
-squelette porte, et il en emploie six sur dix — les deux de `src/state.rs`, `// <rbs:layers>` et
-`// <rbs:startup>` appartiennent aux fragments qu'installe [`rbs add`](./add.md) :
+squelette porte. `rbs generate crud` et `rbs generate feature` en emploient six sur seize —
+les deux de `src/state.rs`, `// <rbs:layers>` et `// <rbs:startup>` appartiennent aux
+fragments qu'installe [`rbs add`](./add.md) :
 
 | Ancre | Fichier |
 |---|---|
@@ -377,6 +443,16 @@ squelette porte, et il en emploie six sur dix — les deux de `src/state.rs`, `/
 | `// <rbs:migration_modules>` | `migration/src/lib.rs` |
 | `// <rbs:migrations>` | `migration/src/lib.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
+
+`rbs generate job` en emploie trois qui lui sont propres, sans en partager aucune avec les
+deux commandes ci-dessus ni avec le squelette : chacune vit dans un fichier qu'un fragment
+dépose :
+
+| Ancre | Fichier |
+|---|---|
+| `// <rbs:job_modules>` | `src/modules/jobs/mod.rs`, déposée par `jobs` |
+| `// <rbs:jobs>` | `src/modules/jobs/mod.rs`, déposée par `jobs` |
+| `// <rbs:schedules>` | `src/modules/scheduler/mod.rs`, déposée par `scheduler`, sous `--every` |
 
 `src/lib.rs` est la bibliothèque que porte tout projet engendré : `src/main.rs` et
 `src/seeds/main.rs` sont deux racines de crate distinctes, et la bibliothèque est ce qui
@@ -399,8 +475,8 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) contrôle les quatorze ancres — onze sur un projet qui ne
-porte ni compose, ni file, ni fragment déplacé sous `src/modules/`, les trois
+[`rbs doctor`](./doctor.md) contrôle les seize ancres — onze sur un projet qui ne
+porte ni compose, ni file, ni fragment déplacé sous `src/modules/`, les cinq
 optionnelles — si bien qu'une ancre disparue se trouve avant qu'une génération ne bute
 dessus.
 

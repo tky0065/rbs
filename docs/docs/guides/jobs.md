@@ -115,6 +115,12 @@ retry, which is the entire reason this is a job.
 
 ## Registering it
 
+[`rbs generate job <name>`](../cli/generate.md#rbs-generate-job) writes the three pieces a
+new job needs in one plan: the file above, under `src/modules/jobs/`; `pub mod <name>;`
+between the `// <rbs:job_modules>` markers; and the line below, between the
+`// <rbs:jobs>` markers. `newsletter` was written by hand before the command existed —
+what it produced is exactly this:
+
 ```rust file=examples/newsletter-queue/src/modules/jobs/mod.rs region=registry
 ```
 

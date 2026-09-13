@@ -82,6 +82,60 @@ payload carrying a date gets the date of the tick and not the date of the deploy
 Changing the calendar means a deploy. That is the ordinary price of a versioned
 configuration, and it is what makes the list reviewable in a diff.
 
+[`rbs generate job <name> --every "<cron>"`](../cli/generate.md#rbs-generate-job) is the
+command that writes an entry like the one above: the job's file under
+`src/modules/jobs/`, its registration with the worker, and — because of `--every` — the
+`calendrier.push(…)` line between the `// <rbs:schedules>` markers, all three in one plan.
+`--every` refuses an expression `Schedule::compiler` would refuse at boot, and refuses a
+second due date for a job the calendar already schedules under a different expression —
+the row is keyed by `kind`, and the command will not silently pick one over the other.
+
+### A calendar predating the anchor
+
+A project generated before this milestone still declares `schedules()` as a `vec![]`
+literal, with no `// <rbs:schedules>` markers inside it:
+
+```rust
+pub fn schedules() -> Vec<Schedule> {
+    vec![Schedule::every::<crate::modules::jobs::demo::Log>(
+        "0 3 * * *",
+        || crate::modules::jobs::demo::Log {
+            message: "échéance quotidienne".to_string(),
+        },
+    )]
+}
+```
+
+`rbs doctor --fix` cannot put the anchor back on such a project: an anchor is restored
+beneath the line it declares as its hook, and this function's hook —
+`let mut calendrier = Vec::new();` — does not exist in it yet. `rbs doctor` reports the
+anchor missing, same as always, but the remedy here is a hand edit rather than a rerun:
+rewrite the function to instructions, the same way [`jobs::registry`](./jobs.md#registering-it)
+already had to move off a `vec![]` for `// <rbs:jobs>`, and add the markers yourself:
+
+```rust
+#[allow(clippy::vec_init_then_push)]
+pub fn schedules() -> Vec<Schedule> {
+    let mut calendrier = Vec::new();
+    // <rbs:schedules>
+    // </rbs:schedules>
+    calendrier.push(Schedule::every::<crate::modules::jobs::demo::Log>(
+        "0 3 * * *",
+        || crate::modules::jobs::demo::Log {
+            message: "échéance quotidienne".to_string(),
+        },
+    ));
+    calendrier
+}
+```
+
+Once the anchor is in place, `rbs generate job --every` writes to it like on any other
+project. `#[allow(clippy::vec_init_then_push)]` is required, not decorative: clippy prefers
+a `vec![]` literal, which is exactly the one shape an anchor cannot survive inside — a
+second `.push()` a fragment or a generated job adds later would be fine, but the marker
+comment sitting between two literal elements is disfigured by the first `cargo fmt` that
+runs after.
+
 ## Five fields or six
 
 The `cron` crate expects six fields, seconds first: `0 0 3 * * *`. A Unix crontab has five,

@@ -42,7 +42,7 @@ that read it, so passing one is a clap error rather than a flag that is taken an
 
 | Check | What it looks at |
 |---|---|
-| `ancres` | The thirteen Rust comment anchors: `// <rbs:features>` in `src/lib.rs` — or in `src/main.rs`, on a project generated before that library existed — `// <rbs:modules>` in `src/modules/mod.rs`, `// <rbs:routes>` and `// <rbs:layers>` in `src/router.rs`, `// <rbs:openapi>` in `src/openapi.rs`, `// <rbs:migration_modules>` and `// <rbs:migrations>` in `migration/src/lib.rs`, `// <rbs:state_champs>` and `// <rbs:state_init>` in `src/state.rs`, `// <rbs:startup>` in `src/main.rs`, `// <rbs:seeds>` in `src/seeds/main.rs`, `// <rbs:jobs>` in `src/modules/jobs/mod.rs`, `// <rbs:health_probes>` in `src/health/controller.rs` — plus the YAML `# <rbs:services>` in `docker-compose.yml`. Three are optional, inapplicable rather than missing when their file does not exist: `modules`, on a project that has never installed a fragment; `jobs`, on one that has not installed it; `services`, on one with no compose. |
+| `ancres` | The fifteen Rust comment anchors: `// <rbs:features>` in `src/lib.rs` — or in `src/main.rs`, on a project generated before that library existed — `// <rbs:modules>` in `src/modules/mod.rs`, `// <rbs:routes>` and `// <rbs:layers>` in `src/router.rs`, `// <rbs:openapi>` in `src/openapi.rs`, `// <rbs:migration_modules>` and `// <rbs:migrations>` in `migration/src/lib.rs`, `// <rbs:state_champs>` and `// <rbs:state_init>` in `src/state.rs`, `// <rbs:startup>` in `src/main.rs`, `// <rbs:seeds>` in `src/seeds/main.rs`, `// <rbs:jobs>` and `// <rbs:job_modules>` in `src/modules/jobs/mod.rs`, `// <rbs:schedules>` in `src/modules/scheduler/mod.rs`, `// <rbs:health_probes>` in `src/health/controller.rs` — plus the YAML `# <rbs:services>` in `docker-compose.yml`. Five are optional, inapplicable rather than missing when their file does not exist: `modules`, on a project that has never installed a fragment; `jobs` and `job_modules`, on one that has not installed the queue; `schedules`, on one that has not installed the calendar; `services`, on one with no compose. |
 | `agents` | [`AGENTS.md`](../guides/agents.md): present, its two zones present, the guide's version matching the CLI's, the inventory matching the project, every declared feature backed by a directory — and, only as a warning, a directory under `src/` that nothing declares. Covered on its own below. |
 | `relations` | The two anchors a model needs to receive a relation — `// <rbs:relations:table>` and `// <rbs:related:table>`, one pair per entity. Outside the anchor registry above, since which file carries them depends on the project's own features. It only turns red on a model that already has a `belongs_to` or `has_many` but is missing one of its two anchors — a state a hand edit is the likely cause of, since [`rbs generate`](./generate.md) never leaves that behind. |
 | `.env` | Every variable declared by `.env.example` is set in `.env`. `.env.example` is the reference because it is versioned and generated alongside the skeleton — a list kept inside the CLI would have been a second truth to keep in sync. |
@@ -199,7 +199,7 @@ $ rbs doctor --json
     {
       "name": "ancres",
       "status": "ok",
-      "detail": "les 14 points d'insertion sont en place"
+      "detail": "les 15 points d'insertion sont en place"
     },
     {
       "name": "base",
@@ -243,7 +243,7 @@ The announcement is a line of the text rendering only; `--json` never carries it
 {/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --with jobs --database-url postgres://rbs:secret@localhost:55501/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
 $ rbs doctor
-  ✓ ancres        les 14 points d'insertion sont en place
+  ✓ ancres        les 15 points d'insertion sont en place
   ✓ agents        guide et inventaire à jour
   ✓ relations     les modèles portent leurs ancres de relation
   ✓ .env          les 7 variables de .env.example sont renseignées
@@ -431,7 +431,7 @@ names the command to run by hand:
 
 ```text
 $ rbs doctor
-  ✓ ancres        les 14 points d'insertion sont en place
+  ✓ ancres        les 15 points d'insertion sont en place
   ✓ agents        guide et inventaire à jour
   ✓ relations     les modèles portent leurs ancres de relation
   ✓ .env          les 7 variables de .env.example sont renseignées

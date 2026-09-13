@@ -103,6 +103,71 @@ it gets neither an entity worth the name, nor a migration, nor a relation to rep
 carries no handler for a guard to protect. `--singular` stays: the skeleton still names its
 service and its DTOs after the singular.
 
+## `rbs generate job`
+
+{/* rbs:transcript cmd="rbs generate job --help" */}
+```text
+$ rbs generate job --help
+Génère un job de la file, et son échéance sous --every ; exige la feature jobs
+
+Usage: rbs generate job [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>  Nom du job, en snake_case : celui de son module et de son KIND
+
+Options:
+      --every <CRON>  Expression cron de l'échéance, à cinq ou six champs, évaluée en UTC ; exige la feature scheduler
+      --force         Écrit même si le working tree Git est sale
+      --dry-run       Affiche le plan sans rien écrire
+  -h, --help          Print help
+  -V, --version       Print version
+```
+
+Neither `--fields` nor an entity: a job is not a CRUD feature, and the manifest never
+records its name. `<NAME>` is both the module under `src/modules/jobs/` and the `KIND` the
+registry looks it up by, which is why it has to be a valid Rust identifier — refused
+otherwise, along with a Rust keyword and a name that collides with one of the six files the
+`jobs` fragment itself owns (`config`, `demo`, `model`, `queue`, `worker`, `tests`), or with
+`jobs` — `pub mod jobs;` inside `src/modules/jobs/mod.rs` would name the module after its
+own directory, which `clippy::module_inception` refuses.
+
+The command requires the `jobs` feature, and `--every` requires `scheduler` on top of it —
+each refusal names the command that installs what is missing. On a project carrying `jobs`:
+
+{/* rbs:transcript cmd="rbs generate job purge_sessions --dry-run" setup="rbs new demo --yes --with jobs --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+```text
+$ rbs generate job purge_sessions --dry-run
+plan pour …/demo
+
+  + src/modules/jobs/purge_sessions.rs   créé
+  ~ src/modules/jobs/mod.rs              modifié
+
+  2 fichiers à écrire
+
+  rien n'a été écrit (--dry-run)
+```
+
+Two anchors here, both deposited by the `jobs` fragment and not by the skeleton:
+`// <rbs:job_modules>` declares the module, `// <rbs:jobs>` registers it with the worker.
+On a project that also carries `scheduler`, `--every` adds a third file and a third anchor
+— `// <rbs:schedules>` pushes the job's due date onto the calendar:
+
+```text
+$ rbs generate job purge_sessions --every "0 3 * * *" --dry-run
+plan pour /private/tmp/rbs-demo/demo
+
+  + src/modules/jobs/purge_sessions.rs   créé
+  ~ src/modules/jobs/mod.rs              modifié
+  ~ src/modules/scheduler/mod.rs         modifié
+
+  3 fichiers à écrire
+
+  rien n'a été écrit (--dry-run)
+```
+
+Rerunning either command changes nothing: a job file that already exists is never
+rewritten, `--force` included, and the plan reports it unchanged.
+
 ## The `--fields` grammar
 
 One field per comma; within a field, colons separate a name, a type, and any number of
@@ -359,8 +424,9 @@ suggests and what the run above used.
 ## Anchors
 
 `rbs generate` never rewrites an AST. It inserts between comment markers the skeleton
-carries, and it uses six of the ten — the two in `src/state.rs`, `// <rbs:layers>` and
-`// <rbs:startup>` belong to the fragments [`rbs add`](./add.md) installs:
+carries. `rbs generate crud` and `rbs generate feature` use six of the sixteen — the two in
+`src/state.rs`, `// <rbs:layers>` and `// <rbs:startup>` belong to the fragments
+[`rbs add`](./add.md) installs:
 
 | Anchor | File |
 |---|---|
@@ -370,6 +436,15 @@ carries, and it uses six of the ten — the two in `src/state.rs`, `// <rbs:laye
 | `// <rbs:migration_modules>` | `migration/src/lib.rs` |
 | `// <rbs:migrations>` | `migration/src/lib.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
+
+`rbs generate job` uses three of its own, none shared with the two commands above and none
+carried by the skeleton either — each lives in a file a fragment deposits:
+
+| Anchor | File |
+|---|---|
+| `// <rbs:job_modules>` | `src/modules/jobs/mod.rs`, deposited by `jobs` |
+| `// <rbs:jobs>` | `src/modules/jobs/mod.rs`, deposited by `jobs` |
+| `// <rbs:schedules>` | `src/modules/scheduler/mod.rs`, deposited by `scheduler`, under `--every` |
 
 `src/lib.rs` is the library every generated project carries: `src/main.rs` and
 `src/seeds/main.rs` are two separate crate roots, and the library is what lets both reach a
@@ -390,8 +465,8 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) checks all fourteen anchors — eleven on a project carrying no
-compose, no queue and no fragment moved under `src/modules/`, the three optional ones —
+[`rbs doctor`](./doctor.md) checks all sixteen anchors — eleven on a project carrying no
+compose, no queue and no fragment moved under `src/modules/`, the five optional ones —
 so a missing one can be found before a generation trips over it.
 
 ## Failures

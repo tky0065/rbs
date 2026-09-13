@@ -431,14 +431,15 @@ otherwise produce an empty plan, and a command that succeeds without doing anyth
 ## Anchors
 
 `rbs add` mostly writes whole files and edits the manifest; it is [`rbs
-generate`](./generate.md#anchors) that inserts into the project's thirteen Rust comment
+generate`](./generate.md#anchors) that inserts into the project's fifteen Rust comment
 anchors — `// <rbs:features>` (in `src/lib.rs`, or in `src/main.rs` on a project with no
 library — see [below](./generate.md#anchors)), `// <rbs:modules>` (optional: only a
 project that has installed a fragment under `src/modules/` has it), `// <rbs:routes>`,
 `// <rbs:layers>`, `// <rbs:openapi>`, `// <rbs:migration_modules>`,
 `// <rbs:migrations>`, `// <rbs:state_champs>`, `// <rbs:state_init>`, `// <rbs:startup>`,
-`// <rbs:seeds>`, `// <rbs:health_probes>` and `// <rbs:jobs>` (optional too: only a
-project carrying the queue has it).
+`// <rbs:seeds>`, `// <rbs:health_probes>`, `// <rbs:jobs>` and `// <rbs:job_modules>`
+(optional too: only a project carrying the queue has them), and `// <rbs:schedules>`
+(optional too: only a project carrying the calendar has it).
 
 `// <rbs:layers>` is where a fragment stacks a middleware, and it is not interchangeable
 with `// <rbs:routes>` a few lines above: a `.layer()` wraps those that precede it, so a
@@ -451,7 +452,7 @@ three use it.
 `migrate` services go into `# <rbs:services>`, the YAML anchor a compose carries — see
 [above](#the-thirteen-features). The rule is the same everywhere: no AST is ever rewritten,
 and a missing anchor makes the command write nothing and print the block to paste back.
-[`rbs doctor`](./doctor.md) checks all fourteen — eleven on a project carrying no compose, no queue and no fragment moved under `src/modules/`, the three optional ones.
+[`rbs doctor`](./doctor.md) checks all sixteen — eleven on a project carrying no compose, no queue and no fragment moved under `src/modules/`, the five optional ones.
 
 A project generated before `// <rbs:layers>` existed does not have it, and `rbs upgrade`
 does not add it: that command aligns the manifest and the `AGENTS.md` zones, and touches

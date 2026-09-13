@@ -44,7 +44,7 @@ pris puis ignoré.
 
 | Contrôle | Ce qu'il regarde |
 |---|---|
-| `ancres` | Les treize ancres Rust en commentaire : `// <rbs:features>` dans `src/lib.rs` — ou dans `src/main.rs`, sur un projet engendré avant que cette bibliothèque existe — `// <rbs:modules>` dans `src/modules/mod.rs`, `// <rbs:routes>` et `// <rbs:layers>` dans `src/router.rs`, `// <rbs:openapi>` dans `src/openapi.rs`, `// <rbs:migration_modules>` et `// <rbs:migrations>` dans `migration/src/lib.rs`, `// <rbs:state_champs>` et `// <rbs:state_init>` dans `src/state.rs`, `// <rbs:startup>` dans `src/main.rs`, `// <rbs:seeds>` dans `src/seeds/main.rs`, `// <rbs:jobs>` dans `src/modules/jobs/mod.rs`, `// <rbs:health_probes>` dans `src/health/controller.rs` — plus l'ancre YAML `# <rbs:services>` dans `docker-compose.yml`. Trois sont optionnelles, inapplicables plutôt qu'absentes quand leur fichier n'existe pas : `modules`, sur un projet qui n'a jamais installé de fragment ; `jobs`, sur un qui ne l'a pas installé ; `services`, sur un sans compose. |
+| `ancres` | Les quinze ancres Rust en commentaire : `// <rbs:features>` dans `src/lib.rs` — ou dans `src/main.rs`, sur un projet engendré avant que cette bibliothèque existe — `// <rbs:modules>` dans `src/modules/mod.rs`, `// <rbs:routes>` et `// <rbs:layers>` dans `src/router.rs`, `// <rbs:openapi>` dans `src/openapi.rs`, `// <rbs:migration_modules>` et `// <rbs:migrations>` dans `migration/src/lib.rs`, `// <rbs:state_champs>` et `// <rbs:state_init>` dans `src/state.rs`, `// <rbs:startup>` dans `src/main.rs`, `// <rbs:seeds>` dans `src/seeds/main.rs`, `// <rbs:jobs>` et `// <rbs:job_modules>` dans `src/modules/jobs/mod.rs`, `// <rbs:schedules>` dans `src/modules/scheduler/mod.rs`, `// <rbs:health_probes>` dans `src/health/controller.rs` — plus l'ancre YAML `# <rbs:services>` dans `docker-compose.yml`. Cinq sont optionnelles, inapplicables plutôt qu'absentes quand leur fichier n'existe pas : `modules`, sur un projet qui n'a jamais installé de fragment ; `jobs` et `job_modules`, sur un qui n'a pas installé la file ; `schedules`, sur un qui n'a pas installé le calendrier ; `services`, sur un sans compose. |
 | `agents` | [`AGENTS.md`](../guides/agents.md) : présent, ses deux zones présentes, la version du guide accordée à celle du CLI, l'inventaire accordé au projet, chaque feature déclarée adossée à un répertoire — et, en simple avertissement, un répertoire de `src/` que rien ne déclare. Couvert à part plus bas. |
 | `relations` | Les deux ancres qu'un modèle réclame pour recevoir une relation — `// <rbs:relations:table>` et `// <rbs:related:table>`, une paire par entité. Hors du registre des ancres ci-dessus, puisque le fichier qui les porte dépend des features du projet. Il ne rougit que pour un modèle qui porte déjà un `belongs_to` ou un `has_many` sans l'une de ses deux ancres — un état vraisemblablement issu d'une retouche à la main, puisque [`rbs generate`](./generate.md) n'en laisse jamais derrière lui. |
 | `.env` | Toute variable déclarée par `.env.example` est renseignée dans `.env`. `.env.example` sert de référence parce qu'il est versionné et généré avec le squelette — une liste tenue dans le CLI aurait fait deux vérités à synchroniser. |
@@ -208,7 +208,7 @@ $ rbs doctor --json
     {
       "name": "ancres",
       "status": "ok",
-      "detail": "les 14 points d'insertion sont en place"
+      "detail": "les 15 points d'insertion sont en place"
     },
     {
       "name": "base",
@@ -253,7 +253,7 @@ L'annonce est une ligne du seul rendu texte ; `--json` ne la porte jamais.
 {/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --with jobs --database-url postgres://rbs:secret@localhost:55501/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
 $ rbs doctor
-  ✓ ancres        les 14 points d'insertion sont en place
+  ✓ ancres        les 15 points d'insertion sont en place
   ✓ agents        guide et inventaire à jour
   ✓ relations     les modèles portent leurs ancres de relation
   ✓ .env          les 7 variables de .env.example sont renseignées
@@ -445,7 +445,7 @@ commande à lancer à la main :
 
 ```text
 $ rbs doctor
-  ✓ ancres        les 14 points d'insertion sont en place
+  ✓ ancres        les 15 points d'insertion sont en place
   ✓ agents        guide et inventaire à jour
   ✓ relations     les modèles portent leurs ancres de relation
   ✓ .env          les 7 variables de .env.example sont renseignées
