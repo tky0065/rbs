@@ -15,7 +15,9 @@ license = "MIT OR Apache-2.0"
 
 [workspace.dependencies]
 anyhow = "1.0.104"
-argon2 = { version = "0.5.3", features = ["std"] }
+# Les features par défaut — `alloc`, `getrandom`, `password-hash` — sont celles dont `hash`
+# a besoin : `getrandom` tire le sel. La 0.6 a supprimé `std`.
+argon2 = "0.6.0"
 axum = "0.8.9"
 base64 = "0.23.1"
 chrono = { version = "0.4.45", default-features = false, features = ["clock"] }
@@ -29,7 +31,7 @@ dotenvy = "0.15.7"
 figment = { version = "0.10.19", features = ["toml", "env"] }
 include_dir = "0.7.4"
 inquire = "0.9.4"
-jsonwebtoken = { version = "10.3.0", default-features = false, features = ["rust_crypto"] }
+jsonwebtoken = { version = "11.0.0", default-features = false, features = ["rust_crypto"] }
 minijinja = { version = "2.24.0", features = ["custom_syntax"] }
 nu-ansi-term = "0.50.3"
 opentelemetry = "0.32.0"

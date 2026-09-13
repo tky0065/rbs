@@ -5,9 +5,8 @@
 //! (`$argon2id$v=19$...`) qui porte son sel et ses paramètres : rehacher un mot de passe
 //! stocké sous d'anciens paramètres reste possible sans migration de schéma.
 
-use argon2::Argon2;
-use argon2::password_hash::rand_core::OsRng;
-use argon2::password_hash::{PasswordHash, PasswordHasher, PasswordVerifier, SaltString};
+use argon2::password_hash::Error as HashError;
+use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 
 use crate::Error;
 
@@ -17,10 +16,8 @@ use crate::Error;
 ///
 /// Échoue si le générateur du système ou Argon2 défaille — jamais du fait de l'entrée.
 pub fn hash_password(password: &str) -> crate::Result<String> {
-    let salt = SaltString::generate(&mut OsRng);
-
     Argon2::default()
-        .hash_password(password.as_bytes(), &salt)
+        .hash_password(password.as_bytes())
         .map(|hash| hash.to_string())
         .map_err(|error| Error::Internal(anyhow::anyhow!("hachage Argon2 : {error}")))
 }
@@ -38,7 +35,7 @@ pub fn verify_password(password: &str, hash: &str) -> crate::Result<bool> {
     match Argon2::default().verify_password(password.as_bytes(), &expected) {
         Ok(()) => Ok(true),
         // Le seul cas où l'échec vient du client : il ne doit pas devenir un 500.
-        Err(argon2::password_hash::Error::Password) => Ok(false),
+        Err(HashError::PasswordInvalid) => Ok(false),
         Err(error) => Err(Error::Internal(anyhow::anyhow!(
             "vérification Argon2 : {error}"
         ))),
