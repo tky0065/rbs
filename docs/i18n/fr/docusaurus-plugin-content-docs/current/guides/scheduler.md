@@ -20,12 +20,13 @@ C'est pourquoi le fragment exige `jobs`, et c'est le seul du
 lui, en dehors d'`auth`. Sur un projet nu, `rbs add scheduler` pose `jobs` d'abord et
 `scheduler` ensuite, dans un même plan :
 
+{/* rbs:transcript cmd="rbs add scheduler" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add scheduler
 scheduler : déclenchement calendaire : une échéance due enfile un job, une seule fois entre réplicas
 scheduler exige jobs : posée avec elle
 
-plan pour /private/tmp/rbs-demo/blog
+plan pour …/demo
 
   + src/modules/jobs/mod.rs                              créé
   + src/modules/jobs/config.rs                           créé
@@ -34,7 +35,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/modules/jobs/worker.rs                           créé
   + src/modules/jobs/demo.rs                             créé
   + src/modules/jobs/tests.rs                            créé
-  + migration/src/m20260903_173943_create_jobs.rs        créé
+  + migration/src/m20260913_132217_create_jobs.rs        créé
   ~ migration/src/lib.rs                                 modifié
   + src/modules/mod.rs                                   créé
   ~ src/lib.rs                                           modifié
@@ -47,7 +48,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/modules/scheduler/sync.rs                        créé
   + src/modules/scheduler/ticker.rs                      créé
   + src/modules/scheduler/tests.rs                       créé
-  + migration/src/m20260903_173943_create_schedules.rs   créé
+  + migration/src/m20260913_132217_create_schedules.rs   créé
   ~ AGENTS.md                                            modifié
 
   22 fichiers à écrire
@@ -64,17 +65,9 @@ n'ont rien à lire.
 
 Le calendrier est déclaré en code, dans `src/modules/scheduler/mod.rs`, et la base n'en porte que
 l'état. `schedules()` est au ticker ce que `registry()` est au worker — l'unique liste que
-vous éditez :
+vous éditez. L'exemple garde l'échéance de démonstration telle que le fragment la pose :
 
-```rust
-pub fn schedules() -> Vec<Schedule> {
-    vec![Schedule::every::<crate::modules::jobs::demo::Log>(
-        "0 3 * * *",
-        || crate::modules::jobs::demo::Log {
-            message: "échéance quotidienne".to_string(),
-        },
-    )]
-}
+```rust file=examples/event-hub/src/modules/scheduler/mod.rs region=schedules
 ```
 
 `Schedule::every::<J>` prend le job en paramètre de type et tire le `kind` de `J::KIND`,
@@ -96,8 +89,7 @@ cinq, et `0 3 * * *` est ce que tout le monde a dans les doigts. Le fragment acc
 deux — cinq champs sont préfixés de `0 `, ce que la ligne de crontab veut dire de toute
 façon, et six passent intacts. Toute autre longueur est refusée en nommant l'expression :
 
-```text
-`0 3 * *` porte 4 champ(s) : une expression cron en compte cinq (minute heure jour mois jour-de-semaine) ou six, la seconde en tête
+```rust file=examples/event-hub/src/modules/scheduler/mod.rs region=normaliser
 ```
 
 ## Tout est en UTC
@@ -122,12 +114,9 @@ Trois instances de l'API, ce sont trois tickers, et la purge nocturne ne doit to
 qu'une fois. C'est toute la raison d'être de la table `schedules` : elle est l'état partagé
 par lequel les réplicas s'arbitrent.
 
-Une échéance se réserve par un `UPDATE` conditionnel :
+Une échéance se réserve par un `UPDATE` conditionnel — `WHERE kind = ? AND next_run_at <= ?` :
 
-```sql
-UPDATE schedules
-SET next_run_at = ?, last_run_at = ?, updated_at = ?
-WHERE kind = ? AND next_run_at <= ?
+```rust file=examples/event-hub/src/modules/scheduler/ticker.rs region=reserve
 ```
 
 `rows_affected == 1` désigne le gagnant ; les perdants voient zéro. La condition est
@@ -182,9 +171,7 @@ silence une occurrence que le processus avait déjà gagnée.
 
 ## La configuration
 
-```toml
-[scheduler]
-poll_interval_secs = 30
+```toml file=examples/event-hub/config/default.toml region=scheduler
 ```
 
 Un seul réglage : le temps que le ticker dort entre deux examens du calendrier. Une
