@@ -155,7 +155,13 @@ const EXEMPLES: &[Exemple] = &[
         champs: "reference:string,amount:int",
         role: None,
         with_upload: false,
-        edite_a_la_main: &[],
+        // La création d'une commande trace et émet dans sa propre transaction : c'est ce
+        // que ce projet montre, et `the_hand_edits_of_event_hub_are_in_place` en répond.
+        edite_a_la_main: &[
+            "src/orders/repository.rs",
+            "src/orders/service.rs",
+            "src/orders/controller.rs",
+        ],
         engendre_a_part: &[],
     },
 ];
@@ -1002,6 +1008,62 @@ fn the_hand_edits_of_newsletter_queue_are_in_place() {
     assert!(
         prometheus.contains(&format!("\"localhost:{port}\"")),
         "prometheus.yml : la cible doit être le port {port} de `[observability]` :\n{prometheus}"
+    );
+}
+
+/// Ce que `event-hub` porte et qu'aucune commande n'écrit.
+///
+/// Les trois fichiers de `orders` sortent de la comparaison octet à octet. Sans ce test, la
+/// transaction que trois guides citent pourrait se défaire en silence : l'exemple
+/// compilerait encore, et les pages montreraient un contrat que plus rien ne tient.
+#[test]
+fn the_hand_edits_of_event_hub_are_in_place() {
+    let racine = common::depot().join("examples").join("event-hub");
+    let lire = |relatif: &str| {
+        std::fs::read_to_string(racine.join(relatif))
+            .unwrap_or_else(|erreur| panic!("{relatif} illisible : {erreur}"))
+    };
+
+    // Dans cet ordre, et non seulement présents : une trace ou une émission posée après le
+    // commit survivrait au rollback qu'elle doit suivre, et c'est ce que les guides réfutent.
+    let service = lire("src/orders/service.rs");
+    let mut depuis = 0;
+    for (raison, extrait) in [
+        ("la transaction n'est pas ouverte", "db.begin().await?"),
+        (
+            "la commande ne s'écrit pas dans la transaction",
+            "repository::create(&transaction, order)",
+        ),
+        (
+            "la trace ne partage pas la transaction",
+            "audit::record(\n        &transaction,",
+        ),
+        (
+            "l'événement ne partage pas la transaction",
+            "webhooks::emit(&transaction, \"order.created\", &order)",
+        ),
+        ("rien ne la commite", "transaction.commit().await?"),
+    ] {
+        let Some(position) = service[depuis..].find(extrait) else {
+            panic!(
+                "src/orders/service.rs : {raison} — « {extrait} » absent ou hors d'ordre :\n{service}"
+            );
+        };
+        depuis += position + extrait.len();
+    }
+
+    // Générique sur la connexion : une transaction n'est pas un `DatabaseConnection`.
+    let repository = lire("src/orders/repository.rs");
+    assert!(
+        repository.contains("pub async fn create<C: ConnectionTrait>(db: &C, order: ActiveModel)"),
+        "src/orders/repository.rs : la création doit accepter une transaction :\n{repository}"
+    );
+
+    // L'acteur vient du jeton : sans lui, le journal ne dirait pas qui a créé la commande.
+    let controller = lire("src/orders/controller.rs");
+    assert!(
+        controller.contains("service::create(state.core().db(), input, &identite.user_id)"),
+        "src/orders/controller.rs : l'identité doit descendre jusqu'au journal :\n{controller}"
     );
 }
 

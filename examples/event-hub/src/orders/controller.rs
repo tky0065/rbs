@@ -90,6 +90,7 @@ pub async fn filter(
         (status = 409, description = "valeur déjà prise sur une colonne unique", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
+// region: create
 pub async fn create(
     State(state): State<AppState>,
     identite: Identity,
@@ -97,10 +98,11 @@ pub async fn create(
 ) -> Result<(StatusCode, Json<OrderResponse>)> {
     identite.require_role(Role::User)?;
 
-    let order = service::create(state.core().db(), input).await?;
+    let order = service::create(state.core().db(), input, &identite.user_id).await?;
 
     Ok((StatusCode::CREATED, Json(order)))
 }
+// endregion: create
 
 #[utoipa::path(
     get,

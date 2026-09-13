@@ -127,6 +127,7 @@ async fn the_entries_of_one_row_read_back_in_order() {
         .await
         .expect("l'entrée s'inscrit");
 
+    // region: history
     // Le second tri n'est pas décoratif : MySQL tronque `created_at` à la seconde, et
     // trois entrées écrites dans la même n'auraient sinon aucun ordre défini. L'UUIDv7
     // est monotone, il tranche.
@@ -138,6 +139,7 @@ async fn the_entries_of_one_row_read_back_in_order() {
         .all(db)
         .await
         .expect("lecture possible");
+    // endregion: history
 
     let actions: Vec<&str> = histoire.iter().map(|ligne| ligne.action.as_str()).collect();
     assert_eq!(actions, ["create", "update", "delete"]);

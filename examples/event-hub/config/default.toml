@@ -95,16 +95,20 @@ verification_ttl_secs = 86400
 # courriel mène à l'écran qui postera le jeton.
 app_url = "http://localhost:3000"
 
+# region: webhooks
 [webhooks]
 # Temps laissé au receveur pour répondre. Au-delà, la livraison compte pour un échec et
 # repart en réessai : un endpoint lent ne doit pas retenir un worker.
 timeout_secs = 10
+# endregion: webhooks
 
+# region: scheduler
 [scheduler]
 # Attente entre deux examens du calendrier. Une échéance à la minute n'a pas besoin d'un
 # réveil par seconde ; trente secondes bornent le retard de déclenchement à trente
 # secondes.
 poll_interval_secs = 30
+# endregion: scheduler
 
 [cors]
 origins = []

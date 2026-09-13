@@ -9,6 +9,7 @@ mod tests;
 #[allow(unused_imports)]
 pub use repository::record;
 
+// region: actions
 /// Les trois actions du CRUD, nommées une fois pour ne pas les réécrire à chaque appel.
 ///
 /// Ce sont des constantes et non un enum : l'ensemble est ouvert, et un `login` ou un
@@ -16,6 +17,7 @@ pub use repository::record;
 pub const CREATE: &str = "create";
 pub const UPDATE: &str = "update";
 pub const DELETE: &str = "delete";
+// endregion: actions
 
 /// Une écriture à inscrire au journal.
 #[derive(Debug, Clone)]

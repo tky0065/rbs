@@ -83,6 +83,7 @@ async fn reserver_et_enfiler(db: &DatabaseConnection, schedule: &Schedule) -> an
 
     let transaction = db.begin().await?;
 
+    // region: reserve
     // La condition porte sur `next_run_at` et non sur une lecture préalable : c'est ce
     // qui rend la réservation atomique. Le verrou de ligne que l'`UPDATE` pose fait
     // attendre le réplica suivant, qui relit une échéance déjà avancée et n'affecte rien.
@@ -94,6 +95,7 @@ async fn reserver_et_enfiler(db: &DatabaseConnection, schedule: &Schedule) -> an
         .filter(Column::NextRunAt.lte(maintenant))
         .exec(&transaction)
         .await?;
+    // endregion: reserve
 
     if reserve.rows_affected == 0 {
         transaction.rollback().await?;

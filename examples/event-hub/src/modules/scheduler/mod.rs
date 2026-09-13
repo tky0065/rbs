@@ -75,6 +75,7 @@ impl Schedule {
     }
 }
 
+// region: normaliser
 /// Ramène une expression à la forme que `cron` attend : six champs, la seconde en tête.
 ///
 /// Le crontab Unix en a cinq et ne dit rien des secondes ; les cinq champs valent donc
@@ -99,6 +100,7 @@ pub fn normaliser(expression: &str) -> anyhow::Result<String> {
 
     Ok(normalisee)
 }
+// endregion: normaliser
 
 /// Tronque un instant à la seconde, tel qu'il sera stocké.
 ///
@@ -113,6 +115,7 @@ pub(super) fn a_la_seconde(instant: DateTimeWithTimeZone) -> DateTimeWithTimeZon
     instant.with_nanosecond(0).unwrap_or(instant)
 }
 
+// region: schedules
 /// Les échéances de ce projet. Déclarez les vôtres ici.
 ///
 /// Les expressions sont évaluées **en UTC** : `0 3 * * *` est 3 h UTC.
@@ -124,6 +127,7 @@ pub fn schedules() -> Vec<Schedule> {
         },
     )]
 }
+// endregion: schedules
 
 /// Valide le calendrier, l'aligne sur la table, puis détache le ticker.
 ///

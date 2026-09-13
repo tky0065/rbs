@@ -2,7 +2,8 @@ use rbs_core::{Error, Pagination, Result};
 use sea_orm::error::SqlErr;
 use sea_orm::prelude::Uuid;
 use sea_orm::{
-    ActiveModelTrait, DatabaseConnection, DbErr, EntityTrait, PaginatorTrait, QuerySelect,
+    ActiveModelTrait, ConnectionTrait, DatabaseConnection, DbErr, EntityTrait, PaginatorTrait,
+    QuerySelect,
 };
 
 use super::filter::{self, OrderFilter};
@@ -43,9 +44,13 @@ pub async fn find(db: &DatabaseConnection, id: Uuid) -> Result<Option<Model>> {
     Ok(Entity::find_by_id(id).one(db).await?)
 }
 
-pub async fn create(db: &DatabaseConnection, order: ActiveModel) -> Result<Model> {
+// region: create
+// Générique sur la connexion, à la différence des autres portes : le service y passe la
+// transaction qui porte aussi la trace d'audit et l'événement.
+pub async fn create<C: ConnectionTrait>(db: &C, order: ActiveModel) -> Result<Model> {
     order.insert(db).await.map_err(conflict_on_duplicate)
 }
+// endregion: create
 
 pub async fn update(db: &DatabaseConnection, order: ActiveModel) -> Result<Model> {
     order.update(db).await.map_err(conflict_on_duplicate)
