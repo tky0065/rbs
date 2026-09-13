@@ -4,7 +4,7 @@
 //! sont deux actions mais un seul changement, et c'est le fichier qui porte le statut
 //! agrégé qui dit la vérité.
 
-use super::{File, Plan, Sautee, Status};
+use super::{CauseSautee, File, Plan, Sautee, Status};
 use crate::ui;
 
 /// Rend le plan : la racine du projet en tête, un fichier par ligne, puis ce que le plan
@@ -51,14 +51,22 @@ pub(crate) fn sautees(plan: &Plan) -> Option<String> {
     Some(blocs.join("\n\n"))
 }
 
-/// Une insertion sautée : le fichier qui manque, l'ancre visée, le bloc — indenté d'un
-/// cran sous son annonce, indentation propre conservée, pour être collé tel quel.
+/// Une insertion sautée : ce qui manquait, l'ancre visée, le bloc — indenté d'un cran
+/// sous son annonce, indentation propre conservée, pour être collé tel quel.
 fn sautee(sautee: &Sautee) -> String {
-    let annonce = ui::yellow(&format!(
-        "{} absent : le bloc destiné à `{}` est à reporter vous-même",
-        sautee.anchor.file,
-        sautee.anchor.opening()
-    ));
+    let annonce = ui::yellow(&match sautee.cause {
+        CauseSautee::FichierAbsent => format!(
+            "{} absent : le bloc destiné à `{}` est à reporter vous-même",
+            sautee.anchor.file,
+            sautee.anchor.opening()
+        ),
+        CauseSautee::AncreAbsente => format!(
+            "{} ne porte pas `{}` : le bloc qui lui était destiné est à reporter vous-même \
+             — `rbs doctor --fix` repose l'ancre",
+            sautee.anchor.file,
+            sautee.anchor.opening()
+        ),
+    });
     let bloc: Vec<String> = sautee
         .lines
         .iter()
@@ -114,7 +122,7 @@ fn footer(files: &[File]) -> String {
 mod tests {
     use std::path::PathBuf;
 
-    use super::super::{File, Sautee, Status};
+    use super::super::{CauseSautee, File, Sautee, Status};
     use super::*;
 
     fn file(path: &str, before: Option<&str>, statut: Status) -> File {
@@ -264,6 +272,7 @@ mod tests {
                 "mailpit:".to_string(),
                 "  image: axllent/mailpit".to_string(),
             ],
+            cause: CauseSautee::FichierAbsent,
         }
     }
 
@@ -301,6 +310,29 @@ mod tests {
 
         assert!(rendered.contains("rien à faire"), "{rendered}");
         assert!(rendered.contains("docker-compose.yml absent"), "{rendered}");
+    }
+
+    /// Le fichier est là, c'est l'ancre qui manque : l'annonce doit le dire, nommer la
+    /// balise et la commande qui la repose — « absent » enverrait chercher un fichier qui
+    /// existe.
+    #[test]
+    fn a_skipped_insertion_into_a_vanished_anchor_names_the_tag_and_the_fix() {
+        let mut plan = plan_of(Vec::new());
+        plan.sautees.push(Sautee {
+            anchor: crate::anchors::JOB_MODULES,
+            lines: vec!["pub mod purge;".to_string()],
+            cause: CauseSautee::AncreAbsente,
+        });
+
+        let rendered = super::plan(&plan);
+
+        assert!(
+            rendered.contains("src/modules/jobs/mod.rs ne porte pas `// <rbs:job_modules>`"),
+            "{rendered}"
+        );
+        assert!(rendered.contains("`rbs doctor --fix`"), "{rendered}");
+        assert!(!rendered.contains("absent"), "{rendered}");
+        assert!(rendered.contains("\n    pub mod purge;"), "{rendered}");
     }
 
     #[test]

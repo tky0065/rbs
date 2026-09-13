@@ -38,6 +38,23 @@ const MODULES_DU_SQUELETTE: [&str; 9] = [
 
 /// Vérifie qu'une feature peut porter ce nom sans casser le projet.
 pub(crate) fn validate(name: &str) -> Result<(), NameError> {
+    validate_identifier(name)?;
+
+    if MODULES_DU_SQUELETTE.contains(&name) {
+        return Err(NameError {
+            libelle: name.to_string(),
+            kind: Kind::ModuleDuSquelette,
+        });
+    }
+
+    Ok(())
+}
+
+/// Vérifie que ce nom fait un module Rust, sans rien présumer de l'endroit où il vivra.
+///
+/// Un job vit sous `src/modules/jobs/`, où les modules du squelette ne le gênent pas : ses
+/// propres collisions sont celles de la file, que son appelant connaît.
+pub(crate) fn validate_identifier(name: &str) -> Result<(), NameError> {
     let error = |kind| {
         Err(NameError {
             libelle: name.to_string(),
@@ -58,10 +75,6 @@ pub(crate) fn validate(name: &str) -> Result<(), NameError> {
 
     if RUST_KEYWORDS.contains(&name) {
         return error(Kind::MotCleRust);
-    }
-
-    if MODULES_DU_SQUELETTE.contains(&name) {
-        return error(Kind::ModuleDuSquelette);
     }
 
     Ok(())
@@ -165,5 +178,20 @@ mod tests {
     #[test]
     fn an_empty_name_is_rejected() {
         assert!(validate("").is_err());
+    }
+
+    /// Un job n'occupe pas `src/<nom>/` : les modules du squelette ne le gênent pas, et
+    /// seul `validate` les réserve.
+    #[test]
+    fn an_identifier_is_not_bound_by_the_skeleton_modules() {
+        assert_eq!(validate_identifier("router"), Ok(()));
+        assert!(validate("router").is_err());
+
+        for refuse in ["", "BlogPosts", "match"] {
+            assert!(
+                validate_identifier(refuse).is_err(),
+                "« {refuse} » doit être refusé"
+            );
+        }
     }
 }

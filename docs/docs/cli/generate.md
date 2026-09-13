@@ -27,6 +27,7 @@ Commands:
   crud     Génère une feature CRUD complète, entité et migration comprises
   feature  Génère une feature vide : six fichiers, aucun champ
   client   Engendre un client typé depuis le document OpenAPI du projet
+  job      Génère un job de la file, et son échéance sous --every ; exige la feature jobs
   help     Print this message or the help of the given subcommand(s)
 
 Options:
