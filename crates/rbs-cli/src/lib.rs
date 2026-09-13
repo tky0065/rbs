@@ -707,19 +707,36 @@ fn generate_job(
         return Ok(());
     }
 
-    // Une relance ne réécrit rien : « écrit — 0 fichier » annoncerait une écriture.
-    let ecrits = planned
-        .plan
-        .files()
-        .iter()
-        .filter(|file| file.statut != plan::Status::DejaFait)
-        .count();
-    if ecrits == 0 {
-        ui::success(&format!("job {name} déjà en place — rien à écrire"));
-        return Ok(());
-    }
+    let blocs = |nombre: usize| {
+        let pluriel = if nombre > 1 { "s" } else { "" };
+        format!("{nombre} bloc{pluriel}")
+    };
 
-    ui::success(&format!("job {name} écrit — {}", ui::files(ecrits)));
+    match planned.bilan() {
+        generate::job::Bilan::DejaEnPlace => {
+            ui::success(&format!("job {name} déjà en place — rien à écrire"));
+            return Ok(());
+        }
+        generate::job::Bilan::AReporter(nombre) => {
+            ui::warn(&format!(
+                "job {name} : rien à écrire, mais {} à reporter — voir ci-dessus",
+                blocs(nombre)
+            ));
+            return Ok(());
+        }
+        generate::job::Bilan::Ecrit {
+            fichiers,
+            a_reporter,
+        } => {
+            ui::success(&format!("job {name} écrit — {}", ui::files(fichiers)));
+            if a_reporter > 0 {
+                ui::warn(&format!(
+                    "{} à reporter — voir ci-dessus",
+                    blocs(a_reporter)
+                ));
+            }
+        }
+    }
 
     // Engendré, le job ne fait que journaliser : c'est `run` qu'il reste à écrire.
     ui::info(&format!(

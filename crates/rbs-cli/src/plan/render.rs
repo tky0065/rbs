@@ -5,6 +5,7 @@
 //! agrégé qui dit la vérité.
 
 use super::{CauseSautee, File, Plan, Sautee, Status};
+use crate::anchors::Anchor;
 use crate::ui;
 
 /// Rend le plan : la racine du projet en tête, un fichier par ligne, puis ce que le plan
@@ -54,17 +55,28 @@ pub(crate) fn sautees(plan: &Plan) -> Option<String> {
 /// Une insertion sautée : ce qui manquait, l'ancre visée, le bloc — indenté d'un cran
 /// sous son annonce, indentation propre conservée, pour être collé tel quel.
 fn sautee(sautee: &Sautee) -> String {
-    let annonce = ui::yellow(&match sautee.cause {
-        CauseSautee::FichierAbsent => format!(
-            "{} absent : le bloc destiné à `{}` est à reporter vous-même",
-            sautee.anchor.file,
-            sautee.anchor.opening()
+    let (fichier, balise) = (&sautee.anchor.file, sautee.anchor.opening());
+
+    let annonce = ui::yellow(&match &sautee.cause {
+        CauseSautee::FichierAbsent => {
+            format!("{fichier} absent : le bloc destiné à `{balise}` est à reporter vous-même")
+        }
+        CauseSautee::AncreAbsente { obstacle: None } => format!(
+            "{fichier} ne porte pas `{balise}` : lancez `rbs doctor --fix`, puis relancez la \
+             commande — ou reportez vous-même le bloc qui lui était destiné"
         ),
-        CauseSautee::AncreAbsente => format!(
-            "{} ne porte pas `{}` : le bloc qui lui était destiné est à reporter vous-même \
-             — `rbs doctor --fix` repose l'ancre",
-            sautee.anchor.file,
-            sautee.anchor.opening()
+        CauseSautee::AncreAbsente {
+            obstacle: Some(obstacle),
+        } => format!(
+            "{fichier} ne porte pas `{balise}`, et `rbs doctor --fix` ne peut pas la reposer : \
+             {} — {}, puis relancez la commande",
+            obstacle.raison(&sautee.anchor),
+            geste(&sautee.anchor)
+        ),
+        CauseSautee::Entrainee { par } => format!(
+            "{fichier} : le bloc destiné à `{balise}` suit celui de `{}`, sauté — il nomme ce \
+             que ce dernier devait poser, et ne s'écrit pas sans lui",
+            par.opening()
         ),
     });
     let bloc: Vec<String> = sautee
@@ -74,6 +86,25 @@ fn sautee(sautee: &Sautee) -> String {
         .collect();
 
     format!("  {annonce}\n{}", bloc.join("\n"))
+}
+
+/// Le geste manuel qui pose une ancre que `rbs doctor --fix` ne sait pas reposer.
+///
+/// `schedules` a le sien : un calendrier d'avant 1.5.0 est un `vec![]`, où une ancre ne
+/// survit pas à rustfmt — et où le bloc, un `calendrier.push(…)`, n'aurait pas de variable
+/// à qui s'adresser. La fonction se réécrit en instructions d'abord.
+fn geste(anchor: &Anchor) -> String {
+    if anchor.name == crate::anchors::SCHEDULES.name {
+        "réécrivez `schedules()` en instructions et posez-y la balise à la main (voir le \
+         guide scheduler)"
+            .to_string()
+    } else {
+        format!(
+            "posez `{}` et `{}` à la main",
+            anchor.opening(),
+            anchor.closing()
+        )
+    }
 }
 
 /// Ce qu'une ligne dit d'un fichier : sa puce, son chemin, ce qu'il adviendra de lui.
@@ -321,7 +352,7 @@ mod tests {
         plan.sautees.push(Sautee {
             anchor: crate::anchors::JOB_MODULES,
             lines: vec!["pub mod purge;".to_string()],
-            cause: CauseSautee::AncreAbsente,
+            cause: CauseSautee::AncreAbsente { obstacle: None },
         });
 
         let rendered = super::plan(&plan);
@@ -330,9 +361,52 @@ mod tests {
             rendered.contains("src/modules/jobs/mod.rs ne porte pas `// <rbs:job_modules>`"),
             "{rendered}"
         );
-        assert!(rendered.contains("`rbs doctor --fix`"), "{rendered}");
+        assert!(
+            rendered.contains("lancez `rbs doctor --fix`, puis relancez la commande"),
+            "{rendered}"
+        );
         assert!(!rendered.contains("absent"), "{rendered}");
         assert!(rendered.contains("\n    pub mod purge;"), "{rendered}");
+    }
+
+    /// Une ancre que `--fix` ne peut pas reposer ne lui est pas confiée : l'annonce dit
+    /// pourquoi et renvoie à la main. Une insertion entraînée nomme celle qu'elle attend.
+    #[test]
+    fn an_anchor_doctor_cannot_repose_and_a_dependent_block_say_so() {
+        let mut plan = plan_of(Vec::new());
+        plan.sautees.push(Sautee {
+            anchor: crate::anchors::JOB_MODULES,
+            lines: vec!["pub mod purge;".to_string()],
+            cause: CauseSautee::AncreAbsente {
+                obstacle: Some(crate::anchors::Cause::Introuvable),
+            },
+        });
+        plan.sautees.push(Sautee {
+            anchor: crate::anchors::JOBS,
+            lines: vec!["registre = registre.register::<purge::Purge>();".to_string()],
+            cause: CauseSautee::Entrainee {
+                par: crate::anchors::JOB_MODULES,
+            },
+        });
+
+        let rendered = super::plan(&plan);
+
+        assert!(
+            !rendered.contains("lancez `rbs doctor --fix`"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("la ligne d'accroche `pub mod worker;` est introuvable"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("posez `// <rbs:job_modules>` et `// </rbs:job_modules>` à la main"),
+            "{rendered}"
+        );
+        assert!(
+            rendered.contains("`// <rbs:jobs>` suit celui de `// <rbs:job_modules>`"),
+            "{rendered}"
+        );
     }
 
     #[test]

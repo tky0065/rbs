@@ -50,13 +50,22 @@ pub(crate) struct Sautee {
 }
 
 /// Ce qui a fait sauter une insertion.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum CauseSautee {
     /// Le fichier porteur n'existe pas.
     FichierAbsent,
-    /// Le fichier est là, sans l'ancre : un projet engendré avant qu'elle n'existe, que
-    /// `rbs doctor --fix` sait compléter.
-    AncreAbsente,
+    /// Le fichier est là, sans l'ancre : un projet engendré avant qu'elle n'existe.
+    AncreAbsente {
+        /// Ce qui empêche `rbs doctor --fix` de la reposer, `None` s'il le sait : promettre
+        /// la réparation d'un fichier qui a perdu son accroche enverrait dans une impasse.
+        obstacle: Option<crate::anchors::Cause>,
+    },
+    /// Une insertion précédente du plan a sauté, et celle-ci nomme ce qu'elle devait poser :
+    /// écrite seule, elle laisserait le projet hors d'état de compiler, ou de fonctionner.
+    Entrainee {
+        /// L'ancre de l'insertion sautée dont celle-ci dépend.
+        par: Anchor,
+    },
 }
 
 /// Ce qu'une commande fera au projet, entièrement calculé et rien d'écrit.
@@ -269,19 +278,41 @@ impl Builder {
     ///
     /// Distincte d'`insert`, dont les appelants tiennent au refus : un compose réécrit à la
     /// main sans son ancre est un compose abîmé. Ici le fichier précède l'ancre — un projet
-    /// engendré avant elle — et l'y reposer est l'affaire de `rbs doctor --fix`.
-    pub fn insert_ou_sauter(&mut self, anchor: Anchor, lines: &[String]) -> Result<(), Error> {
+    /// engendré avant elle — et l'y reposer est l'affaire de `rbs doctor --fix`, quand le
+    /// fichier porte encore la ligne sous laquelle elle se repose.
+    ///
+    /// Rend `true` quand l'insertion est planifiée, écrite ou déjà en place, et `false`
+    /// quand elle saute : l'appelant dont une insertion suivante en dépend la saute avec.
+    pub fn insert_ou_sauter(&mut self, anchor: Anchor, lines: &[String]) -> Result<bool, Error> {
+        let avant = self.sautees.len();
+
         match self.insert(anchor.clone(), lines) {
+            Ok(()) => Ok(self.sautees.len() == avant),
             Err(Error::Anchor(_)) if anchor.optional => {
+                // Jugée sur le fichier tel que le plan le laisse : c'est lui que `rbs doctor
+                // --fix` trouvera, le plan appliqué.
+                let obstacle = match self.states(&anchor.file)?.courant {
+                    Some(courant) => crate::anchors::repose(&courant, &anchor).err(),
+                    None => Some(crate::anchors::Cause::FichierAbsent),
+                };
                 self.sautees.push(Sautee {
                     anchor,
                     lines: lines.to_vec(),
-                    cause: CauseSautee::AncreAbsente,
+                    cause: CauseSautee::AncreAbsente { obstacle },
                 });
-                Ok(())
+                Ok(false)
             }
-            autre => autre,
+            Err(autre) => Err(autre),
         }
+    }
+
+    /// Consigne une insertion sans la tenter : `cause` dit pourquoi elle ne s'écrira pas.
+    pub fn sauter(&mut self, anchor: Anchor, lines: &[String], cause: CauseSautee) {
+        self.sautees.push(Sautee {
+            anchor,
+            lines: lines.to_vec(),
+            cause,
+        });
     }
 
     /// Vérifie que `anchor` précède, dans son fichier, toute ligne commençant par `line`.
@@ -887,7 +918,8 @@ mod tests {
             [Sautee {
                 anchor: anchors::SERVICES,
                 lines: mailpit(),
-                cause: CauseSautee::AncreAbsente,
+                // `services:` est là : `rbs doctor --fix` saurait reposer l'ancre dessous.
+                cause: CauseSautee::AncreAbsente { obstacle: None },
             }]
         );
         assert_eq!(

@@ -65,8 +65,47 @@ pub(crate) struct Planned {
     pub fichier: String,
     /// Ce que rustfmt n'a pas pu faire sur le rendu, s'il y a lieu.
     pub avertissement: Option<format::Avertissement>,
-    /// L'expression de l'échéance, telle qu'elle a été saisie.
+    /// L'expression de l'échéance, telle qu'elle a été saisie — quand le plan l'écrit, ou la
+    /// trouve déjà écrite : une échéance sautée ne sera pas relue au démarrage.
     pub echeance: Option<String>,
+}
+
+/// Ce que la commande a fait au projet, pour la ligne qui le dit après l'application.
+#[derive(Debug, PartialEq, Eq)]
+pub(crate) enum Bilan {
+    /// Des fichiers ont été écrits ; des blocs restent peut-être à reporter.
+    Ecrit {
+        /// Fichiers créés ou modifiés.
+        fichiers: usize,
+        /// Insertions sautées, dont le plan affiche le bloc.
+        a_reporter: usize,
+    },
+    /// Rien d'écrit, et rien ne reste à faire : une relance à l'identique.
+    DejaEnPlace,
+    /// Rien d'écrit, mais des blocs restent à reporter : « déjà en place » mentirait.
+    AReporter(usize),
+}
+
+impl Planned {
+    /// Ce que l'application du plan aura fait.
+    pub(crate) fn bilan(&self) -> Bilan {
+        // Une relance ne réécrit rien : « écrit — 0 fichier » annoncerait une écriture.
+        let fichiers = self
+            .plan
+            .files()
+            .iter()
+            .filter(|file| file.statut != plan::Status::DejaFait)
+            .count();
+
+        match (fichiers, self.plan.sautees().len()) {
+            (0, 0) => Bilan::DejaEnPlace,
+            (0, a_reporter) => Bilan::AReporter(a_reporter),
+            (fichiers, a_reporter) => Bilan::Ecrit {
+                fichiers,
+                a_reporter,
+            },
+        }
+    }
 }
 
 /// Ce qui peut empêcher d'engendrer un job.
@@ -337,27 +376,52 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     let mut builder = plan::Builder::new(root);
     builder.create(&fichier, &contenu)?;
-    builder.insert_ou_sauter(anchors::JOB_MODULES, &[format!("pub mod {nom};")])?;
-    builder.insert_ou_sauter(anchors::JOBS, &inscription)?;
 
+    // Chaque insertion attend celle dont elle dépend : l'inscription d'un module non déclaré
+    // empêcherait le projet de compiler, et l'échéance d'un job non inscrit l'enfilerait à
+    // chaque tick pour un worker qui ne sait pas l'exécuter.
+    let declare = builder.insert_ou_sauter(anchors::JOB_MODULES, &[format!("pub mod {nom};")])?;
+    let inscrit = if declare {
+        builder.insert_ou_sauter(anchors::JOBS, &inscription)?
+    } else {
+        builder.sauter(
+            anchors::JOBS,
+            &inscription,
+            plan::CauseSautee::Entrainee {
+                par: anchors::JOB_MODULES,
+            },
+        );
+        false
+    };
+
+    let mut echeance = None;
     if let Some(expression) = &options.every {
         // `{expression:?}` : l'expression saisie devient un littéral Rust sûr, guillemets et
         // barres obliques inverses échappés.
         let chemin = format!("crate::modules::jobs::{nom}::{type_}");
-        let echeance = instructions(
+        let lignes = instructions(
             format!(
                 "calendrier.push(Schedule::every::<{chemin}>({expression:?}, || {chemin} {{}}));"
             ),
             &mut avertissement,
         );
-        builder.insert_ou_sauter(anchors::SCHEDULES, &echeance)?;
+
+        if !inscrit {
+            builder.sauter(
+                anchors::SCHEDULES,
+                &lignes,
+                plan::CauseSautee::Entrainee { par: anchors::JOBS },
+            );
+        } else if builder.insert_ou_sauter(anchors::SCHEDULES, &lignes)? {
+            echeance = Some(expression.clone());
+        }
     }
 
     Ok(Planned {
         plan: builder.finir(),
         fichier,
         avertissement,
-        echeance: options.every.clone(),
+        echeance,
     })
 }
 
@@ -523,7 +587,7 @@ mod tests {
 
     use super::*;
     use crate::fixtures::Project;
-    use crate::plan::{CauseSautee, Sautee, Status};
+    use crate::plan::Status;
 
     const MODULES: &str = "src/modules/jobs/mod.rs";
     const CALENDRIER: &str = "src/modules/scheduler/mod.rs";
@@ -797,6 +861,7 @@ mod tests {
             "{:?}",
             second.plan.sautees()
         );
+        assert_eq!(second.bilan(), Bilan::DejaEnPlace);
     }
 
     /// Le fichier du job appartient au développeur dès qu'il est écrit : ni la relance ni
@@ -820,29 +885,151 @@ mod tests {
         assert_eq!(read(&chemin), edite);
     }
 
-    /// Un projet engendré avant l'ancre des modules : la déclaration est à reporter, et le
-    /// reste s'écrit — le job, et son inscription au registre.
-    #[test]
-    fn a_project_without_the_modules_anchor_skips_the_declaration_and_writes_the_rest() {
-        let (_parent, root) = project();
-        let chemin = root.join(MODULES);
-        let ampute = read(&chemin)
-            .replace("// <rbs:job_modules>\n", "")
-            .replace("// </rbs:job_modules>\n", "");
-        fs::write(&chemin, ampute).expect("le module se réécrit");
+    /// Les ancres que le plan a sautées, dans son ordre.
+    fn sautees(planned: &Planned) -> Vec<&str> {
+        planned
+            .plan
+            .sautees()
+            .iter()
+            .map(|sautee| sautee.anchor.name.as_ref())
+            .collect()
+    }
 
-        let planned = run(&options(&root, "purge", None)).expect("l'ancre manquante se saute");
-
-        assert_eq!(
-            planned.plan.sautees(),
-            [Sautee {
-                anchor: crate::anchors::JOB_MODULES,
-                lines: vec!["pub mod purge;".to_string()],
-                cause: CauseSautee::AncreAbsente,
-            }]
+    /// Retire les deux balises de l'ancre `nom` de `path`, et rend le fichier ainsi amputé.
+    fn sans_ancre(path: &Path, nom: &str) -> String {
+        let source = read(path);
+        let ampute: String = source
+            .lines()
+            .filter(|ligne| {
+                let ligne = ligne.trim();
+                ligne != format!("// <rbs:{nom}>") && ligne != format!("// </rbs:{nom}>")
+            })
+            .map(|ligne| format!("{ligne}\n"))
+            .collect();
+        assert_ne!(
+            ampute,
+            source,
+            "`{nom}` n'était pas dans {}",
+            path.display()
         );
+        fs::write(path, &ampute).expect("le fichier se réécrit");
+
+        ampute
+    }
+
+    /// Un projet engendré entre la 1.3.0 et la 1.5.0 n'a pas `<rbs:job_modules>` : la
+    /// déclaration saute, et l'inscription et l'échéance, qui nomment le module, sautent avec
+    /// elle — écrites seules, elles laisseraient le projet hors d'état de compiler jusqu'au
+    /// collage.
+    #[test]
+    fn a_project_without_the_modules_anchor_writes_nothing_that_names_the_module() {
+        let (_parent, root) = project();
+        let modules = sans_ancre(&root.join(MODULES), "job_modules");
+        let calendrier = read(&root.join(CALENDRIER));
+
+        let planned =
+            run(&options(&root, "purge", Some("0 4 * * *"))).expect("l'ancre manquante se saute");
+
+        assert_eq!(sautees(&planned), ["job_modules", "jobs", "schedules"]);
+        assert_eq!(read(&root.join(MODULES)), modules);
+        assert_eq!(read(&root.join(CALENDRIER)), calendrier);
         assert!(root.join("src/modules/jobs/purge.rs").exists());
-        assert!(read(&chemin).contains("registre = registre.register::<purge::Purge>();"));
+        assert_eq!(planned.echeance, None, "l'échéance n'est pas écrite");
+        assert_eq!(
+            planned.bilan(),
+            Bilan::Ecrit {
+                fichiers: 1,
+                a_reporter: 3
+            }
+        );
+
+        // Cette ancre-là, `rbs doctor --fix` sait la reposer : l'annonce dit de le lancer.
+        let rendu = crate::plan::render::sautees(&planned.plan).expect("des blocs à reporter");
+        assert!(
+            rendu.contains("lancez `rbs doctor --fix`, puis relancez la commande"),
+            "{rendu}"
+        );
+    }
+
+    /// Sans `<rbs:jobs>`, le job est déclaré mais pas inscrit : son échéance l'enfilerait à
+    /// chaque tick pour un worker qui ne sait pas l'exécuter. Elle saute avec l'inscription.
+    #[test]
+    fn a_schedule_waits_for_the_registration_it_relies_on() {
+        let (_parent, root) = project();
+        sans_ancre(&root.join(MODULES), "jobs");
+        let calendrier = read(&root.join(CALENDRIER));
+
+        let planned =
+            run(&options(&root, "purge", Some("0 4 * * *"))).expect("l'ancre manquante se saute");
+
+        assert_eq!(sautees(&planned), ["jobs", "schedules"]);
+        assert!(read(&root.join(MODULES)).contains("pub mod purge;"));
+        assert_eq!(read(&root.join(CALENDRIER)), calendrier);
+    }
+
+    /// `schedules()` tel qu'un projet d'avant 1.5.0 le déclare : un littéral, sans ancre.
+    const CALENDRIER_EN_VEC: &str = "pub fn schedules() -> Vec<Schedule> {
+    vec![Schedule::every::<crate::modules::jobs::demo::Log>(
+        \"0 3 * * *\",
+        || crate::modules::jobs::demo::Log {
+            message: \"échéance quotidienne\".to_string(),
+        },
+    )]
+}
+";
+
+    /// Un calendrier encore en `vec![]` n'a pas l'accroche sous laquelle `rbs doctor --fix`
+    /// reposerait l'ancre : l'annonce ne promet pas une réparation qui n'aura pas lieu, et
+    /// dit le geste — `schedules()` à réécrire en instructions.
+    #[test]
+    fn a_calendar_still_in_a_vec_literal_is_not_promised_to_doctor() {
+        let (_parent, root) = project();
+        let chemin = root.join(CALENDRIER);
+        let source = read(&chemin);
+        let debut = source
+            .find("#[allow(clippy::vec_init_then_push)]")
+            .expect("le calendrier livré est en instructions");
+        let fin = debut
+            + source[debut..]
+                .find("    calendrier\n}\n")
+                .expect("le calendrier se ferme")
+            + "    calendrier\n}\n".len();
+        let litteral = format!("{}{CALENDRIER_EN_VEC}{}", &source[..debut], &source[fin..]);
+        fs::write(&chemin, &litteral).expect("le calendrier se réécrit");
+
+        let planned =
+            run(&options(&root, "purge", Some("0 4 * * *"))).expect("l'ancre manquante se saute");
+
+        assert_eq!(sautees(&planned), ["schedules"]);
+        assert_eq!(read(&chemin), litteral);
+        let rendu = crate::plan::render::sautees(&planned.plan).expect("l'échéance à reporter");
+        assert!(!rendu.contains("lancez `rbs doctor --fix`"), "{rendu}");
+        assert!(!rendu.contains("repose l'ancre"), "{rendu}");
+        assert!(
+            rendu.contains("`let mut calendrier = Vec::new();`"),
+            "{rendu}"
+        );
+        assert!(
+            rendu.contains("réécrivez `schedules()` en instructions"),
+            "{rendu}"
+        );
+    }
+
+    /// Relancée sans rien écrire, la commande n'est pas « en place » tant qu'un bloc reste
+    /// à reporter.
+    #[test]
+    fn a_rerun_with_blocks_still_to_paste_is_not_announced_in_place() {
+        let (_parent, root) = project();
+        sans_ancre(&root.join(MODULES), "job_modules");
+        run(&options(&root, "purge", None)).expect("la première génération aboutit");
+
+        let second = plan_for(&options(&root, "purge", None)).expect("la relance se planifie");
+
+        assert!(
+            matches!(second.bilan(), Bilan::AReporter(_)),
+            "{:?}",
+            second.bilan()
+        );
     }
 
     #[test]
