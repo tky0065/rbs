@@ -4,8 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## État du dépôt
 
-Le workspace est en place et les cinq jalons de la feuille de route, de la v0.1 à la v1.1,
-sont livrés. La racine porte deux crates publiables — `crates/rbs-core` et `crates/rbs-cli`,
+Le workspace est en place et les six jalons de la feuille de route, de la v0.1 à la v1.1,
+sont livrés ; les versions 1.2 à 1.4 sont publiées et la 1.5.0 est prête (`ROADMAP.md`,
+`CHANGELOG.md`). La racine porte deux crates publiables — `crates/rbs-core` et `crates/rbs-cli`,
 publiées séparément sur crates.io — quatre projets d'exemple compilés en CI, et le site
 Docusaurus sous `docs/`. Le nom `rbs` étant déjà pris sur crates.io, le binaire s'installe
 par `cargo install rbs-cli`.
@@ -67,7 +68,7 @@ Deux crates publiables, plus des templates embarquées dans le binaire :
 
 ```
 crates/rbs-core/            runtime : Error/Result, config, logs, AppState, middlewares, helpers OpenAPI
-crates/rbs-cli/             binaire `rbs` : new, add, generate, migrate, seed, dev, doctor, upgrade
+crates/rbs-cli/             binaire `rbs` : new, add, generate, migrate, seed, dev, doctor, upgrade, completions
 crates/rbs-cli/templates/   squelette de projet et fragments de features (include_dir)
 examples/                   projets réels compilés en CI, source des extraits de documentation
 docs/                       site Docusaurus (toolchain Node isolée ici)
@@ -88,7 +89,7 @@ l'utilisateur tout ce qu'il voudra lire ou modifier. Avant d'ajouter quoi que ce
 **Architecture par feature, avec dépendance unidirectionnelle stricte :**
 
 ```
-src/<nom>/  mod · model · dto · repository · service · controller
+src/<nom>/  mod · model · dto · filter · repository · service · controller
 controller → service → repository → model
 ```
 
