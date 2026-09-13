@@ -1,9 +1,9 @@
 //! La couche qui porte les règles, un fichier par parcours.
 //!
-//! `issue()`, `profile()` et `notify()` vivent ici plutôt que dans l'un des parcours :
-//! plusieurs s'en servent, et les descendre dans l'un d'eux ferait dépendre les autres de
-//! ce voisin-là. `session_view()` rejoint `profile()`, l'autre passage du modèle vers la
-//! réponse.
+//! `issue()` et `notify()` vivent ici plutôt que dans l'un des parcours : plusieurs s'en
+//! servent, et les descendre dans l'un d'eux ferait dépendre les autres de ce voisin-là.
+//! `profile()` et `session_view()` y sont aussi : ce sont les deux seuls passages du
+//! modèle vers la réponse, et les garder côte à côte tient cette règle en un endroit.
 
 use chrono::{Duration, Utc};
 use rbs_core::Result;
@@ -121,7 +121,7 @@ fn session_view(session: repository::refresh_token::Model) -> SessionResponse {
 
 // region: notify
 /// Envoie un courriel à un compte, sans que son échec atteigne la réponse.
-pub(super) fn notify(
+fn notify(
     mail: &Mailer,
     destinataire: &Model,
     objet: &str,
@@ -142,7 +142,7 @@ pub(super) fn notify(
             user_id = %destinataire.id,
             gabarit,
             %error,
-            "envoi du courriel échoué"
+            "préparation du courriel échouée"
         );
     }
 }

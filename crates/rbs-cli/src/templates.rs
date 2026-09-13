@@ -1051,7 +1051,12 @@ mod tests {
         for controleur in ["session", "password", "verification"] {
             let source = read(&racine.join(format!("controller/{controleur}.rs.jinja")));
 
-            for orchestration in ["send_template_detached", "::request(", "request_reset("] {
+            for orchestration in [
+                "send_template_detached",
+                "::request(",
+                "request_reset(",
+                "state.mail().",
+            ] {
                 assert!(
                     !source.contains(orchestration),
                     "controller/{controleur}.rs appelle `{orchestration}` :\n{source}"
@@ -1071,8 +1076,8 @@ mod tests {
 
         let commun = read(&racine.join("service/mod.rs.jinja"));
         assert!(
-            commun.contains("pub(super) fn notify("),
-            "service/mod.rs ne porte pas `notify` :\n{commun}"
+            commun.contains("\nfn notify("),
+            "service/mod.rs ne porte pas `notify`, ou l'expose au-delà du module :\n{commun}"
         );
     }
 
