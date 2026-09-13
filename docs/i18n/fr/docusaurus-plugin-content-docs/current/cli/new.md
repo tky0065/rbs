@@ -195,12 +195,12 @@ tous les cas dans `lang`, dans `[package.metadata.rbs]` ci-dessus, ce qui permet
 [`rbs add`](./add.md) et [`rbs upgrade`](./upgrade.md) de continuer à écrire le fichier
 dans la langue du projet plutôt que dans celle de qui lance la commande ensuite.
 
-La même valeur s'inscrit aussi comme `lang` sous `[server]` dans `config/default.toml`,
-et c'est elle que le projet engendré lit à l'exécution pour choisir la langue d'un corps
-d'erreur HTTP — `title`, `detail` et les messages qu'écrit un fragment. `AGENTS.md` et les
-réponses d'un projet lancé partent donc de la même langue ; voir
-[le guide des erreurs](../guides/errors.md#la-langue-du-corps) pour ce qui suit `lang` et
-ce qui n'en dépend pas.
+Ce même choix fait deux choses de plus. Il s'inscrit comme `lang` sous `[server]` dans
+`config/default.toml`, que le projet engendré lit à l'exécution pour choisir la langue de
+ses réponses HTTP ; et `add` et `generate` le relisent dans `[package.metadata.rbs]` pour
+écrire, dans cette langue, les messages destinés au client qu'ils engendrent. Voir
+[le guide des erreurs](../guides/errors.md#la-langue-du-corps) pour savoir quelles
+réponses HTTP chacun de ces deux réglages décide réellement.
 
 ## Les trois questions
 

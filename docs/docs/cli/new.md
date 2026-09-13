@@ -194,12 +194,12 @@ English, and no value at all giving French. Either way the choice is recorded as
 [`rbs upgrade`](./upgrade.md) keep writing the file in the project's language rather than
 in the language of whoever happens to run the command next.
 
-The same value is also written as `lang` under `[server]` in `config/default.toml`, and it
-is what a generated project reads at runtime to decide the language of an HTTP error body —
-`title`, `detail` and the messages a fragment writes. `AGENTS.md` and the responses a
-running project sends therefore start out in the same language; see
-[the errors guide](../guides/errors.md#the-language-of-the-body) for what follows `lang`
-and what does not.
+The same choice does two more things. It is written as `lang` under `[server]` in
+`config/default.toml`, which a generated project reads at run time to decide the language
+of its HTTP responses; and `add` and `generate` read it back from
+`[package.metadata.rbs]` to write, in that language, the client-facing messages they
+generate. See [the errors guide](../guides/errors.md#the-language-of-the-body) for which
+HTTP responses each of those two settings actually decides.
 
 ## The three questions
 

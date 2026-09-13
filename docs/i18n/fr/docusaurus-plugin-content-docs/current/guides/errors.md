@@ -75,35 +75,76 @@ source fuiterait dans le corps.
 
 ## La langue du corps
 
-`title`, le `detail` fixe des variantes ci-dessus, les messages qu'un fragment écrit dans
-une erreur `Domain` ou une règle `validator`, et les descriptions communes d'OpenAPI
-partagées par toutes les opérations d'un même statut suivent tous `[server] lang` — `fr`
-par défaut, ou `en` :
+Deux réglages nommés `lang`, à deux moments différents, décident deux choses distinctes.
+
+À *l'exécution*, `[server] lang` — `fr` par défaut, ou `en` ; `RBS_SERVER__LANG` le
+surcharge — décide ce que `rbs-core` lui-même écrit dans la réponse : le `title` de tout
+corps `problem+json`, le `detail` fixe du 404 (`{ressource} not found` /
+`{ressource} introuvable`) et du 500, et les descriptions communes du document OpenAPI —
+les six réponses nommées sous `components/responses` et les 422/500 ajoutées à chaque
+opération. C'est `Error::parts` dans `crates/rbs-core/src/error.rs`,
+`crates/rbs-core/src/openapi.rs`, et la résolution dans `crates/rbs-core/src/lang.rs` :
 
 ```toml
 [server]
 lang = "en"
 ```
 
-Le régler suffit ; aucun handler, aucun gabarit, aucune annotation OpenAPI ne le lit lui-même.
+À *la génération*, la langue du projet — choisie une fois par `rbs new --lang` et inscrite
+comme `lang` sous `[package.metadata.rbs]` dans `Cargo.toml` — décide la langue dans
+laquelle `rbs add` et `rbs generate crud` écrivent les messages qu'ils remettent au
+client. Ceux-ci deviennent de simples littéraux de chaîne dans votre code engendré, et
+`[server] lang` ne les touche plus ensuite : le contexte `lang` lu dans
+`crates/rbs-cli/src/add/mod.rs` et l'appel `.speaking(metadonnees.lang)` dans
+`crates/rbs-cli/src/generate/command.rs` choisissent l'un des deux littéraux au rendu,
+une fois pour toutes.
 
-Ce qui n'en dépend pas :
+Ces messages engendrés, fichier par fichier :
+
+| Fichier | Message |
+|---|---|
+| `src/auth/repository/user.rs` | `ADRESSE_PRISE`, le 409 d'une inscription en double |
+| `src/modules/rate_limit/mod.rs` | le message du 429 |
+| `src/modules/webhooks/service.rs` | le 400 d'un motif d'événement vide |
+| `src/modules/webhooks/target.rs` | les trois refus d'URL, 400 |
+| `src/modules/webhooks/repository.rs` | `NotFound("subscription")` / `"abonnement"` |
+| `repository.rs` d'un CRUD engendré | le 409 d'une valeur unique en double |
+| `filter.rs` d'un CRUD engendré | le 400 d'une colonne de tri inconnue |
+| `controller.rs` et `service.rs` d'un CRUD engendré, sous `--with-upload` | `NotFound("content")` / `"contenu"` |
+
+Ce qui ne suit ni l'un ni l'autre réglage :
 
 - le `title` de `Domain` lui-même — le `code` que vous avez choisi, pas un mot que rbs
   aurait décidé à votre place ;
-- les codes qu'une règle `validator` inscrit dans `errors` (`email`, `length`, …) — un
-  client est censé les comparer, pas les lire ;
-- le `message` que vous passez à `BadRequest`, `Conflict`, `Domain` et les autres — vous
-  l'avez écrit, sa traduction vous revient.
+- les codes qu'une règle `validator` inscrit dans `errors` (`email`, `length`, …) — aucun
+  DTO engendré ne leur pose de `message`, ils restent les codes bruts, faits pour être
+  comparés plutôt que lus ;
+- le `message` que vous passez vous-même à `BadRequest`, `Conflict`, `Domain` et les
+  autres.
 
-Ce qui reste en français quoi qu'il arrive : les lignes de journal, les commentaires de
-code, et les courriels envoyés par `mail` et `auth` — une réinitialisation de mot de
-passe, une vérification d'adresse. Rien de tout cela ne relève de `[server] lang`.
+Ce qui reste en français quoi qu'il arrive : les lignes de journal — sauf les refus d'URL
+des webhooks, dont le texte est aussi celui que journalise une livraison bloquée
+(`crates/rbs-cli/templates/features/webhooks/delivery.rs.jinja`), et qui suit donc la
+langue de génération sur cette seule ligne. Restent aussi hors de portée : les
+commentaires de code ; les courriels de `mail` et `auth` (objets et gabarits HTML sous
+`templates/mail/`) ; les descriptions et résumés par opération écrits dans les handlers
+engendrés (`#[utoipa::path(… description = …)]` et les commentaires de documentation) ; et
+les descriptions de schéma que portent les types de `rbs-core` eux-mêmes (les champs de
+`ProblemDetails`, `Page`, `CursorPage`, les schémas de filtre).
 
-Basculer un projet existant tient en une ligne — `lang = "en"` sous `[server]` — mais ne
-change que ce que le runtime rend à partir de là. Un message qu'un fragment a déjà écrit
-dans votre code (une erreur `Domain`, un message `validator`) garde la langue dans
-laquelle vous l'avez écrit ; seule votre propre relecture le traduit.
+Basculer un projet existant vers l'anglais tient en deux modifications, toutes deux à la
+main : `lang = "en"` sous `[server]` dans `config/default.toml` (exécution) et
+`lang = "en"` sous `[package.metadata.rbs]` dans `Cargo.toml` (pour qu'un futur
+`add`/`generate` écrive en anglais) — puis traduire à la main les messages déjà engendrés,
+listés ci-dessus. `rbs upgrade` n'en réécrit aucun.
+
+Une divergence à surveiller sur un projet plus ancien : un projet engendré avant 1.5.0
+sans `--lang` inscrivait `[package.metadata.rbs] lang` d'après la locale — `en` pour
+toute locale non française, y compris le `C.UTF-8` des runners CI et des images Docker
+(voir `from_locale` dans `crates/rbs-cli/src/lang.rs`) — alors que son exécution, sans
+`[server] lang`, parle français. Depuis 1.5.0, `add` et `generate` écrivent leurs messages
+dans la langue de la métadonnée : aligner les deux clés, dans un sens ou dans l'autre,
+avant de générer dans un tel projet.
 
 ## Comment une erreur devient une réponse
 
