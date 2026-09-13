@@ -12,17 +12,18 @@ Calling it is your service's job, and the reason is [below](#what-the-fragment-d
 
 ## What gets installed
 
+{/* rbs:transcript cmd="rbs add audit" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add audit
 audit : journal des écritures : qui a modifié quoi, quand, dans la transaction du changement
 
-plan pour /private/tmp/rbs-demo/demo
+plan pour …/demo
 
   + src/modules/audit/mod.rs                             créé
   + src/modules/audit/model.rs                           créé
   + src/modules/audit/repository.rs                      créé
   + src/modules/audit/tests.rs                           créé
-  + migration/src/m20260903_173024_create_audit_log.rs   créé
+  + migration/src/m20260913_132219_create_audit_log.rs   créé
   ~ migration/src/lib.rs                                 modifié
   + src/modules/mod.rs                                   créé
   ~ src/lib.rs                                           modifié
@@ -62,54 +63,19 @@ if the change is committed.
 The repository `rbs generate` writes takes a `&DatabaseConnection`. Widen the signature of
 the write you want to trace, so that the service can hand it the transaction instead — it
 is the one change the fragment asks of your existing code, and
-[`examples/newsletter-queue`](https://github.com/tky0065/rbs/tree/main/examples/newsletter-queue)
-does the same for a read of its own:
+[`examples/event-hub`](https://github.com/tky0065/rbs/tree/main/examples/event-hub) widens
+the signature of a creation the same way:
 
-```rust
-// src/posts/repository.rs — the only layer that builds a query.
-use sea_orm::ConnectionTrait;
-
-pub async fn update<C: ConnectionTrait>(db: &C, post: ActiveModel) -> Result<Model> {
-    Ok(post.update(db).await?)
-}
+```rust file=examples/event-hub/src/orders/repository.rs region=create
 ```
 
 The service then holds the transaction, and decides what deserves a trace:
 
-```rust
-// src/posts/service.rs
-use sea_orm::{DatabaseConnection, Set, TransactionTrait};
-use serde_json::json;
-
-use super::repository;
-use crate::modules::audit::{self, Entry};
-
-pub async fn rename(
-    db: &DatabaseConnection,
-    post: Model,
-    title: String,
-    actor: &str,
-) -> Result<Model> {
-    let transaction = db.begin().await?;
-
-    let former = post.title.clone();
-    let mut changed: ActiveModel = post.into();
-    changed.title = Set(title);
-    let post = repository::update(&transaction, changed).await?;
-
-    audit::record(
-        &transaction,
-        Entry::new(audit::UPDATE, "posts", post.id.to_string())
-            .actor(actor)
-            .changes(json!({ "title": { "from": former, "to": post.title } })),
-    )
-    .await?;
-
-    transaction.commit().await?;
-
-    Ok(post)
-}
+```rust file=examples/event-hub/src/orders/service.rs region=create
 ```
+
+The same transaction also carries `webhooks::emit(&transaction, "order.created", &order)` —
+see the [webhooks guide](./webhooks.md) for the delivery that shares it.
 
 A log that keeps the trace of a rolled-back `UPDATE` lies. A log that misses the trace of a
 committed one lies too. The transaction settles both at once, and the test that proves it
@@ -124,10 +90,10 @@ It is the same contract as [`jobs::enqueue`](./jobs.md), for the same reason.
 the entity, and the identifier of the row. `actor` and `changes` are chained on: what the
 caller has no choice to make, the caller does not have to write.
 
-Under [`auth`](./auth.md), the actor is one line in your handler:
+Under [`auth`](./auth.md), the actor is one line in your handler — passed down to the
+service, which builds the `Entry`:
 
-```rust
-Entry::new(audit::DELETE, "posts", id.to_string()).actor(identity.user_id.clone())
+```rust file=examples/event-hub/src/orders/controller.rs region=create
 ```
 
 Without `auth`, leave it out. `actor_id` is nullable, and `Entry::actor` takes a `String`
@@ -144,21 +110,19 @@ empty string would say "an anonymous actor", `NULL` says "no HTTP identity".
 
 `action` is a `String`, not an enum. Three constants cover the usual case:
 
-```rust
-pub const CREATE: &str = "create";
-pub const UPDATE: &str = "update";
-pub const DELETE: &str = "delete";
+```rust file=examples/event-hub/src/modules/audit/mod.rs region=actions
 ```
 
 Anything else is a legitimate action — `login`, `export`, `impersonate` — and a closed enum
 would only force you to work around it. `jobs::Status` *is* an enum, because that set is
 closed; this one is not.
 
-`changes` is a `serde_json::Value`, and the fragment imposes no schema on it. A
-before/after per field reads well and is what the example above writes, but a list of
-touched columns, a diff, or `Value::Null` are all valid. `entity_id` is `TEXT` rather than
-`UUID` for the same reason: the generator lays down UUIDv7 keys, but a hand-written entity
-may carry an integer or a composite key, and the log has to be able to cite it.
+`changes` is a `serde_json::Value`, and the fragment imposes no schema on it. The example
+above writes the values a creation produces; an `UPDATE` would write a before/after per
+field, but a list of touched columns, a diff, or `Value::Null` are all valid. `entity_id`
+is `TEXT` rather than `UUID` for the same reason: the generator lays down UUIDv7 keys, but
+a hand-written entity may carry an integer or a composite key, and the log has to be able
+to cite it.
 
 ## The table
 
@@ -178,32 +142,10 @@ read grows with the whole log — and a log is meant to grow.
 
 There is no `updated_at`: a log line is not modified.
 
-Reading a row's history is a plain query:
+Reading a row's history is the query the shipped test replays:
 
-```rust
-// src/modules/audit/repository.rs — reading belongs beside the write, for the same reason:
-// nothing else in the project builds a query.
-use sea_orm::{ColumnTrait, EntityTrait, QueryFilter, QueryOrder};
-
-use super::model::{Column, Entity, Model};
-
-pub async fn history<C>(db: &C, entity: &str, entity_id: &str) -> anyhow::Result<Vec<Model>>
-where
-    C: ConnectionTrait,
-{
-    Ok(Entity::find()
-        .filter(Column::Entity.eq(entity))
-        .filter(Column::EntityId.eq(entity_id))
-        .order_by_asc(Column::CreatedAt)
-        .order_by_asc(Column::Id)
-        .all(db)
-        .await?)
-}
+```rust file=examples/event-hub/src/modules/audit/tests.rs region=history
 ```
-
-The second ordering is not decorative: MySQL truncates `created_at` to the second, and
-three entries written within the same one would otherwise have no defined order. The
-UUIDv7 is monotonic, and settles it.
 
 ## What the fragment does not do
 
