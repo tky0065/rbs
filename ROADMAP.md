@@ -133,7 +133,8 @@ de passe, vérification de l'adresse, sessions listées et fermées. Une table
 L'arrêt gracieux sur Ctrl-C ou SIGTERM, un worker de jobs concurrent dont le délai de
 reprise croît, `--singular` pour les pluriels irréguliers, la fermeture du SSRF des
 webhooks, les correctifs de sécurité d'`auth` (rejeu des jetons, révocation effective,
-adresses normalisées, parcours transactionnels) et le dépôt atomique de `storage`.
+adresses normalisées, parcours transactionnels), le dépôt atomique de `storage`, et
+`rbs new --lang` qui fixe désormais la langue des réponses HTTP (`[server] lang`).
 
 ---
 
