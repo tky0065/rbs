@@ -130,8 +130,10 @@ check above. `jobs` is the one this milestone added:
       [jobs]
       max_attempts = 5
       retry_delay_secs = 30
+      retry_max_delay_secs = 3600
       poll_interval_secs = 1
       lease_secs = 300
+      concurrency = 4
 ```
 
 A feature declared in `[package.metadata.rbs]` whose section has vanished from the

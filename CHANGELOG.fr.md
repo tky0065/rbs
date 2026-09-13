@@ -33,6 +33,16 @@ dépréciation.
   observability` ne demande plus d'appeler `logs::shutdown()` soi-même. Un projet engendré
   avant 1.5.0 garde son ancien `main.rs`, que `rbs upgrade` ne réécrit pas ; la note de
   montée de version dit quoi coller.
+- **Le worker de `jobs` exécute plusieurs jobs de front, et un job raté attend plus
+  longtemps à chaque fois.** `[jobs] concurrency` (défaut `4`) borne le nombre de jobs
+  qu'un worker exécute à la fois — une livraison webhook qui attend un receveur lent ne
+  retient plus toute la file — et chaque job tourne dans une tâche à lui, si bien qu'un
+  job qui panique ne tue plus le worker. Le délai de reprise vaut désormais
+  `retry_delay_secs × 2^(tentative − 1)`, plafonné par la nouvelle clé
+  `retry_max_delay_secs` (défaut `3600`). Les deux clés ont un défaut : un projet engendré
+  avant 1.5.0 continue de fonctionner sans elles, et reprend `src/modules/jobs/worker.rs`
+  et `queue.rs` du fragment quand il veut le comportement. `rbs doctor` propose les deux
+  clés dans le bloc qu'il imprime quand la section manque.
 
 ### Modifié
 

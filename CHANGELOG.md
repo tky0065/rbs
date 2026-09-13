@@ -31,6 +31,15 @@ between minor versions with no deprecation cycle.
   content is unchanged. The message of `rbs add observability` no longer asks you to call
   `logs::shutdown()` yourself. A project generated before 1.5.0 keeps its old `main.rs`,
   which `rbs upgrade` does not rewrite; the upgrade note says what to paste.
+- **The `jobs` worker runs several jobs side by side, and a failed job waits longer each
+  time.** `[jobs] concurrency` (default `4`) bounds how many jobs one worker executes at
+  once — one webhook delivery waiting on a slow receiver no longer holds the whole queue —
+  and each job runs in a task of its own, so a panicking job no longer kills the worker.
+  The retry delay is now `retry_delay_secs × 2^(attempt − 1)`, capped by the new
+  `retry_max_delay_secs` (default `3600`). Both keys have a default: a project generated
+  before 1.5.0 keeps working without them, and takes `src/modules/jobs/worker.rs` and
+  `queue.rs` from the fragment when it wants the behaviour. `rbs doctor` proposes both
+  keys in the block it prints when the section is missing.
 
 ### Changed
 

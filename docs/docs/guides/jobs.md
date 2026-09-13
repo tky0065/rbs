@@ -70,19 +70,24 @@ broker's fan-out is not what this feature is. The trade is deliberate, and the
 ```rust file=examples/newsletter-queue/src/modules/jobs/config.rs
 ```
 
-Four settings, all with defaults written where the section is declared rather than in the
+Six settings, all with defaults written where the section is declared rather than in the
 core, so you can read and change them in one place:
 
 ```toml
 [jobs]
 max_attempts = 5
 retry_delay_secs = 30
+retry_max_delay_secs = 3600
 poll_interval_secs = 1
 lease_secs = 300
+concurrency = 4
 ```
 
 `lease_secs` is the delay after which a reservation nobody reported on — the worker died
-mid-job — is given back to the queue; keep it above your longest job.
+mid-job — is given back to the queue; keep it above your longest job. `concurrency` is how
+many jobs one worker runs side by side: four leaves more than half of the default
+connection pool to the API, and one gives you a strictly sequential worker.
+`retry_delay_secs` doubles with each failed attempt, up to `retry_max_delay_secs`.
 
 `config/{env}.toml` and the `RBS_JOBS__*` variables override them like any other section —
 see the [configuration guide](./configuration.md).
@@ -167,8 +172,12 @@ to completion and its fate is written, no new job is reserved, and `main` waits 
 worker before exiting, up to `server.shutdown_timeout_secs`. The lease is for the process
 that is killed rather than stopped.
 
+A job that panics takes only itself down: it runs in a task of its own, the worker logs
+the panic and moves on, and the row stays `running` until the lease gives it back.
+
 :::note
-There is one worker per process, and it polls. Several processes can run one each: the
+There is one worker per process, running up to `concurrency` jobs side by side, and it
+polls. Several processes can run one each: the
 dequeue reserves a row and increments its counter in a single statement — with
 `FOR UPDATE SKIP LOCKED` on PostgreSQL and MySQL 8, an immediate transaction on SQLite —
 so two workers never get the same row, whatever their interleaving.
@@ -176,8 +185,10 @@ so two workers never get the same row, whatever their interleaving.
 
 ## Retries and definitive failure
 
-A job that returns an error is retried after `retry_delay_secs`, up to `max_attempts`
-times, and is then marked `failed` with its last error kept in the row. Nothing retries it
+A job that returns an error is retried after `retry_delay_secs`, then twice that, then
+four times — the delay doubles with every failed attempt, up to `retry_max_delay_secs` —
+until `max_attempts` is reached, and it is then marked `failed` with its last error kept
+in the row. Nothing retries it
 after that, and nothing tells you either — `status = 'failed'` in the `jobs` table is where
 those live, and watching it is yours to arrange.
 
