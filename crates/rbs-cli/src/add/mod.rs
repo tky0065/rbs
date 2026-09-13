@@ -187,22 +187,10 @@ impl Error {
     /// Ce que le développeur peut coller ou déplacer pour réparer, quand la panne se
     /// répare ainsi.
     ///
-    /// Seule une ancre disparue ou mal placée a un remède tenant en un bloc de texte :
-    /// les autres pannes se règlent par une décision — commiter, corriger le manifeste du
-    /// fragment.
+    /// Le texte lui-même vit sur `plan::Error::remede` — porté une seule fois, pour
+    /// toutes les commandes qui délèguent à un plan.
     pub(crate) fn remedy(&self) -> Option<String> {
-        match self.plan()? {
-            plan::Error::Anchor(absente) => Some(format!(
-                "dans {} :\n{}",
-                absente.anchor.file,
-                absente.anchor.block()
-            )),
-            plan::Error::MalPlacee(placee) => Some(format!(
-                "dans {}, remontez ce bloc au-dessus de `{}` :\n{}",
-                placee.anchor.file, placee.before, placee.block
-            )),
-            _ => None,
-        }
+        self.plan()?.remede()
     }
 
     /// L'erreur de planification que celle-ci porte, directement ou par l'installation.
@@ -2840,5 +2828,50 @@ mod tests {
         });
 
         assert_eq!(error.code(), "arbre_sale");
+    }
+
+    /// Les trois pannes à bloc, portées directement par un plan ou par l'installation
+    /// d'un fragment : un bloc sans son remède, ou l'inverse, laisserait un agent deviner
+    /// où coller ce qu'on lui montre.
+    #[test]
+    fn remede_is_some_exactly_when_bloc_is_some_directly_and_through_the_installation() {
+        let constructeurs: Vec<fn() -> plan::Error> = vec![
+            || {
+                plan::Error::Anchor(crate::anchors::Missing {
+                    anchor: crate::anchors::ROUTES,
+                })
+            },
+            || {
+                plan::Error::MalPlacee(Box::new(crate::anchors::Misplaced {
+                    anchor: crate::anchors::STATE_INIT,
+                    before: "core: CoreState::new(".to_string(),
+                    block: "// <rbs:state_init>\n// </rbs:state_init>".to_string(),
+                }))
+            },
+            || plan::Error::ZoneAbsente {
+                path: "AGENTS.md".to_string(),
+                zone: crate::agents::MissingZone {
+                    zone: "inventory".to_string(),
+                },
+            },
+        ];
+
+        for construire in constructeurs {
+            let direct = Error::Plan(construire());
+            assert_eq!(
+                direct.remede().is_some(),
+                direct.bloc().is_some(),
+                "{direct:?}"
+            );
+            assert!(direct.remede().is_some(), "{direct:?}");
+
+            let via_installation = Error::Installation(installation::Error::Plan(construire()));
+            assert_eq!(
+                via_installation.remede().is_some(),
+                via_installation.bloc().is_some(),
+                "{via_installation:?}"
+            );
+            assert!(via_installation.remede().is_some(), "{via_installation:?}");
+        }
     }
 }

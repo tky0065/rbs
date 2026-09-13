@@ -128,8 +128,13 @@ impl Codee for Error {
         }
     }
 
+    /// `--json` va plus loin que l'affichage humain de `remedy`, qui ne couvre que
+    /// `Openapi` : un `Plan` porte son remède dès qu'il en a un, comme son `bloc()`.
     fn remede(&self) -> Option<String> {
-        self.remedy()
+        match self {
+            Error::Plan(erreur) => erreur.remede(),
+            _ => self.remedy(),
+        }
     }
 
     fn bloc(&self) -> Option<String> {
@@ -232,6 +237,52 @@ mod tests {
         assert_eq!(error.code(), "sans_binaire_openapi");
         let remede = error.remede().expect("le refus doit porter un remède");
         assert!(remede.contains("[[bin]]"), "{remede}");
+    }
+
+    /// `remedy()` (l'affichage humain) ne couvre que `Openapi`, jamais `Plan` : `Codee::
+    /// remede` va plus loin, comme pour `generate`.
+    #[test]
+    fn a_vanished_anchor_has_a_remede_though_remedy_does_not_cover_plan() {
+        let error = Error::Plan(crate::plan::Error::Anchor(crate::anchors::Missing {
+            anchor: crate::anchors::ROUTES,
+        }));
+
+        assert_eq!(error.remedy(), None);
+        assert_eq!(error.code(), "ancre_absente");
+        assert!(error.bloc().is_some());
+        assert!(error.remede().is_some());
+    }
+
+    /// Les trois pannes à bloc d'un plan de client : un bloc sans son remède, ou
+    /// l'inverse, laisserait un agent deviner où coller ce qu'on lui montre.
+    #[test]
+    fn remede_is_some_exactly_when_bloc_is_some_for_a_plan_error() {
+        let erreurs = vec![
+            crate::plan::Error::Anchor(crate::anchors::Missing {
+                anchor: crate::anchors::ROUTES,
+            }),
+            crate::plan::Error::MalPlacee(Box::new(crate::anchors::Misplaced {
+                anchor: crate::anchors::STATE_INIT,
+                before: "core: CoreState::new(".to_string(),
+                block: "// <rbs:state_init>\n// </rbs:state_init>".to_string(),
+            })),
+            crate::plan::Error::ZoneAbsente {
+                path: "AGENTS.md".to_string(),
+                zone: crate::agents::MissingZone {
+                    zone: "inventory".to_string(),
+                },
+            },
+        ];
+
+        for erreur in erreurs {
+            let error = Error::Plan(erreur);
+            assert_eq!(
+                error.remede().is_some(),
+                error.bloc().is_some(),
+                "{error:?}"
+            );
+            assert!(error.remede().is_some(), "{error:?}");
+        }
     }
 
     #[test]

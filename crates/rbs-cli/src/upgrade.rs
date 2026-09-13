@@ -113,20 +113,12 @@ impl Codee for Error {
         }
     }
 
-    /// Cette erreur n'a pas de `remedy()` : seule une ancre disparue ou mal placée,
-    /// portée par `Plan`, a un texte à donner — reconstruit ici à l'identique de celui
-    /// des autres commandes, faute d'un `remedy()` où le lire.
+    /// Cette erreur n'a pas de `remedy()` : seul un `Plan` a un texte à donner, lu sur
+    /// `plan::Error::remede` plutôt que reconstruit ici, où il divergerait au premier
+    /// changement.
     fn remede(&self) -> Option<String> {
         match self {
-            Error::Plan(plan::Error::Anchor(absente)) => Some(format!(
-                "dans {} :\n{}",
-                absente.anchor.file,
-                absente.anchor.block()
-            )),
-            Error::Plan(plan::Error::MalPlacee(placee)) => Some(format!(
-                "dans {}, remontez ce bloc au-dessus de `{}` :\n{}",
-                placee.anchor.file, placee.before, placee.block
-            )),
+            Error::Plan(erreur) => erreur.remede(),
             _ => None,
         }
     }
@@ -693,8 +685,9 @@ mod tests {
         assert_eq!(error.remede(), None);
     }
 
-    /// Sans `remedy()` propre à cette commande, `remede` reconstruit le même texte que
-    /// les autres commandes pour une ancre disparue portée par un `Plan`.
+    /// Sans `remedy()` propre à cette commande, `remede` lit le même texte que les
+    /// autres commandes sur `plan::Error::remede`, pour une ancre disparue portée par un
+    /// `Plan`.
     #[test]
     fn a_vanished_anchor_carried_by_the_plan_still_gives_a_remedy() {
         let error = Error::Plan(crate::plan::Error::Anchor(crate::anchors::Missing {
@@ -706,5 +699,37 @@ mod tests {
         let remede = error.remede().expect("une ancre disparue se recolle");
         assert!(remede.contains("src/router.rs"), "{remede}");
         assert!(remede.contains("// <rbs:routes>"), "{remede}");
+    }
+
+    /// Les trois pannes à bloc d'un plan de mise à niveau : un bloc sans son remède, ou
+    /// l'inverse, laisserait un agent deviner où coller ce qu'on lui montre.
+    #[test]
+    fn remede_is_some_exactly_when_bloc_is_some_for_a_plan_error() {
+        let erreurs = vec![
+            crate::plan::Error::Anchor(crate::anchors::Missing {
+                anchor: crate::anchors::ROUTES,
+            }),
+            crate::plan::Error::MalPlacee(Box::new(crate::anchors::Misplaced {
+                anchor: crate::anchors::STATE_INIT,
+                before: "core: CoreState::new(".to_string(),
+                block: "// <rbs:state_init>\n// </rbs:state_init>".to_string(),
+            })),
+            crate::plan::Error::ZoneAbsente {
+                path: "AGENTS.md".to_string(),
+                zone: crate::agents::MissingZone {
+                    zone: "inventory".to_string(),
+                },
+            },
+        ];
+
+        for erreur in erreurs {
+            let error = Error::Plan(erreur);
+            assert_eq!(
+                error.remede().is_some(),
+                error.bloc().is_some(),
+                "{error:?}"
+            );
+            assert!(error.remede().is_some(), "{error:?}");
+        }
     }
 }
