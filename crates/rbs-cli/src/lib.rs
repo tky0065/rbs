@@ -164,9 +164,6 @@ pub fn run() {
                 } => {
                     if let Err(error) = generate_job(name, every, force, dry_run) {
                         ui::error(&error.to_string());
-                        if let Some(remedy) = error.remedy() {
-                            ui::info(&format!("\n{remedy}"));
-                        }
                         std::process::exit(1);
                     }
 

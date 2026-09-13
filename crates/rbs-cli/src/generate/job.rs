@@ -28,6 +28,22 @@ const TEMPLATE: &str = include_str!(concat!(
 /// écraserait leur fichier, ou doublerait leur déclaration.
 const MODULES_DE_LA_FILE: [&str; 6] = ["config", "demo", "model", "queue", "worker", "tests"];
 
+/// Crates que nomment `src/modules/jobs/mod.rs` et la template d'un job, plus `core` et
+/// `alloc` : déclaré dans ce fichier, un module de ce nom y masque la crate. Mesuré sur un
+/// projet engendré, `std`, `serde`, `serde_json`, `anyhow` et `async_trait` y cassent la
+/// compilation ; les trois autres ne la cassent pas encore, mais le premier chemin qui les
+/// nommerait dans ce fichier le ferait.
+const CRATES: [&str; 8] = [
+    "alloc",
+    "anyhow",
+    "async_trait",
+    "core",
+    "serde",
+    "serde_json",
+    "std",
+    "tracing",
+];
+
 /// Ce qu'il faut savoir pour engendrer un job.
 pub(crate) struct Options {
     /// Nom du job, en snake_case : celui de son module et de son `KIND`.
@@ -94,6 +110,30 @@ pub(crate) enum Error {
          autre nom"
     )]
     NomDuDossier,
+
+    /// Le nom est celui d'une crate : déclaré dans `src/modules/jobs/mod.rs`, le module la
+    /// masquerait.
+    #[error(
+        "« {nom} » est aussi le nom d'une crate : `pub mod {nom};` la masquerait dans \
+         src/modules/jobs/mod.rs, où un chemin `{nom}::…` ne la trouverait plus — choisissez \
+         un autre nom"
+    )]
+    NomDeCrate {
+        /// Nom demandé.
+        nom: String,
+    },
+
+    /// La feature est installée, mais hors de `src/modules/` : le projet l'a reçue avant la
+    /// 1.3.0, et `rbs upgrade` ne déplace aucun module.
+    #[error(
+        "`rbs generate job` écrit dans src/modules/{feature}/mod.rs, qui manque : ce projet a \
+         reçu `{feature}` avant la 1.3.0, en `src/{feature}/`. Déplacez ce répertoire sous \
+         `src/modules/` et corrigez ses `use`, puis relancez la commande"
+    )]
+    HorsModules {
+        /// La feature restée à la racine de `src/`.
+        feature: &'static str,
+    },
 
     /// Le projet n'a pas la file où le job s'inscrit.
     #[error(
@@ -183,18 +223,6 @@ pub(crate) enum Error {
 // Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
 crate::errors::depuis_la_racine!(Error);
 
-impl Error {
-    /// La commande qui répare, quand la panne se répare par une commande.
-    ///
-    /// Aucune ne l'est ici : `SansJobs` et `SansScheduler` la nomment dans leur message,
-    /// comme `RoleSansAuth` le fait dans `command.rs` — et une ancre absente n'en a pas
-    /// besoin, les trois que vise un job sont optionnelles, le plan en porte le bloc à
-    /// reporter.
-    pub(crate) fn remedy(&self) -> Option<String> {
-        None
-    }
-}
-
 /// Calcule ce que la génération du job de `options` ferait au projet, sans rien écrire.
 pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let metadata::Cible { root, metadonnees } = metadata::cible::<Error>(&options.directory)?;
@@ -216,12 +244,31 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         return Err(Error::NomDuDossier);
     }
 
+    if CRATES.contains(&nom) {
+        return Err(Error::NomDeCrate {
+            nom: nom.to_string(),
+        });
+    }
+
     let installee = |feature: &str| metadonnees.features.iter().any(|f| f == feature);
     if !installee("jobs") {
         return Err(Error::SansJobs);
     }
     if options.every.is_some() && !installee("scheduler") {
         return Err(Error::SansScheduler);
+    }
+
+    // Le manifeste ne suffit pas : un projet d'avant 1.3.0 déclare `jobs` et le porte en
+    // `src/jobs/`. Planifié, le job naîtrait dans un `src/modules/jobs/` que rien ne compile
+    // — et qui ferait basculer le contrôle `disposition` de `doctor` — et chacune de ses
+    // insertions sauterait.
+    if !root.join(&*anchors::JOBS.file).exists() {
+        return Err(Error::HorsModules { feature: "jobs" });
+    }
+    if options.every.is_some() && !root.join(&*anchors::SCHEDULES.file).exists() {
+        return Err(Error::HorsModules {
+            feature: "scheduler",
+        });
     }
 
     // Jugée ici plutôt qu'au démarrage du projet, qu'elle arrêterait : le CLI peut encore la
@@ -914,6 +961,130 @@ mod tests {
         })
         .expect("`--force` passe outre");
         assert!(root.join("src/modules/jobs/purge.rs").exists());
+    }
+
+    /// Un projet qui a reçu `jobs` avant la 1.3.0 le porte en `src/jobs/`, où `rbs upgrade`
+    /// l'a laissé. Planifié quand même, le job naîtrait dans un `src/modules/jobs/` que rien
+    /// ne compile, et ses insertions sauteraient toutes.
+    #[test]
+    fn a_queue_of_the_layout_before_1_3_0_is_refused_before_anything_is_written() {
+        let (_parent, root) = project();
+        fs::rename(root.join("src/modules/jobs"), root.join("src/jobs"))
+            .expect("la file se déplace à l'ancienne place");
+
+        let error = run(&options(&root, "purge", None)).expect_err("la file est hors de modules");
+
+        let message = error.to_string();
+        assert!(message.contains("src/modules/jobs/mod.rs"), "{message}");
+        assert!(message.contains("1.3.0"), "{message}");
+        assert!(message.contains("`src/jobs/`"), "{message}");
+        assert!(!root.join("src/modules/jobs").exists());
+    }
+
+    #[test]
+    fn every_on_a_calendar_of_the_layout_before_1_3_0_is_refused() {
+        let (_parent, root) = project();
+        fs::rename(
+            root.join("src/modules/scheduler"),
+            root.join("src/scheduler"),
+        )
+        .expect("le calendrier se déplace à l'ancienne place");
+
+        let error = run(&options(&root, "purge", Some("0 4 * * *")))
+            .expect_err("le calendrier est hors de modules");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("src/modules/scheduler/mod.rs"),
+            "{message}"
+        );
+        assert!(message.contains("`src/scheduler/`"), "{message}");
+        assert!(!root.join("src/modules/jobs/purge.rs").exists());
+
+        run(&options(&root, "purge", None)).expect("sans --every, le calendrier n'est pas visé");
+    }
+
+    /// Déclaré dans `src/modules/jobs/mod.rs`, un module nommé comme une crate que ce fichier
+    /// emploie la masque : mesuré sur `examples/event-hub`, `pub mod serde;` y casse `use
+    /// serde::Serialize`, et de même pour `std`, `serde_json`, `anyhow` et `async_trait`.
+    #[test]
+    fn a_job_named_after_a_crate_is_refused_before_anything_is_written() {
+        let (_parent, root) = project();
+        let modules = read(&root.join(MODULES));
+
+        for nom in [
+            "alloc",
+            "anyhow",
+            "async_trait",
+            "core",
+            "serde",
+            "serde_json",
+            "std",
+            "tracing",
+        ] {
+            let error = run(&options(&root, nom, None)).expect_err("le nom masquerait une crate");
+
+            let message = error.to_string();
+            assert!(message.contains(&format!("« {nom} »")), "{message}");
+            assert!(message.contains("crate"), "{message}");
+            assert!(!root.join(format!("src/modules/jobs/{nom}.rs")).exists());
+        }
+        assert_eq!(read(&root.join(MODULES)), modules);
+    }
+
+    /// Les racines de chemin de `source` qui peuvent nommer une crate : l'identifiant en
+    /// minuscules qui ouvre un `a::b`, hors commentaires, hors `crate`, `super` et `self`, et
+    /// hors les modules que la file porte elle-même.
+    fn racines(source: &str) -> std::collections::BTreeSet<String> {
+        let mut racines = std::collections::BTreeSet::new();
+
+        for ligne in source
+            .lines()
+            .map(str::trim)
+            .filter(|ligne| !ligne.starts_with("//"))
+        {
+            for (rang, _) in ligne.match_indices("::") {
+                let avant = &ligne[..rang];
+                let debut = avant
+                    .char_indices()
+                    .rev()
+                    .find(|(_, c)| !(c.is_alphanumeric() || *c == '_'))
+                    .map_or(0, |(i, c)| i + c.len_utf8());
+                let racine = &avant[debut..];
+                // `a::b::c` n'a qu'une racine, et `x.register::<J>()` n'en a pas.
+                let precedent = avant[..debut].chars().next_back();
+
+                if racine.starts_with(|c: char| c.is_ascii_lowercase())
+                    && !matches!(precedent, Some(':' | '.'))
+                    && !["crate", "super", "self"].contains(&racine)
+                    && !MODULES_DE_LA_FILE.contains(&racine)
+                {
+                    racines.insert(racine.to_string());
+                }
+            }
+        }
+
+        racines
+    }
+
+    /// Les noms refusés sont les crates que nomment la file et la template d'un job, plus
+    /// `core` et `alloc` : une crate ajoutée à l'une d'elles sans l'être à `CRATES`
+    /// rouvrirait le trou, une crate retirée laisserait un refus sans raison.
+    #[test]
+    fn the_refused_crate_names_are_the_path_roots_of_the_queue_templates() {
+        let file = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/templates/features/jobs/mod.rs.jinja"
+        ));
+        let mut trouvees = racines(file);
+        trouvees.extend(racines(TEMPLATE));
+
+        let attendues: std::collections::BTreeSet<String> = CRATES
+            .iter()
+            .filter(|nom| !["core", "alloc"].contains(nom))
+            .map(|nom| nom.to_string())
+            .collect();
+        assert_eq!(trouvees, attendues);
     }
 
     /// Le fichier rendu est déjà ce que rustfmt écrirait : `format_batch` n'est qu'un
