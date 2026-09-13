@@ -68,7 +68,7 @@ fichier :
 C'est la contradiction que [`rbs new`](./new.md) refuse d'emblée, rencontrée ici après coup
 — sur un projet dont le `.env` a été édité plus tard.
 
-## Les trois avertissements
+## Les quatre avertissements
 
 Tout autre verdict ci-dessus est un succès ou un échec. `agents` peut aussi avertir, à une
 seule condition : un répertoire de `src/` qu'aucun fragment installé et qu'aucune feature
@@ -125,6 +125,9 @@ Le remède est manuel, et le reste : déplacer `src/mail/` reviendrait à rééc
 `use crate::mail::` que votre propre code a déjà écrites — un AST auquel le CLI ne touche
 pas.
 
+Le quatrième appartient à `cors`, sur un projet dont la liste `origins` est vide — traité
+avec les autres contrôles de fragment plus bas.
+
 ## Les features installées
 
 Chaque feature qui porte de la configuration ajoute une ligne à elle, et cette ligne
@@ -161,6 +164,34 @@ que l'API écoute.
 
 L'endpoint OTLP, lui, n'est pas contrôlé. Son absence est un mode de fonctionnement
 légitime — un poste de développement n'a pas de collecteur — et non une faute.
+
+Sept autres fragments portent un contrôle à eux. Aucun ne cesse de compiler quand son
+contrôle rougit : une expression cron que le démarrage refuse, une livraison de webhook que
+personne n'a inscrite, une table d'audit qu'aucune migration ne crée — chacun est un projet
+qui se construit, puis se conduit mal.
+
+| Feature | Ce qu'il regarde |
+|---|---|
+| `cors` | La section `[cors]`, puis `origins`. Une liste vide — ce que le fragment écrit, à dessein — est un avertissement plutôt qu'un échec : c'est le défaut sûr, et aussi le premier obstacle que rencontre un front. |
+| `rate-limit` | La section `[rate_limit]`. |
+| `scheduler` | Chaque expression littérale passée à `Schedule::every` dans `src/modules/scheduler/mod.rs`, lue avec la crate et la normalisation du démarrage du projet — cinq champs gagnent la seconde zéro, six passent, tout autre nombre est refusé. Une expression tirée d'une constante reste au jugement du démarrage. |
+| `webhooks` | La ligne qui inscrit `Delivery` dans `// <rbs:jobs>` de `src/modules/jobs/mod.rs`. Sans elle, chaque livraison part en réessai, puis en échec. |
+| `audit` | La migration `create_audit_log`, déclarée et inscrite dans `migration/src/lib.rs`. |
+| `docker` | `config/production.toml`, le profil que le service `api` du compose retient par `RBS_ENV: production` — celui qui coupe `/docs`. |
+| `ci` | `.github/workflows/ci.yml`, seul fichier que pose le fragment. |
+
+Un fichier posé par l'un de ces fragments et disparu depuis se restaure depuis Git, et le
+remède le dit : `rbs add` ne rejoue pas une feature que le manifeste déclare déjà.
+
+```text
+  ! cors          `cors.origins` est vide : aucun front ne peut appeler l'API depuis un navigateur
+      énumérez les origines de votre front dans config/default.toml — ou dans le profil de l'environnement qui les sert :
+      [cors]
+      origins = ["http://localhost:5173"]
+  ✗ webhooks      la livraison des webhooks n'est pas inscrite au registre de la file : chaque livraison partira en échec
+      dans src/modules/jobs/mod.rs, entre les balises de `// <rbs:jobs>` :
+      registre = registre.register::<crate::modules::webhooks::delivery::Delivery>();
+```
 
 ## Un rapport machine-lisible
 
