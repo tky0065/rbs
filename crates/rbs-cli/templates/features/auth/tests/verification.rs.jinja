@@ -33,10 +33,9 @@ async fn verifying_marks_the_address_and_shows_on_me() {
     let db = connection().await;
     let email = fresh_email();
 
-    // `register` rend `(StatusCode, Value)` : le corps est le second membre.
-    let (_, compte) = register(&api, &email).await;
+    register(&api, &email).await;
     assert!(
-        compte["email_verified_at"].is_null(),
+        account(&email).await.email_verified_at.is_none(),
         "une adresse fraîchement inscrite n'est pas vérifiée"
     );
 

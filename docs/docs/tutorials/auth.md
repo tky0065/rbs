@@ -68,6 +68,7 @@ plan pour …/demo
   + src/auth/controller/verification.rs                    créé
   + templates/mail/reinitialisation.html                   créé
   + templates/mail/verification.html                       créé
+  + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
   + src/auth/tests/session.rs                              créé
@@ -79,8 +80,8 @@ plan pour …/demo
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  46 fichiers à écrire
-✓ auth installée — 34 fichiers
+  47 fichiers à écrire
+✓ auth installée — 35 fichiers
 
   rbs migrate up
 ```

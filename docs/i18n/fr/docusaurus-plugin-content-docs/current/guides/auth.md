@@ -6,7 +6,7 @@ title: Authentification
 # Authentification
 
 `rbs add auth` installe une authentification qui fonctionne dans un projet existant :
-vingt-et-un fichiers sous `src/auth/`, deux gabarits de courriel, une migration, et treize
+vingt-et-un fichiers sous `src/auth/`, trois gabarits de courriel, une migration, et treize
 routes montées sur le routeur. Ce qu'elle dépose est du code ordinaire dans votre
 arborescence — une entité, un service, un controller, une garde — et il est fait pour être
 lu et modifié.
@@ -42,6 +42,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/controller/verification.rs                    créé
   + templates/mail/reinitialisation.html                   créé
   + templates/mail/verification.html                       créé
+  + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
   + src/auth/tests/session.rs                              créé
@@ -59,8 +60,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  34 fichiers à écrire
-✓ auth installée — 24 fichiers
+  35 fichiers à écrire
+✓ auth installée — 25 fichiers
 
   rbs migrate up
 ```

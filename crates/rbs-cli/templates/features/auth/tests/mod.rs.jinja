@@ -48,6 +48,7 @@ pub(super) async fn registered_user(db: &DatabaseConnection) -> crate::auth::rep
     crate::auth::repository::create(db, &fresh_email(), "hash sans valeur")
         .await
         .expect("le compte s'insère")
+        .expect("l'adresse est neuve")
 }
 
 /// Compte les jetons à usage unique d'**un** compte, jamais de la table entière.
@@ -187,6 +188,17 @@ async fn register(api: &Router, email: &str) -> (StatusCode, Value) {
     }
 
     (status, body)
+}
+
+/// Le compte que porte `email`, lu en base : l'inscription ne rend pas de corps.
+async fn account(email: &str) -> crate::auth::repository::Model {
+    crate::auth::repository::find_by_email(
+        &connection().await,
+        &crate::auth::service::normalise(email),
+    )
+    .await
+    .expect("la lecture aboutit")
+    .expect("le compte est inscrit")
 }
 
 /// Tente une connexion et rend statut et corps.

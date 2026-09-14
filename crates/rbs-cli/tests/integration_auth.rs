@@ -716,7 +716,7 @@ fn the_hash_does_not_appear_in_the_server_logs() {
     let journal = serveur.journal();
 
     assert_eq!(
-        statut, 201,
+        statut, 202,
         "l'inscription doit aboutir, sans quoi aucun hash n'a été calculé :\n{corps}\n{journal}"
     );
     // Sans cette ligne, un journal vide — serveur muet, capture manquée — ferait passer
@@ -766,7 +766,7 @@ fn the_auth_journey_plays_end_to_end() {
         None,
         Some(&credentials(EMAIL)),
     );
-    assert_eq!(statut, 201, "l'inscription doit aboutir : {corps}");
+    assert_eq!(statut, 202, "l'inscription doit aboutir : {corps}");
 
     let (statut, premiere) = request(port, "POST", "/auth/login", None, Some(&credentials(EMAIL)));
     assert_eq!(
@@ -917,7 +917,7 @@ fn a_guarded_route_rejects_an_authenticated_user() {
         None,
         Some(&credentials(EMAIL)),
     );
-    assert_eq!(statut, 201, "l'inscription doit aboutir : {corps}");
+    assert_eq!(statut, 202, "l'inscription doit aboutir : {corps}");
 
     let (statut, paire) = request(port, "POST", "/auth/login", None, Some(&credentials(EMAIL)));
     assert_eq!(statut, 200, "la connexion doit rendre une paire : {paire}");

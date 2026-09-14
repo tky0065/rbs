@@ -970,8 +970,7 @@ mod tests {
     }
 
     /// Les messages que les fragments rendent au client, dans leur version française.
-    const MESSAGES_FRANCAIS: [&str; 7] = [
-        "cette adresse est déjà inscrite",
+    const MESSAGES_FRANCAIS: [&str; 6] = [
         "un motif d'événement ne peut pas être vide",
         "une URL de webhook doit être en http ou en https",
         "une URL de webhook doit être en https",
@@ -1120,22 +1119,18 @@ mod tests {
         appel
     }
 
-    /// Un 409 qui cite l'adresse la confirme à qui l'a soumise, dans la réponse comme
-    /// dans le journal : l'inscription devient l'oracle d'énumération que le hash témoin
-    /// de `login` écarte de l'autre côté.
+    /// L'inscription ne rend aucun 409 : un refus propre aux adresses prises, même muet
+    /// sur l'adresse, dit à qui en essaie plusieurs lesquelles sont inscrites — l'oracle
+    /// d'énumération que le hash témoin de `login` écarte de l'autre côté.
     #[test]
-    fn no_conflict_of_the_auth_fragment_echoes_the_address_it_refuses() {
+    fn the_auth_registration_answers_no_conflict() {
         for fichier in ["service/session.rs.jinja", "repository/user.rs.jinja"] {
             let source = read(&Path::new(RACINE_FEATURES).join("auth").join(fichier));
 
-            for (debut, _) in source.match_indices("Error::Conflict") {
-                let construction = call_at(&source, debut);
-
-                assert!(
-                    !construction.contains("email"),
-                    "{fichier} répète l'adresse refusée dans son 409 :\n{construction}"
-                );
-            }
+            assert!(
+                !source.contains("Error::Conflict"),
+                "{fichier} rend un conflit à l'inscription :\n{source}"
+            );
         }
     }
 

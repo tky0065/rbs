@@ -6,7 +6,7 @@ title: Authentication
 # Authentication
 
 `rbs add auth` installs a working authentication feature into an existing project:
-twenty-one files under `src/auth/`, two mail templates, one migration, and thirteen
+twenty-one files under `src/auth/`, three mail templates, one migration, and thirteen
 routes mounted on the router. What it lays down is ordinary code in your source tree —
 an entity, a service, a controller, a guard — and it is meant to be read and changed.
 
@@ -41,6 +41,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/controller/verification.rs                    créé
   + templates/mail/reinitialisation.html                   créé
   + templates/mail/verification.html                       créé
+  + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
   + src/auth/tests/session.rs                              créé
@@ -58,8 +59,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  34 fichiers à écrire
-✓ auth installée — 24 fichiers
+  35 fichiers à écrire
+✓ auth installée — 25 fichiers
 
   rbs migrate up
 ```
