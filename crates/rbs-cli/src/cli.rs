@@ -275,6 +275,10 @@ pub enum GenerateCommands {
         /// Affiche le plan sans rien écrire.
         #[arg(long)]
         dry_run: bool,
+
+        /// Rend le plan, ou l'erreur, en un document JSON sur la sortie standard.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -408,6 +412,7 @@ mod tests {
                     every: Some("0 4 * * *".to_string()),
                     force: false,
                     dry_run: true,
+                    json: false,
                 },
             }
         );
@@ -751,22 +756,24 @@ mod tests {
                 command:
                     GenerateCommands::Crud { json, .. }
                     | GenerateCommands::Feature { json, .. }
-                    | GenerateCommands::Client { json, .. },
+                    | GenerateCommands::Client { json, .. }
+                    | GenerateCommands::Job { json, .. },
             } => *json,
             autre => panic!("commande qui ne planifie pas : {autre:?}"),
         }
     }
 
-    /// Les cinq commandes qui planifient rendent leur plan en JSON sur demande, et
+    /// Les six commandes qui planifient rendent leur plan en JSON sur demande, et
     /// seulement sur demande : sans le drapeau, le rendu humain que la documentation
     /// transcrit reste celui qui s'affiche.
     #[test]
-    fn the_five_planning_commands_accept_json_and_default_to_the_human_rendering() {
+    fn the_six_planning_commands_accept_json_and_default_to_the_human_rendering() {
         for commande in [
             vec!["rbs", "add", "cors"],
             vec!["rbs", "generate", "crud", "articles"],
             vec!["rbs", "generate", "feature", "articles"],
             vec!["rbs", "generate", "client", "--lang", "ts"],
+            vec!["rbs", "generate", "job", "purge"],
             vec!["rbs", "upgrade"],
         ] {
             let sans = Cli::try_parse_from(&commande)

@@ -185,6 +185,7 @@ struct SauteeJson<'a> {
     fichier: &'a str,
     ancre: &'a str,
     bloc: String,
+    cause: CauseJson<'a>,
 }
 
 impl<'a> From<&'a Sautee> for SauteeJson<'a> {
@@ -193,6 +194,34 @@ impl<'a> From<&'a Sautee> for SauteeJson<'a> {
             fichier: sautee.anchor.file.as_ref(),
             ancre: sautee.anchor.name.as_ref(),
             bloc: sautee.lines.join("\n"),
+            cause: (&sautee.cause).into(),
+        }
+    }
+}
+
+/// Ce qui a fait sauter une insertion : le geste qui la rétablit n'est pas le même.
+#[derive(Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum CauseJson<'a> {
+    /// Le fichier porteur manque.
+    FichierAbsent,
+    /// Le fichier est là, sans l'ancre ; `reparable` dit si `rbs doctor --fix` la repose.
+    AncreAbsente { reparable: bool },
+    /// L'insertion nomme ce qu'une autre, sautée elle aussi, devait poser : c'est celle-là
+    /// qu'il faut reporter d'abord.
+    Entrainee { par: &'a str },
+}
+
+impl<'a> From<&'a super::CauseSautee> for CauseJson<'a> {
+    fn from(cause: &'a super::CauseSautee) -> Self {
+        match cause {
+            super::CauseSautee::FichierAbsent => CauseJson::FichierAbsent,
+            super::CauseSautee::AncreAbsente { obstacle } => CauseJson::AncreAbsente {
+                reparable: obstacle.is_none(),
+            },
+            super::CauseSautee::Entrainee { par } => CauseJson::Entrainee {
+                par: par.name.as_ref(),
+            },
         }
     }
 }
@@ -538,6 +567,49 @@ mod tests {
         assert_eq!(sautee["fichier"], "docker-compose.yml");
         assert_eq!(sautee["ancre"], "services");
         assert_eq!(sautee["bloc"], "  redis:\n    image: redis:7");
+    }
+
+    /// La cause dit quel geste répare : écrire le fichier, reposer l'ancre — par
+    /// `doctor --fix` quand il le sait —, ou d'abord reporter l'insertion dont celle-ci
+    /// dépend.
+    #[test]
+    fn a_skipped_insertion_names_its_cause() {
+        let sautee = |cause: crate::plan::CauseSautee| Sautee {
+            anchor: anchor("jobs", "src/modules/jobs/mod.rs"),
+            lines: vec!["registre = registre.register::<purge::Purge>();".to_string()],
+            cause,
+        };
+        let plan = Plan {
+            root: PathBuf::from("/projet"),
+            actions: Vec::new(),
+            files: Vec::new(),
+            sautees: vec![
+                sautee(crate::plan::CauseSautee::FichierAbsent),
+                sautee(crate::plan::CauseSautee::AncreAbsente { obstacle: None }),
+                sautee(crate::plan::CauseSautee::AncreAbsente {
+                    obstacle: Some(crate::anchors::Cause::Introuvable),
+                }),
+                sautee(crate::plan::CauseSautee::Entrainee {
+                    par: anchor("job_modules", "src/modules/jobs/mod.rs"),
+                }),
+            ],
+        };
+        let causes: Vec<serde_json::Value> = document(&plan)["sautees"]
+            .as_array()
+            .expect("sautees est un tableau")
+            .iter()
+            .map(|sautee| sautee["cause"].clone())
+            .collect();
+
+        assert_eq!(
+            causes,
+            vec![
+                serde_json::json!({ "type": "fichier_absent" }),
+                serde_json::json!({ "type": "ancre_absente", "reparable": true }),
+                serde_json::json!({ "type": "ancre_absente", "reparable": false }),
+                serde_json::json!({ "type": "entrainee", "par": "job_modules" }),
+            ]
+        );
     }
 
     #[test]

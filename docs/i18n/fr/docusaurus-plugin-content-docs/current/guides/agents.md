@@ -203,8 +203,8 @@ plan pour /private/tmp/rbs-demo/blog2
 ## Lire un plan en JSON
 
 Le plan qu'une commande affiche avant d'écrire est fait pour un humain : couleurs, puces, un
-décompte en bas. `rbs add`, `rbs generate crud`, `rbs generate feature`,
-`rbs generate client` et `rbs upgrade` prennent `--json`, et la sortie standard porte alors
+décompte en bas. `rbs add`, `rbs generate crud`, `feature`, `client` et `job`, et
+`rbs upgrade` prennent `--json`, et la sortie standard porte alors
 un seul document JSON à la place — le plan, ou l'erreur. C'est lui qu'un agent doit lire.
 
 ```text
@@ -282,8 +282,12 @@ ancre. `fichiers` compte les fichiers, une fois chacun : créés quand ils n'exi
 modifiés sinon, les inchangés laissés dehors. `statut` vaut `a_faire` quand l'action change
 quelque chose, `deja_fait` quand le projet la porte déjà, `conflit` quand le fichier existe
 avec un contenu que rbs n'a pas écrit — seul `--force` l'écrase. `sautees` énumère les
-insertions sautées faute de leur fichier optionnel — un projet sans compose, par exemple —,
-chacune avec le `bloc` à écrire vous-même.
+insertions que rbs vous laisse écrire, chacune avec son `bloc` et sa `cause`. `cause.type`
+vaut `fichier_absent` quand manque le fichier optionnel qui porte l'ancre — un projet sans
+compose, par exemple ; `ancre_absente` quand le fichier est là sans l'ancre — un projet
+engendré avant qu'elle n'existe —, avec `reparable` vrai quand `rbs doctor --fix` sait la
+reposer ; `entrainee` quand l'insertion nomme ce qu'une autre, sautée elle aussi, devait
+déclarer, dont `par` donne l'ancre : c'est celle-là qu'on reporte d'abord.
 
 Chaque `effet` a une forme par `type` :
 
@@ -360,6 +364,15 @@ où il va. Un code partagé par plusieurs commandes a le même sens dans toutes.
 | `storage_hors_modules` | `generate` | `storage` a été installée avant la 1.3.0, sous `src/storage/`. |
 | `colonne_reservee` | `generate` | `--soft-delete` pose lui-même `deleted_at` : retirez-la de `--fields`. |
 | `enfant_sans_cle` | `generate` | L'enfant nommé par `--has-many` ne porte aucune colonne référençant cette table. |
+| `nom_reserve` | `generate job` | Le nom est pris : un module de la file, `jobs` lui-même, ou une crate que nomme le code de la file. |
+| `disposition_anterieure` | `generate job` | `jobs` ou `scheduler` a été installée avant la 1.3.0, hors de `src/modules/` ; le message nomme le déplacement à faire. |
+| `jobs_absent` | `generate job` | Le projet n'a pas la feature `jobs` ; `remede` vaut `rbs add jobs`. |
+| `scheduler_absent` | `generate job` | `--every` exige la feature `scheduler` ; `remede` vaut `rbs add scheduler`. |
+| `cron_invalide` | `generate job` | L'expression de `--every` ne passerait pas le démarrage du projet. |
+| `module_deja_declare` | `generate job` | `src/modules/jobs/mod.rs` déclare déjà le module hors de son ancre. |
+| `fichier_etranger` | `generate job` | Le fichier du job existe et ne définit pas ce job. |
+| `kind_pris` | `generate job` | Un autre job porte déjà ce `KIND`. |
+| `echeance_existante` | `generate job` | Le job a déjà une échéance, sous une autre expression. |
 | `sans_bibliotheque` | `generate client` | Le projet n'a pas de `src/lib.rs`. |
 | `sans_binaire_openapi` | `generate client` | Le projet n'a pas de `src/bin/openapi.rs` ; `remede` donne le fichier à créer. |
 | `cargo_introuvable` | `generate client` | `cargo` n'a pas pu être lancé. |

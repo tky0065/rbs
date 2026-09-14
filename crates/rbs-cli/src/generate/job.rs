@@ -259,6 +259,50 @@ pub(crate) enum Error {
     Application(#[from] plan::application::Error),
 }
 
+impl crate::errors::Codee for Error {
+    fn code(&self) -> &'static str {
+        match self {
+            Error::PasUnProjet => "pas_un_projet",
+            Error::Metadata(_) => "manifeste_illisible",
+            Error::Acces(_) => "fichier_inaccessible",
+            Error::WorkingTreeSale(_) => "arbre_sale",
+            Error::Nom(_) => "nom_invalide",
+            Error::ModuleDeLaFile { .. } | Error::NomDuDossier | Error::NomDeCrate { .. } => {
+                "nom_reserve"
+            }
+            Error::HorsModules { .. } => "disposition_anterieure",
+            Error::SansJobs => "jobs_absent",
+            Error::SansScheduler => "scheduler_absent",
+            Error::Cron(_) => "cron_invalide",
+            Error::ModuleDejaDeclare { .. } => "module_deja_declare",
+            Error::FichierEtranger { .. } => "fichier_etranger",
+            Error::KindPris { .. } => "kind_pris",
+            Error::EcheanceExistante { .. } => "echeance_existante",
+            Error::Rendu { .. } => "rendu_impossible",
+            Error::Plan(erreur) => erreur.code(),
+            Error::Application(erreur) => erreur.code(),
+        }
+    }
+
+    /// Une feature absente a pour remède la commande qui l'installe ; les autres refus
+    /// disent dans leur message un geste qu'aucun texte à coller ne résume.
+    fn remede(&self) -> Option<String> {
+        match self {
+            Error::SansJobs => Some("rbs add jobs".to_string()),
+            Error::SansScheduler => Some("rbs add scheduler".to_string()),
+            Error::Plan(erreur) => erreur.remede(),
+            _ => None,
+        }
+    }
+
+    fn bloc(&self) -> Option<String> {
+        match self {
+            Error::Plan(erreur) => erreur.bloc(),
+            _ => None,
+        }
+    }
+}
+
 // Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
 crate::errors::depuis_la_racine!(Error);
 
@@ -580,6 +624,43 @@ fn echeance_de(calendrier: &str, nom: &str, type_: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
+    /// Sous `--json`, un refus se décide sur un code stable ; celui d'une feature absente
+    /// porte pour remède la commande qui l'installe.
+    #[test]
+    fn the_refusals_carry_stable_codes_and_a_missing_feature_names_its_command() {
+        use crate::errors::Codee;
+
+        assert_eq!(Error::SansJobs.code(), "jobs_absent");
+        assert_eq!(Error::SansJobs.remede().as_deref(), Some("rbs add jobs"));
+        assert_eq!(Error::SansScheduler.code(), "scheduler_absent");
+        assert_eq!(
+            Error::SansScheduler.remede().as_deref(),
+            Some("rbs add scheduler")
+        );
+        assert_eq!(Error::NomDuDossier.code(), "nom_reserve");
+        assert_eq!(
+            Error::ModuleDeLaFile {
+                nom: "queue".to_string()
+            }
+            .code(),
+            "nom_reserve"
+        );
+        assert_eq!(
+            Error::HorsModules { feature: "jobs" }.code(),
+            "disposition_anterieure"
+        );
+        assert_eq!(
+            Error::KindPris {
+                kind: "purge".to_string(),
+                path: "src/modules/jobs/autre.rs".to_string()
+            }
+            .code(),
+            "kind_pris"
+        );
+        assert_eq!(Error::PasUnProjet.remede(), None);
+        assert_eq!(Error::PasUnProjet.bloc(), None);
+    }
+
     use std::fs;
     use std::path::{Path, PathBuf};
 

@@ -200,8 +200,8 @@ plan pour /private/tmp/rbs-demo/blog2
 ## Reading a plan as JSON
 
 The plan a command prints before writing is meant for a human: colours, bullets, a count
-at the bottom. `rbs add`, `rbs generate crud`, `rbs generate feature`, `rbs generate client`
-and `rbs upgrade` take `--json`, and standard output then carries a single JSON document
+at the bottom. `rbs add`, `rbs generate crud`, `feature`, `client` and `job`, and
+`rbs upgrade` take `--json`, and standard output then carries a single JSON document
 instead — the plan, or the error. That is what an agent should read.
 
 ```text
@@ -277,9 +277,13 @@ The document lists actions, not files: a file two actions touch appears twice �
 counts files, once each: created when they did not exist, modified otherwise, unchanged ones
 left out. `statut` is `a_faire` when the action changes something, `deja_fait` when the
 project already carries it, `conflit` when the file exists with a content rbs did not
-write — only `--force` overwrites it. `sautees` lists the insertions skipped because their
-optional file is absent — a project with no compose, say — each with the `bloc` to write
-yourself.
+write — only `--force` overwrites it. `sautees` lists the insertions rbs left for you to
+write, each with its `bloc` and its `cause`. `cause.type` is `fichier_absent` when the
+optional file that carries the anchor is missing — a project with no compose, say;
+`ancre_absente` when the file is there without the anchor — a project generated before the
+anchor existed —, with `reparable` set when `rbs doctor --fix` can put it back; `entrainee`
+when the insertion names what another skipped one was to declare, whose anchor `par`
+gives: that one goes in first.
 
 Each `effet` has one shape per `type`:
 
@@ -356,6 +360,15 @@ says where it goes. A code shared by several commands means the same thing in al
 | `storage_hors_modules` | `generate` | `storage` was installed before 1.3.0, under `src/storage/`. |
 | `colonne_reservee` | `generate` | `--soft-delete` sets `deleted_at` itself: remove it from `--fields`. |
 | `enfant_sans_cle` | `generate` | The child named by `--has-many` has no column referencing this table. |
+| `nom_reserve` | `generate job` | The name is taken: a module of the queue, `jobs` itself, or a crate the queue's code names. |
+| `disposition_anterieure` | `generate job` | `jobs` or `scheduler` was installed before 1.3.0, outside `src/modules/`; the message names the move to make. |
+| `jobs_absent` | `generate job` | The project has no `jobs` feature; `remede` is `rbs add jobs`. |
+| `scheduler_absent` | `generate job` | `--every` requires the `scheduler` feature; `remede` is `rbs add scheduler`. |
+| `cron_invalide` | `generate job` | The `--every` expression would not pass the project's startup. |
+| `module_deja_declare` | `generate job` | `src/modules/jobs/mod.rs` already declares the module outside its anchor. |
+| `fichier_etranger` | `generate job` | The job's file exists and does not define that job. |
+| `kind_pris` | `generate job` | Another job already carries that `KIND`. |
+| `echeance_existante` | `generate job` | The job already has a due date, under another expression. |
 | `sans_bibliotheque` | `generate client` | The project has no `src/lib.rs`. |
 | `sans_binaire_openapi` | `generate client` | The project has no `src/bin/openapi.rs`; `remede` gives the file to create. |
 | `cargo_introuvable` | `generate client` | `cargo` could not be launched. |

@@ -270,3 +270,52 @@ fn upgrade_json_without_dry_run_restores_the_guide_and_says_it_was_applied() {
         "le document dit le plan appliqué, mais AGENTS.md n'est pas rétabli"
     );
 }
+
+/// `generate job` rend son plan comme les autres commandes qui planifient : un seul
+/// document, et `--dry-run` n'écrit toujours rien.
+#[test]
+fn generate_job_dry_run_json_prints_an_analysable_plan() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    rbs(parent.path())
+        .args(["new", "demo", "--yes", "--with", "jobs"])
+        .assert()
+        .success();
+    let racine = parent.path().join("demo");
+    let avant = common::empreinte(&racine);
+
+    let sortie = lancer(
+        &racine,
+        &["generate", "job", "purge", "--dry-run", "--json", "--force"],
+    );
+
+    assert_eq!(sortie.code, Some(0), "{}", sortie.stderr);
+    let plan = document(&sortie);
+    assert_eq!(plan["commande"], "generate job");
+    assert_eq!(plan["applique"], false);
+    assert!(
+        plan["actions"].as_array().is_some_and(|actions| actions
+            .iter()
+            .any(|action| action["chemin"] == "src/modules/jobs/purge.rs")),
+        "le plan crée le fichier du job :\n{plan:#}"
+    );
+
+    common::assert_intact(&avant, &racine, "`--dry-run --json` a écrit dans le projet");
+}
+
+/// Sans la file, le refus sort en document, et son remède est la commande qui l'installe.
+#[test]
+fn generate_job_json_without_jobs_renders_jobs_absent() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = projet_neuf(&parent);
+
+    let sortie = lancer(&racine, &["generate", "job", "purge", "--json", "--force"]);
+
+    assert_eq!(sortie.code, Some(1), "{}", sortie.stdout);
+    assert_eq!(
+        sortie.stderr, "",
+        "sous --json, l'erreur ne passe que par le document"
+    );
+    let erreur = &document(&sortie)["erreur"];
+    assert_eq!(erreur["code"], "jobs_absent", "{erreur:#}");
+    assert_eq!(erreur["remede"], "rbs add jobs", "{erreur:#}");
+}

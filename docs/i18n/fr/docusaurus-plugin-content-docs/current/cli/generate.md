@@ -126,6 +126,7 @@ Options:
       --every <CRON>  Expression cron de l'échéance, à cinq ou six champs, évaluée en UTC ; exige la feature scheduler
       --force         Écrit même si le working tree Git est sale
       --dry-run       Affiche le plan sans rien écrire
+      --json          Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
   -h, --help          Print help
   -V, --version       Print version
 ```

@@ -165,10 +165,10 @@ pub fn run() {
                     every,
                     force,
                     dry_run,
+                    json,
                 } => {
-                    if let Err(error) = generate_job(name, every, force, dry_run) {
-                        ui::error(&error.to_string());
-                        std::process::exit(1);
+                    if let Err(error) = generate_job(name, every, force, dry_run, json) {
+                        echec(&error, None, json);
                     }
 
                     return;
@@ -865,6 +865,7 @@ fn generate_job(
     every: Option<String>,
     force: bool,
     dry_run: bool,
+    json: bool,
 ) -> Result<(), generate::job::Error> {
     let directory = std::env::current_dir()
         .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
@@ -878,13 +879,24 @@ fn generate_job(
 
     // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande
     // s'apprête à faire ne doit pas se découvrir après coup.
-    ui::line(&plan::render::plan(&planned.plan));
+    if !json {
+        ui::line(&plan::render::plan(&planned.plan));
+    }
 
     if let Some(avertissement) = &planned.avertissement {
         ui::warn(avertissement);
     }
 
-    if !appliquer(&planned.plan, force, dry_run, false)? {
+    let applique = appliquer(&planned.plan, force, dry_run, json)?;
+
+    // Le bilan se lit dans le document : les blocs à reporter y sont dans `sautees`, le
+    // fichier du job parmi les actions.
+    if json {
+        ui::line(&plan::json::plan("generate job", &planned.plan, applique));
+        return Ok(());
+    }
+
+    if !applique {
         return Ok(());
     }
 
