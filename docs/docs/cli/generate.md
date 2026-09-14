@@ -508,4 +508,5 @@ $ rbs generate crud users --dry-run
 erreur : aucun projet rbs ici : `rbs generate` s'exécute dans un projet créé par `rbs new`
 ```
 
-Each of these exits with status 1.
+Both exit with status 2: the call is what needs correcting — another name, or the right
+directory. See [exit codes](./doctor.md#exit-codes).

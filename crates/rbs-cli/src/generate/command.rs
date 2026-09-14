@@ -697,6 +697,35 @@ fn render(
     Ok((rendus, Some(rendue.module)))
 }
 
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::PasUnProjet
+            | Self::Nom(_)
+            | Self::Fields(_)
+            | Self::DejaPresente { .. }
+            | Self::WorkingTreeSale(_)
+            | Self::Relations(_)
+            | Self::Homonyme { .. }
+            | Self::Absente { .. }
+            | Self::RoleSansAuth { .. }
+            | Self::UploadSansStorage
+            | Self::SoftDeleteColonneReservee { .. }
+            | Self::RoleInconnu { .. }
+            | Self::EnfantSansCle { .. } => Sortie::Usage,
+            Self::Acces(_) => Sortie::Environnement,
+            Self::Rendu { .. }
+            | Self::Plan(_)
+            | Self::Metadata(_)
+            | Self::MigrationsAbsentes(_)
+            | Self::UploadStorageHorsModules => Sortie::Faute,
+            Self::Application(cause) => cause.sortie(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;

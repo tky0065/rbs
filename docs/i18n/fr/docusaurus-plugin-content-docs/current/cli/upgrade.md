@@ -213,7 +213,8 @@ $ rbs upgrade
 erreur : le projet est en rbs 1.0.0, le CLI en 0.4.0 : `rbs upgrade` ne redescend pas un projet — relancez-le avec un CLI en 1.0.0 ou plus récent
 ```
 
-Code de sortie 1. `rbs upgrade` ne fait jamais redescendre un projet. Le cas courant est
+Code de sortie 3 : le projet n'est pas en cause, le CLI est trop ancien pour lui. `rbs
+upgrade` ne fait jamais redescendre un projet. Le cas courant est
 celui de deux CLI installés côte à côte — un `cargo install` et un `cargo run` dans un
 clone — et c'est pourquoi le message nomme les deux numéros : c'est la seule façon de
 savoir lequel des deux vient d'être lancé.
@@ -228,7 +229,7 @@ $ rbs upgrade
 erreur : le working tree n'est pas propre : src/main.rs, src/router.rs — commitez, ou relancez avec --force
 ```
 
-Code de sortie 1. Une mise à niveau qui a quelque chose à écrire réclame un arbre propre,
+Code de sortie 2. Une mise à niveau qui a quelque chose à écrire réclame un arbre propre,
 pour que la ligne qu'elle change reste discernable des vôtres au prochain `git diff`.
 Commitez, ou passez `--force` pour la forcer. Seuls les fichiers suivis comptent, et cinq
 au plus sont nommés avant que le message ne dise combien il y en a d'autres — un arbre

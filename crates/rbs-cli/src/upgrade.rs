@@ -261,6 +261,20 @@ pub(crate) fn nombres(version: &str) -> Option<[u64; 3]> {
     parts.next().is_none().then_some(nombres)
 }
 
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::PasUnProjet | Self::WorkingTreeSale(_) => Sortie::Usage,
+            // Le projet n'est pas en cause : c'est le CLI lancé qui est trop ancien pour lui.
+            Self::Acces(_) | Self::CliAnterieur { .. } => Sortie::Environnement,
+            Self::Metadata(_) | Self::Plan(_) | Self::Agents(_) => Sortie::Faute,
+            Self::Application(cause) => cause.sortie(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;

@@ -77,7 +77,7 @@ rbs test articles -- --nocapture
 ```
 
 Son code de sortie est celui de `cargo test` : un script distingue un test rouge ou un projet qui ne
-compile pas (101) d'une base qui n'a jamais répondu (1).
+compile pas (101) d'une base qui n'a jamais répondu (3).
 
 À la main, la même chose tient en deux commandes, avec une base joignable :
 

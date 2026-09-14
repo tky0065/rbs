@@ -307,7 +307,8 @@ l'analyseur d'arguments, en texte sur la sortie d'erreur, avec le code de sortie
 ### Codes d'erreur
 
 Sous `--json`, un refus est un seul document sur la sortie standard, et le code de sortie
-reste 1. rbs n'ajoute rien sur la sortie d'erreur pour le refus lui-même ; ce qui l'a
+est celui de sa famille — 1 ici, une ancre disparue étant une faute du projet ; voir les
+[codes de sortie](../cli/doctor.md#codes-de-sortie). rbs n'ajoute rien sur la sortie d'erreur pour le refus lui-même ; ce qui l'a
 précédé y reste — un avertissement affiché plus tôt dans l'exécution, ou la compilation du
 projet sous `generate client`. Ici, l'ancre `layers` a été retirée de
 `src/router.rs` avant `rbs add cors --json --force` :

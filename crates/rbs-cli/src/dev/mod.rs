@@ -147,12 +147,12 @@ impl Error {
     /// Le code que le process doit rendre.
     ///
     /// Une CI distingue un test rouge (le code que `cargo test` a lui-même rendu, 101
-    /// d'ordinaire) d'une commande qui n'a pas pu démarrer : les autres fautes restent à 1.
+    /// d'ordinaire) d'une commande qui n'a pas pu démarrer, dont le code dit la famille.
     pub(crate) fn exit_code(&self) -> i32 {
-        match self {
-            Self::Tests { code } => *code,
-            _ => 1,
+        if let Self::Tests { code } = self {
+            return *code;
         }
+        crate::errors::Classee::sortie(self).code()
     }
 }
 
@@ -365,6 +365,26 @@ pub(crate) fn render(steps: &[Step]) -> String {
         .collect();
 
     lignes.join("\n")
+}
+
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::PasUnProjet => Sortie::Usage,
+            Self::Injoignable { .. }
+            | Self::Docker(_)
+            | Self::Compose { .. }
+            | Self::Cwd(_)
+            | Self::Watch(_)
+            | Self::Cargo(_) => Sortie::Environnement,
+            // `exit_code` rend le code de `cargo test` lui-même : la famille ne sert qu'à
+            // qui la demande.
+            Self::UrlIllisible { .. } | Self::Metadata(_) | Self::Tests { .. } => Sortie::Faute,
+            Self::Env(cause) => cause.sortie(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -659,7 +679,7 @@ mod tests {
     #[test]
     fn a_red_test_run_exits_with_the_code_cargo_gave() {
         assert_eq!(Error::Tests { code: 101 }.exit_code(), 101);
-        assert_eq!(Error::PasUnProjet.exit_code(), 1);
+        assert_eq!(Error::PasUnProjet.exit_code(), 2);
     }
 
     #[test]

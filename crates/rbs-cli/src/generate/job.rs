@@ -622,6 +622,35 @@ fn echeance_de(calendrier: &str, nom: &str, type_: &str) -> Option<String> {
         })
 }
 
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            // Chacun de ces refus dit « choisissez un autre nom » : c'est l'appel qui change.
+            Self::PasUnProjet
+            | Self::WorkingTreeSale(_)
+            | Self::Nom(_)
+            | Self::ModuleDeLaFile { .. }
+            | Self::NomDuDossier
+            | Self::NomDeCrate { .. }
+            | Self::ModuleDejaDeclare { .. }
+            | Self::FichierEtranger { .. }
+            | Self::SansJobs
+            | Self::SansScheduler
+            | Self::Cron(_)
+            | Self::KindPris { .. }
+            | Self::EcheanceExistante { .. } => Sortie::Usage,
+            Self::Acces(_) => Sortie::Environnement,
+            // Le module est à déplacer dans le projet : aucun appel ne le contourne.
+            Self::Metadata(_) | Self::Rendu { .. } | Self::Plan(_) | Self::HorsModules { .. } => {
+                Sortie::Faute
+            }
+            Self::Application(cause) => cause.sortie(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     /// Sous `--json`, un refus se décide sur un code stable ; celui d'une feature absente

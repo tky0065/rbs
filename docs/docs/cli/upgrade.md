@@ -207,7 +207,8 @@ $ rbs upgrade
 erreur : le projet est en rbs 1.0.0, le CLI en 0.4.0 : `rbs upgrade` ne redescend pas un projet — relancez-le avec un CLI en 1.0.0 ou plus récent
 ```
 
-Exit status 1. `rbs upgrade` never takes a project backwards. The usual cause is two CLIs
+Exit status 3: the project is not at fault, the CLI is too old for it. `rbs upgrade` never
+takes a project backwards. The usual cause is two CLIs
 installed side by side — a `cargo install` and a `cargo run` in a clone — which is why the
 message names both numbers: that is the only way to know which of the two you just ran.
 
@@ -221,7 +222,7 @@ $ rbs upgrade
 erreur : le working tree n'est pas propre : src/main.rs, src/router.rs — commitez, ou relancez avec --force
 ```
 
-Exit status 1. An upgrade that has something to write wants a clean tree, so that the line
+Exit status 2. An upgrade that has something to write wants a clean tree, so that the line
 it changes stays distinguishable from yours in the next `git diff`. Commit, or pass
 `--force` to upgrade anyway. Only tracked files count, and at most five are named before
 the message says how many others there are — a tree with hundreds of changes would drown

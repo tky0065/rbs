@@ -518,4 +518,5 @@ $ rbs generate crud users --dry-run
 erreur : aucun projet rbs ici : `rbs generate` s'exécute dans un projet créé par `rbs new`
 ```
 
-Chacun de ces cas sort en code 1.
+Les deux sortent en code 2 : c'est l'appel qu'il faut corriger — un autre nom, ou le bon
+répertoire. Voir les [codes de sortie](./doctor.md#codes-de-sortie).

@@ -610,6 +610,25 @@ fn read_manifest(source: Option<String>, feature: &str) -> Result<manifest::Mani
     Ok(manifest::read(&text, &format!("{feature}/feature.toml"))?)
 }
 
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::PasUnProjet | Self::Unknown(_) | Self::WorkingTreeSale(_) => Sortie::Usage,
+            Self::Acces(_) => Sortie::Environnement,
+            Self::SansManifeste { .. }
+            | Self::Manifest(_)
+            | Self::Installation(_)
+            | Self::Metadata(_)
+            | Self::UrlIndecomposable { .. }
+            | Self::Plan(_) => Sortie::Faute,
+            Self::Env(cause) => cause.sortie(),
+            Self::Application(cause) => cause.sortie(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;

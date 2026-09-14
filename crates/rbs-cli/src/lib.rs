@@ -40,8 +40,9 @@ mod ui;
 mod upgrade;
 mod url;
 
-use std::error::Error;
 use std::path::PathBuf;
+
+use errors::Classee as _;
 
 use clap::Parser;
 
@@ -78,7 +79,7 @@ pub fn run() {
 
             if let Err(error) = resultat {
                 ui::error(&error.to_string());
-                std::process::exit(1);
+                std::process::exit(error.sortie().code());
             }
         }
 
@@ -191,7 +192,7 @@ pub fn run() {
 
             if let Err(error) = migrate(action) {
                 ui::error(&error.to_string());
-                std::process::exit(1);
+                std::process::exit(error.sortie().code());
             }
         }
 
@@ -201,7 +202,7 @@ pub fn run() {
                 if let Some(remedy) = error.remedy() {
                     ui::info(&format!("\n{remedy}"));
                 }
-                std::process::exit(1);
+                std::process::exit(error.sortie().code());
             }
         }
 
@@ -215,7 +216,7 @@ pub fn run() {
                 if let Some(remedy) = error.remedy() {
                     ui::info(&format!("\n{remedy}"));
                 }
-                std::process::exit(1);
+                std::process::exit(error.sortie().code());
             }
         }
 
@@ -298,11 +299,12 @@ pub fn run() {
         Commands::Doctor { json, fix, force } => match diagnose(json, fix, force) {
             Ok(true) => {}
             // Un diagnostic qui trouve quelque chose n'est pas un échec de la commande,
-            // mais un script doit pouvoir le distinguer d'un projet sain.
-            Ok(false) => std::process::exit(1),
+            // mais un script doit pouvoir le distinguer d'un projet sain — et d'un
+            // diagnostic qui n'a pas pu tourner, que `sortie()` range en 2 ou en 3.
+            Ok(false) => std::process::exit(errors::Sortie::Faute.code()),
             Err(error) => {
                 ui::error(&error.to_string());
-                std::process::exit(1);
+                std::process::exit(error.sortie().code());
             }
         },
     }
@@ -322,7 +324,7 @@ fn create_project(
     template_dir: Option<PathBuf>,
     yes: bool,
     lang: Option<lang::Lang>,
-) -> Result<(), Box<dyn Error>> {
+) -> Result<(), new::Error> {
     let disponibles = templates::feature_names(template_dir.as_deref());
     let demandees = preset::reunir(preset, &with, &disponibles);
     // Une liste vide laisse la question ouverte ; ni `--with` ni `--preset` vides
@@ -342,7 +344,7 @@ fn create_project(
             template_dir,
             lang: lang.unwrap_or_else(|| lang::Lang::from_locale(locale().as_deref())),
         },
-        &std::env::current_dir()?,
+        &std::env::current_dir().map_err(new::Error::Cwd)?,
     )?;
 
     let name = project
@@ -418,7 +420,8 @@ fn locale_from(lc_all: Option<&str>, lang: Option<&str>) -> Option<String> {
         .map(str::to_owned)
 }
 
-/// Signale l'échec d'une commande qui lit le document OpenAPI, puis sort en 1.
+/// Signale l'échec d'une commande qui lit le document OpenAPI, puis sort sous le code de sa
+/// famille.
 ///
 /// Quand la sortie standard appartient au document — `routes --json`, `openapi export` —, le
 /// remède rejoint le message sur la sortie d'erreur : un script qui l'analyse, ou un
@@ -432,7 +435,7 @@ fn echec_openapi(error: &openapi::Error, sortie_au_document: bool) -> ! {
             ui::info(&format!("\n{remedy}"));
         }
     }
-    std::process::exit(1);
+    std::process::exit(error.sortie().code());
 }
 
 /// Signale la zone de l'`AGENTS.md` qu'une commande n'a pas pu réécrire, et donne le bloc
@@ -448,14 +451,18 @@ fn signaler_zone_manquante(zone: Option<&agents::MissingZone>, json: bool) {
     }
 }
 
-/// Signale l'échec d'une commande qui planifie, puis sort en 1.
+/// Signale l'échec d'une commande qui planifie, puis sort sous le code de sa famille.
 ///
 /// Sous `--json`, l'erreur devient le document de la sortie standard et rien ne passe sur
 /// la sortie d'erreur : un script ne lit qu'un flux, et y décide sur un code stable plutôt
 /// que sur un message à reconnaître. Le remède du document est celui de `Codee`, qui en
 /// accorde un à chaque bloc ; `remedy`, plus étroit, reste celui que l'affichage humain
 /// montrait déjà.
-fn echec<E: errors::Codee + std::fmt::Display>(error: &E, remedy: Option<String>, json: bool) -> ! {
+fn echec<E: errors::Codee + errors::Classee + std::fmt::Display>(
+    error: &E,
+    remedy: Option<String>,
+    json: bool,
+) -> ! {
     if json {
         ui::line(&plan::json::erreur(
             error.code(),
@@ -470,7 +477,7 @@ fn echec<E: errors::Codee + std::fmt::Display>(error: &E, remedy: Option<String>
         }
     }
 
-    std::process::exit(1);
+    std::process::exit(error.sortie().code());
 }
 
 /// Écrit une ligne que l'affichage humain porte sur la sortie standard, et que `--json`
@@ -1040,8 +1047,9 @@ fn upgrade_in(
     Ok(())
 }
 
-fn migrate(action: migrate::Action) -> Result<(), Box<dyn Error>> {
-    match migrate::run(action, &std::env::current_dir()?)? {
+fn migrate(action: migrate::Action) -> Result<(), migrate::Error> {
+    let directory = std::env::current_dir().map_err(migrate::Error::Cwd)?;
+    match migrate::run(action, &directory)? {
         migrate::Output::Appliquees => ui::success("migrations appliquées"),
         migrate::Output::Annulee => ui::success("dernière migration annulée"),
         migrate::Output::Inventaire(inventaire) => ui::line(&inventaire),
@@ -1075,7 +1083,7 @@ fn repair_anchors(
     directory: &std::path::Path,
     force: bool,
     json: bool,
-) -> Result<doctor::anchors::Repair, Box<dyn Error>> {
+) -> Result<doctor::anchors::Repair, doctor::Error> {
     // `racine` et non `project_root` : la doctrine du second — ne rien écrire dans un
     // projet dont on ne sait pas lire l'état — vise les commandes qui écrivent *dans* le
     // manifeste. Reposer une ancre n'en lit aucune donnée et n'écrit que dans des fichiers
@@ -1083,9 +1091,7 @@ fn repair_anchors(
     // diagnostic du même passage, qui sait nommer un manifeste cassé sans s'y arrêter — et
     // faisait tomber avec lui le rapport entier. La faute reste dite, par les contrôles
     // qui suivent.
-    let root = metadata::racine(directory)
-        .map_err(doctor::Error::from)?
-        .root;
+    let root = metadata::racine(directory)?.root;
     let repair = doctor::anchors::repair(&root)?;
 
     // La garde Git vient après le plan, comme pour `upgrade` : un projet qui n'a rien à
@@ -1140,8 +1146,8 @@ fn annoncer_reparation(repair: &doctor::anchors::Repair) {
 /// La réparation passe avant le diagnostic : ce que `--fix` repose doit être compté par
 /// le contrôle `ancres` du même rapport, faute de quoi la commande annoncerait rouge un
 /// projet qu'elle vient de remettre d'aplomb.
-fn diagnose(json: bool, fix: bool, force: bool) -> Result<bool, Box<dyn Error>> {
-    let directory = std::env::current_dir()?;
+fn diagnose(json: bool, fix: bool, force: bool) -> Result<bool, doctor::Error> {
+    let directory = std::env::current_dir().map_err(doctor::Error::Cwd)?;
 
     let repair = if fix {
         Some(repair_anchors(&directory, force, json)?)

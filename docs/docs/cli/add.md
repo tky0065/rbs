@@ -489,4 +489,4 @@ $ rbs add docker
 erreur : aucun projet rbs ici : `rbs add` s'exécute dans un projet créé par `rbs new`
 ```
 
-Each of these exits with status 1.
+Exit status 2: the call is what needs correcting — see [exit codes](./doctor.md#exit-codes).

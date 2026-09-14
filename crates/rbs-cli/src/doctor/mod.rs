@@ -154,6 +154,23 @@ pub(crate) enum Error {
     /// Le manifeste du projet n'a pu être lu.
     #[error("{0}")]
     Metadata(#[from] metadata::Error),
+
+    /// Le répertoire courant n'a pas pu être lu.
+    #[error(transparent)]
+    Cwd(std::io::Error),
+
+    /// La réparation des ancres n'a pas pu être planifiée.
+    #[error(transparent)]
+    Reparation(#[from] crate::plan::Error),
+
+    /// Le projet porte des modifications non commitées, que `--fix` rendrait
+    /// indiscernables des siennes.
+    #[error(transparent)]
+    WorkingTreeSale(#[from] crate::errors::WorkingTreeSale),
+
+    /// La réparation n'a pas pu être écrite.
+    #[error(transparent)]
+    Application(#[from] crate::plan::application::Error),
 }
 
 // Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
@@ -614,6 +631,19 @@ impl Config {
                 .and_then(|value| value.as_str())
                 .map(str::to_owned)
         })
+    }
+}
+
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::PasUnProjet | Self::WorkingTreeSale(_) => Sortie::Usage,
+            Self::Cwd(_) => Sortie::Environnement,
+            Self::Metadata(_) | Self::Reparation(_) => Sortie::Faute,
+            Self::Application(cause) => cause.sortie(),
+        }
     }
 }
 

@@ -471,4 +471,5 @@ $ rbs new 4chan --yes
 erreur : `4chan` n'est pas un nom de projet utilisable : lettres, chiffres, `-` et `_`, en commençant par une lettre
 ```
 
-Each of these exits with status 1 and writes nothing.
+Both exit with status 2 and write nothing: the call is what needs correcting. A directory
+that refuses writing exits with 3 instead — see [exit codes](./doctor.md#exit-codes).

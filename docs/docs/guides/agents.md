@@ -302,8 +302,9 @@ parser, in text on standard error, with exit code 2.
 
 ### Error codes
 
-Under `--json`, a refusal is a single document on standard output, and the exit code stays
-1. rbs adds nothing to standard error for the refusal itself; what came before it stays
+Under `--json`, a refusal is a single document on standard output, and the exit code is
+that of its family — 1 here, a missing anchor being a fault of the project; see
+[exit codes](../cli/doctor.md#exit-codes). rbs adds nothing to standard error for the refusal itself; what came before it stays
 there — a warning printed earlier in the run, or the project's compilation under
 `generate client`. Here, the `layers` anchor was removed from `src/router.rs`
 before `rbs add cors --json --force`:
