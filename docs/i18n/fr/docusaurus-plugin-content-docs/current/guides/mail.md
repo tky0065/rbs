@@ -64,15 +64,19 @@ Les défauts décrivent un serveur de développement : le port 1025 en clair, ce
 **Le mot de passe est la seule valeur qu'aucun fichier versionné ne porte.** `rbs add mail`
 écrit `RBS_MAIL__SMTP_PASSWORD=` dans `.env.example` et rien d'autre — `config/default.toml`
 est versionné, et un mot de passe qui y figure est un mot de passe à changer.
-[`rbs doctor`](../cli/doctor.md) diagnostique le couple, non la variable seule :
+[`rbs doctor`](../cli/doctor.md) nomme la ligne manquante une seule fois, dans son contrôle
+`.env`, et le contrôle `mail` la lui laisse :
 
 ```text
-  ✗ mail       RBS_MAIL__SMTP_PASSWORD n'est renseignée ni dans le .env ni dans l'environnement
-      ajoutez au .env la ligne que mail y attend, vide tant que smtp_user l'est :
+  ✗ .env          RBS_MAIL__SMTP_PASSWORD absente du .env
+      ajoutez au .env :
       RBS_MAIL__SMTP_PASSWORD=
+  …
+  ✓ mail          rien d'autre à signaler — RBS_MAIL__SMTP_PASSWORD relève du contrôle .env
 ```
 
-Un mot de passe vide est légitime tant que `smtp_user` l'est aussi : un relais local sans
+Ce que le contrôle `mail` diagnostique, c'est le couple, non la variable seule : un mot de
+passe vide est légitime tant que `smtp_user` l'est aussi — un relais local sans
 authentification n'a besoin ni de l'un ni de l'autre.
 
 ## Le transport

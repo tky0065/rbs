@@ -857,6 +857,38 @@ mod tests {
         }
     }
 
+    /// Une ligne absente du `.env` est une faute à corriger : le contrôle `.env` et celui
+    /// de la feature la nommaient chacun, avec deux remèdes différents.
+    #[test]
+    fn a_key_missing_from_env_is_reported_by_a_single_check() {
+        const CLE: &str = "RBS_MAIL__SMTP_PASSWORD";
+        let (_parent, root) = project(&["health", "mail"]);
+        let ajouter = |fichier: &str, ajout: &str| {
+            let chemin = root.join(fichier);
+            let mut source = std::fs::read_to_string(&chemin).expect("fichier lisible");
+            if !source.ends_with('\n') {
+                source.push('\n');
+            }
+            std::fs::write(&chemin, format!("{source}{ajout}")).expect("fichier inscriptible");
+        };
+        // Ce que `add mail` dépose : sa section, et la clé dans l'exemple seul.
+        ajouter(
+            CONFIG,
+            "\n[mail]\nsmtp_host = \"localhost\"\nsmtp_port = 1025\nsmtp_user = \"\"\ntls = \"none\"\nfrom = \"no-reply@localhost\"\ntimeout_secs = 10\ntemplates = \"templates/mail\"\n",
+        );
+        ajouter(".env.example", &format!("{CLE}=\n"));
+
+        let report = run_with(&root, &mut Muet).expect("c'est un projet rbs");
+
+        let nomment: Vec<&str> = report
+            .checks
+            .iter()
+            .filter(|check| check.state == State::Echec && check.detail.contains(CLE))
+            .map(|check| check.title)
+            .collect();
+        assert_eq!(nomment, vec![env::TITRE], "{nomment:?}");
+    }
+
     #[test]
     fn a_project_without_the_v03_features_has_none_of_their_checks() {
         let (_parent, root) = project(&["health"]);
