@@ -94,7 +94,7 @@ impl Log {
             self.create_directories(parent)?;
         }
 
-        fs::write(&path, &file.after)?;
+        crate::secret::write(&path, file.after.as_bytes())?;
         self.ecrits.push(file.path.clone());
         self.origines.push(file.before.clone());
 
@@ -128,7 +128,7 @@ impl Log {
         for (path, origin) in self.ecrits.iter().zip(&self.origines).rev() {
             let path = root.join(path);
             let _ = match origin {
-                Some(content) => fs::write(&path, content),
+                Some(content) => crate::secret::write(&path, content.as_bytes()),
                 None => fs::remove_file(&path),
             };
         }
@@ -368,6 +368,80 @@ mod tests {
             !project.path().join("src").exists(),
             "`src/` a été créé par le plan : il doit disparaître avec lui"
         );
+    }
+
+    #[cfg(unix)]
+    fn mode(path: &Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+
+        fs::metadata(path)
+            .expect("le fichier existe")
+            .permissions()
+            .mode()
+            & 0o777
+    }
+
+    /// Un projet antérieur a son `.env` en 0644 : le prochain plan qui y dépose un secret
+    /// — celui de `rbs add auth` — doit le refermer, et non le laisser lisible de tous.
+    #[cfg(unix)]
+    #[test]
+    fn an_existing_env_rewritten_by_a_plan_ends_up_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let project = project();
+        let env = project.path().join(".env");
+        fs::write(&env, "RBS_ENV=development\n").expect("l'écriture aboutit");
+        fs::set_permissions(&env, fs::Permissions::from_mode(0o644)).expect("les droits se posent");
+
+        let plan = plan_of(
+            project.path(),
+            vec![file(
+                ".env",
+                Some("RBS_ENV=development\n"),
+                "RBS_ENV=development\nRBS_AUTH__SECRET=s3cret\n",
+                Status::AFaire,
+            )],
+        );
+
+        apply(&plan, false).expect("rien ne s'oppose à l'écriture");
+
+        assert_eq!(mode(&env), 0o600);
+        assert_eq!(
+            fs::read_to_string(&env).expect("le fichier existe"),
+            "RBS_ENV=development\nRBS_AUTH__SECRET=s3cret\n"
+        );
+    }
+
+    /// La restauration réécrit le `.env` d'origine : elle ne doit pas le rouvrir à tous.
+    #[cfg(unix)]
+    #[test]
+    fn an_env_restored_by_a_rollback_stays_owner_only() {
+        let project = project();
+        let env = project.path().join(".env");
+        fs::write(&env, "RBS_ENV=development\n").expect("l'écriture aboutit");
+        fs::write(project.path().join("obstacle"), "pas un répertoire\n")
+            .expect("l'écriture aboutit");
+
+        let plan = plan_of(
+            project.path(),
+            vec![
+                file(
+                    ".env",
+                    Some("RBS_ENV=development\n"),
+                    "RBS_ENV=development\nRBS_AUTH__SECRET=s3cret\n",
+                    Status::AFaire,
+                ),
+                file("obstacle/x.rs", None, "jamais écrit\n", Status::AFaire),
+            ],
+        );
+
+        apply(&plan, false).expect_err("la seconde action doit échouer");
+
+        assert_eq!(
+            fs::read_to_string(&env).expect("le fichier existe"),
+            "RBS_ENV=development\n"
+        );
+        assert_eq!(mode(&env), 0o600);
     }
 
     #[test]

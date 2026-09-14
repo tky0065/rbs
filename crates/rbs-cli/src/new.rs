@@ -442,7 +442,8 @@ fn write(root: &Path, rendus: &[(PathBuf, String)]) -> Result<(), (String, io::E
             fs::create_dir_all(parent).map_err(|error| (parent.display().to_string(), error))?;
         }
 
-        fs::write(&path, content).map_err(|error| (path.display().to_string(), error))?;
+        crate::secret::write(&path, content.as_bytes())
+            .map_err(|error| (path.display().to_string(), error))?;
     }
 
     Ok(())
@@ -649,6 +650,30 @@ mod tests {
                 "{fichier} ne porte pas l'URL du moteur choisi :\n{text}"
             );
         }
+    }
+
+    /// Le `.env` porte les secrets du projet — mot de passe de la base, clé de signature :
+    /// lisible de son seul propriétaire. `.env.example`, versionné et sans secret, garde
+    /// les droits d'un fichier ordinaire.
+    #[cfg(unix)]
+    #[test]
+    fn the_env_file_is_readable_by_its_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let parent = parent();
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+        let mode = |path: &Path| {
+            fs::metadata(path)
+                .expect("le fichier existe")
+                .permissions()
+                .mode()
+                & 0o777
+        };
+        let ordinaire = parent.path().join("ordinaire");
+        fs::write(&ordinaire, "").expect("le fichier témoin s'écrit");
+
+        assert_eq!(mode(&project.root.join(".env")), 0o600);
+        assert_eq!(mode(&project.root.join(".env.example")), mode(&ordinaire));
     }
 
     #[test]
