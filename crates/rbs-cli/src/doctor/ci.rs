@@ -1,8 +1,9 @@
 //! Contrôle de la feature `ci`.
 //!
-//! Le fragment ne pose qu'un fichier, le workflow que GitHub lit : c'est lui que ce contrôle
-//! cherche. Un workflow disparu est une CI qui ne tourne plus, et rien ne vire au rouge pour
-//! le dire — il n'y a plus rien pour le peindre.
+//! Le fragment pose le workflow que GitHub lit, et la configuration de Dependabot qui en
+//! monte les actions : c'est le premier que ce contrôle cherche. Un workflow disparu est une
+//! CI qui ne tourne plus, et rien ne vire au rouge pour le dire — il n'y a plus rien pour le
+//! peindre. Sans Dependabot, la CI tourne encore : ses actions cessent seulement de monter.
 
 use std::path::Path;
 

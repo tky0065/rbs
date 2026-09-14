@@ -1,0 +1,13 @@
+# Les actions de ci.yml sont épinglées par SHA : un tag peut être déplacé sous vos pieds,
+# un SHA non. Dependabot propose chaque montée de version, SHA et commentaire compris.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci
+    groups:
+      actions:
+        patterns: ['*']

@@ -15,6 +15,10 @@ dépréciation.
 
 ### Ajouté
 
+- **`rbs_core::db::redact_url`** rend une URL de connexion au mot de passe remplacé par
+  `***` — le masquage que `db::connect` appliquait déjà à ses propres erreurs. Les
+  fragments `redis` et `rate-limit` l'appellent pour citer `[cache] url` dans un journal ;
+  toute autre URL d'un projet qui porte un secret peut en faire autant.
 - **`rbs generate crud` et `rbs generate feature` prennent `--singular <NOM>`** pour les
   cas où l'heuristique de singularisation se trompe : `rbs generate crud news` nommait
   ses types `CreateNew` et ses liaisons `new`, schémas OpenAPI et interfaces TypeScript
@@ -178,6 +182,26 @@ dépréciation.
   dans `src/`.
 
 ### Corrigé
+
+- **Le mot de passe Redis n'atteint plus les journaux.** Les fragments `redis` et
+  `rate-limit` citaient `[cache] url` telle quelle dans l'erreur d'un pool
+  inconstructible, mot de passe compris. Tous deux passent désormais par
+  `rbs_core::db::redact_url`.
+
+- **Tout `.env` qu'écrit rbs est en `0600` sous Unix.** `rbs new`, `rbs add` et tout
+  autre plan qui écrit le fichier — sa restauration comprise — le laissaient aux droits
+  du umask, `0644` d'ordinaire : lisible de tout compte de la machine, mot de passe de la
+  base et secret de signature avec lui. Les droits se posent désormais sur le descripteur
+  avant l'écriture du contenu, ce qui referme aussi le `.env` d'un projet antérieur au
+  prochain plan qui le touche — `rbs add auth`, par exemple. `.env.example` garde des
+  droits ordinaires.
+
+- **La CI engendrée épingle ses actions par SHA.** `rbs add ci` écrivait
+  `actions/checkout@v7`, `dtolnay/rust-toolchain@stable` et `Swatinem/rust-cache@v2`,
+  et un tag peut être déplacé vers un autre commit dans le dos du projet. Chaque action
+  est désormais épinglée par son SHA, la version en commentaire, avec `toolchain: stable`
+  écrit en toutes lettres puisque le SHA ne le porte plus ; le fragment dépose aussi
+  `.github/dependabot.yml`, qui en propose les montées chaque semaine.
 
 - **`rbs generate crud --with-upload` écrit les tests de ses trois routes de contenu.** Le
   drapeau montait `PUT`, `GET` et `HEAD` sur `/<nom>/{id}/content` et laissait `tests.rs`

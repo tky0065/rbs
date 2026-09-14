@@ -46,7 +46,7 @@ Options:
 | Feature | Files | Next step |
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, and its `api`/`migrate` services inserted into the project's compose — a whole `docker-compose.yml` when there is none | `docker compose --profile app up --build` |
-| `ci` | `.github/workflows/ci.yml` | `git push` |
+| `ci` | `.github/workflows/ci.yml`, its actions pinned by SHA, and `.github/dependabot.yml`, which proposes their updates every week | `git push` |
 | `auth` | twenty-one files under `src/auth/`, two mail templates, one migration, edits to nine project files of its own — and `mail` and `rate-limit`, which it requires | `rbs migrate up` |
 | `jobs` | seven files under `src/modules/jobs/`, one migration, and a `[jobs]` config section | `rbs migrate up`, then register your jobs in `src/modules/jobs/mod.rs` |
 | `scheduler` | six files under `src/modules/scheduler/`, one migration, a `[scheduler]` config section, a ticker in `// <rbs:startup>` — and `jobs`, which it requires | `rbs migrate up`, then declare your schedules in `src/modules/scheduler/mod.rs` |
@@ -156,11 +156,12 @@ ci : workflow GitHub Actions : fmt, clippy et tests sur PostgreSQL
 plan pour /private/tmp/rbs-demo/blog
 
   + .github/workflows/ci.yml   créé
+  + .github/dependabot.yml     créé
   ~ Cargo.toml                 modifié
   ~ AGENTS.md                  modifié
 
-  3 fichiers à écrire
-✓ ci installée — 1 fichier
+  4 fichiers à écrire
+✓ ci installée — 2 fichiers
 
   git push : le workflow s'exécute à la prochaine poussée
 ```

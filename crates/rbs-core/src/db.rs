@@ -84,6 +84,13 @@ pub async fn connect(config: &DatabaseConfig) -> Result<DatabaseConnection, Conn
     })
 }
 
+/// Rend `url` avec son mot de passe remplacé par `***`, pour la citer dans un journal.
+///
+/// Le masquage des erreurs de [`connect`], pour les autres URL à secret d'un projet.
+pub fn redact_url(url: &str) -> String {
+    strip(url, password(url))
+}
+
 /// Isole le mot de passe d'une URL de connexion, s'il en porte un.
 ///
 /// Le découpage est textuel plutôt que par parsing d'URL, pour traiter aussi les chaînes
@@ -151,11 +158,6 @@ mod tests {
             idle_timeout_secs: 600,
             max_lifetime_secs: 1800,
         }
-    }
-
-    /// Masque le mot de passe que `url` porte elle-même.
-    fn mask(url: &str) -> String {
-        strip(url, password(url))
     }
 
     #[tokio::test]
@@ -247,7 +249,7 @@ mod tests {
     #[test]
     fn masking_replaces_the_password_and_preserves_the_rest() {
         assert_eq!(
-            mask("postgres://alice:s3cr3t@localhost:5432/app"),
+            redact_url("postgres://alice:s3cr3t@localhost:5432/app"),
             "postgres://alice:***@localhost:5432/app"
         );
     }
@@ -269,7 +271,7 @@ mod tests {
                 "postgres://alice:***@host:5432/app?sslmode=require",
             ),
         ] {
-            assert_eq!(mask(url), attendu, "mot de passe divulgué : {url}");
+            assert_eq!(redact_url(url), attendu, "mot de passe divulgué : {url}");
         }
     }
 
@@ -287,7 +289,7 @@ mod tests {
                 "postgres://alice:***@host/app",
             ),
         ] {
-            assert_eq!(mask(url), attendu, "mot de passe divulgué : {url}");
+            assert_eq!(redact_url(url), attendu, "mot de passe divulgué : {url}");
         }
     }
 
@@ -303,14 +305,23 @@ mod tests {
             "pas-une-url",
             "",
         ] {
-            assert_eq!(mask(url), url, "URL modifiée à tort : {url}");
+            assert_eq!(redact_url(url), url, "URL modifiée à tort : {url}");
         }
+    }
+
+    #[test]
+    fn a_redis_url_loses_its_password() {
+        assert_eq!(
+            redact_url("redis://:s3cret@cache:6379/0"),
+            "redis://:***@cache:6379/0"
+        );
+        assert_eq!(redact_url("redis://cache:6379"), "redis://cache:6379");
     }
 
     #[test]
     fn masking_ignores_a_colon_placed_after_the_authority() {
         assert_eq!(
-            mask("postgres://localhost:5432/app"),
+            redact_url("postgres://localhost:5432/app"),
             "postgres://localhost:5432/app"
         );
     }
