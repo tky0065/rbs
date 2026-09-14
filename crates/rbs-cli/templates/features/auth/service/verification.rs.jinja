@@ -21,6 +21,12 @@ pub async fn request(
         return Ok(None);
     };
 
+    // La date sert un jour à redemander une preuve aux plus anciennes adresses : une
+    // seconde vérification la rajeunirait, et la fausserait.
+    if utilisateur.email_verified_at.is_some() {
+        return Ok(None);
+    }
+
     repository::one_time_token::invalidate_pending(
         db,
         utilisateur.id,

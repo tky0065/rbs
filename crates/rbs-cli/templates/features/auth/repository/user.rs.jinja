@@ -67,14 +67,17 @@ pub async fn set_password(db: &impl ConnectionTrait, id: Uuid, hash: &str) -> Re
     Ok(())
 }
 
-/// Date la vérification de l'adresse.
+/// Date la vérification de l'adresse, si elle ne l'est pas déjà.
 ///
 /// La date et non un booléen : savoir *quand* une adresse a été prouvée est ce qui
-/// permet, un jour, d'en redemander la preuve aux plus anciennes.
+/// permet, un jour, d'en redemander la preuve aux plus anciennes. La première preuve est
+/// donc la seule qui s'écrit — la condition est dans l'`UPDATE`, pour qu'un jeton émis
+/// avant la vérification et consommé après ne la rajeunisse pas non plus.
 pub async fn mark_verified(db: &impl ConnectionTrait, id: Uuid) -> Result<()> {
     Entity::update_many()
         .col_expr(user::Column::EmailVerifiedAt, Expr::current_timestamp())
         .filter(user::Column::Id.eq(id))
+        .filter(user::Column::EmailVerifiedAt.is_null())
         .exec(db)
         .await?;
 
