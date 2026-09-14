@@ -14,6 +14,10 @@ between minor versions with no deprecation cycle.
 
 ### Added
 
+- **`rbs_core::db::redact_url`** returns a connection URL with its password replaced by
+  `***` — the masking `db::connect` already applied to its own errors. The `redis` and
+  `rate-limit` fragments call it to quote `[cache] url` in a log; any other URL of a
+  project that carries a secret can do the same.
 - **`rbs generate crud` and `rbs generate feature` take `--singular <NAME>`** for the
   cases the singularisation heuristic gets wrong: `rbs generate crud news` used to name
   its types `CreateNew` and its bindings `new`, OpenAPI schemas and TypeScript interfaces
@@ -169,6 +173,24 @@ between minor versions with no deprecation cycle.
   translate by hand the messages already generated in `src/`.
 
 ### Fixed
+
+- **The Redis password no longer reaches the logs.** The `redis` and `rate-limit`
+  fragments quoted `[cache] url` verbatim in the error of a pool that fails to build,
+  password included. Both now go through `rbs_core::db::redact_url`.
+
+- **Every `.env` rbs writes is `0600` on Unix.** `rbs new`, `rbs add` and every other
+  plan that writes the file — its rollback included — left it at the umask's mode,
+  `0644` as a rule: readable by every account on the machine, database password and
+  signing secret with it. The permissions are now set on the descriptor before the
+  content is written, which also closes the `.env` of an older project the next time a
+  plan touches it — `rbs add auth`, for one. `.env.example` keeps ordinary permissions.
+
+- **The generated CI pins its actions by SHA.** `rbs add ci` wrote
+  `actions/checkout@v7`, `dtolnay/rust-toolchain@stable` and `Swatinem/rust-cache@v2`,
+  and a tag can be moved to another commit behind the project's back. Each action is now
+  pinned by its SHA, the version in a comment, with `toolchain: stable` spelled out since
+  the SHA no longer carries it; the fragment also writes `.github/dependabot.yml`, which
+  proposes their updates every week.
 
 - **`rbs generate crud --with-upload` writes the tests of its three content routes.** The
   flag used to mount `PUT`, `GET` and `HEAD` on `/<name>/{id}/content` and leave
