@@ -209,3 +209,37 @@ async fn two_keys_count_apart() {
 
     assert_eq!(seconde, 1);
 }
+
+/// Au-delà du plancher, le seuil suit le double des fenêtres vivantes : rebalayer au même
+/// seuil parcourrait toute la table à chaque requête.
+#[test]
+fn the_sweep_threshold_doubles_past_the_floor() {
+    use super::counter::{SEUIL_DE_BALAYAGE, prochain_seuil};
+
+    assert_eq!(prochain_seuil(0), SEUIL_DE_BALAYAGE);
+    assert_eq!(prochain_seuil(SEUIL_DE_BALAYAGE / 2), SEUIL_DE_BALAYAGE);
+    assert_eq!(prochain_seuil(SEUIL_DE_BALAYAGE), 2 * SEUIL_DE_BALAYAGE);
+    assert_eq!(prochain_seuil(usize::MAX), usize::MAX);
+}
+
+/// Le balayage ne retire que les fenêtres échues : un client actif n'y perd pas son compte.
+#[tokio::test]
+async fn live_windows_survive_the_sweep() {
+    let counter = super::Counter::new().expect("compteur constructible");
+    let fenetre = std::time::Duration::from_secs(60);
+
+    for i in 0..super::counter::SEUIL_DE_BALAYAGE {
+        counter
+            .hit(&format!("cle-{i}"), fenetre)
+            .await
+            .expect("le comptage aboutit");
+    }
+
+    // La table est au seuil : ce coup-ci la balaie, et ne doit perdre aucune fenêtre vivante.
+    let compte = counter
+        .hit("cle-0", fenetre)
+        .await
+        .expect("le comptage aboutit");
+
+    assert_eq!(compte, 2);
+}
