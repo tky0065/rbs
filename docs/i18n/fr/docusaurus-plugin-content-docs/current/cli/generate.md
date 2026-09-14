@@ -61,10 +61,12 @@ Options:
       --singular <NOM>     Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force              Écrit même si le working tree Git est sale
       --dry-run            Affiche le plan sans rien écrire
+      --json               Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
       --has-many <ENTITE>  Entité enfant dont ce modèle doit porter la variante inverse, répétable
       --role <ROLE>        Relève à ce rôle le seuil des écritures ; exige la feature auth
       --soft-delete        Rend le DELETE logique : la ligne reste, marquée d'une date de suppression
       --with-upload        Ajoute trois routes de contenu binaire ; exige la feature storage
+      --cursor             Pagine GET /<ressource> par curseur ; la route de filtre garde ses pages
   -h, --help               Print help
   -V, --version            Print version
 ```
@@ -75,10 +77,12 @@ Options:
 | `--singular <NOM>` | La forme singulière du nom, quand l'heuristique intégrée se trompe. Elle nomme l'entité, les DTO et les variables locales — `CreateNewsItem` et `let news_item` pour `rbs generate crud news --singular news_item` — tandis que le module, la table et les routes gardent le pluriel. L'heuristique laisse déjà `news`, `series` et `species` intacts ; pour tout autre pluriel invariable ou irrégulier, ce flag est le remède. Doit être en snake_case, et n'être ni un mot-clé Rust ni un module du squelette, vérifié avant toute écriture. |
 | `--force` | Écrit même si le working tree Git est sale, et écrase les fichiers signalés en conflit. |
 | `--dry-run` | Affiche le plan et s'arrête. Rien n'est écrit. |
+| `--json` | Rend le plan — ou l'erreur — en un seul document JSON sur la sortie standard, à la place du texte coloré : chaque action avec son effet, le contenu complet des fichiers créés, et `applique` pour dire si quelque chose a été écrit. Indépendant de `--dry-run`, et accepté aussi par `generate feature`. [Le guide des agents](../guides/agents.md#lire-un-plan-en-json) donne le document et les codes d'erreur. |
 | `--has-many <ENTITE>` | Répare le côté lointain d'une relation : écrit dans le modèle d'une feature déjà générée la variante `has_many` qui vise l'enfant nommé, et rien d'autre. Répétable. [Le guide des relations](../guides/relations.md) dit quand c'est nécessaire. |
 | `--role <ROLE>` | Relève le seuil des écritures — `create`, `update`, `delete`, et le `PUT` de la route de contenu quand `--with-upload` l'accompagne — à ce rôle plutôt qu'au `Role::User` par défaut. Il n'ouvre ni ne ferme rien : sur un projet portant `auth`, *toutes* les routes engendrées prennent déjà une `Identity` et appellent `require_role`, et les lectures (`list`, `find`, `filter`, et les `GET` et `HEAD` de la route de contenu) gardent simplement le seuil par défaut. Exige la feature [`auth`](../guides/auth.md), et un rôle que son enum `Role` déclare — les deux sont vérifiés avant toute écriture. [Le guide de l'authentification](../guides/auth.md#fermées-par-défaut-à-la-génération) dit ce qu'il faut retirer pour rouvrir une route. |
 | `--soft-delete` | Rend `DELETE` logique plutôt que de retirer la ligne. Le contrat HTTP ne change pas, et la contrainte d'un champ `unique` se restreint aux lignes vivantes — sur MySQL elle reste globale, si bien qu'une valeur supprimée y reste réservée. [Le guide des migrations](../guides/migrations.md#suppression-logique) a le reste. |
 | `--with-upload` | Monte trois routes sur `/<ressource>/{id}/content` — `PUT`, `GET`, `HEAD` — contre le trait du fragment `storage`. Exige la feature [`storage`](../guides/storage.md), et le fragment sous `src/modules/storage/`, là où `rbs add` le pose depuis la 1.3.0 — les deux sont vérifiés avant toute écriture, et un projet qui porte encore `src/storage/` est refusé tant que le répertoire n'est pas déplacé et ses `use` corrigés. Avec `--role`, le `PUT` rejoint les écritures dont le drapeau relève le seuil ; avec `--soft-delete`, le contenu survit à la ligne que le `DELETE` se contente d'estampiller. Il écrit aussi leurs tests dans `tests.rs` — le cycle, les 404, le 413, et le 401 sous `auth`. [Le guide du stockage](../guides/storage.md#les-routes-de-contenu-engendrées) a les deux. |
+| `--cursor` | Pagine `GET /<ressource>` par curseur plutôt que par numéro de page : la route prend `after` et `per_page`, et rend `data` avec `meta.next` — l'`id` à passer comme `after` suivant, `null` une fois la marche terminée — et aucun `total`. `POST /<ressource>/filter` garde ses pages, quel que soit son tri : un curseur sur l'`id` est faux dès que l'ordre suit une autre colonne. Se combine avec `--role`, avec `--soft-delete` — les lignes supprimées restent hors de la marche — et avec `--with-upload`. Pour une entité que ses tests peuvent créer — sans référence requise —, les tests engendrés parcourent chaque page jusqu'à l'extinction de `next`, et vérifient qu'aucune ligne ne revient deux fois. [Le guide du filtrage](../guides/filtering.md#pagination-par-curseur-pour-les-listes-qui-débordent-un-offset) a le reste. |
 
 ## `rbs generate feature`
 
@@ -96,6 +100,7 @@ Options:
       --singular <NOM>  Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force           Écrit même si le working tree Git est sale
       --dry-run         Affiche le plan sans rien écrire
+      --json            Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
   -h, --help            Print help
   -V, --version         Print version
 ```

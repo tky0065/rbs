@@ -27,8 +27,9 @@ le document porte les routes que vos fragments ont montées, les DTO que vos `--
 produits, et l'`operationId` de chaque handler — y compris ceux que vous avez écrits à la
 main.
 
-Le binaire vaut par lui-même. Figer le contrat en CI, c'est un `cargo run --bin openapi >
-openapi.json` suivi d'un `git diff` qui doit rester vide.
+Le binaire vaut par lui-même. Figer le contrat en CI, c'est un
+[`rbs openapi export --out openapi.json`](./openapi.md) suivi d'un `git diff` qui doit
+rester vide.
 
 ## Les drapeaux
 
@@ -38,6 +39,7 @@ openapi.json` suivi d'un `git diff` qui doit rester vide.
 | `--out <DIR>` | Répertoire de sortie, relatif à la racine du projet. Le nom du fichier ne change pas — c'est celui que le client porte dans un import. |
 | `--force` | Écrit même si le working tree Git est sale, et écrase un client signalé en conflit. |
 | `--dry-run` | Affiche le plan et s'arrête. rbs n'écrit rien — mais le projet est tout de même compilé, puisque c'est ainsi que le document se lit. |
+| `--json` | Rend le plan — ou l'erreur — en un seul document JSON sur la sortie standard, contenu complet du client compris ; la compilation du projet reste sur la sortie d'erreur. Indépendant de `--dry-run`. [Le guide des agents](../guides/agents.md#lire-un-plan-en-json) donne le document et les codes d'erreur. |
 
 ## À quoi ressemble le client
 

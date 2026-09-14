@@ -326,6 +326,183 @@ mod tests {
         );
     }
 
+    /// Le corps de `list`, de sa signature à l'accolade qui le ferme.
+    fn corps_de_list(rendered: &str) -> &str {
+        rendered
+            .split("pub async fn list(")
+            .nth(1)
+            .expect("list doit être rendu")
+            .split("\n}\n")
+            .next()
+            .expect("le corps de list est délimité par son accolade")
+    }
+
+    /// Sous `--cursor`, la liste reprend la marche à l'`id` où elle s'était arrêtée : la
+    /// borne est exclusive, sans quoi chaque page réafficherait la dernière ligne de la
+    /// précédente, et le tri est le seul sur lequel un `id` situe une ligne.
+    #[test]
+    fn a_cursor_list_resumes_after_the_last_id() {
+        let rendered = render(&bench::articles_par_curseur()).expect("le repository se rend");
+        let list = corps_de_list(&rendered);
+
+        assert!(
+            rendered.contains(
+                "pub async fn list(db: &DatabaseConnection, cursor: &Cursor) -> Result<Vec<Model>> {"
+            ),
+            "signature de list inattendue sous --cursor :\n{rendered}"
+        );
+        for attendu in [
+            "Column::Id.lt(after)",
+            ".order_by_desc(Column::Id)",
+            ".limit(cursor.per_page())",
+        ] {
+            assert!(
+                list.contains(attendu),
+                "« {attendu} » absent de list :\n{list}"
+            );
+        }
+        assert!(
+            !list.contains("offset") && !list.contains("count(db)"),
+            "le curseur ne saute ni ne compte aucune ligne :\n{list}"
+        );
+    }
+
+    /// Le filtre accepte tout tri, où un curseur sur l'`id` serait faux : sa route garde
+    /// la pagination par page, et `list` cesse de lui déléguer.
+    #[test]
+    fn the_filter_keeps_its_pages_under_cursor() {
+        let rendered = render(&bench::articles_par_curseur()).expect("le repository se rend");
+
+        assert!(
+            rendered.contains(
+                "pub async fn filter(\n    db: &DatabaseConnection,\n    filtre: &ArticleFilter,\n    pagination: &Pagination,\n) -> Result<(Vec<Model>, u64)> {"
+            ),
+            "`filter` doit garder sa fenêtre par page :\n{rendered}"
+        );
+        assert!(
+            !rendered.contains("ArticleFilter::default()"),
+            "`list` ne passe plus par le filtre vide :\n{rendered}"
+        );
+    }
+
+    /// Une ligne supprimée n'est plus une ligne que l'API connaisse : la liste par curseur
+    /// l'écarte comme le faisait le filtre vide qu'elle remplace.
+    #[test]
+    fn a_cursor_list_still_hides_the_deleted_rows() {
+        let feature = bench::articles_par_curseur().soft_deleting();
+        let rendered = render(&feature).expect("le repository se rend");
+
+        assert!(
+            corps_de_list(&rendered)
+                .contains("let mut requete = Entity::find().filter(Column::DeletedAt.is_null());"),
+            "la liste par curseur doit écarter les lignes supprimées :\n{rendered}"
+        );
+        assert_eq!(
+            rendered.matches("Column::DeletedAt.is_null()").count(),
+            4,
+            "list, filter, find et delete portent chacun la condition :\n{rendered}"
+        );
+    }
+
+    /// Le commentaire du rendu par défaut dit qu'il n'y a qu'un chemin de lecture : sous
+    /// `--cursor`, il mentirait. Le code engendré dit alors pourquoi il y en a deux.
+    #[test]
+    fn the_cursor_list_says_why_it_reads_on_its_own() {
+        let rendered = render(&bench::articles_par_curseur()).expect("le repository se rend");
+
+        assert!(
+            !rendered.contains("Un seul chemin de lecture"),
+            "il y a désormais deux chemins :\n{rendered}"
+        );
+        assert!(
+            corps_de_list(&rendered).contains(
+                "// Deux chemins de lecture, et c'est voulu : un curseur sur l'`id` n'a de sens que"
+            ),
+            "l'exception doit être justifiée :\n{rendered}"
+        );
+    }
+
+    /// Le projet engendré compile sous `-D warnings` : un import manquant casse le build,
+    /// un import en trop le fait échouer en CI. Le bloc est le même avec ou sans
+    /// `--soft-delete`, `list` demandant déjà `ColumnTrait` et `QueryFilter` ; seul `Expr`,
+    /// qu'emploie la suppression logique, s'y ajoute.
+    #[test]
+    fn a_cursor_repository_imports_what_its_list_uses() {
+        const IMPORTS: &str = "use rbs_core::{Cursor, Error, Pagination, Result};
+use sea_orm::error::SqlErr;
+use sea_orm::prelude::Uuid;
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, PaginatorTrait,
+    QueryFilter, QueryOrder, QuerySelect,
+};
+
+use super::filter::{self, ArticleFilter};
+use super::model::{Column, Entity};
+";
+
+        let rendered = render(&bench::articles_par_curseur()).expect("le repository se rend");
+        assert!(
+            rendered.starts_with(IMPORTS),
+            "imports inattendus sous --cursor :\n{rendered}"
+        );
+
+        let soft =
+            render(&bench::articles_par_curseur().soft_deleting()).expect("le repository se rend");
+        assert!(
+            soft.starts_with(&IMPORTS.replace(
+                "use sea_orm::prelude::Uuid;",
+                "use sea_orm::prelude::Expr;\nuse sea_orm::prelude::Uuid;"
+            )),
+            "imports inattendus sous --cursor --soft-delete :\n{soft}"
+        );
+    }
+
+    /// Le rendu entier, sous `--cursor --soft-delete`, figé octet à octet : aucun exemple
+    /// n'emploie le drapeau, et rustfmt n'insère pas la ligne vide qui manquerait sous la
+    /// bascule.
+    #[test]
+    fn the_cursor_repository_renders_the_frozen_fixture() {
+        bench::fige(
+            "fixtures/cursor/repository.rs",
+            &render(&bench::articles_par_curseur().soft_deleting()).expect("le repository se rend"),
+        );
+    }
+
+    /// Sous `--cursor`, `list` ne rend plus l'appel `filter(db, &…Filter::default(),
+    /// pagination).await` qui fait diverger le rendu par défaut dès vingt-sept caractères,
+    /// et son corps ne suit aucun nom — `Entity`, `Column` et `Model` sont fixes : une
+    /// divergence y paraîtrait à toute longueur.
+    ///
+    /// Reste, dès trente-huit, une ligne commune aux deux rendus et masquée dans le leur :
+    /// `let (…, total) = tokio::try_join!(page, requete.count(db))?;` de `filter` franchit
+    /// alors les cent colonnes, et rustfmt la replie après le `=`. `format::format_batch`
+    /// la rattrape à l'écriture ; l'ensemble reste inclus dans celui du rendu par défaut,
+    /// et aucune divergence n'est propre au curseur.
+    #[test]
+    fn the_cursor_render_is_already_what_rustfmt_would_write() {
+        let rendu = |name: &str, soft_delete: bool| {
+            let champs = fields::parse("title:string,email:string:unique").expect("champs");
+            let feature = Feature::fresh(name, champs).paged_by_cursor();
+            let feature = if soft_delete {
+                feature.soft_deleting()
+            } else {
+                feature
+            };
+            render(&feature).expect("le repository doit se rendre")
+        };
+
+        assert_eq!(
+            bench::longueurs_divergentes(|name| rendu(name, false)),
+            (38..=40).collect::<Vec<usize>>(),
+            "la plage où le repository diverge de rustfmt a bougé sous --cursor"
+        );
+        assert_eq!(
+            bench::longueurs_divergentes(|name| rendu(name, true)),
+            (38..=40).collect::<Vec<usize>>(),
+            "la plage où le repository diverge de rustfmt a bougé sous --cursor --soft-delete"
+        );
+    }
+
     #[test]
     #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
     fn the_generated_repository_compiles_in_a_fresh_project() {

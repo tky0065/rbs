@@ -6,6 +6,7 @@
 
 mod action;
 pub(crate) mod application;
+pub(crate) mod json;
 pub(crate) mod render;
 mod text;
 
@@ -72,10 +73,8 @@ pub(crate) enum CauseSautee {
 #[derive(Debug, Clone)]
 pub(crate) struct Plan {
     root: PathBuf,
-    /// La production ne lit que `files` ; cette trace n'existe que pour les tests, d'où
-    /// l'exemption portée sur le champ et bornée à `not(test)` : sur l'accesseur, elle
-    /// vaudrait aussi en tests et n'y signalerait plus rien.
-    #[cfg_attr(not(test), expect(dead_code))]
+    /// Trace du calcul des statuts, action par action : la vue JSON (`plan::json::plan`)
+    /// la lit en production, les tests du modèle la vérifient dans le même ordre.
     actions: Vec<Action>,
     files: Vec<File>,
     sautees: Vec<Sautee>,
@@ -84,10 +83,9 @@ pub(crate) struct Plan {
 impl Plan {
     /// Les actions dans l'ordre où elles ont été planifiées.
     ///
-    /// Trace du calcul des statuts, action par action, que les tests du modèle vérifient.
-    /// L'affichage et l'application travaillent par fichier : un fichier peut recevoir
-    /// plusieurs actions, et seul son statut agrégé décide de ce qui lui arrivera.
-    #[cfg(test)]
+    /// L'affichage humain et l'application travaillent par fichier : un fichier peut
+    /// recevoir plusieurs actions, et seul son statut agrégé décide de ce qui lui
+    /// arrivera. La vue JSON, elle, rend chaque action séparément — d'où cet accesseur.
     pub fn actions(&self) -> &[Action] {
         &self.actions
     }
@@ -177,6 +175,64 @@ pub(crate) enum Error {
         /// La zone manquante, et le bloc qui la rétablit.
         zone: crate::agents::MissingZone,
     },
+}
+
+impl Error {
+    /// Code stable de la faute, en snake_case ASCII.
+    ///
+    /// `match` exhaustif, sans bras `_` : une variante ajoutée à `Error` ne compile plus
+    /// tant qu'elle n'a pas le sien.
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Error::Acces(_) => "fichier_inaccessible",
+            Error::DejaProjete { .. } => "plan_incoherent",
+            Error::Anchor(_) => "ancre_absente",
+            Error::MalPlacee(_) => "ancre_mal_placee",
+            Error::FichierAbsent { .. } => "fichier_absent",
+            Error::Metadata(_) => "manifeste_illisible",
+            Error::Toml { .. } => "toml_invalide",
+            Error::ManifesteAbsent { .. } => "manifeste_absent",
+            Error::ZoneAbsente { .. } => "zone_absente",
+        }
+    }
+
+    /// Le bloc à coller, quand la faute est une ancre disparue, mal placée, ou une zone
+    /// absente d'`AGENTS.md` — les seules dont le remède tient dans un extrait de
+    /// fichier plutôt que dans une décision du développeur.
+    pub(crate) fn bloc(&self) -> Option<String> {
+        match self {
+            Error::Anchor(absente) => Some(absente.anchor.block()),
+            Error::MalPlacee(placee) => Some(placee.block.clone()),
+            Error::ZoneAbsente { zone, .. } => Some(zone.block()),
+            _ => None,
+        }
+    }
+
+    /// Le texte du remède, porté une seule fois : chaque commande qui affiche un remède
+    /// humain pour une ancre disparue ou mal placée délègue ici plutôt que de recopier
+    /// ce texte, qui divergerait au premier changement.
+    ///
+    /// `Some` exactement quand [`Self::bloc`] l'est : un bloc à coller sans le dire où le
+    /// coller laisserait un agent deviner.
+    pub(crate) fn remede(&self) -> Option<String> {
+        match self {
+            Error::Anchor(absente) => Some(format!(
+                "dans {} :\n{}",
+                absente.anchor.file,
+                absente.anchor.block()
+            )),
+            Error::MalPlacee(placee) => Some(format!(
+                "dans {}, remontez ce bloc au-dessus de `{}` :\n{}",
+                placee.anchor.file, placee.before, placee.block
+            )),
+            Error::ZoneAbsente { path, zone } => Some(format!(
+                "dans {path}, collez ce bloc pour rétablir la zone `rbs:{}` :\n{}",
+                zone.zone,
+                zone.block()
+            )),
+            _ => None,
+        }
+    }
 }
 
 /// Accumule les actions d'un plan en calculant, pour chaque fichier, son contenu final.
@@ -1604,5 +1660,123 @@ mod tests {
         );
         assert_eq!(plan.actions().len(), 4);
         assert_eq!(plan.files().len(), 4);
+    }
+
+    #[test]
+    fn a_vanished_anchor_carries_its_code_and_the_block_to_paste() {
+        let error = Error::Anchor(anchors::Missing {
+            anchor: anchors::ROUTES,
+        });
+
+        assert_eq!(error.code(), "ancre_absente");
+        let Error::Anchor(absente) = &error else {
+            unreachable!()
+        };
+        assert_eq!(error.bloc(), Some(absente.anchor.block()));
+    }
+
+    #[test]
+    fn a_vanished_anchor_names_where_to_paste_the_block() {
+        let error = Error::Anchor(anchors::Missing {
+            anchor: anchors::ROUTES,
+        });
+
+        assert_eq!(
+            error.remede(),
+            Some(format!(
+                "dans {} :\n{}",
+                anchors::ROUTES.file,
+                anchors::ROUTES.block()
+            ))
+        );
+    }
+
+    #[test]
+    fn a_misplaced_anchor_names_the_line_to_move_the_block_above() {
+        let error = Error::MalPlacee(Box::new(anchors::Misplaced {
+            anchor: anchors::STATE_INIT,
+            before: "core: CoreState::new(".to_string(),
+            block: "// <rbs:state_init>\n// </rbs:state_init>".to_string(),
+        }));
+
+        assert_eq!(
+            error.remede(),
+            Some(
+                "dans src/state.rs, remontez ce bloc au-dessus de `core: CoreState::new(` :\n\
+                 // <rbs:state_init>\n// </rbs:state_init>"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn a_missing_zone_names_the_file_and_the_block_to_paste() {
+        let error = Error::ZoneAbsente {
+            path: "AGENTS.md".to_string(),
+            zone: crate::agents::MissingZone {
+                zone: "inventory".to_string(),
+            },
+        };
+
+        assert_eq!(
+            error.remede(),
+            Some(
+                "dans AGENTS.md, collez ce bloc pour rétablir la zone `rbs:inventory` :\n\
+                 <!-- rbs:inventory -->\n<!-- /rbs:inventory -->"
+                    .to_string()
+            )
+        );
+    }
+
+    /// La règle que chaque commande doit pouvoir supposer : un bloc à coller sans dire
+    /// où le coller n'existe pas, et réciproquement.
+    #[test]
+    fn remede_is_some_exactly_when_bloc_is_some_for_every_variant() {
+        let toml_source: Result<toml_edit::DocumentMut, toml_edit::TomlError> =
+            "= invalide".parse();
+        let erreurs: Vec<Error> = vec![
+            Error::Acces(crate::errors::Acces {
+                path: "Cargo.toml".to_string(),
+                source: io::Error::other("panne"),
+            }),
+            Error::DejaProjete {
+                path: "src.rs".to_string(),
+            },
+            Error::Anchor(anchors::Missing {
+                anchor: anchors::ROUTES,
+            }),
+            Error::MalPlacee(Box::new(anchors::Misplaced {
+                anchor: anchors::STATE_INIT,
+                before: "core: CoreState::new(".to_string(),
+                block: "// <rbs:state_init>\n// </rbs:state_init>".to_string(),
+            })),
+            Error::FichierAbsent {
+                path: "src/router.rs".to_string(),
+            },
+            Error::Metadata(crate::metadata::Error::PasUnProjet {
+                path: "Cargo.toml".to_string(),
+            }),
+            Error::Toml {
+                path: "Cargo.toml".to_string(),
+                source: toml_source.expect_err("la source est invalide"),
+            },
+            Error::ManifesteAbsent {
+                path: "Cargo.toml".to_string(),
+            },
+            Error::ZoneAbsente {
+                path: "AGENTS.md".to_string(),
+                zone: crate::agents::MissingZone {
+                    zone: "inventory".to_string(),
+                },
+            },
+        ];
+
+        for erreur in erreurs {
+            assert_eq!(
+                erreur.remede().is_some(),
+                erreur.bloc().is_some(),
+                "{erreur:?}"
+            );
+        }
     }
 }

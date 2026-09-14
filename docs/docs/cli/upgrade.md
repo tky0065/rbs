@@ -34,6 +34,7 @@ Usage: rbs upgrade [OPTIONS]
 Options:
       --force    Met à niveau même si le working tree Git est sale
       --dry-run  Affiche le plan sans rien écrire
+      --json     Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
   -h, --help     Print help
   -V, --version  Print version
 ```
@@ -41,6 +42,11 @@ Options:
 `--force` and `--dry-run` are its own; `--dry-run` prints the plan and stops, which is how
 you read what a jump would touch before it touches it. Neither `--template-dir` nor `--yes` is accepted
 here: each is declared on the commands that read it.
+
+`--json` prints the plan — or the error — as one JSON document on standard output,
+with `applique` to say whether the manifest was written; the migration notes then go to
+standard error. [The agents guide](../guides/agents.md#reading-a-plan-as-json) has the
+document and the error codes.
 
 ## A jump that carries a note
 

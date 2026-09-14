@@ -49,6 +49,8 @@ pub(crate) enum Step {
     Migrations,
     /// Lancer le serveur, et le relancer à chaque changement.
     Server,
+    /// Lancer `cargo` avec ces arguments : les tests du workspace.
+    Tests(Vec<String>),
 }
 
 /// Ce qui peut empêcher de démarrer.
@@ -97,6 +99,17 @@ pub(crate) enum Error {
     /// Le manifeste du projet n'a pu être lu.
     #[error("{0}")]
     Metadata(#[from] metadata::Error),
+
+    /// `cargo` lui-même n'a pas pu être lancé.
+    #[error("cargo n'a pas pu être lancé : {0}")]
+    Cargo(#[source] io::Error),
+
+    /// `cargo test` a rendu un code non nul.
+    #[error("`cargo test` a échoué (code {code})")]
+    Tests {
+        /// Code de sortie rendu par `cargo test`.
+        code: i32,
+    },
 }
 
 // Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
@@ -126,12 +139,24 @@ impl Error {
             _ => None,
         }
     }
+
+    /// Le code que le process doit rendre.
+    ///
+    /// Une CI distingue un test rouge (le code que `cargo test` a lui-même rendu, 101
+    /// d'ordinaire) d'une commande qui n'a pas pu démarrer : les autres fautes restent à 1.
+    pub(crate) fn exit_code(&self) -> i32 {
+        match self {
+            Self::Tests { code } => *code,
+            _ => 1,
+        }
+    }
 }
 
 /// Démarre le projet qui contient `directory`.
 pub(crate) fn run(directory: &Path) -> Result<(), Error> {
     let root = metadata::project_root(directory)?;
-    let steps = plan(&root)?;
+    let mut steps = plan(&root)?;
+    steps.push(Step::Server);
 
     crate::ui::info(&render(&steps));
 
@@ -140,7 +165,7 @@ pub(crate) fn run(directory: &Path) -> Result<(), Error> {
 }
 
 /// Ce que rbs accorde à la base, selon qu'il vient ou non de la démarrer.
-fn patience(steps: &[Step]) -> Duration {
+pub(crate) fn patience(steps: &[Step]) -> Duration {
     if steps.iter().any(|step| matches!(step, Step::Compose(_))) {
         ATTENTE_APRES_COMPOSE
     } else {
@@ -148,7 +173,10 @@ fn patience(steps: &[Step]) -> Duration {
     }
 }
 
-/// Établit la séquence de démarrage à partir de l'état du projet.
+/// Établit la séquence commune à `rbs dev` et `rbs test` à partir de l'état du projet.
+///
+/// Chaque commande ajoute sa dernière étape : `dev` le serveur, `test` la commande
+/// `cargo test` — ce plan partagé s'arrête à la base migrée.
 pub(crate) fn plan(root: &Path) -> Result<Vec<Step>, Error> {
     let mut steps = Vec::new();
 
@@ -170,7 +198,6 @@ pub(crate) fn plan(root: &Path) -> Result<Vec<Step>, Error> {
     }
 
     steps.push(Step::Migrations);
-    steps.push(Step::Server);
 
     Ok(steps)
 }
@@ -193,7 +220,7 @@ fn url(variables: &[(String, String)]) -> Option<String> {
 }
 
 /// Exécute les étapes du plan, dans l'ordre.
-fn start(root: &Path, steps: &[Step], attente: Duration) -> Result<(), Error> {
+pub(crate) fn start(root: &Path, steps: &[Step], attente: Duration) -> Result<(), Error> {
     let variables = migrate::project_variables(root)?;
 
     for step in steps {
@@ -212,6 +239,15 @@ fn start(root: &Path, steps: &[Step], attente: Duration) -> Result<(), Error> {
                 migrate::launch(root, "up", &variables, false)?;
             }
             Step::Server => watch::run(root, &variables)?,
+            Step::Tests(arguments) => {
+                let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
+                crate::cargo::run(root, &arguments, &variables, false).map_err(
+                    |error| match error {
+                        crate::cargo::Error::Lancement(source) => Error::Cargo(source),
+                        crate::cargo::Error::Statut(code) => Error::Tests { code },
+                    },
+                )?;
+            }
         }
     }
 
@@ -306,7 +342,7 @@ fn wait_for(
 }
 
 /// Le plan, tel qu'il s'affiche avant que quoi que ce soit ne démarre.
-fn render(steps: &[Step]) -> String {
+pub(crate) fn render(steps: &[Step]) -> String {
     let lignes: Vec<String> = steps
         .iter()
         .map(|step| match step {
@@ -319,6 +355,7 @@ fn render(steps: &[Step]) -> String {
             Step::Database { host, port } => format!("  base        {host}:{port}"),
             Step::Migrations => "  migrations  rbs migrate up".to_string(),
             Step::Server => "  serveur     cargo run, relancé à chaque changement".to_string(),
+            Step::Tests(arguments) => format!("  tests       cargo {}", arguments.join(" ")),
         })
         .collect();
 
@@ -351,7 +388,7 @@ mod tests {
     // SQLite n'a pas de serveur : attendre qu'un port réponde ferait échouer `rbs dev`
     // sur un projet parfaitement démarrable, et l'URL n'a de toute façon ni hôte ni port.
     #[test]
-    fn a_sqlite_project_waits_for_no_database_and_starts_anyway() {
+    fn a_sqlite_project_waits_for_no_database_and_still_migrates() {
         let (_parent, root) = project_on(Database::Sqlite, &[], "sqlite://demo_api.db?mode=rwc");
 
         let steps = plan(&root).expect("le plan doit se calculer");
@@ -365,10 +402,6 @@ mod tests {
         assert!(
             steps.iter().any(|step| matches!(step, Step::Migrations)),
             "le plan n'applique plus les migrations : {steps:?}"
-        );
-        assert!(
-            steps.iter().any(|step| matches!(step, Step::Server)),
-            "le plan ne démarre plus le serveur : {steps:?}"
         );
     }
 
@@ -595,5 +628,24 @@ mod tests {
         let error = run(ailleurs.path()).expect_err("ce n'est pas un projet");
 
         assert!(matches!(error, Error::PasUnProjet));
+    }
+
+    #[test]
+    fn the_shared_plan_ends_with_the_migrations_and_starts_nothing() {
+        let (_parent, root) = project(&[], "postgres://rbs:rbs@localhost:5432/demo_api");
+        let steps = plan(&root).expect("le plan se calcule");
+        assert_eq!(steps.last(), Some(&Step::Migrations), "{steps:?}");
+    }
+
+    #[test]
+    fn a_red_test_run_exits_with_the_code_cargo_gave() {
+        assert_eq!(Error::Tests { code: 101 }.exit_code(), 101);
+        assert_eq!(Error::PasUnProjet.exit_code(), 1);
+    }
+
+    #[test]
+    fn the_test_step_shows_the_whole_cargo_command() {
+        let rendu = render(&[Step::Tests(vec!["test".into(), "--workspace".into()])]);
+        assert_eq!(rendu, "  tests       cargo test --workspace");
     }
 }

@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use minijinja::context;
 
 use crate::dotenv;
+use crate::errors::Codee;
 use crate::git;
 use crate::manifest;
 use crate::metadata;
@@ -186,22 +187,10 @@ impl Error {
     /// Ce que le développeur peut coller ou déplacer pour réparer, quand la panne se
     /// répare ainsi.
     ///
-    /// Seule une ancre disparue ou mal placée a un remède tenant en un bloc de texte :
-    /// les autres pannes se règlent par une décision — commiter, corriger le manifeste du
-    /// fragment.
+    /// Le texte lui-même vit sur `plan::Error::remede` — porté une seule fois, pour
+    /// toutes les commandes qui délèguent à un plan.
     pub(crate) fn remedy(&self) -> Option<String> {
-        match self.plan()? {
-            plan::Error::Anchor(absente) => Some(format!(
-                "dans {} :\n{}",
-                absente.anchor.file,
-                absente.anchor.block()
-            )),
-            plan::Error::MalPlacee(placee) => Some(format!(
-                "dans {}, remontez ce bloc au-dessus de `{}` :\n{}",
-                placee.anchor.file, placee.before, placee.block
-            )),
-            _ => None,
-        }
+        self.plan()?.remede()
     }
 
     /// L'erreur de planification que celle-ci porte, directement ou par l'installation.
@@ -212,6 +201,33 @@ impl Error {
             }
             _ => None,
         }
+    }
+}
+
+impl Codee for Error {
+    fn code(&self) -> &'static str {
+        match self {
+            Error::PasUnProjet => "pas_un_projet",
+            Error::Unknown(_) => "feature_inconnue",
+            Error::Acces(_) => "fichier_inaccessible",
+            Error::SansManifeste { .. } => "fragment_sans_manifeste",
+            Error::Manifest(_) => "fragment_invalide",
+            Error::Installation(erreur) => erreur.code(),
+            Error::WorkingTreeSale(_) => "arbre_sale",
+            Error::Metadata(_) => "manifeste_illisible",
+            Error::Env(_) => "env_illisible",
+            Error::UrlIndecomposable { .. } => "url_indecomposable",
+            Error::Plan(erreur) => erreur.code(),
+            Error::Application(erreur) => erreur.code(),
+        }
+    }
+
+    fn remede(&self) -> Option<String> {
+        self.remedy()
+    }
+
+    fn bloc(&self) -> Option<String> {
+        self.plan().and_then(plan::Error::bloc)
     }
 }
 
@@ -2788,5 +2804,74 @@ mod tests {
             Some("demo_api"),
             "{env}"
         );
+    }
+
+    /// L'ancre disparue arrive ici par l'installation d'un fragment, et non par un plan
+    /// direct : le code et le bloc doivent tout de même se lire, sans descendre dans
+    /// `installation::Error` à la main.
+    #[test]
+    fn a_vanished_anchor_carries_its_code_and_block_through_the_installation() {
+        let error = Error::Installation(installation::Error::Plan(plan::Error::Anchor(
+            crate::anchors::Missing {
+                anchor: crate::anchors::ROUTES,
+            },
+        )));
+
+        assert_eq!(error.code(), "ancre_absente");
+        assert_eq!(error.bloc(), Some(crate::anchors::ROUTES.block()));
+    }
+
+    #[test]
+    fn a_dirty_working_tree_has_a_stable_code() {
+        let error = Error::WorkingTreeSale(crate::errors::WorkingTreeSale {
+            files: "src/main.rs".to_string(),
+        });
+
+        assert_eq!(error.code(), "arbre_sale");
+    }
+
+    /// Les trois pannes à bloc, portées directement par un plan ou par l'installation
+    /// d'un fragment : un bloc sans son remède, ou l'inverse, laisserait un agent deviner
+    /// où coller ce qu'on lui montre.
+    #[test]
+    fn remede_is_some_exactly_when_bloc_is_some_directly_and_through_the_installation() {
+        let constructeurs: Vec<fn() -> plan::Error> = vec![
+            || {
+                plan::Error::Anchor(crate::anchors::Missing {
+                    anchor: crate::anchors::ROUTES,
+                })
+            },
+            || {
+                plan::Error::MalPlacee(Box::new(crate::anchors::Misplaced {
+                    anchor: crate::anchors::STATE_INIT,
+                    before: "core: CoreState::new(".to_string(),
+                    block: "// <rbs:state_init>\n// </rbs:state_init>".to_string(),
+                }))
+            },
+            || plan::Error::ZoneAbsente {
+                path: "AGENTS.md".to_string(),
+                zone: crate::agents::MissingZone {
+                    zone: "inventory".to_string(),
+                },
+            },
+        ];
+
+        for construire in constructeurs {
+            let direct = Error::Plan(construire());
+            assert_eq!(
+                direct.remede().is_some(),
+                direct.bloc().is_some(),
+                "{direct:?}"
+            );
+            assert!(direct.remede().is_some(), "{direct:?}");
+
+            let via_installation = Error::Installation(installation::Error::Plan(construire()));
+            assert_eq!(
+                via_installation.remede().is_some(),
+                via_installation.bloc().is_some(),
+                "{via_installation:?}"
+            );
+            assert!(via_installation.remede().is_some(), "{via_installation:?}");
+        }
     }
 }

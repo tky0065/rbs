@@ -26,8 +26,9 @@ That is what makes the client follow the code rather than an approximate reading
 sources: the document carries the routes your fragments mounted, the DTOs your `--fields`
 produced, and the `operationId` of every handler — including the ones you wrote by hand.
 
-The binary is useful on its own. Freezing the contract in CI is a `cargo run --bin openapi >
-openapi.json` followed by a `git diff` that must stay empty.
+The binary is useful on its own. Freezing the contract in CI is an
+[`rbs openapi export --out openapi.json`](./openapi.md) followed by a `git diff` that must
+stay empty.
 
 ## Flags
 
@@ -37,6 +38,7 @@ openapi.json` followed by a `git diff` that must stay empty.
 | `--out <DIR>` | Output directory, relative to the project root. The file name does not change — it is the name the client carries in an import. |
 | `--force` | Writes even though the Git working tree is dirty, and overwrites a client reported as conflicting. |
 | `--dry-run` | Prints the plan and stops. rbs writes nothing — but the project is still compiled, since that is how the document is read. |
+| `--json` | Prints the plan — or the error — as one JSON document on standard output, the client's full content included; the project's compilation stays on standard error. Independent of `--dry-run`. [The agents guide](../guides/agents.md#reading-a-plan-as-json) has the document and the error codes. |
 
 ## What the client looks like
 

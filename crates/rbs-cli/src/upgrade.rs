@@ -15,6 +15,7 @@
 
 use std::path::PathBuf;
 
+use crate::errors::Codee;
 use crate::git;
 use crate::metadata;
 use crate::plan;
@@ -98,6 +99,38 @@ pub(crate) enum Error {
 
 // Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
 crate::errors::depuis_la_racine!(Error);
+
+impl Codee for Error {
+    fn code(&self) -> &'static str {
+        match self {
+            Error::PasUnProjet => "pas_un_projet",
+            Error::Acces(_) => "fichier_inaccessible",
+            Error::CliAnterieur { .. } => "cli_anterieur",
+            Error::WorkingTreeSale(_) => "arbre_sale",
+            Error::Metadata(_) => "manifeste_illisible",
+            Error::Plan(erreur) => erreur.code(),
+            Error::Application(erreur) => erreur.code(),
+            Error::Agents(_) => "agents_illisible",
+        }
+    }
+
+    /// Cette erreur n'a pas de `remedy()` : seul un `Plan` a un texte à donner, lu sur
+    /// `plan::Error::remede` plutôt que reconstruit ici, où il divergerait au premier
+    /// changement.
+    fn remede(&self) -> Option<String> {
+        match self {
+            Error::Plan(erreur) => erreur.remede(),
+            _ => None,
+        }
+    }
+
+    fn bloc(&self) -> Option<String> {
+        match self {
+            Error::Plan(erreur) => erreur.bloc(),
+            _ => None,
+        }
+    }
+}
 
 /// Calcule ce que la mise à niveau ferait au projet, sans rien écrire.
 pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
@@ -723,5 +756,63 @@ mod tests {
             fs::read_to_string(root.join("CLAUDE.md")).expect("CLAUDE.md est lisible"),
             "# nos règles\n"
         );
+    }
+
+    /// Cette erreur n'a pas de `remedy()` : `remede` n'invente rien pour une panne qui
+    /// ne se répare pas par un texte à coller.
+    #[test]
+    fn the_absence_of_a_project_has_a_stable_code_and_no_remedy() {
+        let error = Error::PasUnProjet;
+
+        assert_eq!(error.code(), "pas_un_projet");
+        assert_eq!(error.remede(), None);
+    }
+
+    /// Sans `remedy()` propre à cette commande, `remede` lit le même texte que les
+    /// autres commandes sur `plan::Error::remede`, pour une ancre disparue portée par un
+    /// `Plan`.
+    #[test]
+    fn a_vanished_anchor_carried_by_the_plan_still_gives_a_remedy() {
+        let error = Error::Plan(crate::plan::Error::Anchor(crate::anchors::Missing {
+            anchor: crate::anchors::ROUTES,
+        }));
+
+        assert_eq!(error.code(), "ancre_absente");
+        assert_eq!(error.bloc(), Some(crate::anchors::ROUTES.block()));
+        let remede = error.remede().expect("une ancre disparue se recolle");
+        assert!(remede.contains("src/router.rs"), "{remede}");
+        assert!(remede.contains("// <rbs:routes>"), "{remede}");
+    }
+
+    /// Les trois pannes à bloc d'un plan de mise à niveau : un bloc sans son remède, ou
+    /// l'inverse, laisserait un agent deviner où coller ce qu'on lui montre.
+    #[test]
+    fn remede_is_some_exactly_when_bloc_is_some_for_a_plan_error() {
+        let erreurs = vec![
+            crate::plan::Error::Anchor(crate::anchors::Missing {
+                anchor: crate::anchors::ROUTES,
+            }),
+            crate::plan::Error::MalPlacee(Box::new(crate::anchors::Misplaced {
+                anchor: crate::anchors::STATE_INIT,
+                before: "core: CoreState::new(".to_string(),
+                block: "// <rbs:state_init>\n// </rbs:state_init>".to_string(),
+            })),
+            crate::plan::Error::ZoneAbsente {
+                path: "AGENTS.md".to_string(),
+                zone: crate::agents::MissingZone {
+                    zone: "inventory".to_string(),
+                },
+            },
+        ];
+
+        for erreur in erreurs {
+            let error = Error::Plan(erreur);
+            assert_eq!(
+                error.remede().is_some(),
+                error.bloc().is_some(),
+                "{error:?}"
+            );
+            assert!(error.remede().is_some(), "{error:?}");
+        }
     }
 }

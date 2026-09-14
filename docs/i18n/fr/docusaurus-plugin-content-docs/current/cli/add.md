@@ -29,6 +29,7 @@ Arguments:
 Options:
       --force                  Applique les modifications même si le working tree Git est sale
       --dry-run                Affiche le plan sans rien écrire
+      --json                   Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
       --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
   -h, --help                   Print help
   -V, --version                Print version
@@ -38,6 +39,7 @@ Options:
 |---|---|
 | `--force` | Applique même si le working tree Git est sale, et écrase les fichiers signalés en conflit. |
 | `--dry-run` | Affiche le plan et s'arrête. Rien n'est écrit. |
+| `--json` | Rend le plan — ou l'erreur — en un seul document JSON sur la sortie standard, à la place du texte coloré : chaque action avec son effet, le contenu complet des fichiers créés, et `applique` pour dire si quelque chose a été écrit. Indépendant de `--dry-run`. [Le guide des agents](../guides/agents.md#lire-un-plan-en-json) donne le document et les codes d'erreur. |
 | `--template-dir <CHEMIN>` | Lit les fragments dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire. |
 
 ## Les treize features

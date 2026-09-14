@@ -94,8 +94,12 @@ La réponse abandonne les décomptes :
 `next` est nul une fois la marche terminée. Il n'y a pas de `total` : le `COUNT(*)` qu'il
 demanderait est précisément le coût que le curseur existe pour éviter.
 
-Le CRUD engendré garde `Pagination` — basculer retirerait `total` de toutes les réponses
-que vos clients lisent déjà. `Cursor` est là pour les routes que vous écrivez vous-même :
+[`rbs generate crud --cursor`](../cli/generate.md#rbs-generate-crud) écrit cette route pour
+vous : `GET /<ressource>` prend `Cursor` et rend `CursorPage`, et son repository avance sur
+`id < after`, en décroissant, `per_page` lignes à la fois — `deleted_at IS NULL` s'applique
+toujours sous `--soft-delete`. Sans le drapeau, le CRUD engendré garde `Pagination` :
+basculer une liste existante retirerait `total` de toutes les réponses que vos clients
+lisent déjà. Sur une route que vous écrivez vous-même, la même marche s'écrit :
 
 ```rust
 let mut query = Entity::find().order_by_desc(Column::Id);
@@ -115,7 +119,8 @@ Ok(Json(CursorPage::new(
 Le curseur n'avance que sur l'`id` décroissant — l'ordre que `list` applique déjà, et celui
 que l'UUIDv7 rend total. Il ne suit pas un `sort` que vous auriez choisi : sur une colonne
 où deux lignes partagent une valeur, la frontière serait ambiguë et la page suivante
-sauterait des lignes ou en répéterait.
+sauterait des lignes ou en répéterait. C'est pourquoi la route de filtre d'un CRUD
+`--cursor` garde ses pages.
 
 ## Aucun nom de colonne n'atteint la base
 
