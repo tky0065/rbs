@@ -41,8 +41,8 @@ plan pour …/demo
   ~ .env.example                   modifié
   ~ AGENTS.md                      modifié
 
-  12 fichiers à écrire
-✓ storage installée — 4 fichiers
+  5 à créer, 7 à modifier
+✓ storage installée — 5 créés, 7 modifiés
 
   les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example
 ```
@@ -86,8 +86,8 @@ plan pour …/demo
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  17 fichiers à écrire
-✓ uploads générée — 10 fichiers
+  10 à créer, 7 à modifier
+✓ uploads générée — 10 créés, 7 modifiés
 
   la migration m20260909_094423_create_uploads reste à appliquer avant de lancer le projet
 ```

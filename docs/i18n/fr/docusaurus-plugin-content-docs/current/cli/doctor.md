@@ -320,7 +320,7 @@ plan pour /private/tmp/rbs-demo/demo
   ~ src/openapi.rs   modifié
   ~ src/state.rs     modifié
 
-  2 fichiers à écrire
+  2 à modifier
 
 ✓ 2 ancres reposées : openapi, state_init
 
@@ -382,7 +382,7 @@ plan pour /private/tmp/rbs-demo/demo
 
   ~ src/seeds/main.rs   modifié
 
-  1 fichier à écrire
+  1 à modifier
 
 ✓ 1 ancre reposée : seeds
 attention : layers n'a pas été reposée — la ligne d'accroche `.merge(docs)` est introuvable dans src/router.rs

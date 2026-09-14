@@ -49,8 +49,8 @@ plan pour …/demo
   + migration/src/m20260913_132216_create_webhook_subscriptions.rs   créé
   ~ AGENTS.md                                                        modifié
 
-  68 fichiers à écrire
-✓ webhooks installée — 55 fichiers
+  56 à créer, 12 à modifier
+✓ webhooks installée — 56 créés, 12 modifiés
 
   rbs migrate up, inscrivez un abonné par POST /webhooks/subscriptions — son secret n'est rendu qu'à cet instant — puis appelez webhooks::emit dans vos services
 ```

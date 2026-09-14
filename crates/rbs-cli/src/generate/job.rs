@@ -75,8 +75,10 @@ pub(crate) struct Planned {
 pub(crate) enum Bilan {
     /// Des fichiers ont été écrits ; des blocs restent peut-être à reporter.
     Ecrit {
-        /// Fichiers créés ou modifiés.
-        fichiers: usize,
+        /// Fichiers qui n'existaient pas.
+        crees: usize,
+        /// Fichiers existants réécrits.
+        modifies: usize,
         /// Insertions sautées, dont le plan affiche le bloc.
         a_reporter: usize,
     },
@@ -89,19 +91,17 @@ pub(crate) enum Bilan {
 impl Planned {
     /// Ce que l'application du plan aura fait.
     pub(crate) fn bilan(&self) -> Bilan {
-        // Une relance ne réécrit rien : « écrit — 0 fichier » annoncerait une écriture.
-        let fichiers = self
-            .plan
-            .files()
-            .iter()
-            .filter(|file| file.statut != plan::Status::DejaFait)
-            .count();
+        // Lu après une application réussie : un conflit resté au plan a été écrit par
+        // `--force`, faute de quoi l'application aurait refusé.
+        let ecrits = self.plan.bilan(true);
 
-        match (fichiers, self.plan.sautees().len()) {
+        // Une relance ne réécrit rien : « écrit — aucun fichier » annoncerait une écriture.
+        match (ecrits.crees + ecrits.modifies, self.plan.sautees().len()) {
             (0, 0) => Bilan::DejaEnPlace,
             (0, a_reporter) => Bilan::AReporter(a_reporter),
-            (fichiers, a_reporter) => Bilan::Ecrit {
-                fichiers,
+            (_, a_reporter) => Bilan::Ecrit {
+                crees: ecrits.crees,
+                modifies: ecrits.modifies,
                 a_reporter,
             },
         }
@@ -1019,7 +1019,8 @@ mod tests {
         assert_eq!(
             planned.bilan(),
             Bilan::Ecrit {
-                fichiers: 1,
+                crees: 1,
+                modifies: 0,
                 a_reporter: 3
             }
         );

@@ -38,8 +38,8 @@ plan pour /private/tmp/rbs-demo/depot
   ~ .env.example                    modifié
   ~ AGENTS.md                       modifié
 
-  14 fichiers à écrire
-✓ mail installée — 6 fichiers
+  7 à créer, 7 à modifier
+✓ mail installée — 7 créés, 7 modifiés
 
   réglez [mail] dans config/default.toml — un SMTP local par défaut
 ```

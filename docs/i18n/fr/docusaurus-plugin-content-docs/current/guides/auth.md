@@ -60,8 +60,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  35 fichiers à écrire
-✓ auth installée — 25 fichiers
+  25 à créer, 10 à modifier
+✓ auth installée — 25 créés, 10 modifiés
 
   rbs migrate up
 ```

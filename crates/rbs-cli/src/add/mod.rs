@@ -47,7 +47,11 @@ pub(crate) struct Options {
 pub(crate) struct Planned {
     /// Le plan, à afficher puis à appliquer.
     pub plan: plan::Plan,
-    /// Chemins des fichiers de la feature, relatifs à la racine du projet.
+    /// Chemins des fichiers que les fragments déposent, relatifs à la racine du projet.
+    ///
+    /// Seuls les tests les lisent : le bilan de la commande se tire du plan, qui sait
+    /// aussi ce qui a été modifié.
+    #[cfg(test)]
     pub files: Vec<String>,
     /// Chaque fragment que ce plan pose, dans l'ordre de pose.
     ///
@@ -249,6 +253,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     {
         return Ok(Planned {
             plan: plan::Builder::new(root).finir(),
+            #[cfg(test)]
             files: Vec::new(),
             poses: Vec::new(),
             description: String::new(),
@@ -364,6 +369,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     let mut builder = plan::Builder::new(root.clone());
     let timestamp = crate::generate::migration::current_timestamp();
+    #[cfg(test)]
     let mut files = Vec::new();
     let mut poses = Vec::new();
 
@@ -384,6 +390,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
             files: deposes.len(),
             migration: fragment.manifest.migration.is_some(),
         });
+        #[cfg(test)]
         files.extend(deposes);
 
         builder.patch(plan::PatchToml::InscrireFeature(fragment.name.clone()))?;
@@ -418,6 +425,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     Ok(Planned {
         plan: builder.finir(),
+        #[cfg(test)]
         files,
         poses,
         description,

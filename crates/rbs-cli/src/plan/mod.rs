@@ -104,6 +104,43 @@ impl Plan {
     pub fn sautees(&self) -> &[Sautee] {
         &self.sautees
     }
+
+    /// Ce que l'application de ce plan écrit, par ce qui arrive aux fichiers.
+    ///
+    /// La règle est celle d'`application::apply` : un fichier inchangé n'est pas réécrit,
+    /// un conflit ne l'est que sous `--force`. Le bilan d'une commande dit ainsi ce que
+    /// son plan avait annoncé.
+    pub(crate) fn bilan(&self, force: bool) -> Bilan {
+        let mut bilan = Bilan {
+            crees: 0,
+            modifies: 0,
+        };
+        for file in &self.files {
+            let ecrit = match file.statut {
+                Status::AFaire => true,
+                Status::Conflit => force,
+                Status::DejaFait => false,
+            };
+            if !ecrit {
+                continue;
+            }
+            if file.before.is_some() {
+                bilan.modifies += 1;
+            } else {
+                bilan.crees += 1;
+            }
+        }
+        bilan
+    }
+}
+
+/// Les fichiers qu'une application écrit, par ce qui leur arrive.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Bilan {
+    /// Fichiers qui n'existaient pas.
+    pub crees: usize,
+    /// Fichiers existants réécrits.
+    pub modifies: usize,
 }
 
 /// Ce qui peut empêcher de planifier.
@@ -672,6 +709,50 @@ mod tests {
     fn with_router(project: &TempDir, source: &str) {
         fs::create_dir_all(project.path().join("src")).expect("le répertoire se crée");
         fs::write(project.path().join("src/router.rs"), source).expect("l'écriture aboutit");
+    }
+
+    fn fichier(path: &str, before: Option<&str>, statut: Status) -> File {
+        File {
+            path: path.to_string(),
+            before: before.map(str::to_string),
+            after: "après".to_string(),
+            statut,
+        }
+    }
+
+    /// La règle d'`application::apply` : un fichier inchangé n'est pas réécrit, un
+    /// conflit ne l'est que sous `--force`.
+    #[test]
+    fn the_summary_counts_what_the_application_writes() {
+        let plan = Plan {
+            root: std::path::PathBuf::from("/projets/demo-api"),
+            actions: Vec::new(),
+            files: vec![
+                fichier("Dockerfile", None, Status::AFaire),
+                fichier("src/notes/mod.rs", None, Status::AFaire),
+                fichier("src/notes/dto.rs", None, Status::AFaire),
+                fichier("src/router.rs", Some("avant"), Status::AFaire),
+                fichier("Cargo.toml", Some("avant"), Status::AFaire),
+                fichier("src/lib.rs", Some("après"), Status::DejaFait),
+                fichier("src/main.rs", Some("autre"), Status::Conflit),
+            ],
+            sautees: Vec::new(),
+        };
+
+        assert_eq!(
+            plan.bilan(false),
+            Bilan {
+                crees: 3,
+                modifies: 2
+            }
+        );
+        assert_eq!(
+            plan.bilan(true),
+            Bilan {
+                crees: 3,
+                modifies: 3
+            }
+        );
     }
 
     #[test]

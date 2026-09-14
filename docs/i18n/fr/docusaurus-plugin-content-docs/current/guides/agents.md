@@ -175,7 +175,7 @@ attention : AGENTS.md ne porte pas la zone `rbs:inventory` — collez ce bloc po
 
 <!-- rbs:inventory -->
 <!-- /rbs:inventory -->
-✓ redis installée — 3 fichiers
+✓ redis installée — 4 créés, 6 modifiés
 ```
 
 Le reste de la commande va tout de même à son terme — une zone manquante dans un fichier
@@ -196,7 +196,7 @@ plan pour /private/tmp/rbs-demo/blog2
   · Cargo.toml   inchangé
   + AGENTS.md    créé
 
-  1 fichier à écrire, 1 inchangé
+  1 à créer, 1 inchangé
 ✓ manifeste aligné sur rbs 1.2.0
 ```
 

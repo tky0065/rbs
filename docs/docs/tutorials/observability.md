@@ -38,8 +38,8 @@ plan pour …/demo
   ~ config/default.toml                    modifié
   ~ AGENTS.md                              modifié
 
-  11 fichiers à écrire
-✓ observability installée — 4 fichiers
+  5 à créer, 6 à modifier
+✓ observability installée — 5 créés, 6 modifiés
 
   les métriques sont sur http://localhost:9090/metrics ; pour les traces, nommez un collecteur dans OTEL_EXPORTER_OTLP_ENDPOINT
 ```

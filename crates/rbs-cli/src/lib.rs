@@ -588,9 +588,10 @@ fn add_in(
         return Ok(());
     }
 
+    let ecrits = planned.plan.bilan(force);
     ui::success(&format!(
         "{feature} installée — {}",
-        ui::files(planned.files.len())
+        ui::bilan(ecrits.crees, ecrits.modifies)
     ));
 
     if let Some(remedy) = ouverts {
@@ -797,9 +798,10 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
     if repairing {
         ui::success(&format!("{feature} : côté inverse écrit"));
     } else {
+        let ecrits = planned.plan.bilan(force);
         ui::success(&format!(
             "{feature} générée — {}",
-            ui::files(planned.files.len())
+            ui::bilan(ecrits.crees, ecrits.modifies)
         ));
     }
 
@@ -920,10 +922,14 @@ fn generate_job(
             return Ok(());
         }
         generate::job::Bilan::Ecrit {
-            fichiers,
+            crees,
+            modifies,
             a_reporter,
         } => {
-            ui::success(&format!("job {name} écrit — {}", ui::files(fichiers)));
+            ui::success(&format!(
+                "job {name} écrit — {}",
+                ui::bilan(crees, modifies)
+            ));
             if a_reporter > 0 {
                 ui::warn(&format!(
                     "{} à reporter — voir ci-dessus",

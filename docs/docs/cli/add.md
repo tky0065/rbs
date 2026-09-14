@@ -85,8 +85,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml           modifié
   ~ AGENTS.md            modifié
 
-  5 fichiers à écrire, 2 inchangés
-✓ docker installée — 2 fichiers
+  2 à créer, 3 à modifier, 2 inchangés
+✓ docker installée — 2 créés, 3 modifiés
 
   docker compose --profile app up --build
 ```
@@ -122,8 +122,8 @@ plan pour /private/tmp/rbs-demo/depot
   ~ Cargo.toml           modifié
   ~ AGENTS.md            modifié
 
-  7 fichiers à écrire
-✓ docker installée — 3 fichiers
+  3 à créer, 4 à modifier
+✓ docker installée — 3 créés, 4 modifiés
 
   docker compose --profile app up --build
 ```
@@ -160,8 +160,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                 modifié
   ~ AGENTS.md                  modifié
 
-  4 fichiers à écrire
-✓ ci installée — 2 fichiers
+  2 à créer, 2 à modifier
+✓ ci installée — 2 créés, 2 modifiés
 
   git push : le workflow s'exécute à la prochaine poussée
 ```
@@ -182,8 +182,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ config/default.toml          modifié
   ~ AGENTS.md                    modifié
 
-  9 fichiers à écrire
-✓ cors installée — 3 fichiers
+  4 à créer, 5 à modifier
+✓ cors installée — 4 créés, 5 modifiés
 
   énumérez vos origines dans [cors] de config/default.toml — la liste est vide, donc aucune requête d'origine croisée ne passe
 ```
@@ -212,8 +212,8 @@ plan pour /private/tmp/rbs-demo/depot
   ~ config/default.toml                 modifié
   ~ AGENTS.md                           modifié
 
-  11 fichiers à écrire
-✓ rate-limit installée — 4 fichiers
+  5 à créer, 6 à modifier
+✓ rate-limit installée — 5 créés, 6 modifiés
 
   derrière un reverse proxy, passez rate_limit.trust_forwarded_for à true — sinon tous les clients partagent l'adresse du proxy
 ```
@@ -292,8 +292,8 @@ plan pour /private/tmp/rbs-demo/blog
   + src/modules/rate_limit/tests.rs                        créé
   ~ AGENTS.md                                              modifié
 
-  47 fichiers à écrire
-✓ auth installée — 35 fichiers
+  36 à créer, 11 à modifier
+✓ auth installée — 36 créés, 11 modifiés
 
   rbs migrate up
 ```
@@ -360,8 +360,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml           modifié
   ~ AGENTS.md            modifié
 
-  2 fichiers à écrire, 3 inchangés
-✓ docker installée — 2 fichiers
+  2 à modifier, 3 inchangés
+✓ docker installée — 2 modifiés
 
   docker compose --profile app up --build
 ```
@@ -396,7 +396,7 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml   modifié
   ~ AGENTS.md    modifié
 
-  2 fichiers à écrire, 1 en conflit
+  2 à modifier, 1 en conflit
 erreur : Dockerfile — relancer avec --force pour les écraser
 ```
 
@@ -415,8 +415,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml   modifié
   ~ AGENTS.md    modifié
 
-  2 fichiers à écrire, 1 en conflit
-✓ docker installée — 1 fichier
+  2 à modifier, 1 en conflit
+✓ docker installée — 3 modifiés
 
   docker compose --profile app up --build
 

@@ -30,8 +30,8 @@ plan pour …/demo
   ~ Cargo.toml                                           modifié
   ~ AGENTS.md                                            modifié
 
-  10 fichiers à écrire
-✓ audit installée — 5 fichiers
+  6 à créer, 4 à modifier
+✓ audit installée — 6 créés, 4 modifiés
 
   rbs migrate up, puis appelez audit::record dans vos services — l'entrée s'écrit dans la transaction du changement
 ```

@@ -39,8 +39,8 @@ plan pour /private/tmp/rbs-demo/demo
   ~ config/default.toml                             modifié
   ~ AGENTS.md                                       modifié
 
-  15 fichiers à écrire
-✓ jobs installée — 8 fichiers
+  9 à créer, 6 à modifier
+✓ jobs installée — 9 créés, 6 modifiés
 
   rbs migrate up, puis `rbs generate job <nom>` pour écrire un job
 ```

@@ -61,7 +61,7 @@ plan pour /private/tmp/rbs-demo/demo
   ~ Cargo.toml   modifié
   ~ AGENTS.md    modifié
 
-  2 fichiers à écrire
+  2 à modifier
 ✓ manifeste aligné sur rbs 1.0.0
 
 # rbs 1.0.0 — la surface publique du noyau est gelée
@@ -174,7 +174,7 @@ plan pour /private/tmp/rbs-demo/demo
   ~ Cargo.toml   modifié
   ~ AGENTS.md    modifié
 
-  2 fichiers à écrire
+  2 à modifier
 ✓ manifeste aligné sur rbs 0.4.0
 
   aucune note de migration pour rbs 0.3.0 → 0.4.0
