@@ -24,12 +24,13 @@ static HASH_DE_COMPARAISON: LazyLock<String> = LazyLock::new(|| {
     hash::hash_password("aucun compte ne porte ce mot de passe").expect("hachage du hash témoin")
 });
 
-/// Inscrit une adresse, sans jamais dire si elle l'était déjà.
+/// Inscrit une adresse, sans que la réponse dise si elle l'était déjà.
 ///
 /// Neuve, le compte est écrit ici — un client doit pouvoir se connecter aussitôt — et le
 /// lien de vérification part détaché. Prise, le compte n'est pas touché et son titulaire
 /// est prévenu de la tentative, en détaché aussi. L'appelant reçoit la même chose dans
-/// les deux cas.
+/// les deux cas. Une connexion avec le mot de passe soumis le dirait encore, puisqu'un
+/// compte non vérifié se connecte : refuser celui-ci à `login` fermerait cet écart.
 pub async fn register(
     db: &DatabaseConnection,
     mail: &Mailer,

@@ -111,8 +111,8 @@ pub async fn open_reset(
 
 /// `open_reset` pour le compte qui porte l'adresse, rendu avec le jeton.
 ///
-/// `None` quand aucun compte ne porte l'adresse. C'est l'appelant qui décide d'en tirer
-/// une réponse indiscernable, et il le fait.
+/// `None` quand aucun compte ne porte l'adresse. Les routes ne passent pas par ici : elles
+/// lisent le compte et détachent `open_reset`. Les tests s'en servent pour tenir le jeton.
 pub async fn request_reset(
     db: &DatabaseConnection,
     ttl_secs: u64,
