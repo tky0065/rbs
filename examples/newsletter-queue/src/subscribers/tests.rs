@@ -158,6 +158,33 @@ async fn the_full_lifecycle_goes_through_the_api() {
     assert_eq!(status, StatusCode::NOT_FOUND, "elle se supprime deux fois");
 }
 
+/// Le squelette compresse ce que le client accepte de recevoir compressé.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn the_list_travels_compressed_when_the_client_accepts_it() {
+    let api = application().await;
+    let collection = "/subscribers";
+
+    // Une ligne au moins : une liste vide peut tomber sous le seuil en deçà duquel la
+    // compression ne s'applique pas.
+    let (status, created) = call(&api, request("POST", collection, creation())).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {created}");
+
+    let mut demande = without_body("GET", collection);
+    demande
+        .headers_mut()
+        .insert("accept-encoding", "gzip".parse().expect("en-tête valide"));
+    let reponse = api.clone().oneshot(demande).await.expect("réponse");
+    let encodage = reponse.headers().get("content-encoding");
+
+    assert_eq!(reponse.status(), StatusCode::OK);
+    assert_eq!(
+        encodage.map(|valeur| valeur.as_bytes()),
+        Some(&b"gzip"[..]),
+        "le client accepte gzip, la liste doit partir compressée"
+    );
+}
+
 /// Deux créations à la suite portent des identifiants croissants.
 ///
 /// C'est ce qui sépare un UUIDv7 d'un v4, et ce dont dépend la liste : elle trie sur

@@ -1833,12 +1833,15 @@ mod tests {
             "la couche s'est montée parmi les routes"
         );
 
-        // Le squelette déclare déjà `tower-http` pour la borne de durée : le fragment
-        // ajoute sa feature à celle qui est là plutôt qu'une seconde déclaration.
+        // Le squelette déclare déjà `tower-http` pour la borne de durée et la compression :
+        // le fragment ajoute sa feature à celles qui sont là plutôt qu'une seconde
+        // déclaration.
         let manifeste = projected(&planned, "Cargo.toml");
         assert!(
-            manifeste
-                .contains("tower-http = { version = \"0.7\", features = [\"timeout\", \"cors\"] }"),
+            manifeste.contains(
+                "tower-http = { version = \"0.7\", features = [\"timeout\", \
+                 \"compression-gzip\", \"cors\"] }"
+            ),
             "{manifeste}"
         );
     }

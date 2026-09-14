@@ -611,10 +611,11 @@ mod tests {
         let rendered = trials("articles", CHAMPS);
 
         // `CHAMPS` porte `email:string:unique`, un texte libre et des champs filtrables :
-        // les cinq scénarios conditionnels y sont donc attendus, avec les quatre que toute
+        // les cinq scénarios conditionnels y sont donc attendus, avec les cinq que toute
         // feature créable emporte.
         let scenarios = [
             "async fn the_full_lifecycle_goes_through_the_api()",
+            "async fn the_list_travels_compressed_when_the_client_accepts_it()",
             // L'identifiant est posé par le modèle depuis que `uuidv7()` a quitté la
             // migration : la croissance des identifiants se prouve dans le projet.
             "async fn two_creations_in_a_row_carry_increasing_ids()",
