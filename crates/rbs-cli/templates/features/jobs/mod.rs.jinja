@@ -3,6 +3,8 @@ pub mod demo;
 pub mod model;
 pub mod queue;
 pub mod worker;
+// <rbs:job_modules>
+// </rbs:job_modules>
 
 // `pub(crate)` : la file est une table partagée, et le verrou que ses tests posent doit
 // pouvoir être pris par ceux d'un fragment qui y enfile.

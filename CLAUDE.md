@@ -98,14 +98,14 @@ Chaque couche ne voit que la suivante. Un `service` n'accède jamais *directemen
 requête SeaORM ; un `controller` n'en construit jamais. Cette règle rend chaque fichier
 lisible isolément.
 
-**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires, quatorze au
+**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires, seize au
 total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est cette liste que
 `rbs doctor` parcourt, et non celle-ci :
 
 | Ancre | Fichier |
 |---|---|
 | `// <rbs:features>` | `src/lib.rs`, ou `src/main.rs` sur un projet sans bibliothèque |
-| `// <rbs:modules>` | `src/modules/mod.rs` — le point de montage des fragments, la troisième optionnelle |
+| `// <rbs:modules>` | `src/modules/mod.rs` — le point de montage des fragments, optionnelle |
 | `// <rbs:routes>` | `src/router.rs` |
 | `// <rbs:layers>` | `src/router.rs` |
 | `// <rbs:openapi>` | `src/openapi.rs` |
@@ -115,14 +115,21 @@ total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est 
 | `// <rbs:state_init>` | `src/state.rs` |
 | `// <rbs:startup>` | `src/main.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
-| `# <rbs:services>` | `docker-compose.yml` — la seule en YAML, et l'une des trois optionnelles |
+| `# <rbs:services>` | `docker-compose.yml` — la seule en YAML, optionnelle |
 | `// <rbs:health_probes>` | `src/health/controller.rs` |
-| `// <rbs:jobs>` | `src/modules/jobs/mod.rs` — la deuxième optionnelle : le registre que pose le fragment `jobs` |
+| `// <rbs:jobs>` | `src/modules/jobs/mod.rs` — le registre que pose le fragment `jobs`, optionnelle |
+| `// <rbs:job_modules>` | `src/modules/jobs/mod.rs` — la déclaration du module qu'engendre `rbs generate job`, optionnelle |
+| `// <rbs:schedules>` | `src/modules/scheduler/mod.rs` — l'échéance qu'engendre `rbs generate job --every`, optionnelle |
 
-`generate` en emploie six ; les autres appartiennent aux fragments qu'installe `add`. Une
-ancre insérée dans `<rbs:layers>` est *intérieure* à `trace` et `request_id` : un `.layer()`
-enveloppe ce qui le précède, si bien qu'un middleware posé là voit le `request_id` et que
-ses propres réponses courtes — un 429, un préflight refusé — restent dans la trace.
+Cinq sont optionnelles, leur fichier porteur pouvant manquer : `modules`, sur un projet qui
+n'a encore reçu aucun fragment ; `services`, sur un projet sans compose ; `jobs` et
+`job_modules`, sans le fragment `jobs` ; `schedules`, sans le fragment `scheduler`.
+`generate crud` en emploie six ; `generate job` en emploie trois — `job_modules` et
+`schedules`, qui ne servent qu'à lui, et `jobs`, où le fragment `webhooks` inscrit aussi sa
+livraison ; les autres appartiennent aux fragments qu'installe `add`. Une ancre insérée dans `<rbs:layers>` est *intérieure* à `trace` et `request_id` :
+un `.layer()` enveloppe ce qui le précède, si bien qu'un middleware posé là voit le
+`request_id` et que ses propres réponses courtes — un 429, un préflight refusé — restent
+dans la trace.
 
 Ancre absente → le CLI n'écrit rien et affiche le bloc à coller. Toute commande modifiant un projet
 existant suit la séquence lire → planifier → vérifier → afficher → appliquer, avec

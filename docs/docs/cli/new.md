@@ -415,9 +415,9 @@ volumes:
 ```
 
 `docker compose up -d` starts it. The `# <rbs:services>` anchor is where [`rbs
-add`](./add.md) inserts the services `docker` brings, and it is one of the fourteen
+add`](./add.md) inserts the services `docker` brings, and it is one of the sixteen
 anchors [`rbs doctor`](./doctor.md) checks — eleven on a project carrying no compose, no
-queue and no fragment moved under `src/modules/`, the three optional ones.
+queue and no fragment moved under `src/modules/`, the five optional ones.
 
 Four cases write nothing:
 

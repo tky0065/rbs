@@ -5,6 +5,7 @@ mod cargo;
 mod cli;
 mod client;
 mod completions;
+mod cron;
 mod database;
 mod dev;
 mod doctor;
@@ -148,6 +149,21 @@ pub fn run() {
                         if let Some(remedy) = error.remedy() {
                             ui::info(&format!("\n{remedy}"));
                         }
+                        std::process::exit(1);
+                    }
+
+                    return;
+                }
+
+                // Le job non plus : ni champs, ni entité, et des refus qui lui sont propres.
+                GenerateCommands::Job {
+                    name,
+                    every,
+                    force,
+                    dry_run,
+                } => {
+                    if let Err(error) = generate_job(name, every, force, dry_run) {
+                        ui::error(&error.to_string());
                         std::process::exit(1);
                     }
 
@@ -658,6 +674,81 @@ fn generate_client(
         "client engendré — {} porte {} opérations",
         planned.fichier, planned.operations
     ));
+
+    Ok(())
+}
+
+/// Engendre un job de la file dans le projet courant, plan affiché avant écriture.
+fn generate_job(
+    name: String,
+    every: Option<String>,
+    force: bool,
+    dry_run: bool,
+) -> Result<(), generate::job::Error> {
+    let directory = std::env::current_dir()
+        .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
+
+    let planned = generate::job::plan_for(&generate::job::Options {
+        name: name.clone(),
+        every,
+        directory,
+        force,
+    })?;
+
+    // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande
+    // s'apprête à faire ne doit pas se découvrir après coup.
+    ui::line(&plan::render::plan(&planned.plan));
+
+    if let Some(avertissement) = &planned.avertissement {
+        ui::warn(avertissement);
+    }
+
+    if !appliquer(&planned.plan, force, dry_run)? {
+        return Ok(());
+    }
+
+    let blocs = |nombre: usize| {
+        let pluriel = if nombre > 1 { "s" } else { "" };
+        format!("{nombre} bloc{pluriel}")
+    };
+
+    match planned.bilan() {
+        generate::job::Bilan::DejaEnPlace => {
+            ui::success(&format!("job {name} déjà en place — rien à écrire"));
+            return Ok(());
+        }
+        generate::job::Bilan::AReporter(nombre) => {
+            ui::warn(&format!(
+                "job {name} : rien à écrire, mais {} à reporter — voir ci-dessus",
+                blocs(nombre)
+            ));
+            return Ok(());
+        }
+        generate::job::Bilan::Ecrit {
+            fichiers,
+            a_reporter,
+        } => {
+            ui::success(&format!("job {name} écrit — {}", ui::files(fichiers)));
+            if a_reporter > 0 {
+                ui::warn(&format!(
+                    "{} à reporter — voir ci-dessus",
+                    blocs(a_reporter)
+                ));
+            }
+        }
+    }
+
+    // Engendré, le job ne fait que journaliser : c'est `run` qu'il reste à écrire.
+    ui::info(&format!(
+        "\n  ce que fait le job s'écrit dans `run`, en {}",
+        planned.fichier
+    ));
+
+    if let Some(expression) = &planned.echeance {
+        ui::info(&format!(
+            "\n  l'échéance « {expression} » est relue au prochain démarrage, en UTC"
+        ));
+    }
 
     Ok(())
 }

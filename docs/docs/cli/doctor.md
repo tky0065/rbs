@@ -42,7 +42,7 @@ that read it, so passing one is a clap error rather than a flag that is taken an
 
 | Check | What it looks at |
 |---|---|
-| `ancres` | The thirteen Rust comment anchors: `// <rbs:features>` in `src/lib.rs` — or in `src/main.rs`, on a project generated before that library existed — `// <rbs:modules>` in `src/modules/mod.rs`, `// <rbs:routes>` and `// <rbs:layers>` in `src/router.rs`, `// <rbs:openapi>` in `src/openapi.rs`, `// <rbs:migration_modules>` and `// <rbs:migrations>` in `migration/src/lib.rs`, `// <rbs:state_champs>` and `// <rbs:state_init>` in `src/state.rs`, `// <rbs:startup>` in `src/main.rs`, `// <rbs:seeds>` in `src/seeds/main.rs`, `// <rbs:jobs>` in `src/modules/jobs/mod.rs`, `// <rbs:health_probes>` in `src/health/controller.rs` — plus the YAML `# <rbs:services>` in `docker-compose.yml`. Three are optional, inapplicable rather than missing when their file does not exist: `modules`, on a project that has never installed a fragment; `jobs`, on one that has not installed it; `services`, on one with no compose. |
+| `ancres` | The fifteen Rust comment anchors: `// <rbs:features>` in `src/lib.rs` — or in `src/main.rs`, on a project generated before that library existed — `// <rbs:modules>` in `src/modules/mod.rs`, `// <rbs:routes>` and `// <rbs:layers>` in `src/router.rs`, `// <rbs:openapi>` in `src/openapi.rs`, `// <rbs:migration_modules>` and `// <rbs:migrations>` in `migration/src/lib.rs`, `// <rbs:state_champs>` and `// <rbs:state_init>` in `src/state.rs`, `// <rbs:startup>` in `src/main.rs`, `// <rbs:seeds>` in `src/seeds/main.rs`, `// <rbs:jobs>` and `// <rbs:job_modules>` in `src/modules/jobs/mod.rs`, `// <rbs:schedules>` in `src/modules/scheduler/mod.rs`, `// <rbs:health_probes>` in `src/health/controller.rs` — plus the YAML `# <rbs:services>` in `docker-compose.yml`. Five are optional, inapplicable rather than missing when their file does not exist: `modules`, on a project that has never installed a fragment; `jobs` and `job_modules`, on one that has not installed the queue; `schedules`, on one that has not installed the calendar; `services`, on one with no compose. |
 | `agents` | [`AGENTS.md`](../guides/agents.md): present, its two zones present, the guide's version matching the CLI's, the inventory matching the project, every declared feature backed by a directory — and, only as a warning, a directory under `src/` that nothing declares. Covered on its own below. |
 | `relations` | The two anchors a model needs to receive a relation — `// <rbs:relations:table>` and `// <rbs:related:table>`, one pair per entity. Outside the anchor registry above, since which file carries them depends on the project's own features. It only turns red on a model that already has a `belongs_to` or `has_many` but is missing one of its two anchors — a state a hand edit is the likely cause of, since [`rbs generate`](./generate.md) never leaves that behind. |
 | `.env` | Every variable declared by `.env.example` is set in `.env`. `.env.example` is the reference because it is versioned and generated alongside the skeleton — a list kept inside the CLI would have been a second truth to keep in sync. |
@@ -65,7 +65,7 @@ first would charge three seconds to a diagnosis that fits in two file reads:
 That is the contradiction [`rbs new`](./new.md) refuses outright, met here after the fact —
 on a project whose `.env` was edited later.
 
-## The three warnings
+## The four warnings
 
 Every other verdict above is pass or fail. `agents` can also warn, on one condition only:
 a directory under `src/` that no installed fragment and no feature declared in
@@ -118,6 +118,9 @@ there alongside a `src/modules/` the project has since started to receive:
 The remedy is manual, and stays that way: moving `src/mail/` would mean rewriting the
 `use crate::mail::` lines your own code already wrote — an AST the CLI does not touch.
 
+The fourth belongs to `cors`, on a project whose `origins` list is empty — covered with
+the other fragment checks below.
+
 ## Installed features
 
 Each feature that carries configuration adds a line of its own, and the line only exists
@@ -153,6 +156,34 @@ for its section: the port its second listener binds may not be the one the API l
 The OTLP endpoint is not checked. Its absence is a legitimate mode — a development
 machine has no collector — and not a fault.
 
+Seven more fragments carry a check of their own. None of them stops compiling when its
+check turns red: a cron expression the startup refuses, a webhook delivery nobody
+registered, an audit table no migration creates — each is a project that builds and then
+misbehaves.
+
+| Feature | What it looks at |
+|---|---|
+| `cors` | The `[cors]` section, then `origins`. An empty list — what the fragment writes, on purpose — is a warning rather than a failure: it is the safe default, and also the first thing a front end runs into. |
+| `rate-limit` | The `[rate_limit]` section. |
+| `scheduler` | Every literal expression passed to `Schedule::every` in `src/modules/scheduler/mod.rs` — or `src/scheduler/mod.rs`, on a project that received the fragment before 1.3.0 and still carries it there — read with the crate and the normalisation the project's own startup uses — five fields gain second zero, six pass, any other count is refused. An expression taken from a constant is left to the startup. |
+| `webhooks` | The line registering `Delivery` in `// <rbs:jobs>` of `src/modules/jobs/mod.rs` — `src/jobs/mod.rs` before 1.3.0, where the line names `crate::webhooks` rather than `crate::modules::webhooks`. Without it, every delivery retries and then fails. |
+| `audit` | The `create_audit_log` migration, declared and registered in `migration/src/lib.rs`. |
+| `docker` | `config/production.toml`, the profile the compose's `api` service selects with `RBS_ENV: production` — the one that turns `/docs` off. |
+| `ci` | `.github/workflows/ci.yml`, the only file the fragment writes. |
+
+A file one of these fragments wrote and that has since disappeared is restored from Git,
+and the remedy says so: `rbs add` does not replay a feature the manifest already declares.
+
+```text
+  ! cors          `cors.origins` est vide : aucun front ne peut appeler l'API depuis un navigateur
+      énumérez les origines de votre front dans config/default.toml — ou dans le profil de l'environnement qui les sert :
+      [cors]
+      origins = ["http://localhost:5173"]
+  ✗ webhooks      la livraison des webhooks n'est pas inscrite au registre de la file : chaque livraison partira en échec
+      dans src/modules/jobs/mod.rs, entre les balises de `// <rbs:jobs>` :
+      registre = registre.register::<crate::modules::webhooks::delivery::Delivery>();
+```
+
 ## A machine-readable report
 
 `--json` writes the same findings as a single document on standard output — nothing else
@@ -168,7 +199,7 @@ $ rbs doctor --json
     {
       "name": "ancres",
       "status": "ok",
-      "detail": "les 14 points d'insertion sont en place"
+      "detail": "les 15 points d'insertion sont en place"
     },
     {
       "name": "base",
@@ -212,7 +243,7 @@ The announcement is a line of the text rendering only; `--json` never carries it
 {/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --with jobs --database-url postgres://rbs:secret@localhost:55501/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
 $ rbs doctor
-  ✓ ancres        les 14 points d'insertion sont en place
+  ✓ ancres        les 15 points d'insertion sont en place
   ✓ agents        guide et inventaire à jour
   ✓ relations     les modèles portent leurs ancres de relation
   ✓ .env          les 7 variables de .env.example sont renseignées
@@ -400,7 +431,7 @@ names the command to run by hand:
 
 ```text
 $ rbs doctor
-  ✓ ancres        les 14 points d'insertion sont en place
+  ✓ ancres        les 15 points d'insertion sont en place
   ✓ agents        guide et inventaire à jour
   ✓ relations     les modèles portent leurs ancres de relation
   ✓ .env          les 7 variables de .env.example sont renseignées

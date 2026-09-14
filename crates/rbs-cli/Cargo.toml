@@ -17,6 +17,7 @@ chrono.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
 console.workspace = true
+cron.workspace = true
 include_dir.workspace = true
 inquire.workspace = true
 minijinja.workspace = true

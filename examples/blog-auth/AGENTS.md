@@ -78,6 +78,8 @@ faire.
 - `<rbs:services>` dans `docker-compose.yml`
 - `<rbs:health_probes>` dans `src/health/controller.rs`
 - `<rbs:jobs>` dans `src/modules/jobs/mod.rs`
+- `<rbs:job_modules>` dans `src/modules/jobs/mod.rs`
+- `<rbs:schedules>` dans `src/modules/scheduler/mod.rs`
 - `<rbs:relations:<table>>` et `<rbs:related:<table>>` dans le modèle de chaque entité
 
 ## Ce que rbs ne couvre pas

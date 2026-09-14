@@ -33,7 +33,7 @@ pub(crate) struct File {
     pub statut: Status,
 }
 
-/// Une insertion que le plan ne fera pas, faute du fichier qui devait la porter.
+/// Une insertion que le plan ne fera pas, faute de l'endroit qui devait la porter.
 ///
 /// Ne concerne que les ancres optionnelles : un projet SQLite n'a pas de compose, et le
 /// service qu'un fragment y aurait ajouté n'a nulle part où aller. Plutôt que d'échouer
@@ -41,10 +41,31 @@ pub(crate) struct File {
 /// — le plan garde le bloc, pour que l'utilisateur sache quoi monter lui-même.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Sautee {
-    /// L'ancre visée, dont le fichier manque.
+    /// L'ancre visée.
     pub anchor: Anchor,
     /// Les lignes qui y seraient allées.
     pub lines: Vec<String>,
+    /// Ce qui manquait : le remède n'est pas le même.
+    pub cause: CauseSautee,
+}
+
+/// Ce qui a fait sauter une insertion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CauseSautee {
+    /// Le fichier porteur n'existe pas.
+    FichierAbsent,
+    /// Le fichier est là, sans l'ancre : un projet engendré avant qu'elle n'existe.
+    AncreAbsente {
+        /// Ce qui empêche `rbs doctor --fix` de la reposer, `None` s'il le sait : promettre
+        /// la réparation d'un fichier qui a perdu son accroche enverrait dans une impasse.
+        obstacle: Option<crate::anchors::Cause>,
+    },
+    /// Une insertion précédente du plan a sauté, et celle-ci nomme ce qu'elle devait poser :
+    /// écrite seule, elle laisserait le projet hors d'état de compiler, ou de fonctionner.
+    Entrainee {
+        /// L'ancre de l'insertion sautée dont celle-ci dépend.
+        par: Anchor,
+    },
 }
 
 /// Ce qu'une commande fera au projet, entièrement calculé et rien d'écrit.
@@ -224,6 +245,7 @@ impl Builder {
                 self.sautees.push(Sautee {
                     anchor,
                     lines: lines.to_vec(),
+                    cause: CauseSautee::FichierAbsent,
                 });
                 return Ok(());
             }
@@ -249,6 +271,48 @@ impl Builder {
         });
 
         Ok(())
+    }
+
+    /// Comme [`Builder::insert`], mais une ancre optionnelle absente d'un fichier présent
+    /// saute l'insertion au lieu d'arrêter le plan.
+    ///
+    /// Distincte d'`insert`, dont les appelants tiennent au refus : un compose réécrit à la
+    /// main sans son ancre est un compose abîmé. Ici le fichier précède l'ancre — un projet
+    /// engendré avant elle — et l'y reposer est l'affaire de `rbs doctor --fix`, quand le
+    /// fichier porte encore la ligne sous laquelle elle se repose.
+    ///
+    /// Rend `true` quand l'insertion est planifiée, écrite ou déjà en place, et `false`
+    /// quand elle saute : l'appelant dont une insertion suivante en dépend la saute avec.
+    pub fn insert_ou_sauter(&mut self, anchor: Anchor, lines: &[String]) -> Result<bool, Error> {
+        let avant = self.sautees.len();
+
+        match self.insert(anchor.clone(), lines) {
+            Ok(()) => Ok(self.sautees.len() == avant),
+            Err(Error::Anchor(_)) if anchor.optional => {
+                // Jugée sur le fichier tel que le plan le laisse : c'est lui que `rbs doctor
+                // --fix` trouvera, le plan appliqué.
+                let obstacle = match self.states(&anchor.file)?.courant {
+                    Some(courant) => crate::anchors::repose(&courant, &anchor).err(),
+                    None => Some(crate::anchors::Cause::FichierAbsent),
+                };
+                self.sautees.push(Sautee {
+                    anchor,
+                    lines: lines.to_vec(),
+                    cause: CauseSautee::AncreAbsente { obstacle },
+                });
+                Ok(false)
+            }
+            Err(autre) => Err(autre),
+        }
+    }
+
+    /// Consigne une insertion sans la tenter : `cause` dit pourquoi elle ne s'écrira pas.
+    pub fn sauter(&mut self, anchor: Anchor, lines: &[String], cause: CauseSautee) {
+        self.sautees.push(Sautee {
+            anchor,
+            lines: lines.to_vec(),
+            cause,
+        });
     }
 
     /// Vérifie que `anchor` précède, dans son fichier, toute ligne commençant par `line`.
@@ -787,6 +851,7 @@ mod tests {
         assert_eq!(plan.sautees().len(), 1);
         assert_eq!(plan.sautees()[0].anchor, anchors::SERVICES);
         assert_eq!(plan.sautees()[0].lines, mailpit());
+        assert_eq!(plan.sautees()[0].cause, CauseSautee::FichierAbsent);
     }
 
     /// Le fragment `docker` écrit le compose puis y insère ses services, dans le même
@@ -829,6 +894,91 @@ mod tests {
             .expect_err("le fichier est là, sans son ancre");
 
         assert!(matches!(error, Error::Anchor(_)), "{error:?}");
+    }
+
+    /// Un projet engendré avant l'ancre porte le fichier, sans elle : c'est le cas que
+    /// `insert_ou_sauter` sert. L'insertion est sautée, consignée comme telle, et le
+    /// fichier n'est pas touché.
+    #[test]
+    fn insert_or_skip_skips_an_optional_anchor_missing_from_a_present_file() {
+        let project = project();
+        let compose = "services:\n  db:\n    image: postgres\n";
+        fs::write(project.path().join("docker-compose.yml"), compose).expect("l'écriture aboutit");
+        let mut builder = Builder::new(project.path().to_path_buf());
+
+        builder
+            .insert_ou_sauter(anchors::SERVICES, &mailpit())
+            .expect("l'ancre est optionnelle : son absence saute l'insertion");
+        let plan = builder.finir();
+
+        assert!(plan.files().is_empty(), "{:?}", plan.files());
+        assert!(plan.actions().is_empty(), "{:?}", plan.actions());
+        assert_eq!(
+            plan.sautees(),
+            [Sautee {
+                anchor: anchors::SERVICES,
+                lines: mailpit(),
+                // `services:` est là : `rbs doctor --fix` saurait reposer l'ancre dessous.
+                cause: CauseSautee::AncreAbsente { obstacle: None },
+            }]
+        );
+        assert_eq!(
+            fs::read_to_string(project.path().join("docker-compose.yml"))
+                .expect("le compose se lit"),
+            compose
+        );
+    }
+
+    /// Obligatoire, l'ancre absente reste une erreur : le projet est alors abîmé, et non
+    /// antérieur à elle.
+    #[test]
+    fn insert_or_skip_keeps_a_mandatory_anchor_missing_from_its_file_an_error() {
+        let project = project();
+        with_router(
+            &project,
+            "pub fn router() -> Router {\n    Router::new()\n}\n",
+        );
+        let mut builder = Builder::new(project.path().to_path_buf());
+
+        let error = builder
+            .insert_ou_sauter(
+                anchors::ROUTES,
+                &[".merge(crate::users::routes())".to_string()],
+            )
+            .expect_err("l'ancre des routes n'est pas optionnelle");
+        let plan = builder.finir();
+
+        assert!(matches!(error, Error::Anchor(_)), "{error:?}");
+        assert!(plan.sautees().is_empty(), "{:?}", plan.sautees());
+    }
+
+    #[test]
+    fn insert_or_skip_names_a_missing_file_as_the_cause() {
+        let project = project();
+        let mut builder = Builder::new(project.path().to_path_buf());
+
+        builder
+            .insert_ou_sauter(anchors::SERVICES, &mailpit())
+            .expect("l'ancre est optionnelle : son fichier peut manquer");
+        let plan = builder.finir();
+
+        assert_eq!(plan.sautees().len(), 1, "{:?}", plan.sautees());
+        assert_eq!(plan.sautees()[0].cause, CauseSautee::FichierAbsent);
+    }
+
+    #[test]
+    fn insert_or_skip_inserts_into_a_present_anchor() {
+        let project = project();
+        fs::write(project.path().join("docker-compose.yml"), COMPOSE).expect("l'écriture aboutit");
+        let mut builder = Builder::new(project.path().to_path_buf());
+
+        builder
+            .insert_ou_sauter(anchors::SERVICES, &mailpit())
+            .expect("l'ancre est là");
+        let plan = builder.finir();
+
+        assert!(plan.sautees().is_empty(), "{:?}", plan.sautees());
+        assert!(plan.files()[0].after.contains("mailpit:"));
     }
 
     #[test]

@@ -210,6 +210,24 @@ pub enum GenerateCommands {
         #[arg(long)]
         dry_run: bool,
     },
+
+    /// Génère un job de la file, et son échéance sous --every ; exige la feature jobs.
+    Job {
+        /// Nom du job, en snake_case : celui de son module et de son KIND.
+        name: String,
+
+        /// Expression cron de l'échéance, à cinq ou six champs, évaluée en UTC ; exige la feature scheduler.
+        #[arg(long, value_name = "CRON")]
+        every: Option<String>,
+
+        /// Écrit même si le working tree Git est sale.
+        #[arg(long)]
+        force: bool,
+
+        /// Affiche le plan sans rien écrire.
+        #[arg(long)]
+        dry_run: bool,
+    },
 }
 
 #[derive(Debug, PartialEq, Subcommand)]
@@ -296,7 +314,7 @@ mod tests {
     }
 
     #[test]
-    fn the_generate_help_lists_crud_and_feature() {
+    fn the_generate_help_lists_crud_feature_and_job() {
         let help = Cli::command()
             .find_subcommand_mut("generate")
             .expect("`generate` absente du CLI")
@@ -305,6 +323,33 @@ mod tests {
 
         assert!(help.contains("crud"), "`crud` absente :\n{help}");
         assert!(help.contains("feature"), "`feature` absente :\n{help}");
+        assert!(help.contains("job"), "`job` absente :\n{help}");
+    }
+
+    #[test]
+    fn generate_job_reads_its_name_its_schedule_and_dry_run() {
+        let cli = Cli::try_parse_from([
+            "rbs",
+            "generate",
+            "job",
+            "purge",
+            "--every",
+            "0 4 * * *",
+            "--dry-run",
+        ])
+        .expect("la ligne doit être acceptée");
+
+        assert_eq!(
+            cli.command,
+            Commands::Generate {
+                command: GenerateCommands::Job {
+                    name: "purge".to_string(),
+                    every: Some("0 4 * * *".to_string()),
+                    force: false,
+                    dry_run: true,
+                },
+            }
+        );
     }
 
     #[test]

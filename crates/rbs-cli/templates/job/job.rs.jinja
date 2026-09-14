@@ -1,0 +1,19 @@
+use serde::{Deserialize, Serialize};
+
+use super::Job;
+use crate::state::AppState;
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct {@ type @} {}
+
+#[async_trait::async_trait]
+impl Job for {@ type @} {
+    const KIND: &'static str = "{@ nom @}";
+
+    // Le point d'extension : ce que fait le job. Une erreur rendue ici vaut réessai.
+    async fn run(&self, _state: &AppState) -> anyhow::Result<()> {
+        tracing::info!("job `{@ nom @}`");
+
+        Ok(())
+    }
+}

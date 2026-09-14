@@ -117,6 +117,12 @@ qui est toute la raison d'en avoir fait un job.
 
 ## L'inscrire
 
+[`rbs generate job <nom>`](../cli/generate.md#rbs-generate-job) écrit les trois pièces
+qu'un job neuf demande, en un seul plan : le fichier ci-dessus, sous
+`src/modules/jobs/` ; `pub mod <nom>;` entre les balises `// <rbs:job_modules>` ; et la
+ligne ci-dessous, entre les balises `// <rbs:jobs>`. `newsletter` a été écrit à la main
+avant que la commande existe — ce qu'elle aurait produit est exactement ceci :
+
 ```rust file=examples/newsletter-queue/src/modules/jobs/mod.rs region=registry
 ```
 

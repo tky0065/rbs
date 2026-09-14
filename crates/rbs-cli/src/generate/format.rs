@@ -37,6 +37,25 @@ pub(crate) fn format_batch<'a>(
     avertissement
 }
 
+/// Rend des instructions isolées telles que rustfmt les écrirait dans le corps d'une
+/// fonction, une ligne par élément, sans indentation de tête.
+///
+/// Ce qu'une ancre reçoit n'est pas un fichier, et rustfmt ne formate que des fichiers :
+/// l'enveloppe lui donne le corps de `registry()` et de `schedules()`, dont l'indentation
+/// décide de l'endroit où il coupe. L'ancre repose ensuite sa propre indentation.
+pub(crate) fn instructions(source: &str) -> Result<Vec<String>, Avertissement> {
+    let formatee = formatted(&format!("fn f() {{\n{source}\n}}\n"))?;
+
+    let mut lignes: Vec<String> = formatee
+        .lines()
+        .skip(1)
+        .map(|ligne| ligne.strip_prefix("    ").unwrap_or(ligne).to_string())
+        .collect();
+    lignes.pop();
+
+    Ok(lignes)
+}
+
 /// Rend `source` telle que rustfmt l'écrirait.
 ///
 /// `newline_style` est forcé : son défaut, « Auto », déduit le style des retours à la
@@ -139,6 +158,39 @@ mod tests {
 
         assert!(avertissement.contains("refusé"), "{avertissement}");
         assert_eq!(sources[0], source);
+    }
+
+    #[test]
+    fn a_short_instruction_comes_out_as_is() {
+        let source = "registre = registre.register::<purge::Purge>();";
+
+        assert_eq!(instructions(source), Ok(vec![source.to_string()]));
+    }
+
+    /// Au-delà de 100 colonnes, rustfmt coupe : les lignes rendues ne portent pas
+    /// l'indentation de l'enveloppe, et la continuation garde son cran de quatre.
+    #[test]
+    fn a_long_call_is_broken_without_the_wrapper_indentation() {
+        let source = "calendrier.push(Schedule::every::<crate::modules::jobs::purge::Purge>(\"0 4 * * *\", || crate::modules::jobs::purge::Purge {}));";
+        assert!(source.len() > 100, "{}", source.len());
+
+        assert_eq!(
+            instructions(source),
+            Ok(vec![
+                "calendrier.push(Schedule::every::<crate::modules::jobs::purge::Purge>("
+                    .to_string(),
+                "    \"0 4 * * *\",".to_string(),
+                "    || crate::modules::jobs::purge::Purge {},".to_string(),
+                "));".to_string(),
+            ])
+        );
+    }
+
+    #[test]
+    fn an_instruction_rustfmt_refuses_is_an_error() {
+        let refus = instructions("calendrier.push(").expect_err("rustfmt doit se plaindre");
+
+        assert!(refus.contains("refusé"), "{refus}");
     }
 
     /// Sept fichiers rendus sans rustfmt ne valent pas sept fois le même message.

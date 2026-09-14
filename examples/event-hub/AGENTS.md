@@ -78,6 +78,8 @@ faire.
 - `<rbs:services>` dans `docker-compose.yml`
 - `<rbs:health_probes>` dans `src/health/controller.rs`
 - `<rbs:jobs>` dans `src/modules/jobs/mod.rs`
+- `<rbs:job_modules>` dans `src/modules/jobs/mod.rs`
+- `<rbs:schedules>` dans `src/modules/scheduler/mod.rs`
 - `<rbs:relations:<table>>` et `<rbs:related:<table>>` dans le modèle de chaque entité
 
 ## Ce que rbs ne couvre pas
@@ -117,7 +119,7 @@ et `cargo test` seul ne les lance pas. Ils demandent la base du `.env` démarré
 - rbs 1.5.0 · base postgres
 - Fragments installés : jobs, mail, rate-limit, auth, webhooks, scheduler, audit, cors, docker, ci
 - Entités engendrées : orders
-- Ancres du projet : features (src/lib.rs), modules (src/modules/mod.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), health_probes (src/health/controller.rs), jobs (src/modules/jobs/mod.rs)
+- Ancres du projet : features (src/lib.rs), modules (src/modules/mod.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), health_probes (src/health/controller.rs), jobs (src/modules/jobs/mod.rs), job_modules (src/modules/jobs/mod.rs), schedules (src/modules/scheduler/mod.rs)
 <!-- /rbs:inventory -->
 
 ## Notes du projet

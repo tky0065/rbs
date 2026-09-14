@@ -428,8 +428,8 @@ rbs doctor
 
 Sept vérifications : les ancres sont toujours en place — douze ici, onze du squelette
 plus celle du compose, qui sort du compte pour un projet sans `docker-compose.yml`
-(`modules` et `jobs` en sortent aussi, sur un projet qui n'a jamais installé de fragment)
-— le guide et l'inventaire d'[`AGENTS.md`](./guides/agents.md) s'accordent toujours avec
+(`modules`, `jobs`, `job_modules` et `schedules` en sortent aussi, sur un projet qui n'a
+jamais installé de fragment) — le guide et l'inventaire d'[`AGENTS.md`](./guides/agents.md) s'accordent toujours avec
 ce que porte le projet, aucun modèle ne porte de relation sans les deux ancres qu'il lui
 faudrait pour en recevoir une, `.env` porte chaque clé que déclare `.env.example`, le
 projet et `rbs-core` s'accordent avec la version du CLI, la base répond, et aucun fragment

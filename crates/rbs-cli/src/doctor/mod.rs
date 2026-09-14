@@ -6,20 +6,27 @@
 
 pub mod agents;
 pub mod anchors;
+pub mod audit;
 pub mod auth;
 pub mod base;
+pub mod ci;
+pub mod cors;
 mod disposition;
+pub mod docker;
 pub mod env;
 pub mod guards;
 pub mod jobs;
 pub mod json;
 pub mod mail;
 pub mod observability;
+pub mod rate_limit;
 pub mod redis;
 pub mod relations;
 pub mod render;
+pub mod scheduler;
 pub mod storage;
 pub mod versions;
+pub mod webhooks;
 
 use std::path::{Path, PathBuf};
 
@@ -300,7 +307,7 @@ fn plan(manifeste: &Manifeste) -> Vec<Controle> {
 ///
 /// Une feature peut y figurer deux fois : `auth` amène de quoi vérifier son secret, et de
 /// quoi juger les routes que les rôles qu'elle installe pourraient protéger.
-const FEATURE_CHECKS: [(&str, Controle); 7] = [
+const FEATURE_CHECKS: [(&str, Controle); 14] = [
     (
         "auth",
         Controle {
@@ -350,7 +357,100 @@ const FEATURE_CHECKS: [(&str, Controle); 7] = [
             executer: |projet, _| observability::check(&projet.config),
         },
     ),
+    (
+        "cors",
+        Controle {
+            titre: cors::TITRE,
+            executer: |projet, _| cors::check(&projet.config),
+        },
+    ),
+    (
+        "rate-limit",
+        Controle {
+            titre: rate_limit::TITRE,
+            executer: |projet, _| rate_limit::check(&projet.config),
+        },
+    ),
+    (
+        "scheduler",
+        Controle {
+            titre: scheduler::TITRE,
+            executer: |projet, _| scheduler::check(&projet.root),
+        },
+    ),
+    (
+        "webhooks",
+        Controle {
+            titre: webhooks::TITRE,
+            executer: |projet, _| webhooks::check(&projet.root),
+        },
+    ),
+    (
+        "audit",
+        Controle {
+            titre: audit::TITRE,
+            executer: |projet, _| audit::check(&projet.root),
+        },
+    ),
+    (
+        "docker",
+        Controle {
+            titre: docker::TITRE,
+            executer: |projet, _| docker::check(&projet.root),
+        },
+    ),
+    (
+        "ci",
+        Controle {
+            titre: ci::TITRE,
+            executer: |projet, _| ci::check(&projet.root),
+        },
+    ),
 ];
+
+/// Le contenu d'un fichier qu'un fragment a posé, ou le constat qui dit pourquoi il manque.
+///
+/// Trois contrôles lisent un fichier plutôt qu'une section, et nommaient chacun à sa façon
+/// la même absence.
+fn lire(root: &Path, titre: &'static str, fichier: &str) -> Result<String, Check> {
+    match std::fs::read_to_string(root.join(fichier)) {
+        Ok(source) => Ok(source),
+        Err(faute) if faute.kind() == std::io::ErrorKind::NotFound => Err(Check::failed(
+            titre,
+            format!("{fichier} est absent"),
+            restaurer(fichier),
+        )),
+        Err(faute) => Err(Check::failed(
+            titre,
+            format!("{fichier} est inaccessible : {faute}"),
+            format!("rendez {fichier} lisible"),
+        )),
+    }
+}
+
+/// Le remède d'un fichier de fragment disparu.
+///
+/// Git et non `rbs add` : la commande ne rejoue pas une feature que le manifeste déclare
+/// déjà, et le fichier ne reviendrait pas.
+fn restaurer(fichier: &str) -> String {
+    format!(
+        "restaurez-le depuis Git (`git checkout -- {fichier}`) : `rbs add` ne rejoue pas une \
+         feature déjà installée"
+    )
+}
+
+/// Le module de fragment `module` est-il resté à la racine de `src/`, où `rbs add` le posait
+/// avant la 1.3.0 ?
+///
+/// `rbs upgrade` ne déplace aucun module : sans ce repli, celui qu'`anchors::resolve_features`
+/// fait pour l'ancre des features, un contrôle déclarerait absent, et à restaurer depuis Git,
+/// un fichier qui n'a jamais quitté sa place. Le répertoire suffit à trancher : son `mod.rs`
+/// disparu, c'est à cette place-là que Git doit le rendre.
+fn module_d_avant(root: &Path, module: &str) -> bool {
+    let actuel = root.join(format!("src/modules/{module}/mod.rs"));
+
+    !actuel.exists() && root.join("src").join(module).is_dir()
+}
 
 /// Le fichier de configuration que les contrôles de feature interrogent.
 const CONFIG: &str = "config/default.toml";
@@ -491,6 +591,17 @@ impl Config {
                 .get(section)
                 .and_then(|table| table.get(key))
                 .and_then(toml_edit::Item::as_integer)
+        })
+    }
+
+    /// Nombre d'éléments d'un tableau, s'il est renseigné et qu'il en est un.
+    pub(crate) fn array_len(&self, section: &str, key: &str) -> Option<usize> {
+        self.document().and_then(|document| {
+            document
+                .get(section)
+                .and_then(|table| table.get(key))
+                .and_then(toml_edit::Item::as_array)
+                .map(toml_edit::Array::len)
         })
     }
 
@@ -677,6 +788,41 @@ mod tests {
         (parent, root)
     }
 
+    /// Les réglages qu'un fragment inscrit dans `section`, tels qu'un remède les recopie :
+    /// lignes vides et commentaires ôtés.
+    ///
+    /// `pub(super)` : les contrôles de feature y comparent leur remède, qui se colle tel quel
+    /// et ne doit pas dériver de ce que `rbs add` écrit.
+    pub(super) fn reglages_du_fragment(feature: &str, section: &str) -> String {
+        let chemin = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("templates/features")
+            .join(feature)
+            .join("feature.toml");
+        let manifeste: toml_edit::DocumentMut = std::fs::read_to_string(&chemin)
+            .unwrap_or_else(|faute| panic!("{} illisible : {faute}", chemin.display()))
+            .parse()
+            .unwrap_or_else(|faute| panic!("{} mal formé : {faute}", chemin.display()));
+
+        let contenu = manifeste
+            .get("config")
+            .and_then(toml_edit::Item::as_array_of_tables)
+            .and_then(|configs| {
+                configs.iter().find(|config| {
+                    config.get("section").and_then(toml_edit::Item::as_str) == Some(section)
+                })
+            })
+            .and_then(|config| config.get("content"))
+            .and_then(toml_edit::Item::as_str)
+            .unwrap_or_else(|| panic!("{feature} n'inscrit pas de section `[{section}]`"));
+
+        contenu
+            .lines()
+            .map(str::trim_end)
+            .filter(|ligne| !ligne.trim().is_empty() && !ligne.trim_start().starts_with('#'))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
     fn titles(report: &Report) -> Vec<&'static str> {
         report.checks.iter().map(|c| c.title).collect()
     }
@@ -755,6 +901,53 @@ mod tests {
             "la feature est déclarée, son contrôle doit figurer : {:?}",
             titles(&report)
         );
+    }
+
+    /// L'ordre du rapport est celui du tableau, et non celui du manifeste : deux projets
+    /// portant les mêmes fragments se lisent pareil.
+    #[test]
+    fn the_fragment_checks_follow_the_order_of_the_table() {
+        const ORDRE: [&str; 7] = [
+            "cors",
+            "rate-limit",
+            "scheduler",
+            "webhooks",
+            "audit",
+            "docker",
+            "ci",
+        ];
+        let (_parent, root) = project(&[
+            "health",
+            "ci",
+            "docker",
+            "audit",
+            "webhooks",
+            "scheduler",
+            "rate-limit",
+            "cors",
+        ]);
+
+        let report = run_with(&root, &mut Muet).expect("c'est un projet rbs");
+
+        let installes: Vec<&str> = titles(&report)
+            .into_iter()
+            .filter(|title| ORDRE.contains(title))
+            .collect();
+        assert_eq!(installes, ORDRE, "{:?}", titles(&report));
+    }
+
+    /// Le calendrier ne se juge que sur un projet qui l'a installé : ailleurs, son fichier
+    /// manque légitimement.
+    #[test]
+    fn only_a_project_declaring_scheduler_receives_its_check() {
+        let (_parent, avec) = project(&["health", "scheduler"]);
+        let (_autre, sans) = project(&["health"]);
+
+        let avec = run_with(&avec, &mut Muet).expect("c'est un projet rbs");
+        let sans = run_with(&sans, &mut Muet).expect("c'est un projet rbs");
+
+        assert!(titles(&avec).contains(&"scheduler"), "{:?}", titles(&avec));
+        assert!(!titles(&sans).contains(&"scheduler"), "{:?}", titles(&sans));
     }
 
     /// Le contrôle de section, tel que `redis` et `jobs` l'appellent.
