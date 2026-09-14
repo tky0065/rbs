@@ -91,7 +91,7 @@ Les zones d'un vrai projet, engendré en français, se lisent ainsi :
 | `rbs generate crud\|feature` | Régénère la zone d'inventaire. |
 | `rbs upgrade` | Régénère le guide et l'inventaire ; recrée le fichier s'il a disparu. |
 | `rbs doctor` | Ne change rien — il ne fait que constater. |
-| `rbs migrate`, `rbs seed`, `rbs dev`, `rbs test`, `rbs routes`, `rbs openapi export` | Aucun effet. |
+| `rbs generate job`, `rbs generate client`, `rbs migrate`, `rbs seed`, `rbs dev`, `rbs test`, `rbs routes`, `rbs openapi export` | Aucun effet. |
 
 `upgrade` est la seule commande qui a mandat de remettre le projet en accord avec le CLI,
 et c'est pourquoi elle est aussi la seule à recréer un fichier supprimé. `add` et

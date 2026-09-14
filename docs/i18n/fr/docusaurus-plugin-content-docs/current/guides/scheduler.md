@@ -54,7 +54,7 @@ plan pour …/demo
   22 fichiers à écrire
 ✓ scheduler installée — 15 fichiers
 
-  rbs migrate up, puis déclarez vos échéances dans src/modules/scheduler/mod.rs — les expressions sont évaluées en UTC
+  rbs migrate up, puis `rbs generate job <nom> --every "<cron>"` pour déclarer une échéance dans src/modules/scheduler/mod.rs — les expressions sont évaluées en UTC
 ```
 
 Deux migrations viennent avec lui : [`rbs migrate up`](../cli/migrate.md) est donc la

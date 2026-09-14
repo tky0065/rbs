@@ -652,13 +652,13 @@ fn suite(feature: &str) -> Option<&'static str> {
         ),
         // La table n'existe pas encore, et le worker démarre avec l'API : sans la
         // migration, chaque tour de boucle échoue sur une relation absente.
-        "jobs" => Some("rbs migrate up, puis inscrivez vos jobs dans src/modules/jobs/mod.rs"),
+        "jobs" => Some("rbs migrate up, puis `rbs generate job <nom>` pour écrire un job"),
         // Deux tables à créer — le fragment entraîne `jobs` — et une liste d'échéances qui
         // ne contient qu'un exemple : installé et non édité, le calendrier ne déclenche
         // rien d'utile.
         "scheduler" => Some(
-            "rbs migrate up, puis déclarez vos échéances dans src/modules/scheduler/mod.rs — \
-             les expressions sont évaluées en UTC",
+            "rbs migrate up, puis `rbs generate job <nom> --every \"<cron>\"` pour déclarer une \
+             échéance dans src/modules/scheduler/mod.rs — les expressions sont évaluées en UTC",
         ),
         // La liste est vide à l'installation : sans ce rappel, le développeur croirait
         // avoir monté du CORS alors qu'aucune origine n'est encore autorisée.

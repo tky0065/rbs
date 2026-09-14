@@ -68,7 +68,7 @@ Deux crates publiables, plus des templates embarquées dans le binaire :
 
 ```
 crates/rbs-core/            runtime : Error/Result, config, logs, AppState, middlewares, helpers OpenAPI
-crates/rbs-cli/             binaire `rbs` : new, add, generate, migrate, seed, dev, doctor, upgrade, completions
+crates/rbs-cli/             binaire `rbs` : new, add, generate, migrate, seed, dev, test, routes, openapi, doctor, upgrade, completions
 crates/rbs-cli/templates/   squelette de projet et fragments de features (include_dir)
 examples/                   projets réels compilés en CI, source des extraits de documentation
 docs/                       site Docusaurus (toolchain Node isolée ici)

@@ -42,7 +42,7 @@ plan pour /private/tmp/rbs-demo/demo
   15 fichiers à écrire
 ✓ jobs installée — 8 fichiers
 
-  rbs migrate up, puis inscrivez vos jobs dans src/modules/jobs/mod.rs
+  rbs migrate up, puis `rbs generate job <nom>` pour écrire un job
 ```
 
 The migration comes with it, so [`rbs migrate up`](../cli/migrate.md) is the next command:

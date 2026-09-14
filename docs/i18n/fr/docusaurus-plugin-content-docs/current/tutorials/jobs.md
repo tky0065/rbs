@@ -47,7 +47,7 @@ plan pour …/demo
   15 fichiers à écrire
 ✓ jobs installée — 8 fichiers
 
-  rbs migrate up, puis inscrivez vos jobs dans src/modules/jobs/mod.rs
+  rbs migrate up, puis `rbs generate job <nom>` pour écrire un job
 ```
 
 Comme chaque brique qu'installe `rbs add`, `jobs` ne monte aucune route. Ce qu'elle

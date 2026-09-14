@@ -88,7 +88,7 @@ A real project's zones, generated in English, read like this:
 | `rbs generate crud\|feature` | Regenerates the inventory zone. |
 | `rbs upgrade` | Regenerates both the guide and the inventory; recreates the file if it went missing. |
 | `rbs doctor` | Changes nothing — it only reports. |
-| `rbs migrate`, `rbs seed`, `rbs dev`, `rbs test`, `rbs routes`, `rbs openapi export` | No effect. |
+| `rbs generate job`, `rbs generate client`, `rbs migrate`, `rbs seed`, `rbs dev`, `rbs test`, `rbs routes`, `rbs openapi export` | No effect. |
 
 `upgrade` is the only command with a mandate to bring the project back in line with the
 CLI, which is why it is also the only one that recreates a deleted file. `add` and
