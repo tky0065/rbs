@@ -79,6 +79,32 @@ between minor versions with no deprecation cycle.
 - **`rbs new` writes a one-line `CLAUDE.md` that imports `AGENTS.md`.** Claude Code reads
   `CLAUDE.md`, and reaches the handbook only through its `@AGENTS.md` import. `rbs upgrade`
   creates the file on a project that lacks it, and never rewrites one that exists.
+- **`rbs test` runs a project's whole test suite the way its CI does.** It brings up the
+  compose services, waits for the database, applies the migrations, then runs
+  `cargo test --workspace --no-fail-fast -- --include-ignored` — the command the workflow
+  of `rbs add ci` runs. A filter and arguments for libtest pass through
+  (`rbs test articles -- --nocapture`), and the exit code of `cargo test` comes back
+  unchanged, so a script tells a red test from a failure of the CLI. The testing guide now
+  starts from it.
+- **`rbs routes` lists a project's routes, and `rbs openapi export` prints its OpenAPI
+  document**, neither starting a server: both read what the project's `openapi` binary
+  prints, as `rbs generate client` does. `routes` shows method, path, `operation_id` and
+  guard — `bearer` or `public` —, with `--json` for a script; `openapi export` writes to
+  standard output, or to the file `--out` names, relative to the directory it runs in.
+- **`rbs generate crud --cursor` pages the list by cursor.** `GET /<resource>` takes `after`
+  and `per_page` and returns a `rbs_core::CursorPage`: no `COUNT(*)`, and a row inserted
+  between two requests no longer shifts the window. The filter route keeps its numbered
+  pages, since a cursor on `id` is wrong as soon as the sort falls on another column. The
+  generated tests walk the pages until `next` goes out; `--soft-delete`, `--role`,
+  `--with-upload` and `--has-many` combine with it.
+- **Every command that plans takes `--json`.** `rbs add`, `rbs generate crud`, `feature`,
+  `client` and `job`, and `rbs upgrade` then print a single JSON document on standard
+  output instead of the coloured plan: every action with its full content, the insertions
+  left to paste with their `bloc` and their `cause`, and the count of created and modified
+  files, `applique` saying whether anything was written. A refusal becomes an `erreur`
+  document carrying `code`, `message`, `remede` and `bloc`, with the exit code unchanged;
+  the codes are stable, and listed in the agents guide. An argument the parser refuses
+  stays text, with exit code 2.
 
 ### Changed
 

@@ -84,6 +84,33 @@ dépréciation.
 - **`rbs new` écrit un `CLAUDE.md` d'une ligne qui importe `AGENTS.md`.** Claude Code lit
   `CLAUDE.md`, et n'atteint le guide que par son import `@AGENTS.md`. `rbs upgrade` crée
   le fichier sur un projet qui ne l'a pas, et ne réécrit jamais un fichier existant.
+- **`rbs test` lance toute la suite de tests d'un projet comme le fait sa CI.** Il monte les
+  services du compose, attend la base, applique les migrations, puis lance
+  `cargo test --workspace --no-fail-fast -- --include-ignored` — la commande même du
+  workflow de `rbs add ci`. Un filtre et des arguments pour libtest passent tels quels
+  (`rbs test articles -- --nocapture`), et le code de sortie de `cargo test` revient
+  inchangé : un script distingue un test rouge d'un échec du CLI. Le guide des tests part
+  désormais de lui.
+- **`rbs routes` énumère les routes d'un projet, et `rbs openapi export` imprime son
+  document OpenAPI**, sans démarrer de serveur : tous deux lisent ce qu'imprime le binaire
+  `openapi` du projet, comme `rbs generate client`. `routes` montre méthode, chemin,
+  `operation_id` et garde — `bearer` ou `public` —, avec `--json` pour un script ;
+  `openapi export` écrit sur la sortie standard, ou dans le fichier que nomme `--out`,
+  relatif au répertoire de lancement.
+- **`rbs generate crud --cursor` pagine la liste par curseur.** `GET /<ressource>` prend
+  `after` et `per_page` et rend un `rbs_core::CursorPage` : pas de `COUNT(*)`, et une ligne
+  insérée entre deux requêtes ne décale plus la fenêtre. La route de filtre garde ses pages
+  numérotées, un curseur sur l'`id` étant faux dès que le tri porte sur une autre colonne.
+  Les tests engendrés parcourent les pages jusqu'à l'extinction de `next` ;
+  `--soft-delete`, `--role`, `--with-upload` et `--has-many` s'y combinent.
+- **Toute commande qui planifie prend `--json`.** `rbs add`, `rbs generate crud`, `feature`,
+  `client` et `job`, et `rbs upgrade` impriment alors un seul document JSON sur la sortie
+  standard au lieu du plan en couleurs : chaque action avec son contenu complet, les
+  insertions à reporter avec leur `bloc` et leur `cause`, et le compte des fichiers créés
+  et modifiés, `applique` disant si quelque chose a été écrit. Un refus devient un document
+  `erreur` portant `code`, `message`, `remede` et `bloc`, code de sortie inchangé ; les
+  codes sont stables, et énumérés dans le guide des agents. Un argument que l'analyseur
+  refuse reste du texte, code 2.
 
 ### Modifié
 
