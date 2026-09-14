@@ -116,6 +116,7 @@ pub(crate) trait Classee {
 mod tests {
     use super::*;
     use crate::generate::job;
+    use crate::metadata;
     use crate::prompts::PromptError;
     use crate::{
         add, anchors, client, dev, doctor, generate::command, migrate, new, openapi, plan, seed,
@@ -230,6 +231,58 @@ mod tests {
             }
             .sortie(),
             Sortie::Environnement
+        );
+    }
+
+    /// Un fichier que le plan n'a pas pu lire reste une panne d'environnement, même
+    /// enveloppé dans l'erreur de la commande.
+    #[test]
+    fn a_plan_that_cannot_read_a_file_is_the_environment() {
+        assert_eq!(
+            add::Error::Plan(plan::Error::Acces(acces())).sortie(),
+            Sortie::Environnement
+        );
+    }
+
+    #[test]
+    fn a_manifest_that_is_not_an_rbs_project_is_a_call_to_correct() {
+        assert_eq!(
+            add::Error::Metadata(metadata::Error::PasUnProjet {
+                path: "Cargo.toml".to_string(),
+            })
+            .sortie(),
+            Sortie::Usage
+        );
+    }
+
+    #[test]
+    fn cargo_that_cannot_be_launched_is_the_environment() {
+        assert_eq!(
+            openapi::Error::Obtention(openapi::Obtention::Cargo(io::Error::other("introuvable")))
+                .sortie(),
+            Sortie::Environnement
+        );
+    }
+
+    #[test]
+    fn a_project_that_does_not_compile_is_a_fault() {
+        assert_eq!(
+            client::Error::Openapi(openapi::Obtention::BinaireEnEchec { code: 101 }).sortie(),
+            Sortie::Faute
+        );
+    }
+
+    /// Le remède est de modifier l'échéance du projet à la main, pas l'appel.
+    #[test]
+    fn a_schedule_already_set_is_a_fault_of_the_project() {
+        assert_eq!(
+            job::Error::EcheanceExistante {
+                nom: "purge".to_string(),
+                existante: "0 4 * * *".to_string(),
+                demandee: "0 5 * * *".to_string(),
+            }
+            .sortie(),
+            Sortie::Faute
         );
     }
 

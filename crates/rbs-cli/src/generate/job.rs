@@ -639,13 +639,15 @@ impl crate::errors::Classee for Error {
             | Self::SansJobs
             | Self::SansScheduler
             | Self::Cron(_)
-            | Self::KindPris { .. }
-            | Self::EcheanceExistante { .. } => Sortie::Usage,
+            | Self::KindPris { .. } => Sortie::Usage,
             Self::Acces(_) => Sortie::Environnement,
-            // Le module est à déplacer dans le projet : aucun appel ne le contourne.
-            Self::Metadata(_) | Self::Rendu { .. } | Self::Plan(_) | Self::HorsModules { .. } => {
+            // Le module est à déplacer, l'échéance existante à modifier à la main : c'est le
+            // projet qui change, aucun appel ne les contourne.
+            Self::Rendu { .. } | Self::HorsModules { .. } | Self::EcheanceExistante { .. } => {
                 Sortie::Faute
             }
+            Self::Metadata(cause) => cause.sortie(),
+            Self::Plan(cause) => cause.sortie(),
             Self::Application(cause) => cause.sortie(),
         }
     }

@@ -180,7 +180,22 @@ impl crate::errors::Classee for Error {
         match self {
             Self::PasUnProjet => Sortie::Usage,
             Self::Acces(_) => Sortie::Environnement,
-            Self::Metadata(_) | Self::Obtention(_) | Self::Document(_) => Sortie::Faute,
+            Self::Document(_) => Sortie::Faute,
+            Self::Metadata(cause) => cause.sortie(),
+            Self::Obtention(cause) => cause.sortie(),
+        }
+    }
+}
+
+impl crate::errors::Classee for Obtention {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::Cargo(_) => Sortie::Environnement,
+            Self::SansBibliotheque | Self::SansBinaire | Self::BinaireEnEchec { .. } => {
+                Sortie::Faute
+            }
         }
     }
 }

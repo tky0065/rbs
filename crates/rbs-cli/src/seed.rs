@@ -192,11 +192,8 @@ impl crate::errors::Classee for Error {
             // `--force` lève le refus de la production : c'est l'appel qui change.
             Self::PasUnProjet | Self::Production => Sortie::Usage,
             Self::Acces(_) | Self::Cargo(_) => Sortie::Environnement,
-            Self::SansSeeds
-            | Self::Env(_)
-            | Self::SansUrl
-            | Self::Seeds { .. }
-            | Self::Metadata(_) => Sortie::Faute,
+            Self::SansSeeds | Self::Env(_) | Self::SansUrl | Self::Seeds { .. } => Sortie::Faute,
+            Self::Metadata(cause) => cause.sortie(),
         }
     }
 }

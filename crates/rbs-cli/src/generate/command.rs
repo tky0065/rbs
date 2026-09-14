@@ -716,11 +716,11 @@ impl crate::errors::Classee for Error {
             | Self::RoleInconnu { .. }
             | Self::EnfantSansCle { .. } => Sortie::Usage,
             Self::Acces(_) => Sortie::Environnement,
-            Self::Rendu { .. }
-            | Self::Plan(_)
-            | Self::Metadata(_)
-            | Self::MigrationsAbsentes(_)
-            | Self::UploadStorageHorsModules => Sortie::Faute,
+            Self::Rendu { .. } | Self::MigrationsAbsentes(_) | Self::UploadStorageHorsModules => {
+                Sortie::Faute
+            }
+            Self::Plan(cause) => cause.sortie(),
+            Self::Metadata(cause) => cause.sortie(),
             Self::Application(cause) => cause.sortie(),
         }
     }

@@ -641,7 +641,8 @@ impl crate::errors::Classee for Error {
         match self {
             Self::PasUnProjet | Self::WorkingTreeSale(_) => Sortie::Usage,
             Self::Cwd(_) => Sortie::Environnement,
-            Self::Metadata(_) | Self::Reparation(_) => Sortie::Faute,
+            Self::Metadata(cause) => cause.sortie(),
+            Self::Reparation(cause) => cause.sortie(),
             Self::Application(cause) => cause.sortie(),
         }
     }

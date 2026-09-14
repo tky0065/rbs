@@ -381,7 +381,8 @@ impl crate::errors::Classee for Error {
             | Self::Cargo(_) => Sortie::Environnement,
             // `exit_code` rend le code de `cargo test` lui-même : la famille ne sert qu'à
             // qui la demande.
-            Self::UrlIllisible { .. } | Self::Metadata(_) | Self::Tests { .. } => Sortie::Faute,
+            Self::UrlIllisible { .. } | Self::Tests { .. } => Sortie::Faute,
+            Self::Metadata(cause) => cause.sortie(),
             Self::Env(cause) => cause.sortie(),
         }
     }

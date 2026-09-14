@@ -620,9 +620,9 @@ impl crate::errors::Classee for Error {
             Self::SansManifeste { .. }
             | Self::Manifest(_)
             | Self::Installation(_)
-            | Self::Metadata(_)
-            | Self::UrlIndecomposable { .. }
-            | Self::Plan(_) => Sortie::Faute,
+            | Self::UrlIndecomposable { .. } => Sortie::Faute,
+            Self::Metadata(cause) => cause.sortie(),
+            Self::Plan(cause) => cause.sortie(),
             Self::Env(cause) => cause.sortie(),
             Self::Application(cause) => cause.sortie(),
         }

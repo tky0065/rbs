@@ -195,11 +195,10 @@ impl crate::errors::Classee for Error {
         match self {
             Self::PasUnProjet | Self::WorkingTreeSale(_) => Sortie::Usage,
             Self::Acces(_) => Sortie::Environnement,
-            Self::Openapi(_)
-            | Self::Document(_)
-            | Self::Rendu(_)
-            | Self::Plan(_)
-            | Self::Metadata(_) => Sortie::Faute,
+            Self::Document(_) | Self::Rendu(_) => Sortie::Faute,
+            Self::Openapi(cause) => cause.sortie(),
+            Self::Plan(cause) => cause.sortie(),
+            Self::Metadata(cause) => cause.sortie(),
             Self::Application(cause) => cause.sortie(),
         }
     }

@@ -269,7 +269,9 @@ impl crate::errors::Classee for Error {
             Self::PasUnProjet | Self::WorkingTreeSale(_) => Sortie::Usage,
             // Le projet n'est pas en cause : c'est le CLI lancé qui est trop ancien pour lui.
             Self::Acces(_) | Self::CliAnterieur { .. } => Sortie::Environnement,
-            Self::Metadata(_) | Self::Plan(_) | Self::Agents(_) => Sortie::Faute,
+            Self::Agents(_) => Sortie::Faute,
+            Self::Metadata(cause) => cause.sortie(),
+            Self::Plan(cause) => cause.sortie(),
             Self::Application(cause) => cause.sortie(),
         }
     }

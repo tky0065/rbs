@@ -710,6 +710,23 @@ fn name_of(cargo_toml: &Path) -> String {
     cargo_toml.display().to_string()
 }
 
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::Acces(_) => Sortie::Environnement,
+            Self::PasUnProjet { .. } => Sortie::Usage,
+            Self::Syntaxe { .. }
+            | Self::Field { .. }
+            | Self::MoteurInconnu { .. }
+            | Self::Declaration { .. }
+            | Self::VersionIncompatible { .. }
+            | Self::DependanceAbsente { .. } => Sortie::Faute,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;

@@ -181,12 +181,14 @@ impl crate::errors::Classee for Error {
         match self {
             Self::PasUnProjet => Sortie::Usage,
             Self::Cargo(_) | Self::Cwd(_) => Sortie::Environnement,
+            // Un `.env` absent se répare en le recopiant de `.env.example` : même quand la
+            // cause est une erreur d'accès, c'est une faute du projet.
             Self::Env(_)
             | Self::SansUrl
             | Self::Migration { .. }
             | Self::State(_)
-            | Self::Fresh(_)
-            | Self::Metadata(_) => Sortie::Faute,
+            | Self::Fresh(_) => Sortie::Faute,
+            Self::Metadata(cause) => cause.sortie(),
         }
     }
 }

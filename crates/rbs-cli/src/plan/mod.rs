@@ -693,6 +693,24 @@ fn combined_status(origin: Option<&str>, after: &str) -> Status {
     }
 }
 
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::Acces(_) => Sortie::Environnement,
+            Self::Metadata(cause) => cause.sortie(),
+            Self::DejaProjete { .. }
+            | Self::Anchor(_)
+            | Self::MalPlacee(_)
+            | Self::FichierAbsent { .. }
+            | Self::Toml { .. }
+            | Self::ManifesteAbsent { .. }
+            | Self::ZoneAbsente { .. } => Sortie::Faute,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
