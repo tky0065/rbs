@@ -33,10 +33,9 @@ async fn verifying_marks_the_address_and_shows_on_me() {
     let db = connection().await;
     let email = fresh_email();
 
-    // `register` rend `(StatusCode, Value)` : le corps est le second membre.
-    let (_, compte) = register(&api, &email).await;
+    register(&api, &email).await;
     assert!(
-        compte["email_verified_at"].is_null(),
+        account(&email).await.email_verified_at.is_none(),
         "une adresse fraîchement inscrite n'est pas vérifiée"
     );
 
@@ -62,6 +61,95 @@ async fn verifying_marks_the_address_and_shows_on_me() {
     assert!(
         !profil["email_verified_at"].is_null(),
         "me ne montre pas la vérification : {profil}"
+    );
+}
+
+/// Une adresse déjà vérifiée ne reçoit pas de jeton neuf : il ne servirait qu'à rajeunir
+/// une date qui doit rester celle de la première preuve.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_verified_address_is_not_sent_a_new_token() {
+    let api = application().await;
+    let db = connection().await;
+    let email = fresh_email();
+
+    register(&api, &email).await;
+    let (compte, jeton) = crate::auth::service::verification::request(&db, 86400, &email)
+        .await
+        .expect("la demande aboutit")
+        .expect("le compte vient d'être créé");
+    crate::auth::service::verification::verify(&db, &jeton)
+        .await
+        .expect("le jeton vérifie l'adresse");
+    let avant = one_time_tokens_count_for(&db, compte.id).await;
+
+    let renvoi = crate::auth::service::verification::request(&db, 86400, &email)
+        .await
+        .expect("la demande aboutit");
+
+    assert!(
+        renvoi.is_none(),
+        "une adresse vérifiée a reçu un jeton neuf"
+    );
+    assert_eq!(
+        one_time_tokens_count_for(&db, compte.id).await,
+        avant,
+        "une adresse vérifiée a reçu un jeton neuf"
+    );
+}
+
+/// Un second jeton consommé ne réécrit pas la date : c'est celle de la première preuve
+/// qui dit l'âge de l'adresse.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn verifying_again_keeps_the_first_date() {
+    let api = application().await;
+    let db = connection().await;
+    let email = fresh_email();
+
+    register(&api, &email).await;
+    let (compte, jeton) = crate::auth::service::verification::request(&db, 86400, &email)
+        .await
+        .expect("la demande aboutit")
+        .expect("le compte vient d'être créé");
+    crate::auth::service::verification::verify(&db, &jeton)
+        .await
+        .expect("le jeton vérifie l'adresse");
+    let premiere = crate::auth::repository::find(&db, compte.id)
+        .await
+        .expect("la lecture aboutit")
+        .expect("le compte existe")
+        .email_verified_at
+        .expect("l'adresse vient d'être vérifiée");
+
+    // Par le dépôt : le service refuse d'émettre pour une adresse vérifiée.
+    let second = rbs_core::token::random();
+    crate::auth::repository::one_time_token::issue(
+        &db,
+        compte.id,
+        crate::auth::model::TokenPurpose::EmailVerification,
+        rbs_core::token::fingerprint(&second),
+        (chrono::Utc::now() + chrono::Duration::hours(1)).fixed_offset(),
+    )
+    .await
+    .expect("le jeton s'émet");
+
+    // `CURRENT_TIMESTAMP` est à la seconde sur SQLite et MySQL : sans cette attente, une
+    // date réécrite retomberait sur la même et le test passerait sans rien prouver.
+    tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
+    crate::auth::service::verification::verify(&db, &second)
+        .await
+        .expect("le second jeton se consomme");
+
+    let relue = crate::auth::repository::find(&db, compte.id)
+        .await
+        .expect("la lecture aboutit")
+        .expect("le compte existe")
+        .email_verified_at;
+    assert_eq!(
+        relue,
+        Some(premiere),
+        "la date de vérification a été réécrite"
     );
 }
 
@@ -136,9 +224,9 @@ async fn resending_to_a_registered_address_is_accepted() {
         .expect("le compte vient d'être créé");
 
     // Deux lignes : celle de l'inscription, que le renvoi a close, et la neuve.
-    assert_eq!(
-        one_time_tokens_count_for(&db, compte.id).await,
-        2,
+    let (db, id) = (&db, compte.id);
+    assert!(
+        eventually(move || async move { one_time_tokens_count_for(db, id).await == 2 }).await,
         "le renvoi n'a ouvert aucun jeton"
     );
 }

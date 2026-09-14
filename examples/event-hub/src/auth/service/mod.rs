@@ -1,7 +1,8 @@
 //! La couche qui porte les règles, un fichier par parcours.
 //!
-//! `issue()` et `notify()` vivent ici plutôt que dans l'un des parcours : plusieurs s'en
-//! servent, et les descendre dans l'un d'eux ferait dépendre les autres de ce voisin-là.
+//! `issue()`, `notify()` et `detach()` vivent ici plutôt que dans l'un des parcours :
+//! plusieurs s'en servent, et les descendre dans l'un d'eux ferait dépendre les autres de
+//! ce voisin-là.
 //! `profile()` et `session_view()` y sont aussi : ce sont les deux seuls passages du
 //! modèle vers la réponse, et les garder côte à côte tient cette règle en un endroit.
 
@@ -128,14 +129,10 @@ fn notify(
     contexte: impl Serialize,
 ) {
     // `send_template_detached` rend le gabarit sur-le-champ et peut donc échouer —
-    // gabarit absent, mal formé, ou adresse que `lettre` refuse d'analyser. L'échec reste
-    // au journal, pour deux raisons. Ce qui précède l'envoi est écrit et ne se défait
-    // plus : le propager rendrait un 500 après coup, là où `register` promet « toujours
-    // 201 ». Et on n'arrive ici que si l'adresse porte un compte : un 500 ferait de cette
-    // branche la seule à se distinguer, et dirait à qui essaie plusieurs adresses
-    // lesquelles sont inscrites — ce que le 202 de `forgot-password` et de
-    // `resend-verification` existe pour taire. Ces deux routes sont aussi le rattrapage
-    // d'un courriel qui ne part pas.
+    // gabarit absent, mal formé, ou adresse que `lettre` refuse d'analyser. On n'arrive
+    // ici que depuis une tâche détachée, la réponse déjà partie : l'échec n'a plus
+    // d'appelant où remonter, et reste au journal. `forgot-password` et
+    // `resend-verification` sont le rattrapage d'un courriel qui ne part pas.
     if let Err(error) = mail.send_template_detached(&destinataire.email, objet, gabarit, contexte) {
         tracing::error!(
             user_id = %destinataire.id,
@@ -144,4 +141,21 @@ fn notify(
             "préparation du courriel échouée"
         );
     }
+}
+
+/// Lance `travail` sans l'attendre ; son échec va au journal, avec le compte.
+///
+/// Ce qu'une route publique fait pour un compte existant — écrire un jeton, rendre un
+/// courriel — prend un temps qu'une adresse inconnue ne prend pas : attendu, cet écart
+/// dirait lesquelles sont inscrites.
+fn detach(
+    user_id: Uuid,
+    parcours: &'static str,
+    travail: impl Future<Output = Result<()>> + Send + 'static,
+) {
+    tokio::spawn(async move {
+        if let Err(error) = travail.await {
+            tracing::error!(%user_id, parcours, %error, "émission détachée échouée");
+        }
+    });
 }

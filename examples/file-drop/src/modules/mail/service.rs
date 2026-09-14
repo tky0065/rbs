@@ -103,8 +103,7 @@ impl Mailer {
     ///
     /// La dissymétrie est voulue : un gabarit absent ou mal formé est une faute du projet,
     /// que l'appelant doit voir tout de suite ; une panne du serveur SMTP n'en est pas une,
-    /// et ne doit pas retenir la réponse HTTP. C'est ce qui permet à `/auth/forgot-password`
-    /// de répondre en un temps qui ne dit pas si l'adresse est inscrite.
+    /// et ne doit pas retenir la réponse HTTP.
     pub fn send_template_detached<S: Serialize>(
         &self,
         recipient: &str,

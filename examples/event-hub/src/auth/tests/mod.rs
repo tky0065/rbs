@@ -48,6 +48,7 @@ pub(super) async fn registered_user(db: &DatabaseConnection) -> crate::auth::rep
     crate::auth::repository::create(db, &fresh_email(), "hash sans valeur")
         .await
         .expect("le compte s'insère")
+        .expect("l'adresse est neuve")
 }
 
 /// Compte les jetons à usage unique d'**un** compte, jamais de la table entière.
@@ -135,16 +136,69 @@ fn fresh_email() -> String {
     format!("{}@exemple.test", Uuid::new_v4())
 }
 
-/// Inscrit `email` et rend le corps de la réponse.
+/// Attend qu'une condition devienne vraie, cinq secondes au plus.
+///
+/// Les émissions de jetons partent en tâche détachée : la réponse précède l'écriture.
+async fn eventually<F, Fut>(mut condition: F) -> bool
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = bool>,
+{
+    for _ in 0..50 {
+        if condition().await {
+            return true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    false
+}
+
+/// Inscrit `email`, et rend statut et corps une fois le jeton de vérification écrit.
+///
+/// L'inscription émet ce jeton en tâche détachée : sans cette attente, l'émission
+/// arriverait après coup et fermerait le jeton qu'un test vient de s'ouvrir. Une
+/// inscription en double trouve celui de la première aussitôt.
 async fn register(api: &Router, email: &str) -> (StatusCode, Value) {
-    call(
+    let (status, body) = call(
         api,
         post_json(
             "/auth/register",
             json!({ "email": email, "password": PASSWORD }),
         ),
     )
+    .await;
+
+    if status.is_success() {
+        let db = connection().await;
+        let adresse = crate::auth::service::normalise(email);
+        let (db, adresse) = (&db, adresse.as_str());
+        assert!(
+            eventually(move || async move {
+                match crate::auth::repository::find_by_email(db, adresse)
+                    .await
+                    .expect("la lecture aboutit")
+                {
+                    Some(compte) => one_time_tokens_count_for(db, compte.id).await > 0,
+                    None => false,
+                }
+            })
+            .await,
+            "l'inscription n'a ouvert aucun jeton de vérification"
+        );
+    }
+
+    (status, body)
+}
+
+/// Le compte que porte `email`, lu en base : l'inscription ne rend pas de corps.
+async fn account(email: &str) -> crate::auth::repository::Model {
+    crate::auth::repository::find_by_email(
+        &connection().await,
+        &crate::auth::service::normalise(email),
+    )
     .await
+    .expect("la lecture aboutit")
+    .expect("le compte est inscrit")
 }
 
 /// Tente une connexion et rend statut et corps.
@@ -168,4 +222,19 @@ async fn login(api: &Router, email: &str, mot_de_passe: &str) -> Value {
     assert_eq!(status, StatusCode::OK, "{paire}");
 
     paire
+}
+
+/// Le jeton part dans le fragment : un navigateur ne l'envoie jamais au serveur, donc ni
+/// journal d'accès ni en-tête `Referer` ne le portent.
+#[test]
+fn a_link_carries_its_token_in_the_fragment() {
+    let flows = crate::auth::config::FlowConfig {
+        app_url: "https://exemple.test/".to_owned(),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        flows.link("reset-password", "abc"),
+        "https://exemple.test/reset-password#token=abc"
+    );
 }
