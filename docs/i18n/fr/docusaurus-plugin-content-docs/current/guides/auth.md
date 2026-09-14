@@ -259,7 +259,10 @@ besoin d'un endroit où envoyer un lien, et la dépendance est déclarée plutô
 facultative. Sa durée et sa destination viennent de la section `[auth]` montrée plus haut :
 `reset_ttl_secs` fixe la durée de vie du lien de réinitialisation, `verification_ttl_secs`
 fait de même pour l'autre parcours, et `app_url` est la racine que `FlowConfig::link`
-préfixe au chemin — l'adresse de votre client, pas de ce serveur.
+préfixe au chemin — l'adresse de votre client, pas de ce serveur. Le jeton voyage dans le
+fragment du lien, `…/reset-password#token=…` : un navigateur n'envoie jamais le fragment
+à un serveur, si bien que le jeton reste hors des journaux d'accès et des en-têtes
+`Referer` — votre client le lit dans `location.hash` avant de le poster.
 
 Les deux routes sont limitées à trois requêtes par heure et par client, aux côtés de
 `/auth/login` : elles envoient un courriel à une adresse que l'appelant choisit, et sans

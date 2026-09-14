@@ -311,7 +311,7 @@ content-length: 0
 
 202 que l'adresse existe ou non — regardez l'onglet Mailpit, un message y attend, intitulé
 *Réinitialisation de votre mot de passe*, avec un lien de la forme
-`http://localhost:3000/reset-password?token=…`. Recopiez le jeton qu'il porte :
+`http://localhost:3000/reset-password#token=…`. Recopiez le jeton qu'il porte :
 
 ```bash
 curl -i -X POST http://127.0.0.1:8080/auth/reset-password \

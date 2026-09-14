@@ -169,3 +169,18 @@ async fn login(api: &Router, email: &str, mot_de_passe: &str) -> Value {
 
     paire
 }
+
+/// Le jeton part dans le fragment : un navigateur ne l'envoie jamais au serveur, donc ni
+/// journal d'accès ni en-tête `Referer` ne le portent.
+#[test]
+fn a_link_carries_its_token_in_the_fragment() {
+    let flows = crate::auth::config::FlowConfig {
+        app_url: "https://exemple.test/".to_owned(),
+        ..Default::default()
+    };
+
+    assert_eq!(
+        flows.link("reset-password", "abc"),
+        "https://exemple.test/reset-password#token=abc"
+    );
+}

@@ -249,7 +249,10 @@ somewhere to send a link, so the dependency is declared rather than left optiona
 timing and destination come from the `[auth]` section shown above: `reset_ttl_secs` sets how
 long the reset link stays valid, `verification_ttl_secs` does the same for the other flow,
 and `app_url` is the root `FlowConfig::link` prefixes onto the path — your client's
-address, not this server's.
+address, not this server's. The token rides in the link's fragment,
+`…/reset-password#token=…`: a browser never sends a fragment to a server, so the token
+stays out of access logs and `Referer` headers — your client reads it from
+`location.hash` before posting it.
 
 Both routes are rate-limited to three requests per hour per client, alongside
 `/auth/login`: they send an email to an address the caller picks, and without a limit that
