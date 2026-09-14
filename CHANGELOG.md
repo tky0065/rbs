@@ -191,6 +191,30 @@ between minor versions with no deprecation cycle.
   server, so the token stays out of access logs and `Referer` headers. The client reads it
   from `location.hash`.
 
+- **The exit code tells a script what kind of failure it is.** `1`: the project carries
+  a fault the command found or that stops it — `rbs doctor` finding something, a missing
+  or misplaced anchor, a migration that fails. `2`: the call is to be fixed — outside a
+  project, an unknown feature, a name already taken, a dirty working tree, a conflict
+  that `--force` would override — like the usage errors clap already reported with `2`.
+  `3`: the environment failed — an unreadable file, `docker` or `cargo` that cannot be
+  started, a database that does not answer, a CLI older than the project. Every failure
+  used to exit with `1`, so a CI could not tell `rbs doctor` finding a fault from
+  `rbs doctor` failing to run. `rbs test` keeps `cargo test`'s own code when a test
+  fails, and a script that only checks for a non-zero status sees no difference.
+
+- **Plans and summaries count created and modified files apart.** The plan footer reads
+  `3 à créer, 6 à modifier, 2 inchangés`, and the summary `✓ cors installée — 3 créés,
+  6 modifiés`: `rbs add cors` used to announce nine files to write, then call itself
+  installed in three, counting only the files it had created. `rbs generate` and
+  `rbs generate job` follow; the `--json` output is unchanged.
+
+- **`rbs doctor` reports a key missing from `.env` once.** The `.env` check already names
+  every key `.env.example` declares and `.env` lacks, with the line to add. The `auth`
+  and `mail` checks no longer fail a second time on the same `RBS_AUTH__SECRET` or
+  `RBS_MAIL__SMTP_PASSWORD`, with a different remedy, and `base` warns that it could not
+  check the database instead of failing on the missing `RBS_DATABASE__URL`. A key absent
+  from `.env.example` too is still reported by the feature's own check.
+
 ### Fixed
 
 - **The Redis password no longer reaches the logs.** The `redis` and `rate-limit`
@@ -346,6 +370,9 @@ reads `timestamp` on MySQL and `timestamp_with_timezone_text` on SQLite, which i
   every emission now deletes the expired tokens of every account, and the migration adds
   `idx_one_time_tokens_expires_at` so that purge does not scan the table. A project
   migrated earlier creates the index by hand, as the upgrade note shows.
+
+- **`rbs dev` on a MySQL project names MySQL** when the database URL cannot be read, and
+  its remedy gives a `mysql://` URL instead of a PostgreSQL one.
 
 ## [1.4.0] — 2026-09-11
 

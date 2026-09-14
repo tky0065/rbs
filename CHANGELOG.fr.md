@@ -201,6 +201,32 @@ dépréciation.
   jamais le fragment à un serveur, si bien que le jeton reste hors des journaux d'accès et
   des en-têtes `Referer`. Le client le lit dans `location.hash`.
 
+- **Le code de sortie dit à un script de quelle nature est l'échec.** `1` : le projet
+  porte une faute que la commande a trouvée ou qui l'arrête — `rbs doctor` qui trouve
+  quelque chose, une ancre absente ou mal placée, une migration qui échoue. `2` : l'appel
+  est à corriger — hors d'un projet, une feature inconnue, un nom déjà pris, un working
+  tree sale, un conflit que `--force` lèverait — comme les erreurs d'usage que clap
+  rendait déjà en `2`. `3` : l'environnement a manqué — un fichier illisible, `docker`
+  ou `cargo` impossibles à lancer, une base qui ne répond pas, un CLI plus ancien que le
+  projet. Tout échec sortait en `1` : une CI ne distinguait pas `rbs doctor` qui trouve
+  une faute de `rbs doctor` qui n'a pas pu tourner. `rbs test` garde le code de
+  `cargo test` quand un test échoue, et un script qui ne teste qu'un statut non nul ne
+  voit aucune différence.
+
+- **Le plan et le bilan comptent à part les fichiers créés et modifiés.** Le pied du plan
+  dit `3 à créer, 6 à modifier, 2 inchangés`, et le bilan `✓ cors installée — 3 créés,
+  6 modifiés` : `rbs add cors` annonçait neuf fichiers à écrire, puis se disait installé
+  en trois, ne comptant que ceux qu'il avait créés. `rbs generate` et `rbs generate job`
+  suivent ; la sortie `--json` ne change pas.
+
+- **`rbs doctor` ne signale qu'une fois une clé absente du `.env`.** Le contrôle `.env`
+  nomme déjà chaque clé que `.env.example` déclare et que le `.env` n'a pas, avec la
+  ligne à ajouter. Les contrôles `auth` et `mail` n'échouent plus une seconde fois sur le
+  même `RBS_AUTH__SECRET` ou `RBS_MAIL__SMTP_PASSWORD`, avec un autre remède, et `base`
+  avertit qu'il n'a pas pu vérifier la base au lieu d'échouer sur `RBS_DATABASE__URL`
+  manquante. Une clé absente aussi de `.env.example` reste signalée par le contrôle de
+  sa feature.
+
 ### Corrigé
 
 - **Le mot de passe Redis n'atteint plus les journaux.** Les fragments `redis` et
@@ -360,6 +386,9 @@ lit `timestamp` sur MySQL et `timestamp_with_timezone_text` sur SQLite, ce que
   perdre : chaque émission supprime désormais les jetons échus de tous les comptes, et la
   migration ajoute `idx_one_time_tokens_expires_at` pour que cette purge ne parcoure pas la
   table. Un projet déjà migré crée l'index à la main, comme le montre la note de montée.
+
+- **`rbs dev` sur un projet MySQL nomme MySQL** quand l'URL de la base est illisible, et
+  son remède donne une URL `mysql://` au lieu d'une URL PostgreSQL.
 
 ## [1.4.0] — 2026-09-11
 
