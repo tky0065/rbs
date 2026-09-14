@@ -257,7 +257,8 @@ pub fn run() {
                         ui::success(&format!("document écrit dans {}", out.display()));
                     }
                 }
-                Err(error) => echec_openapi(&error, false),
+                // Avec ou sans `--out` : sans lui, la sortie standard est le document lui-même.
+                Err(error) => echec_openapi(&error, true),
             }
         }
 
@@ -403,12 +404,13 @@ fn locale_from(lc_all: Option<&str>, lang: Option<&str>) -> Option<String> {
 
 /// Signale l'échec d'une commande qui lit le document OpenAPI, puis sort en 1.
 ///
-/// Sous `--json`, le remède rejoint le message sur la sortie d'erreur : la sortie standard
-/// n'appartient qu'au document, et un script qui l'analyse n'a pas à y trouver du Rust.
-fn echec_openapi(error: &openapi::Error, json: bool) -> ! {
+/// Quand la sortie standard appartient au document — `routes --json`, `openapi export` —, le
+/// remède rejoint le message sur la sortie d'erreur : un script qui l'analyse, ou un
+/// `> openapi.json`, n'a pas à y trouver du Rust.
+fn echec_openapi(error: &openapi::Error, sortie_au_document: bool) -> ! {
     ui::error(&error.to_string());
     if let Some(remedy) = error.remedy() {
-        if json {
+        if sortie_au_document {
             ui::warn_detail(&format!("\n{remedy}"));
         } else {
             ui::info(&format!("\n{remedy}"));

@@ -67,8 +67,9 @@ pub(crate) use depuis_la_racine;
 pub(crate) trait Codee {
     /// Code stable, en snake_case ASCII.
     fn code(&self) -> &'static str;
-    /// Le remède déjà rendu par la commande, quand la panne se répare en un texte —
-    /// jamais un nouveau texte : `--json` réutilise celui que l'affichage humain porte.
+    /// Le remède, quand la panne se répare en un texte. Il peut dire plus que l'affichage
+    /// humain : toute erreur qui porte un bloc à coller dit aussi où le coller, même quand
+    /// le rendu texte de la commande ne le montrait pas.
     fn remede(&self) -> Option<String>;
     /// Le bloc à coller, quand le remède est une ancre disparue, mal placée, ou une zone
     /// absente d'`AGENTS.md`.

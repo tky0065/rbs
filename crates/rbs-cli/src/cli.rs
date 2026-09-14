@@ -578,6 +578,9 @@ mod tests {
             vec!["rbs", "dev", "--template-dir", "/tmp/t"],
             vec!["rbs", "doctor", "--template-dir", "/tmp/t"],
             vec!["rbs", "upgrade", "--template-dir", "/tmp/t"],
+            vec!["rbs", "test", "--template-dir", "/tmp/t"],
+            vec!["rbs", "routes", "--template-dir", "/tmp/t"],
+            vec!["rbs", "openapi", "export", "--template-dir", "/tmp/t"],
         ] {
             // Le motif du refus est asserté, et pas seulement le refus : sans lui, une
             // faute de frappe dans le nom de la sous-commande ferait passer le test pour
@@ -658,6 +661,9 @@ mod tests {
             vec!["rbs", "dev", "--yes"],
             vec!["rbs", "doctor", "--yes"],
             vec!["rbs", "upgrade", "--yes"],
+            vec!["rbs", "test", "--yes"],
+            vec!["rbs", "routes", "--yes"],
+            vec!["rbs", "openapi", "export", "--yes"],
         ] {
             // Le motif du refus est asserté, et pas seulement le refus : sans lui, une
             // faute de frappe dans le nom de la sous-commande ferait passer le test pour

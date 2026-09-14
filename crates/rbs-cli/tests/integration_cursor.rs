@@ -3,9 +3,9 @@
 //! Les gabarits touchés par `--cursor` ne se lisent pas seuls : `CursorPage` doit encore
 //! passer `utoipa` et Axum, le repository doit encore produire du SQL valide contre une
 //! vraie base, et le document OpenAPI qu'il porte doit encore s'analyser par
-//! `rbs generate client`. Aucune fixture ne couvrait `--cursor` avec `--with-upload` : ce
-//! projet-ci l'engendre avec `--role`, `--soft-delete` et `--with-upload` à la fois, pour
-//! que toutes les compatibilités que la spécification promet soient exercées d'un coup.
+//! `rbs generate client`. Le drapeau se promet compatible avec `--role`, `--soft-delete`
+//! et `--with-upload` : ce projet-ci l'engendre avec les trois à la fois, pour que chacune
+//! de ces compatibilités soit compilée et jouée contre une vraie base.
 
 use std::fs;
 use std::path::Path;
@@ -131,7 +131,7 @@ fn a_cursor_paginated_crud_with_auth_storage_and_a_role_passes_and_renders_its_c
     // Nommés plutôt que comptés : `cargo test` sort en 0 sur une suite amputée, et c'est
     // précisément une suite amputée qu'une template cassée livrerait.
     for scenario in [
-        // La marche par curseur elle-même : le critère central de cette tâche.
+        // La marche par curseur : chaque ligne une fois, jusqu'à l'extinction de `next`.
         "articles::tests::the_cursor_walks_every_page_without_duplicates ... ok",
         // Le cycle de vie ordinaire, et les identifiants croissants d'un curseur sur `id`.
         "articles::tests::the_full_lifecycle_goes_through_the_api ... ok",

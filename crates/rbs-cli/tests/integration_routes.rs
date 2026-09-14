@@ -45,10 +45,20 @@ fn a_project_without_the_openapi_binary_is_refused_by_both_commands() {
     for arguments in [
         vec!["routes"],
         vec!["routes", "--json"],
+        vec!["openapi", "export"],
         vec!["openapi", "export", "--out", "openapi.json"],
     ] {
         let (code, stdout, stderr) = sortie(rbs(&racine).args(&arguments));
         let rendu = format!("{stdout}{stderr}");
+
+        // Sans `--out`, la sortie standard d'`export` est le document, que `> fichier` recueille ;
+        // sous `--json`, celle de `routes` aussi. Un refus n'y laisse rien, remède compris.
+        if arguments == ["routes", "--json"] || arguments == ["openapi", "export"] {
+            assert!(
+                stdout.is_empty(),
+                "{arguments:?} : stdout doit rester vide :\n{stdout}"
+            );
+        }
 
         assert_eq!(code, 1, "{arguments:?} :\n{rendu}");
         assert!(
