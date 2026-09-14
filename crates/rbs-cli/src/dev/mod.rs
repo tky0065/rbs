@@ -65,8 +65,11 @@ pub(crate) enum Error {
     Env(#[from] migrate::Error),
 
     /// L'URL de la base ne dit pas quel hôte joindre.
-    #[error("{} n'est pas une URL PostgreSQL exploitable", migrate::URL)]
-    UrlIllisible,
+    #[error("{} n'est pas une URL {} exploitable", migrate::URL, .database.label())]
+    UrlIllisible {
+        /// Moteur que le manifeste déclare.
+        database: Database,
+    },
 
     /// Rien n'écoute là où la base est attendue.
     #[error("rien ne répond sur {host}:{port} : la base du projet n'est pas démarrée")]
@@ -124,9 +127,10 @@ impl Error {
                  {} dans le .env du projet",
                 migrate::URL
             )),
-            Self::UrlIllisible => Some(format!(
-                "attendu : {}=postgres://utilisateur:motdepasse@hote:port/base",
-                migrate::URL
+            Self::UrlIllisible { database } => Some(format!(
+                "attendu : {}={}://utilisateur:motdepasse@hote:port/base",
+                migrate::URL,
+                database.schemes()[0]
             )),
             // Le compose du squelette est le chemin par défaut depuis cette branche :
             // un projet sans Docker installé n'a plus besoin d'`add docker` pour heurter
@@ -189,10 +193,11 @@ pub(crate) fn plan(root: &Path) -> Result<Vec<Step>, Error> {
 
     // SQLite n'a pas de serveur : son URL ne porte ni hôte ni port, et attendre qu'un
     // port réponde ferait échouer un projet parfaitement démarrable.
-    if database_of(root).a_un_serveur() {
+    let database = database_of(root);
+    if database.a_un_serveur() {
         let variables = migrate::project_variables(root)?;
-        let url = url(&variables).ok_or(Error::UrlIllisible)?;
-        let (host, port) = base::host_and_port(&url).ok_or(Error::UrlIllisible)?;
+        let url = url(&variables).ok_or(Error::UrlIllisible { database })?;
+        let (host, port) = base::host_and_port(&url).ok_or(Error::UrlIllisible { database })?;
 
         steps.push(Step::Database { host, port });
     }
@@ -383,6 +388,20 @@ mod tests {
             .features(features)
             .url(url)
             .create()
+    }
+
+    // `plan()` accepte tout moteur à serveur : un message figé sur PostgreSQL enverrait
+    // l'utilisateur d'un projet MySQL écrire une URL `postgres://` qui ne le servirait pas.
+    #[test]
+    fn an_unreadable_url_on_a_mysql_project_names_mysql() {
+        let (_parent, root) = project_on(Database::Mysql, &[], "mysql://");
+
+        let error = plan(&root).expect_err("une URL sans hôte ne se sonde pas");
+
+        assert!(error.to_string().contains("URL MySQL"), "{error}");
+        let remede = error.remedy().expect("l'erreur porte un remède");
+        assert!(remede.contains("=mysql://"), "{remede}");
+        assert!(!remede.contains("postgres"), "{remede}");
     }
 
     // SQLite n'a pas de serveur : attendre qu'un port réponde ferait échouer `rbs dev`
