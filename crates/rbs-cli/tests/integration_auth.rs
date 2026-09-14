@@ -515,6 +515,25 @@ fn the_auth_tests_of_the_generated_project_pass() {
         rendu.contains("auth::tests::") && rendu.contains(" ... ok"),
         "aucun test du fragment auth n'a tourné :\n{rendu}"
     );
+
+    // Nommés : ce sont eux qui prouvent qu'aucun parcours public ne dit, par son statut,
+    // son temps ou son lien, si une adresse est inscrite. Un test renommé ou déplacé
+    // laisserait la suite verte sans eux.
+    for test in [
+        "auth::tests::a_link_carries_its_token_in_the_fragment",
+        "auth::tests::session::registration_returns_202_without_a_body",
+        "auth::tests::session::a_taken_address_returns_the_same_202_and_creates_nothing",
+        "auth::tests::session::a_taken_address_keeps_its_password",
+        "auth::tests::session::a_taken_address_costs_the_same_time_as_a_new_one",
+        "auth::tests::verification::a_verified_address_is_not_sent_a_new_token",
+        "auth::tests::verification::verifying_again_keeps_the_first_date",
+        "auth::tests::password::an_emission_purges_the_expired_tokens_of_every_account",
+    ] {
+        assert!(
+            rendu.contains(&format!("test {test} ... ok")),
+            "`{test}` n'a pas été joué :\n{rendu}"
+        );
+    }
 }
 
 /// Les mêmes tests contre SQLite, qui ne compare pas les dates comme PostgreSQL.
