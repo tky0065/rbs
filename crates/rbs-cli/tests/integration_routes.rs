@@ -130,6 +130,13 @@ fn the_routes_of_an_authenticated_project_name_their_guard() {
         .unwrap_or_else(|| panic!("GET /health absente : {routes:?}"));
     assert_eq!(health["garde"], "public", "{health}");
 
+    // La sonde de vie n'interroge rien, et un orchestrateur l'appelle sans jeton.
+    let live = routes
+        .iter()
+        .find(|route| route["chemin"] == "/health/live" && route["methode"] == "GET")
+        .unwrap_or_else(|| panic!("GET /health/live absente : {routes:?}"));
+    assert_eq!(live["garde"], "public", "{live}");
+
     assert!(
         routes.iter().any(|route| route["garde"] == "bearer"),
         "aucune route protégée dans un projet --with auth : {routes:?}"

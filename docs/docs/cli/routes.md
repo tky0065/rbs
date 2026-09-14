@@ -48,6 +48,7 @@ DELETE   /auth/sessions             auth_revoke_sessions      bearer
 DELETE   /auth/sessions/{id}        auth_revoke_session       bearer
 POST     /auth/verify-email         auth_verify_email         public
 GET      /health                    health                    public
+GET      /health/live               health_live               public
 ```
 
 Rows are sorted by path, then by method in the order GET, POST, PUT, PATCH, DELETE; any
