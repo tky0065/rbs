@@ -69,7 +69,8 @@ La dernière ligne est la commande que lance le workflow installé par
 
 ## Code de sortie
 
-Le code de sortie est celui qu'a rendu `cargo test`, inchangé — 101 quand un test échoue.
+Le code de sortie est celui qu'a rendu `cargo test`, inchangé — 101 quand un test échoue
+ou que le projet ne compile pas.
 Une CI qui enchaîne `rbs test` distingue donc un test rouge d'une commande qui n'a pas pu
 démarrer, laquelle sort en 1 :
 

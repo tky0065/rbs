@@ -84,7 +84,7 @@ A real project's zones, generated in English, read like this:
 | `rbs generate crud\|feature` | Regenerates the inventory zone. |
 | `rbs upgrade` | Regenerates both the guide and the inventory; recreates the file if it went missing. |
 | `rbs doctor` | Changes nothing — it only reports. |
-| `rbs migrate`, `rbs seed`, `rbs dev` | No effect. |
+| `rbs migrate`, `rbs seed`, `rbs dev`, `rbs test`, `rbs routes`, `rbs openapi export` | No effect. |
 
 `upgrade` is the only command with a mandate to bring the project back in line with the
 CLI, which is why it is also the only one that recreates a deleted file. `add` and
@@ -290,8 +290,10 @@ parser, in text on standard error, with exit code 2.
 
 ### Error codes
 
-Under `--json`, a refusal is a single document on standard output; standard error stays
-empty and the exit code stays 1. Here, the `layers` anchor was removed from `src/router.rs`
+Under `--json`, a refusal is a single document on standard output, and the exit code stays
+1. rbs adds nothing to standard error for the refusal itself; what came before it stays
+there — a warning printed earlier in the run, or the project's compilation under
+`generate client`. Here, the `layers` anchor was removed from `src/router.rs`
 before `rbs add cors --json --force`:
 
 ```json
@@ -322,9 +324,9 @@ says where it goes. A code shared by several commands means the same thing in al
 | `fichier_absent` | `add`, `generate`, `upgrade` | The file that should carry an anchor does not exist. |
 | `manifeste_absent` | `add`, `generate`, `upgrade` | The `Cargo.toml` a change targets does not exist. |
 | `toml_invalide` | `add`, `generate`, `upgrade` | A TOML document of the project does not parse. |
-| `conflit` | `add`, `generate`, `upgrade` | The plan would overwrite files rbs did not write. Rerun with `--force` to overwrite them. |
-| `ecriture_impossible` | `add`, `generate`, `upgrade` | A write failed; what the plan had already written was undone. |
-| `plan_incoherent` | `add`, `generate`, `upgrade` | Two actions claim to write the same file whole — a defect of rbs, to report. |
+| `conflit` | `add`, `generate`, `generate client`, `upgrade` | The plan would overwrite files rbs did not write. Rerun with `--force` to overwrite them. |
+| `ecriture_impossible` | `add`, `generate`, `generate client`, `upgrade` | A write failed; what the plan had already written was undone. |
+| `plan_incoherent` | `add`, `generate`, `generate client`, `upgrade` | Two actions claim to write the same file whole — a defect of rbs, to report. |
 | `feature_inconnue` | `add` | No fragment carries that name. |
 | `fragment_sans_manifeste` | `add` | The fragment has no `feature.toml`. |
 | `fragment_invalide` | `add` | The fragment's `feature.toml` is invalid. |

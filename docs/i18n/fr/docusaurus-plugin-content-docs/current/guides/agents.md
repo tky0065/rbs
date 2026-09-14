@@ -87,7 +87,7 @@ Les zones d'un vrai projet, engendré en français, se lisent ainsi :
 | `rbs generate crud\|feature` | Régénère la zone d'inventaire. |
 | `rbs upgrade` | Régénère le guide et l'inventaire ; recrée le fichier s'il a disparu. |
 | `rbs doctor` | Ne change rien — il ne fait que constater. |
-| `rbs migrate`, `rbs seed`, `rbs dev` | Aucun effet. |
+| `rbs migrate`, `rbs seed`, `rbs dev`, `rbs test`, `rbs routes`, `rbs openapi export` | Aucun effet. |
 
 `upgrade` est la seule commande qui a mandat de remettre le projet en accord avec le CLI,
 et c'est pourquoi elle est aussi la seule à recréer un fichier supprimé. `add` et
@@ -294,8 +294,10 @@ l'analyseur d'arguments, en texte sur la sortie d'erreur, avec le code de sortie
 
 ### Codes d'erreur
 
-Sous `--json`, un refus est un seul document sur la sortie standard ; la sortie d'erreur
-reste vide et le code de sortie reste 1. Ici, l'ancre `layers` a été retirée de
+Sous `--json`, un refus est un seul document sur la sortie standard, et le code de sortie
+reste 1. rbs n'ajoute rien sur la sortie d'erreur pour le refus lui-même ; ce qui l'a
+précédé y reste — un avertissement affiché plus tôt dans l'exécution, ou la compilation du
+projet sous `generate client`. Ici, l'ancre `layers` a été retirée de
 `src/router.rs` avant `rbs add cors --json --force` :
 
 ```json
@@ -326,9 +328,9 @@ où il va. Un code partagé par plusieurs commandes a le même sens dans toutes.
 | `fichier_absent` | `add`, `generate`, `upgrade` | Le fichier qui doit porter une ancre n'existe pas. |
 | `manifeste_absent` | `add`, `generate`, `upgrade` | Le `Cargo.toml` visé par une modification n'existe pas. |
 | `toml_invalide` | `add`, `generate`, `upgrade` | Un document TOML du projet ne s'analyse pas. |
-| `conflit` | `add`, `generate`, `upgrade` | Le plan écraserait des fichiers que rbs n'a pas écrits. Relancez avec `--force` pour les écraser. |
-| `ecriture_impossible` | `add`, `generate`, `upgrade` | Une écriture a échoué ; ce que le plan avait déjà écrit a été défait. |
-| `plan_incoherent` | `add`, `generate`, `upgrade` | Deux actions prétendent écrire le même fichier de bout en bout — un défaut de rbs, à signaler. |
+| `conflit` | `add`, `generate`, `generate client`, `upgrade` | Le plan écraserait des fichiers que rbs n'a pas écrits. Relancez avec `--force` pour les écraser. |
+| `ecriture_impossible` | `add`, `generate`, `generate client`, `upgrade` | Une écriture a échoué ; ce que le plan avait déjà écrit a été défait. |
+| `plan_incoherent` | `add`, `generate`, `generate client`, `upgrade` | Deux actions prétendent écrire le même fichier de bout en bout — un défaut de rbs, à signaler. |
 | `feature_inconnue` | `add` | Aucun fragment ne porte ce nom. |
 | `fragment_sans_manifeste` | `add` | Le fragment n'a pas de `feature.toml`. |
 | `fragment_invalide` | `add` | Le `feature.toml` du fragment est invalide. |

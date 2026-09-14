@@ -73,8 +73,8 @@ and what follows `--` goes to the test harness:
 rbs test articles -- --nocapture
 ```
 
-Its exit code is `cargo test`'s own, so a script can tell a red test (101) from a database
-that never answered (1).
+Its exit code is `cargo test`'s own, so a script can tell a red test or a project that does
+not compile (101) from a database that never answered (1).
 
 By hand, the same thing takes two commands, with a database reachable:
 

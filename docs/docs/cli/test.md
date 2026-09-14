@@ -69,7 +69,8 @@ for flag. Each flag earns its place:
 
 ## Exit code
 
-The exit code is the one `cargo test` returned, unchanged — 101 when a test fails. A CI
+The exit code is the one `cargo test` returned, unchanged — 101 when a test fails or the
+project does not compile. A CI
 that chains `rbs test` can therefore tell a red test apart from a command that could not
 start, which exits with 1:
 
