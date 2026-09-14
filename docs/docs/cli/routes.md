@@ -98,4 +98,5 @@ so a route mounted without an `#[utoipa::path]` does not show up. It is missing 
 document too, and from every client generated from it.
 
 The failures are those of `rbs openapi export`, word for word. Under `--json`, the error and
-its remedy both go to standard error, and the exit code is 1.
+its remedy both go to standard error. The exit code is 1 for each refusal listed there, a
+fault of the project, and 2 outside a project — see [exit codes](./doctor.md#exit-codes).

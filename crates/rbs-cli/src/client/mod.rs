@@ -188,6 +188,22 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     })
 }
 
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::PasUnProjet | Self::WorkingTreeSale(_) => Sortie::Usage,
+            Self::Acces(_) => Sortie::Environnement,
+            Self::Document(_) | Self::Rendu(_) => Sortie::Faute,
+            Self::Openapi(cause) => cause.sortie(),
+            Self::Plan(cause) => cause.sortie(),
+            Self::Metadata(cause) => cause.sortie(),
+            Self::Application(cause) => cause.sortie(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

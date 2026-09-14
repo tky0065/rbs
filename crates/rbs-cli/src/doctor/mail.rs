@@ -38,8 +38,12 @@ fn check_with(root: &Path, config: &Config, env: impl Fn(&str) -> Option<String>
 
     let mut defauts = Vec::new();
     let mut remedes = Vec::new();
+    let mut renvoi = false;
 
     match mot_de_passe.as_deref() {
+        // Le contrôle `.env` a déjà nommé la clé, avec son remède : la nommer ici aussi
+        // compterait deux fautes pour une ligne à écrire.
+        None if super::env::signalee(root, CLE) => renvoi = true,
         None => {
             defauts.push(format!(
                 "{CLE} n'est renseignée ni dans le {FICHIER} ni dans l'environnement"
@@ -66,6 +70,13 @@ fn check_with(root: &Path, config: &Config, env: impl Fn(&str) -> Option<String>
     if let Some((defaut, remede)) = super::defaut_de_section(config, SECTION, REGLAGES) {
         defauts.push(defaut);
         remedes.push(remede);
+    }
+
+    if defauts.is_empty() && renvoi {
+        return Check::ok(
+            TITRE,
+            format!("rien d'autre à signaler — {CLE} relève du contrôle .env"),
+        );
     }
 
     if defauts.is_empty() {
@@ -119,10 +130,26 @@ mod tests {
         None
     }
 
+    /// Le contrôle `.env` nomme déjà la clé, avec son remède : la nommer ici aussi
+    /// comptait deux fautes pour une ligne à écrire.
     #[test]
-    fn without_the_password_variable_the_diagnosis_names_it() {
+    fn a_password_missing_from_env_is_left_to_the_env_check() {
         let (_parent, root) = project_with_mail();
         rewrite(&root, FICHIER, &format!("{CLE}=\n"), "");
+
+        let check = check_with(&root, &Config::read(&root), bare);
+
+        assert_eq!(check.state, State::Bon, "{}", check.detail);
+        assert!(check.detail.contains(".env"), "{}", check.detail);
+    }
+
+    /// Sans la clé dans l'exemple, le contrôle `.env` ne peut pas la nommer : c'est à
+    /// celui-ci de le faire.
+    #[test]
+    fn a_password_missing_from_both_files_is_still_named_by_mail() {
+        let (_parent, root) = project_with_mail();
+        rewrite(&root, FICHIER, &format!("{CLE}=\n"), "");
+        rewrite(&root, ".env.example", &format!("{CLE}=\n"), "");
 
         let check = check_with(&root, &Config::read(&root), bare);
 

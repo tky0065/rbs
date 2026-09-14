@@ -74,6 +74,24 @@ pub(crate) fn check(root: &Path) -> Check {
     )
 }
 
+/// Le contrôle `.env` a-t-il déjà nommé `cle`, avec son remède ?
+///
+/// Il le fait dès que `.env.example` la déclare et que le `.env` ne la porte pas — ou ne
+/// se lit pas. Un contrôle de feature qui la nommerait aussi compterait deux fautes pour
+/// une ligne à écrire, avec deux remèdes différents.
+pub(crate) fn signalee(root: &Path, cle: &str) -> bool {
+    let Ok(attendues) = dotenv::read(&root.join(EXEMPLE)) else {
+        return false;
+    };
+    if dotenv::value(&attendues, cle).is_none() {
+        return false;
+    }
+    match dotenv::read(&root.join(FICHIER)) {
+        Ok(presentes) => dotenv::value(&presentes, cle).is_none(),
+        Err(_) => true,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::fs;
@@ -158,6 +176,36 @@ mod tests {
                 .expect("un échec porte son remède")
                 .contains(EXEMPLE)
         );
+    }
+
+    #[test]
+    fn a_declared_key_missing_from_env_is_already_reported() {
+        let (_parent, root) = project();
+        remove(&root, "RBS_LOG_FORMAT");
+
+        assert!(signalee(&root, "RBS_LOG_FORMAT"));
+    }
+
+    #[test]
+    fn every_declared_key_is_already_reported_when_env_is_missing() {
+        let (_parent, root) = project();
+        fs::remove_file(root.join(FICHIER)).expect("le .env existe");
+
+        assert!(signalee(&root, "RBS_LOG_FORMAT"));
+    }
+
+    #[test]
+    fn a_key_the_example_does_not_declare_is_not_reported() {
+        let (_parent, root) = project();
+
+        assert!(!signalee(&root, "STRIPE_KEY"));
+    }
+
+    #[test]
+    fn a_key_the_env_carries_is_not_reported() {
+        let (_parent, root) = project();
+
+        assert!(!signalee(&root, "RBS_LOG_FORMAT"));
     }
 
     #[test]

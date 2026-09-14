@@ -83,6 +83,10 @@ pub(crate) enum Error {
     /// Le manifeste du projet n'a pu être lu.
     #[error("{0}")]
     Metadata(#[from] metadata::Error),
+
+    /// Le répertoire courant n'a pas pu être lu.
+    #[error(transparent)]
+    Cwd(io::Error),
 }
 
 // Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
@@ -168,6 +172,25 @@ pub(crate) fn launch(
         cargo::Error::Lancement(source) => Error::Cargo(source),
         cargo::Error::Statut(code) => Error::Migration { code },
     })
+}
+
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::PasUnProjet => Sortie::Usage,
+            Self::Cargo(_) | Self::Cwd(_) => Sortie::Environnement,
+            // Un `.env` absent se répare en le recopiant de `.env.example` : même quand la
+            // cause est une erreur d'accès, c'est une faute du projet.
+            Self::Env(_)
+            | Self::SansUrl
+            | Self::Migration { .. }
+            | Self::State(_)
+            | Self::Fresh(_) => Sortie::Faute,
+            Self::Metadata(cause) => cause.sortie(),
+        }
+    }
 }
 
 #[cfg(test)]

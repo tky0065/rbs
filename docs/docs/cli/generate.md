@@ -154,7 +154,7 @@ plan pour …/demo
   + src/modules/jobs/purge_sessions.rs   créé
   ~ src/modules/jobs/mod.rs              modifié
 
-  2 fichiers à écrire
+  1 à créer, 1 à modifier
 
   rien n'a été écrit (--dry-run)
 ```
@@ -172,7 +172,7 @@ plan pour /private/tmp/rbs-demo/demo
   ~ src/modules/jobs/mod.rs              modifié
   ~ src/modules/scheduler/mod.rs         modifié
 
-  3 fichiers à écrire
+  1 à créer, 2 à modifier
 
   rien n'a été écrit (--dry-run)
 ```
@@ -360,7 +360,7 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  16 fichiers à écrire
+  9 à créer, 7 à modifier
 
   rien n'a été écrit (--dry-run)
 ```
@@ -388,8 +388,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  16 fichiers à écrire
-✓ articles générée — 9 fichiers
+  9 à créer, 7 à modifier
+✓ articles générée — 9 créés, 7 modifiés
 
   la migration m20260830_110925_create_articles reste à appliquer avant de lancer le projet
 ```
@@ -424,8 +424,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                   modifié
   ~ AGENTS.md                    modifié
 
-  11 fichiers à écrire
-✓ comments générée — 6 fichiers
+  6 à créer, 5 à modifier
+✓ comments générée — 6 créés, 5 modifiés
 ```
 
 ## A dirty working tree
@@ -508,4 +508,5 @@ $ rbs generate crud users --dry-run
 erreur : aucun projet rbs ici : `rbs generate` s'exécute dans un projet créé par `rbs new`
 ```
 
-Each of these exits with status 1.
+Both exit with status 2: the call is what needs correcting — another name, or the right
+directory. See [exit codes](./doctor.md#exit-codes).

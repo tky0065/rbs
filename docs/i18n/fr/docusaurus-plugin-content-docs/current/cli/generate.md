@@ -156,7 +156,7 @@ plan pour …/demo
   + src/modules/jobs/purge_sessions.rs   créé
   ~ src/modules/jobs/mod.rs              modifié
 
-  2 fichiers à écrire
+  1 à créer, 1 à modifier
 
   rien n'a été écrit (--dry-run)
 ```
@@ -174,7 +174,7 @@ plan pour /private/tmp/rbs-demo/demo
   ~ src/modules/jobs/mod.rs              modifié
   ~ src/modules/scheduler/mod.rs         modifié
 
-  3 fichiers à écrire
+  1 à créer, 2 à modifier
 
   rien n'a été écrit (--dry-run)
 ```
@@ -367,7 +367,7 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  16 fichiers à écrire
+  9 à créer, 7 à modifier
 
   rien n'a été écrit (--dry-run)
 ```
@@ -395,8 +395,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  16 fichiers à écrire
-✓ articles générée — 9 fichiers
+  9 à créer, 7 à modifier
+✓ articles générée — 9 créés, 7 modifiés
 
   la migration m20260830_110925_create_articles reste à appliquer avant de lancer le projet
 ```
@@ -431,8 +431,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                   modifié
   ~ AGENTS.md                    modifié
 
-  11 fichiers à écrire
-✓ comments générée — 6 fichiers
+  6 à créer, 5 à modifier
+✓ comments générée — 6 créés, 5 modifiés
 ```
 
 ## Un working tree sale
@@ -518,4 +518,5 @@ $ rbs generate crud users --dry-run
 erreur : aucun projet rbs ici : `rbs generate` s'exécute dans un projet créé par `rbs new`
 ```
 
-Chacun de ces cas sort en code 1.
+Les deux sortent en code 2 : c'est l'appel qu'il faut corriger — un autre nom, ou le bon
+répertoire. Voir les [codes de sortie](./doctor.md#codes-de-sortie).

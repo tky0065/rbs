@@ -36,8 +36,8 @@ plan pour /private/tmp/rbs-demo/depot
   ~ .env.example                   modifié
   ~ AGENTS.md                      modifié
 
-  12 fichiers à écrire
-✓ storage installée — 4 fichiers
+  5 à créer, 7 à modifier
+✓ storage installée — 5 créés, 7 modifiés
 
   les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example
 ```

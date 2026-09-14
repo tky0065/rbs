@@ -173,6 +173,33 @@ pub(crate) fn exporter(directory: &Path, out: Option<&Path>) -> Result<Option<St
     Ok(None)
 }
 
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::PasUnProjet => Sortie::Usage,
+            Self::Acces(_) => Sortie::Environnement,
+            Self::Document(_) => Sortie::Faute,
+            Self::Metadata(cause) => cause.sortie(),
+            Self::Obtention(cause) => cause.sortie(),
+        }
+    }
+}
+
+impl crate::errors::Classee for Obtention {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::Cargo(_) => Sortie::Environnement,
+            Self::SansBibliotheque | Self::SansBinaire | Self::BinaireEnEchec { .. } => {
+                Sortie::Faute
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -255,8 +255,8 @@ plan pour …/demo
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  17 fichiers à écrire
-✓ articles générée — 10 fichiers
+  10 à créer, 7 à modifier
+✓ articles générée — 10 créés, 7 modifiés
 
   la migration m20260830_110245_create_articles reste à appliquer avant de lancer le projet
 ```

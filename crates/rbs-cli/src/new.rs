@@ -168,6 +168,12 @@ pub enum Error {
     /// Le guide de l'agent n'a pas pu être rendu.
     #[error("AGENTS.md n'a pas pu être écrit : {0}")]
     Agents(#[from] crate::agents::Error),
+    /// Une question n'a pas abouti.
+    #[error(transparent)]
+    Prompt(#[from] crate::prompts::PromptError),
+    /// Le répertoire courant n'a pas pu être lu.
+    #[error(transparent)]
+    Cwd(io::Error),
 }
 
 /// Crée le projet décrit par `options` dans `parent`.
@@ -490,6 +496,30 @@ pub(crate) fn url_opaque(database: Database, url: &str) -> bool {
 /// d'identifiant Rust.
 fn crate_name(name: &str) -> String {
     name.replace('-', "_")
+}
+
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+        use crate::prompts::PromptError;
+
+        match self {
+            Self::NomInvalide { .. }
+            | Self::FeatureInconnue { .. }
+            | Self::UrlEtrangereAuMoteur { .. }
+            | Self::RepertoireOccupe { .. }
+            | Self::NoyauIntrouvable { .. } => Sortie::Usage,
+            Self::Templates(_) | Self::Ecriture { .. } | Self::Cwd(_) => Sortie::Environnement,
+            Self::Rendu { .. } | Self::Agents(_) => Sortie::Faute,
+            Self::Installation { source, .. } => source.sortie(),
+            Self::Prompt(erreur) => match erreur {
+                PromptError::SansTerminal | PromptError::NomRequis => Sortie::Usage,
+                // Ni le projet ni l'appel : l'utilisateur a coupé court, ou le terminal a
+                // manqué.
+                PromptError::Interrompu | PromptError::Autre(_) => Sortie::Environnement,
+            },
+        }
+    }
 }
 
 #[cfg(test)]

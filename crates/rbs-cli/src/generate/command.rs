@@ -56,8 +56,6 @@ type File = (String, String);
 pub(crate) struct Planned {
     /// Le plan, à afficher puis à appliquer.
     pub plan: plan::Plan,
-    /// Chemins des fichiers de la feature, relatifs à la racine du projet.
-    pub files: Vec<String>,
     /// Module de la migration générée, s'il y en a une.
     pub migration: Option<String>,
     /// Ce que rustfmt n'a pas pu faire sur le rendu, s'il y a lieu.
@@ -469,7 +467,6 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     Ok(Planned {
         plan: builder.finir(),
-        files: files.into_iter().map(|(path, _)| path).collect(),
         migration,
         avertissement,
         required_reference,
@@ -609,7 +606,6 @@ fn plan_repair(
 
     Ok(Planned {
         plan: builder.finir(),
-        files: Vec::new(),
         migration: None,
         avertissement: None,
         required_reference: None,
@@ -699,6 +695,35 @@ fn render(
     ));
 
     Ok((rendus, Some(rendue.module)))
+}
+
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::PasUnProjet
+            | Self::Nom(_)
+            | Self::Fields(_)
+            | Self::DejaPresente { .. }
+            | Self::WorkingTreeSale(_)
+            | Self::Relations(_)
+            | Self::Homonyme { .. }
+            | Self::Absente { .. }
+            | Self::RoleSansAuth { .. }
+            | Self::UploadSansStorage
+            | Self::SoftDeleteColonneReservee { .. }
+            | Self::RoleInconnu { .. }
+            | Self::EnfantSansCle { .. } => Sortie::Usage,
+            Self::Acces(_) => Sortie::Environnement,
+            Self::Rendu { .. } | Self::MigrationsAbsentes(_) | Self::UploadStorageHorsModules => {
+                Sortie::Faute
+            }
+            Self::Plan(cause) => cause.sortie(),
+            Self::Metadata(cause) => cause.sortie(),
+            Self::Application(cause) => cause.sortie(),
+        }
+    }
 }
 
 #[cfg(test)]

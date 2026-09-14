@@ -72,7 +72,8 @@ for flag. Each flag earns its place:
 The exit code is the one `cargo test` returned, unchanged — 101 when a test fails or the
 project does not compile. A CI
 that chains `rbs test` can therefore tell a red test apart from a command that could not
-start, which exits with 1:
+start, whose code is 1, 2 or 3 depending on what stopped it — see
+[exit codes](./doctor.md#exit-codes). A red test ends on:
 
 ```text
 erreur : `cargo test` a échoué (code 101)
@@ -93,7 +94,7 @@ démarrez-la — `docker compose up -d` à la racine du projet — ou corrigez R
 | Situation | What happens |
 |---|---|
 | No `.env`, or no database URL in it | Refusal naming the file and the variable, exit 1 |
-| Nothing listening | The message above, after the applicable timeout, exit 1 |
+| Nothing listening | The message above, after the applicable timeout, exit 3 |
 | Migration fails | The migration binary's own error, and no test runs, exit 1 |
 | A test fails | `cargo test`'s report, then the line above, and its exit code |
-| Not in a project | Refusal naming what it looked for, exit 1 |
+| Not in a project | Refusal naming what it looked for, exit 2 |

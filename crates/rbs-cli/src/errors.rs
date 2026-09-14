@@ -76,10 +76,241 @@ pub(crate) trait Codee {
     fn bloc(&self) -> Option<String>;
 }
 
+/// Ce que le code de sortie dit d'un échec, pour un script qui ne lit pas le message.
+///
+/// Trois familles plutôt qu'un code par erreur : un script ne branche que sur ce qu'il
+/// peut faire — corriger le projet, corriger l'appel, ou réessayer quand l'environnement
+/// le permettra. `rbs doctor` en a besoin pour distinguer une faute trouvée d'un
+/// diagnostic qui n'a pas pu tourner.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Sortie {
+    /// Le projet porte une faute que la commande a trouvée, ou qui l'empêche.
+    Faute,
+    /// La commande est mal appelée, ou pas au bon endroit — le 2 des erreurs d'usage de clap.
+    Usage,
+    /// L'environnement a manqué : fichier illisible, outil introuvable, service injoignable.
+    Environnement,
+}
+
+impl Sortie {
+    /// Le code que le processus rend.
+    pub(crate) fn code(self) -> i32 {
+        match self {
+            Self::Faute => 1,
+            Self::Usage => 2,
+            Self::Environnement => 3,
+        }
+    }
+}
+
+/// Une erreur qui sait à quelle famille de sortie elle appartient.
+///
+/// Chaque implémentation est un `match` exhaustif, sans `_` : une variante ajoutée ne
+/// compile pas tant que sa famille n'a pas été décidée.
+pub(crate) trait Classee {
+    /// La famille de l'échec.
+    fn sortie(&self) -> Sortie;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{add, anchors, client, generate::command, openapi, plan, upgrade};
+    use crate::generate::job;
+    use crate::metadata;
+    use crate::prompts::PromptError;
+    use crate::{
+        add, anchors, client, dev, doctor, generate::command, migrate, new, openapi, plan, seed,
+        upgrade,
+    };
+
+    #[test]
+    fn each_family_renders_its_own_exit_code() {
+        assert_eq!(Sortie::Faute.code(), 1);
+        assert_eq!(Sortie::Usage.code(), 2);
+        assert_eq!(Sortie::Environnement.code(), 3);
+    }
+
+    fn acces() -> Acces {
+        Acces::new(Path::new("src/router.rs"), io::Error::other("refusé"))
+    }
+
+    fn ancre() -> plan::Error {
+        plan::Error::Anchor(anchors::Missing {
+            anchor: anchors::ROUTES,
+        })
+    }
+
+    #[test]
+    fn a_command_run_outside_a_project_is_a_call_to_correct() {
+        let sorties = [
+            add::Error::PasUnProjet.sortie(),
+            command::Error::PasUnProjet.sortie(),
+            job::Error::PasUnProjet.sortie(),
+            migrate::Error::PasUnProjet.sortie(),
+            seed::Error::PasUnProjet.sortie(),
+            dev::Error::PasUnProjet.sortie(),
+            openapi::Error::PasUnProjet.sortie(),
+            upgrade::Error::PasUnProjet.sortie(),
+            client::Error::PasUnProjet.sortie(),
+            doctor::Error::PasUnProjet.sortie(),
+            new::Error::NomInvalide {
+                name: "4chan".to_string(),
+            }
+            .sortie(),
+            new::Error::Prompt(PromptError::NomRequis).sortie(),
+        ];
+
+        for sortie in sorties {
+            assert_eq!(sortie, Sortie::Usage);
+        }
+    }
+
+    #[test]
+    fn a_file_or_a_tool_out_of_reach_is_the_environment() {
+        let sorties = [
+            add::Error::Acces(acces()).sortie(),
+            command::Error::Acces(acces()).sortie(),
+            job::Error::Acces(acces()).sortie(),
+            seed::Error::Acces(acces()).sortie(),
+            openapi::Error::Acces(acces()).sortie(),
+            upgrade::Error::Acces(acces()).sortie(),
+            client::Error::Acces(acces()).sortie(),
+            new::Error::Ecriture {
+                path: "demo".to_string(),
+                source: io::Error::other("refusé"),
+            }
+            .sortie(),
+            migrate::Error::Cargo(io::Error::other("introuvable")).sortie(),
+            dev::Error::Injoignable {
+                host: "127.0.0.1".to_string(),
+                port: 1,
+            }
+            .sortie(),
+            doctor::Error::Cwd(io::Error::other("supprimé")).sortie(),
+        ];
+
+        for sortie in sorties {
+            assert_eq!(sortie, Sortie::Environnement);
+        }
+    }
+
+    #[test]
+    fn a_plan_that_the_project_stops_is_a_fault() {
+        let sorties = [
+            add::Error::Plan(ancre()).sortie(),
+            command::Error::Plan(ancre()).sortie(),
+            job::Error::Plan(ancre()).sortie(),
+            upgrade::Error::Plan(ancre()).sortie(),
+            client::Error::Plan(ancre()).sortie(),
+            migrate::Error::SansUrl.sortie(),
+        ];
+
+        for sortie in sorties {
+            assert_eq!(sortie, Sortie::Faute);
+        }
+    }
+
+    #[test]
+    fn a_wrapped_error_keeps_the_family_of_its_cause() {
+        assert_eq!(
+            add::Error::Env(migrate::Error::SansUrl).sortie(),
+            Sortie::Faute
+        );
+        assert_eq!(
+            add::Error::Env(migrate::Error::Cargo(io::Error::other("introuvable"))).sortie(),
+            Sortie::Environnement
+        );
+        assert_eq!(
+            dev::Error::Env(migrate::Error::PasUnProjet).sortie(),
+            Sortie::Usage
+        );
+        assert_eq!(
+            new::Error::Installation {
+                features: "cors".to_string(),
+                source: Box::new(add::Error::Acces(acces())),
+            }
+            .sortie(),
+            Sortie::Environnement
+        );
+    }
+
+    /// Un fichier que le plan n'a pas pu lire reste une panne d'environnement, même
+    /// enveloppé dans l'erreur de la commande.
+    #[test]
+    fn a_plan_that_cannot_read_a_file_is_the_environment() {
+        assert_eq!(
+            add::Error::Plan(plan::Error::Acces(acces())).sortie(),
+            Sortie::Environnement
+        );
+    }
+
+    #[test]
+    fn a_manifest_that_is_not_an_rbs_project_is_a_call_to_correct() {
+        assert_eq!(
+            add::Error::Metadata(metadata::Error::PasUnProjet {
+                path: "Cargo.toml".to_string(),
+            })
+            .sortie(),
+            Sortie::Usage
+        );
+    }
+
+    #[test]
+    fn cargo_that_cannot_be_launched_is_the_environment() {
+        assert_eq!(
+            openapi::Error::Obtention(openapi::Obtention::Cargo(io::Error::other("introuvable")))
+                .sortie(),
+            Sortie::Environnement
+        );
+    }
+
+    #[test]
+    fn a_project_that_does_not_compile_is_a_fault() {
+        assert_eq!(
+            client::Error::Openapi(openapi::Obtention::BinaireEnEchec { code: 101 }).sortie(),
+            Sortie::Faute
+        );
+    }
+
+    /// Le remède est de modifier l'échéance du projet à la main, pas l'appel.
+    #[test]
+    fn a_schedule_already_set_is_a_fault_of_the_project() {
+        assert_eq!(
+            job::Error::EcheanceExistante {
+                nom: "purge".to_string(),
+                existante: "0 4 * * *".to_string(),
+                demandee: "0 5 * * *".to_string(),
+            }
+            .sortie(),
+            Sortie::Faute
+        );
+    }
+
+    /// `--force` lève un conflit : c'est l'appel qui change, pas l'environnement.
+    #[test]
+    fn a_conflict_is_lifted_by_the_call_and_a_failed_write_by_the_environment() {
+        let conflit = || plan::application::Error::Conflit {
+            chemins: "Dockerfile".to_string(),
+        };
+
+        assert_eq!(add::Error::Application(conflit()).sortie(), Sortie::Usage);
+        assert_eq!(
+            upgrade::Error::Application(plan::application::Error::Ecriture {
+                path: "Dockerfile".to_string(),
+                source: io::Error::other("disque plein"),
+            })
+            .sortie(),
+            Sortie::Environnement
+        );
+    }
+
+    /// Un test rouge garde le code que `cargo test` a rendu : une CI le distingue d'une
+    /// commande qui n'a pas pu démarrer.
+    #[test]
+    fn a_red_test_keeps_the_code_cargo_returned() {
+        assert_eq!(dev::Error::Tests { code: 101 }.exit_code(), 101);
+        assert_eq!(dev::Error::PasUnProjet.exit_code(), 2);
+    }
 
     /// Un code n'est jamais lu par un humain : un accent, une majuscule ou un tiret y
     /// signalerait un message recopié plutôt qu'un code choisi pour durer.

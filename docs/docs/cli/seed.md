@@ -65,7 +65,8 @@ $ RBS_ENV=production rbs seed
 erreur : RBS_ENV=production : les seeds sont des données de démonstration, et rbs refuse de les insérer en production — relancez avec --force si c'est bien ce que vous voulez
 ```
 
-Exit code 1, and the project's binary is **not** launched — cargo does not even start.
+Exit code 2 — the call is what lacks `--force` — and the project's binary is **not**
+launched: cargo does not even start.
 
 The guard lives in the command and not in the generated code, and that is deliberate. A
 seed is a file you are meant to edit; a refusal sitting inside it is a refusal you can

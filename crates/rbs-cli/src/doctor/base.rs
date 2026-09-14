@@ -35,6 +35,12 @@ const ANNONCE: &str =
 pub(crate) fn check(root: &Path, manifeste: &Manifeste, annonce: &mut dyn FnMut(&str)) -> Check {
     let variables = match migrate::project_variables(root) {
         Ok(variables) => variables,
+        Err(_) if crate::dotenv::read(&root.join(".env")).is_err() => {
+            return renvoi_au_controle_env("le .env ne se lit pas");
+        }
+        Err(migrate::Error::SansUrl) if super::env::signalee(root, migrate::URL) => {
+            return renvoi_au_controle_env(&format!("{} manque au .env", migrate::URL));
+        }
         Err(error) => {
             return Check::failed(
                 TITRE,
@@ -46,6 +52,9 @@ pub(crate) fn check(root: &Path, manifeste: &Manifeste, annonce: &mut dyn FnMut(
 
     let url = match url(&variables) {
         Some(url) => url,
+        None if super::env::signalee(root, migrate::URL) => {
+            return renvoi_au_controle_env(&format!("{} manque au .env", migrate::URL));
+        }
         None => {
             return Check::failed(
                 TITRE,
@@ -109,6 +118,18 @@ pub(crate) fn check(root: &Path, manifeste: &Manifeste, annonce: &mut dyn FnMut(
             "vérifiez que `cargo run -p migration -- version` aboutit",
         ),
     }
+}
+
+/// Le constat quand le contrôle `.env` a déjà nommé ce qui manque, avec son remède.
+///
+/// La base n'a pas pu être vérifiée, ce qu'un avertissement dit ; un échec compterait une
+/// seconde fois la ligne que le contrôle `.env` demande déjà d'écrire.
+fn renvoi_au_controle_env(cause: &str) -> Check {
+    Check::warned(
+        TITRE,
+        format!("non vérifiée : {cause}, ce que le contrôle .env signale"),
+        "voir le contrôle .env",
+    )
 }
 
 /// Le constat que rend une faute du manifeste, d'où qu'elle vienne.
@@ -589,14 +610,46 @@ mod tests {
         assert!(check.remedy.is_some());
     }
 
+    /// Sans la clé dans l'exemple, le contrôle `.env` ne la nomme pas : l'échec reste ici.
     #[test]
-    fn a_url_missing_from_env_is_reported_without_attempting_a_connection() {
+    fn a_url_missing_from_both_files_is_reported_without_attempting_a_connection() {
+        let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
+        std::fs::write(root.join(".env"), "RBS_ENV=development\n").expect("écriture du .env");
+        let exemple = root.join(".env.example");
+        let source = std::fs::read_to_string(&exemple).expect("exemple lisible");
+        let sans_url: Vec<&str> = source
+            .lines()
+            .filter(|ligne| !ligne.starts_with(migrate::URL))
+            .collect();
+        std::fs::write(&exemple, sans_url.join("\n")).expect("exemple inscriptible");
+
+        let check = check(&root);
+
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
+        assert!(check.detail.contains(migrate::URL));
+    }
+
+    /// Le contrôle `.env` nomme déjà la clé, avec son remède : échouer ici aussi comptait
+    /// deux fautes pour une ligne à écrire.
+    #[test]
+    fn an_url_missing_from_env_is_left_to_the_env_check() {
         let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
         std::fs::write(root.join(".env"), "RBS_ENV=development\n").expect("écriture du .env");
 
         let check = check(&root);
 
-        assert_eq!(check.state, State::Echec);
-        assert!(check.detail.contains(migrate::URL));
+        assert_eq!(check.state, State::Avertissement, "{}", check.detail);
+        assert!(check.detail.contains(migrate::URL), "{}", check.detail);
+    }
+
+    #[test]
+    fn a_missing_env_is_left_to_the_env_check() {
+        let (_parent, root) = project("postgres://rbs:rbs@127.0.0.1:1/demo");
+        std::fs::remove_file(root.join(".env")).expect("le .env existe");
+
+        let check = check(&root);
+
+        assert_eq!(check.state, State::Avertissement, "{}", check.detail);
+        assert!(check.detail.contains(".env"), "{}", check.detail);
     }
 }

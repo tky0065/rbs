@@ -124,19 +124,31 @@ fn line(file: &File, width: usize) -> String {
 /// Le compte, par ce qui adviendra des fichiers.
 ///
 /// Les conflits se comptent à part : sans `--force`, ils ne seront pas écrits, et les
-/// ranger avec le reste ferait annoncer une écriture qui n'aura pas lieu.
+/// ranger avec le reste ferait annoncer une écriture qui n'aura pas lieu. Créés et
+/// modifiés se distinguent comme sur les lignes au-dessus, et comme dans le bilan que la
+/// commande affiche une fois le plan appliqué.
 fn footer(files: &[File]) -> String {
     let compter = |statut: Status| files.iter().filter(|f| f.statut == statut).count();
+    let a_faire = |existant: bool| {
+        files
+            .iter()
+            .filter(|f| f.statut == Status::AFaire && f.before.is_some() == existant)
+            .count()
+    };
 
-    let (a_ecrire, inchanges, conflits) = (
-        compter(Status::AFaire),
+    let (a_creer, a_modifier, inchanges, conflits) = (
+        a_faire(false),
+        a_faire(true),
         compter(Status::DejaFait),
         compter(Status::Conflit),
     );
 
     let mut segments = Vec::new();
-    if a_ecrire > 0 {
-        segments.push(format!("{} à écrire", crate::ui::files(a_ecrire)));
+    if a_creer > 0 {
+        segments.push(format!("{a_creer} à créer"));
+    }
+    if a_modifier > 0 {
+        segments.push(format!("{a_modifier} à modifier"));
     }
     if inchanges > 0 {
         let pluriel = if inchanges > 1 { "s" } else { "" };
@@ -267,10 +279,12 @@ mod tests {
         );
     }
 
+    /// Le pied compte comme les lignes au-dessus : un total « à écrire » annonçait neuf
+    /// fichiers là où le bilan en disait trois, les seuls créés.
     #[test]
-    fn the_footer_counts_the_files_to_write_and_the_unchanged_ones() {
+    fn the_footer_separates_files_to_create_from_files_to_modify() {
         let un = plan(&plan_of(vec![file("Dockerfile", None, Status::AFaire)]));
-        assert!(un.ends_with("1 fichier à écrire"), "{un}");
+        assert!(un.ends_with("1 à créer"), "{un}");
 
         let plusieurs = plan(&plan_of(vec![
             file("Dockerfile", None, Status::AFaire),
@@ -278,8 +292,22 @@ mod tests {
             file("src/router.rs", Some("x"), Status::DejaFait),
         ]));
         assert!(
-            plusieurs.ends_with("2 fichiers à écrire, 1 inchangé"),
+            plusieurs.ends_with("1 à créer, 1 à modifier, 1 inchangé"),
             "{plusieurs}"
+        );
+
+        let tout = plan(&plan_of(vec![
+            file("Dockerfile", None, Status::AFaire),
+            file("src/notes/mod.rs", None, Status::AFaire),
+            file("src/notes/dto.rs", None, Status::AFaire),
+            file("Cargo.toml", Some("x"), Status::AFaire),
+            file("src/router.rs", Some("x"), Status::AFaire),
+            file("src/lib.rs", Some("x"), Status::DejaFait),
+            file("src/main.rs", Some("x"), Status::Conflit),
+        ]));
+        assert!(
+            tout.ends_with("3 à créer, 2 à modifier, 1 inchangé, 1 en conflit"),
+            "{tout}"
         );
     }
 
@@ -290,10 +318,7 @@ mod tests {
             file("src/main.rs", Some("x"), Status::Conflit),
         ]));
 
-        assert!(
-            rendered.ends_with("1 fichier à écrire, 1 en conflit"),
-            "{rendered}"
-        );
+        assert!(rendered.ends_with("1 à créer, 1 en conflit"), "{rendered}");
     }
 
     fn mailpit() -> Sautee {
@@ -318,7 +343,7 @@ mod tests {
         let rendered = super::plan(&plan);
 
         let (avant, apres) = rendered
-            .split_once("1 fichier à écrire")
+            .split_once("1 à modifier")
             .expect("le pied du tableau est là");
         assert!(!avant.contains("docker-compose.yml"), "{rendered}");
         assert!(apres.contains("docker-compose.yml absent"), "{rendered}");
@@ -414,7 +439,8 @@ mod tests {
         let rendered = plan(&plan_of(Vec::new()));
 
         assert!(rendered.contains("rien à faire"), "{rendered}");
-        assert!(!rendered.contains("à écrire"), "{rendered}");
+        assert!(!rendered.contains("à créer"), "{rendered}");
+        assert!(!rendered.contains("à modifier"), "{rendered}");
     }
 
     #[test]

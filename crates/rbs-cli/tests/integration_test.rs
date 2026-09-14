@@ -41,7 +41,7 @@ fn outside_a_project_the_command_says_so_and_fails() {
     commande.arg("test");
     let (code, sortie) = lancer(&mut commande);
 
-    assert_eq!(code, 1, "code de sortie inattendu :\n{sortie}");
+    assert_eq!(code, 2, "code de sortie inattendu :\n{sortie}");
     assert!(
         sortie.contains("projet rbs"),
         "le message ne dit pas ce qui manque :\n{sortie}"

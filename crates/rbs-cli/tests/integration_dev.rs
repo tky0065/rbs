@@ -32,7 +32,7 @@ fn outside_a_project_the_command_says_so_and_fails() {
 
     let (code, sortie) = dev(ailleurs.path());
 
-    assert_eq!(code, 1, "code de sortie inattendu :\n{sortie}");
+    assert_eq!(code, 2, "code de sortie inattendu :\n{sortie}");
     assert!(
         sortie.contains("projet rbs"),
         "le message ne dit pas ce qui manque :\n{sortie}"
@@ -69,7 +69,7 @@ fn a_project_pointing_at_a_dead_port_names_the_host_and_port() {
 
     let (code, sortie) = dev(&projet);
 
-    assert_eq!(code, 1, "code de sortie inattendu :\n{sortie}");
+    assert_eq!(code, 3, "code de sortie inattendu :\n{sortie}");
     assert!(
         sortie.contains("127.0.0.1") && sortie.contains(&port.to_string()),
         "le message ne nomme pas la base injoignable :\n{sortie}"

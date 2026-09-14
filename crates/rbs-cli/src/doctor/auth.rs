@@ -45,8 +45,12 @@ fn check_with(root: &Path, config: &Config, env: impl Fn(&str) -> Option<String>
 
     let mut defauts = Vec::new();
     let mut remedes = Vec::new();
+    let mut renvoi = false;
 
     match secret {
+        // Le contrôle `.env` a déjà nommé la clé, avec son remède : la nommer ici aussi
+        // compterait deux fautes pour une ligne à écrire.
+        None if super::env::signalee(root, SECRET) => renvoi = true,
         None => {
             defauts.push(format!(
                 "{SECRET} n'est renseignée ni dans le {FICHIER} ni dans l'environnement"
@@ -83,6 +87,13 @@ fn check_with(root: &Path, config: &Config, env: impl Fn(&str) -> Option<String>
     if let Some((defaut, remede)) = super::defaut_de_section(config, SECTION, REGLAGES) {
         defauts.push(defaut);
         remedes.push(remede);
+    }
+
+    if defauts.is_empty() && renvoi {
+        return Check::ok(
+            TITRE,
+            format!("rien d'autre à signaler — {SECRET} relève du contrôle .env"),
+        );
     }
 
     if defauts.is_empty() {
@@ -137,9 +148,28 @@ mod tests {
         None
     }
 
+    /// `.env.example` déclare le secret et le `.env` ne le porte pas : le contrôle `.env`
+    /// le nomme déjà, avec son remède.
     #[test]
-    fn without_a_secret_the_diagnosis_names_the_variable() {
+    fn a_secret_missing_from_env_is_left_to_the_env_check() {
         let (_parent, root) = project_with_auth();
+
+        let check = check_with(&root, &Config::read(&root), bare);
+
+        assert_eq!(check.state, State::Bon, "{}", check.detail);
+        assert!(check.detail.contains(".env"), "{}", check.detail);
+    }
+
+    #[test]
+    fn a_secret_missing_from_both_files_is_still_named_by_auth() {
+        let (_parent, root) = project_with_auth();
+        let exemple = root.join(EXEMPLE);
+        let source = fs::read_to_string(&exemple).expect("exemple lisible");
+        fs::write(
+            &exemple,
+            source.replace(&format!("{SECRET}={EXEMPLE_DU_SECRET}\n"), ""),
+        )
+        .expect("exemple inscriptible");
 
         let check = check_with(&root, &Config::read(&root), bare);
 

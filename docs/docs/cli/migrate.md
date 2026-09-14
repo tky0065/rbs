@@ -198,4 +198,5 @@ erreur : la crate migration a échoué (code 1)
 `rbs migrate new` is immune to the last two: it never reads the `.env` and never opens a
 connection. It still needs a project.
 
-Each of these exits with status 1.
+Outside a project the exit status is 2, a call to correct; the other two exit with 1, a
+fault of the project. See [exit codes](./doctor.md#exit-codes).

@@ -139,6 +139,18 @@ impl Log {
     }
 }
 
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            // `--force` le lève : c'est la ligne de commande qui change, pas le projet.
+            Self::Conflit { .. } => Sortie::Usage,
+            Self::Ecriture { .. } => Sortie::Environnement,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::collections::BTreeMap;

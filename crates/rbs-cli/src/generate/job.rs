@@ -75,8 +75,10 @@ pub(crate) struct Planned {
 pub(crate) enum Bilan {
     /// Des fichiers ont été écrits ; des blocs restent peut-être à reporter.
     Ecrit {
-        /// Fichiers créés ou modifiés.
-        fichiers: usize,
+        /// Fichiers qui n'existaient pas.
+        crees: usize,
+        /// Fichiers existants réécrits.
+        modifies: usize,
         /// Insertions sautées, dont le plan affiche le bloc.
         a_reporter: usize,
     },
@@ -89,19 +91,17 @@ pub(crate) enum Bilan {
 impl Planned {
     /// Ce que l'application du plan aura fait.
     pub(crate) fn bilan(&self) -> Bilan {
-        // Une relance ne réécrit rien : « écrit — 0 fichier » annoncerait une écriture.
-        let fichiers = self
-            .plan
-            .files()
-            .iter()
-            .filter(|file| file.statut != plan::Status::DejaFait)
-            .count();
+        // Lu après une application réussie : un conflit resté au plan a été écrit par
+        // `--force`, faute de quoi l'application aurait refusé.
+        let ecrits = self.plan.bilan(true);
 
-        match (fichiers, self.plan.sautees().len()) {
+        // Une relance ne réécrit rien : « écrit — aucun fichier » annoncerait une écriture.
+        match (ecrits.crees + ecrits.modifies, self.plan.sautees().len()) {
             (0, 0) => Bilan::DejaEnPlace,
             (0, a_reporter) => Bilan::AReporter(a_reporter),
-            (fichiers, a_reporter) => Bilan::Ecrit {
-                fichiers,
+            (_, a_reporter) => Bilan::Ecrit {
+                crees: ecrits.crees,
+                modifies: ecrits.modifies,
                 a_reporter,
             },
         }
@@ -622,6 +622,37 @@ fn echeance_de(calendrier: &str, nom: &str, type_: &str) -> Option<String> {
         })
 }
 
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            // Chacun de ces refus dit « choisissez un autre nom » : c'est l'appel qui change.
+            Self::PasUnProjet
+            | Self::WorkingTreeSale(_)
+            | Self::Nom(_)
+            | Self::ModuleDeLaFile { .. }
+            | Self::NomDuDossier
+            | Self::NomDeCrate { .. }
+            | Self::ModuleDejaDeclare { .. }
+            | Self::FichierEtranger { .. }
+            | Self::SansJobs
+            | Self::SansScheduler
+            | Self::Cron(_)
+            | Self::KindPris { .. } => Sortie::Usage,
+            Self::Acces(_) => Sortie::Environnement,
+            // Le module est à déplacer, l'échéance existante à modifier à la main : c'est le
+            // projet qui change, aucun appel ne les contourne.
+            Self::Rendu { .. } | Self::HorsModules { .. } | Self::EcheanceExistante { .. } => {
+                Sortie::Faute
+            }
+            Self::Metadata(cause) => cause.sortie(),
+            Self::Plan(cause) => cause.sortie(),
+            Self::Application(cause) => cause.sortie(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     /// Sous `--json`, un refus se décide sur un code stable ; celui d'une feature absente
@@ -1019,7 +1050,8 @@ mod tests {
         assert_eq!(
             planned.bilan(),
             Bilan::Ecrit {
-                fichiers: 1,
+                crees: 1,
+                modifies: 0,
                 a_reporter: 3
             }
         );
