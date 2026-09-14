@@ -1461,12 +1461,54 @@ mod tests {
             .files()
             .expect("les templates embarquées doivent se lire");
 
-        let destinations: Vec<String> = files
+        let mut destinations: Vec<String> = files
             .iter()
             .map(|file| file.destination.to_string_lossy().into_owned())
             .collect();
+        destinations.sort();
 
-        assert_eq!(destinations, [".github/workflows/ci.yml"]);
+        assert_eq!(
+            destinations,
+            [".github/dependabot.yml", ".github/workflows/ci.yml"]
+        );
+    }
+
+    /// Un tag se déplace sous les pieds du projet, un SHA non : chaque action de la CI
+    /// engendrée est épinglée par le sien, et Dependabot, déposé avec elle, en propose les
+    /// montées.
+    #[test]
+    fn every_action_of_the_generated_ci_is_pinned_by_a_sha() {
+        let path = Path::new(RACINE_FEATURES).join("ci/.github/workflows/ci.yml.jinja");
+
+        for database in ["postgres", "mysql"] {
+            let rendu = render_fragment(
+                &path,
+                context! { database => database, ..feature_context(&[]) },
+            );
+            let actions: Vec<&str> = rendu
+                .lines()
+                .filter_map(|ligne| {
+                    ligne
+                        .trim_start()
+                        .trim_start_matches("- ")
+                        .strip_prefix("uses:")
+                })
+                .map(str::trim)
+                .collect();
+
+            assert_eq!(actions.len(), 3, "sur {database} :\n{rendu}");
+            for action in actions {
+                let sha = action
+                    .split_once('@')
+                    .map(|(_, reste)| reste.split_whitespace().next().unwrap_or_default())
+                    .unwrap_or_default();
+
+                assert!(
+                    sha.len() == 40 && sha.bytes().all(|octet| octet.is_ascii_hexdigit()),
+                    "`{action}` n'est pas épinglée par un SHA sur {database}"
+                );
+            }
+        }
     }
 
     #[test]

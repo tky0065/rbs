@@ -178,7 +178,7 @@ qui se construit, puis se conduit mal.
 | `webhooks` | La ligne qui inscrit `Delivery` dans `// <rbs:jobs>` de `src/modules/jobs/mod.rs` — `src/jobs/mod.rs` avant 1.3.0, où la ligne nomme `crate::webhooks` plutôt que `crate::modules::webhooks`. Sans elle, chaque livraison part en réessai, puis en échec. |
 | `audit` | La migration `create_audit_log`, déclarée et inscrite dans `migration/src/lib.rs`. |
 | `docker` | `config/production.toml`, le profil que le service `api` du compose retient par `RBS_ENV: production` — celui qui coupe `/docs`. |
-| `ci` | `.github/workflows/ci.yml`, seul fichier que pose le fragment. |
+| `ci` | `.github/workflows/ci.yml`, le workflow que GitHub exécute. Le `.github/dependabot.yml` du fragment n'est pas contrôlé : sans lui la CI tourne encore, seules ses actions cessent d'être montées. |
 
 Un fichier posé par l'un de ces fragments et disparu depuis se restaure depuis Git, et le
 remède le dit : `rbs add` ne rejoue pas une feature que le manifeste déclare déjà.
