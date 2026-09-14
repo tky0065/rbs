@@ -72,6 +72,18 @@ dépréciation.
   comporte mal. `scheduler` et `webhooks` lisent un projet qui les a reçus avant 1.3.0 là
   où il les porte encore, sous `src/`. Après la montée, un projet qui porte `cors` voit un
   nouvel avertissement tant qu'il n'a pas énuméré les origines de son front.
+- **Un projet engendré répond à `GET /health/live`, et son image Docker le sonde.** La
+  nouvelle route rend `200` sans rien interroger : une sonde de vie liée à la base ferait
+  redémarrer l'API en boucle par un orchestrateur, pendant une panne de base qu'aucun
+  redémarrage ne répare. `/health` ne change pas et répond toujours à la question de la
+  disponibilité, base et sondes comprises. L'image que construit `rbs add docker` déclare
+  un `HEALTHCHECK` sur la nouvelle route, parlé par bash et `/dev/tcp` puisque l'image ne
+  porte ni curl ni wget. Un projet engendré avant 1.5.0 garde son module de santé et son
+  `Dockerfile`, qu'aucune mise à niveau ne réécrit ; la note de mise à niveau donne les
+  lignes à coller.
+- **`rbs new` écrit un `CLAUDE.md` d'une ligne qui importe `AGENTS.md`.** Claude Code lit
+  `CLAUDE.md`, et n'atteint le guide que par son import `@AGENTS.md`. `rbs upgrade` crée
+  le fichier sur un projet qui ne l'a pas, et ne réécrit jamais un fichier existant.
 
 ### Modifié
 

@@ -68,6 +68,17 @@ between minor versions with no deprecation cycle.
   that builds and then misbehaves. `scheduler` and `webhooks` read a project that received
   them before 1.3.0 where it still carries them, under `src/`. After the upgrade, a project
   carrying `cors` sees a new warning until it lists its front's origins.
+- **A generated project answers `GET /health/live`, and its Docker image probes it.** The
+  new route returns `200` without querying anything: a liveness check tied to the
+  database would have an orchestrator restart the API in a loop over a database outage no
+  restart can fix. `/health` is unchanged and keeps answering readiness, database and
+  probes included. The image `rbs add docker` builds declares a `HEALTHCHECK` on the new
+  route, spoken through bash and `/dev/tcp` since the image carries neither curl nor wget.
+  A project generated before 1.5.0 keeps its health module and its `Dockerfile`, which no
+  upgrade rewrites; the upgrade note gives the lines to paste.
+- **`rbs new` writes a one-line `CLAUDE.md` that imports `AGENTS.md`.** Claude Code reads
+  `CLAUDE.md`, and reaches the handbook only through its `@AGENTS.md` import. `rbs upgrade`
+  creates the file on a project that lacks it, and never rewrites one that exists.
 
 ### Changed
 
