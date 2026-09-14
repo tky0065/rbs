@@ -765,6 +765,28 @@ mod tests {
             .source
     }
 
+    /// L'erreur de construction du pool Redis part dans les journaux : l'URL y paraît
+    /// masquée par `rbs-core`, jamais telle que `[cache] url` la porte, mot de passe compris.
+    #[test]
+    fn the_redis_pool_error_masks_the_url_password() {
+        for (fragment, fichier, champ) in [
+            ("redis", "mod.rs.jinja", "config.url"),
+            ("rate-limit", "counter.rs.jinja", "cache.url"),
+        ] {
+            let path = Path::new(RACINE_FEATURES).join(fragment).join(fichier);
+            let rendu = render_fragment(&path, feature_context(&["redis"]));
+
+            assert!(
+                !rendu.contains(&format!("`{{}}`\", {champ})")),
+                "{fragment}/{fichier} cite l'URL en clair :\n{rendu}"
+            );
+            assert!(
+                rendu.contains(&format!("rbs_core::db::redact_url(&{champ})")),
+                "{fragment}/{fichier} ne masque pas l'URL :\n{rendu}"
+            );
+        }
+    }
+
     /// Un mot de passe sans borne haute fait hacher en Argon2 un corps de plusieurs
     /// mégaoctets : la borne est ce qui sépare une API d'un amplificateur.
     #[test]
