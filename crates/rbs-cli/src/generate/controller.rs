@@ -830,6 +830,205 @@ mod tests {
         );
     }
 
+    /// Rend le contrôleur d'une feature dont la liste `GET` pagine par curseur.
+    fn by_cursor(name: &str) -> String {
+        let fields = fields::parse("title:string").expect("champs valides");
+        render(&Feature::fresh(name, fields).paged_by_cursor())
+            .expect("le contrôleur doit se rendre")
+    }
+
+    /// Le même, sous `auth`.
+    fn by_cursor_authenticated(name: &str) -> String {
+        let fields = fields::parse("title:string").expect("champs valides");
+        render(
+            &Feature::fresh(name, fields)
+                .paged_by_cursor()
+                .authenticated(),
+        )
+        .expect("le contrôleur doit se rendre")
+    }
+
+    /// Sous `--cursor`, `list` extrait le curseur du noyau et annonce la page qu'il rend :
+    /// un document qui promettrait encore `page` ferait chercher au client un paramètre que
+    /// la route ignore.
+    #[test]
+    fn under_cursor_the_list_takes_a_cursor_and_returns_a_cursor_page() {
+        let rendered = by_cursor("articles");
+        let liste = handler(&rendered, "list");
+
+        for attendu in [
+            r#"("after" = Option<Uuid>, Query, description = "identifiant après lequel reprendre ; absent, la première page"),"#,
+            r#"("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")"#,
+            r#"(status = 200, description = "page de articles", body = CursorPage<ArticleResponse>),"#,
+            r#"(status = 400, description = "curseur ou pagination illisible", body = ProblemDetails, content_type = "application/problem+json")"#,
+            "    cursor: Cursor,\n) -> Result<Json<CursorPage<ArticleResponse>>> {\n    \
+             Ok(Json(service::list(state.core().db(), &cursor).await?))\n}",
+        ] {
+            assert!(
+                liste.contains(attendu),
+                "« {attendu} » absent de `list` :\n{liste}"
+            );
+        }
+        for absent in [r#"("page" = "#, "pagination: Pagination", "body = Page<"] {
+            assert!(
+                !liste.contains(absent),
+                "« {absent} » survit dans `list` sous --cursor :\n{liste}"
+            );
+        }
+    }
+
+    /// La route de filtre garde sa pagination par page : un curseur sur l'`id` serait faux
+    /// dès que le tri, libre, porte sur une autre colonne.
+    #[test]
+    fn under_cursor_the_filter_keeps_its_page() {
+        let rendered = by_cursor("articles");
+        let filtre = handler(&rendered, "filter");
+
+        for attendu in [
+            r#"("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),"#,
+            r#"body = Page<ArticleResponse>),"#,
+            "    pagination: Pagination,\n    Json(filtre): Json<ArticleFilter>,\n\
+             ) -> Result<Json<Page<ArticleResponse>>> {",
+            "service::filter(state.core().db(), &filtre, &pagination)",
+        ] {
+            assert!(
+                filtre.contains(attendu),
+                "« {attendu} » absent de `filter` sous --cursor :\n{filtre}"
+            );
+        }
+    }
+
+    /// Les deux pages servent sous `--cursor` : `Page` et `Pagination` à `filter`, `Cursor`
+    /// et `CursorPage` à `list`. Le projet engendré compile sous `-D warnings`, où un
+    /// import de trop arrête la construction autant qu'un import manquant.
+    #[test]
+    fn under_cursor_the_core_import_names_both_pages() {
+        for rendered in [by_cursor("articles"), by_cursor_authenticated("articles")] {
+            let import = rendered
+                .split("use rbs_core::{")
+                .nth(1)
+                .and_then(|suite| suite.split("};").next())
+                .unwrap_or_else(|| panic!("l'import du noyau est rendu :\n{rendered}"));
+            let noms: Vec<&str> = import
+                .split([',', ' ', '\n'])
+                .filter(|nom| !nom.is_empty())
+                .collect();
+
+            for nom in ["Cursor", "CursorPage", "Page", "Pagination"] {
+                assert!(
+                    noms.contains(&nom),
+                    "`{nom}` manque à l'import du noyau : {noms:?}"
+                );
+            }
+        }
+    }
+
+    /// Sous `auth`, la liste par curseur reste fermée comme les cinq autres routes, et sa
+    /// garde se détache du corps comme partout ailleurs.
+    #[test]
+    fn under_cursor_and_auth_the_list_keeps_its_guard() {
+        let rendered = by_cursor_authenticated("articles");
+        let liste = handler(&rendered, "list");
+
+        for attendu in [
+            r#"security(("bearer" = [])),"#,
+            "status = 401",
+            "status = 403",
+            "    identite: Identity,\n    cursor: Cursor,\n",
+            "    identite.require_role(Role::User)?;\n\n    \
+             Ok(Json(service::list(state.core().db(), &cursor).await?))",
+        ] {
+            assert!(
+                liste.contains(attendu),
+                "« {attendu} » absent de `list` sous --cursor et auth :\n{liste}"
+            );
+        }
+        assert_eq!(
+            rendered
+                .matches("identite.require_role(Role::User)?;\n\n")
+                .count(),
+            6,
+            "les six routes gardent leur garde, suivie d'une ligne vide :\n{rendered}"
+        );
+    }
+
+    /// Témoin : sans le drapeau, le contrôleur ne porte rien du curseur.
+    #[test]
+    fn without_cursor_the_controller_carries_nothing_of_the_cursor() {
+        let rendered = controller("articles");
+
+        assert!(
+            !rendered.contains("Cursor") && !rendered.contains(r#""after""#),
+            "sans `--cursor`, la liste pagine par page :\n{rendered}"
+        );
+    }
+
+    /// Le handler `list`, seul propre au curseur, isolé du reste du fichier.
+    fn cursor_list(source: &str) -> Option<String> {
+        source
+            .split("pub async fn list(")
+            .nth(1)
+            .and_then(|suite| suite.split("\n}\n").next())
+            .map(str::to_owned)
+    }
+
+    /// La même garde sous `--cursor`, et le même ensemble que le rendu par défaut : l'import
+    /// des DTO le borne dès vingt-quatre caractères. L'import du noyau, allongé de
+    /// `Cursor` et `CursorPage`, ne suit pas le nom de l'entité — il est écrit éclaté une
+    /// fois pour toutes.
+    ///
+    /// Au-delà de vingt-trois, la divergence de l'import masquerait toute autre : le
+    /// handler `list` est donc comparé à part à la sortie de rustfmt, à chaque longueur.
+    #[test]
+    fn the_cursor_render_is_already_what_rustfmt_would_write() {
+        assert_eq!(
+            bench::longueurs_divergentes(by_cursor),
+            (24..=40).collect::<Vec<usize>>(),
+            "la plage où le contrôleur diverge de rustfmt a bougé sous --cursor"
+        );
+
+        for taille in 1..=40 {
+            let rendered = by_cursor(&("a".repeat(taille - 1) + "e"));
+            assert_eq!(
+                cursor_list(&rendered),
+                cursor_list(&bench::formatted(&rendered)),
+                "le `list` du curseur s'écarte de rustfmt à {taille} caractères"
+            );
+        }
+    }
+
+    /// La même garde sous `--cursor` et `auth` : `identite` allonge l'import du noyau et la
+    /// signature de `list`, sans que ni l'un ni l'autre ne suive le nom de l'entité.
+    #[test]
+    fn the_guarded_cursor_render_is_already_what_rustfmt_would_write() {
+        assert_eq!(
+            bench::longueurs_divergentes(by_cursor_authenticated),
+            (24..=40).collect::<Vec<usize>>(),
+            "la plage où le contrôleur gardé diverge de rustfmt a bougé sous --cursor"
+        );
+
+        for taille in 1..=40 {
+            let rendered = by_cursor_authenticated(&("a".repeat(taille - 1) + "e"));
+            assert_eq!(
+                cursor_list(&rendered),
+                cursor_list(&bench::formatted(&rendered)),
+                "le `list` gardé du curseur s'écarte de rustfmt à {taille} caractères"
+            );
+        }
+    }
+
+    /// Le rendu entier du contrôleur sous `--cursor` et `auth`, figé octet à octet : aucun
+    /// exemple n'emploie le drapeau, et rustfmt ne rétablit pas une ligne vide perdue sous
+    /// la bascule.
+    #[test]
+    fn the_cursor_controller_renders_the_frozen_fixture() {
+        bench::fige(
+            "fixtures/cursor/controller.rs",
+            &render(&bench::articles_par_curseur().authenticated())
+                .expect("le contrôleur doit se rendre"),
+        );
+    }
+
     /// Ce que le projet généré vérifie de son propre document OpenAPI.
     ///
     /// Le projet est un binaire : un test d'intégration ne pourrait pas atteindre son

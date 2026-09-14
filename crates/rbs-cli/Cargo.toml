@@ -17,6 +17,7 @@ chrono.workspace = true
 clap.workspace = true
 clap_complete.workspace = true
 console.workspace = true
+cron.workspace = true
 include_dir.workspace = true
 inquire.workspace = true
 minijinja.workspace = true
@@ -34,3 +35,14 @@ watchexec-signals.workspace = true
 assert_cmd.workspace = true
 tempfile.workspace = true
 testcontainers.workspace = true
+
+# `cargo binstall rbs-cli` télécharge l'archive que la release GitHub du tag porte, au lieu
+# de compiler. Le nom `rbs-<cible>` est celui que `.github/workflows/release.yml` donne à
+# chaque archive : l'un ne change pas sans l'autre.
+[package.metadata.binstall]
+pkg-url = "{ repo }/releases/download/v{ version }/rbs-{ target }{ archive-suffix }"
+bin-dir = "{ bin }{ binary-ext }"
+pkg-fmt = "tgz"
+
+[package.metadata.binstall.overrides.x86_64-pc-windows-msvc]
+pkg-fmt = "zip"

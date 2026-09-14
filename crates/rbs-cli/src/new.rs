@@ -231,9 +231,19 @@ pub fn create(options: &Options, parent: &Path) -> Result<Project, Error> {
         Error::Ecriture { path, source }
     })?;
 
+    // Écrit par le CLI et non tiré du squelette, comme `AGENTS.md` qu'il importe : un
+    // `--template-dir` qui ne porte que le squelette le reçoit, et `upgrade` en connaît le
+    // contenu sans relire aucune template.
+    let claude = root.join(crate::agents::CLAUDE);
+    fs::write(&claude, crate::agents::CLAUDE_CONTENU).map_err(|source| {
+        let path = claude.display().to_string();
+        let _ = fs::remove_dir_all(&root);
+        Error::Ecriture { path, source }
+    })?;
+
     Ok(Project {
         depot_git: git_init(&root),
-        files: rendus.len() + 1,
+        files: rendus.len() + 2,
         installed,
         sautees,
         root,
@@ -729,6 +739,49 @@ mod tests {
         // Sans `tag =`, utoipa retombe sur le chemin de module et le document porte
         // `crate::health::controller` en guise de section.
         assert!(controleur.contains("tag = \"health\""), "{controleur}");
+    }
+
+    /// Une liveness qui sonde la base fait redémarrer l'API en boucle quand c'est la base
+    /// qui tombe : `/health/live` ne prend pas l'état, et ne peut donc rien interroger.
+    #[test]
+    fn the_liveness_route_is_mounted_documented_and_queries_nothing() {
+        let parent = parent();
+
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+
+        let controleur = read(&project.root.join("src/health/controller.rs"));
+        assert!(
+            controleur.contains("pub async fn live() -> StatusCode"),
+            "{controleur}"
+        );
+        assert!(
+            controleur.contains("path = \"/health/live\""),
+            "{controleur}"
+        );
+        assert!(
+            controleur.contains("operation_id = \"health_live\""),
+            "{controleur}"
+        );
+
+        let routes = read(&project.root.join("src/health/mod.rs"));
+        assert!(
+            routes.contains(".route(\"/health/live\", get(controller::live))"),
+            "{routes}"
+        );
+        assert!(
+            routes.contains(".route(\"/health\", get(controller::health))"),
+            "{routes}"
+        );
+
+        // `health` reste la ligne d'accroche de `<rbs:openapi>` : `live` passe avant elle.
+        let openapi = read(&project.root.join("src/openapi.rs"));
+        assert!(
+            openapi.contains(
+                "crate::health::controller::live,\n        \
+                 crate::health::controller::health,\n        // <rbs:openapi>"
+            ),
+            "{openapi}"
+        );
     }
 
     #[test]
@@ -1254,7 +1307,7 @@ mod tests {
         assert!(compose.contains("- \"5432:5432\""), "{compose}");
         assert!(compose.contains("# <rbs:services>"), "{compose}");
         assert!(compose.contains("# </rbs:services>"), "{compose}");
-        assert_eq!(project.files, 21);
+        assert_eq!(project.files, 22);
     }
 
     /// Le compose est versionné, le `.env` ne l'est pas : les identifiants vivent dans
@@ -1438,7 +1491,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 20);
+        assert_eq!(project.files, 21);
     }
 
     #[test]
@@ -1459,7 +1512,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 20);
+        assert_eq!(project.files, 21);
     }
 
     /// Une URL sans identifiants est valide et acceptée par `parse` : sans cette
@@ -1485,7 +1538,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 20);
+        assert_eq!(project.files, 21);
     }
 
     /// L'expression est celle qu'`rbs add` porte aussi : les identifiants d'une URL que
@@ -1634,6 +1687,40 @@ mod tests {
             !module.contains("trop de requêtes : réessayez plus tard"),
             "{module}"
         );
+    }
+
+    /// Claude Code ne lit pas `AGENTS.md` de lui-même : il suit l'import que déclare un
+    /// `CLAUDE.md`, où rien d'autre ne doit figurer qui puisse diverger du guide.
+    #[test]
+    fn a_new_project_carries_a_claude_file_importing_its_agents_file() {
+        let parent = parent();
+
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+
+        assert_eq!(read(&project.root.join("CLAUDE.md")), "@AGENTS.md\n");
+    }
+
+    /// Le fichier vient du CLI, comme `AGENTS.md`, et non du squelette : un
+    /// `--template-dir` qui ne porte que le squelette le reçoit quand même.
+    #[test]
+    fn a_template_dir_holding_only_the_skeleton_still_gets_its_claude_file() {
+        let parent = TempDir::new().expect("répertoire temporaire créable");
+
+        let project = create(
+            &Options {
+                name: "demo-api".to_string(),
+                database_url: "postgres://rbs:rbs@localhost:5432/demo_api".to_string(),
+                database: Default::default(),
+                features: Vec::new(),
+                core_path: None,
+                template_dir: Some(PathBuf::from(SQUELETTE)),
+                lang: crate::lang::Lang::Fr,
+            },
+            parent.path(),
+        )
+        .expect("un `--template-dir` qui ne porte que le squelette doit suffire à créer le projet");
+
+        assert_eq!(read(&project.root.join("CLAUDE.md")), "@AGENTS.md\n");
     }
 
     /// `--template-dir` ne remplace que le squelette de projet : les guides `AGENTS.md`

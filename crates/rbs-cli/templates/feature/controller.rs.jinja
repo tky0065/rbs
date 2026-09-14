@@ -17,7 +17,19 @@ use axum::http::StatusCode;
 {%- if with_upload %}
 use axum::response::IntoResponse;
 {%- endif %}
-{%- if auth %}
+{#- `Cursor` et `CursorPage` allongent l'import au-delà des cent colonnes, sans rien qui suive
+    le nom de l'entité : il s'écrit donc éclaté une fois pour toutes, comme rustfmt le
+    répartit — `ValidatedJson` passe seul à la ligne dès qu'`Identity` s'y ajoute. #}
+{%- if cursor and auth %}
+use rbs_core::{
+    Cursor, CursorPage, HasCoreState, Identity, Page, Pagination, ProblemDetails, Result,
+    ValidatedJson,
+};
+{%- elif cursor %}
+use rbs_core::{
+    Cursor, CursorPage, HasCoreState, Page, Pagination, ProblemDetails, Result, ValidatedJson,
+};
+{%- elif auth %}
 use rbs_core::{HasCoreState, Identity, Page, Pagination, ProblemDetails, Result, ValidatedJson};
 {%- else %}
 use rbs_core::{HasCoreState, Page, Pagination, ProblemDetails, Result, ValidatedJson};
@@ -55,12 +67,22 @@ use crate::state::AppState;
     security(("bearer" = [])),
 {%- endif %}
     params(
+{%- if cursor %}
+        ("after" = Option<Uuid>, Query, description = "identifiant après lequel reprendre ; absent, la première page"),
+{%- else %}
         ("page" = Option<u64>, Query, description = "numéro de page, à partir de 1"),
+{%- endif %}
         ("per_page" = Option<u64>, Query, description = "éléments par page, 100 au plus")
     ),
     responses(
+{%- if cursor %}
+        (status = 200, description = "page de {@ module @}", body = CursorPage<{@ entity @}Response>),
+        (status = 400, description = "curseur ou pagination illisible", body = ProblemDetails, content_type = "application/problem+json")
+{%- else %}
         (status = 200, description = "page de {@ module @}", body = Page<{@ entity @}Response>),
-        (status = 400, description = "pagination illisible", body = ProblemDetails, content_type = "application/problem+json"){% if auth %},
+        (status = 400, description = "pagination illisible", body = ProblemDetails, content_type = "application/problem+json")
+{%- endif %}
+{%- if auth %},
         (status = 401, description = "jeton absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "rôle insuffisant", body = ProblemDetails, content_type = "application/problem+json"){% endif %}
     )
@@ -70,12 +92,21 @@ pub async fn list(
 {%- if auth %}
     identite: Identity,
 {%- endif %}
+{%- if cursor %}
+    cursor: Cursor,
+) -> Result<Json<CursorPage<{@ entity @}Response>>> {
+{%- else %}
     pagination: Pagination,
 ) -> Result<Json<Page<{@ entity @}Response>>> {
+{%- endif %}
 {%- if auth %}
     identite.require_role(Role::{@ role_lecture @})?;
 {% endif %}
+{%- if cursor %}
+    Ok(Json(service::list(state.core().db(), &cursor).await?))
+{%- else %}
     Ok(Json(service::list(state.core().db(), &pagination).await?))
+{%- endif %}
 }
 
 /// Filtrer est une lecture : le corps porte les conditions, que l'URL rendrait illisibles.

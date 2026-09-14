@@ -29,6 +29,7 @@ Arguments:
 Options:
       --force                  Applique les modifications même si le working tree Git est sale
       --dry-run                Affiche le plan sans rien écrire
+      --json                   Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
       --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
   -h, --help                   Print help
   -V, --version                Print version
@@ -38,6 +39,7 @@ Options:
 |---|---|
 | `--force` | Applique même si le working tree Git est sale, et écrase les fichiers signalés en conflit. |
 | `--dry-run` | Affiche le plan et s'arrête. Rien n'est écrit. |
+| `--json` | Rend le plan — ou l'erreur — en un seul document JSON sur la sortie standard, à la place du texte coloré : chaque action avec son effet, le contenu complet des fichiers créés, et `applique` pour dire si quelque chose a été écrit. Indépendant de `--dry-run`. [Le guide des agents](../guides/agents.md#lire-un-plan-en-json) donne le document et les codes d'erreur. |
 | `--template-dir <CHEMIN>` | Lit les fragments dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire. |
 
 ## Les treize features
@@ -93,6 +95,15 @@ plan pour /private/tmp/rbs-demo/blog
 `migrate` et `api` portent `profiles: ["app"]` : c'est le profil qui les bâtit et les
 démarre. `docker compose up -d` seul — ce que [`rbs dev`](./dev.md) lance — laisse
 l'infrastructure tranquille.
+
+Le `Dockerfile` porte son propre `HEALTHCHECK`, et c'est lui qui fait afficher `healthy`
+au conteneur `api` dans `docker ps` — sous le compose comme sous un `docker run` nu. Il
+sonde `/health/live`, et non `/health` : la route de vie n'interroge rien, si bien qu'une
+base tombée fait passer `/health` au `503` sans rendre le conteneur malade — redémarrer
+l'API ne ramènerait pas la base. L'image ne porte ni `curl` ni `wget` : la sonde parle
+HTTP par le `/dev/tcp` de bash, sur le port `8080`, celui que déclare `EXPOSE` ; l'un ne
+bouge pas sans l'autre. Kubernetes ignore tout `HEALTHCHECK` : ses sondes se déclarent
+dans le manifeste, `livenessProbe` sur `/health/live` et `readinessProbe` sur `/health`.
 
 Un projet sans compose où insérer — SQLite, ou créé avant rbs 1.1.0 — en reçoit un entier :
 
@@ -432,14 +443,16 @@ sinon un plan vide, donc une commande qui réussit sans rien faire.
 ## Les ancres
 
 `rbs add` écrit surtout des fichiers entiers et modifie le manifeste ; c'est [`rbs
-generate`](./generate.md#les-ancres) qui insère dans les treize ancres en commentaires
+generate`](./generate.md#les-ancres) qui insère dans les quinze ancres en commentaires
 Rust du projet — `// <rbs:features>` (dans `src/lib.rs`, ou dans `src/main.rs` sur un
 projet sans bibliothèque — voir [plus bas](./generate.md#les-ancres)),
 `// <rbs:modules>` (optionnelle : seul un projet qui a installé un fragment sous
 `src/modules/` la porte), `// <rbs:routes>`, `// <rbs:layers>`, `// <rbs:openapi>`,
 `// <rbs:migration_modules>`, `// <rbs:migrations>`, `// <rbs:state_champs>`,
-`// <rbs:state_init>`, `// <rbs:startup>`, `// <rbs:seeds>`, `// <rbs:health_probes>` et
-`// <rbs:jobs>` (optionnelle aussi : seul un projet qui porte la file la porte).
+`// <rbs:state_init>`, `// <rbs:startup>`, `// <rbs:seeds>`, `// <rbs:health_probes>`,
+`// <rbs:jobs>` et `// <rbs:job_modules>` (optionnelles aussi : seul un projet qui porte la
+file les porte), et `// <rbs:schedules>` (optionnelle aussi : seul un projet qui porte le
+calendrier la porte).
 
 `// <rbs:layers>` est l'endroit où un fragment empile un middleware, et elle ne
 s'interchange pas avec `// <rbs:routes>` qui la précède de quelques lignes : un `.layer()`
@@ -453,9 +466,9 @@ toutes les trois.
 services `api` et `migrate` vont dans `# <rbs:services>`, l'ancre YAML que porte un
 compose — voir [plus haut](#les-treize-features). La règle est la même partout : aucun AST
 n'est jamais réécrit, et une ancre absente fait que la commande n'écrit rien et affiche le
-bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les quatorze — onze sur
+bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les seize — onze sur
 un projet qui ne porte ni compose, ni file, ni fragment déplacé sous `src/modules/`, les
-trois optionnelles.
+cinq optionnelles.
 
 Un projet engendré avant l'existence de `// <rbs:layers>` ne la porte pas, et `rbs upgrade`
 ne l'ajoute pas : cette commande aligne le manifeste et les zones de l'`AGENTS.md`, et ne

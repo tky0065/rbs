@@ -40,8 +40,82 @@ between minor versions with no deprecation cycle.
   before 1.5.0 keeps working without them, and takes `src/modules/jobs/worker.rs` and
   `queue.rs` from the fragment when it wants the behaviour. `rbs doctor` proposes both
   keys in the block it prints when the section is missing.
+- **Every GitHub release carries prebuilt binaries, and `cargo binstall rbs-cli` finds
+  them.** A tag now attaches `rbs` and `rbs-cli` for Linux (x86_64 and aarch64, built
+  against the glibc of Ubuntu 22.04), macOS (Intel and Apple silicon) and Windows
+  (x86_64), each archive with its SHA-256 checksum, to a GitHub release whose notes are
+  this file's section for the version. `rbs-cli` declares `[package.metadata.binstall]`,
+  so `cargo binstall rbs-cli` downloads the archive for your platform instead of
+  compiling — installing rbs on a CI runner no longer costs a build of axum and sea-orm.
+- **`rbs generate job <name>` writes a job of the queue, and `--every "<cron>"` its due
+  date.** One plan creates `src/modules/jobs/<name>.rs`, declares the module between the
+  new `// <rbs:job_modules>` markers, registers it in `// <rbs:jobs>` and, under
+  `--every`, pushes it onto the calendar in the new `// <rbs:schedules>`. The expression
+  is judged with the crate and the normalisation the project's own startup uses, before
+  anything is written. The command requires `jobs` (and `scheduler` under `--every`), and
+  refuses a name that is a Rust keyword, a module of the queue, `jobs`, or a crate the
+  queue's code names — declared in `src/modules/jobs/mod.rs`, it would hide that
+  crate. On a project generated before 1.5.0 the anchors are
+  missing: the job's file is written, and the declaration, the registration and the due
+  date — each of which needs the one before — are printed to paste rather than written
+  without what they name. A project that received `jobs` or `scheduler` before 1.3.0 is
+  refused, with the move to make by hand.
+- **`rbs doctor` checks seven more fragments.** `cors` warns on an empty `origins`,
+  `rate-limit` wants its section, `scheduler` reads every literal expression of the
+  calendar as the startup will, `webhooks` wants the delivery registered with the queue,
+  `audit` its migration declared and in the `Migrator`, `docker` the
+  `config/production.toml` its compose selects, `ci` its workflow. Each names a project
+  that builds and then misbehaves. `scheduler` and `webhooks` read a project that received
+  them before 1.3.0 where it still carries them, under `src/`. After the upgrade, a project
+  carrying `cors` sees a new warning until it lists its front's origins.
+- **A generated project answers `GET /health/live`, and its Docker image probes it.** The
+  new route returns `200` without querying anything: a liveness check tied to the
+  database would have an orchestrator restart the API in a loop over a database outage no
+  restart can fix. `/health` is unchanged and keeps answering readiness, database and
+  probes included. The image `rbs add docker` builds declares a `HEALTHCHECK` on the new
+  route, spoken through bash and `/dev/tcp` since the image carries neither curl nor wget.
+  A project generated before 1.5.0 keeps its health module and its `Dockerfile`, which no
+  upgrade rewrites; the upgrade note gives the lines to paste.
+- **`rbs new` writes a one-line `CLAUDE.md` that imports `AGENTS.md`.** Claude Code reads
+  `CLAUDE.md`, and reaches the handbook only through its `@AGENTS.md` import. `rbs upgrade`
+  creates the file on a project that lacks it, and never rewrites one that exists.
+- **`rbs test` runs a project's whole test suite the way its CI does.** It brings up the
+  compose services, waits for the database, applies the migrations, then runs
+  `cargo test --workspace --no-fail-fast -- --include-ignored` — the command the workflow
+  of `rbs add ci` runs. A filter and arguments for libtest pass through
+  (`rbs test articles -- --nocapture`), and the exit code of `cargo test` comes back
+  unchanged, so a script tells a red test from a failure of the CLI. The testing guide now
+  starts from it.
+- **`rbs routes` lists a project's routes, and `rbs openapi export` prints its OpenAPI
+  document**, neither starting a server: both read what the project's `openapi` binary
+  prints, as `rbs generate client` does. `routes` shows method, path, `operation_id` and
+  guard — `bearer` or `public` —, with `--json` for a script; `openapi export` writes to
+  standard output, or to the file `--out` names, relative to the directory it runs in.
+- **`rbs generate crud --cursor` pages the list by cursor.** `GET /<resource>` takes `after`
+  and `per_page` and returns a `rbs_core::CursorPage`: no `COUNT(*)`, and a row inserted
+  between two requests no longer shifts the window. The filter route keeps its numbered
+  pages, since a cursor on `id` is wrong as soon as the sort falls on another column. The
+  generated tests walk the pages until `next` goes out; `--soft-delete`, `--role`,
+  `--with-upload` and `--has-many` combine with it.
+- **Every command that plans takes `--json`.** `rbs add`, `rbs generate crud`, `feature`,
+  `client` and `job`, and `rbs upgrade` then print a single JSON document on standard
+  output instead of the coloured plan: every action with its full content, the insertions
+  left to paste with their `bloc` and their `cause`, and the count of created and modified
+  files, `applique` saying whether anything was written. A refusal becomes an `erreur`
+  document carrying `code`, `message`, `remede` and `bloc`, with the exit code unchanged;
+  the codes are stable, and listed in the agents guide. An argument the parser refuses
+  stays text, with exit code 2.
 
 ### Changed
+
+- **`rbs add jobs` and `rbs add scheduler` each carry one more anchor, and `schedules()`
+  is written as instructions.** `// <rbs:job_modules>` sits under `pub mod worker;`, and
+  `// <rbs:schedules>` under `let mut calendrier = Vec::new();` — the calendar left its
+  `vec![]` literal, where an anchor does not survive rustfmt once a second element joins
+  it. On a project generated earlier, `rbs doctor` fails on the missing `job_modules`,
+  which `rbs doctor --fix` puts back, and only warns about `schedules`: `schedules()` has
+  to be rewritten by hand first, and a healthy project must not fail a CI meanwhile. The
+  upgrade note gives the form to paste.
 
 - **A webhook subscription can no longer reach the project's own network.** Outside the
   `development` profile, `POST /webhooks/subscriptions` answers 400 to a non-`https` URL

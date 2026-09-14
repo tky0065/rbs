@@ -23,7 +23,11 @@ pub async fn {@ nom @}(
     Au-delà de vingt-six caractères d'entité, une troisième forme bouge — l'appel
     `filter(db, &…Filter::default(), pagination).await` de `list`, dont rustfmt éventaille
     les arguments à un seuil qui ne porte le nom d'aucun réglage. La template s'arrête ici :
-    `format::format_batch` reprend la main à l'écriture. -#}
+    `format::format_batch` reprend la main à l'écriture.
+
+    Sous `cursor`, `list` ne fait plus cet appel. Reste, dès trente-huit caractères, la
+    ligne `let (…, total) = tokio::try_join!(…)?;` de `filter`, commune aux deux rendus,
+    que la même main rattrape. -#}
 {% macro chaine(receveur, maillons, indentation) -%}
 {% set une_ligne = receveur ~ (maillons | join("")) -%}
 {% if une_ligne | length <= 60 -%}
@@ -35,24 +39,34 @@ pub async fn {@ nom @}(
 {%- endfor %}
 {%- endif %}
 {%- endmacro -%}
+{% if cursor -%}
+use rbs_core::{Cursor, Error, Pagination, Result};
+{%- else -%}
 use rbs_core::{Error, Pagination, Result};
+{%- endif %}
 use sea_orm::error::SqlErr;
 {%- if soft_delete %}
 use sea_orm::prelude::Expr;
+{%- endif %}
 use sea_orm::prelude::Uuid;
+{%- if cursor %}
+use sea_orm::{
+    ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, PaginatorTrait,
+    QueryFilter, QueryOrder, QuerySelect,
+};
+{%- elif soft_delete %}
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, DatabaseConnection, DbErr, EntityTrait, PaginatorTrait,
     QueryFilter, QuerySelect,
 };
 {%- else %}
-use sea_orm::prelude::Uuid;
 use sea_orm::{
     ActiveModelTrait, DatabaseConnection, DbErr, EntityTrait, PaginatorTrait, QuerySelect,
 };
 {%- endif %}
 
 use super::filter::{self, {@ entity @}Filter};
-{%- if soft_delete %}
+{%- if cursor or soft_delete %}
 use super::model::{Column, Entity};
 {%- else %}
 use super::model::Entity;
@@ -61,12 +75,35 @@ use super::model::Entity;
 // Le service passe par cette porte plutôt que par `model.rs` : la couche qui parle à la
 // base reste la seule à connaître l'entité.
 pub use super::model::{ActiveModel, Model};
+{%- if cursor %}
+
+pub async fn list(db: &DatabaseConnection, cursor: &Cursor) -> Result<Vec<Model>> {
+    // Deux chemins de lecture, et c'est voulu : un curseur sur l'`id` n'a de sens que
+    // trié sur l'`id`, quand le filtre accepte tout tri. La route de filtre garde donc
+    // sa pagination par page.
+{%- if soft_delete %}
+    let mut requete = Entity::find().filter(Column::DeletedAt.is_null());
+{%- else %}
+    let mut requete = Entity::find();
+{%- endif %}
+    if let Some(after) = cursor.after() {
+        requete = requete.filter(Column::Id.lt(after));
+    }
+
+    Ok(requete
+        .order_by_desc(Column::Id)
+        .limit(cursor.per_page())
+        .all(db)
+        .await?)
+}
+{%- else %}
 
 pub async fn list(db: &DatabaseConnection, pagination: &Pagination) -> Result<(Vec<Model>, u64)> {
     // Un seul chemin de lecture : la liste est le filtre vide, qui trie sur l'`id`
     // décroissant. Deux chemins divergeraient au premier tri ajouté.
     filter(db, &{@ entity @}Filter::default(), pagination).await
 }
+{%- endif %}
 
 pub async fn filter(
     db: &DatabaseConnection,

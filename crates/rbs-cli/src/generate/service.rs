@@ -385,6 +385,90 @@ mod tests {
         );
     }
 
+    /// Sous `--cursor`, le service assemble la page du noyau et lui passe l'`id` de la
+    /// dernière ligne : `CursorPage` ignore si son DTO en porte un.
+    #[test]
+    fn a_cursor_list_assembles_the_core_cursor_page() {
+        let rendered = render(&bench::articles_par_curseur()).expect("le service se rend");
+
+        for attendu in [
+            "pub async fn list(db: &DatabaseConnection, cursor: &Cursor) -> Result<CursorPage<ArticleResponse>> {",
+            "let articles = repository::list(db, cursor).await?;",
+            "let dernier = articles.last().map(|ligne| ligne.id);",
+            "Ok(CursorPage::new(\n        articles.into_iter().map(Into::into).collect(),\n        cursor,\n        dernier,\n    ))",
+        ] {
+            assert!(
+                rendered.contains(attendu),
+                "« {attendu} » absent sous --cursor :\n{rendered}"
+            );
+        }
+    }
+
+    /// La route de filtre garde sa pagination par page, tri libre compris.
+    #[test]
+    fn the_filter_keeps_its_page_under_cursor() {
+        let rendered = render(&bench::articles_par_curseur()).expect("le service se rend");
+
+        assert!(
+            rendered.contains(
+                "    pagination: &Pagination,\n) -> Result<Page<ArticleResponse>> {\n    let (articles, total) = repository::filter(db, filtre, pagination).await?;"
+            ),
+            "`filter` doit toujours rendre une `Page` :\n{rendered}"
+        );
+        assert!(
+            rendered
+                .contains("use rbs_core::{Cursor, CursorPage, Error, Page, Pagination, Result};"),
+            "le service emploie les deux pages :\n{rendered}"
+        );
+    }
+
+    /// Le rendu entier du service sous `--cursor`, figé octet à octet : aucun exemple
+    /// n'emploie le drapeau.
+    #[test]
+    fn the_cursor_service_renders_the_frozen_fixture() {
+        bench::fige(
+            "fixtures/cursor/service.rs",
+            &render(&bench::articles_par_curseur()).expect("le service se rend"),
+        );
+    }
+
+    /// La même garde sous `--cursor`. L'ensemble est celui du rendu par défaut : l'import
+    /// des DTO le borne dès vingt-quatre caractères, et masque au-delà tout ce qui suit.
+    ///
+    /// Le corps de `list`, seul propre au curseur, est donc comparé à part à la sortie de
+    /// rustfmt, à chaque longueur : sa chaîne `….last().map(|ligne| ligne.id)` bascule aux
+    /// soixante colonnes de `chain_width` dès trente-deux caractères, là où le balayage ne
+    /// voit plus rien.
+    #[test]
+    fn the_cursor_render_is_already_what_rustfmt_would_write() {
+        let rendu = |name: &str| {
+            let champs = fields::parse("title:string,summary:text:optional").expect("champs");
+            render(&Feature::fresh(name, champs).paged_by_cursor()).expect("le service se rend")
+        };
+
+        assert_eq!(
+            bench::longueurs_divergentes(rendu),
+            (24..=40).collect::<Vec<usize>>(),
+            "la plage où le service diverge de rustfmt a bougé sous --cursor"
+        );
+
+        let list = |source: &str| {
+            source
+                .split("pub async fn list(")
+                .nth(1)
+                .and_then(|suite| suite.split("\n}\n").next())
+                .map(str::to_owned)
+        };
+        for taille in 1..=40 {
+            let rendered = rendu(&("a".repeat(taille - 1) + "e"));
+            assert_eq!(
+                list(&rendered),
+                list(&bench::formatted(&rendered)),
+                "le `list` du curseur s'écarte de rustfmt à {taille} caractères"
+            );
+        }
+    }
+
     #[test]
     #[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
     fn the_generated_service_compiles_in_a_fresh_project() {

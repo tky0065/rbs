@@ -92,8 +92,12 @@ The response drops the counts:
 `next` is null once the walk is over. There is no `total`: the `COUNT(*)` it needs is the
 cost the cursor exists to avoid.
 
-The generated CRUD keeps `Pagination` — switching it would drop `total` from every
-response your clients already read. `Cursor` is there for the routes you write yourself:
+[`rbs generate crud --cursor`](../cli/generate.md#rbs-generate-crud) writes this route for
+you: `GET /<resource>` takes `Cursor` and returns `CursorPage`, and its repository walks
+`id < after`, descending, `per_page` rows at a time — `deleted_at IS NULL` still applies
+under `--soft-delete`. Without the flag, the generated CRUD keeps `Pagination`: switching an
+existing list would drop `total` from every response your clients already read. On a route
+you write yourself, the same walk reads:
 
 ```rust
 let mut query = Entity::find().order_by_desc(Column::Id);
@@ -112,7 +116,8 @@ Ok(Json(CursorPage::new(
 
 The cursor only walks `id` descending — the order `list` already applies, and the one a
 UUIDv7 makes total. It does not follow a `sort` you chose: on a column where two rows share
-a value, the boundary would be ambiguous and the next page would skip or repeat rows.
+a value, the boundary would be ambiguous and the next page would skip or repeat rows. That is
+why the filter route of a `--cursor` CRUD keeps its pages.
 
 ## No column name ever reaches the database
 

@@ -11,7 +11,7 @@ your terminal prints matches, you have not drifted — timings, identifiers and 
 excepted, which are yours. Only one thing was edited out of the blocks: the absolute
 path of the directory the run happened in, written `…/demo` below.
 
-The CLI speaks French: `✓ demo créé — 21 fichiers` is a success line, not an error.
+The CLI speaks French: `✓ demo créé — 22 fichiers` is a success line, not an error.
 Only the messages are translated-in-waiting; the flags, the file names and the generated
 code are the same in every locale.
 
@@ -36,7 +36,17 @@ crates.io belongs to an unrelated project:
 cargo install rbs-cli
 ```
 
-That drops an `rbs` executable in `~/.cargo/bin`, and a second copy of it named
+That compiles rbs from source, which takes a few minutes. From 1.5.0 on, each
+[GitHub release](https://github.com/tky0065/rbs/releases) also carries prebuilt binaries
+for Linux, macOS and Windows, and
+[`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) downloads the one for
+your platform instead:
+
+```bash
+cargo binstall rbs-cli
+```
+
+Either way, that drops an `rbs` executable in `~/.cargo/bin`, and a second copy of it named
 `rbs-cli`, for the case the note below describes. Check the binary answers:
 
 ```bash
@@ -71,7 +81,7 @@ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 
 {/* rbs:transcript cmd="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" */}
 ```text
-✓ demo créé — 21 fichiers
+✓ demo créé — 22 fichiers
 
   cd demo
   docker compose up -d   # la base du .env, montée
@@ -92,7 +102,7 @@ run without a terminal to ask in, so `--yes` is what a script or a CI job needs:
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
 ```
 
-Twenty files, and none of them a black box:
+Twenty-two files, and none of them a black box:
 
 - `src/main.rs`, `src/router.rs`, `src/state.rs`, `src/openapi.rs` — the wiring.
 - `src/lib.rs` — the library `src/main.rs` and `src/seeds/main.rs` both build on. They are
@@ -106,6 +116,8 @@ Twenty files, and none of them a black box:
 - `docker-compose.yml` — the project's database, built from the URL below.
 - `.env` — the database URL and the log settings, kept out of Git.
 - `.env.example` — the same keys with no secrets, committed.
+- `AGENTS.md` and `CLAUDE.md` — the handbook an agent reads before touching the project,
+  and the one-line import through which Claude Code reaches it.
 
 The `.env` the command wrote carries the URL you passed:
 
@@ -321,7 +333,10 @@ date: Sat, 29 Aug 2026 10:06:30 GMT
 {"status":"ok","checks":{"database":"ok"}}
 ```
 
-`/health` came with the project and checks the database, not just the process. Every
+`/health` came with the project and checks the database, not just the process: it answers
+the readiness question, whether the service can take traffic. Its sibling `/health/live`
+answers the liveness one — is the process up — and checks nothing: tied to the database, it
+would have an orchestrator restart the API in a loop over an outage no restart can fix. Every
 fragment that brings a dependency of its own adds a probe beside it — `rbs add redis` puts
 a `cache` key into `checks`, `rbs add storage` a `storage` one — and one silent dependency
 is enough to turn the whole answer into a `503`, which is what takes the pod out of
@@ -377,7 +392,7 @@ that exist rather than the ones someone remembered to write down. Open
 curl http://127.0.0.1:8080/api-docs/openapi.json
 ```
 
-Its `paths` now holds `/health`, `/articles` and `/articles/{id}`. Both routes are
+Its `paths` now holds `/health`, `/health/live`, `/articles` and `/articles/{id}`. Both routes are
 switched by `[docs]` in `config/default.toml`; turn them off in production.
 
 ## Checking a project
@@ -404,8 +419,8 @@ rbs doctor
 
 Seven checks: the anchors are still in place — twelve of them here, eleven from the
 skeleton plus the compose's, which drops out of the count for a project with no
-`docker-compose.yml` (`modules` and `jobs` drop out too, on a project that never
-installed a fragment) — [`AGENTS.md`](./guides/agents.md)'s guide and inventory still
+`docker-compose.yml` (`modules`, `jobs`, `job_modules` and `schedules` drop out too, on a
+project that never installed a fragment) — [`AGENTS.md`](./guides/agents.md)'s guide and inventory still
 match what the project carries, no model has a relation without the two anchors it would
 need to receive one, `.env` holds every key `.env.example` declares, the project and
 `rbs-core` agree with the CLI's version, the database answers, and no fragment sits at

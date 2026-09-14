@@ -64,6 +64,7 @@ fn the_command_writes_a_client_that_carries_one_method_per_operation() {
         "articlesUpdate(",
         "articlesDelete(",
         "health(",
+        "healthLive(",
     ] {
         assert!(client.contains(methode), "{methode} absente :\n{client}");
     }

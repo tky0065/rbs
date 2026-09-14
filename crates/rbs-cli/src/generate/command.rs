@@ -9,6 +9,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::anchors;
+use crate::errors::Codee;
 use crate::git;
 use crate::metadata;
 use crate::plan;
@@ -41,6 +42,8 @@ pub(crate) struct Options {
     pub soft_delete: bool,
     /// Ajoute au CRUD trois routes de contenu binaire, adossées au fragment `storage`.
     pub with_upload: bool,
+    /// Pagine la liste `GET` par curseur ; la route de filtre garde `Page`/`Pagination`.
+    pub cursor: bool,
     /// Forme singulière du nom, quand l'heuristique se trompe : `news_item` pour `news`.
     pub singular: Option<String>,
 }
@@ -218,15 +221,56 @@ crate::errors::depuis_la_racine!(Error);
 impl Error {
     /// Ce que le développeur peut coller pour réparer, quand la panne se répare ainsi.
     ///
-    /// Seule une ancre disparue a un remède tenant en un bloc de texte : les autres pannes
-    /// se règlent par une décision — commiter, choisir un autre nom, corriger un champ.
+    /// Seule une ancre disparue a un remède tenant en un bloc de texte ici : les autres
+    /// pannes se règlent par une décision — commiter, choisir un autre nom, corriger un
+    /// champ. Le texte lui-même vit sur `plan::Error::remede`, porté une seule fois.
     pub(crate) fn remedy(&self) -> Option<String> {
         match self {
-            Error::Plan(plan::Error::Anchor(absente)) => Some(format!(
-                "dans {} :\n{}",
-                absente.anchor.file,
-                absente.anchor.block()
-            )),
+            Error::Plan(erreur @ plan::Error::Anchor(_)) => erreur.remede(),
+            _ => None,
+        }
+    }
+}
+
+impl Codee for Error {
+    fn code(&self) -> &'static str {
+        match self {
+            Error::PasUnProjet => "pas_un_projet",
+            Error::Nom(_) => "nom_invalide",
+            Error::Fields(_) => "champs_invalides",
+            Error::DejaPresente { .. } => "feature_deja_presente",
+            Error::Rendu { .. } => "rendu_impossible",
+            Error::Acces(_) => "fichier_inaccessible",
+            Error::WorkingTreeSale(_) => "arbre_sale",
+            Error::Plan(erreur) => erreur.code(),
+            Error::Application(erreur) => erreur.code(),
+            Error::Metadata(_) => "manifeste_illisible",
+            Error::Relations(_) => "relation_invalide",
+            Error::MigrationsAbsentes(_) => "migration_absente",
+            Error::Homonyme { .. } => "homonyme",
+            Error::Absente { .. } => "feature_absente",
+            Error::RoleSansAuth { .. } => "role_sans_auth",
+            Error::UploadSansStorage => "upload_sans_storage",
+            Error::UploadStorageHorsModules => "storage_hors_modules",
+            Error::SoftDeleteColonneReservee { .. } => "colonne_reservee",
+            Error::RoleInconnu { .. } => "role_inconnu",
+            Error::EnfantSansCle { .. } => "enfant_sans_cle",
+        }
+    }
+
+    /// `--json` va plus loin que l'affichage humain de `remedy` : un `Plan` porte
+    /// toujours son remède quand il en a un, pas seulement pour une ancre disparue —
+    /// une ancre mal placée a elle aussi un bloc à remonter, et `bloc()` le rend déjà.
+    fn remede(&self) -> Option<String> {
+        match self {
+            Error::Plan(erreur) => erreur.remede(),
+            _ => self.remedy(),
+        }
+    }
+
+    fn bloc(&self) -> Option<String> {
+        match self {
+            Error::Plan(erreur) => erreur.bloc(),
             _ => None,
         }
     }
@@ -327,6 +371,11 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     };
     let feature = if options.with_upload {
         feature.uploading()
+    } else {
+        feature
+    };
+    let feature = if options.cursor {
+        feature.paged_by_cursor()
     } else {
         feature
     };
@@ -715,6 +764,7 @@ mod tests {
             role: None,
             soft_delete: false,
             with_upload: false,
+            cursor: false,
             singular: None,
         }
     }
@@ -1553,6 +1603,66 @@ mod tests {
     #[test]
     fn an_error_without_a_known_remedy_does_not_invent_one() {
         assert_eq!(Error::PasUnProjet.remedy(), None);
+    }
+
+    #[test]
+    fn a_vanished_anchor_carries_its_code_and_the_block_to_paste() {
+        let error = Error::Plan(crate::plan::Error::Anchor(crate::anchors::Missing {
+            anchor: crate::anchors::ROUTES,
+        }));
+
+        assert_eq!(error.code(), "ancre_absente");
+        assert_eq!(error.bloc(), Some(crate::anchors::ROUTES.block()));
+    }
+
+    /// `remedy()` (l'affichage humain) ne couvre que `Plan(Anchor)`, mais `Codee::remede`
+    /// va plus loin : une ancre mal placée a, elle aussi, un bloc à remonter.
+    #[test]
+    fn a_misplaced_anchor_has_a_remede_though_remedy_does_not_cover_it() {
+        let error = Error::Plan(crate::plan::Error::MalPlacee(Box::new(
+            crate::anchors::Misplaced {
+                anchor: crate::anchors::STATE_INIT,
+                before: "core: CoreState::new(".to_string(),
+                block: "// <rbs:state_init>\n// </rbs:state_init>".to_string(),
+            },
+        )));
+
+        assert_eq!(error.remedy(), None);
+        assert_eq!(error.code(), "ancre_mal_placee");
+        assert!(error.bloc().is_some());
+        assert!(error.remede().is_some());
+    }
+
+    /// Les trois pannes à bloc d'un plan de génération : un bloc sans son remède, ou
+    /// l'inverse, laisserait un agent deviner où coller ce qu'on lui montre.
+    #[test]
+    fn remede_is_some_exactly_when_bloc_is_some_for_a_plan_error() {
+        let erreurs = vec![
+            crate::plan::Error::Anchor(crate::anchors::Missing {
+                anchor: crate::anchors::ROUTES,
+            }),
+            crate::plan::Error::MalPlacee(Box::new(crate::anchors::Misplaced {
+                anchor: crate::anchors::STATE_INIT,
+                before: "core: CoreState::new(".to_string(),
+                block: "// <rbs:state_init>\n// </rbs:state_init>".to_string(),
+            })),
+            crate::plan::Error::ZoneAbsente {
+                path: "AGENTS.md".to_string(),
+                zone: crate::agents::MissingZone {
+                    zone: "inventory".to_string(),
+                },
+            },
+        ];
+
+        for erreur in erreurs {
+            let error = Error::Plan(erreur);
+            assert_eq!(
+                error.remede().is_some(),
+                error.bloc().is_some(),
+                "{error:?}"
+            );
+            assert!(error.remede().is_some(), "{error:?}");
+        }
     }
 
     /// Le plan montré est celui qui sera exécuté : c'est ce qui rend `--dry-run` digne de

@@ -27,6 +27,7 @@ Commands:
   crud     Génère une feature CRUD complète, entité et migration comprises
   feature  Génère une feature vide : six fichiers, aucun champ
   client   Engendre un client typé depuis le document OpenAPI du projet
+  job      Génère un job de la file, et son échéance sous --every ; exige la feature jobs
   help     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -58,10 +59,12 @@ Options:
       --singular <NOM>     Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force              Écrit même si le working tree Git est sale
       --dry-run            Affiche le plan sans rien écrire
+      --json               Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
       --has-many <ENTITE>  Entité enfant dont ce modèle doit porter la variante inverse, répétable
       --role <ROLE>        Relève à ce rôle le seuil des écritures ; exige la feature auth
       --soft-delete        Rend le DELETE logique : la ligne reste, marquée d'une date de suppression
       --with-upload        Ajoute trois routes de contenu binaire ; exige la feature storage
+      --cursor             Pagine GET /<ressource> par curseur ; la route de filtre garde ses pages
   -h, --help               Print help
   -V, --version            Print version
 ```
@@ -72,10 +75,12 @@ Options:
 | `--singular <NOM>` | The singular form of the name, when the built-in heuristic gets it wrong. It names the entity, the DTOs and the local variables — `CreateNewsItem` and `let news_item` for `rbs generate crud news --singular news_item` — while the module, the table and the routes keep the plural. The heuristic already leaves `news`, `series` and `species` untouched; for any other invariable or irregular plural, this flag is the fix. Must be snake_case, and neither a Rust keyword nor a skeleton module, checked before anything is written. |
 | `--force` | Writes even though the Git working tree is dirty, and overwrites files reported as conflicting. |
 | `--dry-run` | Prints the plan and stops. Nothing is written. |
+| `--json` | Prints the plan — or the error — as one JSON document on standard output instead of the coloured text: every action with its effect, the full content of created files, and `applique` to say whether anything was written. Independent of `--dry-run`, and accepted by `generate feature` too. [The agents guide](../guides/agents.md#reading-a-plan-as-json) has the document and the error codes. |
 | `--has-many <ENTITE>` | Repairs the far side of a relation: writes into the model of an already generated feature the `has_many` variant pointing at the named child, and nothing else. Repeatable. [The relations guide](../guides/relations.md) covers when it is needed. |
 | `--role <ROLE>` | Raises the threshold on the writes — `create`, `update`, `delete`, and the `PUT` of the content route when `--with-upload` comes along — to that role instead of the default `Role::User`. It opens nothing and closes nothing: on a project carrying `auth`, *every* generated route already takes an `Identity` and calls `require_role`, and the reads (`list`, `find`, `filter`, and the content route's `GET` and `HEAD`) simply keep the default threshold. Requires the [`auth`](../guides/auth.md) feature, and a role its `Role` enum declares — both are checked before anything is written. [The authentication guide](../guides/auth.md#closed-by-default-at-generation-time) explains what to remove to reopen a route. |
 | `--soft-delete` | Makes `DELETE` logical instead of removing the row. The HTTP contract does not change, and a `unique` field's constraint narrows to live rows — on MySQL it stays global, so a deleted value stays reserved there. [The migrations guide](../guides/migrations.md#soft-delete) has the rest. |
 | `--with-upload` | Mounts three routes on `/<resource>/{id}/content` — `PUT`, `GET`, `HEAD` — against the `storage` fragment's trait. Requires the [`storage`](../guides/storage.md) feature, and the fragment under `src/modules/storage/` where `rbs add` has laid it out since 1.3.0 — both are checked before anything is written, and a project that still carries `src/storage/` is refused until the directory is moved and its `use` statements fixed. With `--role`, the `PUT` joins the writes whose threshold the flag raises; with `--soft-delete`, the content outlives the row that `DELETE` only stamps. It also writes their tests into `tests.rs` — the round trip, the 404s, the 413, and the 401 under `auth`. [The storage guide](../guides/storage.md#generated-content-routes) has both. |
+| `--cursor` | Pages `GET /<resource>` by cursor instead of by page number: the route takes `after` and `per_page`, and returns `data` with `meta.next` — the `id` to pass as the next `after`, `null` once the walk is over — and no `total`. `POST /<resource>/filter` keeps its pages, whatever its sort: a cursor on `id` is wrong as soon as the order follows another column. Combines with `--role`, with `--soft-delete` — deleted rows stay out of the walk — and with `--with-upload`. For an entity its tests can create — one without a required reference — the generated tests walk every page until `next` goes out, and check that no row comes back twice. [The filtering guide](../guides/filtering.md#cursor-pagination-for-lists-that-outgrow-an-offset) has the rest. |
 
 ## `rbs generate feature`
 
@@ -93,6 +98,7 @@ Options:
       --singular <NOM>  Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force           Écrit même si le working tree Git est sale
       --dry-run         Affiche le plan sans rien écrire
+      --json            Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
   -h, --help            Print help
   -V, --version         Print version
 ```
@@ -101,6 +107,88 @@ Same flags minus `--fields`, `--has-many` and `--role`: an empty feature has no 
 it gets neither an entity worth the name, nor a migration, nor a relation to repair; and it
 carries no handler for a guard to protect. `--singular` stays: the skeleton still names its
 service and its DTOs after the singular.
+
+## `rbs generate job`
+
+{/* rbs:transcript cmd="rbs generate job --help" */}
+```text
+$ rbs generate job --help
+Génère un job de la file, et son échéance sous --every ; exige la feature jobs
+
+Usage: rbs generate job [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>  Nom du job, en snake_case : celui de son module et de son KIND
+
+Options:
+      --every <CRON>  Expression cron de l'échéance, à cinq ou six champs, évaluée en UTC ; exige la feature scheduler
+      --force         Écrit même si le working tree Git est sale
+      --dry-run       Affiche le plan sans rien écrire
+      --json          Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
+  -h, --help          Print help
+  -V, --version       Print version
+```
+
+Neither `--fields` nor an entity: a job is not a CRUD feature, and the manifest never
+records its name. `<NAME>` is both the module under `src/modules/jobs/` and the `KIND` the
+registry looks it up by, which is why it has to be a valid Rust identifier — refused
+otherwise, along with a Rust keyword and a name that collides with one of the six files the
+`jobs` fragment itself owns (`config`, `demo`, `model`, `queue`, `worker`, `tests`), or with
+`jobs` — `pub mod jobs;` inside `src/modules/jobs/mod.rs` would name the module after its
+own directory, which `clippy::module_inception` refuses. So is the name of a crate that file
+or the job template reaches for — `std`, `core`, `alloc`, `serde`, `serde_json`, `anyhow`,
+`async_trait`, `tracing`: declared there, the module would hide the crate from every
+`serde::…` path of the file.
+
+The command requires the `jobs` feature, and `--every` requires `scheduler` on top of it —
+each refusal names the command that installs what is missing. A project that received
+either before 1.3.0 still carries it under `src/jobs/` or `src/scheduler/`, which
+`rbs upgrade` does not move: the command refuses it as well, naming the move to make by
+hand. On a project carrying `jobs`:
+
+{/* rbs:transcript cmd="rbs generate job purge_sessions --dry-run" setup="rbs new demo --yes --with jobs --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+```text
+$ rbs generate job purge_sessions --dry-run
+plan pour …/demo
+
+  + src/modules/jobs/purge_sessions.rs   créé
+  ~ src/modules/jobs/mod.rs              modifié
+
+  2 fichiers à écrire
+
+  rien n'a été écrit (--dry-run)
+```
+
+Two anchors here, both deposited by the `jobs` fragment and not by the skeleton:
+`// <rbs:job_modules>` declares the module, `// <rbs:jobs>` registers it with the worker.
+On a project that also carries `scheduler`, `--every` adds a third file and a third anchor
+— `// <rbs:schedules>` pushes the job's due date onto the calendar:
+
+```text
+$ rbs generate job purge_sessions --every "0 3 * * *" --dry-run
+plan pour /private/tmp/rbs-demo/demo
+
+  + src/modules/jobs/purge_sessions.rs   créé
+  ~ src/modules/jobs/mod.rs              modifié
+  ~ src/modules/scheduler/mod.rs         modifié
+
+  3 fichiers à écrire
+
+  rien n'a été écrit (--dry-run)
+```
+
+Rerunning either command changes nothing: a job file that already exists is never
+rewritten, `--force` included, and the plan reports it unchanged.
+
+On a project generated before 1.5.0, `src/modules/jobs/mod.rs` has no
+`// <rbs:job_modules>`. The job's file is still written, but its declaration is not — nor
+are the registration and the due date, which name the module and would stop the project
+from compiling without it: the plan prints the three blocks instead. `rbs doctor --fix`
+puts that anchor back, after which rerunning the command writes the rest. A calendar still
+written as a `vec![]` has no line to hang `// <rbs:schedules>` from; the plan says so
+rather than promising `--fix`, and the
+[scheduler guide](../guides/scheduler.md#a-calendar-predating-the-anchor) shows the
+rewrite.
 
 ## The `--fields` grammar
 
@@ -358,8 +446,9 @@ suggests and what the run above used.
 ## Anchors
 
 `rbs generate` never rewrites an AST. It inserts between comment markers the skeleton
-carries, and it uses six of the ten — the two in `src/state.rs`, `// <rbs:layers>` and
-`// <rbs:startup>` belong to the fragments [`rbs add`](./add.md) installs:
+carries. `rbs generate crud` and `rbs generate feature` use six of the sixteen — the two in
+`src/state.rs`, `// <rbs:layers>` and `// <rbs:startup>` belong to the fragments
+[`rbs add`](./add.md) installs:
 
 | Anchor | File |
 |---|---|
@@ -369,6 +458,16 @@ carries, and it uses six of the ten — the two in `src/state.rs`, `// <rbs:laye
 | `// <rbs:migration_modules>` | `migration/src/lib.rs` |
 | `// <rbs:migrations>` | `migration/src/lib.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
+
+`rbs generate job` uses three, none shared with the two commands above and none carried by
+the skeleton either — each lives in a file a fragment deposits, and `// <rbs:jobs>` also
+receives the `webhooks` fragment's delivery:
+
+| Anchor | File |
+|---|---|
+| `// <rbs:job_modules>` | `src/modules/jobs/mod.rs`, deposited by `jobs` |
+| `// <rbs:jobs>` | `src/modules/jobs/mod.rs`, deposited by `jobs` |
+| `// <rbs:schedules>` | `src/modules/scheduler/mod.rs`, deposited by `scheduler`, under `--every` |
 
 `src/lib.rs` is the library every generated project carries: `src/main.rs` and
 `src/seeds/main.rs` are two separate crate roots, and the library is what lets both reach a
@@ -389,8 +488,8 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) checks all fourteen anchors — eleven on a project carrying no
-compose, no queue and no fragment moved under `src/modules/`, the three optional ones —
+[`rbs doctor`](./doctor.md) checks all sixteen anchors — eleven on a project carrying no
+compose, no queue and no fragment moved under `src/modules/`, the five optional ones —
 so a missing one can be found before a generation trips over it.
 
 ## Failures

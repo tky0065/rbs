@@ -10,6 +10,7 @@ use crate::state::AppState;
 #[openapi(
     modifiers(&CommonResponses),
     paths(
+        crate::health::controller::live,
         crate::health::controller::health,
         // <rbs:openapi>
         crate::subscribers::controller::list,

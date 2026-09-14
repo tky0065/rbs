@@ -1,4 +1,5 @@
 use axum::extract::State;
+use axum::http::StatusCode;
 use axum::response::Response;
 use rbs_core::HasCoreState;
 
@@ -25,4 +26,17 @@ pub async fn health(State(state): State<AppState>) -> Response {
         ],
     )
     .await
+}
+
+// Ne prend pas l'état : une sonde de vie qui interrogerait la base ferait redémarrer l'API
+// en boucle le jour où c'est la base qui tombe. Cette question-là est celle de `/health`.
+#[utoipa::path(
+    get,
+    path = "/health/live",
+    tag = "health",
+    operation_id = "health_live",
+    responses((status = 200, description = "le processus répond, sans rien interroger"))
+)]
+pub async fn live() -> StatusCode {
+    StatusCode::OK
 }

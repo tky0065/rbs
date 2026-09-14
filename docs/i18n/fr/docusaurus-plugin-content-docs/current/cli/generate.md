@@ -29,6 +29,7 @@ Commands:
   crud     Génère une feature CRUD complète, entité et migration comprises
   feature  Génère une feature vide : six fichiers, aucun champ
   client   Engendre un client typé depuis le document OpenAPI du projet
+  job      Génère un job de la file, et son échéance sous --every ; exige la feature jobs
   help     Print this message or the help of the given subcommand(s)
 
 Options:
@@ -60,10 +61,12 @@ Options:
       --singular <NOM>     Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force              Écrit même si le working tree Git est sale
       --dry-run            Affiche le plan sans rien écrire
+      --json               Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
       --has-many <ENTITE>  Entité enfant dont ce modèle doit porter la variante inverse, répétable
       --role <ROLE>        Relève à ce rôle le seuil des écritures ; exige la feature auth
       --soft-delete        Rend le DELETE logique : la ligne reste, marquée d'une date de suppression
       --with-upload        Ajoute trois routes de contenu binaire ; exige la feature storage
+      --cursor             Pagine GET /<ressource> par curseur ; la route de filtre garde ses pages
   -h, --help               Print help
   -V, --version            Print version
 ```
@@ -74,10 +77,12 @@ Options:
 | `--singular <NOM>` | La forme singulière du nom, quand l'heuristique intégrée se trompe. Elle nomme l'entité, les DTO et les variables locales — `CreateNewsItem` et `let news_item` pour `rbs generate crud news --singular news_item` — tandis que le module, la table et les routes gardent le pluriel. L'heuristique laisse déjà `news`, `series` et `species` intacts ; pour tout autre pluriel invariable ou irrégulier, ce flag est le remède. Doit être en snake_case, et n'être ni un mot-clé Rust ni un module du squelette, vérifié avant toute écriture. |
 | `--force` | Écrit même si le working tree Git est sale, et écrase les fichiers signalés en conflit. |
 | `--dry-run` | Affiche le plan et s'arrête. Rien n'est écrit. |
+| `--json` | Rend le plan — ou l'erreur — en un seul document JSON sur la sortie standard, à la place du texte coloré : chaque action avec son effet, le contenu complet des fichiers créés, et `applique` pour dire si quelque chose a été écrit. Indépendant de `--dry-run`, et accepté aussi par `generate feature`. [Le guide des agents](../guides/agents.md#lire-un-plan-en-json) donne le document et les codes d'erreur. |
 | `--has-many <ENTITE>` | Répare le côté lointain d'une relation : écrit dans le modèle d'une feature déjà générée la variante `has_many` qui vise l'enfant nommé, et rien d'autre. Répétable. [Le guide des relations](../guides/relations.md) dit quand c'est nécessaire. |
 | `--role <ROLE>` | Relève le seuil des écritures — `create`, `update`, `delete`, et le `PUT` de la route de contenu quand `--with-upload` l'accompagne — à ce rôle plutôt qu'au `Role::User` par défaut. Il n'ouvre ni ne ferme rien : sur un projet portant `auth`, *toutes* les routes engendrées prennent déjà une `Identity` et appellent `require_role`, et les lectures (`list`, `find`, `filter`, et les `GET` et `HEAD` de la route de contenu) gardent simplement le seuil par défaut. Exige la feature [`auth`](../guides/auth.md), et un rôle que son enum `Role` déclare — les deux sont vérifiés avant toute écriture. [Le guide de l'authentification](../guides/auth.md#fermées-par-défaut-à-la-génération) dit ce qu'il faut retirer pour rouvrir une route. |
 | `--soft-delete` | Rend `DELETE` logique plutôt que de retirer la ligne. Le contrat HTTP ne change pas, et la contrainte d'un champ `unique` se restreint aux lignes vivantes — sur MySQL elle reste globale, si bien qu'une valeur supprimée y reste réservée. [Le guide des migrations](../guides/migrations.md#suppression-logique) a le reste. |
 | `--with-upload` | Monte trois routes sur `/<ressource>/{id}/content` — `PUT`, `GET`, `HEAD` — contre le trait du fragment `storage`. Exige la feature [`storage`](../guides/storage.md), et le fragment sous `src/modules/storage/`, là où `rbs add` le pose depuis la 1.3.0 — les deux sont vérifiés avant toute écriture, et un projet qui porte encore `src/storage/` est refusé tant que le répertoire n'est pas déplacé et ses `use` corrigés. Avec `--role`, le `PUT` rejoint les écritures dont le drapeau relève le seuil ; avec `--soft-delete`, le contenu survit à la ligne que le `DELETE` se contente d'estampiller. Il écrit aussi leurs tests dans `tests.rs` — le cycle, les 404, le 413, et le 401 sous `auth`. [Le guide du stockage](../guides/storage.md#les-routes-de-contenu-engendrées) a les deux. |
+| `--cursor` | Pagine `GET /<ressource>` par curseur plutôt que par numéro de page : la route prend `after` et `per_page`, et rend `data` avec `meta.next` — l'`id` à passer comme `after` suivant, `null` une fois la marche terminée — et aucun `total`. `POST /<ressource>/filter` garde ses pages, quel que soit son tri : un curseur sur l'`id` est faux dès que l'ordre suit une autre colonne. Se combine avec `--role`, avec `--soft-delete` — les lignes supprimées restent hors de la marche — et avec `--with-upload`. Pour une entité que ses tests peuvent créer — sans référence requise —, les tests engendrés parcourent chaque page jusqu'à l'extinction de `next`, et vérifient qu'aucune ligne ne revient deux fois. [Le guide du filtrage](../guides/filtering.md#pagination-par-curseur-pour-les-listes-qui-débordent-un-offset) a le reste. |
 
 ## `rbs generate feature`
 
@@ -95,6 +100,7 @@ Options:
       --singular <NOM>  Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force           Écrit même si le working tree Git est sale
       --dry-run         Affiche le plan sans rien écrire
+      --json            Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
   -h, --help            Print help
   -V, --version         Print version
 ```
@@ -103,6 +109,88 @@ Les mêmes flags moins `--fields`, `--has-many` et `--role` : une feature vide n
 colonne, donc ni entité digne de ce nom, ni migration, ni relation à réparer ; et elle ne
 porte aucun handler qu'une garde protégerait. `--singular` reste : le squelette nomme
 toujours son service et ses DTO d'après le singulier.
+
+## `rbs generate job`
+
+{/* rbs:transcript cmd="rbs generate job --help" */}
+```text
+$ rbs generate job --help
+Génère un job de la file, et son échéance sous --every ; exige la feature jobs
+
+Usage: rbs generate job [OPTIONS] <NAME>
+
+Arguments:
+  <NAME>  Nom du job, en snake_case : celui de son module et de son KIND
+
+Options:
+      --every <CRON>  Expression cron de l'échéance, à cinq ou six champs, évaluée en UTC ; exige la feature scheduler
+      --force         Écrit même si le working tree Git est sale
+      --dry-run       Affiche le plan sans rien écrire
+      --json          Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
+  -h, --help          Print help
+  -V, --version       Print version
+```
+
+Ni `--fields`, ni entité : un job n'est pas une feature CRUD, et le manifeste ne garde
+jamais trace de son nom. `<NAME>` est à la fois le module sous `src/modules/jobs/` et le
+`KIND` auquel le registre le retrouve, ce qui en fait un identifiant Rust valide — refusé
+sinon, tout comme un mot-clé Rust ou un nom qui entre en collision avec l'un des six
+fichiers que le fragment `jobs` porte déjà (`config`, `demo`, `model`, `queue`, `worker`,
+`tests`), ou avec `jobs` lui-même — `pub mod jobs;` dans `src/modules/jobs/mod.rs`
+nommerait le module comme son propre dossier, ce que `clippy::module_inception` refuse. Le
+nom d'une crate que ce fichier ou la template du job emploie l'est aussi — `std`, `core`,
+`alloc`, `serde`, `serde_json`, `anyhow`, `async_trait`, `tracing` : déclaré là, le module
+masquerait la crate à chaque chemin `serde::…` du fichier.
+
+La commande exige la feature `jobs`, et `--every` exige en plus `scheduler` — chaque refus
+nomme la commande qui installe ce qui manque. Un projet qui a reçu l'une ou l'autre avant
+1.3.0 la porte encore sous `src/jobs/` ou `src/scheduler/`, que `rbs upgrade` ne déplace
+pas : la commande le refuse aussi, en nommant le déplacement à faire à la main. Sur un
+projet qui porte `jobs` :
+
+{/* rbs:transcript cmd="rbs generate job purge_sessions --dry-run" setup="rbs new demo --yes --with jobs --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+```text
+$ rbs generate job purge_sessions --dry-run
+plan pour …/demo
+
+  + src/modules/jobs/purge_sessions.rs   créé
+  ~ src/modules/jobs/mod.rs              modifié
+
+  2 fichiers à écrire
+
+  rien n'a été écrit (--dry-run)
+```
+
+Deux ancres ici, toutes deux déposées par le fragment `jobs` et non par le squelette :
+`// <rbs:job_modules>` déclare le module, `// <rbs:jobs>` l'inscrit au worker. Sur un
+projet qui porte aussi `scheduler`, `--every` ajoute un troisième fichier et une troisième
+ancre — `// <rbs:schedules>` pousse l'échéance du job dans le calendrier :
+
+```text
+$ rbs generate job purge_sessions --every "0 3 * * *" --dry-run
+plan pour /private/tmp/rbs-demo/demo
+
+  + src/modules/jobs/purge_sessions.rs   créé
+  ~ src/modules/jobs/mod.rs              modifié
+  ~ src/modules/scheduler/mod.rs         modifié
+
+  3 fichiers à écrire
+
+  rien n'a été écrit (--dry-run)
+```
+
+Relancer l'une ou l'autre commande ne change rien : un fichier de job déjà présent n'est
+jamais réécrit, `--force` compris, et le plan le signale inchangé.
+
+Sur un projet engendré avant 1.5.0, `src/modules/jobs/mod.rs` n'a pas
+`// <rbs:job_modules>`. Le fichier du job s'écrit quand même, mais pas sa déclaration — ni
+l'inscription et l'échéance, qui nomment le module et empêcheraient le projet de compiler
+sans elle : le plan affiche les trois blocs à la place. `rbs doctor --fix` repose cette
+ancre, après quoi relancer la commande écrit le reste. Un calendrier encore écrit en
+`vec![]` n'a pas de ligne où accrocher `// <rbs:schedules>` ; le plan le dit plutôt que de
+promettre `--fix`, et le
+[guide scheduler](../guides/scheduler.md#un-calendrier-antérieur-à-lancre) montre la
+réécriture.
 
 ## La grammaire de `--fields`
 
@@ -365,8 +453,9 @@ le message suggère et ce que l'exécution ci-dessus a utilisé.
 ## Les ancres
 
 `rbs generate` ne réécrit jamais d'AST. Il insère entre des marqueurs en commentaires que le
-squelette porte, et il en emploie six sur dix — les deux de `src/state.rs`, `// <rbs:layers>` et
-`// <rbs:startup>` appartiennent aux fragments qu'installe [`rbs add`](./add.md) :
+squelette porte. `rbs generate crud` et `rbs generate feature` en emploient six sur seize —
+les deux de `src/state.rs`, `// <rbs:layers>` et `// <rbs:startup>` appartiennent aux
+fragments qu'installe [`rbs add`](./add.md) :
 
 | Ancre | Fichier |
 |---|---|
@@ -376,6 +465,16 @@ squelette porte, et il en emploie six sur dix — les deux de `src/state.rs`, `/
 | `// <rbs:migration_modules>` | `migration/src/lib.rs` |
 | `// <rbs:migrations>` | `migration/src/lib.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
+
+`rbs generate job` en emploie trois, sans en partager aucune avec les deux commandes
+ci-dessus ni avec le squelette : chacune vit dans un fichier qu'un fragment dépose, et
+`// <rbs:jobs>` reçoit aussi la livraison du fragment `webhooks` :
+
+| Ancre | Fichier |
+|---|---|
+| `// <rbs:job_modules>` | `src/modules/jobs/mod.rs`, déposée par `jobs` |
+| `// <rbs:jobs>` | `src/modules/jobs/mod.rs`, déposée par `jobs` |
+| `// <rbs:schedules>` | `src/modules/scheduler/mod.rs`, déposée par `scheduler`, sous `--every` |
 
 `src/lib.rs` est la bibliothèque que porte tout projet engendré : `src/main.rs` et
 `src/seeds/main.rs` sont deux racines de crate distinctes, et la bibliothèque est ce qui
@@ -398,8 +497,8 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) contrôle les quatorze ancres — onze sur un projet qui ne
-porte ni compose, ni file, ni fragment déplacé sous `src/modules/`, les trois
+[`rbs doctor`](./doctor.md) contrôle les seize ancres — onze sur un projet qui ne
+porte ni compose, ni file, ni fragment déplacé sous `src/modules/`, les cinq
 optionnelles — si bien qu'une ancre disparue se trouve avant qu'une génération ne bute
 dessus.
 

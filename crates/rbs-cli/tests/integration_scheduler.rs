@@ -142,6 +142,53 @@ fn a_due_schedule_is_triggered_once_on_the_three_engines() {
     }
 }
 
+/// Ce que `rbs generate job` engendre n'est prouvé nulle part ailleurs que compilé : ses
+/// tests unitaires jugent le texte produit, pas si rustc et clippy l'acceptent une fois
+/// posé dans un vrai projet, ni si son échéance survit à un `cargo test` complet.
+#[test]
+#[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn a_generated_job_with_its_schedule_compiles_and_passes_the_project_tests() {
+    let postgres = common::start_postgres();
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_scheduler_on("postgres", &common::url_of(&postgres), &parent);
+
+    let _cible = common::verrou(&common::cible());
+
+    // `project_with_scheduler_on` a déjà commité une fois pour poser `scheduler` : la
+    // garde Git de `generate job` en réclame un second.
+    common::commiter(&racine, "avant le job engendré");
+
+    rbs(&racine)
+        .args(["generate", "job", "purge", "--every", "0 4 * * *"])
+        .assert()
+        .success();
+
+    migrate_dans(&racine, &common::cible());
+
+    let (fmt_ok, fmt_journal) = cargo_dans(&racine, &common::cible(), &["fmt", "--check"]);
+    assert!(
+        fmt_ok,
+        "`cargo fmt --check` a échoué sur le job engendré :\n{fmt_journal}"
+    );
+
+    let (clippy_ok, clippy_journal) = cargo_dans(
+        &racine,
+        &common::cible(),
+        &["clippy", "--all-targets", "--", "-D", "warnings"],
+    );
+    assert!(
+        clippy_ok,
+        "`cargo clippy` a échoué sur le job engendré :\n{clippy_journal}"
+    );
+
+    let (test_ok, test_journal) =
+        cargo_test_brut(&racine, &common::cible(), &["--", "--include-ignored"]);
+    assert!(
+        test_ok,
+        "`cargo test --include-ignored` a échoué sur le projet :\n{test_journal}"
+    );
+}
+
 /// Un projet neuf portant `scheduler`, sa base pointée sur `url`.
 ///
 /// Le fragment déclare `requires = ["jobs"]` : `rbs add scheduler` sur un projet nu doit
@@ -189,13 +236,11 @@ fn migrate_dans(racine: &Path, cible: &Path) {
         .success();
 }
 
-/// Joue `cargo test` dans le projet et rend son issue et ses deux flux réunis.
-fn cargo_test_brut(racine: &Path, cible: &Path, arguments: &[&str]) -> (bool, String) {
+/// Joue `cargo <arguments>` dans le projet et rend son issue et ses deux flux réunis.
+fn cargo_dans(racine: &Path, cible: &Path, arguments: &[&str]) -> (bool, String) {
     let output = std::process::Command::new("cargo")
         .current_dir(racine)
         .env("CARGO_TARGET_DIR", cible)
-        .arg("test")
-        .arg("--workspace")
         .args(arguments)
         .output()
         .expect("cargo doit se lancer");
@@ -207,6 +252,14 @@ fn cargo_test_brut(racine: &Path, cible: &Path, arguments: &[&str]) -> (bool, St
     );
 
     (output.status.success(), journal)
+}
+
+/// Joue `cargo test --workspace` dans le projet et rend son issue et ses deux flux réunis.
+fn cargo_test_brut(racine: &Path, cible: &Path, arguments: &[&str]) -> (bool, String) {
+    let mut commande = vec!["test", "--workspace"];
+    commande.extend_from_slice(arguments);
+
+    cargo_dans(racine, cible, &commande)
 }
 
 /// Le binaire livré, lancé depuis `repertoire`.

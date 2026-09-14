@@ -1085,7 +1085,8 @@ fn the_typescript_client_of_hello_crud_is_in_place() {
     )
     .expect("le client versionné doit être lisible");
 
-    // Une méthode par opération du CRUD, plus la sonde : c'est ce que le document porte.
+    // Une méthode par opération du CRUD, plus les deux sondes : c'est ce que le document
+    // porte.
     for methode in [
         "articlesList(",
         "articlesCreate(",
@@ -1093,6 +1094,7 @@ fn the_typescript_client_of_hello_crud_is_in_place() {
         "articlesUpdate(",
         "articlesDelete(",
         "health(",
+        "healthLive(",
     ] {
         assert!(
             client.contains(methode),

@@ -6,6 +6,7 @@
 
 mod action;
 pub(crate) mod application;
+pub(crate) mod json;
 pub(crate) mod render;
 mod text;
 
@@ -33,7 +34,7 @@ pub(crate) struct File {
     pub statut: Status,
 }
 
-/// Une insertion que le plan ne fera pas, faute du fichier qui devait la porter.
+/// Une insertion que le plan ne fera pas, faute de l'endroit qui devait la porter.
 ///
 /// Ne concerne que les ancres optionnelles : un projet SQLite n'a pas de compose, et le
 /// service qu'un fragment y aurait ajouté n'a nulle part où aller. Plutôt que d'échouer
@@ -41,20 +42,39 @@ pub(crate) struct File {
 /// — le plan garde le bloc, pour que l'utilisateur sache quoi monter lui-même.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Sautee {
-    /// L'ancre visée, dont le fichier manque.
+    /// L'ancre visée.
     pub anchor: Anchor,
     /// Les lignes qui y seraient allées.
     pub lines: Vec<String>,
+    /// Ce qui manquait : le remède n'est pas le même.
+    pub cause: CauseSautee,
+}
+
+/// Ce qui a fait sauter une insertion.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum CauseSautee {
+    /// Le fichier porteur n'existe pas.
+    FichierAbsent,
+    /// Le fichier est là, sans l'ancre : un projet engendré avant qu'elle n'existe.
+    AncreAbsente {
+        /// Ce qui empêche `rbs doctor --fix` de la reposer, `None` s'il le sait : promettre
+        /// la réparation d'un fichier qui a perdu son accroche enverrait dans une impasse.
+        obstacle: Option<crate::anchors::Cause>,
+    },
+    /// Une insertion précédente du plan a sauté, et celle-ci nomme ce qu'elle devait poser :
+    /// écrite seule, elle laisserait le projet hors d'état de compiler, ou de fonctionner.
+    Entrainee {
+        /// L'ancre de l'insertion sautée dont celle-ci dépend.
+        par: Anchor,
+    },
 }
 
 /// Ce qu'une commande fera au projet, entièrement calculé et rien d'écrit.
 #[derive(Debug, Clone)]
 pub(crate) struct Plan {
     root: PathBuf,
-    /// La production ne lit que `files` ; cette trace n'existe que pour les tests, d'où
-    /// l'exemption portée sur le champ et bornée à `not(test)` : sur l'accesseur, elle
-    /// vaudrait aussi en tests et n'y signalerait plus rien.
-    #[cfg_attr(not(test), expect(dead_code))]
+    /// Trace du calcul des statuts, action par action : la vue JSON (`plan::json::plan`)
+    /// la lit en production, les tests du modèle la vérifient dans le même ordre.
     actions: Vec<Action>,
     files: Vec<File>,
     sautees: Vec<Sautee>,
@@ -63,10 +83,9 @@ pub(crate) struct Plan {
 impl Plan {
     /// Les actions dans l'ordre où elles ont été planifiées.
     ///
-    /// Trace du calcul des statuts, action par action, que les tests du modèle vérifient.
-    /// L'affichage et l'application travaillent par fichier : un fichier peut recevoir
-    /// plusieurs actions, et seul son statut agrégé décide de ce qui lui arrivera.
-    #[cfg(test)]
+    /// L'affichage humain et l'application travaillent par fichier : un fichier peut
+    /// recevoir plusieurs actions, et seul son statut agrégé décide de ce qui lui
+    /// arrivera. La vue JSON, elle, rend chaque action séparément — d'où cet accesseur.
     pub fn actions(&self) -> &[Action] {
         &self.actions
     }
@@ -158,6 +177,64 @@ pub(crate) enum Error {
     },
 }
 
+impl Error {
+    /// Code stable de la faute, en snake_case ASCII.
+    ///
+    /// `match` exhaustif, sans bras `_` : une variante ajoutée à `Error` ne compile plus
+    /// tant qu'elle n'a pas le sien.
+    pub(crate) fn code(&self) -> &'static str {
+        match self {
+            Error::Acces(_) => "fichier_inaccessible",
+            Error::DejaProjete { .. } => "plan_incoherent",
+            Error::Anchor(_) => "ancre_absente",
+            Error::MalPlacee(_) => "ancre_mal_placee",
+            Error::FichierAbsent { .. } => "fichier_absent",
+            Error::Metadata(_) => "manifeste_illisible",
+            Error::Toml { .. } => "toml_invalide",
+            Error::ManifesteAbsent { .. } => "manifeste_absent",
+            Error::ZoneAbsente { .. } => "zone_absente",
+        }
+    }
+
+    /// Le bloc à coller, quand la faute est une ancre disparue, mal placée, ou une zone
+    /// absente d'`AGENTS.md` — les seules dont le remède tient dans un extrait de
+    /// fichier plutôt que dans une décision du développeur.
+    pub(crate) fn bloc(&self) -> Option<String> {
+        match self {
+            Error::Anchor(absente) => Some(absente.anchor.block()),
+            Error::MalPlacee(placee) => Some(placee.block.clone()),
+            Error::ZoneAbsente { zone, .. } => Some(zone.block()),
+            _ => None,
+        }
+    }
+
+    /// Le texte du remède, porté une seule fois : chaque commande qui affiche un remède
+    /// humain pour une ancre disparue ou mal placée délègue ici plutôt que de recopier
+    /// ce texte, qui divergerait au premier changement.
+    ///
+    /// `Some` exactement quand [`Self::bloc`] l'est : un bloc à coller sans le dire où le
+    /// coller laisserait un agent deviner.
+    pub(crate) fn remede(&self) -> Option<String> {
+        match self {
+            Error::Anchor(absente) => Some(format!(
+                "dans {} :\n{}",
+                absente.anchor.file,
+                absente.anchor.block()
+            )),
+            Error::MalPlacee(placee) => Some(format!(
+                "dans {}, remontez ce bloc au-dessus de `{}` :\n{}",
+                placee.anchor.file, placee.before, placee.block
+            )),
+            Error::ZoneAbsente { path, zone } => Some(format!(
+                "dans {path}, collez ce bloc pour rétablir la zone `rbs:{}` :\n{}",
+                zone.zone,
+                zone.block()
+            )),
+            _ => None,
+        }
+    }
+}
+
 /// Accumule les actions d'un plan en calculant, pour chaque fichier, son contenu final.
 pub(crate) struct Builder {
     root: PathBuf,
@@ -224,6 +301,7 @@ impl Builder {
                 self.sautees.push(Sautee {
                     anchor,
                     lines: lines.to_vec(),
+                    cause: CauseSautee::FichierAbsent,
                 });
                 return Ok(());
             }
@@ -249,6 +327,48 @@ impl Builder {
         });
 
         Ok(())
+    }
+
+    /// Comme [`Builder::insert`], mais une ancre optionnelle absente d'un fichier présent
+    /// saute l'insertion au lieu d'arrêter le plan.
+    ///
+    /// Distincte d'`insert`, dont les appelants tiennent au refus : un compose réécrit à la
+    /// main sans son ancre est un compose abîmé. Ici le fichier précède l'ancre — un projet
+    /// engendré avant elle — et l'y reposer est l'affaire de `rbs doctor --fix`, quand le
+    /// fichier porte encore la ligne sous laquelle elle se repose.
+    ///
+    /// Rend `true` quand l'insertion est planifiée, écrite ou déjà en place, et `false`
+    /// quand elle saute : l'appelant dont une insertion suivante en dépend la saute avec.
+    pub fn insert_ou_sauter(&mut self, anchor: Anchor, lines: &[String]) -> Result<bool, Error> {
+        let avant = self.sautees.len();
+
+        match self.insert(anchor.clone(), lines) {
+            Ok(()) => Ok(self.sautees.len() == avant),
+            Err(Error::Anchor(_)) if anchor.optional => {
+                // Jugée sur le fichier tel que le plan le laisse : c'est lui que `rbs doctor
+                // --fix` trouvera, le plan appliqué.
+                let obstacle = match self.states(&anchor.file)?.courant {
+                    Some(courant) => crate::anchors::repose(&courant, &anchor).err(),
+                    None => Some(crate::anchors::Cause::FichierAbsent),
+                };
+                self.sautees.push(Sautee {
+                    anchor,
+                    lines: lines.to_vec(),
+                    cause: CauseSautee::AncreAbsente { obstacle },
+                });
+                Ok(false)
+            }
+            Err(autre) => Err(autre),
+        }
+    }
+
+    /// Consigne une insertion sans la tenter : `cause` dit pourquoi elle ne s'écrira pas.
+    pub fn sauter(&mut self, anchor: Anchor, lines: &[String], cause: CauseSautee) {
+        self.sautees.push(Sautee {
+            anchor,
+            lines: lines.to_vec(),
+            cause,
+        });
     }
 
     /// Vérifie que `anchor` précède, dans son fichier, toute ligne commençant par `line`.
@@ -787,6 +907,7 @@ mod tests {
         assert_eq!(plan.sautees().len(), 1);
         assert_eq!(plan.sautees()[0].anchor, anchors::SERVICES);
         assert_eq!(plan.sautees()[0].lines, mailpit());
+        assert_eq!(plan.sautees()[0].cause, CauseSautee::FichierAbsent);
     }
 
     /// Le fragment `docker` écrit le compose puis y insère ses services, dans le même
@@ -829,6 +950,91 @@ mod tests {
             .expect_err("le fichier est là, sans son ancre");
 
         assert!(matches!(error, Error::Anchor(_)), "{error:?}");
+    }
+
+    /// Un projet engendré avant l'ancre porte le fichier, sans elle : c'est le cas que
+    /// `insert_ou_sauter` sert. L'insertion est sautée, consignée comme telle, et le
+    /// fichier n'est pas touché.
+    #[test]
+    fn insert_or_skip_skips_an_optional_anchor_missing_from_a_present_file() {
+        let project = project();
+        let compose = "services:\n  db:\n    image: postgres\n";
+        fs::write(project.path().join("docker-compose.yml"), compose).expect("l'écriture aboutit");
+        let mut builder = Builder::new(project.path().to_path_buf());
+
+        builder
+            .insert_ou_sauter(anchors::SERVICES, &mailpit())
+            .expect("l'ancre est optionnelle : son absence saute l'insertion");
+        let plan = builder.finir();
+
+        assert!(plan.files().is_empty(), "{:?}", plan.files());
+        assert!(plan.actions().is_empty(), "{:?}", plan.actions());
+        assert_eq!(
+            plan.sautees(),
+            [Sautee {
+                anchor: anchors::SERVICES,
+                lines: mailpit(),
+                // `services:` est là : `rbs doctor --fix` saurait reposer l'ancre dessous.
+                cause: CauseSautee::AncreAbsente { obstacle: None },
+            }]
+        );
+        assert_eq!(
+            fs::read_to_string(project.path().join("docker-compose.yml"))
+                .expect("le compose se lit"),
+            compose
+        );
+    }
+
+    /// Obligatoire, l'ancre absente reste une erreur : le projet est alors abîmé, et non
+    /// antérieur à elle.
+    #[test]
+    fn insert_or_skip_keeps_a_mandatory_anchor_missing_from_its_file_an_error() {
+        let project = project();
+        with_router(
+            &project,
+            "pub fn router() -> Router {\n    Router::new()\n}\n",
+        );
+        let mut builder = Builder::new(project.path().to_path_buf());
+
+        let error = builder
+            .insert_ou_sauter(
+                anchors::ROUTES,
+                &[".merge(crate::users::routes())".to_string()],
+            )
+            .expect_err("l'ancre des routes n'est pas optionnelle");
+        let plan = builder.finir();
+
+        assert!(matches!(error, Error::Anchor(_)), "{error:?}");
+        assert!(plan.sautees().is_empty(), "{:?}", plan.sautees());
+    }
+
+    #[test]
+    fn insert_or_skip_names_a_missing_file_as_the_cause() {
+        let project = project();
+        let mut builder = Builder::new(project.path().to_path_buf());
+
+        builder
+            .insert_ou_sauter(anchors::SERVICES, &mailpit())
+            .expect("l'ancre est optionnelle : son fichier peut manquer");
+        let plan = builder.finir();
+
+        assert_eq!(plan.sautees().len(), 1, "{:?}", plan.sautees());
+        assert_eq!(plan.sautees()[0].cause, CauseSautee::FichierAbsent);
+    }
+
+    #[test]
+    fn insert_or_skip_inserts_into_a_present_anchor() {
+        let project = project();
+        fs::write(project.path().join("docker-compose.yml"), COMPOSE).expect("l'écriture aboutit");
+        let mut builder = Builder::new(project.path().to_path_buf());
+
+        builder
+            .insert_ou_sauter(anchors::SERVICES, &mailpit())
+            .expect("l'ancre est là");
+        let plan = builder.finir();
+
+        assert!(plan.sautees().is_empty(), "{:?}", plan.sautees());
+        assert!(plan.files()[0].after.contains("mailpit:"));
     }
 
     #[test]
@@ -1454,5 +1660,123 @@ mod tests {
         );
         assert_eq!(plan.actions().len(), 4);
         assert_eq!(plan.files().len(), 4);
+    }
+
+    #[test]
+    fn a_vanished_anchor_carries_its_code_and_the_block_to_paste() {
+        let error = Error::Anchor(anchors::Missing {
+            anchor: anchors::ROUTES,
+        });
+
+        assert_eq!(error.code(), "ancre_absente");
+        let Error::Anchor(absente) = &error else {
+            unreachable!()
+        };
+        assert_eq!(error.bloc(), Some(absente.anchor.block()));
+    }
+
+    #[test]
+    fn a_vanished_anchor_names_where_to_paste_the_block() {
+        let error = Error::Anchor(anchors::Missing {
+            anchor: anchors::ROUTES,
+        });
+
+        assert_eq!(
+            error.remede(),
+            Some(format!(
+                "dans {} :\n{}",
+                anchors::ROUTES.file,
+                anchors::ROUTES.block()
+            ))
+        );
+    }
+
+    #[test]
+    fn a_misplaced_anchor_names_the_line_to_move_the_block_above() {
+        let error = Error::MalPlacee(Box::new(anchors::Misplaced {
+            anchor: anchors::STATE_INIT,
+            before: "core: CoreState::new(".to_string(),
+            block: "// <rbs:state_init>\n// </rbs:state_init>".to_string(),
+        }));
+
+        assert_eq!(
+            error.remede(),
+            Some(
+                "dans src/state.rs, remontez ce bloc au-dessus de `core: CoreState::new(` :\n\
+                 // <rbs:state_init>\n// </rbs:state_init>"
+                    .to_string()
+            )
+        );
+    }
+
+    #[test]
+    fn a_missing_zone_names_the_file_and_the_block_to_paste() {
+        let error = Error::ZoneAbsente {
+            path: "AGENTS.md".to_string(),
+            zone: crate::agents::MissingZone {
+                zone: "inventory".to_string(),
+            },
+        };
+
+        assert_eq!(
+            error.remede(),
+            Some(
+                "dans AGENTS.md, collez ce bloc pour rétablir la zone `rbs:inventory` :\n\
+                 <!-- rbs:inventory -->\n<!-- /rbs:inventory -->"
+                    .to_string()
+            )
+        );
+    }
+
+    /// La règle que chaque commande doit pouvoir supposer : un bloc à coller sans dire
+    /// où le coller n'existe pas, et réciproquement.
+    #[test]
+    fn remede_is_some_exactly_when_bloc_is_some_for_every_variant() {
+        let toml_source: Result<toml_edit::DocumentMut, toml_edit::TomlError> =
+            "= invalide".parse();
+        let erreurs: Vec<Error> = vec![
+            Error::Acces(crate::errors::Acces {
+                path: "Cargo.toml".to_string(),
+                source: io::Error::other("panne"),
+            }),
+            Error::DejaProjete {
+                path: "src.rs".to_string(),
+            },
+            Error::Anchor(anchors::Missing {
+                anchor: anchors::ROUTES,
+            }),
+            Error::MalPlacee(Box::new(anchors::Misplaced {
+                anchor: anchors::STATE_INIT,
+                before: "core: CoreState::new(".to_string(),
+                block: "// <rbs:state_init>\n// </rbs:state_init>".to_string(),
+            })),
+            Error::FichierAbsent {
+                path: "src/router.rs".to_string(),
+            },
+            Error::Metadata(crate::metadata::Error::PasUnProjet {
+                path: "Cargo.toml".to_string(),
+            }),
+            Error::Toml {
+                path: "Cargo.toml".to_string(),
+                source: toml_source.expect_err("la source est invalide"),
+            },
+            Error::ManifesteAbsent {
+                path: "Cargo.toml".to_string(),
+            },
+            Error::ZoneAbsente {
+                path: "AGENTS.md".to_string(),
+                zone: crate::agents::MissingZone {
+                    zone: "inventory".to_string(),
+                },
+            },
+        ];
+
+        for erreur in erreurs {
+            assert_eq!(
+                erreur.remede().is_some(),
+                erreur.bloc().is_some(),
+                "{erreur:?}"
+            );
+        }
     }
 }

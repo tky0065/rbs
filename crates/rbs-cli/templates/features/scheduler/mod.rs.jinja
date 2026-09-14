@@ -116,13 +116,23 @@ pub(super) fn a_la_seconde(instant: DateTimeWithTimeZone) -> DateTimeWithTimeZon
 /// Les échéances de ce projet. Déclarez les vôtres ici.
 ///
 /// Les expressions sont évaluées **en UTC** : `0 3 * * *` est 3 h UTC.
+///
+/// En instructions et non en `vec![]` : une ancre posée à l'intérieur d'une expression — ce
+/// `vec![]`, ou la chaîne de `.register()` qu'était `jobs::registry` — ne survit pas à rustfmt
+/// dès qu'un second élément s'y ajoute. Clippy préférerait le `vec![]`, seule forme que l'ancre
+/// ne peut pas porter.
+#[allow(clippy::vec_init_then_push)]
 pub fn schedules() -> Vec<Schedule> {
-    vec![Schedule::every::<crate::modules::jobs::demo::Log>(
+    let mut calendrier = Vec::new();
+    // <rbs:schedules>
+    // </rbs:schedules>
+    calendrier.push(Schedule::every::<crate::modules::jobs::demo::Log>(
         "0 3 * * *",
         || crate::modules::jobs::demo::Log {
             message: "échéance quotidienne".to_string(),
         },
-    )]
+    ));
+    calendrier
 }
 
 /// Valide le calendrier, l'aligne sur la table, puis détache le ticker.

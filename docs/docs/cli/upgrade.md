@@ -9,8 +9,9 @@ Aligns a generated project on the version of the CLI that runs it: the `rbs-core
 dependency and the version recorded in `[package.metadata.rbs]`. It then prints the
 migration notes the jump crosses.
 
-It writes to `Cargo.toml`, and to the two reserved zones of [`AGENTS.md`](../guides/agents.md)
-— nothing else. The rest of the project — controllers, configuration, migrations, and
+It writes to `Cargo.toml`, and to the two reserved zones of [`AGENTS.md`](../guides/agents.md);
+it also creates the one-line `CLAUDE.md` that imports that guide when the project has none,
+and never rewrites one that exists — nothing else. The rest of the project — controllers, configuration, migrations, and
 everything you write outside those two zones — is yours from the moment
 [`rbs new`](./new.md) put it there, and re-rendering it on a newer version would erase your
 work without you having asked for it by name. The guide is different: it is text rbs
@@ -33,6 +34,7 @@ Usage: rbs upgrade [OPTIONS]
 Options:
       --force    Met à niveau même si le working tree Git est sale
       --dry-run  Affiche le plan sans rien écrire
+      --json     Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
   -h, --help     Print help
   -V, --version  Print version
 ```
@@ -40,6 +42,11 @@ Options:
 `--force` and `--dry-run` are its own; `--dry-run` prints the plan and stops, which is how
 you read what a jump would touch before it touches it. Neither `--template-dir` nor `--yes` is accepted
 here: each is declared on the commands that read it.
+
+`--json` prints the plan — or the error — as one JSON document on standard output,
+with `applique` to say whether the manifest was written; the migration notes then go to
+standard error. [The agents guide](../guides/agents.md#reading-a-plan-as-json) has the
+document and the error codes.
 
 ## A jump that carries a note
 

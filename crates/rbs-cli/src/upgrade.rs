@@ -1,8 +1,9 @@
 //! `rbs upgrade` : le projet aligné sur la version du CLI, et rien d'autre.
 //!
 //! La commande n'écrit que dans `Cargo.toml` et dans les deux zones réservées de
-//! `AGENTS.md`. Le reste du projet — contrôleurs, configuration, migrations, et tout ce
-//! que le développeur écrit hors de ces zones — appartient au développeur dès que
+//! `AGENTS.md`, et crée le `CLAUDE.md` qui l'importe quand il manque. Le reste du projet
+//! — contrôleurs, configuration, migrations, tout ce que le développeur écrit hors de ces
+//! zones, et un `CLAUDE.md` existant — appartient au développeur dès que
 //! `rbs new` l'a posé : le re-rendre sur une version plus récente effacerait son travail
 //! sans qu'il l'ait demandé nommément. Le guide, lui, est du texte que rbs produit et
 //! versionne : un projet mis à niveau doit recevoir le mode d'emploi de sa nouvelle
@@ -14,6 +15,7 @@
 
 use std::path::PathBuf;
 
+use crate::errors::Codee;
 use crate::git;
 use crate::metadata;
 use crate::plan;
@@ -98,6 +100,38 @@ pub(crate) enum Error {
 // Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
 crate::errors::depuis_la_racine!(Error);
 
+impl Codee for Error {
+    fn code(&self) -> &'static str {
+        match self {
+            Error::PasUnProjet => "pas_un_projet",
+            Error::Acces(_) => "fichier_inaccessible",
+            Error::CliAnterieur { .. } => "cli_anterieur",
+            Error::WorkingTreeSale(_) => "arbre_sale",
+            Error::Metadata(_) => "manifeste_illisible",
+            Error::Plan(erreur) => erreur.code(),
+            Error::Application(erreur) => erreur.code(),
+            Error::Agents(_) => "agents_illisible",
+        }
+    }
+
+    /// Cette erreur n'a pas de `remedy()` : seul un `Plan` a un texte à donner, lu sur
+    /// `plan::Error::remede` plutôt que reconstruit ici, où il divergerait au premier
+    /// changement.
+    fn remede(&self) -> Option<String> {
+        match self {
+            Error::Plan(erreur) => erreur.remede(),
+            _ => None,
+        }
+    }
+
+    fn bloc(&self) -> Option<String> {
+        match self {
+            Error::Plan(erreur) => erreur.bloc(),
+            _ => None,
+        }
+    }
+}
+
 /// Calcule ce que la mise à niveau ferait au projet, sans rien écrire.
 pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     plan_for_with(options, CLI)
@@ -171,6 +205,12 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
         builder.create(crate::agents::FICHIER, &document)?;
         None
     };
+
+    // Un `CLAUDE.md` présent appartient au développeur, quel que soit son contenu : il
+    // n'est posé que s'il manque — le parc engendré avant lui — et jamais réécrit.
+    if !builder.exists(crate::agents::CLAUDE)? {
+        builder.create(crate::agents::CLAUDE, crate::agents::CLAUDE_CONTENU)?;
+    }
 
     let plan = builder.finir();
 
@@ -640,5 +680,139 @@ mod tests {
         .expect("le plan doit se calculer");
 
         assert!(planned.deja_a_jour, "{:?}", planned.plan.files());
+    }
+
+    /// Le parc déjà engendré n'a pas de `CLAUDE.md` : la mise à niveau le lui donne, sans
+    /// quoi Claude Code n'y lirait jamais le guide.
+    #[test]
+    fn upgrading_creates_a_missing_claude_file() {
+        let (_parent, root) = project(None);
+        fs::remove_file(root.join("CLAUDE.md")).expect("le fichier existe");
+
+        let planned = plan_for_with(
+            &Options {
+                directory: root.clone(),
+                force: true,
+            },
+            "2.0.0",
+        )
+        .expect("le plan doit se calculer");
+
+        let projete = planned
+            .plan
+            .files()
+            .iter()
+            .find(|file| file.path == "CLAUDE.md")
+            .expect("le plan crée CLAUDE.md");
+        assert_eq!(projete.after, "@AGENTS.md\n");
+    }
+
+    /// C'est l'absence du fichier qui motive l'écriture, non l'écart de version : un
+    /// projet déjà à la version du CLI le reçoit aussi, comme il recevrait son `AGENTS.md`.
+    #[test]
+    fn a_project_on_the_target_without_a_claude_file_is_not_up_to_date() {
+        let (_parent, root) = project(None);
+        fs::remove_file(root.join("CLAUDE.md")).expect("le fichier existe");
+
+        let planned = plan_for_with(
+            &Options {
+                directory: root,
+                force: true,
+            },
+            crate::agents::VERSION,
+        )
+        .expect("le plan doit se calculer");
+
+        assert!(!planned.deja_a_jour, "{:?}", planned.plan.files());
+        assert!(
+            planned
+                .plan
+                .files()
+                .iter()
+                .any(|file| file.path == "CLAUDE.md"),
+            "{:?}",
+            planned.plan.files()
+        );
+    }
+
+    /// Un `CLAUDE.md` présent appartient au développeur, même s'il n'importe plus rien.
+    #[test]
+    fn upgrading_never_rewrites_an_existing_claude_file() {
+        let (_parent, root) = project(None);
+        fs::write(root.join("CLAUDE.md"), "# nos règles\n").expect("l'écriture aboutit");
+
+        let planned = upgrade(&root, futur());
+
+        assert!(
+            !planned
+                .plan
+                .files()
+                .iter()
+                .any(|file| file.path == "CLAUDE.md"),
+            "{:?}",
+            planned.plan.files()
+        );
+        assert_eq!(
+            fs::read_to_string(root.join("CLAUDE.md")).expect("CLAUDE.md est lisible"),
+            "# nos règles\n"
+        );
+    }
+
+    /// Cette erreur n'a pas de `remedy()` : `remede` n'invente rien pour une panne qui
+    /// ne se répare pas par un texte à coller.
+    #[test]
+    fn the_absence_of_a_project_has_a_stable_code_and_no_remedy() {
+        let error = Error::PasUnProjet;
+
+        assert_eq!(error.code(), "pas_un_projet");
+        assert_eq!(error.remede(), None);
+    }
+
+    /// Sans `remedy()` propre à cette commande, `remede` lit le même texte que les
+    /// autres commandes sur `plan::Error::remede`, pour une ancre disparue portée par un
+    /// `Plan`.
+    #[test]
+    fn a_vanished_anchor_carried_by_the_plan_still_gives_a_remedy() {
+        let error = Error::Plan(crate::plan::Error::Anchor(crate::anchors::Missing {
+            anchor: crate::anchors::ROUTES,
+        }));
+
+        assert_eq!(error.code(), "ancre_absente");
+        assert_eq!(error.bloc(), Some(crate::anchors::ROUTES.block()));
+        let remede = error.remede().expect("une ancre disparue se recolle");
+        assert!(remede.contains("src/router.rs"), "{remede}");
+        assert!(remede.contains("// <rbs:routes>"), "{remede}");
+    }
+
+    /// Les trois pannes à bloc d'un plan de mise à niveau : un bloc sans son remède, ou
+    /// l'inverse, laisserait un agent deviner où coller ce qu'on lui montre.
+    #[test]
+    fn remede_is_some_exactly_when_bloc_is_some_for_a_plan_error() {
+        let erreurs = vec![
+            crate::plan::Error::Anchor(crate::anchors::Missing {
+                anchor: crate::anchors::ROUTES,
+            }),
+            crate::plan::Error::MalPlacee(Box::new(crate::anchors::Misplaced {
+                anchor: crate::anchors::STATE_INIT,
+                before: "core: CoreState::new(".to_string(),
+                block: "// <rbs:state_init>\n// </rbs:state_init>".to_string(),
+            })),
+            crate::plan::Error::ZoneAbsente {
+                path: "AGENTS.md".to_string(),
+                zone: crate::agents::MissingZone {
+                    zone: "inventory".to_string(),
+                },
+            },
+        ];
+
+        for erreur in erreurs {
+            let error = Error::Plan(erreur);
+            assert_eq!(
+                error.remede().is_some(),
+                error.bloc().is_some(),
+                "{error:?}"
+            );
+            assert!(error.remede().is_some(), "{error:?}");
+        }
     }
 }

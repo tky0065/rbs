@@ -5,18 +5,12 @@
 //! donc le code, et non une lecture approximative des sources.
 
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
-use crate::{git, metadata, plan};
+use crate::errors::Codee;
+use crate::{git, metadata, openapi, plan};
 
 pub(crate) mod document;
 pub(crate) mod ts;
-
-/// Le binaire du projet qui imprime le document.
-const BINAIRE: &str = "src/bin/openapi.rs";
-
-/// La bibliothèque sans laquelle ce binaire ne peut pas atteindre `ApiDoc`.
-const BIBLIOTHEQUE: &str = "src/lib.rs";
 
 /// Le langage du client demandé.
 ///
@@ -73,27 +67,9 @@ pub(crate) enum Error {
     #[error("{}", crate::errors::PAS_UN_PROJET)]
     PasUnProjet,
 
-    /// Le projet n'a pas de bibliothèque, et le binaire ne peut donc pas exister.
-    #[error(
-        "ce projet n'a pas de {BIBLIOTHEQUE} : `ApiDoc` y vit dans le binaire principal, où \
-         un second binaire ne peut pas l'atteindre"
-    )]
-    SansBibliotheque,
-
-    /// Le projet ne porte pas le binaire qui imprime le document.
-    #[error("ce projet n'a pas de {BINAIRE} : rbs n'a aucun document OpenAPI à lire")]
-    SansBinaire,
-
-    /// `cargo` n'a pas pu être lancé.
-    #[error("cargo n'a pas pu être lancé : {0}")]
-    Cargo(#[source] std::io::Error),
-
-    /// Le binaire du projet a échoué.
-    #[error("`cargo run --bin openapi` a échoué (code {code}) : le projet ne compile pas")]
-    BinaireEnEchec {
-        /// Code de sortie du sous-processus.
-        code: i32,
-    },
+    /// Le document OpenAPI du projet n'a pas pu être obtenu.
+    #[error(transparent)]
+    Openapi(#[from] openapi::Obtention),
 
     /// Le document imprimé n'a pas pu être lu.
     #[error("{0}")]
@@ -129,22 +105,41 @@ crate::errors::depuis_la_racine!(Error);
 
 impl Error {
     /// Ce que le développeur peut coller pour réparer, quand la panne se répare ainsi.
-    ///
-    /// Un projet créé avant que la template ne porte ce binaire n'a rien à lancer, et cela
-    /// se répare en deux gestes plutôt que par une décision : le remède les donne.
     pub(crate) fn remedy(&self) -> Option<String> {
         match self {
-            Error::SansBinaire => Some(format!(
-                "créez {BINAIRE} :\n\n\
-                 use utoipa::OpenApi;\n\n\
-                 fn main() -> Result<(), serde_json::Error> {{\n    \
-                 println!(\"{{}}\", <votre_crate>::openapi::ApiDoc::openapi().to_pretty_json()?);\n\n    \
-                 Ok(())\n\
-                 }}\n\n\
-                 puis déclarez-le dans Cargo.toml :\n\n\
-                 [[bin]]\nname = \"openapi\"\npath = \"{BINAIRE}\"\n\n\
-                 un projet créé par `rbs new` le porte déjà."
-            )),
+            Error::Openapi(obtention) => obtention.remedy(),
+            _ => None,
+        }
+    }
+}
+
+impl Codee for Error {
+    fn code(&self) -> &'static str {
+        match self {
+            Error::PasUnProjet => "pas_un_projet",
+            Error::Openapi(obtention) => obtention.code(),
+            Error::Document(_) => "document_illisible",
+            Error::Rendu(_) => "client_irrendable",
+            Error::Acces(_) => "fichier_inaccessible",
+            Error::WorkingTreeSale(_) => "arbre_sale",
+            Error::Plan(erreur) => erreur.code(),
+            Error::Application(erreur) => erreur.code(),
+            Error::Metadata(_) => "manifeste_illisible",
+        }
+    }
+
+    /// `--json` va plus loin que l'affichage humain de `remedy`, qui ne couvre que
+    /// `Openapi` : un `Plan` porte son remède dès qu'il en a un, comme son `bloc()`.
+    fn remede(&self) -> Option<String> {
+        match self {
+            Error::Plan(erreur) => erreur.remede(),
+            _ => self.remedy(),
+        }
+    }
+
+    fn bloc(&self) -> Option<String> {
+        match self {
+            Error::Plan(erreur) => erreur.bloc(),
             _ => None,
         }
     }
@@ -168,18 +163,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         git::garde(&root)?;
     }
 
-    // Les deux refus précèdent cargo, et dans cet ordre : sans bibliothèque, le binaire ne
-    // peut pas exister, et annoncer son absence enverrait le lecteur écrire un fichier qui
-    // ne compilerait pas.
-    if !root.join(BIBLIOTHEQUE).exists() {
-        return Err(Error::SansBibliotheque);
-    }
-
-    if !root.join(BINAIRE).exists() {
-        return Err(Error::SansBinaire);
-    }
-
-    let json = imprime_le_document(&root)?;
+    let json = openapi::imprimer(&root)?;
     let document = document::parse(&json)?;
 
     let projet = metadonnees.package_name(&root.join("Cargo.toml"))?;
@@ -204,31 +188,11 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     })
 }
 
-/// Lance le binaire du projet et rend ce qu'il a imprimé.
-///
-/// `stderr` est hérité et non capturé : la compilation du projet passe par là, et
-/// l'escamoter laisserait la commande muette pendant une minute sur un projet froid.
-fn imprime_le_document(root: &Path) -> Result<String, Error> {
-    let sortie = Command::new("cargo")
-        .args(["run", "--quiet", "--bin", "openapi"])
-        .current_dir(root)
-        .stderr(std::process::Stdio::inherit())
-        .output()
-        .map_err(Error::Cargo)?;
-
-    if !sortie.status.success() {
-        return Err(Error::BinaireEnEchec {
-            code: sortie.status.code().unwrap_or(-1),
-        });
-    }
-
-    Ok(String::from_utf8_lossy(&sortie.stdout).into_owned())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::fixtures;
+    use crate::openapi::{BIBLIOTHEQUE, BINAIRE};
 
     #[test]
     fn a_project_without_a_library_is_refused_by_naming_it() {
@@ -264,6 +228,61 @@ mod tests {
         assert!(remede.contains("[[bin]]"), "{remede}");
         assert!(remede.contains(BINAIRE), "{remede}");
         assert!(remede.contains("ApiDoc::openapi()"), "{remede}");
+    }
+
+    #[test]
+    fn a_missing_openapi_binary_carries_a_stable_code_and_the_same_remedy() {
+        let error = Error::Openapi(crate::openapi::Obtention::SansBinaire);
+
+        assert_eq!(error.code(), "sans_binaire_openapi");
+        let remede = error.remede().expect("le refus doit porter un remède");
+        assert!(remede.contains("[[bin]]"), "{remede}");
+    }
+
+    /// `remedy()` (l'affichage humain) ne couvre que `Openapi`, jamais `Plan` : `Codee::
+    /// remede` va plus loin, comme pour `generate`.
+    #[test]
+    fn a_vanished_anchor_has_a_remede_though_remedy_does_not_cover_plan() {
+        let error = Error::Plan(crate::plan::Error::Anchor(crate::anchors::Missing {
+            anchor: crate::anchors::ROUTES,
+        }));
+
+        assert_eq!(error.remedy(), None);
+        assert_eq!(error.code(), "ancre_absente");
+        assert!(error.bloc().is_some());
+        assert!(error.remede().is_some());
+    }
+
+    /// Les trois pannes à bloc d'un plan de client : un bloc sans son remède, ou
+    /// l'inverse, laisserait un agent deviner où coller ce qu'on lui montre.
+    #[test]
+    fn remede_is_some_exactly_when_bloc_is_some_for_a_plan_error() {
+        let erreurs = vec![
+            crate::plan::Error::Anchor(crate::anchors::Missing {
+                anchor: crate::anchors::ROUTES,
+            }),
+            crate::plan::Error::MalPlacee(Box::new(crate::anchors::Misplaced {
+                anchor: crate::anchors::STATE_INIT,
+                before: "core: CoreState::new(".to_string(),
+                block: "// <rbs:state_init>\n// </rbs:state_init>".to_string(),
+            })),
+            crate::plan::Error::ZoneAbsente {
+                path: "AGENTS.md".to_string(),
+                zone: crate::agents::MissingZone {
+                    zone: "inventory".to_string(),
+                },
+            },
+        ];
+
+        for erreur in erreurs {
+            let error = Error::Plan(erreur);
+            assert_eq!(
+                error.remede().is_some(),
+                error.bloc().is_some(),
+                "{error:?}"
+            );
+            assert!(error.remede().is_some(), "{error:?}");
+        }
     }
 
     #[test]

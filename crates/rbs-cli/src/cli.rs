@@ -70,6 +70,10 @@ pub enum Commands {
         #[arg(long)]
         dry_run: bool,
 
+        /// Rend le plan, ou l'erreur, en un document JSON sur la sortie standard.
+        #[arg(long)]
+        json: bool,
+
         /// Répertoire de templates remplaçant celles embarquées dans le binaire.
         #[arg(long, value_name = "CHEMIN")]
         template_dir: Option<PathBuf>,
@@ -97,6 +101,30 @@ pub enum Commands {
 
     /// Démarre le projet : services, migrations, serveur relancé à chaque changement.
     Dev,
+
+    /// Lance les tests du projet : services, migrations, puis cargo test sur tout le workspace.
+    Test {
+        /// Ne lance que les tests dont le chemin contient ce motif.
+        #[arg(value_name = "FILTRE")]
+        filtre: Option<String>,
+
+        /// Arguments du harnais de test, passés après `--` (ex. --nocapture).
+        #[arg(last = true, value_name = "ARGS")]
+        libtest: Vec<String>,
+    },
+
+    /// Liste les routes du projet : méthode, chemin, operation_id et garde.
+    Routes {
+        /// Rend les routes en JSON sur la sortie standard, pour un script ou un agent.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Lit le document OpenAPI du projet, sans démarrer de serveur.
+    Openapi {
+        #[command(subcommand)]
+        command: OpenapiCommands,
+    },
 
     /// Diagnostique le projet : ancres, .env, base joignable, versions.
     Doctor {
@@ -131,6 +159,10 @@ pub enum Commands {
         /// Affiche le plan sans rien écrire.
         #[arg(long)]
         dry_run: bool,
+
+        /// Rend le plan, ou l'erreur, en un document JSON sur la sortie standard.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -157,6 +189,10 @@ pub enum GenerateCommands {
         #[arg(long)]
         dry_run: bool,
 
+        /// Rend le plan, ou l'erreur, en un document JSON sur la sortie standard.
+        #[arg(long)]
+        json: bool,
+
         /// Entité enfant dont ce modèle doit porter la variante inverse, répétable.
         #[arg(long = "has-many", value_name = "ENTITE")]
         has_many: Vec<String>,
@@ -172,6 +208,10 @@ pub enum GenerateCommands {
         /// Ajoute trois routes de contenu binaire ; exige la feature storage.
         #[arg(long)]
         with_upload: bool,
+
+        /// Pagine GET /<ressource> par curseur ; la route de filtre garde ses pages.
+        #[arg(long)]
+        cursor: bool,
     },
 
     /// Génère une feature vide : six fichiers, aucun champ.
@@ -190,6 +230,10 @@ pub enum GenerateCommands {
         /// Affiche le plan sans rien écrire.
         #[arg(long)]
         dry_run: bool,
+
+        /// Rend le plan, ou l'erreur, en un document JSON sur la sortie standard.
+        #[arg(long)]
+        json: bool,
     },
 
     /// Engendre un client typé depuis le document OpenAPI du projet.
@@ -209,6 +253,32 @@ pub enum GenerateCommands {
         /// Affiche le plan sans rien écrire.
         #[arg(long)]
         dry_run: bool,
+
+        /// Rend le plan, ou l'erreur, en un document JSON sur la sortie standard.
+        #[arg(long)]
+        json: bool,
+    },
+
+    /// Génère un job de la file, et son échéance sous --every ; exige la feature jobs.
+    Job {
+        /// Nom du job, en snake_case : celui de son module et de son KIND.
+        name: String,
+
+        /// Expression cron de l'échéance, à cinq ou six champs, évaluée en UTC ; exige la feature scheduler.
+        #[arg(long, value_name = "CRON")]
+        every: Option<String>,
+
+        /// Écrit même si le working tree Git est sale.
+        #[arg(long)]
+        force: bool,
+
+        /// Affiche le plan sans rien écrire.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Rend le plan, ou l'erreur, en un document JSON sur la sortie standard.
+        #[arg(long)]
+        json: bool,
     },
 }
 
@@ -227,6 +297,16 @@ pub enum MigrateCommands {
     New {
         /// Nom de la migration.
         name: String,
+    },
+}
+
+#[derive(Debug, PartialEq, Subcommand)]
+pub enum OpenapiCommands {
+    /// Écrit le document OpenAPI du projet sur la sortie standard, ou dans un fichier.
+    Export {
+        /// Fichier à écrire, relatif au répertoire courant, au lieu de la sortie standard.
+        #[arg(long, value_name = "FICHIER")]
+        out: Option<PathBuf>,
     },
 }
 
@@ -252,9 +332,12 @@ mod tests {
             "migrate",
             "seed",
             "dev",
+            "test",
             "doctor",
             "upgrade",
             "completions",
+            "routes",
+            "openapi",
         ] {
             let sous_commande = command
                 .get_subcommands()
@@ -296,7 +379,7 @@ mod tests {
     }
 
     #[test]
-    fn the_generate_help_lists_crud_and_feature() {
+    fn the_generate_help_lists_crud_feature_and_job() {
         let help = Cli::command()
             .find_subcommand_mut("generate")
             .expect("`generate` absente du CLI")
@@ -305,6 +388,60 @@ mod tests {
 
         assert!(help.contains("crud"), "`crud` absente :\n{help}");
         assert!(help.contains("feature"), "`feature` absente :\n{help}");
+        assert!(help.contains("job"), "`job` absente :\n{help}");
+    }
+
+    #[test]
+    fn generate_job_reads_its_name_its_schedule_and_dry_run() {
+        let cli = Cli::try_parse_from([
+            "rbs",
+            "generate",
+            "job",
+            "purge",
+            "--every",
+            "0 4 * * *",
+            "--dry-run",
+        ])
+        .expect("la ligne doit être acceptée");
+
+        assert_eq!(
+            cli.command,
+            Commands::Generate {
+                command: GenerateCommands::Job {
+                    name: "purge".to_string(),
+                    every: Some("0 4 * * *".to_string()),
+                    force: false,
+                    dry_run: true,
+                    json: false,
+                },
+            }
+        );
+    }
+
+    #[test]
+    fn routes_and_openapi_export_parse_their_flags() {
+        let routes = Cli::try_parse_from(["rbs", "routes", "--json"]).expect("commande valide");
+        assert_eq!(routes.command, Commands::Routes { json: true });
+
+        let export = Cli::try_parse_from(["rbs", "openapi", "export", "--out", "doc.json"])
+            .expect("commande valide");
+        assert_eq!(
+            export.command,
+            Commands::Openapi {
+                command: OpenapiCommands::Export {
+                    out: Some(PathBuf::from("doc.json")),
+                },
+            }
+        );
+
+        let sans_fichier =
+            Cli::try_parse_from(["rbs", "openapi", "export"]).expect("commande valide");
+        assert_eq!(
+            sans_fichier.command,
+            Commands::Openapi {
+                command: OpenapiCommands::Export { out: None },
+            }
+        );
     }
 
     #[test]
@@ -343,6 +480,21 @@ mod tests {
         };
 
         assert!(with_upload);
+    }
+
+    #[test]
+    fn generate_crud_accepts_cursor() {
+        let cli = Cli::try_parse_from(["rbs", "generate", "crud", "articles", "--cursor"])
+            .expect("la ligne doit être acceptée");
+
+        let Commands::Generate {
+            command: GenerateCommands::Crud { cursor, .. },
+        } = cli.command
+        else {
+            panic!("la sous-commande doit être `generate crud`");
+        };
+
+        assert!(cursor);
     }
 
     #[test]
@@ -476,6 +628,9 @@ mod tests {
             vec!["rbs", "dev", "--template-dir", "/tmp/t"],
             vec!["rbs", "doctor", "--template-dir", "/tmp/t"],
             vec!["rbs", "upgrade", "--template-dir", "/tmp/t"],
+            vec!["rbs", "test", "--template-dir", "/tmp/t"],
+            vec!["rbs", "routes", "--template-dir", "/tmp/t"],
+            vec!["rbs", "openapi", "export", "--template-dir", "/tmp/t"],
         ] {
             // Le motif du refus est asserté, et pas seulement le refus : sans lui, une
             // faute de frappe dans le nom de la sous-commande ferait passer le test pour
@@ -556,6 +711,9 @@ mod tests {
             vec!["rbs", "dev", "--yes"],
             vec!["rbs", "doctor", "--yes"],
             vec!["rbs", "upgrade", "--yes"],
+            vec!["rbs", "test", "--yes"],
+            vec!["rbs", "routes", "--yes"],
+            vec!["rbs", "openapi", "export", "--yes"],
         ] {
             // Le motif du refus est asserté, et pas seulement le refus : sans lui, une
             // faute de frappe dans le nom de la sous-commande ferait passer le test pour
@@ -572,6 +730,63 @@ mod tests {
                 refus.to_string().contains("--yes"),
                 "le refus doit nommer le drapeau — {commande:?} : {refus}"
             );
+        }
+    }
+
+    /// Le filtre précède `--`, les arguments du harnais de test le suivent : la même
+    /// convention que `cargo test`.
+    #[test]
+    fn test_parses_a_filter_and_libtest_arguments() {
+        let cli = Cli::try_parse_from(["rbs", "test", "articles", "--", "--nocapture"])
+            .expect("commande valide");
+        let Commands::Test { filtre, libtest } = cli.command else {
+            panic!("`test` attendue");
+        };
+
+        assert_eq!(filtre.as_deref(), Some("articles"));
+        assert_eq!(libtest, vec!["--nocapture".to_string()]);
+    }
+
+    /// Le drapeau d'une commande qui planifie, quelle qu'elle soit.
+    fn json_de(commande: &Commands) -> bool {
+        match commande {
+            Commands::Add { json, .. }
+            | Commands::Upgrade { json, .. }
+            | Commands::Generate {
+                command:
+                    GenerateCommands::Crud { json, .. }
+                    | GenerateCommands::Feature { json, .. }
+                    | GenerateCommands::Client { json, .. }
+                    | GenerateCommands::Job { json, .. },
+            } => *json,
+            autre => panic!("commande qui ne planifie pas : {autre:?}"),
+        }
+    }
+
+    /// Les six commandes qui planifient rendent leur plan en JSON sur demande, et
+    /// seulement sur demande : sans le drapeau, le rendu humain que la documentation
+    /// transcrit reste celui qui s'affiche.
+    #[test]
+    fn the_six_planning_commands_accept_json_and_default_to_the_human_rendering() {
+        for commande in [
+            vec!["rbs", "add", "cors"],
+            vec!["rbs", "generate", "crud", "articles"],
+            vec!["rbs", "generate", "feature", "articles"],
+            vec!["rbs", "generate", "client", "--lang", "ts"],
+            vec!["rbs", "generate", "job", "purge"],
+            vec!["rbs", "upgrade"],
+        ] {
+            let sans = Cli::try_parse_from(&commande)
+                .unwrap_or_else(|refus| panic!("{commande:?} : {refus}"));
+            assert!(
+                !json_de(&sans.command),
+                "{commande:?} : JSON sans le drapeau"
+            );
+
+            let avec_drapeau: Vec<&str> = commande.iter().copied().chain(["--json"]).collect();
+            let avec = Cli::try_parse_from(&avec_drapeau)
+                .unwrap_or_else(|refus| panic!("{avec_drapeau:?} : {refus}"));
+            assert!(json_de(&avec.command), "{avec_drapeau:?} : drapeau perdu");
         }
     }
 }

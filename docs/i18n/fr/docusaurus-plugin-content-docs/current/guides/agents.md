@@ -13,8 +13,12 @@ servir.
 
 `rbs new` répond à cela en écrivant `AGENTS.md` à la racine du projet — le mode d'emploi
 de rbs, écrit pour un agent plutôt que pour un humain. `AGENTS.md` est un format neutre,
-déjà lu tel quel par Claude Code, Codex, Cursor et Copilot ; rbs n'engendre aucun fichier
-propre à un outil en particulier.
+que Codex, Cursor et Copilot lisent tel quel. Claude Code, lui, ne le lit pas : il lit
+`CLAUDE.md`, et n'atteint `AGENTS.md` que par un import qui y est déclaré. `rbs new` écrit
+donc aussi `CLAUDE.md`, le seul fichier qu'il engendre pour un outil en particulier, et
+long d'une ligne — `@AGENTS.md` — pour que le mode d'emploi garde une seule source et que
+rien dans `CLAUDE.md` ne puisse s'en écarter. Ce fichier vous appartient dès qu'il existe :
+ajoutez vos propres consignes sous l'import, aucune commande ne les réécrira.
 
 ## Les deux zones que rbs possède
 
@@ -87,13 +91,17 @@ Les zones d'un vrai projet, engendré en français, se lisent ainsi :
 | `rbs generate crud\|feature` | Régénère la zone d'inventaire. |
 | `rbs upgrade` | Régénère le guide et l'inventaire ; recrée le fichier s'il a disparu. |
 | `rbs doctor` | Ne change rien — il ne fait que constater. |
-| `rbs migrate`, `rbs seed`, `rbs dev` | Aucun effet. |
+| `rbs generate job`, `rbs generate client`, `rbs migrate`, `rbs seed`, `rbs dev`, `rbs test`, `rbs routes`, `rbs openapi export` | Aucun effet. |
 
 `upgrade` est la seule commande qui a mandat de remettre le projet en accord avec le CLI,
 et c'est pourquoi elle est aussi la seule à recréer un fichier supprimé. `add` et
 `generate` ne régénèrent que l'inventaire : elles connaissent la feature ou l'entité
 qu'elles viennent d'installer, pas si le CLI lui-même a changé de version — cette
 comparaison n'appartient qu'à `upgrade`.
+
+`CLAUDE.md` suit une règle à lui, plus courte. `rbs new` l'écrit ; `rbs upgrade` ne le
+réécrit que s'il manque — le cas de tout projet engendré avant que rbs ne l'écrive — et
+aucune commande ne réécrit jamais celui qui existe, quoi qu'il contienne.
 
 ## Choisir la langue
 
@@ -191,3 +199,185 @@ plan pour /private/tmp/rbs-demo/blog2
   1 fichier à écrire, 1 inchangé
 ✓ manifeste aligné sur rbs 1.2.0
 ```
+
+## Lire un plan en JSON
+
+Le plan qu'une commande affiche avant d'écrire est fait pour un humain : couleurs, puces, un
+décompte en bas. `rbs add`, `rbs generate crud`, `feature`, `client` et `job`, et
+`rbs upgrade` prennent `--json`, et la sortie standard porte alors
+un seul document JSON à la place — le plan, ou l'erreur. C'est lui qu'un agent doit lire.
+
+```text
+rbs add cors --dry-run --json
+```
+
+`--json` et `--dry-run` sont indépendants. Avec `--dry-run`, rien n'est écrit et `applique`
+vaut `false` ; sans lui, le plan s'applique d'abord et le document annonce
+`applique: true`. Une feature déjà installée, ou un projet déjà à jour, rend un document
+dont les `actions` sont vides et dont `applique` vaut `false` : rien n'a été écrit.
+
+Ce qu'un humain aurait encore besoin de voir part sur la sortie d'erreur : une zone
+d'`AGENTS.md` manquante et son bloc, l'avertissement de rustfmt, une référence requise, les
+CRUD engendrés qu'`auth` laisse ouverts, les notes de migration. Les lignes de succès et les
+conseils se taisent. La sortie standard reste un seul document du premier octet au
+dernier, même pendant que `generate client` compile le projet.
+
+Sur le projet que crée `rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo`,
+`rbs add cors --dry-run --json` rend ceci — tronqué : le document réel porte douze actions et
+le contenu complet de chaque fichier qu'il crée, et la racine est coupée :
+
+```json
+{
+  "commande": "add",
+  "racine": "/…/demo",
+  "applique": false,
+  "actions": [
+    {
+      "chemin": "src/modules/cors/mod.rs",
+      "statut": "a_faire",
+      "effet": {
+        "type": "creer",
+        "contenu": "use std::time::Duration;\n\nuse axum::http::{HeaderName, HeaderValue, Method};\n…"
+      }
+    },
+    {
+      "chemin": "src/router.rs",
+      "statut": "a_faire",
+      "effet": {
+        "type": "inserer",
+        "ancre": "layers",
+        "lignes": [
+          ".layer(crate::modules::cors::layer())"
+        ]
+      }
+    },
+    {
+      "chemin": "Cargo.toml",
+      "statut": "a_faire",
+      "effet": {
+        "type": "patcher_toml",
+        "patch": {
+          "type": "ajouter_dependance",
+          "nom": "tower-http",
+          "version": "0.7",
+          "features": [
+            "cors"
+          ],
+          "features_par_defaut": true
+        }
+      }
+    }
+  ],
+  "sautees": [],
+  "fichiers": {
+    "crees": 4,
+    "modifies": 5
+  }
+}
+```
+
+Le document énumère des actions, non des fichiers : un fichier que deux actions touchent
+paraît deux fois — `src/modules/mod.rs` est créé, puis reçoit `pub mod cors;` dans son
+ancre. `fichiers` compte les fichiers, une fois chacun : créés quand ils n'existaient pas,
+modifiés sinon, les inchangés laissés dehors. `statut` vaut `a_faire` quand l'action change
+quelque chose, `deja_fait` quand le projet la porte déjà, `conflit` quand le fichier existe
+avec un contenu que rbs n'a pas écrit — seul `--force` l'écrase. `sautees` énumère les
+insertions que rbs vous laisse écrire, chacune avec son `bloc` et sa `cause`. `cause.type`
+vaut `fichier_absent` quand manque le fichier optionnel qui porte l'ancre — un projet sans
+compose, par exemple ; `ancre_absente` quand le fichier est là sans l'ancre — un projet
+engendré avant qu'elle n'existe —, avec `reparable` vrai quand `rbs doctor --fix` sait la
+reposer ; `entrainee` quand l'insertion nomme ce qu'une autre, sautée elle aussi, devait
+déclarer, dont `par` donne l'ancre : c'est celle-là qu'on reporte d'abord.
+
+Chaque `effet` a une forme par `type` :
+
+| `type` | Champs | Effet |
+|---|---|---|
+| `creer` | `contenu` | Écrit un fichier dont le contenu est connu en entier — tout est dans `contenu`. |
+| `inserer` | `ancre`, `lignes` | Ajoute des lignes dans une ancre, avant sa balise fermante. |
+| `reposer_ancre` | `ancre` | Repose une ancre disparue sous sa ligne d'accroche. |
+| `patcher_toml` | `patch` | Modifie `Cargo.toml`, mise en forme préservée. `patch.type` vaut `inscrire_feature` (`feature`), `ajouter_dependance` (`nom`, `version`, `features`, `features_par_defaut`), `ajouter_feature_a_dependance` (`dependance`, `feature`) ou `aligner_sur_version` (`dependance`, `version`). |
+| `ajouter_section` | `section`, `contenu` | Ajoute une section à un document TOML qui n'est pas le manifeste. |
+| `ajouter_variable` | `cle`, `valeur`, `commentaire` | Ajoute une variable à un fichier d'environnement ; `commentaire` vaut `null` s'il n'y en a pas. |
+| `remplacer_zone` | `zone`, `contenu` | Remplace le corps d'une zone d'`AGENTS.md`, le reste du fichier intact. |
+
+Une ligne de commande mal formée n'est pas un document : un drapeau inconnu est refusé par
+l'analyseur d'arguments, en texte sur la sortie d'erreur, avec le code de sortie 2.
+
+### Codes d'erreur
+
+Sous `--json`, un refus est un seul document sur la sortie standard, et le code de sortie
+reste 1. rbs n'ajoute rien sur la sortie d'erreur pour le refus lui-même ; ce qui l'a
+précédé y reste — un avertissement affiché plus tôt dans l'exécution, ou la compilation du
+projet sous `generate client`. Ici, l'ancre `layers` a été retirée de
+`src/router.rs` avant `rbs add cors --json --force` :
+
+```json
+{
+  "erreur": {
+    "code": "ancre_absente",
+    "message": "ancre // <rbs:layers> introuvable dans src/router.rs",
+    "remede": "dans src/router.rs :\n// <rbs:layers>\n// </rbs:layers>",
+    "bloc": "// <rbs:layers>\n// </rbs:layers>"
+  }
+}
+```
+
+`message` est la phrase qu'un humain lirait, et peut changer d'une version à l'autre ;
+`code` ne change pas, et c'est sur lui qu'un script décide. `remede` et `bloc` valent `null`
+quand il n'y a rien à faire ou rien à coller ; dès que `bloc` n'est pas `null`, `remede` dit
+où il va. Un code partagé par plusieurs commandes a le même sens dans toutes.
+
+| Code | Commandes | Sens |
+|---|---|---|
+| `pas_un_projet` | toutes | Aucun `Cargo.toml` portant `[package.metadata.rbs]` au-dessus du répertoire courant. |
+| `arbre_sale` | toutes | Le working tree Git porte des modifications non commitées. Commitez, ou relancez avec `--force`. |
+| `fichier_inaccessible` | toutes | Un fichier du projet ou d'une template n'a pu être lu ou écrit. |
+| `manifeste_illisible` | toutes | Le `Cargo.toml` du projet n'a pu être lu ou patché. |
+| `ancre_absente` | `add`, `generate`, `upgrade` | Une ancre manque à son fichier. `bloc` porte les deux balises à coller, `remede` nomme le fichier. |
+| `ancre_mal_placee` | `add`, `generate`, `upgrade` | Une ancre est placée sous la ligne qu'elle doit précéder. `bloc` est le bloc à remonter, `remede` nomme la ligne. |
+| `zone_absente` | `add`, `generate`, `upgrade` | Une zone d'`AGENTS.md` manque. `bloc` porte ses marqueurs. |
+| `fichier_absent` | `add`, `generate`, `upgrade` | Le fichier qui doit porter une ancre n'existe pas. |
+| `manifeste_absent` | `add`, `generate`, `upgrade` | Le `Cargo.toml` visé par une modification n'existe pas. |
+| `toml_invalide` | `add`, `generate`, `upgrade` | Un document TOML du projet ne s'analyse pas. |
+| `conflit` | `add`, `generate`, `generate client`, `upgrade` | Le plan écraserait des fichiers que rbs n'a pas écrits. Relancez avec `--force` pour les écraser. |
+| `ecriture_impossible` | `add`, `generate`, `generate client`, `upgrade` | Une écriture a échoué ; ce que le plan avait déjà écrit a été défait. |
+| `plan_incoherent` | `add`, `generate`, `generate client`, `upgrade` | Deux actions prétendent écrire le même fichier de bout en bout — un défaut de rbs, à signaler. |
+| `feature_inconnue` | `add` | Aucun fragment ne porte ce nom. |
+| `fragment_sans_manifeste` | `add` | Le fragment n'a pas de `feature.toml`. |
+| `fragment_invalide` | `add` | Le `feature.toml` du fragment est invalide. |
+| `template_absente` | `add` | Le manifeste du fragment déclare une template que le fragment ne porte pas. |
+| `ancre_inconnue` | `add` | Le manifeste du fragment vise une ancre que rbs ne connaît pas. |
+| `rendu_impossible` | `add`, `generate` | Une template ne se rend pas. |
+| `env_illisible` | `add` | Le `.env` du projet est absent, illisible, ou muet sur la base. |
+| `url_indecomposable` | `add` | L'URL de la base ne se décompose pas en utilisateur, mot de passe et hôte. |
+| `nom_invalide` | `generate` | Le nom de la feature, ou celui donné à `--singular`, est inutilisable. |
+| `champs_invalides` | `generate` | `--fields` ne s'analyse pas. |
+| `feature_deja_presente` | `generate` | Le répertoire de la feature existe déjà. |
+| `relation_invalide` | `generate` | Une référence ne se résout pas : cible introuvable, ou deux relations réclamant la même variante. |
+| `migration_absente` | `generate` | Une entité référencée n'a pas de migration dans le projet. |
+| `homonyme` | `generate` | Le modèle cible porte déjà, sous ce nom, une variante visant une autre entité. |
+| `feature_absente` | `generate` | `--has-many` répare une feature qui doit d'abord exister. |
+| `role_sans_auth` | `generate` | `--role` exige la feature `auth`. |
+| `role_inconnu` | `generate` | Le rôle n'est pas une variante de `src/auth/model.rs`. |
+| `upload_sans_storage` | `generate` | `--with-upload` exige la feature `storage`. |
+| `storage_hors_modules` | `generate` | `storage` a été installée avant la 1.3.0, sous `src/storage/`. |
+| `colonne_reservee` | `generate` | `--soft-delete` pose lui-même `deleted_at` : retirez-la de `--fields`. |
+| `enfant_sans_cle` | `generate` | L'enfant nommé par `--has-many` ne porte aucune colonne référençant cette table. |
+| `nom_reserve` | `generate job` | Le nom est pris : un module de la file, `jobs` lui-même, ou une crate que nomme le code de la file. |
+| `disposition_anterieure` | `generate job` | `jobs` ou `scheduler` a été installée avant la 1.3.0, hors de `src/modules/` ; le message nomme le déplacement à faire. |
+| `jobs_absent` | `generate job` | Le projet n'a pas la feature `jobs` ; `remede` vaut `rbs add jobs`. |
+| `scheduler_absent` | `generate job` | `--every` exige la feature `scheduler` ; `remede` vaut `rbs add scheduler`. |
+| `cron_invalide` | `generate job` | L'expression de `--every` ne passerait pas le démarrage du projet. |
+| `module_deja_declare` | `generate job` | `src/modules/jobs/mod.rs` déclare déjà le module hors de son ancre. |
+| `fichier_etranger` | `generate job` | Le fichier du job existe et ne définit pas ce job. |
+| `kind_pris` | `generate job` | Un autre job porte déjà ce `KIND`. |
+| `echeance_existante` | `generate job` | Le job a déjà une échéance, sous une autre expression. |
+| `sans_bibliotheque` | `generate client` | Le projet n'a pas de `src/lib.rs`. |
+| `sans_binaire_openapi` | `generate client` | Le projet n'a pas de `src/bin/openapi.rs` ; `remede` donne le fichier à créer. |
+| `cargo_introuvable` | `generate client` | `cargo` n'a pas pu être lancé. |
+| `projet_ne_compile_pas` | `generate client` | `cargo run --bin openapi` a échoué. |
+| `document_illisible` | `generate client` | Ce que le binaire a imprimé n'est pas un document OpenAPI. |
+| `client_irrendable` | `generate client` | Le document ne se traduit pas en TypeScript. |
+| `cli_anterieur` | `upgrade` | Le projet a été engendré par un rbs plus récent que ce CLI. |
+| `agents_illisible` | `upgrade` | `AGENTS.md` n'a pas pu être rendu. |

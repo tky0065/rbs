@@ -32,7 +32,7 @@ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 {/* rbs:transcript cmd="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" */}
 ```text
 $ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
-✓ demo créé — 21 fichiers
+✓ demo créé — 22 fichiers
 
   cd demo
   docker compose up -d   # la base du .env, montée

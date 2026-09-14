@@ -118,18 +118,28 @@ pub(crate) fn parse(json: &str) -> Result<Document, Erreur> {
         })
         .unwrap_or_default();
 
+    let globale = exige_un_jeton(&value);
+
     let paths = value
         .get("paths")
         .and_then(Value::as_object)
         .map(|paths| {
             paths
                 .iter()
-                .map(|(chemin, item)| (chemin.clone(), parse_path_item(item)))
+                .map(|(chemin, item)| (chemin.clone(), parse_path_item(item, globale)))
                 .collect()
         })
         .unwrap_or_default();
 
     Ok(Document { paths, schemas })
+}
+
+/// `value` déclare une `security` non vide.
+fn exige_un_jeton(value: &Value) -> bool {
+    value
+        .get("security")
+        .and_then(Value::as_array)
+        .is_some_and(|exigences| !exigences.is_empty())
 }
 
 /// Les méthodes HTTP qu'OpenAPI autorise sous un chemin, dans un ordre fixe — celui du
@@ -138,7 +148,7 @@ const VERBES: &[&str] = &[
     "get", "put", "post", "delete", "options", "head", "patch", "trace",
 ];
 
-fn parse_path_item(value: &Value) -> PathItem {
+fn parse_path_item(value: &Value, globale: bool) -> PathItem {
     let Some(item) = value.as_object() else {
         return PathItem {
             operations: Vec::new(),
@@ -149,14 +159,14 @@ fn parse_path_item(value: &Value) -> PathItem {
         .iter()
         .filter_map(|verbe| {
             item.get(*verbe)
-                .map(|operation| (verbe.to_uppercase(), parse_operation(operation)))
+                .map(|operation| (verbe.to_uppercase(), parse_operation(operation, globale)))
         })
         .collect();
 
     PathItem { operations }
 }
 
-fn parse_operation(value: &Value) -> Operation {
+fn parse_operation(value: &Value, globale: bool) -> Operation {
     let operation_id = texte(value, "operationId");
     let summary = texte(value, "summary");
     let description = texte(value, "description");
@@ -187,12 +197,13 @@ fn parse_operation(value: &Value) -> Operation {
         })
         .unwrap_or_default();
 
-    // Une opération sans clé `security` hérite de celle, globale, du document — que ce
-    // lot ne lit pas encore. Seule une liste explicite et non vide la marque protégée.
-    let secured = value
-        .get("security")
-        .and_then(Value::as_array)
-        .is_some_and(|exigences| !exigences.is_empty());
+    // Une opération sans clé `security` hérite de celle, globale, du document ; une liste
+    // vide posée sur elle l'en affranchit — c'est ainsi qu'OpenAPI ouvre une route au
+    // public sous une exigence globale.
+    let secured = match value.get("security") {
+        Some(_) => exige_un_jeton(value),
+        None => globale,
+    };
 
     Operation {
         operation_id,
@@ -462,6 +473,31 @@ mod tests {
 
         let (_, operation) = &document.paths["/a"].operations[0];
         assert!(operation.secured);
+    }
+
+    /// Une opération sans clé `security` hérite de celle du document.
+    #[test]
+    fn a_global_security_marks_the_operations_that_declare_none() {
+        let document = parse_ok(
+            r#"{"openapi":"3.1.0","security":[{"bearer":[]}],
+                 "paths":{"/a":{"get":{"operationId":"g","responses":{}}}}}"#,
+        );
+
+        let (_, operation) = &document.paths["/a"].operations[0];
+        assert!(operation.secured);
+    }
+
+    /// Une liste vide posée sur l'opération la rend publique : c'est ainsi qu'OpenAPI
+    /// ouvre une route sous une exigence globale.
+    #[test]
+    fn an_explicit_empty_security_makes_an_operation_public_despite_the_global_one() {
+        let document = parse_ok(
+            r#"{"openapi":"3.1.0","security":[{"bearer":[]}],
+                 "paths":{"/a":{"get":{"operationId":"g","responses":{},"security":[]}}}}"#,
+        );
+
+        let (_, operation) = &document.paths["/a"].operations[0];
+        assert!(!operation.secured);
     }
 
     #[test]

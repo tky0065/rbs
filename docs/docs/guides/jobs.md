@@ -42,7 +42,7 @@ plan pour /private/tmp/rbs-demo/demo
   15 fichiers à écrire
 ✓ jobs installée — 8 fichiers
 
-  rbs migrate up, puis inscrivez vos jobs dans src/modules/jobs/mod.rs
+  rbs migrate up, puis `rbs generate job <nom>` pour écrire un job
 ```
 
 The migration comes with it, so [`rbs migrate up`](../cli/migrate.md) is the next command:
@@ -114,6 +114,12 @@ at send time that matters. And the send is *awaited* — an error returned from 
 retry, which is the entire reason this is a job.
 
 ## Registering it
+
+[`rbs generate job <name>`](../cli/generate.md#rbs-generate-job) writes the three pieces a
+new job needs in one plan: the file above, under `src/modules/jobs/`; `pub mod <name>;`
+between the `// <rbs:job_modules>` markers; and the line below, between the
+`// <rbs:jobs>` markers. `newsletter` was written by hand before the command existed —
+what it produced is exactly this:
 
 ```rust file=examples/newsletter-queue/src/modules/jobs/mod.rs region=registry
 ```

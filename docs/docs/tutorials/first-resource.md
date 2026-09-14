@@ -90,7 +90,7 @@ INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
 
 A clean start here is proof `src/articles/` compiles into the router: `demo` is now
-listening with six new operations added to `/health` — `GET` and `POST` on `/articles`,
+listening with six new operations added to `/health` and `/health/live` — `GET` and `POST` on `/articles`,
 `POST` on `/articles/filter`, and `GET`, `PATCH` and `DELETE` on `/articles/{id}` — if the
 module had failed to compile, this line would never have printed.
 

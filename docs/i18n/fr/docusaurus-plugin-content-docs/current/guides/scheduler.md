@@ -54,7 +54,7 @@ plan pour …/demo
   22 fichiers à écrire
 ✓ scheduler installée — 15 fichiers
 
-  rbs migrate up, puis déclarez vos échéances dans src/modules/scheduler/mod.rs — les expressions sont évaluées en UTC
+  rbs migrate up, puis `rbs generate job <nom> --every "<cron>"` pour déclarer une échéance dans src/modules/scheduler/mod.rs — les expressions sont évaluées en UTC
 ```
 
 Deux migrations viennent avec lui : [`rbs migrate up`](../cli/migrate.md) est donc la
@@ -81,6 +81,62 @@ déploiement.
 
 Changer le calendrier passe par un déploiement. C'est le prix ordinaire d'une configuration
 versionnée, et c'est ce qui rend la liste relisible dans un diff.
+
+[`rbs generate job <nom> --every "<cron>"`](../cli/generate.md#rbs-generate-job) est la commande qui écrit
+une entrée comme celle ci-dessus : le fichier du job sous `src/modules/jobs/`, son
+inscription au worker, et — à cause de `--every` — la ligne `calendrier.push(…)` entre les
+balises `// <rbs:schedules>`, les trois dans un seul plan. `--every` refuse une expression
+que `Schedule::compiler` refuserait au démarrage, et refuse une seconde échéance pour un
+job déjà planifié sous une autre expression — la ligne se clé par `kind`, et la commande ne
+choisit jamais l'une des deux à votre place.
+
+### Un calendrier antérieur à l'ancre
+
+Un projet engendré avant 1.5.0 déclare encore `schedules()` comme un littéral `vec![]`,
+sans balises `// <rbs:schedules>` à l'intérieur :
+
+```rust
+pub fn schedules() -> Vec<Schedule> {
+    vec![Schedule::every::<crate::modules::jobs::demo::Log>(
+        "0 3 * * *",
+        || crate::modules::jobs::demo::Log {
+            message: "échéance quotidienne".to_string(),
+        },
+    )]
+}
+```
+
+`rbs doctor --fix` ne peut pas reposer l'ancre sur un tel projet : une ancre se repose sous
+la ligne qu'elle déclare comme accroche, et celle de cette fonction —
+`let mut calendrier = Vec::new();` — n'y existe pas encore. `rbs doctor` signale l'ancre
+absente comme toujours, mais le remède ici est une retouche à la main plutôt qu'une
+relance. Une ancre posée à l'intérieur d'une expression ne survit pas à rustfmt dès qu'un
+second élément s'y ajoute — c'est ce qui a fait quitter à [`jobs::registry`](./jobs.md#linscrire)
+sa chaîne d'appels `.register()` pour `// <rbs:jobs>`. Réécrivez donc la fonction en
+instructions, et posez vous-même les balises :
+
+```rust
+#[allow(clippy::vec_init_then_push)]
+pub fn schedules() -> Vec<Schedule> {
+    let mut calendrier = Vec::new();
+    // <rbs:schedules>
+    // </rbs:schedules>
+    calendrier.push(Schedule::every::<crate::modules::jobs::demo::Log>(
+        "0 3 * * *",
+        || crate::modules::jobs::demo::Log {
+            message: "échéance quotidienne".to_string(),
+        },
+    ));
+    calendrier
+}
+```
+
+Une fois l'ancre en place, `rbs generate job --every` y écrit comme sur n'importe quel
+autre projet. `#[allow(clippy::vec_init_then_push)]` n'est pas décoratif : clippy préfère
+un littéral `vec![]`, précisément la seule forme qu'une ancre ne peut pas porter — un
+second `.push()` qu'un fragment ou un job engendré ajoute plus tard passerait sans
+problème, mais le commentaire de la balise posé entre deux éléments d'un littéral est
+défiguré par le premier `cargo fmt` qui s'ensuit.
 
 ## Cinq champs ou six
 

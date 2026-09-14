@@ -43,8 +43,85 @@ dépréciation.
   avant 1.5.0 continue de fonctionner sans elles, et reprend `src/modules/jobs/worker.rs`
   et `queue.rs` du fragment quand il veut le comportement. `rbs doctor` propose les deux
   clés dans le bloc qu'il imprime quand la section manque.
+- **Chaque release GitHub porte des binaires précompilés, que `cargo binstall rbs-cli`
+  trouve.** Un tag joint désormais `rbs` et `rbs-cli` pour Linux (x86_64 et aarch64,
+  compilés contre la glibc d'Ubuntu 22.04), macOS (Intel et Apple silicon) et Windows
+  (x86_64), chaque archive avec sa somme SHA-256, à une release GitHub dont les notes
+  sont la section de ce fichier pour la version. `rbs-cli` déclare
+  `[package.metadata.binstall]` : `cargo binstall rbs-cli` télécharge l'archive de votre
+  plateforme au lieu de compiler — installer rbs sur un runner de CI ne coûte plus une
+  compilation d'axum et de sea-orm.
+- **`rbs generate job <nom>` écrit un job de la file, et `--every "<cron>"` son
+  échéance.** Un seul plan crée `src/modules/jobs/<nom>.rs`, déclare le module entre les
+  nouvelles balises `// <rbs:job_modules>`, l'inscrit dans `// <rbs:jobs>` et, sous
+  `--every`, le pousse dans le calendrier par la nouvelle `// <rbs:schedules>`.
+  L'expression est jugée avec la crate et la normalisation du démarrage du projet, avant
+  toute écriture. La commande exige `jobs` (et `scheduler` sous `--every`), et refuse un
+  nom qui est un mot-clé Rust, un module de la file, `jobs`, ou une crate que nomme le code
+  de la file — déclaré dans `src/modules/jobs/mod.rs`, il masquerait cette crate. Sur
+  un projet engendré avant 1.5.0, les ancres manquent : le
+  fichier du job s'écrit, et la déclaration, l'inscription et l'échéance — chacune
+  suppose la précédente — s'affichent à reporter plutôt que de s'écrire sans ce qu'elles
+  nomment. Un projet qui a reçu `jobs` ou `scheduler` avant 1.3.0 est refusé, avec le
+  déplacement à faire à la main.
+- **`rbs doctor` contrôle sept fragments de plus.** `cors` avertit d'un `origins` vide,
+  `rate-limit` veut sa section, `scheduler` lit chaque expression littérale du calendrier
+  comme le démarrage la lira, `webhooks` veut la livraison inscrite à la file, `audit` sa
+  migration déclarée et dans le `Migrator`, `docker` le `config/production.toml` que son
+  compose sélectionne, `ci` son workflow. Chacun nomme un projet qui compile puis se
+  comporte mal. `scheduler` et `webhooks` lisent un projet qui les a reçus avant 1.3.0 là
+  où il les porte encore, sous `src/`. Après la montée, un projet qui porte `cors` voit un
+  nouvel avertissement tant qu'il n'a pas énuméré les origines de son front.
+- **Un projet engendré répond à `GET /health/live`, et son image Docker le sonde.** La
+  nouvelle route rend `200` sans rien interroger : une sonde de vie liée à la base ferait
+  redémarrer l'API en boucle par un orchestrateur, pendant une panne de base qu'aucun
+  redémarrage ne répare. `/health` ne change pas et répond toujours à la question de la
+  disponibilité, base et sondes comprises. L'image que construit `rbs add docker` déclare
+  un `HEALTHCHECK` sur la nouvelle route, parlé par bash et `/dev/tcp` puisque l'image ne
+  porte ni curl ni wget. Un projet engendré avant 1.5.0 garde son module de santé et son
+  `Dockerfile`, qu'aucune mise à niveau ne réécrit ; la note de mise à niveau donne les
+  lignes à coller.
+- **`rbs new` écrit un `CLAUDE.md` d'une ligne qui importe `AGENTS.md`.** Claude Code lit
+  `CLAUDE.md`, et n'atteint le guide que par son import `@AGENTS.md`. `rbs upgrade` crée
+  le fichier sur un projet qui ne l'a pas, et ne réécrit jamais un fichier existant.
+- **`rbs test` lance toute la suite de tests d'un projet comme le fait sa CI.** Il monte les
+  services du compose, attend la base, applique les migrations, puis lance
+  `cargo test --workspace --no-fail-fast -- --include-ignored` — la commande même du
+  workflow de `rbs add ci`. Un filtre et des arguments pour libtest passent tels quels
+  (`rbs test articles -- --nocapture`), et le code de sortie de `cargo test` revient
+  inchangé : un script distingue un test rouge d'un échec du CLI. Le guide des tests part
+  désormais de lui.
+- **`rbs routes` énumère les routes d'un projet, et `rbs openapi export` imprime son
+  document OpenAPI**, sans démarrer de serveur : tous deux lisent ce qu'imprime le binaire
+  `openapi` du projet, comme `rbs generate client`. `routes` montre méthode, chemin,
+  `operation_id` et garde — `bearer` ou `public` —, avec `--json` pour un script ;
+  `openapi export` écrit sur la sortie standard, ou dans le fichier que nomme `--out`,
+  relatif au répertoire de lancement.
+- **`rbs generate crud --cursor` pagine la liste par curseur.** `GET /<ressource>` prend
+  `after` et `per_page` et rend un `rbs_core::CursorPage` : pas de `COUNT(*)`, et une ligne
+  insérée entre deux requêtes ne décale plus la fenêtre. La route de filtre garde ses pages
+  numérotées, un curseur sur l'`id` étant faux dès que le tri porte sur une autre colonne.
+  Les tests engendrés parcourent les pages jusqu'à l'extinction de `next` ;
+  `--soft-delete`, `--role`, `--with-upload` et `--has-many` s'y combinent.
+- **Toute commande qui planifie prend `--json`.** `rbs add`, `rbs generate crud`, `feature`,
+  `client` et `job`, et `rbs upgrade` impriment alors un seul document JSON sur la sortie
+  standard au lieu du plan en couleurs : chaque action avec son contenu complet, les
+  insertions à reporter avec leur `bloc` et leur `cause`, et le compte des fichiers créés
+  et modifiés, `applique` disant si quelque chose a été écrit. Un refus devient un document
+  `erreur` portant `code`, `message`, `remede` et `bloc`, code de sortie inchangé ; les
+  codes sont stables, et énumérés dans le guide des agents. Un argument que l'analyseur
+  refuse reste du texte, code 2.
 
 ### Modifié
+
+- **`rbs add jobs` et `rbs add scheduler` portent chacun une ancre de plus, et
+  `schedules()` s'écrit en instructions.** `// <rbs:job_modules>` se tient sous
+  `pub mod worker;`, et `// <rbs:schedules>` sous `let mut calendrier = Vec::new();` — le
+  calendrier a quitté son littéral `vec![]`, où une ancre ne survit pas à rustfmt dès
+  qu'un second élément s'y ajoute. Sur un projet engendré plus tôt, `rbs doctor` échoue sur
+  `job_modules` absente, que `rbs doctor --fix` repose, et n'avertit que pour `schedules` :
+  `schedules()` doit d'abord être réécrite à la main, et un projet sain ne doit pas faire
+  échouer une CI entre-temps. La note de montée donne la forme à coller.
 
 - **Un abonnement webhook ne peut plus atteindre le réseau du projet.** Hors du profil
   `development`, `POST /webhooks/subscriptions` rend 400 à une URL qui n'est pas en

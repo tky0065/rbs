@@ -5,6 +5,7 @@ mod cargo;
 mod cli;
 mod client;
 mod completions;
+mod cron;
 mod database;
 mod dev;
 mod doctor;
@@ -20,13 +21,16 @@ mod metadata;
 mod migrate;
 mod new;
 mod notes;
+mod openapi;
 mod plan;
 mod preset;
 mod prompts;
+mod routes;
 mod secret;
 mod seed;
 mod template;
 mod templates;
+mod test;
 // Partagés avec `tests/common` par `#[path]` : voir l'en-tête de chaque fichier.
 #[cfg(test)]
 mod test_cible;
@@ -82,14 +86,11 @@ pub fn run() {
             feature,
             force,
             dry_run,
+            json,
             template_dir,
         } => {
-            if let Err(error) = add(feature, force, dry_run, template_dir) {
-                ui::error(&error.to_string());
-                if let Some(remedy) = error.remedy() {
-                    ui::info(&format!("\n{remedy}"));
-                }
-                std::process::exit(1);
+            if let Err(error) = add(feature, force, dry_run, json, template_dir) {
+                echec(&error, error.remedy(), json);
             }
         }
 
@@ -100,10 +101,12 @@ pub fn run() {
                     fields,
                     force,
                     dry_run,
+                    json,
                     has_many,
                     role,
                     soft_delete,
                     with_upload,
+                    cursor,
                     singular,
                 } => GenerateArgs {
                     name,
@@ -111,10 +114,12 @@ pub fn run() {
                     complete: true,
                     force,
                     dry_run,
+                    json,
                     has_many,
                     role,
                     soft_delete,
                     with_upload,
+                    cursor,
                     singular,
                 },
                 GenerateCommands::Feature {
@@ -122,16 +127,19 @@ pub fn run() {
                     singular,
                     force,
                     dry_run,
+                    json,
                 } => GenerateArgs {
                     name,
                     fields: None,
                     complete: false,
                     force,
                     dry_run,
+                    json,
                     has_many: Vec::new(),
                     role: None,
                     soft_delete: false,
                     with_upload: false,
+                    cursor: false,
                     singular,
                 },
 
@@ -142,25 +150,34 @@ pub fn run() {
                     out,
                     force,
                     dry_run,
+                    json,
                 } => {
-                    if let Err(error) = generate_client(lang, out, force, dry_run) {
-                        ui::error(&error.to_string());
-                        if let Some(remedy) = error.remedy() {
-                            ui::info(&format!("\n{remedy}"));
-                        }
-                        std::process::exit(1);
+                    if let Err(error) = generate_client(lang, out, force, dry_run, json) {
+                        echec(&error, error.remedy(), json);
+                    }
+
+                    return;
+                }
+
+                // Le job non plus : ni champs, ni entité, et des refus qui lui sont propres.
+                GenerateCommands::Job {
+                    name,
+                    every,
+                    force,
+                    dry_run,
+                    json,
+                } => {
+                    if let Err(error) = generate_job(name, every, force, dry_run, json) {
+                        echec(&error, None, json);
                     }
 
                     return;
                 }
             };
 
+            let json = args.json;
             if let Err(error) = generate(args) {
-                ui::error(&error.to_string());
-                if let Some(remedy) = error.remedy() {
-                    ui::info(&format!("\n{remedy}"));
-                }
-                std::process::exit(1);
+                echec(&error, error.remedy(), json);
             }
         }
 
@@ -202,10 +219,73 @@ pub fn run() {
             }
         }
 
-        Commands::Upgrade { force, dry_run } => {
-            if let Err(error) = upgrade(force, dry_run) {
+        Commands::Test { filtre, libtest } => {
+            let resultat = std::env::current_dir()
+                .map_err(dev::Error::Cwd)
+                .and_then(|directory| test::run(&directory, filtre.as_deref(), &libtest));
+
+            if let Err(error) = resultat {
                 ui::error(&error.to_string());
-                std::process::exit(1);
+                if let Some(remedy) = error.remedy() {
+                    ui::info(&format!("\n{remedy}"));
+                }
+                std::process::exit(error.exit_code());
+            }
+        }
+
+        Commands::Routes { json } => {
+            let resultat = std::env::current_dir()
+                .map_err(|source| {
+                    openapi::Error::from(crate::errors::Acces::new(
+                        std::path::Path::new("."),
+                        source,
+                    ))
+                })
+                .and_then(|directory| routes::run(&directory, json));
+
+            match resultat {
+                Ok(rendu) => ui::line(&rendu),
+                Err(error) => echec_openapi(&error, json),
+            }
+        }
+
+        Commands::Openapi {
+            command: cli::OpenapiCommands::Export { out },
+        } => {
+            let resultat = std::env::current_dir()
+                .map_err(|source| {
+                    openapi::Error::from(crate::errors::Acces::new(
+                        std::path::Path::new("."),
+                        source,
+                    ))
+                })
+                .and_then(|directory| openapi::exporter(&directory, out.as_deref()));
+
+            match resultat {
+                // Tel que le binaire l'a imprimé, fin de ligne comprise : un `diff` contre
+                // le fichier que `--out` écrit doit rester vide.
+                Ok(Some(document)) => {
+                    use std::io::Write as _;
+                    let _ = ui::stdout().write_all(document.as_bytes());
+                }
+                Ok(None) => {
+                    if let Some(out) = &out {
+                        ui::success(&format!("document écrit dans {}", out.display()));
+                    }
+                }
+                // Avec ou sans `--out` : sans lui, la sortie standard est le document lui-même.
+                Err(error) => echec_openapi(&error, true),
+            }
+        }
+
+        Commands::Upgrade {
+            force,
+            dry_run,
+            json,
+        } => {
+            // Aucun remède humain : l'affichage d'`upgrade` n'en a jamais porté.
+            if let Err(error) = upgrade(force, dry_run, json) {
+                echec(&error, None, json);
             }
         }
 
@@ -338,30 +418,86 @@ fn locale_from(lc_all: Option<&str>, lang: Option<&str>) -> Option<String> {
         .map(str::to_owned)
 }
 
+/// Signale l'échec d'une commande qui lit le document OpenAPI, puis sort en 1.
+///
+/// Quand la sortie standard appartient au document — `routes --json`, `openapi export` —, le
+/// remède rejoint le message sur la sortie d'erreur : un script qui l'analyse, ou un
+/// `> openapi.json`, n'a pas à y trouver du Rust.
+fn echec_openapi(error: &openapi::Error, sortie_au_document: bool) -> ! {
+    ui::error(&error.to_string());
+    if let Some(remedy) = error.remedy() {
+        if sortie_au_document {
+            ui::warn_detail(&format!("\n{remedy}"));
+        } else {
+            ui::info(&format!("\n{remedy}"));
+        }
+    }
+    std::process::exit(1);
+}
+
 /// Signale la zone de l'`AGENTS.md` qu'une commande n'a pas pu réécrire, et donne le bloc
 /// à recoller.
 ///
 /// Une seule fonction pour les trois commandes qui touchent au fichier : `rbs doctor`
 /// renvoie vers elles pour rétablir une zone, et une des trois qui se tairait laisserait
 /// l'utilisateur tourner en rond entre les deux commandes.
-fn signaler_zone_manquante(zone: Option<&agents::MissingZone>) {
+fn signaler_zone_manquante(zone: Option<&agents::MissingZone>, json: bool) {
     if let Some(zone) = zone {
         ui::warn(&format!("{zone} — collez ce bloc pour la rétablir :"));
-        ui::info(&format!("\n{}", zone.block()));
+        hors_du_document(&format!("\n{}", zone.block()), json);
+    }
+}
+
+/// Signale l'échec d'une commande qui planifie, puis sort en 1.
+///
+/// Sous `--json`, l'erreur devient le document de la sortie standard et rien ne passe sur
+/// la sortie d'erreur : un script ne lit qu'un flux, et y décide sur un code stable plutôt
+/// que sur un message à reconnaître. Le remède du document est celui de `Codee`, qui en
+/// accorde un à chaque bloc ; `remedy`, plus étroit, reste celui que l'affichage humain
+/// montrait déjà.
+fn echec<E: errors::Codee + std::fmt::Display>(error: &E, remedy: Option<String>, json: bool) -> ! {
+    if json {
+        ui::line(&plan::json::erreur(
+            error.code(),
+            &error.to_string(),
+            error.remede().as_deref(),
+            error.bloc().as_deref(),
+        ));
+    } else {
+        ui::error(&error.to_string());
+        if let Some(remedy) = remedy {
+            ui::info(&format!("\n{remedy}"));
+        }
+    }
+
+    std::process::exit(1);
+}
+
+/// Écrit une ligne que l'affichage humain porte sur la sortie standard, et que `--json`
+/// renvoie sur la sortie d'erreur : la sortie standard n'y appartient qu'au document,
+/// qu'une ligne de plus rendrait inanalysable.
+fn hors_du_document(message: &str, json: bool) {
+    if json {
+        ui::warn_detail(message);
+    } else {
+        ui::info(message);
     }
 }
 
 /// Applique le plan, ou dit que `--dry-run` l'a laissé sur le papier.
 ///
 /// Rend `false` quand rien n'a été écrit : l'appelant sort alors sans annoncer une
-/// écriture qui n'a pas eu lieu.
+/// écriture qui n'a pas eu lieu. Sous `--json`, c'est `applique: false` qui le dit.
 fn appliquer(
     plan: &plan::Plan,
     force: bool,
     dry_run: bool,
+    json: bool,
 ) -> Result<bool, plan::application::Error> {
     if dry_run {
-        ui::info("\n  rien n'a été écrit (--dry-run)");
+        if !json {
+            ui::info("\n  rien n'a été écrit (--dry-run)");
+        }
         return Ok(false);
     }
 
@@ -375,12 +511,13 @@ fn add(
     feature: String,
     force: bool,
     dry_run: bool,
+    json: bool,
     template_dir: Option<PathBuf>,
 ) -> Result<(), add::Error> {
     let directory = std::env::current_dir()
         .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
 
-    add_in(directory, feature, force, dry_run, template_dir)
+    add_in(directory, feature, force, dry_run, json, template_dir)
 }
 
 /// La même, le projet visé donné en paramètre.
@@ -393,6 +530,7 @@ fn add_in(
     feature: String,
     force: bool,
     dry_run: bool,
+    json: bool,
     template_dir: Option<PathBuf>,
 ) -> Result<(), add::Error> {
     let planned = add::plan_for(&add::Options {
@@ -403,27 +541,50 @@ fn add_in(
     })?;
 
     if planned.deja_installee {
-        ui::success(&format!("{feature} est déjà installée — rien à faire"));
+        if json {
+            ui::line(&plan::json::plan("add", &planned.plan, false));
+        } else {
+            ui::success(&format!("{feature} est déjà installée — rien à faire"));
+        }
         return Ok(());
     }
 
-    ui::info(&format!("{feature} : {}", planned.description));
+    // Rien de ceci ne rejoint le document : les features entraînées s'y lisent par leur
+    // inscription au manifeste, et la description n'apprend rien à qui analyse le plan.
+    if !json {
+        ui::info(&format!("{feature} : {}", planned.description));
 
-    // Annoncé avant le plan et non après : ce que l'utilisateur n'a pas nommé, il doit le
-    // lire au moment où il décide d'appliquer, pas une fois les fichiers écrits.
-    if !planned.entrainees.is_empty() {
-        ui::info(&format!(
-            "{feature} exige {} : posée avec elle",
-            planned.entrainees.join(", ")
-        ));
+        // Annoncé avant le plan et non après : ce que l'utilisateur n'a pas nommé, il doit
+        // le lire au moment où il décide d'appliquer, pas une fois les fichiers écrits.
+        if !planned.entrainees.is_empty() {
+            ui::info(&format!(
+                "{feature} exige {} : posée avec elle",
+                planned.entrainees.join(", ")
+            ));
+        }
+
+        ui::line("");
+        ui::line(&plan::render::plan(&planned.plan));
     }
 
-    ui::line("");
-    ui::line(&plan::render::plan(&planned.plan));
+    signaler_zone_manquante(planned.zone_manquante.as_ref(), json);
 
-    signaler_zone_manquante(planned.zone_manquante.as_ref());
+    let applique = appliquer(&planned.plan, force, dry_run, json)?;
 
-    if !appliquer(&planned.plan, force, dry_run)? {
+    // `auth` arrivée après des CRUD déjà générés les laisse ouverts : le CLI ne réécrit
+    // jamais un fichier existant pour les fermer, et se taire ferait croire l'API fermée —
+    // `--json` compris, d'où la sortie d'erreur plutôt que le silence.
+    let ouverts = planned.remedy().filter(|_| applique);
+
+    if json {
+        if let Some(remedy) = &ouverts {
+            ui::warn_detail(&format!("\n{remedy}"));
+        }
+        ui::line(&plan::json::plan("add", &planned.plan, applique));
+        return Ok(());
+    }
+
+    if !applique {
         return Ok(());
     }
 
@@ -432,9 +593,7 @@ fn add_in(
         ui::files(planned.files.len())
     ));
 
-    // `auth` arrivée après des CRUD déjà générés les laisse ouverts : le CLI ne réécrit
-    // jamais un fichier existant pour les fermer, et se taire ferait croire l'API fermée.
-    if let Some(remedy) = planned.remedy() {
+    if let Some(remedy) = ouverts {
         ui::info(&format!("\n{remedy}"));
     }
 
@@ -493,13 +652,13 @@ fn suite(feature: &str) -> Option<&'static str> {
         ),
         // La table n'existe pas encore, et le worker démarre avec l'API : sans la
         // migration, chaque tour de boucle échoue sur une relation absente.
-        "jobs" => Some("rbs migrate up, puis inscrivez vos jobs dans src/modules/jobs/mod.rs"),
+        "jobs" => Some("rbs migrate up, puis `rbs generate job <nom>` pour écrire un job"),
         // Deux tables à créer — le fragment entraîne `jobs` — et une liste d'échéances qui
         // ne contient qu'un exemple : installé et non édité, le calendrier ne déclenche
         // rien d'utile.
         "scheduler" => Some(
-            "rbs migrate up, puis déclarez vos échéances dans src/modules/scheduler/mod.rs — \
-             les expressions sont évaluées en UTC",
+            "rbs migrate up, puis `rbs generate job <nom> --every \"<cron>\"` pour déclarer une \
+             échéance dans src/modules/scheduler/mod.rs — les expressions sont évaluées en UTC",
         ),
         // La liste est vide à l'installation : sans ce rappel, le développeur croirait
         // avoir monté du CORS alors qu'aucune origine n'est encore autorisée.
@@ -545,10 +704,12 @@ struct GenerateArgs {
     complete: bool,
     force: bool,
     dry_run: bool,
+    json: bool,
     has_many: Vec<String>,
     role: Option<String>,
     soft_delete: bool,
     with_upload: bool,
+    cursor: bool,
     singular: Option<String>,
 }
 
@@ -559,13 +720,20 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
         complete,
         force,
         dry_run,
+        json,
         has_many,
         role,
         soft_delete,
         with_upload,
+        cursor,
         singular,
     } = args;
 
+    let commande = if complete {
+        "generate crud"
+    } else {
+        "generate feature"
+    };
     let feature = name.clone();
     // `--has-many` répare une feature déjà là : rien à générer, donc rien à annoncer sous
     // ce nom-là une fois l'écriture faite.
@@ -582,14 +750,17 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
         role,
         soft_delete,
         with_upload,
+        cursor,
         singular,
     })?;
 
     // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande
     // s'apprête à faire ne doit pas se découvrir après coup.
-    ui::line(&plan::render::plan(&planned.plan));
+    if !json {
+        ui::line(&plan::render::plan(&planned.plan));
+    }
 
-    signaler_zone_manquante(planned.zone_manquante.as_ref());
+    signaler_zone_manquante(planned.zone_manquante.as_ref(), json);
 
     // Avant le plan, l'avertissement se perdrait au-dessus de sept lignes de fichiers.
     if let Some(avertissement) = &planned.avertissement {
@@ -600,14 +771,26 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
     // du seed se découvrirait en cherchant un fichier qui n'a jamais existé, et celle des
     // scénarios de création en lisant les tests.
     if let Some(relation) = &planned.required_reference {
-        ui::info(&format!(
-            "\n  la référence « {relation} » est requise : ni le seed de {feature} ni ses \
-             scénarios de création ne peuvent deviner vers quelle ligne pointer — le seed \
-             n'est pas engendré, et les tests s'arrêtent aux cas qui ne créent rien"
-        ));
+        hors_du_document(
+            &format!(
+                "\n  la référence « {relation} » est requise : ni le seed de {feature} ni ses \
+                 scénarios de création ne peuvent deviner vers quelle ligne pointer — le seed \
+                 n'est pas engendré, et les tests s'arrêtent aux cas qui ne créent rien"
+            ),
+            json,
+        );
     }
 
-    if !appliquer(&planned.plan, force, dry_run)? {
+    let applique = appliquer(&planned.plan, force, dry_run, json)?;
+
+    // Ni annonce ni rappel de migration : la migration se lit dans le document, parmi les
+    // fichiers qu'il crée.
+    if json {
+        ui::line(&plan::json::plan(commande, &planned.plan, applique));
+        return Ok(());
+    }
+
+    if !applique {
         return Ok(());
     }
 
@@ -635,6 +818,7 @@ fn generate_client(
     out: Option<PathBuf>,
     force: bool,
     dry_run: bool,
+    json: bool,
 ) -> Result<(), client::Error> {
     let directory = std::env::current_dir()
         .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
@@ -648,9 +832,22 @@ fn generate_client(
 
     // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande
     // s'apprête à faire ne doit pas se découvrir après coup.
-    println!("{}", plan::render::plan(&planned.plan));
+    if !json {
+        println!("{}", plan::render::plan(&planned.plan));
+    }
 
-    if !appliquer(&planned.plan, force, dry_run)? {
+    let applique = appliquer(&planned.plan, force, dry_run, json)?;
+
+    if json {
+        ui::line(&plan::json::plan(
+            "generate client",
+            &planned.plan,
+            applique,
+        ));
+        return Ok(());
+    }
+
+    if !applique {
         return Ok(());
     }
 
@@ -662,37 +859,155 @@ fn generate_client(
     Ok(())
 }
 
-/// Aligne le manifeste du projet courant sur la version du CLI, plan affiché avant
-/// écriture.
-fn upgrade(force: bool, dry_run: bool) -> Result<(), upgrade::Error> {
+/// Engendre un job de la file dans le projet courant, plan affiché avant écriture.
+fn generate_job(
+    name: String,
+    every: Option<String>,
+    force: bool,
+    dry_run: bool,
+    json: bool,
+) -> Result<(), generate::job::Error> {
     let directory = std::env::current_dir()
         .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
 
-    upgrade_in(directory, force, dry_run)
-}
+    let planned = generate::job::plan_for(&generate::job::Options {
+        name: name.clone(),
+        every,
+        directory,
+        force,
+    })?;
 
-/// La même, le projet visé donné en paramètre — pour la raison dite sur `add_in`.
-fn upgrade_in(directory: PathBuf, force: bool, dry_run: bool) -> Result<(), upgrade::Error> {
-    let planned = upgrade::plan_for(&upgrade::Options { directory, force })?;
+    // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande
+    // s'apprête à faire ne doit pas se découvrir après coup.
+    if !json {
+        ui::line(&plan::render::plan(&planned.plan));
+    }
 
-    if planned.deja_a_jour {
-        ui::success(&format!(
-            "le projet est déjà en rbs {} — rien à faire",
-            planned.vers
-        ));
-        // Le retour anticipé avalait ce bloc : un projet par ailleurs à jour dont une zone
-        // a disparu n'a rien à aligner, et c'est exactement le cas où `rbs doctor` renvoie
-        // ici. Sans cette ligne, les deux commandes se renvoyaient l'une à l'autre.
-        signaler_zone_manquante(planned.zone_manquante.as_ref());
+    if let Some(avertissement) = &planned.avertissement {
+        ui::warn(avertissement);
+    }
+
+    let applique = appliquer(&planned.plan, force, dry_run, json)?;
+
+    // Le bilan se lit dans le document : les blocs à reporter y sont dans `sautees`, le
+    // fichier du job parmi les actions. `applique` y dit, comme sous `add`, que quelque
+    // chose a été écrit : un job déjà en place, ou dont tout est à reporter, n'a rien écrit.
+    if json {
+        let ecrit = applique && matches!(planned.bilan(), generate::job::Bilan::Ecrit { .. });
+        ui::line(&plan::json::plan("generate job", &planned.plan, ecrit));
         return Ok(());
     }
 
-    ui::info(&format!("rbs {} → {}\n", planned.depuis, planned.vers));
-    ui::line(&plan::render::plan(&planned.plan));
+    if !applique {
+        return Ok(());
+    }
 
-    signaler_zone_manquante(planned.zone_manquante.as_ref());
+    let blocs = |nombre: usize| {
+        let pluriel = if nombre > 1 { "s" } else { "" };
+        format!("{nombre} bloc{pluriel}")
+    };
 
-    if !appliquer(&planned.plan, force, dry_run)? {
+    match planned.bilan() {
+        generate::job::Bilan::DejaEnPlace => {
+            ui::success(&format!("job {name} déjà en place — rien à écrire"));
+            return Ok(());
+        }
+        generate::job::Bilan::AReporter(nombre) => {
+            ui::warn(&format!(
+                "job {name} : rien à écrire, mais {} à reporter — voir ci-dessus",
+                blocs(nombre)
+            ));
+            return Ok(());
+        }
+        generate::job::Bilan::Ecrit {
+            fichiers,
+            a_reporter,
+        } => {
+            ui::success(&format!("job {name} écrit — {}", ui::files(fichiers)));
+            if a_reporter > 0 {
+                ui::warn(&format!(
+                    "{} à reporter — voir ci-dessus",
+                    blocs(a_reporter)
+                ));
+            }
+        }
+    }
+
+    // Engendré, le job ne fait que journaliser : c'est `run` qu'il reste à écrire.
+    ui::info(&format!(
+        "\n  ce que fait le job s'écrit dans `run`, en {}",
+        planned.fichier
+    ));
+
+    if let Some(expression) = &planned.echeance {
+        ui::info(&format!(
+            "\n  l'échéance « {expression} » est relue au prochain démarrage, en UTC"
+        ));
+    }
+
+    Ok(())
+}
+
+/// Aligne le manifeste du projet courant sur la version du CLI, plan affiché avant
+/// écriture.
+fn upgrade(force: bool, dry_run: bool, json: bool) -> Result<(), upgrade::Error> {
+    let directory = std::env::current_dir()
+        .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
+
+    upgrade_in(directory, force, dry_run, json)
+}
+
+/// La même, le projet visé donné en paramètre — pour la raison dite sur `add_in`.
+fn upgrade_in(
+    directory: PathBuf,
+    force: bool,
+    dry_run: bool,
+    json: bool,
+) -> Result<(), upgrade::Error> {
+    let planned = upgrade::plan_for(&upgrade::Options { directory, force })?;
+
+    if planned.deja_a_jour {
+        if json {
+            // Les actions d'un projet à jour sont toutes `deja_fait` : le document le dit
+            // comme celui d'une feature déjà installée, par des `actions` vides, plutôt
+            // que de laisser un script les filtrer pour conclure la même chose.
+            let vide = plan::Builder::new(planned.plan.root().to_path_buf()).finir();
+            ui::line(&plan::json::plan("upgrade", &vide, false));
+        } else {
+            ui::success(&format!(
+                "le projet est déjà en rbs {} — rien à faire",
+                planned.vers
+            ));
+        }
+        // Le retour anticipé avalait ce bloc : un projet par ailleurs à jour dont une zone
+        // a disparu n'a rien à aligner, et c'est exactement le cas où `rbs doctor` renvoie
+        // ici. Sans cette ligne, les deux commandes se renvoyaient l'une à l'autre.
+        signaler_zone_manquante(planned.zone_manquante.as_ref(), json);
+        return Ok(());
+    }
+
+    if !json {
+        ui::info(&format!("rbs {} → {}\n", planned.depuis, planned.vers));
+        ui::line(&plan::render::plan(&planned.plan));
+    }
+
+    signaler_zone_manquante(planned.zone_manquante.as_ref(), json);
+
+    let applique = appliquer(&planned.plan, force, dry_run, json)?;
+
+    if json {
+        // Une note dit ce que le code du projet doit reprendre à la main : la taire
+        // laisserait un agent aligner le manifeste sans le reste.
+        if applique {
+            for note in notes::traversees(&planned.depuis, &planned.vers) {
+                ui::warn_detail(&format!("\n{}", note.trim_end()));
+            }
+        }
+        ui::line(&plan::json::plan("upgrade", &planned.plan, applique));
+        return Ok(());
+    }
+
+    if !applique {
         return Ok(());
     }
 
@@ -998,7 +1313,7 @@ mod tests {
         let (_parent, root) = projet();
         let avant = empreinte(&root);
 
-        add_in(root.clone(), "cors".to_string(), false, true, None)
+        add_in(root.clone(), "cors".to_string(), false, true, false, None)
             .expect("le plan doit se calculer");
 
         assert_eq!(
@@ -1007,7 +1322,7 @@ mod tests {
             "`--dry-run` a écrit dans le projet"
         );
 
-        add_in(root.clone(), "cors".to_string(), false, false, None)
+        add_in(root.clone(), "cors".to_string(), false, false, false, None)
             .expect("l'installation doit aboutir");
 
         assert!(
@@ -1032,8 +1347,15 @@ mod tests {
         fs::write(&env, reecrit).expect("le .env est réécrivable");
         let avant = empreinte(&root);
 
-        let refus = add_in(root.clone(), "docker".to_string(), false, false, None)
-            .expect_err("une URL que rien ne décompose doit être refusée");
+        let refus = add_in(
+            root.clone(),
+            "docker".to_string(),
+            false,
+            false,
+            false,
+            None,
+        )
+        .expect_err("une URL que rien ne décompose doit être refusée");
 
         assert!(
             refus.to_string().contains("RBS_DATABASE__URL"),
@@ -1055,7 +1377,7 @@ mod tests {
         fs::remove_file(&guide).expect("le guide est là");
         let avant = empreinte(&root);
 
-        upgrade_in(root.clone(), false, true).expect("la mise à niveau doit se planifier");
+        upgrade_in(root.clone(), false, true, false).expect("la mise à niveau doit se planifier");
 
         assert_eq!(
             ecarts(&avant, &empreinte(&root)),
@@ -1064,7 +1386,7 @@ mod tests {
         );
         assert!(!guide.exists(), "`--dry-run` a recréé le guide");
 
-        upgrade_in(root.clone(), false, false).expect("la mise à niveau doit aboutir");
+        upgrade_in(root.clone(), false, false, false).expect("la mise à niveau doit aboutir");
 
         assert!(
             guide.exists(),

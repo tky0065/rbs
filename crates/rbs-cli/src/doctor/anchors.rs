@@ -36,7 +36,45 @@ pub(crate) fn check(root: &Path) -> Check {
         .collect::<Vec<_>>()
         .join("\n\n");
 
+    // Une ancre optionnelle dont la ligne d'accroche manque vit dans un fichier écrit avant
+    // elle — `schedules()` encore en `vec![]` : le projet est sain, et un échec ferait
+    // tomber sa CI pour une ancre que seul `rbs generate job` emploie. Une ancre à demi
+    // effacée ou une accroche ambiguë est, elle, une faute du projet ; elle garde l'échec,
+    // comme une seule absence réparable à côté.
+    let irreparables: Vec<String> = absentes
+        .iter()
+        .filter(|a| a.optional)
+        .filter_map(|a| match obstacle(root, a) {
+            Some(cause @ anchors::Cause::Introuvable) => Some((a, cause)),
+            _ => None,
+        })
+        .map(|(a, cause)| {
+            format!(
+                "{} : {} — `rbs doctor --fix` ne peut donc pas la reposer ; donnez d'abord à {} \
+                 la forme que le fragment pose aujourd'hui (la note de `rbs upgrade` la montre)",
+                a.name,
+                cause.raison(a),
+                a.file
+            )
+        })
+        .collect();
+
+    if irreparables.len() == absentes.len() {
+        return Check::warned(
+            TITRE,
+            detail,
+            format!("{}\n\n{remedy}", irreparables.join("\n")),
+        );
+    }
+
     Check::failed(TITRE, detail, remedy)
+}
+
+/// Ce qui empêche `--fix` de reposer `anchor` dans son fichier tel qu'il est, s'il y a
+/// quelque chose : le même jugement que la réparation, rendu sans rien planifier.
+fn obstacle(root: &Path, anchor: &Anchor) -> Option<anchors::Cause> {
+    let source = fs::read_to_string(root.join(anchor.file.as_ref())).ok()?;
+    anchors::repose(&source, anchor).err()
 }
 
 /// Les ancres que le projet devrait porter, comptées, et celles qui lui manquent.
@@ -118,23 +156,32 @@ fn present(root: &Path, anchor: &Anchor) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use crate::anchors::{self, ANCRES};
-    use crate::fixtures::project;
+    use crate::anchors::{self, ANCRES, JOB_MODULES, SCHEDULES};
+    use crate::fixtures::{Project, project};
 
     use super::super::State;
     use super::*;
 
     /// Retire du projet la ligne portant `motif`.
+    ///
+    /// Conserve le saut de ligne final du fichier : `lines()` ne le rend pas, et le perdre
+    /// ferait échouer toute comparaison à l'octet entre le fichier reposé et l'original,
+    /// sans rapport avec la réparation elle-même.
     fn remove(root: &Path, file: &str, motif: &str) {
         let path = root.join(file);
         let source = fs::read_to_string(&path).expect("le fichier est lisible");
         let ampute: Vec<_> = source.lines().filter(|l| !l.contains(motif)).collect();
-        fs::write(&path, ampute.join("\n")).expect("le fichier est réécrivable");
+        let mut resultat = ampute.join("\n");
+        if source.ends_with('\n') {
+            resultat.push('\n');
+        }
+        fs::write(&path, resultat).expect("le fichier est réécrivable");
     }
 
-    /// Un projet frais ne porte pas *toutes* les ancres du registre : `jobs` vit dans
-    /// `src/modules/jobs/mod.rs` et `modules` dans `src/modules/mod.rs`, que seul
-    /// `rbs add` dépose — contrairement au compose, que `new` écrit déjà. Deux des trois
+    /// Un projet frais ne porte pas *toutes* les ancres du registre : `jobs` et
+    /// `job_modules` vivent dans `src/modules/jobs/mod.rs`, `schedules` dans
+    /// `src/modules/scheduler/mod.rs`, `modules` dans `src/modules/mod.rs` — que seul
+    /// `rbs add` dépose, contrairement au compose que `new` écrit déjà. Quatre des cinq
     /// ancres optionnelles sont donc inapplicables ici.
     #[test]
     fn a_fresh_project_carries_every_anchor_that_applies_to_it() {
@@ -144,7 +191,7 @@ mod tests {
 
         assert_eq!(check.state, State::Bon);
         assert!(
-            check.detail.contains(&(ANCRES.len() - 2).to_string()),
+            check.detail.contains(&(ANCRES.len() - 4).to_string()),
             "{}",
             check.detail
         );
@@ -262,12 +309,13 @@ mod tests {
         let check = check(&root);
 
         assert_eq!(check.state, State::Bon, "{check:?}");
-        // Le compose retiré à la main, `jobs` et `modules` déjà absents par défaut
-        // (v. le test précédent) : les trois ancres optionnelles sont inapplicables.
+        // Le compose retiré à la main, `jobs`, `job_modules`, `schedules` et `modules`
+        // déjà absents par défaut (v. le test précédent) : les cinq ancres optionnelles
+        // sont inapplicables.
         assert!(
-            check.detail.contains(&(ANCRES.len() - 3).to_string()),
-            "ni le compose, ni le registre de la file, ni le point de montage ne comptent \
-             parmi les applicables : {}",
+            check.detail.contains(&(ANCRES.len() - 5).to_string()),
+            "ni le compose, ni le registre de la file, ni ses modules, ni le calendrier, \
+             ni le point de montage ne comptent parmi les applicables : {}",
             check.detail
         );
     }
@@ -463,5 +511,97 @@ mod tests {
             "{}",
             check.detail
         );
+    }
+
+    /// Un calendrier écrit avant `<rbs:schedules>` est encore un `vec![]`, sans la ligne
+    /// sous laquelle `--fix` reposerait l'ancre : le projet est sain, et `doctor` ne doit
+    /// pas faire échouer sa CI. Il avertit, avec le geste.
+    #[test]
+    fn an_optional_anchor_that_fix_cannot_put_back_only_warns() {
+        let (_parent, root) = project();
+        calendrier_d_avant_l_ancre(&root);
+
+        let check = check(&root);
+
+        assert_eq!(check.state, State::Avertissement, "{check:?}");
+        assert!(
+            check
+                .detail
+                .contains("schedules manque dans src/modules/scheduler/mod.rs"),
+            "{}",
+            check.detail
+        );
+    }
+
+    /// L'avertissement ne couvre que l'ancre que `--fix` ne peut pas reposer : une absence
+    /// réparable à côté d'elle garde le contrôle en échec, et les deux sont nommées.
+    #[test]
+    fn a_repairable_absence_beside_it_keeps_the_check_failed() {
+        let (_parent, root) = project();
+        calendrier_d_avant_l_ancre(&root);
+        remove(&root, "src/router.rs", "<rbs:routes>");
+
+        let check = check(&root);
+
+        assert_eq!(check.state, State::Echec, "{check:?}");
+        assert!(check.detail.contains("routes manque"), "{}", check.detail);
+        assert!(
+            check.detail.contains("schedules manque"),
+            "{}",
+            check.detail
+        );
+    }
+
+    /// Le calendrier tel que `scheduler` l'écrivait avant 1.5.0 : un littéral, sans ancre.
+    fn calendrier_d_avant_l_ancre(root: &Path) {
+        let dossier = root.join("src/modules/scheduler");
+        fs::create_dir_all(&dossier).expect("le dossier est créable");
+        fs::write(
+            dossier.join("mod.rs"),
+            "pub fn schedules() -> Vec<Schedule> {\n    vec![]\n}\n",
+        )
+        .expect("le calendrier est écrivable");
+    }
+
+    /// Un projet qui installe `jobs` et `scheduler` porte les deux ancres que
+    /// `rbs generate job` visera : effacée puis reposée, chacune retrouve le fichier
+    /// qu'elle avait, à l'octet près.
+    #[test]
+    fn a_generated_job_anchor_and_its_schedule_anchor_are_put_back_at_the_byte() {
+        let (_parent, root) = Project::new().features(&["jobs", "scheduler"]).create();
+
+        for anchor in [JOB_MODULES, SCHEDULES] {
+            let path = root.join(anchor.file.as_ref());
+            assert!(
+                path.exists(),
+                "{} : le fragment doit avoir déposé {}",
+                anchor.name,
+                anchor.file
+            );
+
+            let avant = fs::read_to_string(&path).expect("le fichier porteur est lisible");
+            remove(&root, &anchor.file, &anchor.opening());
+            remove(&root, &anchor.file, &anchor.closing());
+
+            let repair = repair(&root).expect("la réparation se planifie");
+            crate::plan::application::apply(&repair.plan, false).expect("le plan s'applique");
+
+            assert_eq!(
+                repair.reposees,
+                vec![anchor.name.to_string()],
+                "{} n'a pas été reposée : {:?}",
+                anchor.name,
+                repair.laissees
+            );
+
+            let apres = fs::read_to_string(&path).expect("le fichier porteur est lisible");
+            assert_eq!(
+                apres, avant,
+                "{} : le fichier ne revient pas à l'octet",
+                anchor.name
+            );
+
+            fs::write(&path, &avant).expect("le fichier se rétablit");
+        }
     }
 }

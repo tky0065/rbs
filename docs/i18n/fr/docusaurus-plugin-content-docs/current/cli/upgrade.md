@@ -10,7 +10,9 @@ version consignée dans `[package.metadata.rbs]`. Il affiche ensuite les notes d
 que le saut traverse.
 
 Il n'écrit que dans `Cargo.toml`, et dans les deux zones réservées d'
-[`AGENTS.md`](../guides/agents.md) — nulle part ailleurs. Le reste du projet —
+[`AGENTS.md`](../guides/agents.md) ; il crée aussi le `CLAUDE.md` d'une ligne qui importe ce
+guide quand le projet n'en a pas, et ne réécrit jamais celui qui existe — nulle part
+ailleurs. Le reste du projet —
 contrôleurs, configuration, migrations, et tout ce que vous écrivez hors de ces deux
 zones — vous appartient dès l'instant où [`rbs new`](./new.md) l'a posé, et le re-rendre
 sur une version plus récente effacerait votre travail sans que vous l'ayez demandé
@@ -36,6 +38,7 @@ Usage: rbs upgrade [OPTIONS]
 Options:
       --force    Met à niveau même si le working tree Git est sale
       --dry-run  Affiche le plan sans rien écrire
+      --json     Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
   -h, --help     Print help
   -V, --version  Print version
 ```
@@ -43,6 +46,11 @@ Options:
 `--force` et `--dry-run` sont ses flags propres ; `--dry-run` affiche le plan et s'arrête,
 ce qui donne à lire ce qu'un saut toucherait avant qu'il n'y touche. Ni `--template-dir` ni `--yes` n'est accepté
 ici : chacun est déclaré sur les commandes qui le lisent.
+
+`--json` rend le plan — ou l'erreur — en un seul document JSON sur la sortie standard,
+avec `applique` pour dire si le manifeste a été écrit ; les notes de migration partent
+alors sur la sortie d'erreur. [Le guide des agents](../guides/agents.md#lire-un-plan-en-json)
+donne le document et les codes d'erreur.
 
 ## Un saut qui porte une note
 

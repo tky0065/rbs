@@ -42,7 +42,7 @@ plan pour /private/tmp/rbs-demo/demo
   15 fichiers à écrire
 ✓ jobs installée — 8 fichiers
 
-  rbs migrate up, puis inscrivez vos jobs dans src/modules/jobs/mod.rs
+  rbs migrate up, puis `rbs generate job <nom>` pour écrire un job
 ```
 
 La migration vient avec, et [`rbs migrate up`](../cli/migrate.md) est donc la commande
@@ -116,6 +116,12 @@ l'envoi qui compte. Et l'envoi est *attendu* — une erreur rendue par `run` vau
 qui est toute la raison d'en avoir fait un job.
 
 ## L'inscrire
+
+[`rbs generate job <nom>`](../cli/generate.md#rbs-generate-job) écrit les trois pièces
+qu'un job neuf demande, en un seul plan : le fichier ci-dessus, sous
+`src/modules/jobs/` ; `pub mod <nom>;` entre les balises `// <rbs:job_modules>` ; et la
+ligne ci-dessous, entre les balises `// <rbs:jobs>`. `newsletter` a été écrit à la main
+avant que la commande existe — ce qu'elle aurait produit est exactement ceci :
 
 ```rust file=examples/newsletter-queue/src/modules/jobs/mod.rs region=registry
 ```

@@ -558,6 +558,17 @@ pub(crate) fn posts() -> Feature {
         .guarded("admin")
 }
 
+/// La feature dont la liste `GET` pagine par curseur.
+///
+/// Aucun exemple n'engendre `--cursor` : la comparaison des exemples ne passe jamais par
+/// cette branche des gabarits, et les fixtures qu'elle fige en sont le seul oracle des
+/// blancs.
+pub(crate) fn articles_par_curseur() -> Feature {
+    let fields = super::fields::parse("title:string").expect("les champs du témoin sont valides");
+
+    Feature::fresh("articles", fields).paged_by_cursor()
+}
+
 /// Compare `rendu` à la fixture figée sous `chemin`, relatif à la racine de la crate.
 ///
 /// `src/uploads/controller.rs` et `src/uploads/service.rs` d'`examples/file-drop` sortent

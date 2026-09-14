@@ -25,15 +25,19 @@ du projet », en bas, est faite pour l'accueillir.
 | `rbs add <feature>` | installe audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks | le câblage de la feature |
 | `rbs generate crud <nom> --fields "..."` | une feature CRUD complète | huit fichiers, le seed et la migration |
 | `rbs generate feature <nom>` | une feature vide | sept fichiers |
+| `rbs generate job <nom> [--every "<cron>"]` | un job de la file, et son échéance sous `--every` | le fichier du job, son inscription et son échéance |
 | `rbs migrate up\|down\|status` | pilote les migrations | — |
 | `rbs migrate new <nom>` | un fichier de migration vide | le squelette de la migration |
 | `rbs seed` | insère les données de démonstration | — |
 | `rbs dev` | services, migrations, serveur rechargé | — |
+| `rbs test [filtre] [-- args]` | services, migrations, puis `cargo test --workspace` | — |
+| `rbs routes [--json]` | les routes du projet : méthode, chemin, `operation_id`, garde | — |
+| `rbs openapi export [--out <fichier>]` | le document OpenAPI, sans serveur | — |
 | `rbs doctor` | diagnostique le projet ; `--fix` repose les ancres absentes | — |
 | `rbs upgrade` | aligne le projet sur la version du CLI | — |
 | `rbs completions <shell>` | écrit le script de complétion du shell | — |
 
-`rbs generate`, `rbs add` et `rbs upgrade` acceptent `--dry-run` : le plan s'affiche, rien ne s'écrit.
+`rbs generate`, `rbs add` et `rbs upgrade` acceptent `--dry-run` : le plan s'affiche, rien ne s'écrit. Avec `--json`, le plan — ou le refus — devient un seul document JSON sur la sortie standard : c'est lui qu'il faut lire, plutôt que le rendu en couleurs.
 
 ## Recettes
 
@@ -41,6 +45,7 @@ du projet », en bas, est faite pour l'accueillir.
 - Une référence vers une autre entité : `--fields "author:references:users"`
 - Le côté inverse d'une relation : `rbs generate crud users --has-many posts`
 - Une feature sans champs : `rbs generate feature reports`
+- Un job de fond et son échéance : `rbs generate job purge_sessions --every "0 3 * * *"`
 - L'authentification JWT : `rbs add auth`, puis recopier `RBS_AUTH__SECRET`
 - Une migration écrite à la main : `rbs migrate new ajoute_index_sur_slug`
 
@@ -78,6 +83,8 @@ faire.
 - `<rbs:services>` dans `docker-compose.yml`
 - `<rbs:health_probes>` dans `src/health/controller.rs`
 - `<rbs:jobs>` dans `src/modules/jobs/mod.rs`
+- `<rbs:job_modules>` dans `src/modules/jobs/mod.rs`
+- `<rbs:schedules>` dans `src/modules/scheduler/mod.rs`
 - `<rbs:relations:<table>>` et `<rbs:related:<table>>` dans le modèle de chaque entité
 
 ## Ce que rbs ne couvre pas

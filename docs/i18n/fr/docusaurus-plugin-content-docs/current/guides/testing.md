@@ -60,11 +60,30 @@ rien ne doit vous empêcher de le modifier.
 
 ## Les lancer
 
-Depuis la racine du projet, avec une base joignable :
+Depuis la racine du projet :
+
+```bash
+rbs test
+```
+
+[`rbs test`](../cli/test.md) remonte le compose si le projet en porte un, attend la base,
+applique les migrations en attente, puis lance
+`cargo test --workspace --no-fail-fast -- --include-ignored` — la commande que lance le
+workflow qu'installe `rbs add ci`, après avoir fait les trois mêmes choses. Un filtre
+restreint la passe, et ce qui suit `--` va au harnais de test :
+
+```bash
+rbs test articles -- --nocapture
+```
+
+Son code de sortie est celui de `cargo test` : un script distingue un test rouge ou un projet qui ne
+compile pas (101) d'une base qui n'a jamais répondu (1).
+
+À la main, la même chose tient en deux commandes, avec une base joignable :
 
 ```bash
 rbs migrate up
-cargo test -- --include-ignored
+cargo test --workspace --no-fail-fast -- --include-ignored
 ```
 
 La première commande n'est pas facultative : `application()` échoue avec un message qui le
@@ -72,8 +91,7 @@ dit si le schéma n'est pas là.
 
 Le `--include-ignored` ne l'est pas davantage. Tout test qui joint la base est marqué
 `#[ignore = "joint la base du projet"]`, pour qu'un `cargo test` nu reste rapide sur un
-poste où rien ne tourne — et il n'y lance alors rien qui compte. Le workflow qu'installe
-`rbs add ci` passe le même drapeau, après avoir démarré la base et l'avoir migrée.
+poste où rien ne tourne — et il n'y lance alors rien qui compte.
 
 ## Comment rbs se teste lui-même
 

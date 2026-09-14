@@ -57,11 +57,30 @@ you from editing it.
 
 ## Running them
 
-From the project root, with a database reachable:
+From the project root:
+
+```bash
+rbs test
+```
+
+[`rbs test`](../cli/test.md) brings up the compose stack if the project has one, waits for
+the database, applies the pending migrations, then runs
+`cargo test --workspace --no-fail-fast -- --include-ignored` — the command the CI workflow
+`rbs add ci` installs runs, after doing the same three things. A filter narrows the run,
+and what follows `--` goes to the test harness:
+
+```bash
+rbs test articles -- --nocapture
+```
+
+Its exit code is `cargo test`'s own, so a script can tell a red test or a project that does
+not compile (101) from a database that never answered (1).
+
+By hand, the same thing takes two commands, with a database reachable:
 
 ```bash
 rbs migrate up
-cargo test -- --include-ignored
+cargo test --workspace --no-fail-fast -- --include-ignored
 ```
 
 The first command is not optional. `application()` fails with a message saying so if the
@@ -69,8 +88,7 @@ schema is not there.
 
 The `--include-ignored` is not optional either. Every test that reaches the database is
 marked `#[ignore = "joint la base du projet"]`, so that a bare `cargo test` stays fast on a
-machine where nothing is running — and runs nothing that matters. The CI workflow
-`rbs add ci` installs passes the same flag, after starting the database and migrating it.
+machine where nothing is running — and runs nothing that matters.
 
 ## How rbs tests itself
 

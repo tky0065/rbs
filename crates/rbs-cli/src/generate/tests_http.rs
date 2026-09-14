@@ -45,6 +45,7 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
             role => feature.role,
             auth => feature.auth,
             with_upload => feature.with_upload,
+            cursor => feature.cursor,
             // Le rôle que le harnais signe, tel qu'il s'écrit en base.
             signed_role => feature.role_value.clone().unwrap_or_else(|| "user".to_string()),
             blocking_reference => blocking.map(|field| field.relation_name()),
@@ -352,6 +353,204 @@ mod tests {
         );
     }
 
+    fn trials_by_cursor(name: &str, fields: &str) -> String {
+        let fields = fields::parse(fields).expect("champs valides");
+        render(&Feature::fresh(name, fields).paged_by_cursor())
+            .expect("les tests doivent se rendre")
+    }
+
+    fn trials_by_cursor_authenticated(name: &str, fields: &str) -> String {
+        let fields = fields::parse(fields).expect("champs valides");
+        render(
+            &Feature::fresh(name, fields)
+                .paged_by_cursor()
+                .authenticated(),
+        )
+        .expect("les tests doivent se rendre")
+    }
+
+    /// Le scénario nommé, isolé du reste du fichier.
+    fn scenario<'a>(rendered: &'a str, name: &str) -> &'a str {
+        rendered
+            .split(&format!("async fn {name}()"))
+            .nth(1)
+            .and_then(|reste| reste.split("\n#[tokio::test]").next())
+            .unwrap_or_else(|| panic!("« {name} » doit être rendu :\n{rendered}"))
+    }
+
+    /// Sous `--cursor`, la marche parcourt la liste par pages de deux et prouve ce que le
+    /// curseur promet : aucune ligne rendue deux fois, et un `next` qui s'éteint de
+    /// lui-même plutôt qu'une boucle arrêtée par sa borne.
+    #[test]
+    fn under_cursor_the_walk_through_every_page_is_rendered() {
+        let rendered = trials_by_cursor("articles", CHAMPS);
+        let marche = scenario(&rendered, "the_cursor_walks_every_page_without_duplicates");
+
+        for attendu in [
+            "for _ in 0..3 {",
+            r#"let mut chemin = format!("{collection}?per_page=2");"#,
+            r#"format!("{collection}?per_page=2&after={next}")"#,
+            "for _ in 0..10_000 {",
+            "HashSet::new()",
+            r#"page["meta"]["next"].as_str()"#,
+            r#"without_body("DELETE", &resource)"#,
+        ] {
+            assert!(
+                marche.contains(attendu),
+                "« {attendu} » absent de la marche :\n{marche}"
+            );
+        }
+        assert!(
+            rendered.contains("use std::collections::HashSet;\n"),
+            "la marche compte ses lignes dans un `HashSet` :\n{rendered}"
+        );
+        assert_eq!(
+            rendered
+                .matches(r#"#[ignore = "joint la base du projet"]"#)
+                .count(),
+            rendered.matches("#[tokio::test]").count(),
+            "la marche joint la base, et doit être ignorée comme les autres :\n{rendered}"
+        );
+    }
+
+    /// Les lignes que la marche crée, elle les supprime avant de conclure : une assertion
+    /// qui échoue ne laisse pas trois lignes de plus dans la base de développement.
+    #[test]
+    fn the_walk_deletes_what_it_created_before_asserting() {
+        let rendered = trials_by_cursor("articles", CHAMPS);
+        let marche = scenario(&rendered, "the_cursor_walks_every_page_without_duplicates");
+
+        let suppression = marche
+            .find(r#"without_body("DELETE", &resource)"#)
+            .expect("les trois lignes créées sont supprimées");
+        let constat = marche
+            .find("ne s'est pas éteint")
+            .expect("la marche constate qu'elle s'est éteinte");
+
+        assert!(
+            suppression < constat,
+            "la suppression doit précéder les assertions :\n{marche}"
+        );
+    }
+
+    /// Témoin : sans le drapeau, ni marche ni `HashSet`.
+    #[test]
+    fn without_cursor_no_walk_is_rendered() {
+        let rendered = trials("articles", CHAMPS);
+
+        assert!(
+            !rendered.contains("the_cursor_walks_every_page_without_duplicates")
+                && !rendered.contains("HashSet"),
+            "sans `--cursor`, le rendu ne porte rien de la marche :\n{rendered}"
+        );
+    }
+
+    /// La page par curseur ne compte plus la table : le cycle de vie vérifie la taille
+    /// qu'elle annonce, et garde le reste — la ligne créée présente, la page ordonnée.
+    #[test]
+    fn under_cursor_the_lifecycle_checks_the_page_size_instead_of_the_total() {
+        let rendered = trials_by_cursor("articles", CHAMPS);
+        let cycle = scenario(&rendered, "the_full_lifecycle_goes_through_the_api");
+
+        assert!(
+            cycle.contains(r#"page["meta"]["per_page"], 50,"#),
+            "le cycle doit vérifier la taille annoncée :\n{cycle}"
+        );
+        assert!(
+            !rendered.contains(r#"["total"]"#),
+            "`meta.total` n'existe pas sous --cursor :\n{rendered}"
+        );
+        for garde in [
+            "la ligne créée est absente de la première page",
+            "la liste n'est pas triée",
+        ] {
+            assert!(
+                cycle.contains(garde),
+                "« {garde} » doit survivre sous --cursor :\n{cycle}"
+            );
+        }
+    }
+
+    /// Témoin : sans le drapeau, le cycle de vie garde son `meta.total`.
+    #[test]
+    fn without_cursor_the_lifecycle_keeps_its_total() {
+        let rendered = trials("articles", CHAMPS);
+
+        assert!(
+            rendered.contains(r#"page["meta"]["total"]"#) && !rendered.contains(r#"["per_page"]"#),
+            "sans `--cursor`, le rendu est inchangé :\n{rendered}"
+        );
+    }
+
+    /// Une référence requise écarte les scénarios qui créent : la marche tombe avec eux, et
+    /// l'import de `HashSet` avec elle, faute de quoi `-D warnings` arrête le projet.
+    #[test]
+    fn under_cursor_a_required_reference_drops_the_walk() {
+        let rendered = trials_by_cursor("posts", "title:string,author:references:users");
+
+        assert!(
+            !rendered.contains("the_cursor_walks_every_page_without_duplicates")
+                && !rendered.contains("HashSet"),
+            "sans création, rien de la marche :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("async fn an_unknown_id_returns_404()"),
+            "ce qui ne crée rien reste rendu :\n{rendered}"
+        );
+    }
+
+    /// La même garde sous `--cursor`, et le même ensemble que le rendu par défaut : la
+    /// marche ne porte le nom du module qu'une fois, dans une ligne qui tient à toute
+    /// longueur, et tout le reste de ses lignes est fixe.
+    #[test]
+    fn the_cursor_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(|name| trials_by_cursor(name, CHAMPS));
+
+        assert_eq!(
+            divergentes,
+            (34..=40).collect::<Vec<usize>>(),
+            "la plage où les tests HTTP divergent de rustfmt a bougé sous --cursor"
+        );
+    }
+
+    /// La même garde sous `--cursor` et `auth`.
+    #[test]
+    fn the_guarded_cursor_render_is_already_what_rustfmt_would_write() {
+        let divergentes =
+            bench::longueurs_divergentes(|name| trials_by_cursor_authenticated(name, CHAMPS));
+
+        assert_eq!(
+            divergentes,
+            (34..=40).collect::<Vec<usize>>(),
+            "la plage où les tests HTTP gardés divergent de rustfmt a bougé sous --cursor"
+        );
+    }
+
+    /// Le fichier réduit par une référence requise reste un point fixe sous `--cursor` : la
+    /// bascule n'y laisse ni la marche ni son import, et rien d'autre n'y suit le drapeau.
+    #[test]
+    fn the_reduced_cursor_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(|name| {
+            trials_by_cursor(name, "title:string,author:references:users")
+        });
+
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le fichier réduit diverge de rustfmt sous --cursor"
+        );
+    }
+
+    /// Le rendu entier des tests sous `--cursor`, figé octet à octet : aucun exemple
+    /// n'emploie le drapeau, et rustfmt ne rétablit pas une ligne vide perdue sous la
+    /// bascule.
+    #[test]
+    fn the_cursor_trials_render_the_frozen_fixture() {
+        bench::fige(
+            "fixtures/cursor/tests.rs",
+            &render(&bench::articles_par_curseur()).expect("les tests doivent se rendre"),
+        );
+    }
     /// Le rôle signé est celui que le contrôleur exige.
     #[test]
     fn the_signed_role_matches_the_one_the_controller_requires() {

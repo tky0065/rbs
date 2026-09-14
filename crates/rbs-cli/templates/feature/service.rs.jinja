@@ -31,7 +31,11 @@ pub async fn {@ nom @}(
 {%- endfor %}
 {%- endif %}
 {%- endmacro -%}
+{% if cursor -%}
+use rbs_core::{Cursor, CursorPage, Error, Page, Pagination, Result};
+{%- else -%}
 use rbs_core::{Error, Page, Pagination, Result};
+{%- endif %}
 use sea_orm::ActiveValue::Set;
 use sea_orm::DatabaseConnection;
 use sea_orm::prelude::Uuid;
@@ -61,6 +65,19 @@ fn content_key(id: Uuid) -> String {
     format!("{@ module @}/{id}")
 }
 {%- endif %}
+{%- if cursor %}
+
+{@ entete("list", ["db: &DatabaseConnection", "cursor: &Cursor"], "Result<CursorPage<" ~ entity ~ "Response>>") @}
+    let {@ module @} = repository::list(db, cursor).await?;
+    let dernier = {@ chaine(module, [".last()", ".map(|ligne| ligne.id)"], "    ") @};
+
+    Ok(CursorPage::new(
+        {@ chaine(module, [".into_iter()", ".map(Into::into)", ".collect()"], "        ") @},
+        cursor,
+        dernier,
+    ))
+}
+{%- else %}
 
 {@ entete("list", ["db: &DatabaseConnection", "pagination: &Pagination"], "Result<Page<" ~ entity ~ "Response>>") @}
     let ({@ module @}, total) = repository::list(db, pagination).await?;
@@ -71,6 +88,7 @@ fn content_key(id: Uuid) -> String {
         total,
     ))
 }
+{%- endif %}
 
 {@ entete("filter", ["db: &DatabaseConnection", "filtre: &" ~ entity ~ "Filter", "pagination: &Pagination"], "Result<Page<" ~ entity ~ "Response>>") @}
     let ({@ module @}, total) = repository::filter(db, filtre, pagination).await?;
