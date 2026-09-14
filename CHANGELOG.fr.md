@@ -118,10 +118,10 @@ dépréciation.
   `schedules()` s'écrit en instructions.** `// <rbs:job_modules>` se tient sous
   `pub mod worker;`, et `// <rbs:schedules>` sous `let mut calendrier = Vec::new();` — le
   calendrier a quitté son littéral `vec![]`, où une ancre ne survit pas à rustfmt dès
-  qu'un second élément s'y ajoute. Après la montée, `rbs doctor` signale les deux absentes
-  sur un projet engendré plus tôt : `rbs doctor --fix` repose `job_modules`, tandis que
-  `schedules()` doit d'abord être réécrite à la main. La note de montée donne la forme à
-  coller.
+  qu'un second élément s'y ajoute. Sur un projet engendré plus tôt, `rbs doctor` échoue sur
+  `job_modules` absente, que `rbs doctor --fix` repose, et n'avertit que pour `schedules` :
+  `schedules()` doit d'abord être réécrite à la main, et un projet sain ne doit pas faire
+  échouer une CI entre-temps. La note de montée donne la forme à coller.
 
 - **Un abonnement webhook ne peut plus atteindre le réseau du projet.** Hors du profil
   `development`, `POST /webhooks/subscriptions` rend 400 à une URL qui n'est pas en

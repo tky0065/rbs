@@ -36,7 +36,45 @@ pub(crate) fn check(root: &Path) -> Check {
         .collect::<Vec<_>>()
         .join("\n\n");
 
+    // Une ancre optionnelle dont la ligne d'accroche manque vit dans un fichier écrit avant
+    // elle — `schedules()` encore en `vec![]` : le projet est sain, et un échec ferait
+    // tomber sa CI pour une ancre que seul `rbs generate job` emploie. Une ancre à demi
+    // effacée ou une accroche ambiguë est, elle, une faute du projet ; elle garde l'échec,
+    // comme une seule absence réparable à côté.
+    let irreparables: Vec<String> = absentes
+        .iter()
+        .filter(|a| a.optional)
+        .filter_map(|a| match obstacle(root, a) {
+            Some(cause @ anchors::Cause::Introuvable) => Some((a, cause)),
+            _ => None,
+        })
+        .map(|(a, cause)| {
+            format!(
+                "{} : {} — `rbs doctor --fix` ne peut donc pas la reposer ; donnez d'abord à {} \
+                 la forme que le fragment pose aujourd'hui (la note de `rbs upgrade` la montre)",
+                a.name,
+                cause.raison(a),
+                a.file
+            )
+        })
+        .collect();
+
+    if irreparables.len() == absentes.len() {
+        return Check::warned(
+            TITRE,
+            detail,
+            format!("{}\n\n{remedy}", irreparables.join("\n")),
+        );
+    }
+
     Check::failed(TITRE, detail, remedy)
+}
+
+/// Ce qui empêche `--fix` de reposer `anchor` dans son fichier tel qu'il est, s'il y a
+/// quelque chose : le même jugement que la réparation, rendu sans rien planifier.
+fn obstacle(root: &Path, anchor: &Anchor) -> Option<anchors::Cause> {
+    let source = fs::read_to_string(root.join(anchor.file.as_ref())).ok()?;
+    anchors::repose(&source, anchor).err()
 }
 
 /// Les ancres que le projet devrait porter, comptées, et celles qui lui manquent.
@@ -473,6 +511,56 @@ mod tests {
             "{}",
             check.detail
         );
+    }
+
+    /// Un calendrier écrit avant `<rbs:schedules>` est encore un `vec![]`, sans la ligne
+    /// sous laquelle `--fix` reposerait l'ancre : le projet est sain, et `doctor` ne doit
+    /// pas faire échouer sa CI. Il avertit, avec le geste.
+    #[test]
+    fn an_optional_anchor_that_fix_cannot_put_back_only_warns() {
+        let (_parent, root) = project();
+        calendrier_d_avant_l_ancre(&root);
+
+        let check = check(&root);
+
+        assert_eq!(check.state, State::Avertissement, "{check:?}");
+        assert!(
+            check
+                .detail
+                .contains("schedules manque dans src/modules/scheduler/mod.rs"),
+            "{}",
+            check.detail
+        );
+    }
+
+    /// L'avertissement ne couvre que l'ancre que `--fix` ne peut pas reposer : une absence
+    /// réparable à côté d'elle garde le contrôle en échec, et les deux sont nommées.
+    #[test]
+    fn a_repairable_absence_beside_it_keeps_the_check_failed() {
+        let (_parent, root) = project();
+        calendrier_d_avant_l_ancre(&root);
+        remove(&root, "src/router.rs", "<rbs:routes>");
+
+        let check = check(&root);
+
+        assert_eq!(check.state, State::Echec, "{check:?}");
+        assert!(check.detail.contains("routes manque"), "{}", check.detail);
+        assert!(
+            check.detail.contains("schedules manque"),
+            "{}",
+            check.detail
+        );
+    }
+
+    /// Le calendrier tel que `scheduler` l'écrivait avant 1.5.0 : un littéral, sans ancre.
+    fn calendrier_d_avant_l_ancre(root: &Path) {
+        let dossier = root.join("src/modules/scheduler");
+        fs::create_dir_all(&dossier).expect("le dossier est créable");
+        fs::write(
+            dossier.join("mod.rs"),
+            "pub fn schedules() -> Vec<Schedule> {\n    vec![]\n}\n",
+        )
+        .expect("le calendrier est écrivable");
     }
 
     /// Un projet qui installe `jobs` et `scheduler` porte les deux ancres que

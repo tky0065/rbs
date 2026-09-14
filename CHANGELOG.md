@@ -112,9 +112,10 @@ between minor versions with no deprecation cycle.
   is written as instructions.** `// <rbs:job_modules>` sits under `pub mod worker;`, and
   `// <rbs:schedules>` under `let mut calendrier = Vec::new();` — the calendar left its
   `vec![]` literal, where an anchor does not survive rustfmt once a second element joins
-  it. After the upgrade, `rbs doctor` reports both missing on a project generated earlier:
-  `rbs doctor --fix` puts `job_modules` back, while `schedules()` has to be rewritten by
-  hand first. The upgrade note gives the form to paste.
+  it. On a project generated earlier, `rbs doctor` fails on the missing `job_modules`,
+  which `rbs doctor --fix` puts back, and only warns about `schedules`: `schedules()` has
+  to be rewritten by hand first, and a healthy project must not fail a CI meanwhile. The
+  upgrade note gives the form to paste.
 
 - **A webhook subscription can no longer reach the project's own network.** Outside the
   `development` profile, `POST /webhooks/subscriptions` answers 400 to a non-`https` URL
