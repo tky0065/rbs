@@ -145,6 +145,11 @@ name   = "create_auth_tables"
 [cargo.rbs-core]
 features = ["auth"]
 
+# Les émissions de jetons partent en tâche détachée, et les tests du fragment attendent
+# qu'elles aient écrit.
+[cargo.tokio]
+features = ["time"]
+
 [[config]]
 file    = "config/default.toml"
 section = "auth"

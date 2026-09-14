@@ -1,7 +1,7 @@
 use super::*;
 
 use chrono::Utc;
-use sea_orm::TransactionTrait;
+use sea_orm::{ActiveModelTrait, Set, TransactionTrait};
 
 /// Deux consommations simultanées du même jeton : une seule passe.
 ///
@@ -49,30 +49,50 @@ async fn a_token_is_consumed_once_even_under_concurrency() {
 
 /// Émet un jeton de réinitialisation dont l'échéance est `decalage` après maintenant, et
 /// rend sa ligne.
+///
+/// La ligne est celle que rend l'`INSERT`, sans relecture : toute émission purge les
+/// jetons échus, et celle d'un test voisin retirerait celui-ci avant qu'on le relise.
 async fn reset_token_expiring_in(
     db: &DatabaseConnection,
     user_id: Uuid,
     decalage: chrono::Duration,
 ) -> crate::auth::repository::one_time_token::Model {
-    let jeton = rbs_core::token::random();
-    crate::auth::repository::one_time_token::issue(
-        db,
-        user_id,
-        crate::auth::model::TokenPurpose::PasswordReset,
-        rbs_core::token::fingerprint(&jeton),
-        (Utc::now() + decalage).fixed_offset(),
-    )
+    crate::auth::model::one_time_token::ActiveModel {
+        user_id: Set(user_id),
+        token_hash: Set(rbs_core::token::fingerprint(&rbs_core::token::random())),
+        purpose: Set(crate::auth::model::TokenPurpose::PasswordReset),
+        expires_at: Set((Utc::now() + decalage).fixed_offset()),
+        created_at: Set(Utc::now().fixed_offset()),
+        ..Default::default()
+    }
+    .insert(db)
     .await
-    .expect("le jeton s'émet");
+    .expect("le jeton s'émet")
+}
 
-    crate::auth::repository::one_time_token::find(
-        db,
-        &rbs_core::token::fingerprint(&jeton),
-        crate::auth::model::TokenPurpose::PasswordReset,
-    )
-    .await
-    .expect("la lecture aboutit")
-    .expect("le jeton vient d'être émis")
+/// Chaque émission purge les jetons échus, ceux de tous les comptes : sans elle, la table
+/// croîtrait d'une ligne par demande sans jamais en perdre, au rythme du trafic anonyme.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_emission_purges_the_expired_tokens_of_every_account() {
+    let db = connection().await;
+    let autre = registered_user(&db).await;
+    let demandeur = registered_user(&db).await;
+    let echu = reset_token_expiring_in(&db, autre.id, -chrono::Duration::seconds(1)).await;
+
+    crate::auth::service::password::request_reset(&db, 3600, &demandeur.email)
+        .await
+        .expect("la demande aboutit")
+        .expect("le compte existe");
+
+    let survivant = crate::auth::model::one_time_token::Entity::find_by_id(echu.id)
+        .one(&db)
+        .await
+        .expect("la lecture aboutit");
+    assert!(
+        survivant.is_none(),
+        "le jeton échu d'un autre compte a survécu à une émission"
+    );
 }
 
 /// Une seconde de retard suffit : l'échéance est comparée à l'instant, pas au jour —
@@ -521,9 +541,10 @@ async fn forgetting_a_registered_address_is_accepted_and_opens_a_token() {
     .await;
 
     assert_eq!(statut, StatusCode::ACCEPTED);
-    assert_eq!(
-        one_time_tokens_count_for(&db, compte.id).await,
-        avant + 1,
+    let (db, id) = (&db, compte.id);
+    assert!(
+        eventually(move || async move { one_time_tokens_count_for(db, id).await == avant + 1 })
+            .await,
         "la demande n'a ouvert aucun jeton de réinitialisation"
     );
 }

@@ -135,16 +135,58 @@ fn fresh_email() -> String {
     format!("{}@exemple.test", Uuid::new_v4())
 }
 
-/// Inscrit `email` et rend le corps de la réponse.
+/// Attend qu'une condition devienne vraie, cinq secondes au plus.
+///
+/// Les émissions de jetons partent en tâche détachée : la réponse précède l'écriture.
+async fn eventually<F, Fut>(mut condition: F) -> bool
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = bool>,
+{
+    for _ in 0..50 {
+        if condition().await {
+            return true;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+    }
+    false
+}
+
+/// Inscrit `email`, et rend statut et corps une fois le jeton de vérification écrit.
+///
+/// L'inscription émet ce jeton en tâche détachée : sans cette attente, l'émission
+/// arriverait après coup et fermerait le jeton qu'un test vient de s'ouvrir. Une
+/// inscription en double trouve celui de la première aussitôt.
 async fn register(api: &Router, email: &str) -> (StatusCode, Value) {
-    call(
+    let (status, body) = call(
         api,
         post_json(
             "/auth/register",
             json!({ "email": email, "password": PASSWORD }),
         ),
     )
-    .await
+    .await;
+
+    if status.is_success() {
+        let db = connection().await;
+        let adresse = crate::auth::service::normalise(email);
+        let (db, adresse) = (&db, adresse.as_str());
+        assert!(
+            eventually(move || async move {
+                match crate::auth::repository::find_by_email(db, adresse)
+                    .await
+                    .expect("la lecture aboutit")
+                {
+                    Some(compte) => one_time_tokens_count_for(db, compte.id).await > 0,
+                    None => false,
+                }
+            })
+            .await,
+            "l'inscription n'a ouvert aucun jeton de vérification"
+        );
+    }
+
+    (status, body)
 }
 
 /// Tente une connexion et rend statut et corps.

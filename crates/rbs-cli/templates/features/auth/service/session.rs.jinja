@@ -38,7 +38,7 @@ pub async fn register(
 
     let hash = hash::hash_password(&input.password)?;
     let cree = repository::create(db, &email, &hash).await?;
-    super::verification::send_link(db, mail, flows, &cree.email).await?;
+    super::verification::send_link_detached(db, mail, flows, cree.clone());
 
     Ok(profile(cree))
 }

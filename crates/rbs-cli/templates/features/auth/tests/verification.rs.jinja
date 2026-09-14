@@ -225,9 +225,9 @@ async fn resending_to_a_registered_address_is_accepted() {
         .expect("le compte vient d'être créé");
 
     // Deux lignes : celle de l'inscription, que le renvoi a close, et la neuve.
-    assert_eq!(
-        one_time_tokens_count_for(&db, compte.id).await,
-        2,
+    let (db, id) = (&db, compte.id);
+    assert!(
+        eventually(move || async move { one_time_tokens_count_for(db, id).await == 2 }).await,
         "le renvoi n'a ouvert aucun jeton"
     );
 }

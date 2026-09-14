@@ -134,6 +134,7 @@ fn the_migration_creates_the_one_time_tokens_table() {
         "OneTimeTokens::ConsumedAt",
         "Users::EmailVerifiedAt",
         "idx_one_time_tokens_token_hash",
+        "idx_one_time_tokens_expires_at",
     ] {
         assert!(
             source.contains(attendu),
@@ -142,7 +143,7 @@ fn the_migration_creates_the_one_time_tokens_table() {
     }
 }
 
-/// Le repository des jetons est déposé, et la purge y est, prête à être branchée.
+/// Le repository des jetons est déposé, purge comprise.
 #[test]
 fn the_one_time_token_repository_is_written() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
