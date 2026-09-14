@@ -6,7 +6,7 @@ title: Authentication
 # Authentication
 
 `rbs add auth` installs a working authentication feature into an existing project:
-twenty-one files under `src/auth/`, two mail templates, one migration, and thirteen
+twenty-one files under `src/auth/`, three mail templates, one migration, and thirteen
 routes mounted on the router. What it lays down is ordinary code in your source tree —
 an entity, a service, a controller, a guard — and it is meant to be read and changed.
 
@@ -41,6 +41,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/controller/verification.rs                    créé
   + templates/mail/reinitialisation.html                   créé
   + templates/mail/verification.html                       créé
+  + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
   + src/auth/tests/session.rs                              créé
@@ -58,8 +59,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  34 fichiers à écrire
-✓ auth installée — 24 fichiers
+  35 fichiers à écrire
+✓ auth installée — 25 fichiers
 
   rbs migrate up
 ```
@@ -68,11 +69,19 @@ Thirteen routes come with it. Five open the core cycle:
 
 | Route | What it does |
 |---|---|
-| `POST /auth/register` | Creates an account. 201 with the profile, 409 if the address is taken. |
+| `POST /auth/register` | Creates an account. Always 202, without a body — a taken address included. |
 | `POST /auth/login` | Exchanges credentials for an access/refresh pair. |
 | `POST /auth/refresh` | Rotates the pair. The token presented is marked replaced. |
 | `POST /auth/logout` | Revokes one session. 204. |
 | `GET /auth/me` | The caller's profile. |
+
+`register` answers the same 202 whether the address is new or already carries an account,
+and hashes the password in both cases — a 409, a profile returned to the new address
+alone, or an answer that skipped Argon2 would each tell whoever tries several addresses
+which ones are registered. A new address has its account written before the answer, so
+the client can log in right away; a taken one is left untouched, and its holder receives
+an email, `templates/mail/inscription.html`, saying someone tried to sign up with it and
+pointing to `forgot-password`.
 
 A sixth, `POST /auth/change-password`, lets a caller already holding a token do the same
 without an email link — covered right below. The other seven act on a forgotten password,
@@ -152,8 +161,8 @@ Passwords are hashed with Argon2id, salted per call. Neither the hash nor the pa
 appears in a response or in the logs.
 
 Addresses are trimmed and lowercased before they reach the table: `Alice@Example.test`
-and `alice@example.test` are one account, at registration as at login, and the profile
-carries the lowercased form. The DTO still validates what the client sent.
+and `alice@example.test` are one account, at registration as at login, and `/auth/me`
+shows the lowercased form. The DTO still validates what the client sent.
 
 Login answers **the same 401** whether the address is unknown or the password wrong, and
 it hashes a comparison value even for an unknown address. Skipping that comparison would
@@ -223,17 +232,20 @@ other route:
 ```rust file=examples/blog-auth/src/auth/controller/password.rs region=forgot_password
 ```
 
-The handler hands the address to `service::password::send_reset_link`, which opens the
-token and passes the email to `notify` — the one place in the feature that sends one:
+The handler hands the address to `service::password::send_reset_link`, which reads the
+account and nothing more: opening the token and rendering the email go to a detached task,
+whose email passes through `notify` — the one place in the feature that sends one:
 
 ```rust file=examples/blog-auth/src/auth/service/mod.rs region=notify
 ```
 
-`Mailer::send_template_detached` renders the template right away, then hands delivery to a
-detached task rather than awaiting it: waiting on SMTP would let the response time say what
-the status code refuses to. A render that fails — a missing template, an address `lettre`
-cannot parse — is logged with the account id and never reaches the response: a 500 on the
-only branch that runs when the address is registered would say what the 202 exists to hide.
+Only the lookup is awaited. Closing the previous token, writing the new one, rendering and
+sending take time an unknown address never spends: awaited, they would let the response
+time say what the status code refuses to. The same task first purges the expired tokens of
+every account — emitting is when `one_time_tokens` grows, and purging there keeps it
+bounded without a scheduled job. Whatever fails in it — the database, a missing template,
+an address `lettre` cannot parse — is logged with the account id and never reaches the
+response, which has already left.
 
 A second request closes the first: only one reset token stays live per account, so a link
 sent to an inbox no longer controlled stops working the moment a fresh one is requested.
@@ -249,7 +261,10 @@ somewhere to send a link, so the dependency is declared rather than left optiona
 timing and destination come from the `[auth]` section shown above: `reset_ttl_secs` sets how
 long the reset link stays valid, `verification_ttl_secs` does the same for the other flow,
 and `app_url` is the root `FlowConfig::link` prefixes onto the path — your client's
-address, not this server's.
+address, not this server's. The token rides in the link's fragment,
+`…/reset-password#token=…`: a browser never sends a fragment to a server, so the token
+stays out of access logs and `Referer` headers — your client reads it from
+`location.hash` before posting it.
 
 Both routes are rate-limited to three requests per hour per client, alongside
 `/auth/login`: they send an email to an address the caller picks, and without a limit that
@@ -257,20 +272,22 @@ makes the project a harassment relay whose cost falls on whoever holds the addre
 
 ## Confirming an email address
 
-`register` opens a verification token the moment it creates the account — before it
-answers, and after the account exists, so a mail failure at that instant cannot undo the
-signup; the caller still has an account, only `resend-verification` to catch up on the
-email. Two routes close that loop, both public — no bearer token:
+`register` opens a verification token for every account it creates — in a detached task,
+once the account exists, so a failure at that instant cannot undo the signup; the caller
+still has an account, only `resend-verification` to catch up on the email. Two routes
+close that loop, both public — no bearer token:
 
 | Route | What it does |
 |---|---|
 | `POST /auth/resend-verification` | Emails a fresh verification link. Always 202, exactly like `forgot-password`. |
 | `POST /auth/verify-email` | Spends the token from that link and dates `email_verified_at`. 204. |
 
-`resend-verification` answers the same 202 whether or not the address carries an account.
-Its email goes through the same `notify` as `forgot-password`'s: the `.await` in the
-handler covers the token write, never the SMTP exchange — waiting on that would leak
-through response time what the status code refuses to say:
+`resend-verification` answers the same 202 whether or not the address carries an account,
+and an address already verified receives nothing — a second proof would only make its date
+younger, and that date is what a later re-check of the oldest addresses reads. The handler
+awaits the account lookup and nothing else: the token write and the email go to the same
+kind of detached task as `forgot-password`'s, since waiting on either would leak through
+response time what the status code refuses to say:
 
 ```rust file=examples/blog-auth/src/auth/controller/verification.rs region=resend_verification
 ```
@@ -284,8 +301,10 @@ purpose as much as on fingerprint, so a password-reset link can never verify an 
 ```
 
 Registering and resending share one service function rather than two,
-`verification::send_link`, because both start from an address. `register` calls it once
-the account is written, so whatever becomes of the email, the account stands:
+`verification::send_link_detached`, because both have the account in hand when they emit.
+`send_link` reads the account behind an address and skips one already verified;
+`register` calls `send_link_detached` directly once the account is written, so whatever
+becomes of the email, the account stands:
 
 ```rust file=examples/blog-auth/src/auth/service/verification.rs region=send_link
 ```

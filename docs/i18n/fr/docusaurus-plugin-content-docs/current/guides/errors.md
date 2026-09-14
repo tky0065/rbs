@@ -103,7 +103,6 @@ Ces messages engendrés, fichier par fichier :
 
 | Fichier | Message |
 |---|---|
-| `src/auth/repository/user.rs` | `ADRESSE_PRISE`, le 409 d'une inscription en double |
 | `src/modules/rate_limit/mod.rs` | le message du 429 |
 | `src/modules/webhooks/service.rs` | le 400 d'un motif d'événement vide |
 | `src/modules/webhooks/target.rs` | les trois refus d'URL, 400 |

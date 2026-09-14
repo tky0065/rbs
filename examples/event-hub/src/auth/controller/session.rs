@@ -10,6 +10,9 @@ use super::super::dto::{
 use super::super::service;
 use crate::state::AppState;
 
+// Un 202 sans corps, que l'adresse soit neuve ou déjà prise : un 409, ou un profil rendu
+// à la seule adresse neuve, dirait à qui essaie plusieurs adresses lesquelles sont
+// inscrites.
 #[utoipa::path(
     post,
     path = "/auth/register",
@@ -17,18 +20,17 @@ use crate::state::AppState;
     operation_id = "auth_register",
     request_body = RegisterRequest,
     responses(
-        (status = 201, description = "compte créé", body = UserResponse),
-        (status = 409, description = "email déjà pris", body = ProblemDetails, content_type = "application/problem+json"),
+        (status = 202, description = "inscription reçue, que l'adresse soit neuve ou non"),
         (status = 422, description = "entrée invalide", body = ProblemDetails, content_type = "application/problem+json")
     )
 )]
 pub async fn register(
     State(state): State<AppState>,
     ValidatedJson(input): ValidatedJson<RegisterRequest>,
-) -> Result<(StatusCode, Json<UserResponse>)> {
-    let cree = service::register(state.core().db(), state.mail(), state.flows(), input).await?;
+) -> Result<StatusCode> {
+    service::register(state.core().db(), state.mail(), state.flows(), input).await?;
 
-    Ok((StatusCode::CREATED, Json(cree)))
+    Ok(StatusCode::ACCEPTED)
 }
 
 // Un mot de passe erroné et un email inconnu rendent la même réponse : distinguer les

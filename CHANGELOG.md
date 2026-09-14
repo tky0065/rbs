@@ -172,6 +172,26 @@ between minor versions with no deprecation cycle.
   `[server]` — the runtime and every later `add` and `generate` follow it — then
   translate by hand the messages already generated in `src/`.
 
+- **`POST /auth/register` answers 202 without a body, whether the address is new or
+  taken.** It used to answer 201 with the profile, and 409 — before hashing — for a taken
+  address: the status, and the response time, told whoever tried several addresses which
+  ones were registered. Argon2 now runs in both branches. A new address still has its
+  account written before the answer, so a client logs in right away; a taken one is left
+  untouched, and its holder receives `templates/mail/inscription.html`. This holds for new
+  projects: a project generated earlier keeps its code, and the upgrade note lists the
+  files to take from the fragment.
+
+- **`forgot-password`, `resend-verification` and registration emit their tokens in a
+  detached task.** The request only looks the account up; the purge, the invalidation, the
+  token write and the email rendering happen after the answer, their failures logged with
+  the account id — awaiting those writes let the response time say whether an address was
+  registered.
+
+- **Reset and verification links carry their token in the fragment.**
+  `…/reset-password#token=…` rather than `?token=…`: a browser never sends a fragment to a
+  server, so the token stays out of access logs and `Referer` headers. The client reads it
+  from `location.hash`.
+
 ### Fixed
 
 - **The Redis password no longer reaches the logs.** The `redis` and `rate-limit`
@@ -317,6 +337,16 @@ reads `timestamp` on MySQL and `timestamp_with_timezone_text` on SQLite, which i
   above `core: CoreState::new(db, config),` in `src/state.rs`. The command refuses and
   prints that block as long as it stays below the line; `rbs doctor --fix` only restores
   a missing anchor, it never relocates one that is still present.
+
+- **A verified address is no longer verified again.** `resend-verification` issued a fresh
+  token to an account already verified, and every token spent rewrote
+  `email_verified_at`, making the address look younger than its first proof. A verified
+  account now receives nothing, and `mark_verified` only writes a date that is still null.
+
+- **`one_time_tokens` is purged.** The table grew by one row per request and never shrank:
+  every emission now deletes the expired tokens of every account, and the migration adds
+  `idx_one_time_tokens_expires_at` so that purge does not scan the table. A project
+  migrated earlier creates the index by hand, as the upgrade note shows.
 
 ## [1.4.0] — 2026-09-11
 

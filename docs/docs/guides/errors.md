@@ -102,7 +102,6 @@ Those generated messages, file by file:
 
 | File | Message |
 |---|---|
-| `src/auth/repository/user.rs` | `ADRESSE_PRISE`, the 409 of a duplicate registration |
 | `src/modules/rate_limit/mod.rs` | the 429 message |
 | `src/modules/webhooks/service.rs` | the 400 of an empty event pattern |
 | `src/modules/webhooks/target.rs` | the three URL refusals, 400 |

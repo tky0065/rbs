@@ -5,9 +5,10 @@ description = "authentification JWT : Argon2, jetons d'accès et de rafraîchiss
 # la protection contre l'énumération est un déni de service offert au premier venu : le
 # fragment vient donc avec, et le plan de `rbs add auth` le montre.
 #
-# `auth` envoie deux courriels — le lien de réinitialisation et celui de vérification — et
-# aucun des deux parcours n'a de sens sans destinataire. La dépendance est dure plutôt
-# qu'optionnelle : un point d'extension resté vide rendrait 202 sans que rien ne parte.
+# `auth` envoie trois courriels — le lien de réinitialisation, celui de vérification, et
+# l'avertissement d'une inscription tentée sur une adresse prise — et aucun de ces
+# parcours n'a de sens sans destinataire. La dépendance est dure plutôt qu'optionnelle :
+# un point d'extension resté vide rendrait 202 sans que rien ne parte.
 requires = ["rate-limit", "mail"]
 
 [[files]]
@@ -85,6 +86,10 @@ source      = "verification.html.jinja"
 destination = "templates/mail/verification.html"
 
 [[files]]
+source      = "inscription.html.jinja"
+destination = "templates/mail/inscription.html"
+
+[[files]]
 source      = "guard.rs.jinja"
 destination = "src/auth/guard.rs"
 
@@ -144,6 +149,11 @@ name   = "create_auth_tables"
 
 [cargo.rbs-core]
 features = ["auth"]
+
+# Les émissions de jetons partent en tâche détachée, et les tests du fragment attendent
+# qu'elles aient écrit.
+[cargo.tokio]
+features = ["time"]
 
 [[config]]
 file    = "config/default.toml"

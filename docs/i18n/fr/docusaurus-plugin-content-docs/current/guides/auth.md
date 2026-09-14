@@ -6,7 +6,7 @@ title: Authentification
 # Authentification
 
 `rbs add auth` installe une authentification qui fonctionne dans un projet existant :
-vingt-et-un fichiers sous `src/auth/`, deux gabarits de courriel, une migration, et treize
+vingt-et-un fichiers sous `src/auth/`, trois gabarits de courriel, une migration, et treize
 routes montées sur le routeur. Ce qu'elle dépose est du code ordinaire dans votre
 arborescence — une entité, un service, un controller, une garde — et il est fait pour être
 lu et modifié.
@@ -42,6 +42,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/controller/verification.rs                    créé
   + templates/mail/reinitialisation.html                   créé
   + templates/mail/verification.html                       créé
+  + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
   + src/auth/tests/session.rs                              créé
@@ -59,8 +60,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  34 fichiers à écrire
-✓ auth installée — 24 fichiers
+  35 fichiers à écrire
+✓ auth installée — 25 fichiers
 
   rbs migrate up
 ```
@@ -69,11 +70,19 @@ Treize routes viennent avec. Cinq ouvrent le cycle central :
 
 | Route | Ce qu'elle fait |
 |---|---|
-| `POST /auth/register` | Crée un compte. 201 avec le profil, 409 si l'adresse est prise. |
+| `POST /auth/register` | Crée un compte. Toujours 202, sans corps — adresse déjà prise comprise. |
 | `POST /auth/login` | Échange les identifiants contre une paire accès/rafraîchissement. |
 | `POST /auth/refresh` | Fait tourner la paire : le jeton présenté est marqué remplacé. |
 | `POST /auth/logout` | Révoque une session. 204. |
 | `GET /auth/me` | Le profil de l'appelant. |
+
+`register` rend le même 202 que l'adresse soit neuve ou porte déjà un compte, et hache le
+mot de passe dans les deux cas — un 409, un profil rendu à la seule adresse neuve, ou une
+réponse qui aurait sauté Argon2 diraient chacun à qui essaie plusieurs adresses lesquelles
+sont inscrites. Une adresse neuve voit son compte écrit avant la réponse, si bien que le
+client peut se connecter aussitôt ; une adresse prise n'est pas touchée, et son titulaire
+reçoit un courriel, `templates/mail/inscription.html`, qui le prévient de la tentative et
+le renvoie vers `forgot-password`.
 
 Une sixième, `POST /auth/change-password`, laisse un appelant qui porte déjà un jeton en
 faire autant sans lien courriel — couverte juste en dessous. Les sept autres portent sur un
@@ -160,7 +169,7 @@ le mot de passe n'apparaissent dans une réponse ou dans les logs.
 
 Les adresses sont débarrassées de leurs blancs et passées en minuscules avant d'atteindre
 la table : `Alice@Exemple.test` et `alice@exemple.test` sont un seul compte, à
-l'inscription comme à la connexion, et le profil porte la forme en minuscules. Le DTO
+l'inscription comme à la connexion, et `/auth/me` montre la forme en minuscules. Le DTO
 valide toujours ce que le client a envoyé.
 
 La connexion répond **la même 401** que l'adresse soit inconnue ou le mot de passe erroné,
@@ -232,18 +241,21 @@ l'autre côté :
 ```rust file=examples/blog-auth/src/auth/controller/password.rs region=forgot_password
 ```
 
-Le handler passe l'adresse à `service::password::send_reset_link`, qui ouvre le jeton et
-confie le courriel à `notify` — le seul endroit de la feature qui en envoie un :
+Le handler passe l'adresse à `service::password::send_reset_link`, qui lit le compte et
+rien de plus : l'ouverture du jeton et le rendu du courriel partent dans une tâche
+détachée, dont le courriel passe par `notify` — le seul endroit de la feature qui en
+envoie un :
 
 ```rust file=examples/blog-auth/src/auth/service/mod.rs region=notify
 ```
 
-`Mailer::send_template_detached` rend le gabarit tout de suite, puis confie l'envoi à une
-tâche détachée plutôt que de l'attendre : attendre le SMTP ferait dire au temps de réponse
-ce que le code de statut refuse de dire. Un rendu qui échoue — gabarit absent, adresse que
-`lettre` ne sait pas analyser — est journalisé avec l'identifiant du compte et n'atteint
-jamais la réponse : un 500 sur la seule branche qui s'exécute quand l'adresse est inscrite
-dirait ce que le 202 existe pour taire.
+Seule la lecture est attendue. Fermer le jeton précédent, écrire le neuf, rendre et
+envoyer le courriel prennent un temps qu'une adresse inconnue ne dépense jamais : attendus,
+ils feraient dire au temps de réponse ce que le code de statut refuse de dire. La même
+tâche purge d'abord les jetons échus de tous les comptes — c'est à l'émission que
+`one_time_tokens` grossit, et y purger la borne sans tâche planifiée. Ce qui y échoue — la
+base, un gabarit absent, une adresse que `lettre` ne sait pas analyser — est journalisé
+avec l'identifiant du compte et n'atteint jamais la réponse, déjà partie.
 
 Une seconde demande ferme la première : un seul jeton de réinitialisation reste vivant par
 compte, si bien qu'un lien parti dans une boîte qu'on ne contrôle plus cesse de valoir dès
@@ -259,7 +271,10 @@ besoin d'un endroit où envoyer un lien, et la dépendance est déclarée plutô
 facultative. Sa durée et sa destination viennent de la section `[auth]` montrée plus haut :
 `reset_ttl_secs` fixe la durée de vie du lien de réinitialisation, `verification_ttl_secs`
 fait de même pour l'autre parcours, et `app_url` est la racine que `FlowConfig::link`
-préfixe au chemin — l'adresse de votre client, pas de ce serveur.
+préfixe au chemin — l'adresse de votre client, pas de ce serveur. Le jeton voyage dans le
+fragment du lien, `…/reset-password#token=…` : un navigateur n'envoie jamais le fragment
+à un serveur, si bien que le jeton reste hors des journaux d'accès et des en-têtes
+`Referer` — votre client le lit dans `location.hash` avant de le poster.
 
 Les deux routes sont limitées à trois requêtes par heure et par client, aux côtés de
 `/auth/login` : elles envoient un courriel à une adresse que l'appelant choisit, et sans
@@ -268,9 +283,9 @@ titulaire de l'adresse.
 
 ## Confirmer une adresse
 
-`register` ouvre un jeton de vérification à l'instant même où le compte est créé — avant
-de répondre, et après que le compte existe, si bien qu'une panne de courriel à cet instant
-ne peut pas défaire l'inscription : l'appelant a toujours un compte, il ne lui manque que
+`register` ouvre un jeton de vérification pour chaque compte qu'elle crée — dans une
+tâche détachée, une fois le compte écrit, si bien qu'un échec à cet instant ne peut pas
+défaire l'inscription : l'appelant a toujours un compte, il ne lui manque que
 `resend-verification` pour rattraper le courriel. Deux routes ferment cette boucle,
 publiques toutes deux — sans jeton porteur :
 
@@ -279,10 +294,12 @@ publiques toutes deux — sans jeton porteur :
 | `POST /auth/resend-verification` | Envoie un lien de vérification neuf. Toujours 202, exactement comme `forgot-password`. |
 | `POST /auth/verify-email` | Consomme le jeton de ce lien et date `email_verified_at`. 204. |
 
-`resend-verification` rend le même 202 que l'adresse porte un compte ou non. Son courriel
-passe par le même `notify` que celui de `forgot-password` : le `.await` du handler couvre
-l'écriture du jeton, jamais l'échange SMTP — l'attendre laisserait le temps de réponse
-dire ce que le code de statut refuse de dire :
+`resend-verification` rend le même 202 que l'adresse porte un compte ou non, et une
+adresse déjà vérifiée ne reçoit rien — une seconde preuve ne ferait que rajeunir sa date,
+et c'est cette date que lira une revérification des plus anciennes adresses. Le handler
+n'attend que la lecture du compte : l'écriture du jeton et le courriel partent dans la même
+sorte de tâche détachée que ceux de `forgot-password`, attendre l'un ou l'autre laissant
+le temps de réponse dire ce que le code de statut refuse de dire :
 
 ```rust file=examples/blog-auth/src/auth/controller/verification.rs region=resend_verification
 ```
@@ -297,8 +314,10 @@ une adresse :
 ```
 
 L'inscription et le renvoi partagent une seule fonction de service plutôt que deux,
-`verification::send_link`, parce que les deux partent d'une adresse. `register` l'appelle
-une fois le compte écrit, si bien que le compte tient quoi qu'il advienne du courriel :
+`verification::send_link_detached`, parce que les deux ont le compte en main au moment
+d'émettre. `send_link` lit le compte derrière une adresse et écarte celui qui est déjà
+vérifié ; `register` appelle `send_link_detached` directement, une fois le compte écrit, si
+bien que le compte tient quoi qu'il advienne du courriel :
 
 ```rust file=examples/blog-auth/src/auth/service/verification.rs region=send_link
 ```

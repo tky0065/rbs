@@ -86,7 +86,8 @@ async fn token(db: &DatabaseConnection, role: &str) -> String {
         "hash sans valeur",
     )
     .await
-    .expect("le compte s'insère");
+    .expect("le compte s'insère")
+    .expect("l'adresse est neuve");
     let role_connu: crate::auth::model::Role =
         sea_orm::ActiveEnum::try_from_value(&role.to_owned()).expect("rôle connu");
     let mut promu: crate::auth::model::user::ActiveModel = compte.into();

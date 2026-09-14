@@ -2,13 +2,13 @@ use chrono::{Duration, Utc};
 use rbs_core::config::AuthConfig;
 use rbs_core::{Error, Result, hash, token};
 use sea_orm::prelude::Uuid;
-use sea_orm::{DatabaseConnection, TransactionTrait};
+use sea_orm::{ConnectionTrait, DatabaseConnection, TransactionTrait};
 
 use super::super::config::FlowConfig;
 use super::super::dto::{ChangePasswordRequest, ResetPasswordRequest, TokenPair};
 use super::super::model::TokenPurpose;
 use super::super::repository;
-use super::{close_every_session, issue, normalise, notify};
+use super::{close_every_session, detach, issue, normalise, notify};
 use crate::modules::mail::Mailer;
 
 /// Change le mot de passe d'un compte identifié, et rend une paire neuve.
@@ -79,23 +79,20 @@ pub async fn change(
     Ok(paire)
 }
 
-/// Ouvre un jeton de réinitialisation, et rend le compte avec le jeton **en clair**.
+/// Ouvre un jeton de réinitialisation pour un compte, et le rend **en clair**.
 ///
 /// Le jeton en clair ne se relit nulle part : la base n'en garde que l'empreinte. Le
 /// rendre ici est ce qui permet à `send_reset_link` de le mettre dans un courriel — et
 /// aux tests du projet de dérouler le parcours entier sans qu'aucun SMTP soit joignable.
 ///
-/// `None` quand aucun compte ne porte l'adresse. C'est l'appelant qui décide d'en tirer
-/// une réponse indiscernable, et il le fait.
-pub async fn request_reset(
-    db: &DatabaseConnection,
+/// Les jetons échus de tous les comptes partent d'abord : l'émission est le moment où la
+/// table grossit, et y purger la borne sans tâche périodique.
+pub async fn open_reset(
+    db: &impl ConnectionTrait,
     ttl_secs: u64,
-    email: &str,
-) -> Result<Option<(repository::Model, String)>> {
-    let Some(utilisateur) = repository::find_by_email(db, &normalise(email)).await? else {
-        return Ok(None);
-    };
-
+    utilisateur: &repository::Model,
+) -> Result<String> {
+    repository::one_time_token::purge_expired(db).await?;
     repository::one_time_token::invalidate_pending(db, utilisateur.id, TokenPurpose::PasswordReset)
         .await?;
 
@@ -109,19 +106,46 @@ pub async fn request_reset(
     )
     .await?;
 
+    Ok(jeton)
+}
+
+/// `open_reset` pour le compte qui porte l'adresse, rendu avec le jeton.
+///
+/// `None` quand aucun compte ne porte l'adresse. C'est l'appelant qui décide d'en tirer
+/// une réponse indiscernable, et il le fait.
+pub async fn request_reset(
+    db: &DatabaseConnection,
+    ttl_secs: u64,
+    email: &str,
+) -> Result<Option<(repository::Model, String)>> {
+    let Some(utilisateur) = repository::find_by_email(db, &normalise(email)).await? else {
+        return Ok(None);
+    };
+
+    let jeton = open_reset(db, ttl_secs, &utilisateur).await?;
+
     Ok(Some((utilisateur, jeton)))
 }
 
 /// Envoie un lien de réinitialisation neuf, si un compte porte l'adresse.
+///
+/// Seule la lecture du compte est attendue : l'émission et le courriel partent détachés,
+/// et une adresse inconnue répond dans le même temps qu'une adresse inscrite.
 pub async fn send_reset_link(
     db: &DatabaseConnection,
     mail: &Mailer,
     flows: &FlowConfig,
     email: &str,
 ) -> Result<()> {
-    if let Some((utilisateur, jeton)) = request_reset(db, flows.reset_ttl_secs, email).await? {
+    let Some(utilisateur) = repository::find_by_email(db, &normalise(email)).await? else {
+        return Ok(());
+    };
+
+    let (db, mail, flows) = (db.clone(), mail.clone(), flows.clone());
+    detach(utilisateur.id, "réinitialisation", async move {
+        let jeton = open_reset(&db, flows.reset_ttl_secs, &utilisateur).await?;
         notify(
-            mail,
+            &mail,
             &utilisateur,
             "Réinitialisation de votre mot de passe",
             "reinitialisation.html",
@@ -130,7 +154,9 @@ pub async fn send_reset_link(
                 heures => flows.reset_ttl_secs / 3600,
             },
         );
-    }
+
+        Ok(())
+    });
 
     Ok(())
 }

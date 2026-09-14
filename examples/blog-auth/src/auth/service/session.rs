@@ -10,8 +10,8 @@ use super::super::config::FlowConfig;
 use super::super::dto::{
     LoginRequest, RefreshRequest, RegisterRequest, SessionResponse, TokenPair, UserResponse,
 };
-use super::super::repository::{self, ADRESSE_PRISE, refresh_token::Rotation};
-use super::{close_every_session, issue, normalise, profile, session_view};
+use super::super::repository::{self, refresh_token::Rotation};
+use super::{close_every_session, detach, issue, normalise, notify, profile, session_view};
 use crate::modules::mail::Mailer;
 
 /// Le hash vérifié quand l'adresse est inconnue.
@@ -24,23 +24,63 @@ static HASH_DE_COMPARAISON: LazyLock<String> = LazyLock::new(|| {
     hash::hash_password("aucun compte ne porte ce mot de passe").expect("hachage du hash témoin")
 });
 
+/// Inscrit une adresse, sans jamais dire si elle l'était déjà.
+///
+/// Neuve, le compte est écrit ici — un client doit pouvoir se connecter aussitôt — et le
+/// lien de vérification part détaché. Prise, le compte n'est pas touché et son titulaire
+/// est prévenu de la tentative, en détaché aussi. L'appelant reçoit la même chose dans
+/// les deux cas.
 pub async fn register(
     db: &DatabaseConnection,
     mail: &Mailer,
     flows: &FlowConfig,
     input: RegisterRequest,
-) -> Result<UserResponse> {
+) -> Result<()> {
     let email = normalise(&input.email);
 
-    if repository::find_by_email(db, &email).await?.is_some() {
-        return Err(Error::Conflict(ADRESSE_PRISE.to_owned()));
+    // Argon2 avant tout, dans les deux branches : c'est lui qui coûte, et ne le calculer
+    // que pour une adresse neuve ferait répondre une adresse prise des dizaines de
+    // millisecondes plus tôt.
+    let hash = hash::hash_password(&input.password)?;
+
+    let titulaire = match repository::find_by_email(db, &email).await? {
+        Some(titulaire) => Some(titulaire),
+        None => match repository::create(db, &email, &hash).await? {
+            Some(cree) => {
+                super::verification::send_link_detached(db, mail, flows, cree);
+                return Ok(());
+            }
+            // Une inscription concurrente de la même adresse a gagné la course entre la
+            // lecture et l'écriture : la contrainte d'unicité l'a tranchée, et l'adresse
+            // est prise comme au-dessus.
+            None => repository::find_by_email(db, &email).await?,
+        },
+    };
+
+    if let Some(titulaire) = titulaire {
+        warn_taken(mail, flows, titulaire);
     }
 
-    let hash = hash::hash_password(&input.password)?;
-    let cree = repository::create(db, &email, &hash).await?;
-    super::verification::send_link(db, mail, flows, &cree.email).await?;
+    Ok(())
+}
 
-    Ok(profile(cree))
+/// Prévient le titulaire d'une adresse qu'on a tenté de l'inscrire.
+///
+/// Détaché comme le lien d'une adresse neuve : les deux branches de `register` répondent
+/// dans le même temps.
+fn warn_taken(mail: &Mailer, flows: &FlowConfig, titulaire: repository::Model) {
+    let (mail, flows) = (mail.clone(), flows.clone());
+    detach(titulaire.id, "inscription", async move {
+        notify(
+            &mail,
+            &titulaire,
+            "Tentative d'inscription avec votre adresse",
+            "inscription.html",
+            minijinja::context! { forgot_url => flows.page("forgot-password") },
+        );
+
+        Ok(())
+    });
 }
 
 pub async fn login(

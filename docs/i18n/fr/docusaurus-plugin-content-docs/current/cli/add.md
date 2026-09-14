@@ -48,7 +48,7 @@ Options:
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, et ses services `api`/`migrate` insérés dans le compose du projet — un `docker-compose.yml` entier s'il n'y en a pas | `docker compose --profile app up --build` |
 | `ci` | `.github/workflows/ci.yml`, ses actions épinglées par SHA, et `.github/dependabot.yml`, qui en propose les montées chaque semaine | `git push` |
-| `auth` | vingt-et-un fichiers sous `src/auth/`, deux gabarits de courriel, une migration, neuf fichiers du projet modifiés en propre — et `mail` et `rate-limit`, qu'elle exige | `rbs migrate up` |
+| `auth` | vingt-et-un fichiers sous `src/auth/`, trois gabarits de courriel, une migration, neuf fichiers du projet modifiés en propre — et `mail` et `rate-limit`, qu'elle exige | `rbs migrate up` |
 | `jobs` | sept fichiers sous `src/modules/jobs/`, une migration, et une section `[jobs]` de configuration | `rbs migrate up`, puis inscrire vos jobs dans `src/modules/jobs/mod.rs` |
 | `scheduler` | six fichiers sous `src/modules/scheduler/`, une migration, une section `[scheduler]`, un ticker dans `// <rbs:startup>` — et `jobs`, qu'elle exige | `rbs migrate up`, puis déclarer vos échéances dans `src/modules/scheduler/mod.rs` |
 | `redis` | trois fichiers sous `src/modules/cache/`, et un service `redis` inséré dans le compose du projet | le compose le porte déjà — `docker compose up -d` le démarre |
@@ -262,6 +262,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/controller/verification.rs                    créé
   + templates/mail/reinitialisation.html                   créé
   + templates/mail/verification.html                       créé
+  + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
   + src/auth/tests/session.rs                              créé
@@ -291,8 +292,8 @@ plan pour /private/tmp/rbs-demo/blog
   + src/modules/rate_limit/tests.rs                        créé
   ~ AGENTS.md                                              modifié
 
-  46 fichiers à écrire
-✓ auth installée — 34 fichiers
+  47 fichiers à écrire
+✓ auth installée — 35 fichiers
 
   rbs migrate up
 ```

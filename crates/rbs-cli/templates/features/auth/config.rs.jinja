@@ -33,15 +33,21 @@ impl FlowConfig {
         Ok(rbs_core::config::section::<Self>("auth")?)
     }
 
-    /// Le lien à mettre dans un courriel, `app_url` et la barre finale réconciliées.
+    /// Une page de l'application, `app_url` et la barre finale réconciliées.
     ///
     /// La barre est retirée plutôt que supposée absente : `http://exemple.test/` dans un
     /// fichier de configuration est aussi naturel que sans, et donnerait sinon un lien à
     /// double barre que certains clients de messagerie coupent.
+    pub fn page(&self, path: &str) -> String {
+        format!("{}/{path}", self.app_url.trim_end_matches('/'))
+    }
+
+    /// Le lien à mettre dans un courriel, le jeton dans le fragment.
+    ///
+    /// Le fragment et non la query string : un navigateur ne l'envoie jamais au serveur,
+    /// si bien que ni les journaux d'accès du client ni l'en-tête `Referer` d'une page
+    /// qu'il charge ne portent le jeton. L'application le lit dans `location.hash`.
     pub fn link(&self, path: &str, token: &str) -> String {
-        format!(
-            "{}/{path}?token={token}",
-            self.app_url.trim_end_matches('/')
-        )
+        format!("{}#token={token}", self.page(path))
     }
 }

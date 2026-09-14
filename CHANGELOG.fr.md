@@ -181,6 +181,26 @@ dépréciation.
   `generate` ultérieur la suivent —, puis traduire à la main les messages déjà engendrés
   dans `src/`.
 
+- **`POST /auth/register` rend 202 sans corps, que l'adresse soit neuve ou prise.** Elle
+  rendait 201 et le profil, et 409 — avant de hacher — pour une adresse prise : le statut,
+  et le temps de réponse, disaient à qui essayait plusieurs adresses lesquelles étaient
+  inscrites. Argon2 tourne désormais dans les deux branches. Une adresse neuve voit
+  toujours son compte écrit avant la réponse, si bien qu'un client se connecte aussitôt ;
+  une adresse prise n'est pas touchée, et son titulaire reçoit
+  `templates/mail/inscription.html`. Cela vaut pour les projets neufs : un projet engendré
+  plus tôt garde son code, et la note de montée liste les fichiers à reprendre du fragment.
+
+- **`forgot-password`, `resend-verification` et l'inscription émettent leurs jetons dans
+  une tâche détachée.** La requête ne fait plus que lire le compte ; la purge,
+  l'invalidation, l'écriture du jeton et le rendu du courriel ont lieu après la réponse, et
+  leurs échecs vont au journal avec l'identifiant du compte — attendre ces écritures
+  laissait le temps de réponse dire si une adresse était inscrite.
+
+- **Les liens de réinitialisation et de vérification portent leur jeton dans le
+  fragment.** `…/reset-password#token=…` plutôt que `?token=…` : un navigateur n'envoie
+  jamais le fragment à un serveur, si bien que le jeton reste hors des journaux d'accès et
+  des en-têtes `Referer`. Le client le lit dans `location.hash`.
+
 ### Corrigé
 
 - **Le mot de passe Redis n'atteint plus les journaux.** Les fragments `redis` et
@@ -330,6 +350,16 @@ lit `timestamp` sur MySQL et `timestamp_with_timezone_text` sur SQLite, ce que
   au-dessus de `core: CoreState::new(db, config),` dans `src/state.rs`. La commande refuse
   et affiche ce bloc tant qu'il reste sous la ligne ; `rbs doctor --fix` ne fait que
   restaurer une ancre absente, il n'en déplace jamais une déjà présente.
+
+- **Une adresse vérifiée ne se revérifie plus.** `resend-verification` émettait un jeton
+  neuf pour un compte déjà vérifié, et chaque jeton consommé réécrivait
+  `email_verified_at`, rajeunissant l'adresse au-delà de sa première preuve. Un compte
+  vérifié ne reçoit plus rien, et `mark_verified` n'écrit qu'une date encore nulle.
+
+- **`one_time_tokens` se purge.** La table croissait d'une ligne par demande sans jamais en
+  perdre : chaque émission supprime désormais les jetons échus de tous les comptes, et la
+  migration ajoute `idx_one_time_tokens_expires_at` pour que cette purge ne parcoure pas la
+  table. Un projet déjà migré crée l'index à la main, comme le montre la note de montée.
 
 ## [1.4.0] — 2026-09-11
 
