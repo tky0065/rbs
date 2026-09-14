@@ -195,8 +195,9 @@ HTTP/1.1 202 Accepted
 content-length: 0
 ```
 
-202 without a body, whether or not the address was already taken: the answer never says
-which, and a taken address gets an email warning its holder instead of a second account.
+202 without a body, whether or not the address was already taken: the answer itself does
+not say which — a login with the password just sent still would, as the auth guide
+explains —, and a taken address gets an email warning its holder instead of a second account.
 The account exists as soon as the 202 arrives, and it is always a `user` — no route on
 this page hands out `admin` for the asking; the account you get here can read, but not
 write, `posts`.

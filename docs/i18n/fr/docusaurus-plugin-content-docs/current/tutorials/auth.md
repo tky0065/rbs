@@ -199,7 +199,9 @@ HTTP/1.1 202 Accepted
 content-length: 0
 ```
 
-202 sans corps, que l'adresse soit déjà prise ou non : la réponse ne dit jamais laquelle,
+202 sans corps, que l'adresse soit déjà prise ou non : la réponse elle-même ne dit pas
+laquelle — une connexion avec le mot de passe tout juste envoyé le dirait encore, comme
+l'explique le guide auth —,
 et une adresse prise vaut à son titulaire un courriel d'avertissement plutôt qu'un second
 compte. Le compte existe dès que le 202 arrive, et c'est toujours un `user` — aucune route
 de cette page ne distribue `admin` sur simple demande ; le compte obtenu ici peut lire

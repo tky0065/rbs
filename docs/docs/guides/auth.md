@@ -83,6 +83,14 @@ the client can log in right away; a taken one is left untouched, and its holder 
 an email, `templates/mail/inscription.html`, saying someone tried to sign up with it and
 pointing to `forgot-password`.
 
+What the 202 does not close is a login with the password just submitted. A new address
+now has an account that logs in with it; a taken one refuses it with a 401 — so
+`register` followed by `login` still tells the two apart, in two requests instead of
+one, at the pace the rate limit allows (`/auth/register` takes 10 an hour per client).
+Closing that means refusing to log in an account whose address is unverified, which the
+fragment does not do: it would forbid logging in right after signing up. A route that
+must not serve an unproven address takes `VerifiedIdentity` instead.
+
 A sixth, `POST /auth/change-password`, lets a caller already holding a token do the same
 without an email link — covered right below. The other seven act on a forgotten password,
 an unconfirmed address, or the caller's own sessions, each in its own section further down

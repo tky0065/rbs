@@ -151,10 +151,9 @@ dépréciation.
   explicite.
 - **Les contrôleurs d'`auth` n'envoient plus eux-mêmes de courriel.** Un helper unique
   `notify`, dans la couche service, rend et expédie chaque message ;
-  `verification::send_link` et `password::send_reset_link` enveloppent les `request` et
-  `request_reset` existants, et `service::register` reçoit désormais le client mail et les
-  réglages des parcours. Les réponses ne changent pas — 201 à `register`, 202 à
-  `forgot-password` et `resend-verification`, mêmes objets, gabarits et liens. Un rendu en
+  `verification::send_link` et `password::send_reset_link` portent les émissions, et
+  `service::register` reçoit désormais le client mail et les réglages des parcours. Objets
+  et gabarits ne changent pas. Un rendu en
   échec est journalisé une fois, sous « préparation du courriel échouée » avec un champ
   `gabarit`, au lieu d'un message par parcours. Seul un `rbs add auth` neuf écrit cette
   disposition ; un projet existant garde la sienne.
@@ -168,8 +167,7 @@ dépréciation.
   descriptions communes du document OpenAPI (`RBS_SERVER__LANG` la surcharge là), et
   `rbs add` et `rbs generate crud` la lisent — dans `config/default.toml` seul, jamais
   dans l'environnement — pour écrire les messages qu'ils adressent au client
-  (`"this address is already registered"`, `"too many requests: try again later"`,
-  `"this value is already taken"`…). `rbs new --lang` l'écrit à côté de
+  (`"too many requests: try again later"`, `"this value is already taken"`…). `rbs new --lang` l'écrit à côté de
   `[package.metadata.rbs] lang`, qui ne décide plus que de la langue d'`AGENTS.md`.
   `Error::Domain` garde son `code` pour `title`, les codes de validation restent ceux de
   `validator` ; les journaux, les commentaires, les courriels et les textes OpenAPI par
@@ -189,6 +187,8 @@ dépréciation.
   une adresse prise n'est pas touchée, et son titulaire reçoit
   `templates/mail/inscription.html`. Cela vaut pour les projets neufs : un projet engendré
   plus tôt garde son code, et la note de montée liste les fichiers à reprendre du fragment.
+  La réponse seule ne dit plus rien ; une connexion avec le mot de passe soumis le dit
+  encore, puisqu'un compte non vérifié se connecte — le guide auth dit ce qui le fermerait.
 
 - **`forgot-password`, `resend-verification` et l'inscription émettent leurs jetons dans
   une tâche détachée.** La requête ne fait plus que lire le compte ; la purge,

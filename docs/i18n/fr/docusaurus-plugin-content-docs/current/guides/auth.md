@@ -84,6 +84,15 @@ client peut se connecter aussitôt ; une adresse prise n'est pas touchée, et so
 reçoit un courriel, `templates/mail/inscription.html`, qui le prévient de la tentative et
 le renvoie vers `forgot-password`.
 
+Ce que le 202 ne ferme pas, c'est une connexion avec le mot de passe tout juste soumis.
+Une adresse neuve porte désormais un compte qui s'ouvre avec lui ; une adresse prise le
+refuse d'un 401 — si bien que `register` suivi de `login` distingue encore les deux, en
+deux requêtes au lieu d'une, au rythme que la limite de débit autorise (`/auth/register`
+en accepte 10 par heure et par client). Le fermer reviendrait à refuser la connexion d'un
+compte dont l'adresse n'est pas vérifiée, ce que le fragment ne fait pas : ce serait
+interdire de se connecter juste après l'inscription. Une route qui ne doit pas servir une
+adresse non prouvée prend `VerifiedIdentity` à la place.
+
 Une sixième, `POST /auth/change-password`, laisse un appelant qui porte déjà un jeton en
 faire autant sans lien courriel — couverte juste en dessous. Les sept autres portent sur un
 mot de passe oublié, une adresse non confirmée, ou les sessions de l'appelant, chacune dans

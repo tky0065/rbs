@@ -144,10 +144,8 @@ between minor versions with no deprecation cycle.
   explicit.
 - **The `auth` controllers no longer send email themselves.** A single `notify` helper in
   the service layer renders and dispatches every message; `verification::send_link` and
-  `password::send_reset_link` wrap the existing `request` and `request_reset`, and
-  `service::register` now receives the mailer and the flow settings. Responses do not
-  change — 201 on `register`, 202 on `forgot-password` and `resend-verification`, same
-  subjects, templates and links. A render that fails is logged once as « préparation du
+  `password::send_reset_link` carry the emissions, and `service::register` now receives
+  the mailer and the flow settings. Subjects and templates do not change. A render that fails is logged once as « préparation du
   courriel échouée » with a `gabarit` field, instead of one message per flow. Only a
   fresh `rbs add auth` writes the new layout; an existing project keeps its own.
 - **Error responses speak the project's language, and `--lang` now covers them.** A
@@ -160,8 +158,7 @@ between minor versions with no deprecation cycle.
   response descriptions of the OpenAPI document in it (`RBS_SERVER__LANG` overrides it
   there), and `rbs add` and `rbs generate crud` read it — from `config/default.toml`
   alone, never from the environment — to write the messages they hand to the client
-  (`"this address is already registered"`, `"too many requests: try again later"`,
-  `"this value is already taken"`…). `rbs new --lang` writes it next to
+  (`"too many requests: try again later"`, `"this value is already taken"`…). `rbs new --lang` writes it next to
   `[package.metadata.rbs] lang`, which now only decides the language of `AGENTS.md`.
   `Error::Domain` keeps its `code` as `title`, validation codes stay `validator`'s own;
   logs, code comments, emails and per-operation OpenAPI texts stay in French. **A French
@@ -179,7 +176,9 @@ between minor versions with no deprecation cycle.
   account written before the answer, so a client logs in right away; a taken one is left
   untouched, and its holder receives `templates/mail/inscription.html`. This holds for new
   projects: a project generated earlier keeps its code, and the upgrade note lists the
-  files to take from the fragment.
+  files to take from the fragment. The answer alone no longer tells; a login with the
+  submitted password still does, since an unverified account can log in — the auth guide
+  says what would close it.
 
 - **`forgot-password`, `resend-verification` and registration emit their tokens in a
   detached task.** The request only looks the account up; the purge, the invalidation, the
