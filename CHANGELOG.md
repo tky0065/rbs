@@ -110,6 +110,13 @@ between minor versions with no deprecation cycle.
   the codes are stable, and listed in the agents guide. An argument the parser refuses
   stays text, with exit code 2.
 
+- **A generated project compresses its responses.** The skeleton's `<rbs:layers>` block
+  now carries a `CompressionLayer`, and `tower-http` gains the `compression-gzip`
+  feature: `/api-docs/openapi.json`, which grows with every CRUD, and every list travel
+  gzipped to any client that accepts it. The default predicate leaves small bodies,
+  images and server-sent events alone. A project generated earlier keeps its router; the
+  upgrade note gives the lines to paste.
+
 ### Changed
 
 - **`rbs add jobs` and `rbs add scheduler` each carry one more anchor, and `schedules()`
@@ -214,6 +221,11 @@ between minor versions with no deprecation cycle.
   `RBS_MAIL__SMTP_PASSWORD`, with a different remedy, and `base` warns that it could not
   check the database instead of failing on the missing `RBS_DATABASE__URL`. A key absent
   from `.env.example` too is still reported by the feature's own check.
+
+- **The `jobs` queue records a job's outcome without reading its row back.**
+  `mark_done` and `retry_or_fail` issue a targeted `UPDATE`: `ActiveModel::update`
+  returned the whole row, payload included — through `RETURNING` on PostgreSQL and
+  SQLite, through one more `SELECT` on MySQL — for a model nobody read.
 
 ### Fixed
 
@@ -373,6 +385,17 @@ reads `timestamp` on MySQL and `timestamp_with_timezone_text` on SQLite, which i
 
 - **`rbs dev` on a MySQL project names MySQL** when the database URL cannot be read, and
   its remedy gives a `mysql://` URL instead of a PostgreSQL one.
+
+- **`contains` in a generated filter matches the value literally.** `%` and `_` went
+  into `LIKE` as wildcards: `{"title": {"contains": "%"}}` returned every row, while the
+  comment above claimed the value was escaped. `%`, `_` and `!` are now escaped, with an
+  explicit `ESCAPE '!'` that reads the same on the three engines. A feature generated
+  earlier keeps its `filter.rs`; the upgrade note gives the function to paste.
+
+- **The in-memory rate-limit counter no longer walks its table on every request under
+  load.** Once the table held 10,000 keys, the sweep ran on each hit and removed only
+  expired windows: with 10,000 clients active at once, every request walked the whole
+  table under the lock. The next sweep now waits for the table to double.
 
 ## [1.4.0] — 2026-09-11
 

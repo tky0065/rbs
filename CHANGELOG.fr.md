@@ -116,6 +116,13 @@ dépréciation.
   codes sont stables, et énumérés dans le guide des agents. Un argument que l'analyseur
   refuse reste du texte, code 2.
 
+- **Un projet engendré compresse ses réponses.** Le bloc `<rbs:layers>` du squelette porte
+  désormais une `CompressionLayer`, et `tower-http` gagne la feature `compression-gzip` :
+  `/api-docs/openapi.json`, qui grossit à chaque CRUD, et chaque liste partent compressés
+  en gzip vers tout client qui l'accepte. Le prédicat par défaut épargne les petits
+  corps, les images et les flux SSE. Un projet engendré avant garde son routeur ; la note
+  de montée donne les lignes à coller.
+
 ### Modifié
 
 - **`rbs add jobs` et `rbs add scheduler` portent chacun une ancre de plus, et
@@ -226,6 +233,11 @@ dépréciation.
   avertit qu'il n'a pas pu vérifier la base au lieu d'échouer sur `RBS_DATABASE__URL`
   manquante. Une clé absente aussi de `.env.example` reste signalée par le contrôle de
   sa feature.
+
+- **La file `jobs` inscrit le sort d'un job sans relire sa ligne.** `mark_done` et
+  `retry_or_fail` émettent un `UPDATE` ciblé : `ActiveModel::update` rendait la ligne
+  entière, payload compris — par `RETURNING` sur PostgreSQL et SQLite, par un `SELECT`
+  de plus sur MySQL — pour un modèle que personne ne lisait.
 
 ### Corrigé
 
@@ -389,6 +401,19 @@ lit `timestamp` sur MySQL et `timestamp_with_timezone_text` sur SQLite, ce que
 
 - **`rbs dev` sur un projet MySQL nomme MySQL** quand l'URL de la base est illisible, et
   son remède donne une URL `mysql://` au lieu d'une URL PostgreSQL.
+
+- **`contains` cherche la valeur à la lettre dans un filtre engendré.** `%` et `_`
+  partaient dans le `LIKE` comme jokers : `{"title": {"contains": "%"}}` rendait toutes
+  les lignes, alors que le commentaire au-dessus affirmait la valeur échappée. `%`, `_`
+  et `!` sont désormais échappés, avec un `ESCAPE '!'` explicite qui se lit de même sur
+  les trois moteurs. Une feature engendrée avant garde son `filter.rs` ; la note de montée
+  donne la fonction à coller.
+
+- **Le compteur mémoire du rate-limit ne parcourt plus sa table à chaque requête sous
+  charge.** Dès que la table atteignait 10 000 clés, le balayage tournait à chaque coup
+  et ne retirait que les fenêtres échues : avec 10 000 clients actifs à la fois, chaque
+  requête parcourait toute la table sous le verrou. Le balayage suivant attend désormais
+  que la table ait doublé.
 
 ## [1.4.0] — 2026-09-11
 
