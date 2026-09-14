@@ -890,9 +890,11 @@ fn generate_job(
     let applique = appliquer(&planned.plan, force, dry_run, json)?;
 
     // Le bilan se lit dans le document : les blocs à reporter y sont dans `sautees`, le
-    // fichier du job parmi les actions.
+    // fichier du job parmi les actions. `applique` y dit, comme sous `add`, que quelque
+    // chose a été écrit : un job déjà en place, ou dont tout est à reporter, n'a rien écrit.
     if json {
-        ui::line(&plan::json::plan("generate job", &planned.plan, applique));
+        let ecrit = applique && matches!(planned.bilan(), generate::job::Bilan::Ecrit { .. });
+        ui::line(&plan::json::plan("generate job", &planned.plan, ecrit));
         return Ok(());
     }
 

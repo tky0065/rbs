@@ -319,3 +319,23 @@ fn generate_job_json_without_jobs_renders_jobs_absent() {
     assert_eq!(erreur["code"], "jobs_absent", "{erreur:#}");
     assert_eq!(erreur["remede"], "rbs add jobs", "{erreur:#}");
 }
+
+/// Relancé sur un job déjà en place, `generate job` n'écrit rien, et son document le dit
+/// comme celui d'`add` : `applique` à `false`.
+#[test]
+fn generate_job_json_rerun_on_a_job_in_place_says_nothing_was_applied() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    rbs(parent.path())
+        .args(["new", "demo", "--yes", "--with", "jobs"])
+        .assert()
+        .success();
+    let racine = parent.path().join("demo");
+
+    let premiere = lancer(&racine, &["generate", "job", "purge", "--json", "--force"]);
+    assert_eq!(premiere.code, Some(0), "{}", premiere.stderr);
+    assert_eq!(document(&premiere)["applique"], true, "{}", premiere.stdout);
+
+    let seconde = lancer(&racine, &["generate", "job", "purge", "--json", "--force"]);
+    assert_eq!(seconde.code, Some(0), "{}", seconde.stderr);
+    assert_eq!(document(&seconde)["applique"], false, "{}", seconde.stdout);
+}
