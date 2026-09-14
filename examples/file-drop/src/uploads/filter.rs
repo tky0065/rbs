@@ -1,5 +1,6 @@
 use rbs_core::{Comparison, Error, Result, Sort, TextMatch};
 use sea_orm::prelude::{DateTimeUtc, Uuid};
+use sea_orm::sea_query::LikeExpr;
 use sea_orm::{ColumnTrait, Condition, QueryFilter, QueryOrder, Select, Value};
 use serde::Deserialize;
 use utoipa::ToSchema;
@@ -106,11 +107,24 @@ fn matches(colonne: Column, recherche: Option<&TextMatch>) -> Condition {
         return Condition::all();
     };
 
-    // `contains` rend un LIKE '%…%' et échappe la valeur. La casse suit la collation du
-    // moteur : PostgreSQL la distingue, MySQL l'ignore par défaut.
+    // `contains` rend un LIKE '%…%' dont `%`, `_` et `!` sont échappés : la valeur se
+    // cherche à la lettre. `!` plutôt que `\` : sea-query écrit le caractère d'échappement
+    // en littéral SQL, et MySQL y lit `\` comme un échappement de chaîne. La casse suit la
+    // collation du moteur : PostgreSQL la distingue, MySQL l'ignore par défaut.
     null_condition(colonne, recherche.is_null)
         .add_option(recherche.eq.clone().map(|valeur| colonne.eq(valeur)))
-        .add_option(recherche.contains.clone().map(|v| colonne.contains(v)))
+        .add_option(recherche.contains.as_ref().map(|v| colonne.like(motif(v))))
+}
+
+fn motif(valeur: &str) -> LikeExpr {
+    let mut echappee = String::with_capacity(valeur.len() + 2);
+    for caractere in valeur.chars() {
+        if matches!(caractere, '!' | '%' | '_') {
+            echappee.push('!');
+        }
+        echappee.push(caractere);
+    }
+    LikeExpr::new(format!("%{echappee}%")).escape('!')
 }
 
 fn null_condition(colonne: Column, is_null: Option<bool>) -> Condition {

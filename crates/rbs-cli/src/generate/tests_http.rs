@@ -63,6 +63,7 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
             // unique rien ne rend 409, et le test échouerait faute de refus à observer.
             email_field => sent.iter().find(|champ| champ.validates_email()).map(Field::column_name),
             unique_field => sent.iter().any(|champ| champ.unique),
+            contains_field => sent.iter().find(|champ| contains_field(champ)).map(Field::column_name),
         },
     )
 }
@@ -159,6 +160,21 @@ fn drawn_number(champ: &Field) -> bool {
             champ.column_type(),
             FieldType::Int | FieldType::Float | FieldType::Datetime
         )
+}
+
+/// Un texte libre sur lequel le scénario `contains` peut porter.
+///
+/// L'adresse en est écartée : la valeur d'épreuve n'en est pas une, et la validation la
+/// refuserait. Un `max=` plus court que cette valeur — une marque de dix caractères suivie
+/// d'un joker — ferait refuser la création de même.
+fn contains_field(champ: &Field) -> bool {
+    const VALEUR_D_EPREUVE: u32 = 11;
+
+    champ.is_textual()
+        && !champ.validates_email()
+        && champ
+            .max_length()
+            .is_none_or(|borne| borne >= VALEUR_D_EPREUVE)
 }
 
 fn textual(champ: &Field) -> bool {
@@ -594,16 +610,18 @@ mod tests {
     fn the_scenarios_are_declared() {
         let rendered = trials("articles", CHAMPS);
 
-        // `CHAMPS` porte `email:string:unique` et des champs filtrables : les quatre
-        // scénarios conditionnels y sont donc attendus, avec les quatre que toute feature
-        // créable emporte.
+        // `CHAMPS` porte `email:string:unique`, un texte libre et des champs filtrables :
+        // les cinq scénarios conditionnels y sont donc attendus, avec les cinq que toute
+        // feature créable emporte.
         let scenarios = [
             "async fn the_full_lifecycle_goes_through_the_api()",
+            "async fn the_list_travels_compressed_when_the_client_accepts_it()",
             // L'identifiant est posé par le modèle depuis que `uuidv7()` a quitté la
             // migration : la croissance des identifiants se prouve dans le projet.
             "async fn two_creations_in_a_row_carry_increasing_ids()",
             "async fn an_invalid_email_returns_422()",
             "async fn the_filter_narrows_the_list()",
+            "async fn contains_reads_percent_and_underscore_literally()",
             "async fn an_unknown_sort_column_returns_400()",
             "async fn a_replayed_unique_value_returns_409()",
             "async fn an_unknown_id_returns_404()",
@@ -694,6 +712,40 @@ mod tests {
             !rendered.contains("a_replayed_unique_value_returns_409"),
             "aucun champ n'est unique :\n{rendered}"
         );
+    }
+
+    /// `%` et `_` sont des jokers de LIKE, et seul un scénario joué contre la base montre
+    /// qu'ils se cherchent à la lettre. Il porte sur un texte libre, pas sur l'adresse.
+    #[test]
+    fn a_free_text_field_earns_the_literal_contains_scenario() {
+        let rendered = trials("articles", "email:string,title:string");
+
+        assert!(
+            rendered.contains("async fn contains_reads_percent_and_underscore_literally()"),
+            "le scénario `contains` est absent :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(r#"let champ = "title";"#),
+            "le scénario doit porter sur le premier texte libre, pas sur l'adresse :\n{rendered}"
+        );
+    }
+
+    /// Sans texte libre assez large pour la valeur d'épreuve, le scénario n'a rien sur
+    /// quoi porter : il échouerait sur une création refusée.
+    #[test]
+    fn a_feature_without_free_text_carries_no_contains_scenario() {
+        for champs in [
+            "views:int,published:bool",
+            "email:string",
+            "code:string:max=8",
+        ] {
+            let rendered = trials("articles", champs);
+
+            assert!(
+                !rendered.contains("contains_reads_percent_and_underscore_literally"),
+                "« {champs} » n'offre aucun texte libre à chercher :\n{rendered}"
+            );
+        }
     }
 
     /// Sans création possible, les deux scénarios tombent avec les autres.

@@ -125,6 +125,12 @@ fn a_generated_crud_migrates_and_passes_its_tests_against_postgresql() {
         "le scénario de filtrage n'a pas été joué :\n{joues}"
     );
     assert!(
+        joues.contains(
+            "test articles::tests::contains_reads_percent_and_underscore_literally ... ok"
+        ),
+        "la recherche de `%` et `_` à la lettre n'a pas été jouée :\n{joues}"
+    );
+    assert!(
         joues.contains("test articles::tests::an_unknown_sort_column_returns_400 ... ok"),
         "le refus d'une colonne de tri inconnue n'a pas été joué :\n{joues}"
     );

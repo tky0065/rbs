@@ -41,9 +41,11 @@ the same thing, and the short form is the one you write most often.
 | `contains` | `string`, `text` | substring, `LIKE '%…%'` |
 | `is_null` | every column | `true` requires null, `false` requires a value |
 
-`contains` follows the engine's collation: PostgreSQL distinguishes case, MySQL ignores it
-with its default collation. `ILIKE` would settle it, but sea-orm only exposes it through
-`PgExpr`, and rbs generates for MySQL and SQLite too.
+`contains` searches its value literally: `%` and `_`, the two wildcards of `LIKE`, are
+escaped, so `{ "contains": "50%" }` finds `50%` and not every row. It follows the engine's
+collation: PostgreSQL distinguishes case, MySQL ignores it with its default collation.
+`ILIKE` would settle it, but sea-orm only exposes it through `PgExpr`, and rbs generates
+for MySQL and SQLite too.
 
 ## Swagger says both forms
 

@@ -158,6 +158,33 @@ async fn the_full_lifecycle_goes_through_the_api() {
     assert_eq!(status, StatusCode::NOT_FOUND, "elle se supprime deux fois");
 }
 
+/// Le squelette compresse ce que le client accepte de recevoir compressé.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn the_list_travels_compressed_when_the_client_accepts_it() {
+    let api = application().await;
+    let collection = "/subscribers";
+
+    // Une ligne au moins : une liste vide peut tomber sous le seuil en deçà duquel la
+    // compression ne s'applique pas.
+    let (status, created) = call(&api, request("POST", collection, creation())).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {created}");
+
+    let mut demande = without_body("GET", collection);
+    demande
+        .headers_mut()
+        .insert("accept-encoding", "gzip".parse().expect("en-tête valide"));
+    let reponse = api.clone().oneshot(demande).await.expect("réponse");
+    let encodage = reponse.headers().get("content-encoding");
+
+    assert_eq!(reponse.status(), StatusCode::OK);
+    assert_eq!(
+        encodage.map(|valeur| valeur.as_bytes()),
+        Some(&b"gzip"[..]),
+        "le client accepte gzip, la liste doit partir compressée"
+    );
+}
+
 /// Deux créations à la suite portent des identifiants croissants.
 ///
 /// C'est ce qui sépare un UUIDv7 d'un v4, et ce dont dépend la liste : elle trie sur
@@ -252,6 +279,51 @@ async fn the_filter_narrows_the_list() {
     let resource = format!("{collection}/{id}");
     let (status, _) = call(&api, without_body("DELETE", &resource)).await;
     assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
+}
+
+/// `%` et `_` sont des jokers de LIKE, et `!` le caractère qui les échappe : lus tels
+/// quels, `contains: "%"` rendrait toute la table.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn contains_reads_percent_and_underscore_literally() {
+    let api = application().await;
+    let collection = "/subscribers";
+    let champ = "name";
+    let marque = Uuid::new_v4().simple().to_string()[..10].to_string();
+    let pourcent = format!("{marque}%");
+    let souligne = format!("{marque}_");
+    let exclamation = format!("{marque}!");
+    let temoin = format!("{marque}x");
+
+    for valeur in [&pourcent, &souligne, &exclamation, &temoin] {
+        let mut sent = creation();
+        sent[champ] = json!(valeur);
+        let (status, created) = call(&api, request("POST", collection, sent)).await;
+        assert_eq!(status, StatusCode::CREATED, "création refusée : {created}");
+    }
+
+    // Lu comme un joker, chacun de ces motifs retiendrait aussi les trois autres lignes.
+    let chemin = format!("{collection}/filter");
+    let mut ecarts = Vec::new();
+    for attendue in [&pourcent, &souligne, &exclamation] {
+        let critere = json!({ champ: { "contains": attendue } });
+        let (status, page) = call(&api, request("POST", &chemin, critere)).await;
+        assert_eq!(status, StatusCode::OK, "filtre refusé : {page}");
+
+        let valeurs: Vec<&str> = page["data"]
+            .as_array()
+            .expect("la liste rend un tableau")
+            .iter()
+            .map(|ligne| ligne[champ].as_str().expect("texte rendu"))
+            .collect();
+        if valeurs != [attendue.as_str()] {
+            ecarts.push(format!("« {attendue} » rend {valeurs:?}"));
+        }
+    }
+    assert!(
+        ecarts.is_empty(),
+        "`contains` doit se lire à la lettre : {ecarts:?}"
+    );
 }
 
 /// Une colonne de tri inconnue est une faute du client, et le refus la nomme.

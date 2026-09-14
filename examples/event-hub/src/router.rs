@@ -4,6 +4,7 @@ use axum::Router;
 use axum::http::StatusCode;
 use axum::middleware::from_fn;
 use rbs_core::HasCoreState;
+use tower_http::compression::CompressionLayer;
 use tower_http::timeout::TimeoutLayer;
 
 use crate::health;
@@ -33,6 +34,10 @@ pub fn router(state: AppState) -> Router {
             StatusCode::REQUEST_TIMEOUT,
             timeout,
         ))
+        // Le document OpenAPI dépasse vite la centaine de Ko. Le prédicat par défaut
+        // épargne les petits corps, les images et les flux SSE, que la compression
+        // ralentirait sans rien gagner.
+        .layer(CompressionLayer::new())
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             crate::modules::rate_limit::middleware,

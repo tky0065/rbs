@@ -296,12 +296,18 @@ pub async fn requeue_stale(db: &DatabaseConnection, config: &Config) -> anyhow::
 }
 
 /// Marque un job réussi.
+///
+/// Un `UPDATE` ciblé plutôt que `ActiveModel::update` : celui-ci relit la ligne entière,
+/// payload compris — par `RETURNING` sur PostgreSQL et SQLite, par un `SELECT` de plus sur
+/// MySQL — pour rendre un modèle que personne ne lit.
 pub async fn mark_done(db: &DatabaseConnection, job: &Model) -> anyhow::Result<()> {
-    let mut ligne: ActiveModel = job.clone().into();
-    ligne.status = Set(Status::Done);
-    ligne.last_error = Set(None);
-    ligne.updated_at = Set(Utc::now().fixed_offset());
-    ligne.update(db).await?;
+    Entity::update_many()
+        .col_expr(Column::Status, Expr::value(Status::Done))
+        .col_expr(Column::LastError, Expr::value(Option::<String>::None))
+        .col_expr(Column::UpdatedAt, Expr::value(Utc::now().fixed_offset()))
+        .filter(Column::Id.eq(job.id))
+        .exec(db)
+        .await?;
 
     Ok(())
 }
@@ -345,12 +351,17 @@ pub async fn retry_or_fail(
     let attente = TimeDelta::from_std(retry_delay(config, job.attempts))
         .unwrap_or_else(|_| TimeDelta::seconds(0));
 
-    let mut ligne: ActiveModel = job.clone().into();
-    ligne.status = Set(status);
-    ligne.last_error = Set(Some(format!("{error:#}")));
-    ligne.available_at = Set(a_la_seconde((Utc::now() + attente).fixed_offset()));
-    ligne.updated_at = Set(Utc::now().fixed_offset());
-    ligne.update(db).await?;
+    Entity::update_many()
+        .col_expr(Column::Status, Expr::value(status))
+        .col_expr(Column::LastError, Expr::value(Some(format!("{error:#}"))))
+        .col_expr(
+            Column::AvailableAt,
+            Expr::value(a_la_seconde((Utc::now() + attente).fixed_offset())),
+        )
+        .col_expr(Column::UpdatedAt, Expr::value(Utc::now().fixed_offset()))
+        .filter(Column::Id.eq(job.id))
+        .exec(db)
+        .await?;
 
     Ok(status)
 }
