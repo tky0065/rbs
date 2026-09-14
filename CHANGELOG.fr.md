@@ -116,6 +116,13 @@ dépréciation.
   codes sont stables, et énumérés dans le guide des agents. Un argument que l'analyseur
   refuse reste du texte, code 2.
 
+- **Un projet engendré compresse ses réponses.** Le bloc `<rbs:layers>` du squelette porte
+  désormais une `CompressionLayer`, et `tower-http` gagne la feature `compression-gzip` :
+  `/api-docs/openapi.json`, qui grossit à chaque CRUD, et chaque liste partent compressés
+  en gzip vers tout client qui l'accepte. Le prédicat par défaut épargne les petits
+  corps, les images et les flux SSE. Un projet engendré avant garde son routeur ; la note
+  de montée donne les lignes à coller.
+
 ### Modifié
 
 - **`rbs add jobs` et `rbs add scheduler` portent chacun une ancre de plus, et
@@ -200,6 +207,37 @@ dépréciation.
   fragment.** `…/reset-password#token=…` plutôt que `?token=…` : un navigateur n'envoie
   jamais le fragment à un serveur, si bien que le jeton reste hors des journaux d'accès et
   des en-têtes `Referer`. Le client le lit dans `location.hash`.
+
+- **Le code de sortie dit à un script de quelle nature est l'échec.** `1` : le projet
+  porte une faute que la commande a trouvée ou qui l'arrête — `rbs doctor` qui trouve
+  quelque chose, une ancre absente ou mal placée, une migration qui échoue. `2` : l'appel
+  est à corriger — hors d'un projet, une feature inconnue, un nom déjà pris, un working
+  tree sale, un conflit que `--force` lèverait — comme les erreurs d'usage que clap
+  rendait déjà en `2`. `3` : l'environnement a manqué — un fichier illisible, `docker`
+  ou `cargo` impossibles à lancer, une base qui ne répond pas, un CLI plus ancien que le
+  projet. Tout échec sortait en `1` : une CI ne distinguait pas `rbs doctor` qui trouve
+  une faute de `rbs doctor` qui n'a pas pu tourner. `rbs test` garde le code de
+  `cargo test` quand un test échoue, et un script qui ne teste qu'un statut non nul ne
+  voit aucune différence.
+
+- **Le plan et le bilan comptent à part les fichiers créés et modifiés.** Le pied du plan
+  dit `3 à créer, 6 à modifier, 2 inchangés`, et le bilan `✓ cors installée — 3 créés,
+  6 modifiés` : `rbs add cors` annonçait neuf fichiers à écrire, puis se disait installé
+  en trois, ne comptant que ceux qu'il avait créés. `rbs generate` et `rbs generate job`
+  suivent ; la sortie `--json` ne change pas.
+
+- **`rbs doctor` ne signale qu'une fois une clé absente du `.env`.** Le contrôle `.env`
+  nomme déjà chaque clé que `.env.example` déclare et que le `.env` n'a pas, avec la
+  ligne à ajouter. Les contrôles `auth` et `mail` n'échouent plus une seconde fois sur le
+  même `RBS_AUTH__SECRET` ou `RBS_MAIL__SMTP_PASSWORD`, avec un autre remède, et `base`
+  avertit qu'il n'a pas pu vérifier la base au lieu d'échouer sur `RBS_DATABASE__URL`
+  manquante. Une clé absente aussi de `.env.example` reste signalée par le contrôle de
+  sa feature.
+
+- **La file `jobs` inscrit le sort d'un job sans relire sa ligne.** `mark_done` et
+  `retry_or_fail` émettent un `UPDATE` ciblé : `ActiveModel::update` rendait la ligne
+  entière, payload compris — par `RETURNING` sur PostgreSQL et SQLite, par un `SELECT`
+  de plus sur MySQL — pour un modèle que personne ne lisait.
 
 ### Corrigé
 
@@ -360,6 +398,22 @@ lit `timestamp` sur MySQL et `timestamp_with_timezone_text` sur SQLite, ce que
   perdre : chaque émission supprime désormais les jetons échus de tous les comptes, et la
   migration ajoute `idx_one_time_tokens_expires_at` pour que cette purge ne parcoure pas la
   table. Un projet déjà migré crée l'index à la main, comme le montre la note de montée.
+
+- **`rbs dev` sur un projet MySQL nomme MySQL** quand l'URL de la base est illisible, et
+  son remède donne une URL `mysql://` au lieu d'une URL PostgreSQL.
+
+- **`contains` cherche la valeur à la lettre dans un filtre engendré.** `%` et `_`
+  partaient dans le `LIKE` comme jokers : `{"title": {"contains": "%"}}` rendait toutes
+  les lignes, alors que le commentaire au-dessus affirmait la valeur échappée. `%`, `_`
+  et `!` sont désormais échappés, avec un `ESCAPE '!'` explicite qui se lit de même sur
+  les trois moteurs. Une feature engendrée avant garde son `filter.rs` ; la note de montée
+  donne la fonction à coller.
+
+- **Le compteur mémoire du rate-limit ne parcourt plus sa table à chaque requête sous
+  charge.** Dès que la table atteignait 10 000 clés, le balayage tournait à chaque coup
+  et ne retirait que les fenêtres échues : avec 10 000 clients actifs à la fois, chaque
+  requête parcourait toute la table sous le verrou. Le balayage suivant attend désormais
+  que la table ait doublé.
 
 ## [1.4.0] — 2026-09-11
 

@@ -198,7 +198,8 @@ remède le dit : `rbs add` ne rejoue pas une feature que le manifeste déclare d
 `--json` écrit les mêmes constats en un seul document sur la sortie standard — rien d'autre
 n'y va, ni couleur ni glyphe — de sorte qu'une étape de CI peut nommer le contrôle qui a
 échoué au lieu de chercher une croix. Le code de sortie garde le sens qu'il avait déjà : 0
-quand le projet est sain, 1 quand un contrôle a échoué.
+quand le projet est sain, 1 quand un contrôle a échoué — 2 ou 3 quand le diagnostic n'a pas
+pu tourner, voir les [codes de sortie](#codes-de-sortie).
 
 ```text
 $ rbs doctor --json
@@ -320,7 +321,7 @@ plan pour /private/tmp/rbs-demo/demo
   ~ src/openapi.rs   modifié
   ~ src/state.rs     modifié
 
-  2 fichiers à écrire
+  2 à modifier
 
 ✓ 2 ancres reposées : openapi, state_init
 
@@ -356,7 +357,7 @@ $ rbs doctor --fix
 erreur : le working tree n'est pas propre : src/openapi.rs, src/state.rs — commitez, ou relancez avec --force
 ```
 
-Code de sortie 1. C'est la garde d'[`rbs add`](./add.md), d'[`rbs
+Code de sortie 2, un appel à corriger. C'est la garde d'[`rbs add`](./add.md), d'[`rbs
 generate`](./generate.md) et d'[`rbs upgrade`](./upgrade.md) : ce que la réparation écrit
 doit rester discernable de votre propre travail au prochain `git diff`. Commitez, ou passez
 `--force`.
@@ -382,7 +383,7 @@ plan pour /private/tmp/rbs-demo/demo
 
   ~ src/seeds/main.rs   modifié
 
-  1 fichier à écrire
+  1 à modifier
 
 ✓ 1 ancre reposée : seeds
 attention : layers n'a pas été reposée — la ligne d'accroche `.merge(docs)` est introuvable dans src/router.rs
@@ -475,4 +476,18 @@ $ rbs doctor
 erreur : cette commande attend un projet rbs : aucun Cargo.toml portant [package.metadata.rbs] au-dessus d'ici
 ```
 
-Code de sortie 1.
+Code de sortie 2.
+
+## Codes de sortie
+
+| Code | Sens |
+|---|---|
+| 0 | Le projet est sain — pour les autres commandes, la commande a fait ce qu'elle annonçait. |
+| 1 | Une faute du projet : un contrôle a échoué, ou le projet a arrêté la commande — une ancre disparue, un manifeste qui ne s'analyse pas, un `.env` sans URL de base. |
+| 2 | Un appel à corriger : hors d'un projet, un nom ou une feature inconnus, un working tree sale ou un conflit sans `--force`, une feature prérequise absente — le code que clap rend déjà à un flag mal tapé. |
+| 3 | L'environnement a manqué : un fichier impossible à lire ou à écrire, un outil impossible à lancer, un service qui ne répond pas, un CLI plus ancien que le projet. |
+
+`rbs doctor` en a le plus besoin : 1 dit que le diagnostic a tourné et trouvé quelque chose,
+2 ou 3 qu'il n'a pas pu tourner. Le contrat vaut pour toutes les commandes — `new`, `add`,
+`generate`, `migrate`, `seed`, `dev`, `routes`, `openapi`, `upgrade` — à une exception près :
+quand un test échoue, [`rbs test`](./test.md) rend le code que `cargo test` a rendu.

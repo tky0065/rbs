@@ -80,8 +80,8 @@ plan pour …/demo
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  47 fichiers à écrire
-✓ auth installée — 35 fichiers
+  36 à créer, 11 à modifier
+✓ auth installée — 36 créés, 11 modifiés
 
   rbs migrate up
 ```
@@ -140,8 +140,8 @@ plan pour …/demo
   ~ Cargo.toml                                       modifié
   ~ AGENTS.md                                        modifié
 
-  17 fichiers à écrire
-✓ posts générée — 10 fichiers
+  10 à créer, 7 à modifier
+✓ posts générée — 10 créés, 7 modifiés
 
   la migration m20260909_093231_create_posts reste à appliquer avant de lancer le projet
 ```

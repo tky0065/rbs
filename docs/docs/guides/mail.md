@@ -38,8 +38,8 @@ plan pour /private/tmp/rbs-demo/depot
   ~ .env.example                    modifié
   ~ AGENTS.md                       modifié
 
-  14 fichiers à écrire
-✓ mail installée — 6 fichiers
+  7 à créer, 7 à modifier
+✓ mail installée — 7 créés, 7 modifiés
 
   réglez [mail] dans config/default.toml — un SMTP local par défaut
 ```
@@ -62,16 +62,20 @@ The defaults describe a development server: port 1025 in the clear, which is wha
 **The password is the one value no versioned file carries.** `rbs add mail` writes
 `RBS_MAIL__SMTP_PASSWORD=` into `.env.example` and nothing else — `config/default.toml` is
 committed, and a password committed alongside it is a password to rotate.
-[`rbs doctor`](../cli/doctor.md) reports the couple, not the variable alone:
+[`rbs doctor`](../cli/doctor.md) names the missing line once, in its `.env` check, and the
+`mail` check leaves it there:
 
 ```text
-  ✗ mail       RBS_MAIL__SMTP_PASSWORD n'est renseignée ni dans le .env ni dans l'environnement
-      ajoutez au .env la ligne que mail y attend, vide tant que smtp_user l'est :
+  ✗ .env          RBS_MAIL__SMTP_PASSWORD absente du .env
+      ajoutez au .env :
       RBS_MAIL__SMTP_PASSWORD=
+  …
+  ✓ mail          rien d'autre à signaler — RBS_MAIL__SMTP_PASSWORD relève du contrôle .env
 ```
 
-An empty password is legitimate as long as `smtp_user` is empty too: an unauthenticated
-local relay needs neither.
+What the `mail` check diagnoses is the couple, not the variable alone: an empty password is
+legitimate as long as `smtp_user` is empty too — an unauthenticated local relay needs
+neither.
 
 ## The transport
 

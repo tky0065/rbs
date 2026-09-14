@@ -472,4 +472,6 @@ $ rbs new 4chan --yes
 erreur : `4chan` n'est pas un nom de projet utilisable : lettres, chiffres, `-` et `_`, en commençant par une lettre
 ```
 
-Chacun de ces cas sort en code 1 sans rien écrire.
+Les deux sortent en code 2 sans rien écrire : c'est l'appel qu'il faut corriger. Un
+répertoire qui refuse l'écriture sort en 3 — voir les [codes de
+sortie](./doctor.md#codes-de-sortie).

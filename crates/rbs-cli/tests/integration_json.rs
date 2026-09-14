@@ -211,7 +211,7 @@ fn add_json_outside_a_project_renders_pas_un_projet() {
 
     let sortie = lancer(vide.path(), &["add", "cors", "--json"]);
 
-    assert_eq!(sortie.code, Some(1), "{}", sortie.stdout);
+    assert_eq!(sortie.code, Some(2), "{}", sortie.stdout);
     assert_eq!(
         sortie.stderr, "",
         "sous --json, l'erreur ne passe que par le document"
@@ -310,7 +310,7 @@ fn generate_job_json_without_jobs_renders_jobs_absent() {
 
     let sortie = lancer(&racine, &["generate", "job", "purge", "--json", "--force"]);
 
-    assert_eq!(sortie.code, Some(1), "{}", sortie.stdout);
+    assert_eq!(sortie.code, Some(2), "{}", sortie.stdout);
     assert_eq!(
         sortie.stderr, "",
         "sous --json, l'erreur ne passe que par le document"

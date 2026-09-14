@@ -40,8 +40,8 @@ plan pour …/demo
   ~ config/default.toml           modifié
   ~ AGENTS.md                     modifié
 
-  11 fichiers à écrire
-✓ redis installée — 3 fichiers
+  4 à créer, 7 à modifier
+✓ redis installée — 4 créés, 7 modifiés
 
   le compose du projet porte déjà un service redis — docker compose up -d le démarre ; sans compose, faites écouter un Redis à l'URL de [cache] de config/default.toml
 ```

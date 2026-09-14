@@ -99,4 +99,6 @@ projet : une route montée sans `#[utoipa::path]` n'y figure donc pas. Elle manq
 document, et à tout client engendré depuis lui.
 
 Les échecs sont ceux de `rbs openapi export`, mot pour mot. Sous `--json`, l'erreur et son
-remède partent tous deux sur la sortie d'erreur, et le code de sortie est 1.
+remède partent tous deux sur la sortie d'erreur. Le code de sortie est 1 pour chaque refus
+qui y est décrit, une faute du projet, et 2 hors d'un projet — voir les [codes de
+sortie](./doctor.md#codes-de-sortie).

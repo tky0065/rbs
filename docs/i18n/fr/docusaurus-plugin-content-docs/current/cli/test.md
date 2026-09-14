@@ -72,7 +72,8 @@ La dernière ligne est la commande que lance le workflow installé par
 Le code de sortie est celui qu'a rendu `cargo test`, inchangé — 101 quand un test échoue
 ou que le projet ne compile pas.
 Une CI qui enchaîne `rbs test` distingue donc un test rouge d'une commande qui n'a pas pu
-démarrer, laquelle sort en 1 :
+démarrer, dont le code est 1, 2 ou 3 selon ce qui l'a arrêtée — voir les [codes de
+sortie](./doctor.md#codes-de-sortie). Un test rouge se termine sur :
 
 ```text
 erreur : `cargo test` a échoué (code 101)
@@ -93,7 +94,7 @@ démarrez-la — `docker compose up -d` à la racine du projet — ou corrigez R
 | Situation | Ce qui se passe |
 |---|---|
 | Pas de `.env`, ou pas d'URL de base dedans | Refus nommant le fichier et la variable, code 1 |
-| Rien n'écoute | Le message ci-dessus, après la patience applicable, code 1 |
+| Rien n'écoute | Le message ci-dessus, après la patience applicable, code 3 |
 | Une migration échoue | L'erreur propre au binaire de migration, et aucun test ne tourne, code 1 |
 | Un test échoue | Le rapport de `cargo test`, puis la ligne ci-dessus, et son code |
-| Hors d'un projet | Refus nommant ce qu'elle a cherché, code 1 |
+| Hors d'un projet | Refus nommant ce qu'elle a cherché, code 2 |

@@ -31,6 +31,15 @@ impl Database {
         }
     }
 
+    /// Nom du moteur tel qu'un message le montre à l'utilisateur.
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Postgres => "PostgreSQL",
+            Self::Mysql => "MySQL",
+            Self::Sqlite => "SQLite",
+        }
+    }
+
     /// Feature `sea-orm` — et `sea-orm-migration` — qui porte ce moteur.
     pub fn sea_orm_feature(self) -> &'static str {
         match self {

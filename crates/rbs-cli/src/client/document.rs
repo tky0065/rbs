@@ -38,14 +38,10 @@ pub(crate) struct Operation {
 }
 
 /// Un paramètre de chemin, de requête, ou d'un autre emplacement que le client ignore.
-// Champs seulement écrits par `parse_parameter` tant qu'aucun appelant ne les lit :
-// tombe avec le lot qui traduit ce modèle en méthodes du client.
-#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct Parameter {
     pub name: String,
     pub location: Location,
-    pub description: Option<String>,
     pub required: bool,
     pub schema: Schema,
 }
@@ -99,8 +95,6 @@ pub(crate) enum Erreur {
 }
 
 /// Analyse la sortie du binaire `openapi` d'un projet en un modèle exploitable.
-// Aucun appelant tant que `generate client` n'existe pas : tombe avec la commande.
-#[allow(dead_code)]
 pub(crate) fn parse(json: &str) -> Result<Document, Erreur> {
     let value: Value = serde_json::from_str(json)?;
     if value.get("openapi").is_none() {
@@ -232,7 +226,6 @@ fn parse_parameter(value: &Value) -> Parameter {
         Some(autre) => Location::Autre(autre.to_string()),
         None => Location::Autre(String::new()),
     };
-    let description = texte(value, "description");
     let required = value
         .get("required")
         .and_then(Value::as_bool)
@@ -245,7 +238,6 @@ fn parse_parameter(value: &Value) -> Parameter {
     Parameter {
         name,
         location,
-        description,
         required,
         schema,
     }

@@ -154,6 +154,23 @@ pub(crate) enum Error {
     /// Le manifeste du projet n'a pu être lu.
     #[error("{0}")]
     Metadata(#[from] metadata::Error),
+
+    /// Le répertoire courant n'a pas pu être lu.
+    #[error(transparent)]
+    Cwd(std::io::Error),
+
+    /// La réparation des ancres n'a pas pu être planifiée.
+    #[error(transparent)]
+    Reparation(#[from] crate::plan::Error),
+
+    /// Le projet porte des modifications non commitées, que `--fix` rendrait
+    /// indiscernables des siennes.
+    #[error(transparent)]
+    WorkingTreeSale(#[from] crate::errors::WorkingTreeSale),
+
+    /// La réparation n'a pas pu être écrite.
+    #[error(transparent)]
+    Application(#[from] crate::plan::application::Error),
 }
 
 // Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
@@ -617,6 +634,20 @@ impl Config {
     }
 }
 
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::PasUnProjet | Self::WorkingTreeSale(_) => Sortie::Usage,
+            Self::Cwd(_) => Sortie::Environnement,
+            Self::Metadata(cause) => cause.sortie(),
+            Self::Reparation(cause) => cause.sortie(),
+            Self::Application(cause) => cause.sortie(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use tempfile::TempDir;
@@ -855,6 +886,38 @@ mod tests {
                 titles(&report)
             );
         }
+    }
+
+    /// Une ligne absente du `.env` est une faute à corriger : le contrôle `.env` et celui
+    /// de la feature la nommaient chacun, avec deux remèdes différents.
+    #[test]
+    fn a_key_missing_from_env_is_reported_by_a_single_check() {
+        const CLE: &str = "RBS_MAIL__SMTP_PASSWORD";
+        let (_parent, root) = project(&["health", "mail"]);
+        let ajouter = |fichier: &str, ajout: &str| {
+            let chemin = root.join(fichier);
+            let mut source = std::fs::read_to_string(&chemin).expect("fichier lisible");
+            if !source.ends_with('\n') {
+                source.push('\n');
+            }
+            std::fs::write(&chemin, format!("{source}{ajout}")).expect("fichier inscriptible");
+        };
+        // Ce que `add mail` dépose : sa section, et la clé dans l'exemple seul.
+        ajouter(
+            CONFIG,
+            "\n[mail]\nsmtp_host = \"localhost\"\nsmtp_port = 1025\nsmtp_user = \"\"\ntls = \"none\"\nfrom = \"no-reply@localhost\"\ntimeout_secs = 10\ntemplates = \"templates/mail\"\n",
+        );
+        ajouter(".env.example", &format!("{CLE}=\n"));
+
+        let report = run_with(&root, &mut Muet).expect("c'est un projet rbs");
+
+        let nomment: Vec<&str> = report
+            .checks
+            .iter()
+            .filter(|check| check.state == State::Echec && check.detail.contains(CLE))
+            .map(|check| check.title)
+            .collect();
+        assert_eq!(nomment, vec![env::TITRE], "{nomment:?}");
     }
 
     #[test]

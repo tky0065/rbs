@@ -47,7 +47,11 @@ pub(crate) struct Options {
 pub(crate) struct Planned {
     /// Le plan, à afficher puis à appliquer.
     pub plan: plan::Plan,
-    /// Chemins des fichiers de la feature, relatifs à la racine du projet.
+    /// Chemins des fichiers que les fragments déposent, relatifs à la racine du projet.
+    ///
+    /// Seuls les tests les lisent : le bilan de la commande se tire du plan, qui sait
+    /// aussi ce qui a été modifié.
+    #[cfg(test)]
     pub files: Vec<String>,
     /// Chaque fragment que ce plan pose, dans l'ordre de pose.
     ///
@@ -249,6 +253,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     {
         return Ok(Planned {
             plan: plan::Builder::new(root).finir(),
+            #[cfg(test)]
             files: Vec::new(),
             poses: Vec::new(),
             description: String::new(),
@@ -364,6 +369,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     let mut builder = plan::Builder::new(root.clone());
     let timestamp = crate::generate::migration::current_timestamp();
+    #[cfg(test)]
     let mut files = Vec::new();
     let mut poses = Vec::new();
 
@@ -384,6 +390,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
             files: deposes.len(),
             migration: fragment.manifest.migration.is_some(),
         });
+        #[cfg(test)]
         files.extend(deposes);
 
         builder.patch(plan::PatchToml::InscrireFeature(fragment.name.clone()))?;
@@ -418,6 +425,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     Ok(Planned {
         plan: builder.finir(),
+        #[cfg(test)]
         files,
         poses,
         description,
@@ -600,6 +608,25 @@ fn read_manifest(source: Option<String>, feature: &str) -> Result<manifest::Mani
     })?;
 
     Ok(manifest::read(&text, &format!("{feature}/feature.toml"))?)
+}
+
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::PasUnProjet | Self::Unknown(_) | Self::WorkingTreeSale(_) => Sortie::Usage,
+            Self::Acces(_) => Sortie::Environnement,
+            Self::SansManifeste { .. }
+            | Self::Manifest(_)
+            | Self::Installation(_)
+            | Self::UrlIndecomposable { .. } => Sortie::Faute,
+            Self::Metadata(cause) => cause.sortie(),
+            Self::Plan(cause) => cause.sortie(),
+            Self::Env(cause) => cause.sortie(),
+            Self::Application(cause) => cause.sortie(),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -1833,12 +1860,15 @@ mod tests {
             "la couche s'est montée parmi les routes"
         );
 
-        // Le squelette déclare déjà `tower-http` pour la borne de durée : le fragment
-        // ajoute sa feature à celle qui est là plutôt qu'une seconde déclaration.
+        // Le squelette déclare déjà `tower-http` pour la borne de durée et la compression :
+        // le fragment ajoute sa feature à celles qui sont là plutôt qu'une seconde
+        // déclaration.
         let manifeste = projected(&planned, "Cargo.toml");
         assert!(
-            manifeste
-                .contains("tower-http = { version = \"0.7\", features = [\"timeout\", \"cors\"] }"),
+            manifeste.contains(
+                "tower-http = { version = \"0.7\", features = [\"timeout\", \
+                 \"compression-gzip\", \"cors\"] }"
+            ),
             "{manifeste}"
         );
     }

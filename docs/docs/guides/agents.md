@@ -173,7 +173,7 @@ attention : AGENTS.md ne porte pas la zone `rbs:inventory` — collez ce bloc po
 
 <!-- rbs:inventory -->
 <!-- /rbs:inventory -->
-✓ redis installée — 3 fichiers
+✓ redis installée — 4 créés, 6 modifiés
 ```
 
 The rest of the command still runs to completion — a missing zone in a documentation file
@@ -193,7 +193,7 @@ plan pour /private/tmp/rbs-demo/blog2
   · Cargo.toml   inchangé
   + AGENTS.md    créé
 
-  1 fichier à écrire, 1 inchangé
+  1 à créer, 1 inchangé
 ✓ manifeste aligné sur rbs 1.2.0
 ```
 
@@ -302,8 +302,9 @@ parser, in text on standard error, with exit code 2.
 
 ### Error codes
 
-Under `--json`, a refusal is a single document on standard output, and the exit code stays
-1. rbs adds nothing to standard error for the refusal itself; what came before it stays
+Under `--json`, a refusal is a single document on standard output, and the exit code is
+that of its family — 1 here, a missing anchor being a fault of the project; see
+[exit codes](../cli/doctor.md#exit-codes). rbs adds nothing to standard error for the refusal itself; what came before it stays
 there — a warning printed earlier in the run, or the project's compilation under
 `generate client`. Here, the `layers` anchor was removed from `src/router.rs`
 before `rbs add cors --json --force`:

@@ -30,7 +30,7 @@ plan pour …/demo
 
   + clients/ts/client.ts   créé
 
-  1 fichier à écrire
+  1 à créer
 ✓ client engendré — clients/ts/client.ts porte 8 opérations
 ```
 

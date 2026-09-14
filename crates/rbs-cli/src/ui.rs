@@ -125,6 +125,25 @@ pub fn yellow(text: &str) -> String {
     style(text).yellow().to_string()
 }
 
+/// Ce qu'une commande a écrit, par ce qui est arrivé aux fichiers.
+///
+/// Le seul total mentait : `add cors` annonçait neuf fichiers à écrire puis se disait
+/// installé en trois, ne comptant que ceux qu'il avait créés.
+pub fn bilan(crees: usize, modifies: usize) -> String {
+    let pluriel = |n: usize| if n > 1 { "s" } else { "" };
+    let mut segments = Vec::new();
+    if crees > 0 {
+        segments.push(format!("{crees} créé{}", pluriel(crees)));
+    }
+    if modifies > 0 {
+        segments.push(format!("{modifies} modifié{}", pluriel(modifies)));
+    }
+    if segments.is_empty() {
+        return "aucun fichier".to_string();
+    }
+    segments.join(", ")
+}
+
 /// Accorde un décompte de fichiers : « 1 fichier », « 3 fichiers ».
 pub fn files(compte: usize) -> String {
     let pluriel = if compte > 1 { "s" } else { "" };
@@ -151,6 +170,14 @@ impl Write for Rompue {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn the_summary_separates_created_and_modified_files() {
+        assert_eq!(super::bilan(3, 6), "3 créés, 6 modifiés");
+        assert_eq!(super::bilan(1, 0), "1 créé");
+        assert_eq!(super::bilan(0, 1), "1 modifié");
+        assert_eq!(super::bilan(0, 0), "aucun fichier");
+    }
+
     use super::*;
 
     /// Ce que les trois puits du CLI attendent d'elle : écrire sur un tube refermé ne

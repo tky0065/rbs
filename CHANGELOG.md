@@ -110,6 +110,13 @@ between minor versions with no deprecation cycle.
   the codes are stable, and listed in the agents guide. An argument the parser refuses
   stays text, with exit code 2.
 
+- **A generated project compresses its responses.** The skeleton's `<rbs:layers>` block
+  now carries a `CompressionLayer`, and `tower-http` gains the `compression-gzip`
+  feature: `/api-docs/openapi.json`, which grows with every CRUD, and every list travel
+  gzipped to any client that accepts it. The default predicate leaves small bodies,
+  images and server-sent events alone. A project generated earlier keeps its router; the
+  upgrade note gives the lines to paste.
+
 ### Changed
 
 - **`rbs add jobs` and `rbs add scheduler` each carry one more anchor, and `schedules()`
@@ -190,6 +197,35 @@ between minor versions with no deprecation cycle.
   `…/reset-password#token=…` rather than `?token=…`: a browser never sends a fragment to a
   server, so the token stays out of access logs and `Referer` headers. The client reads it
   from `location.hash`.
+
+- **The exit code tells a script what kind of failure it is.** `1`: the project carries
+  a fault the command found or that stops it — `rbs doctor` finding something, a missing
+  or misplaced anchor, a migration that fails. `2`: the call is to be fixed — outside a
+  project, an unknown feature, a name already taken, a dirty working tree, a conflict
+  that `--force` would override — like the usage errors clap already reported with `2`.
+  `3`: the environment failed — an unreadable file, `docker` or `cargo` that cannot be
+  started, a database that does not answer, a CLI older than the project. Every failure
+  used to exit with `1`, so a CI could not tell `rbs doctor` finding a fault from
+  `rbs doctor` failing to run. `rbs test` keeps `cargo test`'s own code when a test
+  fails, and a script that only checks for a non-zero status sees no difference.
+
+- **Plans and summaries count created and modified files apart.** The plan footer reads
+  `3 à créer, 6 à modifier, 2 inchangés`, and the summary `✓ cors installée — 3 créés,
+  6 modifiés`: `rbs add cors` used to announce nine files to write, then call itself
+  installed in three, counting only the files it had created. `rbs generate` and
+  `rbs generate job` follow; the `--json` output is unchanged.
+
+- **`rbs doctor` reports a key missing from `.env` once.** The `.env` check already names
+  every key `.env.example` declares and `.env` lacks, with the line to add. The `auth`
+  and `mail` checks no longer fail a second time on the same `RBS_AUTH__SECRET` or
+  `RBS_MAIL__SMTP_PASSWORD`, with a different remedy, and `base` warns that it could not
+  check the database instead of failing on the missing `RBS_DATABASE__URL`. A key absent
+  from `.env.example` too is still reported by the feature's own check.
+
+- **The `jobs` queue records a job's outcome without reading its row back.**
+  `mark_done` and `retry_or_fail` issue a targeted `UPDATE`: `ActiveModel::update`
+  returned the whole row, payload included — through `RETURNING` on PostgreSQL and
+  SQLite, through one more `SELECT` on MySQL — for a model nobody read.
 
 ### Fixed
 
@@ -346,6 +382,20 @@ reads `timestamp` on MySQL and `timestamp_with_timezone_text` on SQLite, which i
   every emission now deletes the expired tokens of every account, and the migration adds
   `idx_one_time_tokens_expires_at` so that purge does not scan the table. A project
   migrated earlier creates the index by hand, as the upgrade note shows.
+
+- **`rbs dev` on a MySQL project names MySQL** when the database URL cannot be read, and
+  its remedy gives a `mysql://` URL instead of a PostgreSQL one.
+
+- **`contains` in a generated filter matches the value literally.** `%` and `_` went
+  into `LIKE` as wildcards: `{"title": {"contains": "%"}}` returned every row, while the
+  comment above claimed the value was escaped. `%`, `_` and `!` are now escaped, with an
+  explicit `ESCAPE '!'` that reads the same on the three engines. A feature generated
+  earlier keeps its `filter.rs`; the upgrade note gives the function to paste.
+
+- **The in-memory rate-limit counter no longer walks its table on every request under
+  load.** Once the table held 10,000 keys, the sweep ran on each hit and removed only
+  expired windows: with 10,000 clients active at once, every request walked the whole
+  table under the lock. The next sweep now waits for the table to double.
 
 ## [1.4.0] — 2026-09-11
 

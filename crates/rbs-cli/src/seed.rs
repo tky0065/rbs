@@ -184,6 +184,20 @@ fn launch(root: &Path) -> Result<(), Error> {
         })
 }
 
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            // `--force` lève le refus de la production : c'est l'appel qui change.
+            Self::PasUnProjet | Self::Production => Sortie::Usage,
+            Self::Acces(_) | Self::Cargo(_) => Sortie::Environnement,
+            Self::SansSeeds | Self::Env(_) | Self::SansUrl | Self::Seeds { .. } => Sortie::Faute,
+            Self::Metadata(cause) => cause.sortie(),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::cell::Cell;

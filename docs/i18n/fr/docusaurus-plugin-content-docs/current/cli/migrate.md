@@ -200,4 +200,5 @@ erreur : la crate migration a échoué (code 1)
 `rbs migrate new` est insensible aux deux derniers cas : elle ne lit jamais le `.env` et
 n'ouvre jamais de connexion. Elle a toujours besoin d'un projet.
 
-Chacun de ces cas sort en code 1.
+Hors d'un projet, le code de sortie est 2 — un appel à corriger ; les deux autres cas sortent
+en 1 — une faute du projet. Voir les [codes de sortie](./doctor.md#codes-de-sortie).

@@ -51,8 +51,8 @@ plan pour …/demo
   + migration/src/m20260913_132217_create_schedules.rs   créé
   ~ AGENTS.md                                            modifié
 
-  22 fichiers à écrire
-✓ scheduler installée — 15 fichiers
+  16 à créer, 6 à modifier
+✓ scheduler installée — 16 créés, 6 modifiés
 
   rbs migrate up, puis `rbs generate job <nom> --every "<cron>"` pour déclarer une échéance dans src/modules/scheduler/mod.rs — les expressions sont évaluées en UTC
 ```

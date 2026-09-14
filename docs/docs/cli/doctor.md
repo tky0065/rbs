@@ -189,7 +189,8 @@ and the remedy says so: `rbs add` does not replay a feature the manifest already
 `--json` writes the same findings as a single document on standard output — nothing else
 goes there, no colour, no glyphs — so a CI step can name the check that failed instead of
 grepping for a cross. The exit code keeps the meaning it already had: 0 when the project is
-healthy, 1 when a check failed.
+healthy, 1 when a check failed — 2 or 3 when the diagnosis could not run, see
+[exit codes](#exit-codes).
 
 ```text
 $ rbs doctor --json
@@ -308,7 +309,7 @@ plan pour /private/tmp/rbs-demo/demo
   ~ src/openapi.rs   modifié
   ~ src/state.rs     modifié
 
-  2 fichiers à écrire
+  2 à modifier
 
 ✓ 2 ancres reposées : openapi, state_init
 
@@ -344,7 +345,7 @@ $ rbs doctor --fix
 erreur : le working tree n'est pas propre : src/openapi.rs, src/state.rs — commitez, ou relancez avec --force
 ```
 
-Exit status 1. Same guard as [`rbs add`](./add.md), [`rbs generate`](./generate.md) and
+Exit status 2, a call to correct. Same guard as [`rbs add`](./add.md), [`rbs generate`](./generate.md) and
 [`rbs upgrade`](./upgrade.md): what the repair writes has to stay distinguishable from your
 own work in the next `git diff`. Commit, or pass `--force`.
 
@@ -369,7 +370,7 @@ plan pour /private/tmp/rbs-demo/demo
 
   ~ src/seeds/main.rs   modifié
 
-  1 fichier à écrire
+  1 à modifier
 
 ✓ 1 ancre reposée : seeds
 attention : layers n'a pas été reposée — la ligne d'accroche `.merge(docs)` est introuvable dans src/router.rs
@@ -461,4 +462,18 @@ $ rbs doctor
 erreur : cette commande attend un projet rbs : aucun Cargo.toml portant [package.metadata.rbs] au-dessus d'ici
 ```
 
-Exit status 1.
+Exit status 2.
+
+## Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | The project is healthy — for the other commands, the command did what it announced. |
+| 1 | A fault in the project: a check failed, or the project stopped the command — an anchor gone, a manifest that does not parse, a `.env` without a database URL. |
+| 2 | A call to correct: run outside a project, an unknown name or feature, a dirty working tree or a conflict without `--force`, a prerequisite feature missing — the code clap already gives a mistyped flag. |
+| 3 | The environment failed: a file that cannot be read or written, a tool that cannot be launched, a service that does not answer, a CLI older than the project. |
+
+`rbs doctor` needs the difference most: a 1 says the diagnosis ran and found something, a 2
+or a 3 that it could not run. The contract holds for every command — `new`, `add`,
+`generate`, `migrate`, `seed`, `dev`, `routes`, `openapi`, `upgrade` — with one exception:
+when a test fails, [`rbs test`](./test.md) passes on the code `cargo test` returned.

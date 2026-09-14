@@ -42,9 +42,11 @@ disent la même chose, et la forme courte est celle que l'on écrit le plus souv
 | `contains` | `string`, `text` | sous-chaîne, `LIKE '%…%'` |
 | `is_null` | toute colonne | `true` exige une colonne nulle, `false` une colonne renseignée |
 
-`contains` suit la collation du moteur : PostgreSQL distingue la casse, MySQL l'ignore avec
-sa collation par défaut. `ILIKE` trancherait, mais sea-orm ne l'expose que par `PgExpr`, et
-rbs engendre aussi pour MySQL et SQLite.
+`contains` cherche sa valeur à la lettre : `%` et `_`, les deux jokers de `LIKE`, sont
+échappés, si bien que `{ "contains": "50%" }` trouve `50%` et non toute la table. Il suit la
+collation du moteur : PostgreSQL distingue la casse, MySQL l'ignore avec sa collation par
+défaut. `ILIKE` trancherait, mais sea-orm ne l'expose que par `PgExpr`, et rbs engendre
+aussi pour MySQL et SQLite.
 
 ## Swagger dit les deux formes
 
