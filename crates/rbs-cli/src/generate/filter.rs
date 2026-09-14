@@ -309,7 +309,9 @@ mod tests {
         for condition in [
             ".add(compare(Column::Views, filtre.views.as_ref()))",
             ".add(matches(Column::Title, filtre.title.as_ref()))",
-            "colonne.contains(v)",
+            // `contains` échappe ses jokers : `colonne.contains` les laissait jouer.
+            "colonne.like(motif(v))",
+            "LikeExpr::new(format!(\"%{echappee}%\")).escape('!')",
             "colonne.is_not_null()",
             ".order_by_desc(",
             ".order_by_asc(",
