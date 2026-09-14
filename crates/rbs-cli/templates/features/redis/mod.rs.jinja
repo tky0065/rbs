@@ -36,7 +36,12 @@ impl Cache {
     pub fn new(config: &Config) -> anyhow::Result<Self> {
         let pool = deadpool_redis::Config::from_url(&config.url)
             .create_pool(Some(Runtime::Tokio1))
-            .with_context(|| format!("pool Redis inconstructible pour `{}`", config.url))?;
+            .with_context(|| {
+                format!(
+                    "pool Redis inconstructible pour `{}`",
+                    rbs_core::db::redact_url(&config.url)
+                )
+            })?;
 
         Ok(Self {
             pool,

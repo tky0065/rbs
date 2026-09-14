@@ -21,36 +21,30 @@ pub async fn find_by_email(db: &impl ConnectionTrait, email: &str) -> Result<Opt
         .await?)
 }
 
-/// Le refus d'une adresse déjà prise, dit sans la répéter.
-///
-/// Citer l'adresse la confirme à qui la soumet, dans la réponse comme dans le journal :
-/// l'inscription deviendrait l'oracle d'énumération que le hash témoin de `login` écarte
-/// de l'autre côté.
-{%- if lang == "en" %}
-pub const ADRESSE_PRISE: &str = "this address is already registered";
-{%- else %}
-pub const ADRESSE_PRISE: &str = "cette adresse est déjà inscrite";
-{%- endif %}
-
 /// Inscrit un utilisateur, le rôle et les horodatages venant des défauts de la table.
 ///
-/// La violation de la contrainte d'unicité devient un conflit plutôt qu'une erreur
-/// interne : sans cela, deux inscriptions simultanées de la même adresse rendraient une
-/// 409 et une 500 selon celle qui gagne la course.
-pub async fn create(db: &impl ConnectionTrait, email: &str, password_hash: &str) -> Result<Model> {
+/// `None` quand l'adresse est déjà prise. Deux inscriptions simultanées de la même
+/// adresse franchissent toutes deux la lecture qui précède, et seule la contrainte
+/// d'unicité les départage : la perdante n'est pas une erreur interne, elle reçoit la
+/// même réponse que la gagnante.
+pub async fn create(
+    db: &impl ConnectionTrait,
+    email: &str,
+    password_hash: &str,
+) -> Result<Option<Model>> {
     let nouveau = user::ActiveModel {
         email: Set(email.to_owned()),
         password_hash: Set(password_hash.to_owned()),
         ..Default::default()
     };
 
-    nouveau
-        .insert(db)
-        .await
-        .map_err(|error| match error.sql_err() {
-            Some(SqlErr::UniqueConstraintViolation(_)) => Error::Conflict(ADRESSE_PRISE.to_owned()),
-            _ => Error::from(error),
-        })
+    match nouveau.insert(db).await {
+        Ok(cree) => Ok(Some(cree)),
+        Err(error) if matches!(error.sql_err(), Some(SqlErr::UniqueConstraintViolation(_))) => {
+            Ok(None)
+        }
+        Err(error) => Err(Error::from(error)),
+    }
 }
 
 /// Remplace le hash du mot de passe.
@@ -67,14 +61,17 @@ pub async fn set_password(db: &impl ConnectionTrait, id: Uuid, hash: &str) -> Re
     Ok(())
 }
 
-/// Date la vérification de l'adresse.
+/// Date la vérification de l'adresse, si elle ne l'est pas déjà.
 ///
 /// La date et non un booléen : savoir *quand* une adresse a été prouvée est ce qui
-/// permet, un jour, d'en redemander la preuve aux plus anciennes.
+/// permet, un jour, d'en redemander la preuve aux plus anciennes. La première preuve est
+/// donc la seule qui s'écrit — la condition est dans l'`UPDATE`, pour qu'un jeton émis
+/// avant la vérification et consommé après ne la rajeunisse pas non plus.
 pub async fn mark_verified(db: &impl ConnectionTrait, id: Uuid) -> Result<()> {
     Entity::update_many()
         .col_expr(user::Column::EmailVerifiedAt, Expr::current_timestamp())
         .filter(user::Column::Id.eq(id))
+        .filter(user::Column::EmailVerifiedAt.is_null())
         .exec(db)
         .await?;
 

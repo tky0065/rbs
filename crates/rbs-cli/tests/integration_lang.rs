@@ -148,8 +148,10 @@ fn an_english_project_answers_its_clients_in_english() {
         None,
         Some(&credentials(EMAIL, MOT_DE_PASSE)),
     );
-    assert_eq!(statut, 201, "l'inscription doit aboutir : {corps}");
+    assert_eq!(statut, 202, "l'inscription doit aboutir : {corps}");
 
+    // Une adresse prise rend le même 202, sans message à traduire : le conflit que ce
+    // parcours éprouve en anglais est celui du CRUD, plus bas.
     let (statut, corps) = request(
         port,
         "POST",
@@ -157,10 +159,10 @@ fn an_english_project_answers_its_clients_in_english() {
         None,
         Some(&credentials(EMAIL, MOT_DE_PASSE)),
     );
-    assert_eq!(statut, 409, "la même adresse doit être refusée : {corps}");
-    assert_eq!(corps["title"], "Conflict");
-    assert_eq!(corps["detail"], "this address is already registered");
-    assert_anglais(&corps);
+    assert_eq!(
+        statut, 202,
+        "la même adresse doit rendre le même 202 : {corps}"
+    );
 
     let (statut, corps) = request(
         port,

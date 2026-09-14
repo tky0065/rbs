@@ -34,9 +34,10 @@ pub async fn change_password(
 }
 
 // region: forgot_password
-// L'envoi part détaché, et le statut est 202 quoi qu'il arrive. Attendre le SMTP
-// rendrait par le temps de réponse ce que le code de statut refuse de dire : quelques
-// centaines de millisecondes séparent une adresse inscrite d'une adresse inconnue.
+// Le statut est 202 quoi qu'il arrive, et seule la lecture du compte est attendue :
+// l'émission du jeton et l'envoi partent détachés. Les attendre rendrait par le temps
+// de réponse ce que le code de statut refuse de dire — une adresse inconnue n'écrit
+// rien et n'envoie rien.
 #[utoipa::path(
     post,
     path = "/auth/forgot-password",

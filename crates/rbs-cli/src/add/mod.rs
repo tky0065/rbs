@@ -1093,7 +1093,10 @@ mod tests {
 
         let planned = plan_for(&options(&root, "ci")).expect("le plan doit se calculer");
 
-        assert_eq!(planned.files, [".github/workflows/ci.yml"]);
+        assert_eq!(
+            planned.files,
+            [".github/workflows/ci.yml", ".github/dependabot.yml"]
+        );
     }
 
     /// Trois états, trois comportements. Le premier : le projet a son compose, `add

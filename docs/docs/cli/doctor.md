@@ -169,7 +169,7 @@ misbehaves.
 | `webhooks` | The line registering `Delivery` in `// <rbs:jobs>` of `src/modules/jobs/mod.rs` — `src/jobs/mod.rs` before 1.3.0, where the line names `crate::webhooks` rather than `crate::modules::webhooks`. Without it, every delivery retries and then fails. |
 | `audit` | The `create_audit_log` migration, declared and registered in `migration/src/lib.rs`. |
 | `docker` | `config/production.toml`, the profile the compose's `api` service selects with `RBS_ENV: production` — the one that turns `/docs` off. |
-| `ci` | `.github/workflows/ci.yml`, the only file the fragment writes. |
+| `ci` | `.github/workflows/ci.yml`, the workflow GitHub runs. The fragment's `.github/dependabot.yml` is left unchecked: without it the CI still runs, its actions just stop being bumped. |
 
 A file one of these fragments wrote and that has since disappeared is restored from Git,
 and the remedy says so: `rbs add` does not replay a feature the manifest already declares.

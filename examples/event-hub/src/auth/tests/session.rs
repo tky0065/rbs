@@ -47,62 +47,109 @@ async fn me_with_an_unreadable_token_returns_401() {
     assert_eq!(body["status"], 401, "{body}");
 }
 
+/// L'inscription rend 202 sans corps, et le compte existe aussitôt : un client se
+/// connecte sans attendre.
+///
+/// Sans corps, ni le hash ni le mot de passe reçu n'ont de chemin vers le client.
 #[tokio::test]
 #[ignore = "joint la base du projet"]
-async fn registration_returns_201_and_the_created_profile() {
+async fn registration_returns_202_without_a_body() {
     let api = application().await;
     let email = fresh_email();
 
     let (status, body) = register(&api, &email).await;
 
-    assert_eq!(status, StatusCode::CREATED, "{body}");
-    assert_eq!(body["email"], email, "{body}");
-    assert_eq!(body["role"], "user", "{body}");
-    assert!(body["id"].is_string(), "{body}");
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    assert_eq!(body, Value::Null, "l'inscription rend un corps : {body}");
+    assert_eq!(account(&email).await.email, email);
+    login(&api, &email, PASSWORD).await;
 }
 
-/// Ni le hash ni le mot de passe reçu ne repartent vers le client.
+/// Une adresse prise rend le même 202 qu'une adresse neuve, et n'inscrit rien : un statut
+/// ou un corps qui différerait dirait à qui essaie plusieurs adresses lesquelles sont
+/// inscrites.
 #[tokio::test]
 #[ignore = "joint la base du projet"]
-async fn the_hash_does_not_appear_in_the_response() {
+async fn a_taken_address_returns_the_same_202_and_creates_nothing() {
     let api = application().await;
-
-    let (_, body) = register(&api, &fresh_email()).await;
-
-    let texte = body.to_string();
-    assert!(
-        !texte.contains("$argon2"),
-        "hash dans la réponse :\n{texte}"
-    );
-    assert!(
-        !texte.contains(PASSWORD),
-        "mot de passe dans la réponse :\n{texte}"
-    );
-    assert!(
-        !texte.contains("password"),
-        "champ de mot de passe dans la réponse :\n{texte}"
-    );
-}
-
-/// Le 409 dit qu'il refuse, sans redire quoi.
-///
-/// Une réponse qui cite l'adresse la confirme à qui la soumet : l'inscription
-/// deviendrait l'oracle d'énumération que la connexion s'applique à ne pas être.
-#[tokio::test]
-#[ignore = "joint la base du projet"]
-async fn an_email_already_taken_returns_409_without_repeating_it() {
-    let api = application().await;
+    let db = connection().await;
     let email = fresh_email();
 
-    let (premier, body) = register(&api, &email).await;
-    assert_eq!(premier, StatusCode::CREATED, "{body}");
+    let (premier, corps_premier) = register(&api, &email).await;
+    let (second, corps_second) = register(&api, &email).await;
 
-    let (second, body) = register(&api, &email).await;
+    assert_eq!(premier, StatusCode::ACCEPTED, "{corps_premier}");
+    assert_eq!(second, StatusCode::ACCEPTED, "{corps_second}");
+    assert_eq!(
+        corps_premier, corps_second,
+        "les deux réponses se distinguent"
+    );
 
-    assert_eq!(second, StatusCode::CONFLICT, "{body}");
+    let comptes = crate::auth::model::user::Entity::find()
+        .filter(crate::auth::model::user::Column::Email.eq(&email))
+        .count(&db)
+        .await
+        .expect("le comptage aboutit");
+    assert_eq!(comptes, 1, "l'adresse prise a inscrit un second compte");
+}
+
+/// Une seconde inscription ne touche pas au compte : un tiers qui connaît l'adresse ne
+/// remplace pas le mot de passe de son titulaire par le sien.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_taken_address_keeps_its_password() {
+    const AUTRE: &str = "le mot de passe d'un tiers";
+
+    let api = application().await;
+    let email = fresh_email();
+    register(&api, &email).await;
+
+    let (statut, corps) = call(
+        &api,
+        post_json(
+            "/auth/register",
+            json!({ "email": email, "password": AUTRE }),
+        ),
+    )
+    .await;
+    assert_eq!(statut, StatusCode::ACCEPTED, "{corps}");
+
+    login(&api, &email, PASSWORD).await;
+    let (refus, corps) = authenticate(&api, &email, AUTRE).await;
+    assert_eq!(refus, StatusCode::UNAUTHORIZED, "{corps}");
+}
+
+/// Le temps de réponse ne dit pas davantage que le statut.
+///
+/// Sans hachage sur le chemin « adresse prise », la réponse tomberait en quelques
+/// millisecondes là où Argon2 en coûte des dizaines. Le rapport toléré est large, pour la
+/// même raison qu'à la connexion.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_taken_address_costs_the_same_time_as_a_new_one() {
+    let api = application().await;
+    let prise = fresh_email();
+    register(&api, &prise).await;
+
+    let inscription = |email: String| {
+        post_json(
+            "/auth/register",
+            json!({ "email": email, "password": PASSWORD }),
+        )
+    };
+
+    let depart = Instant::now();
+    call(&api, inscription(fresh_email())).await;
+    let neuve = depart.elapsed();
+
+    let depart = Instant::now();
+    call(&api, inscription(prise)).await;
+    let deja_prise = depart.elapsed();
+
     assert!(
-        !body.to_string().contains(&email),
-        "le refus répète l'adresse soumise : {body}"
+        deja_prise * 5 >= neuve,
+        "une adresse prise répond en {deja_prise:?} contre {neuve:?} pour une adresse \
+         neuve : l'écart énumère les comptes"
     );
 }
 
@@ -119,10 +166,18 @@ async fn registration_lowercases_the_address() {
     let api = application().await;
     let base = fresh_email();
 
-    let (status, profile) = register(&api, &base.to_uppercase()).await;
+    let db = connection().await;
 
-    assert_eq!(status, StatusCode::CREATED, "{profile}");
-    assert_eq!(profile["email"], base);
+    let (status, body) = register(&api, &base.to_uppercase()).await;
+
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    assert!(
+        crate::auth::repository::find_by_email(&db, &base)
+            .await
+            .expect("la lecture aboutit")
+            .is_some(),
+        "l'adresse n'est pas inscrite en minuscules"
+    );
 }
 
 /// Ce que la base voit d'une adresse : ni casse ni blancs, quel que soit le parcours
@@ -147,16 +202,27 @@ async fn login_ignores_the_case_of_the_address() {
     assert_eq!(status, StatusCode::OK, "{paire}");
 }
 
+/// La même adresse dans une autre casse est la même adresse : le même 202, et aucun
+/// second compte.
 #[tokio::test]
 #[ignore = "joint la base du projet"]
-async fn an_address_taken_in_another_case_is_a_conflict() {
+async fn an_address_taken_in_another_case_is_the_same_account() {
     let api = application().await;
+    let db = connection().await;
     let email = fresh_email();
     register(&api, &email).await;
 
     let (status, body) = register(&api, &email.to_uppercase()).await;
 
-    assert_eq!(status, StatusCode::CONFLICT, "{body}");
+    assert_eq!(status, StatusCode::ACCEPTED, "{body}");
+    for (adresse, attendus) in [(email.clone(), 1), (email.to_uppercase(), 0)] {
+        let comptes = crate::auth::model::user::Entity::find()
+            .filter(crate::auth::model::user::Column::Email.eq(&adresse))
+            .count(&db)
+            .await
+            .expect("le comptage aboutit");
+        assert_eq!(comptes, attendus, "comptes inscrits sous `{adresse}`");
+    }
 }
 
 /// Les deux échecs sont indiscernables : un corps qui différerait dirait à un attaquant
@@ -226,13 +292,8 @@ async fn an_unknown_email_costs_the_same_time_as_a_wrong_password() {
 /// Inscrit une adresse neuve et ouvre une session : l'identifiant du compte et sa paire.
 async fn login_as(api: &Router) -> (Uuid, Value) {
     let email = fresh_email();
-    let (_, profile) = register(api, &email).await;
-    let id = Uuid::parse_str(
-        profile["id"]
-            .as_str()
-            .expect("le profil porte un identifiant"),
-    )
-    .expect("identifiant lisible");
+    register(api, &email).await;
+    let id = account(&email).await.id;
 
     let (status, paire) = authenticate(api, &email, PASSWORD).await;
     assert_eq!(status, StatusCode::OK, "{paire}");
@@ -746,16 +807,9 @@ fn access_for(paire: &Value) -> String {
 /// la table, et le rôle ne voyage que dans un jeton émis après coup.
 async fn login_as_admin(api: &Router, db: &DatabaseConnection) -> Value {
     let email = fresh_email();
-    let (_, profile) = register(api, &email).await;
-    let id = Uuid::parse_str(
-        profile["id"]
-            .as_str()
-            .expect("le profil porte un identifiant"),
-    )
-    .expect("identifiant lisible");
+    register(api, &email).await;
 
-    let compte = crate::auth::model::user::Entity::find_by_id(id)
-        .one(db)
+    let compte = crate::auth::repository::find_by_email(db, &email)
         .await
         .expect("la table doit être interrogeable")
         .expect("le compte inscrit doit exister");
@@ -883,13 +937,14 @@ async fn a_demoted_admin_is_refused_with_its_old_token() {
 async fn me_returns_the_callers_profile() {
     let api = application().await;
     let email = fresh_email();
-    let (_, inscrit) = register(&api, &email).await;
+    register(&api, &email).await;
+    let inscrit = account(&email).await;
     let (_, paire) = authenticate(&api, &email, PASSWORD).await;
 
     let (status, profile) = call(&api, with_token("GET", "/auth/me", &access_for(&paire))).await;
 
     assert_eq!(status, StatusCode::OK, "{profile}");
-    assert_eq!(profile["id"], inscrit["id"], "{profile}");
+    assert_eq!(profile["id"], inscrit.id.to_string(), "{profile}");
     assert_eq!(profile["email"], email, "{profile}");
     assert_eq!(profile["role"], "user", "{profile}");
 }

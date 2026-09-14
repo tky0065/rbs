@@ -68,6 +68,7 @@ plan pour …/demo
   + src/auth/controller/verification.rs                    créé
   + templates/mail/reinitialisation.html                   créé
   + templates/mail/verification.html                       créé
+  + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
   + src/auth/tests/session.rs                              créé
@@ -79,8 +80,8 @@ plan pour …/demo
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  46 fichiers à écrire
-✓ auth installée — 34 fichiers
+  47 fichiers à écrire
+✓ auth installée — 35 fichiers
 
   rbs migrate up
 ```
@@ -184,17 +185,22 @@ would never have printed.
 From the second terminal, create an account and exchange it for a token:
 
 ```bash
-curl -s -X POST http://127.0.0.1:8080/auth/register \
+curl -i -X POST http://127.0.0.1:8080/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"email":"alice@example.com","password":"un-mot-de-passe-long"}'
 ```
 
 ```text
-{"id":"01a08583-7b76-7a01-90a8-c526d25cb1e3","email":"alice@example.com","role":"user","created_at":"2026-09-09T09:33:01.713220Z"}
+HTTP/1.1 202 Accepted
+content-length: 0
 ```
 
-Registration always produces `"role":"user"` — proof that no route on this page can hand
-out `admin` for the asking; the account you get here can read, but not write, `posts`.
+202 without a body, whether or not the address was already taken: the answer itself does
+not say which — a login with the password just sent still would, as the auth guide
+explains —, and a taken address gets an email warning its holder instead of a second account.
+The account exists as soon as the 202 arrives, and it is always a `user` — no route on
+this page hands out `admin` for the asking; the account you get here can read, but not
+write, `posts`.
 
 ```bash
 TOKEN=$(curl -s -X POST http://127.0.0.1:8080/auth/login \
@@ -304,7 +310,7 @@ content-length: 0
 
 202 whether or not the address exists — check the Mailpit tab and there is a message
 titled *Réinitialisation de votre mot de passe*, with a link shaped like
-`http://localhost:3000/reset-password?token=…`. Copy the token out of it:
+`http://localhost:3000/reset-password#token=…`. Copy the token out of it:
 
 ```bash
 curl -i -X POST http://127.0.0.1:8080/auth/reset-password \
@@ -318,7 +324,7 @@ HTTP/1.1 204 No Content
 
 204, and every session of the account is revoked again — logging in from here on needs
 the password just set. Registration also opened a verification token, back in `## 1`,
-before this page ever answered the first `curl`; Mailpit already holds that one too,
+in a task detached from its answer; Mailpit already holds that one too,
 titled *Confirmez votre adresse*. A link goes stale after `verification_ttl_secs`, so a
 real client leans on the other route to get a fresh one:
 

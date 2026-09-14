@@ -134,6 +134,7 @@ fn the_migration_creates_the_one_time_tokens_table() {
         "OneTimeTokens::ConsumedAt",
         "Users::EmailVerifiedAt",
         "idx_one_time_tokens_token_hash",
+        "idx_one_time_tokens_expires_at",
     ] {
         assert!(
             source.contains(attendu),
@@ -142,7 +143,7 @@ fn the_migration_creates_the_one_time_tokens_table() {
     }
 }
 
-/// Le repository des jetons est déposé, et la purge y est, prête à être branchée.
+/// Le repository des jetons est déposé, purge comprise.
 #[test]
 fn the_one_time_token_repository_is_written() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
@@ -514,6 +515,25 @@ fn the_auth_tests_of_the_generated_project_pass() {
         rendu.contains("auth::tests::") && rendu.contains(" ... ok"),
         "aucun test du fragment auth n'a tourné :\n{rendu}"
     );
+
+    // Nommés : ce sont eux qui prouvent qu'aucun parcours public ne dit, par son statut,
+    // son temps ou son lien, si une adresse est inscrite. Un test renommé ou déplacé
+    // laisserait la suite verte sans eux.
+    for test in [
+        "auth::tests::a_link_carries_its_token_in_the_fragment",
+        "auth::tests::session::registration_returns_202_without_a_body",
+        "auth::tests::session::a_taken_address_returns_the_same_202_and_creates_nothing",
+        "auth::tests::session::a_taken_address_keeps_its_password",
+        "auth::tests::session::a_taken_address_costs_the_same_time_as_a_new_one",
+        "auth::tests::verification::a_verified_address_is_not_sent_a_new_token",
+        "auth::tests::verification::verifying_again_keeps_the_first_date",
+        "auth::tests::password::an_emission_purges_the_expired_tokens_of_every_account",
+    ] {
+        assert!(
+            rendu.contains(&format!("test {test} ... ok")),
+            "`{test}` n'a pas été joué :\n{rendu}"
+        );
+    }
 }
 
 /// Les mêmes tests contre SQLite, qui ne compare pas les dates comme PostgreSQL.
@@ -715,7 +735,7 @@ fn the_hash_does_not_appear_in_the_server_logs() {
     let journal = serveur.journal();
 
     assert_eq!(
-        statut, 201,
+        statut, 202,
         "l'inscription doit aboutir, sans quoi aucun hash n'a été calculé :\n{corps}\n{journal}"
     );
     // Sans cette ligne, un journal vide — serveur muet, capture manquée — ferait passer
@@ -765,7 +785,7 @@ fn the_auth_journey_plays_end_to_end() {
         None,
         Some(&credentials(EMAIL)),
     );
-    assert_eq!(statut, 201, "l'inscription doit aboutir : {corps}");
+    assert_eq!(statut, 202, "l'inscription doit aboutir : {corps}");
 
     let (statut, premiere) = request(port, "POST", "/auth/login", None, Some(&credentials(EMAIL)));
     assert_eq!(
@@ -916,7 +936,7 @@ fn a_guarded_route_rejects_an_authenticated_user() {
         None,
         Some(&credentials(EMAIL)),
     );
-    assert_eq!(statut, 201, "l'inscription doit aboutir : {corps}");
+    assert_eq!(statut, 202, "l'inscription doit aboutir : {corps}");
 
     let (statut, paire) = request(port, "POST", "/auth/login", None, Some(&credentials(EMAIL)));
     assert_eq!(statut, 200, "la connexion doit rendre une paire : {paire}");

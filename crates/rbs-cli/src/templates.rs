@@ -765,6 +765,28 @@ mod tests {
             .source
     }
 
+    /// L'erreur de construction du pool Redis part dans les journaux : l'URL y paraît
+    /// masquée par `rbs-core`, jamais telle que `[cache] url` la porte, mot de passe compris.
+    #[test]
+    fn the_redis_pool_error_masks_the_url_password() {
+        for (fragment, fichier, champ) in [
+            ("redis", "mod.rs.jinja", "config.url"),
+            ("rate-limit", "counter.rs.jinja", "cache.url"),
+        ] {
+            let path = Path::new(RACINE_FEATURES).join(fragment).join(fichier);
+            let rendu = render_fragment(&path, feature_context(&["redis"]));
+
+            assert!(
+                !rendu.contains(&format!("`{{}}`\", {champ})")),
+                "{fragment}/{fichier} cite l'URL en clair :\n{rendu}"
+            );
+            assert!(
+                rendu.contains(&format!("rbs_core::db::redact_url(&{champ})")),
+                "{fragment}/{fichier} ne masque pas l'URL :\n{rendu}"
+            );
+        }
+    }
+
     /// Un mot de passe sans borne haute fait hacher en Argon2 un corps de plusieurs
     /// mégaoctets : la borne est ce qui sépare une API d'un amplificateur.
     #[test]
@@ -970,8 +992,7 @@ mod tests {
     }
 
     /// Les messages que les fragments rendent au client, dans leur version française.
-    const MESSAGES_FRANCAIS: [&str; 7] = [
-        "cette adresse est déjà inscrite",
+    const MESSAGES_FRANCAIS: [&str; 6] = [
         "un motif d'événement ne peut pas être vide",
         "une URL de webhook doit être en http ou en https",
         "une URL de webhook doit être en https",
@@ -1120,22 +1141,18 @@ mod tests {
         appel
     }
 
-    /// Un 409 qui cite l'adresse la confirme à qui l'a soumise, dans la réponse comme
-    /// dans le journal : l'inscription devient l'oracle d'énumération que le hash témoin
-    /// de `login` écarte de l'autre côté.
+    /// L'inscription ne rend aucun 409 : un refus propre aux adresses prises, même muet
+    /// sur l'adresse, dit à qui en essaie plusieurs lesquelles sont inscrites — l'oracle
+    /// d'énumération que le hash témoin de `login` écarte de l'autre côté.
     #[test]
-    fn no_conflict_of_the_auth_fragment_echoes_the_address_it_refuses() {
+    fn the_auth_registration_answers_no_conflict() {
         for fichier in ["service/session.rs.jinja", "repository/user.rs.jinja"] {
             let source = read(&Path::new(RACINE_FEATURES).join("auth").join(fichier));
 
-            for (debut, _) in source.match_indices("Error::Conflict") {
-                let construction = call_at(&source, debut);
-
-                assert!(
-                    !construction.contains("email"),
-                    "{fichier} répète l'adresse refusée dans son 409 :\n{construction}"
-                );
-            }
+            assert!(
+                !source.contains("Error::Conflict"),
+                "{fichier} rend un conflit à l'inscription :\n{source}"
+            );
         }
     }
 
@@ -1439,12 +1456,54 @@ mod tests {
             .files()
             .expect("les templates embarquées doivent se lire");
 
-        let destinations: Vec<String> = files
+        let mut destinations: Vec<String> = files
             .iter()
             .map(|file| file.destination.to_string_lossy().into_owned())
             .collect();
+        destinations.sort();
 
-        assert_eq!(destinations, [".github/workflows/ci.yml"]);
+        assert_eq!(
+            destinations,
+            [".github/dependabot.yml", ".github/workflows/ci.yml"]
+        );
+    }
+
+    /// Un tag se déplace sous les pieds du projet, un SHA non : chaque action de la CI
+    /// engendrée est épinglée par le sien, et Dependabot, déposé avec elle, en propose les
+    /// montées.
+    #[test]
+    fn every_action_of_the_generated_ci_is_pinned_by_a_sha() {
+        let path = Path::new(RACINE_FEATURES).join("ci/.github/workflows/ci.yml.jinja");
+
+        for database in ["postgres", "mysql"] {
+            let rendu = render_fragment(
+                &path,
+                context! { database => database, ..feature_context(&[]) },
+            );
+            let actions: Vec<&str> = rendu
+                .lines()
+                .filter_map(|ligne| {
+                    ligne
+                        .trim_start()
+                        .trim_start_matches("- ")
+                        .strip_prefix("uses:")
+                })
+                .map(str::trim)
+                .collect();
+
+            assert_eq!(actions.len(), 3, "sur {database} :\n{rendu}");
+            for action in actions {
+                let sha = action
+                    .split_once('@')
+                    .map(|(_, reste)| reste.split_whitespace().next().unwrap_or_default())
+                    .unwrap_or_default();
+
+                assert!(
+                    sha.len() == 40 && sha.bytes().all(|octet| octet.is_ascii_hexdigit()),
+                    "`{action}` n'est pas épinglée par un SHA sur {database}"
+                );
+            }
+        }
     }
 
     #[test]

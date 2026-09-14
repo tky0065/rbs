@@ -14,6 +14,10 @@ between minor versions with no deprecation cycle.
 
 ### Added
 
+- **`rbs_core::db::redact_url`** returns a connection URL with its password replaced by
+  `***` — the masking `db::connect` already applied to its own errors. The `redis` and
+  `rate-limit` fragments call it to quote `[cache] url` in a log; any other URL of a
+  project that carries a secret can do the same.
 - **`rbs generate crud` and `rbs generate feature` take `--singular <NAME>`** for the
   cases the singularisation heuristic gets wrong: `rbs generate crud news` used to name
   its types `CreateNew` and its bindings `new`, OpenAPI schemas and TypeScript interfaces
@@ -140,10 +144,8 @@ between minor versions with no deprecation cycle.
   explicit.
 - **The `auth` controllers no longer send email themselves.** A single `notify` helper in
   the service layer renders and dispatches every message; `verification::send_link` and
-  `password::send_reset_link` wrap the existing `request` and `request_reset`, and
-  `service::register` now receives the mailer and the flow settings. Responses do not
-  change — 201 on `register`, 202 on `forgot-password` and `resend-verification`, same
-  subjects, templates and links. A render that fails is logged once as « préparation du
+  `password::send_reset_link` carry the emissions, and `service::register` now receives
+  the mailer and the flow settings. Subjects and templates do not change. A render that fails is logged once as « préparation du
   courriel échouée » with a `gabarit` field, instead of one message per flow. Only a
   fresh `rbs add auth` writes the new layout; an existing project keeps its own.
 - **Error responses speak the project's language, and `--lang` now covers them.** A
@@ -156,8 +158,7 @@ between minor versions with no deprecation cycle.
   response descriptions of the OpenAPI document in it (`RBS_SERVER__LANG` overrides it
   there), and `rbs add` and `rbs generate crud` read it — from `config/default.toml`
   alone, never from the environment — to write the messages they hand to the client
-  (`"this address is already registered"`, `"too many requests: try again later"`,
-  `"this value is already taken"`…). `rbs new --lang` writes it next to
+  (`"too many requests: try again later"`, `"this value is already taken"`…). `rbs new --lang` writes it next to
   `[package.metadata.rbs] lang`, which now only decides the language of `AGENTS.md`.
   `Error::Domain` keeps its `code` as `title`, validation codes stay `validator`'s own;
   logs, code comments, emails and per-operation OpenAPI texts stay in French. **A French
@@ -168,7 +169,47 @@ between minor versions with no deprecation cycle.
   `[server]` — the runtime and every later `add` and `generate` follow it — then
   translate by hand the messages already generated in `src/`.
 
+- **`POST /auth/register` answers 202 without a body, whether the address is new or
+  taken.** It used to answer 201 with the profile, and 409 — before hashing — for a taken
+  address: the status, and the response time, told whoever tried several addresses which
+  ones were registered. Argon2 now runs in both branches. A new address still has its
+  account written before the answer, so a client logs in right away; a taken one is left
+  untouched, and its holder receives `templates/mail/inscription.html`. This holds for new
+  projects: a project generated earlier keeps its code, and the upgrade note lists the
+  files to take from the fragment. The answer alone no longer tells; a login with the
+  submitted password still does, since an unverified account can log in — the auth guide
+  says what would close it.
+
+- **`forgot-password`, `resend-verification` and registration emit their tokens in a
+  detached task.** The request only looks the account up; the purge, the invalidation, the
+  token write and the email rendering happen after the answer, their failures logged with
+  the account id — awaiting those writes let the response time say whether an address was
+  registered.
+
+- **Reset and verification links carry their token in the fragment.**
+  `…/reset-password#token=…` rather than `?token=…`: a browser never sends a fragment to a
+  server, so the token stays out of access logs and `Referer` headers. The client reads it
+  from `location.hash`.
+
 ### Fixed
+
+- **The Redis password no longer reaches the logs.** The `redis` and `rate-limit`
+  fragments quoted `[cache] url` verbatim in the error of a pool that fails to build,
+  password included. Both now go through `rbs_core::db::redact_url`.
+
+- **Every `.env` rbs writes is `0600` on Unix.** `rbs new`, `rbs add` and every other
+  plan that writes the file — its rollback included — left it at the umask's mode,
+  `0644` as a rule: readable by every account on the machine, database password and
+  signing secret with it. The permissions are now set on the descriptor before the
+  content is written, which also closes the `.env` of an older project the next time a
+  plan touches it — `rbs add auth`, for one. `.env.example` keeps ordinary permissions.
+
+- **The generated CI pins its actions by SHA.** `rbs add ci` wrote
+  `actions/checkout@v7`, `dtolnay/rust-toolchain@stable` and `Swatinem/rust-cache@v2`,
+  and a tag can be moved to another commit behind the project's back. Each action is now
+  pinned by its SHA, the version in a comment, with `toolchain: stable` spelled out since
+  the SHA no longer carries it; the fragment also writes `.github/dependabot.yml`, which
+  proposes their updates every week.
 
 - **`rbs generate crud --with-upload` writes the tests of its three content routes.** The
   flag used to mount `PUT`, `GET` and `HEAD` on `/<name>/{id}/content` and leave
@@ -295,6 +336,16 @@ reads `timestamp` on MySQL and `timestamp_with_timezone_text` on SQLite, which i
   above `core: CoreState::new(db, config),` in `src/state.rs`. The command refuses and
   prints that block as long as it stays below the line; `rbs doctor --fix` only restores
   a missing anchor, it never relocates one that is still present.
+
+- **A verified address is no longer verified again.** `resend-verification` issued a fresh
+  token to an account already verified, and every token spent rewrote
+  `email_verified_at`, making the address look younger than its first proof. A verified
+  account now receives nothing, and `mark_verified` only writes a date that is still null.
+
+- **`one_time_tokens` is purged.** The table grew by one row per request and never shrank:
+  every emission now deletes the expired tokens of every account, and the migration adds
+  `idx_one_time_tokens_expires_at` so that purge does not scan the table. A project
+  migrated earlier creates the index by hand, as the upgrade note shows.
 
 ## [1.4.0] — 2026-09-11
 

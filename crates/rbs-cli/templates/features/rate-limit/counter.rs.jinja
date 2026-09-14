@@ -25,7 +25,12 @@ impl Counter {
         let cache = crate::modules::cache::Config::load()?;
         let pool = deadpool_redis::Config::from_url(&cache.url)
             .create_pool(Some(Runtime::Tokio1))
-            .with_context(|| format!("pool Redis inconstructible pour `{}`", cache.url))?;
+            .with_context(|| {
+                format!(
+                    "pool Redis inconstructible pour `{}`",
+                    rbs_core::db::redact_url(&cache.url)
+                )
+            })?;
 
         Ok(Self { pool })
     }

@@ -68,6 +68,7 @@ plan pour …/demo
   + src/auth/controller/verification.rs                    créé
   + templates/mail/reinitialisation.html                   créé
   + templates/mail/verification.html                       créé
+  + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
   + src/auth/tests/session.rs                              créé
@@ -79,8 +80,8 @@ plan pour …/demo
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  46 fichiers à écrire
-✓ auth installée — 34 fichiers
+  47 fichiers à écrire
+✓ auth installée — 35 fichiers
 
   rbs migrate up
 ```
@@ -188,18 +189,23 @@ cette ligne ne se serait jamais affichée.
 Depuis le second terminal, créez un compte et échangez-le contre un jeton :
 
 ```bash
-curl -s -X POST http://127.0.0.1:8080/auth/register \
+curl -i -X POST http://127.0.0.1:8080/auth/register \
   -H 'Content-Type: application/json' \
   -d '{"email":"alice@example.com","password":"un-mot-de-passe-long"}'
 ```
 
 ```text
-{"id":"01a08583-7b76-7a01-90a8-c526d25cb1e3","email":"alice@example.com","role":"user","created_at":"2026-09-09T09:33:01.713220Z"}
+HTTP/1.1 202 Accepted
+content-length: 0
 ```
 
-L'inscription produit toujours `"role":"user"` — la preuve qu'aucune route de cette page
-ne distribue `admin` sur simple demande ; le compte obtenu ici peut lire `posts`, pas y
-écrire.
+202 sans corps, que l'adresse soit déjà prise ou non : la réponse elle-même ne dit pas
+laquelle — une connexion avec le mot de passe tout juste envoyé le dirait encore, comme
+l'explique le guide auth —,
+et une adresse prise vaut à son titulaire un courriel d'avertissement plutôt qu'un second
+compte. Le compte existe dès que le 202 arrive, et c'est toujours un `user` — aucune route
+de cette page ne distribue `admin` sur simple demande ; le compte obtenu ici peut lire
+`posts`, pas y écrire.
 
 ```bash
 TOKEN=$(curl -s -X POST http://127.0.0.1:8080/auth/login \
@@ -311,7 +317,7 @@ content-length: 0
 
 202 que l'adresse existe ou non — regardez l'onglet Mailpit, un message y attend, intitulé
 *Réinitialisation de votre mot de passe*, avec un lien de la forme
-`http://localhost:3000/reset-password?token=…`. Recopiez le jeton qu'il porte :
+`http://localhost:3000/reset-password#token=…`. Recopiez le jeton qu'il porte :
 
 ```bash
 curl -i -X POST http://127.0.0.1:8080/auth/reset-password \
@@ -325,7 +331,7 @@ HTTP/1.1 204 No Content
 
 204, et toutes les sessions du compte sont révoquées à nouveau — se connecter à partir
 d'ici exige le mot de passe qui vient d'être posé. L'inscription avait aussi ouvert un
-jeton de vérification, dès le `## 1`, avant que cette page ne réponde au premier `curl` ;
+jeton de vérification, dès le `## 1`, dans une tâche détachée de sa réponse ;
 Mailpit garde déjà ce message-là aussi, intitulé *Confirmez votre adresse*. Un lien
 périme après `verification_ttl_secs`, si bien qu'un client réel s'appuie sur l'autre
 route pour en obtenir un neuf :

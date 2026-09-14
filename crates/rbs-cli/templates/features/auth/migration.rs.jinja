@@ -179,6 +179,19 @@ impl MigrationTrait for Migration {
             )
             .await?;
 
+        // Chaque émission de jeton purge la table par cette colonne : sans index, la
+        // purge la parcourrait en entier à chaque demande.
+        manager
+            .create_index(
+                Index::create()
+                    .if_not_exists()
+                    .name("idx_one_time_tokens_expires_at")
+                    .table(OneTimeTokens::Table)
+                    .col(OneTimeTokens::ExpiresAt)
+                    .to_owned(),
+            )
+            .await?;
+
         // Chaque rafraîchissement cherche une ligne par cette colonne : sans index, le
         // coût de l'opération croît avec le nombre de sessions ouvertes.
         manager

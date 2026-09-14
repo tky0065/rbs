@@ -98,13 +98,11 @@ pub async fn invalidate_pending(
     Ok(touchees.rows_affected)
 }
 
-/// Supprime les jetons périmés, et dit combien.
+/// Supprime les jetons périmés, de tous les comptes, et dit combien.
 ///
-/// La table croît d'une ligne par demande et n'en perd aucune : sans appel périodique,
-/// elle est la seule du projet dont la taille suit le trafic anonyme. Le fragment ne
-/// branche pas la tâche — `rbs add scheduler` vous donne où la poser, et cette fonction
-/// est ce qu'elle appellera. Retirez ce `#[allow]` en la branchant.
-#[allow(dead_code)]
+/// La table croît d'une ligne par demande, au rythme du trafic anonyme : chaque émission
+/// appelle cette purge avant d'écrire, ce qui la borne aux jetons encore vivants sans
+/// réclamer de tâche périodique. L'index sur `expires_at` la garde bon marché.
 pub async fn purge_expired(db: &impl ConnectionTrait) -> Result<u64> {
     let supprimees = one_time_token::Entity::delete_many()
         .filter(one_time_token::Column::ExpiresAt.lt(Utc::now().fixed_offset()))

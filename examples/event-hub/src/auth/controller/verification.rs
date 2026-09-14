@@ -6,9 +6,9 @@ use super::super::dto::{EmailRequest, TokenRequest};
 use super::super::service;
 use crate::state::AppState;
 
-// L'envoi part détaché, et le statut est 202 quoi qu'il arrive — même raison qu'à
-// `/auth/forgot-password` : attendre le SMTP dirait par le temps de réponse ce que le
-// code de statut refuse de dire.
+// Le statut est 202 quoi qu'il arrive, et l'émission part détachée — même raison qu'à
+// `/auth/forgot-password` : l'attendre dirait par le temps de réponse ce que le code de
+// statut refuse de dire.
 #[utoipa::path(
     post,
     path = "/auth/resend-verification",

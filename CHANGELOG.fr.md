@@ -15,6 +15,10 @@ dépréciation.
 
 ### Ajouté
 
+- **`rbs_core::db::redact_url`** rend une URL de connexion au mot de passe remplacé par
+  `***` — le masquage que `db::connect` appliquait déjà à ses propres erreurs. Les
+  fragments `redis` et `rate-limit` l'appellent pour citer `[cache] url` dans un journal ;
+  toute autre URL d'un projet qui porte un secret peut en faire autant.
 - **`rbs generate crud` et `rbs generate feature` prennent `--singular <NOM>`** pour les
   cas où l'heuristique de singularisation se trompe : `rbs generate crud news` nommait
   ses types `CreateNew` et ses liaisons `new`, schémas OpenAPI et interfaces TypeScript
@@ -147,10 +151,9 @@ dépréciation.
   explicite.
 - **Les contrôleurs d'`auth` n'envoient plus eux-mêmes de courriel.** Un helper unique
   `notify`, dans la couche service, rend et expédie chaque message ;
-  `verification::send_link` et `password::send_reset_link` enveloppent les `request` et
-  `request_reset` existants, et `service::register` reçoit désormais le client mail et les
-  réglages des parcours. Les réponses ne changent pas — 201 à `register`, 202 à
-  `forgot-password` et `resend-verification`, mêmes objets, gabarits et liens. Un rendu en
+  `verification::send_link` et `password::send_reset_link` portent les émissions, et
+  `service::register` reçoit désormais le client mail et les réglages des parcours. Objets
+  et gabarits ne changent pas. Un rendu en
   échec est journalisé une fois, sous « préparation du courriel échouée » avec un champ
   `gabarit`, au lieu d'un message par parcours. Seul un `rbs add auth` neuf écrit cette
   disposition ; un projet existant garde la sienne.
@@ -164,8 +167,7 @@ dépréciation.
   descriptions communes du document OpenAPI (`RBS_SERVER__LANG` la surcharge là), et
   `rbs add` et `rbs generate crud` la lisent — dans `config/default.toml` seul, jamais
   dans l'environnement — pour écrire les messages qu'ils adressent au client
-  (`"this address is already registered"`, `"too many requests: try again later"`,
-  `"this value is already taken"`…). `rbs new --lang` l'écrit à côté de
+  (`"too many requests: try again later"`, `"this value is already taken"`…). `rbs new --lang` l'écrit à côté de
   `[package.metadata.rbs] lang`, qui ne décide plus que de la langue d'`AGENTS.md`.
   `Error::Domain` garde son `code` pour `title`, les codes de validation restent ceux de
   `validator` ; les journaux, les commentaires, les courriels et les textes OpenAPI par
@@ -177,7 +179,49 @@ dépréciation.
   `generate` ultérieur la suivent —, puis traduire à la main les messages déjà engendrés
   dans `src/`.
 
+- **`POST /auth/register` rend 202 sans corps, que l'adresse soit neuve ou prise.** Elle
+  rendait 201 et le profil, et 409 — avant de hacher — pour une adresse prise : le statut,
+  et le temps de réponse, disaient à qui essayait plusieurs adresses lesquelles étaient
+  inscrites. Argon2 tourne désormais dans les deux branches. Une adresse neuve voit
+  toujours son compte écrit avant la réponse, si bien qu'un client se connecte aussitôt ;
+  une adresse prise n'est pas touchée, et son titulaire reçoit
+  `templates/mail/inscription.html`. Cela vaut pour les projets neufs : un projet engendré
+  plus tôt garde son code, et la note de montée liste les fichiers à reprendre du fragment.
+  La réponse seule ne dit plus rien ; une connexion avec le mot de passe soumis le dit
+  encore, puisqu'un compte non vérifié se connecte — le guide auth dit ce qui le fermerait.
+
+- **`forgot-password`, `resend-verification` et l'inscription émettent leurs jetons dans
+  une tâche détachée.** La requête ne fait plus que lire le compte ; la purge,
+  l'invalidation, l'écriture du jeton et le rendu du courriel ont lieu après la réponse, et
+  leurs échecs vont au journal avec l'identifiant du compte — attendre ces écritures
+  laissait le temps de réponse dire si une adresse était inscrite.
+
+- **Les liens de réinitialisation et de vérification portent leur jeton dans le
+  fragment.** `…/reset-password#token=…` plutôt que `?token=…` : un navigateur n'envoie
+  jamais le fragment à un serveur, si bien que le jeton reste hors des journaux d'accès et
+  des en-têtes `Referer`. Le client le lit dans `location.hash`.
+
 ### Corrigé
+
+- **Le mot de passe Redis n'atteint plus les journaux.** Les fragments `redis` et
+  `rate-limit` citaient `[cache] url` telle quelle dans l'erreur d'un pool
+  inconstructible, mot de passe compris. Tous deux passent désormais par
+  `rbs_core::db::redact_url`.
+
+- **Tout `.env` qu'écrit rbs est en `0600` sous Unix.** `rbs new`, `rbs add` et tout
+  autre plan qui écrit le fichier — sa restauration comprise — le laissaient aux droits
+  du umask, `0644` d'ordinaire : lisible de tout compte de la machine, mot de passe de la
+  base et secret de signature avec lui. Les droits se posent désormais sur le descripteur
+  avant l'écriture du contenu, ce qui referme aussi le `.env` d'un projet antérieur au
+  prochain plan qui le touche — `rbs add auth`, par exemple. `.env.example` garde des
+  droits ordinaires.
+
+- **La CI engendrée épingle ses actions par SHA.** `rbs add ci` écrivait
+  `actions/checkout@v7`, `dtolnay/rust-toolchain@stable` et `Swatinem/rust-cache@v2`,
+  et un tag peut être déplacé vers un autre commit dans le dos du projet. Chaque action
+  est désormais épinglée par son SHA, la version en commentaire, avec `toolchain: stable`
+  écrit en toutes lettres puisque le SHA ne le porte plus ; le fragment dépose aussi
+  `.github/dependabot.yml`, qui en propose les montées chaque semaine.
 
 - **`rbs generate crud --with-upload` écrit les tests de ses trois routes de contenu.** Le
   drapeau montait `PUT`, `GET` et `HEAD` sur `/<nom>/{id}/content` et laissait `tests.rs`
@@ -306,6 +350,16 @@ lit `timestamp` sur MySQL et `timestamp_with_timezone_text` sur SQLite, ce que
   au-dessus de `core: CoreState::new(db, config),` dans `src/state.rs`. La commande refuse
   et affiche ce bloc tant qu'il reste sous la ligne ; `rbs doctor --fix` ne fait que
   restaurer une ancre absente, il n'en déplace jamais une déjà présente.
+
+- **Une adresse vérifiée ne se revérifie plus.** `resend-verification` émettait un jeton
+  neuf pour un compte déjà vérifié, et chaque jeton consommé réécrivait
+  `email_verified_at`, rajeunissant l'adresse au-delà de sa première preuve. Un compte
+  vérifié ne reçoit plus rien, et `mark_verified` n'écrit qu'une date encore nulle.
+
+- **`one_time_tokens` se purge.** La table croissait d'une ligne par demande sans jamais en
+  perdre : chaque émission supprime désormais les jetons échus de tous les comptes, et la
+  migration ajoute `idx_one_time_tokens_expires_at` pour que cette purge ne parcoure pas la
+  table. Un projet déjà migré crée l'index à la main, comme le montre la note de montée.
 
 ## [1.4.0] — 2026-09-11
 
