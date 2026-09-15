@@ -23,21 +23,23 @@ storage : stockage d'objets : un trait à cinq méthodes, deux backends — fich
 
 plan pour /private/tmp/rbs-demo/depot
 
-  + src/modules/storage/mod.rs     créé
-  + src/modules/storage/files.rs   créé
-  + src/modules/storage/s3.rs      créé
-  + src/modules/storage/tests.rs   créé
-  + src/modules/mod.rs             créé
-  ~ src/lib.rs                     modifié
-  ~ src/state.rs                   modifié
-  ~ src/health/controller.rs       modifié
-  ~ Cargo.toml                     modifié
-  ~ config/default.toml            modifié
-  ~ .env.example                   modifié
-  ~ AGENTS.md                      modifié
+  + src/modules/storage/mod.rs           créé
+  + src/modules/storage/files.rs         créé
+  + src/modules/storage/s3.rs            créé
+  + src/modules/storage/tests/mod.rs     créé
+  + src/modules/storage/tests/files.rs   créé
+  + src/modules/storage/tests/s3.rs      créé
+  + src/modules/mod.rs                   créé
+  ~ src/lib.rs                           modifié
+  ~ src/state.rs                         modifié
+  ~ src/health/controller.rs             modifié
+  ~ Cargo.toml                           modifié
+  ~ config/default.toml                  modifié
+  ~ .env.example                         modifié
+  ~ AGENTS.md                            modifié
 
-  5 à créer, 7 à modifier
-✓ storage installée — 5 créés, 7 modifiés
+  7 à créer, 7 à modifier
+✓ storage installée — 7 créés, 7 modifiés
 
   les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example
 ```
@@ -229,21 +231,22 @@ un `id` suffit à dériver une clé.
 
 ## Les tests
 
-Le `src/modules/storage/tests.rs` engendré est bâti autour d'une seule fonction, `round`, qui
-éprouve ce que le trait promet — déposer, lire, attester, supprimer — contre un
-`&dyn Storage` plutôt que contre un type concret.
+Le `src/modules/storage/tests/mod.rs` engendré est bâti autour d'une seule fonction,
+`round`, qui éprouve ce que le trait promet — déposer, lire, attester, supprimer — contre
+un `&dyn Storage` plutôt que contre un type concret, partagée par `tests/files.rs` et
+`tests/s3.rs`.
 
-C'est la conception même du fichier. `cargo test` joue la ronde contre le backend fichiers,
-avec un test de traversée qui éprouve quatre clés fuyantes et assertent à la fois la
-variante `RejectedKey` *et* l'absence de fichiers témoins hors de la racine ; il bâtit aussi
-un client S3 sans toucher au réseau, et vérifie qu'un backend inconnu est refusé en le
-nommant. Quatre tests de plus ne portent que sur le backend fichiers : un dépôt ne laisse
-aucun fichier temporaire derrière lui ; un objet d'un mébioctet se relit en plus d'un
-morceau, la preuve que rien ne le charge d'un bloc avant de l'envoyer ; quatre lecteurs qui relisent une clé pendant qu'un
-écrivain la remplace deux cents fois ne voient jamais que l'un des deux contenus, entier —
-sur une écriture en place, ils attrapent un corps vide ou tronqué dès les premières
-lectures ; et la sonde signale une racine retirée sous le stockage vivant au lieu de la
-recréer.
+C'est la conception des deux fichiers de backend. `tests/files.rs` joue la ronde contre le
+backend fichiers, avec un test de traversée qui éprouve quatre clés fuyantes et assertent
+à la fois la variante `RejectedKey` *et* l'absence de fichiers témoins hors de la racine.
+Quatre tests de plus ne portent que sur le backend fichiers : un dépôt ne laisse aucun
+fichier temporaire derrière lui ; un objet d'un mébioctet se relit en plus d'un morceau,
+la preuve que rien ne le charge d'un bloc avant de l'envoyer ; quatre lecteurs qui relisent
+une clé pendant qu'un écrivain la remplace deux cents fois ne voient jamais que l'un des
+deux contenus, entier — sur une écriture en place, ils attrapent un corps vide ou tronqué
+dès les premières lectures ; et la sonde signale une racine retirée sous le stockage
+vivant au lieu de la recréer. `tests/s3.rs` bâtit un client S3 sans toucher au réseau, et
+vérifie qu'un backend inconnu est refusé en le nommant.
 
 Deux tests `#[ignore]` joignent le service de la section `[storage]` — MinIO en
 développement. Le premier rejoue **la même** `round`, appelée sans une ligne de différence :

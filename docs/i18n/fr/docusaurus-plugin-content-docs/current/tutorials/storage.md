@@ -28,21 +28,23 @@ storage : stockage d'objets : un trait à cinq méthodes, deux backends — fich
 
 plan pour …/demo
 
-  + src/modules/storage/mod.rs     créé
-  + src/modules/storage/files.rs   créé
-  + src/modules/storage/s3.rs      créé
-  + src/modules/storage/tests.rs   créé
-  + src/modules/mod.rs             créé
-  ~ src/lib.rs                     modifié
-  ~ src/state.rs                   modifié
-  ~ src/health/controller.rs       modifié
-  ~ Cargo.toml                     modifié
-  ~ config/default.toml            modifié
-  ~ .env.example                   modifié
-  ~ AGENTS.md                      modifié
+  + src/modules/storage/mod.rs           créé
+  + src/modules/storage/files.rs         créé
+  + src/modules/storage/s3.rs            créé
+  + src/modules/storage/tests/mod.rs     créé
+  + src/modules/storage/tests/files.rs   créé
+  + src/modules/storage/tests/s3.rs      créé
+  + src/modules/mod.rs                   créé
+  ~ src/lib.rs                           modifié
+  ~ src/state.rs                         modifié
+  ~ src/health/controller.rs             modifié
+  ~ Cargo.toml                           modifié
+  ~ config/default.toml                  modifié
+  ~ .env.example                         modifié
+  ~ AGENTS.md                            modifié
 
-  5 à créer, 7 à modifier
-✓ storage installée — 5 créés, 7 modifiés
+  7 à créer, 7 à modifier
+✓ storage installée — 7 créés, 7 modifiés
 
   les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example
 ```

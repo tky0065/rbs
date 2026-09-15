@@ -14,8 +14,16 @@ source      = "s3.rs.jinja"
 destination = "src/modules/storage/s3.rs"
 
 [[files]]
-source      = "tests.rs.jinja"
-destination = "src/modules/storage/tests.rs"
+source      = "tests/mod.rs.jinja"
+destination = "src/modules/storage/tests/mod.rs"
+
+[[files]]
+source      = "tests/files.rs.jinja"
+destination = "src/modules/storage/tests/files.rs"
+
+[[files]]
+source      = "tests/s3.rs.jinja"
+destination = "src/modules/storage/tests/s3.rs"
 
 [[anchors]]
 anchor  = "modules"

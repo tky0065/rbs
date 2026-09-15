@@ -23,21 +23,23 @@ storage : stockage d'objets : un trait à cinq méthodes, deux backends — fich
 
 plan pour /private/tmp/rbs-demo/depot
 
-  + src/modules/storage/mod.rs     créé
-  + src/modules/storage/files.rs   créé
-  + src/modules/storage/s3.rs      créé
-  + src/modules/storage/tests.rs   créé
-  + src/modules/mod.rs             créé
-  ~ src/lib.rs                     modifié
-  ~ src/state.rs                   modifié
-  ~ src/health/controller.rs       modifié
-  ~ Cargo.toml                     modifié
-  ~ config/default.toml            modifié
-  ~ .env.example                   modifié
-  ~ AGENTS.md                      modifié
+  + src/modules/storage/mod.rs           créé
+  + src/modules/storage/files.rs         créé
+  + src/modules/storage/s3.rs            créé
+  + src/modules/storage/tests/mod.rs     créé
+  + src/modules/storage/tests/files.rs   créé
+  + src/modules/storage/tests/s3.rs      créé
+  + src/modules/mod.rs                   créé
+  ~ src/lib.rs                           modifié
+  ~ src/state.rs                         modifié
+  ~ src/health/controller.rs             modifié
+  ~ Cargo.toml                           modifié
+  ~ config/default.toml                  modifié
+  ~ .env.example                         modifié
+  ~ AGENTS.md                            modifié
 
-  5 à créer, 7 à modifier
-✓ storage installée — 5 créés, 7 modifiés
+  7 à créer, 7 à modifier
+✓ storage installée — 7 créés, 7 modifiés
 
   les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example
 ```
@@ -222,20 +224,21 @@ derive a key.
 
 ## Testing
 
-The generated `src/modules/storage/tests.rs` is built around one function, `round`, which
-exercises what the trait promises — put, get, exists, delete — against `&dyn Storage`
-rather than a concrete type.
+The generated `src/modules/storage/tests/mod.rs` is built around one function, `round`,
+which exercises what the trait promises — put, get, exists, delete — against `&dyn
+Storage` rather than a concrete type, shared by `tests/files.rs` and `tests/s3.rs`.
 
-That is the design of the file. `cargo test` plays the round against the file backend,
-along with a traversal test that tries four escaping keys and asserts both the
-`RejectedKey` variant *and* the absence of witness files outside the root; it also builds
-an S3 client without touching the network, and checks that an unknown backend is refused by
-name. Four more tests pin down the file backend alone: a deposit leaves no temporary file
-behind; an object of one mebibyte reads back in more than one chunk, the proof that
-nothing loads it whole before sending it; four readers re-reading a key while a writer replaces it two hundred times only
-ever see one of the two contents, whole — on an in-place write, they catch an empty or
-truncated body within the first few reads; and the probe reports a root removed under the
-running store rather than recreating it.
+That is the design of the two backend files. `tests/files.rs` plays the round against the
+file backend, along with a traversal test that tries four escaping keys and asserts both
+the `RejectedKey` variant *and* the absence of witness files outside the root. Four more
+tests pin down the file backend alone: a deposit leaves no temporary file behind; an
+object of one mebibyte reads back in more than one chunk, the proof that nothing loads it
+whole before sending it; four readers re-reading a key while a writer replaces it two
+hundred times only ever see one of the two contents, whole — on an in-place write, they
+catch an empty or truncated body within the first few reads; and the probe reports a root
+removed under the running store rather than recreating it. `tests/s3.rs` builds an S3
+client without touching the network, and checks that an unknown backend is refused by
+name.
 
 Two `#[ignore]`d tests join the service of the `[storage]` section — MinIO in development.
 The first replays **the same** `round`, called without a line of difference: a suite
