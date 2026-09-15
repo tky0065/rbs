@@ -5,6 +5,7 @@ use axum::http::StatusCode;
 use axum::middleware::from_fn;
 use rbs_core::HasCoreState;
 use tower_http::compression::CompressionLayer;
+use tower_http::compression::predicate::{DefaultPredicate, NotForContentType, Predicate};
 use tower_http::timeout::TimeoutLayer;
 
 use crate::health;
@@ -14,6 +15,12 @@ use crate::state::AppState;
 pub fn router(state: AppState) -> Router {
     let docs = openapi::routes(state.core().config());
     let timeout = Duration::from_secs(state.core().config().server.timeout_secs);
+    // Le document OpenAPI dépasse vite la centaine de Ko. Le prédicat par défaut épargne
+    // les petits corps, les images et les flux SSE, que la compression ralentirait sans
+    // rien gagner ; un binaire s'y ajoute : servi tel quel, il garde son `content-length`,
+    // et une archive déjà compressée ne l'est pas une seconde fois.
+    let compression =
+        DefaultPredicate::new().and(NotForContentType::const_new("application/octet-stream"));
 
     Router::new()
         .merge(health::routes())
@@ -32,10 +39,7 @@ pub fn router(state: AppState) -> Router {
             StatusCode::REQUEST_TIMEOUT,
             timeout,
         ))
-        // Le document OpenAPI dépasse vite la centaine de Ko. Le prédicat par défaut
-        // épargne les petits corps, les images et les flux SSE, que la compression
-        // ralentirait sans rien gagner.
-        .layer(CompressionLayer::new())
+        .layer(CompressionLayer::new().compress_when(compression))
         .layer(axum::middleware::from_fn(
             crate::modules::observability::metrics::middleware,
         ))

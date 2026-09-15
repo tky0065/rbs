@@ -21,18 +21,18 @@ sortie de terminal ne se traduit pas.
 $ rbs migrate --help
 Pilote les migrations du projet
 
-Usage: rbs migrate <COMMAND>
+Utilisation : rbs migrate <COMMANDE>
 
-Commands:
+Commandes :
   up      Applique les migrations en attente
   down    Annule la dernière migration appliquée
   status  Affiche les migrations appliquées et celles en attente
   new     Crée un fichier de migration vide
-  help    Print this message or the help of the given subcommand(s)
+  help    Affiche cette aide, ou celle des commandes données
 
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
+Options :
+  -h, --help     Affiche l'aide
+  -V, --version  Affiche la version
 ```
 
 Aucune sous-commande n'a de flag propre, et ni `--template-dir` ni `--yes` n'est accepté :
@@ -42,11 +42,11 @@ chacun est déclaré sur les commandes qui le lisent.
 $ rbs migrate up --help
 Applique les migrations en attente
 
-Usage: rbs migrate up
+Utilisation : rbs migrate up
 
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
+Options :
+  -h, --help     Affiche l'aide
+  -V, --version  Affiche la version
 ```
 
 `down` et `status` sont déclarées de la même manière. Seule `new` prend un argument :
@@ -55,14 +55,14 @@ Options:
 $ rbs migrate new --help
 Crée un fichier de migration vide
 
-Usage: rbs migrate new <NAME>
+Utilisation : rbs migrate new <NAME>
 
-Arguments:
+Arguments :
   <NAME>  Nom de la migration
 
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
+Options :
+  -h, --help     Affiche l'aide
+  -V, --version  Affiche la version
 ```
 
 ## Quelle base

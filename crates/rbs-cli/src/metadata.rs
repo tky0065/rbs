@@ -758,6 +758,8 @@ mod tests {
                     crate_name => "mon_api",
                     rbs_core_dep => "\"0.1\"",
                     rbs_version => "0.1.0",
+                    rust_version => crate::templates::RUST_VERSION,
+                    rust_image => crate::templates::rust_image(),
                     database => Database::default().name(),
                     sea_orm_feature => Database::default().sea_orm_feature(),
                     lang => crate::lang::Lang::default().name(),

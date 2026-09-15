@@ -11,7 +11,7 @@ manifeste, montez de version, votre projet compile toujours.
 
 Une promesse de ce genre ne vaut que ce que valent ses frontières. rbs publie deux crates
 et écrit du code dans vos propres sources : « l'API » n'y est donc pas une chose, mais
-cinq — dont trois sont délibérément laissées dehors. Cette page dit lesquelles, et
+quatre — dont deux sont délibérément laissées dehors. Cette page dit lesquelles, et
 pourquoi.
 
 ## Ce que la promesse couvre
@@ -22,7 +22,6 @@ pourquoi.
 | Le format des ancres et de `[package.metadata.rbs]` | **oui** | Un projet engendré par une version du CLI doit rester lisible par la suivante. |
 | Le code engendré dans votre projet | non | Il vous appartient dès qu'il est écrit ; le CLI ne le relit jamais. |
 | La bibliothèque de `rbs-cli` | non | `rbs-cli` publie un binaire ; que sa bibliothèque soit visible est un détail de construction, pas une offre. |
-| Les features vides `redis`, `mail` et `storage` de `rbs-core` | non | Elles réservent un nom et ne portent aucun code. |
 
 Les deux crates sont publiées depuis un même workspace et partagent leur numéro de
 version. Un CLI qui affiche `rbs 1.2.0` est celui qui va avec `rbs-core 1.2.0`.
@@ -126,11 +125,6 @@ différence entre deux projets neufs, pas un changement dans le vôtre.
 bibliothèque est visible parce que c'est ainsi que la crate se construit et se teste, non
 parce qu'elle est offerte comme une API. En dépendre, c'est s'exposer à une rupture dès une
 version corrective.
-
-**Les features vides `redis`, `mail` et `storage` de `rbs-core`.** Elles réservent des noms
-pour un travail qui se fait dans votre projet plutôt que dans le noyau, et ne portent aucun
-code. En activer une ne change rien aujourd'hui. Le jour où l'une portera du code, ce sera
-un ajout — et la forme qu'il prendra n'est pas promise d'avance.
 
 ## Lire un numéro de version
 

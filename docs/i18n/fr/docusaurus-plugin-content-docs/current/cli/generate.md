@@ -23,18 +23,18 @@ sortie de terminal ne se traduit pas.
 $ rbs generate --help
 Génère une feature dans un projet existant
 
-Usage: rbs generate <COMMAND>
+Utilisation : rbs generate <COMMANDE>
 
-Commands:
+Commandes :
   crud     Génère une feature CRUD complète, entité et migration comprises
   feature  Génère une feature vide : six fichiers, aucun champ
   client   Engendre un client typé depuis le document OpenAPI du projet
   job      Génère un job de la file, et son échéance sous --every ; exige la feature jobs
-  help     Print this message or the help of the given subcommand(s)
+  help     Affiche cette aide, ou celle des commandes données
 
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
+Options :
+  -h, --help     Affiche l'aide
+  -V, --version  Affiche la version
 ```
 
 `g` est un alias de `generate` : `rbs g crud users` et `rbs generate crud users` s'analysent
@@ -51,12 +51,12 @@ un est une erreur de clap plutôt qu'un flag pris puis ignoré.
 $ rbs generate crud --help
 Génère une feature CRUD complète, entité et migration comprises
 
-Usage: rbs generate crud [OPTIONS] <NAME>
+Utilisation : rbs generate crud [OPTIONS] <NAME>
 
-Arguments:
+Arguments :
   <NAME>  Nom de la feature, au pluriel
 
-Options:
+Options :
       --fields <CHAMPS>    Champs de l'entité, ex. "name:string,email:string:unique"
       --singular <NOM>     Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force              Écrit même si le working tree Git est sale
@@ -67,8 +67,8 @@ Options:
       --soft-delete        Rend le DELETE logique : la ligne reste, marquée d'une date de suppression
       --with-upload        Ajoute trois routes de contenu binaire ; exige la feature storage
       --cursor             Pagine GET /<ressource> par curseur ; la route de filtre garde ses pages
-  -h, --help               Print help
-  -V, --version            Print version
+  -h, --help               Affiche l'aide
+  -V, --version            Affiche la version
 ```
 
 | Flag | Effet |
@@ -91,18 +91,18 @@ Options:
 $ rbs generate feature --help
 Génère une feature vide : six fichiers, aucun champ
 
-Usage: rbs generate feature [OPTIONS] <NAME>
+Utilisation : rbs generate feature [OPTIONS] <NAME>
 
-Arguments:
+Arguments :
   <NAME>  Nom de la feature
 
-Options:
+Options :
       --singular <NOM>  Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force           Écrit même si le working tree Git est sale
       --dry-run         Affiche le plan sans rien écrire
       --json            Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
-  -h, --help            Print help
-  -V, --version         Print version
+  -h, --help            Affiche l'aide
+  -V, --version         Affiche la version
 ```
 
 Les mêmes flags moins `--fields`, `--has-many` et `--role` : une feature vide n'a pas de
@@ -117,18 +117,18 @@ toujours son service et ses DTO d'après le singulier.
 $ rbs generate job --help
 Génère un job de la file, et son échéance sous --every ; exige la feature jobs
 
-Usage: rbs generate job [OPTIONS] <NAME>
+Utilisation : rbs generate job [OPTIONS] <NAME>
 
-Arguments:
+Arguments :
   <NAME>  Nom du job, en snake_case : celui de son module et de son KIND
 
-Options:
+Options :
       --every <CRON>  Expression cron de l'échéance, à cinq ou six champs, évaluée en UTC ; exige la feature scheduler
       --force         Écrit même si le working tree Git est sale
       --dry-run       Affiche le plan sans rien écrire
       --json          Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
-  -h, --help          Print help
-  -V, --version       Print version
+  -h, --help          Affiche l'aide
+  -V, --version       Affiche la version
 ```
 
 Ni `--fields`, ni entité : un job n'est pas une feature CRUD, et le manifeste ne garde

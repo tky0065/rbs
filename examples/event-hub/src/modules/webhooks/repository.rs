@@ -1,5 +1,5 @@
 use rbs_core::{Error, Result};
-use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
+use sea_orm::prelude::{DateTimeWithTimeZone, Expr, Uuid};
 use sea_orm::{
     ActiveModelTrait, ColumnTrait, ConnectionTrait, EntityTrait, QueryFilter, QueryOrder, Set,
 };
@@ -65,15 +65,15 @@ pub async fn revoke<C: ConnectionTrait>(
     id: Uuid,
     quand: DateTimeWithTimeZone,
 ) -> Result<Model> {
-    let abonnement = find(db, id).await?.ok_or(Error::NotFound("abonnement"))?;
+    // Un seul UPDATE conditionnel : deux révocations concurrentes ne peuvent pas écrire
+    // chacune sa date, la première gagne et la seconde ne touche aucune ligne.
+    Entity::update_many()
+        .col_expr(Column::RevokedAt, Expr::value(quand))
+        .col_expr(Column::UpdatedAt, Expr::value(quand))
+        .filter(Column::Id.eq(id))
+        .filter(Column::RevokedAt.is_null())
+        .exec(db)
+        .await?;
 
-    if abonnement.revoked_at.is_some() {
-        return Ok(abonnement);
-    }
-
-    let mut ligne: ActiveModel = abonnement.into();
-    ligne.revoked_at = Set(Some(quand));
-    ligne.updated_at = Set(quand);
-
-    Ok(ligne.update(db).await?)
+    find(db, id).await?.ok_or(Error::NotFound("abonnement"))
 }

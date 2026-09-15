@@ -45,8 +45,9 @@ the crate is designed as the runtime half of a generated project — start with
 code because `set_global_default` is called once, and that call is the first line of a
 generated `main`.
 
-`redis`, `mail` and `storage` are declared but **empty**: they reserve the names for planned
-extensions and activate nothing today.
+Redis, mail and file storage are not features of this crate: they are fragments generated
+into your project by `rbs add redis`, `rbs add mail` and `rbs add storage`, and have no
+business in the core.
 
 ## What it deliberately leaves out
 

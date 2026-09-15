@@ -29,12 +29,6 @@ observability = [
     "dep:tracing-opentelemetry",
 ]
 
-# Vides et sans dépendances : les nommer réserve le nom sans figer, un an à l'avance,
-# les crates que leur implémentation utilisera.
-redis = []
-mail = []
-storage = []
-
 [package.metadata.docs.rs]
 all-features = true
 
@@ -46,6 +40,11 @@ all-features = true
 # disparaît. À rétablir en `deny` le jour où un type public devient réellement obtenable.
 [package.metadata.cargo-semver-checks.lints]
 derive_trait_impl_removed = "allow"
+# `redis`, `mail` et `storage` étaient vides depuis la v0.3 : les trois fragments vivent
+# côté engendré et n'activent aucune feature du noyau — aucun `feature.toml`, aucun
+# exemple ne les nomme. Seul un manifeste écrit à la main qui les citerait cesserait de
+# résoudre, et il n'activait rien. À rétablir en `deny` à la prochaine feature retirée.
+feature_missing = "allow"
 
 [dependencies]
 anyhow.workspace = true

@@ -91,30 +91,44 @@ pub(crate) fn command(program: Program) -> Arc<Command> {
     })
 }
 
-/// Le serveur du projet.
+/// Le serveur du projet, `arguments` passés après le `--` de `cargo run`.
 ///
 /// Ni racine ni environnement ici : `Program::Exec` n'en porte pas, ils se posent sur la
 /// commande au moment du spawn.
-fn server() -> Program {
+pub(crate) fn server(arguments: &[String]) -> Program {
+    let mut args = vec!["run".to_string()];
+    if !arguments.is_empty() {
+        args.push("--".to_string());
+        args.extend(arguments.iter().cloned());
+    }
+
     Program::Exec {
         prog: "cargo".into(),
-        args: vec!["run".into()],
+        args,
     }
 }
 
 /// Surveille le projet et relance son serveur à chaque changement utile.
-pub(crate) fn run(root: &Path, variables: &[(String, String)]) -> Result<(), Error> {
+pub(crate) fn run(
+    root: &Path,
+    variables: &[(String, String)],
+    arguments: &[String],
+) -> Result<(), Error> {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
         .map_err(|source| Error::Watch(source.to_string()))?;
 
-    runtime.block_on(supervise(root.to_path_buf(), variables.to_vec()))
+    runtime.block_on(supervise(root.to_path_buf(), variables.to_vec(), arguments))
 }
 
 /// La boucle du watch, une fois le runtime en place.
-async fn supervise(root: PathBuf, variables: Vec<(String, String)>) -> Result<(), Error> {
-    let commande = command(server());
+async fn supervise(
+    root: PathBuf,
+    variables: Vec<(String, String)>,
+    arguments: &[String],
+) -> Result<(), Error> {
+    let commande = command(server(arguments));
     let racine = root.clone();
 
     // Un identifiant stable, sinon chaque événement créerait un serveur de plus au lieu

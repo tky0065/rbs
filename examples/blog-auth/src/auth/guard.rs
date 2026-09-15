@@ -2,7 +2,6 @@ use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use rbs_core::{Error, HasCoreState, Identity, Result};
 use sea_orm::ActiveEnum;
-use sea_orm::prelude::Uuid;
 
 use super::model::Role;
 use super::repository;
@@ -77,7 +76,7 @@ impl FromRequestParts<AppState> for VerifiedIdentity {
         // à qui n'est pas identifié.
         let identite = Identity::from_request_parts(parts, state).await?;
 
-        let id = Uuid::parse_str(&identite.user_id).map_err(|_| Error::Unauthorized)?;
+        let id = identite.user_uuid()?;
 
         // Un jeton valide dont le compte a disparu ne vaut pas mieux qu'un jeton
         // invalide : `Forbidden` laisserait entendre que le compte existe.

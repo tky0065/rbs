@@ -199,7 +199,7 @@ fn normalise(sortie: &str, tmp: &Path) -> String {
     }
 
     texte = texte.replace("…/", "<tmp>/");
-    // Sous Windows, clap tire l'`Usage:` du nom réel de l'exécutable et écrit `rbs.exe`,
+    // Sous Windows, clap tire la ligne `Utilisation :` du nom réel de l'exécutable et écrit `rbs.exe`,
     // là où la page montre la commande telle qu'on la tape. Le suffixe tombe des deux
     // côtés de la comparaison, qui reste sensible à tout le reste de la ligne.
     texte = texte.replace("rbs.exe", "rbs");
@@ -779,7 +779,7 @@ avant\n\
         );
     }
 
-    /// Windows imprime le chemin absolu du tmpdir avec des barres inverses, et son `Usage:`
+    /// Windows imprime le chemin absolu du tmpdir avec des barres inverses, et sa ligne `Utilisation :`
     /// avec le nom réel de l'exécutable. Les pages montrent l'un et l'autre sous la forme
     /// qu'on tape : sans cette unification, tout transcript citant un chemin absolu
     /// échouait sur cette seule plateforme, en accusant la page d'une dérive.
@@ -792,8 +792,8 @@ avant\n\
             "plan pour <tmp>/demo/src\n"
         );
         assert_eq!(
-            normalise("Usage: rbs.exe generate <COMMAND>\n", tmp),
-            "Usage: rbs generate <COMMAND>\n"
+            normalise("Utilisation : rbs.exe generate <COMMANDE>\n", tmp),
+            "Utilisation : rbs generate <COMMANDE>\n"
         );
     }
 

@@ -14,6 +14,10 @@ between minor versions with no deprecation cycle.
 
 ### Added
 
+- **`Identity::user_uuid()` and `Claims::user_uuid()`** read the caller's identifier as a
+  `Uuid`, and answer `Error::Unauthorized` when `sub` is not one. The `auth` fragment
+  called `Uuid::parse_str` with the same error mapping at seven places; each now calls the
+  method, as a generated CRUD that wants the author of a write can.
 - **`rbs_core::db::redact_url`** returns a connection URL with its password replaced by
   `***` — the masking `db::connect` already applied to its own errors. The `redis` and
   `rate-limit` fragments call it to quote `[cache] url` in a log; any other URL of a
@@ -114,10 +118,21 @@ between minor versions with no deprecation cycle.
   now carries a `CompressionLayer`, and `tower-http` gains the `compression-gzip`
   feature: `/api-docs/openapi.json`, which grows with every CRUD, and every list travel
   gzipped to any client that accepts it. The default predicate leaves small bodies,
-  images and server-sent events alone. A project generated earlier keeps its router; the
-  upgrade note gives the lines to paste.
+  images and server-sent events alone, and the skeleton adds `application/octet-stream` to
+  them: a file served as is keeps its `content-length`, and an archive already compressed
+  is not compressed twice. A project generated earlier keeps its router; the upgrade note
+  gives the lines to paste.
 
 ### Changed
+
+- **`rbs` speaks French from end to end in its help screens and usage errors.** clap
+  wrote its own parts in English — `Usage:`, `Commands:`, `Options:`, `Print help`,
+  `[default: …]`, `[possible values: …]`, and every usage error (`error:`, `tip:`,
+  `For more information, try '--help'`) — around French descriptions. Headings, the
+  `-h` and `-V` flags, the `help` subcommand, default and possible values, and the
+  common usage errors — unknown argument, invalid value, unknown command, missing
+  argument, conflict — are now French; a usage error still exits with clap's code, 2.
+  The shell completions describe the options in French as well.
 
 - **`rbs add jobs` and `rbs add scheduler` each carry one more anchor, and `schedules()`
   is written as instructions.** `// <rbs:job_modules>` sits under `pub mod worker;`, and
@@ -226,6 +241,40 @@ between minor versions with no deprecation cycle.
   `mark_done` and `retry_or_fail` issue a targeted `UPDATE`: `ActiveModel::update`
   returned the whole row, payload included — through `RETURNING` on PostgreSQL and
   SQLite, through one more `SELECT` on MySQL — for a model nobody read.
+
+- **An empty webhook event pattern gets a 422, like an invalid URL.**
+  `POST /webhooks/subscriptions` checked blank patterns in the service and answered 400;
+  the check now sits on the DTO, next to `#[validate(url)]`, so the refusal is a
+  validation error that names `events` in the problem's `errors`. A project generated
+  earlier keeps its 400 until it regenerates the fragment.
+
+- **A generated project declares its MSRV, a release profile and a cached Docker build.**
+  The manifest gains `rust-version = "1.94.1"` — a patch above `rbs-core`'s own, which
+  the `aws-sdk` family pulled by `storage` requires — so cargo itself refuses a toolchain
+  too old for the project rather than letting the build fail
+  on an edition or a syntax it does not know. A `[profile.release]` table sets
+  `lto = "thin"`, `codegen-units = 1` and `strip = true`. The `Dockerfile` written by
+  `rbs add docker` pins the minor, `rust:1.94-slim-trixie`, instead of the floating `rust:1`, and
+  builds under BuildKit cache mounts for the registry and `target/`: a commit no longer
+  recompiles every dependency. A project generated earlier keeps its manifest and its
+  `Dockerfile`; both changes can be copied by hand.
+
+- **`storage` reads objects as a stream, and deposits `Bytes` without a copy.** The
+  trait's `get` loaded a whole object into memory — `fs::read` on the file backend,
+  `collect()` then `to_vec()` on S3 — and the generated content route copied every deposit
+  with `Bytes::to_vec()`. `get` now returns an `Object`, its length when the backend knows
+  it and its content as a stream read as the client consumes it, and
+  `GET /<module>/{id}/content` sends that stream with its `content-length`. `put` takes
+  `bytes::Bytes`, handed down from the extractor untouched. The fragment gains `bytes`,
+  `futures-util` and `tokio-util`. A project generated earlier keeps its trait; the 1.5.0
+  upgrade note lists the edits that adopt the stream.
+
+### Removed
+
+- **`rbs-core` drops its empty `redis`, `mail` and `storage` features.** They had
+  activated nothing since v0.3: the three live as fragments generated into the project,
+  and no `feature.toml` nor any example named them. A manifest that lists one of them on
+  `rbs-core` no longer resolves until it is removed — see the upgrade note.
 
 ### Fixed
 
@@ -396,6 +445,12 @@ reads `timestamp` on MySQL and `timestamp_with_timezone_text` on SQLite, which i
   load.** Once the table held 10,000 keys, the sweep ran on each hit and removed only
   expired windows: with 10,000 clients active at once, every request walked the whole
   table under the lock. The next sweep now waits for the table to double.
+
+- **Revoking a webhook subscription is one conditional `UPDATE`.** `revoke` read the
+  row, tested `revoked_at`, then wrote it back: two concurrent revocations could each
+  write their own date, the later one overwriting the first. It now runs
+  `UPDATE … WHERE revoked_at IS NULL`, as `auth` does for its sessions — the first wins,
+  the second touches no row. `emit` also stops cloning each subscription's pattern list.
 
 ## [1.4.0] — 2026-09-11
 

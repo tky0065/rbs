@@ -22,14 +22,14 @@ is verbatim, captured by running the command; only the prose around it is transl
 $ rbs doctor --help
 Diagnostique le projet : ancres, .env, base joignable, versions
 
-Usage: rbs doctor [OPTIONS]
+Utilisation : rbs doctor [OPTIONS]
 
-Options:
+Options :
       --json     Rend le rapport en JSON sur la sortie standard, pour un script ou une CI
       --fix      Repose les ancres absentes avant de diagnostiquer
       --force    Repose les ancres même si le working tree Git est sale
-  -h, --help     Print help
-  -V, --version  Print version
+  -h, --help     Affiche l'aide
+  -V, --version  Affiche la version
 ```
 
 Three flags, and only three. `--json` renders the report as a document; `--fix` puts the

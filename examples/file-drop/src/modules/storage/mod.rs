@@ -8,6 +8,7 @@ use std::path::{Component, Path, PathBuf};
 use std::sync::Arc;
 
 use async_trait::async_trait;
+use bytes::Bytes;
 use serde::Deserialize;
 
 use crate::state::AppState;
@@ -31,13 +32,30 @@ pub enum StorageError {
 // endregion: erreurs
 
 // region: trait
+/// Le contenu d'un objet, morceau par morceau.
+pub type ContentStream = futures_util::stream::BoxStream<'static, std::io::Result<Bytes>>;
+
+/// Un objet lu : sa taille quand le backend la connaît, son contenu en flux.
+///
+/// Un flux plutôt qu'un tampon : servir un objet ne le charge pas en mémoire, quelle que
+/// soit sa taille et quel que soit le nombre de lectures concurrentes.
+pub struct Object {
+    /// Sa taille en octets, que la réponse annonce en `content-length`.
+    pub length: Option<u64>,
+    /// Son contenu, lu à mesure que le client le consomme.
+    pub body: ContentStream,
+}
+
 #[async_trait]
 pub trait Storage: std::fmt::Debug + Send + Sync {
     /// Dépose `content` sous `key`, en écrasant l'objet qui s'y trouvait.
-    async fn put(&self, key: &str, content: Vec<u8>) -> Result<(), StorageError>;
+    async fn put(&self, key: &str, content: Bytes) -> Result<(), StorageError>;
 
-    /// Rend le contenu déposé sous `key`.
-    async fn get(&self, key: &str) -> Result<Vec<u8>, StorageError>;
+    /// Rend l'objet déposé sous `key`, son contenu en flux.
+    ///
+    /// `NotFound` se tranche ici, avant qu'un octet ne parte : une fois le flux entamé,
+    /// une erreur ne peut plus devenir un statut.
+    async fn get(&self, key: &str) -> Result<Object, StorageError>;
 
     /// Retire l'objet déposé sous `key`. Une clé absente n'est pas une erreur.
     async fn delete(&self, key: &str) -> Result<(), StorageError>;
@@ -53,6 +71,10 @@ pub trait Storage: std::fmt::Debug + Send + Sync {
     async fn available(&self) -> bool;
 }
 // endregion: trait
+
+// Les 4 Kio par défaut de `ReaderStream` coûtent, côté fichiers, un aller-retour vers le
+// pool bloquant par morceau : 25 600 pour un objet de 100 Mio.
+const CHUNK: usize = 64 * 1024;
 
 /// Le stockage du projet répond-il ?
 ///

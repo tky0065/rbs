@@ -19,12 +19,12 @@ de cette page sont verbatim, capturés en lançant la commande.
 $ rbs openapi export --help
 Écrit le document OpenAPI du projet sur la sortie standard, ou dans un fichier
 
-Usage: rbs openapi export [OPTIONS]
+Utilisation : rbs openapi export [OPTIONS]
 
-Options:
+Options :
       --out <FICHIER>  Fichier à écrire, relatif au répertoire courant, au lieu de la sortie standard
-  -h, --help           Print help
-  -V, --version        Print version
+  -h, --help           Affiche l'aide
+  -V, --version        Affiche la version
 ```
 
 | Drapeau | Effet |

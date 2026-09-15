@@ -16,6 +16,8 @@ use axum::extract::FromRequestParts;
 use axum::http::header::AUTHORIZATION;
 #[cfg(feature = "auth")]
 use axum::http::request::Parts;
+#[cfg(feature = "auth")]
+use sea_orm::prelude::Uuid;
 
 /// Schéma d'autorisation attendu, casse comprise dans la comparaison.
 #[cfg(feature = "auth")]
@@ -33,6 +35,17 @@ pub struct Identity {
     pub user_id: String,
     /// Rôle en clair. L'enum `Role` est généré dans le projet, hors de portée du noyau.
     pub role: String,
+}
+
+#[cfg(feature = "auth")]
+impl Identity {
+    /// L'identifiant de l'appelant, lu comme UUID.
+    ///
+    /// `sub` est signé, mais rien ne garantit qu'un jeton émis par une version antérieure
+    /// du service y ait mis un UUID : un `sub` illisible vaut un jeton invalide.
+    pub fn user_uuid(&self) -> crate::Result<Uuid> {
+        Uuid::parse_str(&self.user_id).map_err(|_| Error::Unauthorized)
+    }
 }
 
 #[cfg(feature = "auth")]
@@ -202,6 +215,7 @@ mod tests {
 
     #[cfg(feature = "auth")]
     mod identite {
+        use crate::Error;
         use crate::config::{AuthConfig, Config, DatabaseConfig, DocsConfig, ServerConfig};
         use crate::extract::Identity;
         use crate::jwt::{self, Claims};
@@ -211,6 +225,7 @@ mod tests {
         use axum::http::{Request, StatusCode, header};
         use axum::routing::get;
         use sea_orm::DatabaseConnection;
+        use sea_orm::prelude::Uuid;
         use tower::ServiceExt;
 
         const SECRET: &str = "un secret de test qui porte au moins trente-deux octets";
@@ -391,6 +406,27 @@ mod tests {
                 .expect("le router doit répondre");
 
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+
+        #[test]
+        fn a_uuid_subject_reads_back_as_the_user_uuid() {
+            let id = Uuid::from_u128(0x0192_1f5e_7a3b_7c4d_8e9f_a0b1_c2d3_e4f5);
+            let identite = Identity {
+                user_id: id.to_string(),
+                role: "user".into(),
+            };
+
+            assert_eq!(identite.user_uuid().expect("un UUID se lit"), id);
+        }
+
+        #[test]
+        fn a_subject_that_is_not_a_uuid_is_unauthorized() {
+            let identite = Identity {
+                user_id: "42".into(),
+                role: "user".into(),
+            };
+
+            assert!(matches!(identite.user_uuid(), Err(Error::Unauthorized)));
         }
 
         #[tokio::test]

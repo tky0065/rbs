@@ -29,14 +29,14 @@ sortie de terminal ne se traduit pas.
 $ rbs completions --help
 Écrit sur la sortie standard le script de complétion du shell donné
 
-Usage: rbs completions <SHELL>
+Utilisation : rbs completions <SHELL>
 
-Arguments:
-  <SHELL>  Shell visé [possible values: bash, elvish, fish, powershell, zsh]
+Arguments :
+  <SHELL>  Shell visé [valeurs : bash, elvish, fish, powershell, zsh]
 
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
+Options :
+  -h, --help     Affiche l'aide
+  -V, --version  Affiche la version
 ```
 
 Le shell est le seul argument, et il est obligatoire. Les cinq valeurs sont celles pour
@@ -116,10 +116,10 @@ une limite du générateur, non de la déclaration.
 
 ```text
 $ rbs completions nushell
-error: invalid value 'nushell' for '<SHELL>'
-  [possible values: bash, elvish, fish, powershell, zsh]
+erreur : valeur « nushell » invalide pour « <SHELL> »
+  [valeurs : bash, elvish, fish, powershell, zsh]
 
-For more information, try '--help'.
+Pour plus d'informations, essayez « --help ».
 ```
 
 Code de sortie 2, et rien sur la sortie standard — un `eval` de la commande n'évalue donc

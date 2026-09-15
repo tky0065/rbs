@@ -20,18 +20,18 @@ is verbatim, captured by running the command; only the prose around it is transl
 $ rbs migrate --help
 Pilote les migrations du projet
 
-Usage: rbs migrate <COMMAND>
+Utilisation : rbs migrate <COMMANDE>
 
-Commands:
+Commandes :
   up      Applique les migrations en attente
   down    Annule la dernière migration appliquée
   status  Affiche les migrations appliquées et celles en attente
   new     Crée un fichier de migration vide
-  help    Print this message or the help of the given subcommand(s)
+  help    Affiche cette aide, ou celle des commandes données
 
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
+Options :
+  -h, --help     Affiche l'aide
+  -V, --version  Affiche la version
 ```
 
 No subcommand takes a flag of its own, and neither `--template-dir` nor `--yes` is
@@ -41,11 +41,11 @@ accepted: each is declared on the commands that read it.
 $ rbs migrate up --help
 Applique les migrations en attente
 
-Usage: rbs migrate up
+Utilisation : rbs migrate up
 
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
+Options :
+  -h, --help     Affiche l'aide
+  -V, --version  Affiche la version
 ```
 
 `down` and `status` are declared the same way. `new` alone takes an argument:
@@ -54,14 +54,14 @@ Options:
 $ rbs migrate new --help
 Crée un fichier de migration vide
 
-Usage: rbs migrate new <NAME>
+Utilisation : rbs migrate new <NAME>
 
-Arguments:
+Arguments :
   <NAME>  Nom de la migration
 
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
+Options :
+  -h, --help     Affiche l'aide
+  -V, --version  Affiche la version
 ```
 
 ## Which database

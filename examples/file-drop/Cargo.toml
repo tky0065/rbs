@@ -6,6 +6,7 @@ resolver = "3"
 name = "file-drop"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.94.1"
 # Le paquet porte trois binaires : sans ce choix, `cargo run` ne saurait plus lequel lancer.
 default-run = "file-drop"
 
@@ -53,6 +54,17 @@ minijinja = { version = "2.24", features = ["loader"] }
 async-trait = "0.1"
 thiserror = "2.0"
 aws-sdk-s3 = "1.146"
+bytes = "1.12"
+futures-util = "0.3"
+tokio-util = { version = "0.7", features = ["io"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+
+# `thin` garde l'essentiel du gain de `lto = true` pour une fraction du temps d'édition de
+# liens ; une seule unité de code laisse l'optimiseur voir tout le paquet. Le binaire part
+# sans symboles : l'image n'a pas de débogueur pour s'en servir.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

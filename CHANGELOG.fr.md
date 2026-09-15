@@ -15,6 +15,11 @@ dépréciation.
 
 ### Ajouté
 
+- **`Identity::user_uuid()` et `Claims::user_uuid()`** lisent l'identifiant de l'appelant
+  en `Uuid`, et rendent `Error::Unauthorized` quand `sub` n'en est pas un. Le fragment
+  `auth` appelait `Uuid::parse_str` avec la même conversion d'erreur à sept endroits ;
+  chacun appelle désormais la méthode, comme peut le faire un CRUD engendré qui veut
+  l'auteur d'une écriture.
 - **`rbs_core::db::redact_url`** rend une URL de connexion au mot de passe remplacé par
   `***` — le masquage que `db::connect` appliquait déjà à ses propres erreurs. Les
   fragments `redis` et `rate-limit` l'appellent pour citer `[cache] url` dans un journal ;
@@ -120,10 +125,22 @@ dépréciation.
   désormais une `CompressionLayer`, et `tower-http` gagne la feature `compression-gzip` :
   `/api-docs/openapi.json`, qui grossit à chaque CRUD, et chaque liste partent compressés
   en gzip vers tout client qui l'accepte. Le prédicat par défaut épargne les petits
-  corps, les images et les flux SSE. Un projet engendré avant garde son routeur ; la note
-  de montée donne les lignes à coller.
+  corps, les images et les flux SSE, et le squelette y ajoute `application/octet-stream` :
+  un fichier servi tel quel garde son `content-length`, et une archive déjà compressée ne
+  l'est pas une seconde fois. Un projet engendré avant garde son routeur ; la note de
+  montée donne les lignes à coller.
 
 ### Modifié
+
+- **`rbs` parle français de bout en bout dans son aide et ses erreurs d'usage.** clap
+  écrivait en anglais ce qui lui revient — `Usage:`, `Commands:`, `Options:`,
+  `Print help`, `[default: …]`, `[possible values: …]`, et chaque erreur d'usage
+  (`error:`, `tip:`, `For more information, try '--help'`) — autour de descriptions
+  françaises. Les en-têtes, les drapeaux `-h` et `-V`, la sous-commande `help`, les
+  valeurs par défaut et possibles, et les erreurs d'usage courantes — argument inconnu,
+  valeur invalide, commande inconnue, argument manquant, conflit — sont désormais en
+  français ; une erreur d'usage sort toujours avec le code de clap, 2. Les complétions
+  du shell décrivent elles aussi les options en français.
 
 - **`rbs add jobs` et `rbs add scheduler` portent chacun une ancre de plus, et
   `schedules()` s'écrit en instructions.** `// <rbs:job_modules>` se tient sous
@@ -238,6 +255,43 @@ dépréciation.
   `retry_or_fail` émettent un `UPDATE` ciblé : `ActiveModel::update` rendait la ligne
   entière, payload compris — par `RETURNING` sur PostgreSQL et SQLite, par un `SELECT`
   de plus sur MySQL — pour un modèle que personne ne lisait.
+
+- **Un motif d'événement vide reçoit un 422, comme une URL invalide.**
+  `POST /webhooks/subscriptions` vérifiait les motifs blancs dans le service et répondait
+  400 ; la vérification se tient désormais sur le DTO, à côté de `#[validate(url)]`, si
+  bien que le refus est une erreur de validation qui nomme `events` dans les `errors` du
+  problème. Un projet engendré plus tôt garde son 400 tant qu'il ne réengendre pas le
+  fragment.
+
+- **Un projet engendré déclare sa MSRV, un profil release et un build Docker en cache.**
+  Le manifeste gagne `rust-version = "1.94.1"` — un patch au-dessus de celle de
+  `rbs-core`, qu'exige la famille `aws-sdk` que tire `storage` : cargo refuse lui-même une
+  toolchain trop vieille pour le projet, au lieu de laisser le
+  build échouer sur une édition ou une syntaxe qu'elle ne connaît pas. Une table
+  `[profile.release]` pose `lto = "thin"`, `codegen-units = 1` et `strip = true`. Le
+  `Dockerfile` qu'écrit `rbs add docker` épingle la mineure, `rust:1.94-slim-trixie`, au lieu de
+  `rust:1` flottante, et construit sous des montages de cache BuildKit pour le registre et
+  `target/` : un commit ne recompile plus toutes les dépendances. Un projet engendré plus
+  tôt garde son manifeste et son `Dockerfile` ; les deux changements se recopient à la
+  main.
+
+- **`storage` lit ses objets en flux, et dépose des `Bytes` sans copie.** Le `get` du
+  trait chargeait l'objet entier en mémoire — `fs::read` côté fichiers, `collect()` puis
+  `to_vec()` côté S3 —, et la route de contenu engendrée copiait chaque dépôt par
+  `Bytes::to_vec()`. `get` rend désormais un `Object`, sa taille quand le backend la
+  connaît et son contenu en flux lu à mesure que le client le consomme, et
+  `GET /<module>/{id}/content` sert ce flux avec son `content-length`. `put` prend des
+  `bytes::Bytes`, transmis par l'extracteur tels quels. Le fragment gagne `bytes`,
+  `futures-util` et `tokio-util`. Un projet engendré avant garde son trait ; la note de
+  mise à jour 1.5.0 dit les retouches qui adoptent le flux.
+
+### Retiré
+
+- **`rbs-core` perd ses features vides `redis`, `mail` et `storage`.** Elles
+  n'activaient rien depuis la v0.3 : les trois vivent en fragments engendrés dans le
+  projet, et aucun `feature.toml` ni aucun exemple ne les nommait. Un manifeste qui en
+  active une sur `rbs-core` ne se résout plus tant qu'elle y figure — voir la note de
+  mise à jour.
 
 ### Corrigé
 
@@ -414,6 +468,13 @@ lit `timestamp` sur MySQL et `timestamp_with_timezone_text` sur SQLite, ce que
   et ne retirait que les fenêtres échues : avec 10 000 clients actifs à la fois, chaque
   requête parcourait toute la table sous le verrou. Le balayage suivant attend désormais
   que la table ait doublé.
+
+- **La révocation d'un abonnement webhook est un seul `UPDATE` conditionnel.** `revoke`
+  lisait la ligne, testait `revoked_at`, puis la réécrivait : deux révocations
+  concurrentes pouvaient écrire chacune sa date, la seconde écrasant la première. Elle
+  passe désormais par `UPDATE … WHERE revoked_at IS NULL`, comme `auth` pour ses
+  sessions — la première gagne, la seconde ne touche aucune ligne. `emit` cesse aussi de
+  cloner la liste des motifs de chaque abonnement.
 
 ## [1.4.0] — 2026-09-11
 

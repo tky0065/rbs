@@ -1,4 +1,5 @@
-FROM rust:1-slim-trixie AS builder
+# syntax=docker/dockerfile:1
+FROM rust:1.94-slim-trixie AS builder
 
 # `utoipa-swagger-ui` télécharge son archive pendant la compilation, avec `curl`, que
 # l'image `rust:slim` ne porte pas. Sans lui, le build échoue à la toute fin, une fois
@@ -11,7 +12,18 @@ WORKDIR /build
 COPY . .
 # `--bins` construit l'API et le binaire de migration : le service `migrate` du compose
 # tourne sur cette même image.
-RUN cargo build --release --workspace --bins
+#
+# Les montages de cache gardent le registre et `target/` d'un build à l'autre : un commit
+# ne recompile plus sea-orm ni axum. Ils n'entrent pas dans la couche, d'où la copie des
+# deux binaires hors de `target/` dans la même instruction. Le cache de `target/` porte le
+# nom du projet : partagé, deux projets du même builder se prêteraient leur paquet
+# `migration`, qui a partout le même identifiant.
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,id=event-hub-target,target=/build/target \
+    cargo build --release --workspace --bins \
+ && mkdir -p /build/out \
+ && cp target/release/event-hub target/release/migration /build/out/
 
 FROM debian:trixie-slim AS runtime
 
@@ -20,8 +32,8 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/* \
  && useradd --create-home --uid 10001 api
 
-COPY --from=builder /build/target/release/event-hub /usr/local/bin/
-COPY --from=builder /build/target/release/migration /usr/local/bin/
+COPY --from=builder /build/out/event-hub /usr/local/bin/
+COPY --from=builder /build/out/migration /usr/local/bin/
 
 WORKDIR /app
 COPY config ./config

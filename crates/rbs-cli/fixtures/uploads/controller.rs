@@ -1,7 +1,8 @@
 use axum::Json;
-use axum::body::Bytes;
+use axum::body::{Body, Bytes};
 use axum::extract::{Path, State};
-use axum::http::StatusCode;
+use axum::http::header::{CONTENT_LENGTH, CONTENT_TYPE};
+use axum::http::{HeaderValue, StatusCode};
 use axum::response::IntoResponse;
 use rbs_core::{HasCoreState, Page, Pagination, ProblemDetails, Result, ValidatedJson};
 use sea_orm::prelude::Uuid;
@@ -155,13 +156,7 @@ pub async fn put_content(
     Path(id): Path<Uuid>,
     content: Bytes,
 ) -> Result<StatusCode> {
-    service::put_content(
-        state.core().db(),
-        state.storage().as_ref(),
-        id,
-        content.to_vec(),
-    )
-    .await?;
+    service::put_content(state.core().db(), state.storage().as_ref(), id, content).await?;
 
     Ok(StatusCode::NO_CONTENT)
 }
@@ -181,9 +176,22 @@ pub async fn get_content(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
-    let content = service::get_content(state.storage().as_ref(), id).await?;
+    let object = service::get_content(state.storage().as_ref(), id).await?;
 
-    Ok(([("content-type", "application/octet-stream")], content))
+    // Le corps part en flux. Une erreur en route ne peut plus devenir un 500, les en-têtes
+    // étant partis : la réponse s'interrompt, et la taille annoncée dit au client qu'il lui
+    // manque la fin.
+    let mut response = Body::from_stream(object.body).into_response();
+    let headers = response.headers_mut();
+    headers.insert(
+        CONTENT_TYPE,
+        HeaderValue::from_static("application/octet-stream"),
+    );
+    if let Some(length) = object.length {
+        headers.insert(CONTENT_LENGTH, HeaderValue::from(length));
+    }
+
+    Ok(response)
 }
 
 #[utoipa::path(

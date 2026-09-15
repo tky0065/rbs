@@ -20,14 +20,25 @@ de cette page sont verbatim, capturés en lançant la commande.
 $ rbs dev --help
 Démarre le projet : services, migrations, serveur relancé à chaque changement
 
-Usage: rbs dev
+Utilisation : rbs dev [OPTIONS] [-- <ARGS>...]
 
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
+Arguments :
+  [ARGS]...  Arguments passés au binaire du serveur après `--` ; le main engendré n'en lit aucun
+
+Options :
+      --no-compose  Ne remonte pas les services du compose : ils tournent déjà, ou ailleurs
+      --no-migrate  N'applique pas les migrations en attente
+  -h, --help        Affiche l'aide
+  -V, --version     Affiche la version
 ```
 
-Aucun drapeau propre. Ce qu'elle fait dépend entièrement de ce que le projet déclare.
+| Option | Effet |
+|---|---|
+| `--no-compose` | Saute `docker compose up -d` : les services tournent déjà, ou ailleurs. L'attente de la base reste, avec la patience de 3 secondes d'une base que rbs n'a pas démarrée. |
+| `--no-migrate` | Saute `rbs migrate up`, pour qu'une relance ne rejoue pas les migrations. |
+| `-- ARGS` | Tout ce qui suit `--` va au serveur, après `cargo run --`, à chaque relance. |
+
+Sans eux, ce qu'elle fait dépend entièrement de ce que le projet déclare.
 
 ## Le plan
 
@@ -50,6 +61,18 @@ Quatre étapes au plus, dans cet ordre :
 3. **[`rbs migrate up`](./migrate.md)**, pour qu'un changement de schéma récupéré d'un
    collègue s'applique sans seconde commande ;
 4. **le serveur**, `cargo run`, relancé à chaque changement sous `src/`.
+
+`--no-compose` ôte la première étape, `--no-migrate` la troisième. L'attente reste, quoi
+qu'on saute : le serveur a besoin de sa base de toute façon. Les arguments qui suivent
+`--` vont au binaire du serveur, et s'affichent sur sa ligne. Le `main` engendré n'en lit
+aucun, son port venant de `[server] port` dans `config/` : ils servent un `main` à qui
+vous avez appris à les lire.
+
+```text
+$ rbs dev --no-compose --no-migrate -- --verbose
+  base        127.0.0.1:1
+  serveur     cargo run -- --verbose, relancé à chaque changement
+```
 
 Un projet avec un compose — le cas par défaut, pour la plupart — montre l'étape en plus,
 en tête :

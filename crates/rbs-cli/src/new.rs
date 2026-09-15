@@ -399,6 +399,8 @@ fn render(options: &Options, dependency: &str) -> Result<Vec<(PathBuf, String)>,
         crate_name => crate_name(&options.name),
         rbs_core_dep => dependency,
         rbs_version => env!("CARGO_PKG_VERSION"),
+        rust_version => crate::templates::RUST_VERSION,
+        rust_image => crate::templates::rust_image(),
         database_url => options.database_url.as_str(),
         database => options.database.name(),
         sea_orm_feature => options.database.sea_orm_feature(),
@@ -939,6 +941,31 @@ mod tests {
             production.contains("\"v4\""),
             "la feature `v4` manque aux tests générés :\n{manifest}"
         );
+    }
+
+    /// `rust-version` fait refuser une toolchain trop vieille par cargo lui-même, là où
+    /// l'édition seule laisserait une erreur de compilation obscure.
+    #[test]
+    fn the_manifest_declares_its_msrv_and_a_release_profile() {
+        let parent = parent();
+
+        let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
+
+        let manifest = read(&project.root.join("Cargo.toml"));
+        let msrv = format!("rust-version = \"{}\"", crate::templates::RUST_VERSION);
+        assert!(
+            manifest.contains(&msrv),
+            "`{msrv}` absent du manifeste :\n{manifest}"
+        );
+        let (_, profil) = manifest
+            .split_once("[profile.release]")
+            .unwrap_or_else(|| panic!("profil release absent :\n{manifest}"));
+        for reglage in ["lto = \"thin\"", "codegen-units = 1", "strip = true"] {
+            assert!(
+                profil.contains(reglage),
+                "`{reglage}` absent du profil release :\n{manifest}"
+            );
+        }
     }
 
     #[test]

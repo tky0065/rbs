@@ -3,8 +3,11 @@ use aws_sdk_s3::Client;
 use aws_sdk_s3::config::{BehaviorVersion, Credentials, Region};
 use aws_sdk_s3::operation::head_object::HeadObjectError;
 use aws_sdk_s3::primitives::ByteStream;
+use bytes::Bytes;
+use futures_util::StreamExt;
+use tokio_util::io::ReaderStream;
 
-use super::{Storage, StorageConfig, StorageError, normalize};
+use super::{Object, Storage, StorageConfig, StorageError, normalize};
 
 /// Stockage sur S3, ou sur toute API qui en suit le protocole.
 #[derive(Debug, Clone)]
@@ -51,7 +54,7 @@ fn unavailable<E: std::error::Error + Send + Sync + 'static>(error: E) -> Storag
 
 #[async_trait]
 impl Storage for S3Storage {
-    async fn put(&self, key: &str, content: Vec<u8>) -> Result<(), StorageError> {
+    async fn put(&self, key: &str, content: Bytes) -> Result<(), StorageError> {
         self.client
             .put_object()
             .bucket(&self.bucket)
@@ -64,7 +67,9 @@ impl Storage for S3Storage {
         Ok(())
     }
 
-    async fn get(&self, key: &str) -> Result<Vec<u8>, StorageError> {
+    // `get_object` tranche `NoSuchKey` avant qu'un octet ne parte ; le corps ne descend
+    // ensuite du bucket qu'à mesure que le client le consomme.
+    async fn get(&self, key: &str) -> Result<Object, StorageError> {
         let object = self
             .client
             .get_object()
@@ -77,7 +82,12 @@ impl Storage for S3Storage {
                 _ => unavailable(error),
             })?;
 
-        Ok(object.body.collect().await.map_err(unavailable)?.to_vec())
+        Ok(Object {
+            length: object
+                .content_length()
+                .and_then(|length| u64::try_from(length).ok()),
+            body: ReaderStream::with_capacity(object.body.into_async_read(), super::CHUNK).boxed(),
+        })
     }
 
     async fn delete(&self, key: &str) -> Result<(), StorageError> {

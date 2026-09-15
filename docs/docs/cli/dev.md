@@ -19,14 +19,25 @@ is verbatim, captured by running the command; only the prose around it is transl
 $ rbs dev --help
 Démarre le projet : services, migrations, serveur relancé à chaque changement
 
-Usage: rbs dev
+Utilisation : rbs dev [OPTIONS] [-- <ARGS>...]
 
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
+Arguments :
+  [ARGS]...  Arguments passés au binaire du serveur après `--` ; le main engendré n'en lit aucun
+
+Options :
+      --no-compose  Ne remonte pas les services du compose : ils tournent déjà, ou ailleurs
+      --no-migrate  N'applique pas les migrations en attente
+  -h, --help        Affiche l'aide
+  -V, --version     Affiche la version
 ```
 
-No flags of its own. What it does depends entirely on what the project declares.
+| Option | Effect |
+|---|---|
+| `--no-compose` | Skips `docker compose up -d`: the services are already running, or run elsewhere. The wait for the database stays, with the 3-second patience of a database rbs did not start. |
+| `--no-migrate` | Skips `rbs migrate up`, so that a restart does not replay the migrations. |
+| `-- ARGS` | Everything after `--` goes to the server, after `cargo run --`, on every restart. |
+
+Without them, what it does depends entirely on what the project declares.
 
 ## The plan
 
@@ -49,6 +60,18 @@ Up to four steps, in order:
 3. **[`rbs migrate up`](./migrate.md)**, so that a schema change pulled from a colleague
    applies without a second command;
 4. **the server**, `cargo run`, restarted on every change under `src/`.
+
+`--no-compose` removes the first step and `--no-migrate` the third. The wait stays,
+whatever is skipped: the server needs its database either way. The arguments after `--`
+go to the server binary, and show on its line. The generated `main` reads none — its port
+comes from `[server] port` in `config/` — so they serve a `main` you have taught to read
+them:
+
+```text
+$ rbs dev --no-compose --no-migrate -- --verbose
+  base        127.0.0.1:1
+  serveur     cargo run -- --verbose, relancé à chaque changement
+```
 
 A project with a compose — the default, for most — shows the extra step first:
 

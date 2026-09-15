@@ -337,6 +337,8 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let context = context! {
         project_name => nom_projet.clone(),
         crate_name => crate_name.clone(),
+        rust_version => crate::templates::RUST_VERSION,
+        rust_image => crate::templates::rust_image(),
         features => features,
         // Par où le binaire principal atteint un module de feature : la bibliothèque du
         // projet, ou `crate::` sur un projet engendré avant qu'elle n'existe, où ces

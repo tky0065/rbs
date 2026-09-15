@@ -49,8 +49,9 @@ quand `OTEL_EXPORTER_OTLP_ENDPOINT` nomme un collecteur. Elle vit ici plutôt qu
 engendré parce que `set_global_default` s'appelle une seule fois, et que cet appel est la
 première ligne d'un `main` engendré.
 
-`redis`, `mail` et `storage` sont déclarées mais **vides** : elles réservent les noms
-d'extensions prévues et n'activent rien aujourd'hui.
+Redis, le mail et le stockage de fichiers ne sont pas des features de cette crate : ce sont
+des fragments engendrés dans votre projet par `rbs add redis`, `rbs add mail` et
+`rbs add storage`, et ils n'ont rien à faire dans le noyau.
 
 ## Ce qu'elle laisse délibérément de côté
 
