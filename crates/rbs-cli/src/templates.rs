@@ -26,9 +26,24 @@ static FEATURES: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/templates/feat
 /// Les guides `AGENTS.md`, une template par langue.
 static AGENTS: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/templates/agents");
 
-/// La toolchain minimale d'un projet engendré : la MSRV du workspace, celle de `rbs-core`
-/// dont il dépend. Le manifeste la déclare, le Dockerfile en épingle l'image.
-pub(crate) const RUST_VERSION: &str = env!("CARGO_PKG_RUST_VERSION");
+/// La toolchain minimale d'un projet engendré, que son manifeste déclare en `rust-version`.
+///
+/// Un patch au-dessus de la MSRV de `rbs-core` : la famille `aws-sdk` que tire `storage`
+/// exige 1.94.1 dans toute la plage que son `feature.toml` admet, et un projet qui la porte
+/// ne se résout pas sur une 1.94.0. À relever quand une dépendance de fragment monte la
+/// sienne ; un test la garde de descendre sous celle du noyau.
+pub(crate) const RUST_VERSION: &str = "1.94.1";
+
+/// Le tag de l'image `rust` du Dockerfile engendré : la mineure de [`RUST_VERSION`], qui
+/// reçoit les correctifs sans qu'on ait à la relever.
+pub(crate) fn rust_image() -> &'static str {
+    let fin = RUST_VERSION
+        .match_indices('.')
+        .nth(1)
+        .map_or(RUST_VERSION.len(), |(position, _)| position);
+
+    &RUST_VERSION[..fin]
+}
 
 /// Provenance des templates.
 #[derive(Debug)]
@@ -343,6 +358,7 @@ mod tests {
             rbs_core_dep => "\"0.1\"",
             rbs_version => "0.1.0",
             rust_version => super::RUST_VERSION,
+            rust_image => super::rust_image(),
             database_url => "postgres://postgres:postgres@localhost:5432/mon_api",
             database => database.name(),
             sea_orm_feature => database.sea_orm_feature(),
@@ -696,6 +712,7 @@ mod tests {
             project_name => "mon-api",
             crate_name => "mon_api",
             rust_version => super::RUST_VERSION,
+            rust_image => super::rust_image(),
             features => installees,
             database => database.name(),
             database_a_un_serveur => database.a_un_serveur(),
@@ -1576,6 +1593,34 @@ mod tests {
         assert!(sonde.contains("GET /health/live HTTP/1.1"), "{sonde}");
     }
 
+    /// Un projet engendré dépend de `rbs-core` : déclarer une toolchain plus vieille que la
+    /// sienne promettrait ce que cargo refusera.
+    #[test]
+    fn the_generated_msrv_is_never_below_the_core_one() {
+        let version = |texte: &str| -> Vec<u32> {
+            texte
+                .split('.')
+                .map(|nombre| nombre.parse().expect("version numérique"))
+                .collect()
+        };
+
+        assert!(
+            version(super::RUST_VERSION) >= version(env!("CARGO_PKG_RUST_VERSION")),
+            "{} est sous la MSRV du noyau, {}",
+            super::RUST_VERSION,
+            env!("CARGO_PKG_RUST_VERSION")
+        );
+    }
+
+    /// L'image suit la mineure : un tag de patch figerait les correctifs de sécurité.
+    #[test]
+    fn the_docker_image_is_the_minor_of_the_generated_msrv() {
+        let image = super::rust_image();
+
+        assert_eq!(image.matches('.').count(), 1, "{image}");
+        assert!(super::RUST_VERSION.starts_with(image), "{image}");
+    }
+
     /// L'image de build suit la MSRV du projet plutôt que `rust:1` flottante, et garde le
     /// registre et `target/` d'un build à l'autre : sans ces montages, chaque commit
     /// recompile toutes les dépendances.
@@ -1590,10 +1635,7 @@ mod tests {
             rendu.starts_with("# syntax=docker/dockerfile:1\n"),
             "les montages de cache exigent la syntaxe BuildKit en tête :\n{rendu}"
         );
-        let image = format!(
-            "FROM rust:{}-slim-trixie AS builder",
-            env!("CARGO_PKG_RUST_VERSION")
-        );
+        let image = format!("FROM rust:{}-slim-trixie AS builder", super::rust_image());
         assert!(rendu.contains(&image), "`{image}` absent :\n{rendu}");
         for cache in [
             "/usr/local/cargo/registry",

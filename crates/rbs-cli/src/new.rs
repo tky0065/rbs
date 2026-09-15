@@ -400,6 +400,7 @@ fn render(options: &Options, dependency: &str) -> Result<Vec<(PathBuf, String)>,
         rbs_core_dep => dependency,
         rbs_version => env!("CARGO_PKG_VERSION"),
         rust_version => crate::templates::RUST_VERSION,
+        rust_image => crate::templates::rust_image(),
         database_url => options.database_url.as_str(),
         database => options.database.name(),
         sea_orm_feature => options.database.sea_orm_feature(),
@@ -943,8 +944,7 @@ mod tests {
     }
 
     /// `rust-version` fait refuser une toolchain trop vieille par cargo lui-même, là où
-    /// l'édition seule laisserait une erreur de compilation obscure : c'est la MSRV de
-    /// `rbs-core`, dont tout projet engendré dépend.
+    /// l'édition seule laisserait une erreur de compilation obscure.
     #[test]
     fn the_manifest_declares_its_msrv_and_a_release_profile() {
         let parent = parent();
@@ -952,7 +952,7 @@ mod tests {
         let project = create(&options("mon-api"), parent.path()).expect("le projet doit se créer");
 
         let manifest = read(&project.root.join("Cargo.toml"));
-        let msrv = format!("rust-version = \"{}\"", env!("CARGO_PKG_RUST_VERSION"));
+        let msrv = format!("rust-version = \"{}\"", crate::templates::RUST_VERSION);
         assert!(
             manifest.contains(&msrv),
             "`{msrv}` absent du manifeste :\n{manifest}"

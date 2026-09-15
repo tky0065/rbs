@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM rust:{@ rust_version @}-slim-trixie AS builder
+FROM rust:{@ rust_image @}-slim-trixie AS builder
 
 # `utoipa-swagger-ui` télécharge son archive pendant la compilation, avec `curl`, que
 # l'image `rust:slim` ne porte pas. Sans lui, le build échoue à la toute fin, une fois

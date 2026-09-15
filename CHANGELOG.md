@@ -247,11 +247,12 @@ between minor versions with no deprecation cycle.
   earlier keeps its 400 until it regenerates the fragment.
 
 - **A generated project declares its MSRV, a release profile and a cached Docker build.**
-  The manifest gains `rust-version`, the minimum toolchain of `rbs-core` it depends on, so
-  cargo itself refuses a toolchain too old for the core rather than letting the build fail
+  The manifest gains `rust-version = "1.94.1"` — a patch above `rbs-core`'s own, which
+  the `aws-sdk` family pulled by `storage` requires — so cargo itself refuses a toolchain
+  too old for the project rather than letting the build fail
   on an edition or a syntax it does not know. A `[profile.release]` table sets
   `lto = "thin"`, `codegen-units = 1` and `strip = true`. The `Dockerfile` written by
-  `rbs add docker` pins `rust:<msrv>-slim-trixie` instead of the floating `rust:1`, and
+  `rbs add docker` pins the minor, `rust:1.94-slim-trixie`, instead of the floating `rust:1`, and
   builds under BuildKit cache mounts for the registry and `target/`: a commit no longer
   recompiles every dependency. A project generated earlier keeps its manifest and its
   `Dockerfile`; both changes can be copied by hand.

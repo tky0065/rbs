@@ -6,7 +6,7 @@ resolver = "3"
 name = "blog-auth"
 version = "0.1.0"
 edition = "2024"
-rust-version = "1.94"
+rust-version = "1.94.1"
 # Le paquet porte trois binaires : sans ce choix, `cargo run` ne saurait plus lequel lancer.
 default-run = "blog-auth"
 
