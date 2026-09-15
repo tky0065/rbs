@@ -52,8 +52,28 @@ source      = "delivery.rs.jinja"
 destination = "src/modules/webhooks/delivery.rs"
 
 [[files]]
-source      = "tests.rs.jinja"
-destination = "src/modules/webhooks/tests.rs"
+source      = "tests/mod.rs.jinja"
+destination = "src/modules/webhooks/tests/mod.rs"
+
+[[files]]
+source      = "tests/blocked.rs.jinja"
+destination = "src/modules/webhooks/tests/blocked.rs"
+
+[[files]]
+source      = "tests/emission.rs.jinja"
+destination = "src/modules/webhooks/tests/emission.rs"
+
+[[files]]
+source      = "tests/routes.rs.jinja"
+destination = "src/modules/webhooks/tests/routes.rs"
+
+[[files]]
+source      = "tests/signature.rs.jinja"
+destination = "src/modules/webhooks/tests/signature.rs"
+
+[[files]]
+source      = "tests/target.rs.jinja"
+destination = "src/modules/webhooks/tests/target.rs"
 
 [[anchors]]
 anchor  = "modules"

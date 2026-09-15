@@ -18,36 +18,74 @@ use tempfile::TempDir;
 
 mod common;
 
-/// Ce que le fragment livre et que `cargo test` joue sans base.
-const TESTS_ORDINAIRES: [&str; 11] = [
-    "the_signature_matches_an_independently_computed_vector",
-    "the_signature_changes_with_the_timestamp",
-    "the_signature_header_carries_the_timestamp_and_the_v1_digest",
-    "an_exact_pattern_matches_only_its_own_event",
-    "a_prefix_pattern_matches_every_event_of_its_family",
-    "the_star_pattern_matches_every_event",
-    "private_loopback_and_link_local_addresses_are_not_public",
-    "public_addresses_are_public",
-    "outside_development_only_https_to_a_public_host_passes",
-    "in_development_http_and_private_hosts_pass_but_not_other_schemes",
-    "the_resolver_drops_localhost_outside_development_and_keeps_it_in_development",
+/// Ce que le fragment livre et que `cargo test` joue sans base, nommés avec le sous-module
+/// — `signature` ou `target` — où le découpage des tests l'a rangé.
+const TESTS_ORDINAIRES: [(&str, &str); 11] = [
+    (
+        "signature",
+        "the_signature_matches_an_independently_computed_vector",
+    ),
+    ("signature", "the_signature_changes_with_the_timestamp"),
+    (
+        "signature",
+        "the_signature_header_carries_the_timestamp_and_the_v1_digest",
+    ),
+    ("signature", "an_exact_pattern_matches_only_its_own_event"),
+    (
+        "signature",
+        "a_prefix_pattern_matches_every_event_of_its_family",
+    ),
+    ("signature", "the_star_pattern_matches_every_event"),
+    (
+        "target",
+        "private_loopback_and_link_local_addresses_are_not_public",
+    ),
+    ("target", "public_addresses_are_public"),
+    (
+        "target",
+        "outside_development_only_https_to_a_public_host_passes",
+    ),
+    (
+        "target",
+        "in_development_http_and_private_hosts_pass_but_not_other_schemes",
+    ),
+    (
+        "target",
+        "the_resolver_drops_localhost_outside_development_and_keeps_it_in_development",
+    ),
 ];
 
-/// Ce qu'il livre et qui joint la base.
-const TESTS_SOUS_CONTENEUR: [&str; 13] = [
-    "emitting_an_event_enqueues_one_delivery_per_listening_subscription",
-    "a_revoked_subscription_is_not_delivered_to",
-    "a_subscription_that_does_not_listen_receives_nothing",
-    "a_delivery_whose_subscription_was_revoked_succeeds_without_a_request",
-    "an_emission_rolled_back_with_its_transaction_enqueues_nothing",
-    "a_user_role_is_refused_on_the_three_routes",
-    "an_admin_subscribes_then_reads_and_revokes",
-    "an_empty_pattern_is_refused_by_validation",
-    "revoking_twice_keeps_the_first_date",
-    "an_admin_subscribing_a_private_url_gets_400",
-    "post_refuses_a_blocked_target_before_sending",
-    "a_delivery_to_a_blocked_target_is_abandoned_not_retried",
-    "in_development_a_local_receiver_is_reached",
+/// Ce qu'il livre et qui joint la base, nommés avec le sous-module — `emission`, `routes`
+/// ou `blocked` — où le découpage des tests l'a rangé.
+const TESTS_SOUS_CONTENEUR: [(&str, &str); 13] = [
+    (
+        "emission",
+        "emitting_an_event_enqueues_one_delivery_per_listening_subscription",
+    ),
+    ("emission", "a_revoked_subscription_is_not_delivered_to"),
+    (
+        "emission",
+        "a_subscription_that_does_not_listen_receives_nothing",
+    ),
+    (
+        "emission",
+        "a_delivery_whose_subscription_was_revoked_succeeds_without_a_request",
+    ),
+    (
+        "emission",
+        "an_emission_rolled_back_with_its_transaction_enqueues_nothing",
+    ),
+    ("routes", "a_user_role_is_refused_on_the_three_routes"),
+    ("routes", "an_admin_subscribes_then_reads_and_revokes"),
+    ("routes", "an_empty_pattern_is_refused_by_validation"),
+    ("routes", "revoking_twice_keeps_the_first_date"),
+    ("blocked", "an_admin_subscribing_a_private_url_gets_400"),
+    ("blocked", "post_refuses_a_blocked_target_before_sending"),
+    (
+        "blocked",
+        "a_delivery_to_a_blocked_target_is_abandoned_not_retried",
+    ),
+    ("blocked", "in_development_a_local_receiver_is_reached"),
 ];
 
 #[test]
@@ -69,9 +107,11 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     // soit vraiment joué.
     let (abouti, ordinaires) = cargo_test_brut(&racine, &common::cible(), &[]);
     assert!(abouti, "`cargo test` du projet a échoué :\n{ordinaires}");
-    for test in TESTS_ORDINAIRES {
+    for (sous_module, test) in TESTS_ORDINAIRES {
         assert!(
-            ordinaires.contains(&format!("test modules::webhooks::tests::{test} ... ok")),
+            ordinaires.contains(&format!(
+                "test modules::webhooks::tests::{sous_module}::{test} ... ok"
+            )),
             "`{test}` n'a pas été exécuté :\n{ordinaires}"
         );
     }
@@ -85,9 +125,11 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     // `cargo test -- --ignored` sort en 0 même quand il ne filtre **aucun** test : sans
     // ces treize lignes, un fragment qui cesserait de livrer ses tests laisserait celui-ci
     // au vert sans qu'une seule transaction ait été ouverte.
-    for test in TESTS_SOUS_CONTENEUR {
+    for (sous_module, test) in TESTS_SOUS_CONTENEUR {
         assert!(
-            sous_conteneur.contains(&format!("test modules::webhooks::tests::{test} ... ok")),
+            sous_conteneur.contains(&format!(
+                "test modules::webhooks::tests::{sous_module}::{test} ... ok"
+            )),
             "`{test}` n'a pas été exécuté :\n{sous_conteneur}"
         );
     }

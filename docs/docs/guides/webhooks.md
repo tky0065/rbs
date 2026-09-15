@@ -45,12 +45,17 @@ plan pour …/demo
   + src/modules/webhooks/signature.rs                                créé
   + src/modules/webhooks/target.rs                                   créé
   + src/modules/webhooks/delivery.rs                                 créé
-  + src/modules/webhooks/tests.rs                                    créé
+  + src/modules/webhooks/tests/mod.rs                                créé
+  + src/modules/webhooks/tests/blocked.rs                            créé
+  + src/modules/webhooks/tests/emission.rs                           créé
+  + src/modules/webhooks/tests/routes.rs                             créé
+  + src/modules/webhooks/tests/signature.rs                          créé
+  + src/modules/webhooks/tests/target.rs                             créé
   + migration/src/m20260913_132216_create_webhook_subscriptions.rs   créé
   ~ AGENTS.md                                                        modifié
 
-  62 à créer, 12 à modifier
-✓ webhooks installée — 62 créés, 12 modifiés
+  67 à créer, 12 à modifier
+✓ webhooks installée — 67 créés, 12 modifiés
 
   rbs migrate up, inscrivez un abonné par POST /webhooks/subscriptions — son secret n'est rendu qu'à cet instant — puis appelez webhooks::emit dans vos services
 ```
@@ -240,7 +245,7 @@ worker's log.
 
 ## Testing
 
-The generated `src/modules/webhooks/tests.rs` covers the two halves separately. The signature is
+The generated `src/modules/webhooks/tests/` covers the two halves separately. The signature is
 proven against **a vector computed outside Rust**, so the test would survive a rewrite of
 the signing code and catch a change of scheme; the pattern matching is proven on its three
 forms.
