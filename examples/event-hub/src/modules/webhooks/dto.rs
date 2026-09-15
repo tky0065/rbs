@@ -1,7 +1,7 @@
 use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-use validator::Validate;
+use validator::{Validate, ValidationError};
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct CreateSubscription {
@@ -12,8 +12,18 @@ pub struct CreateSubscription {
     pub url: String,
     /// Les motifs écoutés. `*` pour tout, `user.*` pour une famille, `user.created` pour un
     /// événement précis.
-    #[validate(length(min = 1))]
+    #[validate(length(min = 1), custom(function = "motifs_non_vides"))]
     pub events: Vec<String>,
+}
+
+/// Un motif blanc ne correspond à aucun événement : l'abonné croirait écouter et ne
+/// recevrait jamais rien.
+fn motifs_non_vides(motifs: &[String]) -> Result<(), ValidationError> {
+    if motifs.iter().any(|motif| motif.trim().is_empty()) {
+        let message = "un motif d'événement ne peut pas être vide";
+        return Err(ValidationError::new("blank").with_message(message.into()));
+    }
+    Ok(())
 }
 
 /// Ce que rend la création, et elle seule.

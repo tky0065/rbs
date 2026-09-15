@@ -227,6 +227,12 @@ between minor versions with no deprecation cycle.
   returned the whole row, payload included — through `RETURNING` on PostgreSQL and
   SQLite, through one more `SELECT` on MySQL — for a model nobody read.
 
+- **An empty webhook event pattern gets a 422, like an invalid URL.**
+  `POST /webhooks/subscriptions` checked blank patterns in the service and answered 400;
+  the check now sits on the DTO, next to `#[validate(url)]`, so the refusal is a
+  validation error that names `events` in the problem's `errors`. A project generated
+  earlier keeps its 400 until it regenerates the fragment.
+
 ### Fixed
 
 - **The Redis password no longer reaches the logs.** The `redis` and `rate-limit`
@@ -396,6 +402,12 @@ reads `timestamp` on MySQL and `timestamp_with_timezone_text` on SQLite, which i
   load.** Once the table held 10,000 keys, the sweep ran on each hit and removed only
   expired windows: with 10,000 clients active at once, every request walked the whole
   table under the lock. The next sweep now waits for the table to double.
+
+- **Revoking a webhook subscription is one conditional `UPDATE`.** `revoke` read the
+  row, tested `revoked_at`, then wrote it back: two concurrent revocations could each
+  write their own date, the later one overwriting the first. It now runs
+  `UPDATE … WHERE revoked_at IS NULL`, as `auth` does for its sessions — the first wins,
+  the second touches no row. `emit` also stops cloning each subscription's pattern list.
 
 ## [1.4.0] — 2026-09-11
 

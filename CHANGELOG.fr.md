@@ -239,6 +239,13 @@ dépréciation.
   entière, payload compris — par `RETURNING` sur PostgreSQL et SQLite, par un `SELECT`
   de plus sur MySQL — pour un modèle que personne ne lisait.
 
+- **Un motif d'événement vide reçoit un 422, comme une URL invalide.**
+  `POST /webhooks/subscriptions` vérifiait les motifs blancs dans le service et répondait
+  400 ; la vérification se tient désormais sur le DTO, à côté de `#[validate(url)]`, si
+  bien que le refus est une erreur de validation qui nomme `events` dans les `errors` du
+  problème. Un projet engendré plus tôt garde son 400 tant qu'il ne réengendre pas le
+  fragment.
+
 ### Corrigé
 
 - **Le mot de passe Redis n'atteint plus les journaux.** Les fragments `redis` et
@@ -414,6 +421,13 @@ lit `timestamp` sur MySQL et `timestamp_with_timezone_text` sur SQLite, ce que
   et ne retirait que les fenêtres échues : avec 10 000 clients actifs à la fois, chaque
   requête parcourait toute la table sous le verrou. Le balayage suivant attend désormais
   que la table ait doublé.
+
+- **La révocation d'un abonnement webhook est un seul `UPDATE` conditionnel.** `revoke`
+  lisait la ligne, testait `revoked_at`, puis la réécrivait : deux révocations
+  concurrentes pouvaient écrire chacune sa date, la seconde écrasant la première. Elle
+  passe désormais par `UPDATE … WHERE revoked_at IS NULL`, comme `auth` pour ses
+  sessions — la première gagne, la seconde ne touche aucune ligne. `emit` cesse aussi de
+  cloner la liste des motifs de chaque abonnement.
 
 ## [1.4.0] — 2026-09-11
 
