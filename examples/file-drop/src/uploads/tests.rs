@@ -1,6 +1,6 @@
 use axum::Router;
 use axum::body::{Body, to_bytes};
-use axum::http::{Request, StatusCode};
+use axum::http::{HeaderMap, Request, StatusCode};
 use serde_json::{Value, json};
 use tower::ServiceExt;
 use uuid::Uuid;
@@ -383,29 +383,24 @@ fn binary(method: &str, path: &str, body: Vec<u8>) -> Request<Body> {
         .expect("requête bien formée")
 }
 
-/// Fait traverser le routeur à `request`, et rend son statut, son `Content-Type` et son
-/// corps tel quel.
+/// Fait traverser le routeur à `request`, et rend son statut, ses en-têtes et son corps
+/// tel quel.
 ///
 /// `call` lit le corps comme du JSON : le contenu déposé est binaire, et c'est l'octet
 /// rendu qui se compare.
-async fn call_raw(api: &Router, request: Request<Body>) -> (StatusCode, String, Vec<u8>) {
+async fn call_raw(api: &Router, request: Request<Body>) -> (StatusCode, HeaderMap, Vec<u8>) {
     let response = api
         .clone()
         .oneshot(request)
         .await
         .expect("l'application doit répondre");
     let status = response.status();
-    let content_type = response
-        .headers()
-        .get("content-type")
-        .and_then(|value| value.to_str().ok())
-        .unwrap_or_default()
-        .to_owned();
+    let headers = response.headers().clone();
     let bytes = to_bytes(response.into_body(), usize::MAX)
         .await
         .expect("corps de réponse lisible");
 
-    (status, content_type, bytes.to_vec())
+    (status, headers, bytes.to_vec())
 }
 
 /// L'octet déposé par `PUT` est celui que `GET` rend, et `HEAD` reflète la présence d'un
@@ -432,9 +427,18 @@ async fn the_content_round_trips_through_put_get_and_head() {
     let (status, _, _) = call_raw(&api, binary("PUT", &content, deposited.clone())).await;
     assert_eq!(status, StatusCode::NO_CONTENT, "dépôt refusé");
 
-    let (status, content_type, read) = call_raw(&api, without_body("GET", &content)).await;
+    let (status, headers, read) = call_raw(&api, without_body("GET", &content)).await;
     assert_eq!(status, StatusCode::OK, "le contenu déposé doit se relire");
-    assert_eq!(content_type, "application/octet-stream");
+    assert_eq!(headers["content-type"], "application/octet-stream");
+    // Le corps part en flux : sans taille annoncée, un flux coupé en route passerait pour
+    // complet.
+    assert_eq!(
+        headers
+            .get("content-length")
+            .and_then(|value| value.to_str().ok()),
+        Some(deposited.len().to_string().as_str()),
+        "la taille déposée doit être annoncée"
+    );
     assert_eq!(read, deposited, "l'octet rendu diffère de l'octet déposé");
 
     let (status, _, _) = call_raw(&api, without_body("HEAD", &content)).await;

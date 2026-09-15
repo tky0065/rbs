@@ -257,6 +257,16 @@ dépréciation.
   tôt garde son manifeste et son `Dockerfile` ; les deux changements se recopient à la
   main.
 
+- **`storage` lit ses objets en flux, et dépose des `Bytes` sans copie.** Le `get` du
+  trait chargeait l'objet entier en mémoire — `fs::read` côté fichiers, `collect()` puis
+  `to_vec()` côté S3 —, et la route de contenu engendrée copiait chaque dépôt par
+  `Bytes::to_vec()`. `get` rend désormais un `Object`, sa taille quand le backend la
+  connaît et son contenu en flux lu à mesure que le client le consomme, et
+  `GET /<module>/{id}/content` sert ce flux avec son `content-length`. `put` prend des
+  `bytes::Bytes`, transmis par l'extracteur tels quels. Le fragment gagne `bytes`,
+  `futures-util` et `tokio-util`. Un projet engendré avant garde son trait ; la note de
+  mise à jour 1.5.0 dit les retouches qui adoptent le flux.
+
 ### Corrigé
 
 - **Le mot de passe Redis n'atteint plus les journaux.** Les fragments `redis` et

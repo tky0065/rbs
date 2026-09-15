@@ -54,6 +54,9 @@ minijinja = { version = "2.24", features = ["loader"] }
 async-trait = "0.1"
 thiserror = "2.0"
 aws-sdk-s3 = "1.146"
+bytes = "1.12"
+futures-util = "0.3"
+tokio-util = { version = "0.7", features = ["io"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

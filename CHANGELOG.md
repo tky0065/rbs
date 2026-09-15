@@ -243,6 +243,16 @@ between minor versions with no deprecation cycle.
   recompiles every dependency. A project generated earlier keeps its manifest and its
   `Dockerfile`; both changes can be copied by hand.
 
+- **`storage` reads objects as a stream, and deposits `Bytes` without a copy.** The
+  trait's `get` loaded a whole object into memory — `fs::read` on the file backend,
+  `collect()` then `to_vec()` on S3 — and the generated content route copied every deposit
+  with `Bytes::to_vec()`. `get` now returns an `Object`, its length when the backend knows
+  it and its content as a stream read as the client consumes it, and
+  `GET /<module>/{id}/content` sends that stream with its `content-length`. `put` takes
+  `bytes::Bytes`, handed down from the extractor untouched. The fragment gains `bytes`,
+  `futures-util` and `tokio-util`. A project generated earlier keeps its trait; the 1.5.0
+  upgrade note lists the edits that adopt the stream.
+
 ### Fixed
 
 - **The Redis password no longer reaches the logs.** The `redis` and `rate-limit`
