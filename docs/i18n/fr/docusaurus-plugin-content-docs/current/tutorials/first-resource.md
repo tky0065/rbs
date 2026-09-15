@@ -56,7 +56,7 @@ plan pour …/demo
   la migration m20260909_092448_create_articles reste à appliquer avant de lancer le projet
 ```
 
-Dix fichiers écrits sans aucune base de données lancée : la preuve que `--fields` seul a
+Treize fichiers écrits sans aucune base de données lancée : la preuve que `--fields` seul a
 suffi à décider la forme de l'entité et sa migration à la fois, le schéma déclaré une
 seule fois plutôt que relu depuis un serveur. Les lignes `~` ne sont pas des
 réécritures — ce sont des insertions à des ancres en commentaire déjà présentes dans des
@@ -139,7 +139,7 @@ sur la même ligne, à travers le même serveur en cours d'exécution.
 
 ## Ce qui a été installé
 
-Quatre des sept fichiers que `generate crud` a écrits dans `src/articles/` — tout ce
+Quatre des dix fichiers que `generate crud` a écrits dans `src/articles/` — tout ce
 répertoire à l'exception de `mod.rs` —, chacun lu depuis
 [`examples/hello-crud`](https://github.com/tky0065/rbs/tree/main/examples/hello-crud) —
 la même fonctionnalité, engendrée par la même commande.

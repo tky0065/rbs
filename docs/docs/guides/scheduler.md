@@ -5,7 +5,7 @@ title: Scheduler
 
 # Scheduled triggers
 
-`rbs add scheduler` gives a project a calendar: six files under `src/modules/scheduler/`, a
+`rbs add scheduler` gives a project a calendar: nine files under `src/modules/scheduler/`, a
 migration for the `schedules` table, and a ticker started with the server. It is the answer
 to the last line of the [jobs guide](./jobs.md) — a queue knows how to run work and retry
 it, but nothing enqueues anything except an event of your own.

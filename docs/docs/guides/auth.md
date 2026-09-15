@@ -493,9 +493,10 @@ identified but whose role falls short, refused 403 by the guard inside the handl
 
 The feature's own routes are covered the same way, split by concern under
 `src/auth/tests/` — `registration.rs`, `login.rs`, `refresh.rs`, `replay.rs`, `logout.rs`,
-`sessions.rs`, `roles.rs`, `tokens.rs`, `change.rs`, `reset.rs` and `verification.rs` —
-registration, the identical 401s, rotation, replay, revocation, and the password and
-verification journeys above.
+`sessions.rs`, `roles.rs`, `tokens.rs`, `change.rs`, `reset.rs`, `verification.rs`,
+`guard.rs` and `openapi.rs`, around the shared harness of `mod.rs` and the request helpers
+of `http.rs` — registration, the identical 401s, rotation, replay, revocation, the password
+and verification journeys above, the verified-address guard and the OpenAPI document.
 Every one of them goes through HTTP against a real database, so every one is marked
 `#[ignore]`: `cargo test` on a fresh project passes with no server running, and
 `cargo test -- --ignored` runs them against the database your `.env` names, migrations

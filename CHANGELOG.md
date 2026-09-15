@@ -137,7 +137,7 @@ between minor versions with no deprecation cycle.
   run to hundreds of lines — `add auth` laid down a `session.rs` of 1300. Each fragment
   that ships long tests — `auth`, `jobs`, `scheduler`, `storage`, `webhooks` — now puts
   them in a `tests/` directory: a `mod.rs` holding the shared harness, and one file per
-  route or mechanism, none above ~250 lines. `rbs generate crud` does the same: the
+  route or mechanism, about 250 lines at most. `rbs generate crud` does the same: the
   feature gets `src/<name>/tests/` instead of `src/<name>/tests.rs`, with its lifecycle,
   error, filter, access and content scenarios each in their own file, written only when
   the options give them something to test. `jobs/queue.rs` becomes `jobs/queue/`, with the

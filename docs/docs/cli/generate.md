@@ -402,7 +402,7 @@ plan pour /private/tmp/rbs-demo/blog
   la migration m20260830_110925_create_articles reste à appliquer avant de lancer le projet
 ```
 
-Nine files created, seven modified through their anchors. The feature is then recorded in
+Thirteen files created, seven modified through their anchors. The feature is then recorded in
 the manifest, which is what makes the command idempotent:
 
 ```text

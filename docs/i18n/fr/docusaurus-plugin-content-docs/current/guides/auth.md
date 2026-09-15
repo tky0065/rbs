@@ -508,9 +508,11 @@ bien identifié mais d'un rôle trop court, à qui la garde répond 403 dans le 
 
 Les routes de la feature elle-même sont couvertes de la même façon, réparties par sujet
 sous `src/auth/tests/` — `registration.rs`, `login.rs`, `refresh.rs`, `replay.rs`,
-`logout.rs`, `sessions.rs`, `roles.rs`, `tokens.rs`, `change.rs`, `reset.rs` et
-`verification.rs` — l'inscription, les 401 identiques, la rotation, le rejeu, la
-révocation, et les parcours de mot de passe et de vérification ci-dessus. Tous passent par
+`logout.rs`, `sessions.rs`, `roles.rs`, `tokens.rs`, `change.rs`, `reset.rs`,
+`verification.rs`, `guard.rs` et `openapi.rs`, autour du harnais partagé de `mod.rs` et des
+aides de requête de `http.rs` — l'inscription, les 401 identiques, la rotation, le rejeu, la
+révocation, les parcours de mot de passe et de vérification ci-dessus, la garde d'adresse
+vérifiée et le document OpenAPI. Tous passent par
 HTTP contre une vraie base, et tous
 portent donc `#[ignore]` :
 le `cargo test` d'un projet neuf réussit sans serveur démarré, et `cargo test -- --ignored`

@@ -6,7 +6,7 @@ title: Webhooks
 # Outgoing webhooks
 
 `rbs add webhooks` gives a project a way to tell the outside world what just happened:
-eleven files under `src/modules/webhooks/` — `target.rs` included — a migration for the
+sixteen files under `src/modules/webhooks/` — `target.rs` included — a migration for the
 `webhook_subscriptions` table, three routes, and a signed HTTP POST for every subscriber
 that listens.
 

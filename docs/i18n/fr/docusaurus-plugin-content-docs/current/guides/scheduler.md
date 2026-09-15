@@ -5,7 +5,7 @@ title: Scheduler
 
 # Le déclenchement calendaire
 
-`rbs add scheduler` donne un calendrier à un projet : six fichiers sous `src/modules/scheduler/`,
+`rbs add scheduler` donne un calendrier à un projet : neuf fichiers sous `src/modules/scheduler/`,
 une migration pour la table `schedules`, et un ticker démarré avec le serveur. C'est la
 réponse à la dernière ligne du [guide des jobs](./jobs.md) — une file sait exécuter un
 travail et le réessayer, mais rien ne l'enfile sinon un événement que vous écrivez.

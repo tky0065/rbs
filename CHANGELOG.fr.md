@@ -145,7 +145,7 @@ dépréciation.
   `session.rs` de 1300. Chaque fragment qui livre de longs tests — `auth`, `jobs`,
   `scheduler`, `storage`, `webhooks` — les range désormais dans un répertoire `tests/` :
   un `mod.rs` qui porte le harnais partagé, et un fichier par route ou par mécanisme,
-  aucun au-delà de ~250 lignes. `rbs generate crud` fait de même : la feature reçoit
+  autour de 250 lignes au plus. `rbs generate crud` fait de même : la feature reçoit
   `src/<nom>/tests/` au lieu de `src/<nom>/tests.rs`, ses scénarios de cycle de vie,
   d'erreurs, de filtre, d'accès et de contenu chacun dans son fichier, écrit seulement si
   les options lui donnent de quoi éprouver. `jobs/queue.rs` devient `jobs/queue/`, dépôt,

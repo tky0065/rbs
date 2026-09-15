@@ -409,7 +409,7 @@ plan pour /private/tmp/rbs-demo/blog
   la migration m20260830_110925_create_articles reste à appliquer avant de lancer le projet
 ```
 
-Neuf fichiers créés, sept modifiés par leurs ancres. La feature est ensuite inscrite dans le
+Treize fichiers créés, sept modifiés par leurs ancres. La feature est ensuite inscrite dans le
 manifeste, ce qui rend la commande idempotente :
 
 ```text
