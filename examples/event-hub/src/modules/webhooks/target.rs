@@ -86,26 +86,6 @@ impl Policy {
 
         Ok(url)
     }
-
-    /// Résout l'hôte de `url` et ne garde que les adresses permises.
-    ///
-    /// Vide quand tout a été filtré : c'est ce que la livraison lit pour abandonner plutôt
-    /// que réessayer. Le client refiltre à la connexion par [`Resolver`] — deux
-    /// résolutions, parce qu'un nom peut changer de réponse entre les deux, et c'est
-    /// précisément l'attaque que la seconde ferme.
-    pub async fn resolve(self, url: &Url) -> std::io::Result<Vec<SocketAddr>> {
-        let Some(hote) = url.host_str() else {
-            return Ok(Vec::new());
-        };
-        let port = url.port_or_known_default().unwrap_or(443);
-
-        Ok(
-            tokio::net::lookup_host((hote.trim_matches(['[', ']']), port))
-                .await?
-                .filter(|adresse| self.allows(adresse.ip()))
-                .collect(),
-        )
-    }
 }
 
 /// Une adresse joignable depuis l'Internet public, et rien d'autre.
@@ -186,8 +166,9 @@ fn is_public_v4(ip: Ipv4Addr) -> bool {
 
 /// Le résolveur du client de livraison : celui du système, filtré par la politique.
 ///
-/// Une adresse retirée ici n'est jamais connectée, quoi qu'ait répondu la résolution
-/// faite avant l'envoi.
+/// Seul à résoudre, et au moment de la connexion : aucun nom ne peut changer de réponse
+/// entre le contrôle et l'envoi, ce qui ferme le rebinding. Tout écarter rend un
+/// [`Refusal`], que [`refusal_in`] retrouve dans l'erreur de la requête.
 #[derive(Clone, Debug)]
 pub struct Resolver {
     policy: Policy,
@@ -221,4 +202,14 @@ impl Resolve for Resolver {
             Ok(Box::new(adresses.into_iter()) as Addrs)
         })
     }
+}
+
+/// Retrouve le refus de [`Resolver`] dans l'erreur d'une requête.
+///
+/// reqwest l'enveloppe sous celle du connecteur : la profondeur de la chaîne des causes lui
+/// appartient, d'où le parcours entier plutôt qu'un nombre fixe de `source()`.
+pub fn refusal_in(error: &(dyn std::error::Error + 'static)) -> Option<Refusal> {
+    std::iter::successors(Some(error), |cause| cause.source())
+        .find_map(|cause| cause.downcast_ref::<Refusal>())
+        .copied()
 }

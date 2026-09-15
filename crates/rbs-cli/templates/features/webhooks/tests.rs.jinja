@@ -483,10 +483,9 @@ async fn revoking_twice_keeps_the_first_date() {
 
 use std::net::IpAddr;
 
-use reqwest::Url;
 use reqwest::dns::{Name, Resolve};
 
-use super::target::{Policy, Refusal, Resolver, is_public};
+use super::target::{Policy, Refusal, Resolver, is_public, refusal_in};
 
 #[test]
 fn private_loopback_and_link_local_addresses_are_not_public() {
@@ -602,35 +601,10 @@ fn in_development_http_and_private_hosts_pass_but_not_other_schemes() {
     );
 }
 
-/// `Policy::resolve` sert l'émission, `Resolver` sert la connexion : les deux doivent
-/// filtrer `localhost` de la même façon, faute de quoi l'un des deux resterait un SSRF
-/// ouvert que l'autre a pourtant fermé.
+/// Le résolveur du client est le seul filtre de la connexion : il écarte `localhost` hors
+/// de `development`, et le garde dedans.
 #[tokio::test]
 async fn the_resolver_drops_localhost_outside_development_and_keeps_it_in_development() {
-    let url = Url::parse("http://localhost:4000/hook").expect("URL lisible");
-
-    let adresses = Policy::for_env("production")
-        .resolve(&url)
-        .await
-        .expect("la résolution ne renvoie pas d'erreur d'E/S");
-    assert!(
-        adresses.is_empty(),
-        "localhost ne devrait rien résoudre en production"
-    );
-
-    let adresses = Policy::for_env("development")
-        .resolve(&url)
-        .await
-        .expect("la résolution ne renvoie pas d'erreur d'E/S");
-    assert!(
-        !adresses.is_empty(),
-        "localhost devrait résoudre en development"
-    );
-    assert!(
-        adresses.iter().all(|adresse| adresse.ip().is_loopback()),
-        "chaque adresse résolue pour localhost doit être en boucle locale"
-    );
-
     let refus = Resolver::new(Policy::for_env("production"))
         .resolve("localhost".parse::<Name>().expect("nom DNS valide"))
         .await;
@@ -649,6 +623,52 @@ async fn the_resolver_drops_localhost_outside_development_and_keeps_it_in_develo
         acceptees.iter().all(|adresse| adresse.ip().is_loopback()),
         "chaque adresse résolue pour localhost doit être en boucle locale"
     );
+}
+
+/// Un client de livraison, sans le mandataire que l'environnement pourrait imposer : c'est
+/// l'hôte de l'URL qui doit passer par le résolveur, pas celui d'un proxy.
+fn client_filtre(env: &str) -> reqwest::Client {
+    reqwest::Client::builder()
+        .no_proxy()
+        .dns_resolver(std::sync::Arc::new(Resolver::new(Policy::for_env(env))))
+        .build()
+        .expect("client constructible")
+}
+
+/// Le refus du résolveur arrive enveloppé dans l'erreur de reqwest : `post` ne le nomme
+/// que si `refusal_in` le retrouve au bout de la chaîne des causes, dont la forme
+/// appartient à reqwest et à hyper-util — seule une vraie requête le prouve.
+#[tokio::test]
+async fn a_refusal_from_the_resolver_is_found_in_the_client_error() {
+    let erreur = client_filtre("production")
+        .get("http://localhost:9/hook")
+        .send()
+        .await
+        .expect_err("localhost est refusé en production");
+
+    assert_eq!(
+        refusal_in(&erreur),
+        Some(Refusal::PrivateHost),
+        "{erreur:?}"
+    );
+}
+
+/// L'inverse : un port fermé est une panne de transport, que la file réessaie. La prendre
+/// pour un refus abandonnerait une livraison qui aurait abouti plus tard.
+#[tokio::test]
+async fn a_connection_failure_is_not_a_refusal() {
+    let port = std::net::TcpListener::bind("127.0.0.1:0")
+        .and_then(|ecoute| ecoute.local_addr())
+        .expect("port libre")
+        .port();
+
+    let erreur = client_filtre("development")
+        .get(format!("http://localhost:{port}/hook"))
+        .send()
+        .await
+        .expect_err("rien n'écoute sur ce port");
+
+    assert_eq!(refusal_in(&erreur), None, "{erreur:?}");
 }
 
 /// Le profil des tests est `development`, qui tolère tout : la politique ne se lit que du

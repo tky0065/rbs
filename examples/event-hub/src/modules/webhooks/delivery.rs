@@ -4,7 +4,7 @@ use rbs_core::HasCoreState;
 use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 use serde::{Deserialize, Serialize};
 
-use super::target::{Policy, Refusal, Resolver};
+use super::target::{Policy, Refusal, Resolver, refusal_in};
 use super::{Config, repository, signature};
 use crate::modules::jobs::Job;
 use crate::state::AppState;
@@ -134,8 +134,9 @@ impl Sender {
         self.policy
     }
 
-    /// POSTe un corps signé, en refusant la cible avant tout envoi plutôt qu'en laissant le
-    /// transport échouer sur elle.
+    /// POSTe un corps signé. Une cible interdite rend `Blocked`, et non une panne que la
+    /// file réessaierait — que l'URL enfreigne une règle, ou que le résolveur du client
+    /// n'en laisse passer aucune adresse.
     ///
     /// Toute réponse hors 2xx vaut échec de transport, 4xx comprises : un receveur qui
     /// répond 400 à une livraison bien formée est en panne, et le distinguer d'un 503
@@ -150,17 +151,6 @@ impl Sender {
     ) -> Result<(), PostError> {
         let cible = self.policy.check(url).map_err(PostError::Blocked)?;
 
-        // Résolue avant l'envoi pour que le refus soit nommé — le résolveur du client
-        // refiltre à la connexion, mais son erreur arrive noyée dans celle du transport.
-        let adresses = self
-            .policy
-            .resolve(&cible)
-            .await
-            .map_err(|source| PostError::Transport(source.into()))?;
-        if adresses.is_empty() {
-            return Err(PostError::Blocked(Refusal::PrivateHost));
-        }
-
         let reponse = self
             .client
             .post(cible)
@@ -171,7 +161,10 @@ impl Sender {
             .body(body)
             .send()
             .await
-            .map_err(|source| PostError::Transport(source.into()))?;
+            .map_err(|source| match refusal_in(&source) {
+                Some(refus) => PostError::Blocked(refus),
+                None => PostError::Transport(source.into()),
+            })?;
 
         let statut = reponse.status();
 

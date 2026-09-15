@@ -108,10 +108,10 @@ ouvrir une route à tout compte, remplacez `Role::Admin` par `Role::User` sur so
 L'URL d'un abonnement est vérifiée deux fois. À l'inscription, hors du profil
 `development`, elle doit être en `https` et son hôte ne peut être ni une adresse de
 boucle locale, privée, de lien local ou de CGNAT, ni `localhost` ; la requête reçoit un
-400 qui nomme la règle. À la livraison, l'hôte est résolu et toute adresse non publique
-est écartée, avant l'envoi puis de nouveau dans le résolveur du client HTTP, si bien qu'un
-nom qui change de réponse entre les deux n'atteint jamais un service interne. Les
-redirections ne sont jamais suivies : un 3xx est une livraison échouée comme tout autre
+400 qui nomme la règle. À la livraison, l'hôte est résolu une seule fois, dans le
+résolveur du client HTTP, qui écarte toute adresse non publique au moment de la
+connexion : aucun nom ne peut changer de réponse entre le contrôle et l'envoi, ni donc
+atteindre un service interne. Les redirections ne sont jamais suivies : un 3xx est une livraison échouée comme tout autre
 hors 2xx. Une livraison dont la cible est interdite est abandonnée, non réessayée — rien ne
 changerait au cinquième essai.
 

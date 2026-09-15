@@ -109,10 +109,10 @@ the [auth guide](./auth.md) for the guard.
 A subscription URL is checked twice. At registration, outside the `development` profile,
 it must be `https` and its host must not be a loopback, private, link-local or
 carrier-grade NAT address — nor `localhost`; the request gets a 400 naming the rule. At
-delivery, the host is resolved and every non-public address is dropped, both before the
-request is sent and again inside the HTTP client's resolver, so a name that changes its
-answer between the two never reaches an internal service. Redirects are never followed: a
-3xx is a failed delivery like any other non-2xx. A delivery whose target is blocked is
+delivery, the host is resolved once, inside the HTTP client's resolver, which drops every
+non-public address at connection time: no name can change its answer between the check and
+the request, and so none reaches an internal service. Redirects are never followed: a 3xx
+is a failed delivery like any other non-2xx. A delivery whose target is blocked is
 abandoned, not retried — nothing would change on the fifth attempt.
 
 In `development` every rule is lifted: a receiver on `http://localhost:4000` is the normal
