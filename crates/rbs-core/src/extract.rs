@@ -408,7 +408,8 @@ mod tests {
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
         }
 
-        /// Ce qu'un état dépose depuis `accept_in` : le projet y met le compte relu.
+        /// Ce qu'un état dépose depuis `accept_in` : le projet y met ce qu'il a relu du
+        /// compte.
         #[derive(Clone)]
         struct Relu(String);
 
