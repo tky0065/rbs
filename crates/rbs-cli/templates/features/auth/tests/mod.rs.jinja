@@ -16,6 +16,7 @@ mod logout;
 mod openapi;
 mod refresh;
 mod registration;
+mod replay;
 mod reset;
 mod roles;
 mod sessions;

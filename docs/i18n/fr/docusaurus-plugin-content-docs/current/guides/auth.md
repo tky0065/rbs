@@ -6,7 +6,7 @@ title: Authentification
 # Authentification
 
 `rbs add auth` installe une authentification qui fonctionne dans un projet existant :
-trente-et-un fichiers sous `src/auth/`, trois gabarits de courriel, une migration, et treize
+trente-deux fichiers sous `src/auth/`, trois gabarits de courriel, une migration, et treize
 routes montées sur le routeur. Ce qu'elle dépose est du code ordinaire dans votre
 arborescence — une entité, un service, un controller, une garde — et il est fait pour être
 lu et modifié.
@@ -53,6 +53,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/tests/openapi.rs                              créé
   + src/auth/tests/refresh.rs                              créé
   + src/auth/tests/registration.rs                         créé
+  + src/auth/tests/replay.rs                               créé
   + src/auth/tests/reset.rs                                créé
   + src/auth/tests/roles.rs                                créé
   + src/auth/tests/sessions.rs                             créé
@@ -70,8 +71,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  35 à créer, 10 à modifier
-✓ auth installée — 35 créés, 10 modifiés
+  36 à créer, 10 à modifier
+✓ auth installée — 36 créés, 10 modifiés
 
   rbs migrate up
 ```
@@ -495,10 +496,11 @@ bien identifié mais d'un rôle trop court, à qui la garde répond 403 dans le 
 ```
 
 Les routes de la feature elle-même sont couvertes de la même façon, réparties par sujet
-sous `src/auth/tests/` — `registration.rs`, `login.rs`, `refresh.rs`, `logout.rs`,
-`sessions.rs`, `roles.rs`, `tokens.rs`, `change.rs`, `reset.rs` et `verification.rs` —
-l'inscription, les 401 identiques, la rotation, la révocation, et les parcours de mot de
-passe et de vérification ci-dessus. Tous passent par HTTP contre une vraie base, et tous
+sous `src/auth/tests/` — `registration.rs`, `login.rs`, `refresh.rs`, `replay.rs`,
+`logout.rs`, `sessions.rs`, `roles.rs`, `tokens.rs`, `change.rs`, `reset.rs` et
+`verification.rs` — l'inscription, les 401 identiques, la rotation, le rejeu, la
+révocation, et les parcours de mot de passe et de vérification ci-dessus. Tous passent par
+HTTP contre une vraie base, et tous
 portent donc `#[ignore]` :
 le `cargo test` d'un projet neuf réussit sans serveur démarré, et `cargo test -- --ignored`
 les lance contre la base que nomme votre `.env`, migrations appliquées. Voir le

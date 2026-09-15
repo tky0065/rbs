@@ -130,6 +130,10 @@ source      = "tests/registration.rs.jinja"
 destination = "src/auth/tests/registration.rs"
 
 [[files]]
+source      = "tests/replay.rs.jinja"
+destination = "src/auth/tests/replay.rs"
+
+[[files]]
 source      = "tests/reset.rs.jinja"
 destination = "src/auth/tests/reset.rs"
 

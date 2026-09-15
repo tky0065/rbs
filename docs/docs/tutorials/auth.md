@@ -79,6 +79,7 @@ plan pour …/demo
   + src/auth/tests/openapi.rs                              créé
   + src/auth/tests/refresh.rs                              créé
   + src/auth/tests/registration.rs                         créé
+  + src/auth/tests/replay.rs                               créé
   + src/auth/tests/reset.rs                                créé
   + src/auth/tests/roles.rs                                créé
   + src/auth/tests/sessions.rs                             créé
@@ -90,8 +91,8 @@ plan pour …/demo
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  46 à créer, 11 à modifier
-✓ auth installée — 46 créés, 11 modifiés
+  47 à créer, 11 à modifier
+✓ auth installée — 47 créés, 11 modifiés
 
   rbs migrate up
 ```

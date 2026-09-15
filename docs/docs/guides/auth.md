@@ -6,7 +6,7 @@ title: Authentication
 # Authentication
 
 `rbs add auth` installs a working authentication feature into an existing project:
-thirty-one files under `src/auth/`, three mail templates, one migration, and thirteen
+thirty-two files under `src/auth/`, three mail templates, one migration, and thirteen
 routes mounted on the router. What it lays down is ordinary code in your source tree —
 an entity, a service, a controller, a guard — and it is meant to be read and changed.
 
@@ -52,6 +52,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/tests/openapi.rs                              créé
   + src/auth/tests/refresh.rs                              créé
   + src/auth/tests/registration.rs                         créé
+  + src/auth/tests/replay.rs                               créé
   + src/auth/tests/reset.rs                                créé
   + src/auth/tests/roles.rs                                créé
   + src/auth/tests/sessions.rs                             créé
@@ -69,8 +70,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  35 à créer, 10 à modifier
-✓ auth installée — 35 créés, 10 modifiés
+  36 à créer, 10 à modifier
+✓ auth installée — 36 créés, 10 modifiés
 
   rbs migrate up
 ```
@@ -481,9 +482,10 @@ identified but whose role falls short, refused 403 by the guard inside the handl
 ```
 
 The feature's own routes are covered the same way, split by concern under
-`src/auth/tests/` — `registration.rs`, `login.rs`, `refresh.rs`, `logout.rs`, `sessions.rs`,
-`roles.rs`, `tokens.rs`, `change.rs`, `reset.rs` and `verification.rs` — registration, the
-identical 401s, rotation, revocation, and the password and verification journeys above.
+`src/auth/tests/` — `registration.rs`, `login.rs`, `refresh.rs`, `replay.rs`, `logout.rs`,
+`sessions.rs`, `roles.rs`, `tokens.rs`, `change.rs`, `reset.rs` and `verification.rs` —
+registration, the identical 401s, rotation, replay, revocation, and the password and
+verification journeys above.
 Every one of them goes through HTTP against a real database, so every one is marked
 `#[ignore]`: `cargo test` on a fresh project passes with no server running, and
 `cargo test -- --ignored` runs them against the database your `.env` names, migrations

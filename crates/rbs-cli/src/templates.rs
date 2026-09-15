@@ -834,9 +834,9 @@ mod tests {
     /// Chaque test du fragment monte l'application ou ouvre une connexion : aucun n'est
     /// unitaire, et tous prennent le marqueur, comme dans `jobs`, `redis` et `storage`.
     ///
-    /// Les tests du fragment vivent dans douze fichiers depuis sa découpe par route —
+    /// Les tests du fragment vivent dans treize fichiers depuis sa découpe par route —
     /// `tests/mod.rs` et `tests/http.rs` n'en portent aucun, ils n'exposent que les aides
-    /// partagées. S'arrêter au premier laisserait les onze autres sans garde-fou : sans
+    /// partagées. S'arrêter au premier laisserait les douze autres sans garde-fou : sans
     /// lui, `rbs new --with auth && cargo test` échoue tant que PostgreSQL n'est pas
     /// démarré *et* migré, là où `--with jobs` passe.
     #[test]
@@ -850,6 +850,7 @@ mod tests {
             "tests/openapi.rs",
             "tests/refresh.rs",
             "tests/registration.rs",
+            "tests/replay.rs",
             "tests/reset.rs",
             "tests/roles.rs",
             "tests/sessions.rs",
