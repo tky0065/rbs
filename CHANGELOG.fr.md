@@ -139,6 +139,17 @@ dépréciation.
 
 ### Modifié
 
+- **Les tests engendrés se rangent par préoccupation.** Les fichiers de tests que reçoit
+  un projet ne courent plus sur des centaines de lignes — `add auth` posait un
+  `session.rs` de 1300. Chaque fragment qui livre de longs tests — `auth`, `jobs`,
+  `scheduler`, `storage`, `webhooks` — les range désormais dans un répertoire `tests/` :
+  un `mod.rs` qui porte le harnais partagé, et un fichier par route ou par mécanisme,
+  aucun au-delà de ~250 lignes. `rbs generate crud` fait de même : la feature reçoit
+  `src/<nom>/tests/` au lieu de `src/<nom>/tests.rs`, ses scénarios de cycle de vie,
+  d'erreurs, de filtre, d'accès et de contenu chacun dans son fichier, écrit seulement si
+  les options lui donnent de quoi éprouver. `jobs/queue.rs` devient `jobs/queue/`, dépôt,
+  réservation et issue d'un job dans trois fichiers ; chaque chemin qu'appelle le projet
+  reste le même. Un projet engendré plus tôt garde ses fichiers.
 - **Un compte ne se connecte qu'une fois son adresse vérifiée.** `register` rend le même
   202 à une adresse neuve et à une prise, mais une connexion avec le mot de passe tout
   juste soumis les distinguait encore : le compte neuf se connectait, la prise non. La

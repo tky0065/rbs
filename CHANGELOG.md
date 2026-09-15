@@ -132,6 +132,16 @@ between minor versions with no deprecation cycle.
 
 ### Changed
 
+- **Generated tests are split by concern.** The test files a project receives no longer
+  run to hundreds of lines — `add auth` laid down a `session.rs` of 1300. Each fragment
+  that ships long tests — `auth`, `jobs`, `scheduler`, `storage`, `webhooks` — now puts
+  them in a `tests/` directory: a `mod.rs` holding the shared harness, and one file per
+  route or mechanism, none above ~250 lines. `rbs generate crud` does the same: the
+  feature gets `src/<name>/tests/` instead of `src/<name>/tests.rs`, with its lifecycle,
+  error, filter, access and content scenarios each in their own file, written only when
+  the options give them something to test. `jobs/queue.rs` becomes `jobs/queue/`, with the
+  enqueueing, the reservation and the outcome of a job in three files; every path the
+  project calls stays the same. A project generated earlier keeps its files.
 - **An account logs in only once its address is verified.** `register` answers the same
   202 to a new address and a taken one, but a login with the password just submitted
   still told them apart: the new account logged in, the taken one did not. The `[auth]`
