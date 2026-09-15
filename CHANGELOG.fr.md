@@ -129,6 +129,13 @@ dépréciation.
   un fichier servi tel quel garde son `content-length`, et une archive déjà compressée ne
   l'est pas une seconde fois. Un projet engendré avant garde son routeur ; la note de
   montée donne les lignes à coller.
+- **`HasAuth::accept_in(&claims, &mut extensions)`**, une méthode fournie qu'`Identity`
+  appelle désormais à la place d'`accept`, les extensions de la requête à portée. Son
+  défaut appelle `accept` : un projet qui n'implémente qu'`accept` se comporte comme avant.
+  Le fragment `auth` implémente les deux : `accept_in` laisse dans la requête le compte
+  qu'il lit, et `VerifiedIdentity` l'y reprend — une lecture de `users` par requête sur une
+  route derrière la garde, au lieu de deux. Un projet engendré plus tôt garde sa garde, qui
+  relit toujours le compte elle-même.
 
 ### Modifié
 

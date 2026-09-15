@@ -96,6 +96,18 @@ pub trait HasAuth: HasCoreState {
         let _ = claims;
         async { Ok(()) }
     }
+
+    /// Ce que l'extracteur [`Identity`](crate::Identity) appelle, les extensions de la
+    /// requête à portée : un projet qui relit le compte pour juger le jeton peut l'y
+    /// laisser, et l'extracteur suivant le reprendre. Le défaut s'en remet à `accept`.
+    fn accept_in(
+        &self,
+        claims: &crate::jwt::Claims,
+        extensions: &mut axum::http::Extensions,
+    ) -> impl std::future::Future<Output = Result<(), crate::Error>> + Send {
+        let _ = extensions;
+        self.accept(claims)
+    }
 }
 
 #[cfg(feature = "auth")]

@@ -364,8 +364,9 @@ l'appelant de s'identifier, non qu'il manque de droits. Et c'est la ligne
 
 Un second extracteur, `VerifiedIdentity`, enveloppe `Identity` plutôt que de se poser à
 côté : un handler qui le prend à la place reçoit la même 401 pour un jeton absent ou
-invalide, puis une 403 par-dessus, tirée en relisant le compte et en vérifiant
-`email_verified_at`.
+invalide, puis une 403 par-dessus quand `email_verified_at` est vide. Le compte qu'elle
+examine est celui qu'`Identity` vient de lire pour accepter le jeton : `accept_in` le laisse
+dans la requête, et la garde ne relit pas la même ligne.
 
 L'état vient de la base et non du jeton, délibérément : le jeton d'accès porte `sub` et
 `role` pour ses quinze minutes entières, et lire la vérification dessus continuerait de

@@ -122,6 +122,13 @@ between minor versions with no deprecation cycle.
   them: a file served as is keeps its `content-length`, and an archive already compressed
   is not compressed twice. A project generated earlier keeps its router; the upgrade note
   gives the lines to paste.
+- **`HasAuth::accept_in(&claims, &mut extensions)`**, a provided method that `Identity`
+  now calls in place of `accept`, with the request's extensions in reach. Its default
+  calls `accept`, so a project that only implements `accept` behaves as before. The
+  `auth` fragment implements both: `accept_in` leaves the account it reads in the request,
+  and `VerifiedIdentity` takes it from there — one read of `users` per request on a route
+  behind the guard, down from two. A project generated earlier keeps its guard, which
+  still reads the account itself.
 
 ### Changed
 

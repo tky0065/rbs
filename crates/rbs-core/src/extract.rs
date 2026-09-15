@@ -61,7 +61,7 @@ impl<S: HasAuth> FromRequestParts<S> for Identity {
             .ok_or(Error::Unauthorized)?;
 
         let claims = crate::jwt::verify(token, &state.auth().secret)?;
-        state.accept(&claims).await?;
+        state.accept_in(&claims, &mut parts.extensions).await?;
 
         Ok(Self {
             user_id: claims.sub,
@@ -406,6 +406,61 @@ mod tests {
                 .expect("le router doit répondre");
 
             assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
+
+        /// Ce qu'un état dépose depuis `accept_in` : le projet y met le compte relu.
+        #[derive(Clone)]
+        struct Relu(String);
+
+        #[derive(Clone)]
+        struct Deposant(AppState);
+
+        impl HasCoreState for Deposant {
+            fn core(&self) -> &CoreState {
+                self.0.core()
+            }
+        }
+
+        impl HasAuth for Deposant {
+            async fn accept_in(
+                &self,
+                claims: &Claims,
+                extensions: &mut axum::http::Extensions,
+            ) -> Result<(), crate::Error> {
+                extensions.insert(Relu(claims.sub.clone()));
+                Ok(())
+            }
+        }
+
+        /// Ce qu'`accept_in` dépose, l'extracteur qui suit `Identity` le trouve : c'est ce
+        /// qui épargne à une garde de relire le compte que le projet vient de lire.
+        #[tokio::test]
+        async fn what_accept_in_leaves_in_the_extensions_reaches_the_next_extractor() {
+            async fn handler(_: Identity, axum::Extension(relu): axum::Extension<Relu>) -> String {
+                relu.0
+            }
+
+            let response = Router::new()
+                .route("/", get(handler))
+                .with_state(Deposant(state()))
+                .oneshot(
+                    Request::builder()
+                        .uri("/")
+                        .header(
+                            header::AUTHORIZATION,
+                            format!("Bearer {}", token(LATER, SECRET)),
+                        )
+                        .body(Body::empty())
+                        .expect("requête valide"),
+                )
+                .await
+                .expect("le router doit répondre");
+
+            assert_eq!(response.status(), StatusCode::OK);
+            let corps = axum::body::to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("corps lisible");
+            assert_eq!(&corps[..], b"u1");
         }
 
         #[test]

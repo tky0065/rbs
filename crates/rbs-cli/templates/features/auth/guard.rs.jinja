@@ -66,6 +66,13 @@ impl RequireRole for Identity {
 #[allow(dead_code)]
 pub struct VerifiedIdentity(pub Identity);
 
+/// Le compte qu'`accept_in` a relu pour juger le jeton, laissé dans la requête.
+///
+/// Un type propre au fragment plutôt que le `Model` nu : seule l'acceptation peut l'y avoir
+/// mis.
+#[derive(Clone)]
+pub(super) struct Accepted(pub(super) repository::Model);
+
 impl FromRequestParts<AppState> for VerifiedIdentity {
     type Rejection = Error;
 
@@ -74,13 +81,16 @@ impl FromRequestParts<AppState> for VerifiedIdentity {
         // à qui n'est pas identifié.
         let identite = Identity::from_request_parts(parts, state).await?;
 
-        let id = identite.user_uuid()?;
-
-        // Un jeton valide dont le compte a disparu ne vaut pas mieux qu'un jeton
-        // invalide : `Forbidden` laisserait entendre que le compte existe.
-        let utilisateur = repository::find(state.core().db(), id)
-            .await?
-            .ok_or(Error::Unauthorized)?;
+        // `accept_in` vient de relire le compte pour juger le jeton, et l'a laissé là.
+        let utilisateur = match parts.extensions.remove::<Accepted>() {
+            Some(Accepted(compte)) => compte,
+            // Un `accept_in` réécrit qui ne le dépose plus : relire plutôt que laisser
+            // passer. Un compte disparu ne vaut pas mieux qu'un jeton invalide —
+            // `Forbidden` laisserait entendre qu'il existe.
+            None => repository::find(state.core().db(), identite.user_uuid()?)
+                .await?
+                .ok_or(Error::Unauthorized)?,
+        };
 
         if utilisateur.email_verified_at.is_none() {
             return Err(Error::Forbidden);

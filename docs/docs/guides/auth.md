@@ -349,7 +349,9 @@ unprotected must not carry it.
 
 A second extractor, `VerifiedIdentity`, wraps `Identity` rather than sitting beside it: a
 handler that takes it instead gets the same 401 for a missing or invalid token, then a 403
-on top, drawn by re-reading the account and checking `email_verified_at`.
+on top when `email_verified_at` is empty. The account it checks is the one `Identity` has
+just read to accept the token: `accept_in` leaves it in the request, so the guard does not
+read the same row a second time.
 
 The state comes from the database and not from the token, on purpose: the access token
 carries `sub` and `role` for its whole fifteen minutes, and reading verification off it

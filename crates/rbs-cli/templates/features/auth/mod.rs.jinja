@@ -10,6 +10,7 @@ pub mod service;
 mod tests;
 
 use axum::Router;
+use axum::http::Extensions;
 use axum::routing::{delete, get, post};
 use rbs_core::jwt::Claims;
 use rbs_core::{Error, HasAuth, HasCoreState};
@@ -21,34 +22,49 @@ use crate::state::AppState;
 // secret d'ailleurs qu'un fichier de configuration. L'implémentation vit ici plutôt que
 // dans `state.rs` — elle arrive avec la feature, et repart avec elle.
 impl HasAuth for AppState {
-    /// Ce que la signature ne dit pas : le compte existe-t-il encore, a-t-il fermé ses
-    /// sessions depuis l'émission, porte-t-il toujours ce rôle.
-    ///
-    /// Une lecture de `users` par requête authentifiée — le prix d'un jeton d'accès qui
-    /// meurt avec les sessions au lieu de survivre `access_ttl_secs`. Fermer une seule
-    /// session nommée ne passe pas ici : rien ne relie un jeton d'accès à sa ligne.
     async fn accept(&self, claims: &Claims) -> rbs_core::Result<()> {
-        let id = claims.user_uuid()?;
-        let compte = repository::find(self.core().db(), id)
-            .await?
-            .ok_or(Error::Unauthorized)?;
+        admit(self, claims).await.map(drop)
+    }
 
-        // La seconde de la révocation comprise : `iat` n'a pas mieux, et `issue` n'émet
-        // jamais dedans.
-        if compte
-            .sessions_revoked_at
-            .is_some_and(|estampille| claims.iat <= estampille.timestamp())
-        {
-            return Err(Error::Unauthorized);
-        }
-
-        // Le client rafraîchit, et repart avec le rôle courant.
-        if compte.role.to_value() != claims.role {
-            return Err(Error::Unauthorized);
-        }
-
+    /// Comme `accept`, et laisse le compte relu dans la requête : une garde qui suit
+    /// `Identity`, comme `VerifiedIdentity`, le reprend au lieu de relire la même ligne.
+    async fn accept_in(
+        &self,
+        claims: &Claims,
+        extensions: &mut Extensions,
+    ) -> rbs_core::Result<()> {
+        extensions.insert(guard::Accepted(admit(self, claims).await?));
         Ok(())
     }
+}
+
+/// Ce que la signature ne dit pas : le compte existe-t-il encore, a-t-il fermé ses
+/// sessions depuis l'émission, porte-t-il toujours ce rôle. Rend le compte lu.
+///
+/// Une lecture de `users` par requête authentifiée — le prix d'un jeton d'accès qui
+/// meurt avec les sessions au lieu de survivre `access_ttl_secs`. Fermer une seule
+/// session nommée ne passe pas ici : rien ne relie un jeton d'accès à sa ligne.
+async fn admit(state: &AppState, claims: &Claims) -> rbs_core::Result<repository::Model> {
+    let id = claims.user_uuid()?;
+    let compte = repository::find(state.core().db(), id)
+        .await?
+        .ok_or(Error::Unauthorized)?;
+
+    // La seconde de la révocation comprise : `iat` n'a pas mieux, et `issue` n'émet
+    // jamais dedans.
+    if compte
+        .sessions_revoked_at
+        .is_some_and(|estampille| claims.iat <= estampille.timestamp())
+    {
+        return Err(Error::Unauthorized);
+    }
+
+    // Le client rafraîchit, et repart avec le rôle courant.
+    if compte.role.to_value() != claims.role {
+        return Err(Error::Unauthorized);
+    }
+
+    Ok(compte)
 }
 
 // L'accesseur vit ici et non dans `state.rs` : il arrive avec la feature, et repart avec
