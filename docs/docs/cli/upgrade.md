@@ -29,14 +29,14 @@ is verbatim, captured by running the command; only the prose around it is transl
 $ rbs upgrade --help
 Aligne le manifeste du projet sur la version du CLI : rbs-core et les métadonnées
 
-Usage: rbs upgrade [OPTIONS]
+Utilisation : rbs upgrade [OPTIONS]
 
-Options:
+Options :
       --force    Met à niveau même si le working tree Git est sale
       --dry-run  Affiche le plan sans rien écrire
       --json     Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
-  -h, --help     Print help
-  -V, --version  Print version
+  -h, --help     Affiche l'aide
+  -V, --version  Affiche la version
 ```
 
 `--force` and `--dry-run` are its own; `--dry-run` prints the plan and stops, which is how

@@ -123,6 +123,15 @@ between minor versions with no deprecation cycle.
 
 ### Changed
 
+- **`rbs` speaks French from end to end in its help screens and usage errors.** clap
+  wrote its own parts in English — `Usage:`, `Commands:`, `Options:`, `Print help`,
+  `[default: …]`, `[possible values: …]`, and every usage error (`error:`, `tip:`,
+  `For more information, try '--help'`) — around French descriptions. Headings, the
+  `-h` and `-V` flags, the `help` subcommand, default and possible values, and the
+  common usage errors — unknown argument, invalid value, unknown command, missing
+  argument, conflict — are now French; a usage error still exits with clap's code, 2.
+  The shell completions describe the options in French as well.
+
 - **`rbs add jobs` and `rbs add scheduler` each carry one more anchor, and `schedules()`
   is written as instructions.** `// <rbs:job_modules>` sits under `pub mod worker;`, and
   `// <rbs:schedules>` under `let mut calendrier = Vec::new();` — the calendar left its

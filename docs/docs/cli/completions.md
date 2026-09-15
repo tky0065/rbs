@@ -27,14 +27,14 @@ is verbatim, captured by running the command; only the prose around it is transl
 $ rbs completions --help
 Écrit sur la sortie standard le script de complétion du shell donné
 
-Usage: rbs completions <SHELL>
+Utilisation : rbs completions <SHELL>
 
-Arguments:
-  <SHELL>  Shell visé [possible values: bash, elvish, fish, powershell, zsh]
+Arguments :
+  <SHELL>  Shell visé [valeurs : bash, elvish, fish, powershell, zsh]
 
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
+Options :
+  -h, --help     Affiche l'aide
+  -V, --version  Affiche la version
 ```
 
 The shell is the only argument, and it is required. The five values are those
@@ -111,10 +111,10 @@ a limit of the generator, not of the declaration.
 
 ```text
 $ rbs completions nushell
-error: invalid value 'nushell' for '<SHELL>'
-  [possible values: bash, elvish, fish, powershell, zsh]
+erreur : valeur « nushell » invalide pour « <SHELL> »
+  [valeurs : bash, elvish, fish, powershell, zsh]
 
-For more information, try '--help'.
+Pour plus d'informations, essayez « --help ».
 ```
 
 Exit status 2, and nothing on standard output — so an `eval` of the command evaluates

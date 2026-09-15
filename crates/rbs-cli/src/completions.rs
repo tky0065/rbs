@@ -5,11 +5,8 @@
 
 use std::io;
 
-use clap::CommandFactory;
 use clap::builder::PossibleValuesParser;
 use clap_complete::Shell;
-
-use crate::cli::Cli;
 
 /// Écrit sur `buffer` le script de complétion de `shell`.
 pub(crate) fn render(shell: Shell, buffer: &mut impl io::Write) {
@@ -25,7 +22,7 @@ pub(crate) fn render(shell: Shell, buffer: &mut impl io::Write) {
 fn command() -> clap::Command {
     let fragments = PossibleValuesParser::new(crate::templates::embedded_names());
 
-    Cli::command().mut_subcommand("add", |add| {
+    crate::cli::command().mut_subcommand("add", |add| {
         add.mut_arg("feature", |feature| feature.value_parser(fragments))
     })
 }
@@ -33,6 +30,7 @@ fn command() -> clap::Command {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cli::Cli;
 
     /// Les quatre shells que la commande annonce, et sur lesquels le rendu est exercé.
     const SHELLS: [Shell; 4] = [Shell::Bash, Shell::Zsh, Shell::Fish, Shell::PowerShell];
@@ -43,6 +41,19 @@ mod tests {
         render(shell, &mut script);
 
         String::from_utf8(script).expect("le script est de l'UTF-8")
+    }
+
+    /// Les descriptions que zsh et fish affichent à côté des options viennent de l'aide :
+    /// elles doivent être celles du CLI, non l'anglais de clap.
+    #[test]
+    fn the_completed_descriptions_are_the_french_ones() {
+        for shell in [Shell::Zsh, Shell::Fish] {
+            let script = script(shell);
+            assert!(script.contains("Affiche la version"), "{shell} : {script}");
+            for anglais in ["Print help", "Print version", "Print this message"] {
+                assert!(!script.contains(anglais), "{shell} garde `{anglais}`");
+            }
+        }
     }
 
     #[test]

@@ -19,12 +19,12 @@ de cette page sont verbatim, capturés en lançant la commande.
 $ rbs routes --help
 Liste les routes du projet : méthode, chemin, operation_id et garde
 
-Usage: rbs routes [OPTIONS]
+Utilisation : rbs routes [OPTIONS]
 
-Options:
+Options :
       --json     Rend les routes en JSON sur la sortie standard, pour un script ou un agent
-  -h, --help     Print help
-  -V, --version  Print version
+  -h, --help     Affiche l'aide
+  -V, --version  Affiche la version
 ```
 
 ## Le tableau

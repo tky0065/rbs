@@ -23,14 +23,14 @@ sortie de terminal ne se traduit pas.
 $ rbs doctor --help
 Diagnostique le projet : ancres, .env, base joignable, versions
 
-Usage: rbs doctor [OPTIONS]
+Utilisation : rbs doctor [OPTIONS]
 
-Options:
+Options :
       --json     Rend le rapport en JSON sur la sortie standard, pour un script ou une CI
       --fix      Repose les ancres absentes avant de diagnostiquer
       --force    Repose les ancres même si le working tree Git est sale
-  -h, --help     Print help
-  -V, --version  Print version
+  -h, --help     Affiche l'aide
+  -V, --version  Affiche la version
 ```
 
 Trois flags, et trois seulement. `--json` rend le rapport en document ; `--fix` repose les

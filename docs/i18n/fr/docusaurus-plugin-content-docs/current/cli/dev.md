@@ -20,16 +20,16 @@ de cette page sont verbatim, capturés en lançant la commande.
 $ rbs dev --help
 Démarre le projet : services, migrations, serveur relancé à chaque changement
 
-Usage: rbs dev [OPTIONS] [-- <ARGS>...]
+Utilisation : rbs dev [OPTIONS] [-- <ARGS>...]
 
-Arguments:
+Arguments :
   [ARGS]...  Arguments du serveur, passés après `--` (ex. -- --port 4000)
 
-Options:
+Options :
       --no-compose  Ne remonte pas les services du compose : ils tournent déjà, ou ailleurs
       --no-migrate  N'applique pas les migrations en attente
-  -h, --help        Print help
-  -V, --version     Print version
+  -h, --help        Affiche l'aide
+  -V, --version     Affiche la version
 ```
 
 | Option | Effet |

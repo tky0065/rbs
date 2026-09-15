@@ -44,14 +44,12 @@ use std::path::PathBuf;
 
 use errors::Classee as _;
 
-use clap::Parser;
-
-use cli::{Cli, Commands, GenerateCommands, MigrateCommands};
+use cli::{Commands, GenerateCommands, MigrateCommands};
 use database::Database;
 
 /// Le corps de la commande, appelé à l'identique par les deux binaires livrés.
 pub fn run() {
-    let cli = Cli::parse();
+    let cli = cli::parse();
 
     match cli.command {
         Commands::New {

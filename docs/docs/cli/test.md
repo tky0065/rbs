@@ -20,17 +20,17 @@ is verbatim, captured by running the command; only the prose around it is transl
 $ rbs test --help
 Lance les tests du projet : services, migrations, puis cargo test sur tout le workspace
 
-Usage: rbs test [OPTIONS] [FILTRE] [-- <ARGS>...]
+Utilisation : rbs test [OPTIONS] [FILTRE] [-- <ARGS>...]
 
-Arguments:
+Arguments :
   [FILTRE]   Ne lance que les tests dont le chemin contient ce motif
   [ARGS]...  Arguments du harnais de test, passés après `--` (ex. --nocapture)
 
-Options:
+Options :
       --no-compose  Ne remonte pas les services du compose : ils tournent déjà, ou ailleurs
       --no-migrate  N'applique pas les migrations en attente
-  -h, --help        Print help
-  -V, --version     Print version
+  -h, --help        Affiche l'aide
+  -V, --version     Affiche la version
 ```
 
 | Argument or option | Effect |

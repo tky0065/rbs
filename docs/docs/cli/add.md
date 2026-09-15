@@ -20,18 +20,18 @@ is verbatim, captured by running the command; only the prose around it is transl
 $ rbs add --help
 Ajoute une feature : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 
-Usage: rbs add [OPTIONS] <FEATURE>
+Utilisation : rbs add [OPTIONS] <FEATURE>
 
-Arguments:
+Arguments :
   <FEATURE>  Feature à installer
 
-Options:
+Options :
       --force                  Applique les modifications même si le working tree Git est sale
       --dry-run                Affiche le plan sans rien écrire
       --json                   Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
       --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
-  -h, --help                   Print help
-  -V, --version                Print version
+  -h, --help                   Affiche l'aide
+  -V, --version                Affiche la version
 ```
 
 | Flag | Effect |

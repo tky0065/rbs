@@ -4,6 +4,38 @@ use clap::{Parser, Subcommand};
 
 use crate::database::Database;
 
+mod aide;
+mod usage;
+
+/// La commande `rbs`, aide comprise en français.
+pub fn command() -> clap::Command {
+    use clap::CommandFactory;
+
+    aide::francise(Cli::command())
+}
+
+/// Parse les arguments du processus ; une erreur d'usage s'affiche en français et sort en 2.
+pub fn parse() -> Cli {
+    use clap::{CommandFactory, FromArgMatches};
+
+    let args: Vec<std::ffi::OsString> = std::env::args_os().collect();
+    // `francise` construit l'arborescence, et clap y nomme chaque sous-commande d'après le
+    // binaire : il doit le connaître avant, faute de quoi `rbs-cli new --help` se
+    // présenterait en `rbs new`.
+    let mut declaree = Cli::command();
+    if let Some(nom) = args
+        .first()
+        .and_then(|a| std::path::Path::new(a).file_name())
+    {
+        declaree = declaree.bin_name(nom.to_string_lossy().into_owned());
+    }
+
+    aide::francise(declaree)
+        .try_get_matches_from(args)
+        .and_then(|matches| Cli::from_arg_matches(&matches))
+        .unwrap_or_else(|error| usage::exit(error))
+}
+
 #[derive(Debug, PartialEq, Parser)]
 #[command(
     name = "rbs",
@@ -334,6 +366,203 @@ pub enum OpenapiCommands {
 mod tests {
     use super::*;
     use clap::CommandFactory;
+    use clap::error::ErrorKind;
+
+    /// Ce que clap écrit en anglais dans une aide, et qu'aucune page de `rbs` ne doit
+    /// garder.
+    const ANGLAIS: [&str; 12] = [
+        "Usage:",
+        "Commands:",
+        "Options:",
+        "Arguments:",
+        "Print help",
+        "Print version",
+        "Print this message",
+        "see more with",
+        "see a summary with",
+        "[default:",
+        "[possible values:",
+        "Possible values:",
+    ];
+
+    fn toutes(
+        commande: &clap::Command,
+        chemin: &str,
+        visite: &mut dyn FnMut(&str, &clap::Command),
+    ) {
+        visite(chemin, commande);
+        for sous in commande.get_subcommands() {
+            toutes(sous, &format!("{chemin} {}", sous.get_name()), visite);
+        }
+    }
+
+    #[test]
+    fn no_help_page_keeps_an_english_clap_string() {
+        let mut racine = command();
+        racine.build();
+        let mut fautes = Vec::new();
+        let mut pages = 0;
+        toutes(&racine, "rbs", &mut |chemin, commande| {
+            pages += 1;
+            let mut c = commande.clone();
+            for aide in [
+                c.render_help().to_string(),
+                c.render_long_help().to_string(),
+            ] {
+                for mot in ANGLAIS {
+                    if aide.contains(mot) {
+                        fautes.push(format!("{chemin} : {mot}"));
+                    }
+                }
+            }
+        });
+        assert!(pages > 20, "le parcours n'a vu que {pages} pages");
+        assert!(fautes.is_empty(), "{fautes:#?}");
+    }
+
+    #[test]
+    fn a_help_page_speaks_french_with_french_typography() {
+        let mut racine = command();
+        let aide = racine.render_help().to_string();
+        for attendu in [
+            "Utilisation : rbs",
+            "Commandes :",
+            "Options :",
+            "Affiche l'aide",
+        ] {
+            assert!(aide.contains(attendu), "`{attendu}` absent :\n{aide}");
+        }
+
+        let mut nouveau = command();
+        let nouveau = nouveau
+            .find_subcommand_mut("new")
+            .expect("`new` absente du CLI");
+        let courte = nouveau.render_help().to_string();
+        for attendu in [
+            "Arguments :",
+            "[défaut : postgres]",
+            "[valeurs : postgres, mysql, sqlite]",
+            "plus de détail avec --help",
+        ] {
+            assert!(courte.contains(attendu), "`{attendu}` absent :\n{courte}");
+        }
+        let longue = nouveau.render_long_help().to_string();
+        for attendu in [
+            "Valeurs possibles :",
+            "- sqlite : SQLite, sans serveur",
+            "résumé avec -h",
+        ] {
+            assert!(longue.contains(attendu), "`{attendu}` absent :\n{longue}");
+        }
+    }
+
+    /// L'erreur d'usage que `command()` rend pour `args`, et son rendu français.
+    fn refus(args: &[&str]) -> (clap::Error, String) {
+        let error = command()
+            .try_get_matches_from(args)
+            .expect_err("la commande doit être refusée");
+        let texte = usage::message(&error)
+            .unwrap_or_else(|| panic!("{:?} sans rendu français : {error}", error.kind()));
+        (error, texte)
+    }
+
+    fn sans_anglais(texte: &str) {
+        for mot in ["error:", "tip:", "For more information", "Usage:"] {
+            assert!(!texte.contains(mot), "`{mot}` dans :\n{texte}");
+        }
+        assert!(
+            texte.ends_with("Pour plus d'informations, essayez « --help »."),
+            "{texte}"
+        );
+    }
+
+    #[test]
+    fn an_unknown_argument_is_refused_in_french() {
+        let (error, texte) = refus(&["rbs", "new", "--inconnu"]);
+        assert_eq!(error.exit_code(), 2);
+        assert!(
+            texte.contains("argument inattendu « --inconnu »"),
+            "{texte}"
+        );
+        assert!(texte.contains("Utilisation : rbs new"), "{texte}");
+        sans_anglais(&texte);
+    }
+
+    #[test]
+    fn an_invalid_value_is_refused_with_the_accepted_ones() {
+        let (error, texte) = refus(&["rbs", "new", "--database", "oracle"]);
+        assert_eq!(error.exit_code(), 2);
+        assert!(
+            texte.contains("valeur « oracle » invalide pour « --database <MOTEUR> »"),
+            "{texte}"
+        );
+        assert!(
+            texte.contains("[valeurs : postgres, mysql, sqlite]"),
+            "{texte}"
+        );
+        sans_anglais(&texte);
+    }
+
+    #[test]
+    fn an_unknown_subcommand_is_refused_in_french() {
+        let (error, texte) = refus(&["rbs", "nouveau"]);
+        assert_eq!(error.exit_code(), 2);
+        assert!(texte.contains("commande inconnue « nouveau »"), "{texte}");
+        sans_anglais(&texte);
+    }
+
+    #[test]
+    fn a_missing_argument_is_named_in_french() {
+        let (error, texte) = refus(&["rbs", "completions"]);
+        assert_eq!(error.exit_code(), 2);
+        assert!(
+            texte.contains("argument obligatoire absent : <SHELL>"),
+            "{texte}"
+        );
+        sans_anglais(&texte);
+    }
+
+    #[test]
+    fn help_and_version_stay_successful_outputs() {
+        for args in [["rbs", "--help"], ["rbs", "-h"]] {
+            let aide = command()
+                .try_get_matches_from(args)
+                .expect_err("l'aide interrompt");
+            assert_eq!(aide.kind(), ErrorKind::DisplayHelp, "{args:?}");
+            assert_eq!(aide.exit_code(), 0, "{args:?}");
+        }
+
+        let version = command()
+            .try_get_matches_from(["rbs", "--version"])
+            .expect_err("la version interrompt");
+        assert_eq!(version.kind(), ErrorKind::DisplayVersion);
+        assert_eq!(version.exit_code(), 0);
+        assert_eq!(
+            version.render().to_string(),
+            format!("rbs {}\n", env!("CARGO_PKG_VERSION"))
+        );
+    }
+
+    #[test]
+    fn the_french_command_parses_like_the_declared_one() {
+        let matches = command()
+            .try_get_matches_from(["rbs", "dev", "--no-migrate", "--", "--port", "4000"])
+            .expect("commande valide");
+        let cli = <Cli as clap::FromArgMatches>::from_arg_matches(&matches).expect("Cli lisible");
+        assert_eq!(
+            cli.command,
+            Commands::Dev {
+                no_compose: false,
+                no_migrate: true,
+                server: vec!["--port".to_string(), "4000".to_string()],
+            }
+        );
+    }
+
+    #[test]
+    fn the_french_command_is_consistent() {
+        command().debug_assert();
+    }
 
     #[test]
     fn the_clap_declaration_is_consistent() {

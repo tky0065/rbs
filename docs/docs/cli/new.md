@@ -20,22 +20,22 @@ is verbatim, captured by running the command; only the prose around it is transl
 $ rbs new -h
 Crée un projet prêt à démarrer, avec sa base, ses migrations et sa route /health
 
-Usage: rbs new [OPTIONS] [NAME]
+Utilisation : rbs new [OPTIONS] [NAME]
 
-Arguments:
+Arguments :
   [NAME]  Nom du projet, qui est aussi celui du répertoire créé, à défaut de quoi la question est posée
 
-Options:
+Options :
       --database-url <URL>     URL de connexion, à défaut de quoi la question est posée
-      --database <MOTEUR>      Moteur de base sur lequel le projet tournera [default: postgres] [possible values: postgres, mysql, sqlite]
+      --database <MOTEUR>      Moteur de base sur lequel le projet tournera [défaut : postgres] [valeurs : postgres, mysql, sqlite]
       --with <FEATURES>        Features à installer sans passer par les questions, séparées par des virgules
-      --preset <PRESET>        Jeu de features nommé, cumulable avec `--with` [possible values: api, worker, full]
+      --preset <PRESET>        Jeu de features nommé, cumulable avec `--with` [valeurs : api, worker, full]
       --core-path <CHEMIN>     Crate `rbs-core` locale à utiliser au lieu de la version publiée
-      --lang <LANGUE>          Langue du projet : `AGENTS.md` et réponses HTTP. À défaut, celle de l'environnement [possible values: fr, en]
+      --lang <LANGUE>          Langue du projet : `AGENTS.md` et réponses HTTP. À défaut, celle de l'environnement [valeurs : fr, en]
       --template-dir <CHEMIN>  Répertoire de templates remplaçant celles embarquées dans le binaire
   -y, --yes                    Prend les valeurs par défaut sans rien demander : le CLI reste scriptable
-  -h, --help                   Print help (see more with '--help')
-  -V, --version                Print version
+  -h, --help                   Affiche l'aide (plus de détail avec --help)
+  -V, --version                Affiche la version
 ```
 
 `[NAME]` is both the Cargo package name and the directory name. It must start with an ASCII
@@ -73,10 +73,10 @@ An unknown value is refused before anything is written:
 
 ```text
 $ rbs new blog --database oracle
-error: invalid value 'oracle' for '--database <MOTEUR>'
-  [possible values: postgres, mysql, sqlite]
+erreur : valeur « oracle » invalide pour « --database <MOTEUR> »
+  [valeurs : postgres, mysql, sqlite]
 
-For more information, try '--help'.
+Pour plus d'informations, essayez « --help ».
 ```
 
 Without the flag, `postgres` stays the default, and a manifest with no `database` key reads

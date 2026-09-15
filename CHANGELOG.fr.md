@@ -130,6 +130,16 @@ dépréciation.
 
 ### Modifié
 
+- **`rbs` parle français de bout en bout dans son aide et ses erreurs d'usage.** clap
+  écrivait en anglais ce qui lui revient — `Usage:`, `Commands:`, `Options:`,
+  `Print help`, `[default: …]`, `[possible values: …]`, et chaque erreur d'usage
+  (`error:`, `tip:`, `For more information, try '--help'`) — autour de descriptions
+  françaises. Les en-têtes, les drapeaux `-h` et `-V`, la sous-commande `help`, les
+  valeurs par défaut et possibles, et les erreurs d'usage courantes — argument inconnu,
+  valeur invalide, commande inconnue, argument manquant, conflit — sont désormais en
+  français ; une erreur d'usage sort toujours avec le code de clap, 2. Les complétions
+  du shell décrivent elles aussi les options en français.
+
 - **`rbs add jobs` et `rbs add scheduler` portent chacun une ancre de plus, et
   `schedules()` s'écrit en instructions.** `// <rbs:job_modules>` se tient sous
   `pub mod worker;`, et `// <rbs:schedules>` sous `let mut calendrier = Vec::new();` — le
