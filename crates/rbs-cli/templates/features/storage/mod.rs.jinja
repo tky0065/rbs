@@ -71,6 +71,10 @@ pub trait Storage: std::fmt::Debug + Send + Sync {
     async fn available(&self) -> bool;
 }
 
+// Les 4 Kio par défaut de `ReaderStream` coûtent, côté fichiers, un aller-retour vers le
+// pool bloquant par morceau : 25 600 pour un objet de 100 Mio.
+const CHUNK: usize = 64 * 1024;
+
 /// Le stockage du projet répond-il ?
 ///
 /// Une fonction plutôt qu'un appel direct à [`Storage::available`] : la sonde s'inscrit

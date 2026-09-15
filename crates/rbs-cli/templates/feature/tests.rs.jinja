@@ -762,6 +762,49 @@ async fn the_content_round_trips_through_put_get_and_head() {
     assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
 }
 
+/// Un binaire part tel quel, même vers un client qui accepte gzip : il garde sa taille, et
+/// un contenu déjà compressé ne l'est pas une seconde fois.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_binary_content_is_served_uncompressed() {
+    let api = application().await;
+    let collection = "/{@ module @}";
+
+    let (status, created) = call(&api, request("POST", collection, creation())).await;
+    assert_eq!(status, StatusCode::CREATED, "création refusée : {created}");
+    let id = created["id"].as_str().expect("identifiant rendu");
+    let resource = format!("{collection}/{id}");
+    let content = format!("{resource}/content");
+
+    // Au-delà du seuil sous lequel la compression ne s'applique jamais.
+    let deposited = vec![b'a'; 4096];
+    let (status, _, _) = call_raw(&api, binary("PUT", &content, deposited.clone())).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "dépôt refusé");
+
+    let mut demande = without_body("GET", &content);
+    demande
+        .headers_mut()
+        .insert("accept-encoding", "gzip".parse().expect("en-tête valide"));
+    let (status, headers, read) = call_raw(&api, demande).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        headers.get("content-encoding").is_none(),
+        "un binaire ne doit pas partir compressé : {headers:?}"
+    );
+    assert_eq!(
+        headers
+            .get("content-length")
+            .and_then(|value| value.to_str().ok()),
+        Some("4096"),
+        "la taille déposée doit rester annoncée"
+    );
+    assert_eq!(read, deposited, "l'octet rendu diffère de l'octet déposé");
+
+    let (status, _) = call(&api, without_body("DELETE", &resource)).await;
+    assert_eq!(status, StatusCode::NO_CONTENT, "suppression refusée");
+}
+
 /// Un octet de trop franchit `TAILLE_MAX`, et le dépôt est refusé.
 ///
 /// La borne est celle que `mod.rs` engendre : la relever garde ce test juste.

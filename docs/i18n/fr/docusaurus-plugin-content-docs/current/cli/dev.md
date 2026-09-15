@@ -23,7 +23,7 @@ Démarre le projet : services, migrations, serveur relancé à chaque changement
 Utilisation : rbs dev [OPTIONS] [-- <ARGS>...]
 
 Arguments :
-  [ARGS]...  Arguments du serveur, passés après `--` (ex. -- --port 4000)
+  [ARGS]...  Arguments passés au binaire du serveur après `--` ; le main engendré n'en lit aucun
 
 Options :
       --no-compose  Ne remonte pas les services du compose : ils tournent déjà, ou ailleurs
@@ -64,12 +64,14 @@ Quatre étapes au plus, dans cet ordre :
 
 `--no-compose` ôte la première étape, `--no-migrate` la troisième. L'attente reste, quoi
 qu'on saute : le serveur a besoin de sa base de toute façon. Les arguments qui suivent
-`--` s'affichent sur la ligne du serveur :
+`--` vont au binaire du serveur, et s'affichent sur sa ligne. Le `main` engendré n'en lit
+aucun, son port venant de `[server] port` dans `config/` : ils servent un `main` à qui
+vous avez appris à les lire.
 
 ```text
-$ rbs dev --no-compose --no-migrate -- --port 4000
+$ rbs dev --no-compose --no-migrate -- --verbose
   base        127.0.0.1:1
-  serveur     cargo run -- --port 4000, relancé à chaque changement
+  serveur     cargo run -- --verbose, relancé à chaque changement
 ```
 
 Un projet avec un compose — le cas par défaut, pour la plupart — montre l'étape en plus,

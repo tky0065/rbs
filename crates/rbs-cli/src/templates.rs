@@ -34,8 +34,11 @@ static AGENTS: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/templates/agents
 /// sienne ; un test la garde de descendre sous celle du noyau.
 pub(crate) const RUST_VERSION: &str = "1.94.1";
 
-/// Le tag de l'image `rust` du Dockerfile engendré : la mineure de [`RUST_VERSION`], qui
-/// reçoit les correctifs sans qu'on ait à la relever.
+/// Le tag de l'image `rust` du Dockerfile engendré : la mineure de [`RUST_VERSION`].
+///
+/// docker-library ne reconstruit que la stable courante : ce tag désigne le dernier
+/// correctif de la mineure, figé depuis la sortie de la suivante — une toolchain
+/// reproductible, au plancher que déclare le manifeste.
 pub(crate) fn rust_image() -> &'static str {
     let fin = RUST_VERSION
         .match_indices('.')
@@ -1612,7 +1615,8 @@ mod tests {
         );
     }
 
-    /// L'image suit la mineure : un tag de patch figerait les correctifs de sécurité.
+    /// L'image nomme la mineure dont `RUST_VERSION` est un correctif : le dernier correctif
+    /// de cette mineure satisfait donc le plancher du manifeste.
     #[test]
     fn the_docker_image_is_the_minor_of_the_generated_msrv() {
         let image = super::rust_image();
@@ -1638,11 +1642,13 @@ mod tests {
         let image = format!("FROM rust:{}-slim-trixie AS builder", super::rust_image());
         assert!(rendu.contains(&image), "`{image}` absent :\n{rendu}");
         for cache in [
-            "/usr/local/cargo/registry",
-            "/usr/local/cargo/git",
-            "/build/target",
+            "type=cache,target=/usr/local/cargo/registry",
+            "type=cache,target=/usr/local/cargo/git",
+            // Un `target/` par projet : partagé, deux projets du même builder se prêteraient
+            // leur paquet `migration`, qui porte partout le même identifiant.
+            "type=cache,id=mon-api-target,target=/build/target",
         ] {
-            let montage = format!("--mount=type=cache,target={cache}");
+            let montage = format!("--mount={cache}");
             assert!(rendu.contains(&montage), "`{montage}` absent :\n{rendu}");
         }
         // Le cache n'entre pas dans la couche : l'étape runtime ne peut copier que ce qui

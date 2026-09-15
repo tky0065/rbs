@@ -86,7 +86,7 @@ impl Storage for S3Storage {
             length: object
                 .content_length()
                 .and_then(|length| u64::try_from(length).ok()),
-            body: ReaderStream::new(object.body.into_async_read()).boxed(),
+            body: ReaderStream::with_capacity(object.body.into_async_read(), super::CHUNK).boxed(),
         })
     }
 

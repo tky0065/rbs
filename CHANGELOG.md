@@ -118,8 +118,10 @@ between minor versions with no deprecation cycle.
   now carries a `CompressionLayer`, and `tower-http` gains the `compression-gzip`
   feature: `/api-docs/openapi.json`, which grows with every CRUD, and every list travel
   gzipped to any client that accepts it. The default predicate leaves small bodies,
-  images and server-sent events alone. A project generated earlier keeps its router; the
-  upgrade note gives the lines to paste.
+  images and server-sent events alone, and the skeleton adds `application/octet-stream` to
+  them: a file served as is keeps its `content-length`, and an archive already compressed
+  is not compressed twice. A project generated earlier keeps its router; the upgrade note
+  gives the lines to paste.
 
 ### Changed
 

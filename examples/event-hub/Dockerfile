@@ -15,10 +15,12 @@ COPY . .
 #
 # Les montages de cache gardent le registre et `target/` d'un build à l'autre : un commit
 # ne recompile plus sea-orm ni axum. Ils n'entrent pas dans la couche, d'où la copie des
-# deux binaires hors de `target/` dans la même instruction.
+# deux binaires hors de `target/` dans la même instruction. Le cache de `target/` porte le
+# nom du projet : partagé, deux projets du même builder se prêteraient leur paquet
+# `migration`, qui a partout le même identifiant.
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/usr/local/cargo/git \
-    --mount=type=cache,target=/build/target \
+    --mount=type=cache,id=event-hub-target,target=/build/target \
     cargo build --release --workspace --bins \
  && mkdir -p /build/out \
  && cp target/release/event-hub target/release/migration /build/out/
