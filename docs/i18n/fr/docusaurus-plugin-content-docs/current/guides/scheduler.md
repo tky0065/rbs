@@ -47,12 +47,15 @@ plan pour …/demo
   + src/modules/scheduler/model.rs                       créé
   + src/modules/scheduler/sync.rs                        créé
   + src/modules/scheduler/ticker.rs                      créé
-  + src/modules/scheduler/tests.rs                       créé
+  + src/modules/scheduler/tests/mod.rs                   créé
+  + src/modules/scheduler/tests/expression.rs            créé
+  + src/modules/scheduler/tests/sync.rs                  créé
+  + src/modules/scheduler/tests/ticker.rs                créé
   + migration/src/m20260913_132217_create_schedules.rs   créé
   ~ AGENTS.md                                            modifié
 
-  16 à créer, 6 à modifier
-✓ scheduler installée — 16 créés, 6 modifiés
+  19 à créer, 6 à modifier
+✓ scheduler installée — 19 créés, 6 modifiés
 
   rbs migrate up, puis `rbs generate job <nom> --every "<cron>"` pour déclarer une échéance dans src/modules/scheduler/mod.rs — les expressions sont évaluées en UTC
 ```
@@ -242,9 +245,9 @@ la main, si bien que `main` ne l'attend pas trente secondes avant de sortir.
 
 ## Les tests
 
-Le `src/modules/scheduler/tests.rs` engendré tourne contre une vraie base, comme tout test qui en
-touche une — voir le [guide des tests](./testing.md). Cinq d'entre eux sont ceux qu'il vaut
-la peine de garder si vous éditez le fragment :
+Le `src/modules/scheduler/tests/` engendré tourne contre une vraie base, comme tout test qui
+en touche une — voir le [guide des tests](./testing.md). Cinq d'entre eux sont ceux qu'il
+vaut la peine de garder si vous éditez le fragment :
 
 - une expression à cinq champs et sa forme à six donnent la même prochaine occurrence, et
   toute autre longueur est refusée ;

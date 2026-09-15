@@ -47,12 +47,15 @@ plan pour …/demo
   + src/modules/scheduler/model.rs                       créé
   + src/modules/scheduler/sync.rs                        créé
   + src/modules/scheduler/ticker.rs                      créé
-  + src/modules/scheduler/tests.rs                       créé
+  + src/modules/scheduler/tests/mod.rs                   créé
+  + src/modules/scheduler/tests/expression.rs            créé
+  + src/modules/scheduler/tests/sync.rs                  créé
+  + src/modules/scheduler/tests/ticker.rs                créé
   + migration/src/m20260913_132217_create_schedules.rs   créé
   ~ AGENTS.md                                            modifié
 
-  16 à créer, 6 à modifier
-✓ scheduler installée — 16 créés, 6 modifiés
+  19 à créer, 6 à modifier
+✓ scheduler installée — 19 créés, 6 modifiés
 
   rbs migrate up, puis `rbs generate job <nom> --every "<cron>"` pour déclarer une échéance dans src/modules/scheduler/mod.rs — les expressions sont évaluées en UTC
 ```
@@ -239,8 +242,8 @@ does not wait thirty seconds for it before exiting.
 
 ## Testing
 
-The generated `src/modules/scheduler/tests.rs` runs against a real database, like every test that
-touches one — see the [testing guide](./testing.md). Five of them are the ones worth
+The generated `src/modules/scheduler/tests/` runs against a real database, like every test
+that touches one — see the [testing guide](./testing.md). Five of them are the ones worth
 keeping when you edit the fragment:
 
 - a five-field expression and its six-field form give the same next occurrence, and any

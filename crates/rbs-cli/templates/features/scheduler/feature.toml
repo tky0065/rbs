@@ -23,8 +23,20 @@ source      = "ticker.rs.jinja"
 destination = "src/modules/scheduler/ticker.rs"
 
 [[files]]
-source      = "tests.rs.jinja"
-destination = "src/modules/scheduler/tests.rs"
+source      = "tests/mod.rs.jinja"
+destination = "src/modules/scheduler/tests/mod.rs"
+
+[[files]]
+source      = "tests/expression.rs.jinja"
+destination = "src/modules/scheduler/tests/expression.rs"
+
+[[files]]
+source      = "tests/sync.rs.jinja"
+destination = "src/modules/scheduler/tests/sync.rs"
+
+[[files]]
+source      = "tests/ticker.rs.jinja"
+destination = "src/modules/scheduler/tests/ticker.rs"
 
 [[anchors]]
 anchor  = "modules"

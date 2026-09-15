@@ -178,7 +178,7 @@ mod tests {
     /// désaccord ferait dire au CLI l'inverse du démarrage.
     #[test]
     fn the_expressions_the_fragment_tests_judge_are_judged_alike() {
-        let source = fragment("tests.rs.jinja");
+        let source = fragment("tests/expression.rs.jinja");
         let mut jugees = 0;
 
         for morceau in source.split("normaliser(\"").skip(1) {
