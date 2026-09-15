@@ -1,7 +1,9 @@
 use std::net::IpAddr;
+use std::time::Duration;
 
 use reqwest::dns::{Name, Resolve};
 
+use super::super::delivery::client;
 use super::super::target::{Policy, Refusal, Resolver, is_public, refusal_in};
 
 #[test]
@@ -142,22 +144,15 @@ async fn the_resolver_drops_localhost_outside_development_and_keeps_it_in_develo
     );
 }
 
-/// Un client de livraison, sans le mandataire que l'environnement pourrait imposer : c'est
-/// l'hôte de l'URL qui doit passer par le résolveur, pas celui d'un proxy.
-fn client_filtre(env: &str) -> reqwest::Client {
-    reqwest::Client::builder()
-        .no_proxy()
-        .dns_resolver(std::sync::Arc::new(Resolver::new(Policy::for_env(env))))
-        .build()
-        .expect("client constructible")
-}
-
 /// Le refus du résolveur arrive enveloppé dans l'erreur de reqwest : `post` ne le nomme
 /// que si `refusal_in` le retrouve au bout de la chaîne des causes, dont la forme
-/// appartient à reqwest et à hyper-util — seule une vraie requête le prouve.
+/// appartient à reqwest et à hyper-util — seule une vraie requête le prouve. Le client est
+/// celui de `Sender`, et non une copie : un `HTTP_PROXY` dans l'environnement du test y
+/// ferait échouer la requête chez le mandataire, sans jamais atteindre le résolveur.
 #[tokio::test]
 async fn a_refusal_from_the_resolver_is_found_in_the_client_error() {
-    let erreur = client_filtre("production")
+    let erreur = client(Policy::for_env("production"), Duration::from_secs(5))
+        .expect("client constructible")
         .get("http://localhost:9/hook")
         .send()
         .await
@@ -179,11 +174,21 @@ async fn a_connection_failure_is_not_a_refusal() {
         .expect("port libre")
         .port();
 
-    let erreur = client_filtre("development")
+    let erreur = client(Policy::for_env("development"), Duration::from_secs(5))
+        .expect("client constructible")
         .get(format!("http://localhost:{port}/hook"))
         .send()
         .await
         .expect_err("rien n'écoute sur ce port");
 
     assert_eq!(refusal_in(&erreur), None, "{erreur:?}");
+}
+
+/// `io::Error::source()` saute l'erreur qu'il enveloppe : un refus relayé dans un
+/// `io::Error` doit rester un refus, et non une panne que la file réessaierait cinq fois.
+#[test]
+fn a_refusal_wrapped_in_an_io_error_is_found() {
+    let erreur = std::io::Error::other(Refusal::PrivateHost);
+
+    assert_eq!(refusal_in(&erreur), Some(Refusal::PrivateHost));
 }

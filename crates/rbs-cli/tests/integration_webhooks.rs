@@ -20,7 +20,7 @@ mod common;
 
 /// Ce que le fragment livre et que `cargo test` joue sans base, nommés avec le sous-module
 /// — `signature` ou `target` — où le découpage des tests l'a rangé.
-const TESTS_ORDINAIRES: [(&str, &str); 11] = [
+const TESTS_ORDINAIRES: [(&str, &str); 14] = [
     (
         "signature",
         "the_signature_matches_an_independently_computed_vector",
@@ -53,6 +53,12 @@ const TESTS_ORDINAIRES: [(&str, &str); 11] = [
         "target",
         "the_resolver_drops_localhost_outside_development_and_keeps_it_in_development",
     ),
+    (
+        "target",
+        "a_refusal_from_the_resolver_is_found_in_the_client_error",
+    ),
+    ("target", "a_connection_failure_is_not_a_refusal"),
+    ("target", "a_refusal_wrapped_in_an_io_error_is_found"),
 ];
 
 /// Ce qu'il livre et qui joint la base, nommés avec le sous-module — `emission`, `routes`
@@ -101,7 +107,7 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
 
     migrate_dans(&racine, &common::cible());
 
-    // Les deux flux sont exigés séparément : onze des vingt-quatre tests livrés n'ont
+    // Les deux flux sont exigés séparément : quatorze des vingt-sept tests livrés n'ont
     // besoin d'aucune base et sortent sous `cargo test` ordinaire, les treize autres sous
     // `--ignored`. Les confondre ferait passer ce test sans qu'un seul des deux groupes
     // soit vraiment joué.

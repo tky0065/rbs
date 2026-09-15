@@ -116,7 +116,10 @@ boucle locale, privée, de lien local ou de CGNAT, ni `localhost` ; la requête 
 400 qui nomme la règle. À la livraison, l'hôte est résolu une seule fois, dans le
 résolveur du client HTTP, qui écarte toute adresse non publique au moment de la
 connexion : aucun nom ne peut changer de réponse entre le contrôle et l'envoi, ni donc
-atteindre un service interne. Les redirections ne sont jamais suivies : un 3xx est une livraison échouée comme tout autre
+atteindre un service interne. Le client des livraisons ignore les réglages de mandataire
+de l'environnement — `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` : derrière un mandataire, une
+livraison HTTPS part en tunnel `CONNECT`, c'est le mandataire qui résout la cible, et le
+résolveur ne verrait jamais que l'hôte du mandataire. Les redirections ne sont jamais suivies : un 3xx est une livraison échouée comme tout autre
 hors 2xx. Une livraison dont la cible est interdite est abandonnée, non réessayée — rien ne
 changerait au cinquième essai.
 

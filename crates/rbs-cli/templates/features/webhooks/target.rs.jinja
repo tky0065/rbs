@@ -215,7 +215,15 @@ impl Resolve for Resolver {
 /// reqwest l'enveloppe sous celle du connecteur : la profondeur de la chaîne des causes lui
 /// appartient, d'où le parcours entier plutôt qu'un nombre fixe de `source()`.
 pub fn refusal_in(error: &(dyn std::error::Error + 'static)) -> Option<Refusal> {
-    std::iter::successors(Some(error), |cause| cause.source())
-        .find_map(|cause| cause.downcast_ref::<Refusal>())
-        .copied()
+    std::iter::successors(Some(error), |cause| {
+        // `io::Error::source()` rend la cause de l'erreur qu'il enveloppe, et saute donc
+        // celle-ci : un refus relayé dans un `io::Error` ne s'atteint que par `get_ref`.
+        cause
+            .downcast_ref::<std::io::Error>()
+            .and_then(|io| io.get_ref())
+            .map(|dedans| dedans as &(dyn std::error::Error + 'static))
+            .or_else(|| cause.source())
+    })
+    .find_map(|cause| cause.downcast_ref::<Refusal>())
+    .copied()
 }

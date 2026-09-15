@@ -118,14 +118,7 @@ impl Sender {
         let policy = Policy::for_env(&config.env);
 
         Ok(Self {
-            client: reqwest::Client::builder()
-                .timeout(Duration::from_secs(section.timeout_secs))
-                // Un 3xx est une réponse hors 2xx comme une autre : suivre une
-                // redirection livrerait le corps signé là où le receveur — ou qui a pris
-                // sa place — l'envoie, hors de toute politique.
-                .redirect(reqwest::redirect::Policy::none())
-                .dns_resolver(std::sync::Arc::new(Resolver::new(policy)))
-                .build()?,
+            client: client(policy, Duration::from_secs(section.timeout_secs))?,
             policy,
         })
     }
@@ -177,6 +170,23 @@ impl Sender {
             "{url} a répondu {statut}"
         )))
     }
+}
+
+/// Le client des livraisons, et celui des tests qui éprouvent son filtre : un seul
+/// constructeur, pour que ce que les tests prouvent soit ce que `Sender` envoie.
+pub(super) fn client(policy: Policy, timeout: Duration) -> reqwest::Result<reqwest::Client> {
+    reqwest::Client::builder()
+        .timeout(timeout)
+        // Un 3xx est une réponse hors 2xx comme une autre : suivre une redirection
+        // livrerait le corps signé là où le receveur — ou qui a pris sa place — l'envoie,
+        // hors de toute politique.
+        .redirect(reqwest::redirect::Policy::none())
+        // reqwest suit par défaut `HTTP_PROXY`, `HTTPS_PROXY` et `ALL_PROXY` : derrière un
+        // mandataire, une livraison HTTPS part en tunnel CONNECT, c'est lui qui résout
+        // l'hôte de la cible, et le résolveur ci-dessous ne verrait jamais que le sien.
+        .no_proxy()
+        .dns_resolver(std::sync::Arc::new(Resolver::new(policy)))
+        .build()
 }
 
 /// Ce qui empêche une livraison, et ce que la file doit en faire.

@@ -116,7 +116,10 @@ it must be `https` and its host must not be a loopback, private, link-local or
 carrier-grade NAT address — nor `localhost`; the request gets a 400 naming the rule. At
 delivery, the host is resolved once, inside the HTTP client's resolver, which drops every
 non-public address at connection time: no name can change its answer between the check and
-the request, and so none reaches an internal service. Redirects are never followed: a 3xx
+the request, and so none reaches an internal service. The delivery client ignores the
+environment's proxy settings — `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`: through a proxy,
+an HTTPS delivery is tunnelled with `CONNECT`, the proxy resolves the target itself, and
+the resolver would only ever see the proxy's own host. Redirects are never followed: a 3xx
 is a failed delivery like any other non-2xx. A delivery whose target is blocked is
 abandoned, not retried — nothing would change on the fifth attempt.
 
