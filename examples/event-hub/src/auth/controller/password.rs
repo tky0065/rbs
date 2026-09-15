@@ -1,7 +1,6 @@
 use axum::extract::State;
 use axum::http::StatusCode;
 use rbs_core::{HasAuth, HasCoreState, Identity, ProblemDetails, Result, ValidatedJson};
-use sea_orm::prelude::Uuid;
 
 use super::super::dto::{ChangePasswordRequest, EmailRequest, ResetPasswordRequest, TokenPair};
 use super::super::service;
@@ -26,9 +25,7 @@ pub async fn change_password(
     identite: Identity,
     ValidatedJson(input): ValidatedJson<ChangePasswordRequest>,
 ) -> Result<TokenPair> {
-    // `sub` porte l'identifiant sous forme de chaîne : le jeton est signé, mais rien ne
-    // garantit que celui-ci a été émis par une version du service qui y mettait un UUID.
-    let id = Uuid::parse_str(&identite.user_id).map_err(|_| rbs_core::Error::Unauthorized)?;
+    let id = identite.user_uuid()?;
 
     service::password::change(state.core().db(), state.auth(), id, input).await
 }

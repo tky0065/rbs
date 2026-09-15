@@ -14,6 +14,10 @@ between minor versions with no deprecation cycle.
 
 ### Added
 
+- **`Identity::user_uuid()` and `Claims::user_uuid()`** read the caller's identifier as a
+  `Uuid`, and answer `Error::Unauthorized` when `sub` is not one. The `auth` fragment
+  called `Uuid::parse_str` with the same error mapping at seven places; each now calls the
+  method, as a generated CRUD that wants the author of a write can.
 - **`rbs_core::db::redact_url`** returns a connection URL with its password replaced by
   `***` — the masking `db::connect` already applied to its own errors. The `redis` and
   `rate-limit` fragments call it to quote `[cache] url` in a log; any other URL of a

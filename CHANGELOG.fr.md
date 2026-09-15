@@ -15,6 +15,11 @@ dépréciation.
 
 ### Ajouté
 
+- **`Identity::user_uuid()` et `Claims::user_uuid()`** lisent l'identifiant de l'appelant
+  en `Uuid`, et rendent `Error::Unauthorized` quand `sub` n'en est pas un. Le fragment
+  `auth` appelait `Uuid::parse_str` avec la même conversion d'erreur à sept endroits ;
+  chacun appelle désormais la méthode, comme peut le faire un CRUD engendré qui veut
+  l'auteur d'une écriture.
 - **`rbs_core::db::redact_url`** rend une URL de connexion au mot de passe remplacé par
   `***` — le masquage que `db::connect` appliquait déjà à ses propres erreurs. Les
   fragments `redis` et `rate-limit` l'appellent pour citer `[cache] url` dans un journal ;

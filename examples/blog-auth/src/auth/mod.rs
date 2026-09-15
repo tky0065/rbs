@@ -14,7 +14,6 @@ use axum::routing::{delete, get, post};
 use rbs_core::jwt::Claims;
 use rbs_core::{Error, HasAuth, HasCoreState};
 use sea_orm::ActiveEnum;
-use sea_orm::prelude::Uuid;
 
 use crate::state::AppState;
 
@@ -29,7 +28,7 @@ impl HasAuth for AppState {
     /// meurt avec les sessions au lieu de survivre `access_ttl_secs`. Fermer une seule
     /// session nommée ne passe pas ici : rien ne relie un jeton d'accès à sa ligne.
     async fn accept(&self, claims: &Claims) -> rbs_core::Result<()> {
-        let id = Uuid::parse_str(&claims.sub).map_err(|_| Error::Unauthorized)?;
+        let id = claims.user_uuid()?;
         let compte = repository::find(self.core().db(), id)
             .await?
             .ok_or(Error::Unauthorized)?;

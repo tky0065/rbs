@@ -103,9 +103,7 @@ pub async fn logout(
     )
 )]
 pub async fn me(State(state): State<AppState>, identite: Identity) -> Result<Json<UserResponse>> {
-    // `sub` porte l'identifiant sous forme de chaîne : le jeton est signé, mais rien ne
-    // garantit que celui-ci a été émis par une version du service qui y mettait un UUID.
-    let id = Uuid::parse_str(&identite.user_id).map_err(|_| rbs_core::Error::Unauthorized)?;
+    let id = identite.user_uuid()?;
 
     Ok(Json(service::me(state.core().db(), id).await?))
 }
@@ -125,7 +123,7 @@ pub async fn list_sessions(
     State(state): State<AppState>,
     identite: Identity,
 ) -> Result<Json<Vec<SessionResponse>>> {
-    let id = Uuid::parse_str(&identite.user_id).map_err(|_| rbs_core::Error::Unauthorized)?;
+    let id = identite.user_uuid()?;
 
     Ok(Json(service::sessions(state.core().db(), id).await?))
 }
@@ -148,7 +146,7 @@ pub async fn revoke_session(
     identite: Identity,
     Path(id): Path<Uuid>,
 ) -> Result<StatusCode> {
-    let user_id = Uuid::parse_str(&identite.user_id).map_err(|_| rbs_core::Error::Unauthorized)?;
+    let user_id = identite.user_uuid()?;
 
     service::revoke_session(state.core().db(), id, user_id).await?;
 
@@ -170,7 +168,7 @@ pub async fn revoke_sessions(
     State(state): State<AppState>,
     identite: Identity,
 ) -> Result<StatusCode> {
-    let id = Uuid::parse_str(&identite.user_id).map_err(|_| rbs_core::Error::Unauthorized)?;
+    let id = identite.user_uuid()?;
 
     service::revoke_sessions(state.core().db(), id).await?;
 

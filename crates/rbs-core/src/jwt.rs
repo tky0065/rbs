@@ -5,6 +5,7 @@
 
 use jsonwebtoken::errors::ErrorKind;
 use jsonwebtoken::{Algorithm, DecodingKey, EncodingKey, Header, Validation, decode, encode};
+use sea_orm::prelude::Uuid;
 use serde::{Deserialize, Serialize};
 
 use crate::Error;
@@ -22,6 +23,15 @@ pub struct Claims {
     pub iat: i64,
     /// Identifiant du jeton.
     pub jti: String,
+}
+
+impl Claims {
+    /// L'identifiant de l'utilisateur, lu comme UUID dans `sub`.
+    ///
+    /// Un `sub` qui n'en est pas un vaut un jeton invalide : [`Error::Unauthorized`].
+    pub fn user_uuid(&self) -> crate::Result<Uuid> {
+        Uuid::parse_str(&self.sub).map_err(|_| Error::Unauthorized)
+    }
 }
 
 /// Échec de vérification d'un jeton.
@@ -105,6 +115,27 @@ mod tests {
 
     /// Expiration lointaine, pour les cas où la validité temporelle n'est pas le sujet.
     const LATER: i64 = 4_102_444_800;
+
+    #[test]
+    fn a_uuid_subject_reads_back_as_the_user_uuid() {
+        let id = Uuid::from_u128(0x0192_1f5e_7a3b_7c4d_8e9f_a0b1_c2d3_e4f5);
+        let claims = Claims {
+            sub: id.to_string(),
+            ..claims(LATER)
+        };
+
+        assert_eq!(claims.user_uuid().expect("un UUID se lit"), id);
+    }
+
+    #[test]
+    fn a_subject_that_is_not_a_uuid_is_unauthorized() {
+        let claims = Claims {
+            sub: "42".into(),
+            ..claims(LATER)
+        };
+
+        assert!(matches!(claims.user_uuid(), Err(Error::Unauthorized)));
+    }
 
     #[test]
     fn signing_then_verifying_restores_the_claims() {
