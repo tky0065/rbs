@@ -98,12 +98,52 @@ source      = "tests/mod.rs.jinja"
 destination = "src/auth/tests/mod.rs"
 
 [[files]]
-source      = "tests/session.rs.jinja"
-destination = "src/auth/tests/session.rs"
+source      = "tests/change.rs.jinja"
+destination = "src/auth/tests/change.rs"
 
 [[files]]
-source      = "tests/password.rs.jinja"
-destination = "src/auth/tests/password.rs"
+source      = "tests/guard.rs.jinja"
+destination = "src/auth/tests/guard.rs"
+
+[[files]]
+source      = "tests/http.rs.jinja"
+destination = "src/auth/tests/http.rs"
+
+[[files]]
+source      = "tests/login.rs.jinja"
+destination = "src/auth/tests/login.rs"
+
+[[files]]
+source      = "tests/logout.rs.jinja"
+destination = "src/auth/tests/logout.rs"
+
+[[files]]
+source      = "tests/openapi.rs.jinja"
+destination = "src/auth/tests/openapi.rs"
+
+[[files]]
+source      = "tests/refresh.rs.jinja"
+destination = "src/auth/tests/refresh.rs"
+
+[[files]]
+source      = "tests/registration.rs.jinja"
+destination = "src/auth/tests/registration.rs"
+
+[[files]]
+source      = "tests/reset.rs.jinja"
+destination = "src/auth/tests/reset.rs"
+
+[[files]]
+source      = "tests/roles.rs.jinja"
+destination = "src/auth/tests/roles.rs"
+
+[[files]]
+source      = "tests/sessions.rs.jinja"
+destination = "src/auth/tests/sessions.rs"
+
+[[files]]
+source      = "tests/tokens.rs.jinja"
+destination = "src/auth/tests/tokens.rs"
 
 [[files]]
 source      = "tests/verification.rs.jinja"

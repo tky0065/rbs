@@ -71,8 +71,18 @@ plan pour …/demo
   + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
-  + src/auth/tests/session.rs                              créé
-  + src/auth/tests/password.rs                             créé
+  + src/auth/tests/change.rs                               créé
+  + src/auth/tests/guard.rs                                créé
+  + src/auth/tests/http.rs                                 créé
+  + src/auth/tests/login.rs                                créé
+  + src/auth/tests/logout.rs                               créé
+  + src/auth/tests/openapi.rs                              créé
+  + src/auth/tests/refresh.rs                              créé
+  + src/auth/tests/registration.rs                         créé
+  + src/auth/tests/reset.rs                                créé
+  + src/auth/tests/roles.rs                                créé
+  + src/auth/tests/sessions.rs                             créé
+  + src/auth/tests/tokens.rs                               créé
   + src/auth/tests/verification.rs                         créé
   + migration/src/m20260909_093150_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
@@ -80,8 +90,8 @@ plan pour …/demo
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  36 à créer, 11 à modifier
-✓ auth installée — 36 créés, 11 modifiés
+  46 à créer, 11 à modifier
+✓ auth installée — 46 créés, 11 modifiés
 
   rbs migrate up
 ```

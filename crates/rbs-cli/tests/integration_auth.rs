@@ -242,7 +242,7 @@ fn each_layer_is_a_directory() {
         "src/auth/controller/mod.rs",
         "src/auth/controller/session.rs",
         "src/auth/tests/mod.rs",
-        "src/auth/tests/session.rs",
+        "src/auth/tests/registration.rs",
     ] {
         assert!(
             racine.join(fichier).is_file(),
@@ -521,13 +521,13 @@ fn the_auth_tests_of_the_generated_project_pass() {
     // laisserait la suite verte sans eux.
     for test in [
         "auth::tests::a_link_carries_its_token_in_the_fragment",
-        "auth::tests::session::registration_returns_202_without_a_body",
-        "auth::tests::session::a_taken_address_returns_the_same_202_and_creates_nothing",
-        "auth::tests::session::a_taken_address_keeps_its_password",
-        "auth::tests::session::a_taken_address_costs_the_same_time_as_a_new_one",
+        "auth::tests::registration::registration_returns_202_without_a_body",
+        "auth::tests::registration::a_taken_address_returns_the_same_202_and_creates_nothing",
+        "auth::tests::registration::a_taken_address_keeps_its_password",
+        "auth::tests::registration::a_taken_address_costs_the_same_time_as_a_new_one",
         "auth::tests::verification::a_verified_address_is_not_sent_a_new_token",
         "auth::tests::verification::verifying_again_keeps_the_first_date",
-        "auth::tests::password::an_emission_purges_the_expired_tokens_of_every_account",
+        "auth::tests::tokens::an_emission_purges_the_expired_tokens_of_every_account",
     ] {
         assert!(
             rendu.contains(&format!("test {test} ... ok")),
@@ -587,8 +587,8 @@ fn the_auth_tests_of_the_generated_project_pass_on_sqlite() {
     // Nommés plutôt que comptés : `--include-ignored` sort en 0 même quand rien ne
     // filtre, et ce sont ces deux tests qui distinguent un instant d'un jour.
     for test in [
-        "auth::tests::password::an_expired_reset_token_is_refused_by_consume_and_removed_by_the_purge",
-        "auth::tests::session::an_expired_session_is_no_longer_listed",
+        "auth::tests::tokens::an_expired_reset_token_is_refused_by_consume_and_removed_by_the_purge",
+        "auth::tests::refresh::an_expired_session_is_no_longer_listed",
     ] {
         assert!(
             rendu.contains(&format!("test {test} ... ok")),

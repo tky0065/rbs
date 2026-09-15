@@ -834,17 +834,26 @@ mod tests {
     /// Chaque test du fragment monte l'application ou ouvre une connexion : aucun n'est
     /// unitaire, et tous prennent le marqueur, comme dans `jobs`, `redis` et `storage`.
     ///
-    /// Les tests du fragment vivent dans quatre fichiers depuis sa découpe par couche —
-    /// `tests/mod.rs` n'en porte aucun, il n'expose que les aides partagées. Se limiter à
-    /// `tests/session.rs` laisserait les trois autres sans garde-fou : sans lui, `rbs new
-    /// --with auth && cargo test` échoue tant que PostgreSQL n'est pas démarré *et*
-    /// migré, là où `--with jobs` passe.
+    /// Les tests du fragment vivent dans douze fichiers depuis sa découpe par route —
+    /// `tests/mod.rs` et `tests/http.rs` n'en portent aucun, ils n'exposent que les aides
+    /// partagées. S'arrêter au premier laisserait les onze autres sans garde-fou : sans
+    /// lui, `rbs new --with auth && cargo test` échoue tant que PostgreSQL n'est pas
+    /// démarré *et* migré, là où `--with jobs` passe.
     #[test]
     fn every_auth_test_joining_the_database_is_ignored() {
         for destination in [
             "tests/mod.rs",
-            "tests/session.rs",
-            "tests/password.rs",
+            "tests/change.rs",
+            "tests/guard.rs",
+            "tests/login.rs",
+            "tests/logout.rs",
+            "tests/openapi.rs",
+            "tests/refresh.rs",
+            "tests/registration.rs",
+            "tests/reset.rs",
+            "tests/roles.rs",
+            "tests/sessions.rs",
+            "tests/tokens.rs",
             "tests/verification.rs",
         ] {
             let tests = fragment_source("auth", destination);

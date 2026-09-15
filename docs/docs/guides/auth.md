@@ -6,7 +6,7 @@ title: Authentication
 # Authentication
 
 `rbs add auth` installs a working authentication feature into an existing project:
-twenty-one files under `src/auth/`, three mail templates, one migration, and thirteen
+thirty-one files under `src/auth/`, three mail templates, one migration, and thirteen
 routes mounted on the router. What it lays down is ordinary code in your source tree —
 an entity, a service, a controller, a guard — and it is meant to be read and changed.
 
@@ -44,8 +44,18 @@ plan pour /private/tmp/rbs-demo/blog
   + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
-  + src/auth/tests/session.rs                              créé
-  + src/auth/tests/password.rs                             créé
+  + src/auth/tests/change.rs                               créé
+  + src/auth/tests/guard.rs                                créé
+  + src/auth/tests/http.rs                                 créé
+  + src/auth/tests/login.rs                                créé
+  + src/auth/tests/logout.rs                               créé
+  + src/auth/tests/openapi.rs                              créé
+  + src/auth/tests/refresh.rs                              créé
+  + src/auth/tests/registration.rs                         créé
+  + src/auth/tests/reset.rs                                créé
+  + src/auth/tests/roles.rs                                créé
+  + src/auth/tests/sessions.rs                             créé
+  + src/auth/tests/tokens.rs                               créé
   + src/auth/tests/verification.rs                         créé
   + migration/src/m20260910_162209_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
@@ -59,8 +69,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  25 à créer, 10 à modifier
-✓ auth installée — 25 créés, 10 modifiés
+  35 à créer, 10 à modifier
+✓ auth installée — 35 créés, 10 modifiés
 
   rbs migrate up
 ```
@@ -445,11 +455,11 @@ an existing project over.
 
 **No route grants a role.** Registration always produces a `user`, by table default, and
 promotion goes through the database. That is deliberate: an HTTP route that hands out
-`admin` is a route someone will eventually reach. The generated `src/auth/tests/session.rs`
+`admin` is a route someone will eventually reach. The generated `src/auth/tests/roles.rs`
 promotes an account exactly this way, and only then logs in — a token minted before the
 promotion would carry the old role:
 
-```rust file=examples/blog-auth/src/auth/tests/session.rs region=jeton_admin
+```rust file=examples/blog-auth/src/auth/tests/roles.rs region=jeton_admin
 ```
 
 ## Testing a protected route
@@ -470,13 +480,14 @@ identified but whose role falls short, refused 403 by the guard inside the handl
 ```rust file=examples/blog-auth/src/posts/tests.rs region=refus
 ```
 
-The feature's own routes are covered the same way, split across `src/auth/tests/session.rs`,
-`password.rs` and `verification.rs` — registration, the identical 401s, rotation,
-revocation, and the password and verification journeys above. Every one of them goes
-through HTTP against a real database, so every one is marked `#[ignore]`: `cargo test` on
-a fresh project passes with no server running, and `cargo test -- --ignored` runs them
-against the database your `.env` names, migrations applied. See the
-[testing guide](./testing.md).
+The feature's own routes are covered the same way, split by concern under
+`src/auth/tests/` — `registration.rs`, `login.rs`, `refresh.rs`, `logout.rs`, `sessions.rs`,
+`roles.rs`, `tokens.rs`, `change.rs`, `reset.rs` and `verification.rs` — registration, the
+identical 401s, rotation, revocation, and the password and verification journeys above.
+Every one of them goes through HTTP against a real database, so every one is marked
+`#[ignore]`: `cargo test` on a fresh project passes with no server running, and
+`cargo test -- --ignored` runs them against the database your `.env` names, migrations
+applied. See the [testing guide](./testing.md).
 
 ## What it leaves to you
 

@@ -54,8 +54,8 @@ plan pour …/demo
   + migration/src/m20260913_132216_create_webhook_subscriptions.rs   créé
   ~ AGENTS.md                                                        modifié
 
-  67 à créer, 12 à modifier
-✓ webhooks installée — 67 créés, 12 modifiés
+  77 à créer, 12 à modifier
+✓ webhooks installée — 77 créés, 12 modifiés
 
   rbs migrate up, inscrivez un abonné par POST /webhooks/subscriptions — son secret n'est rendu qu'à cet instant — puis appelez webhooks::emit dans vos services
 ```

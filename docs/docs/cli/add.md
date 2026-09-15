@@ -47,7 +47,7 @@ Options :
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, and its `api`/`migrate` services inserted into the project's compose — a whole `docker-compose.yml` when there is none | `docker compose --profile app up --build` |
 | `ci` | `.github/workflows/ci.yml`, its actions pinned by SHA, and `.github/dependabot.yml`, which proposes their updates every week | `git push` |
-| `auth` | twenty-one files under `src/auth/`, three mail templates, one migration, edits to nine project files of its own — and `mail` and `rate-limit`, which it requires | `rbs migrate up` |
+| `auth` | thirty-one files under `src/auth/`, three mail templates, one migration, edits to nine project files of its own — and `mail` and `rate-limit`, which it requires | `rbs migrate up` |
 | `jobs` | thirteen files under `src/modules/jobs/`, one migration, and a `[jobs]` config section | `rbs migrate up`, then register your jobs in `src/modules/jobs/mod.rs` |
 | `scheduler` | six files under `src/modules/scheduler/`, one migration, a `[scheduler]` config section, a ticker in `// <rbs:startup>` — and `jobs`, which it requires | `rbs migrate up`, then declare your schedules in `src/modules/scheduler/mod.rs` |
 | `redis` | three files under `src/modules/cache/`, and a `redis` service inserted into the project's compose | the compose already carries it — `docker compose up -d` starts it |
@@ -265,8 +265,18 @@ plan pour /private/tmp/rbs-demo/blog
   + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
-  + src/auth/tests/session.rs                              créé
-  + src/auth/tests/password.rs                             créé
+  + src/auth/tests/change.rs                               créé
+  + src/auth/tests/guard.rs                                créé
+  + src/auth/tests/http.rs                                 créé
+  + src/auth/tests/login.rs                                créé
+  + src/auth/tests/logout.rs                               créé
+  + src/auth/tests/openapi.rs                              créé
+  + src/auth/tests/refresh.rs                              créé
+  + src/auth/tests/registration.rs                         créé
+  + src/auth/tests/reset.rs                                créé
+  + src/auth/tests/roles.rs                                créé
+  + src/auth/tests/sessions.rs                             créé
+  + src/auth/tests/tokens.rs                               créé
   + src/auth/tests/verification.rs                         créé
   + migration/src/m20260910_171229_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
@@ -292,8 +302,8 @@ plan pour /private/tmp/rbs-demo/blog
   + src/modules/rate_limit/tests.rs                        créé
   ~ AGENTS.md                                              modifié
 
-  36 à créer, 11 à modifier
-✓ auth installée — 36 créés, 11 modifiés
+  46 à créer, 11 à modifier
+✓ auth installée — 46 créés, 11 modifiés
 
   rbs migrate up
 ```

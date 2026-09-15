@@ -6,7 +6,7 @@ title: Authentification
 # Authentification
 
 `rbs add auth` installe une authentification qui fonctionne dans un projet existant :
-vingt-et-un fichiers sous `src/auth/`, trois gabarits de courriel, une migration, et treize
+trente-et-un fichiers sous `src/auth/`, trois gabarits de courriel, une migration, et treize
 routes montées sur le routeur. Ce qu'elle dépose est du code ordinaire dans votre
 arborescence — une entité, un service, un controller, une garde — et il est fait pour être
 lu et modifié.
@@ -45,8 +45,18 @@ plan pour /private/tmp/rbs-demo/blog
   + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
-  + src/auth/tests/session.rs                              créé
-  + src/auth/tests/password.rs                             créé
+  + src/auth/tests/change.rs                               créé
+  + src/auth/tests/guard.rs                                créé
+  + src/auth/tests/http.rs                                 créé
+  + src/auth/tests/login.rs                                créé
+  + src/auth/tests/logout.rs                               créé
+  + src/auth/tests/openapi.rs                              créé
+  + src/auth/tests/refresh.rs                              créé
+  + src/auth/tests/registration.rs                         créé
+  + src/auth/tests/reset.rs                                créé
+  + src/auth/tests/roles.rs                                créé
+  + src/auth/tests/sessions.rs                             créé
+  + src/auth/tests/tokens.rs                               créé
   + src/auth/tests/verification.rs                         créé
   + migration/src/m20260910_162209_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
@@ -60,8 +70,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  25 à créer, 10 à modifier
-✓ auth installée — 25 créés, 10 modifiés
+  35 à créer, 10 à modifier
+✓ auth installée — 35 créés, 10 modifiés
 
   rbs migrate up
 ```
@@ -459,11 +469,11 @@ deux sémantiques votre projet porte dépend de la version qui l'a engendré. La
 
 **Aucune route ne donne un rôle.** L'inscription rend toujours un `user`, par défaut de la
 table, et la promotion passe par la base. C'est délibéré : une route HTTP qui distribue
-`admin` est une route que quelqu'un finira par atteindre. Le `src/auth/tests/session.rs`
+`admin` est une route que quelqu'un finira par atteindre. Le `src/auth/tests/roles.rs`
 engendré promeut un compte exactement ainsi, et se connecte seulement après — un jeton émis
 avant la promotion porterait l'ancien rôle :
 
-```rust file=examples/blog-auth/src/auth/tests/session.rs region=jeton_admin
+```rust file=examples/blog-auth/src/auth/tests/roles.rs region=jeton_admin
 ```
 
 ## Tester une route protégée
@@ -484,10 +494,12 @@ bien identifié mais d'un rôle trop court, à qui la garde répond 403 dans le 
 ```rust file=examples/blog-auth/src/posts/tests.rs region=refus
 ```
 
-Les routes de la feature elle-même sont couvertes de la même façon, réparties entre
-`src/auth/tests/session.rs`, `password.rs` et `verification.rs` — l'inscription, les 401
-identiques, la rotation, la révocation, et les parcours de mot de passe et de vérification
-ci-dessus. Tous passent par HTTP contre une vraie base, et tous portent donc `#[ignore]` :
+Les routes de la feature elle-même sont couvertes de la même façon, réparties par sujet
+sous `src/auth/tests/` — `registration.rs`, `login.rs`, `refresh.rs`, `logout.rs`,
+`sessions.rs`, `roles.rs`, `tokens.rs`, `change.rs`, `reset.rs` et `verification.rs` —
+l'inscription, les 401 identiques, la rotation, la révocation, et les parcours de mot de
+passe et de vérification ci-dessus. Tous passent par HTTP contre une vraie base, et tous
+portent donc `#[ignore]` :
 le `cargo test` d'un projet neuf réussit sans serveur démarré, et `cargo test -- --ignored`
 les lance contre la base que nomme votre `.env`, migrations appliquées. Voir le
 [guide des tests](./testing.md).

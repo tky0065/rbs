@@ -286,7 +286,7 @@ $ rbs new site --with auth --yes
 ✓ site créé — 22 fichiers
   + mail       6 fichiers
   + rate-limit 4 fichiers
-  + auth       25 fichiers, 1 migration
+  + auth       35 fichiers, 1 migration
 
   réglez [mail] dans config/default.toml — un SMTP local par défaut
 
@@ -316,7 +316,7 @@ $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_dem
   + docker     2 fichiers
   + mail       6 fichiers
   + rate-limit 4 fichiers
-  + auth       25 fichiers, 1 migration
+  + auth       35 fichiers, 1 migration
   + storage    4 fichiers
 
   docker compose --profile app up --build

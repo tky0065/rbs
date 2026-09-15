@@ -1,17 +1,28 @@
 use axum::Router;
-use axum::body::{Body, to_bytes};
+use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter};
 use serde_json::{Value, json};
-use tower::ServiceExt;
 use uuid::Uuid;
 
 use crate::router::router;
 use crate::state::AppState;
 
-mod password;
-mod session;
+mod change;
+mod guard;
+mod http;
+mod login;
+mod logout;
+mod openapi;
+mod refresh;
+mod registration;
+mod reset;
+mod roles;
+mod sessions;
+mod tokens;
 mod verification;
+
+use http::*;
 
 /// Un mot de passe qui satisfait la validation du DTO, partagé par les tests.
 const PASSWORD: &str = "un mot de passe assez long";
@@ -62,73 +73,6 @@ pub(super) async fn one_time_tokens_count_for(db: &DatabaseConnection, user_id: 
         .count(db)
         .await
         .expect("le comptage aboutit")
-}
-
-/// Fait traverser le routeur à `requete`, et rend son statut avec son corps.
-async fn call(api: &Router, requete: Request<Body>) -> (StatusCode, Value) {
-    let response = api
-        .clone()
-        .oneshot(requete)
-        .await
-        .expect("l'application doit répondre");
-    let status = response.status();
-    let octets = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("corps de réponse lisible");
-
-    // Une réponse sans corps se lit `null` plutôt que d'arrêter le test.
-    let body = serde_json::from_slice(&octets).unwrap_or(Value::Null);
-
-    (status, body)
-}
-
-fn without_body(methode: &str, chemin: &str) -> Request<Body> {
-    Request::builder()
-        .method(methode)
-        .uri(chemin)
-        .body(Body::empty())
-        .expect("requête bien formée")
-}
-
-fn post_json(chemin: &str, body: Value) -> Request<Body> {
-    Request::builder()
-        .method("POST")
-        .uri(chemin)
-        .header("content-type", "application/json")
-        .body(Body::from(body.to_string()))
-        .expect("requête bien formée")
-}
-
-/// `post_json`, porteur d'un jeton d'accès. `get_authenticated` et `delete_authenticated`
-/// suivront le même modèle pour les routes protégées des autres méthodes.
-fn post_json_authenticated(chemin: &str, jeton: &str, body: Value) -> Request<Body> {
-    Request::builder()
-        .method("POST")
-        .uri(chemin)
-        .header("content-type", "application/json")
-        .header("authorization", format!("Bearer {jeton}"))
-        .body(Body::from(body.to_string()))
-        .expect("requête bien formée")
-}
-
-/// `without_body`, porteur d'un jeton d'accès.
-fn get_authenticated(chemin: &str, jeton: &str) -> Request<Body> {
-    Request::builder()
-        .method("GET")
-        .uri(chemin)
-        .header("authorization", format!("Bearer {jeton}"))
-        .body(Body::empty())
-        .expect("requête bien formée")
-}
-
-/// `without_body`, porteur d'un jeton d'accès.
-fn delete_authenticated(chemin: &str, jeton: &str) -> Request<Body> {
-    Request::builder()
-        .method("DELETE")
-        .uri(chemin)
-        .header("authorization", format!("Bearer {jeton}"))
-        .body(Body::empty())
-        .expect("requête bien formée")
 }
 
 /// Une adresse jamais inscrite : les tests partagent une base qu'ils ne vident pas.
@@ -255,6 +199,51 @@ fn access_token_for(compte: &crate::auth::repository::Model) -> String {
     };
 
     rbs_core::jwt::sign(&claims, &config.auth.secret).expect("jeton signable")
+}
+
+/// Inscrit une adresse neuve et ouvre une session : l'identifiant du compte et sa paire.
+async fn login_as(api: &Router) -> (Uuid, Value) {
+    let email = fresh_email();
+    signed_up(api, &email).await;
+    let id = account(&email).await.id;
+
+    let (status, paire) = authenticate(api, &email, PASSWORD).await;
+    assert_eq!(status, StatusCode::OK, "{paire}");
+
+    (id, paire)
+}
+
+/// Le jeton de rafraîchissement d'une paire.
+fn refresh_for(paire: &Value) -> String {
+    paire["refresh_token"]
+        .as_str()
+        .expect("la paire doit porter un jeton de rafraîchissement")
+        .to_owned()
+}
+
+async fn refresh(api: &Router, token: &str) -> (StatusCode, Value) {
+    call(
+        api,
+        post_json("/auth/refresh", json!({ "refresh_token": token })),
+    )
+    .await
+}
+
+/// Le jeton d'accès d'une paire.
+fn access_for(paire: &Value) -> String {
+    paire["access_token"]
+        .as_str()
+        .expect("la paire doit porter un jeton d'accès")
+        .to_owned()
+}
+
+fn with_token(methode: &str, chemin: &str, token: &str) -> Request<Body> {
+    Request::builder()
+        .method(methode)
+        .uri(chemin)
+        .header("authorization", format!("Bearer {token}"))
+        .body(Body::empty())
+        .expect("requête bien formée")
 }
 
 /// Le jeton part dans le fragment : un navigateur ne l'envoie jamais au serveur, donc ni
