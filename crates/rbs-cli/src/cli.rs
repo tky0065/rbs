@@ -100,13 +100,33 @@ pub enum Commands {
     },
 
     /// Démarre le projet : services, migrations, serveur relancé à chaque changement.
-    Dev,
+    Dev {
+        /// Ne remonte pas les services du compose : ils tournent déjà, ou ailleurs.
+        #[arg(long)]
+        no_compose: bool,
+
+        /// N'applique pas les migrations en attente.
+        #[arg(long)]
+        no_migrate: bool,
+
+        /// Arguments du serveur, passés après `--` (ex. -- --port 4000).
+        #[arg(last = true, value_name = "ARGS")]
+        server: Vec<String>,
+    },
 
     /// Lance les tests du projet : services, migrations, puis cargo test sur tout le workspace.
     Test {
         /// Ne lance que les tests dont le chemin contient ce motif.
         #[arg(value_name = "FILTRE")]
         filtre: Option<String>,
+
+        /// Ne remonte pas les services du compose : ils tournent déjà, ou ailleurs.
+        #[arg(long)]
+        no_compose: bool,
+
+        /// N'applique pas les migrations en attente.
+        #[arg(long)]
+        no_migrate: bool,
 
         /// Arguments du harnais de test, passés après `--` (ex. --nocapture).
         #[arg(last = true, value_name = "ARGS")]
@@ -445,6 +465,53 @@ mod tests {
     }
 
     #[test]
+    fn dev_reads_its_skips_and_the_server_arguments() {
+        let cli = Cli::try_parse_from([
+            "rbs",
+            "dev",
+            "--no-compose",
+            "--no-migrate",
+            "--",
+            "--port",
+            "4000",
+        ])
+        .expect("commande valide");
+        assert_eq!(
+            cli.command,
+            Commands::Dev {
+                no_compose: true,
+                no_migrate: true,
+                server: vec!["--port".to_string(), "4000".to_string()],
+            }
+        );
+
+        let nue = Cli::try_parse_from(["rbs", "dev"]).expect("commande valide");
+        assert_eq!(
+            nue.command,
+            Commands::Dev {
+                no_compose: false,
+                no_migrate: false,
+                server: vec![],
+            }
+        );
+    }
+
+    #[test]
+    fn test_reads_its_skips_between_the_filter_and_the_harness_arguments() {
+        let cli = Cli::try_parse_from(["rbs", "test", "--no-migrate", "user", "--", "--nocapture"])
+            .expect("commande valide");
+        assert_eq!(
+            cli.command,
+            Commands::Test {
+                filtre: Some("user".to_string()),
+                no_compose: false,
+                no_migrate: true,
+                libtest: vec!["--nocapture".to_string()],
+            }
+        );
+    }
+
+    #[test]
     fn the_g_alias_parses_as_generate() {
         let court = Cli::try_parse_from(["rbs", "g", "crud", "users"]).unwrap();
         let long = Cli::try_parse_from(["rbs", "generate", "crud", "users"]).unwrap();
@@ -739,7 +806,10 @@ mod tests {
     fn test_parses_a_filter_and_libtest_arguments() {
         let cli = Cli::try_parse_from(["rbs", "test", "articles", "--", "--nocapture"])
             .expect("commande valide");
-        let Commands::Test { filtre, libtest } = cli.command else {
+        let Commands::Test {
+            filtre, libtest, ..
+        } = cli.command
+        else {
             panic!("`test` attendue");
         };
 

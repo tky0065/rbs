@@ -47,10 +47,19 @@ pub(crate) enum Step {
     },
     /// Appliquer les migrations en attente.
     Migrations,
-    /// Lancer le serveur, et le relancer à chaque changement.
-    Server,
+    /// Lancer le serveur, `cargo run -- <arguments>`, et le relancer à chaque changement.
+    Server(Vec<String>),
     /// Lancer `cargo` avec ces arguments : les tests du workspace.
     Tests(Vec<String>),
+}
+
+/// Les étapes que l'appelant demande de sauter.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub(crate) struct Skip {
+    /// Ne pas remonter le compose : les services tournent déjà, ou ailleurs.
+    pub(crate) compose: bool,
+    /// Ne pas appliquer les migrations en attente.
+    pub(crate) migrations: bool,
 }
 
 /// Ce qui peut empêcher de démarrer.
@@ -157,10 +166,10 @@ impl Error {
 }
 
 /// Démarre le projet qui contient `directory`.
-pub(crate) fn run(directory: &Path) -> Result<(), Error> {
+pub(crate) fn run(directory: &Path, skip: Skip, server: &[String]) -> Result<(), Error> {
     let root = metadata::project_root(directory)?;
-    let mut steps = plan(&root)?;
-    steps.push(Step::Server);
+    let mut steps = plan(&root, skip)?;
+    steps.push(Step::Server(server.to_vec()));
 
     crate::ui::info(&render(&steps));
 
@@ -180,14 +189,15 @@ pub(crate) fn patience(steps: &[Step]) -> Duration {
 /// Établit la séquence commune à `rbs dev` et `rbs test` à partir de l'état du projet.
 ///
 /// Chaque commande ajoute sa dernière étape : `dev` le serveur, `test` la commande
-/// `cargo test` — ce plan partagé s'arrête à la base migrée.
-pub(crate) fn plan(root: &Path) -> Result<Vec<Step>, Error> {
+/// `cargo test` — ce plan partagé s'arrête à la base migrée. `skip` n'ôte jamais l'attente
+/// de la base : le serveur comme les tests en ont besoin, quoi qu'on saute.
+pub(crate) fn plan(root: &Path, skip: Skip) -> Result<Vec<Step>, Error> {
     let mut steps = Vec::new();
 
     // Le compose n'est plus la marque d'une feature : le squelette l'écrit pour tout
     // projet dont la base a un serveur à monter. Sa présence est le seul critère.
     let compose = root.join(COMPOSE);
-    if compose.is_file() {
+    if !skip.compose && compose.is_file() {
         steps.push(Step::Compose(compose));
     }
 
@@ -202,7 +212,9 @@ pub(crate) fn plan(root: &Path) -> Result<Vec<Step>, Error> {
         steps.push(Step::Database { host, port });
     }
 
-    steps.push(Step::Migrations);
+    if !skip.migrations {
+        steps.push(Step::Migrations);
+    }
 
     Ok(steps)
 }
@@ -243,7 +255,7 @@ pub(crate) fn start(root: &Path, steps: &[Step], attente: Duration) -> Result<()
             Step::Migrations => {
                 migrate::launch(root, "up", &variables, false)?;
             }
-            Step::Server => watch::run(root, &variables)?,
+            Step::Server(arguments) => watch::run(root, &variables, arguments)?,
             Step::Tests(arguments) => {
                 let arguments: Vec<&str> = arguments.iter().map(String::as_str).collect();
                 crate::cargo::run(root, &arguments, &variables, false).map_err(
@@ -359,7 +371,13 @@ pub(crate) fn render(steps: &[Step]) -> String {
             ),
             Step::Database { host, port } => format!("  base        {host}:{port}"),
             Step::Migrations => "  migrations  rbs migrate up".to_string(),
-            Step::Server => "  serveur     cargo run, relancé à chaque changement".to_string(),
+            Step::Server(arguments) if arguments.is_empty() => {
+                "  serveur     cargo run, relancé à chaque changement".to_string()
+            }
+            Step::Server(arguments) => format!(
+                "  serveur     cargo run -- {}, relancé à chaque changement",
+                arguments.join(" ")
+            ),
             Step::Tests(arguments) => format!("  tests       cargo {}", arguments.join(" ")),
         })
         .collect();
@@ -417,7 +435,7 @@ mod tests {
     fn an_unreadable_url_on_a_mysql_project_names_mysql() {
         let (_parent, root) = project_on(Database::Mysql, &[], "mysql://");
 
-        let error = plan(&root).expect_err("une URL sans hôte ne se sonde pas");
+        let error = plan(&root, Skip::default()).expect_err("une URL sans hôte ne se sonde pas");
 
         assert!(error.to_string().contains("URL MySQL"), "{error}");
         let remede = error.remedy().expect("l'erreur porte un remède");
@@ -431,7 +449,7 @@ mod tests {
     fn a_sqlite_project_waits_for_no_database_and_still_migrates() {
         let (_parent, root) = project_on(Database::Sqlite, &[], "sqlite://demo_api.db?mode=rwc");
 
-        let steps = plan(&root).expect("le plan doit se calculer");
+        let steps = plan(&root, Skip::default()).expect("le plan doit se calculer");
 
         assert!(
             !steps
@@ -484,7 +502,7 @@ mod tests {
             "le projet de ce test ne doit pas porter la feature"
         );
 
-        let steps = plan(&root).expect("le plan doit se calculer");
+        let steps = plan(&root, Skip::default()).expect("le plan doit se calculer");
 
         assert!(matches!(steps.first(), Some(Step::Compose(_))), "{steps:?}");
     }
@@ -494,7 +512,7 @@ mod tests {
         let (_parent, root) = project(&[], "postgres://rbs:rbs@localhost:5432/demo_api");
         std::fs::remove_file(root.join(COMPOSE)).expect("le compose doit exister");
 
-        let steps = plan(&root).expect("le plan doit se calculer");
+        let steps = plan(&root, Skip::default()).expect("le plan doit se calculer");
 
         assert!(
             !steps.iter().any(|step| matches!(step, Step::Compose(_))),
@@ -507,7 +525,7 @@ mod tests {
         let (_parent, root) = project(&[], "postgres://rbs:rbs@localhost:5432/demo_api");
         install_docker(&root);
 
-        let steps = plan(&root).expect("le plan se calcule");
+        let steps = plan(&root, Skip::default()).expect("le plan se calcule");
 
         assert_eq!(
             steps.first(),
@@ -568,7 +586,7 @@ mod tests {
         // Le compose du squelette est réel : le laisser dans le plan ferait `start`
         // lancer un vrai `docker compose up -d` avant même d'atteindre le port mort.
         std::fs::remove_file(root.join(COMPOSE)).expect("le compose doit exister");
-        let steps = plan(&root).expect("le plan se calcule");
+        let steps = plan(&root, Skip::default()).expect("le plan se calcule");
 
         let error = start(&root, &steps, Duration::from_millis(10)).expect_err("le port est mort");
 
@@ -665,7 +683,7 @@ mod tests {
     fn outside_an_rbs_project_nothing_is_started() {
         let ailleurs = TempDir::new().expect("répertoire temporaire créable");
 
-        let error = run(ailleurs.path()).expect_err("ce n'est pas un projet");
+        let error = run(ailleurs.path(), Skip::default(), &[]).expect_err("ce n'est pas un projet");
 
         assert!(matches!(error, Error::PasUnProjet));
     }
@@ -673,7 +691,7 @@ mod tests {
     #[test]
     fn the_shared_plan_ends_with_the_migrations_and_starts_nothing() {
         let (_parent, root) = project(&[], "postgres://rbs:rbs@localhost:5432/demo_api");
-        let steps = plan(&root).expect("le plan se calcule");
+        let steps = plan(&root, Skip::default()).expect("le plan se calcule");
         assert_eq!(steps.last(), Some(&Step::Migrations), "{steps:?}");
     }
 
@@ -687,5 +705,79 @@ mod tests {
     fn the_test_step_shows_the_whole_cargo_command() {
         let rendu = render(&[Step::Tests(vec!["test".into(), "--workspace".into()])]);
         assert_eq!(rendu, "  tests       cargo test --workspace");
+    }
+
+    #[test]
+    fn skipping_compose_leaves_no_compose_step() {
+        let (_parent, root) = project(&[], "postgres://rbs:rbs@localhost:5432/demo_api");
+
+        let steps = plan(
+            &root,
+            Skip {
+                compose: true,
+                ..Skip::default()
+            },
+        )
+        .expect("le plan se calcule");
+
+        assert!(
+            !steps.iter().any(|step| matches!(step, Step::Compose(_))),
+            "{steps:?}"
+        );
+        assert!(
+            steps
+                .iter()
+                .any(|step| matches!(step, Step::Database { .. })),
+            "l'attente de la base reste : {steps:?}"
+        );
+        assert_eq!(patience(&steps), ATTENTE);
+    }
+
+    #[test]
+    fn skipping_migrations_leaves_no_migration_step() {
+        let (_parent, root) = project(&[], "postgres://rbs:rbs@localhost:5432/demo_api");
+
+        let steps = plan(
+            &root,
+            Skip {
+                migrations: true,
+                ..Skip::default()
+            },
+        )
+        .expect("le plan se calcule");
+
+        assert!(
+            !steps.iter().any(|step| matches!(step, Step::Migrations)),
+            "{steps:?}"
+        );
+        assert!(matches!(steps.first(), Some(Step::Compose(_))), "{steps:?}");
+    }
+
+    #[test]
+    fn the_server_arguments_follow_cargo_run_and_its_separator() {
+        let watchexec::command::Program::Exec { prog, args } =
+            watch::server(&["--port".to_string(), "4000".to_string()])
+        else {
+            panic!("le serveur se lance sans shell");
+        };
+        assert_eq!(prog, PathBuf::from("cargo"));
+        assert_eq!(args, ["run", "--", "--port", "4000"]);
+
+        let watchexec::command::Program::Exec { args, .. } = watch::server(&[]) else {
+            panic!("le serveur se lance sans shell");
+        };
+        assert_eq!(args, ["run"]);
+    }
+
+    #[test]
+    fn the_rendered_plan_shows_the_server_arguments() {
+        assert_eq!(
+            render(&[Step::Server(vec!["--port".into(), "4000".into()])]),
+            "  serveur     cargo run -- --port 4000, relancé à chaque changement"
+        );
+        assert_eq!(
+            render(&[Step::Server(vec![])]),
+            "  serveur     cargo run, relancé à chaque changement"
+        );
     }
 }

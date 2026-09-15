@@ -5,7 +5,7 @@
 
 use std::path::Path;
 
-use crate::dev::{self, Step};
+use crate::dev::{self, Skip, Step};
 use crate::metadata;
 
 /// Les arguments de `cargo`, alignés sur ceux de la CI engendrée.
@@ -26,10 +26,11 @@ pub(crate) fn arguments(filtre: Option<&str>, libtest: &[String]) -> Vec<String>
 /// Le plan partagé de `rbs dev`, complété de l'étape des tests.
 pub(crate) fn plan(
     root: &Path,
+    skip: Skip,
     filtre: Option<&str>,
     libtest: &[String],
 ) -> Result<Vec<Step>, dev::Error> {
-    let mut steps = dev::plan(root)?;
+    let mut steps = dev::plan(root, skip)?;
     steps.push(Step::Tests(arguments(filtre, libtest)));
     Ok(steps)
 }
@@ -37,11 +38,12 @@ pub(crate) fn plan(
 /// Monte la base du projet qui contient `directory`, la migre, puis lance ses tests.
 pub(crate) fn run(
     directory: &Path,
+    skip: Skip,
     filtre: Option<&str>,
     libtest: &[String],
 ) -> Result<(), dev::Error> {
     let root = metadata::project_root(directory)?;
-    let steps = plan(&root, filtre, libtest)?;
+    let steps = plan(&root, skip, filtre, libtest)?;
     crate::ui::info(&dev::render(&steps));
     dev::start(&root, &steps, dev::patience(&steps))
 }
@@ -88,9 +90,9 @@ mod tests {
         let (_parent, root) = crate::fixtures::Project::new()
             .url("postgres://rbs:rbs@localhost:5432/demo_api")
             .create();
-        let steps = plan(&root, None, &[]).expect("le plan se calcule");
+        let steps = plan(&root, Skip::default(), None, &[]).expect("le plan se calcule");
         assert!(
-            !steps.iter().any(|s| matches!(s, Step::Server)),
+            !steps.iter().any(|s| matches!(s, Step::Server(_))),
             "{steps:?}"
         );
         let position = |cible: fn(&Step) -> bool| steps.iter().position(cible);
@@ -106,7 +108,7 @@ mod tests {
             .database(Database::Sqlite)
             .url("sqlite://demo_api.db?mode=rwc")
             .create();
-        let steps = plan(&root, None, &[]).expect("le plan se calcule");
+        let steps = plan(&root, Skip::default(), None, &[]).expect("le plan se calcule");
         assert!(
             !steps.iter().any(|s| matches!(s, Step::Database { .. })),
             "{steps:?}"
@@ -115,9 +117,27 @@ mod tests {
     }
 
     #[test]
+    fn skipping_the_migrations_still_runs_the_tests() {
+        let (_parent, root) = crate::fixtures::Project::new()
+            .url("postgres://rbs:rbs@localhost:5432/demo_api")
+            .create();
+        let skip = Skip {
+            migrations: true,
+            ..Skip::default()
+        };
+        let steps = plan(&root, skip, None, &[]).expect("le plan se calcule");
+        assert!(
+            !steps.iter().any(|s| matches!(s, Step::Migrations)),
+            "{steps:?}"
+        );
+        assert!(matches!(steps.last(), Some(Step::Tests(_))), "{steps:?}");
+    }
+
+    #[test]
     fn outside_an_rbs_project_no_test_is_run() {
         let ailleurs = tempfile::TempDir::new().expect("répertoire temporaire créable");
-        let error = run(ailleurs.path(), None, &[]).expect_err("ce n'est pas un projet");
+        let error =
+            run(ailleurs.path(), Skip::default(), None, &[]).expect_err("ce n'est pas un projet");
         assert!(matches!(error, crate::dev::Error::PasUnProjet));
     }
 }

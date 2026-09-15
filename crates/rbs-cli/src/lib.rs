@@ -206,10 +206,18 @@ pub fn run() {
             }
         }
 
-        Commands::Dev => {
+        Commands::Dev {
+            no_compose,
+            no_migrate,
+            server,
+        } => {
+            let skip = dev::Skip {
+                compose: no_compose,
+                migrations: no_migrate,
+            };
             let resultat = std::env::current_dir()
                 .map_err(dev::Error::Cwd)
-                .and_then(|directory| dev::run(&directory));
+                .and_then(|directory| dev::run(&directory, skip, &server));
 
             if let Err(error) = resultat {
                 ui::error(&error.to_string());
@@ -220,10 +228,19 @@ pub fn run() {
             }
         }
 
-        Commands::Test { filtre, libtest } => {
+        Commands::Test {
+            filtre,
+            no_compose,
+            no_migrate,
+            libtest,
+        } => {
+            let skip = dev::Skip {
+                compose: no_compose,
+                migrations: no_migrate,
+            };
             let resultat = std::env::current_dir()
                 .map_err(dev::Error::Cwd)
-                .and_then(|directory| test::run(&directory, filtre.as_deref(), &libtest));
+                .and_then(|directory| test::run(&directory, skip, filtre.as_deref(), &libtest));
 
             if let Err(error) = resultat {
                 ui::error(&error.to_string());
