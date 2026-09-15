@@ -50,8 +50,9 @@ impl RequireRole for Identity {
 
 /// Une identité dont l'adresse est prouvée.
 ///
-/// À poser sur les routes que vous jugez sensibles : `login` ne réclame pas la
-/// vérification, et c'est ici que votre projet décide où elle devient obligatoire.
+/// Sous le défaut `login_requires_verification = true`, seul un compte vérifié se
+/// connecte : la garde sert le projet qui a mis la clé à `false` pour connecter dès
+/// l'inscription, et décide alors des routes où la vérification devient obligatoire.
 ///
 /// L'état est relu en base et non lu dans le jeton : le jeton d'accès porte `sub` et
 /// `role`, et y mettre la vérification la figerait pour sa durée — une adresse tout juste

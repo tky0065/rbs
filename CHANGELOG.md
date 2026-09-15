@@ -132,6 +132,14 @@ between minor versions with no deprecation cycle.
 
 ### Changed
 
+- **An account logs in only once its address is verified.** `register` answers the same
+  202 to a new address and a taken one, but a login with the password just submitted
+  still told them apart: the new account logged in, the taken one did not. The `[auth]`
+  section of the `auth` fragment gains `login_requires_verification`, `true` by default:
+  an unverified account now gets the 401 of a wrong password, after the same Argon2, and
+  the verification link — in Mailpit during development — comes before the first login.
+  `false` restores logging in right after signing up, and the gap with it. A project
+  generated earlier keeps its `login`; the upgrade note gives the lines to change.
 - **`rbs` speaks French from end to end in its help screens and usage errors.** clap
   wrote its own parts in English — `Usage:`, `Commands:`, `Options:`, `Print help`,
   `[default: …]`, `[possible values: …]`, and every usage error (`error:`, `tip:`,

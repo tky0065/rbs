@@ -224,6 +224,39 @@ async fn login(api: &Router, email: &str, mot_de_passe: &str) -> Value {
     paire
 }
 
+/// Pose la preuve d'adresse que le lien du courriel aurait apportée.
+///
+/// `login_requires_verification` vaut `true` par défaut : un compte qui doit se connecter
+/// passe d'abord par là.
+async fn verified(email: &str) {
+    crate::auth::repository::user::mark_verified(&connection().await, account(email).await.id)
+        .await
+        .expect("l'adresse se vérifie");
+}
+
+/// Inscrit `email` et vérifie son adresse : un compte prêt à se connecter.
+async fn signed_up(api: &Router, email: &str) {
+    let (status, corps) = register(api, email).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{corps}");
+    verified(email).await;
+}
+
+/// Signe un jeton d'accès pour `compte` sans passer par `login`, qui refuse une adresse
+/// non vérifiée.
+fn access_token_for(compte: &crate::auth::repository::Model) -> String {
+    let config = rbs_core::Config::load().expect("configuration lisible");
+    let maintenant = chrono::Utc::now().timestamp();
+    let claims = rbs_core::jwt::Claims {
+        sub: compte.id.to_string(),
+        role: sea_orm::ActiveEnum::to_value(&compte.role),
+        exp: maintenant + 300,
+        iat: maintenant,
+        jti: Uuid::new_v4().to_string(),
+    };
+
+    rbs_core::jwt::sign(&claims, &config.auth.secret).expect("jeton signable")
+}
+
 /// Le jeton part dans le fragment : un navigateur ne l'envoie jamais au serveur, donc ni
 /// journal d'accès ni en-tête `Referer` ne le portent.
 #[test]

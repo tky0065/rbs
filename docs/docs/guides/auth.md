@@ -78,18 +78,20 @@ Thirteen routes come with it. Five open the core cycle:
 `register` answers the same 202 whether the address is new or already carries an account,
 and hashes the password in both cases — a 409, a profile returned to the new address
 alone, or an answer that skipped Argon2 would each tell whoever tries several addresses
-which ones are registered. A new address has its account written before the answer, so
-the client can log in right away; a taken one is left untouched, and its holder receives
-an email, `templates/mail/inscription.html`, saying someone tried to sign up with it and
+which ones are registered. A new address has its account written before the answer, and its verification link
+leaves in a detached task; a taken one is left untouched, and its holder receives an
+email, `templates/mail/inscription.html`, saying someone tried to sign up with it and
 pointing to `forgot-password`.
 
-What the 202 does not close is a login with the password just submitted. A new address
-now has an account that logs in with it; a taken one refuses it with a 401 — so
-`register` followed by `login` still tells the two apart, in two requests instead of
-one, at the pace the rate limit allows (`/auth/register` takes 10 an hour per client).
-Closing that means refusing to log in an account whose address is unverified, which the
-fragment does not do: it would forbid logging in right after signing up. A route that
-must not serve an unproven address takes `VerifiedIdentity` instead.
+Nor does a login with the password just submitted tell the two apart. An account logs in
+only once its address is verified — `login_requires_verification`, `true` by default in
+`[auth]` — and is otherwise refused with the 401 of a wrong password, after the same
+Argon2: the new address is not verified yet, the taken one does not carry that password,
+and both answer alike. Setting the key to `false` lets an account log in right after
+signing up, and reopens that gap — `register` followed by `login` then tells the two
+apart, in two requests, at the pace the rate limit allows (`/auth/register` takes 10 an
+hour per client). A project that makes that choice puts the routes that must not serve an
+unproven address behind `VerifiedIdentity`.
 
 A sixth, `POST /auth/change-password`, lets a caller already holding a token do the same
 without an email link — covered right below. The other seven act on a forgotten password,
@@ -356,9 +358,11 @@ read the same row a second time.
 The state comes from the database and not from the token, on purpose: the access token
 carries `sub` and `role` for its whole fifteen minutes, and reading verification off it
 would keep answering false for whatever is left of that window after `verify-email` clears
-it. No route in the fragment takes `VerifiedIdentity` — `login` does not require a
-verified address, as above — so it starts out as dead code behind `#[allow(dead_code)]` in
-`src/auth/guard.rs`, the same way `require_role` would if no generated route called it.
+it. No route in the fragment takes `VerifiedIdentity` — under the default
+`login_requires_verification = true` only a verified account logs in, and the guard serves
+the project that turned the key off — so it starts out as dead code behind
+`#[allow(dead_code)]` in `src/auth/guard.rs`, the same way `require_role` would if no
+generated route called it.
 Taking `VerifiedIdentity` instead of `Identity` on a handler's signature is what puts a
 route behind it.
 

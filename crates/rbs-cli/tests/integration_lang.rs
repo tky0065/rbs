@@ -408,6 +408,9 @@ impl Serveur {
             .current_dir(racine)
             .env("RBS_SERVER__PORT", port.to_string())
             .env("RUST_LOG", journal)
+            // Ce parcours éprouve la langue des réponses et non la preuve d'adresse, que
+            // `integration_auth` couvre : il se connecte dès l'inscription.
+            .env("RBS_AUTH__LOGIN_REQUIRES_VERIFICATION", "false")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()

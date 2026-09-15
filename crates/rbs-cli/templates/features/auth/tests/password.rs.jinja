@@ -187,7 +187,7 @@ async fn changing_the_password_returns_a_usable_pair_and_closes_the_others() {
     let api = application().await;
     let email = fresh_email();
 
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
     let premiere = login(&api, &email, PASSWORD).await;
 
     let (statut, corps) = call(
@@ -254,7 +254,7 @@ async fn changing_the_password_closes_pending_reset_links() {
     let db = connection().await;
     let email = fresh_email();
 
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
     let paire = login(&api, &email, PASSWORD).await;
 
     let (_, jeton) = crate::auth::service::password::request_reset(&db, 3600, &email)
@@ -300,7 +300,7 @@ async fn a_wrong_current_password_is_forbidden_not_unauthorized() {
     let api = application().await;
     let email = fresh_email();
 
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
     let paire = login(&api, &email, PASSWORD).await;
 
     let (statut, _) = call(
@@ -330,7 +330,7 @@ async fn a_reset_token_sets_a_new_password_and_closes_every_session() {
     let db = connection().await;
     let email = fresh_email();
 
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
     let paire = login(&api, &email, PASSWORD).await;
 
     let (_, jeton) = crate::auth::service::password::request_reset(&db, 3600, &email)
@@ -389,7 +389,7 @@ async fn an_access_token_issued_before_a_reset_is_refused() {
     let api = application().await;
     let db = connection().await;
     let email = fresh_email();
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
     let avant = login(&api, &email, PASSWORD).await;
     let acces = avant["access_token"].as_str().expect("jeton d'accès");
 

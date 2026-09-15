@@ -62,6 +62,7 @@ async fn registration_returns_202_without_a_body() {
     assert_eq!(status, StatusCode::ACCEPTED, "{body}");
     assert_eq!(body, Value::Null, "l'inscription rend un corps : {body}");
     assert_eq!(account(&email).await.email, email);
+    verified(&email).await;
     login(&api, &email, PASSWORD).await;
 }
 
@@ -102,7 +103,7 @@ async fn a_taken_address_keeps_its_password() {
 
     let api = application().await;
     let email = fresh_email();
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
 
     let (statut, corps) = call(
         &api,
@@ -117,6 +118,86 @@ async fn a_taken_address_keeps_its_password() {
     login(&api, &email, PASSWORD).await;
     let (refus, corps) = authenticate(&api, &email, AUTRE).await;
     assert_eq!(refus, StatusCode::UNAUTHORIZED, "{corps}");
+}
+
+/// Une adresse non vérifiée ne se connecte pas, et reçoit le 401 d'un mauvais mot de
+/// passe : `login_requires_verification` vaut `true` par défaut. La preuve d'adresse
+/// l'ouvre.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_unverified_address_logs_in_only_after_verification() {
+    let api = application().await;
+    let email = fresh_email();
+    register(&api, &email).await;
+
+    let (refus, corps) = authenticate(&api, &email, PASSWORD).await;
+    assert_eq!(refus, StatusCode::UNAUTHORIZED, "{corps}");
+
+    verified(&email).await;
+    login(&api, &email, PASSWORD).await;
+}
+
+/// `register` suivi de `login` ne dit plus si l'adresse était libre : la neuve n'est pas
+/// vérifiée, la prise ne porte pas ce mot de passe, et les deux rendent le même 401.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn register_then_login_answers_the_same_for_a_free_and_a_taken_address() {
+    const TITULAIRE: &str = "le mot de passe du titulaire";
+
+    let api = application().await;
+    let libre = fresh_email();
+    let prise = fresh_email();
+    let (statut, corps) = call(
+        &api,
+        post_json(
+            "/auth/register",
+            json!({ "email": prise, "password": TITULAIRE }),
+        ),
+    )
+    .await;
+    assert_eq!(statut, StatusCode::ACCEPTED, "{corps}");
+    verified(&prise).await;
+
+    let mut reponses = Vec::new();
+    for adresse in [&libre, &prise] {
+        register(&api, adresse).await;
+        let (statut, mut corps) = authenticate(&api, adresse, PASSWORD).await;
+        assert_eq!(statut, StatusCode::UNAUTHORIZED, "{corps}");
+        if let Some(objet) = corps.as_object_mut() {
+            objet.remove("request_id");
+        }
+        reponses.push(corps);
+    }
+
+    assert_eq!(
+        reponses[0], reponses[1],
+        "la connexion distingue une adresse libre d'une prise"
+    );
+}
+
+/// `login_requires_verification = false` connecte dès l'inscription : le choix d'un projet
+/// qui accepte l'écart que la clé ferme.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn without_the_rule_an_unverified_address_logs_in() {
+    let api = application().await;
+    let db = connection().await;
+    let email = fresh_email();
+    register(&api, &email).await;
+
+    let config = rbs_core::Config::load().expect("configuration lisible");
+    let flows = crate::auth::config::FlowConfig {
+        login_requires_verification: false,
+        ..Default::default()
+    };
+    let requete = crate::auth::dto::LoginRequest {
+        email,
+        password: PASSWORD.to_owned(),
+    };
+
+    crate::auth::service::login(&db, &config.auth, &flows, requete)
+        .await
+        .expect("la connexion aboutit sans preuve d'adresse");
 }
 
 /// Le temps de réponse ne dit pas davantage que le statut.
@@ -195,7 +276,7 @@ fn an_address_is_trimmed_and_lowercased_before_the_table() {
 async fn login_ignores_the_case_of_the_address() {
     let api = application().await;
     let email = fresh_email();
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
 
     let (status, paire) = authenticate(&api, &email.to_uppercase(), PASSWORD).await;
 
@@ -236,7 +317,7 @@ async fn an_address_taken_in_another_case_is_the_same_account() {
 async fn a_wrong_password_and_an_unknown_email_return_the_same_401() {
     let api = application().await;
     let inscrit = fresh_email();
-    register(&api, &inscrit).await;
+    signed_up(&api, &inscrit).await;
 
     let (statut_faux, mut corps_faux) =
         authenticate(&api, &inscrit, "un tout autre mot de passe").await;
@@ -268,7 +349,7 @@ async fn a_wrong_password_and_an_unknown_email_return_the_same_401() {
 async fn an_unknown_email_costs_the_same_time_as_a_wrong_password() {
     let api = application().await;
     let inscrit = fresh_email();
-    register(&api, &inscrit).await;
+    signed_up(&api, &inscrit).await;
 
     // Un tour à vide : le hash de comparaison se calcule au premier passage, et son coût
     // ne doit pas être imputé à la mesure.
@@ -292,7 +373,7 @@ async fn an_unknown_email_costs_the_same_time_as_a_wrong_password() {
 /// Inscrit une adresse neuve et ouvre une session : l'identifiant du compte et sa paire.
 async fn login_as(api: &Router) -> (Uuid, Value) {
     let email = fresh_email();
-    register(api, &email).await;
+    signed_up(api, &email).await;
     let id = account(&email).await.id;
 
     let (status, paire) = authenticate(api, &email, PASSWORD).await;
@@ -405,7 +486,7 @@ async fn a_rolled_back_rotation_leaves_the_session_open_and_opens_no_other() {
 async fn a_response_carrying_tokens_forbids_its_own_caching() {
     let api = application().await;
     let email = fresh_email();
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
 
     let connexion = post_json(
         "/auth/login",
@@ -467,7 +548,7 @@ async fn a_response_carrying_tokens_forbids_its_own_caching() {
 async fn replaying_a_refresh_closes_the_other_sessions_of_the_account() {
     let api = application().await;
     let email = fresh_email();
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
 
     let (_, premiere) = authenticate(&api, &email, PASSWORD).await;
     let (_, seconde) = authenticate(&api, &email, PASSWORD).await;
@@ -504,7 +585,7 @@ async fn replaying_a_refresh_closes_the_other_sessions_of_the_account() {
 async fn a_replayed_token_presented_again_leaves_the_sessions_opened_since_alive() {
     let api = application().await;
     let email = fresh_email();
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
 
     let (_, premiere) = authenticate(&api, &email, PASSWORD).await;
     let ancien = refresh_for(&premiere);
@@ -535,7 +616,7 @@ async fn a_replayed_token_presented_again_leaves_the_sessions_opened_since_alive
 async fn a_rotated_session_is_listed_once_after_two_refreshes() {
     let api = application().await;
     let email = fresh_email();
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
 
     let (_, paire) = authenticate(&api, &email, PASSWORD).await;
     let (status, tournee) = refresh(&api, &refresh_for(&paire)).await;
@@ -697,7 +778,7 @@ async fn a_revoked_refresh_returns_401() {
 async fn a_refresh_closed_by_logout_when_replayed_leaves_the_other_sessions_open() {
     let api = application().await;
     let email = fresh_email();
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
 
     let (_, fermee) = authenticate(&api, &email, PASSWORD).await;
     let (_, vivante) = authenticate(&api, &email, PASSWORD).await;
@@ -725,7 +806,7 @@ async fn a_refresh_closed_by_logout_when_replayed_leaves_the_other_sessions_open
 async fn the_other_sessions_of_the_same_account_stay_valid() {
     let api = application().await;
     let email = fresh_email();
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
 
     let (_, premiere) = authenticate(&api, &email, PASSWORD).await;
     let (_, seconde) = authenticate(&api, &email, PASSWORD).await;
@@ -808,7 +889,7 @@ fn access_for(paire: &Value) -> String {
 /// la table, et le rôle ne voyage que dans un jeton émis après coup.
 async fn login_as_admin(api: &Router, db: &DatabaseConnection) -> Value {
     let email = fresh_email();
-    register(api, &email).await;
+    signed_up(api, &email).await;
 
     let compte = crate::auth::repository::find_by_email(db, &email)
         .await
@@ -939,7 +1020,7 @@ async fn a_demoted_admin_is_refused_with_its_old_token() {
 async fn me_returns_the_callers_profile() {
     let api = application().await;
     let email = fresh_email();
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
     let inscrit = account(&email).await;
     let (_, paire) = authenticate(&api, &email, PASSWORD).await;
 
@@ -1053,13 +1134,13 @@ async fn the_session_list_shows_only_the_callers_own() {
     let api = application().await;
 
     let mien = fresh_email();
-    register(&api, &mien).await;
+    signed_up(&api, &mien).await;
     let premiere = login(&api, &mien, PASSWORD).await;
     login(&api, &mien, PASSWORD).await;
 
     // Un second compte, dont les sessions ne doivent pas apparaître.
     let autre = fresh_email();
-    register(&api, &autre).await;
+    signed_up(&api, &autre).await;
     login(&api, &autre, PASSWORD).await;
 
     let (statut, corps) = call(
@@ -1094,7 +1175,7 @@ async fn the_session_list_shows_only_the_callers_own() {
 async fn revoking_a_named_session_leaves_the_others_of_the_same_account_running() {
     let api = application().await;
     let email = fresh_email();
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
 
     let premiere = login(&api, &email, PASSWORD).await;
     let seconde = login(&api, &email, PASSWORD).await;
@@ -1157,11 +1238,11 @@ async fn revoking_someone_elses_session_is_not_found() {
     let api = application().await;
 
     let victime = fresh_email();
-    register(&api, &victime).await;
+    signed_up(&api, &victime).await;
     let sienne = login(&api, &victime, PASSWORD).await;
 
     let attaquant = fresh_email();
-    register(&api, &attaquant).await;
+    signed_up(&api, &attaquant).await;
     let paire = login(&api, &attaquant, PASSWORD).await;
 
     let (_, liste) = call(
@@ -1204,7 +1285,7 @@ async fn revoking_every_session_closes_them_all() {
     let api = application().await;
     let email = fresh_email();
 
-    register(&api, &email).await;
+    signed_up(&api, &email).await;
     let premiere = login(&api, &email, PASSWORD).await;
     let seconde = login(&api, &email, PASSWORD).await;
 

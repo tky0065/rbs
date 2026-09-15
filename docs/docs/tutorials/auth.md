@@ -195,12 +195,34 @@ HTTP/1.1 202 Accepted
 content-length: 0
 ```
 
-202 without a body, whether or not the address was already taken: the answer itself does
-not say which — a login with the password just sent still would, as the auth guide
-explains —, and a taken address gets an email warning its holder instead of a second account.
+202 without a body, whether or not the address was already taken: the answer does not say
+which, and a taken address gets an email warning its holder instead of a second account.
 The account exists as soon as the 202 arrives, and it is always a `user` — no route on
 this page hands out `admin` for the asking; the account you get here can read, but not
 write, `posts`.
+
+It cannot log in yet: `login_requires_verification`, `true` in `[auth]`, keeps an account
+out until its address is proven — a login with the password just sent would otherwise
+tell a new address from a taken one, as the auth guide explains. The proof comes by mail.
+`auth` ships with `mail`, and `mail`'s default SMTP is Mailpit — the `mailpit` service
+`docker-compose.yml` already carries, catching every message the project sends without a
+real inbox on the other end. Open [`http://localhost:8025`](http://localhost:8025) in a
+browser and leave it there: a message titled *Confirmez votre adresse* is waiting, with a
+link shaped like `http://localhost:3000/verify-email#token=…`. Copy the token out of it:
+
+```bash
+curl -i -X POST http://127.0.0.1:8080/auth/verify-email \
+  -H 'Content-Type: application/json' \
+  -d '{"token":"<le token du lien>"}'
+```
+
+```text
+HTTP/1.1 204 No Content
+```
+
+A link goes stale after `verification_ttl_secs`; a client that finds it expired asks for a
+fresh one with `POST /auth/resend-verification`. The address is proven, and the password
+now opens the account:
 
 ```bash
 TOKEN=$(curl -s -X POST http://127.0.0.1:8080/auth/login \
@@ -270,13 +292,9 @@ date: Wed, 09 Sep 2026 09:33:06 GMT
 Proof that `--role admin` never touched this route: the same `user` token that was
 forbidden on the write reads the empty list without complaint.
 
-## Changing, resetting, and confirming
+## Changing and resetting
 
-`auth` also ships with `mail`, and `mail`'s default SMTP is Mailpit — the `mailpit`
-service `docker-compose.yml` already carries, catching every message the project sends
-without a real inbox on the other end. Open
-[`http://localhost:8025`](http://localhost:8025) in a browser and leave it there: the
-next three requests each drop something into it.
+Keep the Mailpit tab open: the next requests drop more into it.
 
 Alice, still holding `$TOKEN` from above, changes her own password:
 
@@ -323,37 +341,7 @@ HTTP/1.1 204 No Content
 ```
 
 204, and every session of the account is revoked again — logging in from here on needs
-the password just set. Registration also opened a verification token, back in `## 1`,
-in a task detached from its answer; Mailpit already holds that one too,
-titled *Confirmez votre adresse*. A link goes stale after `verification_ttl_secs`, so a
-real client leans on the other route to get a fresh one:
-
-```bash
-curl -i -X POST http://127.0.0.1:8080/auth/resend-verification \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"alice@example.com"}'
-```
-
-```text
-HTTP/1.1 202 Accepted
-content-length: 0
-```
-
-Take the token from the newest *Confirmez votre adresse* message in Mailpit and spend it:
-
-```bash
-curl -i -X POST http://127.0.0.1:8080/auth/verify-email \
-  -H 'Content-Type: application/json' \
-  -d '{"token":"<le token du lien>"}'
-```
-
-```text
-HTTP/1.1 204 No Content
-```
-
-`GET /auth/me`, logged back in with the newest password, now answers with
-`"email_verified_at"` set instead of `null` — the one field on the account these three
-requests, together, moved.
+the password just set.
 
 ## What was installed
 

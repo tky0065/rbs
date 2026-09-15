@@ -26,11 +26,11 @@ static HASH_DE_COMPARAISON: LazyLock<String> = LazyLock::new(|| {
 
 /// Inscrit une adresse, sans que la réponse dise si elle l'était déjà.
 ///
-/// Neuve, le compte est écrit ici — un client doit pouvoir se connecter aussitôt — et le
-/// lien de vérification part détaché. Prise, le compte n'est pas touché et son titulaire
-/// est prévenu de la tentative, en détaché aussi. L'appelant reçoit la même chose dans
-/// les deux cas. Une connexion avec le mot de passe soumis le dirait encore, puisqu'un
-/// compte non vérifié se connecte : refuser celui-ci à `login` fermerait cet écart.
+/// Neuve, le compte est écrit ici et le lien de vérification part détaché. Prise, le
+/// compte n'est pas touché et son titulaire est prévenu de la tentative, en détaché aussi.
+/// L'appelant reçoit la même chose dans les deux cas — et une connexion avec le mot de
+/// passe soumis ne le dit pas davantage tant que `login_requires_verification` tient :
+/// l'adresse neuve n'est pas vérifiée, la prise ne porte pas ce mot de passe.
 pub async fn register(
     db: &DatabaseConnection,
     mail: &Mailer,
@@ -87,6 +87,7 @@ fn warn_taken(mail: &Mailer, flows: &FlowConfig, titulaire: repository::Model) {
 pub async fn login(
     db: &DatabaseConnection,
     auth: &AuthConfig,
+    flows: &FlowConfig,
     input: LoginRequest,
 ) -> Result<TokenPair> {
     let utilisateur = repository::find_by_email(db, &normalise(&input.email)).await?;
@@ -101,8 +102,16 @@ pub async fn login(
 
     let correspond = hash::verify_password(&input.password, hash)?;
 
+    // Une adresse non vérifiée reçoit la même erreur, après le même hachage : sans cela,
+    // `register` suivi de `login` dirait si l'adresse était libre.
+    let prouvee = |compte: &repository::Model| {
+        !flows.login_requires_verification || compte.email_verified_at.is_some()
+    };
+
     match utilisateur {
-        Some(utilisateur) if correspond => issue(db, auth, &utilisateur).await,
+        Some(utilisateur) if correspond && prouvee(&utilisateur) => {
+            issue(db, auth, &utilisateur).await
+        }
         // Mot de passe faux et adresse inconnue rendent la même erreur : les distinguer
         // dirait à un attaquant quelles adresses sont inscrites.
         _ => Err(Error::Unauthorized),

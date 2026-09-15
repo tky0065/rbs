@@ -1,8 +1,9 @@
 use serde::Deserialize;
 
-/// Ce que les parcours de réinitialisation et de vérification lisent dans `[auth]`.
+/// Ce que la connexion et les parcours de réinitialisation et de vérification lisent dans
+/// `[auth]`.
 ///
-/// Ces trois clés vivent ici et non dans `rbs_core::config::AuthConfig`, qui les
+/// Ces quatre clés vivent ici et non dans `rbs_core::config::AuthConfig`, qui les
 /// ignorerait : le noyau porte ce qui ne varie pas d'un projet à l'autre, et l'adresse de
 /// votre application n'entre pas dans cette catégorie. C'est donc ce fichier que vous
 /// ouvrirez pour changer les durées ou l'URL des liens.
@@ -15,6 +16,10 @@ pub struct FlowConfig {
     pub verification_ttl_secs: u64,
     /// Racine des liens envoyés par courriel, sans barre finale.
     pub app_url: String,
+    /// Refuse la connexion d'une adresse non vérifiée, par le 401 d'un mauvais mot de
+    /// passe. `false` connecte dès l'inscription, et rouvre l'écart que `register` suivi
+    /// de `login` forme alors : la réponse dit si l'adresse était libre.
+    pub login_requires_verification: bool,
 }
 
 impl Default for FlowConfig {
@@ -23,12 +28,13 @@ impl Default for FlowConfig {
             reset_ttl_secs: 3600,
             verification_ttl_secs: 86_400,
             app_url: "http://localhost:3000".to_string(),
+            login_requires_verification: true,
         }
     }
 }
 
 impl FlowConfig {
-    /// Lit la section `[auth]`, dont elle ne retient que ses trois clés.
+    /// Lit la section `[auth]`, dont elle ne retient que ses quatre clés.
     pub fn from_config() -> anyhow::Result<Self> {
         Ok(rbs_core::config::section::<Self>("auth")?)
     }

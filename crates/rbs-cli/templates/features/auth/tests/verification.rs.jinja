@@ -252,11 +252,9 @@ async fn the_verified_guard_opens_only_after_verification() {
 
     let email = fresh_email();
     register(&publique, &email).await;
-    let paire = login(&publique, &email, PASSWORD).await;
-    let jeton_acces = paire["access_token"]
-        .as_str()
-        .expect("jeton d'accès")
-        .to_owned();
+    // `login` refuse une adresse non vérifiée : le jeton est signé ici, comme l'obtiendrait
+    // un projet qui a mis `login_requires_verification` à `false`.
+    let jeton_acces = access_token_for(&account(&email).await);
 
     let (avant, _) = call(&api, get_authenticated("/protegee", &jeton_acces)).await;
     assert_eq!(
@@ -292,7 +290,7 @@ async fn identity_leaves_the_account_it_read_for_the_verified_guard() {
     let publique = application().await;
 
     let email = fresh_email();
-    register(&publique, &email).await;
+    signed_up(&publique, &email).await;
     let paire = login(&publique, &email, PASSWORD).await;
     let jeton_acces = paire["access_token"].as_str().expect("jeton d'accès");
 

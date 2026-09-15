@@ -139,6 +139,15 @@ dépréciation.
 
 ### Modifié
 
+- **Un compte ne se connecte qu'une fois son adresse vérifiée.** `register` rend le même
+  202 à une adresse neuve et à une prise, mais une connexion avec le mot de passe tout
+  juste soumis les distinguait encore : le compte neuf se connectait, la prise non. La
+  section `[auth]` du fragment `auth` gagne `login_requires_verification`, `true` par
+  défaut : un compte non vérifié reçoit désormais le 401 d'un mauvais mot de passe, après
+  le même Argon2, et le lien de vérification — dans Mailpit en développement — précède la
+  première connexion. `false` rend la connexion dès l'inscription, et l'écart avec elle. Un
+  projet engendré plus tôt garde son `login` ; la note de montée de version donne les
+  lignes à changer.
 - **`rbs` parle français de bout en bout dans son aide et ses erreurs d'usage.** clap
   écrivait en anglais ce qui lui revient — `Usage:`, `Commands:`, `Options:`,
   `Print help`, `[default: …]`, `[possible values: …]`, et chaque erreur d'usage

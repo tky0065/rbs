@@ -50,7 +50,7 @@ pub async fn login(
     State(state): State<AppState>,
     ValidatedJson(input): ValidatedJson<LoginRequest>,
 ) -> Result<TokenPair> {
-    service::login(state.core().db(), state.auth(), input).await
+    service::login(state.core().db(), state.auth(), state.flows(), input).await
 }
 
 #[utoipa::path(

@@ -787,6 +787,18 @@ fn the_auth_journey_plays_end_to_end() {
     );
     assert_eq!(statut, 202, "l'inscription doit aboutir : {corps}");
 
+    let (statut, corps) = request(port, "POST", "/auth/login", None, Some(&credentials(EMAIL)));
+    assert_eq!(
+        statut, 401,
+        "une adresse non vérifiée ne doit pas se connecter : {corps}"
+    );
+
+    // Ce que ferait le lien du courriel : ce parcours ne lance pas de Mailpit.
+    psql(
+        &postgres,
+        &format!("UPDATE users SET email_verified_at = now() WHERE email = '{EMAIL}'"),
+    );
+
     let (statut, premiere) = request(port, "POST", "/auth/login", None, Some(&credentials(EMAIL)));
     assert_eq!(
         statut, 200,
@@ -937,6 +949,13 @@ fn a_guarded_route_rejects_an_authenticated_user() {
         Some(&credentials(EMAIL)),
     );
     assert_eq!(statut, 202, "l'inscription doit aboutir : {corps}");
+
+    // `login_requires_verification` tient : sans preuve d'adresse, pas de paire. Le lien du
+    // courriel ferait cette écriture.
+    psql(
+        &postgres,
+        &format!("UPDATE users SET email_verified_at = now() WHERE email = '{EMAIL}'"),
+    );
 
     let (statut, paire) = request(port, "POST", "/auth/login", None, Some(&credentials(EMAIL)));
     assert_eq!(statut, 200, "la connexion doit rendre une paire : {paire}");

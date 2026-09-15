@@ -79,19 +79,20 @@ Treize routes viennent avec. Cinq ouvrent le cycle central :
 `register` rend le même 202 que l'adresse soit neuve ou porte déjà un compte, et hache le
 mot de passe dans les deux cas — un 409, un profil rendu à la seule adresse neuve, ou une
 réponse qui aurait sauté Argon2 diraient chacun à qui essaie plusieurs adresses lesquelles
-sont inscrites. Une adresse neuve voit son compte écrit avant la réponse, si bien que le
-client peut se connecter aussitôt ; une adresse prise n'est pas touchée, et son titulaire
-reçoit un courriel, `templates/mail/inscription.html`, qui le prévient de la tentative et
-le renvoie vers `forgot-password`.
+sont inscrites. Une adresse neuve voit son compte écrit avant la réponse, et son lien de vérification part
+dans une tâche détachée ; une adresse prise n'est pas touchée, et son titulaire reçoit un
+courriel, `templates/mail/inscription.html`, qui le prévient de la tentative et le renvoie
+vers `forgot-password`.
 
-Ce que le 202 ne ferme pas, c'est une connexion avec le mot de passe tout juste soumis.
-Une adresse neuve porte désormais un compte qui s'ouvre avec lui ; une adresse prise le
-refuse d'un 401 — si bien que `register` suivi de `login` distingue encore les deux, en
-deux requêtes au lieu d'une, au rythme que la limite de débit autorise (`/auth/register`
-en accepte 10 par heure et par client). Le fermer reviendrait à refuser la connexion d'un
-compte dont l'adresse n'est pas vérifiée, ce que le fragment ne fait pas : ce serait
-interdire de se connecter juste après l'inscription. Une route qui ne doit pas servir une
-adresse non prouvée prend `VerifiedIdentity` à la place.
+Une connexion avec le mot de passe tout juste soumis ne les distingue pas davantage. Un
+compte ne se connecte qu'une fois son adresse vérifiée — `login_requires_verification`,
+`true` par défaut dans `[auth]` — et reçoit sinon le 401 d'un mauvais mot de passe, après
+le même Argon2 : l'adresse neuve n'est pas encore vérifiée, la prise ne porte pas ce mot de
+passe, et les deux répondent pareil. Mettre la clé à `false` connecte un compte dès son
+inscription, et rouvre cet écart — `register` suivi de `login` distingue alors les deux, en
+deux requêtes, au rythme que la limite de débit autorise (`/auth/register` en accepte 10
+par heure et par client). Un projet qui fait ce choix pose `VerifiedIdentity` sur les
+routes qui ne doivent pas servir une adresse non prouvée.
 
 Une sixième, `POST /auth/change-password`, laisse un appelant qui porte déjà un jeton en
 faire autant sans lien courriel — couverte juste en dessous. Les sept autres portent sur un
@@ -371,8 +372,9 @@ dans la requête, et la garde ne relit pas la même ligne.
 L'état vient de la base et non du jeton, délibérément : le jeton d'accès porte `sub` et
 `role` pour ses quinze minutes entières, et lire la vérification dessus continuerait de
 répondre faux pour ce qu'il reste de cette fenêtre après que `verify-email` l'a levée.
-Aucune route du fragment ne prend `VerifiedIdentity` — `login` n'exige pas une adresse
-vérifiée, comme ci-dessus — si bien qu'elle démarre en code mort, derrière
+Aucune route du fragment ne prend `VerifiedIdentity` — sous le défaut
+`login_requires_verification = true`, seul un compte vérifié se connecte, et la garde sert
+le projet qui a mis la clé à `false` — si bien qu'elle démarre en code mort, derrière
 `#[allow(dead_code)]`, dans `src/auth/guard.rs`, de la même façon que `require_role` le
 serait si aucune route engendrée ne l'appelait. Prendre `VerifiedIdentity` au lieu
 d'`Identity` sur la signature d'un handler est ce qui met une route derrière elle.
