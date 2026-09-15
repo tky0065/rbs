@@ -76,10 +76,11 @@ Des `pub use` gardent les chemins `queue::…` qu'emploient le worker, les tests
 
 Leurs fichiers ne bougent pas : `add` ne repasse pas, et rien ne casse.
 
-`rbs generate crud X --force` sur un CRUD qui porte encore `src/X/tests.rs` : le plan
-signale un conflit avant toute écriture — le fichier nommé, la raison (les tests vivent
-désormais dans `tests/`), le remède (le supprimer puis relancer). Le CLI ne supprime
-jamais un fichier lui-même. La note 1.5.0 le dit.
+`generate crud X` ne réécrit jamais un CRUD existant : il refuse dès que `src/X` existe
+(`Error::DejaPresente`, `generate/command.rs:382`), `--force` compris — `--force` ne fait
+que passer outre un arbre Git sale. Un ancien `src/X/tests.rs` ne peut donc jamais se
+retrouver à côté d'un `src/X/tests/` : aucun refus nouveau n'est à écrire. La note 1.5.0
+dit seulement que les CRUD engendrés désormais portent `tests/`.
 
 ## 5. Exemples et documentation
 
