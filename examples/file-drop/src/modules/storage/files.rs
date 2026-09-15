@@ -104,7 +104,7 @@ impl Storage for FileStorage {
 
         Ok(Object {
             length: Some(length),
-            body: ReaderStream::new(file).boxed(),
+            body: ReaderStream::with_capacity(file, super::CHUNK).boxed(),
         })
     }
 
