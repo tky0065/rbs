@@ -125,8 +125,10 @@ dépréciation.
   désormais une `CompressionLayer`, et `tower-http` gagne la feature `compression-gzip` :
   `/api-docs/openapi.json`, qui grossit à chaque CRUD, et chaque liste partent compressés
   en gzip vers tout client qui l'accepte. Le prédicat par défaut épargne les petits
-  corps, les images et les flux SSE. Un projet engendré avant garde son routeur ; la note
-  de montée donne les lignes à coller.
+  corps, les images et les flux SSE, et le squelette y ajoute `application/octet-stream` :
+  un fichier servi tel quel garde son `content-length`, et une archive déjà compressée ne
+  l'est pas une seconde fois. Un projet engendré avant garde son routeur ; la note de
+  montée donne les lignes à coller.
 
 ### Modifié
 
