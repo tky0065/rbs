@@ -15,6 +15,11 @@ dépréciation.
 
 ### Ajouté
 
+- **`Identity::user_uuid()` et `Claims::user_uuid()`** lisent l'identifiant de l'appelant
+  en `Uuid`, et rendent `Error::Unauthorized` quand `sub` n'en est pas un. Le fragment
+  `auth` appelait `Uuid::parse_str` avec la même conversion d'erreur à sept endroits ;
+  chacun appelle désormais la méthode, comme peut le faire un CRUD engendré qui veut
+  l'auteur d'une écriture.
 - **`rbs_core::db::redact_url`** rend une URL de connexion au mot de passe remplacé par
   `***` — le masquage que `db::connect` appliquait déjà à ses propres erreurs. Les
   fragments `redis` et `rate-limit` l'appellent pour citer `[cache] url` dans un journal ;
@@ -124,6 +129,16 @@ dépréciation.
   de montée donne les lignes à coller.
 
 ### Modifié
+
+- **`rbs` parle français de bout en bout dans son aide et ses erreurs d'usage.** clap
+  écrivait en anglais ce qui lui revient — `Usage:`, `Commands:`, `Options:`,
+  `Print help`, `[default: …]`, `[possible values: …]`, et chaque erreur d'usage
+  (`error:`, `tip:`, `For more information, try '--help'`) — autour de descriptions
+  françaises. Les en-têtes, les drapeaux `-h` et `-V`, la sous-commande `help`, les
+  valeurs par défaut et possibles, et les erreurs d'usage courantes — argument inconnu,
+  valeur invalide, commande inconnue, argument manquant, conflit — sont désormais en
+  français ; une erreur d'usage sort toujours avec le code de clap, 2. Les complétions
+  du shell décrivent elles aussi les options en français.
 
 - **`rbs add jobs` et `rbs add scheduler` portent chacun une ancre de plus, et
   `schedules()` s'écrit en instructions.** `// <rbs:job_modules>` se tient sous
@@ -238,6 +253,14 @@ dépréciation.
   `retry_or_fail` émettent un `UPDATE` ciblé : `ActiveModel::update` rendait la ligne
   entière, payload compris — par `RETURNING` sur PostgreSQL et SQLite, par un `SELECT`
   de plus sur MySQL — pour un modèle que personne ne lisait.
+
+### Retiré
+
+- **`rbs-core` perd ses features vides `redis`, `mail` et `storage`.** Elles
+  n'activaient rien depuis la v0.3 : les trois vivent en fragments engendrés dans le
+  projet, et aucun `feature.toml` ni aucun exemple ne les nommait. Un manifeste qui en
+  active une sur `rbs-core` ne se résout plus tant qu'elle y figure — voir la note de
+  mise à jour.
 
 ### Corrigé
 

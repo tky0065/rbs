@@ -20,12 +20,12 @@ is verbatim, captured by running the command; only the prose around it is transl
 $ rbs seed --help
 Insère les données de démonstration du projet
 
-Usage: rbs seed [OPTIONS]
+Utilisation : rbs seed [OPTIONS]
 
-Options:
+Options :
       --force    Insère même sous RBS_ENV=production
-  -h, --help     Print help
-  -V, --version  Print version
+  -h, --help     Affiche l'aide
+  -V, --version  Affiche la version
 ```
 
 Like [`rbs migrate`](./migrate.md), the command wraps a binary of the project rather than

@@ -23,11 +23,11 @@ fn output(binaire: &str, args: &[&str]) -> String {
     String::from_utf8(rendu.stdout).expect("sortie UTF-8")
 }
 
-/// L'aide amputée de sa ligne `Usage:`, seule à porter le nom de l'invocation.
+/// L'aide amputée de sa ligne `Utilisation :`, seule à porter le nom de l'invocation.
 fn help_without_usage(binaire: &str) -> String {
     output(binaire, &["--help"])
         .lines()
-        .filter(|ligne| !ligne.starts_with("Usage:"))
+        .filter(|ligne| !ligne.starts_with("Utilisation :"))
         .collect::<Vec<_>>()
         .join("\n")
 }
@@ -45,15 +45,15 @@ fn both_names_expose_the_same_commands() {
     assert_eq!(help_without_usage("rbs-cli"), help_without_usage("rbs"));
 }
 
-/// Le nom que la ligne `Usage:` donne à la commande, extension de plateforme comprise.
+/// Le nom que la ligne `Utilisation :` donne à la commande, extension de plateforme comprise.
 fn name_in_usage(binaire: &str) -> String {
     output(binaire, &["--help"])
         .lines()
-        .find_map(|ligne| ligne.strip_prefix("Usage: "))
-        .expect("l'aide porte une ligne Usage")
+        .find_map(|ligne| ligne.strip_prefix("Utilisation : "))
+        .expect("l'aide porte une ligne Utilisation")
         .split_whitespace()
         .next()
-        .expect("la ligne Usage nomme la commande")
+        .expect("la ligne Utilisation nomme la commande")
         .to_string()
 }
 

@@ -20,12 +20,12 @@ de cette page sont verbatim, capturés en lançant la commande.
 $ rbs seed --help
 Insère les données de démonstration du projet
 
-Usage: rbs seed [OPTIONS]
+Utilisation : rbs seed [OPTIONS]
 
-Options:
+Options :
       --force    Insère même sous RBS_ENV=production
-  -h, --help     Print help
-  -V, --version  Print version
+  -h, --help     Affiche l'aide
+  -V, --version  Affiche la version
 ```
 
 Comme [`rbs migrate`](./migrate.md), la commande enveloppe un binaire du projet plutôt que

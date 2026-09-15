@@ -20,20 +20,24 @@ de cette page sont verbatim, capturés en lançant la commande.
 $ rbs test --help
 Lance les tests du projet : services, migrations, puis cargo test sur tout le workspace
 
-Usage: rbs test [FILTRE] [-- <ARGS>...]
+Utilisation : rbs test [OPTIONS] [FILTRE] [-- <ARGS>...]
 
-Arguments:
+Arguments :
   [FILTRE]   Ne lance que les tests dont le chemin contient ce motif
   [ARGS]...  Arguments du harnais de test, passés après `--` (ex. --nocapture)
 
-Options:
-  -h, --help     Print help
-  -V, --version  Print version
+Options :
+      --no-compose  Ne remonte pas les services du compose : ils tournent déjà, ou ailleurs
+      --no-migrate  N'applique pas les migrations en attente
+  -h, --help        Affiche l'aide
+  -V, --version     Affiche la version
 ```
 
-| Argument | Effet |
+| Argument ou option | Effet |
 |---|---|
 | `FILTRE` | Passé à `cargo test` comme filtre : seuls les tests dont le chemin le contient tournent — `rbs test articles` lance les tests de la feature `articles`. |
+| `--no-compose` | Saute `docker compose up -d`, comme pour [`rbs dev`](./dev.md#synopsis) : les services tournent déjà, ou ailleurs. L'attente de la base reste. |
+| `--no-migrate` | Saute `rbs migrate up` : les tests tournent sur le schéma tel qu'il est. |
 | `-- ARGS` | Tout ce qui suit `--` va au harnais de test, après `--include-ignored` : `rbs test -- --nocapture`, `rbs test articles -- --test-threads=1`. |
 
 ## Le plan
@@ -48,10 +52,12 @@ serveur y est remplacé par les tests :
   tests       cargo test --workspace --no-fail-fast articles -- --include-ignored --nocapture
 ```
 
-1. **`docker compose up -d`**, si le projet porte un `docker-compose.yml` ;
+1. **`docker compose up -d`**, si le projet porte un `docker-compose.yml` et que
+   `--no-compose` est absent ;
 2. **l'attente de la base**, sautée pour SQLite. Les deux mêmes patiences que
    `rbs dev` : 30 secondes après avoir remonté le compose, 3 sinon ;
-3. **[`rbs migrate up`](./migrate.md)** — les tests engendrés supposent le schéma en place ;
+3. **[`rbs migrate up`](./migrate.md)**, sauf sous `--no-migrate` — les tests engendrés
+   supposent le schéma en place ;
 4. **`cargo test --workspace --no-fail-fast [FILTRE] -- --include-ignored [ARGS]`**, avec les
    variables du `.env` du projet, exactement comme [`rbs migrate`](./migrate.md) lance son
    propre binaire.

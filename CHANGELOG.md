@@ -14,6 +14,10 @@ between minor versions with no deprecation cycle.
 
 ### Added
 
+- **`Identity::user_uuid()` and `Claims::user_uuid()`** read the caller's identifier as a
+  `Uuid`, and answer `Error::Unauthorized` when `sub` is not one. The `auth` fragment
+  called `Uuid::parse_str` with the same error mapping at seven places; each now calls the
+  method, as a generated CRUD that wants the author of a write can.
 - **`rbs_core::db::redact_url`** returns a connection URL with its password replaced by
   `***` — the masking `db::connect` already applied to its own errors. The `redis` and
   `rate-limit` fragments call it to quote `[cache] url` in a log; any other URL of a
@@ -118,6 +122,15 @@ between minor versions with no deprecation cycle.
   upgrade note gives the lines to paste.
 
 ### Changed
+
+- **`rbs` speaks French from end to end in its help screens and usage errors.** clap
+  wrote its own parts in English — `Usage:`, `Commands:`, `Options:`, `Print help`,
+  `[default: …]`, `[possible values: …]`, and every usage error (`error:`, `tip:`,
+  `For more information, try '--help'`) — around French descriptions. Headings, the
+  `-h` and `-V` flags, the `help` subcommand, default and possible values, and the
+  common usage errors — unknown argument, invalid value, unknown command, missing
+  argument, conflict — are now French; a usage error still exits with clap's code, 2.
+  The shell completions describe the options in French as well.
 
 - **`rbs add jobs` and `rbs add scheduler` each carry one more anchor, and `schedules()`
   is written as instructions.** `// <rbs:job_modules>` sits under `pub mod worker;`, and
@@ -226,6 +239,13 @@ between minor versions with no deprecation cycle.
   `mark_done` and `retry_or_fail` issue a targeted `UPDATE`: `ActiveModel::update`
   returned the whole row, payload included — through `RETURNING` on PostgreSQL and
   SQLite, through one more `SELECT` on MySQL — for a model nobody read.
+
+### Removed
+
+- **`rbs-core` drops its empty `redis`, `mail` and `storage` features.** They had
+  activated nothing since v0.3: the three live as fragments generated into the project,
+  and no `feature.toml` nor any example named them. A manifest that lists one of them on
+  `rbs-core` no longer resolves until it is removed — see the upgrade note.
 
 ### Fixed
 

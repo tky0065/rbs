@@ -44,14 +44,12 @@ use std::path::PathBuf;
 
 use errors::Classee as _;
 
-use clap::Parser;
-
-use cli::{Cli, Commands, GenerateCommands, MigrateCommands};
+use cli::{Commands, GenerateCommands, MigrateCommands};
 use database::Database;
 
 /// Le corps de la commande, appelé à l'identique par les deux binaires livrés.
 pub fn run() {
-    let cli = Cli::parse();
+    let cli = cli::parse();
 
     match cli.command {
         Commands::New {
@@ -206,10 +204,18 @@ pub fn run() {
             }
         }
 
-        Commands::Dev => {
+        Commands::Dev {
+            no_compose,
+            no_migrate,
+            server,
+        } => {
+            let skip = dev::Skip {
+                compose: no_compose,
+                migrations: no_migrate,
+            };
             let resultat = std::env::current_dir()
                 .map_err(dev::Error::Cwd)
-                .and_then(|directory| dev::run(&directory));
+                .and_then(|directory| dev::run(&directory, skip, &server));
 
             if let Err(error) = resultat {
                 ui::error(&error.to_string());
@@ -220,10 +226,19 @@ pub fn run() {
             }
         }
 
-        Commands::Test { filtre, libtest } => {
+        Commands::Test {
+            filtre,
+            no_compose,
+            no_migrate,
+            libtest,
+        } => {
+            let skip = dev::Skip {
+                compose: no_compose,
+                migrations: no_migrate,
+            };
             let resultat = std::env::current_dir()
                 .map_err(dev::Error::Cwd)
-                .and_then(|directory| test::run(&directory, filtre.as_deref(), &libtest));
+                .and_then(|directory| test::run(&directory, skip, filtre.as_deref(), &libtest));
 
             if let Err(error) = resultat {
                 ui::error(&error.to_string());
