@@ -26,8 +26,24 @@ source      = "demo.rs.jinja"
 destination = "src/modules/jobs/demo.rs"
 
 [[files]]
-source      = "tests.rs.jinja"
-destination = "src/modules/jobs/tests.rs"
+source      = "tests/mod.rs.jinja"
+destination = "src/modules/jobs/tests/mod.rs"
+
+[[files]]
+source      = "tests/lease.rs.jinja"
+destination = "src/modules/jobs/tests/lease.rs"
+
+[[files]]
+source      = "tests/reservation.rs.jinja"
+destination = "src/modules/jobs/tests/reservation.rs"
+
+[[files]]
+source      = "tests/retry.rs.jinja"
+destination = "src/modules/jobs/tests/retry.rs"
+
+[[files]]
+source      = "tests/worker.rs.jinja"
+destination = "src/modules/jobs/tests/worker.rs"
 
 [[anchors]]
 anchor  = "modules"

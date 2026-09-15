@@ -20,17 +20,42 @@ use testcontainers::{Container, GenericImage};
 
 mod common;
 
-/// Les tests que le fragment livre au projet et qui joignent la base.
-const TESTS: [&str; 9] = [
-    "jobs_run_side_by_side_up_to_the_configured_concurrency",
-    "a_job_enqueued_in_a_rolled_back_transaction_does_not_exist",
-    "a_job_enqueued_in_a_committed_transaction_is_visible_to_the_worker",
-    "two_concurrent_workers_never_reserve_the_same_job",
-    "a_failing_job_is_retried_then_marked_failed_after_the_last_attempt",
-    "a_job_left_running_past_the_lease_returns_to_the_queue",
-    "a_job_running_within_the_lease_is_left_alone",
-    "a_job_abandoned_on_its_last_attempt_is_failed_rather_than_requeued",
-    "the_worker_finishes_its_job_and_stops_when_shutdown_is_requested",
+/// Les tests que le fragment livre au projet et qui joignent la base, nommés avec le
+/// sous-module — `lease`, `reservation` ou `worker` — où le découpage des tests l'a rangé.
+const TESTS: [(&str, &str); 9] = [
+    (
+        "worker",
+        "jobs_run_side_by_side_up_to_the_configured_concurrency",
+    ),
+    (
+        "reservation",
+        "a_job_enqueued_in_a_rolled_back_transaction_does_not_exist",
+    ),
+    (
+        "reservation",
+        "a_job_enqueued_in_a_committed_transaction_is_visible_to_the_worker",
+    ),
+    (
+        "reservation",
+        "two_concurrent_workers_never_reserve_the_same_job",
+    ),
+    (
+        "lease",
+        "a_failing_job_is_retried_then_marked_failed_after_the_last_attempt",
+    ),
+    (
+        "lease",
+        "a_job_left_running_past_the_lease_returns_to_the_queue",
+    ),
+    ("lease", "a_job_running_within_the_lease_is_left_alone"),
+    (
+        "lease",
+        "a_job_abandoned_on_its_last_attempt_is_failed_rather_than_requeued",
+    ),
+    (
+        "worker",
+        "the_worker_finishes_its_job_and_stops_when_shutdown_is_requested",
+    ),
 ];
 
 /// Le message du job d'exemple, par lequel la ligne se retrouve dans la table.
@@ -60,9 +85,11 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     // `cargo test -- --ignored` sort en 0 même quand il ne filtre **aucun** test : sans
     // ces sept lignes, un fragment qui cesserait de livrer ses tests laisserait
     // celui-ci au vert sans qu'une seule transaction ait été ouverte.
-    for test in TESTS {
+    for (sous_module, test) in TESTS {
         assert!(
-            sous_conteneur.contains(&format!("test modules::jobs::tests::{test} ... ok")),
+            sous_conteneur.contains(&format!(
+                "test modules::jobs::tests::{sous_module}::{test} ... ok"
+            )),
             "`{test}` n'a pas été exécuté :\n{sous_conteneur}"
         );
     }
@@ -121,7 +148,7 @@ fn the_dequeue_never_hands_the_same_job_twice_on_the_three_engines() {
         );
         assert!(
             joues.contains(
-                "test modules::jobs::tests::two_concurrent_workers_never_reserve_the_same_job ... ok"
+                "test modules::jobs::tests::reservation::two_concurrent_workers_never_reserve_the_same_job ... ok"
             ),
             "le test de concurrence n'a pas été joué sur {moteur} :\n{joues}"
         );
