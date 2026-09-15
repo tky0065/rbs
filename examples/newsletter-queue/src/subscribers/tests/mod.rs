@@ -8,9 +8,9 @@ use uuid::Uuid;
 use crate::router::router;
 use crate::state::AppState;
 
-// Les tests de ce fichier joignent la base que décrit `.env`, et sont donc `#[ignore]` :
-// `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre la base du
-// projet, migrations appliquées.
+// Les tests de ce répertoire joignent la base que décrit `.env`, et sont donc
+// `#[ignore]` : `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre
+// la base du projet, migrations appliquées.
 
 /// Monte l'application sur la base décrite par `.env`, sans écouter sur le réseau.
 ///

@@ -129,7 +129,8 @@ async fn a_binary_content_is_served_uncompressed() {
 
 /// Un octet de trop franchit `TAILLE_MAX`, et le dépôt est refusé.
 ///
-/// La borne est celle que `mod.rs` engendre : la relever garde ce test juste.
+/// La borne est celle que le `mod.rs` de la feature engendre, deux modules plus haut : la
+/// relever garde ce test juste.
 #[tokio::test]
 #[ignore = "joint la base du projet"]
 async fn a_content_beyond_the_limit_returns_413() {

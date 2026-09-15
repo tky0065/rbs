@@ -9,9 +9,9 @@ use uuid::Uuid;
 use crate::router::router;
 use crate::state::AppState;
 
-// Les tests de ce fichier joignent la base que décrit `.env`, et sont donc `#[ignore]` :
-// `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre la base du
-// projet, migrations appliquées.
+// Les tests de ce répertoire joignent la base que décrit `.env`, et sont donc
+// `#[ignore]` : `cargo test` ne les lance pas, `cargo test -- --ignored` les lance contre
+// la base du projet, migrations appliquées.
 
 /// Monte l'application sur la base décrite par `.env`, sans écouter sur le réseau.
 ///
@@ -87,7 +87,7 @@ async fn token(db: &DatabaseConnection, role: &str) -> String {
     rbs_core::jwt::sign(&claims, &config.auth.secret).expect("jeton signable")
 }
 
-/// L'en-tête `Authorization` des requêtes de ce fichier.
+/// L'en-tête `Authorization` des requêtes que construisent les tests de ce répertoire.
 fn bearer() -> String {
     format!(
         "Bearer {}",
