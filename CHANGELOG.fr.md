@@ -132,8 +132,9 @@ dépréciation.
 - **`HasAuth::accept_in(&claims, &mut extensions)`**, une méthode fournie qu'`Identity`
   appelle désormais à la place d'`accept`, les extensions de la requête à portée. Son
   défaut appelle `accept` : un projet qui n'implémente qu'`accept` se comporte comme avant.
-  Le fragment `auth` implémente les deux : `accept_in` laisse dans la requête le compte
-  qu'il lit, et `VerifiedIdentity` l'y reprend — une lecture de `users` par requête sur une
+  Le fragment `auth` implémente les deux : `accept_in` laisse dans la requête la date de
+  vérification du compte qu'il lit — cette date seule, et non la ligne avec son hash de mot
+  de passe — et `VerifiedIdentity` l'y reprend : une lecture de `users` par requête sur une
   route derrière la garde, au lieu de deux. Un projet engendré plus tôt garde sa garde, qui
   relit toujours le compte elle-même.
 
@@ -156,9 +157,12 @@ dépréciation.
   section `[auth]` du fragment `auth` gagne `login_requires_verification`, `true` par
   défaut : un compte non vérifié reçoit désormais le 401 d'un mauvais mot de passe, après
   le même Argon2, et le lien de vérification — dans Mailpit en développement — précède la
-  première connexion. `false` rend la connexion dès l'inscription, et l'écart avec elle. Un
-  projet engendré plus tôt garde son `login` ; la note de montée de version donne les
-  lignes à changer.
+  première connexion. Une réinitialisation du mot de passe vérifie aussi l'adresse : son
+  jeton est arrivé dans la boîte comme un lien de vérification, et un compte non vérifié
+  que ce 401 envoie vers `forgot-password` le retrouverait sinon avec son nouveau mot de
+  passe. `false` rend la connexion dès l'inscription, et l'écart avec elle. Un projet
+  engendré plus tôt garde son `login` ; la note de montée de version donne les lignes à
+  changer.
 - **`rbs` parle français de bout en bout dans son aide et ses erreurs d'usage.** clap
   écrivait en anglais ce qui lui revient — `Usage:`, `Commands:`, `Options:`,
   `Print help`, `[default: …]`, `[possible values: …]`, et chaque erreur d'usage

@@ -125,8 +125,9 @@ between minor versions with no deprecation cycle.
 - **`HasAuth::accept_in(&claims, &mut extensions)`**, a provided method that `Identity`
   now calls in place of `accept`, with the request's extensions in reach. Its default
   calls `accept`, so a project that only implements `accept` behaves as before. The
-  `auth` fragment implements both: `accept_in` leaves the account it reads in the request,
-  and `VerifiedIdentity` takes it from there — one read of `users` per request on a route
+  `auth` fragment implements both: `accept_in` leaves in the request the verification
+  date of the account it reads — that date alone, not the row and its password hash — and
+  `VerifiedIdentity` takes it from there: one read of `users` per request on a route
   behind the guard, down from two. A project generated earlier keeps its guard, which
   still reads the account itself.
 
@@ -148,8 +149,11 @@ between minor versions with no deprecation cycle.
   section of the `auth` fragment gains `login_requires_verification`, `true` by default:
   an unverified account now gets the 401 of a wrong password, after the same Argon2, and
   the verification link — in Mailpit during development — comes before the first login.
-  `false` restores logging in right after signing up, and the gap with it. A project
-  generated earlier keeps its `login`; the upgrade note gives the lines to change.
+  A password reset marks the address verified too: its token reached the inbox as a
+  verification link does, and an unverified account sent to `forgot-password` by that
+  401 would otherwise meet it again with its new password. `false` restores logging in
+  right after signing up, and the gap with it. A project generated earlier keeps its
+  `login`; the upgrade note gives the lines to change.
 - **`rbs` speaks French from end to end in its help screens and usage errors.** clap
   wrote its own parts in English — `Usage:`, `Commands:`, `Options:`, `Print help`,
   `[default: …]`, `[possible values: …]`, and every usage error (`error:`, `tip:`,

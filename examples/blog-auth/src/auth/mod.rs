@@ -26,14 +26,16 @@ impl HasAuth for AppState {
         admit(self, claims).await.map(drop)
     }
 
-    /// Comme `accept`, et laisse le compte relu dans la requête : une garde qui suit
-    /// `Identity`, comme `VerifiedIdentity`, le reprend au lieu de relire la même ligne.
+    /// Comme `accept`, et laisse dans la requête la date de vérification du compte relu :
+    /// une garde qui suit `Identity`, comme `VerifiedIdentity`, la reprend au lieu de
+    /// relire la même ligne.
     async fn accept_in(
         &self,
         claims: &Claims,
         extensions: &mut Extensions,
     ) -> rbs_core::Result<()> {
-        extensions.insert(guard::Accepted(admit(self, claims).await?));
+        let compte = admit(self, claims).await?;
+        extensions.insert(guard::Accepted(compte.email_verified_at));
         Ok(())
     }
 }

@@ -244,7 +244,7 @@ Two more routes close the loop that login opens, both public — no bearer token
 | Route | What it does |
 |---|---|
 | `POST /auth/forgot-password` | Emails a reset link if the address is registered. Always 202. |
-| `POST /auth/reset-password` | Spends the token from that link and sets a new password. 204, every session of the account revoked. |
+| `POST /auth/reset-password` | Spends the token from that link and sets a new password. 204, every session of the account revoked, and the address marked verified. |
 
 `forgot-password` answers 202 whether or not the address carries an account, and the body
 never differs either — the same enumeration risk that login's decoy hash closes on the
@@ -276,6 +276,12 @@ whoever holds none of them:
 
 ```rust file=examples/blog-auth/src/auth/controller/password.rs region=reset_password
 ```
+
+A reset also marks the address verified, when it was not yet, in the same transaction as
+the new password: the token reached the inbox exactly as a verification link does. Without
+that, an account that never clicked its verification link would get the 401 of a wrong
+password under `login_requires_verification`, go through `forgot-password` as anyone would,
+and get the same 401 with its new password. An address already verified keeps its date.
 
 `auth` pulls in `mail` for this — both this route and the one that verifies an address need
 somewhere to send a link, so the dependency is declared rather than left optional. Its
@@ -316,7 +322,8 @@ response time what the status code refuses to say:
 `verify-email` answers the same 401 for four different causes: an unknown token, an
 expired one, one already spent, or — this fourth case is what turns the shared token table
 into a saving rather than a hole — one issued for the other flow. The lookup filters on
-purpose as much as on fingerprint, so a password-reset link can never verify an address:
+purpose as much as on fingerprint, so a password-reset link is never spent here — only
+`reset-password` spends it, and verifies the address along with the new password:
 
 ```rust file=examples/blog-auth/src/auth/controller/verification.rs region=verify_email
 ```
@@ -330,10 +337,12 @@ becomes of the email, the account stands:
 ```rust file=examples/blog-auth/src/auth/service/verification.rs region=send_link
 ```
 
-**`login` does not require a verified address.** An account that never clicks its link
-still signs in — this feature hands you the token cycle and the two routes that close it,
-not an opinion on which of your routes should refuse an unverified caller. A guard for that
-is a separate piece, covered [below](#requiring-a-verified-address).
+**`login` requires a verified address, unless you turn the key off.** Under the default
+`login_requires_verification = true`, an account that never clicks its link — nor resets
+its password — gets the 401 of a wrong password; a client that has just called `register`
+should say "check your inbox", since that 401 will not. With the key at `false` the account
+signs in right away, and which of your routes refuse an unverified caller is up to a guard,
+covered [below](#requiring-a-verified-address).
 
 ## Protecting a route
 
@@ -362,9 +371,10 @@ unprotected must not carry it.
 
 A second extractor, `VerifiedIdentity`, wraps `Identity` rather than sitting beside it: a
 handler that takes it instead gets the same 401 for a missing or invalid token, then a 403
-on top when `email_verified_at` is empty. The account it checks is the one `Identity` has
-just read to accept the token: `accept_in` leaves it in the request, so the guard does not
-read the same row a second time.
+on top when `email_verified_at` is empty. The date it checks comes from the account
+`Identity` has just read to accept the token: `accept_in` leaves that date in the request —
+the date alone, not the row and its password hash — so the guard does not read the same
+row a second time.
 
 The state comes from the database and not from the token, on purpose: the access token
 carries `sub` and `role` for its whole fifteen minutes, and reading verification off it

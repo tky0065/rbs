@@ -253,7 +253,7 @@ jeton porteur :
 | Route | Ce qu'elle fait |
 |---|---|
 | `POST /auth/forgot-password` | Envoie un lien de réinitialisation si l'adresse est inscrite. Toujours 202. |
-| `POST /auth/reset-password` | Consomme le jeton de ce lien et pose un nouveau mot de passe. 204, toutes les sessions du compte révoquées. |
+| `POST /auth/reset-password` | Consomme le jeton de ce lien et pose un nouveau mot de passe. 204, toutes les sessions du compte révoquées, et l'adresse vérifiée. |
 
 `forgot-password` rend 202 que l'adresse porte un compte ou non, et le corps ne diffère pas
 davantage — le même risque d'énumération que le hash témoin de la connexion écarte de
@@ -286,6 +286,13 @@ détient aucun des trois :
 
 ```rust file=examples/blog-auth/src/auth/controller/password.rs region=reset_password
 ```
+
+Une réinitialisation vérifie aussi l'adresse, si elle ne l'était pas encore, dans la même
+transaction que le nouveau mot de passe : le jeton est arrivé dans la boîte exactement
+comme un lien de vérification. Sans cela, un compte qui n'a jamais cliqué son lien de
+vérification recevrait le 401 d'un mauvais mot de passe sous `login_requires_verification`,
+passerait par `forgot-password` comme tout le monde, et retrouverait le même 401 avec son
+nouveau mot de passe. Une adresse déjà vérifiée garde sa date.
 
 `auth` tire `mail` pour cela — cette route et celle qui vérifie une adresse ont toutes deux
 besoin d'un endroit où envoyer un lien, et la dépendance est déclarée plutôt que laissée
@@ -328,8 +335,9 @@ le temps de réponse dire ce que le code de statut refuse de dire :
 `verify-email` rend le même 401 pour quatre causes distinctes : un jeton inconnu, périmé,
 déjà consommé, ou — ce quatrième cas est ce qui fait d'une table de jetons partagée une
 économie plutôt qu'une faille — émis pour l'autre parcours. La recherche filtre sur l'usage
-autant que sur l'empreinte, si bien qu'un lien de réinitialisation ne peut jamais vérifier
-une adresse :
+autant que sur l'empreinte, si bien qu'un lien de réinitialisation ne se consomme jamais
+ici — seule `reset-password` le consomme, et vérifie l'adresse avec le nouveau mot de
+passe :
 
 ```rust file=examples/blog-auth/src/auth/controller/verification.rs region=verify_email
 ```
@@ -343,10 +351,12 @@ bien que le compte tient quoi qu'il advienne du courriel :
 ```rust file=examples/blog-auth/src/auth/service/verification.rs region=send_link
 ```
 
-**`login` n'exige pas une adresse vérifiée.** Un compte qui ne clique jamais son lien se
-connecte quand même — cette feature livre le cycle du jeton et les deux routes qui le
-ferment, pas un avis sur celles de vos routes qui devraient refuser un appelant non
-vérifié. Une garde pour cela est une pièce à part, couverte [plus bas](#exiger-une-adresse-vérifiée).
+**`login` exige une adresse vérifiée, sauf si vous coupez la clé.** Sous le défaut
+`login_requires_verification = true`, un compte qui ne clique jamais son lien — ni ne
+réinitialise son mot de passe — reçoit le 401 d'un mauvais mot de passe ; un client qui
+vient d'appeler `register` doit dire « vérifiez votre boîte », puisque ce 401 ne le dira
+pas. La clé à `false`, le compte se connecte aussitôt, et celles de vos routes qui refusent
+un appelant non vérifié relèvent d'une garde, couverte [plus bas](#exiger-une-adresse-vérifiée).
 
 ## Protéger une route
 
@@ -376,9 +386,10 @@ l'appelant de s'identifier, non qu'il manque de droits. Et c'est la ligne
 
 Un second extracteur, `VerifiedIdentity`, enveloppe `Identity` plutôt que de se poser à
 côté : un handler qui le prend à la place reçoit la même 401 pour un jeton absent ou
-invalide, puis une 403 par-dessus quand `email_verified_at` est vide. Le compte qu'elle
-examine est celui qu'`Identity` vient de lire pour accepter le jeton : `accept_in` le laisse
-dans la requête, et la garde ne relit pas la même ligne.
+invalide, puis une 403 par-dessus quand `email_verified_at` est vide. La date qu'elle
+examine vient du compte qu'`Identity` vient de lire pour accepter le jeton : `accept_in`
+laisse cette date dans la requête — la date seule, et non la ligne avec son hash de mot de
+passe —, et la garde ne relit pas la même ligne.
 
 L'état vient de la base et non du jeton, délibérément : le jeton d'accès porte `sub` et
 `role` pour ses quinze minutes entières, et lire la vérification dessus continuerait de

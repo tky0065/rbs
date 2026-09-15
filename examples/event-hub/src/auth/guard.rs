@@ -2,6 +2,7 @@ use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use rbs_core::{Error, HasCoreState, Identity, Result};
 use sea_orm::ActiveEnum;
+use sea_orm::prelude::DateTimeWithTimeZone;
 
 use super::model::Role;
 use super::repository;
@@ -67,12 +68,14 @@ impl RequireRole for Identity {
 #[allow(dead_code)]
 pub struct VerifiedIdentity(pub Identity);
 
-/// Le compte qu'`accept_in` a relu pour juger le jeton, laissé dans la requête.
+/// La date de vérification du compte qu'`accept_in` a relu pour juger le jeton, laissée
+/// dans la requête.
 ///
-/// Un type propre au fragment plutôt que le `Model` nu : seule l'acceptation peut l'y avoir
-/// mis.
+/// La date seule, et non le compte : la garde ne lit rien d'autre, et le hash du mot de
+/// passe n'a pas à voyager dans les extensions de chaque requête authentifiée. Un type
+/// propre au fragment plutôt qu'une date nue : seule l'acceptation peut l'y avoir mise.
 #[derive(Clone)]
-pub(super) struct Accepted(pub(super) repository::Model);
+pub(super) struct Accepted(pub(super) Option<DateTimeWithTimeZone>);
 
 impl FromRequestParts<AppState> for VerifiedIdentity {
     type Rejection = Error;
@@ -82,18 +85,22 @@ impl FromRequestParts<AppState> for VerifiedIdentity {
         // à qui n'est pas identifié.
         let identite = Identity::from_request_parts(parts, state).await?;
 
-        // `accept_in` vient de relire le compte pour juger le jeton, et l'a laissé là.
-        let utilisateur = match parts.extensions.remove::<Accepted>() {
-            Some(Accepted(compte)) => compte,
-            // Un `accept_in` réécrit qui ne le dépose plus : relire plutôt que laisser
+        // `accept_in` vient de relire le compte pour juger le jeton, et en a laissé là la
+        // date de vérification.
+        let verifiee = match parts.extensions.remove::<Accepted>() {
+            Some(Accepted(date)) => date,
+            // Un `accept_in` réécrit qui ne la dépose plus : relire plutôt que laisser
             // passer. Un compte disparu ne vaut pas mieux qu'un jeton invalide —
             // `Forbidden` laisserait entendre qu'il existe.
-            None => repository::find(state.core().db(), identite.user_uuid()?)
-                .await?
-                .ok_or(Error::Unauthorized)?,
+            None => {
+                repository::find(state.core().db(), identite.user_uuid()?)
+                    .await?
+                    .ok_or(Error::Unauthorized)?
+                    .email_verified_at
+            }
         };
 
-        if utilisateur.email_verified_at.is_none() {
+        if verifiee.is_none() {
             return Err(Error::Forbidden);
         }
 

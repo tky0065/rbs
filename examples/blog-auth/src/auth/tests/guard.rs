@@ -48,11 +48,11 @@ async fn the_verified_guard_opens_only_after_verification() {
     assert_eq!(apres, StatusCode::OK, "une adresse vérifiée est rejetée");
 }
 
-/// `Identity` laisse dans la requête le compte qu'`accept_in` a relu : c'est lui que la
-/// garde reprend, au lieu de relire la même ligne.
+/// `Identity` laisse dans la requête la date de vérification qu'`accept_in` a relue : c'est
+/// elle que la garde reprend, au lieu de relire la même ligne.
 #[tokio::test]
 #[ignore = "joint la base du projet"]
-async fn identity_leaves_the_account_it_read_for_the_verified_guard() {
+async fn identity_leaves_the_verification_date_it_read_for_the_verified_guard() {
     use axum::extract::FromRequestParts;
 
     let db = connection().await;
@@ -74,13 +74,14 @@ async fn identity_leaves_the_account_it_read_for_the_verified_guard() {
         .expect("requête valide")
         .into_parts();
 
-    let identite = rbs_core::Identity::from_request_parts(&mut parts, &state)
+    rbs_core::Identity::from_request_parts(&mut parts, &state)
         .await
         .expect("le jeton est accepté");
-    let crate::auth::guard::Accepted(compte) = parts
+    let crate::auth::guard::Accepted(date) = parts
         .extensions
         .remove()
-        .expect("accept_in n'a laissé aucun compte dans la requête");
+        .expect("accept_in n'a laissé aucune date dans la requête");
 
-    assert_eq!(compte.id, identite.user_uuid().expect("sub lisible"));
+    assert!(date.is_some(), "le compte vient d'être vérifié");
+    assert_eq!(date, account(&email).await.email_verified_at);
 }

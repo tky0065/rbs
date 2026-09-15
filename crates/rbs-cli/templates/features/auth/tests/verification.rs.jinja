@@ -151,13 +151,15 @@ async fn verifying_again_keeps_the_first_date() {
     );
 }
 
-/// Un jeton de réinitialisation ne vaut pas comme jeton de vérification.
+/// Un jeton de réinitialisation ne vérifie une adresse qu'en posant un mot de passe.
 ///
-/// C'est ce que l'usage porté par la recherche achète : sans lui, la table unique serait
-/// une faille au lieu d'une économie.
+/// `verify-email` le refuse : c'est ce que l'usage porté par la recherche achète, sans
+/// quoi la table unique serait une faille au lieu d'une économie. `reset-password` le
+/// consomme et vérifie l'adresse : sans cela, un compte jamais vérifié qui passe par
+/// `forgot-password` retrouverait, avec son nouveau mot de passe, le 401 qui l'y a mené.
 #[tokio::test]
 #[ignore = "joint la base du projet"]
-async fn a_reset_token_does_not_verify_an_address() {
+async fn a_reset_token_verifies_an_address_only_through_the_reset() {
     let api = application().await;
     let db = connection().await;
     let email = fresh_email();
@@ -173,8 +175,20 @@ async fn a_reset_token_does_not_verify_an_address() {
         post_json("/auth/verify-email", json!({ "token": jeton })),
     )
     .await;
-
     assert_eq!(statut, StatusCode::UNAUTHORIZED);
+
+    let nouveau = "un mot de passe choisi apres l'oubli";
+    let (statut, corps) = call(
+        &api,
+        post_json(
+            "/auth/reset-password",
+            json!({ "token": jeton, "new_password": nouveau }),
+        ),
+    )
+    .await;
+    assert_eq!(statut, StatusCode::NO_CONTENT, "{corps}");
+
+    login(&api, &email, nouveau).await;
 }
 
 /// Une adresse inconnue rend 202, comme `forgot-password` et pour la même raison.
