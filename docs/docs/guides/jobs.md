@@ -5,7 +5,7 @@ title: Jobs
 
 # Background jobs
 
-`rbs add jobs` installs a work queue into an existing project: eleven files under
+`rbs add jobs` installs a work queue into an existing project: thirteen files under
 `src/modules/jobs/`, a migration for the `jobs` table, and a worker started with the server. Like
 the other bricks, it mounts no route — when work leaves the request cycle is a decision
 only your domain can make.
@@ -26,7 +26,9 @@ plan pour /private/tmp/rbs-demo/demo
   + src/modules/jobs/mod.rs                         créé
   + src/modules/jobs/config.rs                      créé
   + src/modules/jobs/model.rs                       créé
-  + src/modules/jobs/queue.rs                       créé
+  + src/modules/jobs/queue/mod.rs                   créé
+  + src/modules/jobs/queue/reserve.rs               créé
+  + src/modules/jobs/queue/outcome.rs               créé
   + src/modules/jobs/worker.rs                      créé
   + src/modules/jobs/demo.rs                        créé
   + src/modules/jobs/tests/mod.rs                   créé
@@ -43,8 +45,8 @@ plan pour /private/tmp/rbs-demo/demo
   ~ config/default.toml                             modifié
   ~ AGENTS.md                                       modifié
 
-  13 à créer, 6 à modifier
-✓ jobs installée — 13 créés, 6 modifiés
+  15 à créer, 6 à modifier
+✓ jobs installée — 15 créés, 6 modifiés
 
   rbs migrate up, puis `rbs generate job <nom>` pour écrire un job
 ```
@@ -135,7 +137,7 @@ generated `demo::Log` is meant to be replaced rather than left alongside yours.
 
 ## Enqueuing
 
-```rust file=examples/newsletter-queue/src/modules/jobs/queue.rs region=enqueue
+```rust file=examples/newsletter-queue/src/modules/jobs/queue/mod.rs region=enqueue
 ```
 
 `db` is a `ConnectionTrait`, not a connection, and that is the point of the whole feature:

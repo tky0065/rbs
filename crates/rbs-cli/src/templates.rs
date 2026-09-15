@@ -1671,7 +1671,7 @@ mod tests {
     #[test]
     fn the_dequeue_carries_its_three_engines_and_nothing_else_does() {
         let racine = Path::new(RACINE_FEATURES).join("jobs");
-        let queue = read(&racine.join("queue.rs.jinja"));
+        let queue = read(&racine.join("queue/reserve.rs.jinja"));
 
         for moteur in [
             "DatabaseBackend::Postgres",
@@ -1715,9 +1715,9 @@ mod tests {
             })
             .collect();
 
-        assert_eq!(porteurs, ["queue.rs.jinja"], "porteurs : {porteurs:?}");
+        assert_eq!(porteurs, ["reserve.rs.jinja"], "porteurs : {porteurs:?}");
 
-        let queue = read(&racine.join("queue.rs.jinja"));
+        let queue = read(&racine.join("queue/reserve.rs.jinja"));
         assert_eq!(
             queue.matches("pub async fn reserver_prochain_job").count(),
             1,

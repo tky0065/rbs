@@ -31,7 +31,9 @@ plan pour …/demo
   + src/modules/jobs/mod.rs                         créé
   + src/modules/jobs/config.rs                      créé
   + src/modules/jobs/model.rs                       créé
-  + src/modules/jobs/queue.rs                       créé
+  + src/modules/jobs/queue/mod.rs                   créé
+  + src/modules/jobs/queue/reserve.rs               créé
+  + src/modules/jobs/queue/outcome.rs               créé
   + src/modules/jobs/worker.rs                      créé
   + src/modules/jobs/demo.rs                        créé
   + src/modules/jobs/tests/mod.rs                   créé
@@ -48,8 +50,8 @@ plan pour …/demo
   ~ config/default.toml                             modifié
   ~ AGENTS.md                                       modifié
 
-  13 à créer, 6 à modifier
-✓ jobs installée — 13 créés, 6 modifiés
+  15 à créer, 6 à modifier
+✓ jobs installée — 15 créés, 6 modifiés
 
   rbs migrate up, puis `rbs generate job <nom>` pour écrire un job
 ```

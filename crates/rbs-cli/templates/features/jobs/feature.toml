@@ -14,8 +14,16 @@ source      = "model.rs.jinja"
 destination = "src/modules/jobs/model.rs"
 
 [[files]]
-source      = "queue.rs.jinja"
-destination = "src/modules/jobs/queue.rs"
+source      = "queue/mod.rs.jinja"
+destination = "src/modules/jobs/queue/mod.rs"
+
+[[files]]
+source      = "queue/reserve.rs.jinja"
+destination = "src/modules/jobs/queue/reserve.rs"
+
+[[files]]
+source      = "queue/outcome.rs.jinja"
+destination = "src/modules/jobs/queue/outcome.rs"
 
 [[files]]
 source      = "worker.rs.jinja"

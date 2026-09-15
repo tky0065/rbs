@@ -5,7 +5,7 @@ title: Jobs
 
 # Jobs en arrière-plan
 
-`rbs add jobs` installe une file de travaux dans un projet existant : onze fichiers sous
+`rbs add jobs` installe une file de travaux dans un projet existant : treize fichiers sous
 `src/modules/jobs/`, une migration pour la table `jobs`, et un worker démarré avec le serveur.
 Comme les autres briques, elle ne monte aucune route — le moment où un travail sort du
 cycle de la requête est une décision que seul votre métier peut prendre.
@@ -26,7 +26,9 @@ plan pour /private/tmp/rbs-demo/demo
   + src/modules/jobs/mod.rs                         créé
   + src/modules/jobs/config.rs                      créé
   + src/modules/jobs/model.rs                       créé
-  + src/modules/jobs/queue.rs                       créé
+  + src/modules/jobs/queue/mod.rs                   créé
+  + src/modules/jobs/queue/reserve.rs               créé
+  + src/modules/jobs/queue/outcome.rs               créé
   + src/modules/jobs/worker.rs                      créé
   + src/modules/jobs/demo.rs                        créé
   + src/modules/jobs/tests/mod.rs                   créé
@@ -43,8 +45,8 @@ plan pour /private/tmp/rbs-demo/demo
   ~ config/default.toml                             modifié
   ~ AGENTS.md                                       modifié
 
-  13 à créer, 6 à modifier
-✓ jobs installée — 13 créés, 6 modifiés
+  15 à créer, 6 à modifier
+✓ jobs installée — 15 créés, 6 modifiés
 
   rbs migrate up, puis `rbs generate job <nom>` pour écrire un job
 ```
@@ -137,7 +139,7 @@ le `demo::Log` livré est fait pour être remplacé plutôt que laissé à côt�
 
 ## Enfiler
 
-```rust file=examples/newsletter-queue/src/modules/jobs/queue.rs region=enqueue
+```rust file=examples/newsletter-queue/src/modules/jobs/queue/mod.rs region=enqueue
 ```
 
 `db` est un `ConnectionTrait` et non une connexion, et c'est tout le propos de cette
