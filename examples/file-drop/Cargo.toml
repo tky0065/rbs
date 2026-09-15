@@ -6,6 +6,7 @@ resolver = "3"
 name = "file-drop"
 version = "0.1.0"
 edition = "2024"
+rust-version = "1.94"
 # Le paquet porte trois binaires : sans ce choix, `cargo run` ne saurait plus lequel lancer.
 default-run = "file-drop"
 
@@ -56,3 +57,11 @@ aws-sdk-s3 = "1.146"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+
+# `thin` garde l'essentiel du gain de `lto = true` pour une fraction du temps d'édition de
+# liens ; une seule unité de code laisse l'optimiseur voir tout le paquet. Le binaire part
+# sans symboles : l'image n'a pas de débogueur pour s'en servir.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true

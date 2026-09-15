@@ -246,6 +246,17 @@ dépréciation.
   problème. Un projet engendré plus tôt garde son 400 tant qu'il ne réengendre pas le
   fragment.
 
+- **Un projet engendré déclare sa MSRV, un profil release et un build Docker en cache.**
+  Le manifeste gagne `rust-version`, la toolchain minimale de `rbs-core` dont il dépend :
+  cargo refuse lui-même une toolchain trop vieille pour le noyau, au lieu de laisser le
+  build échouer sur une édition ou une syntaxe qu'elle ne connaît pas. Une table
+  `[profile.release]` pose `lto = "thin"`, `codegen-units = 1` et `strip = true`. Le
+  `Dockerfile` qu'écrit `rbs add docker` épingle `rust:<msrv>-slim-trixie` au lieu de
+  `rust:1` flottante, et construit sous des montages de cache BuildKit pour le registre et
+  `target/` : un commit ne recompile plus toutes les dépendances. Un projet engendré plus
+  tôt garde son manifeste et son `Dockerfile` ; les deux changements se recopient à la
+  main.
+
 ### Corrigé
 
 - **Le mot de passe Redis n'atteint plus les journaux.** Les fragments `redis` et
