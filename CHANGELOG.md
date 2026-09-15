@@ -227,6 +227,13 @@ between minor versions with no deprecation cycle.
   returned the whole row, payload included — through `RETURNING` on PostgreSQL and
   SQLite, through one more `SELECT` on MySQL — for a model nobody read.
 
+### Removed
+
+- **`rbs-core` drops its empty `redis`, `mail` and `storage` features.** They had
+  activated nothing since v0.3: the three live as fragments generated into the project,
+  and no `feature.toml` nor any example named them. A manifest that lists one of them on
+  `rbs-core` no longer resolves until it is removed — see the upgrade note.
+
 ### Fixed
 
 - **The Redis password no longer reaches the logs.** The `redis` and `rate-limit`

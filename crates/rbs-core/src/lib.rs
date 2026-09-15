@@ -5,16 +5,14 @@
 
 //! # Feature flags
 //!
-//! Cinq extensions sont prévues. `auth` et `observability` portent du code ; les trois
-//! autres sont **déclarés mais vides**, et servent seulement à réserver leur nom.
+//! Outre le pilote (`postgres`, `mysql`, `sqlite`), deux features portent du code. Redis,
+//! le mail et le stockage n'en ont pas : ce sont des fragments que `rbs add` engendre
+//! dans le projet.
 //!
 //! | Flag | Ce qu'il active |
 //! |---|---|
 //! | `auth` | hachage Argon2, JWT, jetons opaques, extracteur d'identité |
 //! | `observability` | export OTLP des spans, greffé sur l'abonné que `logs::init()` pose |
-//! | `redis` | client Redis partagé par l'état applicatif |
-//! | `mail` | envoi de courriels et rendu de gabarits |
-//! | `storage` | stockage de fichiers, local ou compatible S3 |
 
 #![warn(missing_docs)]
 

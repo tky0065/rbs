@@ -239,6 +239,14 @@ dépréciation.
   entière, payload compris — par `RETURNING` sur PostgreSQL et SQLite, par un `SELECT`
   de plus sur MySQL — pour un modèle que personne ne lisait.
 
+### Retiré
+
+- **`rbs-core` perd ses features vides `redis`, `mail` et `storage`.** Elles
+  n'activaient rien depuis la v0.3 : les trois vivent en fragments engendrés dans le
+  projet, et aucun `feature.toml` ni aucun exemple ne les nommait. Un manifeste qui en
+  active une sur `rbs-core` ne se résout plus tant qu'elle y figure — voir la note de
+  mise à jour.
+
 ### Corrigé
 
 - **Le mot de passe Redis n'atteint plus les journaux.** Les fragments `redis` et
