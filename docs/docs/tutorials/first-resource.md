@@ -35,7 +35,10 @@ plan pour …/demo
   + src/articles/repository.rs                          créé
   + src/articles/service.rs                             créé
   + src/articles/controller.rs                          créé
-  + src/articles/tests.rs                               créé
+  + src/articles/tests/mod.rs                           créé
+  + src/articles/tests/lifecycle.rs                     créé
+  + src/articles/tests/errors.rs                        créé
+  + src/articles/tests/filter.rs                        créé
   + src/seeds/articles.rs                               créé
   + migration/src/m20260909_092448_create_articles.rs   créé
   ~ src/lib.rs                                          modifié
@@ -46,8 +49,8 @@ plan pour …/demo
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  10 à créer, 7 à modifier
-✓ articles générée — 10 créés, 7 modifiés
+  13 à créer, 7 à modifier
+✓ articles générée — 13 créés, 7 modifiés
 
   la migration m20260909_092448_create_articles reste à appliquer avant de lancer le projet
 ```
@@ -173,7 +176,7 @@ itself.
 One direction of dependency runs through all four: controller → service → repository →
 model, each layer seeing only the next. [Architecture](../architecture.md) maps every
 layer these seven files land in, including the three this page never opened —
-`service.rs`, `filter.rs` and `tests.rs`.
+`service.rs`, `filter.rs` and `tests/`.
 
 ## Going further
 
@@ -181,7 +184,7 @@ layer these seven files land in, including the three this page never opened —
   `--has-many`, `--soft-delete`, and `--role` for a write only some callers may make.
 - [Filtering](../guides/filtering.md) is what `filter.rs` mounts: a `POST
   /articles/filter` route this page never called.
-- [Testing](../guides/testing.md) reads the `tests.rs` file the same command wrote, and
+- [Testing](../guides/testing.md) reads the `tests/` directory the same command wrote, and
   the harness it runs against.
 - [Architecture](../architecture.md) maps every file `rbs generate crud` just wrote to
   the layer it belongs to.

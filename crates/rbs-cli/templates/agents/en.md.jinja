@@ -20,7 +20,7 @@ written between their markers is lost, without warning, on the next `rbs upgrade
 |---|---|---|
 | `rbs new <name>` | creates a project; `--lang fr\|en` sets the project's language — this file and the HTTP responses | the whole skeleton |
 | `rbs add <feature>` | installs audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks | the feature's wiring |
-| `rbs generate crud <name> --fields "..."` | a full CRUD feature | eight files, the seed and the migration |
+| `rbs generate crud <name> --fields "..."` | a full CRUD feature | seven files, their `tests/` directory, the seed and the migration |
 | `rbs generate feature <name>` | an empty feature | seven files |
 | `rbs generate job <name> [--every "<cron>"]` | a job of the queue, and its due date under `--every` | the job's file, its registration and its due date |
 | `rbs migrate up\|down\|status` | drives migrations | — |
@@ -56,7 +56,7 @@ controller → service → repository → model
 The dependency is one-directional and strict: a `service` never reaches for
 `DatabaseConnection` *itself* — it receives it and hands it to the `repository`, the only
 layer that builds a SeaORM query; a `controller` never builds one. `rbs generate crud` adds
-a `tests.rs` to those seven files and, when the entity can be seeded, the seed
+a `tests/` directory to those seven files and, when the entity can be seeded, the seed
 `src/seeds/<name>.rs`. A feature file past ~200 lines is a sign that the feature should be
 split.
 

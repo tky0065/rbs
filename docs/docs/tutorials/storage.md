@@ -75,19 +75,23 @@ plan pour …/demo
   + src/uploads/repository.rs                          créé
   + src/uploads/service.rs                             créé
   + src/uploads/controller.rs                          créé
-  + src/uploads/tests.rs                                créé
+  + src/uploads/tests/mod.rs                           créé
+  + src/uploads/tests/lifecycle.rs                     créé
+  + src/uploads/tests/errors.rs                        créé
+  + src/uploads/tests/filter.rs                        créé
+  + src/uploads/tests/content.rs                       créé
   + src/seeds/uploads.rs                               créé
   + migration/src/m20260909_094423_create_uploads.rs   créé
   ~ src/lib.rs                                         modifié
   ~ src/router.rs                                      modifié
-  ~ src/openapi.rs                                      modifié
+  ~ src/openapi.rs                                     modifié
   ~ migration/src/lib.rs                               modifié
-  ~ src/seeds/main.rs                                   modifié
-  ~ Cargo.toml                                          modifié
-  ~ AGENTS.md                                           modifié
+  ~ src/seeds/main.rs                                  modifié
+  ~ Cargo.toml                                         modifié
+  ~ AGENTS.md                                          modifié
 
-  10 à créer, 7 à modifier
-✓ uploads générée — 10 créés, 7 modifiés
+  14 à créer, 7 à modifier
+✓ uploads générée — 14 créés, 7 modifiés
 
   la migration m20260909_094423_create_uploads reste à appliquer avant de lancer le projet
 ```
@@ -274,7 +278,7 @@ would be thrown away.
   install.
 - [`rbs generate`](../cli/generate.md) has the full grammar of `--with-upload`, including
   how it combines with `--role` and `--soft-delete`.
-- [Testing](../guides/testing.md) is the harness `uploads/tests.rs` runs against, and
+- [Testing](../guides/testing.md) is the harness `uploads/tests/` runs against, and
   the `storage` fragment's own `round` test this page's extracts never open.
 - [Sending mail](./mail.md) is the next tutorial: the moment this page's deposit
   succeeds, its owner gets a mail confirming it.

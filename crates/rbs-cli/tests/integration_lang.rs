@@ -101,8 +101,8 @@ fn an_english_project_answers_its_clients_in_english() {
         "`cargo test --workspace -- --include-ignored` a échoué :\n{journal}"
     );
     for test in [
-        "articles::tests::a_replayed_unique_value_returns_409",
-        "articles::tests::an_unknown_id_returns_404",
+        "articles::tests::errors::a_replayed_unique_value_returns_409",
+        "articles::tests::errors::an_unknown_id_returns_404",
         "modules::webhooks::tests::blocked::an_admin_subscribing_a_private_url_gets_400",
     ] {
         assert!(

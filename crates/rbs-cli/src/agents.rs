@@ -794,17 +794,35 @@ mod tests {
     #[test]
     fn the_guide_counts_the_files_that_generate_writes() {
         let feature = crate::generate::feature::Feature::fresh("articles", Vec::new());
-        let compte = |complete| {
+        let noms = |complete| -> Vec<String> {
             crate::generate::command::fichiers(&feature, complete)
                 .expect("la feature se rend")
-                .len()
+                .into_iter()
+                .map(|(nom, _)| nom)
+                .collect()
         };
-        let (vide, crud) = (compte(false), compte(true));
+        // Les tests forment un répertoire dont le nombre de fichiers suit les options : le
+        // guide le nomme sans le compter.
+        let (vide, crud) = (noms(false), noms(true));
+        assert!(
+            crud.iter().any(|nom| nom.starts_with("tests/")),
+            "le guide nomme un répertoire `tests/` que `generate crud` n'écrit plus : {crud:?}"
+        );
+        let vide = vide.len();
+        let crud = crud.iter().filter(|nom| !nom.starts_with("tests/")).count();
         let racine = Path::new("/aucun-projet-ici");
 
         for (lang, fichiers, suite) in [
-            (Lang::Fr, "fichiers", "le seed et la migration"),
-            (Lang::En, "files", "the seed and the migration"),
+            (
+                Lang::Fr,
+                "fichiers",
+                "leur répertoire `tests/`, le seed et la migration",
+            ),
+            (
+                Lang::En,
+                "files",
+                "their `tests/` directory, the seed and the migration",
+            ),
         ] {
             let rendu = guide(lang, racine).expect("le guide se rend");
             let compte_ecrit = |n| format!("{} {fichiers}", en_toutes_lettres(lang, n));

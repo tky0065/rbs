@@ -132,19 +132,19 @@ fn a_cursor_paginated_crud_with_auth_storage_and_a_role_passes_and_renders_its_c
     // précisément une suite amputée qu'une template cassée livrerait.
     for scenario in [
         // La marche par curseur : chaque ligne une fois, jusqu'à l'extinction de `next`.
-        "articles::tests::the_cursor_walks_every_page_without_duplicates ... ok",
+        "articles::tests::lifecycle::the_cursor_walks_every_page_without_duplicates ... ok",
         // Le cycle de vie ordinaire, et les identifiants croissants d'un curseur sur `id`.
-        "articles::tests::the_full_lifecycle_goes_through_the_api ... ok",
-        "articles::tests::two_creations_in_a_row_carry_increasing_ids ... ok",
+        "articles::tests::lifecycle::the_full_lifecycle_goes_through_the_api ... ok",
+        "articles::tests::lifecycle::two_creations_in_a_row_carry_increasing_ids ... ok",
         // La route de filtre reste en `Page`/`Pagination` : `--cursor` ne l'a pas déplacée.
-        "articles::tests::the_filter_narrows_the_list ... ok",
-        "articles::tests::an_unknown_sort_column_returns_400 ... ok",
+        "articles::tests::filter::the_filter_narrows_the_list ... ok",
+        "articles::tests::errors::an_unknown_sort_column_returns_400 ... ok",
         // `--role admin` fait franchir les deux seuils : la garde et la lecture anonyme.
-        "articles::tests::an_anonymous_request_returns_401 ... ok",
-        "articles::tests::an_anonymous_read_returns_401 ... ok",
+        "articles::tests::access::an_anonymous_request_returns_401 ... ok",
+        "articles::tests::access::an_anonymous_read_returns_401 ... ok",
         // `--with-upload`, sous `auth` : les routes de contenu, protégées elles aussi.
-        "articles::tests::the_content_round_trips_through_put_get_and_head ... ok",
-        "articles::tests::an_anonymous_content_request_returns_401 ... ok",
+        "articles::tests::content::the_content_round_trips_through_put_get_and_head ... ok",
+        "articles::tests::content::an_anonymous_content_request_returns_401 ... ok",
     ] {
         assert!(
             rendu.contains(scenario),

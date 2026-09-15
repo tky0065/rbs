@@ -157,7 +157,7 @@ aucun bucket n'est nommé nulle part — et ne dit rien de tout cela tant que le
 | `GET` | 200, `application/octet-stream` | 404 | 404 |
 | `HEAD` | 204 | 404 | 404 |
 
-Le drapeau écrit aussi leurs tests dans le `tests.rs` de la ressource, `#[ignore]` comme
+Le drapeau écrit aussi leurs tests dans le `tests/content.rs` de la ressource, `#[ignore]` comme
 les autres et joués par `cargo test -- --include-ignored` : le cycle — `PUT` d'un corps
 binaire, `GET` rendu octet pour octet en `application/octet-stream` avec un
 `content-length` égal à la taille déposée, `HEAD` avant et

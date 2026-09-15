@@ -159,13 +159,14 @@ route que vous avez engendrée — a cessé d'être vraie en 1.3.0 : sur un proj
 et `--role` relève le seuil des écritures. Le contrôleur est donc le fichier engendré tel
 quel, et `src/auth/guard.rs` aussi.
 
-- `src/posts/tests.rs` : un test s'ajoute, `a_non_admin_write_returns_403`. Le fichier
-  engendré refuse déjà une écriture anonyme et une lecture anonyme — 401 toutes deux, de
-  l'extracteur — mais il signe un jeton `admin` pour tout le reste de ce qu'il envoie, et
-  ne dit donc rien du seuil lui-même. C'est de présenter un jeton `user` qui sépare les
-  deux refus : 403 sur `POST /posts`, 200 sur `GET /posts` avec ce même jeton. Rien
-  d'autre n'est écrit à la main — le harnais, le cycle de vie, le filtre et le 404 sont
-  tels qu'ils ont été engendrés, seuls les marqueurs `// region:` se posent par-dessus.
+- `src/posts/tests/access.rs` : un test s'ajoute, `a_non_admin_write_returns_403`. Le
+  fichier engendré refuse déjà une écriture anonyme et une lecture anonyme — 401 toutes
+  deux, de l'extracteur — mais le harnais signe un jeton `admin` pour tout le reste de ce
+  que les tests envoient, qui ne disent donc rien du seuil lui-même. C'est de présenter un
+  jeton `user` qui sépare les deux refus : 403 sur `POST /posts`, 200 sur `GET /posts`
+  avec ce même jeton. Rien d'autre n'est écrit à la main sous `tests/` — le harnais, le
+  cycle de vie, le filtre et le 404 sont tels qu'ils ont été engendrés, seuls les
+  marqueurs `// region:` se posent par-dessus.
 
 Deux entrées qui figuraient ici ont disparu, et c'est leur absence qui compte :
 

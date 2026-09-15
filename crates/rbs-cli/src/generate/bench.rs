@@ -207,8 +207,14 @@ impl Project {
         fs::write(directory.join("mod.rs"), declarations).expect("mod.rs écrivable");
 
         for (name, content) in files.iter().filter(|(name, _)| name.as_ref() != "mod.rs") {
-            fs::write(directory.join(name.as_ref()), content.as_ref())
-                .expect("fichier de feature écrivable");
+            let path = directory.join(name.as_ref());
+            // Les tests du CRUD forment un sous-répertoire de la feature.
+            fs::create_dir_all(
+                path.parent()
+                    .expect("un fichier de feature a un répertoire"),
+            )
+            .expect("répertoire de feature créable");
+            fs::write(&path, content.as_ref()).expect("fichier de feature écrivable");
         }
 
         let features = anchors::resolve_features(&self.root);
@@ -547,7 +553,7 @@ pub(crate) fn uploads() -> Feature {
 ///
 /// Sous `auth`, et `--role admin` par-dessus : le rôle signé par le harnais cesse alors
 /// d'être celui par défaut, et la fixture le fige avec le reste. C'est la seule feature du
-/// dépôt rendue sous `auth`, et celle dont l'exemple retouche le `tests.rs` — le fichier
+/// dépôt rendue sous `auth`, et celle dont l'exemple retouche `tests/access.rs` — le fichier
 /// sort de la comparaison des exemples, où cette branche de template avait son seul oracle.
 pub(crate) fn posts() -> Feature {
     let fields = super::fields::parse("title:string,body:text,published:bool")

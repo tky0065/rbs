@@ -412,7 +412,7 @@ on the handler to open, remove the `identite` parameter, the `require_role` call
 file of your own tree. Nothing in the CLI performs them for you, and nothing puts them
 back.
 
-The generated `tests.rs` follows. It signs the token it presents with `rbs_core::jwt::sign`
+The generated `tests/` follows. It signs the token it presents with `rbs_core::jwt::sign`
 — `Identity` verifies a signature and nothing else, so there is no account to create — and
 exercises the full write cycle with it. Two of its tests present no token at all, one write
 and one read, and pin the 401 that answers both.
@@ -467,10 +467,10 @@ promotion would carry the old role:
 
 A feature's own tests create one account. `Identity` verifies the signature, then reads
 the account row, so a token signed for an invented `sub` is refused: the generated
-`tests.rs` registers an account at the role its routes require the first time
+`tests/mod.rs` registers an account at the role its routes require the first time
 `application()` runs, signs a token for it, and every request carries that token:
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=jeton
+```rust file=examples/blog-auth/src/posts/tests/mod.rs region=jeton
 ```
 
 Three tests then pin the refusals, and they must not be allowed to collapse into one
@@ -478,7 +478,7 @@ another. Two are generated — a write and a read, both anonymous, both answered
 extractor before the handler runs. The third is the example's own: a caller who *is*
 identified but whose role falls short, refused 403 by the guard inside the handler.
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=refus
+```rust file=examples/blog-auth/src/posts/tests/access.rs region=refus
 ```
 
 The feature's own routes are covered the same way, split by concern under

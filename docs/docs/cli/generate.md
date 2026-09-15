@@ -346,10 +346,14 @@ plan pour /private/tmp/rbs-demo/blog
   + src/articles/mod.rs                                 créé
   + src/articles/model.rs                               créé
   + src/articles/dto.rs                                 créé
+  + src/articles/filter.rs                              créé
   + src/articles/repository.rs                          créé
   + src/articles/service.rs                             créé
   + src/articles/controller.rs                          créé
-  + src/articles/tests.rs                               créé
+  + src/articles/tests/mod.rs                           créé
+  + src/articles/tests/lifecycle.rs                     créé
+  + src/articles/tests/errors.rs                        créé
+  + src/articles/tests/filter.rs                        créé
   + src/seeds/articles.rs                               créé
   + migration/src/m20260830_110925_create_articles.rs   créé
   ~ src/lib.rs                                          modifié
@@ -360,7 +364,7 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  9 à créer, 7 à modifier
+  13 à créer, 7 à modifier
 
   rien n'a été écrit (--dry-run)
 ```
@@ -374,10 +378,14 @@ plan pour /private/tmp/rbs-demo/blog
   + src/articles/mod.rs                                 créé
   + src/articles/model.rs                               créé
   + src/articles/dto.rs                                 créé
+  + src/articles/filter.rs                              créé
   + src/articles/repository.rs                          créé
   + src/articles/service.rs                             créé
   + src/articles/controller.rs                          créé
-  + src/articles/tests.rs                               créé
+  + src/articles/tests/mod.rs                           créé
+  + src/articles/tests/lifecycle.rs                     créé
+  + src/articles/tests/errors.rs                        créé
+  + src/articles/tests/filter.rs                        créé
   + src/seeds/articles.rs                               créé
   + migration/src/m20260830_110925_create_articles.rs   créé
   ~ src/lib.rs                                          modifié
@@ -388,8 +396,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  9 à créer, 7 à modifier
-✓ articles générée — 9 créés, 7 modifiés
+  13 à créer, 7 à modifier
+✓ articles générée — 13 créés, 7 modifiés
 
   la migration m20260830_110925_create_articles reste à appliquer avant de lancer le projet
 ```

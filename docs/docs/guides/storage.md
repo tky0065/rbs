@@ -154,7 +154,7 @@ the backend is `fs`, which needs none of it.
 | `GET` | 200, `application/octet-stream` | 404 | 404 |
 | `HEAD` | 204 | 404 | 404 |
 
-The flag writes their tests into the resource's `tests.rs` as well, `#[ignore]`d like the
+The flag writes their tests into the resource's `tests/content.rs` as well, `#[ignore]`d like the
 others and played by `cargo test -- --include-ignored`: the round trip — `PUT` a binary
 body, `GET` it back byte for byte as `application/octet-stream` with a `content-length`
 equal to what was deposited, `HEAD` before and after,

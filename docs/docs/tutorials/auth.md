@@ -138,19 +138,23 @@ plan pour …/demo
   + src/posts/repository.rs                          créé
   + src/posts/service.rs                             créé
   + src/posts/controller.rs                          créé
-  + src/posts/tests.rs                               créé
+  + src/posts/tests/mod.rs                           créé
+  + src/posts/tests/lifecycle.rs                     créé
+  + src/posts/tests/errors.rs                        créé
+  + src/posts/tests/filter.rs                        créé
+  + src/posts/tests/access.rs                        créé
   + src/seeds/posts.rs                               créé
   + migration/src/m20260909_093231_create_posts.rs   créé
   ~ src/lib.rs                                       modifié
   ~ src/router.rs                                    modifié
   ~ src/openapi.rs                                   modifié
-  ~ migration/src/lib.rs                              modifié
+  ~ migration/src/lib.rs                             modifié
   ~ src/seeds/main.rs                                modifié
   ~ Cargo.toml                                       modifié
   ~ AGENTS.md                                        modifié
 
-  10 à créer, 7 à modifier
-✓ posts générée — 10 créés, 7 modifiés
+  14 à créer, 7 à modifier
+✓ posts générée — 14 créés, 7 modifiés
 
   la migration m20260909_093231_create_posts reste à appliquer avant de lancer le projet
 ```
@@ -383,7 +387,7 @@ asks for `User`.
 Two 401s and a 403 look alike from a status code alone. This test is the one that pins
 down which is which — a `user` token forbidden on the write, and reading anyway.
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=refus
+```rust file=examples/blog-auth/src/posts/tests/access.rs region=refus
 ```
 
 ## Going further
@@ -395,7 +399,7 @@ down which is which — a `user` token forbidden on the write, and reading anywa
 - [`rbs generate`](../cli/generate.md) has the full grammar of `--role`, including what
   it does under `--with-upload`, and [what to remove to reopen a
   route](../guides/auth.md#closed-by-default-at-generation-time).
-- [Testing](../guides/testing.md) is the harness `posts/tests.rs` runs against, the same
+- [Testing](../guides/testing.md) is the harness `posts/tests/` runs against, the same
   one this page's third excerpt extends by hand.
 - [Taking a file](./storage.md) is the next tutorial: a client deposits a file, and
   `PUT /uploads/{id}/content` stores it.

@@ -634,7 +634,13 @@ pub(crate) fn fichiers(feature: &Feature, complete: bool) -> Result<Vec<File>, E
     ];
 
     if complete {
-        files.push(("tests.rs", tests_http::render(feature)));
+        // Les tests forment un répertoire, un fichier par préoccupation : chacun rejoint la
+        // liste sous le chemin qu'il portera. Une template fautive se signale sur le
+        // répertoire, le rendu ne disant pas laquelle a échoué.
+        match tests_http::render(feature) {
+            Ok(tests) => files.extend(tests.into_iter().map(|(name, content)| (name, Ok(content)))),
+            Err(source) => files.push(("tests/", Err(source))),
+        }
     }
 
     let mut rendus = Vec::with_capacity(files.len());
@@ -1080,15 +1086,16 @@ mod tests {
 
         run(&guarded(&root, "articles", "admin")).expect("la génération doit aboutir");
 
-        let tests = read(&root.join("src/articles/tests.rs"));
+        let cycle = read(&root.join("src/articles/tests/lifecycle.rs"));
+        let acces = read(&root.join("src/articles/tests/access.rs"));
 
         assert!(
-            tests.contains("the_full_lifecycle_goes_through_the_api"),
-            "le cycle complet doit rester exercé :\n{tests}"
+            cycle.contains("the_full_lifecycle_goes_through_the_api"),
+            "le cycle complet doit rester exercé :\n{cycle}"
         );
         assert!(
-            tests.contains("an_anonymous_request_returns_401"),
-            "le refus sans jeton doit être éprouvé :\n{tests}"
+            acces.contains("an_anonymous_request_returns_401"),
+            "le refus sans jeton doit être éprouvé :\n{acces}"
         );
     }
 
@@ -1107,7 +1114,10 @@ mod tests {
             "repository.rs",
             "service.rs",
             "controller.rs",
-            "tests.rs",
+            "tests/mod.rs",
+            "tests/lifecycle.rs",
+            "tests/errors.rs",
+            "tests/filter.rs",
         ] {
             assert!(
                 root.join("src/articles").join(file).exists(),
@@ -1478,14 +1488,14 @@ mod tests {
 
         assert_eq!(planned.required_reference.as_deref(), Some("author"));
 
-        let engendres = read(&root.join("src/posts/tests.rs"));
         assert!(
-            !engendres.contains("the_full_lifecycle_goes_through_the_api"),
-            "le scénario qui crée violerait la clé étrangère :\n{engendres}"
+            !root.join("src/posts/tests/lifecycle.rs").exists(),
+            "le scénario qui crée violerait la clé étrangère"
         );
+        let harnais = read(&root.join("src/posts/tests/mod.rs"));
         assert!(
-            engendres.contains("« author »"),
-            "le fichier doit dire ce qui manque et pourquoi :\n{engendres}"
+            harnais.contains("« author »"),
+            "le harnais doit dire ce qui manque et pourquoi :\n{harnais}"
         );
     }
 
@@ -1518,7 +1528,7 @@ mod tests {
 
         assert!(root.join("src/notes/controller.rs").exists());
         assert!(
-            !root.join("src/notes/tests.rs").exists(),
+            !root.join("src/notes/tests").exists(),
             "une feature écrite à la main ne porte pas de tests générés"
         );
         assert_eq!(generated.migration, None);

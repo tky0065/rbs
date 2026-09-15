@@ -425,7 +425,7 @@ sur le handler à ouvrir, retirez le paramètre `identite`, l'appel à `require_
 `security` et les réponses 401 et 403 de son annotation. Quatre suppressions dans un fichier
 de votre propre arborescence. Rien dans le CLI ne les fait pour vous, et rien ne les remet.
 
-Le `tests.rs` engendré suit. Il signe le jeton qu'il présente par `rbs_core::jwt::sign` —
+Le `tests/` engendré suit. Il signe le jeton qu'il présente par `rbs_core::jwt::sign` —
 `Identity` ne vérifie qu'une signature, il n'y a donc aucun compte à créer — et exerce avec
 lui le cycle d'écriture complet. Deux de ses tests ne présentent aucun jeton, une écriture
 et une lecture, et tiennent la 401 que l'une et l'autre reçoivent.
@@ -480,11 +480,11 @@ avant la promotion porterait l'ancien rôle :
 ## Tester une route protégée
 
 Les tests d'une feature créent un compte. `Identity` vérifie la signature, puis relit la
-ligne du compte : un jeton signé pour un `sub` inventé est refusé. Le `tests.rs` engendré
+ligne du compte : un jeton signé pour un `sub` inventé est refusé. Le `tests/mod.rs` engendré
 inscrit donc un compte au rôle que ses routes exigent, à la première montée de
 `application()`, signe un jeton pour lui, et chaque requête le porte :
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=jeton
+```rust file=examples/blog-auth/src/posts/tests/mod.rs region=jeton
 ```
 
 Trois tests tiennent ensuite les refus, et il ne faut pas les laisser se confondre. Deux
@@ -492,7 +492,7 @@ sont engendrés — une écriture et une lecture, anonymes toutes deux, auxquell
 répond 401 avant que le handler s'exécute. Le troisième appartient à l'exemple : un appelant
 bien identifié mais d'un rôle trop court, à qui la garde répond 403 dans le handler.
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=refus
+```rust file=examples/blog-auth/src/posts/tests/access.rs region=refus
 ```
 
 Les routes de la feature elle-même sont couvertes de la même façon, réparties par sujet

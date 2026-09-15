@@ -77,19 +77,23 @@ plan pour …/demo
   + src/uploads/repository.rs                          créé
   + src/uploads/service.rs                             créé
   + src/uploads/controller.rs                          créé
-  + src/uploads/tests.rs                                créé
-  + src/seeds/uploads.rs                                créé
+  + src/uploads/tests/mod.rs                           créé
+  + src/uploads/tests/lifecycle.rs                     créé
+  + src/uploads/tests/errors.rs                        créé
+  + src/uploads/tests/filter.rs                        créé
+  + src/uploads/tests/content.rs                       créé
+  + src/seeds/uploads.rs                               créé
   + migration/src/m20260909_094423_create_uploads.rs   créé
   ~ src/lib.rs                                         modifié
-  ~ src/router.rs                                       modifié
-  ~ src/openapi.rs                                      modifié
-  ~ migration/src/lib.rs                                modifié
-  ~ src/seeds/main.rs                                   modifié
-  ~ Cargo.toml                                          modifié
-  ~ AGENTS.md                                           modifié
+  ~ src/router.rs                                      modifié
+  ~ src/openapi.rs                                     modifié
+  ~ migration/src/lib.rs                               modifié
+  ~ src/seeds/main.rs                                  modifié
+  ~ Cargo.toml                                         modifié
+  ~ AGENTS.md                                          modifié
 
-  10 à créer, 7 à modifier
-✓ uploads générée — 10 créés, 7 modifiés
+  14 à créer, 7 à modifier
+✓ uploads générée — 14 créés, 7 modifiés
 
   la migration m20260909_094423_create_uploads reste à appliquer avant de lancer le projet
 ```
@@ -276,7 +280,7 @@ qu'aucune ressource ne réclame — et `exists` répond à la requête `HEAD` pl
   encore installer.
 - [`rbs generate`](../cli/generate.md) a la grammaire complète d'`--with-upload`, y
   compris comment il se combine avec `--role` et `--soft-delete`.
-- [Tests](../guides/testing.md) est le harnais contre lequel `uploads/tests.rs` tourne,
+- [Tests](../guides/testing.md) est le harnais contre lequel `uploads/tests/` tourne,
   et le test `round` propre au fragment `storage` que les extraits de cette page
   n'ouvrent jamais.
 - [Envoyer un mail](./mail.md) est le tutoriel suivant : dès que le dépôt de cette page

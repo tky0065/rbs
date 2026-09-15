@@ -239,7 +239,10 @@ plan pour …/demo
   + src/articles/repository.rs                          créé
   + src/articles/service.rs                             créé
   + src/articles/controller.rs                          créé
-  + src/articles/tests.rs                               créé
+  + src/articles/tests/mod.rs                           créé
+  + src/articles/tests/lifecycle.rs                     créé
+  + src/articles/tests/errors.rs                        créé
+  + src/articles/tests/filter.rs                        créé
   + src/seeds/articles.rs                               créé
   + migration/src/m20260830_110245_create_articles.rs   créé
   ~ src/lib.rs                                          modifié
@@ -250,8 +253,8 @@ plan pour …/demo
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  10 à créer, 7 à modifier
-✓ articles générée — 10 créés, 7 modifiés
+  13 à créer, 7 à modifier
+✓ articles générée — 13 créés, 7 modifiés
 
   la migration m20260830_110245_create_articles reste à appliquer avant de lancer le projet
 ```

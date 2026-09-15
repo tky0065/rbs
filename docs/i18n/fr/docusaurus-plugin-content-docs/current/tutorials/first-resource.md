@@ -36,7 +36,10 @@ plan pour …/demo
   + src/articles/repository.rs                          créé
   + src/articles/service.rs                             créé
   + src/articles/controller.rs                          créé
-  + src/articles/tests.rs                               créé
+  + src/articles/tests/mod.rs                           créé
+  + src/articles/tests/lifecycle.rs                     créé
+  + src/articles/tests/errors.rs                        créé
+  + src/articles/tests/filter.rs                        créé
   + src/seeds/articles.rs                               créé
   + migration/src/m20260909_092448_create_articles.rs   créé
   ~ src/lib.rs                                          modifié
@@ -47,8 +50,8 @@ plan pour …/demo
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  10 à créer, 7 à modifier
-✓ articles générée — 10 créés, 7 modifiés
+  13 à créer, 7 à modifier
+✓ articles générée — 13 créés, 7 modifiés
 
   la migration m20260909_092448_create_articles reste à appliquer avant de lancer le projet
 ```
@@ -180,7 +183,7 @@ Une seule direction de dépendance traverse ces quatre fichiers : contrôleur �
 repository → modèle, chaque couche ne voyant que la suivante.
 [Architecture](../architecture.md) place chaque couche que ces sept fichiers occupent,
 y compris les trois que cette page n'a jamais ouverts — `service.rs`, `filter.rs` et
-`tests.rs`.
+`tests/`.
 
 ## Pour aller plus loin
 
@@ -189,7 +192,7 @@ y compris les trois que cette page n'a jamais ouverts — `service.rs`, `filter.
   certains appelants peuvent faire.
 - [Filtrage](../guides/filtering.md) est ce que `filter.rs` monte : une route `POST
   /articles/filter` que cette page n'a jamais appelée.
-- [Tests](../guides/testing.md) lit le fichier `tests.rs` que la même commande a écrit,
+- [Tests](../guides/testing.md) lit le répertoire `tests/` que la même commande a écrit,
   et le harnais contre lequel il tourne.
 - [Architecture](../architecture.md) place chaque fichier que `rbs generate crud` vient
   d'écrire dans la couche à laquelle il appartient.

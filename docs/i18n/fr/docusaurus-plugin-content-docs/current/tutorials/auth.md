@@ -140,19 +140,23 @@ plan pour …/demo
   + src/posts/repository.rs                          créé
   + src/posts/service.rs                             créé
   + src/posts/controller.rs                          créé
-  + src/posts/tests.rs                               créé
+  + src/posts/tests/mod.rs                           créé
+  + src/posts/tests/lifecycle.rs                     créé
+  + src/posts/tests/errors.rs                        créé
+  + src/posts/tests/filter.rs                        créé
+  + src/posts/tests/access.rs                        créé
   + src/seeds/posts.rs                               créé
   + migration/src/m20260909_093231_create_posts.rs   créé
   ~ src/lib.rs                                       modifié
   ~ src/router.rs                                    modifié
   ~ src/openapi.rs                                   modifié
-  ~ migration/src/lib.rs                              modifié
+  ~ migration/src/lib.rs                             modifié
   ~ src/seeds/main.rs                                modifié
   ~ Cargo.toml                                       modifié
   ~ AGENTS.md                                        modifié
 
-  10 à créer, 7 à modifier
-✓ posts générée — 10 créés, 7 modifiés
+  14 à créer, 7 à modifier
+✓ posts générée — 14 créés, 7 modifiés
 
   la migration m20260909_093231_create_posts reste à appliquer avant de lancer le projet
 ```
@@ -392,7 +396,7 @@ Deux 401 et un 403 se ressemblent, à ne juger que le code de statut. Ce test es
 qui fixe lequel est lequel — un jeton `user` refusé sur l'écriture, et qui lit quand
 même.
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=refus
+```rust file=examples/blog-auth/src/posts/tests/access.rs region=refus
 ```
 
 ## Pour aller plus loin
@@ -404,7 +408,7 @@ même.
 - [`rbs generate`](../cli/generate.md) a la grammaire complète de `--role`, y compris ce
   qu'il fait sous `--with-upload`, et [ce qu'il faut retirer pour rouvrir une
   route](../guides/auth.md#fermées-par-défaut-à-la-génération).
-- [Tests](../guides/testing.md) est le harnais contre lequel `posts/tests.rs` tourne, le
+- [Tests](../guides/testing.md) est le harnais contre lequel `posts/tests/` tourne, le
   même que le troisième extrait de cette page étend à la main.
 - [Recevoir un fichier](./storage.md) est le tutoriel suivant : un client dépose un
   fichier, et `PUT /uploads/{id}/content` le range.

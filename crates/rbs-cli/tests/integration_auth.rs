@@ -686,11 +686,11 @@ fn the_tests_of_a_crud_generated_under_auth_pass() {
     // une suite amputée, et c'est précisément une suite amputée qu'une template cassée
     // livrerait.
     for scenario in [
-        "articles::tests::the_full_lifecycle_goes_through_the_api ... ok",
-        "articles::tests::an_anonymous_request_returns_401 ... ok",
-        "articles::tests::an_anonymous_read_returns_401 ... ok",
-        "articles::tests::the_content_round_trips_through_put_get_and_head ... ok",
-        "articles::tests::an_anonymous_content_request_returns_401 ... ok",
+        "articles::tests::lifecycle::the_full_lifecycle_goes_through_the_api ... ok",
+        "articles::tests::access::an_anonymous_request_returns_401 ... ok",
+        "articles::tests::access::an_anonymous_read_returns_401 ... ok",
+        "articles::tests::content::the_content_round_trips_through_put_get_and_head ... ok",
+        "articles::tests::content::an_anonymous_content_request_returns_401 ... ok",
     ] {
         assert!(
             rendu.contains(scenario),

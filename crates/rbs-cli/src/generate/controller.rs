@@ -626,7 +626,7 @@ mod tests {
         );
     }
 
-    /// Une feature écrite à la main n'a pas de `tests.rs` : le déclarer empêcherait la
+    /// Une feature écrite à la main n'a pas de `tests/` : le déclarer empêcherait la
     /// compilation du projet.
     #[test]
     fn the_module_declares_no_tests_when_there_are_none() {

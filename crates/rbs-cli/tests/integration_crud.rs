@@ -114,24 +114,26 @@ fn a_generated_crud_migrates_and_passes_its_tests_against_postgresql() {
     // gabarit qui cesserait de livrer ce test laisserait celui-ci au vert, `cargo test`
     // sortant en 0 sur une suite amputée.
     assert!(
-        joues.contains("test articles::tests::two_creations_in_a_row_carry_increasing_ids ... ok"),
+        joues.contains(
+            "test articles::tests::lifecycle::two_creations_in_a_row_carry_increasing_ids ... ok"
+        ),
         "le test des identifiants croissants n'a pas été joué :\n{joues}"
     );
 
     // Le filtre s'exige de même : une condition mal traduite en SQL ne se voit qu'ici, la
     // requête étant construite à la génération et jouée contre une vraie base.
     assert!(
-        joues.contains("test articles::tests::the_filter_narrows_the_list ... ok"),
+        joues.contains("test articles::tests::filter::the_filter_narrows_the_list ... ok"),
         "le scénario de filtrage n'a pas été joué :\n{joues}"
     );
     assert!(
         joues.contains(
-            "test articles::tests::contains_reads_percent_and_underscore_literally ... ok"
+            "test articles::tests::filter::contains_reads_percent_and_underscore_literally ... ok"
         ),
         "la recherche de `%` et `_` à la lettre n'a pas été jouée :\n{joues}"
     );
     assert!(
-        joues.contains("test articles::tests::an_unknown_sort_column_returns_400 ... ok"),
+        joues.contains("test articles::tests::errors::an_unknown_sort_column_returns_400 ... ok"),
         "le refus d'une colonne de tri inconnue n'a pas été joué :\n{joues}"
     );
 
@@ -363,7 +365,9 @@ fn a_soft_deleting_crud_migrates_and_hides_its_deleted_rows() {
     // `DELETE` retrouve la même absence plutôt qu'un nouveau succès — la garde manquante
     // que la template commente rendrait 204 les deux fois.
     assert!(
-        joues.contains("test soft_articles::tests::the_full_lifecycle_goes_through_the_api ... ok"),
+        joues.contains(
+            "test soft_articles::tests::lifecycle::the_full_lifecycle_goes_through_the_api ... ok"
+        ),
         "le cycle complet n'a pas été joué :\n{joues}"
     );
 
@@ -372,7 +376,9 @@ fn a_soft_deleting_crud_migrates_and_hides_its_deleted_rows() {
     // l'épreuve contre une vraie base — un rendu correct en apparence mais que PostgreSQL
     // refuserait à l'application ne se verrait qu'ici.
     assert!(
-        joues.contains("test soft_articles::tests::a_replayed_unique_value_returns_409 ... ok"),
+        joues.contains(
+            "test soft_articles::tests::errors::a_replayed_unique_value_returns_409 ... ok"
+        ),
         "le refus du doublon n'a pas été joué :\n{joues}"
     );
 
@@ -482,11 +488,15 @@ fn a_soft_deleting_crud_migrates_and_hides_its_deleted_rows_on_sqlite() {
     );
 
     assert!(
-        joues.contains("test soft_articles::tests::the_full_lifecycle_goes_through_the_api ... ok"),
+        joues.contains(
+            "test soft_articles::tests::lifecycle::the_full_lifecycle_goes_through_the_api ... ok"
+        ),
         "le cycle complet n'a pas été joué sur SQLite :\n{joues}"
     );
     assert!(
-        joues.contains("test soft_articles::tests::a_replayed_unique_value_returns_409 ... ok"),
+        joues.contains(
+            "test soft_articles::tests::errors::a_replayed_unique_value_returns_409 ... ok"
+        ),
         "le refus du doublon n'a pas été joué sur SQLite :\n{joues}"
     );
 }
@@ -604,11 +614,14 @@ fn a_soft_deleting_crud_keeps_a_global_uniqueness_on_mysql() {
     );
 
     assert!(
-        joues.contains("test soft_memos::tests::the_full_lifecycle_goes_through_the_api ... ok"),
+        joues.contains(
+            "test soft_memos::tests::lifecycle::the_full_lifecycle_goes_through_the_api ... ok"
+        ),
         "le cycle complet n'a pas été joué sur MySQL :\n{joues}"
     );
     assert!(
-        joues.contains("test soft_memos::tests::a_replayed_unique_value_returns_409 ... ok"),
+        joues
+            .contains("test soft_memos::tests::errors::a_replayed_unique_value_returns_409 ... ok"),
         "le refus du doublon n'a pas été joué sur MySQL :\n{joues}"
     );
 }
@@ -649,7 +662,7 @@ fn an_uploading_crud_compiles_against_the_storage_trait() {
         .assert()
         .success();
 
-    // `--all-targets`, pour que `src/attachments/tests.rs` entre dans la compilation
+    // `--all-targets`, pour que `src/attachments/tests/` entre dans la compilation
     // vérifiée, et `-D warnings` : c'est la commande que `rbs add ci` inscrit dans le
     // workflow livré, celle qui jugerait ce code chez l'utilisateur.
     Command::new("cargo")
@@ -797,9 +810,9 @@ fn the_deposited_content_round_trips_through_the_running_server() {
     );
 
     for scenario in [
-        "attachments::tests::the_content_round_trips_through_put_get_and_head ... ok",
-        "attachments::tests::an_unknown_id_has_no_content ... ok",
-        "attachments::tests::a_content_beyond_the_limit_returns_413 ... ok",
+        "attachments::tests::content::the_content_round_trips_through_put_get_and_head ... ok",
+        "attachments::tests::content::an_unknown_id_has_no_content ... ok",
+        "attachments::tests::content::a_content_beyond_the_limit_returns_413 ... ok",
     ] {
         assert!(
             joues.contains(scenario),
