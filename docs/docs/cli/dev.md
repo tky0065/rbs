@@ -22,7 +22,7 @@ Démarre le projet : services, migrations, serveur relancé à chaque changement
 Utilisation : rbs dev [OPTIONS] [-- <ARGS>...]
 
 Arguments :
-  [ARGS]...  Arguments du serveur, passés après `--` (ex. -- --port 4000)
+  [ARGS]...  Arguments passés au binaire du serveur après `--` ; le main engendré n'en lit aucun
 
 Options :
       --no-compose  Ne remonte pas les services du compose : ils tournent déjà, ou ailleurs
@@ -63,12 +63,14 @@ Up to four steps, in order:
 
 `--no-compose` removes the first step and `--no-migrate` the third. The wait stays,
 whatever is skipped: the server needs its database either way. The arguments after `--`
-show on the server's line:
+go to the server binary, and show on its line. The generated `main` reads none — its port
+comes from `[server] port` in `config/` — so they serve a `main` you have taught to read
+them:
 
 ```text
-$ rbs dev --no-compose --no-migrate -- --port 4000
+$ rbs dev --no-compose --no-migrate -- --verbose
   base        127.0.0.1:1
-  serveur     cargo run -- --port 4000, relancé à chaque changement
+  serveur     cargo run -- --verbose, relancé à chaque changement
 ```
 
 A project with a compose — the default, for most — shows the extra step first:

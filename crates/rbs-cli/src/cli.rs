@@ -141,7 +141,7 @@ pub enum Commands {
         #[arg(long)]
         no_migrate: bool,
 
-        /// Arguments du serveur, passés après `--` (ex. -- --port 4000).
+        /// Arguments passés au binaire du serveur après `--` ; le main engendré n'en lit aucun.
         #[arg(last = true, value_name = "ARGS")]
         server: Vec<String>,
     },
