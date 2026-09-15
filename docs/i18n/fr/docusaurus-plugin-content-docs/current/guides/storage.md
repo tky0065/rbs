@@ -51,10 +51,19 @@ atterrissent dans `./storage`, au cœur de votre arborescence, et `git status` l
 ```
 
 Voilà tout le contrat. Délibérément absents : le listage, la copie, les URL signées, les
-métadonnées, le flux. Quatre méthodes, c'est ce que deux backends peuvent honorer à
-l'identique, et l'abstraction ne vaut ni plus ni moins que cette identité. La cinquième ne
-transporte rien et ne répond qu'à `GET /health` : c'est elle qui empêche la route de dire
-`ok` sur un stockage que votre projet ne joint plus.
+métadonnées. Quatre méthodes, c'est ce que deux backends peuvent honorer à l'identique, et
+l'abstraction ne vaut ni plus ni moins que cette identité. La cinquième ne transporte rien
+et ne répond qu'à `GET /health` : c'est elle qui empêche la route de dire `ok` sur un
+stockage que votre projet ne joint plus.
+
+`get` rend un `Object` — sa taille quand le backend la connaît, son contenu en flux de
+`Bytes`. Servir un objet ne le charge jamais en mémoire : le backend fichiers le lit sur le
+disque, et S3 dans le bucket, à mesure que le client le consomme. `NotFound` se tranche
+avant que le premier octet ne parte ; une panne en route ne peut plus devenir un statut,
+les en-têtes étant partis, et la réponse s'interrompt — ce qu'un client qui lit face au
+`content-length` voit comme un corps incomplet. `put` reçoit toujours le contenu entier, en
+`Bytes` transmis par la route sans copie : la limite de corps de la route le borne déjà, et
+un dépôt en flux vers S3 exigerait son upload multipart, que rien ici ne réclame.
 
 Les échecs tiennent en une énumération, ce qui permet à l'appelant de distinguer une erreur
 du client d'une panne :
@@ -148,7 +157,8 @@ aucun bucket n'est nommé nulle part — et ne dit rien de tout cela tant que le
 
 Le drapeau écrit aussi leurs tests dans le `tests.rs` de la ressource, `#[ignore]` comme
 les autres et joués par `cargo test -- --include-ignored` : le cycle — `PUT` d'un corps
-binaire, `GET` rendu octet pour octet en `application/octet-stream`, `HEAD` avant et
+binaire, `GET` rendu octet pour octet en `application/octet-stream` avec un
+`content-length` égal à la taille déposée, `HEAD` avant et
 après, un second `PUT` qui remplace —, le 404 d'un identifiant inconnu sur les trois
 verbes, le 413 un octet au-delà de `TAILLE_MAX`, et sous `auth` le 401 d'une requête sans
 jeton. Une modification de l'un des trois handlers se voit dans votre projet, et non
@@ -227,8 +237,9 @@ C'est la conception même du fichier. `cargo test` joue la ronde contre le backe
 avec un test de traversée qui éprouve quatre clés fuyantes et assertent à la fois la
 variante `RejectedKey` *et* l'absence de fichiers témoins hors de la racine ; il bâtit aussi
 un client S3 sans toucher au réseau, et vérifie qu'un backend inconnu est refusé en le
-nommant. Trois tests de plus ne portent que sur le backend fichiers : un dépôt ne laisse
-aucun fichier temporaire derrière lui ; quatre lecteurs qui relisent une clé pendant qu'un
+nommant. Quatre tests de plus ne portent que sur le backend fichiers : un dépôt ne laisse
+aucun fichier temporaire derrière lui ; un objet d'un mébioctet se relit en plus d'un
+morceau, la preuve que rien ne le charge d'un bloc avant de l'envoyer ; quatre lecteurs qui relisent une clé pendant qu'un
 écrivain la remplace deux cents fois ne voient jamais que l'un des deux contenus, entier —
 sur une écriture en place, ils attrapent un corps vide ou tronqué dès les premières
 lectures ; et la sonde signale une racine retirée sous le stockage vivant au lieu de la

@@ -36,7 +36,7 @@ where
     let mut enfilees = 0;
 
     for abonnement in repository::actifs(db).await? {
-        let motifs: Vec<String> = serde_json::from_value(abonnement.events.clone())?;
+        let motifs: Vec<String> = serde_json::from_value(abonnement.events)?;
 
         if !matches(&motifs, event) {
             continue;
@@ -69,14 +69,6 @@ pub async fn subscribe(
     policy
         .check(&input.url)
         .map_err(|refus| Error::BadRequest(refus.to_string()))?;
-
-    for motif in &input.events {
-        if motif.trim().is_empty() {
-            return Err(Error::BadRequest(
-                {% if lang == "en" %}"an event pattern cannot be empty"{% else %}"un motif d'événement ne peut pas être vide"{% endif %}.to_string(),
-            ));
-        }
-    }
 
     let secret = rbs_core::token::random();
     let inscrit = repository::create(db, &input.url, &input.events, &secret).await?;

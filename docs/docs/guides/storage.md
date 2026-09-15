@@ -51,10 +51,20 @@ The next step is not decoration: with the default `fs` backend, deposited object
 ```
 
 That is the whole contract. Deliberately not in it: listing, copying, signed URLs,
-metadata, streaming. Four methods are what two backends can honour identically, and the
-abstraction is worth exactly as much as that identity. The fifth carries nothing and
-answers only `GET /health`: it is what stops the route replying `ok` on a store your
-project can no longer reach.
+metadata. Four methods are what two backends can honour identically, and the abstraction
+is worth exactly as much as that identity. The fifth carries nothing and answers only
+`GET /health`: it is what stops the route replying `ok` on a store your project can no
+longer reach.
+
+`get` hands back an `Object` — its length when the backend knows it, its content as a
+stream of `Bytes`. Serving an object never loads it into memory: the file backend reads it
+from disk, and S3 from the bucket, as the client consumes it. `NotFound` is settled before
+the first byte leaves; a failure midway can no longer become a status, the headers being
+gone, and the response is cut short instead — which a client reading against
+`content-length` sees as an incomplete body. `put` still takes the whole content, as
+`Bytes` handed down from the route without a copy: the route's body limit already bounds
+it, and streaming a deposit to S3 would mean its multipart upload, which nothing here
+calls for.
 
 Failures are one enum, which is what lets a caller tell a client error from an outage:
 
@@ -144,7 +154,8 @@ the backend is `fs`, which needs none of it.
 
 The flag writes their tests into the resource's `tests.rs` as well, `#[ignore]`d like the
 others and played by `cargo test -- --include-ignored`: the round trip — `PUT` a binary
-body, `GET` it back byte for byte as `application/octet-stream`, `HEAD` before and after,
+body, `GET` it back byte for byte as `application/octet-stream` with a `content-length`
+equal to what was deposited, `HEAD` before and after,
 a second `PUT` that replaces —, the 404 of an unknown id on all three verbs, the 413 one
 byte past `TAILLE_MAX`, and under `auth` the 401 of a request without a token. A change to
 one of the three handlers is caught in your project, not only in rbs's own suite.
@@ -219,8 +230,9 @@ That is the design of the file. `cargo test` plays the round against the file ba
 along with a traversal test that tries four escaping keys and asserts both the
 `RejectedKey` variant *and* the absence of witness files outside the root; it also builds
 an S3 client without touching the network, and checks that an unknown backend is refused by
-name. Three more tests pin down the file backend alone: a deposit leaves no temporary file
-behind; four readers re-reading a key while a writer replaces it two hundred times only
+name. Four more tests pin down the file backend alone: a deposit leaves no temporary file
+behind; an object of one mebibyte reads back in more than one chunk, the proof that
+nothing loads it whole before sending it; four readers re-reading a key while a writer replaces it two hundred times only
 ever see one of the two contents, whole — on an in-place write, they catch an empty or
 truncated body within the first few reads; and the probe reports a root removed under the
 running store rather than recreating it.

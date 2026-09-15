@@ -2,10 +2,13 @@ use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
 use async_trait::async_trait;
+use bytes::Bytes;
+use futures_util::StreamExt;
 use tokio::fs;
+use tokio_util::io::ReaderStream;
 use uuid::Uuid;
 
-use super::{Storage, StorageError, normalize};
+use super::{Object, Storage, StorageError, normalize};
 
 /// Stockage sur le système de fichiers local, sous une racine unique.
 #[derive(Debug, Clone)]
@@ -75,7 +78,7 @@ fn deposit(path: &Path, content: &[u8]) -> std::io::Result<()> {
 
 #[async_trait]
 impl Storage for FileStorage {
-    async fn put(&self, key: &str, content: Vec<u8>) -> Result<(), StorageError> {
+    async fn put(&self, key: &str, content: Bytes) -> Result<(), StorageError> {
         let path = self.path(key)?;
 
         // Un seul saut vers le pool bloquant pour toute la séquence : elle n'a aucun
@@ -86,13 +89,22 @@ impl Storage for FileStorage {
             .map_err(unavailable)
     }
 
-    async fn get(&self, key: &str) -> Result<Vec<u8>, StorageError> {
-        fs::read(self.path(key)?).await.map_err(|error| {
+    // L'ouverture tranche `NotFound` avant qu'un octet ne parte ; la lecture suit ensuite
+    // le client, morceau par morceau. Un dépôt concurrent renomme un autre fichier sur la
+    // clé : celui qui est ouvert reste entier jusqu'au bout du flux.
+    async fn get(&self, key: &str) -> Result<Object, StorageError> {
+        let file = fs::File::open(self.path(key)?).await.map_err(|error| {
             if error.kind() == ErrorKind::NotFound {
                 StorageError::NotFound(key.to_owned())
             } else {
                 unavailable(error)
             }
+        })?;
+        let length = file.metadata().await.map_err(unavailable)?.len();
+
+        Ok(Object {
+            length: Some(length),
+            body: ReaderStream::new(file).boxed(),
         })
     }
 

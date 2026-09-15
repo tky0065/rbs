@@ -26,6 +26,10 @@ static FEATURES: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/templates/feat
 /// Les guides `AGENTS.md`, une template par langue.
 static AGENTS: Dir<'static> = include_dir!("$CARGO_MANIFEST_DIR/templates/agents");
 
+/// La toolchain minimale d'un projet engendré : la MSRV du workspace, celle de `rbs-core`
+/// dont il dépend. Le manifeste la déclare, le Dockerfile en épingle l'image.
+pub(crate) const RUST_VERSION: &str = env!("CARGO_PKG_RUST_VERSION");
+
 /// Provenance des templates.
 #[derive(Debug)]
 pub enum Source {
@@ -338,6 +342,7 @@ mod tests {
             crate_name => "mon_api",
             rbs_core_dep => "\"0.1\"",
             rbs_version => "0.1.0",
+            rust_version => super::RUST_VERSION,
             database_url => "postgres://postgres:postgres@localhost:5432/mon_api",
             database => database.name(),
             sea_orm_feature => database.sea_orm_feature(),
@@ -690,6 +695,7 @@ mod tests {
         context! {
             project_name => "mon-api",
             crate_name => "mon_api",
+            rust_version => super::RUST_VERSION,
             features => installees,
             database => database.name(),
             database_a_un_serveur => database.a_un_serveur(),
@@ -1568,6 +1574,45 @@ mod tests {
         assert!(sonde.contains("\"bash\", \"-c\""), "{runtime}");
         assert!(sonde.contains("/dev/tcp/127.0.0.1/8080"), "{sonde}");
         assert!(sonde.contains("GET /health/live HTTP/1.1"), "{sonde}");
+    }
+
+    /// L'image de build suit la MSRV du projet plutôt que `rust:1` flottante, et garde le
+    /// registre et `target/` d'un build à l'autre : sans ces montages, chaque commit
+    /// recompile toutes les dépendances.
+    #[test]
+    fn the_dockerfile_pins_the_toolchain_and_caches_the_dependencies() {
+        let rendu = render_fragment(
+            &Path::new(RACINE_FEATURES).join("docker/Dockerfile.jinja"),
+            feature_context(&["docker"]),
+        );
+
+        assert!(
+            rendu.starts_with("# syntax=docker/dockerfile:1\n"),
+            "les montages de cache exigent la syntaxe BuildKit en tête :\n{rendu}"
+        );
+        let image = format!(
+            "FROM rust:{}-slim-trixie AS builder",
+            env!("CARGO_PKG_RUST_VERSION")
+        );
+        assert!(rendu.contains(&image), "`{image}` absent :\n{rendu}");
+        for cache in [
+            "/usr/local/cargo/registry",
+            "/usr/local/cargo/git",
+            "/build/target",
+        ] {
+            let montage = format!("--mount=type=cache,target={cache}");
+            assert!(rendu.contains(&montage), "`{montage}` absent :\n{rendu}");
+        }
+        // Le cache n'entre pas dans la couche : l'étape runtime ne peut copier que ce qui
+        // en a été sorti.
+        assert!(
+            rendu.contains("COPY --from=builder /build/out/mon-api /usr/local/bin/"),
+            "{rendu}"
+        );
+        assert!(
+            rendu.contains("COPY --from=builder /build/out/migration /usr/local/bin/"),
+            "{rendu}"
+        );
     }
 
     /// Le dépilage porte ses trois moteurs, et lui seul.

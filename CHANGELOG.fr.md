@@ -254,6 +254,34 @@ dépréciation.
   entière, payload compris — par `RETURNING` sur PostgreSQL et SQLite, par un `SELECT`
   de plus sur MySQL — pour un modèle que personne ne lisait.
 
+- **Un motif d'événement vide reçoit un 422, comme une URL invalide.**
+  `POST /webhooks/subscriptions` vérifiait les motifs blancs dans le service et répondait
+  400 ; la vérification se tient désormais sur le DTO, à côté de `#[validate(url)]`, si
+  bien que le refus est une erreur de validation qui nomme `events` dans les `errors` du
+  problème. Un projet engendré plus tôt garde son 400 tant qu'il ne réengendre pas le
+  fragment.
+
+- **Un projet engendré déclare sa MSRV, un profil release et un build Docker en cache.**
+  Le manifeste gagne `rust-version`, la toolchain minimale de `rbs-core` dont il dépend :
+  cargo refuse lui-même une toolchain trop vieille pour le noyau, au lieu de laisser le
+  build échouer sur une édition ou une syntaxe qu'elle ne connaît pas. Une table
+  `[profile.release]` pose `lto = "thin"`, `codegen-units = 1` et `strip = true`. Le
+  `Dockerfile` qu'écrit `rbs add docker` épingle `rust:<msrv>-slim-trixie` au lieu de
+  `rust:1` flottante, et construit sous des montages de cache BuildKit pour le registre et
+  `target/` : un commit ne recompile plus toutes les dépendances. Un projet engendré plus
+  tôt garde son manifeste et son `Dockerfile` ; les deux changements se recopient à la
+  main.
+
+- **`storage` lit ses objets en flux, et dépose des `Bytes` sans copie.** Le `get` du
+  trait chargeait l'objet entier en mémoire — `fs::read` côté fichiers, `collect()` puis
+  `to_vec()` côté S3 —, et la route de contenu engendrée copiait chaque dépôt par
+  `Bytes::to_vec()`. `get` rend désormais un `Object`, sa taille quand le backend la
+  connaît et son contenu en flux lu à mesure que le client le consomme, et
+  `GET /<module>/{id}/content` sert ce flux avec son `content-length`. `put` prend des
+  `bytes::Bytes`, transmis par l'extracteur tels quels. Le fragment gagne `bytes`,
+  `futures-util` et `tokio-util`. Un projet engendré avant garde son trait ; la note de
+  mise à jour 1.5.0 dit les retouches qui adoptent le flux.
+
 ### Retiré
 
 - **`rbs-core` perd ses features vides `redis`, `mail` et `storage`.** Elles
@@ -437,6 +465,13 @@ lit `timestamp` sur MySQL et `timestamp_with_timezone_text` sur SQLite, ce que
   et ne retirait que les fenêtres échues : avec 10 000 clients actifs à la fois, chaque
   requête parcourait toute la table sous le verrou. Le balayage suivant attend désormais
   que la table ait doublé.
+
+- **La révocation d'un abonnement webhook est un seul `UPDATE` conditionnel.** `revoke`
+  lisait la ligne, testait `revoked_at`, puis la réécrivait : deux révocations
+  concurrentes pouvaient écrire chacune sa date, la seconde écrasant la première. Elle
+  passe désormais par `UPDATE … WHERE revoked_at IS NULL`, comme `auth` pour ses
+  sessions — la première gagne, la seconde ne touche aucune ligne. `emit` cesse aussi de
+  cloner la liste des motifs de chaque abonnement.
 
 ## [1.4.0] — 2026-09-11
 

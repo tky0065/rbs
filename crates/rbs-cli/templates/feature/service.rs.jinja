@@ -55,7 +55,7 @@ use super::dto::{
 use super::filter::{@ entity @}Filter;
 use super::repository::{self, ActiveModel};
 {%- if with_upload %}
-use crate::modules::storage::{Storage, StorageError};
+use crate::modules::storage::{Object, Storage, StorageError};
 
 /// Clé du contenu déposé pour `id`.
 ///
@@ -173,7 +173,7 @@ pub async fn delete(db: &DatabaseConnection, id: Uuid) -> Result<()> {
 {%- if with_upload %}
 
 /// Dépose le contenu de `id`, la ressource devant exister.
-{@ entete("put_content", ["db: &DatabaseConnection", "storage: &dyn Storage", "id: Uuid", "content: Vec<u8>"], "Result<()>") @}
+{@ entete("put_content", ["db: &DatabaseConnection", "storage: &dyn Storage", "id: Uuid", "content: bytes::Bytes"], "Result<()>") @}
     // La ligne est lue avant le dépôt : sans elle, le magasin accumulerait des objets
     // qu'aucune ressource ne réclame.
     repository::find(db, id)
@@ -197,8 +197,8 @@ pub async fn has_content(storage: &dyn Storage, id: Uuid) -> Result<bool> {
         .map_err(|error| Error::Internal(anyhow::anyhow!("{error}")))
 }
 
-/// Rend le contenu déposé pour `id`.
-pub async fn get_content(storage: &dyn Storage, id: Uuid) -> Result<Vec<u8>> {
+/// Rend l'objet déposé pour `id`, son contenu en flux.
+pub async fn get_content(storage: &dyn Storage, id: Uuid) -> Result<Object> {
     storage
         .get(&content_key(id))
         .await

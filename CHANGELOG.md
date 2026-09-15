@@ -240,6 +240,32 @@ between minor versions with no deprecation cycle.
   returned the whole row, payload included — through `RETURNING` on PostgreSQL and
   SQLite, through one more `SELECT` on MySQL — for a model nobody read.
 
+- **An empty webhook event pattern gets a 422, like an invalid URL.**
+  `POST /webhooks/subscriptions` checked blank patterns in the service and answered 400;
+  the check now sits on the DTO, next to `#[validate(url)]`, so the refusal is a
+  validation error that names `events` in the problem's `errors`. A project generated
+  earlier keeps its 400 until it regenerates the fragment.
+
+- **A generated project declares its MSRV, a release profile and a cached Docker build.**
+  The manifest gains `rust-version`, the minimum toolchain of `rbs-core` it depends on, so
+  cargo itself refuses a toolchain too old for the core rather than letting the build fail
+  on an edition or a syntax it does not know. A `[profile.release]` table sets
+  `lto = "thin"`, `codegen-units = 1` and `strip = true`. The `Dockerfile` written by
+  `rbs add docker` pins `rust:<msrv>-slim-trixie` instead of the floating `rust:1`, and
+  builds under BuildKit cache mounts for the registry and `target/`: a commit no longer
+  recompiles every dependency. A project generated earlier keeps its manifest and its
+  `Dockerfile`; both changes can be copied by hand.
+
+- **`storage` reads objects as a stream, and deposits `Bytes` without a copy.** The
+  trait's `get` loaded a whole object into memory — `fs::read` on the file backend,
+  `collect()` then `to_vec()` on S3 — and the generated content route copied every deposit
+  with `Bytes::to_vec()`. `get` now returns an `Object`, its length when the backend knows
+  it and its content as a stream read as the client consumes it, and
+  `GET /<module>/{id}/content` sends that stream with its `content-length`. `put` takes
+  `bytes::Bytes`, handed down from the extractor untouched. The fragment gains `bytes`,
+  `futures-util` and `tokio-util`. A project generated earlier keeps its trait; the 1.5.0
+  upgrade note lists the edits that adopt the stream.
+
 ### Removed
 
 - **`rbs-core` drops its empty `redis`, `mail` and `storage` features.** They had
@@ -416,6 +442,12 @@ reads `timestamp` on MySQL and `timestamp_with_timezone_text` on SQLite, which i
   load.** Once the table held 10,000 keys, the sweep ran on each hit and removed only
   expired windows: with 10,000 clients active at once, every request walked the whole
   table under the lock. The next sweep now waits for the table to double.
+
+- **Revoking a webhook subscription is one conditional `UPDATE`.** `revoke` read the
+  row, tested `revoked_at`, then wrote it back: two concurrent revocations could each
+  write their own date, the later one overwriting the first. It now runs
+  `UPDATE … WHERE revoked_at IS NULL`, as `auth` does for its sessions — the first wins,
+  the second touches no row. `emit` also stops cloning each subscription's pattern list.
 
 ## [1.4.0] — 2026-09-11
 

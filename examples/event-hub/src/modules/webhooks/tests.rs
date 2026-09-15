@@ -432,6 +432,53 @@ async fn an_admin_subscribes_then_reads_and_revokes() {
     assert_eq!(revocation, StatusCode::NO_CONTENT);
 }
 
+/// Un motif blanc est une entrée non conforme au même titre qu'une URL malformée : le DTO
+/// le refuse avant le service, et la réponse nomme le champ fautif.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_empty_pattern_is_refused_by_validation() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db().clone();
+    let api = crate::router::router(state);
+
+    let corps = json!({ "url": "https://example.test/x", "events": ["user.*", "  "] });
+    let (statut, reponse) = call(
+        &api,
+        request(&db, "POST", "/webhooks/subscriptions", "admin", Some(corps)).await,
+    )
+    .await;
+
+    assert_eq!(statut, StatusCode::UNPROCESSABLE_ENTITY, "{reponse}");
+    assert!(
+        reponse["errors"]["events"].is_array(),
+        "la réponse doit nommer le champ `events` : {reponse}"
+    );
+}
+
+/// La première révocation est celle qui compte : un client qui rejoue son appel ne doit
+/// pas réécrire l'histoire de l'abonnement.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn revoking_twice_keeps_the_first_date() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db();
+    let abonnement = abonne(db, "https://example.test/hooks", &["*"]).await;
+
+    let premiere =
+        chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z").expect("date lisible");
+    let seconde =
+        chrono::DateTime::parse_from_rfc3339("2026-06-01T00:00:00Z").expect("date lisible");
+
+    super::repository::revoke(db, abonnement.id, premiere)
+        .await
+        .expect("la première révocation aboutit");
+    let relu = super::repository::revoke(db, abonnement.id, seconde)
+        .await
+        .expect("la seconde révocation aboutit");
+
+    assert_eq!(relu.revoked_at, Some(premiere));
+}
+
 // ── Cibles ───────────────────────────────────────────────────────────────────
 
 use std::net::IpAddr;

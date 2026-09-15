@@ -6,7 +6,7 @@ use sea_orm::prelude::Uuid;
 use super::dto::{CreateUpload, UpdateUpload, UploadResponse};
 use super::filter::UploadFilter;
 use super::repository::{self, ActiveModel};
-use crate::modules::storage::{Storage, StorageError};
+use crate::modules::storage::{Object, Storage, StorageError};
 
 /// Clé du contenu déposé pour `id`.
 ///
@@ -111,7 +111,7 @@ pub async fn put_content(
     db: &DatabaseConnection,
     storage: &dyn Storage,
     id: Uuid,
-    content: Vec<u8>,
+    content: bytes::Bytes,
 ) -> Result<()> {
     // La ligne est lue avant le dépôt : sans elle, le magasin accumulerait des objets
     // qu'aucune ressource ne réclame.
@@ -136,8 +136,8 @@ pub async fn has_content(storage: &dyn Storage, id: Uuid) -> Result<bool> {
         .map_err(|error| Error::Internal(anyhow::anyhow!("{error}")))
 }
 
-/// Rend le contenu déposé pour `id`.
-pub async fn get_content(storage: &dyn Storage, id: Uuid) -> Result<Vec<u8>> {
+/// Rend l'objet déposé pour `id`, son contenu en flux.
+pub async fn get_content(storage: &dyn Storage, id: Uuid) -> Result<Object> {
     storage
         .get(&content_key(id))
         .await

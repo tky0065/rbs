@@ -52,6 +52,21 @@ version = "2.0"
 name    = "aws-sdk-s3"
 version = "1.146"
 
+# `get` rend l'objet en flux : `bytes` en porte les morceaux, `futures-util` met le flux
+# en boîte, `tokio-util` lit un fichier ou un corps S3 morceau par morceau.
+[[dependencies]]
+name    = "bytes"
+version = "1.12"
+
+[[dependencies]]
+name    = "futures-util"
+version = "0.3"
+
+[[dependencies]]
+name     = "tokio-util"
+version  = "0.7"
+features = ["io"]
+
 [cargo.tokio]
 features = ["fs"]
 

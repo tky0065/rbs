@@ -2,6 +2,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+use bytes::Bytes;
+use futures_util::TryStreamExt;
+
 use super::files::FileStorage;
 use super::{Storage, StorageConfig, StorageError, build};
 
@@ -14,6 +17,18 @@ fn root(nom: &str) -> PathBuf {
     path
 }
 
+/// Recolle un objet lu, et rend la taille annoncée avec lui.
+async fn read(storage: &dyn Storage, key: &str) -> Result<(Option<u64>, Vec<u8>), StorageError> {
+    let object = storage.get(key).await?;
+    let morceaux: Vec<Bytes> = object
+        .body
+        .try_collect()
+        .await
+        .expect("le flux doit se lire");
+
+    Ok((object.length, morceaux.concat()))
+}
+
 /// Ce que le trait promet, sans rien connaître du backend qui l'honore.
 ///
 /// Écrite contre `&dyn Storage` pour être rejouable telle quelle contre S3 : deux
@@ -24,14 +39,14 @@ async fn round(storage: &dyn Storage) {
     assert!(!storage.exists(key).await.expect("l'existence se consulte"));
 
     storage
-        .put(key, b"%PDF-1.7".to_vec())
+        .put(key, Bytes::from_static(b"%PDF-1.7"))
         .await
         .expect("le dépôt doit aboutir");
 
     assert!(storage.exists(key).await.expect("l'existence se consulte"));
     assert_eq!(
-        storage.get(key).await.expect("la lecture doit aboutir"),
-        b"%PDF-1.7"
+        read(storage, key).await.expect("la lecture doit aboutir"),
+        (Some(8), b"%PDF-1.7".to_vec())
     );
 
     storage
@@ -74,7 +89,7 @@ async fn a_key_escaping_the_root_is_rejected() {
         &absolute,
     ] {
         let error = storage
-            .put(key, b"charge utile".to_vec())
+            .put(key, Bytes::from_static(b"charge utile"))
             .await
             .expect_err("une clé sortant de la racine doit être refusée");
 
@@ -95,16 +110,13 @@ async fn a_key_escaping_the_root_is_rejected() {
     // Le refus porte sur l'évasion, pas sur la présence d'un `..` : une clé qui redescend
     // sans sortir reste valide, sans quoi la normalisation serait une simple sous-chaîne.
     storage
-        .put("sous/../recu.txt", b"charge utile".to_vec())
+        .put("sous/../recu.txt", Bytes::from_static(b"charge utile"))
         .await
         .expect("`sous/../recu.txt` reste sous la racine");
-    assert_eq!(
-        storage
-            .get("recu.txt")
-            .await
-            .expect("la clé normalisée doit se relire"),
-        b"charge utile"
-    );
+    let (_, relu) = read(&storage, "recu.txt")
+        .await
+        .expect("la clé normalisée doit se relire");
+    assert_eq!(relu, b"charge utile");
 
     fs::remove_dir_all(&root).expect("le répertoire du test doit se nettoyer");
 }
@@ -130,7 +142,7 @@ async fn a_put_leaves_no_temporary_file_behind() {
     let storage = FileStorage::new(root.join("objets")).expect("la racine doit se créer");
 
     storage
-        .put("dossier/objet.bin", b"charge utile".to_vec())
+        .put("dossier/objet.bin", Bytes::from_static(b"charge utile"))
         .await
         .expect("le dépôt doit aboutir");
 
@@ -154,7 +166,10 @@ async fn a_put_on_an_existing_key_never_exposes_an_empty_object() {
     let root = root("remplacement");
     let storage = FileStorage::new(root.join("objets")).expect("la racine doit se créer");
     let key = "objet.bin";
-    let (first, second) = (vec![b'a'; 1 << 20], vec![b'b'; 1 << 20]);
+    let (first, second) = (
+        Bytes::from(vec![b'a'; 1 << 20]),
+        Bytes::from(vec![b'b'; 1 << 20]),
+    );
 
     storage
         .put(key, first.clone())
@@ -183,11 +198,13 @@ async fn a_put_on_an_existing_key_never_exposes_an_empty_object() {
             tokio::spawn(async move {
                 let mut reads = 0;
                 while !writer.is_finished() {
-                    let read = storage.get(key).await.expect("la relecture doit aboutir");
+                    let (_, relu) = read(&storage, key)
+                        .await
+                        .expect("la relecture doit aboutir");
                     assert!(
-                        read == first || read == second,
+                        relu == first || relu == second,
                         "lecture n°{reads} : {} octets, ni l'un ni l'autre des contenus déposés",
-                        read.len()
+                        relu.len()
                     );
                     reads += 1;
                 }
@@ -201,6 +218,39 @@ async fn a_put_on_an_existing_key_never_exposes_an_empty_object() {
         let reads = reader.await.expect("le lecteur doit finir");
         assert!(reads > 0, "aucune lecture n'a eu lieu pendant les dépôts");
     }
+
+    fs::remove_dir_all(&root).expect("le répertoire du test doit se nettoyer");
+}
+
+/// Un objet d'un mébioctet se lit en plusieurs morceaux : la preuve qu'il n'est plus
+/// chargé d'un bloc avant de partir.
+#[tokio::test]
+async fn a_large_object_reads_back_in_several_chunks() {
+    let root = root("flux");
+    let storage = FileStorage::new(root.join("objets")).expect("la racine doit se créer");
+    let content = Bytes::from(vec![b'x'; 1 << 20]);
+
+    storage
+        .put("gros.bin", content.clone())
+        .await
+        .expect("le dépôt doit aboutir");
+
+    let object = storage
+        .get("gros.bin")
+        .await
+        .expect("la lecture doit aboutir");
+    assert_eq!(object.length, Some(1 << 20));
+    let morceaux: Vec<Bytes> = object
+        .body
+        .try_collect()
+        .await
+        .expect("le flux doit se lire");
+
+    assert!(
+        morceaux.len() > 1,
+        "l'objet est arrivé d'un seul bloc : il a été chargé en mémoire avant de partir"
+    );
+    assert_eq!(morceaux.concat(), content);
 
     fs::remove_dir_all(&root).expect("le répertoire du test doit se nettoyer");
 }
@@ -328,7 +378,7 @@ async fn an_object_put_by_the_trait_reads_back_through_the_s3_client() {
 
     let key = "hors-trait/recu.bin";
     storage
-        .put(key, b"charge utile".to_vec())
+        .put(key, Bytes::from_static(b"charge utile"))
         .await
         .expect("le dépôt doit aboutir");
 
