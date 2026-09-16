@@ -1235,7 +1235,8 @@ git commit -m "feat(remove): refuse avant d'écrire ce qu'un dépendant exige en
 > **Correction du contrôleur (R6).** La tâche 2 a posé deux `#[allow(dead_code)]`
 > — sur `Builder::supprimer` (`plan/mod.rs`) et `Effect::Supprimer` (`plan/action.rs`) —
 > parce que rien ne les appelait encore. **C'est ta tâche qui câble l'appel : retire-les.**
-> Et vérifie qu'il n'en reste aucun autre posé par les tâches 4 à 9. Un
+> Et vérifie qu'il n'en reste aucun autre — la tâche 3 en a posé un sur `anchors::retire`,
+> et les tâches 4 à 9 peuvent faire de même. Un
 > `#[allow(dead_code)]` oublié avec un commentaire devenu faux est un défaut que ce dépôt a
 > déjà dû nettoyer une fois ; il ne doit pas revenir par cette porte.
 
