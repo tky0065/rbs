@@ -888,6 +888,16 @@ git commit -m "feat(plan): sérialise les effets de retrait dans le document JSO
 
 ### Task 8: `remove::desinstallation` — le parcours inverse du manifeste
 
+> **Correction du contrôleur (R8) — le point de montage ne se supprime jamais.**
+> `installation::ouvre_le_point_de_montage` crée `src/modules/mod.rs` s'il manque, puis y
+> insère `pub mod <feature>;`. L'inverse s'arrête à la ligne : **retire le `pub mod`, ne
+> supprime jamais le fichier**, même s'il devient vide. D'autres fragments et les CRUD
+> engendrés y vivent aussi, et `lib.rs` porte un `mod modules;` qu'un fichier supprimé
+> casserait, là où un fichier vide ne gêne personne. Corollaire pour l'ordre : aucune ancre
+> que tu vides ne vit dans un fichier que le même plan supprime — les ancres sont dans le
+> squelette, les fichiers supprimés appartiennent au fragment. Si tu rencontres un contre
+> -exemple, arrête-toi et signale-le plutôt que de deviner.
+
 **Files:**
 - Create: `crates/rbs-cli/src/remove/mod.rs` (déclaration du module seulement, à cette tâche), `crates/rbs-cli/src/remove/desinstallation.rs`
 - Modify: `crates/rbs-cli/src/lib.rs` (`mod remove;`)
