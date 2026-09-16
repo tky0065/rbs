@@ -13,7 +13,12 @@
 ## Global Constraints
 
 - **Branche** : `remove-fragment`. Jamais de commit sur `main`.
-- **Commits** : Conventional Commits, sujet en français à l'impératif, sans majuscule ni point final. Aucun identifiant de tâche, aucun renvoi à un fichier de suivi, aucune ligne `Co-Authored-By` ni `Claude-Session`. Le corps porte le *pourquoi* et un intertitre `Vérifications :` avec les commandes réellement lancées et leurs chiffres.
+- **Commits** : Conventional Commits, sujet en français, verbe en tête au présent, sans
+  majuscule ni point final. Le `CLAUDE.md` dit « à l'impératif », mais la pratique du dépôt
+  est l'indicatif de troisième personne — le sujet décrit *ce que le commit fait au dépôt*.
+  Sur tous les verbes irréguliers du corpus : `rend` (41), `fait` (26), `dit` (20),
+  `inscrit` (15), `lit` (14), `écrit` (10), `met` (7), et jamais `rends`, `fais` ni `dis`.
+  Suivre le corpus, pas la lettre. Aucun identifiant de tâche, aucun renvoi à un fichier de suivi, aucune ligne `Co-Authored-By` ni `Claude-Session`. Le corps porte le *pourquoi* et un intertitre `Vérifications :` avec les commandes réellement lancées et leurs chiffres.
 - **Noms de tests en anglais**, `snake_case`, phrase complète — `a_conflict_rejects_the_plan_before_the_first_write`. Commentaires et documentation en français.
 - **Commentaires** : le *pourquoi*, jamais le *quoi*. `#![warn(missing_docs)]` ne concerne que `rbs-core`, pas `rbs-cli`.
 - **Bloquant en CI**, à relancer à chaque tâche : `cargo fmt --all --check` et `cargo clippy --workspace --all-targets -- -D warnings`.
