@@ -332,6 +332,32 @@ pub enum GenerateCommands {
         #[arg(long)]
         json: bool,
     },
+
+    /// Écrit une migration d'évolution : des colonnes de plus sur une table existante.
+    Migration {
+        /// Nom de la migration, en snake_case : celui de son module.
+        name: String,
+
+        /// Table à modifier, telle que le projet la déclare.
+        #[arg(long = "add-column", value_name = "TABLE")]
+        add_column: String,
+
+        /// Colonnes à ajouter, toutes optionnelles, ex. "statut:enum(draft,published):optional".
+        #[arg(long, value_name = "CHAMPS")]
+        fields: String,
+
+        /// Écrit même si le working tree Git est sale.
+        #[arg(long)]
+        force: bool,
+
+        /// Affiche le plan sans rien écrire.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Rend le plan, ou l'erreur, en un document JSON sur la sortie standard.
+        #[arg(long)]
+        json: bool,
+    },
 }
 
 #[derive(Debug, PartialEq, Subcommand)]
@@ -628,16 +654,19 @@ mod tests {
     }
 
     #[test]
-    fn the_generate_help_lists_crud_feature_and_job() {
+    fn the_generate_help_lists_its_five_subcommands() {
         let help = Cli::command()
             .find_subcommand_mut("generate")
             .expect("`generate` absente du CLI")
             .render_long_help()
             .to_string();
 
-        assert!(help.contains("crud"), "`crud` absente :\n{help}");
-        assert!(help.contains("feature"), "`feature` absente :\n{help}");
-        assert!(help.contains("job"), "`job` absente :\n{help}");
+        for sous_commande in ["crud", "feature", "client", "job", "migration"] {
+            assert!(
+                help.contains(sous_commande),
+                "`{sous_commande}` absente :\n{help}"
+            );
+        }
     }
 
     #[test]
@@ -1056,23 +1085,34 @@ mod tests {
                     GenerateCommands::Crud { json, .. }
                     | GenerateCommands::Feature { json, .. }
                     | GenerateCommands::Client { json, .. }
-                    | GenerateCommands::Job { json, .. },
+                    | GenerateCommands::Job { json, .. }
+                    | GenerateCommands::Migration { json, .. },
             } => *json,
             autre => panic!("commande qui ne planifie pas : {autre:?}"),
         }
     }
 
-    /// Les six commandes qui planifient rendent leur plan en JSON sur demande, et
+    /// Les sept commandes qui planifient rendent leur plan en JSON sur demande, et
     /// seulement sur demande : sans le drapeau, le rendu humain que la documentation
     /// transcrit reste celui qui s'affiche.
     #[test]
-    fn the_six_planning_commands_accept_json_and_default_to_the_human_rendering() {
+    fn the_seven_planning_commands_accept_json_and_default_to_the_human_rendering() {
         for commande in [
             vec!["rbs", "add", "cors"],
             vec!["rbs", "generate", "crud", "articles"],
             vec!["rbs", "generate", "feature", "articles"],
             vec!["rbs", "generate", "client", "--lang", "ts"],
             vec!["rbs", "generate", "job", "purge"],
+            vec![
+                "rbs",
+                "generate",
+                "migration",
+                "ajoute_statut",
+                "--add-column",
+                "articles",
+                "--fields",
+                "statut:string:optional",
+            ],
             vec!["rbs", "upgrade"],
         ] {
             let sans = Cli::try_parse_from(&commande)

@@ -180,12 +180,10 @@ pub(crate) enum Error {
     UploadStorageHorsModules,
 
     /// Un champ `decimal` sur un projet SQLite, dont le pilote ne lie aucun décimal exact.
-    #[error(
-        "le champ `{champ}` est un `decimal`, que SQLite ne porte pas : sqlx-sqlite refuse \
-         délibérément de lier un décimal exact — un NUMERIC n'y garde que quinze chiffres \
-         significatifs, et les centimes s'y perdraient sans un mot. Déclarez `{champ}:float`, \
-         ou un entier de centimes `{champ}:int`, ou créez le projet sous PostgreSQL ou MySQL"
-    )]
+    ///
+    /// Le texte vit sur `errors::decimal_sous_sqlite` : `generate migration` prononce le
+    /// même refus, et deux copies auraient divergé à la première reformulation.
+    #[error("{}", crate::errors::decimal_sous_sqlite(.champ))]
     DecimalSousSqlite {
         /// Nom du champ fautif, tel qu'il a été déclaré.
         champ: String,

@@ -282,7 +282,7 @@ impl Field {
         }
     }
 
-    fn column_type_attribute(&self) -> Option<&'static str> {
+    pub(crate) fn column_type_attribute(&self) -> Option<&'static str> {
         match &self.kind {
             FieldKind::Scalar(type_) => type_.column_type_attribute(),
             FieldKind::Reference(_) | FieldKind::Enum(_) => None,
@@ -323,7 +323,7 @@ impl Field {
     ///
     /// Comptée en caractères et non en octets : les valeurs sont en snake_case ASCII,
     /// où les deux coïncident, et `StringLen::N` compte des caractères.
-    fn enum_length(&self) -> usize {
+    pub(crate) fn enum_length(&self) -> usize {
         self.enum_variants()
             .iter()
             .map(|value| value.chars().count())

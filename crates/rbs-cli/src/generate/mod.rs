@@ -1,3 +1,4 @@
+pub(crate) mod alter;
 #[cfg(test)]
 pub(crate) mod bench;
 pub(crate) mod command;

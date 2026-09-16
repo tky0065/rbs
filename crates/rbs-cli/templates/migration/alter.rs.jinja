@@ -1,0 +1,188 @@
+use sea_orm_migration::prelude::*;
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+{#- Un `alter_table` par colonne, et non un seul portant toutes les options : SQLite
+    n'accepte qu'une modification par instruction, et sea-query y renonce plutôt que de
+    la plier. Les trois moteurs acceptent la forme éclatée. #}
+{%- for field in fields %}
+{%- set col_new = "ColumnDef::new(" ~ iden ~ "::" ~ field.pascal_name ~ ")" %}
+{#- La colonne est toujours nullable : la table porte déjà des lignes, qui n'ont pas de
+    valeur pour elle. `--fields` refuse ici ce qui ne l'est pas. #}
+{%- set col = col_new ~ "." ~ field.migration_method ~ ".null()" %}
+{#- Les deux régimes de `fn_call_width` : en deçà de soixante colonnes d'arguments,
+    rustfmt ramène l'appel sur une ligne ; au-delà il l'éclate, et une tête trop large
+    se casse à son tour, la chaîne se réalignant alors d'un cran à gauche. #}
+{%- set retrait = "                            " if col_new | length <= 75 else "                        " %}
+{%- set expr_col = "Expr::col(" ~ iden ~ "::" ~ field.pascal_name ~ ")" %}
+{%- set valeurs = '["' ~ (field.enum_variants | join('", "')) ~ '"]' %}
+{%- set is_in = ".is_in(" ~ valeurs ~ ")" %}
+{%- set check = expr_col ~ is_in %}
+        manager
+            .alter_table(
+                Table::alter()
+                    .table({@ iden @}::Table)
+{#- Une énumération porte en plus un `CHECK` : c'est la base qui refuse alors une valeur
+    que `--fields` n'a pas déclarée, sur les trois moteurs. La colonne est toujours
+    éclatée — le `CHECK` la fait déborder à tout nom — et quatre régimes s'y succèdent
+    selon que l'appel, son seul argument, puis la tête de cet argument tiennent dans les
+    cent colonnes de `max_width`. La tête se mesure à quatre-vingt-dix-neuf et non à cent :
+    elle ouvre une chaîne, dont la ligne suivante doit encore tenir sous elle, là où un
+    argument refermé peut remplir la ligne entière. #}
+{%- if field.enum_variants %}
+                    .add_column(
+{%- if col_new | length <= 75 %}
+                        ColumnDef::new({@ iden @}::{@ field.pascal_name @})
+{%- else %}
+                        ColumnDef::new(
+                            {@ iden @}::{@ field.pascal_name @},
+                        )
+{%- endif %}
+{@ retrait @}.{@ field.migration_method @}
+{@ retrait @}.null()
+{%- if (retrait ~ ".check(" ~ check ~ "),") | length <= 100 %}
+{@ retrait @}.check({@ check @}),
+{%- elif (retrait ~ "    " ~ check ~ ",") | length <= 100 %}
+{@ retrait @}.check(
+{@ retrait @}    {@ check @},
+{@ retrait @}),
+{%- elif (retrait ~ "    " ~ expr_col) | length <= 99 %}
+{@ retrait @}.check(
+{@ retrait @}    {@ expr_col @}
+{@ retrait @}        {@ is_in @},
+{@ retrait @}),
+{%- else %}
+{@ retrait @}.check(
+{@ retrait @}    Expr::col(
+{@ retrait @}        {@ iden @}::{@ field.pascal_name @},
+{@ retrait @}    )
+{@ retrait @}    {@ is_in @},
+{@ retrait @}),
+{%- endif %}
+                    )
+{%- elif col | length <= 60 %}
+                    .add_column({@ col @})
+{%- elif col_new | length <= 75 %}
+                    .add_column(
+                        ColumnDef::new({@ iden @}::{@ field.pascal_name @})
+                            .{@ field.migration_method @}
+                            .null(),
+                    )
+{%- else %}
+                    .add_column(
+                        ColumnDef::new(
+                            {@ iden @}::{@ field.pascal_name @},
+                        )
+                        .{@ field.migration_method @}
+                        .null(),
+                    )
+{%- endif %}
+                    .to_owned(),
+            )
+            .await?;
+{% endfor %}
+{%- for field in fields if field.index %}
+{%- set idx = "idx_" ~ table ~ "_" ~ field.name %}
+{#- Le nom de l'index est un littéral, que rustfmt ne coupe pas : il déporte l'argument sur
+    sa propre ligne quand l'appel déborde — puis y renonce quand cette ligne-là déborderait
+    à son tour. Les deux extrêmes s'écrivent donc pareil. #}
+{%- set ligne_nom = "                    " ~ '.name("' ~ idx ~ '")' %}
+{%- set ligne_seule = "                        " ~ '"' ~ idx ~ '",' %}
+        manager
+            .create_index(
+                Index::create()
+                    .if_not_exists()
+{%- if ligne_nom | length <= 100 or ligne_seule | length > 100 %}
+                    .name("{@ idx @}")
+{%- else %}
+                    .name(
+                        "{@ idx @}",
+                    )
+{%- endif %}
+                    .table({@ iden @}::Table)
+                    .col({@ iden @}::{@ field.pascal_name @})
+                    .to_owned(),
+            )
+            .await?;
+{% endfor %}
+        Ok(())
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+{#- Les index d'abord, et dans l'ordre inverse : SQLite refuse de retirer une colonne
+    qu'un index nomme encore. #}
+{%- for field in (fields | reverse) if field.index %}
+{%- set idx = "idx_" ~ table ~ "_" ~ field.name %}
+{%- set drop_index = 'Index::drop().name("' ~ idx ~ '").table(' ~ iden ~ "::Table).to_owned()" %}
+{%- set ligne_nom = "                    " ~ '.name("' ~ idx ~ '")' %}
+{%- set ligne_seule = "                        " ~ '"' ~ idx ~ '",' %}
+{%- if drop_index | length <= 60 %}
+        manager
+            .drop_index({@ drop_index @})
+            .await?;
+{%- else %}
+        manager
+            .drop_index(
+                Index::drop()
+{%- if ligne_nom | length <= 100 or ligne_seule | length > 100 %}
+                    .name("{@ idx @}")
+{%- else %}
+                    .name(
+                        "{@ idx @}",
+                    )
+{%- endif %}
+                    .table({@ iden @}::Table)
+                    .to_owned(),
+            )
+            .await?;
+{%- endif %}
+{% endfor %}
+{%- for field in (fields | reverse) %}
+{%- set col_ref = iden ~ "::" ~ field.pascal_name %}
+{%- set drop_col = "Table::alter().table(" ~ iden ~ "::Table).drop_column(" ~ col_ref ~ ").to_owned()" %}
+{%- if drop_col | length <= 60 %}
+        manager
+            .alter_table({@ drop_col @})
+            .await?;
+{#- `.drop_column(…)` tient sur sa ligne tant que l'identifiant reste court ; au-delà
+    rustfmt déporte l'argument — puis y renonce quand cette ligne-là déborderait à son
+    tour, et laisse l'appel entier. Les deux extrêmes s'écrivent donc pareil. #}
+{%- elif col_ref | length <= 66 or col_ref | length >= 76 %}
+        manager
+            .alter_table(
+                Table::alter()
+                    .table({@ iden @}::Table)
+                    .drop_column({@ col_ref @})
+                    .to_owned(),
+            )
+            .await?;
+{%- else %}
+        manager
+            .alter_table(
+                Table::alter()
+                    .table({@ iden @}::Table)
+                    .drop_column(
+                        {@ col_ref @},
+                    )
+                    .to_owned(),
+            )
+            .await?;
+{%- endif %}
+{% endfor %}
+        Ok(())
+    }
+}
+
+{#- L'identifiant ne déclare que ce que cette migration nomme : la table, et les colonnes
+    qu'elle ajoute. Les autres appartiennent à la migration qui les a créées. #}
+#[derive(DeriveIden)]
+enum {@ iden @} {
+    Table,
+{%- for field in fields %}
+    {@ field.pascal_name @},
+{%- endfor %}
+}
