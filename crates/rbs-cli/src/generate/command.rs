@@ -482,20 +482,12 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     builder.patch(plan::PatchToml::InscrireFeature(module.clone()))?;
 
-    // `sea_orm::prelude::Decimal` n'existe que sous `with-rust_decimal` ; `serde-str`
-    // épingle la représentation JSON du décimal — une chaîne — plutôt que de la laisser au
-    // défaut de la crate, qu'une feature activée ailleurs dans le graphe pourrait changer.
+    // L'épingle vit sur `generate::patches_decimal`, que `generate migration` emploie
+    // aussi : deux copies auraient divergé à la première montée de version.
     if feature.has_decimal() {
-        builder.patch(plan::PatchToml::AjouterDependance(metadata::Dependency {
-            name: "rust_decimal".to_string(),
-            version: "1.43".to_string(),
-            features: vec!["serde-str".to_string()],
-            default_features: true,
-        }))?;
-        builder.patch(plan::PatchToml::AjouterFeatureADependance {
-            dependency: "sea-orm".to_string(),
-            feature: "with-rust_decimal".to_string(),
-        })?;
+        for patch in super::patches_decimal() {
+            builder.patch(patch)?;
+        }
     }
 
     // L'inventaire décrit le projet tel que ce plan le laissera : c'est `module` qui l'y
