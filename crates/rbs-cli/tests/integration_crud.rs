@@ -626,6 +626,511 @@ fn a_soft_deleting_crud_keeps_a_global_uniqueness_on_mysql() {
     );
 }
 
+/// Les trois types que seule une base peut juger — `date`, `enum(…)` et `decimal` —
+/// contre un vrai PostgreSQL.
+///
+/// Le rendu se lit dans les tests unitaires ; ce que la base en fait ne se lit nulle part.
+/// Trois promesses se jouent ici : le `CHECK` de l'énumération refuse une valeur hors
+/// liste, une colonne `DECIMAL(19, 4)` rend « 12.5000 » sans rien arrondir — ce que la
+/// documentation promet dans les deux langues — et une `date` fait l'aller-retour en
+/// « AAAA-MM-JJ ». Le serveur lancé à la fin ajoute ce que le SQL ne dit pas : un nombre
+/// JSON pour un décimal est refusé plutôt qu'arrondi, et `OneOf` se traduit bien en `IN`.
+#[test]
+#[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn the_three_new_types_migrate_and_pass_their_tests_against_postgresql() {
+    let postgres = common::start_postgres();
+    let url = common::url_of(&postgres);
+
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+
+    rbs(parent.path())
+        .args([
+            "new",
+            "demo-api",
+            "--database-url",
+            &url,
+            "--core-path",
+            common::noyau()
+                .to_str()
+                .expect("chemin du noyau représentable"),
+            "--yes",
+        ])
+        .assert()
+        .success();
+
+    let projet = parent.path().join("demo-api");
+
+    rbs(&projet)
+        .args([
+            "generate",
+            "crud",
+            "invoices",
+            "--fields",
+            "due:date,status:enum(draft,published),price:decimal",
+        ])
+        .assert()
+        .success();
+
+    // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+    // premier cargo et se tient jusqu'au dernier.
+    let _cible = common::verrou(&common::cible());
+
+    rbs(&projet)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .args(["migrate", "up"])
+        .assert()
+        .success();
+
+    // Le `CHECK` que la migration écrit n'est qu'une chaîne de caractères tant qu'aucun
+    // moteur ne l'a lu : une valeur hors liste doit être refusée par la base elle-même,
+    // et non par le seul type Rust — un `UPDATE` direct, un import, un autre service
+    // n'ont pas de `Status` à traverser.
+    let mut refus = postgres
+        .exec(ExecCommand::new([
+            "psql",
+            "-U",
+            UTILISATEUR,
+            "-d",
+            BASE,
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-c",
+            "insert into invoices (id, due, status, price, created_at, updated_at) \
+             values ('00000000-0000-4000-8000-000000000001', '2024-01-15', 'archived', 12.5, now(), now());",
+        ]))
+        .expect("psql doit pouvoir s'exécuter dans le conteneur");
+
+    let sortie_refus = format!(
+        "{}{}",
+        String::from_utf8_lossy(&refus.stdout_to_vec().expect("la sortie de psql se lit")),
+        String::from_utf8_lossy(&refus.stderr_to_vec().expect("l'erreur de psql se lit")),
+    );
+
+    assert!(
+        sortie_refus.to_lowercase().contains("check constraint"),
+        "PostgreSQL a accepté une valeur hors de l'énumération : le CHECK ne tient \
+         pas :\n{sortie_refus}"
+    );
+
+    // La même ligne, sa valeur dans la liste : acceptée, puis relue telle que la colonne
+    // la garde. `12.5` écrit, `12.5000` relu — c'est l'échelle de `DECIMAL(19, 4)` ; et la
+    // `date` se relit dans la forme que la documentation promet.
+    let mut relu = postgres
+        .exec(ExecCommand::new([
+            "psql",
+            "-U",
+            UTILISATEUR,
+            "-d",
+            BASE,
+            "-tA",
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-c",
+            "insert into invoices (id, due, status, price, created_at, updated_at) \
+             values ('00000000-0000-4000-8000-000000000001', '2024-01-15', 'draft', 12.5, now(), now());",
+            "-c",
+            "select due::text || '|' || price::text from invoices \
+             where id = '00000000-0000-4000-8000-000000000001';",
+        ]))
+        .expect("psql doit pouvoir s'exécuter dans le conteneur");
+
+    let sortie_relue = format!(
+        "{}{}",
+        String::from_utf8_lossy(&relu.stdout_to_vec().expect("la sortie de psql se lit")),
+        String::from_utf8_lossy(&relu.stderr_to_vec().expect("l'erreur de psql se lit")),
+    );
+
+    assert!(
+        sortie_relue.contains("2024-01-15|12.5000"),
+        "la date ou l'échelle du décimal ont bougé en base :\n{sortie_relue}"
+    );
+
+    // Les tests engendrés joignent la base : ils comparent à la réponse ce qu'ils ont
+    // envoyé, pour les trois colonnes à la fois — c'est l'aller-retour complet, du JSON à
+    // la colonne et retour.
+    let sortie = Command::new("cargo")
+        .current_dir(&projet)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .args(["test", "--workspace", "--", "--include-ignored"])
+        .assert()
+        .success()
+        .get_output()
+        .clone();
+
+    let joues = format!(
+        "{}{}",
+        String::from_utf8_lossy(&sortie.stdout),
+        String::from_utf8_lossy(&sortie.stderr)
+    );
+
+    assert!(
+        joues.contains(
+            "test invoices::tests::lifecycle::the_full_lifecycle_goes_through_the_api ... ok"
+        ),
+        "le cycle complet des trois types n'a pas été joué :\n{joues}"
+    );
+    assert!(
+        joues.contains("test invoices::tests::filter::the_filter_narrows_the_list ... ok"),
+        "le filtre sur la date n'a pas été joué :\n{joues}"
+    );
+
+    Command::new("cargo")
+        .current_dir(&projet)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .arg("build")
+        .assert()
+        .success();
+
+    let serveur = Serveur::lancer(&projet, &common::cible(), "demo-api");
+    let port = serveur.port;
+
+    // La promesse la mieux cachée du type : un nombre JSON n'est pas un décimal exact, et
+    // l'accepter reviendrait à arrondir en silence ce que le type existe pour garder. La
+    // feature `serde-str` du manifeste engendré est ce qui le refuse ; sans elle, ce
+    // corps passerait.
+    let (statut, corps) = json_request(
+        port,
+        "POST",
+        "/invoices",
+        br#"{"due":"2024-02-01","status":"draft","price":12.5}"#,
+    );
+    assert_eq!(
+        statut,
+        400,
+        "un nombre JSON pour un décimal doit être refusé, non arrondi : {}",
+        String::from_utf8_lossy(&corps)
+    );
+
+    let (statut, corps) = json_request(
+        port,
+        "POST",
+        "/invoices",
+        br#"{"due":"2024-02-01","status":"published","price":"12.5000"}"#,
+    );
+    assert_eq!(
+        statut,
+        201,
+        "la création doit aboutir : {}",
+        String::from_utf8_lossy(&corps)
+    );
+
+    let cree: serde_json::Value =
+        serde_json::from_slice(&corps).expect("le corps créé doit être du JSON");
+    assert_eq!(
+        cree["price"], "12.5000",
+        "le décimal doit revenir en chaîne, à l'identique : {cree}"
+    );
+    assert_eq!(
+        cree["due"], "2024-02-01",
+        "la date doit revenir en AAAA-MM-JJ : {cree}"
+    );
+
+    let id = cree["id"]
+        .as_str()
+        .expect("la réponse doit porter un id")
+        .to_string();
+
+    // `OneOf` ne se prouve pas non plus par son rendu : `in` doit devenir un `IN` que la
+    // base comprend, et qui écarte ce qu'il ne nomme pas. La ligne créée est
+    // « published » ; celle posée par psql plus haut est « draft ».
+    let (statut, corps) = json_request(
+        port,
+        "POST",
+        "/invoices/filter",
+        br#"{"status":{"in":["published"]}}"#,
+    );
+    assert_eq!(
+        statut,
+        200,
+        "le filtre doit aboutir : {}",
+        String::from_utf8_lossy(&corps)
+    );
+    assert!(
+        ids_de(&corps).contains(&id),
+        "`in` doit retenir la ligne qui porte la valeur nommée : {}",
+        String::from_utf8_lossy(&corps)
+    );
+
+    let (statut, corps) = json_request(
+        port,
+        "POST",
+        "/invoices/filter",
+        br#"{"status":{"in":["draft"]}}"#,
+    );
+    assert_eq!(
+        statut,
+        200,
+        "le filtre doit aboutir : {}",
+        String::from_utf8_lossy(&corps)
+    );
+    assert!(
+        !ids_de(&corps).contains(&id),
+        "`in` doit écarter la ligne qui ne porte pas la valeur nommée : {}",
+        String::from_utf8_lossy(&corps)
+    );
+}
+
+/// Les mêmes trois types contre MySQL, qui ne tient un `CHECK` que depuis la 8.0.16 et
+/// ramènerait un `DECIMAL` nu à `DECIMAL(10, 0)`.
+///
+/// C'est le moteur pour lequel `decimal_len(19, 4)` est écrit en toutes lettres : ici
+/// seulement, une précision laissée au moteur perdrait les centimes à l'écriture, sans
+/// qu'aucune erreur le dise.
+#[test]
+#[ignore = "démarre MySQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn the_three_new_types_migrate_and_pass_their_tests_against_mysql() {
+    let mysql = common::start_mysql();
+    let url = common::url_of_mysql(&mysql);
+
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+
+    rbs(parent.path())
+        .args([
+            "new",
+            "demo-api",
+            "--database",
+            "mysql",
+            "--database-url",
+            &url,
+            "--core-path",
+            common::noyau()
+                .to_str()
+                .expect("chemin du noyau représentable"),
+            "--yes",
+        ])
+        .assert()
+        .success();
+
+    let projet = parent.path().join("demo-api");
+
+    // Un nom de feature propre à ce banc : la cible est celle du moteur, partagée avec
+    // `integration_new` et le banc de suppression logique MySQL.
+    rbs(&projet)
+        .args([
+            "generate",
+            "crud",
+            "receipts",
+            "--fields",
+            "due:date,status:enum(draft,published),price:decimal",
+        ])
+        .assert()
+        .success();
+
+    let cible = common::cible_pour("mysql");
+    let _verrou = common::verrou(&cible);
+
+    rbs(&projet)
+        .env("CARGO_TARGET_DIR", &cible)
+        .args(["migrate", "up"])
+        .assert()
+        .success();
+
+    let mut refus = mysql
+        .exec(ExecCommand::new([
+            "mysql",
+            &format!("-u{UTILISATEUR_MYSQL}"),
+            &format!("-p{MOT_DE_PASSE}"),
+            BASE,
+            "-e",
+            "insert into receipts (id, due, status, price, created_at, updated_at) \
+             values (x'00000000000040008000000000000001', '2024-01-15', 'archived', 12.5, now(), now());",
+        ]))
+        .expect("mysql doit pouvoir s'exécuter dans le conteneur");
+
+    let sortie_refus = format!(
+        "{}{}",
+        String::from_utf8_lossy(&refus.stdout_to_vec().expect("la sortie de mysql se lit")),
+        String::from_utf8_lossy(&refus.stderr_to_vec().expect("l'erreur de mysql se lit")),
+    );
+
+    assert!(
+        sortie_refus.to_lowercase().contains("check constraint"),
+        "MySQL a accepté une valeur hors de l'énumération : le CHECK ne tient \
+         pas :\n{sortie_refus}"
+    );
+
+    let mut relu = mysql
+        .exec(ExecCommand::new([
+            "mysql",
+            &format!("-u{UTILISATEUR_MYSQL}"),
+            &format!("-p{MOT_DE_PASSE}"),
+            BASE,
+            "-N",
+            "-e",
+            "insert into receipts (id, due, status, price, created_at, updated_at) \
+             values (x'00000000000040008000000000000001', '2024-01-15', 'draft', 12.5, now(), now()); \
+             select concat(due, '|', price) from receipts \
+             where id = x'00000000000040008000000000000001';",
+        ]))
+        .expect("mysql doit pouvoir s'exécuter dans le conteneur");
+
+    let sortie_relue = format!(
+        "{}{}",
+        String::from_utf8_lossy(&relu.stdout_to_vec().expect("la sortie de mysql se lit")),
+        String::from_utf8_lossy(&relu.stderr_to_vec().expect("l'erreur de mysql se lit")),
+    );
+
+    assert!(
+        sortie_relue.contains("2024-01-15|12.5000"),
+        "la date ou l'échelle du décimal ont bougé en base MySQL :\n{sortie_relue}"
+    );
+
+    let sortie = Command::new("cargo")
+        .current_dir(&projet)
+        .env("CARGO_TARGET_DIR", &cible)
+        .args(["test", "--workspace", "--", "--include-ignored"])
+        .output()
+        .expect("cargo doit être lançable");
+
+    let joues = format!(
+        "{}{}",
+        String::from_utf8_lossy(&sortie.stdout),
+        String::from_utf8_lossy(&sortie.stderr)
+    );
+
+    assert!(
+        sortie.status.success(),
+        "la suite du projet engendré échoue sur MySQL :\n{joues}"
+    );
+
+    assert!(
+        joues.contains(
+            "test receipts::tests::lifecycle::the_full_lifecycle_goes_through_the_api ... ok"
+        ),
+        "le cycle complet des trois types n'a pas été joué sur MySQL :\n{joues}"
+    );
+    assert!(
+        joues.contains("test receipts::tests::filter::the_filter_narrows_the_list ... ok"),
+        "le filtre sur la date n'a pas été joué sur MySQL :\n{joues}"
+    );
+}
+
+/// `date` et `enum(…)` sous SQLite, sans `decimal` — que ce moteur refuse avant tout
+/// rendu, ce qu'éprouve un test unitaire de `generate::command`.
+///
+/// SQLite n'a ni type date ni type énuméré : la colonne y est du texte, et c'est le
+/// `CHECK` qui la borne. Aucun conteneur n'est requis, la base étant un fichier du projet.
+#[test]
+#[ignore = "compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn a_date_and_an_enum_migrate_and_pass_their_tests_on_sqlite() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+
+    rbs(parent.path())
+        .args([
+            "new",
+            "demo-api",
+            "--database",
+            "sqlite",
+            "--database-url",
+            "sqlite://demo_api.db?mode=rwc",
+            "--core-path",
+            common::noyau()
+                .to_str()
+                .expect("chemin du noyau représentable"),
+            "--yes",
+        ])
+        .assert()
+        .success();
+
+    let projet = parent.path().join("demo-api");
+
+    rbs(&projet)
+        .args([
+            "generate",
+            "crud",
+            "reminders",
+            "--fields",
+            "due:date,status:enum(draft,published)",
+        ])
+        .assert()
+        .success();
+
+    // Une cible propre à ce banc, comme pour les autres bancs SQLite : ce moteur active
+    // des features `sea-orm` que PostgreSQL n'active pas.
+    let cible = common::cible_pour("types-sqlite");
+    let _verrou = common::verrou(&cible);
+
+    rbs(&projet)
+        .env("CARGO_TARGET_DIR", &cible)
+        .args(["migrate", "up"])
+        .assert()
+        .success();
+
+    // SeaORM range l'`uuid` en BLOB de 16 octets sur SQLite, jamais en texte : d'où les
+    // littéraux `x'…'`, comme au banc de suppression logique.
+    let refus = std::process::Command::new("sqlite3")
+        .arg(projet.join("demo_api.db"))
+        .arg(
+            "insert into reminders (id, due, status, created_at, updated_at) \
+             values (x'00000000000040008000000000000001', '2024-01-15', 'archived', datetime('now'), datetime('now'));",
+        )
+        .output()
+        .expect("sqlite3 doit être lançable");
+
+    let sortie_refus = format!(
+        "{}{}",
+        String::from_utf8_lossy(&refus.stdout),
+        String::from_utf8_lossy(&refus.stderr)
+    );
+
+    assert!(
+        !refus.status.success() && sortie_refus.to_lowercase().contains("check constraint"),
+        "SQLite a accepté une valeur hors de l'énumération : le CHECK ne tient \
+         pas :\n{sortie_refus}"
+    );
+
+    let relu = std::process::Command::new("sqlite3")
+        .arg(projet.join("demo_api.db"))
+        .arg(
+            "insert into reminders (id, due, status, created_at, updated_at) \
+             values (x'00000000000040008000000000000001', '2024-01-15', 'draft', datetime('now'), datetime('now')); \
+             select due || '|' || status from reminders \
+             where id = x'00000000000040008000000000000001';",
+        )
+        .output()
+        .expect("sqlite3 doit être lançable");
+
+    let sortie_relue = format!(
+        "{}{}",
+        String::from_utf8_lossy(&relu.stdout),
+        String::from_utf8_lossy(&relu.stderr)
+    );
+
+    assert!(
+        sortie_relue.contains("2024-01-15|draft"),
+        "la date ou la valeur énumérée ont bougé en base SQLite :\n{sortie_relue}"
+    );
+
+    let sortie = Command::new("cargo")
+        .current_dir(&projet)
+        .env("CARGO_TARGET_DIR", &cible)
+        .args(["test", "--workspace", "--", "--include-ignored"])
+        .output()
+        .expect("cargo doit être lançable");
+
+    let joues = format!(
+        "{}{}",
+        String::from_utf8_lossy(&sortie.stdout),
+        String::from_utf8_lossy(&sortie.stderr)
+    );
+
+    assert!(
+        sortie.status.success(),
+        "la suite du projet engendré échoue sur SQLite :\n{joues}"
+    );
+
+    assert!(
+        joues.contains(
+            "test reminders::tests::lifecycle::the_full_lifecycle_goes_through_the_api ... ok"
+        ),
+        "le cycle complet n'a pas été joué sur SQLite :\n{joues}"
+    );
+    assert!(
+        joues.contains("test reminders::tests::filter::the_filter_narrows_the_list ... ok"),
+        "le filtre sur la date n'a pas été joué sur SQLite :\n{joues}"
+    );
+}
+
 /// Le CRUD à routes de contenu compile contre le trait que le fragment installe.
 ///
 /// Les tests unitaires comparent des chaînes de caractères : seul ce banc dit si les
@@ -942,6 +1447,23 @@ impl Drop for Serveur {
         let _ = self.processus.kill();
         let _ = self.processus.wait();
     }
+}
+
+/// Les identifiants que porte une page rendue par une liste ou un filtre.
+fn ids_de(corps: &[u8]) -> Vec<String> {
+    let page: serde_json::Value = serde_json::from_slice(corps).expect("la page doit être du JSON");
+
+    page["data"]
+        .as_array()
+        .expect("la page rend un tableau")
+        .iter()
+        .map(|ligne| {
+            ligne["id"]
+                .as_str()
+                .expect("chaque ligne porte un identifiant")
+                .to_string()
+        })
+        .collect()
 }
 
 /// Joue une requête `POST` au corps JSON, et rend son statut avec son corps en octets.

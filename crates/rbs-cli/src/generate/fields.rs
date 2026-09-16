@@ -91,10 +91,21 @@ impl FieldType {
 
     /// SeaORM déduit la colonne du type Rust ; seul `text` doit être forcé, `String`
     /// donnant sinon un `varchar`.
+    ///
+    /// Les bras sont écrits un par un, sans `_` : un type nouveau ne compile pas tant que
+    /// personne n'a tranché s'il porte un type de colonne explicite, là où le joker
+    /// répondait `None` pour lui sans que la question soit posée.
     pub(crate) fn column_type_attribute(self) -> Option<&'static str> {
         match self {
             Self::Text => Some("Text"),
-            _ => None,
+            Self::String
+            | Self::Int
+            | Self::Float
+            | Self::Decimal
+            | Self::Bool
+            | Self::Uuid
+            | Self::Datetime
+            | Self::Date => None,
         }
     }
 }
