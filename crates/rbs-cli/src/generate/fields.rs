@@ -874,6 +874,7 @@ mod tests {
             ("string", FieldType::String),
             ("int", FieldType::Int),
             ("float", FieldType::Float),
+            ("decimal", FieldType::Decimal),
             ("bool", FieldType::Bool),
             ("uuid", FieldType::Uuid),
             ("datetime", FieldType::Datetime),
