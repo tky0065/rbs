@@ -333,6 +333,33 @@ pub fn record_feature(text: &str, feature: &str, name: &str) -> Result<Option<St
     Ok(Some(document.to_string()))
 }
 
+/// Rend le manifeste privé de `feature` dans `[package.metadata.rbs]`, ou `None` s'il ne
+/// l'inscrit pas.
+///
+/// Comme sa jumelle [`record_feature`], une section `[package.metadata.rbs]` absente est
+/// une faute : un manifeste qui ne la porte pas n'est pas un projet rbs, et n'a rien à
+/// désinstaller.
+pub fn remove_feature(text: &str, feature: &str, name: &str) -> Result<Option<String>, Error> {
+    let mut document = parse(text, name)?;
+
+    let Some(installees) = document
+        .get_mut("package")
+        .and_then(|package| package.get_mut("metadata"))
+        .and_then(|metadata| metadata.get_mut("rbs"))
+        .and_then(|rbs| rbs.get_mut("features"))
+        .and_then(Item::as_array_mut)
+    else {
+        return Err(Error::PasUnProjet {
+            path: name.to_string(),
+        });
+    };
+
+    let avant = installees.len();
+    installees.retain(|value| value.as_str() != Some(feature));
+
+    Ok((installees.len() != avant).then(|| document.to_string()))
+}
+
 /// Rend le manifeste avec `dep` déclarée dans `[dependencies]`, ou `None` s'il la porte
 /// déjà avec au moins ce qui est demandé.
 ///
@@ -384,6 +411,28 @@ pub fn add_dependency(text: &str, dep: &Dependency, name: &str) -> Result<Option
     Ok(modifie.then(|| document.to_string()))
 }
 
+/// Rend le manifeste privé de la dépendance `dep`, ou `None` s'il ne la déclare pas.
+///
+/// L'appelant a déjà tranché que personne d'autre ne la réclame : la règle d'union
+/// appartient à `remove::desinstallation`, qui seul connaît les fragments installés.
+/// Une dépendance déjà absente n'est pas une faute — c'est un travail déjà fait —, à la
+/// différence d'une section `[package.metadata.rbs]` manquante pour [`remove_feature`].
+pub fn remove_dependency(text: &str, dep: &str, name: &str) -> Result<Option<String>, Error> {
+    let mut document = parse(text, name)?;
+
+    let Some(dependencies) = document
+        .get_mut("dependencies")
+        .and_then(Item::as_table_like_mut)
+    else {
+        return Ok(None);
+    };
+
+    Ok(dependencies
+        .remove(dep)
+        .is_some()
+        .then(|| document.to_string()))
+}
+
 /// Rend le manifeste avec `feature` activée sur la dépendance `dep`, ou `None` si elle
 /// l'est déjà.
 ///
@@ -419,6 +468,35 @@ pub fn add_feature_to_dependency(
             key: dep.to_string(),
         })?
     };
+
+    Ok(modifie.then(|| document.to_string()))
+}
+
+/// Rend le manifeste avec `feature` désactivée sur `dep`, ou `None` si elle ne l'est pas.
+///
+/// Une dépendance absente n'est pas une faute ici, à la différence de
+/// [`add_feature_to_dependency`] : un fragment parti a pu emporter la dépendance dans le
+/// même plan.
+pub fn remove_feature_from_dependency(
+    text: &str,
+    dep: &str,
+    feature: &str,
+    name: &str,
+) -> Result<Option<String>, Error> {
+    let mut document = parse(text, name)?;
+
+    let Some(declared) = document
+        .get_mut("dependencies")
+        .and_then(Item::as_table_like_mut)
+        .and_then(|dependencies| dependencies.get_mut(dep))
+    else {
+        return Ok(None);
+    };
+
+    let modifie = disable_feature(declared, feature).ok_or_else(|| Error::Declaration {
+        path: name.to_string(),
+        key: dep.to_string(),
+    })?;
 
     Ok(modifie.then(|| document.to_string()))
 }
@@ -647,6 +725,25 @@ fn enable_feature(declared: &mut Item, feature: &str) -> Option<bool> {
     features.push(feature);
 
     Some(true)
+}
+
+/// Désactive `feature` sur une déclaration, en rendant `false` si elle n'y était pas et
+/// `None` si la déclaration n'a pas une forme manipulable.
+///
+/// Se pose à côté d'[`enable_feature`], même forme : une déclaration sans clé `features`
+/// du tout n'est pas malformée pour autant, elle n'a simplement rien à retirer.
+fn disable_feature(declared: &mut Item, feature: &str) -> Option<bool> {
+    spread(declared)?;
+
+    let table = declared.as_table_like_mut()?;
+    let Some(features) = table.get_mut("features").and_then(Item::as_array_mut) else {
+        return Some(false);
+    };
+
+    let avant = features.len();
+    features.retain(|value| value.as_str() != Some(feature));
+
+    Some(features.len() != avant)
 }
 
 /// Donne à une déclaration la forme d'une table inline, seule à pouvoir porter plus que
@@ -1410,6 +1507,154 @@ rust_decimal = {declaration}
         assert!(matches!(error, Error::DependanceAbsente { .. }), "{error}");
     }
 
+    const MANIFESTE_AVEC_FEATURES: &str = r#"[package]
+name = "demo"
+
+[package.metadata.rbs]
+version = "0.1.0"
+features = ["health", "mail", "auth"]
+"#;
+
+    /// La feature quitte le tableau, les autres gardent leur ordre.
+    #[test]
+    fn the_feature_leaves_the_array_and_the_others_keep_their_order() {
+        let apres = remove_feature(MANIFESTE_AVEC_FEATURES, "mail", "Cargo.toml")
+            .expect("le manifeste se lit")
+            .expect("le tableau change");
+
+        assert!(
+            apres.contains(r#"features = ["health", "auth"]"#),
+            "{apres}"
+        );
+    }
+
+    /// Une feature absente ne fait rien écrire.
+    #[test]
+    fn an_absent_feature_rewrites_nothing() {
+        assert_eq!(
+            remove_feature(MANIFESTE_AVEC_FEATURES, "storage", "Cargo.toml")
+                .expect("le manifeste se lit"),
+            None
+        );
+    }
+
+    /// L'asymétrie voulue avec `remove_dependency` et `remove_feature_from_dependency` :
+    /// une section absente n'est pas un travail déjà fait, c'est un manifeste qui n'est
+    /// pas un projet rbs.
+    #[test]
+    fn removing_a_feature_from_a_manifest_without_an_rbs_section_is_rejected() {
+        let error = remove_feature(MANIFESTE_MINIMAL_SANS_RBS, "mail", "Cargo.toml")
+            .expect_err("la section `[package.metadata.rbs]` manque");
+
+        assert!(matches!(error, Error::PasUnProjet { .. }), "{error}");
+    }
+
+    const MANIFESTE_MINIMAL_SANS_RBS: &str = "[package]\nname = \"demo\"\n";
+
+    const MANIFESTE_AVEC_LETTRE: &str = r#"[package]
+name = "demo"
+version = "0.1.0"
+
+[dependencies]
+# un commentaire du développeur
+axum = "0.9"
+lettre = { version = "0.11", features = ["tokio1-native-tls"] }
+"#;
+
+    /// La dépendance quitte la table, le reste du manifeste est intact.
+    #[test]
+    fn the_dependency_leaves_the_table_and_the_rest_survives() {
+        let apres = remove_dependency(MANIFESTE_AVEC_LETTRE, "lettre", "Cargo.toml")
+            .expect("le manifeste se lit")
+            .expect("la table change");
+
+        assert!(!apres.contains("lettre"), "{apres}");
+        assert!(apres.contains("# un commentaire du développeur"), "{apres}");
+    }
+
+    /// Une dépendance déjà absente est un travail déjà fait, pas une faute : `rbs remove`
+    /// doit pouvoir se relancer sans effet sur un fragment déjà désinstallé.
+    #[test]
+    fn an_absent_dependency_rewrites_nothing() {
+        assert_eq!(
+            remove_dependency(MANIFESTE_AVEC_LETTRE, "redis", "Cargo.toml")
+                .expect("le manifeste se lit"),
+            None
+        );
+    }
+
+    /// Sans table `[dependencies]` du tout, il n'y a rien à retirer non plus.
+    #[test]
+    fn removing_a_dependency_from_a_manifest_without_a_dependencies_table_rewrites_nothing() {
+        assert_eq!(
+            remove_dependency(MANIFESTE_MINIMAL, "redis", "Cargo.toml")
+                .expect("le manifeste se lit"),
+            None
+        );
+    }
+
+    const MANIFESTE_AVEC_TOKIO: &str = r#"[package]
+name = "demo"
+version = "0.1.0"
+
+[dependencies]
+tokio = { version = "1", features = ["macros", "time", "sync"] }
+"#;
+
+    /// Une feature quitte une dépendance, ses sœurs restent.
+    #[test]
+    fn a_feature_leaves_a_dependency_and_its_siblings_stay() {
+        let apres =
+            remove_feature_from_dependency(MANIFESTE_AVEC_TOKIO, "tokio", "sync", "Cargo.toml")
+                .expect("le manifeste se lit")
+                .expect("la déclaration change");
+
+        assert!(
+            apres.contains(r#"features = ["macros", "time"]"#),
+            "{apres}"
+        );
+    }
+
+    /// Une feature déjà absente d'une dépendance présente est un travail déjà fait.
+    #[test]
+    fn a_feature_already_absent_from_a_dependency_produces_no_text() {
+        assert_eq!(
+            remove_feature_from_dependency(MANIFESTE_AVEC_TOKIO, "tokio", "cors", "Cargo.toml")
+                .expect("le manifeste se lit"),
+            None
+        );
+    }
+
+    /// Une dépendance absente n'est pas une faute ici, à la différence de
+    /// `add_feature_to_dependency` : un fragment parti a pu l'emporter dans le même plan.
+    #[test]
+    fn removing_a_feature_from_an_absent_dependency_produces_no_text() {
+        assert_eq!(
+            remove_feature_from_dependency(MANIFESTE_AVEC_TOKIO, "redis", "cors", "Cargo.toml")
+                .expect("le manifeste se lit"),
+            None
+        );
+    }
+
+    /// `disable_feature` rend `None` sur une déclaration qui n'a pas de forme
+    /// manipulable — ici un booléen, forme que ni `spread` ni une table ne redressent.
+    #[test]
+    fn removing_a_feature_from_a_malformed_dependency_names_the_key() {
+        let source = r#"[package]
+name = "demo"
+version = "0.1.0"
+
+[dependencies]
+tokio = true
+"#;
+
+        let error = remove_feature_from_dependency(source, "tokio", "sync", "Cargo.toml")
+            .expect_err("une dépendance booléenne n'a pas de features à retirer");
+
+        assert!(matches!(error, Error::Declaration { .. }), "{error}");
+        assert!(error.to_string().contains("tokio"), "{error}");
+    }
+
     /// Manifeste témoin : commentaires de tête et de fin de ligne, lignes vides,
     /// alignements irréguliers, tables voisines que le patch doit ignorer.
     const TEMOIN: &str = r#"# Manifest écrit à la main.
@@ -1461,21 +1706,24 @@ features = ["health"]
             .collect()
     }
 
-    /// Établit qu'entre `TEMOIN` et `rendered`, seules les lignes annoncées ont changé — et
-    /// que le reste est resté dans le même ordre.
-    fn only_these_lines_changed(rendered: &str, perdues: &[&str], gagnees: &[&str]) {
+    /// Établit qu'entre `before` et `rendered`, seules les lignes annoncées ont changé —
+    /// et que le reste est resté dans le même ordre.
+    ///
+    /// `before` n'est pas figé sur `TEMOIN` : les tests de retrait partent d'une variante
+    /// de `TEMOIN` qui porte déjà ce qu'ils vont retirer.
+    fn only_these_lines_changed(before: &str, rendered: &str, perdues: &[&str], gagnees: &[&str]) {
         let expected = (
             perdues.iter().map(|l| l.to_string()).collect::<Vec<_>>(),
             gagnees.iter().map(|l| l.to_string()).collect::<Vec<_>>(),
         );
 
         assert_eq!(
-            modified_lines(TEMOIN, rendered),
+            modified_lines(before, rendered),
             expected,
             "le patch a débordé de sa ligne :\n{rendered}"
         );
         assert_eq!(
-            out_of_range(TEMOIN, &expected.0),
+            out_of_range(before, &expected.0),
             out_of_range(rendered, &expected.1),
             "le patch a réordonné le manifeste :\n{rendered}"
         );
@@ -1497,6 +1745,7 @@ features = ["health"]
         .expect("la dépendance est absente");
 
         only_these_lines_changed(
+            TEMOIN,
             &rendered,
             &[],
             &[r#"redis = { version = "0.32", features = ["tokio-comp"] }"#],
@@ -1510,6 +1759,7 @@ features = ["health"]
             .expect("la feature manque");
 
         only_these_lines_changed(
+            TEMOIN,
             &rendered,
             &[r#"sea-orm    = { version = "1.1", features = ["runtime-tokio-rustls"] }"#],
             &[
@@ -1525,9 +1775,63 @@ features = ["health"]
             .expect("la feature est absente");
 
         only_these_lines_changed(
+            TEMOIN,
             &rendered,
             &[r#"features = ["health"]"#],
             &[r#"features = ["health", "docker"]"#],
+        );
+    }
+
+    #[test]
+    fn removing_a_feature_only_touches_its_own_line() {
+        let avant = TEMOIN.replace(
+            r#"features = ["health"]"#,
+            r#"features = ["health", "mail"]"#,
+        );
+
+        let rendered = remove_feature(&avant, "mail", "Cargo.toml")
+            .expect("le manifeste est valide")
+            .expect("la feature est présente");
+
+        only_these_lines_changed(
+            &avant,
+            &rendered,
+            &[r#"features = ["health", "mail"]"#],
+            &[r#"features = ["health"]"#],
+        );
+    }
+
+    #[test]
+    fn removing_a_dependency_only_touches_its_own_line() {
+        let avant = TEMOIN.replace(
+            r#"tokio      = { version = "1", features = ["macros"] }"#,
+            "tokio      = { version = \"1\", features = [\"macros\"] }\n\
+             redis      = \"0.32\"",
+        );
+
+        let rendered = remove_dependency(&avant, "redis", "Cargo.toml")
+            .expect("le manifeste est valide")
+            .expect("la dépendance est présente");
+
+        only_these_lines_changed(&avant, &rendered, &[r#"redis      = "0.32""#], &[]);
+    }
+
+    #[test]
+    fn removing_a_feature_from_a_dependency_only_touches_its_own_line() {
+        let avant = TEMOIN.replace(
+            r#"tokio      = { version = "1", features = ["macros"] }"#,
+            r#"tokio      = { version = "1", features = ["macros", "time"] }"#,
+        );
+
+        let rendered = remove_feature_from_dependency(&avant, "tokio", "time", "Cargo.toml")
+            .expect("le manifeste est valide")
+            .expect("la feature est présente");
+
+        only_these_lines_changed(
+            &avant,
+            &rendered,
+            &[r#"tokio      = { version = "1", features = ["macros", "time"] }"#],
+            &[r#"tokio      = { version = "1", features = ["macros"] }"#],
         );
     }
 

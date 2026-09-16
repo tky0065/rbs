@@ -594,6 +594,18 @@ impl Builder {
                 dependency,
                 version,
             } => crate::metadata::align_version(&courant, dependency, version, path),
+            PatchToml::RetirerFeature(feature) => {
+                crate::metadata::remove_feature(&courant, feature, path)
+            }
+            PatchToml::RetirerDependance(dependency) => {
+                crate::metadata::remove_dependency(&courant, dependency, path)
+            }
+            PatchToml::RetirerFeatureADependance {
+                dependency,
+                feature,
+            } => {
+                crate::metadata::remove_feature_from_dependency(&courant, dependency, feature, path)
+            }
         }
         .map_err(Error::Metadata)?;
 

@@ -90,6 +90,24 @@ pub(crate) enum PatchToml {
         /// Version à écrire des deux côtés.
         version: String,
     },
+    /// Retire une feature de `[package.metadata.rbs]`.
+    // Idem `Effect::Supprimer` : sans construction hors des tests avant `rbs remove`.
+    #[allow(dead_code)]
+    RetirerFeature(String),
+    /// Retire une dépendance de `[dependencies]`.
+    ///
+    /// La règle d'union — savoir si un autre fragment installé la réclame encore —
+    /// appartient à l'appelant : ce patch retire ce qu'on lui nomme, point.
+    #[allow(dead_code)]
+    RetirerDependance(String),
+    /// Désactive une feature sur une dépendance que le manifeste déclare déjà.
+    #[allow(dead_code)]
+    RetirerFeatureADependance {
+        /// Nom de la dépendance visée.
+        dependency: String,
+        /// Feature à y désactiver.
+        feature: String,
+    },
 }
 
 /// Ce que l'action produira, connu dès la planification.

@@ -159,6 +159,17 @@ enum PatchTomlJson<'a> {
         dependance: &'a str,
         version: &'a str,
     },
+    // Bras minimal : le test de représentation JSON de `rbs remove` vient avec elle.
+    RetirerFeature {
+        feature: &'a str,
+    },
+    RetirerDependance {
+        nom: &'a str,
+    },
+    RetirerFeatureADependance {
+        dependance: &'a str,
+        feature: &'a str,
+    },
 }
 
 impl<'a> From<&'a PatchToml> for PatchTomlJson<'a> {
@@ -184,6 +195,17 @@ impl<'a> From<&'a PatchToml> for PatchTomlJson<'a> {
             } => PatchTomlJson::AlignerSurVersion {
                 dependance: dependency,
                 version,
+            },
+            PatchToml::RetirerFeature(feature) => PatchTomlJson::RetirerFeature { feature },
+            PatchToml::RetirerDependance(dependency) => {
+                PatchTomlJson::RetirerDependance { nom: dependency }
+            }
+            PatchToml::RetirerFeatureADependance {
+                dependency,
+                feature,
+            } => PatchTomlJson::RetirerFeatureADependance {
+                dependance: dependency,
+                feature,
             },
         }
     }
