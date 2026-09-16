@@ -634,7 +634,8 @@ fn a_soft_deleting_crud_keeps_a_global_uniqueness_on_mysql() {
 /// liste, une colonne `DECIMAL(19, 4)` rend « 12.5000 » sans rien arrondir — ce que la
 /// documentation promet dans les deux langues — et une `date` fait l'aller-retour en
 /// « AAAA-MM-JJ ». Le serveur lancé à la fin ajoute ce que le SQL ne dit pas : un nombre
-/// JSON pour un décimal est refusé plutôt qu'arrondi, et `OneOf` se traduit bien en `IN`.
+/// JSON pour un décimal est refusé plutôt qu'arrondi, `OneOf` se traduit bien en `IN`, et
+/// le document qu'il publie nomme les valeurs de l'énumération des deux côtés.
 #[test]
 #[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
 fn the_three_new_types_migrate_and_pass_their_tests_against_postgresql() {
@@ -871,6 +872,39 @@ fn the_three_new_types_migrate_and_pass_their_tests_against_postgresql() {
         !ids_de(&corps).contains(&id),
         "`in` doit écarter la ligne qui ne porte pas la valeur nommée : {}",
         String::from_utf8_lossy(&corps)
+    );
+
+    // Le document est le contrat que lisent les clients engendrés, et rien d'autre ne
+    // prouve que l'énumération l'atteint : le rendu des gabarits ne voit pas ce qu'utoipa
+    // en fait. Du côté de la réponse, elle y vient du type rendu ; du côté du filtre, elle
+    // n'y est que parce que le schéma cité porte l'énumération et non une chaîne — sans
+    // quoi un client typé accepterait n'importe quel texte dans le filtre, et une faute de
+    // frappe rendrait une page vide là où le document promet une erreur.
+    let (statut, corps) = json_request(port, "GET", "/api-docs/openapi.json", b"");
+    assert_eq!(
+        statut,
+        200,
+        "le document OpenAPI doit être servi : {}",
+        String::from_utf8_lossy(&corps)
+    );
+
+    let document: serde_json::Value =
+        serde_json::from_slice(&corps).expect("le document doit être du JSON");
+    let schemas = &document["components"]["schemas"];
+    let attendues = ["draft".to_string(), "published".to_string()];
+
+    assert_eq!(
+        valeurs_enumerees(
+            &document,
+            &schemas["InvoiceResponse"]["properties"]["status"]
+        ),
+        attendues,
+        "la réponse ne nomme pas les valeurs de l'énumération :\n{document}"
+    );
+    assert_eq!(
+        valeurs_enumerees(&document, &schemas["InvoiceFilter"]["properties"]["status"]),
+        attendues,
+        "le filtre ne nomme pas les valeurs de l'énumération :\n{document}"
     );
 }
 
@@ -1473,6 +1507,45 @@ fn ids_de(corps: &[u8]) -> Vec<String> {
                 .to_string()
         })
         .collect()
+}
+
+/// Les valeurs énumérées qu'un client trouve à cet endroit du document, `$ref` suivis.
+///
+/// utoipa tantôt recopie le schéma d'un paramètre générique, tantôt le cite : ce qui
+/// compte n'est pas la forme retenue, mais qu'un client qui lit le document y trouve les
+/// valeurs. La descente suit donc les `$ref`, les `oneOf` et les `items`, et retient les
+/// noms déjà visités — un schéma qui se cite lui-même boucle sinon.
+fn valeurs_enumerees(document: &serde_json::Value, depart: &serde_json::Value) -> Vec<String> {
+    let mut valeurs = Vec::new();
+    let mut vus: Vec<String> = Vec::new();
+    let mut pile = vec![depart.clone()];
+
+    while let Some(noeud) = pile.pop() {
+        if let Some(nom) = noeud["$ref"].as_str().and_then(|r| r.rsplit('/').next())
+            && !vus.iter().any(|vu| vu == nom)
+        {
+            vus.push(nom.to_string());
+            pile.push(document["components"]["schemas"][nom].clone());
+        }
+        if let Some(liste) = noeud["enum"].as_array() {
+            valeurs.extend(liste.iter().filter_map(|v| v.as_str().map(str::to_owned)));
+        }
+        for cle in ["oneOf", "anyOf", "allOf"] {
+            if let Some(formes) = noeud[cle].as_array() {
+                pile.extend(formes.iter().cloned());
+            }
+        }
+        if !noeud["items"].is_null() {
+            pile.push(noeud["items"].clone());
+        }
+        if let Some(proprietes) = noeud["properties"].as_object() {
+            pile.extend(proprietes.values().cloned());
+        }
+    }
+
+    valeurs.sort();
+    valeurs.dedup();
+    valeurs
 }
 
 /// Joue une requête `POST` au corps JSON, et rend son statut avec son corps en octets.
