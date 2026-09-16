@@ -119,9 +119,11 @@ non-public address at connection time: no name can change its answer between the
 the request, and so none reaches an internal service. The delivery client ignores the
 environment's proxy settings — `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`: through a proxy,
 an HTTPS delivery is tunnelled with `CONNECT`, the proxy resolves the target itself, and
-the resolver would only ever see the proxy's own host. Redirects are never followed: a 3xx
-is a failed delivery like any other non-2xx. A delivery whose target is blocked is
-abandoned, not retried — nothing would change on the fifth attempt.
+the resolver would only ever see the proxy's own host. On a network whose only route out
+is a mandatory proxy, that closes the door for good: no delivery leaves at all, and no key
+reopens it — a target the resolver never sees is a target nothing vouches for. Redirects
+are never followed: a 3xx is a failed delivery like any other non-2xx. A delivery whose
+target is blocked is abandoned, not retried — nothing would change on the fifth attempt.
 
 In `development` every rule is lifted: a receiver on `http://localhost:4000` is the normal
 case on a workstation. `development` is also what a process gets when `RBS_ENV` is unset

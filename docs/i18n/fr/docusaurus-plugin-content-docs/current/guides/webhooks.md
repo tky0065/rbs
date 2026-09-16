@@ -119,9 +119,12 @@ connexion : aucun nom ne peut changer de réponse entre le contrôle et l'envoi,
 atteindre un service interne. Le client des livraisons ignore les réglages de mandataire
 de l'environnement — `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` : derrière un mandataire, une
 livraison HTTPS part en tunnel `CONNECT`, c'est le mandataire qui résout la cible, et le
-résolveur ne verrait jamais que l'hôte du mandataire. Les redirections ne sont jamais suivies : un 3xx est une livraison échouée comme tout autre
-hors 2xx. Une livraison dont la cible est interdite est abandonnée, non réessayée — rien ne
-changerait au cinquième essai.
+résolveur ne verrait jamais que l'hôte du mandataire. Sur un réseau dont la seule sortie
+est un mandataire obligatoire, la porte est alors fermée pour de bon : aucune livraison ne
+part, et aucune clé ne la rouvre — une cible que le résolveur ne voit jamais est une cible
+dont rien ne répond. Les redirections ne sont jamais suivies : un 3xx est une livraison
+échouée comme tout autre hors 2xx. Une livraison dont la cible est interdite est
+abandonnée, non réessayée — rien ne changerait au cinquième essai.
 
 En `development`, toutes ces règles sont levées : un receveur sur `http://localhost:4000`
 est le cas nominal d'un poste de travail. `development` est aussi le profil que reçoit un
