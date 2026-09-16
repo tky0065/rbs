@@ -5,14 +5,15 @@ use error::{keyword_suggestions, to_snake_case};
 use serde::Serialize;
 use serde::ser::{SerializeStruct, Serializer};
 
-/// Un des huit types scalaires de la grammaire `--fields` — le neuvième, `references`, et
-/// le dixième, `enum(a,b,c)`, sont portés par `FieldKind` : chacun prend un argument que
+/// Un des neuf types scalaires de la grammaire `--fields` — le dixième, `references`, et
+/// le onzième, `enum(a,b,c)`, sont portés par `FieldKind` : chacun prend un argument que
 /// la forme `nom:type` ne peut pas exprimer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FieldType {
     String,
     Int,
     Float,
+    Decimal,
     Bool,
     Uuid,
     Datetime,
@@ -21,8 +22,8 @@ pub(crate) enum FieldType {
 }
 
 impl FieldType {
-    pub(crate) const NAMES: [&'static str; 8] = [
-        "string", "int", "float", "bool", "uuid", "datetime", "date", "text",
+    pub(crate) const NAMES: [&'static str; 9] = [
+        "string", "int", "float", "decimal", "bool", "uuid", "datetime", "date", "text",
     ];
 
     pub(crate) fn parse(word: &str) -> Option<Self> {
@@ -30,6 +31,7 @@ impl FieldType {
             "string" => Self::String,
             "int" => Self::Int,
             "float" => Self::Float,
+            "decimal" => Self::Decimal,
             "bool" => Self::Bool,
             "uuid" => Self::Uuid,
             "datetime" => Self::Datetime,
@@ -44,6 +46,7 @@ impl FieldType {
             Self::String => "string",
             Self::Int => "int",
             Self::Float => "float",
+            Self::Decimal => "decimal",
             Self::Bool => "bool",
             Self::Uuid => "uuid",
             Self::Datetime => "datetime",
@@ -57,6 +60,10 @@ impl FieldType {
             Self::String | Self::Text => "String",
             Self::Int => "i32",
             Self::Float => "f64",
+            // `rust_decimal::Decimal`, que `sea_orm::prelude` réexporte sous
+            // `with-rust_decimal` : le manifeste du projet reçoit l'un et l'autre dès
+            // qu'un champ le demande.
+            Self::Decimal => "Decimal",
             Self::Bool => "bool",
             Self::Uuid => "Uuid",
             Self::Datetime => "DateTimeWithTimeZone",
@@ -69,6 +76,11 @@ impl FieldType {
             Self::String => "string()",
             Self::Int => "integer()",
             Self::Float => "double()",
+            // La précision est écrite, et non laissée au moteur : MySQL ramènerait une
+            // colonne `DECIMAL` sans argument à `DECIMAL(10, 0)`, et les centimes
+            // disparaîtraient à l'écriture sans qu'une erreur le dise. Dix-neuf chiffres
+            // dont quatre décimales tiennent une somme d'argent et un taux.
+            Self::Decimal => "decimal_len(19, 4)",
             Self::Bool => "boolean()",
             Self::Uuid => "uuid()",
             Self::Datetime => "timestamp_with_time_zone()",
@@ -354,7 +366,7 @@ impl Field {
 
     /// Le champ mérite-t-il une contrainte d'email dans les DTO ?
     ///
-    /// La grammaire de `--fields` n'a pas de type `email` et n'en aura pas : huit types
+    /// La grammaire de `--fields` n'a pas de type `email` et n'en aura pas : neuf types
     /// suffisent à décrire une colonne, et un format de chaîne n'est pas un type de
     /// colonne. La contrainte se déduit donc du nom, seule information dont on dispose.
     pub(crate) fn validates_email(&self) -> bool {
@@ -959,7 +971,7 @@ mod tests {
 
     #[test]
     fn a_type_outside_the_grammar_is_not_recognised() {
-        assert_eq!(FieldType::parse("decimal"), None);
+        assert_eq!(FieldType::parse("money"), None);
         assert_eq!(FieldType::parse("String"), None);
         assert_eq!(FieldType::parse(""), None);
     }
@@ -982,6 +994,7 @@ mod tests {
         assert_eq!(FieldType::Uuid.rust_type(), "Uuid");
         assert_eq!(FieldType::Datetime.rust_type(), "DateTimeWithTimeZone");
         assert_eq!(FieldType::Date.rust_type(), "Date");
+        assert_eq!(FieldType::Decimal.rust_type(), "Decimal");
     }
 
     #[test]
@@ -997,6 +1010,9 @@ mod tests {
             "timestamp_with_time_zone()"
         );
         assert_eq!(FieldType::Date.migration_method(), "date()");
+        // Sans la longueur, MySQL tronquerait la colonne à `DECIMAL(10, 0)` : les
+        // centimes disparaîtraient à l'écriture, sans une erreur pour le dire.
+        assert_eq!(FieldType::Decimal.migration_method(), "decimal_len(19, 4)");
     }
 
     #[test]
@@ -1120,13 +1136,13 @@ mod tests {
 
     #[test]
     fn a_type_outside_the_grammar_is_reported_on_its_field() {
-        let error = parse("price:decimal").expect_err("decimal n'est pas dans la grammaire");
+        let error = parse("price:money").expect_err("money n'est pas dans la grammaire");
 
         assert_eq!(error.errors[0].label, "price");
         assert_eq!(
             error.errors[0].kind,
             ErrorKind::UnknownType {
-                name: "decimal".to_string()
+                name: "money".to_string()
             }
         );
     }
@@ -1369,7 +1385,7 @@ mod tests {
     #[test]
     fn every_fault_in_the_string_surfaces_in_order() {
         let error =
-            parse("Title:string,type:text,price:decimal").expect_err("trois fautes attendues");
+            parse("Title:string,type:text,price:money").expect_err("trois fautes attendues");
 
         assert_eq!(error.errors.len(), 3);
         assert_eq!(error.errors[0].rank, 1);
@@ -1391,7 +1407,7 @@ mod tests {
 
     #[test]
     fn a_field_carrying_two_faults_surfaces_only_the_first() {
-        let error = parse("Type:decimal").expect_err("deux fautes, une seule remontée");
+        let error = parse("Type:money").expect_err("deux fautes, une seule remontée");
 
         assert_eq!(error.errors.len(), 1);
         assert!(matches!(

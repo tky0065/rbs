@@ -38,7 +38,7 @@ disent la même chose, et la forme courte est celle que l'on écrit le plus souv
 | Opérateur | S'applique à | Sens |
 |---|---|---|
 | `eq` | toute colonne | égalité stricte |
-| `gt`, `gte`, `lt`, `lte` | `int`, `float`, `datetime`, `date`, `uuid` | comparaison |
+| `gt`, `gte`, `lt`, `lte` | `int`, `float`, `decimal`, `datetime`, `date`, `uuid` | comparaison |
 | `contains` | `string`, `text` | sous-chaîne, `LIKE '%…%'` |
 | `in` | `enum(a,b,c)` | l'une des valeurs citées ; une liste vide n'en accepte aucune |
 | `is_null` | toute colonne | `true` exige une colonne nulle, `false` une colonne renseignée |

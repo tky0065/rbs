@@ -95,14 +95,15 @@ mod tests {
     fn each_type_of_the_grammar_projects_into_the_entity() {
         let rendered = entity(
             "samples",
-            "title:string,quantity:int,price:float,active:bool,owner:uuid,\
+            "title:string,quantity:int,ratio:float,price:decimal,active:bool,owner:uuid,\
              published_at:datetime,due:date,body:text",
         );
 
         for expected in [
             "pub title: String,",
             "pub quantity: i32,",
-            "pub price: f64,",
+            "pub ratio: f64,",
+            "pub price: Decimal,",
             "pub active: bool,",
             "pub owner: Uuid,",
             "pub published_at: DateTimeWithTimeZone,",

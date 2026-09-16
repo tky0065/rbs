@@ -206,9 +206,9 @@ unique "` et `"titre:string,email:string:unique"` décrivent les deux mêmes cha
 `--fields` vide ne déclare aucun champ. Les champs gardent leur ordre de déclaration dans
 l'entité comme dans la migration.
 
-### Les dix types
+### Les onze types
 
-Il n'y en a pas un onzième, ni de type `email` : un format de chaîne n'est pas un type de
+Il n'y en a pas un douzième, ni de type `email` : un format de chaîne n'est pas un type de
 colonne.
 
 | Type | Rust | Migration |
@@ -217,6 +217,7 @@ colonne.
 | `text` | `String` | `text()` |
 | `int` | `i32` | `integer()` |
 | `float` | `f64` | `double()` |
+| `decimal` | `Decimal` | `decimal_len(19, 4)` |
 | `bool` | `bool` | `boolean()` |
 | `uuid` | `Uuid` | `uuid()` |
 | `datetime` | `DateTimeWithTimeZone` | `timestamp_with_time_zone()` |
@@ -225,6 +226,18 @@ colonne.
 
 `string` et `text` partagent leur type Rust : `text` est donc le seul à porter en plus un
 type de colonne explicite sur l'entité, sans quoi SeaORM déduirait un `varchar`.
+
+`float` et `decimal` portent tous deux un nombre à virgule, et seul le second le porte
+exactement : `rust_decimal::Decimal`, une colonne `DECIMAL(19, 4)` — écrite en toutes
+lettres, faute de quoi MySQL ramènerait un `DECIMAL` nu à `DECIMAL(10, 0)` — et une chaîne
+en JSON (`"12.5000"`), pour qu'un client JavaScript n'y perde aucun centime. En déclarer un
+ajoute au manifeste du projet `rust_decimal` et la feature `with-rust_decimal` de sea-orm ;
+la forme en chaîne y est épinglée par `serde-str` plutôt que laissée au défaut de la crate, et
+un nombre JSON est refusé plutôt qu'arrondi en silence — ce qui est tout l'objet du type.
+**SQLite le refuse**, avant toute écriture : sqlx-sqlite écarte délibérément le décimal
+exact — son affinité `NUMERIC` ne garde que quinze chiffres significatifs — et sea-query ne
+lie un `Decimal` que pour PostgreSQL et MySQL. Le refus nomme le champ et propose les deux
+replis : `float`, ou un entier en centimes.
 
 `enum(a,b,c)` est le seul type à porter ses propres valeurs. Elles sont en snake_case,
 distinctes, et au moins une. Le modèle déclare une énumération nommée d'après le champ en
@@ -236,7 +249,7 @@ un `CHECK`. Un champ dont la forme PascalCase heurte un type que le modèle déc
 écriture. Une telle colonne se filtre par `eq`, `in` et `is_null`, et non par les comparaisons
 d'une colonne ordonnée ; [Filtrage](../guides/filtering.md) en donne la table.
 
-Le dixième, `references`, n'est pas un scalaire du tout : il pointe la colonne vers une
+Le onzième, `references`, n'est pas un scalaire du tout : il pointe la colonne vers une
 autre entité plutôt que de lui donner un type propre.
 
 ```text
@@ -319,13 +332,13 @@ Toutes les fautes de la ligne sont collectées en une passe : la ligne se corrig
 plutôt qu'une faute par exécution. Un champ qui en porte deux ne remonte que la première.
 
 ```text
-$ rbs generate crud tags --fields "Title:string,type:text,prix:decimal,slug:string:unique:index,email:string,email:int" --dry-run
+$ rbs generate crud tags --fields "Title:string,type:text,prix:money,slug:string:unique:index,email:string,email:int" --dry-run
 erreur : champ 1 « Title » — le nom doit être en snake_case : minuscules ASCII, chiffres et souligné
         → essayez « title »
 erreur : champ 2 « type » — « type » est un mot-clé Rust
         → essayez « kind » ou « type_ »
-erreur : champ 3 « prix » — type inconnu « decimal »
-        → string, int, float, bool, uuid, datetime, date, text, references:<table>, enum(a,b,c)
+erreur : champ 3 « prix » — type inconnu « money »
+        → string, int, float, decimal, bool, uuid, datetime, date, text, references:<table>, enum(a,b,c)
 erreur : champ 4 « slug » — « index » redondant : « unique » pose déjà un index
         → retirez « index »
 erreur : champ 6 « email » — « email » est déjà déclaré au champ 5

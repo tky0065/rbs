@@ -2,6 +2,9 @@ use rbs_core::{Comparison, Error, {% if has_enum %}OneOf, {% endif %}Result, Sor
 {%- if has_date %}
 use sea_orm::prelude::Date;
 {%- endif %}
+{%- if has_decimal %}
+use sea_orm::prelude::Decimal;
+{%- endif %}
 use sea_orm::prelude::{DateTimeUtc, Uuid};
 use sea_orm::sea_query::LikeExpr;
 use sea_orm::{ColumnTrait, Condition, QueryFilter, QueryOrder, Select, Value};

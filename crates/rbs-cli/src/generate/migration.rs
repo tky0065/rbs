@@ -197,7 +197,7 @@ mod tests {
     fn each_type_projects_to_its_column_method() {
         let rendered = migration(
             "samples",
-            "title:string,quantity:int,price:float,active:bool,owner:uuid,\
+            "title:string,quantity:int,ratio:float,price:decimal,active:bool,owner:uuid,\
              published_at:datetime,due:date,body:text",
         )
         .content;
@@ -207,7 +207,8 @@ mod tests {
         for expected in [
             "ColumnDef::new(Samples::Title).string()",
             "ColumnDef::new(Samples::Quantity).integer()",
-            "ColumnDef::new(Samples::Price).double()",
+            "ColumnDef::new(Samples::Ratio).double()",
+            "ColumnDef::new(Samples::Price).decimal_len(19,4)",
             "ColumnDef::new(Samples::Active).boolean()",
             "ColumnDef::new(Samples::Owner).uuid()",
             "ColumnDef::new(Samples::PublishedAt).timestamp_with_time_zone()",

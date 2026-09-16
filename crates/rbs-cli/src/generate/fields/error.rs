@@ -205,7 +205,7 @@ impl ErrorKind {
             ),
             // `references` n'est pas de `FieldType::NAMES` : c'est un `FieldKind` à
             // part, qui attend une cible — l'énumérer nu laisserait croire à un type
-            // sans argument, comme les huit autres.
+            // sans argument, comme les neuf autres.
             Self::UnknownType { .. } => {
                 let mut names = FieldType::NAMES.join(", ");
                 names.push_str(", references:<table>, enum(a,b,c)");
@@ -473,11 +473,11 @@ mod tests {
     fn an_unknown_type_lists_the_allowed_types() {
         let text = rendered(
             ErrorKind::UnknownType {
-                name: "decimal".to_string(),
+                name: "money".to_string(),
             },
             "price",
         );
-        assert!(text.contains("type inconnu « decimal »"), "{text}");
+        assert!(text.contains("type inconnu « money »"), "{text}");
         for word in FieldType::NAMES {
             assert!(text.contains(word), "« {word} » absent de : {text}");
         }
@@ -490,7 +490,7 @@ mod tests {
     fn an_unknown_type_also_mentions_references_with_its_target() {
         let text = rendered(
             ErrorKind::UnknownType {
-                name: "decimal".to_string(),
+                name: "money".to_string(),
             },
             "price",
         );
@@ -725,7 +725,7 @@ mod tests {
     fn an_unknown_type_also_mentions_the_enum_grammar() {
         let text = rendered(
             ErrorKind::UnknownType {
-                name: "decimal".to_string(),
+                name: "money".to_string(),
             },
             "price",
         );

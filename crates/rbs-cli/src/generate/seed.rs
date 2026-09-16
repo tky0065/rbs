@@ -53,6 +53,7 @@ pub(crate) fn render(
                 .fields
                 .iter()
                 .any(|c| c.column_type() == FieldType::Uuid && !(c.optional && c.reference().is_some())),
+            decimal => feature.has_decimal(),
         },
     )
 }
@@ -112,6 +113,9 @@ fn value(champ: &Field, rang: usize) -> String {
         FieldType::String | FieldType::Text => format!("\"{}-{rang}\".to_owned()", champ.name),
         FieldType::Int => (41 + rang).to_string(),
         FieldType::Float => format!("{}.2", 3 + rang),
+        // Construit en centimes, et non lu d'un littéral flottant : `Decimal::from(12.99)`
+        // n'existe pas sans arrondi binaire, ce que ce type existe pour éviter.
+        FieldType::Decimal => format!("Decimal::new({}, 2)", 1199 + 100 * rang),
         FieldType::Bool => (rang % 2 == 1).to_string(),
         FieldType::Uuid => format!("Uuid::from_u128({rang})"),
         FieldType::Datetime => "chrono::Utc::now().into()".to_string(),
@@ -273,6 +277,39 @@ mod tests {
         assert!(
             rendered.contains("due: Set(chrono::NaiveDate::from_ymd_opt(2024, 1, 2).unwrap())"),
             "seconde ligne :\n{rendered}"
+        );
+    }
+
+    /// Un décimal se sème par sa forme exacte, en centimes : un littéral flottant
+    /// (`12.99`) rentrerait dans le `Decimal` par un arrondi binaire, ce que ce type
+    /// existe pour éviter.
+    #[test]
+    fn a_decimal_field_receives_an_exact_value_that_differs_between_the_two_rows() {
+        let rendered = seed("orders", "price:decimal");
+
+        assert!(
+            rendered.contains("price: Set(Decimal::new(1299, 2))"),
+            "première ligne :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("price: Set(Decimal::new(1399, 2))"),
+            "seconde ligne :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("use sea_orm::prelude::Decimal;"),
+            "l'import de `Decimal` manque :\n{rendered}"
+        );
+    }
+
+    /// Un seed sans colonne décimale n'importe pas `Decimal` : le binaire des seeds
+    /// compile sous les mêmes avertissements que le reste du projet.
+    #[test]
+    fn a_seed_without_a_decimal_column_does_not_import_decimal() {
+        let rendered = seed("articles", "title:string");
+
+        assert!(
+            !rendered.contains("sea_orm::prelude::Decimal;"),
+            "l'import de `Decimal` est présent sans servir :\n{rendered}"
         );
     }
 

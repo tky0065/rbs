@@ -97,6 +97,13 @@ comparaison_documentee!(
     "Opérateurs acceptés sur une colonne datée."
 );
 comparaison_documentee!(
+    DecimalComparisonSchema,
+    DecimalComparisonOperators,
+    DecimalSchema,
+    "Conditions acceptées sur une colonne décimale exacte.",
+    "Opérateurs acceptés sur une colonne décimale exacte."
+);
+comparaison_documentee!(
     DateComparisonSchema,
     DateComparisonOperators,
     DateSchema,
@@ -125,6 +132,19 @@ pub struct DateTimeSchema(
 #[schema(value_type = String, format = Date)]
 pub struct DateSchema(
     /// Le jour, en ISO 8601 (`AAAA-MM-JJ`).
+    pub String,
+);
+
+/// Un décimal exact, écrit en chaîne (`"12.5000"`).
+///
+/// La chaîne plutôt que le nombre : un nombre JSON passe par le flottant d'un client
+/// JavaScript, qui perdrait les centimes que ce type existe pour garder. Elle évite en
+/// prime au noyau une dépendance à `rust_decimal`, qu'il n'a par ailleurs aucune raison
+/// de porter.
+#[derive(Deserialize, ToSchema)]
+#[schema(value_type = String, format = "decimal")]
+pub struct DecimalSchema(
+    /// Le décimal, écrit en chaîne.
     pub String,
 );
 
@@ -271,6 +291,17 @@ mod tests {
         assert_eq!(schema["format"], "date");
     }
 
+    /// Un décimal exact se documente en chaîne : le noyau ne dépend pas de
+    /// `rust_decimal`, et un nombre JSON passerait de toute façon par le flottant d'un
+    /// client JavaScript, qui perdrait les centimes.
+    #[test]
+    fn an_exact_decimal_is_documented_as_a_string() {
+        let schema = schema::<DecimalSchema>();
+
+        assert_eq!(schema["type"], "string");
+        assert_eq!(schema["format"], "decimal");
+    }
+
     /// Le second membre nomme les opérateurs, un à un : c'est ce que la forme longue
     /// apporte, et un `$ref` qui ne serait pas exposé pendrait dans le vide.
     #[test]
@@ -286,6 +317,10 @@ mod tests {
             ),
             (
                 schema::<DateComparisonOperators>(),
+                vec!["eq", "gt", "gte", "lt", "lte", "is_null"],
+            ),
+            (
+                schema::<DecimalComparisonOperators>(),
                 vec!["eq", "gt", "gte", "lt", "lte", "is_null"],
             ),
             (
@@ -325,6 +360,10 @@ mod tests {
                 DateComparisonSchema::name(),
                 vec!["DateSchema", "DateComparisonOperators"],
             ),
+            (
+                DecimalComparisonSchema::name(),
+                vec!["DecimalSchema", "DecimalComparisonOperators"],
+            ),
             (TextMatchSchema::name(), vec!["TextMatchOperators"]),
         ] {
             let mut exposes = Vec::new();
@@ -332,6 +371,7 @@ mod tests {
                 "BoolComparisonSchema" => BoolComparisonSchema::schemas(&mut exposes),
                 "DateTimeComparisonSchema" => DateTimeComparisonSchema::schemas(&mut exposes),
                 "DateComparisonSchema" => DateComparisonSchema::schemas(&mut exposes),
+                "DecimalComparisonSchema" => DecimalComparisonSchema::schemas(&mut exposes),
                 _ => TextMatchSchema::schemas(&mut exposes),
             }
 

@@ -45,6 +45,7 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
             colonnes => colonnes,
             lang => feature.lang.name(),
             has_date => feature.has_date(),
+            has_decimal => feature.has_decimal(),
             has_enum => !feature.enum_types().is_empty(),
             // `Column` et `Entity` sont importés de toute entité ; une énumération les
             // rejoint dans le même `use`, que rustfmt trie.
@@ -100,6 +101,7 @@ fn schema(field: &Field) -> &'static str {
         FieldType::String | FieldType::Text => "TextMatchSchema",
         FieldType::Int => "IntComparisonSchema",
         FieldType::Float => "FloatComparisonSchema",
+        FieldType::Decimal => "DecimalComparisonSchema",
         FieldType::Bool => "BoolComparisonSchema",
         FieldType::Uuid => "UuidComparisonSchema",
         FieldType::Datetime => "DateTimeComparisonSchema",
@@ -202,11 +204,11 @@ mod tests {
         }
     }
 
-    /// Une colonne décimale a son propre schéma : `float` est le seul type de `--fields`
+    /// Une colonne flottante a son propre schéma : `float` est le seul type de `--fields`
     /// que `CHAMPS` ne porte pas, et un type sans schéma serait une erreur de compilation
     /// dans le projet engendré.
     #[test]
-    fn a_decimal_column_cites_the_decimal_schema() {
+    fn a_float_column_cites_the_float_schema() {
         let rendered = filtre("meters", "ratio:float");
 
         assert!(
@@ -264,6 +266,40 @@ mod tests {
         assert!(
             !rendered.contains("sea_orm::prelude::Date;"),
             "l'import de `Date` est présent sans servir :\n{rendered}"
+        );
+    }
+
+    /// Une colonne `decimal` se compare sur `Decimal`, et cite son propre schéma : celui
+    /// d'un `float` documenterait un nombre là où la condition s'écrit en chaîne.
+    #[test]
+    fn a_decimal_column_compares_on_decimal_and_cites_its_own_schema() {
+        let rendered = filtre("orders", "price:decimal");
+
+        assert!(
+            rendered.contains("pub price: Option<Comparison<Decimal>>,"),
+            "« price » ne compare pas sur `Decimal` :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(
+                "#[schema(value_type = Option<rbs_core::DecimalComparisonSchema>)]\n    pub price:"
+            ),
+            "le schéma du décimal exact manque :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("use sea_orm::prelude::Decimal;"),
+            "l'import de `Decimal` manque :\n{rendered}"
+        );
+    }
+
+    /// Une entité sans colonne `decimal` n'importe pas `Decimal` : le projet engendré
+    /// échouerait sous `-D warnings` sur un import qui ne sert à rien.
+    #[test]
+    fn an_entity_without_a_decimal_column_does_not_import_decimal() {
+        let rendered = filtre("meters", "views:int,published:bool");
+
+        assert!(
+            !rendered.contains("sea_orm::prelude::Decimal;"),
+            "l'import de `Decimal` est présent sans servir :\n{rendered}"
         );
     }
 

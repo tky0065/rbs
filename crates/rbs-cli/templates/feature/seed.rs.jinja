@@ -1,6 +1,9 @@
 //! Données de démonstration de `{@ module @}`.
 
 use sea_orm::ActiveValue::Set;
+{%- if decimal %}
+use sea_orm::prelude::Decimal;
+{%- endif %}
 {%- if uuid %}
 use sea_orm::prelude::Uuid;
 {%- endif %}

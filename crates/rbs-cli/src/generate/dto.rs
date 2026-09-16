@@ -152,6 +152,49 @@ mod tests {
         );
     }
 
+    /// Un décimal exact voyage en chaîne (`"12.5000"`) : un nombre JSON passerait par le
+    /// flottant d'un client JavaScript, qui perdrait précisément les centimes que ce type
+    /// existe pour garder. Le document le dit, champ par champ.
+    #[test]
+    fn a_decimal_field_is_documented_as_a_string() {
+        let rendered = dto("orders", "price:decimal,remise:decimal:optional");
+
+        let creation = extract(&rendered, "pub struct CreateOrder {");
+        assert!(
+            creation
+                .contains("#[schema(value_type = String, format = \"decimal\")]\n    pub price:"),
+            "le format d'un décimal obligatoire manque :\n{creation}"
+        );
+        assert!(
+            creation.contains(
+                "#[schema(value_type = Option<String>, format = \"decimal\")]\n    pub remise:"
+            ),
+            "le format d'un décimal optionnel manque :\n{creation}"
+        );
+        assert!(creation.contains("pub price: Decimal,"), "{creation}");
+
+        let response = extract(&rendered, "pub struct OrderResponse {");
+        assert!(response.contains("pub price: Decimal,"), "{response}");
+    }
+
+    /// `Decimal` n'entre dans `sea_orm::prelude` que par un import explicite, et que sous
+    /// la feature `with-rust_decimal` : sans lui, un champ `decimal` ne compilerait pas —
+    /// avec lui sans servir, le projet échouerait sous `-D warnings`.
+    #[test]
+    fn a_decimal_field_is_imported_and_only_when_needed() {
+        let rendered = dto("orders", "price:decimal");
+        assert!(
+            rendered.contains("use sea_orm::prelude::Decimal;"),
+            "l'import de `Decimal` manque :\n{rendered}"
+        );
+
+        let sans_decimal = dto("users", "nom:string");
+        assert!(
+            !sans_decimal.contains("sea_orm::prelude::Decimal;"),
+            "l'import de `Decimal` est présent sans servir :\n{sans_decimal}"
+        );
+    }
+
     #[test]
     fn the_response_timestamps_declare_their_format() {
         let rendered = dto("users", "nom:string");

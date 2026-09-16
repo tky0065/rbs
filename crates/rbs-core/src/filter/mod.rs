@@ -11,7 +11,8 @@ pub mod schema;
 
 pub use schema::{
     BoolComparisonSchema, ComparisonSchema, DateComparisonSchema, DateTimeComparisonSchema,
-    FloatComparisonSchema, IntComparisonSchema, OneOfSchema, TextMatchSchema, UuidComparisonSchema,
+    DecimalComparisonSchema, FloatComparisonSchema, IntComparisonSchema, OneOfSchema,
+    TextMatchSchema, UuidComparisonSchema,
 };
 
 use serde::{Deserialize, Deserializer};

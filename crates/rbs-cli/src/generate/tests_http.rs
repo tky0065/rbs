@@ -166,6 +166,9 @@ fn value(champ: &Field, mark: &str) -> String {
         return match champ.column_type() {
             FieldType::Int => "unique_number() as i32".to_string(),
             FieldType::Float => "unique_number() as f64 / 10.0".to_string(),
+            // Les quatre décimales sont écrites : `DECIMAL(19, 4)` les rend toutes, et
+            // une valeur qui n'en porterait pas se comparerait à un autre texte.
+            FieldType::Decimal => "format!(\"{}.0000\", unique_number())".to_string(),
             // Un jour de l'année tiré au sort : l'ordinal reste dans 1..=365, valide pour
             // toute année, là où décaler un jour fixe exigerait de gérer les fins de mois.
             FieldType::Date => "chrono::NaiveDate::from_yo_opt(2024, 1 + (unique_number() % 365) as u32)\n            .unwrap()\n            .to_string()"
@@ -184,6 +187,9 @@ fn value(champ: &Field, mark: &str) -> String {
         }
         FieldType::Int => if_modified(mark, "42", "43"),
         FieldType::Float => if_modified(mark, "4.2", "8.4"),
+        // Une chaîne, portant déjà les quatre décimales que rend `DECIMAL(19, 4)` : la
+        // valeur revient à la lettre, et se compare comme n'importe quel scalaire.
+        FieldType::Decimal => if_modified(mark, "\"12.5000\"", "\"99.9900\""),
         FieldType::Bool => if_modified(mark, "true", "false"),
         FieldType::Uuid => "Uuid::new_v4().to_string()".to_string(),
         FieldType::Datetime => "chrono::Utc::now().to_rfc3339()".to_string(),
@@ -225,7 +231,11 @@ fn drawn_number(champ: &Field) -> bool {
         && champ.reference().is_none()
         && matches!(
             champ.column_type(),
-            FieldType::Int | FieldType::Float | FieldType::Datetime | FieldType::Date
+            FieldType::Int
+                | FieldType::Float
+                | FieldType::Decimal
+                | FieldType::Datetime
+                | FieldType::Date
         )
 }
 
@@ -1232,6 +1242,39 @@ mod tests {
             "le jour unique doit se tirer au sort :\n{rendered}"
         );
         for en_dur in ["\"due\": \"2024-01-15\"", "\"due\": \"2024-06-20\""] {
+            assert!(
+                !rendered.contains(en_dur),
+                "« {en_dur} » se rejouerait d'une exécution à l'autre :\n{rendered}"
+            );
+        }
+    }
+
+    /// Un décimal part en chaîne et revient à l'identique : `DECIMAL(19, 4)` rend
+    /// toujours ses quatre décimales, et la valeur envoyée les porte donc déjà — sans
+    /// quoi « 12.50 » serait comparé à « 12.5000 » et le test échouerait sur un format.
+    #[test]
+    fn a_decimal_field_is_sent_as_a_string_carrying_its_four_decimals() {
+        let rendered = trials("orders", "price:decimal");
+
+        assert!(rendered.contains(r#""price": "12.5000""#), "{rendered}");
+        assert!(rendered.contains(r#""price": "99.9900""#), "{rendered}");
+        assert!(
+            rendered.contains(r#"compare(&created, &sent, "price");"#),
+            "« price » doit être comparé à ce qui a été envoyé :\n{rendered}"
+        );
+    }
+
+    /// Une colonne `decimal` `unique` ne peut pas rejouer une valeur écrite : les
+    /// scénarios de ce répertoire créent en parallèle sur la même base.
+    #[test]
+    fn a_unique_decimal_is_drawn_at_each_call() {
+        let rendered = trials("orders", "price:decimal:unique");
+
+        assert!(
+            rendered.contains(r#"format!("{}.0000", unique_number())"#),
+            "le décimal unique doit se tirer au sort :\n{rendered}"
+        );
+        for en_dur in ["\"price\": \"12.5000\"", "\"price\": \"99.9900\""] {
             assert!(
                 !rendered.contains(en_dur),
                 "« {en_dur} » se rejouerait d'une exécution à l'autre :\n{rendered}"

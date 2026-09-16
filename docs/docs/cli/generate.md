@@ -204,9 +204,9 @@ unique "` and `"titre:string,email:string:unique"` describe the same two fields.
 `--fields` declares no field at all. Fields keep their declaration order in the entity and
 in the migration.
 
-### The ten types
+### The eleven types
 
-There is no eleventh, and no `email` type: a string format is not a column type.
+There is no twelfth, and no `email` type: a string format is not a column type.
 
 | Type | Rust | Migration |
 |---|---|---|
@@ -214,6 +214,7 @@ There is no eleventh, and no `email` type: a string format is not a column type.
 | `text` | `String` | `text()` |
 | `int` | `i32` | `integer()` |
 | `float` | `f64` | `double()` |
+| `decimal` | `Decimal` | `decimal_len(19, 4)` |
 | `bool` | `bool` | `boolean()` |
 | `uuid` | `Uuid` | `uuid()` |
 | `datetime` | `DateTimeWithTimeZone` | `timestamp_with_time_zone()` |
@@ -222,6 +223,18 @@ There is no eleventh, and no `email` type: a string format is not a column type.
 
 `string` and `text` share a Rust type, so `text` is the only one that also carries an
 explicit column type on the entity — without it SeaORM would infer `varchar`.
+
+`float` and `decimal` both carry a fractional number, and only the second one carries it
+exactly: `rust_decimal::Decimal`, a `DECIMAL(19, 4)` column — written out, because MySQL
+would otherwise narrow a bare `DECIMAL` to `DECIMAL(10, 0)` — and a JSON string
+(`"12.5000"`), so that a JavaScript client loses no cent to a float. Declaring one adds
+`rust_decimal` to the project's manifest and sea-orm's `with-rust_decimal` feature; the
+string form is pinned there by `serde-str` rather than left to the crate's default, and a
+JSON number is refused rather than quietly rounded — which is the whole point of the type.
+**SQLite refuses it**, before anything is written: sqlx-sqlite deliberately declines to
+bind an exact decimal — its `NUMERIC` affinity keeps only fifteen significant digits — and
+sea-query binds a `Decimal` for PostgreSQL and MySQL only. The refusal names the field and
+offers the two fallbacks: `float`, or an integer of cents.
 
 `enum(a,b,c)` is the only type carrying its own values. They are snake_case, distinct, and
 at least one. The model declares an enum named after the field in PascalCase — `status`
@@ -233,7 +246,7 @@ PascalCase form collides with a type the model already declares — `Model`, `Ac
 column is filtered by `eq`, `in` and `is_null` rather than by the comparisons of an ordered
 one; [Filtering](../guides/filtering.md) has that table.
 
-The tenth, `references`, is not a scalar at all: it points the column at another entity
+The eleventh, `references`, is not a scalar at all: it points the column at another entity
 instead of giving it a type of its own.
 
 ```text
@@ -312,13 +325,13 @@ Every fault on the line is collected in one pass, so the line gets fixed in one 
 than one fault per run. A field carrying two faults reports only the first.
 
 ```text
-$ rbs generate crud tags --fields "Title:string,type:text,prix:decimal,slug:string:unique:index,email:string,email:int" --dry-run
+$ rbs generate crud tags --fields "Title:string,type:text,prix:money,slug:string:unique:index,email:string,email:int" --dry-run
 erreur : champ 1 « Title » — le nom doit être en snake_case : minuscules ASCII, chiffres et souligné
         → essayez « title »
 erreur : champ 2 « type » — « type » est un mot-clé Rust
         → essayez « kind » ou « type_ »
-erreur : champ 3 « prix » — type inconnu « decimal »
-        → string, int, float, bool, uuid, datetime, date, text, references:<table>, enum(a,b,c)
+erreur : champ 3 « prix » — type inconnu « money »
+        → string, int, float, decimal, bool, uuid, datetime, date, text, references:<table>, enum(a,b,c)
 erreur : champ 4 « slug » — « index » redondant : « unique » pose déjà un index
         → retirez « index »
 erreur : champ 6 « email » — « email » est déjà déclaré au champ 5
