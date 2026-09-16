@@ -38,10 +38,11 @@ impl MigrationTrait for Migration {
 {%- set col_new = "ColumnDef::new(" ~ iden ~ "::" ~ field.pascal_name ~ ")" %}
 {#- Une énumération porte en plus un `CHECK` : c'est la base qui refuse alors une valeur
     que `--fields` n'a pas déclarée, sur les trois moteurs. La colonne est toujours
-    éclatée — le `CHECK` la fait déborder à tout nom — et trois régimes s'y succèdent
-    selon que l'appel, puis son seul argument, tiennent dans les cent colonnes de
-    `max_width`. Le retrait, lui, suit le même seuil que les colonnes ordinaires : une
-    tête `ColumnDef::new(iden::Champ)` trop large ramène la chaîne d'un cran à gauche. #}
+    éclatée — le `CHECK` la fait déborder à tout nom — et quatre régimes s'y succèdent
+    selon que l'appel, puis son seul argument, puis la tête de chaîne de cet argument,
+    tiennent dans les cent colonnes de `max_width`. Le retrait, lui, suit le même seuil
+    que les colonnes ordinaires : une tête `ColumnDef::new(iden::Champ)` trop large
+    ramène la chaîne d'un cran à gauche. #}
 {%- set valeurs = '["' ~ (field.enum_variants | join('", "')) ~ '"]' %}
 {%- set expr_col = "Expr::col(" ~ iden ~ "::" ~ field.pascal_name ~ ")" %}
 {%- set is_in = ".is_in(" ~ valeurs ~ ")" %}
@@ -67,10 +68,23 @@ impl MigrationTrait for Migration {
 {@ retrait @}    {@ check @},
 {@ retrait @}),
 {%- else %}
+{#- `Expr::col(…)` ouvre ici une chaîne que `.is_in(…)` poursuit à la ligne suivante :
+    rustfmt ne laisse à une telle tête que quatre-vingt-dix-neuf colonnes, une de moins
+    que `max_width`, et casse son argument au-delà. La chaîne une fois rompue, `.is_in`
+    revient sur le retrait de la tête au lieu de s'indenter d'un cran à sa droite. #}
+{%- if (retrait ~ "    " ~ expr_col) | length <= 99 %}
 {@ retrait @}.check(
 {@ retrait @}    {@ expr_col @}
 {@ retrait @}        {@ is_in @},
 {@ retrait @}),
+{%- else %}
+{@ retrait @}.check(
+{@ retrait @}    Expr::col(
+{@ retrait @}        {@ iden @}::{@ field.pascal_name @},
+{@ retrait @}    )
+{@ retrait @}    {@ is_in @},
+{@ retrait @}),
+{%- endif %}
 {%- endif %}
                     )
 {%- elif col | length <= 60 %}

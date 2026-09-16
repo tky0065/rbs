@@ -680,28 +680,47 @@ async fn la_migration_monte_insere_et_redescend() {
         );
     }
 
-    /// La contrainte porte le nom de la table et celui du champ : leur somme décide de la
-    /// mise en forme, et le balayage la mesure plutôt que de la supposer.
+    /// La contrainte porte le nom de la table *et* celui du champ : c'est leur somme qui
+    /// décide de la mise en forme, si bien qu'un balayage laissant l'autre nom court ne
+    /// dépasse jamais les soixante-six caractères de `col_new`. La tête `ColumnDef::new`
+    /// cède à soixante-quinze, et les quatre régimes du `CHECK` se rejouent sous le retrait
+    /// qu'elle impose : il faut donc deux axes de paire, l'un fixant la table longue,
+    /// l'autre le champ, pour que ces branches soient écrites une seule fois.
     #[test]
     fn the_enum_render_is_already_what_rustfmt_would_write() {
-        let divergentes = bench::longueurs_divergentes(|name| {
-            migration(name, "status:enum(draft,published)").content
-        });
+        let long = "a".repeat(33) + "e";
 
-        assert_eq!(
-            divergentes,
-            Vec::<usize>::new(),
-            "le rendu d'une colonne d'énumération diverge de rustfmt à ces longueurs de nom"
-        );
-
-        let divergentes_champ = bench::longueurs_divergentes(|champ| {
-            migration("articles", &format!("{champ}:enum(draft,published)")).content
-        });
-
-        assert_eq!(
-            divergentes_champ,
-            Vec::<usize>::new(),
-            "le rendu diverge de rustfmt à ces longueurs de champ"
-        );
+        for (libelle, divergentes) in [
+            (
+                "table, champ énuméré",
+                bench::longueurs_divergentes(|name| {
+                    migration(name, "status:enum(draft,published)").content
+                }),
+            ),
+            (
+                "champ énuméré, table courte",
+                bench::longueurs_divergentes(|champ| {
+                    migration("articles", &format!("{champ}:enum(draft,published)")).content
+                }),
+            ),
+            (
+                "champ énuméré, table longue",
+                bench::longueurs_divergentes(|champ| {
+                    migration(&long, &format!("{champ}:enum(draft,published)")).content
+                }),
+            ),
+            (
+                "table longue, champ énuméré",
+                bench::longueurs_divergentes(|name| {
+                    migration(name, &format!("{long}:enum(draft,published)")).content
+                }),
+            ),
+        ] {
+            assert_eq!(
+                divergentes,
+                Vec::<usize>::new(),
+                "le rendu d'une colonne d'énumération diverge de rustfmt à ces longueurs ({libelle})"
+            );
+        }
     }
 }
