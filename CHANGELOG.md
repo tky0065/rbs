@@ -68,6 +68,21 @@ between minor versions with no deprecation cycle.
   date — each of which needs the one before — are printed to paste rather than written
   without what they name. A project that received `jobs` or `scheduler` before 1.3.0 is
   refused, with the move to make by hand.
+- **`rbs generate migration <name> --add-column <table> --fields "…"` writes a
+  schema-evolution migration.** A fifth `generate` subcommand, next to `crud`, `feature`,
+  `client` and `job`. It writes one file, `migration/src/m<timestamp>_<name>.rs`, declared
+  and registered in the same two anchors as every generated migration: `up` stacks one
+  `alter_table().add_column()` per field — one statement per column, SQLite accepting a
+  single alteration per `ALTER TABLE` — and `down` drops them in reverse, indexes first.
+  The file declares its own minimal `Iden`, naming the table and the columns it adds and
+  nothing else. An added column must be `optional`: the table already holds rows that have
+  no value for it. `unique` and `references` are refused on all three engines, SQLite being
+  able to add neither a uniqueness constraint nor a foreign key after the fact, and a
+  `decimal` under SQLite draws the same refusal `generate crud` prints; a `decimal` still
+  patches the manifest through the same plan actions. Because `model.rs` and `dto.rs` carry
+  no anchor and the CLI never rewrites an AST, the lines they need are printed rather than
+  written — including, for an `enum(a,b,c)` field, the `DeriveActiveEnum` type to paste,
+  exactly as `generate crud` renders it.
 - **`rbs doctor` checks seven more fragments.** `cors` warns on an empty `origins`,
   `rate-limit` wants its section, `scheduler` reads every literal expression of the
   calendar as the startup will, `webhooks` wants the delivery registered with the queue,

@@ -73,6 +73,22 @@ dépréciation.
   suppose la précédente — s'affichent à reporter plutôt que de s'écrire sans ce qu'elles
   nomment. Un projet qui a reçu `jobs` ou `scheduler` avant 1.3.0 est refusé, avec le
   déplacement à faire à la main.
+- **`rbs generate migration <nom> --add-column <table> --fields "…"` écrit une migration
+  d'évolution du schéma.** Une cinquième sous-commande de `generate`, à côté de `crud`,
+  `feature`, `client` et `job`. Elle écrit un fichier,
+  `migration/src/m<horodatage>_<nom>.rs`, déclaré et inscrit dans les deux ancres de toute
+  migration engendrée : `up` empile un `alter_table().add_column()` par champ — une
+  instruction par colonne, SQLite n'acceptant qu'une modification par `ALTER TABLE` — et
+  `down` les défait dans l'ordre inverse, les index avant les colonnes qu'ils nomment. Le
+  fichier déclare son propre `Iden` minimal : la table, les colonnes qu'il ajoute, et rien
+  d'autre. Une colonne ajoutée doit être `optional` — la table porte déjà des lignes, qui
+  n'ont pas de valeur pour elle. `unique` et `references` sont refusés sur les trois
+  moteurs, SQLite ne sachant ajouter après coup ni contrainte d'unicité ni clé étrangère,
+  et un `decimal` sous SQLite reçoit le refus que `generate crud` prononce déjà ; un
+  `decimal` demande toujours au manifeste ce que le type exige. Comme `model.rs` et
+  `dto.rs` ne portent pas d'ancre et que le CLI ne réécrit pas d'AST, les lignes qui leur
+  reviennent sont affichées plutôt qu'écrites — y compris, pour un champ `enum(a,b,c)`, le
+  type `DeriveActiveEnum` à coller, tel que `generate crud` le rend.
 - **`rbs doctor` contrôle sept fragments de plus.** `cors` avertit d'un `origins` vide,
   `rate-limit` veut sa section, `scheduler` lit chaque expression littérale du calendrier
   comme le démarrage la lira, `webhooks` veut la livraison inscrite à la file, `audit` sa

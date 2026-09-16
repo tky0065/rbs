@@ -26,11 +26,12 @@ Génère une feature dans un projet existant
 Utilisation : rbs generate <COMMANDE>
 
 Commandes :
-  crud     Génère une feature CRUD complète, entité et migration comprises
-  feature  Génère une feature vide : six fichiers, aucun champ
-  client   Engendre un client typé depuis le document OpenAPI du projet
-  job      Génère un job de la file, et son échéance sous --every ; exige la feature jobs
-  help     Affiche cette aide, ou celle des commandes données
+  crud       Génère une feature CRUD complète, entité et migration comprises
+  feature    Génère une feature vide : six fichiers, aucun champ
+  client     Engendre un client typé depuis le document OpenAPI du projet
+  job        Génère un job de la file, et son échéance sous --every ; exige la feature jobs
+  migration  Écrit une migration d'évolution : des colonnes de plus sur une table existante
+  help       Affiche cette aide, ou celle des commandes données
 
 Options :
   -h, --help     Affiche l'aide
@@ -191,6 +192,119 @@ ancre, après quoi relancer la commande écrit le reste. Un calendrier encore é
 promettre `--fix`, et le
 [guide scheduler](../guides/scheduler.md#un-calendrier-antérieur-à-lancre) montre la
 réécriture.
+
+## `rbs generate migration`
+
+{/* rbs:transcript cmd="rbs generate migration --help" */}
+```text
+$ rbs generate migration --help
+Écrit une migration d'évolution : des colonnes de plus sur une table existante
+
+Utilisation : rbs generate migration [OPTIONS] --add-column <TABLE> --fields <CHAMPS> <NAME>
+
+Arguments :
+  <NAME>  Nom de la migration, en snake_case : celui de son module
+
+Options :
+      --add-column <TABLE>  Table à modifier, telle que le projet la déclare
+      --fields <CHAMPS>     Colonnes à ajouter, toutes optionnelles, ex. "statut:enum(draft,published):optional"
+      --force               Écrit même si le working tree Git est sale
+      --dry-run             Affiche le plan sans rien écrire
+      --json                Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
+  -h, --help                Affiche l'aide
+  -V, --version             Affiche la version
+```
+
+Les quatre autres sous-commandes écrivent une feature ; celle-ci modifie une table qui
+existe déjà. Elle écrit un seul fichier — `migration/src/m<horodatage>_<nom>.rs` —, déclaré
+entre `// <rbs:migration_modules>` et inscrit dans `// <rbs:migrations>`, comme toute
+migration qu'engendre rbs. `up` empile un `alter_table().add_column()` par champ, une
+instruction par colonne parce que SQLite n'accepte qu'une modification par `ALTER TABLE` ;
+`down` les défait dans l'ordre inverse, en retirant un index avant la colonne qu'il nomme —
+ce que SQLite exige également. Le fichier déclare son propre `Iden` minimal : la table, et
+les colonnes qu'il ajoute, et rien d'autre — les autres appartiennent à la migration qui
+les a créées.
+
+```bash
+rbs generate migration ajoute_statut --add-column articles \
+  --fields "statut:enum(draft,published):optional,prix:decimal:optional"
+```
+
+`--fields` est la grammaire décrite plus bas, analysée par le même parseur, avec les mêmes
+fautes et les mêmes refus. Ce qui diffère, c'est ce qu'une colonne *ajoutée* peut être :
+
+| Refusé | Pourquoi |
+|---|---|
+| une colonne qui n'est pas `optional` | La table porte déjà des lignes, qui n'ont pas de valeur pour la colonne nouvelle. SQLite exige un défaut pour une colonne `NOT NULL` ajoutée après coup ; les deux autres refusent l'ajout tout court. Le refus nomme le champ et le `:optional` qui le lève. Aucun défaut n'est proposé : il vaudrait pour les lignes anciennes comme pour les nouvelles, et ce choix-là appartient au schéma, pas au CLI. |
+| `unique` | SQLite ne sait pas ajouter une colonne sous contrainte d'unicité. Le refus tient sur les trois moteurs, PostgreSQL compris — une migration engendrée doit s'appliquer partout, et une règle est une règle — et renvoie à `rbs migrate new` pour l'index unique écrit à la main. |
+| `references` | SQLite ne sait pas ajouter de clé étrangère à une table existante. Ajoutez la colonne en `uuid:optional`, puis posez la contrainte à la main. |
+| `decimal` sous SQLite | Le refus que `rbs generate crud` prononce, au mot près : sqlx-sqlite écarte délibérément le décimal exact, quel que soit le chemin par lequel la colonne arrive. |
+
+Une table dont aucun module ne porte l'entité est refusée elle aussi, et le message nomme
+ce qui a été cherché — `src/*/model.rs` — et les tables que le projet déclare. La recherche
+passe par cet inventaire plutôt que par un répertoire : la table `users` d'un projet
+authentifié vit sous `src/auth/model.rs`, et non dans un `src/users/`.
+
+Un champ `decimal` demande toujours au manifeste ce que le type exige, par les mêmes
+actions de plan que `generate crud` : `rust_decimal` avec `serde-str`, et la feature
+`with-rust_decimal` de `sea-orm`.
+
+### Ce qu'elle affiche sans l'écrire
+
+La migration apprend la colonne à la base ; l'entité et ses DTO ont encore à l'apprendre.
+`model.rs` et `dto.rs` ne portent pas d'ancre, et le CLI ne réécrit pas d'AST — la commande
+affiche donc les lignes à coller, et n'en écrit aucune :
+
+```text
+$ rbs generate migration ajoute_statut --add-column articles --fields "statut:enum(draft,published):optional,prix:decimal:optional" --dry-run
+plan pour /private/tmp/rbs-demo/demo
+
+  + migration/src/m20260916_133333_ajoute_statut.rs   créé
+  ~ migration/src/lib.rs                              modifié
+  ~ Cargo.toml                                        modifié
+
+  1 à créer, 2 à modifier
+
+  à coller dans src/articles/model.rs :
+
+    /// Valeurs acceptées par la colonne « statut ».
+    #[derive(
+        Clone, Copy, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, Deserialize, Serialize, ToSchema,
+    )]
+    #[sea_orm(rs_type = "String", db_type = "String(StringLen::N(9))")]
+    pub enum Statut {
+        #[sea_orm(string_value = "draft")]
+        #[serde(rename = "draft")]
+        Draft,
+        #[sea_orm(string_value = "published")]
+        #[serde(rename = "published")]
+        Published,
+    }
+
+    // dans `struct Model`
+        pub statut: Option<Statut>,
+        pub prix: Option<Decimal>,
+
+  à coller dans src/articles/dto.rs :
+
+    // dans `CreateArticle`, `UpdateArticle` et `ArticleResponse`
+        pub statut: Option<Statut>,
+        #[schema(value_type = Option<String>, format = "decimal")]
+        pub prix: Option<Decimal>,
+
+  rien n'a été écrit (--dry-run)
+```
+
+Toute colonne ajoutée étant optionnelle, les trois DTO portent la même ligne `Option<T>` —
+une colonne obligatoire les aurait distingués. Pour un champ `enum(a,b,c)`, le bloc du
+modèle porte en plus le type `DeriveActiveEnum` à coller, tel que `generate crud` le rend :
+le `CHECK` de la migration et les variantes du modèle décrivent une seule et même colonne,
+et un modèle qui divergerait refuserait une valeur que la base porte, ou en offrirait une
+qu'elle rejette.
+
+Comme les autres sous-commandes, celle-ci respecte `--dry-run`, `--json` et `--force`, et
+passe par le même plan : rien n'est écrit tant qu'il n'est pas entier, et un échec partiel
+restaure ce qu'il a touché.
 
 ## La grammaire de `--fields`
 
