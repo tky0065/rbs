@@ -95,6 +95,22 @@ pub(crate) enum Error {
     #[error("{0}")]
     Fields(fields::FieldsError),
 
+    /// `--fields` ne déclare aucune colonne.
+    ///
+    /// Le parseur rend un vecteur vide sans se plaindre, et la migration rendue n'altère
+    /// alors rien — tout en s'écrivant, en s'inscrivant aux deux ancres et en se comptant
+    /// dans `migrate status`. C'est ce que rend `rbs migrate new`, à ceci près que
+    /// l'utilisateur ne l'a pas demandé.
+    #[error(
+        "`--fields` ne déclare aucune colonne : la migration rendue n'altérerait rien. \
+         Déclarez les colonnes à ajouter, ou ouvrez une migration vide à écrire à la main \
+         par `rbs migrate new {name}`"
+    )]
+    ChampsVides {
+        /// Nom de la migration, tel qu'il a été demandé.
+        name: String,
+    },
+
     /// Aucun module du projet ne déclare cette table.
     #[error(
         "aucune entité du projet ne déclare la table « {table} » — cherchée dans \
@@ -205,6 +221,7 @@ impl Codee for Error {
             Error::WorkingTreeSale(_) => "arbre_sale",
             Error::Nom(_) => "nom_invalide",
             Error::Fields(_) => "champs_invalides",
+            Error::ChampsVides { .. } => "champs_vides",
             Error::TableSansModule { .. } => "table_sans_module",
             Error::ColonneDejaDeclaree { .. } => "colonne_deja_declaree",
             Error::ColonneObligatoire { .. } => "colonne_obligatoire",
@@ -245,6 +262,7 @@ impl crate::errors::Classee for Error {
             | Self::WorkingTreeSale(_)
             | Self::Nom(_)
             | Self::Fields(_)
+            | Self::ChampsVides { .. }
             | Self::TableSansModule { .. }
             | Self::ColonneDejaDeclaree { .. }
             | Self::ColonneObligatoire { .. }
@@ -288,6 +306,14 @@ pub(crate) fn plan_for(options: &Options, timestamp: &str) -> Result<Planned, Er
     name::validate_identifier(&options.name).map_err(Error::Nom)?;
 
     let champs = fields::parse(&options.fields).map_err(Error::Fields)?;
+
+    // Le parseur rend un vecteur vide sans se plaindre : c'est ce dont `rbs migrate new` a
+    // besoin, et non cette commande-ci, dont le rendu n'altérerait alors aucune table.
+    if champs.is_empty() {
+        return Err(Error::ChampsVides {
+            name: options.name.clone(),
+        });
+    }
 
     // Avant tout rendu : chacun de ces refus décrit une migration qu'un des trois moteurs
     // n'appliquerait pas. SQLite ne sait ajouter ni clé étrangère, ni colonne unique, ni
@@ -1146,6 +1172,29 @@ mod tests {
         assert_eq!(empreinte(&root), avant, "rien ne doit avoir été écrit");
     }
 
+    /// Sans champ, la migration rendue n'altère rien — mais elle s'écrit, s'inscrit aux
+    /// deux ancres et se compte dans `migrate status`. C'est ce que rend `rbs migrate
+    /// new`, à ceci près que l'utilisateur ne l'a pas demandé.
+    #[test]
+    fn an_empty_fields_string_is_refused_rather_than_written_as_an_empty_migration() {
+        let (_parent, root) = projet();
+        let avant = empreinte(&root);
+
+        let error = run(&options(&root, "ajoute_statut", "articles", ""))
+            .expect_err("une migration sans colonne est refusée");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("--fields"),
+            "le refus doit nommer ce qui manque : {message}"
+        );
+        assert!(
+            message.contains("rbs migrate new ajoute_statut"),
+            "le refus doit donner le remède, la commande toute faite : {message}"
+        );
+        assert_eq!(empreinte(&root), avant, "rien ne doit avoir été écrit");
+    }
+
     /// Une colonne que l'entité déclare déjà est refusée au plan. Sans ce refus, le
     /// moteur la rejette au `migrate up` — la migration déjà écrite, déjà inscrite aux
     /// deux ancres, et sans remède affiché.
@@ -1623,6 +1672,10 @@ mod tests {
             Error::TableSansModule {
                 table: "factures".to_string(),
                 connues: "articles".to_string(),
+            }
+            .code(),
+            Error::ChampsVides {
+                name: "ajoute_statut".to_string(),
             }
             .code(),
             Error::ColonneDejaDeclaree {
