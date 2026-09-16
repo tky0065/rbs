@@ -698,6 +698,19 @@ fn parse_field(rank: usize, chunk: &str) -> Result<Field, FieldError> {
         if matches!(field.kind, FieldKind::Scalar(FieldType::Bool)) && field.unique {
             return Err(error(name, ErrorKind::UniqueOnBool));
         }
+        // Autant de lignes que de valeurs, au plus — le même raisonnement que sur un
+        // booléen, et les mêmes dégâts en aval : le seed rejouerait une valeur sur sa
+        // seconde ligne, et les tests engendrés n'ont rien à tirer hors de la liste.
+        // `enum_variants` rend une liste vide hors énumération : la garde tient en une
+        // condition, sans bras `_`.
+        if field.unique && !field.enum_variants().is_empty() {
+            return Err(error(
+                name,
+                ErrorKind::UniqueOnEnum {
+                    values: field.enum_variants().len(),
+                },
+            ));
+        }
         if field.unique && field.index {
             return Err(error(name, ErrorKind::RedundantIndex));
         }
@@ -745,6 +758,13 @@ const MODEL_TYPE_NAMES: [&str; 6] = [
     "Relation",
 ];
 
+/// Identifiants que Rust réserve et qu'une recasse en PascalCase peut produire.
+///
+/// `Self` est le seul : les cinquante-et-un mots de [`RUST_KEYWORDS`] sont en minuscules,
+/// et `to_pascal_case` met toujours la première lettre en majuscule — seule la valeur
+/// `self`, que `is_snake_case` accepte, peut donc nommer une variante que rustc refuse.
+const VARIANT_RESERVED: [&str; 1] = ["Self"];
+
 /// Analyse les valeurs d'un `enum(a,b,c)`. Les virgules internes ont déjà été protégées
 /// par [`split_top_level_commas`] : ce découpage ne les revoit plus.
 fn parse_enum_values(raw_type: &str) -> Result<Vec<String>, ErrorKind> {
@@ -759,7 +779,12 @@ fn parse_enum_values(raw_type: &str) -> Result<Vec<String>, ErrorKind> {
         return Err(ErrorKind::EnumEmptyList);
     }
 
-    let mut values = Vec::new();
+    let mut values: Vec<String> = Vec::new();
+    // Les variantes déjà nommées, chacune avec la valeur qui l'a nommée : c'est la forme
+    // PascalCase, et non la valeur écrite, qui doit être un identifiant Rust légal et
+    // distinct — `model.rs` la pose telle quelle dans l'énumération engendrée.
+    let mut variants: Vec<(String, String)> = Vec::new();
+
     for raw_value in inner.split(',') {
         let value = raw_value.trim();
 
@@ -779,6 +804,25 @@ fn parse_enum_values(raw_type: &str) -> Result<Vec<String>, ErrorKind> {
             });
         }
 
+        let variant = to_pascal_case(value);
+        if VARIANT_RESERVED.contains(&variant.as_str()) {
+            return Err(ErrorKind::EnumVariantReserved {
+                value: value.to_string(),
+                variant,
+            });
+        }
+        // La recasse n'est pas injective : `a_1` et `a1` ne diffèrent que par un souligné,
+        // que `to_pascal_case` mange. Deux valeurs distinctes nommeraient alors la même
+        // variante, et le projet engendré ne compilerait pas.
+        if let Some((_, previous)) = variants.iter().find(|(nomme, _)| *nomme == variant) {
+            return Err(ErrorKind::EnumVariantCollision {
+                value: value.to_string(),
+                previous: previous.clone(),
+                variant,
+            });
+        }
+
+        variants.push((variant, value.to_string()));
         values.push(value.to_string());
     }
 
@@ -1544,10 +1588,15 @@ mod tests {
 
     /// Ruling 1 : l'enum se mêle à une référence et aux modificateurs existants sans que
     /// la grammaire n'ait à changer pour eux.
+    ///
+    /// `unique` a quitté cette ligne : une énumération le refuse désormais, comme un
+    /// booléen le refusait déjà — le refus a son propre test
+    /// (`unique_on_an_enum_is_refused_like_unique_on_a_bool`). Ce que celui-ci couvre est
+    /// la grammaire, et elle mêle toujours les trois formes.
     #[test]
     fn an_enum_mixes_with_a_reference_and_modifiers() {
         let fields = parse(
-            "status:enum(draft,published):unique,\
+            "status:enum(draft,published):index,\
              author:references:users:cascade,\
              role:enum(admin,editor):optional:index",
         )
@@ -1559,7 +1608,7 @@ mod tests {
             fields[0].kind,
             FieldKind::Enum(vec!["draft".to_string(), "published".to_string()])
         );
-        assert!(fields[0].unique);
+        assert!(fields[0].index);
 
         let reference = fields[1].reference().expect("le champ porte une référence");
         assert_eq!(reference.target, "users");
@@ -1680,5 +1729,60 @@ mod tests {
 
         assert_eq!(error.errors.len(), 1, "{error}");
         assert_eq!(error.errors[0].kind, ErrorKind::EnumEmptyValue);
+    }
+
+    /// `a_1` et `a1` ne diffèrent que par un souligné, que la recasse mange : la même
+    /// variante `A1` deux fois dans l'énumération, et un projet que rustc refuse.
+    #[test]
+    fn two_values_that_recase_into_the_same_variant_are_refused() {
+        let error = parse("status:enum(a_1,a1)").expect_err("recasse ambiguë refusée");
+
+        assert_eq!(
+            error.errors[0].kind,
+            ErrorKind::EnumVariantCollision {
+                value: "a1".to_string(),
+                previous: "a_1".to_string(),
+                variant: "A1".to_string(),
+            }
+        );
+    }
+
+    /// `is_snake_case` accepte `self`, dont la forme PascalCase est `Self` : un
+    /// identifiant que Rust réserve et qui ne peut nommer aucune variante.
+    #[test]
+    fn a_value_whose_variant_rust_reserves_is_refused() {
+        let error = parse("status:enum(self)").expect_err("variante réservée refusée");
+
+        assert_eq!(
+            error.errors[0].kind,
+            ErrorKind::EnumVariantReserved {
+                value: "self".to_string(),
+                variant: "Self".to_string(),
+            }
+        );
+    }
+
+    /// Une énumération n'a que ses valeurs : `unique` borne la table à autant de lignes,
+    /// le seed rejouerait la même valeur sur sa seconde ligne, et les tests engendrés
+    /// n'ont rien à tirer hors de la liste.
+    #[test]
+    fn unique_on_an_enum_is_refused_like_unique_on_a_bool() {
+        let error = parse("status:enum(draft,published):unique").expect_err("« unique » refusé");
+
+        assert_eq!(error.errors[0].kind, ErrorKind::UniqueOnEnum { values: 2 });
+
+        let seule = parse("status:enum(draft):unique").expect_err("« unique » refusé");
+
+        assert_eq!(seule.errors[0].kind, ErrorKind::UniqueOnEnum { values: 1 });
+    }
+
+    /// Les nouvelles gardes ne mordent pas une énumération légitime : `index` reste
+    /// accepté, et deux valeurs dont les recasses diffèrent le sont aussi.
+    #[test]
+    fn an_ordinary_enum_still_passes_the_new_guards() {
+        let fields = parse("status:enum(draft,in_review,published):index").expect("champs valides");
+
+        assert_eq!(fields[0].enum_variants().len(), 3);
+        assert!(fields[0].index);
     }
 }

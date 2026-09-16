@@ -149,7 +149,9 @@ fn value(champ: &Field, mark: &str) -> String {
 
     // Une énumération n'accepte que ses propres valeurs : la première à la création, la
     // deuxième à la modification — la première encore quand elle est seule. Une valeur
-    // inventée ferait refuser le corps par la colonne comme par le `CHECK`.
+    // inventée ferait refuser le corps par la colonne comme par le `CHECK`. Le tirage que
+    // réclame une colonne `unique` ne la concerne donc pas, et `--fields` refuse
+    // « unique » sur une énumération faute de valeur à tirer hors de la liste.
     let valeurs = champ.enum_variants();
     if !valeurs.is_empty() {
         let rang = usize::from(!mark.is_empty()).min(valeurs.len() - 1);

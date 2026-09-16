@@ -124,7 +124,7 @@ fn value(champ: &Field, rang: usize) -> String {
 /// La valeur qu'une énumération donne à la ligne `rang`, s'il s'agit d'une énumération.
 fn enum_case(champ: &Field, rang: usize) -> Option<EnumCase> {
     let cases = champ.enum_cases();
-    let index = (rang - 1).min(cases.len().saturating_sub(1));
+    let index = rang.saturating_sub(1).min(cases.len().saturating_sub(1));
 
     cases.into_iter().nth(index)
 }

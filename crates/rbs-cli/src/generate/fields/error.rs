@@ -66,6 +66,18 @@ pub(crate) enum ErrorKind {
     EnumUnclosedParenthesis,
     EnumEmptyList,
     EnumEmptyValue,
+    EnumVariantCollision {
+        value: String,
+        previous: String,
+        variant: String,
+    },
+    EnumVariantReserved {
+        value: String,
+        variant: String,
+    },
+    UniqueOnEnum {
+        values: usize,
+    },
     EnumValueNotSnakeCase {
         value: String,
     },
@@ -137,6 +149,24 @@ impl ErrorKind {
             }
             Self::EnumEmptyList => "« enum » attend au moins une valeur".to_string(),
             Self::EnumEmptyValue => "une valeur de « enum » est vide".to_string(),
+            Self::EnumVariantCollision {
+                value,
+                previous,
+                variant,
+            } => format!(
+                "« {value} » et « {previous} » nomment toutes deux la variante « {variant} »"
+            ),
+            Self::EnumVariantReserved { value, variant } => {
+                format!("« {value} » nommerait la variante « {variant} », que Rust réserve")
+            }
+            Self::UniqueOnEnum { values } => {
+                let lignes = match values {
+                    1 => "qu'une ligne".to_string(),
+                    autres => format!("que {autres} lignes"),
+                };
+
+                format!("« unique » sur une énumération : la colonne n'admettrait {lignes}")
+            }
             Self::EnumValueNotSnakeCase { value } => {
                 format!("la valeur « {value} » n'est pas en snake_case")
             }
@@ -205,6 +235,17 @@ impl ErrorKind {
             Self::EnumUnclosedParenthesis | Self::EnumEmptyList | Self::EnumEmptyValue => {
                 Some("exemple : « status:enum(draft,published) »".to_string())
             }
+            Self::EnumVariantCollision { .. } => Some(
+                "chaque valeur nomme une variante par sa forme PascalCase : choisissez-en \
+                 deux qui en diffèrent"
+                    .to_string(),
+            ),
+            Self::EnumVariantReserved { .. } => Some(
+                "choisissez une autre valeur : sa forme PascalCase nomme la variante de \
+                 l'énumération"
+                    .to_string(),
+            ),
+            Self::UniqueOnEnum { .. } => Some("retirez « unique »".to_string()),
             Self::EnumValueNotSnakeCase { .. } => {
                 Some("minuscules ASCII, chiffres et souligné, comme un nom de champ".to_string())
             }
@@ -712,5 +753,53 @@ mod tests {
 
         assert!(text.contains("vide"), "{text}");
         assert!(!text.contains("snake_case"), "{text}");
+    }
+
+    #[test]
+    fn a_variant_collision_names_both_values_and_the_variant() {
+        let text = rendered(
+            ErrorKind::EnumVariantCollision {
+                value: "a1".to_string(),
+                previous: "a_1".to_string(),
+                variant: "A1".to_string(),
+            },
+            "status",
+        );
+
+        assert!(
+            text.contains("« a1 » et « a_1 » nomment toutes deux la variante « A1 »"),
+            "{text}"
+        );
+        assert!(text.contains("PascalCase"), "{text}");
+    }
+
+    #[test]
+    fn a_reserved_variant_says_which_word_rust_keeps() {
+        let text = rendered(
+            ErrorKind::EnumVariantReserved {
+                value: "self".to_string(),
+                variant: "Self".to_string(),
+            },
+            "status",
+        );
+
+        assert!(
+            text.contains("« self » nommerait la variante « Self », que Rust réserve"),
+            "{text}"
+        );
+    }
+
+    /// Le compte des valeurs entre dans le message, au singulier comme au pluriel : le
+    /// refus jumeau sur un booléen dit « deux lignes », celui-ci dit combien.
+    #[test]
+    fn unique_on_an_enum_counts_the_lines_it_would_allow() {
+        let deux = rendered(ErrorKind::UniqueOnEnum { values: 2 }, "status");
+
+        assert!(deux.contains("n'admettrait que 2 lignes"), "{deux}");
+        assert!(deux.contains("retirez « unique »"), "{deux}");
+
+        let une = rendered(ErrorKind::UniqueOnEnum { values: 1 }, "status");
+
+        assert!(une.contains("n'admettrait qu'une ligne"), "{une}");
     }
 }
