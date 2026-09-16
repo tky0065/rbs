@@ -107,6 +107,24 @@ pub(crate) enum Error {
         connues: String,
     },
 
+    /// La table porte déjà une colonne de ce nom.
+    ///
+    /// Sans ce refus, l'échec vient du moteur au `migrate up`, la migration déjà écrite
+    /// et déjà inscrite aux deux ancres — et son message ne dit pas quoi en faire.
+    #[error(
+        "le champ `{champ}` nomme une colonne que la table « {table} » porte déjà : \
+         {fichier} la déclare. Nommez-en une autre, ou modifiez celle qui existe par une \
+         migration écrite à la main — `rbs migrate new` en ouvre une"
+    )]
+    ColonneDejaDeclaree {
+        /// Nom du champ fautif, tel qu'il a été déclaré.
+        champ: String,
+        /// Table visée, telle qu'elle a été demandée.
+        table: String,
+        /// Fichier qui atteste la colonne, relatif à la racine du projet.
+        fichier: String,
+    },
+
     /// Une colonne ajoutée à une table peuplée doit admettre le nul.
     ///
     /// SQLite exige une valeur par défaut pour une colonne `NOT NULL` ajoutée ; les deux
@@ -188,6 +206,7 @@ impl Codee for Error {
             Error::Nom(_) => "nom_invalide",
             Error::Fields(_) => "champs_invalides",
             Error::TableSansModule { .. } => "table_sans_module",
+            Error::ColonneDejaDeclaree { .. } => "colonne_deja_declaree",
             Error::ColonneObligatoire { .. } => "colonne_obligatoire",
             Error::UniqueSurColonneAjoutee { .. } => "unique_sur_colonne_ajoutee",
             Error::ReferenceInterdite { .. } => "reference_interdite",
@@ -227,6 +246,7 @@ impl crate::errors::Classee for Error {
             | Self::Nom(_)
             | Self::Fields(_)
             | Self::TableSansModule { .. }
+            | Self::ColonneDejaDeclaree { .. }
             | Self::ColonneObligatoire { .. }
             | Self::UniqueSurColonneAjoutee { .. }
             | Self::ReferenceInterdite { .. }
@@ -316,6 +336,28 @@ pub(crate) fn plan_for(options: &Options, timestamp: &str) -> Result<Planned, Er
             connues: tables_connues(&inventaire),
         })?;
 
+    // Les deux fichiers sont lus avant le rendu : le doublon se juge sur le modèle, et ce
+    // refus-là doit tomber comme les autres, avant le premier octet rendu. Le bloc affiché
+    // se calcule ensuite sur les mêmes sources — il ne doit porter que les imports qui
+    // manquent réellement à ce module-ci, et la ligne d'import du modèle est à modifier
+    // plutôt qu'à ajouter.
+    let model_path = format!("src/{module}/model.rs");
+    let dto_path = format!("src/{module}/dto.rs");
+    let model_source = lire(&root, &model_path);
+    let dto_source = lire(&root, &dto_path);
+
+    let declarees = colonnes_declarees(&model_source, &options.table);
+    if let Some(champ) = champs
+        .iter()
+        .find(|champ| declarees.contains(&champ.column_name()))
+    {
+        return Err(Error::ColonneDejaDeclaree {
+            champ: champ.name.clone(),
+            table: options.table.clone(),
+            fichier: model_path,
+        });
+    }
+
     let module_migration = format!("m{timestamp}_{}", options.name);
     let fichier = format!("migration/src/{module_migration}.rs");
 
@@ -327,14 +369,6 @@ pub(crate) fn plan_for(options: &Options, timestamp: &str) -> Result<Planned, Er
     // Après le rendu et avant le plan : le plan porte le contenu exact qui sera écrit, et
     // c'est lui que `--dry-run` montre.
     let avertissement = format::format_batch(std::iter::once(&mut contenu));
-
-    // Les deux fichiers sont lus avant le plan : le bloc affiché ne doit porter que les
-    // imports qui manquent reellement a ce module-ci, et la ligne d'import du modele est a
-    // modifier plutot qu'a ajouter.
-    let model_path = format!("src/{module}/model.rs");
-    let dto_path = format!("src/{module}/dto.rs");
-    let model_source = lire(&root, &model_path);
-    let dto_source = lire(&root, &dto_path);
 
     let entity = Feature::fresh(&options.table, champs.clone()).entity();
 
@@ -393,6 +427,45 @@ fn tables_connues(inventaire: &[entities::Entity]) -> String {
     } else {
         tables.join(", ")
     }
+}
+
+/// Les colonnes que le `struct Model` de `table` déclare, relevées dans `source`.
+///
+/// Le relevé part de l'attribut `table_name` et non du début du fichier : un `model.rs`
+/// en porte parfois plusieurs — `src/auth/model.rs` déclare `users`, `refresh_tokens` et
+/// `one_time_tokens` —, et un doublon prononcé sur l'homonyme d'une table voisine
+/// refuserait une colonne parfaitement légitime.
+///
+/// La lecture est textuelle, comme celle d'[`entities::scan`] : un modèle lourdement
+/// réécrit y échappera, et le doublon retombera alors sur le moteur. Ce relevé sert à
+/// refuser, jamais à autoriser.
+fn colonnes_declarees(source: &str, table: &str) -> Vec<String> {
+    let attribut = format!("table_name = \"{table}\"");
+    let mut colonnes = Vec::new();
+    let mut dans_la_structure = false;
+
+    for ligne in source.lines() {
+        let ligne = ligne.trim();
+
+        if !dans_la_structure {
+            dans_la_structure = ligne.contains(&attribut);
+            continue;
+        }
+
+        // La structure ne porte que des attributs et des champs : sa première accolade
+        // fermante en début de ligne est la sienne.
+        if ligne == "}" {
+            break;
+        }
+
+        if let Some(reste) = ligne.strip_prefix("pub ")
+            && let Some((nom, _)) = reste.split_once(':')
+        {
+            colonnes.push(nom.trim().to_string());
+        }
+    }
+
+    colonnes
 }
 
 /// Les imports que le gabarit du modèle ne pose que sous `{% if enum_types %}`.
@@ -1073,6 +1146,68 @@ mod tests {
         assert_eq!(empreinte(&root), avant, "rien ne doit avoir été écrit");
     }
 
+    /// Une colonne que l'entité déclare déjà est refusée au plan. Sans ce refus, le
+    /// moteur la rejette au `migrate up` — la migration déjà écrite, déjà inscrite aux
+    /// deux ancres, et sans remède affiché.
+    #[test]
+    fn a_column_the_entity_already_declares_is_refused_before_anything_is_written() {
+        let (_parent, root) = projet();
+        let avant = empreinte(&root);
+
+        let error = run(&options(
+            &root,
+            "ajoute_titre",
+            "articles",
+            "titre:string:optional",
+        ))
+        .expect_err("une colonne déjà déclarée est refusée");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("titre"),
+            "le refus doit nommer le champ : {message}"
+        );
+        assert!(
+            message.contains("articles"),
+            "le refus doit nommer la table : {message}"
+        );
+        assert!(
+            message.contains("src/articles/model.rs"),
+            "le refus doit nommer le fichier qui atteste : {message}"
+        );
+        assert_eq!(empreinte(&root), avant, "rien ne doit avoir été écrit");
+    }
+
+    /// Le doublon se cherche dans le `struct Model` de la table visée, et non dans tout
+    /// le fichier : `src/auth/model.rs` porte trois entités, et `email` n'appartient
+    /// qu'à `users`. Un refus prononcé sur l'homonyme d'une table voisine interdirait une
+    /// colonne parfaitement légitime.
+    #[test]
+    fn the_duplicate_is_sought_in_the_targeted_table_alone() {
+        let (_parent, root) = crate::fixtures::Project::new().features(&["auth"]).create();
+
+        run(&options(
+            &root,
+            "ajoute_email_au_jeton",
+            "refresh_tokens",
+            "email:string:optional",
+        ))
+        .expect("`email` n'appartient pas à refresh_tokens");
+
+        let error = run(&options(
+            &root,
+            "ajoute_email",
+            "users",
+            "email:string:optional",
+        ))
+        .expect_err("`users` porte déjà `email`");
+
+        assert!(
+            matches!(error, Error::ColonneDejaDeclaree { .. }),
+            "le refus doit être celui du doublon : {error}"
+        );
+    }
+
     /// SQLite refuse d'ajouter une colonne sous contrainte d'unicité : le refus tient sur
     /// les trois moteurs, une migration engendrée devant s'appliquer partout.
     #[test]
@@ -1488,6 +1623,12 @@ mod tests {
             Error::TableSansModule {
                 table: "factures".to_string(),
                 connues: "articles".to_string(),
+            }
+            .code(),
+            Error::ColonneDejaDeclaree {
+                champ: "titre".to_string(),
+                table: "articles".to_string(),
+                fichier: "src/articles/model.rs".to_string(),
             }
             .code(),
             Error::ColonneObligatoire {
