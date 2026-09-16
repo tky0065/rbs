@@ -562,12 +562,9 @@ mod tests {
             .find(|file| file.path == "AGENTS.md")
             .expect("AGENTS.md est visé par le plan");
 
-        assert!(
-            projete.after.contains("<!-- rbs:guide 2.0.0 -->"),
-            "{}",
-            projete.after
-        );
-        assert!(!projete.after.contains("0.9.0"), "{}", projete.after);
+        let after = projete.after.as_deref().expect("le guide est réécrit");
+        assert!(after.contains("<!-- rbs:guide 2.0.0 -->"), "{after}");
+        assert!(!after.contains("0.9.0"), "{after}");
     }
 
     /// Ce que le développeur écrit hors des zones lui appartient, mise à niveau comprise.
@@ -597,12 +594,10 @@ mod tests {
             .find(|file| file.path == "AGENTS.md")
             .expect("AGENTS.md est visé par le plan");
 
+        let after = projete.after.as_deref().expect("AGENTS.md est réécrit");
         assert!(
-            projete
-                .after
-                .contains("ne jamais toucher au module facturation"),
-            "{}",
-            projete.after
+            after.contains("ne jamais toucher au module facturation"),
+            "{after}"
         );
     }
 
@@ -673,10 +668,10 @@ mod tests {
             .find(|file| file.path == "AGENTS.md")
             .expect("l'inventaire reste à réécrire, guide ou non");
 
+        let after = projete.after.as_deref().expect("l'inventaire est réécrit");
         assert!(
-            projete.after.contains("- rbs 2.0.0 ·"),
-            "l'inventaire n'a pas suivi la version visée :\n{}",
-            projete.after
+            after.contains("- rbs 2.0.0 ·"),
+            "l'inventaire n'a pas suivi la version visée :\n{after}"
         );
     }
 
@@ -720,7 +715,7 @@ mod tests {
             .iter()
             .find(|file| file.path == "CLAUDE.md")
             .expect("le plan crée CLAUDE.md");
-        assert_eq!(projete.after, "@AGENTS.md\n");
+        assert_eq!(projete.after.as_deref(), Some("@AGENTS.md\n"));
     }
 
     /// C'est l'absence du fichier qui motive l'écriture, non l'écart de version : un

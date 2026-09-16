@@ -447,7 +447,7 @@ mod tests {
 
         assert_eq!(deposes, ["Dockerfile", ".dockerignore"]);
         assert_eq!(plan.files().len(), 2);
-        assert_eq!(plan.files()[0].after, "FROM rust\n");
+        assert_eq!(plan.files()[0].after.as_deref(), Some("FROM rust\n"));
     }
 
     #[test]
@@ -468,7 +468,10 @@ mod tests {
 
         assert_eq!(deposes, ["src/auth/model.rs"]);
         assert_eq!(plan.files()[0].path, "src/auth/model.rs");
-        assert_eq!(plan.files()[0].after, "// demo_api\npub struct User;\n");
+        assert_eq!(
+            plan.files()[0].after.as_deref(),
+            Some("// demo_api\npub struct User;\n")
+        );
     }
 
     /// Un manifeste de projet réaliste : une dépendance nue, une commentée en fin de
@@ -509,12 +512,13 @@ axum = \"0.8\"
 
     /// Le contenu que le plan projette pour `path`.
     fn projected<'plan>(plan: &'plan plan::Plan, path: &str) -> &'plan str {
-        &plan
-            .files()
+        plan.files()
             .iter()
             .find(|file| file.path == path)
             .unwrap_or_else(|| panic!("{path} absent du plan"))
             .after
+            .as_deref()
+            .unwrap_or_else(|| panic!("{path} est projeté absent"))
     }
 
     /// Le critère de la tâche : le patch touche une ligne et laisse les autres intactes.
@@ -619,7 +623,10 @@ axum = \"0.8\"
 
         let (_, premier) = plan_for(project.path(), PATCHS, &[]).expect("le plan doit se calculer");
         for file in premier.files() {
-            avec(project.path(), &[(&file.path, &file.after)]);
+            avec(
+                project.path(),
+                &[(&file.path, file.after.as_deref().unwrap_or_default())],
+            );
         }
 
         let (_, second) = plan_for(project.path(), PATCHS, &[]).expect("le plan se recalcule");
@@ -630,7 +637,7 @@ axum = \"0.8\"
                 plan::Status::DejaFait,
                 "{} n'est pas sans effet :\n{}",
                 file.path,
-                file.after
+                file.after.as_deref().unwrap_or_default()
             );
         }
     }

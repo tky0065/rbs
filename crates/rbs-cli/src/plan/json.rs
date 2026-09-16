@@ -621,19 +621,19 @@ mod tests {
                 File {
                     path: "src/nouveau.rs".to_string(),
                     before: None,
-                    after: "// nouveau\n".to_string(),
+                    after: Some("// nouveau\n".to_string()),
                     statut: Status::AFaire,
                 },
                 File {
                     path: "src/router.rs".to_string(),
                     before: Some("ancien".to_string()),
-                    after: "nouveau".to_string(),
+                    after: Some("nouveau".to_string()),
                     statut: Status::AFaire,
                 },
                 File {
                     path: "Cargo.toml".to_string(),
                     before: Some("inchangé".to_string()),
-                    after: "inchangé".to_string(),
+                    after: Some("inchangé".to_string()),
                     statut: Status::DejaFait,
                 },
             ],

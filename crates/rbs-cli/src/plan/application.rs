@@ -90,11 +90,22 @@ impl Log {
     fn write(&mut self, root: &Path, file: &File) -> io::Result<()> {
         let path = root.join(&file.path);
 
-        if let Some(parent) = path.parent() {
-            self.create_directories(parent)?;
+        match &file.after {
+            Some(content) => {
+                if let Some(parent) = path.parent() {
+                    self.create_directories(parent)?;
+                }
+                crate::secret::write(&path, content.as_bytes())?;
+            }
+            // Un fichier déjà absent n'est pas une faute : le plan projette un état, pas une
+            // opération, et l'état visé est déjà celui-là.
+            None => match fs::remove_file(&path) {
+                Ok(()) => {}
+                Err(source) if source.kind() == io::ErrorKind::NotFound => {}
+                Err(source) => return Err(source),
+            },
         }
 
-        crate::secret::write(&path, file.after.as_bytes())?;
         self.ecrits.push(file.path.clone());
         self.origines.push(file.before.clone());
 
@@ -166,7 +177,7 @@ mod tests {
         File {
             path: path.to_string(),
             before: before.map(str::to_string),
-            after: after.to_string(),
+            after: Some(after.to_string()),
             statut,
         }
     }
@@ -318,6 +329,63 @@ mod tests {
         assert_eq!(
             fs::read_to_string(project.path().join("src.rs")).expect("le fichier existe"),
             "écrasé\n"
+        );
+    }
+
+    /// Un fichier que le plan projette absent est retiré du disque.
+    #[test]
+    fn a_file_projected_absent_is_removed_from_disk() {
+        let projet = project();
+        let racine = projet.path();
+        fs::create_dir_all(racine.join("src")).expect("le répertoire se crée");
+        fs::write(racine.join("src/parti.rs"), "// à retirer\n").expect("le fichier s'écrit");
+
+        let plan = plan_of(
+            racine,
+            vec![File {
+                path: "src/parti.rs".to_string(),
+                before: Some("// à retirer\n".to_string()),
+                after: None,
+                statut: Status::AFaire,
+            }],
+        );
+
+        apply(&plan, false).expect("le plan s'applique");
+
+        assert!(
+            !racine.join("src/parti.rs").exists(),
+            "le fichier devait disparaître"
+        );
+    }
+
+    /// Une suppression défaite rend le fichier tel qu'il était.
+    #[test]
+    fn a_removal_rolled_back_restores_the_file() {
+        let projet = project();
+        let racine = projet.path();
+        fs::create_dir_all(racine.join("src")).expect("le répertoire se crée");
+        fs::write(racine.join("src/parti.rs"), "// à retirer\n").expect("le fichier s'écrit");
+
+        let plan = plan_of(
+            racine,
+            vec![
+                File {
+                    path: "src/parti.rs".to_string(),
+                    before: Some("// à retirer\n".to_string()),
+                    after: None,
+                    statut: Status::AFaire,
+                },
+                // Un répertoire en guise de chemin : l'écriture échoue, et la restauration
+                // doit rendre le fichier que l'action précédente a supprimé.
+                file("src", None, "peu importe", Status::AFaire),
+            ],
+        );
+
+        apply(&plan, false).expect_err("l'écriture sur un répertoire doit échouer");
+
+        assert_eq!(
+            fs::read_to_string(racine.join("src/parti.rs")).expect("le fichier est revenu"),
+            "// à retirer\n"
         );
     }
 

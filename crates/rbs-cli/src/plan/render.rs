@@ -172,7 +172,7 @@ mod tests {
         File {
             path: path.to_string(),
             before: before.map(str::to_string),
-            after: "peu importe".to_string(),
+            after: Some("peu importe".to_string()),
             statut,
         }
     }

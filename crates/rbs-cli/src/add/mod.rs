@@ -1073,13 +1073,15 @@ mod tests {
 
     /// Le contenu qu'un plan projette pour `path`.
     fn projected<'plan>(planned: &'plan Planned, path: &str) -> &'plan str {
-        &planned
+        planned
             .plan
             .files()
             .iter()
             .find(|file| file.path == path)
             .unwrap_or_else(|| panic!("{path} absent du plan"))
             .after
+            .as_deref()
+            .unwrap_or_else(|| panic!("{path} est projeté absent"))
     }
 
     /// Le compose du squelette existe déjà : seuls `Dockerfile` et `.dockerignore` sont
@@ -1350,10 +1352,14 @@ mod tests {
                 continue;
             }
             assert!(
-                !file.after.contains("a'b:c$(id)"),
+                !file
+                    .after
+                    .as_deref()
+                    .unwrap_or_default()
+                    .contains("a'b:c$(id)"),
                 "{} porte le mot de passe du projet :\n{}",
                 file.path,
-                file.after
+                file.after.as_deref().unwrap_or_default()
             );
         }
 
@@ -1452,10 +1458,10 @@ mod tests {
         for file in planned.plan.files() {
             for cle in ["POSTGRES_", "MYSQL_"] {
                 assert!(
-                    !file.after.contains(cle),
+                    !file.after.as_deref().unwrap_or_default().contains(cle),
                     "{} porte une clé `{cle}` sur un projet SQLite :\n{}",
                     file.path,
-                    file.after
+                    file.after.as_deref().unwrap_or_default()
                 );
             }
         }
@@ -1533,6 +1539,8 @@ mod tests {
             // rôle d'un commentaire de `config/default.toml`.
             let keys: String = file
                 .after
+                .as_deref()
+                .unwrap_or_default()
                 .lines()
                 .filter(|line| !line.trim_start().starts_with('#'))
                 .collect::<Vec<_>>()
@@ -1543,7 +1551,7 @@ mod tests {
                 !keys.contains("password"),
                 "{} porte le secret en clé de configuration :\n{}",
                 file.path,
-                file.after
+                file.after.as_deref().unwrap_or_default()
             );
         }
     }

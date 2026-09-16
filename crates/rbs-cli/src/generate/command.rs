@@ -1842,7 +1842,7 @@ mod tests {
 
         for file in planned.plan.files() {
             assert_eq!(
-                read(&root.join(&file.path)),
+                Some(read(&root.join(&file.path))),
                 file.after,
                 "`{}` ne porte pas le contenu que le plan annonçait",
                 file.path

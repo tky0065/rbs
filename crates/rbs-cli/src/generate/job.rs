@@ -892,7 +892,10 @@ mod tests {
             ]
         );
 
-        let job = &file(&planned, "src/modules/jobs/purge.rs").after;
+        let job = file(&planned, "src/modules/jobs/purge.rs")
+            .after
+            .as_deref()
+            .expect("le job est écrit");
         assert!(job.contains("pub struct Purge {}"), "{job}");
         assert!(job.contains("impl Job for Purge {"), "{job}");
         assert!(
@@ -900,7 +903,10 @@ mod tests {
             "{job}"
         );
 
-        let modules = &file(&planned, MODULES).after;
+        let modules = file(&planned, MODULES)
+            .after
+            .as_deref()
+            .expect("le registre est écrit");
         assert!(
             modules.contains(
                 "pub mod worker;\n// <rbs:job_modules>\npub mod purge;\n// </rbs:job_modules>\n"
@@ -914,7 +920,10 @@ mod tests {
             "{modules}"
         );
 
-        let calendrier = &file(&planned, CALENDRIER).after;
+        let calendrier = file(&planned, CALENDRIER)
+            .after
+            .as_deref()
+            .expect("le calendrier est écrit");
         assert!(
             calendrier.contains(
                 "    // <rbs:schedules>\n    \

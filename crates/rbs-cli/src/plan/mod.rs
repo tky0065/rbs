@@ -25,8 +25,11 @@ pub(crate) struct File {
     pub path: String,
     /// Contenu actuel, ou `None` si le fichier n'existe pas encore.
     pub before: Option<String>,
-    /// Contenu que l'application écrira.
-    pub after: String,
+    /// Contenu que l'application écrira, ou `None` si le fichier ne doit plus exister.
+    ///
+    /// L'absence est dans le type et non à côté : la porte des conflits, la restauration
+    /// et l'affichage travaillent tous sur `File`, et n'ont donc rien à apprendre.
+    pub after: Option<String>,
     /// Statut agrégé des actions qui visent ce fichier.
     ///
     /// Sans lui, un appelant qui écrit `files()` tel quel écraserait un fichier en
@@ -310,7 +313,7 @@ impl Builder {
             Some(_) => Status::Conflit,
         };
 
-        self.project_onto(path, origin, content.to_string(), statut);
+        self.project_onto(path, origin, Some(content.to_string()), statut);
         self.actions.push(Action {
             path: path.to_string(),
             effet: Effect::Creer {
@@ -351,9 +354,9 @@ impl Builder {
 
         let after =
             crate::anchors::insert(&courant, anchor.clone(), lines).map_err(Error::Anchor)?;
-        let statut = combined_status(states.origin.as_deref(), &after);
+        let statut = combined_status(states.origin.as_deref(), Some(&after));
 
-        self.project_onto(&path, states.origin, after, statut);
+        self.project_onto(&path, states.origin, Some(after), statut);
         self.actions.push(Action {
             path: path.to_string(),
             effet: Effect::Inserer {
@@ -439,9 +442,9 @@ impl Builder {
             Ok(after) => after,
             Err(cause) => return Ok(Repose::Laissee(cause)),
         };
-        let statut = combined_status(states.origin.as_deref(), &after);
+        let statut = combined_status(states.origin.as_deref(), Some(&after));
 
-        self.project_onto(&path, states.origin, after, statut);
+        self.project_onto(&path, states.origin, Some(after), statut);
         self.actions.push(Action {
             path,
             effet: Effect::ReposerAncre { anchor },
@@ -479,9 +482,9 @@ impl Builder {
             zone,
         })?;
 
-        let statut = combined_status(states.origin.as_deref(), &after);
+        let statut = combined_status(states.origin.as_deref(), Some(&after));
 
-        self.project_onto(path, states.origin, after, statut);
+        self.project_onto(path, states.origin, Some(after), statut);
         self.actions.push(Action {
             path: path.to_string(),
             effet: Effect::RemplacerZone {
@@ -522,9 +525,9 @@ impl Builder {
         .map_err(Error::Metadata)?;
 
         let after = rendered.unwrap_or(courant);
-        let statut = combined_status(states.origin.as_deref(), &after);
+        let statut = combined_status(states.origin.as_deref(), Some(&after));
 
-        self.project_onto(path, states.origin, after, statut);
+        self.project_onto(path, states.origin, Some(after), statut);
         self.actions.push(Action {
             path: path.to_string(),
             effet: Effect::PatcherToml { patch },
@@ -548,9 +551,9 @@ impl Builder {
             })?;
 
         let after = rendered.unwrap_or(courant);
-        let statut = combined_status(states.origin.as_deref(), &after);
+        let statut = combined_status(states.origin.as_deref(), Some(&after));
 
-        self.project_onto(path, states.origin, after, statut);
+        self.project_onto(path, states.origin, Some(after), statut);
         self.actions.push(Action {
             path: path.to_string(),
             effet: Effect::AjouterSection {
@@ -577,9 +580,9 @@ impl Builder {
         })?;
 
         let after = text::add_variable(&courant, key, value, comment).unwrap_or(courant);
-        let statut = combined_status(states.origin.as_deref(), &after);
+        let statut = combined_status(states.origin.as_deref(), Some(&after));
 
-        self.project_onto(path, states.origin, after, statut);
+        self.project_onto(path, states.origin, Some(after), statut);
         self.actions.push(Action {
             path: path.to_string(),
             effet: Effect::AjouterVariable {
@@ -622,7 +625,7 @@ impl Builder {
         if let Some(file) = self.files.iter().find(|f| f.path == path) {
             return Ok(States {
                 origin: file.before.clone(),
-                courant: Some(file.after.clone()),
+                courant: file.after.clone(),
             });
         }
 
@@ -647,7 +650,13 @@ impl Builder {
 
     /// Enregistre le contenu final du fichier, en conservant son état d'origine et en
     /// agrégeant le statut des actions qui le visent.
-    fn project_onto(&mut self, path: &str, before: Option<String>, after: String, statut: Status) {
+    fn project_onto(
+        &mut self,
+        path: &str,
+        before: Option<String>,
+        after: Option<String>,
+        statut: Status,
+    ) {
         match self.files.iter_mut().find(|f| f.path == path) {
             Some(file) => {
                 file.after = after;
@@ -685,8 +694,8 @@ struct States {
 ///
 /// Elle n'est sans effet que si le projet d'origine porte déjà ce qu'elle produit ; elle
 /// n'entre jamais en conflit, puisqu'elle ne remplace pas un fichier entier.
-fn combined_status(origin: Option<&str>, after: &str) -> Status {
-    if origin == Some(after) {
+fn combined_status(origin: Option<&str>, after: Option<&str>) -> Status {
+    if origin == after {
         Status::DejaFait
     } else {
         Status::AFaire
@@ -733,7 +742,7 @@ mod tests {
         File {
             path: path.to_string(),
             before: before.map(str::to_string),
-            after: "après".to_string(),
+            after: Some("après".to_string()),
             statut,
         }
     }
@@ -795,7 +804,7 @@ mod tests {
 
         assert_eq!(plan.actions()[0].statut, Status::AFaire);
         assert_eq!(plan.files()[0].before, None);
-        assert_eq!(plan.files()[0].after, "FROM rust\n");
+        assert_eq!(plan.files()[0].after.as_deref(), Some("FROM rust\n"));
     }
 
     #[test]
@@ -826,7 +835,7 @@ mod tests {
 
         assert_eq!(plan.actions()[0].statut, Status::Conflit);
         assert_eq!(plan.files()[0].before.as_deref(), Some("FROM alpine\n"));
-        assert_eq!(plan.files()[0].after, "FROM rust\n");
+        assert_eq!(plan.files()[0].after.as_deref(), Some("FROM rust\n"));
     }
 
     #[test]
@@ -861,6 +870,8 @@ mod tests {
         assert!(
             plan.files()[0]
                 .after
+                .as_deref()
+                .expect("l'insertion écrit le fichier")
                 .contains(".merge(crate::users::routes())")
         );
     }
@@ -886,10 +897,7 @@ mod tests {
         let plan = builder.finir();
 
         assert_eq!(plan.actions()[0].statut, Status::DejaFait);
-        assert_eq!(
-            plan.files()[0].before.as_deref(),
-            Some(plan.files()[0].after.as_str())
-        );
+        assert_eq!(plan.files()[0].before, plan.files()[0].after);
     }
 
     #[test]
@@ -916,12 +924,12 @@ mod tests {
 
         assert_eq!(plan.actions().len(), 2);
         assert_eq!(plan.files().len(), 1);
-        assert!(plan.files()[0].after.contains("mod m20260826_creer_users;"));
-        assert!(
-            plan.files()[0]
-                .after
-                .contains("Box::new(m20260826_creer_users::Migration),")
-        );
+        let after = plan.files()[0]
+            .after
+            .as_deref()
+            .expect("les deux insertions écrivent le fichier");
+        assert!(after.contains("mod m20260826_creer_users;"));
+        assert!(after.contains("Box::new(m20260826_creer_users::Migration),"));
         assert_eq!(plan.files()[0].before.as_deref(), Some(lib));
     }
 
@@ -1025,11 +1033,11 @@ mod tests {
         let plan = builder.finir();
 
         assert!(plan.sautees().is_empty(), "{:?}", plan.sautees());
-        assert!(
-            plan.files()[0].after.contains("mailpit:"),
-            "{}",
-            plan.files()[0].after
-        );
+        let after = plan.files()[0]
+            .after
+            .as_deref()
+            .expect("le compose est projeté");
+        assert!(after.contains("mailpit:"), "{after}");
     }
 
     /// Optionnelle ne veut pas dire facultative dans un fichier présent : un compose
@@ -1133,7 +1141,13 @@ mod tests {
         let plan = builder.finir();
 
         assert!(plan.sautees().is_empty(), "{:?}", plan.sautees());
-        assert!(plan.files()[0].after.contains("mailpit:"));
+        assert!(
+            plan.files()[0]
+                .after
+                .as_deref()
+                .unwrap()
+                .contains("mailpit:")
+        );
     }
 
     #[test]
@@ -1171,7 +1185,13 @@ mod tests {
 
         assert_eq!(plan.actions()[0].statut, Status::AFaire);
         assert_eq!(plan.actions()[0].path, "Cargo.toml");
-        assert!(plan.files()[0].after.contains("\"docker\""));
+        assert!(
+            plan.files()[0]
+                .after
+                .as_deref()
+                .unwrap()
+                .contains("\"docker\"")
+        );
     }
 
     #[test]
@@ -1186,7 +1206,7 @@ mod tests {
         let plan = builder.finir();
 
         assert_eq!(plan.actions()[0].statut, Status::DejaFait);
-        assert_eq!(plan.files()[0].after, CARGO);
+        assert_eq!(plan.files()[0].after.as_deref(), Some(CARGO));
     }
 
     #[test]
@@ -1243,12 +1263,13 @@ mod tests {
 
         assert_eq!(plan.actions()[0].statut, Status::AFaire);
         assert_eq!(plan.actions()[0].path, "Cargo.toml");
+        let after = plan.files()[0]
+            .after
+            .as_deref()
+            .expect("le patch écrit le manifeste");
         assert!(
-            plan.files()[0]
-                .after
-                .contains(r#"redis = { version = "0.32", features = ["tokio-comp"] }"#),
-            "{}",
-            plan.files()[0].after
+            after.contains(r#"redis = { version = "0.32", features = ["tokio-comp"] }"#),
+            "{after}"
         );
     }
 
@@ -1257,12 +1278,13 @@ mod tests {
         let project = project();
         let after = patched_plan(&project, CARGO_DEPS, redis()).files()[0]
             .after
-            .clone();
+            .clone()
+            .expect("le patch écrit le manifeste");
 
         let plan = patched_plan(&project, &after, redis());
 
         assert_eq!(plan.actions()[0].statut, Status::DejaFait);
-        assert_eq!(plan.files()[0].after, after);
+        assert_eq!(plan.files()[0].after.as_deref(), Some(after.as_str()));
     }
 
     #[test]
@@ -1276,12 +1298,15 @@ mod tests {
         let plan = patched_plan(&project, CARGO_DEPS, patch);
 
         assert_eq!(plan.actions()[0].statut, Status::AFaire);
+        let after = plan.files()[0]
+            .after
+            .as_deref()
+            .expect("le patch écrit le manifeste");
         assert!(
-            plan.files()[0].after.contains(
+            after.contains(
                 r#"axum = { version = "0.9", features = ["macros"] }       # le serveur"#
             ),
-            "{}",
-            plan.files()[0].after
+            "{after}"
         );
     }
 
@@ -1294,12 +1319,13 @@ mod tests {
         };
         let after = patched_plan(&project, CARGO_DEPS, patch()).files()[0]
             .after
-            .clone();
+            .clone()
+            .expect("le patch écrit le manifeste");
 
         let plan = patched_plan(&project, &after, patch());
 
         assert_eq!(plan.actions()[0].statut, Status::DejaFait);
-        assert_eq!(plan.files()[0].after, after);
+        assert_eq!(plan.files()[0].after.as_deref(), Some(after.as_str()));
     }
 
     #[test]
@@ -1360,7 +1386,12 @@ mod tests {
             "le routeur trouvé ne porte pas la ligne : l'action a bien un effet"
         );
         assert_eq!(
-            plan.files()[0].after.matches("users::routes").count(),
+            plan.files()[0]
+                .after
+                .as_deref()
+                .unwrap()
+                .matches("users::routes")
+                .count(),
             1,
             "la ligne a été insérée deux fois"
         );
@@ -1386,10 +1417,10 @@ mod tests {
         assert!(matches!(error, Error::DejaProjete { .. }));
 
         assert_eq!(plan.actions().len(), 1);
+        let after = plan.files()[0].after.as_deref().unwrap();
         assert!(
-            plan.files()[0].after.contains("users::routes"),
-            "la projection de l'insertion a été écrasée : {}",
-            plan.files()[0].after
+            after.contains("users::routes"),
+            "la projection de l'insertion a été écrasée : {after}"
         );
     }
 
@@ -1408,7 +1439,7 @@ mod tests {
 
         assert!(matches!(error, Error::DejaProjete { .. }));
         assert_eq!(plan.actions().len(), 1);
-        assert_eq!(plan.files()[0].after, "FROM rust\n");
+        assert_eq!(plan.files()[0].after.as_deref(), Some("FROM rust\n"));
     }
 
     #[test]
@@ -1500,7 +1531,7 @@ mod tests {
 
         assert_eq!(plan.actions().len(), 1, "une action en échec a été retenue");
         assert_eq!(plan.files().len(), 1, "un fichier en échec a été projeté");
-        assert_eq!(plan.files()[0].after, "FROM rust\n");
+        assert_eq!(plan.files()[0].after.as_deref(), Some("FROM rust\n"));
     }
 
     /// Chemin et contenu de chaque fichier du répertoire, trié : deux empreintes égales
@@ -1582,7 +1613,7 @@ mod tests {
 
         fs::write(
             project.path().join("src/router.rs"),
-            &premier.files()[0].after,
+            premier.files()[0].after.as_deref().unwrap(),
         )
         .expect("l'écriture aboutit");
 
@@ -1594,8 +1625,8 @@ mod tests {
 
         assert_eq!(second.files()[0].statut, Status::DejaFait);
         assert_eq!(
-            second.files()[0].before.as_deref(),
-            Some(second.files()[0].after.as_str()),
+            second.files()[0].before,
+            second.files()[0].after,
             "la seconde planification réécrirait le fichier"
         );
     }
@@ -1621,8 +1652,9 @@ mod tests {
         let file = plan.files().first().expect("une action a visé le fichier");
 
         assert_eq!(file.statut, Status::AFaire);
-        assert!(file.after.contains("neuf"));
-        assert!(file.after.contains("## Notes du projet\n\nà moi\n"));
+        let after = file.after.as_deref().unwrap();
+        assert!(after.contains("neuf"));
+        assert!(after.contains("## Notes du projet\n\nà moi\n"));
     }
 
     /// Le statut est ce qui permet à `upgrade` de dire « rien à faire » : une zone déjà
@@ -1685,7 +1717,13 @@ mod tests {
             .expect("la zone est présente");
 
         let plan = builder.finir();
-        let after = &plan.files().first().expect("un fichier visé").after;
+        let after = plan
+            .files()
+            .first()
+            .expect("un fichier visé")
+            .after
+            .as_deref()
+            .unwrap();
 
         assert!(after.contains("<!-- rbs:guide 1.2.0 -->"), "{after}");
     }
