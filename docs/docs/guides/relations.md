@@ -7,8 +7,8 @@ title: Relations
 
 A generator that produces a CRUD feature but cannot produce a foreign key leaves its user
 writing, by hand, the exact part SeaORM makes the most tedious: the `Relation` variant, the
-`impl Related`, the migration's constraint, and the index that constraint needs. The ninth
-type of [`--fields`](../cli/generate.md#the-nine-types), `references`, closes that gap —
+`impl Related`, the migration's constraint, and the index that constraint needs. The tenth
+type of [`--fields`](../cli/generate.md#the-ten-types), `references`, closes that gap —
 entirely from the command line, with no database running.
 
 ```text

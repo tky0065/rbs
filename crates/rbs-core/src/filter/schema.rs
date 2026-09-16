@@ -156,6 +156,38 @@ pub struct TextMatchOperators {
     pub is_null: Option<bool>,
 }
 
+/// Conditions acceptées sur une colonne à valeurs énumérées.
+///
+/// Une valeur nue, écrite hors de tout objet, vaut la condition `eq`.
+///
+/// Les valeurs elles-mêmes ne sont pas nommées ici : elles viennent de `--fields` et
+/// changent d'une colonne à l'autre. C'est l'énumération que le modèle engendré déclare
+/// qui les porte dans le document, là où le corps de la ressource les cite.
+#[derive(Deserialize, ToSchema)]
+#[serde(untagged)]
+#[non_exhaustive]
+pub enum OneOfSchema {
+    /// La valeur seule, hors de tout objet : une égalité stricte.
+    Bare(String),
+    /// L'objet qui nomme les conditions demandées.
+    Operators(OneOfOperators),
+}
+
+/// Opérateurs acceptés sur une colonne à valeurs énumérées.
+///
+/// Une énumération ne s'ordonne pas : l'appartenance à une liste y remplace les
+/// comparaisons d'une colonne ordonnée.
+#[derive(Deserialize, ToSchema)]
+#[non_exhaustive]
+pub struct OneOfOperators {
+    /// Égalité stricte.
+    pub eq: Option<String>,
+    /// Appartenance à l'une des valeurs citées. Une liste vide n'en accepte aucune.
+    pub r#in: Option<Vec<String>>,
+    /// `true` exige une colonne nulle, `false` une colonne renseignée.
+    pub is_null: Option<bool>,
+}
+
 /// Conditions acceptées sur une colonne comparable, sans que son type soit nommé.
 ///
 /// Les filtres engendrés citent depuis la 1.3.1 le schéma du type de leur colonne, qui
@@ -311,6 +343,51 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Une colonne à valeurs énumérées offre les deux mêmes formes que les autres : la
+    /// valeur nue d'abord, puis l'objet qui nomme ses opérateurs.
+    #[test]
+    fn an_enumerated_column_offers_the_bare_value_first() {
+        let schema = schema::<OneOfSchema>();
+        let formes = schema["oneOf"]
+            .as_array()
+            .unwrap_or_else(|| panic!("un oneOf attendu : {schema}"));
+
+        assert_eq!(formes.len(), 2, "{schema}");
+        assert_eq!(formes[0]["type"], json!("string"), "{schema}");
+        assert!(formes[1]["$ref"].is_string(), "{schema}");
+    }
+
+    /// `in` est le seul opérateur que `Comparison` n'a pas : une énumération ne s'ordonne
+    /// pas, et l'appartenance à une liste remplace la comparaison.
+    #[test]
+    fn the_enumerated_operators_are_eq_in_and_is_null() {
+        let schema = schema::<OneOfOperators>();
+        let proprietes = schema["properties"]
+            .as_object()
+            .unwrap_or_else(|| panic!("des propriétés attendues : {schema}"));
+
+        assert_eq!(proprietes.len(), 3, "{schema}");
+        for operateur in ["eq", "in", "is_null"] {
+            assert!(
+                proprietes.contains_key(operateur),
+                "« {operateur} » absent : {schema}"
+            );
+        }
+    }
+
+    /// Un `$ref` que le document n'expose pas est un lien mort, ici comme ailleurs.
+    #[test]
+    fn the_enumerated_schema_exposes_what_its_oneof_cites() {
+        let mut exposes = Vec::new();
+        OneOfSchema::schemas(&mut exposes);
+        let noms: Vec<String> = exposes.into_iter().map(|(nom, _)| nom).collect();
+
+        assert!(
+            noms.iter().any(|nom| nom == "OneOfOperators"),
+            "« OneOfOperators » absent : {noms:?}"
+        );
     }
 
     /// Aucune condition n'est exigée : un filtre qui ne porte que `gte` est valide, et un

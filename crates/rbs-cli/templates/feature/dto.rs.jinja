@@ -29,7 +29,7 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use validator::Validate;
 
-use super::model::Model;
+use super::model::{@ model_import @};
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct Create{@ entity @}{@ body(fields, false) @}

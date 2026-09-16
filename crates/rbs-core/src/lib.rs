@@ -62,9 +62,9 @@ pub use extract::Identity;
 pub use extract::ValidatedJson;
 pub use filter::schema::{
     BoolComparisonSchema, ComparisonSchema, DateComparisonSchema, DateTimeComparisonSchema,
-    FloatComparisonSchema, IntComparisonSchema, TextMatchSchema, UuidComparisonSchema,
+    FloatComparisonSchema, IntComparisonSchema, OneOfSchema, TextMatchSchema, UuidComparisonSchema,
 };
-pub use filter::{Comparison, Sort, SortKey, TextMatch};
+pub use filter::{Comparison, OneOf, Sort, SortKey, TextMatch};
 pub use lang::Lang;
 pub use openapi::{CommonResponses, ProblemDetails};
 pub use pagination::{Cursor, CursorPage, Page, Pagination};

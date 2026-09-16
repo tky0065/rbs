@@ -225,7 +225,7 @@ pub enum GenerateCommands {
         /// Nom de la feature, au pluriel.
         name: String,
 
-        /// Champs de l'entité, ex. "name:string,email:string:unique".
+        /// Champs de l'entité, ex. "name:string,status:enum(draft,published)".
         #[arg(long, value_name = "CHAMPS")]
         fields: Option<String>,
 

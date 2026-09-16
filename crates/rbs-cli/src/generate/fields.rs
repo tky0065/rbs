@@ -145,6 +145,18 @@ pub(crate) struct RelationView {
     pub on_delete: String,
 }
 
+/// Une valeur d'énumération et la variante Rust qui la porte.
+///
+/// Le couple est calculé ici plutôt que dans la template : `draft` devient `Draft` par la
+/// même recasse que les autres identifiants, et une template ne sait pas recasser.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(crate) struct EnumCase {
+    /// La valeur telle qu'elle a été écrite : `draft`.
+    pub value: String,
+    /// La variante Rust qui la porte : `Draft`.
+    pub variant: String,
+}
+
 /// Un champ déclaré dans `--fields`, une fois analysé et validé.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Field {
@@ -192,18 +204,12 @@ impl Field {
     }
 
     pub(crate) fn rust_type(&self) -> String {
-        let bare = match &self.kind {
-            FieldKind::Scalar(type_) => type_.rust_type(),
-            FieldKind::Reference(_) => "Uuid",
-            // Le type réel est nommé d'après le champ (`enum_type`) : le patron ne le lit
-            // pas encore, la tâche suivante l'y branche.
-            FieldKind::Enum(_) => "String",
-        };
+        let bare = self.bare_rust_type();
 
         if self.optional {
             format!("Option<{bare}>")
         } else {
-            bare.to_string()
+            bare
         }
     }
 
@@ -215,19 +221,19 @@ impl Field {
         match &self.kind {
             FieldKind::Scalar(type_) => *type_,
             FieldKind::Reference(_) => FieldType::Uuid,
-            // Aucun des huit scalaires ne représente une énumération : les quatre
-            // consommateurs qui décident du filtre, du seed et des tests engendrés à
-            // partir de ce type continuent de compiler sur cette approximation, que la
-            // tâche suivante remplace par le vrai rendu (variantes, `CHECK`, `OneOf`).
+            // Une énumération est physiquement une chaîne : c'est ce qu'en dit la
+            // colonne. Les générateurs qui décident du filtre, du seed et des tests
+            // engendrés regardent `enum_variants` *avant* d'appeler ce type — une
+            // énumération ne se cherche pas par sous-chaîne et ne tire pas sa valeur.
             FieldKind::Enum(_) => FieldType::String,
         }
     }
 
-    fn bare_rust_type(&self) -> &'static str {
+    fn bare_rust_type(&self) -> String {
         match &self.kind {
-            FieldKind::Scalar(type_) => type_.rust_type(),
-            FieldKind::Reference(_) => "Uuid",
-            FieldKind::Enum(_) => "String",
+            FieldKind::Scalar(type_) => type_.rust_type().to_string(),
+            FieldKind::Reference(_) => "Uuid".to_string(),
+            FieldKind::Enum(_) => self.enum_type(),
         }
     }
 
@@ -239,13 +245,17 @@ impl Field {
         }
     }
 
-    fn migration_method(&self) -> &'static str {
+    /// L'appel qui pose le type de la colonne dans la migration.
+    ///
+    /// Rendu en `String` et non en `&'static str` : une énumération borne sa colonne à
+    /// la plus longue de ses valeurs, longueur que seul le champ connaît.
+    fn migration_method(&self) -> String {
         match &self.kind {
-            FieldKind::Scalar(type_) => type_.migration_method(),
-            FieldKind::Reference(_) => "uuid()",
-            // Longueur et `CHECK` dynamiques : la tâche suivante y branche la colonne
-            // réelle, dérivée de la plus longue valeur écrite.
-            FieldKind::Enum(_) => "string()",
+            FieldKind::Scalar(type_) => type_.migration_method().to_string(),
+            FieldKind::Reference(_) => "uuid()".to_string(),
+            // La colonne est une chaîne bornée ; c'est le `CHECK` que pose la migration,
+            // et non ce type, qui en refuse les valeurs étrangères.
+            FieldKind::Enum(_) => format!("string_len({})", self.enum_length()),
         }
     }
 
@@ -272,6 +282,30 @@ impl Field {
             FieldKind::Enum(_) => to_pascal_case(&self.name),
             FieldKind::Scalar(_) | FieldKind::Reference(_) => String::new(),
         }
+    }
+
+    /// Les valeurs de l'énumération et les variantes Rust qui les portent, dans l'ordre
+    /// écrit — vide pour tout champ qui n'en est pas une.
+    pub(crate) fn enum_cases(&self) -> Vec<EnumCase> {
+        self.enum_variants()
+            .iter()
+            .map(|value| EnumCase {
+                value: value.clone(),
+                variant: to_pascal_case(value),
+            })
+            .collect()
+    }
+
+    /// Longueur de la plus longue valeur : c'est elle que borne la colonne.
+    ///
+    /// Comptée en caractères et non en octets : les valeurs sont en snake_case ASCII,
+    /// où les deux coïncident, et `StringLen::N` compte des caractères.
+    fn enum_length(&self) -> usize {
+        self.enum_variants()
+            .iter()
+            .map(|value| value.chars().count())
+            .max()
+            .unwrap_or_default()
     }
 
     /// Le champ porte-t-il du texte, seul endroit où une longueur se borne ?
@@ -343,7 +377,7 @@ impl Field {
 /// reconstruirait sa propre structure de vue.
 impl Serialize for Field {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("Field", 15)?;
+        let mut state = serializer.serialize_struct("Field", 16)?;
         // `name` porte la colonne, non le nom déclaré : les templates de colonne
         // — modèle, migration, DTO — n'ont ainsi rien à savoir des relations.
         state.serialize_field("name", &self.column_name())?;
@@ -354,11 +388,13 @@ impl Serialize for Field {
         state.serialize_field("index", &self.index)?;
         state.serialize_field("rust_type", &self.rust_type())?;
         state.serialize_field("bare_rust_type", &self.bare_rust_type())?;
-        state.serialize_field("migration_method", self.migration_method())?;
+        state.serialize_field("migration_method", &self.migration_method())?;
         state.serialize_field("column_type_attribute", &self.column_type_attribute())?;
         state.serialize_field("validations", &self.validations())?;
         state.serialize_field("enum_variants", self.enum_variants())?;
+        state.serialize_field("enum_cases", &self.enum_cases())?;
         state.serialize_field("enum_type", &self.enum_type())?;
+        state.serialize_field("enum_length", &self.enum_length())?;
         state.serialize_field("relation", &self.relation)?;
         state.end()
     }
@@ -727,6 +763,11 @@ fn parse_enum_values(raw_type: &str) -> Result<Vec<String>, ErrorKind> {
     for raw_value in inner.split(',') {
         let value = raw_value.trim();
 
+        // Une valeur vide — « enum(draft,,published) » — n'est pas une faute de casse :
+        // le message de snake_case citerait une valeur que personne ne voit.
+        if value.is_empty() {
+            return Err(ErrorKind::EnumEmptyValue);
+        }
         if !is_snake_case(value) {
             return Err(ErrorKind::EnumValueNotSnakeCase {
                 value: value.to_string(),
@@ -1608,5 +1649,36 @@ mod tests {
 
         assert_eq!(json["enum_variants"], serde_json::json!([]));
         assert_eq!(json["enum_type"], "");
+    }
+
+    /// Le type Rust d'un champ `enum` est l'énumération que le modèle déclare pour lui :
+    /// `String` nommerait la colonne, pas ce que les DTO et le filtre manipulent.
+    #[test]
+    fn an_enum_field_is_typed_by_its_own_enumeration() {
+        let fields =
+            parse("status:enum(draft,published),state:enum(a,b):optional").expect("champs valides");
+
+        assert_eq!(fields[0].rust_type(), "Status");
+        assert_eq!(fields[1].rust_type(), "Option<State>");
+        assert_eq!(fields[1].bare_rust_type(), "State");
+    }
+
+    /// La colonne porte la longueur de la plus longue valeur : `string()` rendrait un
+    /// `varchar` sans borne sur PostgreSQL, et le `CHECK` y serait la seule garde.
+    #[test]
+    fn an_enum_column_is_a_string_bounded_by_its_longest_value() {
+        let fields = parse("status:enum(draft,published)").expect("champs valides");
+
+        assert_eq!(fields[0].migration_method(), "string_len(9)");
+    }
+
+    /// « enum(draft,,published) » : une valeur vide n'est pas une faute de casse. Le
+    /// message qui parlait de snake_case citait une valeur invisible.
+    #[test]
+    fn an_empty_enum_value_is_named_as_such() {
+        let error = parse("status:enum(draft,,published)").expect_err("valeur vide refusée");
+
+        assert_eq!(error.errors.len(), 1, "{error}");
+        assert_eq!(error.errors[0].kind, ErrorKind::EnumEmptyValue);
     }
 }

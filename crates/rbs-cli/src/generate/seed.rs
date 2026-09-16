@@ -10,7 +10,7 @@ use serde::Serialize;
 use crate::template::Renderer;
 
 use super::feature::Feature;
-use super::fields::{Field, FieldType};
+use super::fields::{EnumCase, Field, FieldType};
 
 const TEMPLATE: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -98,6 +98,13 @@ fn value(champ: &Field, rang: usize) -> String {
         return "None".to_string();
     }
 
+    // Une énumération n'a que ses propres valeurs : la première ligne prend la
+    // première, la seconde la deuxième — et la dernière déclarée quand il y en a moins
+    // que de lignes, faute d'autre chose à écrire.
+    if let Some(case) = enum_case(champ, rang) {
+        return format!("model::{}::{}", champ.enum_type(), case.variant);
+    }
+
     match champ.column_type() {
         FieldType::String | FieldType::Text if champ.validates_email() => {
             format!("\"{}-{rang}@example.com\".to_owned()", champ.name)
@@ -112,6 +119,14 @@ fn value(champ: &Field, rang: usize) -> String {
         // lettre d'un moteur à l'autre, et le seed n'a besoin que de deux valeurs distinctes.
         FieldType::Date => format!("chrono::NaiveDate::from_ymd_opt(2024, 1, {rang}).unwrap()"),
     }
+}
+
+/// La valeur qu'une énumération donne à la ligne `rang`, s'il s'agit d'une énumération.
+fn enum_case(champ: &Field, rang: usize) -> Option<EnumCase> {
+    let cases = champ.enum_cases();
+    let index = (rang - 1).min(cases.len().saturating_sub(1));
+
+    cases.into_iter().nth(index)
 }
 
 /// Une entité portant une référence **requise** ne se sème pas.
@@ -441,5 +456,47 @@ async fn les_semis_sont_rendus_par_l_api() {
                 "le seed diverge de rustfmt à ces longueurs de nom, sur « {champs} »"
             );
         }
+    }
+
+    /// Les deux lignes prennent la première puis la deuxième valeur : deux lignes
+    /// identiques ne montreraient pas que la colonne en accepte plusieurs.
+    #[test]
+    fn an_enum_field_takes_its_first_value_then_its_second() {
+        let rendered = seed("articles", "status:enum(draft,published)");
+
+        assert!(
+            rendered.contains("status: Set(model::Status::Draft)"),
+            "première ligne :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("status: Set(model::Status::Published)"),
+            "seconde ligne :\n{rendered}"
+        );
+    }
+
+    /// Une énumération à une seule valeur la répète : il n'y en a pas d'autre à poser.
+    #[test]
+    fn a_single_valued_enum_repeats_its_only_value() {
+        let rendered = seed("articles", "status:enum(draft)");
+
+        assert_eq!(
+            rendered
+                .matches("status: Set(model::Status::Draft)")
+                .count(),
+            LIGNES,
+            "{rendered}"
+        );
+    }
+
+    /// Une énumération optionnelle est une colonne comme une autre : la renseigner rend le
+    /// seed lisible, là où un `None` ne montrerait rien.
+    #[test]
+    fn an_optional_enum_field_is_seeded_inside_some() {
+        let rendered = seed("articles", "status:enum(draft,published):optional");
+
+        assert!(
+            rendered.contains("status: Set(Some(model::Status::Draft))"),
+            "{rendered}"
+        );
     }
 }

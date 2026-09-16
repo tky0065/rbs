@@ -24,6 +24,7 @@ struct FilterField {
     operator: String,
     schema: &'static str,
     textual: bool,
+    one_of: bool,
 }
 
 /// Rend le filtre de `feature`.
@@ -44,22 +45,38 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
             colonnes => colonnes,
             lang => feature.lang.name(),
             has_date => feature.has_date(),
+            has_enum => !feature.enum_types().is_empty(),
+            // `Column` et `Entity` sont importés de toute entité ; une énumération les
+            // rejoint dans le même `use`, que rustfmt trie.
+            model_imports => model_imports(feature),
         },
     )
 }
 
+/// Les noms que le filtre importe du modèle, triés comme rustfmt les trierait.
+fn model_imports(feature: &Feature) -> Vec<String> {
+    let mut noms = vec!["Column".to_owned(), "Entity".to_owned()];
+    noms.extend(feature.enum_types());
+    noms.sort();
+
+    noms
+}
+
 fn champ(field: &Field) -> FilterField {
     let textual = textual(field);
+    let one_of = !field.enum_variants().is_empty();
 
     FilterField {
         name: field.column_name(),
         pascal_name: field.pascal_name(),
-        operator: match textual {
-            true => "TextMatch".to_owned(),
-            false => format!("Comparison<{}>", scalar_type(field)),
+        operator: match (one_of, textual) {
+            (true, _) => format!("OneOf<{}>", field.enum_type()),
+            (_, true) => "TextMatch".to_owned(),
+            (_, false) => format!("Comparison<{}>", scalar_type(field)),
         },
         schema: schema(field),
         textual,
+        one_of,
     }
 }
 
@@ -71,6 +88,12 @@ fn champ(field: &Field) -> FilterField {
 fn schema(field: &Field) -> &'static str {
     if field.reference().is_some() {
         return "UuidComparisonSchema";
+    }
+
+    // Une énumération est physiquement une chaîne, mais ne se cherche pas par
+    // sous-chaîne : le document doit offrir ses valeurs, pas un `contains`.
+    if !field.enum_variants().is_empty() {
+        return "OneOfSchema";
     }
 
     match field.column_type() {
@@ -89,6 +112,7 @@ fn schema(field: &Field) -> &'static str {
 /// Une référence n'en est jamais une : elle porte un identifiant, que l'on compare.
 fn textual(field: &Field) -> bool {
     field.reference().is_none()
+        && field.enum_variants().is_empty()
         && matches!(field.column_type(), FieldType::String | FieldType::Text)
 }
 
@@ -437,6 +461,64 @@ mod tests {
     #[test]
     fn the_render_is_already_what_rustfmt_would_write() {
         let divergentes = bench::longueurs_divergentes(|name| filtre(name, CHAMPS));
+
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu du filtre diverge de rustfmt à ces longueurs de nom"
+        );
+    }
+
+    /// Une colonne à valeurs énumérées ne se compare ni ne se cherche : elle s'égale ou
+    /// appartient à une liste, ce que porte `OneOf`.
+    #[test]
+    fn an_enum_column_is_filtered_by_one_of() {
+        let rendered = filtre("articles", "status:enum(draft,published)");
+
+        assert!(
+            rendered.contains("pub status: Option<OneOf<Status>>,"),
+            "« status » ne porte pas `OneOf` :\n{rendered}"
+        );
+        assert!(
+            rendered
+                .contains("#[schema(value_type = Option<rbs_core::OneOfSchema>)]\n    pub status:"),
+            "le schéma de l'énumération manque :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("use rbs_core::{Comparison, Error, OneOf, Result, Sort, TextMatch};"),
+            "l'import de `OneOf` manque :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("use super::model::{Column, Entity, Status};"),
+            "l'import de l'énumération manque :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(".add(one_of(Column::Status, filtre.status.as_ref()))"),
+            "la condition n'est pas posée :\n{rendered}"
+        );
+        for traduction in ["colonne.eq(valeur)", "colonne.is_in(valeurs)"] {
+            assert!(
+                rendered.contains(traduction),
+                "« {traduction} » absent :\n{rendered}"
+            );
+        }
+    }
+
+    /// Une entité sans énumération n'importe ni `OneOf` ni l'aide qui le traduit : le
+    /// projet engendré échouerait sous `-D warnings`.
+    #[test]
+    fn an_entity_without_an_enum_carries_neither_one_of_nor_its_helper() {
+        let rendered = filtre("meters", "views:int,published:bool");
+
+        assert!(!rendered.contains("OneOf"), "{rendered}");
+        assert!(!rendered.contains("fn one_of"), "{rendered}");
+    }
+
+    /// Le rendu reste ce que rustfmt écrirait, la colonne d'énumération comprise.
+    #[test]
+    fn the_enum_render_is_already_what_rustfmt_would_write() {
+        let divergentes =
+            bench::longueurs_divergentes(|name| filtre(name, "status:enum(draft,published)"));
 
         assert_eq!(
             divergentes,

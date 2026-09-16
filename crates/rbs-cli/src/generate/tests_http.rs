@@ -147,6 +147,15 @@ fn value(champ: &Field, mark: &str) -> String {
         return "Value::Null".to_string();
     }
 
+    // Une énumération n'accepte que ses propres valeurs : la première à la création, la
+    // deuxième à la modification — la première encore quand elle est seule. Une valeur
+    // inventée ferait refuser le corps par la colonne comme par le `CHECK`.
+    let valeurs = champ.enum_variants();
+    if !valeurs.is_empty() {
+        let rang = usize::from(!mark.is_empty()).min(valeurs.len() - 1);
+        return format!("\"{}\"", valeurs[rang]);
+    }
+
     // Une colonne `unique` non textuelle ne peut pas porter de valeur écrite : les
     // scénarios de ce fichier créent en parallèle sur la même base, et se refuseraient
     // l'un l'autre par un 409 dès la première exécution. Les textes tiennent déjà
@@ -233,8 +242,13 @@ fn contains_field(champ: &Field) -> bool {
             .is_none_or(|borne| borne >= VALEUR_D_EPREUVE)
 }
 
+/// Un champ dont la valeur d'exemple porte le suffixe tiré au sort.
+///
+/// Une énumération en est écartée : sa colonne est une chaîne, mais ses valeurs sont
+/// écrites une fois pour toutes — un suffixe les ferait refuser par le `CHECK`.
 fn textual(champ: &Field) -> bool {
-    matches!(champ.column_type(), FieldType::String | FieldType::Text)
+    champ.enum_variants().is_empty()
+        && matches!(champ.column_type(), FieldType::String | FieldType::Text)
 }
 
 fn names(fields: &[Field], retenu: impl Fn(&Field) -> bool) -> Vec<String> {
@@ -1371,5 +1385,39 @@ mod tests {
         project.migrate(base.url());
 
         project.test_of();
+    }
+
+    /// Les tests engendrés envoient la première valeur à la création, la deuxième à la
+    /// modification : la valeur se rejoue à la lettre, et le scénario de filtrage peut
+    /// donc porter sur elle.
+    #[test]
+    fn an_enum_field_sends_its_first_value_then_its_second() {
+        let rendered = trials("articles", "status:enum(draft,published)");
+
+        assert!(
+            rendered.contains("\"status\": \"draft\","),
+            "valeur de création absente :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("\"status\": \"published\","),
+            "valeur de modification absente :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("compare(&created, &sent, \"status\");"),
+            "la valeur doit se comparer :\n{rendered}"
+        );
+    }
+
+    /// Une énumération à une seule valeur la rejoue : la modification n'a rien d'autre à
+    /// envoyer, et un scénario qui enverrait une valeur absente rendrait 422.
+    #[test]
+    fn a_single_valued_enum_replays_its_only_value() {
+        let rendered = trials("articles", "status:enum(draft)");
+
+        assert_eq!(
+            rendered.matches("\"status\": \"draft\",").count(),
+            2,
+            "la création et la modification envoient la même valeur :\n{rendered}"
+        );
     }
 }

@@ -328,4 +328,56 @@ mod tests {
 
         &reste[..fin]
     }
+
+    /// Un champ `enum` porte dans les DTO le type que le modèle déclare pour lui, et le
+    /// fichier l'importe à côté de `Model`.
+    #[test]
+    fn an_enum_field_carries_its_enumeration_in_the_three_dtos() {
+        let rendered = dto("articles", "status:enum(draft,published)");
+
+        assert!(
+            rendered.contains("use super::model::{Model, Status};"),
+            "l'import de l'énumération manque :\n{rendered}"
+        );
+
+        let creation = extract(&rendered, "pub struct CreateArticle {");
+        assert!(creation.contains("pub status: Status,"), "{creation}");
+
+        let mise_a_jour = extract(&rendered, "pub struct UpdateArticle {");
+        assert!(
+            mise_a_jour.contains("pub status: Option<Status>,"),
+            "{mise_a_jour}"
+        );
+
+        let response = extract(&rendered, "pub struct ArticleResponse {");
+        assert!(response.contains("pub status: Status,"), "{response}");
+    }
+
+    /// Un champ optionnel d'un type neuf rend bien `Option<T>` là où le champ requis rend
+    /// `T` — la création porte l'`Option` du champ, non celle de la mise à jour.
+    #[test]
+    fn an_optional_enum_field_is_optional_in_the_creation_and_the_response() {
+        let rendered = dto("articles", "status:enum(draft,published):optional");
+
+        let creation = extract(&rendered, "pub struct CreateArticle {");
+        assert!(
+            creation.contains("pub status: Option<Status>,"),
+            "{creation}"
+        );
+
+        let response = extract(&rendered, "pub struct ArticleResponse {");
+        assert!(
+            response.contains("pub status: Option<Status>,"),
+            "{response}"
+        );
+    }
+
+    /// Une entité sans énumération n'importe qu'elle : un `use` inutile est refusé sous
+    /// `-D warnings`.
+    #[test]
+    fn an_entity_without_an_enum_imports_only_the_model() {
+        let rendered = dto("articles", "title:string");
+
+        assert!(rendered.contains("use super::model::Model;"), "{rendered}");
+    }
 }

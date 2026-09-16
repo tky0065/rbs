@@ -55,7 +55,7 @@ Arguments :
   <NAME>  Nom de la feature, au pluriel
 
 Options :
-      --fields <CHAMPS>    Champs de l'entité, ex. "name:string,email:string:unique"
+      --fields <CHAMPS>    Champs de l'entité, ex. "name:string,status:enum(draft,published)"
       --singular <NOM>     Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force              Écrit même si le working tree Git est sale
       --dry-run            Affiche le plan sans rien écrire
@@ -204,9 +204,9 @@ unique "` and `"titre:string,email:string:unique"` describe the same two fields.
 `--fields` declares no field at all. Fields keep their declaration order in the entity and
 in the migration.
 
-### The nine types
+### The ten types
 
-There is no tenth, and no `email` type: a string format is not a column type.
+There is no eleventh, and no `email` type: a string format is not a column type.
 
 | Type | Rust | Migration |
 |---|---|---|
@@ -218,11 +218,22 @@ There is no tenth, and no `email` type: a string format is not a column type.
 | `uuid` | `Uuid` | `uuid()` |
 | `datetime` | `DateTimeWithTimeZone` | `timestamp_with_time_zone()` |
 | `date` | `Date` | `date()` |
+| `enum(a,b,c)` | an enum named after the field | `string_len(n)` under a `CHECK` |
 
 `string` and `text` share a Rust type, so `text` is the only one that also carries an
 explicit column type on the entity — without it SeaORM would infer `varchar`.
 
-The ninth, `references`, is not a scalar at all: it points the column at another entity
+`enum(a,b,c)` is the only type carrying its own values. They are snake_case, distinct, and
+at least one. The model declares an enum named after the field in PascalCase — `status`
+gives `Status` — one variant per value, and the migration bounds the column to the longest
+value under a `CHECK (status IN ('draft', 'published'))` that holds on PostgreSQL, MySQL and
+SQLite alike. An `optional` column stays nullable: a `NULL` passes a `CHECK`. A field whose
+PascalCase form collides with a type the model already declares — `Model`, `ActiveModel`,
+`Entity`, `Column`, `PrimaryKey`, `Relation` — is refused before anything is written. Such a
+column is filtered by `eq`, `in` and `is_null` rather than by the comparisons of an ordered
+one; [Filtering](../guides/filtering.md) has that table.
+
+The tenth, `references`, is not a scalar at all: it points the column at another entity
 instead of giving it a type of its own.
 
 ```text
@@ -307,7 +318,7 @@ erreur : champ 1 « Title » — le nom doit être en snake_case : minuscules AS
 erreur : champ 2 « type » — « type » est un mot-clé Rust
         → essayez « kind » ou « type_ »
 erreur : champ 3 « prix » — type inconnu « decimal »
-        → string, int, float, bool, uuid, datetime, date, text, references:<table>
+        → string, int, float, bool, uuid, datetime, date, text, references:<table>, enum(a,b,c)
 erreur : champ 4 « slug » — « index » redondant : « unique » pose déjà un index
         → retirez « index »
 erreur : champ 6 « email » — « email » est déjà déclaré au champ 5

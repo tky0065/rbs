@@ -65,6 +65,7 @@ pub(crate) enum ErrorKind {
     },
     EnumUnclosedParenthesis,
     EnumEmptyList,
+    EnumEmptyValue,
     EnumValueNotSnakeCase {
         value: String,
     },
@@ -135,6 +136,7 @@ impl ErrorKind {
                 "la liste de valeurs de « enum » n'est pas refermée par une parenthèse".to_string()
             }
             Self::EnumEmptyList => "« enum » attend au moins une valeur".to_string(),
+            Self::EnumEmptyValue => "une valeur de « enum » est vide".to_string(),
             Self::EnumValueNotSnakeCase { value } => {
                 format!("la valeur « {value} » n'est pas en snake_case")
             }
@@ -142,7 +144,7 @@ impl ErrorKind {
                 format!("la valeur « {value} » est déclarée deux fois")
             }
             Self::EnumTypeNameCollision { type_name } => format!(
-                "« {label} » nommerait le type « {type_name} », que `model.rs` déclare déjà"
+                "« {label} » nommerait le type « {type_name} », que « model.rs » déclare déjà"
             ),
         }
     }
@@ -200,7 +202,7 @@ impl ErrorKind {
                 Some("« max » s'écrit sur un champ « string » ou « text »".to_string())
             }
             Self::InvalidMaxLength { .. } => Some(format!("exemple : « {label}:string:max=200 »")),
-            Self::EnumUnclosedParenthesis | Self::EnumEmptyList => {
+            Self::EnumUnclosedParenthesis | Self::EnumEmptyList | Self::EnumEmptyValue => {
                 Some("exemple : « status:enum(draft,published) »".to_string())
             }
             Self::EnumValueNotSnakeCase { .. } => {
@@ -673,7 +675,7 @@ mod tests {
             "model",
         );
         assert!(
-            text.contains("« model » nommerait le type « Model », que `model.rs` déclare déjà"),
+            text.contains("« model » nommerait le type « Model », que « model.rs » déclare déjà"),
             "{text}"
         );
     }
@@ -687,5 +689,28 @@ mod tests {
             "price",
         );
         assert!(text.contains("enum(a,b,c)"), "« enum » absent de : {text}");
+    }
+
+    /// Les messages citent entre guillemets français, jamais entre accents graves : celui
+    /// de la collision était le seul à écrire `model.rs` comme du code.
+    #[test]
+    fn the_enum_type_collision_quotes_the_file_like_every_other_message() {
+        let text = rendered(
+            ErrorKind::EnumTypeNameCollision {
+                type_name: "Column".to_string(),
+            },
+            "column",
+        );
+
+        assert!(text.contains("« model.rs »"), "{text}");
+        assert!(!text.contains("`model.rs`"), "{text}");
+    }
+
+    #[test]
+    fn an_empty_enum_value_says_it_is_empty() {
+        let text = rendered(ErrorKind::EnumEmptyValue, "status");
+
+        assert!(text.contains("vide"), "{text}");
+        assert!(!text.contains("snake_case"), "{text}");
     }
 }

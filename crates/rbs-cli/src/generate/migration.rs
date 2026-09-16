@@ -648,4 +648,59 @@ async fn la_migration_monte_insere_et_redescend() {
         assert!(rendered.contains(".unique_key()"), "témoin :\n{rendered}");
         assert!(!rendered.contains("deleted_at"), "témoin :\n{rendered}");
     }
+
+    /// La colonne d'une énumération est une chaîne bornée, sous un `CHECK` qui n'accepte
+    /// que les valeurs écrites : c'est la base, et non l'application, qui le tient.
+    #[test]
+    fn an_enum_column_is_a_bounded_string_under_a_check() {
+        let rendered = migration("articles", "status:enum(draft,published)").content;
+        let compact = sans_blancs(&rendered);
+
+        assert!(
+            compact.contains(
+                "ColumnDef::new(Articles::Status).string_len(9).not_null().check(Expr::col(Articles::Status).is_in([\"draft\",\"published\"]))"
+            ),
+            "colonne ou contrainte absente :\n{rendered}"
+        );
+    }
+
+    /// Une colonne optionnelle reste nullable : un `NULL` passe un `CHECK`, et la
+    /// contrainte ne doit donc pas la rendre obligatoire.
+    #[test]
+    fn an_optional_enum_column_stays_nullable_under_its_check() {
+        let rendered = migration("articles", "status:enum(draft,published):optional").content;
+        let compact = sans_blancs(&rendered);
+
+        assert!(
+            compact.contains(
+                "ColumnDef::new(Articles::Status).string_len(9).null().check(Expr::col(Articles::Status).is_in([\"draft\",\"published\"]))"
+            ),
+            "la colonne optionnelle n'est pas nullable :\n{rendered}"
+        );
+    }
+
+    /// La contrainte porte le nom de la table et celui du champ : leur somme décide de la
+    /// mise en forme, et le balayage la mesure plutôt que de la supposer.
+    #[test]
+    fn the_enum_render_is_already_what_rustfmt_would_write() {
+        let divergentes = bench::longueurs_divergentes(|name| {
+            migration(name, "status:enum(draft,published)").content
+        });
+
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu d'une colonne d'énumération diverge de rustfmt à ces longueurs de nom"
+        );
+
+        let divergentes_champ = bench::longueurs_divergentes(|champ| {
+            migration("articles", &format!("{champ}:enum(draft,published)")).content
+        });
+
+        assert_eq!(
+            divergentes_champ,
+            Vec::<usize>::new(),
+            "le rendu diverge de rustfmt à ces longueurs de champ"
+        );
+    }
 }
