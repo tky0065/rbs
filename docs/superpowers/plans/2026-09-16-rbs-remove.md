@@ -1235,8 +1235,14 @@ git commit -m "feat(remove): refuse avant d'écrire ce qu'un dépendant exige en
 > **Correction du contrôleur (R6).** La tâche 2 a posé deux `#[allow(dead_code)]`
 > — sur `Builder::supprimer` (`plan/mod.rs`) et `Effect::Supprimer` (`plan/action.rs`) —
 > parce que rien ne les appelait encore. **C'est ta tâche qui câble l'appel : retire-les.**
-> Et vérifie qu'il n'en reste aucun autre — la tâche 3 en a posé un sur `anchors::retire`,
-> et les tâches 4 à 9 peuvent faire de même. Un
+> Recense-les par `grep -rn 'allow(dead_code)' crates/rbs-cli/src --include='*.rs'` et
+> retire-les tous. **Piège à éviter** : ce grep remonte aussi `anchors.rs` vers la ligne
+> 1346, où un test préexistant manipule et assertionne la *chaîne littérale*
+> `"#[allow(dead_code)]"` — il n'a rien à voir avec notre séquence et **ne doit pas être
+> touché**. Au dernier relevé (fin de la tâche 4) les attributs réels étaient au nombre de
+> cinq : `plan/mod.rs` sur `supprimer` et `retirer_lignes`, `plan/action.rs` sur
+> `Effect::Supprimer` et `Effect::RetirerLignes`, `anchors.rs` sur `retire`. Les tâches 5 à
+> 9 en ajouteront d'autres. Un
 > `#[allow(dead_code)]` oublié avec un commentaire devenu faux est un défaut que ce dépôt a
 > déjà dû nettoyer une fois ; il ne doit pas revenir par cette porte.
 
