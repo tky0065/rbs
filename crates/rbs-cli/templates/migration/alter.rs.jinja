@@ -144,13 +144,16 @@ impl MigrationTrait for Migration {
 {%- for field in (fields | reverse) %}
 {%- set col_ref = iden ~ "::" ~ field.pascal_name %}
 {%- set drop_col = "Table::alter().table(" ~ iden ~ "::Table).drop_column(" ~ col_ref ~ ").to_owned()" %}
+{#- Trois régimes, tous balayés. L'appel entier tient sur la ligne de `manager` tant que son
+    argument reste sous les soixante colonnes de `fn_call_width` : il y faut une table *et*
+    une colonne courtes, ce que le balayage à champ d'une lettre atteint. Au-delà la chaîne
+    s'éclate, et `.drop_column(…)` y tient à son tour jusqu'à ce que rustfmt déporte son
+    argument — puis y renonce quand la ligne déportée déborderait elle aussi, si bien que
+    les deux extrêmes s'écrivent pareil. #}
 {%- if drop_col | length <= 60 %}
         manager
             .alter_table({@ drop_col @})
             .await?;
-{#- `.drop_column(…)` tient sur sa ligne tant que l'identifiant reste court ; au-delà
-    rustfmt déporte l'argument — puis y renonce quand cette ligne-là déborderait à son
-    tour, et laisse l'appel entier. Les deux extrêmes s'écrivent donc pareil. #}
 {%- elif col_ref | length <= 66 or col_ref | length >= 76 %}
         manager
             .alter_table(

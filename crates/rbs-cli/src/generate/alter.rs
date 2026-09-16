@@ -8,7 +8,8 @@
 //! Le CLI ne réécrit pas d'AST : `model.rs` et `dto.rs` n'ont pas d'ancre, et les lignes
 //! qui leur reviennent sont affichées plutôt qu'insérées.
 
-use std::path::PathBuf;
+use std::fs;
+use std::path::{Path, PathBuf};
 
 use crate::errors::Codee;
 use crate::git;
@@ -327,6 +328,14 @@ pub(crate) fn plan_for(options: &Options, timestamp: &str) -> Result<Planned, Er
     // c'est lui que `--dry-run` montre.
     let avertissement = format::format_batch(std::iter::once(&mut contenu));
 
+    // Les deux fichiers sont lus avant le plan : le bloc affiché ne doit porter que les
+    // imports qui manquent reellement a ce module-ci, et la ligne d'import du modele est a
+    // modifier plutot qu'a ajouter.
+    let model_path = format!("src/{module}/model.rs");
+    let dto_path = format!("src/{module}/dto.rs");
+    let model_source = lire(&root, &model_path);
+    let dto_source = lire(&root, &dto_path);
+
     let entity = Feature::fresh(&options.table, champs.clone()).entity();
 
     // Les deux fichiers s'écrivent ensemble ou pas du tout : une migration que le `lib.rs`
@@ -338,22 +347,15 @@ pub(crate) fn plan_for(options: &Options, timestamp: &str) -> Result<Planned, Er
         builder.insert(mount.anchor, &mount.lines)?;
     }
 
-    // Le même patch que `generate crud` : `sea_orm::prelude::Decimal` n'existe que sous
-    // `with-rust_decimal`, et `serde-str` épingle la représentation JSON du décimal.
+    // La même épingle que `generate crud`, et depuis la même source : voir
+    // `generate::patches_decimal`.
     if champs
         .iter()
         .any(|champ| champ.column_type() == FieldType::Decimal)
     {
-        builder.patch(plan::PatchToml::AjouterDependance(metadata::Dependency {
-            name: "rust_decimal".to_string(),
-            version: "1.43".to_string(),
-            features: vec!["serde-str".to_string()],
-            default_features: true,
-        }))?;
-        builder.patch(plan::PatchToml::AjouterFeatureADependance {
-            dependency: "sea-orm".to_string(),
-            feature: "with-rust_decimal".to_string(),
-        })?;
+        for patch in super::patches_decimal() {
+            builder.patch(patch)?;
+        }
     }
 
     Ok(Planned {
@@ -362,12 +364,12 @@ pub(crate) fn plan_for(options: &Options, timestamp: &str) -> Result<Planned, Er
         fichier,
         blocs: vec![
             Bloc {
-                fichier: format!("src/{module}/model.rs"),
-                lignes: bloc_du_modele(&champs),
+                fichier: model_path,
+                lignes: bloc_du_modele(&champs, &model_source),
             },
             Bloc {
-                fichier: format!("src/{module}/dto.rs"),
-                lignes: bloc_des_dto(&entity, &champs),
+                fichier: dto_path,
+                lignes: bloc_des_dto(&entity, &champs, &dto_source),
             },
         ],
         avertissement,
@@ -393,23 +395,73 @@ fn tables_connues(inventaire: &[entities::Entity]) -> String {
     }
 }
 
-/// Ce que le modèle reçoit : le type de chaque énumération, puis les champs de `Model`.
+/// Les imports que le gabarit du modèle ne pose que sous `{% if enum_types %}`.
+///
+/// Un module qui ne portait aucune énumération ne les a pas, et le type collé ne
+/// compilerait pas sans eux.
+const IMPORTS_ENUM_MODELE: [&str; 2] = [
+    "use serde::{Deserialize, Serialize};",
+    "use utoipa::ToSchema;",
+];
+
+/// Le contenu d'un fichier du projet, ou le vide s'il n'existe pas.
+///
+/// Un fichier absent n'arrête pas la commande : le bloc portera alors tous ses imports,
+/// ce qui reste juste — c'est ce qu'un fichier vide réclame.
+fn lire(root: &Path, chemin: &str) -> String {
+    fs::read_to_string(root.join(chemin)).unwrap_or_default()
+}
+
+/// Ce que le modèle reçoit : les imports qui lui manquent, le type de chaque
+/// énumération, puis les champs de `Model`.
 ///
 /// Affiché et non inséré : `model.rs` n'a pas d'ancre, et le CLI ne réécrit pas d'AST. Le
-/// type d'une énumération est écrit comme `generate crud` le rend — la migration pose le
-/// `CHECK` qui borne la colonne, et un modèle qui n'accorderait pas décrirait un schéma
-/// que la base n'a pas.
-fn bloc_du_modele(champs: &[Field]) -> Vec<String> {
+/// type d'une énumération est écrit comme `generate crud` le rend, documentation comprise :
+/// la migration pose le `CHECK` qui borne la colonne, et un modèle qui n'accorderait pas
+/// décrirait un schéma que la base n'a pas.
+fn bloc_du_modele(champs: &[Field], source: &str) -> Vec<String> {
     let mut lignes = Vec::new();
-
-    for champ in champs
+    let enumerations: Vec<&Field> = champs
         .iter()
         .filter(|champ| !champ.enum_variants().is_empty())
-    {
+        .collect();
+
+    if !enumerations.is_empty() {
+        let manquants: Vec<&str> = IMPORTS_ENUM_MODELE
+            .iter()
+            .copied()
+            .filter(|import| !source.contains(import))
+            .collect();
+
+        if !manquants.is_empty() {
+            lignes.push("// aux imports, en tête du fichier".to_string());
+            lignes.extend(manquants.iter().map(|import| (*import).to_string()));
+            lignes.push(String::new());
+        }
+    }
+
+    for champ in enumerations {
         lignes.push(format!(
             "/// Valeurs acceptées par la colonne « {} ».",
             champ.name
         ));
+        lignes.push("///".to_string());
+        lignes.push(
+            "/// Une valeur de plus s'ajoute ici et dans le `CHECK` que porte une migration \
+             nouvelle :"
+                .to_string(),
+        );
+        lignes.push(
+            "/// la base refuse d'elle-même celles qu'elle ne connaît pas. Plus longue que \
+             toutes les"
+                .to_string(),
+        );
+        lignes.push(
+            "/// actuelles, elle demande en troisième lieu d'élargir le `StringLen::N` \
+             ci-dessous, et"
+                .to_string(),
+        );
+        lignes.push("/// avec lui le `string_len` de cette migration.".to_string());
         lignes.push("#[derive(".to_string());
         lignes.push(
             "    Clone, Copy, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, Deserialize, \
@@ -444,15 +496,111 @@ fn bloc_du_modele(champs: &[Field]) -> Vec<String> {
     lignes
 }
 
-/// Ce que les DTO reçoivent : la même ligne dans les trois structures.
+/// L'import que le prélude ne donne pas : `Date` et `Decimal` n'y entrent que nommés.
 ///
-/// Toute colonne ajoutée est optionnelle — c'est ce que cette commande exige —, si bien
-/// que `Create`, `Update` et la réponse portent le même `Option<T>` ; un champ obligatoire
-/// les aurait distingués.
-fn bloc_des_dto(entity: &str, champs: &[Field]) -> Vec<String> {
-    let mut lignes = vec![format!(
+/// Les bras sont écrits un par un, sans `_` : un type nouveau ne compile pas tant que
+/// personne n'a tranché s'il demande un import.
+fn import_du_type(champ: &Field) -> Option<String> {
+    match champ.column_type() {
+        FieldType::Date => Some("use sea_orm::prelude::Date;".to_string()),
+        FieldType::Decimal => Some("use sea_orm::prelude::Decimal;".to_string()),
+        FieldType::String
+        | FieldType::Int
+        | FieldType::Float
+        | FieldType::Bool
+        | FieldType::Uuid
+        | FieldType::Datetime
+        | FieldType::Text => None,
+    }
+}
+
+/// La ligne `use super::model::…` telle qu'elle est, et telle qu'elle doit devenir.
+///
+/// C'est une ligne à **modifier** et non à ajouter : le fichier en porte déjà une, et le
+/// type de l'énumération s'y joint. La forme suit celle du gabarit — noms triés, accolades
+/// seulement à plusieurs —, faute de quoi le premier `cargo fmt` du projet la réécrirait.
+///
+/// `None` quand rien ne s'y ajoute : aucune énumération, ou toutes déjà importées.
+fn import_du_modele(champs: &[Field], source: &str) -> Option<(String, String)> {
+    let types: Vec<String> = champs
+        .iter()
+        .filter(|champ| !champ.enum_variants().is_empty())
+        .map(Field::enum_type)
+        .collect();
+
+    if types.is_empty() {
+        return None;
+    }
+
+    let ancienne = source
+        .lines()
+        .find(|ligne| ligne.trim_start().starts_with("use super::model::"))?
+        .trim()
+        .to_string();
+
+    let dedans = ancienne
+        .trim_start_matches("use super::model::")
+        .trim_end_matches(';');
+    let mut noms: Vec<String> = dedans
+        .trim_start_matches('{')
+        .trim_end_matches('}')
+        .split(',')
+        .map(|nom| nom.trim().to_string())
+        .filter(|nom| !nom.is_empty())
+        .collect();
+
+    let avant = noms.len();
+    for type_ in types {
+        if !noms.contains(&type_) {
+            noms.push(type_);
+        }
+    }
+
+    if noms.len() == avant {
+        return None;
+    }
+
+    noms.sort();
+    let nouvelle = if noms.len() > 1 {
+        format!("use super::model::{{{}}};", noms.join(", "))
+    } else {
+        format!("use super::model::{};", noms[0])
+    };
+
+    Some((ancienne, nouvelle))
+}
+
+/// Ce que les DTO reçoivent : les imports qui leur manquent, la ligne d'import du modèle à
+/// reprendre, puis la même ligne de champ dans les trois structures.
+///
+/// Toute colonne ajoutée étant optionnelle — c'est ce que cette commande exige —, `Create`,
+/// `Update` et la réponse portent le même `Option<T>` ; un champ obligatoire les aurait
+/// distingués.
+fn bloc_des_dto(entity: &str, champs: &[Field], source: &str) -> Vec<String> {
+    let mut lignes = Vec::new();
+
+    let mut imports: Vec<String> = Vec::new();
+    for import in champs.iter().filter_map(import_du_type) {
+        if !source.contains(&import) && !imports.contains(&import) {
+            imports.push(import);
+        }
+    }
+
+    if !imports.is_empty() {
+        lignes.push("// aux imports, en tête du fichier".to_string());
+        lignes.append(&mut imports);
+        lignes.push(String::new());
+    }
+
+    if let Some((ancienne, nouvelle)) = import_du_modele(champs, source) {
+        lignes.push(format!("// remplacez `{ancienne}` par :"));
+        lignes.push(nouvelle);
+        lignes.push(String::new());
+    }
+
+    lignes.push(format!(
         "// dans `Create{entity}`, `Update{entity}` et `{entity}Response`"
-    )];
+    ));
 
     for champ in champs {
         if let Some(attribut) = schema_format(champ) {
@@ -833,6 +981,17 @@ mod tests {
                     rendu(&table_longue, &format!("{champ}:string:optional:index"))
                 }),
             ),
+            // Les formes ramassées de la descente — l'appel entier sur la ligne de
+            // `manager` — ne s'atteignent qu'à table *et* colonne courtes : les deux axes
+            // ci-dessus figent l'un ou l'autre trop long pour jamais y tomber.
+            (
+                "table courte, champ d'une lettre",
+                bench::longueurs_divergentes(|table| rendu(table, "a:string:optional")),
+            ),
+            (
+                "table courte, champ d'une lettre indexé",
+                bench::longueurs_divergentes(|table| rendu(table, "a:string:optional:index")),
+            ),
             (
                 "table, champ énuméré",
                 bench::longueurs_divergentes(|table| {
@@ -1012,6 +1171,37 @@ mod tests {
         );
     }
 
+    /// Les deux commandes épinglent le décimal à la même ligne de manifeste.
+    ///
+    /// `generate crud` crée la colonne, `generate migration` l'ajoute : une épingle qui
+    /// divergerait ferait dépendre le manifeste de celle qui l'a touché en dernier. Le
+    /// test compare les deux projets plutôt que la constante, qui ne prouverait que
+    /// d'elle-même.
+    #[test]
+    fn both_commands_pin_the_decimal_to_the_same_manifest_line() {
+        let epingle = |root: &Path| {
+            read(&root.join("Cargo.toml"))
+                .lines()
+                .find(|ligne| ligne.starts_with("rust_decimal"))
+                .unwrap_or_else(|| panic!("l'épingle du décimal manque à {}", root.display()))
+                .to_string()
+        };
+
+        let (_par_crud, par_crud) = crate::fixtures::project();
+        crud(&par_crud, "orders", "price:decimal");
+
+        let (_par_migration, par_migration) = projet();
+        run(&options(
+            &par_migration,
+            "ajoute_prix",
+            "articles",
+            "prix:decimal:optional",
+        ))
+        .expect("la migration doit s'écrire");
+
+        assert_eq!(epingle(&par_crud), epingle(&par_migration));
+    }
+
     /// Une migration sans champ décimal ne touche pas au manifeste.
     #[test]
     fn a_migration_without_a_decimal_leaves_the_manifest_alone() {
@@ -1116,28 +1306,143 @@ mod tests {
         let modele = crate::generate::entity::render(&Feature::fresh("articles", champs))
             .expect("l'entité doit se rendre");
 
-        let declaration = modele
-            .split_once("pub enum Statut {")
-            .expect("le modèle engendré déclare l'énumération")
-            .1
-            .split_once("\n}")
-            .expect("la déclaration se ferme")
-            .0;
+        // La déclaration **entière**, de sa documentation à son accolade fermante : le
+        // commentaire dit où s'ajoute une valeur de plus, et un bloc qui l'abrégerait
+        // laisserait le lecteur sans cette consigne-là.
+        let debut = modele
+            .find("/// Valeurs acceptées par la colonne « statut ».")
+            .expect("le modèle engendré documente l'énumération");
+        let fin = debut
+            + modele[debut..]
+                .find("\n}")
+                .expect("la déclaration se ferme")
+            + 2;
+        let declaration = &modele[debut..fin];
 
         assert!(
-            colle.contains("pub enum Statut {"),
-            "le bloc doit porter le type :\n{colle}"
+            declaration.contains("DeriveActiveEnum") && declaration.contains("pub enum Statut {"),
+            "l'extraction doit couvrir la déclaration entière :\n{declaration}"
         );
-        assert!(
-            colle.contains("DeriveActiveEnum"),
-            "le bloc doit porter la dérive :\n{colle}"
-        );
-        for variante in declaration.lines().map(str::trim).filter(|l| !l.is_empty()) {
+        for ligne in declaration.lines().map(str::trim).filter(|l| !l.is_empty()) {
             assert!(
-                colle.contains(variante),
-                "« {variante} » manque au bloc, que `generate crud` écrit pourtant :\n{colle}"
+                colle.contains(ligne),
+                "« {ligne} » manque au bloc, que `generate crud` écrit pourtant :\n{colle}"
             );
         }
+    }
+
+    /// Les lignes du bloc visant `fichier`, réunies.
+    fn bloc(planned: &Planned, fichier: &str) -> String {
+        planned
+            .blocs
+            .iter()
+            .find(|bloc| bloc.fichier == fichier)
+            .unwrap_or_else(|| panic!("aucun bloc pour {fichier}"))
+            .lignes
+            .join("\n")
+    }
+
+    /// Un module qui ne portait aucune énumération n'a pas les imports que le type collé
+    /// réclame : le gabarit du modèle ne les pose que sous `{% if enum_types %}`. Sans eux,
+    /// le développeur qui suit la consigne à la lettre récolte une erreur de compilation.
+    #[test]
+    fn the_model_block_carries_the_imports_the_module_lacked() {
+        let (_parent, root) = projet();
+
+        let planned = run(&options(
+            &root,
+            "ajoute_statut",
+            "articles",
+            "statut:enum(draft,published):optional",
+        ))
+        .expect("la migration doit s'écrire");
+
+        let colle = bloc(&planned, "src/articles/model.rs");
+        assert!(
+            colle.contains("use serde::{Deserialize, Serialize};"),
+            "l'import de serde manque :\n{colle}"
+        );
+        assert!(
+            colle.contains("use utoipa::ToSchema;"),
+            "l'import d'utoipa manque :\n{colle}"
+        );
+    }
+
+    /// Le même module, une énumération déjà là : les imports y sont, et les répéter
+    /// donnerait un doublon que rustc refuse.
+    #[test]
+    fn the_model_block_leaves_out_the_imports_the_module_already_has() {
+        let (_parent, root) = crate::fixtures::project();
+        crud(&root, "factures", "statut:enum(draft,sent)");
+
+        let planned = run(&options(
+            &root,
+            "ajoute_etat",
+            "factures",
+            "etat:enum(neuf,ancien):optional",
+        ))
+        .expect("la migration doit s'écrire");
+
+        let colle = bloc(&planned, "src/factures/model.rs");
+        assert!(
+            !colle.contains("use serde::"),
+            "import déjà présent, proposé une seconde fois :\n{colle}"
+        );
+        assert!(
+            !colle.contains("use utoipa::"),
+            "import déjà présent, proposé une seconde fois :\n{colle}"
+        );
+        assert!(colle.contains("pub enum Etat {"), "{colle}");
+    }
+
+    /// L'import du modèle dans les DTO est une ligne à **modifier** : le fichier en porte
+    /// déjà une, et le type de l'énumération s'y joint. L'ajouter telle quelle la
+    /// déclarerait deux fois.
+    #[test]
+    fn the_dto_block_says_the_model_import_is_an_edit() {
+        let (_parent, root) = projet();
+
+        let planned = run(&options(
+            &root,
+            "ajoute_statut",
+            "articles",
+            "statut:enum(draft,published):optional",
+        ))
+        .expect("la migration doit s'écrire");
+
+        let colle = bloc(&planned, "src/articles/dto.rs");
+        assert!(
+            colle.contains("// remplacez `use super::model::Model;` par :"),
+            "le bloc doit dire que la ligne se remplace :\n{colle}"
+        );
+        assert!(
+            colle.contains("use super::model::{Model, Statut};"),
+            "le bloc doit donner la ligne complète :\n{colle}"
+        );
+    }
+
+    /// Un `decimal` demande aux DTO un import que le prélude ne donne pas nommément.
+    #[test]
+    fn the_dto_block_carries_the_prelude_import_a_decimal_needs() {
+        let (_parent, root) = projet();
+
+        let planned = run(&options(
+            &root,
+            "ajoute_prix",
+            "articles",
+            "prix:decimal:optional",
+        ))
+        .expect("la migration doit s'écrire");
+
+        let colle = bloc(&planned, "src/articles/dto.rs");
+        assert!(
+            colle.contains("use sea_orm::prelude::Decimal;"),
+            "l'import du décimal manque :\n{colle}"
+        );
+        assert!(
+            !colle.contains("remplacez"),
+            "sans énumération, la ligne d'import du modèle n'a pas à changer :\n{colle}"
+        );
     }
 
     /// Le plan se calcule entièrement sans écrire : c'est ce que `--dry-run` montre.
