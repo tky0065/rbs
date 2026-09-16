@@ -692,6 +692,44 @@ pub(crate) fn insert(source: &str, anchor: Anchor, lines: &[String]) -> Result<S
     ))
 }
 
+/// Rend `source` privé des `lines` que porte le bloc de `anchor`.
+///
+/// Pas de branche `sorted`, à la différence d'[`insert`] : retirer une ligne d'un bloc
+/// trié le laisse trié. La comparaison se fait sur la ligne ébarbée, comme dans
+/// [`contains`] — l'indentation appartient au fichier, pas à la déclaration du fragment.
+///
+/// Les lignes qui restent gardent leur terminaison d'origine telle quelle : le corps est
+/// filtré, jamais reformé ligne à ligne, si bien qu'un fichier CRLF n'a pas besoin d'
+/// [`eol`] pour le rester — seule une ligne entièrement retirée en perd la sienne.
+// Sans appelant hors des tests tant que `rbs remove` n'existe pas : à retirer quand une
+// tâche ultérieure câble cet appel.
+#[allow(dead_code)]
+pub(crate) fn retire(source: &str, anchor: &Anchor, lines: &[String]) -> Result<String, Missing> {
+    let absente = || Missing {
+        anchor: anchor.clone(),
+    };
+
+    let (opening, _) = line_of(source, &anchor.opening()).ok_or_else(absente)?;
+    let (closing, _) = line_of(source, &anchor.closing()).ok_or_else(absente)?;
+
+    if closing < opening {
+        return Err(absente());
+    }
+
+    // `opening` est le début de la ligne de balise : le corps commence après son saut.
+    let debut = source[opening..closing]
+        .find('\n')
+        .map_or(closing, |fin| opening + fin + 1);
+
+    let a_retirer: Vec<&str> = lines.iter().map(|line| line.trim()).collect();
+    let corps: String = source[debut..closing]
+        .split_inclusive('\n')
+        .filter(|line| !a_retirer.contains(&line.trim()))
+        .collect();
+
+    Ok(format!("{}{corps}{}", &source[..debut], &source[closing..]))
+}
+
 /// Ce que l'ancre contient, entre ses deux balises, ou `None` si elle est absente.
 ///
 /// `rbs seed` s'en sert pour distinguer un projet sans seed déclaré d'un projet qui en a :
@@ -1108,6 +1146,69 @@ services:
             insert(tronque, ROUTES, &lines(&["peu importe"])).expect_err("fermeture absente");
 
         assert_eq!(error.anchor, ROUTES);
+    }
+
+    /// La ligne visée s'en va, ses voisines restent.
+    #[test]
+    fn the_named_line_leaves_and_its_neighbours_stay() {
+        let source =
+            "// <rbs:routes>\n    .merge(a::routes())\n    .merge(b::routes())\n// </rbs:routes>\n";
+
+        let apres =
+            retire(source, &ROUTES, &[".merge(a::routes())".to_string()]).expect("l'ancre est là");
+
+        assert!(!apres.contains("a::routes"));
+        assert!(apres.contains("    .merge(b::routes())\n"));
+    }
+
+    /// Retirer une ligne absente ne change rien : le retrait est idempotent.
+    #[test]
+    fn removing_an_absent_line_changes_nothing() {
+        let source = "// <rbs:routes>\n    .merge(b::routes())\n// </rbs:routes>\n";
+
+        let apres =
+            retire(source, &ROUTES, &[".merge(a::routes())".to_string()]).expect("l'ancre est là");
+
+        assert_eq!(apres, source);
+    }
+
+    /// Rien hors de l'ancre n'est touché, fût-ce une ligne identique.
+    #[test]
+    fn an_identical_line_outside_the_anchor_survives() {
+        let source =
+            "    .merge(a::routes())\n// <rbs:routes>\n    .merge(a::routes())\n// </rbs:routes>\n";
+
+        let apres =
+            retire(source, &ROUTES, &[".merge(a::routes())".to_string()]).expect("l'ancre est là");
+
+        assert_eq!(apres.matches("a::routes").count(), 1);
+    }
+
+    /// Une ancre absente est une faute, comme pour l'insertion.
+    #[test]
+    fn a_missing_anchor_is_reported() {
+        retire(
+            "pub fn router() {}\n",
+            &ROUTES,
+            &[".merge(a::routes())".to_string()],
+        )
+        .expect_err("l'ancre manque");
+    }
+
+    /// Le retrait ne touche qu'aux lignes qu'il ôte : les autres gardent la fin de ligne
+    /// du fichier hôte, sans passage par `eol` — aucune ligne n'y est reconstruite.
+    #[test]
+    fn retiring_a_line_follows_the_line_endings_of_the_host_file() {
+        let hote = "// <rbs:routes>\r\n    .merge(a::routes())\r\n    .merge(b::routes())\r\n// </rbs:routes>\r\n";
+
+        let apres =
+            retire(hote, &ROUTES, &[".merge(a::routes())".to_string()]).expect("l'ancre est là");
+
+        assert!(
+            lf_orphelin(&apres).is_none(),
+            "fin de ligne LF au rang {:?} d'un fichier CRLF :\n{apres:?}",
+            lf_orphelin(&apres)
+        );
     }
 
     /// Une occurrence citée dans du code — une chaîne, un message d'erreur — n'ouvre pas
