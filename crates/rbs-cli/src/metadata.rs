@@ -287,12 +287,13 @@ where
     Ok(Cible { root, metadonnees })
 }
 
-/// Rend le manifeste avec `feature` inscrite, ou `None` si elle y est déjà.
+/// Localise `[package.metadata.rbs]` en mutable, ou lève `PasUnProjet` si le manifeste ne
+/// la porte pas.
 ///
-/// `name` ne désigne le fichier que dans les messages d'erreur : rien n'est lu ni écrit ici.
-pub fn record_feature(text: &str, feature: &str, name: &str) -> Result<Option<String>, Error> {
-    let mut document = parse(text, name)?;
-
+/// Partagée par [`record_feature`] et [`remove_feature`] : sans elle, l'une des deux finit
+/// par confondre l'absence de la section avec celle d'une clé qu'elle porte — deux fautes
+/// qu'un diagnostic correct doit distinguer.
+fn section_rbs_mut<'a>(document: &'a mut DocumentMut, name: &str) -> Result<&'a mut Item, Error> {
     // `get_mut` sur une clé absente la crée à `Item::None` pour permettre l'écriture :
     // vérifier l'existence de la section avant de la traverser en mutable évite qu'une
     // absence s'y déguise en `Item::None` au lieu de déclencher `PasUnProjet`.
@@ -307,11 +308,20 @@ pub fn record_feature(text: &str, feature: &str, name: &str) -> Result<Option<St
         });
     }
 
-    let rbs = document
+    Ok(document
         .get_mut("package")
         .and_then(|package| package.get_mut("metadata"))
         .and_then(|metadata| metadata.get_mut("rbs"))
-        .expect("la section a été vérifiée juste au-dessus");
+        .expect("la section a été vérifiée juste au-dessus"))
+}
+
+/// Rend le manifeste avec `feature` inscrite, ou `None` si elle y est déjà.
+///
+/// `name` ne désigne le fichier que dans les messages d'erreur : rien n'est lu ni écrit ici.
+pub fn record_feature(text: &str, feature: &str, name: &str) -> Result<Option<String>, Error> {
+    let mut document = parse(text, name)?;
+
+    let rbs = section_rbs_mut(&mut document, name)?;
 
     let installees = rbs
         .get_mut("features")
@@ -336,23 +346,22 @@ pub fn record_feature(text: &str, feature: &str, name: &str) -> Result<Option<St
 /// Rend le manifeste privé de `feature` dans `[package.metadata.rbs]`, ou `None` s'il ne
 /// l'inscrit pas.
 ///
-/// Comme sa jumelle [`record_feature`], une section `[package.metadata.rbs]` absente est
-/// une faute : un manifeste qui ne la porte pas n'est pas un projet rbs, et n'a rien à
-/// désinstaller.
+/// Comme sa jumelle [`record_feature`], dont elle partage [`section_rbs_mut`] : une section
+/// `[package.metadata.rbs]` absente est `PasUnProjet`, une clé `features` absente ou mal
+/// typée dans une section présente est `Field` — deux fautes que fondre l'une dans l'autre
+/// rendrait le diagnostic trompeur.
 pub fn remove_feature(text: &str, feature: &str, name: &str) -> Result<Option<String>, Error> {
     let mut document = parse(text, name)?;
 
-    let Some(installees) = document
-        .get_mut("package")
-        .and_then(|package| package.get_mut("metadata"))
-        .and_then(|metadata| metadata.get_mut("rbs"))
-        .and_then(|rbs| rbs.get_mut("features"))
+    let rbs = section_rbs_mut(&mut document, name)?;
+
+    let installees = rbs
+        .get_mut("features")
         .and_then(Item::as_array_mut)
-    else {
-        return Err(Error::PasUnProjet {
+        .ok_or_else(|| Error::Field {
             path: name.to_string(),
-        });
-    };
+            key: "features",
+        })?;
 
     let avant = installees.len();
     installees.retain(|value| value.as_str() != Some(feature));
@@ -1549,6 +1558,28 @@ features = ["health", "mail", "auth"]
         assert!(matches!(error, Error::PasUnProjet { .. }), "{error}");
     }
 
+    /// Une section présente mais dépourvue de `features` n'est pas un manifeste qui n'est
+    /// pas un projet rbs : c'est une clé mal formée dans un projet qui l'est. `Error::Field`
+    /// le dit ; `Error::PasUnProjet` mentirait sur la cause.
+    #[test]
+    fn removing_a_feature_from_a_section_without_the_features_key_names_the_key() {
+        let source = "[package]\nname = \"demo\"\n\n[package.metadata.rbs]\nversion = \"0.1.0\"\n";
+
+        let error = remove_feature(source, "mail", "Cargo.toml")
+            .expect_err("la section existe, mais `features` n'y est pas un tableau");
+
+        assert!(
+            matches!(
+                error,
+                Error::Field {
+                    key: "features",
+                    ..
+                }
+            ),
+            "{error}"
+        );
+    }
+
     const MANIFESTE_MINIMAL_SANS_RBS: &str = "[package]\nname = \"demo\"\n";
 
     const MANIFESTE_AVEC_LETTRE: &str = r#"[package]
@@ -1623,6 +1654,31 @@ tokio = { version = "1", features = ["macros", "time", "sync"] }
                 .expect("le manifeste se lit"),
             None
         );
+    }
+
+    /// Une dépendance en table détaillée — `[dependencies.tokio]`, ses clés en dessous —
+    /// est une forme courante d'un vrai `Cargo.toml` ; sa jumelle `add_feature_to_dependency`
+    /// la gère déjà, `remove_feature_from_dependency` doit s'y comporter pareil.
+    #[test]
+    fn a_feature_leaves_a_dependency_declared_as_a_full_table() {
+        let source = r#"[package]
+name = "demo"
+version = "0.1.0"
+
+[dependencies.tokio]
+version = "1"
+features = ["macros", "time", "sync"]
+"#;
+
+        let apres = remove_feature_from_dependency(source, "tokio", "sync", "Cargo.toml")
+            .expect("le manifeste se lit")
+            .expect("la déclaration change");
+
+        assert!(
+            apres.contains(r#"features = ["macros", "time"]"#),
+            "{apres}"
+        );
+        assert!(apres.contains("[dependencies.tokio]"), "{apres}");
     }
 
     /// Une dépendance absente n'est pas une faute ici, à la différence de
