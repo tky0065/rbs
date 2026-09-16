@@ -234,7 +234,11 @@ JSON number is refused rather than quietly rounded — which is the whole point 
 **SQLite refuses it**, before anything is written: sqlx-sqlite deliberately declines to
 bind an exact decimal — its `NUMERIC` affinity keeps only fifteen significant digits — and
 sea-query binds a `Decimal` for PostgreSQL and MySQL only. The refusal names the field and
-offers the two fallbacks: `float`, or an integer of cents.
+offers the two fallbacks: `float`, or an integer of cents. A project that has already
+pinned `rust_decimal` itself, at another version, gets the whole generation refused before
+anything is written: a version someone chose is never rewritten, and the refusal names
+both. Align the pin on the version asked for, or drop it and let the generation declare
+it.
 
 `enum(a,b,c)` is the only type carrying its own values. They are snake_case, distinct, and
 at least one. The model declares an enum named after the field in PascalCase — `status`

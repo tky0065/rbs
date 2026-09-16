@@ -237,7 +237,11 @@ un nombre JSON est refusé plutôt qu'arrondi en silence — ce qui est tout l'o
 **SQLite le refuse**, avant toute écriture : sqlx-sqlite écarte délibérément le décimal
 exact — son affinité `NUMERIC` ne garde que quinze chiffres significatifs — et sea-query ne
 lie un `Decimal` que pour PostgreSQL et MySQL. Le refus nomme le champ et propose les deux
-replis : `float`, ou un entier en centimes.
+replis : `float`, ou un entier en centimes. Un projet qui a déjà épinglé `rust_decimal`
+lui-même, dans une autre version, voit toute la génération refusée avant la moindre
+écriture : une version choisie par quelqu'un n'est jamais réécrite, et le refus nomme les
+deux. Alignez l'épingle sur la version demandée, ou retirez-la et laissez la génération la
+déclarer.
 
 `enum(a,b,c)` est le seul type à porter ses propres valeurs. Elles sont en snake_case,
 distinctes, et au moins une. Le modèle déclare une énumération nommée d'après le champ en
