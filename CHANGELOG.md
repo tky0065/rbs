@@ -130,6 +130,25 @@ between minor versions with no deprecation cycle.
   `VerifiedIdentity` takes it from there: one read of `users` per request on a route
   behind the guard, down from two. A project generated earlier keeps its guard, which
   still reads the account itself.
+- **`--fields` takes three more types: `date`, `enum(a,b,c)` and `decimal`.** `due:date`
+  gives a `Date` column — a `chrono::NaiveDate`, a `date()` in the migration, a
+  `"2026-09-15"` in JSON — where `datetime` forced an hour nobody had.
+  `status:enum(draft,published)` declares in the feature's `model.rs` a `DeriveActiveEnum`
+  named after the field, one variant per value, and bounds the column to the longest of
+  them under a `CHECK (status IN ('draft', 'published'))` that PostgreSQL, MySQL 8.0.16+
+  and SQLite all hold; the values are snake_case, distinct and at least one, and the
+  parser no longer splits `--fields` on a comma placed between parentheses.
+  `price:decimal` gives a `rust_decimal::Decimal` and a `DECIMAL(19, 4)` column — written
+  out, because MySQL narrows a bare `DECIMAL` to `DECIMAL(10, 0)` — carried in JSON as a
+  string (`"12.5000"`), so that no cent is lost to a float: declaring one adds
+  `rust_decimal` (feature `serde-str`) and sea-orm's `with-rust_decimal` to the project's
+  manifest, and a JSON number is then refused rather than quietly rounded. **SQLite
+  refuses `decimal`** before anything is written, sqlx-sqlite deliberately declining to
+  bind an exact decimal; the message offers `float` or an integer of cents. `rbs-core`
+  gains what the generated filters need: the `OneOf<T>` operator — `eq`, `in`, `is_null`,
+  read from a bare value or an object, which an enum column takes instead of `Comparison`
+  — and the `OneOfSchema`, `DateComparisonSchema` and `DecimalComparisonSchema`
+  documentation schemas.
 
 ### Changed
 

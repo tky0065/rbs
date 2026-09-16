@@ -137,6 +137,26 @@ dépréciation.
   de passe — et `VerifiedIdentity` l'y reprend : une lecture de `users` par requête sur une
   route derrière la garde, au lieu de deux. Un projet engendré plus tôt garde sa garde, qui
   relit toujours le compte elle-même.
+- **`--fields` prend trois types de plus : `date`, `enum(a,b,c)` et `decimal`.**
+  `due:date` donne une colonne `Date` — un `chrono::NaiveDate`, un `date()` dans la
+  migration, un `"2026-09-15"` en JSON — là où `datetime` imposait une heure que personne
+  n'avait. `status:enum(draft,published)` déclare dans le `model.rs` de la feature une
+  énumération `DeriveActiveEnum` nommée d'après le champ, une variante par valeur, et
+  borne la colonne à la plus longue d'entre elles sous un
+  `CHECK (status IN ('draft', 'published'))` que tiennent PostgreSQL, MySQL 8.0.16+ et
+  SQLite ; les valeurs sont en snake_case, distinctes et au moins une, et l'analyseur ne
+  coupe plus `--fields` sur une virgule placée entre parenthèses. `price:decimal` donne un
+  `rust_decimal::Decimal` et une colonne `DECIMAL(19, 4)` — écrite en toutes lettres,
+  MySQL ramenant un `DECIMAL` nu à `DECIMAL(10, 0)` — portée en JSON par une chaîne
+  (`"12.5000"`), pour qu'aucun centime ne se perde dans un flottant : en déclarer un
+  ajoute au manifeste du projet `rust_decimal` (feature `serde-str`) et la feature
+  `with-rust_decimal` de sea-orm, et un nombre JSON est dès lors refusé plutôt qu'arrondi
+  en silence. **SQLite refuse `decimal`** avant toute écriture, sqlx-sqlite écartant
+  délibérément le décimal exact ; le message propose `float` ou un entier en centimes. Le
+  noyau gagne ce qu'exigent les filtres engendrés : l'opérateur `OneOf<T>` — `eq`, `in`,
+  `is_null`, lu d'une valeur nue ou d'un objet, qu'une colonne énumérée prend à la place
+  de `Comparison` — et les schémas de documentation `OneOfSchema`, `DateComparisonSchema`
+  et `DecimalComparisonSchema`.
 
 ### Modifié
 
