@@ -267,7 +267,16 @@ plan pour /private/tmp/rbs-demo/demo
 
   à coller dans src/articles/model.rs :
 
+    // aux imports, en tête du fichier
+    use serde::{Deserialize, Serialize};
+    use utoipa::ToSchema;
+
     /// Valeurs acceptées par la colonne « statut ».
+    ///
+    /// Une valeur de plus s'ajoute ici et dans le `CHECK` que porte une migration nouvelle :
+    /// la base refuse d'elle-même celles qu'elle ne connaît pas. Plus longue que toutes les
+    /// actuelles, elle demande en troisième lieu d'élargir le `StringLen::N` ci-dessous, et
+    /// avec lui le `string_len` de cette migration.
     #[derive(
         Clone, Copy, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, Deserialize, Serialize, ToSchema,
     )]
@@ -287,6 +296,12 @@ plan pour /private/tmp/rbs-demo/demo
 
   à coller dans src/articles/dto.rs :
 
+    // aux imports, en tête du fichier
+    use sea_orm::prelude::Decimal;
+
+    // remplacez `use super::model::Model;` par :
+    use super::model::{Model, Statut};
+
     // dans `CreateArticle`, `UpdateArticle` et `ArticleResponse`
         pub statut: Option<Statut>,
         #[schema(value_type = Option<String>, format = "decimal")]
@@ -301,6 +316,15 @@ modèle porte en plus le type `DeriveActiveEnum` à coller, tel que `generate cr
 le `CHECK` de la migration et les variantes du modèle décrivent une seule et même colonne,
 et un modèle qui divergerait refuserait une valeur que la base porte, ou en offrirait une
 qu'elle rejette.
+
+Les blocs sont calculés contre les fichiers de ce module-là, et non affichés à l'aveugle :
+les suivre à la lettre compile. N'y paraissent que les `use` qui lui manquent réellement —
+ceux de `serde` et d'`utoipa` qu'un `DeriveActiveEnum` réclame, que le modèle engendré ne
+porte que s'il avait déjà une énumération, et le nom de `sea_orm::prelude` qu'une colonne
+`date` ou `decimal` demande aux DTO. L'import du modèle est donné comme une **modification**
+et non comme un ajout : la ligne existe déjà, et le type de l'énumération s'y joint —
+l'ajouter entière la déclarerait deux fois. Un module qui porte déjà une énumération ne se
+voit proposer ni l'un ni l'autre.
 
 Comme les autres sous-commandes, celle-ci respecte `--dry-run`, `--json` et `--force`, et
 passe par le même plan : rien n'est écrit tant qu'il n'est pas entier, et un échec partiel

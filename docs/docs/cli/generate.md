@@ -263,7 +263,16 @@ plan pour /private/tmp/rbs-demo/demo
 
   à coller dans src/articles/model.rs :
 
+    // aux imports, en tête du fichier
+    use serde::{Deserialize, Serialize};
+    use utoipa::ToSchema;
+
     /// Valeurs acceptées par la colonne « statut ».
+    ///
+    /// Une valeur de plus s'ajoute ici et dans le `CHECK` que porte une migration nouvelle :
+    /// la base refuse d'elle-même celles qu'elle ne connaît pas. Plus longue que toutes les
+    /// actuelles, elle demande en troisième lieu d'élargir le `StringLen::N` ci-dessous, et
+    /// avec lui le `string_len` de cette migration.
     #[derive(
         Clone, Copy, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, Deserialize, Serialize, ToSchema,
     )]
@@ -283,6 +292,12 @@ plan pour /private/tmp/rbs-demo/demo
 
   à coller dans src/articles/dto.rs :
 
+    // aux imports, en tête du fichier
+    use sea_orm::prelude::Decimal;
+
+    // remplacez `use super::model::Model;` par :
+    use super::model::{Model, Statut};
+
     // dans `CreateArticle`, `UpdateArticle` et `ArticleResponse`
         pub statut: Option<Statut>,
         #[schema(value_type = Option<String>, format = "decimal")]
@@ -296,6 +311,14 @@ required column would have told them apart. For an `enum(a,b,c)` field the model
 carries the `DeriveActiveEnum` type to paste, exactly as `generate crud` renders it: the
 migration's `CHECK` and the model's variants describe one and the same column, and a model
 that disagreed would either refuse a value the database holds or offer one it rejects.
+
+The blocks are computed against that module's own files rather than printed blindly, so
+that following them to the letter compiles. Only the `use` lines it actually lacks appear:
+the `serde` and `utoipa` imports a `DeriveActiveEnum` needs — the generated model carries
+them only when it already had an enum — and the `sea_orm::prelude` name a `date` or
+`decimal` column needs in the DTOs. The model import is given as an **edit** rather than an
+addition, because that line already exists and the enum type joins it: adding it whole
+would declare it twice. A module that already carries an enum is offered neither import.
 
 Like the other subcommands, this one honours `--dry-run`, `--json` and `--force`, and goes
 through the same plan: nothing is written until the whole plan is computed, and a partial
