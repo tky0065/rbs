@@ -419,6 +419,13 @@ git commit -m "feat(anchors): retire d'un bloc les lignes qu'un fragment y avait
 
 ### Task 4: `Builder::retirer_lignes`
 
+> **Correction du contrôleur (R5) — effet de bord obligatoire.** Ajouter une variante à
+> `Effect` ou à `PatchToml` casse aussitôt le `match` exhaustif de
+> `From<&Effect> for EffectJson` (`crates/rbs-cli/src/plan/json.rs`), et le projet ne
+> compile plus. Pose donc dans le même commit le **bras minimal** de sérialisation, sans
+> test JSON : le test appartient à la tâche 7. Ce n'est pas un débordement de périmètre,
+> c'est la condition pour que ta tâche compile.
+
 **Files:**
 - Modify: `crates/rbs-cli/src/plan/action.rs` (`Effect`), `crates/rbs-cli/src/plan/mod.rs` (après `insert`)
 - Test: `crates/rbs-cli/src/plan/mod.rs` (module `tests`)
@@ -534,6 +541,13 @@ git commit -m "feat(plan): planifie le retrait de lignes d'une ancre"
 ---
 
 ### Task 5: Les trois inverses du manifeste Cargo
+
+> **Correction du contrôleur (R5) — effet de bord obligatoire.** Ajouter une variante à
+> `Effect` ou à `PatchToml` casse aussitôt le `match` exhaustif de
+> `From<&Effect> for EffectJson` (`crates/rbs-cli/src/plan/json.rs`), et le projet ne
+> compile plus. Pose donc dans le même commit le **bras minimal** de sérialisation, sans
+> test JSON : le test appartient à la tâche 7. Ce n'est pas un débordement de périmètre,
+> c'est la condition pour que ta tâche compile.
 
 **Files:**
 - Modify: `crates/rbs-cli/src/metadata.rs` (après `record_feature:293`, `add_dependency:342`, `add_feature_to_dependency:392`)
@@ -701,6 +715,13 @@ git commit -m "feat(metadata): inverse l'inscription d'une feature, d'une dépen
 
 ### Task 6: Le retrait d'une section de configuration
 
+> **Correction du contrôleur (R5) — effet de bord obligatoire.** Ajouter une variante à
+> `Effect` ou à `PatchToml` casse aussitôt le `match` exhaustif de
+> `From<&Effect> for EffectJson` (`crates/rbs-cli/src/plan/json.rs`), et le projet ne
+> compile plus. Pose donc dans le même commit le **bras minimal** de sérialisation, sans
+> test JSON : le test appartient à la tâche 7. Ce n'est pas un débordement de périmètre,
+> c'est la condition pour que ta tâche compile.
+
 **Files:**
 - Modify: `crates/rbs-cli/src/plan/text.rs` (après `add_section:16`), `crates/rbs-cli/src/plan/action.rs`, `crates/rbs-cli/src/plan/mod.rs` (après `add_section:538`)
 - Test: `crates/rbs-cli/src/plan/text.rs` (module `tests`)
@@ -775,6 +796,12 @@ git commit -m "feat(plan): retire d'un document de configuration la section d'un
 ---
 
 ### Task 7: Les nouvelles variantes en JSON
+
+> **Correction du contrôleur (R5).** Les bras de sérialisation des variantes ont déjà été
+> posés, au minimum, par les tâches qui les ont introduites — sans quoi elles n'auraient pas
+> compilé. Ton travail ici est donc : **les tests** qui les gardent, les variantes de
+> `PatchTomlJson` qui manqueraient encore, et la vérification que chaque bras rend bien le
+> nom attendu. Ne t'étonne pas de trouver le code déjà en place ; vérifie-le.
 
 > **Correction du contrôleur (R3) — prime sur le code de l'étape 1 ci-dessous.**
 > Le helper `json_of(&[Action…])` **n'existe pas**. Le module de tests de
@@ -1197,6 +1224,13 @@ git commit -m "feat(remove): refuse avant d'écrire ce qu'un dépendant exige en
 ---
 
 ### Task 10: Le branchement de la commande
+
+> **Correction du contrôleur (R6).** La tâche 2 a posé deux `#[allow(dead_code)]`
+> — sur `Builder::supprimer` (`plan/mod.rs`) et `Effect::Supprimer` (`plan/action.rs`) —
+> parce que rien ne les appelait encore. **C'est ta tâche qui câble l'appel : retire-les.**
+> Et vérifie qu'il n'en reste aucun autre posé par les tâches 4 à 9. Un
+> `#[allow(dead_code)]` oublié avec un commentaire devenu faux est un défaut que ce dépôt a
+> déjà dû nettoyer une fois ; il ne doit pas revenir par cette porte.
 
 > **Correction du contrôleur (R1) — prime sur l'étape 1 ci-dessous.**
 > Le test `a_dry_run_writes_nothing` **ne va pas ici** : il appelle `empreinte` et
