@@ -155,8 +155,10 @@ dépréciation.
   délibérément le décimal exact ; le message propose `float` ou un entier en centimes. Le
   noyau gagne ce qu'exigent les filtres engendrés : l'opérateur `OneOf<T>` — `eq`, `in`,
   `is_null`, lu d'une valeur nue ou d'un objet, qu'une colonne énumérée prend à la place
-  de `Comparison` — et les schémas de documentation `OneOfSchema`, `DateComparisonSchema`
-  et `DecimalComparisonSchema`.
+  de `Comparison` — et les schémas de documentation `OneOfSchema<T>`,
+  `DateComparisonSchema` et `DecimalComparisonSchema`. `OneOfSchema` prend en paramètre
+  l'énumération engendrée : le document nomme dès lors les valeurs acceptées du côté du
+  filtre autant que dans le corps de la réponse.
 
 ### Modifié
 

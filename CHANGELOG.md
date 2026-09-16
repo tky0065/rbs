@@ -147,8 +147,9 @@ between minor versions with no deprecation cycle.
   bind an exact decimal; the message offers `float` or an integer of cents. `rbs-core`
   gains what the generated filters need: the `OneOf<T>` operator — `eq`, `in`, `is_null`,
   read from a bare value or an object, which an enum column takes instead of `Comparison`
-  — and the `OneOfSchema`, `DateComparisonSchema` and `DecimalComparisonSchema`
-  documentation schemas.
+  — and the `OneOfSchema<T>`, `DateComparisonSchema` and `DecimalComparisonSchema`
+  documentation schemas. `OneOfSchema` takes the generated enum as its parameter, so the
+  document names the accepted values on the filter side as much as in the response body.
 
 ### Changed
 

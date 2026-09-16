@@ -22,7 +22,7 @@ struct FilterField {
     name: String,
     pascal_name: String,
     operator: String,
-    schema: &'static str,
+    schema: String,
     textual: bool,
     one_of: bool,
 }
@@ -86,18 +86,21 @@ fn champ(field: &Field) -> FilterField {
 /// Un schéma par type, et non un seul portant une valeur libre : c'est ce qui fait écrire
 /// `"published": true` au document plutôt que `"published": "string"`, et ce qui y nomme la
 /// forme courte à côté des opérateurs.
-fn schema(field: &Field) -> &'static str {
+fn schema(field: &Field) -> String {
     if field.reference().is_some() {
-        return "UuidComparisonSchema";
+        return "UuidComparisonSchema".to_owned();
     }
 
     // Une énumération est physiquement une chaîne, mais ne se cherche pas par
-    // sous-chaîne : le document doit offrir ses valeurs, pas un `contains`.
+    // sous-chaîne : le document doit offrir ses valeurs, pas un `contains`. Le schéma
+    // porte l'énumération du modèle plutôt qu'une chaîne, faute de quoi les valeurs
+    // n'atteindraient que le corps de la réponse, et un client typé accepterait dans le
+    // filtre n'importe quel texte.
     if !field.enum_variants().is_empty() {
-        return "OneOfSchema";
+        return format!("OneOfSchema<{}>", field.enum_type());
     }
 
-    match field.column_type() {
+    let scalaire = match field.column_type() {
         FieldType::String | FieldType::Text => "TextMatchSchema",
         FieldType::Int => "IntComparisonSchema",
         FieldType::Float => "FloatComparisonSchema",
@@ -106,7 +109,9 @@ fn schema(field: &Field) -> &'static str {
         FieldType::Uuid => "UuidComparisonSchema",
         FieldType::Datetime => "DateTimeComparisonSchema",
         FieldType::Date => "DateComparisonSchema",
-    }
+    };
+
+    scalaire.to_owned()
 }
 
 /// Un texte se cherche par sous-chaîne, tout le reste se compare.
@@ -516,8 +521,9 @@ mod tests {
             "« status » ne porte pas `OneOf` :\n{rendered}"
         );
         assert!(
-            rendered
-                .contains("#[schema(value_type = Option<rbs_core::OneOfSchema>)]\n    pub status:"),
+            rendered.contains(
+                "#[schema(value_type = Option<rbs_core::OneOfSchema<Status>>)]\n    pub status:"
+            ),
             "le schéma de l'énumération manque :\n{rendered}"
         );
         assert!(

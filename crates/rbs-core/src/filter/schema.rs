@@ -180,17 +180,18 @@ pub struct TextMatchOperators {
 ///
 /// Une valeur nue, écrite hors de tout objet, vaut la condition `eq`.
 ///
-/// Les valeurs elles-mêmes ne sont pas nommées ici : elles viennent de `--fields` et
-/// changent d'une colonne à l'autre. C'est l'énumération que le modèle engendré déclare
-/// qui les porte dans le document, là où le corps de la ressource les cite.
+/// `T` est l'énumération que le modèle engendré déclare d'après `--fields` : le filtre
+/// cite `OneOfSchema<Status>`, et le document nomme alors les valeurs des deux côtés — le
+/// corps de la ressource comme le filtre. Une chaîne figée ici les tairait du côté du
+/// filtre, et un client typé y accepterait n'importe quel texte.
 #[derive(Deserialize, ToSchema)]
 #[serde(untagged)]
 #[non_exhaustive]
-pub enum OneOfSchema {
+pub enum OneOfSchema<T> {
     /// La valeur seule, hors de tout objet : une égalité stricte.
-    Bare(String),
+    Bare(T),
     /// L'objet qui nomme les conditions demandées.
-    Operators(OneOfOperators),
+    Operators(OneOfOperators<T>),
 }
 
 /// Opérateurs acceptés sur une colonne à valeurs énumérées.
@@ -199,11 +200,11 @@ pub enum OneOfSchema {
 /// comparaisons d'une colonne ordonnée.
 #[derive(Deserialize, ToSchema)]
 #[non_exhaustive]
-pub struct OneOfOperators {
+pub struct OneOfOperators<T> {
     /// Égalité stricte.
-    pub eq: Option<String>,
+    pub eq: Option<T>,
     /// Appartenance à l'une des valeurs citées. Une liste vide n'en accepte aucune.
-    pub r#in: Option<Vec<String>>,
+    pub r#in: Option<Vec<T>>,
     /// `true` exige une colonne nulle, `false` une colonne renseignée.
     pub is_null: Option<bool>,
 }
@@ -236,7 +237,20 @@ pub struct ComparisonSchema {
 mod tests {
     use super::*;
     use serde_json::{Value, json};
-    use utoipa::{PartialSchema, ToSchema};
+    use utoipa::{OpenApi, PartialSchema, ToSchema};
+
+    /// L'énumération que le modèle engendré déclare pour `status:enum(draft,published)`.
+    ///
+    /// Les schémas de ce module ne sont jamais cités sur une chaîne nue : une colonne
+    /// énumérée porte toujours le type que `--fields` a fait naître.
+    #[derive(Deserialize, ToSchema)]
+    #[allow(dead_code)]
+    enum Statut {
+        #[serde(rename = "draft")]
+        Draft,
+        #[serde(rename = "published")]
+        Published,
+    }
 
     /// Rend le schéma d'un type, tel qu'il entre dans le document.
     fn schema<T: PartialSchema>() -> Value {
@@ -386,16 +400,21 @@ mod tests {
     }
 
     /// Une colonne à valeurs énumérées offre les deux mêmes formes que les autres : la
-    /// valeur nue d'abord, puis l'objet qui nomme ses opérateurs.
+    /// valeur nue d'abord, puis l'objet qui nomme ses opérateurs. La valeur nue cite ici
+    /// l'énumération elle-même, et non une chaîne : c'est ce qui en nomme les valeurs.
     #[test]
     fn an_enumerated_column_offers_the_bare_value_first() {
-        let schema = schema::<OneOfSchema>();
+        let schema = schema::<OneOfSchema<Statut>>();
         let formes = schema["oneOf"]
             .as_array()
             .unwrap_or_else(|| panic!("un oneOf attendu : {schema}"));
 
         assert_eq!(formes.len(), 2, "{schema}");
-        assert_eq!(formes[0]["type"], json!("string"), "{schema}");
+        assert_eq!(
+            formes[0]["$ref"],
+            json!("#/components/schemas/Statut"),
+            "{schema}"
+        );
         assert!(formes[1]["$ref"].is_string(), "{schema}");
     }
 
@@ -403,7 +422,7 @@ mod tests {
     /// pas, et l'appartenance à une liste remplace la comparaison.
     #[test]
     fn the_enumerated_operators_are_eq_in_and_is_null() {
-        let schema = schema::<OneOfOperators>();
+        let schema = schema::<OneOfOperators<Statut>>();
         let proprietes = schema["properties"]
             .as_object()
             .unwrap_or_else(|| panic!("des propriétés attendues : {schema}"));
@@ -417,16 +436,73 @@ mod tests {
         }
     }
 
-    /// Un `$ref` que le document n'expose pas est un lien mort, ici comme ailleurs.
+    /// Un `$ref` que le document n'expose pas est un lien mort, ici comme ailleurs. Le
+    /// nom porte celui du paramètre : deux colonnes énumérées d'une même API ont chacune
+    /// leurs opérateurs, et un nom partagé en écraserait un.
     #[test]
     fn the_enumerated_schema_exposes_what_its_oneof_cites() {
         let mut exposes = Vec::new();
-        OneOfSchema::schemas(&mut exposes);
+        OneOfSchema::<Statut>::schemas(&mut exposes);
         let noms: Vec<String> = exposes.into_iter().map(|(nom, _)| nom).collect();
 
         assert!(
-            noms.iter().any(|nom| nom == "OneOfOperators"),
-            "« OneOfOperators » absent : {noms:?}"
+            noms.iter().any(|nom| nom == "OneOfOperators_Statut"),
+            "« OneOfOperators_Statut » absent : {noms:?}"
+        );
+    }
+
+    /// Les valeurs doivent atteindre le document du côté du filtre, et non du seul corps
+    /// de la réponse : un client engendré y typerait sinon le filtre en chaîne libre, et
+    /// une faute de frappe dans une valeur rendrait une page vide là où le document
+    /// promet une erreur.
+    #[test]
+    fn the_rendered_document_names_the_values_on_the_filter_side() {
+        #[derive(ToSchema)]
+        #[allow(dead_code)]
+        struct Reponse {
+            statut: Statut,
+        }
+
+        #[derive(ToSchema)]
+        #[allow(dead_code)]
+        struct Filtre {
+            #[schema(value_type = Option<OneOfSchema<Statut>>)]
+            statut: Option<String>,
+        }
+
+        #[derive(OpenApi)]
+        #[openapi(components(schemas(Reponse, Filtre)))]
+        struct Document;
+
+        let document: Value =
+            serde_json::to_value(Document::openapi()).expect("document sérialisable");
+        let schemas = &document["components"]["schemas"];
+
+        assert_eq!(
+            schemas["Statut"]["enum"],
+            json!(["draft", "published"]),
+            "{document}"
+        );
+        let valeurs = json!(["draft", "published"]);
+        let filtre = &schemas["OneOfSchema_Statut"];
+        let operateurs = &schemas["OneOfOperators_Statut"];
+
+        assert_eq!(
+            filtre["oneOf"][0]["enum"], valeurs,
+            "la forme courte du filtre ne nomme pas les valeurs : {document}"
+        );
+        assert_eq!(
+            operateurs["properties"]["eq"]["enum"], valeurs,
+            "« eq » ne nomme pas les valeurs : {document}"
+        );
+        assert_eq!(
+            operateurs["properties"]["in"]["items"]["enum"], valeurs,
+            "« in » ne nomme pas les valeurs : {document}"
+        );
+        assert_eq!(
+            document["components"]["schemas"]["Filtre"]["properties"]["statut"]["oneOf"][1]["$ref"],
+            json!("#/components/schemas/OneOfSchema_Statut"),
+            "le filtre ne cite pas le schéma énuméré : {document}"
         );
     }
 
