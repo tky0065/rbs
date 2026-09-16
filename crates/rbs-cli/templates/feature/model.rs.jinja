@@ -8,8 +8,10 @@ use utoipa::ToSchema;
 
 /// Valeurs acceptées par la colonne « {@ field.name @} ».
 ///
-/// Une valeur de plus s'ajoute ici, et dans le `CHECK` que porte la migration : la base
-/// refuse celles qu'elle ne connaît pas, et seule une migration nouvelle l'élargit.
+/// Une valeur de plus s'ajoute ici et dans le `CHECK` que porte une migration nouvelle :
+/// la base refuse d'elle-même celles qu'elle ne connaît pas. Plus longue que toutes les
+/// actuelles, elle demande en troisième lieu d'élargir le `StringLen::N` ci-dessous, et
+/// avec lui le `string_len` de cette migration.
 {#- La ligne des dérives passe les cent colonnes de `max_width` : rustfmt l'éclate, et le
     gabarit l'écrit déjà éclatée. Elle ne dépend d'aucun nom — ni celui de la feature, ni
     celui du champ — et ne bascule donc jamais. #}
