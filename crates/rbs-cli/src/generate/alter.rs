@@ -396,7 +396,13 @@ pub(crate) fn plan_for(options: &Options, timestamp: &str) -> Result<Planned, Er
     // c'est lui que `--dry-run` montre.
     let avertissement = format::format_batch(std::iter::once(&mut contenu));
 
-    let entity = Feature::fresh(&options.table, champs.clone()).entity();
+    // Le trio que l'en-tête du bloc nomme est celui que le module porte : l'heuristique
+    // singulière le manque dès qu'un CRUD a été engendré avec `--singular`, et elle ne
+    // sert plus que de repli à un `dto.rs` qui ne dit rien.
+    let entity = entite_des_dto(&dto_source).unwrap_or_else(|| {
+        // Seul le nom de la table entre dans l'entité ; les champs n'y ont aucune part.
+        Feature::fresh(&options.table, Vec::new()).entity()
+    });
 
     // Les deux fichiers s'écrivent ensemble ou pas du tout : une migration que le `lib.rs`
     // ne déclare pas est un module que cargo refuse, et le projet ne compilerait plus pour
@@ -613,6 +619,32 @@ fn import_du_type(champ: &Field) -> Option<String> {
     }
 }
 
+/// Le nom que les DTO du module portent, lu dans `dto.rs`.
+///
+/// L'en-tête du bloc nomme trois structures : les redeviner par l'heuristique singulière
+/// les manque dès qu'un CRUD a été engendré avec `--singular`, et le développeur cherche
+/// alors des noms qui n'existent pas. `[package.metadata.rbs]` ne retient pas cette
+/// forme-là ; le fichier des DTO, lui, la porte.
+///
+/// Les trois doivent concorder — c'est le trio que l'en-tête annonce —, faute de quoi le
+/// fichier n'est pas celui d'un CRUD engendré et l'heuristique reprend la main.
+fn entite_des_dto(source: &str) -> Option<String> {
+    let entite = source.lines().find_map(|ligne| {
+        ligne
+            .trim()
+            .strip_prefix("pub struct Create")?
+            .split([' ', '{', '(', '<'])
+            .next()
+            .filter(|nom| !nom.is_empty())
+            .map(str::to_string)
+    })?;
+
+    let complet = source.contains(&format!("pub struct Update{entite}"))
+        && source.contains(&format!("pub struct {entite}Response"));
+
+    complet.then_some(entite)
+}
+
 /// La ligne `use super::model::…` telle qu'elle est, et telle qu'elle doit devenir.
 ///
 /// C'est une ligne à **modifier** et non à ajouter : le fichier en porte déjà une, et le
@@ -794,6 +826,15 @@ mod tests {
 
     /// Écrit un CRUD dans le projet, pour que la table visée ait un module.
     fn crud(root: &Path, table: &str, champs: &str) {
+        crud_avec(root, table, champs, None);
+    }
+
+    /// Le même CRUD, sa forme singulière imposée : ce que `--singular` passe.
+    fn crud_singulier(root: &Path, table: &str, champs: &str, singular: &str) {
+        crud_avec(root, table, champs, Some(singular.to_string()));
+    }
+
+    fn crud_avec(root: &Path, table: &str, champs: &str, singular: Option<String>) {
         let planned = crate::generate::command::plan_for(&crate::generate::command::Options {
             name: table.to_string(),
             fields: Some(champs.to_string()),
@@ -805,7 +846,7 @@ mod tests {
             soft_delete: false,
             with_upload: false,
             cursor: false,
-            singular: None,
+            singular,
         })
         .expect("le CRUD du test doit se planifier");
 
@@ -1577,6 +1618,50 @@ mod tests {
             "import déjà présent, proposé une seconde fois :\n{colle}"
         );
         assert!(colle.contains("pub enum Etat {"), "{colle}");
+    }
+
+    /// Le trio que l'en-tête du bloc nomme est celui que le module porte, et non celui
+    /// que l'heuristique singulière redevine : un CRUD engendré avec `--singular` porte
+    /// d'autres noms, et l'en-tête désignerait alors trois structures qui n'existent pas.
+    #[test]
+    fn the_dto_block_names_the_structs_the_module_really_carries() {
+        let (_parent, root) = crate::fixtures::project();
+        crud_singulier(&root, "news", "titre:string", "news_item");
+
+        let planned = run(&options(&root, "ajoute_vues", "news", "vues:int:optional"))
+            .expect("la migration doit s'écrire");
+
+        let colle = bloc(&planned, "src/news/dto.rs");
+        assert!(
+            colle.contains("// dans `CreateNewsItem`, `UpdateNewsItem` et `NewsItemResponse`"),
+            "l'en-tête doit nommer les structures du module :\n{colle}"
+        );
+    }
+
+    /// Un `dto.rs` qui ne nomme aucun trio — réécrit à la main, ou absent — ne dit rien :
+    /// l'heuristique reprend alors la main, et c'est le meilleur nom qui reste.
+    #[test]
+    fn the_dto_block_falls_back_to_the_heuristic_when_the_file_names_no_trio() {
+        let (_parent, root) = projet();
+        fs::write(
+            root.join("src/articles/dto.rs"),
+            "// ce fichier ne déclare plus rien que la commande sache lire\n",
+        )
+        .expect("le DTO du test doit s'écrire");
+
+        let planned = run(&options(
+            &root,
+            "ajoute_vues",
+            "articles",
+            "vues:int:optional",
+        ))
+        .expect("la migration doit s'écrire");
+
+        let colle = bloc(&planned, "src/articles/dto.rs");
+        assert!(
+            colle.contains("// dans `CreateArticle`, `UpdateArticle` et `ArticleResponse`"),
+            "sans trio lisible, l'en-tête reste celui de l'heuristique :\n{colle}"
+        );
     }
 
     /// L'import du modèle dans les DTO est une ligne à **modifier** : le fichier en porte
