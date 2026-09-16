@@ -5,11 +5,12 @@ title: rbs doctor
 
 # `rbs doctor`
 
-Diagnostique un projet généré par sept contrôles : les ancres,
+Diagnostique un projet généré par sept contrôles — huit sur un projet SQLite : les ancres,
 [`AGENTS.md`](../guides/agents.md), les relations déjà écrites dans ses modèles, le
-`.env`, les versions, la base et la disposition des fragments. Chacun est indépendant et
-rend son verdict sans interrompre les autres — un diagnostic qui s'arrête au premier
-problème oblige à le relancer autant de fois qu'il y a de problèmes.
+`.env`, les versions, la base, la disposition des fragments et, sous SQLite seulement, les
+colonnes `decimal` que son pilote ne sait pas lire. Chacun est indépendant et rend son
+verdict sans interrompre les autres — un diagnostic qui s'arrête au premier problème oblige
+à le relancer autant de fois qu'il y a de problèmes.
 
 :::note
 Les blocs de terminal de cette page sont des sorties réelles, capturées en lançant la
@@ -40,7 +41,7 @@ dans `doctor`, si bien qu'isolé il serait pris puis ignoré. `--template-dir` e
 commandes qui le lisent, si bien qu'en passer un est une erreur de clap plutôt qu'un flag
 pris puis ignoré.
 
-## Les sept contrôles
+## Les contrôles
 
 | Contrôle | Ce qu'il regarde |
 |---|---|
@@ -51,6 +52,7 @@ pris puis ignoré.
 | `versions` | Le rbs inscrit dans `[package.metadata.rbs]`, la dépendance `rbs-core`, et le CLI qui diagnostique. |
 | `base` | Le pilote compilé au manifeste face au schéma de l'URL, puis une connexion TCP en moins de trois secondes, puis la version du serveur — demandée au binaire de la crate `migration`, rbs n'embarquant aucun client SQL. Chaque moteur a son plancher, et chaque plancher sa raison : PostgreSQL 14, le plus ancien encore maintenu ; MySQL 8.0, pour `FOR UPDATE SKIP LOCKED` ; SQLite 3.35, pour `UPDATE … RETURNING`. |
 | `disposition` | Si le projet mêle les deux dispositions qu'un fragment peut prendre : un répertoire que `rbs add` posait jadis à la racine de `src/` — l'un d'`audit`, `cache`, `cors`, `jobs`, `mail`, `observability`, `rate_limit`, `scheduler`, `storage`, `webhooks` — toujours là aux côtés d'un `src/modules/` que le projet a depuis commencé à recevoir. Seulement un avertissement : le remède est un déplacement à la main, réécrire vos propres `use` n'étant pas au CLI de le faire. `auth` n'est jamais compté — il reste à la racine par décision. |
+| `decimal` | Sur un projet SQLite seulement, et prévu nulle part ailleurs : les colonnes `Decimal` que son pilote ne lira pas. [`rbs generate`](./generate.md) refuse un champ `decimal` sous SQLite, sur le CRUD comme sur une migration, mais rien ne gardait le chemin inverse — un projet basculé vers SQLite après coup conserve ses colonnes `DECIMAL(19,4)` et un modèle en `rust_decimal::Decimal` que sqlx-sqlite refuse de lier, et la casse ne se voit qu'à l'exécution. Le contrôle nomme chaque champ et le fichier qui le porte. Le scan est textuel, comme les autres : un `Decimal` qu'une retouche à vous aurait mis dans une structure auxiliaire d'un `model.rs` serait nommé aussi — un `Decimal` en commentaire, non. |
 
 Une ancre disparue ne casse rien tant qu'aucune génération n'a lieu : c'est précisément
 pourquoi `doctor` la cherche avant que [`rbs generate`](./generate.md) ne bute dessus.

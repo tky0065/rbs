@@ -5,11 +5,12 @@ title: rbs doctor
 
 # `rbs doctor`
 
-Diagnoses a generated project through seven checks: the anchors,
-[`AGENTS.md`](../guides/agents.md), the relations already written into its models, the
-`.env`, the versions, the database and the fragment layout. Each is independent and returns
-its verdict without stopping the others — a diagnosis that halts on the first problem has to
-be re-run once per problem.
+Diagnoses a generated project through seven checks — eight on a SQLite project: the
+anchors, [`AGENTS.md`](../guides/agents.md), the relations already written into its models,
+the `.env`, the versions, the database, the fragment layout, and, under SQLite alone, the
+`decimal` columns its driver cannot read. Each is independent and returns its verdict
+without stopping the others — a diagnosis that halts on the first problem has to be re-run
+once per problem.
 
 :::note
 rbs speaks French in its help screens and in its output. Every terminal block on this page
@@ -38,7 +39,7 @@ tree. `--force` only lifts that one guard, and is therefore refused on its own: 
 else in `doctor` writes, so alone it would be taken and ignored. `--template-dir` and `--yes` are not accepted here: each is declared on the commands
 that read it, so passing one is a clap error rather than a flag that is taken and ignored.
 
-## The seven checks
+## The checks
 
 | Check | What it looks at |
 |---|---|
@@ -49,6 +50,7 @@ that read it, so passing one is a clap error rather than a flag that is taken an
 | `versions` | The rbs recorded in `[package.metadata.rbs]`, the `rbs-core` dependency, and the CLI running the diagnosis. |
 | `base` | The driver compiled into the manifest against the URL's scheme, then a TCP connection within three seconds, then the server version — asked of the `migration` crate's binary, since rbs embeds no SQL client. Each engine has its own floor, and each floor has a reason: PostgreSQL 14, the oldest still maintained; MySQL 8.0, for `FOR UPDATE SKIP LOCKED`; SQLite 3.35, for `UPDATE … RETURNING`. |
 | `disposition` | Whether the project mixes the two layouts a fragment can land in: a directory `rbs add` used to write at the root of `src/` — any of `audit`, `cache`, `cors`, `jobs`, `mail`, `observability`, `rate_limit`, `scheduler`, `storage`, `webhooks` — still there alongside a `src/modules/` the project has since started to receive. Only a warning: the fix is a manual move, since rewriting your own `use` statements is not the CLI's to do. `auth` is never counted — it lives at the root by design. |
+| `decimal` | On a SQLite project only, and planned nowhere else: the `Decimal` columns its driver will not read. [`rbs generate`](./generate.md) refuses a `decimal` field under SQLite, on the CRUD as on a migration, but nothing guarded the reverse road — a project moved to SQLite after the fact keeps its `DECIMAL(19,4)` columns and a model in `rust_decimal::Decimal` that sqlx-sqlite declines to bind, and the breakage only shows at runtime. The check names every field and the file carrying it. The scan is textual, like the others: a `Decimal` an edit of your own put into some auxiliary struct of a `model.rs` would be named too — a commented one is not. |
 
 A missing anchor breaks nothing until a generation happens, which is exactly why `doctor`
 looks for it before [`rbs generate`](./generate.md) trips over it.
