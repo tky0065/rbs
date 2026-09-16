@@ -149,7 +149,7 @@ impl ErrorKind {
             ),
             // `references` n'est pas de `FieldType::NAMES` : c'est un `FieldKind` à
             // part, qui attend une cible — l'énumérer nu laisserait croire à un type
-            // sans argument, comme les sept autres.
+            // sans argument, comme les huit autres.
             Self::UnknownType { .. } => {
                 let mut names = FieldType::NAMES.join(", ");
                 names.push_str(", references:<table>");

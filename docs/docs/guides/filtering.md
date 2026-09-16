@@ -37,7 +37,7 @@ the same thing, and the short form is the one you write most often.
 | Operator | Applies to | Meaning |
 |---|---|---|
 | `eq` | every column | strict equality |
-| `gt`, `gte`, `lt`, `lte` | `int`, `float`, `datetime`, `uuid` | comparison |
+| `gt`, `gte`, `lt`, `lte` | `int`, `float`, `datetime`, `date`, `uuid` | comparison |
 | `contains` | `string`, `text` | substring, `LIKE '%…%'` |
 | `is_null` | every column | `true` requires null, `false` requires a value |
 

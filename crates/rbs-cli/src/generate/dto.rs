@@ -117,6 +117,41 @@ mod tests {
         );
     }
 
+    /// `Date` est écrit tel quel — sans alias — et utoipa le reconnaît par son nom
+    /// littéral, à la différence de `DateTimeWithTimeZone` : `due` n'a donc besoin
+    /// d'aucune annotation `#[schema(…)]`, contrairement à un `datetime`.
+    #[test]
+    fn a_date_field_needs_no_explicit_openapi_annotation() {
+        let rendered = dto("events", "due:date");
+
+        let creation = extract(&rendered, "pub struct CreateEvent {");
+        assert!(creation.contains("pub due: Date,"), "{creation}");
+        assert!(
+            !creation.contains("#[schema("),
+            "un champ `date` ne porte aucune annotation OpenAPI explicite :\n{creation}"
+        );
+
+        let response = extract(&rendered, "pub struct EventResponse {");
+        assert!(response.contains("pub due: Date,"), "{response}");
+    }
+
+    /// `Date` n'entre dans `sea_orm::prelude` que par un import explicite : sans lui, un
+    /// champ `date` échouerait à la compilation du projet engendré.
+    #[test]
+    fn a_date_field_is_imported_and_only_when_needed() {
+        let rendered = dto("events", "due:date");
+        assert!(
+            rendered.contains("use sea_orm::prelude::Date;"),
+            "l'import de `Date` manque :\n{rendered}"
+        );
+
+        let sans_date = dto("users", "nom:string");
+        assert!(
+            !sans_date.contains("sea_orm::prelude::Date;"),
+            "l'import de `Date` est présent sans servir :\n{sans_date}"
+        );
+    }
+
     #[test]
     fn the_response_timestamps_declare_their_format() {
         let rendered = dto("users", "nom:string");

@@ -1,4 +1,7 @@
 use rbs_core::{Comparison, Error, Result, Sort, TextMatch};
+{%- if has_date %}
+use sea_orm::prelude::Date;
+{%- endif %}
 use sea_orm::prelude::{DateTimeUtc, Uuid};
 use sea_orm::sea_query::LikeExpr;
 use sea_orm::{ColumnTrait, Condition, QueryFilter, QueryOrder, Select, Value};

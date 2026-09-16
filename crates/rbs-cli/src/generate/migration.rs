@@ -198,7 +198,7 @@ mod tests {
         let rendered = migration(
             "samples",
             "title:string,quantity:int,price:float,active:bool,owner:uuid,\
-             published_at:datetime,body:text",
+             published_at:datetime,due:date,body:text",
         )
         .content;
 
@@ -211,6 +211,7 @@ mod tests {
             "ColumnDef::new(Samples::Active).boolean()",
             "ColumnDef::new(Samples::Owner).uuid()",
             "ColumnDef::new(Samples::PublishedAt).timestamp_with_time_zone()",
+            "ColumnDef::new(Samples::Due).date()",
             "ColumnDef::new(Samples::Body).text()",
         ] {
             assert!(

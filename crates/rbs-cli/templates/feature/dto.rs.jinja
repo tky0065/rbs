@@ -22,6 +22,8 @@
 {%- else %} {}
 {%- endif %}
 {%- endmacro -%}
+{% if has_date %}use sea_orm::prelude::Date;
+{% endif -%}
 use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;

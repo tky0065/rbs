@@ -96,6 +96,13 @@ comparaison_documentee!(
     "Conditions acceptées sur une colonne datée.",
     "Opérateurs acceptés sur une colonne datée."
 );
+comparaison_documentee!(
+    DateComparisonSchema,
+    DateComparisonOperators,
+    DateSchema,
+    "Conditions acceptées sur une colonne de date sans heure.",
+    "Opérateurs acceptés sur une colonne de date sans heure."
+);
 
 /// Un instant, écrit en RFC 3339.
 ///
@@ -106,6 +113,18 @@ comparaison_documentee!(
 #[schema(value_type = String, format = DateTime)]
 pub struct DateTimeSchema(
     /// L'instant, en RFC 3339.
+    pub String,
+);
+
+/// Un jour sans heure, écrit en ISO 8601 (`AAAA-MM-JJ`).
+///
+/// Même raison d'être que [`DateTimeSchema`] : une variante d'énumération n'accepte pas
+/// `value_type`, et sans ce type nommé la forme courte se documenterait en `string` sans
+/// format.
+#[derive(Deserialize, ToSchema)]
+#[schema(value_type = String, format = Date)]
+pub struct DateSchema(
+    /// Le jour, en ISO 8601 (`AAAA-MM-JJ`).
     pub String,
 );
 
@@ -210,6 +229,16 @@ mod tests {
         assert_eq!(schema["format"], "date-time");
     }
 
+    /// Une date sans heure a son propre format : la confondre avec `DateTimeSchema`
+    /// documenterait `due` comme un instant, que Swagger daterait d'un exemple horodaté.
+    #[test]
+    fn a_bare_date_without_time_keeps_its_own_format() {
+        let schema = schema::<DateSchema>();
+
+        assert_eq!(schema["type"], "string");
+        assert_eq!(schema["format"], "date");
+    }
+
     /// Le second membre nomme les opérateurs, un à un : c'est ce que la forme longue
     /// apporte, et un `$ref` qui ne serait pas exposé pendrait dans le vide.
     #[test]
@@ -221,6 +250,10 @@ mod tests {
             ),
             (
                 schema::<DateTimeComparisonOperators>(),
+                vec!["eq", "gt", "gte", "lt", "lte", "is_null"],
+            ),
+            (
+                schema::<DateComparisonOperators>(),
                 vec!["eq", "gt", "gte", "lt", "lte", "is_null"],
             ),
             (
@@ -256,12 +289,17 @@ mod tests {
                 DateTimeComparisonSchema::name(),
                 vec!["DateTimeSchema", "DateTimeComparisonOperators"],
             ),
+            (
+                DateComparisonSchema::name(),
+                vec!["DateSchema", "DateComparisonOperators"],
+            ),
             (TextMatchSchema::name(), vec!["TextMatchOperators"]),
         ] {
             let mut exposes = Vec::new();
             match nom.as_ref() {
                 "BoolComparisonSchema" => BoolComparisonSchema::schemas(&mut exposes),
                 "DateTimeComparisonSchema" => DateTimeComparisonSchema::schemas(&mut exposes),
+                "DateComparisonSchema" => DateComparisonSchema::schemas(&mut exposes),
                 _ => TextMatchSchema::schemas(&mut exposes),
             }
 

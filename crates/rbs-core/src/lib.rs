@@ -61,8 +61,8 @@ pub use error::{Error, Result};
 pub use extract::Identity;
 pub use extract::ValidatedJson;
 pub use filter::schema::{
-    BoolComparisonSchema, ComparisonSchema, DateTimeComparisonSchema, FloatComparisonSchema,
-    IntComparisonSchema, TextMatchSchema, UuidComparisonSchema,
+    BoolComparisonSchema, ComparisonSchema, DateComparisonSchema, DateTimeComparisonSchema,
+    FloatComparisonSchema, IntComparisonSchema, TextMatchSchema, UuidComparisonSchema,
 };
 pub use filter::{Comparison, Sort, SortKey, TextMatch};
 pub use lang::Lang;

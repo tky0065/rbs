@@ -10,8 +10,8 @@
 pub mod schema;
 
 pub use schema::{
-    BoolComparisonSchema, ComparisonSchema, DateTimeComparisonSchema, FloatComparisonSchema,
-    IntComparisonSchema, TextMatchSchema, UuidComparisonSchema,
+    BoolComparisonSchema, ComparisonSchema, DateComparisonSchema, DateTimeComparisonSchema,
+    FloatComparisonSchema, IntComparisonSchema, TextMatchSchema, UuidComparisonSchema,
 };
 
 use serde::{Deserialize, Deserializer};

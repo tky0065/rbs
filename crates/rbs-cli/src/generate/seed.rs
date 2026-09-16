@@ -108,6 +108,9 @@ fn value(champ: &Field, rang: usize) -> String {
         FieldType::Bool => (rang % 2 == 1).to_string(),
         FieldType::Uuid => format!("Uuid::from_u128({rang})"),
         FieldType::Datetime => "chrono::Utc::now().into()".to_string(),
+        // Un jour fixe par ligne, et non `chrono::Utc::now()` : un `DATE` se compare à la
+        // lettre d'un moteur à l'autre, et le seed n'a besoin que de deux valeurs distinctes.
+        FieldType::Date => format!("chrono::NaiveDate::from_ymd_opt(2024, 1, {rang}).unwrap()"),
     }
 }
 
@@ -240,6 +243,22 @@ mod tests {
         ] {
             assert!(rendered.contains(value), "« {value} » absent :\n{rendered}");
         }
+    }
+
+    /// Une date fixe par ligne, distincte de l'autre : un `DATE` se compare à la lettre
+    /// d'un moteur à l'autre, contrairement à un horodatage.
+    #[test]
+    fn a_date_field_receives_a_fixed_day_that_differs_between_the_two_rows() {
+        let rendered = seed("events", "due:date");
+
+        assert!(
+            rendered.contains("due: Set(chrono::NaiveDate::from_ymd_opt(2024, 1, 1).unwrap())"),
+            "première ligne :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("due: Set(chrono::NaiveDate::from_ymd_opt(2024, 1, 2).unwrap())"),
+            "seconde ligne :\n{rendered}"
+        );
     }
 
     /// `new_v4` demanderait la feature `v4`, que le projet n'active que pour ses tests.

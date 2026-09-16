@@ -96,7 +96,7 @@ mod tests {
         let rendered = entity(
             "samples",
             "title:string,quantity:int,price:float,active:bool,owner:uuid,\
-             published_at:datetime,body:text",
+             published_at:datetime,due:date,body:text",
         );
 
         for expected in [
@@ -106,6 +106,7 @@ mod tests {
             "pub active: bool,",
             "pub owner: Uuid,",
             "pub published_at: DateTimeWithTimeZone,",
+            "pub due: Date,",
             "pub body: String,",
         ] {
             assert!(

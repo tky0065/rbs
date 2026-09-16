@@ -155,6 +155,10 @@ fn value(champ: &Field, mark: &str) -> String {
         return match champ.column_type() {
             FieldType::Int => "unique_number() as i32".to_string(),
             FieldType::Float => "unique_number() as f64 / 10.0".to_string(),
+            // Un jour de l'année tiré au sort : l'ordinal reste dans 1..=365, valide pour
+            // toute année, là où décaler un jour fixe exigerait de gérer les fins de mois.
+            FieldType::Date => "chrono::NaiveDate::from_yo_opt(2024, 1 + (unique_number() % 365) as u32)\n            .unwrap()\n            .to_string()"
+                .to_string(),
             _ => "(chrono::Utc::now() + chrono::Duration::microseconds(unique_number()))\n            .to_rfc3339()"
                 .to_string(),
         };
@@ -172,6 +176,9 @@ fn value(champ: &Field, mark: &str) -> String {
         FieldType::Bool => if_modified(mark, "true", "false"),
         FieldType::Uuid => "Uuid::new_v4().to_string()".to_string(),
         FieldType::Datetime => "chrono::Utc::now().to_rfc3339()".to_string(),
+        // Comparée à la lettre : un `DATE` rend le même texte sur les trois moteurs, à la
+        // différence d'un horodatage.
+        FieldType::Date => if_modified(mark, "\"2024-01-15\"", "\"2024-06-20\""),
     }
 }
 
@@ -207,7 +214,7 @@ fn drawn_number(champ: &Field) -> bool {
         && champ.reference().is_none()
         && matches!(
             champ.column_type(),
-            FieldType::Int | FieldType::Float | FieldType::Datetime
+            FieldType::Int | FieldType::Float | FieldType::Datetime | FieldType::Date
         )
 }
 
@@ -1159,6 +1166,61 @@ mod tests {
             rendered.contains(r#"filled(&created, "published_at");"#),
             "l'horodatage doit au moins être rendu :\n{rendered}"
         );
+    }
+
+    /// Un `DATE` rend le même texte sur les trois moteurs, à la différence d'un
+    /// horodatage : sa valeur se compare à la lettre, elle n'est pas seulement vérifiée
+    /// présente.
+    #[test]
+    fn a_date_field_is_compared_like_an_ordinary_scalar() {
+        let rendered = trials("articles", "due:date");
+
+        assert!(
+            rendered.contains(r#"compare(&created, &sent, "due");"#),
+            "« due » doit être comparé à ce qui a été envoyé :\n{rendered}"
+        );
+        assert!(
+            !rendered.contains(r#"filled(&created, "due");"#),
+            "une date se compare, elle n'est pas seulement vérifiée présente :\n{rendered}"
+        );
+    }
+
+    /// La création et la modification envoient deux jours distincts, écrits en dur : ils
+    /// se rejouent d'une exécution à l'autre, puisque `due` n'est pas `unique` ici.
+    #[test]
+    fn an_ordinary_date_keeps_its_readable_value() {
+        let rendered = trials("articles", "due:date");
+
+        assert!(rendered.contains(r#""due": "2024-01-15""#), "{rendered}");
+        assert!(rendered.contains(r#""due": "2024-06-20""#), "{rendered}");
+        assert!(
+            !rendered.contains("unique_number()"),
+            "« due » n'est pas unique ici :\n{rendered}"
+        );
+    }
+
+    /// Une colonne `date` `unique` ne peut pas rejouer une valeur écrite en dur : les
+    /// scénarios de ce répertoire créent en parallèle sur la même base.
+    #[test]
+    fn a_unique_date_is_drawn_at_each_call() {
+        let rendered = trials("articles", "due:date:unique");
+
+        assert!(
+            rendered.contains("fn unique_number() -> i64"),
+            "l'aide qui tire le nombre est absente :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(
+                "chrono::NaiveDate::from_yo_opt(2024, 1 + (unique_number() % 365) as u32)"
+            ),
+            "le jour unique doit se tirer au sort :\n{rendered}"
+        );
+        for en_dur in ["\"due\": \"2024-01-15\"", "\"due\": \"2024-06-20\""] {
+            assert!(
+                !rendered.contains(en_dur),
+                "« {en_dur} » se rejouerait d'une exécution à l'autre :\n{rendered}"
+            );
+        }
     }
 
     #[test]

@@ -204,9 +204,9 @@ unique "` and `"titre:string,email:string:unique"` describe the same two fields.
 `--fields` declares no field at all. Fields keep their declaration order in the entity and
 in the migration.
 
-### The eight types
+### The nine types
 
-There is no ninth, and no `email` type: a string format is not a column type.
+There is no tenth, and no `email` type: a string format is not a column type.
 
 | Type | Rust | Migration |
 |---|---|---|
@@ -217,11 +217,12 @@ There is no ninth, and no `email` type: a string format is not a column type.
 | `bool` | `bool` | `boolean()` |
 | `uuid` | `Uuid` | `uuid()` |
 | `datetime` | `DateTimeWithTimeZone` | `timestamp_with_time_zone()` |
+| `date` | `Date` | `date()` |
 
 `string` and `text` share a Rust type, so `text` is the only one that also carries an
 explicit column type on the entity — without it SeaORM would infer `varchar`.
 
-The eighth, `references`, is not a scalar at all: it points the column at another entity
+The ninth, `references`, is not a scalar at all: it points the column at another entity
 instead of giving it a type of its own.
 
 ```text
@@ -306,7 +307,7 @@ erreur : champ 1 « Title » — le nom doit être en snake_case : minuscules AS
 erreur : champ 2 « type » — « type » est un mot-clé Rust
         → essayez « kind » ou « type_ »
 erreur : champ 3 « prix » — type inconnu « decimal »
-        → string, int, float, bool, uuid, datetime, text, references:<table>
+        → string, int, float, bool, uuid, datetime, date, text, references:<table>
 erreur : champ 4 « slug » — « index » redondant : « unique » pose déjà un index
         → retirez « index »
 erreur : champ 6 « email » — « email » est déjà déclaré au champ 5

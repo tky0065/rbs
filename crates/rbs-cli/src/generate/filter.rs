@@ -43,6 +43,7 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
             fields => fields,
             colonnes => colonnes,
             lang => feature.lang.name(),
+            has_date => feature.has_date(),
         },
     )
 }
@@ -79,6 +80,7 @@ fn schema(field: &Field) -> &'static str {
         FieldType::Bool => "BoolComparisonSchema",
         FieldType::Uuid => "UuidComparisonSchema",
         FieldType::Datetime => "DateTimeComparisonSchema",
+        FieldType::Date => "DateComparisonSchema",
     }
 }
 
@@ -204,6 +206,40 @@ mod tests {
         assert!(
             rendered.contains("use rbs_core::{Comparison, Error, Result, Sort, TextMatch};"),
             "l'import du noyau a changé de forme :\n{rendered}"
+        );
+    }
+
+    /// Une colonne `date` se compare sur `Date`, et cite le schéma de son propre type —
+    /// pas celui d'un horodatage, qui documenterait un format qu'elle ne rend jamais.
+    #[test]
+    fn a_date_column_compares_on_date_and_cites_its_own_schema() {
+        let rendered = filtre("agendas", "due:date");
+
+        assert!(
+            rendered.contains("pub due: Option<Comparison<Date>>,"),
+            "« due » ne compare pas sur `Date` :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(
+                "#[schema(value_type = Option<rbs_core::DateComparisonSchema>)]\n    pub due:"
+            ),
+            "le schéma de date manque :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("use sea_orm::prelude::Date;"),
+            "l'import de `Date` manque :\n{rendered}"
+        );
+    }
+
+    /// Une entité sans colonne `date` n'importe pas `Date` : le projet engendré échouerait
+    /// sous `-D warnings` sur un import qui ne sert à rien.
+    #[test]
+    fn an_entity_without_a_date_column_does_not_import_date() {
+        let rendered = filtre("meters", "views:int,published:bool");
+
+        assert!(
+            !rendered.contains("sea_orm::prelude::Date;"),
+            "l'import de `Date` est présent sans servir :\n{rendered}"
         );
     }
 

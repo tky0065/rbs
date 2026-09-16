@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use serde::Serialize;
 use serde::ser::{SerializeStruct, Serializer};
 
-use super::fields::{Field, RelationView, to_pascal_case};
+use super::fields::{Field, FieldType, RelationView, to_pascal_case};
 
 /// Une feature à générer, telle que la voient l'entité, les DTO et la migration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -210,6 +210,18 @@ impl Feature {
 
         idens
     }
+
+    /// La feature porte-t-elle un champ `date` ?
+    ///
+    /// `Date` n'entre dans `sea_orm::prelude` que par un import explicite, à la
+    /// différence des autres types de colonne : les DTO, qui n'importent pas le module
+    /// en bloc, ne l'écrivent donc que sur cette condition — sans quoi un projet sans
+    /// champ `date` porterait un import inutilisé, refusé sous `-D warnings`.
+    pub(crate) fn has_date(&self) -> bool {
+        self.fields
+            .iter()
+            .any(|field| field.column_type() == FieldType::Date)
+    }
 }
 
 /// Une table visée par plus d'une relation de la feature.
@@ -291,7 +303,7 @@ fn named(variants: &[String]) -> String {
 /// templates lisent `entity` comme elles lisent `module`.
 impl Serialize for Feature {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("Feature", 16)?;
+        let mut state = serializer.serialize_struct("Feature", 17)?;
         state.serialize_field("module", self.module())?;
         state.serialize_field("table", self.module())?;
         state.serialize_field("entity", &self.entity())?;
@@ -307,6 +319,7 @@ impl Serialize for Feature {
         state.serialize_field("soft_delete", &self.soft_delete)?;
         state.serialize_field("with_upload", &self.with_upload)?;
         state.serialize_field("cursor", &self.cursor)?;
+        state.serialize_field("has_date", &self.has_date())?;
         state.serialize_field("lang", self.lang.name())?;
         state.end()
     }

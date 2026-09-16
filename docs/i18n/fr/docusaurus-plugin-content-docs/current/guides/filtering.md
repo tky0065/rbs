@@ -38,7 +38,7 @@ disent la même chose, et la forme courte est celle que l'on écrit le plus souv
 | Opérateur | S'applique à | Sens |
 |---|---|---|
 | `eq` | toute colonne | égalité stricte |
-| `gt`, `gte`, `lt`, `lte` | `int`, `float`, `datetime`, `uuid` | comparaison |
+| `gt`, `gte`, `lt`, `lte` | `int`, `float`, `datetime`, `date`, `uuid` | comparaison |
 | `contains` | `string`, `text` | sous-chaîne, `LIKE '%…%'` |
 | `is_null` | toute colonne | `true` exige une colonne nulle, `false` une colonne renseignée |
 

@@ -5,7 +5,7 @@ use error::{keyword_suggestions, to_snake_case};
 use serde::Serialize;
 use serde::ser::{SerializeStruct, Serializer};
 
-/// Un des sept types scalaires de la grammaire `--fields` — le huitième, `references`,
+/// Un des huit types scalaires de la grammaire `--fields` — le neuvième, `references`,
 /// est porté par `FieldKind::Reference`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FieldType {
@@ -15,12 +15,14 @@ pub(crate) enum FieldType {
     Bool,
     Uuid,
     Datetime,
+    Date,
     Text,
 }
 
 impl FieldType {
-    pub(crate) const NAMES: [&'static str; 7] =
-        ["string", "int", "float", "bool", "uuid", "datetime", "text"];
+    pub(crate) const NAMES: [&'static str; 8] = [
+        "string", "int", "float", "bool", "uuid", "datetime", "date", "text",
+    ];
 
     pub(crate) fn parse(word: &str) -> Option<Self> {
         Some(match word {
@@ -30,6 +32,7 @@ impl FieldType {
             "bool" => Self::Bool,
             "uuid" => Self::Uuid,
             "datetime" => Self::Datetime,
+            "date" => Self::Date,
             "text" => Self::Text,
             _ => return None,
         })
@@ -43,6 +46,7 @@ impl FieldType {
             Self::Bool => "bool",
             Self::Uuid => "uuid",
             Self::Datetime => "datetime",
+            Self::Date => "date",
             Self::Text => "text",
         }
     }
@@ -55,6 +59,7 @@ impl FieldType {
             Self::Bool => "bool",
             Self::Uuid => "Uuid",
             Self::Datetime => "DateTimeWithTimeZone",
+            Self::Date => "Date",
         }
     }
 
@@ -66,6 +71,7 @@ impl FieldType {
             Self::Bool => "boolean()",
             Self::Uuid => "uuid()",
             Self::Datetime => "timestamp_with_time_zone()",
+            Self::Date => "date()",
             Self::Text => "text()",
         }
     }
@@ -280,7 +286,7 @@ impl Field {
 
     /// Le champ mérite-t-il une contrainte d'email dans les DTO ?
     ///
-    /// La grammaire de `--fields` n'a pas de type `email` et n'en aura pas : sept types
+    /// La grammaire de `--fields` n'a pas de type `email` et n'en aura pas : huit types
     /// suffisent à décrire une colonne, et un format de chaîne n'est pas un type de
     /// colonne. La contrainte se déduit donc du nom, seule information dont on dispose.
     pub(crate) fn validates_email(&self) -> bool {
@@ -644,6 +650,7 @@ mod tests {
             ("bool", FieldType::Bool),
             ("uuid", FieldType::Uuid),
             ("datetime", FieldType::Datetime),
+            ("date", FieldType::Date),
             ("text", FieldType::Text),
         ];
 
@@ -770,6 +777,7 @@ mod tests {
         assert_eq!(FieldType::Bool.rust_type(), "bool");
         assert_eq!(FieldType::Uuid.rust_type(), "Uuid");
         assert_eq!(FieldType::Datetime.rust_type(), "DateTimeWithTimeZone");
+        assert_eq!(FieldType::Date.rust_type(), "Date");
     }
 
     #[test]
@@ -784,6 +792,7 @@ mod tests {
             FieldType::Datetime.migration_method(),
             "timestamp_with_time_zone()"
         );
+        assert_eq!(FieldType::Date.migration_method(), "date()");
     }
 
     #[test]
