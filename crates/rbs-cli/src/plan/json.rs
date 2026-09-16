@@ -88,6 +88,9 @@ enum EffectJson<'a> {
         zone: &'a str,
         contenu: &'a str,
     },
+    /// Sans champ, à l'image d'[`Effect::Supprimer`] : le fichier visé par l'action est
+    /// tout ce qu'un lecteur a besoin de savoir.
+    Supprimer,
 }
 
 impl<'a> From<&'a Effect> for EffectJson<'a> {
@@ -121,6 +124,7 @@ impl<'a> From<&'a Effect> for EffectJson<'a> {
                 zone,
                 contenu: content,
             },
+            Effect::Supprimer => EffectJson::Supprimer,
         }
     }
 }

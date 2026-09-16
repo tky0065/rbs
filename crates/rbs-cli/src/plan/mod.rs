@@ -325,6 +325,41 @@ impl Builder {
         Ok(())
     }
 
+    /// Planifie le retrait de `path`, dont le contenu attendu est `rendu_attendu`.
+    ///
+    /// Le statut est l'inverse exact de celui de [`Builder::create`] : là où créer est un
+    /// conflit quand le fichier existe, supprimer n'en est un que s'il existe **et diffère**
+    /// de ce qu'une installation neuve produirait. C'est ce test, et lui seul, qui distingue
+    /// un fichier que le CLI a posé d'un fichier que le développeur a fait sien.
+    ///
+    // Sans appelant avant que `rbs remove` n'existe : `-D warnings` la dirait morte,
+    // alors que les tests en prouvent déjà le contrat.
+    #[allow(dead_code)]
+    pub fn supprimer(&mut self, path: &str, rendu_attendu: &str) -> Result<(), Error> {
+        if self.projected(path) {
+            return Err(Error::DejaProjete {
+                path: path.to_string(),
+            });
+        }
+
+        let origin = self.read(path)?;
+
+        let statut = match origin.as_deref() {
+            None => Status::DejaFait,
+            Some(actuel) if actuel == rendu_attendu => Status::AFaire,
+            Some(_) => Status::Conflit,
+        };
+
+        self.project_onto(path, origin, None, statut);
+        self.actions.push(Action {
+            path: path.to_string(),
+            effet: Effect::Supprimer,
+            statut,
+        });
+
+        Ok(())
+    }
+
     /// Planifie l'ajout de `lines` dans `anchor`, juste avant sa balise fermante.
     ///
     /// Le fichier visé est celui que l'ancre désigne : une ancre ne se déplace pas. S'il
@@ -731,6 +766,19 @@ mod tests {
         TempDir::new().expect("le répertoire temporaire se crée")
     }
 
+    /// Un projet temporaire portant déjà les fichiers donnés.
+    fn projet_avec(fichiers: &[(&str, &str)]) -> TempDir {
+        let projet = project();
+        for (chemin, contenu) in fichiers {
+            let cible = projet.path().join(chemin);
+            if let Some(parent) = cible.parent() {
+                fs::create_dir_all(parent).expect("le répertoire du fichier se crée");
+            }
+            fs::write(cible, contenu).expect("l'écriture aboutit");
+        }
+        projet
+    }
+
     const ROUTER: &str = "pub fn router() -> Router {\n    Router::new()\n        // <rbs:routes>\n        // </rbs:routes>\n}\n";
 
     fn with_router(project: &TempDir, source: &str) {
@@ -836,6 +884,47 @@ mod tests {
         assert_eq!(plan.actions()[0].statut, Status::Conflit);
         assert_eq!(plan.files()[0].before.as_deref(), Some("FROM alpine\n"));
         assert_eq!(plan.files()[0].after.as_deref(), Some("FROM rust\n"));
+    }
+
+    /// Un fichier conforme au rendu se supprime sans réclamer de forçage.
+    #[test]
+    fn a_file_matching_its_render_is_removed_without_force() {
+        let projet = projet_avec(&[("src/pose.rs", "// posé par le fragment\n")]);
+        let mut builder = Builder::new(projet.path());
+
+        builder
+            .supprimer("src/pose.rs", "// posé par le fragment\n")
+            .expect("la suppression se planifie");
+
+        let plan = builder.finir();
+        assert_eq!(plan.files()[0].statut, Status::AFaire);
+        assert_eq!(plan.files()[0].after, None);
+    }
+
+    /// Un fichier que le développeur a modifié entre en conflit.
+    #[test]
+    fn a_file_the_developer_changed_is_a_conflict() {
+        let projet = projet_avec(&[("src/pose.rs", "// posé, puis retouché\n")]);
+        let mut builder = Builder::new(projet.path());
+
+        builder
+            .supprimer("src/pose.rs", "// posé par le fragment\n")
+            .expect("la suppression se planifie");
+
+        assert_eq!(builder.finir().files()[0].statut, Status::Conflit);
+    }
+
+    /// Un fichier déjà absent rend la suppression sans effet, et non fautive.
+    #[test]
+    fn an_already_absent_file_makes_the_removal_a_no_op() {
+        let projet = projet_avec(&[]);
+        let mut builder = Builder::new(projet.path());
+
+        builder
+            .supprimer("src/pose.rs", "// posé par le fragment\n")
+            .expect("la suppression se planifie");
+
+        assert_eq!(builder.finir().files()[0].statut, Status::DejaFait);
     }
 
     #[test]
