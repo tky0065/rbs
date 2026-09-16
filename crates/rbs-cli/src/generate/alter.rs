@@ -645,15 +645,36 @@ fn entite_des_dto(source: &str) -> Option<String> {
     complet.then_some(entite)
 }
 
-/// La ligne `use super::model::…` telle qu'elle est, et telle qu'elle doit devenir.
-///
-/// C'est une ligne à **modifier** et non à ajouter : le fichier en porte déjà une, et le
-/// type de l'énumération s'y joint. La forme suit celle du gabarit — noms triés, accolades
-/// seulement à plusieurs —, faute de quoi le premier `cargo fmt` du projet la réécrirait.
+/// Ce que la ligne `use super::model::…` des DTO réclame d'un type d'énumération.
+enum ImportDuModele {
+    /// Le fichier porte déjà la ligne : elle se **remplace** par celle-ci, le type de
+    /// l'énumération l'ayant rejointe. L'ajouter telle quelle la déclarerait deux fois.
+    Remplacer {
+        /// La ligne telle que le fichier la porte.
+        ancienne: String,
+        /// La même, le type joint.
+        nouvelle: String,
+    },
+    /// Le fichier n'en porte aucune — les DTO du fragment `auth` n'en ont pas : la ligne
+    /// s'ajoute entière, avec les autres imports qui manquent.
+    Ajouter(String),
+}
+
+/// La ligne d'import telle que le gabarit l'écrit : noms triés, accolades seulement à
+/// plusieurs — faute de quoi le premier `cargo fmt` du projet la réécrirait.
+fn ligne_du_modele(noms: &[String]) -> String {
+    if noms.len() > 1 {
+        format!("use super::model::{{{}}};", noms.join(", "))
+    } else {
+        format!("use super::model::{};", noms[0])
+    }
+}
+
+/// L'import du modèle que les types d'énumération collés réclament aux DTO.
 ///
 /// `None` quand rien ne s'y ajoute : aucune énumération, ou toutes déjà importées.
-fn import_du_modele(champs: &[Field], source: &str) -> Option<(String, String)> {
-    let types: Vec<String> = champs
+fn import_du_modele(champs: &[Field], source: &str) -> Option<ImportDuModele> {
+    let mut types: Vec<String> = champs
         .iter()
         .filter(|champ| !champ.enum_variants().is_empty())
         .map(Field::enum_type)
@@ -663,11 +684,18 @@ fn import_du_modele(champs: &[Field], source: &str) -> Option<(String, String)> 
         return None;
     }
 
-    let ancienne = source
+    // Un fichier sans ligne à modifier n'est pas un fichier sans besoin : se taire
+    // livrerait le champ collé sans dire d'où vient son type.
+    let Some(ancienne) = source
         .lines()
-        .find(|ligne| ligne.trim_start().starts_with("use super::model::"))?
-        .trim()
-        .to_string();
+        .find(|ligne| ligne.trim_start().starts_with("use super::model::"))
+        .map(|ligne| ligne.trim().to_string())
+    else {
+        types.sort();
+        types.dedup();
+
+        return Some(ImportDuModele::Ajouter(ligne_du_modele(&types)));
+    };
 
     let dedans = ancienne
         .trim_start_matches("use super::model::")
@@ -692,17 +720,14 @@ fn import_du_modele(champs: &[Field], source: &str) -> Option<(String, String)> 
     }
 
     noms.sort();
-    let nouvelle = if noms.len() > 1 {
-        format!("use super::model::{{{}}};", noms.join(", "))
-    } else {
-        format!("use super::model::{};", noms[0])
-    };
+    let nouvelle = ligne_du_modele(&noms);
 
-    Some((ancienne, nouvelle))
+    Some(ImportDuModele::Remplacer { ancienne, nouvelle })
 }
 
-/// Ce que les DTO reçoivent : les imports qui leur manquent, la ligne d'import du modèle à
-/// reprendre, puis la même ligne de champ dans les trois structures.
+/// Ce que les DTO reçoivent : les imports qui leur manquent, la ligne d'import du modèle —
+/// à reprendre, ou à ajouter entière —, puis la même ligne de champ dans les trois
+/// structures.
 ///
 /// Toute colonne ajoutée étant optionnelle — c'est ce que cette commande exige —, `Create`,
 /// `Update` et la réponse portent le même `Option<T>` ; un champ obligatoire les aurait
@@ -717,15 +742,24 @@ fn bloc_des_dto(entity: &str, champs: &[Field], source: &str) -> Vec<String> {
         }
     }
 
+    let modele = import_du_modele(champs, source);
+
+    // Les deux cas se distinguent à l'en-tête sous lequel la ligne tombe, et aucun des
+    // deux ne se tait : un fichier sans ligne à remplacer reçoit l'import entier, parmi
+    // ceux qui s'ajoutent.
+    if let Some(ImportDuModele::Ajouter(ligne)) = &modele {
+        imports.push(ligne.clone());
+    }
+
     if !imports.is_empty() {
         lignes.push("// aux imports, en tête du fichier".to_string());
         lignes.append(&mut imports);
         lignes.push(String::new());
     }
 
-    if let Some((ancienne, nouvelle)) = import_du_modele(champs, source) {
+    if let Some(ImportDuModele::Remplacer { ancienne, nouvelle }) = &modele {
         lignes.push(format!("// remplacez `{ancienne}` par :"));
-        lignes.push(nouvelle);
+        lignes.push(nouvelle.clone());
         lignes.push(String::new());
     }
 
@@ -1661,6 +1695,33 @@ mod tests {
         assert!(
             colle.contains("// dans `CreateArticle`, `UpdateArticle` et `ArticleResponse`"),
             "sans trio lisible, l'en-tête reste celui de l'heuristique :\n{colle}"
+        );
+    }
+
+    /// Un `dto.rs` sans ligne `use super::model::` n'a rien à remplacer — ceux du
+    /// fragment `auth` n'en portent pas, et ce sont les tables que le refus de la
+    /// commande cite en exemple. Se taire livrerait un `Option<Statut>` sans dire d'où
+    /// vient le type.
+    #[test]
+    fn the_dto_block_gives_the_whole_import_when_the_file_has_no_line_to_edit() {
+        let (_parent, root) = crate::fixtures::Project::new().features(&["auth"]).create();
+
+        let planned = run(&options(
+            &root,
+            "ajoute_statut",
+            "users",
+            "statut:enum(actif,suspendu):optional",
+        ))
+        .expect("la migration doit s'écrire");
+
+        let colle = bloc(&planned, "src/auth/dto.rs");
+        assert!(
+            colle.contains("use super::model::Statut;"),
+            "le bloc doit donner l'import à ajouter :\n{colle}"
+        );
+        assert!(
+            !colle.contains("remplacez"),
+            "le fichier ne porte aucune ligne d'import du modèle : rien à remplacer :\n{colle}"
         );
     }
 
