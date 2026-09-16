@@ -55,6 +55,7 @@ rand = "0.10.2"
 # à tout consommateur de la crate. Le projet engendré les déclare pour son propre compte,
 # lui qui en a besoin.
 sea-orm = { version = "2.0.2", features = ["runtime-tokio-rustls", "macros"] }
+semver = "1.0.28"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
 sha2 = "0.11.0"
