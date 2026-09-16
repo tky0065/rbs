@@ -11,6 +11,7 @@ pub mod auth;
 pub mod base;
 pub mod ci;
 pub mod cors;
+mod decimal;
 mod disposition;
 pub mod docker;
 pub mod env;
@@ -299,6 +300,20 @@ fn plan(manifeste: &Manifeste) -> Vec<Controle> {
             executer: |projet, _| disposition::check(&projet.root),
         },
     ];
+
+    // Le seul contrôle que commande le moteur et non une feature : une colonne `decimal`
+    // n'est fatale que sous SQLite, et un projet qui tourne ailleurs n'a pas à lire une
+    // ligne à son sujet. Un manifeste illisible n'en reçoit aucun — sa faute est déjà
+    // portée par `versions` et `base`, qui la nomment.
+    if manifeste
+        .as_ref()
+        .is_ok_and(|manifeste| manifeste.metadonnees.database == crate::database::Database::Sqlite)
+    {
+        controles.push(Controle {
+            titre: decimal::TITRE,
+            executer: |projet, _| decimal::check(&projet.root),
+        });
+    }
 
     let installees = manifeste
         .as_ref()
