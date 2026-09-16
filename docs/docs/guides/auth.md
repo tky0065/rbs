@@ -497,10 +497,12 @@ The feature's own routes are covered the same way, split by concern under
 `guard.rs` and `openapi.rs`, around the shared harness of `mod.rs` and the request helpers
 of `http.rs` — registration, the identical 401s, rotation, replay, revocation, the password
 and verification journeys above, the verified-address guard and the OpenAPI document.
-Every one of them goes through HTTP against a real database, so every one is marked
+All of these go through HTTP against a real database, so all of them are marked
 `#[ignore]`: `cargo test` on a fresh project passes with no server running, and
 `cargo test -- --ignored` runs them against the database your `.env` names, migrations
-applied. See the [testing guide](./testing.md).
+applied. One test escapes the rule and stays an ordinary `#[test]`, in `mod.rs`: it checks
+that a link carries its token in its fragment, which is a matter of how the URL is built
+and needs nothing running. See the [testing guide](./testing.md).
 
 ## What it leaves to you
 

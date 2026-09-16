@@ -512,12 +512,12 @@ sous `src/auth/tests/` — `registration.rs`, `login.rs`, `refresh.rs`, `replay.
 `verification.rs`, `guard.rs` et `openapi.rs`, autour du harnais partagé de `mod.rs` et des
 aides de requête de `http.rs` — l'inscription, les 401 identiques, la rotation, le rejeu, la
 révocation, les parcours de mot de passe et de vérification ci-dessus, la garde d'adresse
-vérifiée et le document OpenAPI. Tous passent par
-HTTP contre une vraie base, et tous
-portent donc `#[ignore]` :
-le `cargo test` d'un projet neuf réussit sans serveur démarré, et `cargo test -- --ignored`
-les lance contre la base que nomme votre `.env`, migrations appliquées. Voir le
-[guide des tests](./testing.md).
+vérifiée et le document OpenAPI. Tous passent par HTTP contre une vraie base, et tous
+portent donc `#[ignore]` : le `cargo test` d'un projet neuf réussit sans serveur démarré,
+et `cargo test -- --ignored` les lance contre la base que nomme votre `.env`, migrations
+appliquées. Un test échappe à la règle et reste un `#[test]` ordinaire, dans `mod.rs` : il
+vérifie qu'un lien porte son jeton dans son fragment, ce qui tient à la façon dont l'URL
+est construite et ne demande rien de démarré. Voir le [guide des tests](./testing.md).
 
 ## Ce qu'elle vous laisse
 
