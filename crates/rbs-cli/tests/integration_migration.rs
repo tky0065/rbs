@@ -1,9 +1,16 @@
-//! Une migration d'évolution appliquée contre chacun des trois moteurs.
+//! Une migration d'évolution appliquée, puis défaite, contre chacun des trois moteurs.
 //!
 //! Ce que le rendu ne peut pas prouver : qu'`ALTER TABLE ADD COLUMN` passe là où chaque
 //! moteur a ses interdits, et que le `CHECK` d'une énumération mord une fois la colonne
 //! ajoutée. SQLite accepte l'un et l'autre — éprouvé ici plutôt que supposé —, MySQL ne
 //! tient un `CHECK` que depuis la 8.0.16, et PostgreSQL le porte de longue date.
+//!
+//! **La descente est jouée, et son effet mesuré.** Une `down` que rien n'exécute est une
+//! `down` que rien ne dit juste : chaque banc la lance, puis demande à la base si la table
+//! est restée et si la colonne ajoutée s'en est allée — sans quoi un `migrate down` qui
+//! sortirait en zéro sans rien défaire passerait pour une preuve. Le cas qui le mérite est
+//! MySQL, seul des trois à matérialiser le `CHECK` en contrainte nommée au niveau de la
+//! table, et donc seul à pouvoir refuser le retrait de la colonne qu'elle nomme.
 //!
 //! Chaque banc pose une table et une migration de noms qui lui sont propres : les projets
 //! d'essai partagent leur répertoire de compilation, où deux modules de migration de même
@@ -29,6 +36,15 @@ fn rbs(repertoire: impl AsRef<Path>) -> Command {
     let mut commande = Command::cargo_bin("rbs").expect("le binaire rbs doit être compilé");
     commande.current_dir(repertoire);
     commande
+}
+
+/// Lance `rbs migrate <action>` sur le projet, et exige qu'il aboutisse.
+fn migre(projet: &Path, cible: &Path, action: &str) {
+    rbs(projet)
+        .env("CARGO_TARGET_DIR", cible)
+        .args(["migrate", action])
+        .assert()
+        .success();
 }
 
 /// Crée un projet, y engendre un CRUD, puis la migration qui l'enrichit, et l'applique.
@@ -77,11 +93,7 @@ fn projet_migre(
         .assert()
         .success();
 
-    rbs(&projet)
-        .env("CARGO_TARGET_DIR", cible)
-        .args(["migrate", "up"])
-        .assert()
-        .success();
+    migre(&projet, cible, "up");
 
     projet
 }
@@ -136,6 +148,22 @@ fn mysql(conteneur: &Container<GenericImage>, sql: &str) -> String {
     )
 }
 
+/// Le compte qu'une requête `select count(*)` a rendu.
+///
+/// Les deux flux du client sont réunis — c'est l'erreur du moteur qui prouve un refus —, et
+/// le client MySQL écrit sur la sienne un avertissement dès qu'un mot de passe passe par la
+/// ligne de commande. La valeur est donc la première ligne qui n'en est pas un : sans ce
+/// tri, le compte se lisait « 1\nmysql: [Warning]… » et l'assertion tombait sur la forme du
+/// message plutôt que sur ce que la base avait fait.
+fn compte(sortie: &str) -> String {
+    sortie
+        .lines()
+        .map(str::trim)
+        .find(|ligne| !ligne.is_empty() && !ligne.contains("[Warning]"))
+        .unwrap_or_default()
+        .to_string()
+}
+
 #[test]
 #[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
 fn an_added_column_migrates_and_its_check_bites_on_postgresql() {
@@ -146,7 +174,7 @@ fn an_added_column_migrates_and_its_check_bites_on_postgresql() {
     let cible = common::cible();
     let _verrou = common::verrou(&cible);
 
-    projet_migre(
+    let projet = projet_migre(
         parent.path(),
         "postgres",
         &url,
@@ -179,10 +207,38 @@ fn an_added_column_migrates_and_its_check_bites_on_postgresql() {
         relu.contains("draft|7"),
         "les deux colonnes ajoutées ne se relisent pas :\n{relu}"
     );
+
+    const TABLE: &str =
+        "select count(*) from information_schema.tables where table_name = 'notices';";
+    const COLONNE: &str = "select count(*) from information_schema.columns where \
+                           table_name = 'notices' and column_name = 'statut';";
+
+    migre(&projet, &cible, "down");
+    assert_eq!(
+        compte(&psql(&postgres, TABLE)),
+        "1",
+        "la descente a emporté la table entière, non la seule colonne ajoutée"
+    );
+    assert_eq!(
+        compte(&psql(&postgres, COLONNE)),
+        "0",
+        "la colonne ajoutée survit à la descente"
+    );
+
+    migre(&projet, &cible, "up");
+    assert_eq!(
+        compte(&psql(&postgres, COLONNE)),
+        "1",
+        "la remontée ne repose pas la colonne"
+    );
 }
 
 /// Le même sur MySQL, qui ne tient un `CHECK` que depuis la 8.0.16 — avant, il l'analysait
 /// puis l'ignorait en silence.
+///
+/// C'est ici que la descente se joue vraiment : MySQL matérialise le `CHECK` en contrainte
+/// nommée au niveau de la table, et refuse le retrait d'une colonne qu'une contrainte
+/// nomme encore. Si la `down` engendrée devait échouer quelque part, c'est sur ce moteur.
 #[test]
 #[ignore = "démarre MySQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
 fn an_added_column_migrates_and_its_check_bites_on_mysql() {
@@ -193,7 +249,7 @@ fn an_added_column_migrates_and_its_check_bites_on_mysql() {
     let cible = common::cible_pour("mysql");
     let _verrou = common::verrou(&cible);
 
-    projet_migre(
+    let projet = projet_migre(
         parent.path(),
         "mysql",
         &url,
@@ -222,6 +278,32 @@ fn an_added_column_migrates_and_its_check_bites_on_mysql() {
     assert!(
         relu.contains("draft|7"),
         "les deux colonnes ajoutées ne se relisent pas :\n{relu}"
+    );
+
+    const TABLE: &str = "select count(*) from information_schema.tables where \
+                         table_schema = 'demo' and table_name = 'bulletins';";
+    const COLONNE: &str = "select count(*) from information_schema.columns where \
+                           table_schema = 'demo' and table_name = 'bulletins' and \
+                           column_name = 'statut';";
+
+    migre(&projet, &cible, "down");
+    assert_eq!(
+        compte(&mysql(&conteneur, TABLE)),
+        "1",
+        "la descente a emporté la table entière, non la seule colonne ajoutée"
+    );
+    assert_eq!(
+        compte(&mysql(&conteneur, COLONNE)),
+        "0",
+        "la colonne ajoutée survit à la descente : MySQL a-t-il refusé de la retirer \
+         pendant que la contrainte la nommait encore ?"
+    );
+
+    migre(&projet, &cible, "up");
+    assert_eq!(
+        compte(&mysql(&conteneur, COLONNE)),
+        "1",
+        "la remontée ne repose pas la colonne"
     );
 }
 
@@ -279,5 +361,29 @@ fn an_added_column_migrates_and_its_check_bites_on_sqlite() {
     assert!(
         relu.contains("draft|7"),
         "les deux colonnes ajoutées ne se relisent pas :\n{relu}"
+    );
+
+    const TABLE: &str = "select count(*) from sqlite_master where type = 'table' and \
+                         name = 'memos';";
+    const COLONNE: &str = "select count(*) from pragma_table_info('memos') where \
+                           name = 'statut';";
+
+    migre(&projet, &cible, "down");
+    assert_eq!(
+        compte(&sqlite3(TABLE)),
+        "1",
+        "la descente a emporté la table entière, non la seule colonne ajoutée"
+    );
+    assert_eq!(
+        compte(&sqlite3(COLONNE)),
+        "0",
+        "la colonne ajoutée survit à la descente"
+    );
+
+    migre(&projet, &cible, "up");
+    assert_eq!(
+        compte(&sqlite3(COLONNE)),
+        "1",
+        "la remontée ne repose pas la colonne"
     );
 }
