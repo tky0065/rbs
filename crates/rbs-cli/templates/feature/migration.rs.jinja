@@ -47,7 +47,8 @@ impl MigrationTrait for Migration {
 {%- set is_in = ".is_in(" ~ valeurs ~ ")" %}
 {%- set check = expr_col ~ is_in %}
 {%- set retrait = "                            " if col_new | length <= 75 else "                        " %}
-{%- set unicite_ligne = "\n" ~ retrait ~ ".unique_key()" if field.unique and not soft_delete else "" %}
+{#- Pas d'`unique_key()` ici : `--fields` refuse `unique` sur une énumération — autant de
+    lignes que de valeurs, au plus — et la branche ne pourrait jamais sortir. #}
 {%- if field.enum_variants %}
                     .col(
 {%- if col_new | length <= 75 %}
@@ -58,7 +59,7 @@ impl MigrationTrait for Migration {
                         )
 {%- endif %}
 {@ retrait @}.{@ field.migration_method @}
-{@ retrait @}.{@ nullite @}{@ unicite_ligne @}
+{@ retrait @}.{@ nullite @}
 {%- if (retrait ~ ".check(" ~ check ~ "),") | length <= 100 %}
 {@ retrait @}.check({@ check @}),
 {%- elif (retrait ~ "    " ~ check ~ ",") | length <= 100 %}
