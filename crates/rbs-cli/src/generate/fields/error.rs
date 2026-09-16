@@ -63,6 +63,30 @@ pub(crate) enum ErrorKind {
     InvalidMaxLength {
         value: String,
     },
+    EnumUnclosedParenthesis,
+    EnumEmptyList,
+    EnumEmptyValue,
+    EnumVariantCollision {
+        value: String,
+        previous: String,
+        variant: String,
+    },
+    EnumVariantReserved {
+        value: String,
+        variant: String,
+    },
+    UniqueOnEnum {
+        values: usize,
+    },
+    EnumValueNotSnakeCase {
+        value: String,
+    },
+    EnumDuplicateValue {
+        value: String,
+    },
+    EnumTypeNameCollision {
+        type_name: String,
+    },
 }
 
 impl ErrorKind {
@@ -120,6 +144,38 @@ impl ErrorKind {
             Self::InvalidMaxLength { value } => {
                 format!("« max » attend un entier strictement positif, et non « {value} »")
             }
+            Self::EnumUnclosedParenthesis => {
+                "la liste de valeurs de « enum » n'est pas refermée par une parenthèse".to_string()
+            }
+            Self::EnumEmptyList => "« enum » attend au moins une valeur".to_string(),
+            Self::EnumEmptyValue => "une valeur de « enum » est vide".to_string(),
+            Self::EnumVariantCollision {
+                value,
+                previous,
+                variant,
+            } => format!(
+                "« {value} » et « {previous} » nomment toutes deux la variante « {variant} »"
+            ),
+            Self::EnumVariantReserved { value, variant } => {
+                format!("« {value} » nommerait la variante « {variant} », que Rust réserve")
+            }
+            Self::UniqueOnEnum { values } => {
+                let lignes = match values {
+                    1 => "qu'une ligne".to_string(),
+                    autres => format!("que {autres} lignes"),
+                };
+
+                format!("« unique » sur une énumération : la colonne n'admettrait {lignes}")
+            }
+            Self::EnumValueNotSnakeCase { value } => {
+                format!("la valeur « {value} » n'est pas en snake_case")
+            }
+            Self::EnumDuplicateValue { value } => {
+                format!("la valeur « {value} » est déclarée deux fois")
+            }
+            Self::EnumTypeNameCollision { type_name } => format!(
+                "« {label} » nommerait le type « {type_name} », que « model.rs » déclare déjà"
+            ),
         }
     }
 
@@ -149,10 +205,10 @@ impl ErrorKind {
             ),
             // `references` n'est pas de `FieldType::NAMES` : c'est un `FieldKind` à
             // part, qui attend une cible — l'énumérer nu laisserait croire à un type
-            // sans argument, comme les sept autres.
+            // sans argument, comme les neuf autres.
             Self::UnknownType { .. } => {
                 let mut names = FieldType::NAMES.join(", ");
-                names.push_str(", references:<table>");
+                names.push_str(", references:<table>, enum(a,b,c)");
                 Some(names)
             }
             Self::UnknownModifier { .. } => Some(
@@ -176,6 +232,31 @@ impl ErrorKind {
                 Some("« max » s'écrit sur un champ « string » ou « text »".to_string())
             }
             Self::InvalidMaxLength { .. } => Some(format!("exemple : « {label}:string:max=200 »")),
+            Self::EnumUnclosedParenthesis | Self::EnumEmptyList | Self::EnumEmptyValue => {
+                Some("exemple : « status:enum(draft,published) »".to_string())
+            }
+            Self::EnumVariantCollision { .. } => Some(
+                "chaque valeur nomme une variante par sa forme PascalCase : choisissez-en \
+                 deux qui en diffèrent"
+                    .to_string(),
+            ),
+            Self::EnumVariantReserved { .. } => Some(
+                "choisissez une autre valeur : sa forme PascalCase nomme la variante de \
+                 l'énumération"
+                    .to_string(),
+            ),
+            Self::UniqueOnEnum { .. } => Some("retirez « unique »".to_string()),
+            Self::EnumValueNotSnakeCase { .. } => {
+                Some("minuscules ASCII, chiffres et souligné, comme un nom de champ".to_string())
+            }
+            Self::EnumDuplicateValue { .. } => {
+                Some("chaque valeur ne doit apparaître qu'une fois".to_string())
+            }
+            Self::EnumTypeNameCollision { .. } => Some(
+                "choisissez un autre nom de champ : son PascalCase nomme le type de \
+                 l'énumération"
+                    .to_string(),
+            ),
         }
     }
 }
@@ -392,11 +473,11 @@ mod tests {
     fn an_unknown_type_lists_the_allowed_types() {
         let text = rendered(
             ErrorKind::UnknownType {
-                name: "decimal".to_string(),
+                name: "money".to_string(),
             },
             "price",
         );
-        assert!(text.contains("type inconnu « decimal »"), "{text}");
+        assert!(text.contains("type inconnu « money »"), "{text}");
         for word in FieldType::NAMES {
             assert!(text.contains(word), "« {word} » absent de : {text}");
         }
@@ -409,7 +490,7 @@ mod tests {
     fn an_unknown_type_also_mentions_references_with_its_target() {
         let text = rendered(
             ErrorKind::UnknownType {
-                name: "decimal".to_string(),
+                name: "money".to_string(),
             },
             "price",
         );
@@ -573,5 +654,152 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("→ retirez « index »"), "{text}");
+    }
+
+    #[test]
+    fn an_unclosed_enum_parenthesis_shows_an_example() {
+        let text = rendered(ErrorKind::EnumUnclosedParenthesis, "status");
+        assert!(text.contains("n'est pas refermée"), "{text}");
+        assert!(
+            text.contains("→ exemple : « status:enum(draft,published) »"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn an_empty_enum_list_shows_an_example() {
+        let text = rendered(ErrorKind::EnumEmptyList, "status");
+        assert!(
+            text.contains("« enum » attend au moins une valeur"),
+            "{text}"
+        );
+        assert!(
+            text.contains("→ exemple : « status:enum(draft,published) »"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_non_snake_case_enum_value_names_it() {
+        let text = rendered(
+            ErrorKind::EnumValueNotSnakeCase {
+                value: "Draft".to_string(),
+            },
+            "status",
+        );
+        assert!(
+            text.contains("la valeur « Draft » n'est pas en snake_case"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_duplicated_enum_value_names_it() {
+        let text = rendered(
+            ErrorKind::EnumDuplicateValue {
+                value: "draft".to_string(),
+            },
+            "status",
+        );
+        assert!(
+            text.contains("la valeur « draft » est déclarée deux fois"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn an_enum_type_name_collision_names_the_colliding_type() {
+        let text = rendered(
+            ErrorKind::EnumTypeNameCollision {
+                type_name: "Model".to_string(),
+            },
+            "model",
+        );
+        assert!(
+            text.contains("« model » nommerait le type « Model », que « model.rs » déclare déjà"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn an_unknown_type_also_mentions_the_enum_grammar() {
+        let text = rendered(
+            ErrorKind::UnknownType {
+                name: "money".to_string(),
+            },
+            "price",
+        );
+        assert!(text.contains("enum(a,b,c)"), "« enum » absent de : {text}");
+    }
+
+    /// Les messages citent entre guillemets français, jamais entre accents graves : celui
+    /// de la collision était le seul à écrire `model.rs` comme du code.
+    #[test]
+    fn the_enum_type_collision_quotes_the_file_like_every_other_message() {
+        let text = rendered(
+            ErrorKind::EnumTypeNameCollision {
+                type_name: "Column".to_string(),
+            },
+            "column",
+        );
+
+        assert!(text.contains("« model.rs »"), "{text}");
+        assert!(!text.contains("`model.rs`"), "{text}");
+    }
+
+    #[test]
+    fn an_empty_enum_value_says_it_is_empty() {
+        let text = rendered(ErrorKind::EnumEmptyValue, "status");
+
+        assert!(text.contains("vide"), "{text}");
+        assert!(!text.contains("snake_case"), "{text}");
+    }
+
+    #[test]
+    fn a_variant_collision_names_both_values_and_the_variant() {
+        let text = rendered(
+            ErrorKind::EnumVariantCollision {
+                value: "a1".to_string(),
+                previous: "a_1".to_string(),
+                variant: "A1".to_string(),
+            },
+            "status",
+        );
+
+        assert!(
+            text.contains("« a1 » et « a_1 » nomment toutes deux la variante « A1 »"),
+            "{text}"
+        );
+        assert!(text.contains("PascalCase"), "{text}");
+    }
+
+    #[test]
+    fn a_reserved_variant_says_which_word_rust_keeps() {
+        let text = rendered(
+            ErrorKind::EnumVariantReserved {
+                value: "self".to_string(),
+                variant: "Self".to_string(),
+            },
+            "status",
+        );
+
+        assert!(
+            text.contains("« self » nommerait la variante « Self », que Rust réserve"),
+            "{text}"
+        );
+    }
+
+    /// Le compte des valeurs entre dans le message, au singulier comme au pluriel : le
+    /// refus jumeau sur un booléen dit « deux lignes », celui-ci dit combien.
+    #[test]
+    fn unique_on_an_enum_counts_the_lines_it_would_allow() {
+        let deux = rendered(ErrorKind::UniqueOnEnum { values: 2 }, "status");
+
+        assert!(deux.contains("n'admettrait que 2 lignes"), "{deux}");
+        assert!(deux.contains("retirez « unique »"), "{deux}");
+
+        let une = rendered(ErrorKind::UniqueOnEnum { values: 1 }, "status");
+
+        assert!(une.contains("n'admettrait qu'une ligne"), "{une}");
     }
 }

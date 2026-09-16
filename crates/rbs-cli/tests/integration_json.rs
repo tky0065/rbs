@@ -302,6 +302,64 @@ fn generate_job_dry_run_json_prints_an_analysable_plan() {
     common::assert_intact(&avant, &racine, "`--dry-run --json` a écrit dans le projet");
 }
 
+/// `generate migration` rend son plan comme les autres commandes qui planifient : un seul
+/// document, et `--dry-run` n'écrit toujours rien.
+#[test]
+fn generate_migration_dry_run_json_prints_an_analysable_plan() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = projet_neuf(&parent);
+
+    // La table visée doit porter un module : c'est là que la commande cherche l'entité.
+    rbs(&racine)
+        .args(["generate", "crud", "articles", "--fields", "titre:string"])
+        .assert()
+        .success();
+
+    let avant = common::empreinte(&racine);
+
+    let sortie = lancer(
+        &racine,
+        &[
+            "generate",
+            "migration",
+            "ajoute_statut",
+            "--add-column",
+            "articles",
+            "--fields",
+            "statut:enum(draft,published):optional",
+            "--dry-run",
+            "--json",
+            "--force",
+        ],
+    );
+
+    assert_eq!(sortie.code, Some(0), "{}", sortie.stderr);
+    let plan = document(&sortie);
+    assert_eq!(plan["commande"], "generate migration");
+    assert_eq!(plan["applique"], false);
+    assert!(
+        plan["actions"]
+            .as_array()
+            .is_some_and(|actions| actions.iter().any(|action| action["chemin"]
+                .as_str()
+                .is_some_and(|chemin| chemin.starts_with("migration/src/m")
+                    && chemin.ends_with("_ajoute_statut.rs")))),
+        "le plan crée le fichier de la migration :\n{plan:#}"
+    );
+
+    // Les blocs à coller n'appartiennent pas au document : la sortie standard ne porte que
+    // le plan, et un bloc de Rust glissé dedans la rendrait inanalysable.
+    assert!(
+        sortie
+            .stderr
+            .contains("à coller dans src/articles/model.rs"),
+        "les blocs partent sur la sortie d'erreur sous --json :\n{}",
+        sortie.stderr
+    );
+
+    common::assert_intact(&avant, &racine, "`--dry-run --json` a écrit dans le projet");
+}
+
 /// Sans la file, le refus sort en document, et son remède est la commande qui l'installe.
 #[test]
 fn generate_job_json_without_jobs_renders_jobs_absent() {

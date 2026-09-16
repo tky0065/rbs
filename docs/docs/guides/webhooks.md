@@ -6,7 +6,7 @@ title: Webhooks
 # Outgoing webhooks
 
 `rbs add webhooks` gives a project a way to tell the outside world what just happened:
-eleven files under `src/modules/webhooks/` — `target.rs` included — a migration for the
+sixteen files under `src/modules/webhooks/` — `target.rs` included — a migration for the
 `webhook_subscriptions` table, three routes, and a signed HTTP POST for every subscriber
 that listens.
 
@@ -45,12 +45,17 @@ plan pour …/demo
   + src/modules/webhooks/signature.rs                                créé
   + src/modules/webhooks/target.rs                                   créé
   + src/modules/webhooks/delivery.rs                                 créé
-  + src/modules/webhooks/tests.rs                                    créé
+  + src/modules/webhooks/tests/mod.rs                                créé
+  + src/modules/webhooks/tests/blocked.rs                            créé
+  + src/modules/webhooks/tests/emission.rs                           créé
+  + src/modules/webhooks/tests/routes.rs                             créé
+  + src/modules/webhooks/tests/signature.rs                          créé
+  + src/modules/webhooks/tests/target.rs                             créé
   + migration/src/m20260913_132216_create_webhook_subscriptions.rs   créé
   ~ AGENTS.md                                                        modifié
 
-  56 à créer, 12 à modifier
-✓ webhooks installée — 56 créés, 12 modifiés
+  78 à créer, 12 à modifier
+✓ webhooks installée — 78 créés, 12 modifiés
 
   rbs migrate up, inscrivez un abonné par POST /webhooks/subscriptions — son secret n'est rendu qu'à cet instant — puis appelez webhooks::emit dans vos services
 ```
@@ -109,10 +114,13 @@ the [auth guide](./auth.md) for the guard.
 A subscription URL is checked twice. At registration, outside the `development` profile,
 it must be `https` and its host must not be a loopback, private, link-local or
 carrier-grade NAT address — nor `localhost`; the request gets a 400 naming the rule. At
-delivery, the host is resolved and every non-public address is dropped, both before the
-request is sent and again inside the HTTP client's resolver, so a name that changes its
-answer between the two never reaches an internal service. Redirects are never followed: a
-3xx is a failed delivery like any other non-2xx. A delivery whose target is blocked is
+delivery, the host is resolved once, inside the HTTP client's resolver, which drops every
+non-public address at connection time: no name can change its answer between the check and
+the request, and so none reaches an internal service. The delivery client ignores the
+environment's proxy settings — `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY`: through a proxy,
+an HTTPS delivery is tunnelled with `CONNECT`, the proxy resolves the target itself, and
+the resolver would only ever see the proxy's own host. Redirects are never followed: a 3xx
+is a failed delivery like any other non-2xx. A delivery whose target is blocked is
 abandoned, not retried — nothing would change on the fifth attempt.
 
 In `development` every rule is lifted: a receiver on `http://localhost:4000` is the normal
@@ -240,7 +248,7 @@ worker's log.
 
 ## Testing
 
-The generated `src/modules/webhooks/tests.rs` covers the two halves separately. The signature is
+The generated `src/modules/webhooks/tests/` covers the two halves separately. The signature is
 proven against **a vector computed outside Rust**, so the test would survive a rewrite of
 the signing code and catch a change of scheme; the pattern matching is proven on its three
 forms.

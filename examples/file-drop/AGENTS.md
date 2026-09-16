@@ -23,7 +23,7 @@ du projet », en bas, est faite pour l'accueillir.
 |---|---|---|
 | `rbs new <nom>` | crée un projet ; `--lang fr\|en` fixe la langue du projet — ce fichier et les réponses HTTP | tout le squelette |
 | `rbs add <feature>` | installe audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks | le câblage de la feature |
-| `rbs generate crud <nom> --fields "..."` | une feature CRUD complète | huit fichiers, le seed et la migration |
+| `rbs generate crud <nom> --fields "..."` | une feature CRUD complète | sept fichiers, leur répertoire `tests/`, le seed et la migration |
 | `rbs generate feature <nom>` | une feature vide | sept fichiers |
 | `rbs generate job <nom> [--every "<cron>"]` | un job de la file, et son échéance sous `--every` | le fichier du job, son inscription et son échéance |
 | `rbs migrate up\|down\|status` | pilote les migrations | — |
@@ -59,9 +59,9 @@ controller → service → repository → model
 La dépendance est unidirectionnelle et stricte : un `service` n'accède jamais
 *directement* à `DatabaseConnection` — il la reçoit et la passe au `repository`, seul à
 construire une requête SeaORM ; un `controller` n'en construit jamais. `rbs generate
-crud` ajoute à ces sept fichiers un `tests.rs` et, quand l'entité est semable, le seed
-`src/seeds/<nom>.rs`. Un fichier de feature au-delà de ~200 lignes signale une feature à
-scinder.
+crud` ajoute à ces sept fichiers un répertoire `tests/` et, quand l'entité est semable,
+le seed `src/seeds/<nom>.rs`. Un fichier de feature au-delà de ~200 lignes signale une
+feature à scinder.
 
 ## Les ancres
 

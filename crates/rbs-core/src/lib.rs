@@ -61,10 +61,11 @@ pub use error::{Error, Result};
 pub use extract::Identity;
 pub use extract::ValidatedJson;
 pub use filter::schema::{
-    BoolComparisonSchema, ComparisonSchema, DateTimeComparisonSchema, FloatComparisonSchema,
-    IntComparisonSchema, TextMatchSchema, UuidComparisonSchema,
+    BoolComparisonSchema, ComparisonSchema, DateComparisonSchema, DateTimeComparisonSchema,
+    DecimalComparisonSchema, FloatComparisonSchema, IntComparisonSchema, OneOfSchema,
+    TextMatchSchema, UuidComparisonSchema,
 };
-pub use filter::{Comparison, Sort, SortKey, TextMatch};
+pub use filter::{Comparison, OneOf, Sort, SortKey, TextMatch};
 pub use lang::Lang;
 pub use openapi::{CommonResponses, ProblemDetails};
 pub use pagination::{Cursor, CursorPage, Page, Pagination};

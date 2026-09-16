@@ -15,10 +15,10 @@ mod common;
 
 /// Les tests qu'un CRUD engendré livre au projet, et qui joignent tous la base.
 const TESTS_DU_CRUD: [&str; 4] = [
-    "articles::tests::the_full_lifecycle_goes_through_the_api",
-    "articles::tests::two_creations_in_a_row_carry_increasing_ids",
-    "articles::tests::an_unknown_id_returns_404",
-    "articles::tests::an_unreadable_body_returns_400",
+    "articles::tests::lifecycle::the_full_lifecycle_goes_through_the_api",
+    "articles::tests::lifecycle::two_creations_in_a_row_carry_increasing_ids",
+    "articles::tests::errors::an_unknown_id_returns_404",
+    "articles::tests::errors::an_unreadable_body_returns_400",
 ];
 
 #[test]

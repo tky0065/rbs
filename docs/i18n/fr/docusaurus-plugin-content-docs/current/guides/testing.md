@@ -5,10 +5,11 @@ title: Tests
 
 # Tests
 
-`rbs generate crud` écrit un fichier de tests à côté de la feature qu'il génère, et le
-monte dans le `mod.rs` de celle-ci. Les tests qu'il contient passent par HTTP, contre une
-vraie base. C'est un banc de départ, pas une suite : ils prouvent le câblage et vous
-laissent les règles.
+`rbs generate crud` écrit un répertoire `tests/` à côté de la feature qu'il génère — un
+harnais dans `tests/mod.rs`, puis un fichier par préoccupation — et le monte dans le
+`mod.rs` de celle-ci. Les tests qu'il contient passent par HTTP, contre une vraie base.
+C'est un banc de départ, pas une suite : ils prouvent le câblage et vous laissent les
+règles.
 
 ## Le banc
 
@@ -16,7 +17,7 @@ L'application est montée dans le processus. Aucun socket n'est ouvert, aucune t
 serveur n'est lancée — le routeur est construit exactement comme `main` le construit, et
 les requêtes lui sont remises directement :
 
-```rust file=examples/hello-crud/src/articles/tests.rs region=harnais
+```rust file=examples/hello-crud/src/articles/tests/mod.rs region=harnais
 ```
 
 La configuration est chargée comme le binaire la charge, ce qui veut dire que les tests
@@ -30,7 +31,7 @@ mock masquerait.
 Un test parcourt le cycle de vie complet de la ressource — création, relecture, liste,
 mise à jour, suppression, puis relecture pour confirmer qu'elle a disparu :
 
-```rust file=examples/hello-crud/src/articles/tests.rs region=cycle_de_vie
+```rust file=examples/hello-crud/src/articles/tests/lifecycle.rs region=cycle_de_vie
 ```
 
 D'autres éprouvent les chemins d'erreur que le runtime traite tout seul. Deux sont
@@ -54,9 +55,9 @@ Tout ce qui est propre à votre domaine, c'est-à-dire tout ce qui compte :
 - vos propres cas limites — concurrence, bornes de pagination, états dont une ressource ne
   peut pas sortir.
 
-Le fichier généré est du Rust ordinaire dans votre arbre de sources. Complétez-le,
-scindez-le, supprimez-en ce qui cesse de servir. Rien ne le marque comme généré, parce que
-rien ne doit vous empêcher de le modifier.
+Les fichiers générés sont du Rust ordinaire dans votre arbre de sources. Complétez-les,
+scindez-les encore, supprimez-en ce qui cesse de servir. Rien ne les marque comme générés,
+parce que rien ne doit vous empêcher de les modifier.
 
 ## Les lancer
 

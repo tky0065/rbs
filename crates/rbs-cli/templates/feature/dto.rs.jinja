@@ -3,16 +3,22 @@
   écrit — `DateTime`, `NaiveDateTime` — et bute donc sur celui-ci. Le format se déclare
   à la main plutôt que par un import renommé, qui casserait sans bruit à la première
   retouche de l'utilisateur.
+
+  `Decimal` passe par le même chemin, pour une autre raison : le document doit dire une
+  chaîne, qui est ce que le corps porte. Un nombre y passerait par le flottant d'un client
+  JavaScript, qui perdrait les centimes.
 -#}
-{% macro schema_datetime(field, optional) -%}
+{% macro schema_format(field, optional) -%}
 {% if field.type == "datetime" %}
     #[schema(value_type = {@ "Option<String>" if optional else "String" @}, format = DateTime)]
+{%- elif field.type == "decimal" %}
+    #[schema(value_type = {@ "Option<String>" if optional else "String" @}, format = "decimal")]
 {%- endif %}
 {%- endmacro -%}
 {% macro body(fields, all_optional) -%}
 {% if fields %} {
 {%- for field in fields %}
-{@- schema_datetime(field, all_optional or field.optional) @}
+{@- schema_format(field, all_optional or field.optional) @}
 {%- if field.validations %}
     #[validate({@ field.validations | join(", ") @})]
 {%- endif %}
@@ -22,12 +28,16 @@
 {%- else %} {}
 {%- endif %}
 {%- endmacro -%}
+{% if has_date %}use sea_orm::prelude::Date;
+{% endif -%}
+{% if has_decimal %}use sea_orm::prelude::Decimal;
+{% endif -%}
 use sea_orm::prelude::{DateTimeWithTimeZone, Uuid};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use validator::Validate;
 
-use super::model::Model;
+use super::model::{@ model_import @};
 
 #[derive(Debug, Deserialize, ToSchema, Validate)]
 pub struct Create{@ entity @}{@ body(fields, false) @}
@@ -39,7 +49,7 @@ pub struct Update{@ entity @}{@ body(fields, true) @}
 pub struct {@ entity @}Response {
     pub id: Uuid,
 {%- for field in fields %}
-{@- schema_datetime(field, field.optional) @}
+{@- schema_format(field, field.optional) @}
     pub {@ field.name @}: {@ field.rust_type @},
 {%- endfor %}
     #[schema(value_type = String, format = DateTime)]

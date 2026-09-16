@@ -160,13 +160,14 @@ command writes takes an `Identity` and calls `require_role`, and `--role` raises
 threshold of the writes. The controller is therefore the plain generated file, and so is
 `src/auth/guard.rs`.
 
-- `src/posts/tests.rs`: one test is added, `a_non_admin_write_returns_403`. The generated
-  file already refuses an anonymous write and an anonymous read — both 401, both from the
-  extractor — but it signs an `admin` token for everything else it sends, so it says
-  nothing about the threshold itself. Presenting a `user` token is what separates the two
-  refusals: 403 on `POST /posts`, 200 on `GET /posts` with that same token. Nothing else
-  in the file is written by hand — the harness, the lifecycle, the filter and the 404 are
-  all as generated, and only the `// region:` markers are restored on top.
+- `src/posts/tests/access.rs`: one test is added, `a_non_admin_write_returns_403`. The
+  generated file already refuses an anonymous write and an anonymous read — both 401, both
+  from the extractor — but the harness signs an `admin` token for everything else the
+  tests send, so they say nothing about the threshold itself. Presenting a `user` token is
+  what separates the two refusals: 403 on `POST /posts`, 200 on `GET /posts` with that
+  same token. Nothing else under `tests/` is written by hand — the harness, the lifecycle,
+  the filter and the 404 are all as generated, and only the `// region:` markers are
+  restored on top.
 
 Two things that used to be listed here are gone, and their absence is the point:
 

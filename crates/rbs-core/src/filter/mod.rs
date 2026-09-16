@@ -10,8 +10,9 @@
 pub mod schema;
 
 pub use schema::{
-    BoolComparisonSchema, ComparisonSchema, DateTimeComparisonSchema, FloatComparisonSchema,
-    IntComparisonSchema, TextMatchSchema, UuidComparisonSchema,
+    BoolComparisonSchema, ComparisonSchema, DateComparisonSchema, DateTimeComparisonSchema,
+    DecimalComparisonSchema, FloatComparisonSchema, IntComparisonSchema, OneOfSchema,
+    TextMatchSchema, UuidComparisonSchema,
 };
 
 use serde::{Deserialize, Deserializer};
@@ -53,6 +54,22 @@ pub struct TextMatch {
     pub is_null: Option<bool>,
 }
 
+/// Conditions portées sur une colonne à valeurs énumérées.
+///
+/// Se lit d'une valeur nue, qui vaut `eq`, ou d'un objet nommant ses opérateurs :
+/// `{ "status": "draft" }` et `{ "status": { "eq": "draft" } }` disent la même chose.
+///
+/// Une énumération ne s'ordonne pas : `in` y remplace les comparaisons de [`Comparison`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct OneOf<T> {
+    /// Égalité stricte.
+    pub eq: Option<T>,
+    /// Appartenance à l'une des valeurs citées. Une liste vide n'en accepte aucune.
+    pub r#in: Option<Vec<T>>,
+    /// `true` exige une colonne nulle, `false` une colonne renseignée.
+    pub is_null: Option<bool>,
+}
+
 /// Une colonne de tri et son sens.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SortKey {
@@ -82,7 +99,7 @@ impl Sort {
 /// document OpenAPI, où la forme longue est la seule qui se décrive.
 #[derive(Deserialize)]
 #[serde(untagged)]
-enum OneOf<T, O> {
+enum Forme<T, O> {
     Bare(T),
     Operators(O),
 }
@@ -98,6 +115,13 @@ struct ComparisonInput<T> {
 }
 
 #[derive(Deserialize)]
+struct OneOfInput<T> {
+    eq: Option<T>,
+    r#in: Option<Vec<T>>,
+    is_null: Option<bool>,
+}
+
+#[derive(Deserialize)]
 struct TextMatchInput {
     eq: Option<String>,
     contains: Option<String>,
@@ -107,8 +131,8 @@ struct TextMatchInput {
 impl<'de, T: Deserialize<'de>> Deserialize<'de> for Comparison<T> {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Ok(
-            match OneOf::<T, ComparisonInput<T>>::deserialize(deserializer)? {
-                OneOf::Bare(valeur) => Self {
+            match Forme::<T, ComparisonInput<T>>::deserialize(deserializer)? {
+                Forme::Bare(valeur) => Self {
                     eq: Some(valeur),
                     gt: None,
                     gte: None,
@@ -116,7 +140,7 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Comparison<T> {
                     lte: None,
                     is_null: None,
                 },
-                OneOf::Operators(operateurs) => Self {
+                Forme::Operators(operateurs) => Self {
                     eq: operateurs.eq,
                     gt: operateurs.gt,
                     gte: operateurs.gte,
@@ -129,16 +153,35 @@ impl<'de, T: Deserialize<'de>> Deserialize<'de> for Comparison<T> {
     }
 }
 
+impl<'de, T: Deserialize<'de>> Deserialize<'de> for OneOf<T> {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        Ok(
+            match Forme::<T, OneOfInput<T>>::deserialize(deserializer)? {
+                Forme::Bare(valeur) => Self {
+                    eq: Some(valeur),
+                    r#in: None,
+                    is_null: None,
+                },
+                Forme::Operators(operateurs) => Self {
+                    eq: operateurs.eq,
+                    r#in: operateurs.r#in,
+                    is_null: operateurs.is_null,
+                },
+            },
+        )
+    }
+}
+
 impl<'de> Deserialize<'de> for TextMatch {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         Ok(
-            match OneOf::<String, TextMatchInput>::deserialize(deserializer)? {
-                OneOf::Bare(valeur) => Self {
+            match Forme::<String, TextMatchInput>::deserialize(deserializer)? {
+                Forme::Bare(valeur) => Self {
                     eq: Some(valeur),
                     contains: None,
                     is_null: None,
                 },
-                OneOf::Operators(operateurs) => Self {
+                Forme::Operators(operateurs) => Self {
                     eq: operateurs.eq,
                     contains: operateurs.contains,
                     is_null: operateurs.is_null,
@@ -232,6 +275,48 @@ mod tests {
         let sort: Sort = serde_json::from_str(r#"["-inconnue"]"#).expect("tri lisible");
 
         assert_eq!(sort.keys()[0].column, "inconnue");
+    }
+
+    /// La forme courte vaut sur une colonne à valeurs énumérées comme sur les autres :
+    /// `{ "status": "draft" }` est ce qu'un client écrit, et doit valoir `eq`.
+    #[test]
+    fn a_bare_value_reads_as_an_equality_on_an_enumerated_column() {
+        let choix: OneOf<String> = serde_json::from_str(r#""draft""#).expect("valeur nue lisible");
+
+        assert_eq!(choix.eq.as_deref(), Some("draft"));
+        assert_eq!(choix.r#in, None);
+        assert_eq!(choix.is_null, None);
+    }
+
+    #[test]
+    fn an_enumerated_object_names_its_operators() {
+        let choix: OneOf<String> =
+            serde_json::from_str(r#"{"in": ["draft", "published"]}"#).expect("objet lisible");
+
+        assert_eq!(
+            choix.r#in,
+            Some(vec!["draft".to_owned(), "published".to_owned()])
+        );
+        assert_eq!(choix.eq, None);
+    }
+
+    /// Une liste vide est une liste, non l'absence de condition : le filtre engendré la
+    /// traduit en `IN ()`, que sea-query écrit `1 = 2` — aucune ligne. La confondre avec
+    /// `None` rendrait la liste entière là où le client n'accepte aucune valeur.
+    #[test]
+    fn an_empty_in_list_stays_an_empty_list() {
+        let choix: OneOf<String> = serde_json::from_str(r#"{"in": []}"#).expect("objet lisible");
+
+        assert_eq!(choix.r#in, Some(Vec::new()));
+    }
+
+    #[test]
+    fn an_enumerated_column_reads_is_null() {
+        let choix: OneOf<String> =
+            serde_json::from_str(r#"{"is_null": true}"#).expect("objet lisible");
+
+        assert_eq!(choix.is_null, Some(true));
+        assert_eq!(choix.eq, None);
     }
 
     /// Un corps qui ne dit rien ne restreint rien : le filtre par défaut est celui que

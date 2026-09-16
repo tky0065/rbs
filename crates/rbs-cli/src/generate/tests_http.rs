@@ -1,4 +1,5 @@
-//! Rendu de `<name>/tests.rs` : le CRUD complet exercé par HTTP.
+//! Rendu de `<name>/tests/` : le CRUD complet exercé par HTTP, un fichier par
+//! préoccupation.
 //!
 //! Le module se nomme `trials` et non `tests` : `generate::tests` se confondrait avec les
 //! modules `#[cfg(test)]` que porte chaque générateur.
@@ -11,22 +12,46 @@ use crate::template::Renderer;
 use super::feature::Feature;
 use super::fields::{Field, FieldType};
 
-const TESTS: &str = include_str!(concat!(
+const HARNAIS: &str = include_str!(concat!(
     env!("CARGO_MANIFEST_DIR"),
-    "/templates/feature/tests.rs.jinja"
+    "/templates/feature/tests/mod.rs.jinja"
+));
+const CYCLE_DE_VIE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/feature/tests/lifecycle.rs.jinja"
+));
+const ERREURS: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/feature/tests/errors.rs.jinja"
+));
+const FILTRE: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/feature/tests/filter.rs.jinja"
+));
+const ACCES: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/feature/tests/access.rs.jinja"
+));
+const CONTENU: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/feature/tests/content.rs.jinja"
 ));
 
-/// Rend les tests d'intégration HTTP de `feature`.
+/// Rend les tests d'intégration HTTP de `feature`, chacun sous le chemin qu'il porte dans
+/// le répertoire de la feature : `tests/mod.rs`, puis un fichier par préoccupation.
+///
+/// Un fichier dont aucun scénario ne tient pour cette feature n'est pas rendu, et le
+/// harnais ne le déclare pas : il lit pour ses `mod` les présences qui décident ici.
 ///
 /// Une référence requise écarte les scénarios qui créent : ils POSTeraient un identifiant
 /// inventé dans une colonne sous contrainte de clé étrangère, et rendraient 500 dès la
-/// première exécution. Le fichier garde ce qui ne crée rien, et dit ce qui manque — le
+/// première exécution. Les tests gardent ce qui ne crée rien, et disent ce qui manque — le
 /// seed s'écarte entièrement pour la même raison.
 ///
 /// Un garde de rôle ne les écarte plus : sous `auth`, le harnais signe son propre jeton et
-/// le cycle complet reste exercé quel que soit le rôle exigé. Le fichier éprouve en plus
+/// le cycle complet reste exercé quel que soit le rôle exigé. Les tests éprouvent en plus
 /// le refus d'une requête anonyme, qui est ce que le garde promet.
-pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
+pub(crate) fn render(feature: &Feature) -> Result<Vec<(&'static str, String)>, minijinja::Error> {
     let blocking = feature.required_reference();
     // Le rôle n'écarte plus rien : le harnais signe son jeton, et une écriture gardée
     // s'exerce comme les autres. Seule une référence requise reste bloquante — le
@@ -36,36 +61,60 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
     // resteraient inutilisées, et le projet engendré ne compile pas sous `-D warnings`.
     let sent: &[Field] = if creatable { &feature.fields } else { &[] };
     let fields: Vec<TestField> = sent.iter().map(TestField::from).collect();
+    // Le critère du scénario de filtrage : un champ dont la valeur envoyée se rejoue telle
+    // quelle. Un horodatage en est écarté — PostgreSQL le rend dans un autre format que la
+    // chaîne envoyée, et l'égalité porterait à faux.
+    let critere = sent
+        .iter()
+        .find(|champ| filterable(champ))
+        .map(Field::column_name);
 
-    Renderer::new().render(
-        TESTS,
-        context! {
-            module => feature.module(),
-            creatable,
-            role => feature.role,
-            auth => feature.auth,
-            with_upload => feature.with_upload,
-            cursor => feature.cursor,
-            // Le rôle que le harnais signe, tel qu'il s'écrit en base.
-            signed_role => feature.role_value.clone().unwrap_or_else(|| "user".to_string()),
-            blocking_reference => blocking.map(|field| field.relation_name()),
-            fields => fields,
-            compared => names(sent, |champ| !timestamp(champ)),
-            timestamped => names(sent, timestamp),
-            suffix => sent.iter().any(textual),
-            unique_number => sent.iter().any(drawn_number),
-            // Le critère du scénario de filtrage : un champ dont la valeur envoyée se
-            // rejoue telle quelle. Un horodatage en est écarté — PostgreSQL le rend dans
-            // un autre format que la chaîne envoyée, et l'égalité porterait à faux.
-            filterable => sent.iter().find(|champ| filterable(champ)).map(Field::column_name),
-            // Les deux scénarios ci-dessous n'ont de sens que si `--fields` les rend
-            // atteignables : sans contrainte d'e-mail rien ne rend 422, sans colonne
-            // unique rien ne rend 409, et le test échouerait faute de refus à observer.
-            email_field => sent.iter().find(|champ| champ.validates_email()).map(Field::column_name),
-            unique_field => sent.iter().any(|champ| champ.unique),
-            contains_field => sent.iter().find(|champ| contains_field(champ)).map(Field::column_name),
-        },
-    )
+    let with_lifecycle = creatable;
+    let with_filter = critere.is_some();
+    let with_access = feature.auth;
+    let with_content = feature.with_upload;
+
+    let contexte = context! {
+        module => feature.module(),
+        creatable,
+        role => feature.role,
+        auth => feature.auth,
+        with_upload => feature.with_upload,
+        cursor => feature.cursor,
+        // Le rôle que le harnais signe, tel qu'il s'écrit en base.
+        signed_role => feature.role_value.clone().unwrap_or_else(|| "user".to_string()),
+        blocking_reference => blocking.map(|field| field.relation_name()),
+        fields => fields,
+        compared => names(sent, |champ| !timestamp(champ)),
+        timestamped => names(sent, timestamp),
+        suffix => sent.iter().any(textual),
+        unique_number => sent.iter().any(drawn_number),
+        filterable => critere,
+        // Les deux scénarios ci-dessous n'ont de sens que si `--fields` les rend
+        // atteignables : sans contrainte d'e-mail rien ne rend 422, sans colonne
+        // unique rien ne rend 409, et le test échouerait faute de refus à observer.
+        email_field => sent.iter().find(|champ| champ.validates_email()).map(Field::column_name),
+        unique_field => sent.iter().any(|champ| champ.unique),
+        contains_field => sent.iter().find(|champ| contains_field(champ)).map(Field::column_name),
+        with_lifecycle,
+        with_filter,
+        with_access,
+        with_content,
+    };
+
+    let renderer = Renderer::new();
+    [
+        ("tests/mod.rs", HARNAIS, true),
+        ("tests/lifecycle.rs", CYCLE_DE_VIE, with_lifecycle),
+        ("tests/errors.rs", ERREURS, true),
+        ("tests/filter.rs", FILTRE, with_filter),
+        ("tests/access.rs", ACCES, with_access),
+        ("tests/content.rs", CONTENU, with_content),
+    ]
+    .into_iter()
+    .filter(|(_, _, present)| *present)
+    .map(|(name, template, _)| Ok((name, renderer.render(template, &contexte)?)))
+    .collect()
 }
 
 /// Un champ vu par les tests : la valeur qu'ils envoient, et celle qu'ils réenvoient.
@@ -98,6 +147,17 @@ fn value(champ: &Field, mark: &str) -> String {
         return "Value::Null".to_string();
     }
 
+    // Une énumération n'accepte que ses propres valeurs : la première à la création, la
+    // deuxième à la modification — la première encore quand elle est seule. Une valeur
+    // inventée ferait refuser le corps par la colonne comme par le `CHECK`. Le tirage que
+    // réclame une colonne `unique` ne la concerne donc pas, et `--fields` refuse
+    // « unique » sur une énumération faute de valeur à tirer hors de la liste.
+    let valeurs = champ.enum_variants();
+    if !valeurs.is_empty() {
+        let rang = usize::from(!mark.is_empty()).min(valeurs.len() - 1);
+        return format!("\"{}\"", valeurs[rang]);
+    }
+
     // Une colonne `unique` non textuelle ne peut pas porter de valeur écrite : les
     // scénarios de ce fichier créent en parallèle sur la même base, et se refuseraient
     // l'un l'autre par un 409 dès la première exécution. Les textes tiennent déjà
@@ -106,6 +166,13 @@ fn value(champ: &Field, mark: &str) -> String {
         return match champ.column_type() {
             FieldType::Int => "unique_number() as i32".to_string(),
             FieldType::Float => "unique_number() as f64 / 10.0".to_string(),
+            // Les quatre décimales sont écrites : `DECIMAL(19, 4)` les rend toutes, et
+            // une valeur qui n'en porterait pas se comparerait à un autre texte.
+            FieldType::Decimal => "format!(\"{}.0000\", unique_number())".to_string(),
+            // Un jour de l'année tiré au sort : l'ordinal reste dans 1..=365, valide pour
+            // toute année, là où décaler un jour fixe exigerait de gérer les fins de mois.
+            FieldType::Date => "chrono::NaiveDate::from_yo_opt(2024, 1 + (unique_number() % 365) as u32)\n            .unwrap()\n            .to_string()"
+                .to_string(),
             _ => "(chrono::Utc::now() + chrono::Duration::microseconds(unique_number()))\n            .to_rfc3339()"
                 .to_string(),
         };
@@ -120,9 +187,15 @@ fn value(champ: &Field, mark: &str) -> String {
         }
         FieldType::Int => if_modified(mark, "42", "43"),
         FieldType::Float => if_modified(mark, "4.2", "8.4"),
+        // Une chaîne, portant déjà les quatre décimales que rend `DECIMAL(19, 4)` : la
+        // valeur revient à la lettre, et se compare comme n'importe quel scalaire.
+        FieldType::Decimal => if_modified(mark, "\"12.5000\"", "\"99.9900\""),
         FieldType::Bool => if_modified(mark, "true", "false"),
         FieldType::Uuid => "Uuid::new_v4().to_string()".to_string(),
         FieldType::Datetime => "chrono::Utc::now().to_rfc3339()".to_string(),
+        // Comparée à la lettre : un `DATE` rend le même texte sur les trois moteurs, à la
+        // différence d'un horodatage.
+        FieldType::Date => if_modified(mark, "\"2024-01-15\"", "\"2024-06-20\""),
     }
 }
 
@@ -158,7 +231,11 @@ fn drawn_number(champ: &Field) -> bool {
         && champ.reference().is_none()
         && matches!(
             champ.column_type(),
-            FieldType::Int | FieldType::Float | FieldType::Datetime
+            FieldType::Int
+                | FieldType::Float
+                | FieldType::Decimal
+                | FieldType::Datetime
+                | FieldType::Date
         )
 }
 
@@ -177,8 +254,13 @@ fn contains_field(champ: &Field) -> bool {
             .is_none_or(|borne| borne >= VALEUR_D_EPREUVE)
 }
 
+/// Un champ dont la valeur d'exemple porte le suffixe tiré au sort.
+///
+/// Une énumération en est écartée : sa colonne est une chaîne, mais ses valeurs sont
+/// écrites une fois pour toutes — un suffixe les ferait refuser par le `CHECK`.
 fn textual(champ: &Field) -> bool {
-    matches!(champ.column_type(), FieldType::String | FieldType::Text)
+    champ.enum_variants().is_empty()
+        && matches!(champ.column_type(), FieldType::String | FieldType::Text)
 }
 
 fn names(fields: &[Field], retenu: impl Fn(&Field) -> bool) -> Vec<String> {
@@ -197,9 +279,117 @@ mod tests {
     const CHAMPS: &str = "title:string,email:string:unique,summary:text:optional,views:int,\
                           note:float,published:bool,auteur_id:uuid,published_at:datetime";
 
+    fn files(feature: &Feature) -> Vec<(&'static str, String)> {
+        render(feature).expect("les tests doivent se rendre")
+    }
+
+    /// Les fichiers rendus mis bout à bout : ce qu'une assertion cherche vit dans l'un ou
+    /// l'autre, et c'est le contenu livré qu'elle éprouve, non son découpage.
+    fn joined(files: Vec<(&'static str, String)>) -> String {
+        files.into_iter().map(|(_, content)| content).collect()
+    }
+
     fn trials(name: &str, fields: &str) -> String {
         let fields = fields::parse(fields).expect("champs valides");
-        render(&Feature::fresh(name, fields)).expect("les tests doivent se rendre")
+        joined(files(&Feature::fresh(name, fields)))
+    }
+
+    /// Les longueurs de nom pour lesquelles l'un des fichiers rendus s'écarte de rustfmt.
+    ///
+    /// Chaque fichier se mesure seul, comme il atteint le projet : leur concaténation
+    /// n'est pas un fichier que rustfmt aurait à lire.
+    fn divergences(rendu: impl Fn(&str) -> Vec<(&'static str, String)>) -> Vec<usize> {
+        let noms: Vec<&str> = rendu("e").into_iter().map(|(nom, _)| nom).collect();
+        let mut toutes: Vec<usize> = noms
+            .iter()
+            .flat_map(|nom| {
+                bench::longueurs_divergentes(|name| {
+                    rendu(name)
+                        .into_iter()
+                        .find(|(fichier, _)| fichier == nom)
+                        .map(|(_, content)| content)
+                        .unwrap_or_else(|| panic!("« {nom} » cesse d'être rendu"))
+                })
+            })
+            .collect();
+        toutes.sort_unstable();
+        toutes.dedup();
+        toutes
+    }
+
+    /// Un fichier par préoccupation, et seulement ceux qui ont de quoi s'écrire : les
+    /// options de la feature décident lesquels existent.
+    #[test]
+    fn a_complete_crud_renders_its_tests_as_a_directory() {
+        let noms = |feature: &Feature| -> Vec<&'static str> {
+            files(feature).into_iter().map(|(nom, _)| nom).collect()
+        };
+
+        let complete = Feature::fresh(
+            "articles",
+            fields::parse("title:string").expect("champs valides"),
+        )
+        .authenticated()
+        .uploading();
+        assert_eq!(
+            noms(&complete),
+            [
+                "tests/mod.rs",
+                "tests/lifecycle.rs",
+                "tests/errors.rs",
+                "tests/filter.rs",
+                "tests/access.rs",
+                "tests/content.rs",
+            ]
+        );
+
+        // Un horodatage ne porte aucun critère de filtre : sans lui, ni `auth` ni
+        // `--with-upload`, restent le harnais, le cycle de vie et les erreurs.
+        let nue = Feature::fresh(
+            "articles",
+            fields::parse("vu_le:datetime").expect("champs valides"),
+        );
+        assert_eq!(
+            noms(&nue),
+            ["tests/mod.rs", "tests/lifecycle.rs", "tests/errors.rs"]
+        );
+    }
+
+    /// `tests/mod.rs` déclare chaque fichier rendu à côté de lui, et rien d'autre : un
+    /// `mod` sans fichier ne compile pas, un fichier sans `mod` ne serait jamais compilé.
+    #[test]
+    fn the_harness_declares_exactly_the_files_rendered_beside_it() {
+        let feature = |champs: &str| {
+            Feature::fresh("articles", fields::parse(champs).expect("champs valides"))
+        };
+
+        for feature in [
+            feature("title:string").authenticated().uploading(),
+            feature("vu_le:datetime"),
+            feature("title:string,author:references:users"),
+            feature("title:string,author:references:users").uploading(),
+        ] {
+            let rendus = files(&feature);
+            let harnais = &rendus
+                .iter()
+                .find(|(nom, _)| *nom == "tests/mod.rs")
+                .expect("le harnais est toujours rendu")
+                .1;
+
+            let declares: Vec<&str> = harnais
+                .lines()
+                .filter_map(|ligne| ligne.strip_prefix("mod "))
+                .map(|ligne| ligne.trim_end_matches(';'))
+                .collect();
+            let mut voisins: Vec<&str> = rendus
+                .iter()
+                .filter(|(nom, _)| *nom != "tests/mod.rs")
+                .map(|(nom, _)| nom.trim_start_matches("tests/").trim_end_matches(".rs"))
+                .collect();
+            voisins.sort_unstable();
+
+            assert_eq!(declares, voisins, "{harnais}");
+        }
     }
 
     /// Sous `auth`, le harnais inscrit son propre compte et signe son jeton, et les
@@ -208,8 +398,7 @@ mod tests {
     #[test]
     fn under_auth_the_harness_signs_its_own_token() {
         let fields = fields::parse("title:string").expect("champs valides");
-        let rendered = render(&Feature::fresh("articles", fields).authenticated())
-            .expect("les tests doivent se rendre");
+        let rendered = joined(files(&Feature::fresh("articles", fields).authenticated()));
 
         assert!(
             rendered.contains("async fn token(db: &DatabaseConnection, role: &str) -> String"),
@@ -241,8 +430,7 @@ mod tests {
     #[test]
     fn under_auth_an_anonymous_read_is_refused_too() {
         let fields = fields::parse("title:string").expect("champs valides");
-        let rendered = render(&Feature::fresh("articles", fields).authenticated())
-            .expect("les tests doivent se rendre");
+        let rendered = joined(files(&Feature::fresh("articles", fields).authenticated()));
 
         assert!(
             rendered.contains("async fn an_anonymous_read_returns_401()"),
@@ -271,7 +459,7 @@ mod tests {
     /// Sous `--with-upload`, les trois routes de contenu ont leurs scénarios.
     #[test]
     fn with_upload_the_content_routes_earn_their_scenarios() {
-        let rendered = render(&bench::uploads()).expect("les tests doivent se rendre");
+        let rendered = joined(files(&bench::uploads()));
 
         for scenario in [
             "async fn the_content_round_trips_through_put_get_and_head()",
@@ -284,7 +472,7 @@ mod tests {
             );
         }
         assert!(
-            rendered.contains("vec![b'x'; super::TAILLE_MAX + 1]"),
+            rendered.contains("vec![b'x'; super::super::TAILLE_MAX + 1]"),
             "la borne éprouvée doit être celle que `mod.rs` engendre :\n{rendered}"
         );
         assert!(
@@ -308,8 +496,7 @@ mod tests {
     /// porte le jeton.
     #[test]
     fn under_auth_the_content_routes_refuse_an_anonymous_request() {
-        let rendered =
-            render(&bench::uploads().authenticated()).expect("les tests doivent se rendre");
+        let rendered = joined(files(&bench::uploads().authenticated()));
 
         assert!(
             rendered.contains("async fn an_anonymous_content_request_returns_401()"),
@@ -326,18 +513,16 @@ mod tests {
     /// Aucun exemple ne rend cette combinaison : rustfmt est son seul oracle de forme.
     #[test]
     fn the_content_scenarios_under_auth_are_already_what_rustfmt_would_write() {
-        let rendered =
-            render(&bench::uploads().authenticated()).expect("les tests doivent se rendre");
-
-        assert_eq!(bench::formatted(&rendered), rendered);
+        for (name, rendered) in files(&bench::uploads().authenticated()) {
+            assert_eq!(bench::formatted(&rendered), rendered, "{name}");
+        }
     }
 
     /// Une référence requise écarte les scénarios qui créent ; le reste du bloc demeure.
     #[test]
     fn a_required_reference_keeps_the_content_scenarios_that_create_nothing() {
         let fields = fields::parse("title:string,author:references:users").expect("champs valides");
-        let rendered = render(&Feature::fresh("posts", fields).uploading())
-            .expect("les tests doivent se rendre");
+        let rendered = joined(files(&Feature::fresh("posts", fields).uploading()));
 
         assert!(
             rendered.contains("async fn an_unknown_id_has_no_content()"),
@@ -354,38 +539,30 @@ mod tests {
         }
     }
 
-    /// Le rendu entier des tests sous `auth`, figé octet à octet.
+    /// Le rendu entier des tests sous `auth`, figé octet à octet, fichier par fichier.
     ///
-    /// `examples/blog-auth` retouche `src/posts/tests.rs` : le fichier sort de la
-    /// comparaison des exemples, et c'est le seul du dépôt rendu sous `auth`. Cette branche
-    /// de la template n'a donc plus aucun oracle — les assertions ci-dessus cherchent
+    /// `examples/blog-auth` retouche `src/posts/tests/access.rs` : le fichier sort de la
+    /// comparaison des exemples, et c'est lui qui porte les refus que seule la branche
+    /// `auth` rend. Il n'a donc plus d'autre oracle — les assertions ci-dessus cherchent
     /// chacune une chaîne, et aucune ne verrait un scénario disparu ni une ligne vide
     /// perdue, que rustfmt ne rétablit pas.
     #[test]
     fn the_guarded_trials_render_the_frozen_fixture() {
-        bench::fige(
-            "fixtures/posts/tests.rs",
-            &render(&bench::posts()).expect("les tests doivent se rendre"),
-        );
+        for (name, rendered) in files(&bench::posts()) {
+            bench::fige(&format!("fixtures/posts/{name}"), &rendered);
+        }
+    }
+
+    fn by_cursor(name: &str, fields: &str) -> Feature {
+        let fields = fields::parse(fields).expect("champs valides");
+        Feature::fresh(name, fields).paged_by_cursor()
     }
 
     fn trials_by_cursor(name: &str, fields: &str) -> String {
-        let fields = fields::parse(fields).expect("champs valides");
-        render(&Feature::fresh(name, fields).paged_by_cursor())
-            .expect("les tests doivent se rendre")
+        joined(files(&by_cursor(name, fields)))
     }
 
-    fn trials_by_cursor_authenticated(name: &str, fields: &str) -> String {
-        let fields = fields::parse(fields).expect("champs valides");
-        render(
-            &Feature::fresh(name, fields)
-                .paged_by_cursor()
-                .authenticated(),
-        )
-        .expect("les tests doivent se rendre")
-    }
-
-    /// Le scénario nommé, isolé du reste du fichier.
+    /// Le scénario nommé, isolé du reste des tests.
     fn scenario<'a>(rendered: &'a str, name: &str) -> &'a str {
         rendered
             .split(&format!("async fn {name}()"))
@@ -520,7 +697,7 @@ mod tests {
     /// longueur, et tout le reste de ses lignes est fixe.
     #[test]
     fn the_cursor_render_is_already_what_rustfmt_would_write() {
-        let divergentes = bench::longueurs_divergentes(|name| trials_by_cursor(name, CHAMPS));
+        let divergentes = divergences(|name| files(&by_cursor(name, CHAMPS)));
 
         assert_eq!(
             divergentes,
@@ -532,8 +709,7 @@ mod tests {
     /// La même garde sous `--cursor` et `auth`.
     #[test]
     fn the_guarded_cursor_render_is_already_what_rustfmt_would_write() {
-        let divergentes =
-            bench::longueurs_divergentes(|name| trials_by_cursor_authenticated(name, CHAMPS));
+        let divergentes = divergences(|name| files(&by_cursor(name, CHAMPS).authenticated()));
 
         assert_eq!(
             divergentes,
@@ -546,9 +722,8 @@ mod tests {
     /// bascule n'y laisse ni la marche ni son import, et rien d'autre n'y suit le drapeau.
     #[test]
     fn the_reduced_cursor_render_is_already_what_rustfmt_would_write() {
-        let divergentes = bench::longueurs_divergentes(|name| {
-            trials_by_cursor(name, "title:string,author:references:users")
-        });
+        let divergentes =
+            divergences(|name| files(&by_cursor(name, "title:string,author:references:users")));
 
         assert_eq!(
             divergentes,
@@ -562,21 +737,19 @@ mod tests {
     /// bascule.
     #[test]
     fn the_cursor_trials_render_the_frozen_fixture() {
-        bench::fige(
-            "fixtures/cursor/tests.rs",
-            &render(&bench::articles_par_curseur()).expect("les tests doivent se rendre"),
-        );
+        for (name, rendered) in files(&bench::articles_par_curseur()) {
+            bench::fige(&format!("fixtures/cursor/{name}"), &rendered);
+        }
     }
     /// Le rôle signé est celui que le contrôleur exige.
     #[test]
     fn the_signed_role_matches_the_one_the_controller_requires() {
         let fields = fields::parse("title:string").expect("champs valides");
-        let rendered = render(
+        let rendered = joined(files(
             &Feature::fresh("articles", fields)
                 .authenticated()
                 .guarded("admin"),
-        )
-        .expect("les tests doivent se rendre");
+        ));
 
         assert!(
             rendered.contains(r#"token(&db, "admin")"#),
@@ -597,7 +770,12 @@ mod tests {
     /// commentée.
     #[test]
     fn the_render_is_already_what_rustfmt_would_write() {
-        let divergentes = bench::longueurs_divergentes(|name| trials(name, CHAMPS));
+        let divergentes = divergences(|name| {
+            files(&Feature::fresh(
+                name,
+                fields::parse(CHAMPS).expect("champs valides"),
+            ))
+        });
 
         assert_eq!(
             divergentes,
@@ -650,7 +828,7 @@ mod tests {
             "articles",
             fields::parse("title:string:unique").expect("champs"),
         );
-        let rendered = render(&feature).expect("les tests doivent se rendre");
+        let rendered = joined(files(&feature));
 
         assert_eq!(
             rendered
@@ -1016,6 +1194,94 @@ mod tests {
         );
     }
 
+    /// Un `DATE` rend le même texte sur les trois moteurs, à la différence d'un
+    /// horodatage : sa valeur se compare à la lettre, elle n'est pas seulement vérifiée
+    /// présente.
+    #[test]
+    fn a_date_field_is_compared_like_an_ordinary_scalar() {
+        let rendered = trials("articles", "due:date");
+
+        assert!(
+            rendered.contains(r#"compare(&created, &sent, "due");"#),
+            "« due » doit être comparé à ce qui a été envoyé :\n{rendered}"
+        );
+        assert!(
+            !rendered.contains(r#"filled(&created, "due");"#),
+            "une date se compare, elle n'est pas seulement vérifiée présente :\n{rendered}"
+        );
+    }
+
+    /// La création et la modification envoient deux jours distincts, écrits en dur : ils
+    /// se rejouent d'une exécution à l'autre, puisque `due` n'est pas `unique` ici.
+    #[test]
+    fn an_ordinary_date_keeps_its_readable_value() {
+        let rendered = trials("articles", "due:date");
+
+        assert!(rendered.contains(r#""due": "2024-01-15""#), "{rendered}");
+        assert!(rendered.contains(r#""due": "2024-06-20""#), "{rendered}");
+        assert!(
+            !rendered.contains("unique_number()"),
+            "« due » n'est pas unique ici :\n{rendered}"
+        );
+    }
+
+    /// Une colonne `date` `unique` ne peut pas rejouer une valeur écrite en dur : les
+    /// scénarios de ce répertoire créent en parallèle sur la même base.
+    #[test]
+    fn a_unique_date_is_drawn_at_each_call() {
+        let rendered = trials("articles", "due:date:unique");
+
+        assert!(
+            rendered.contains("fn unique_number() -> i64"),
+            "l'aide qui tire le nombre est absente :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(
+                "chrono::NaiveDate::from_yo_opt(2024, 1 + (unique_number() % 365) as u32)"
+            ),
+            "le jour unique doit se tirer au sort :\n{rendered}"
+        );
+        for en_dur in ["\"due\": \"2024-01-15\"", "\"due\": \"2024-06-20\""] {
+            assert!(
+                !rendered.contains(en_dur),
+                "« {en_dur} » se rejouerait d'une exécution à l'autre :\n{rendered}"
+            );
+        }
+    }
+
+    /// Un décimal part en chaîne et revient à l'identique : `DECIMAL(19, 4)` rend
+    /// toujours ses quatre décimales, et la valeur envoyée les porte donc déjà — sans
+    /// quoi « 12.50 » serait comparé à « 12.5000 » et le test échouerait sur un format.
+    #[test]
+    fn a_decimal_field_is_sent_as_a_string_carrying_its_four_decimals() {
+        let rendered = trials("orders", "price:decimal");
+
+        assert!(rendered.contains(r#""price": "12.5000""#), "{rendered}");
+        assert!(rendered.contains(r#""price": "99.9900""#), "{rendered}");
+        assert!(
+            rendered.contains(r#"compare(&created, &sent, "price");"#),
+            "« price » doit être comparé à ce qui a été envoyé :\n{rendered}"
+        );
+    }
+
+    /// Une colonne `decimal` `unique` ne peut pas rejouer une valeur écrite : les
+    /// scénarios de ce répertoire créent en parallèle sur la même base.
+    #[test]
+    fn a_unique_decimal_is_drawn_at_each_call() {
+        let rendered = trials("orders", "price:decimal:unique");
+
+        assert!(
+            rendered.contains(r#"format!("{}.0000", unique_number())"#),
+            "le décimal unique doit se tirer au sort :\n{rendered}"
+        );
+        for en_dur in ["\"price\": \"12.5000\"", "\"price\": \"99.9900\""] {
+            assert!(
+                !rendered.contains(en_dur),
+                "« {en_dur} » se rejouerait d'une exécution à l'autre :\n{rendered}"
+            );
+        }
+    }
+
     #[test]
     fn a_feature_without_a_timestamp_carries_no_presence_assertion() {
         let rendered = trials("articles", "title:string");
@@ -1164,5 +1430,39 @@ mod tests {
         project.migrate(base.url());
 
         project.test_of();
+    }
+
+    /// Les tests engendrés envoient la première valeur à la création, la deuxième à la
+    /// modification : la valeur se rejoue à la lettre, et le scénario de filtrage peut
+    /// donc porter sur elle.
+    #[test]
+    fn an_enum_field_sends_its_first_value_then_its_second() {
+        let rendered = trials("articles", "status:enum(draft,published)");
+
+        assert!(
+            rendered.contains("\"status\": \"draft\","),
+            "valeur de création absente :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("\"status\": \"published\","),
+            "valeur de modification absente :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("compare(&created, &sent, \"status\");"),
+            "la valeur doit se comparer :\n{rendered}"
+        );
+    }
+
+    /// Une énumération à une seule valeur la rejoue : la modification n'a rien d'autre à
+    /// envoyer, et un scénario qui enverrait une valeur absente rendrait 422.
+    #[test]
+    fn a_single_valued_enum_replays_its_only_value() {
+        let rendered = trials("articles", "status:enum(draft)");
+
+        assert_eq!(
+            rendered.matches("\"status\": \"draft\",").count(),
+            2,
+            "la création et la modification envoient la même valeur :\n{rendered}"
+        );
     }
 }

@@ -71,8 +71,19 @@ plan pour …/demo
   + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
-  + src/auth/tests/session.rs                              créé
-  + src/auth/tests/password.rs                             créé
+  + src/auth/tests/change.rs                               créé
+  + src/auth/tests/guard.rs                                créé
+  + src/auth/tests/http.rs                                 créé
+  + src/auth/tests/login.rs                                créé
+  + src/auth/tests/logout.rs                               créé
+  + src/auth/tests/openapi.rs                              créé
+  + src/auth/tests/refresh.rs                              créé
+  + src/auth/tests/registration.rs                         créé
+  + src/auth/tests/replay.rs                               créé
+  + src/auth/tests/reset.rs                                créé
+  + src/auth/tests/roles.rs                                créé
+  + src/auth/tests/sessions.rs                             créé
+  + src/auth/tests/tokens.rs                               créé
   + src/auth/tests/verification.rs                         créé
   + migration/src/m20260909_093150_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
@@ -80,8 +91,8 @@ plan pour …/demo
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  36 à créer, 11 à modifier
-✓ auth installée — 36 créés, 11 modifiés
+  47 à créer, 11 à modifier
+✓ auth installée — 47 créés, 11 modifiés
 
   rbs migrate up
 ```
@@ -129,19 +140,23 @@ plan pour …/demo
   + src/posts/repository.rs                          créé
   + src/posts/service.rs                             créé
   + src/posts/controller.rs                          créé
-  + src/posts/tests.rs                               créé
+  + src/posts/tests/mod.rs                           créé
+  + src/posts/tests/lifecycle.rs                     créé
+  + src/posts/tests/errors.rs                        créé
+  + src/posts/tests/filter.rs                        créé
+  + src/posts/tests/access.rs                        créé
   + src/seeds/posts.rs                               créé
   + migration/src/m20260909_093231_create_posts.rs   créé
   ~ src/lib.rs                                       modifié
   ~ src/router.rs                                    modifié
   ~ src/openapi.rs                                   modifié
-  ~ migration/src/lib.rs                              modifié
+  ~ migration/src/lib.rs                             modifié
   ~ src/seeds/main.rs                                modifié
   ~ Cargo.toml                                       modifié
   ~ AGENTS.md                                        modifié
 
-  10 à créer, 7 à modifier
-✓ posts générée — 10 créés, 7 modifiés
+  14 à créer, 7 à modifier
+✓ posts générée — 14 créés, 7 modifiés
 
   la migration m20260909_093231_create_posts reste à appliquer avant de lancer le projet
 ```
@@ -199,13 +214,36 @@ HTTP/1.1 202 Accepted
 content-length: 0
 ```
 
-202 sans corps, que l'adresse soit déjà prise ou non : la réponse elle-même ne dit pas
-laquelle — une connexion avec le mot de passe tout juste envoyé le dirait encore, comme
-l'explique le guide auth —,
-et une adresse prise vaut à son titulaire un courriel d'avertissement plutôt qu'un second
+202 sans corps, que l'adresse soit déjà prise ou non : la réponse ne dit pas laquelle, et
+une adresse prise vaut à son titulaire un courriel d'avertissement plutôt qu'un second
 compte. Le compte existe dès que le 202 arrive, et c'est toujours un `user` — aucune route
 de cette page ne distribue `admin` sur simple demande ; le compte obtenu ici peut lire
 `posts`, pas y écrire.
+
+Il ne peut pas encore se connecter : `login_requires_verification`, `true` dans `[auth]`,
+tient un compte à l'écart tant que son adresse n'est pas prouvée — une connexion avec le
+mot de passe tout juste envoyé distinguerait sinon une adresse neuve d'une prise, comme
+l'explique le guide auth. La preuve arrive par courriel. `auth` arrive avec `mail`, et le
+SMTP par défaut de `mail` est Mailpit — le service `mailpit` que `docker-compose.yml`
+porte déjà, qui attrape chaque message que le projet envoie sans qu'aucune vraie boîte
+n'existe de l'autre côté. Ouvrez [`http://localhost:8025`](http://localhost:8025) dans un
+navigateur et laissez-le ouvert : un message intitulé *Confirmez votre adresse* y attend,
+avec un lien de la forme `http://localhost:3000/verify-email#token=…`. Recopiez le jeton
+qu'il porte :
+
+```bash
+curl -i -X POST http://127.0.0.1:8080/auth/verify-email \
+  -H 'Content-Type: application/json' \
+  -d '{"token":"<le token du lien>"}'
+```
+
+```text
+HTTP/1.1 204 No Content
+```
+
+Un lien périme après `verification_ttl_secs` ; un client qui le trouve expiré en demande un
+neuf par `POST /auth/resend-verification`. L'adresse est prouvée, et le mot de passe ouvre
+désormais le compte :
 
 ```bash
 TOKEN=$(curl -s -X POST http://127.0.0.1:8080/auth/login \
@@ -276,13 +314,9 @@ date: Wed, 09 Sep 2026 09:33:06 GMT
 La preuve que `--role admin` n'a jamais touché cette route : le même jeton `user`,
 refusé sur l'écriture, lit la liste vide sans se plaindre.
 
-## Changer, réinitialiser, confirmer
+## Changer, réinitialiser
 
-`auth` arrive aussi avec `mail`, et le SMTP par défaut de `mail` est Mailpit — le service
-`mailpit` que `docker-compose.yml` porte déjà, qui attrape chaque message que le projet
-envoie sans qu'aucune vraie boîte n'existe de l'autre côté. Ouvrez
-[`http://localhost:8025`](http://localhost:8025) dans un navigateur et laissez-le ouvert :
-les trois requêtes suivantes y déposent chacune quelque chose.
+Gardez l'onglet Mailpit ouvert : les requêtes suivantes y déposent encore quelque chose.
 
 Alice, qui tient toujours `$TOKEN` ci-dessus, change son propre mot de passe :
 
@@ -330,39 +364,7 @@ HTTP/1.1 204 No Content
 ```
 
 204, et toutes les sessions du compte sont révoquées à nouveau — se connecter à partir
-d'ici exige le mot de passe qui vient d'être posé. L'inscription avait aussi ouvert un
-jeton de vérification, dès le `## 1`, dans une tâche détachée de sa réponse ;
-Mailpit garde déjà ce message-là aussi, intitulé *Confirmez votre adresse*. Un lien
-périme après `verification_ttl_secs`, si bien qu'un client réel s'appuie sur l'autre
-route pour en obtenir un neuf :
-
-```bash
-curl -i -X POST http://127.0.0.1:8080/auth/resend-verification \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"alice@example.com"}'
-```
-
-```text
-HTTP/1.1 202 Accepted
-content-length: 0
-```
-
-Prenez le jeton du message *Confirmez votre adresse* le plus récent dans Mailpit et
-consommez-le :
-
-```bash
-curl -i -X POST http://127.0.0.1:8080/auth/verify-email \
-  -H 'Content-Type: application/json' \
-  -d '{"token":"<le token du lien>"}'
-```
-
-```text
-HTTP/1.1 204 No Content
-```
-
-`GET /auth/me`, reconnecté avec le mot de passe le plus récent, répond désormais avec
-`"email_verified_at"` posé plutôt que `null` — le seul champ du compte que ces trois
-requêtes, ensemble, ont fait bouger.
+d'ici exige le mot de passe qui vient d'être posé.
 
 ## Ce qui a été installé
 
@@ -394,7 +396,7 @@ Deux 401 et un 403 se ressemblent, à ne juger que le code de statut. Ce test es
 qui fixe lequel est lequel — un jeton `user` refusé sur l'écriture, et qui lit quand
 même.
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=refus
+```rust file=examples/blog-auth/src/posts/tests/access.rs region=refus
 ```
 
 ## Pour aller plus loin
@@ -406,7 +408,7 @@ même.
 - [`rbs generate`](../cli/generate.md) a la grammaire complète de `--role`, y compris ce
   qu'il fait sous `--with-upload`, et [ce qu'il faut retirer pour rouvrir une
   route](../guides/auth.md#fermées-par-défaut-à-la-génération).
-- [Tests](../guides/testing.md) est le harnais contre lequel `posts/tests.rs` tourne, le
+- [Tests](../guides/testing.md) est le harnais contre lequel `posts/tests/` tourne, le
   même que le troisième extrait de cette page étend à la main.
 - [Recevoir un fichier](./storage.md) est le tutoriel suivant : un client dépose un
   fichier, et `PUT /uploads/{id}/content` le range.

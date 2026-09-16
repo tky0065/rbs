@@ -36,7 +36,44 @@ impl MigrationTrait for Migration {
     déborder : rustfmt casse alors la tête, et la suite de la chaîne se réaligne d'un cran
     à gauche plutôt que de s'indenter sous elle. #}
 {%- set col_new = "ColumnDef::new(" ~ iden ~ "::" ~ field.pascal_name ~ ")" %}
-{%- if col | length <= 60 %}
+{#- Une énumération porte en plus un `CHECK` : c'est la base qui refuse alors une valeur
+    que `--fields` n'a pas déclarée, sur les trois moteurs. La colonne est toujours
+    éclatée — le `CHECK` la fait déborder à tout nom — et trois régimes s'y succèdent
+    selon que l'appel, puis son seul argument, tiennent dans les cent colonnes de
+    `max_width`. Le retrait, lui, suit le même seuil que les colonnes ordinaires : une
+    tête `ColumnDef::new(iden::Champ)` trop large ramène la chaîne d'un cran à gauche. #}
+{%- set valeurs = '["' ~ (field.enum_variants | join('", "')) ~ '"]' %}
+{%- set expr_col = "Expr::col(" ~ iden ~ "::" ~ field.pascal_name ~ ")" %}
+{%- set is_in = ".is_in(" ~ valeurs ~ ")" %}
+{%- set check = expr_col ~ is_in %}
+{%- set retrait = "                            " if col_new | length <= 75 else "                        " %}
+{#- Pas d'`unique_key()` ici : `--fields` refuse `unique` sur une énumération — autant de
+    lignes que de valeurs, au plus — et la branche ne pourrait jamais sortir. #}
+{%- if field.enum_variants %}
+                    .col(
+{%- if col_new | length <= 75 %}
+                        ColumnDef::new({@ iden @}::{@ field.pascal_name @})
+{%- else %}
+                        ColumnDef::new(
+                            {@ iden @}::{@ field.pascal_name @},
+                        )
+{%- endif %}
+{@ retrait @}.{@ field.migration_method @}
+{@ retrait @}.{@ nullite @}
+{%- if (retrait ~ ".check(" ~ check ~ "),") | length <= 100 %}
+{@ retrait @}.check({@ check @}),
+{%- elif (retrait ~ "    " ~ check ~ ",") | length <= 100 %}
+{@ retrait @}.check(
+{@ retrait @}    {@ check @},
+{@ retrait @}),
+{%- else %}
+{@ retrait @}.check(
+{@ retrait @}    {@ expr_col @}
+{@ retrait @}        {@ is_in @},
+{@ retrait @}),
+{%- endif %}
+                    )
+{%- elif col | length <= 60 %}
                     .col({@ col @})
 {%- elif col_new | length <= 75 %}
                     .col(

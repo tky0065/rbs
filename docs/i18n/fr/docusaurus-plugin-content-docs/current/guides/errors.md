@@ -154,12 +154,12 @@ n'est pas une faute qu'il faille signaler au client, alors que `per_page=abc` en
 
 Les tests générés éprouvent les deux côtés de cette frontière. Un identifiant inconnu :
 
-```rust file=examples/hello-crud/src/articles/tests.rs region=erreur_404
+```rust file=examples/hello-crud/src/articles/tests/errors.rs region=erreur_404
 ```
 
 Et un corps que rien ne permet de lire :
 
-```rust file=examples/hello-crud/src/articles/tests.rs region=corps_illisible
+```rust file=examples/hello-crud/src/articles/tests/errors.rs region=corps_illisible
 ```
 
 ## Jugez par vous-même

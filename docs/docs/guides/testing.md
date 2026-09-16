@@ -5,16 +5,17 @@ title: Testing
 
 # Testing
 
-`rbs generate crud` writes a test file next to the feature it generates, and mounts it in
-the feature's `mod.rs`. The tests it contains go through HTTP, against a real database.
-They are a starting bench, not a suite: they prove the wiring, and leave the rules to you.
+`rbs generate crud` writes a `tests/` directory next to the feature it generates — a
+harness in `tests/mod.rs`, then one file per concern — and mounts it in the feature's
+`mod.rs`. The tests it contains go through HTTP, against a real database. They are a
+starting bench, not a suite: they prove the wiring, and leave the rules to you.
 
 ## The bench
 
 The application is mounted in-process. No socket is opened, no server task is spawned —
 the router is built exactly as `main` builds it, and requests are handed to it directly:
 
-```rust file=examples/hello-crud/src/articles/tests.rs region=harnais
+```rust file=examples/hello-crud/src/articles/tests/mod.rs region=harnais
 ```
 
 Configuration is loaded the same way the binary loads it, which means the tests talk to
@@ -27,7 +28,7 @@ compiles against SeaORM but writes broken SQL is precisely the failure a mock wo
 One test walks the full lifecycle of the resource — create, read, list, update, delete,
 then read again to confirm the resource is gone:
 
-```rust file=examples/hello-crud/src/articles/tests.rs region=cycle_de_vie
+```rust file=examples/hello-crud/src/articles/tests/lifecycle.rs region=cycle_de_vie
 ```
 
 Others check the error paths that the runtime handles on its own. Two are always written:
@@ -51,9 +52,9 @@ Everything that is specific to your domain, which is everything that matters:
 - edge cases of your own — concurrency, pagination boundaries, states a resource cannot
   leave.
 
-The generated file is ordinary Rust in your source tree. Add to it, split it, delete the
-parts that stop being useful. Nothing marks it as generated, because nothing should stop
-you from editing it.
+The generated files are ordinary Rust in your source tree. Add to them, split them
+further, delete the parts that stop being useful. Nothing marks them as generated, because
+nothing should stop you from editing them.
 
 ## Running them
 

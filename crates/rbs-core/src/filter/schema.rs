@@ -96,6 +96,20 @@ comparaison_documentee!(
     "Conditions acceptées sur une colonne datée.",
     "Opérateurs acceptés sur une colonne datée."
 );
+comparaison_documentee!(
+    DecimalComparisonSchema,
+    DecimalComparisonOperators,
+    DecimalSchema,
+    "Conditions acceptées sur une colonne décimale exacte.",
+    "Opérateurs acceptés sur une colonne décimale exacte."
+);
+comparaison_documentee!(
+    DateComparisonSchema,
+    DateComparisonOperators,
+    DateSchema,
+    "Conditions acceptées sur une colonne de date sans heure.",
+    "Opérateurs acceptés sur une colonne de date sans heure."
+);
 
 /// Un instant, écrit en RFC 3339.
 ///
@@ -106,6 +120,31 @@ comparaison_documentee!(
 #[schema(value_type = String, format = DateTime)]
 pub struct DateTimeSchema(
     /// L'instant, en RFC 3339.
+    pub String,
+);
+
+/// Un jour sans heure, écrit en ISO 8601 (`AAAA-MM-JJ`).
+///
+/// Même raison d'être que [`DateTimeSchema`] : une variante d'énumération n'accepte pas
+/// `value_type`, et sans ce type nommé la forme courte se documenterait en `string` sans
+/// format.
+#[derive(Deserialize, ToSchema)]
+#[schema(value_type = String, format = Date)]
+pub struct DateSchema(
+    /// Le jour, en ISO 8601 (`AAAA-MM-JJ`).
+    pub String,
+);
+
+/// Un décimal exact, écrit en chaîne (`"12.5000"`).
+///
+/// La chaîne plutôt que le nombre : un nombre JSON passe par le flottant d'un client
+/// JavaScript, qui perdrait les centimes que ce type existe pour garder. Elle évite en
+/// prime au noyau une dépendance à `rust_decimal`, qu'il n'a par ailleurs aucune raison
+/// de porter.
+#[derive(Deserialize, ToSchema)]
+#[schema(value_type = String, format = "decimal")]
+pub struct DecimalSchema(
+    /// Le décimal, écrit en chaîne.
     pub String,
 );
 
@@ -133,6 +172,39 @@ pub struct TextMatchOperators {
     pub eq: Option<String>,
     /// Sous-chaîne, cherchée par `LIKE '%…%'`.
     pub contains: Option<String>,
+    /// `true` exige une colonne nulle, `false` une colonne renseignée.
+    pub is_null: Option<bool>,
+}
+
+/// Conditions acceptées sur une colonne à valeurs énumérées.
+///
+/// Une valeur nue, écrite hors de tout objet, vaut la condition `eq`.
+///
+/// `T` est l'énumération que le modèle engendré déclare d'après `--fields` : le filtre
+/// cite `OneOfSchema<Status>`, et le document nomme alors les valeurs des deux côtés — le
+/// corps de la ressource comme le filtre. Une chaîne figée ici les tairait du côté du
+/// filtre, et un client typé y accepterait n'importe quel texte.
+#[derive(Deserialize, ToSchema)]
+#[serde(untagged)]
+#[non_exhaustive]
+pub enum OneOfSchema<T> {
+    /// La valeur seule, hors de tout objet : une égalité stricte.
+    Bare(T),
+    /// L'objet qui nomme les conditions demandées.
+    Operators(OneOfOperators<T>),
+}
+
+/// Opérateurs acceptés sur une colonne à valeurs énumérées.
+///
+/// Une énumération ne s'ordonne pas : l'appartenance à une liste y remplace les
+/// comparaisons d'une colonne ordonnée.
+#[derive(Deserialize, ToSchema)]
+#[non_exhaustive]
+pub struct OneOfOperators<T> {
+    /// Égalité stricte.
+    pub eq: Option<T>,
+    /// Appartenance à l'une des valeurs citées. Une liste vide n'en accepte aucune.
+    pub r#in: Option<Vec<T>>,
     /// `true` exige une colonne nulle, `false` une colonne renseignée.
     pub is_null: Option<bool>,
 }
@@ -165,7 +237,20 @@ pub struct ComparisonSchema {
 mod tests {
     use super::*;
     use serde_json::{Value, json};
-    use utoipa::{PartialSchema, ToSchema};
+    use utoipa::{OpenApi, PartialSchema, ToSchema};
+
+    /// L'énumération que le modèle engendré déclare pour `status:enum(draft,published)`.
+    ///
+    /// Les schémas de ce module ne sont jamais cités sur une chaîne nue : une colonne
+    /// énumérée porte toujours le type que `--fields` a fait naître.
+    #[derive(Deserialize, ToSchema)]
+    #[allow(dead_code)]
+    enum Statut {
+        #[serde(rename = "draft")]
+        Draft,
+        #[serde(rename = "published")]
+        Published,
+    }
 
     /// Rend le schéma d'un type, tel qu'il entre dans le document.
     fn schema<T: PartialSchema>() -> Value {
@@ -210,6 +295,27 @@ mod tests {
         assert_eq!(schema["format"], "date-time");
     }
 
+    /// Une date sans heure a son propre format : la confondre avec `DateTimeSchema`
+    /// documenterait `due` comme un instant, que Swagger daterait d'un exemple horodaté.
+    #[test]
+    fn a_bare_date_without_time_keeps_its_own_format() {
+        let schema = schema::<DateSchema>();
+
+        assert_eq!(schema["type"], "string");
+        assert_eq!(schema["format"], "date");
+    }
+
+    /// Un décimal exact se documente en chaîne : le noyau ne dépend pas de
+    /// `rust_decimal`, et un nombre JSON passerait de toute façon par le flottant d'un
+    /// client JavaScript, qui perdrait les centimes.
+    #[test]
+    fn an_exact_decimal_is_documented_as_a_string() {
+        let schema = schema::<DecimalSchema>();
+
+        assert_eq!(schema["type"], "string");
+        assert_eq!(schema["format"], "decimal");
+    }
+
     /// Le second membre nomme les opérateurs, un à un : c'est ce que la forme longue
     /// apporte, et un `$ref` qui ne serait pas exposé pendrait dans le vide.
     #[test]
@@ -221,6 +327,14 @@ mod tests {
             ),
             (
                 schema::<DateTimeComparisonOperators>(),
+                vec!["eq", "gt", "gte", "lt", "lte", "is_null"],
+            ),
+            (
+                schema::<DateComparisonOperators>(),
+                vec!["eq", "gt", "gte", "lt", "lte", "is_null"],
+            ),
+            (
+                schema::<DecimalComparisonOperators>(),
                 vec!["eq", "gt", "gte", "lt", "lte", "is_null"],
             ),
             (
@@ -256,12 +370,22 @@ mod tests {
                 DateTimeComparisonSchema::name(),
                 vec!["DateTimeSchema", "DateTimeComparisonOperators"],
             ),
+            (
+                DateComparisonSchema::name(),
+                vec!["DateSchema", "DateComparisonOperators"],
+            ),
+            (
+                DecimalComparisonSchema::name(),
+                vec!["DecimalSchema", "DecimalComparisonOperators"],
+            ),
             (TextMatchSchema::name(), vec!["TextMatchOperators"]),
         ] {
             let mut exposes = Vec::new();
             match nom.as_ref() {
                 "BoolComparisonSchema" => BoolComparisonSchema::schemas(&mut exposes),
                 "DateTimeComparisonSchema" => DateTimeComparisonSchema::schemas(&mut exposes),
+                "DateComparisonSchema" => DateComparisonSchema::schemas(&mut exposes),
+                "DecimalComparisonSchema" => DecimalComparisonSchema::schemas(&mut exposes),
                 _ => TextMatchSchema::schemas(&mut exposes),
             }
 
@@ -273,6 +397,113 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Une colonne à valeurs énumérées offre les deux mêmes formes que les autres : la
+    /// valeur nue d'abord, puis l'objet qui nomme ses opérateurs. La valeur nue cite ici
+    /// l'énumération elle-même, et non une chaîne : c'est ce qui en nomme les valeurs.
+    #[test]
+    fn an_enumerated_column_offers_the_bare_value_first() {
+        let schema = schema::<OneOfSchema<Statut>>();
+        let formes = schema["oneOf"]
+            .as_array()
+            .unwrap_or_else(|| panic!("un oneOf attendu : {schema}"));
+
+        assert_eq!(formes.len(), 2, "{schema}");
+        assert_eq!(
+            formes[0]["$ref"],
+            json!("#/components/schemas/Statut"),
+            "{schema}"
+        );
+        assert!(formes[1]["$ref"].is_string(), "{schema}");
+    }
+
+    /// `in` est le seul opérateur que `Comparison` n'a pas : une énumération ne s'ordonne
+    /// pas, et l'appartenance à une liste remplace la comparaison.
+    #[test]
+    fn the_enumerated_operators_are_eq_in_and_is_null() {
+        let schema = schema::<OneOfOperators<Statut>>();
+        let proprietes = schema["properties"]
+            .as_object()
+            .unwrap_or_else(|| panic!("des propriétés attendues : {schema}"));
+
+        assert_eq!(proprietes.len(), 3, "{schema}");
+        for operateur in ["eq", "in", "is_null"] {
+            assert!(
+                proprietes.contains_key(operateur),
+                "« {operateur} » absent : {schema}"
+            );
+        }
+    }
+
+    /// Un `$ref` que le document n'expose pas est un lien mort, ici comme ailleurs. Le
+    /// nom porte celui du paramètre : deux colonnes énumérées d'une même API ont chacune
+    /// leurs opérateurs, et un nom partagé en écraserait un.
+    #[test]
+    fn the_enumerated_schema_exposes_what_its_oneof_cites() {
+        let mut exposes = Vec::new();
+        OneOfSchema::<Statut>::schemas(&mut exposes);
+        let noms: Vec<String> = exposes.into_iter().map(|(nom, _)| nom).collect();
+
+        assert!(
+            noms.iter().any(|nom| nom == "OneOfOperators_Statut"),
+            "« OneOfOperators_Statut » absent : {noms:?}"
+        );
+    }
+
+    /// Les valeurs doivent atteindre le document du côté du filtre, et non du seul corps
+    /// de la réponse : un client engendré y typerait sinon le filtre en chaîne libre, et
+    /// une faute de frappe dans une valeur rendrait une page vide là où le document
+    /// promet une erreur.
+    #[test]
+    fn the_rendered_document_names_the_values_on_the_filter_side() {
+        #[derive(ToSchema)]
+        #[allow(dead_code)]
+        struct Reponse {
+            statut: Statut,
+        }
+
+        #[derive(ToSchema)]
+        #[allow(dead_code)]
+        struct Filtre {
+            #[schema(value_type = Option<OneOfSchema<Statut>>)]
+            statut: Option<String>,
+        }
+
+        #[derive(OpenApi)]
+        #[openapi(components(schemas(Reponse, Filtre)))]
+        struct Document;
+
+        let document: Value =
+            serde_json::to_value(Document::openapi()).expect("document sérialisable");
+        let schemas = &document["components"]["schemas"];
+
+        assert_eq!(
+            schemas["Statut"]["enum"],
+            json!(["draft", "published"]),
+            "{document}"
+        );
+        let valeurs = json!(["draft", "published"]);
+        let filtre = &schemas["OneOfSchema_Statut"];
+        let operateurs = &schemas["OneOfOperators_Statut"];
+
+        assert_eq!(
+            filtre["oneOf"][0]["enum"], valeurs,
+            "la forme courte du filtre ne nomme pas les valeurs : {document}"
+        );
+        assert_eq!(
+            operateurs["properties"]["eq"]["enum"], valeurs,
+            "« eq » ne nomme pas les valeurs : {document}"
+        );
+        assert_eq!(
+            operateurs["properties"]["in"]["items"]["enum"], valeurs,
+            "« in » ne nomme pas les valeurs : {document}"
+        );
+        assert_eq!(
+            document["components"]["schemas"]["Filtre"]["properties"]["statut"]["oneOf"][1]["$ref"],
+            json!("#/components/schemas/OneOfSchema_Statut"),
+            "le filtre ne cite pas le schéma énuméré : {document}"
+        );
     }
 
     /// Aucune condition n'est exigée : un filtre qui ne porte que `gte` est valide, et un

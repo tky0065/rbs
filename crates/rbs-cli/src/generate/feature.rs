@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use serde::Serialize;
 use serde::ser::{SerializeStruct, Serializer};
 
-use super::fields::{Field, RelationView, to_pascal_case};
+use super::fields::{Field, FieldType, RelationView, to_pascal_case};
 
 /// Une feature à générer, telle que la voient l'entité, les DTO et la migration.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -210,6 +210,65 @@ impl Feature {
 
         idens
     }
+
+    /// Noms des énumérations que le modèle engendré déclare, triés et dédupliqués.
+    ///
+    /// Triés parce que les DTO et le filtre les importent aux côtés de `Model` et de
+    /// `Column` : rustfmt trie les noms d'un `use` groupé, et un rendu qui ne le ferait
+    /// pas serait reformaté dès le premier `cargo fmt` du projet engendré.
+    pub(crate) fn enum_types(&self) -> Vec<String> {
+        let mut types: Vec<String> = self
+            .fields
+            .iter()
+            .filter(|field| !field.enum_variants().is_empty())
+            .map(Field::enum_type)
+            .collect();
+        types.sort();
+        types.dedup();
+
+        types
+    }
+
+    /// Ce que les DTO importent du modèle : `Model`, et les énumérations qu'il déclare.
+    ///
+    /// Le groupe est trié, et n'est accolé que s'il porte plus d'un nom : rustfmt trie les
+    /// noms d'un `use` groupé et retire les accolades d'un import unique — un rendu qui
+    /// ferait autrement serait reformaté au premier `cargo fmt` du projet engendré.
+    pub(crate) fn model_import(&self) -> String {
+        let mut noms = self.enum_types();
+        if noms.is_empty() {
+            return "Model".to_string();
+        }
+
+        noms.push("Model".to_string());
+        noms.sort();
+
+        format!("{{{}}}", noms.join(", "))
+    }
+
+    /// La feature porte-t-elle un champ `date` ?
+    ///
+    /// `Date` n'entre dans `sea_orm::prelude` que par un import explicite, à la
+    /// différence des autres types de colonne : les DTO, qui n'importent pas le module
+    /// en bloc, ne l'écrivent donc que sur cette condition — sans quoi un projet sans
+    /// champ `date` porterait un import inutilisé, refusé sous `-D warnings`.
+    pub(crate) fn has_date(&self) -> bool {
+        self.fields
+            .iter()
+            .any(|field| field.column_type() == FieldType::Date)
+    }
+
+    /// La feature porte-t-elle un champ `decimal` ?
+    ///
+    /// `Decimal` n'entre dans `sea_orm::prelude` que sous la feature `with-rust_decimal`,
+    /// et par un import explicite : les DTO, le filtre et le seed ne l'écrivent donc que
+    /// sur cette condition — et c'est elle, aussi, qui décide d'ajouter au manifeste du
+    /// projet ce que ce type exige.
+    pub(crate) fn has_decimal(&self) -> bool {
+        self.fields
+            .iter()
+            .any(|field| field.column_type() == FieldType::Decimal)
+    }
 }
 
 /// Une table visée par plus d'une relation de la feature.
@@ -291,7 +350,7 @@ fn named(variants: &[String]) -> String {
 /// templates lisent `entity` comme elles lisent `module`.
 impl Serialize for Feature {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("Feature", 16)?;
+        let mut state = serializer.serialize_struct("Feature", 20)?;
         state.serialize_field("module", self.module())?;
         state.serialize_field("table", self.module())?;
         state.serialize_field("entity", &self.entity())?;
@@ -307,6 +366,10 @@ impl Serialize for Feature {
         state.serialize_field("soft_delete", &self.soft_delete)?;
         state.serialize_field("with_upload", &self.with_upload)?;
         state.serialize_field("cursor", &self.cursor)?;
+        state.serialize_field("has_date", &self.has_date())?;
+        state.serialize_field("has_decimal", &self.has_decimal())?;
+        state.serialize_field("enum_types", &self.enum_types())?;
+        state.serialize_field("model_import", &self.model_import())?;
         state.serialize_field("lang", self.lang.name())?;
         state.end()
     }

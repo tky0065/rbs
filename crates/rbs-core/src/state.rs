@@ -88,13 +88,28 @@ pub trait HasAuth: HasCoreState {
     ///
     /// Le noyau ne connaît ni la table des comptes ni ce qu'une révocation y écrit : il
     /// vérifie la signature, puis demande. Le défaut accepte tout, et c'est ce qu'un
-    /// projet sans révocation obtient sans rien écrire.
+    /// projet sans révocation obtient sans rien écrire. [`Identity`](crate::Identity) ne
+    /// l'appelle pas lui-même : il appelle `accept_in`, dont le défaut s'en remet ici.
     fn accept(
         &self,
         claims: &crate::jwt::Claims,
     ) -> impl std::future::Future<Output = Result<(), crate::Error>> + Send {
         let _ = claims;
         async { Ok(()) }
+    }
+
+    /// Ce que l'extracteur [`Identity`](crate::Identity) appelle, les extensions de la
+    /// requête à portée : un projet qui relit le compte pour juger le jeton peut y laisser
+    /// ce qu'il en a lu, et l'extracteur suivant le reprendre. Le défaut s'en remet à
+    /// `accept`. Un projet qui réécrit `accept_in` y appelle `accept`, ou juge le jeton
+    /// de la même façon : un appel direct d'`accept` ne doit pas voir une autre règle.
+    fn accept_in(
+        &self,
+        claims: &crate::jwt::Claims,
+        extensions: &mut axum::http::Extensions,
+    ) -> impl std::future::Future<Output = Result<(), crate::Error>> + Send {
+        let _ = extensions;
+        self.accept(claims)
     }
 }
 

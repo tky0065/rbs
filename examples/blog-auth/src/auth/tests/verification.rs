@@ -1,7 +1,5 @@
 use super::*;
 
-use axum::routing::get;
-
 /// L'inscription ouvre un jeton de vérification : c'est ce qui fait que le courriel part
 /// sans qu'aucune route ne soit appelée.
 #[tokio::test]
@@ -153,13 +151,15 @@ async fn verifying_again_keeps_the_first_date() {
     );
 }
 
-/// Un jeton de réinitialisation ne vaut pas comme jeton de vérification.
+/// Un jeton de réinitialisation ne vérifie une adresse qu'en posant un mot de passe.
 ///
-/// C'est ce que l'usage porté par la recherche achète : sans lui, la table unique serait
-/// une faille au lieu d'une économie.
+/// `verify-email` le refuse : c'est ce que l'usage porté par la recherche achète, sans
+/// quoi la table unique serait une faille au lieu d'une économie. `reset-password` le
+/// consomme et vérifie l'adresse : sans cela, un compte jamais vérifié qui passe par
+/// `forgot-password` retrouverait, avec son nouveau mot de passe, le 401 qui l'y a mené.
 #[tokio::test]
 #[ignore = "joint la base du projet"]
-async fn a_reset_token_does_not_verify_an_address() {
+async fn a_reset_token_verifies_an_address_only_through_the_reset() {
     let api = application().await;
     let db = connection().await;
     let email = fresh_email();
@@ -175,8 +175,20 @@ async fn a_reset_token_does_not_verify_an_address() {
         post_json("/auth/verify-email", json!({ "token": jeton })),
     )
     .await;
-
     assert_eq!(statut, StatusCode::UNAUTHORIZED);
+
+    let nouveau = "un mot de passe choisi apres l'oubli";
+    let (statut, corps) = call(
+        &api,
+        post_json(
+            "/auth/reset-password",
+            json!({ "token": jeton, "new_password": nouveau }),
+        ),
+    )
+    .await;
+    assert_eq!(statut, StatusCode::NO_CONTENT, "{corps}");
+
+    login(&api, &email, nouveau).await;
 }
 
 /// Une adresse inconnue rend 202, comme `forgot-password` et pour la même raison.
@@ -229,52 +241,4 @@ async fn resending_to_a_registered_address_is_accepted() {
         eventually(move || async move { one_time_tokens_count_for(db, id).await == 2 }).await,
         "le renvoi n'a ouvert aucun jeton"
     );
-}
-
-/// La garde rejette avant la vérification et laisse passer après.
-///
-/// La route est montée ici et nulle part ailleurs : le fragment livre la garde sans
-/// l'imposer, et c'est au projet de décider où elle s'applique.
-#[tokio::test]
-#[ignore = "joint la base du projet"]
-async fn the_verified_guard_opens_only_after_verification() {
-    async fn protegee(_verifiee: crate::auth::guard::VerifiedIdentity) -> StatusCode {
-        StatusCode::OK
-    }
-
-    let db = connection().await;
-    let config = rbs_core::Config::load().expect("configuration lisible");
-
-    let api = Router::new()
-        .route("/protegee", get(protegee))
-        .with_state(AppState::new(db.clone(), config).expect("état partagé constructible"));
-    let publique = application().await;
-
-    let email = fresh_email();
-    register(&publique, &email).await;
-    let paire = login(&publique, &email, PASSWORD).await;
-    let jeton_acces = paire["access_token"]
-        .as_str()
-        .expect("jeton d'accès")
-        .to_owned();
-
-    let (avant, _) = call(&api, get_authenticated("/protegee", &jeton_acces)).await;
-    assert_eq!(
-        avant,
-        StatusCode::FORBIDDEN,
-        "une adresse non vérifiée passe la garde"
-    );
-
-    let (_, jeton) = crate::auth::service::verification::request(&db, 86400, &email)
-        .await
-        .expect("la demande aboutit")
-        .expect("le compte existe");
-    call(
-        &publique,
-        post_json("/auth/verify-email", json!({ "token": jeton })),
-    )
-    .await;
-
-    let (apres, _) = call(&api, get_authenticated("/protegee", &jeton_acces)).await;
-    assert_eq!(apres, StatusCode::OK, "une adresse vérifiée est rejetée");
 }

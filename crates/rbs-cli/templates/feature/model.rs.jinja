@@ -1,5 +1,32 @@
 use sea_orm::ActiveValue::Set;
 use sea_orm::entity::prelude::*;
+{%- if enum_types %}
+use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
+{%- endif %}
+{%- for field in fields if field.enum_variants %}
+
+/// Valeurs acceptées par la colonne « {@ field.name @} ».
+///
+/// Une valeur de plus s'ajoute ici et dans le `CHECK` que porte une migration nouvelle :
+/// la base refuse d'elle-même celles qu'elle ne connaît pas. Plus longue que toutes les
+/// actuelles, elle demande en troisième lieu d'élargir le `StringLen::N` ci-dessous, et
+/// avec lui le `string_len` de cette migration.
+{#- La ligne des dérives passe les cent colonnes de `max_width` : rustfmt l'éclate, et le
+    gabarit l'écrit déjà éclatée. Elle ne dépend d'aucun nom — ni celui de la feature, ni
+    celui du champ — et ne bascule donc jamais. #}
+#[derive(
+    Clone, Copy, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, Deserialize, Serialize, ToSchema,
+)]
+#[sea_orm(rs_type = "String", db_type = "String(StringLen::N({@ field.enum_length @}))")]
+pub enum {@ field.enum_type @} {
+{%- for case in field.enum_cases %}
+    #[sea_orm(string_value = "{@ case.value @}")]
+    #[serde(rename = "{@ case.value @}")]
+    {@ case.variant @},
+{%- endfor %}
+}
+{%- endfor %}
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel)]
 #[sea_orm(table_name = "{@ table @}")]

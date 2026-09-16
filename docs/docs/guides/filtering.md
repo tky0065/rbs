@@ -27,9 +27,9 @@ POST /articles/filter
 }
 ```
 
-Every condition is an **AND**. There is no `or`, no nested group, no `in`: that would be a
-query engine to generate, test and bound against pathological requests, and the escape
-hatch is one you already have — `repository.rs` is yours to edit.
+Every condition is an **AND**. There is no `or` and no nested group: that would be a query
+engine to generate, test and bound against pathological requests, and the escape hatch is
+one you already have — `repository.rs` is yours to edit.
 
 A bare value means equality, so `"published": true` and `"published": { "eq": true }` say
 the same thing, and the short form is the one you write most often.
@@ -37,8 +37,9 @@ the same thing, and the short form is the one you write most often.
 | Operator | Applies to | Meaning |
 |---|---|---|
 | `eq` | every column | strict equality |
-| `gt`, `gte`, `lt`, `lte` | `int`, `float`, `datetime`, `uuid` | comparison |
+| `gt`, `gte`, `lt`, `lte` | `int`, `float`, `decimal`, `datetime`, `date`, `uuid` | comparison |
 | `contains` | `string`, `text` | substring, `LIKE '%…%'` |
+| `in` | `enum(a,b,c)` | one of the listed values; an empty list accepts none |
 | `is_null` | every column | `true` requires null, `false` requires a value |
 
 `contains` searches its value literally: `%` and `_`, the two wildcards of `LIKE`, are

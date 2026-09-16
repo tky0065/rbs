@@ -5,31 +5,37 @@ use error::{keyword_suggestions, to_snake_case};
 use serde::Serialize;
 use serde::ser::{SerializeStruct, Serializer};
 
-/// Un des sept types scalaires de la grammaire `--fields` — le huitième, `references`,
-/// est porté par `FieldKind::Reference`.
+/// Un des neuf types scalaires de la grammaire `--fields` — le dixième, `references`, et
+/// le onzième, `enum(a,b,c)`, sont portés par `FieldKind` : chacun prend un argument que
+/// la forme `nom:type` ne peut pas exprimer.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FieldType {
     String,
     Int,
     Float,
+    Decimal,
     Bool,
     Uuid,
     Datetime,
+    Date,
     Text,
 }
 
 impl FieldType {
-    pub(crate) const NAMES: [&'static str; 7] =
-        ["string", "int", "float", "bool", "uuid", "datetime", "text"];
+    pub(crate) const NAMES: [&'static str; 9] = [
+        "string", "int", "float", "decimal", "bool", "uuid", "datetime", "date", "text",
+    ];
 
     pub(crate) fn parse(word: &str) -> Option<Self> {
         Some(match word {
             "string" => Self::String,
             "int" => Self::Int,
             "float" => Self::Float,
+            "decimal" => Self::Decimal,
             "bool" => Self::Bool,
             "uuid" => Self::Uuid,
             "datetime" => Self::Datetime,
+            "date" => Self::Date,
             "text" => Self::Text,
             _ => return None,
         })
@@ -40,9 +46,11 @@ impl FieldType {
             Self::String => "string",
             Self::Int => "int",
             Self::Float => "float",
+            Self::Decimal => "decimal",
             Self::Bool => "bool",
             Self::Uuid => "uuid",
             Self::Datetime => "datetime",
+            Self::Date => "date",
             Self::Text => "text",
         }
     }
@@ -52,9 +60,14 @@ impl FieldType {
             Self::String | Self::Text => "String",
             Self::Int => "i32",
             Self::Float => "f64",
+            // `rust_decimal::Decimal`, que `sea_orm::prelude` réexporte sous
+            // `with-rust_decimal` : le manifeste du projet reçoit l'un et l'autre dès
+            // qu'un champ le demande.
+            Self::Decimal => "Decimal",
             Self::Bool => "bool",
             Self::Uuid => "Uuid",
             Self::Datetime => "DateTimeWithTimeZone",
+            Self::Date => "Date",
         }
     }
 
@@ -63,19 +76,36 @@ impl FieldType {
             Self::String => "string()",
             Self::Int => "integer()",
             Self::Float => "double()",
+            // La précision est écrite, et non laissée au moteur : MySQL ramènerait une
+            // colonne `DECIMAL` sans argument à `DECIMAL(10, 0)`, et les centimes
+            // disparaîtraient à l'écriture sans qu'une erreur le dise. Dix-neuf chiffres
+            // dont quatre décimales tiennent une somme d'argent et un taux.
+            Self::Decimal => "decimal_len(19, 4)",
             Self::Bool => "boolean()",
             Self::Uuid => "uuid()",
             Self::Datetime => "timestamp_with_time_zone()",
+            Self::Date => "date()",
             Self::Text => "text()",
         }
     }
 
     /// SeaORM déduit la colonne du type Rust ; seul `text` doit être forcé, `String`
     /// donnant sinon un `varchar`.
+    ///
+    /// Les bras sont écrits un par un, sans `_` : un type nouveau ne compile pas tant que
+    /// personne n'a tranché s'il porte un type de colonne explicite, là où le joker
+    /// répondait `None` pour lui sans que la question soit posée.
     pub(crate) fn column_type_attribute(self) -> Option<&'static str> {
         match self {
             Self::Text => Some("Text"),
-            _ => None,
+            Self::String
+            | Self::Int
+            | Self::Float
+            | Self::Decimal
+            | Self::Bool
+            | Self::Uuid
+            | Self::Datetime
+            | Self::Date => None,
         }
     }
 }
@@ -107,11 +137,13 @@ pub(crate) struct Reference {
     pub on_delete: OnDelete,
 }
 
-/// Un champ décrit soit une colonne scalaire, soit une référence.
+/// Un champ décrit une colonne scalaire, une référence, ou une énumération — dont il
+/// porte alors lui-même les valeurs, dans l'ordre écrit.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum FieldKind {
     Scalar(FieldType),
     Reference(Reference),
+    Enum(Vec<String>),
 }
 
 /// Ce qu'une template lit d'une référence, une fois la cible retrouvée dans le projet.
@@ -136,6 +168,18 @@ pub(crate) struct RelationView {
     pub on_delete: String,
 }
 
+/// Une valeur d'énumération et la variante Rust qui la porte.
+///
+/// Le couple est calculé ici plutôt que dans la template : `draft` devient `Draft` par la
+/// même recasse que les autres identifiants, et une template ne sait pas recasser.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(crate) struct EnumCase {
+    /// La valeur telle qu'elle a été écrite : `draft`.
+    pub value: String,
+    /// La variante Rust qui la porte : `Draft`.
+    pub variant: String,
+}
+
 /// Un champ déclaré dans `--fields`, une fois analysé et validé.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) struct Field {
@@ -158,7 +202,7 @@ impl Field {
     pub(crate) fn column_name(&self) -> String {
         match self.kind {
             FieldKind::Reference(_) => format!("{}_id", self.name),
-            FieldKind::Scalar(_) => self.name.clone(),
+            FieldKind::Scalar(_) | FieldKind::Enum(_) => self.name.clone(),
         }
     }
 
@@ -170,7 +214,7 @@ impl Field {
     pub(crate) fn reference(&self) -> Option<&Reference> {
         match &self.kind {
             FieldKind::Reference(reference) => Some(reference),
-            FieldKind::Scalar(_) => None,
+            FieldKind::Scalar(_) | FieldKind::Enum(_) => None,
         }
     }
 
@@ -183,15 +227,12 @@ impl Field {
     }
 
     pub(crate) fn rust_type(&self) -> String {
-        let bare = match &self.kind {
-            FieldKind::Scalar(type_) => type_.rust_type(),
-            FieldKind::Reference(_) => "Uuid",
-        };
+        let bare = self.bare_rust_type();
 
         if self.optional {
             format!("Option<{bare}>")
         } else {
-            bare.to_string()
+            bare
         }
     }
 
@@ -203,13 +244,19 @@ impl Field {
         match &self.kind {
             FieldKind::Scalar(type_) => *type_,
             FieldKind::Reference(_) => FieldType::Uuid,
+            // Une énumération est physiquement une chaîne : c'est ce qu'en dit la
+            // colonne. Les générateurs qui décident du filtre, du seed et des tests
+            // engendrés regardent `enum_variants` *avant* d'appeler ce type — une
+            // énumération ne se cherche pas par sous-chaîne et ne tire pas sa valeur.
+            FieldKind::Enum(_) => FieldType::String,
         }
     }
 
-    fn bare_rust_type(&self) -> &'static str {
+    fn bare_rust_type(&self) -> String {
         match &self.kind {
-            FieldKind::Scalar(type_) => type_.rust_type(),
-            FieldKind::Reference(_) => "Uuid",
+            FieldKind::Scalar(type_) => type_.rust_type().to_string(),
+            FieldKind::Reference(_) => "Uuid".to_string(),
+            FieldKind::Enum(_) => self.enum_type(),
         }
     }
 
@@ -217,21 +264,71 @@ impl Field {
         match &self.kind {
             FieldKind::Scalar(type_) => type_.name(),
             FieldKind::Reference(_) => "references",
+            FieldKind::Enum(_) => "enum",
         }
     }
 
-    fn migration_method(&self) -> &'static str {
+    /// L'appel qui pose le type de la colonne dans la migration.
+    ///
+    /// Rendu en `String` et non en `&'static str` : une énumération borne sa colonne à
+    /// la plus longue de ses valeurs, longueur que seul le champ connaît.
+    fn migration_method(&self) -> String {
         match &self.kind {
-            FieldKind::Scalar(type_) => type_.migration_method(),
-            FieldKind::Reference(_) => "uuid()",
+            FieldKind::Scalar(type_) => type_.migration_method().to_string(),
+            FieldKind::Reference(_) => "uuid()".to_string(),
+            // La colonne est une chaîne bornée ; c'est le `CHECK` que pose la migration,
+            // et non ce type, qui en refuse les valeurs étrangères.
+            FieldKind::Enum(_) => format!("string_len({})", self.enum_length()),
         }
     }
 
-    fn column_type_attribute(&self) -> Option<&'static str> {
+    pub(crate) fn column_type_attribute(&self) -> Option<&'static str> {
         match &self.kind {
             FieldKind::Scalar(type_) => type_.column_type_attribute(),
-            FieldKind::Reference(_) => None,
+            FieldKind::Reference(_) | FieldKind::Enum(_) => None,
         }
+    }
+
+    /// Valeurs de l'énumération, dans l'ordre écrit — vide pour tout champ qui n'en est
+    /// pas une.
+    pub(crate) fn enum_variants(&self) -> &[String] {
+        match &self.kind {
+            FieldKind::Enum(values) => values,
+            FieldKind::Scalar(_) | FieldKind::Reference(_) => &[],
+        }
+    }
+
+    /// Nom PascalCase du type d'énumération engendré pour ce champ, d'après son propre
+    /// nom — vide pour tout champ qui n'en est pas une.
+    pub(crate) fn enum_type(&self) -> String {
+        match &self.kind {
+            FieldKind::Enum(_) => to_pascal_case(&self.name),
+            FieldKind::Scalar(_) | FieldKind::Reference(_) => String::new(),
+        }
+    }
+
+    /// Les valeurs de l'énumération et les variantes Rust qui les portent, dans l'ordre
+    /// écrit — vide pour tout champ qui n'en est pas une.
+    pub(crate) fn enum_cases(&self) -> Vec<EnumCase> {
+        self.enum_variants()
+            .iter()
+            .map(|value| EnumCase {
+                value: value.clone(),
+                variant: to_pascal_case(value),
+            })
+            .collect()
+    }
+
+    /// Longueur de la plus longue valeur : c'est elle que borne la colonne.
+    ///
+    /// Comptée en caractères et non en octets : les valeurs sont en snake_case ASCII,
+    /// où les deux coïncident, et `StringLen::N` compte des caractères.
+    pub(crate) fn enum_length(&self) -> usize {
+        self.enum_variants()
+            .iter()
+            .map(|value| value.chars().count())
+            .max()
+            .unwrap_or_default()
     }
 
     /// Le champ porte-t-il du texte, seul endroit où une longueur se borne ?
@@ -280,7 +377,7 @@ impl Field {
 
     /// Le champ mérite-t-il une contrainte d'email dans les DTO ?
     ///
-    /// La grammaire de `--fields` n'a pas de type `email` et n'en aura pas : sept types
+    /// La grammaire de `--fields` n'a pas de type `email` et n'en aura pas : neuf types
     /// suffisent à décrire une colonne, et un format de chaîne n'est pas un type de
     /// colonne. La contrainte se déduit donc du nom, seule information dont on dispose.
     pub(crate) fn validates_email(&self) -> bool {
@@ -303,7 +400,7 @@ impl Field {
 /// reconstruirait sa propre structure de vue.
 impl Serialize for Field {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        let mut state = serializer.serialize_struct("Field", 13)?;
+        let mut state = serializer.serialize_struct("Field", 16)?;
         // `name` porte la colonne, non le nom déclaré : les templates de colonne
         // — modèle, migration, DTO — n'ont ainsi rien à savoir des relations.
         state.serialize_field("name", &self.column_name())?;
@@ -314,9 +411,13 @@ impl Serialize for Field {
         state.serialize_field("index", &self.index)?;
         state.serialize_field("rust_type", &self.rust_type())?;
         state.serialize_field("bare_rust_type", &self.bare_rust_type())?;
-        state.serialize_field("migration_method", self.migration_method())?;
+        state.serialize_field("migration_method", &self.migration_method())?;
         state.serialize_field("column_type_attribute", &self.column_type_attribute())?;
         state.serialize_field("validations", &self.validations())?;
+        state.serialize_field("enum_variants", self.enum_variants())?;
+        state.serialize_field("enum_cases", &self.enum_cases())?;
+        state.serialize_field("enum_type", &self.enum_type())?;
+        state.serialize_field("enum_length", &self.enum_length())?;
         state.serialize_field("relation", &self.relation)?;
         state.end()
     }
@@ -349,7 +450,7 @@ pub(crate) fn parse(input: &str) -> Result<Vec<Field>, FieldsError> {
     // se dédoubleraient dans le modèle comme dans la migration.
     let mut seen: Vec<(String, String, usize)> = Vec::new();
 
-    for (rank, chunk) in input.split(',').enumerate() {
+    for (rank, chunk) in split_top_level_commas(input).into_iter().enumerate() {
         let rank = rank + 1;
 
         // L'homonymie se contrôle après la validation du champ lui-même : un champ
@@ -392,6 +493,30 @@ pub(crate) fn parse(input: &str) -> Result<Vec<Field>, FieldsError> {
     } else {
         Err(FieldsError { errors })
     }
+}
+
+/// Découpe `--fields` sur ses virgules de premier niveau : celles qu'`enum(a,b,c)` place
+/// entre parenthèses séparent des valeurs, pas des champs, et ne doivent donc plus finir
+/// un champ en deux.
+fn split_top_level_commas(input: &str) -> Vec<&str> {
+    let mut chunks = Vec::new();
+    let mut depth: i32 = 0;
+    let mut start = 0;
+
+    for (index, character) in input.char_indices() {
+        match character {
+            '(' => depth += 1,
+            ')' => depth -= 1,
+            ',' if depth <= 0 => {
+                chunks.push(&input[start..index]);
+                start = index + character.len_utf8();
+            }
+            _ => {}
+        }
+    }
+    chunks.push(&input[start..]);
+
+    chunks
 }
 
 fn parse_field(rank: usize, chunk: &str) -> Result<Field, FieldError> {
@@ -457,6 +582,18 @@ fn parse_field(rank: usize, chunk: &str) -> Result<Field, FieldError> {
             target: target.to_string(),
             on_delete: OnDelete::Restrict,
         })
+    } else if raw_type == "enum" || raw_type.starts_with("enum(") {
+        let values = parse_enum_values(raw_type).map_err(|kind| error(name, kind))?;
+
+        // Le type de l'énumération est nommé d'après le champ, en PascalCase : une
+        // collision avec un type que `model.rs` déclare déjà pour toute entité romprait
+        // la compilation du projet engendré.
+        let type_name = to_pascal_case(name);
+        if MODEL_TYPE_NAMES.contains(&type_name.as_str()) {
+            return Err(error(name, ErrorKind::EnumTypeNameCollision { type_name }));
+        }
+
+        FieldKind::Enum(values)
     } else {
         let Some(type_) = FieldType::parse(raw_type) else {
             return Err(error(
@@ -584,6 +721,19 @@ fn parse_field(rank: usize, chunk: &str) -> Result<Field, FieldError> {
         if matches!(field.kind, FieldKind::Scalar(FieldType::Bool)) && field.unique {
             return Err(error(name, ErrorKind::UniqueOnBool));
         }
+        // Autant de lignes que de valeurs, au plus — le même raisonnement que sur un
+        // booléen, et les mêmes dégâts en aval : le seed rejouerait une valeur sur sa
+        // seconde ligne, et les tests engendrés n'ont rien à tirer hors de la liste.
+        // `enum_variants` rend une liste vide hors énumération : la garde tient en une
+        // condition, sans bras `_`.
+        if field.unique && !field.enum_variants().is_empty() {
+            return Err(error(
+                name,
+                ErrorKind::UniqueOnEnum {
+                    values: field.enum_variants().len(),
+                },
+            ));
+        }
         if field.unique && field.index {
             return Err(error(name, ErrorKind::RedundantIndex));
         }
@@ -619,6 +769,89 @@ const NAMES_SET_BY_RBS: [&str; 3] = ["id", "created_at", "updated_at"];
 /// Variante que `#[derive(DeriveIden)]` réserve au nom de la table dans la migration.
 const TABLE_NAME_IN_MIGRATION: &str = "table";
 
+/// Types que `model.rs` déclare déjà pour toute entité engendrée : la structure
+/// `DeriveActiveEnum` d'un champ `enum` porte le nom du champ en PascalCase, qui les
+/// heurterait.
+const MODEL_TYPE_NAMES: [&str; 6] = [
+    "Model",
+    "ActiveModel",
+    "Entity",
+    "Column",
+    "PrimaryKey",
+    "Relation",
+];
+
+/// Identifiants que Rust réserve et qu'une recasse en PascalCase peut produire.
+///
+/// `Self` est le seul : les cinquante-et-un mots de [`RUST_KEYWORDS`] sont en minuscules,
+/// et `to_pascal_case` met toujours la première lettre en majuscule — seule la valeur
+/// `self`, que `is_snake_case` accepte, peut donc nommer une variante que rustc refuse.
+const VARIANT_RESERVED: [&str; 1] = ["Self"];
+
+/// Analyse les valeurs d'un `enum(a,b,c)`. Les virgules internes ont déjà été protégées
+/// par [`split_top_level_commas`] : ce découpage ne les revoit plus.
+fn parse_enum_values(raw_type: &str) -> Result<Vec<String>, ErrorKind> {
+    let inner = raw_type
+        .strip_prefix("enum(")
+        .and_then(|reste| reste.strip_suffix(')'));
+    let Some(inner) = inner else {
+        return Err(ErrorKind::EnumUnclosedParenthesis);
+    };
+
+    if inner.trim().is_empty() {
+        return Err(ErrorKind::EnumEmptyList);
+    }
+
+    let mut values: Vec<String> = Vec::new();
+    // Les variantes déjà nommées, chacune avec la valeur qui l'a nommée : c'est la forme
+    // PascalCase, et non la valeur écrite, qui doit être un identifiant Rust légal et
+    // distinct — `model.rs` la pose telle quelle dans l'énumération engendrée.
+    let mut variants: Vec<(String, String)> = Vec::new();
+
+    for raw_value in inner.split(',') {
+        let value = raw_value.trim();
+
+        // Une valeur vide — « enum(draft,,published) » — n'est pas une faute de casse :
+        // le message de snake_case citerait une valeur que personne ne voit.
+        if value.is_empty() {
+            return Err(ErrorKind::EnumEmptyValue);
+        }
+        if !is_snake_case(value) {
+            return Err(ErrorKind::EnumValueNotSnakeCase {
+                value: value.to_string(),
+            });
+        }
+        if values.contains(&value.to_string()) {
+            return Err(ErrorKind::EnumDuplicateValue {
+                value: value.to_string(),
+            });
+        }
+
+        let variant = to_pascal_case(value);
+        if VARIANT_RESERVED.contains(&variant.as_str()) {
+            return Err(ErrorKind::EnumVariantReserved {
+                value: value.to_string(),
+                variant,
+            });
+        }
+        // La recasse n'est pas injective : `a_1` et `a1` ne diffèrent que par un souligné,
+        // que `to_pascal_case` mange. Deux valeurs distinctes nommeraient alors la même
+        // variante, et le projet engendré ne compilerait pas.
+        if let Some((_, previous)) = variants.iter().find(|(nomme, _)| *nomme == variant) {
+            return Err(ErrorKind::EnumVariantCollision {
+                value: value.to_string(),
+                previous: previous.clone(),
+                variant,
+            });
+        }
+
+        variants.push((variant, value.to_string()));
+        values.push(value.to_string());
+    }
+
+    Ok(values)
+}
+
 pub(crate) fn is_snake_case(name: &str) -> bool {
     let Some(first) = name.chars().next() else {
         return false;
@@ -641,9 +874,11 @@ mod tests {
             ("string", FieldType::String),
             ("int", FieldType::Int),
             ("float", FieldType::Float),
+            ("decimal", FieldType::Decimal),
             ("bool", FieldType::Bool),
             ("uuid", FieldType::Uuid),
             ("datetime", FieldType::Datetime),
+            ("date", FieldType::Date),
             ("text", FieldType::Text),
         ];
 
@@ -748,7 +983,7 @@ mod tests {
 
     #[test]
     fn a_type_outside_the_grammar_is_not_recognised() {
-        assert_eq!(FieldType::parse("decimal"), None);
+        assert_eq!(FieldType::parse("money"), None);
         assert_eq!(FieldType::parse("String"), None);
         assert_eq!(FieldType::parse(""), None);
     }
@@ -770,6 +1005,8 @@ mod tests {
         assert_eq!(FieldType::Bool.rust_type(), "bool");
         assert_eq!(FieldType::Uuid.rust_type(), "Uuid");
         assert_eq!(FieldType::Datetime.rust_type(), "DateTimeWithTimeZone");
+        assert_eq!(FieldType::Date.rust_type(), "Date");
+        assert_eq!(FieldType::Decimal.rust_type(), "Decimal");
     }
 
     #[test]
@@ -784,6 +1021,10 @@ mod tests {
             FieldType::Datetime.migration_method(),
             "timestamp_with_time_zone()"
         );
+        assert_eq!(FieldType::Date.migration_method(), "date()");
+        // Sans la longueur, MySQL tronquerait la colonne à `DECIMAL(10, 0)` : les
+        // centimes disparaîtraient à l'écriture, sans une erreur pour le dire.
+        assert_eq!(FieldType::Decimal.migration_method(), "decimal_len(19, 4)");
     }
 
     #[test]
@@ -907,13 +1148,13 @@ mod tests {
 
     #[test]
     fn a_type_outside_the_grammar_is_reported_on_its_field() {
-        let error = parse("price:decimal").expect_err("decimal n'est pas dans la grammaire");
+        let error = parse("price:money").expect_err("money n'est pas dans la grammaire");
 
         assert_eq!(error.errors[0].label, "price");
         assert_eq!(
             error.errors[0].kind,
             ErrorKind::UnknownType {
-                name: "decimal".to_string()
+                name: "money".to_string()
             }
         );
     }
@@ -1156,7 +1397,7 @@ mod tests {
     #[test]
     fn every_fault_in_the_string_surfaces_in_order() {
         let error =
-            parse("Title:string,type:text,price:decimal").expect_err("trois fautes attendues");
+            parse("Title:string,type:text,price:money").expect_err("trois fautes attendues");
 
         assert_eq!(error.errors.len(), 3);
         assert_eq!(error.errors[0].rank, 1);
@@ -1178,7 +1419,7 @@ mod tests {
 
     #[test]
     fn a_field_carrying_two_faults_surfaces_only_the_first() {
-        let error = parse("Type:decimal").expect_err("deux fautes, une seule remontée");
+        let error = parse("Type:money").expect_err("deux fautes, une seule remontée");
 
         assert_eq!(error.errors.len(), 1);
         assert!(matches!(
@@ -1340,5 +1581,236 @@ mod tests {
 
         assert_eq!(fields[0].column_name(), "author_id");
         assert_eq!(fields[1].column_name(), "reviewer_id");
+    }
+
+    // --- enum(a,b,c) ---
+
+    #[test]
+    fn an_enum_field_carries_its_values_in_order() {
+        let fields = parse("status:enum(draft,published)").expect("la chaîne doit être acceptée");
+
+        assert_eq!(fields.len(), 1);
+        assert_eq!(
+            fields[0].kind,
+            FieldKind::Enum(vec!["draft".to_string(), "published".to_string()])
+        );
+        assert_eq!(fields[0].enum_variants(), ["draft", "published"]);
+        assert_eq!(fields[0].enum_type(), "Status");
+    }
+
+    /// Une virgule entre parenthèses ne coupe pas `--fields` : sans quoi ce champ se
+    /// scinderait en deux champs fautifs.
+    #[test]
+    fn a_comma_inside_the_enum_parentheses_does_not_split_the_field() {
+        let fields = fields("a:string,status:enum(x,y),b:int");
+
+        assert_eq!(fields.len(), 3);
+        assert_eq!(fields[0].name, "a");
+        assert_eq!(fields[1].name, "status");
+        assert_eq!(
+            fields[1].kind,
+            FieldKind::Enum(vec!["x".to_string(), "y".to_string()])
+        );
+        assert_eq!(fields[2].name, "b");
+    }
+
+    /// Ruling 1 : l'enum se mêle à une référence et aux modificateurs existants sans que
+    /// la grammaire n'ait à changer pour eux.
+    ///
+    /// `unique` a quitté cette ligne : une énumération le refuse désormais, comme un
+    /// booléen le refusait déjà — le refus a son propre test
+    /// (`unique_on_an_enum_is_refused_like_unique_on_a_bool`). Ce que celui-ci couvre est
+    /// la grammaire, et elle mêle toujours les trois formes.
+    #[test]
+    fn an_enum_mixes_with_a_reference_and_modifiers() {
+        let fields = parse(
+            "status:enum(draft,published):index,\
+             author:references:users:cascade,\
+             role:enum(admin,editor):optional:index",
+        )
+        .expect("la chaîne doit être acceptée");
+
+        assert_eq!(fields.len(), 3);
+
+        assert_eq!(
+            fields[0].kind,
+            FieldKind::Enum(vec!["draft".to_string(), "published".to_string()])
+        );
+        assert!(fields[0].index);
+
+        let reference = fields[1].reference().expect("le champ porte une référence");
+        assert_eq!(reference.target, "users");
+        assert_eq!(reference.on_delete, OnDelete::Cascade);
+
+        assert_eq!(
+            fields[2].kind,
+            FieldKind::Enum(vec!["admin".to_string(), "editor".to_string()])
+        );
+        assert!(fields[2].optional);
+        assert!(fields[2].index);
+    }
+
+    #[test]
+    fn an_unclosed_enum_parenthesis_is_rejected() {
+        assert_eq!(
+            kind("status:enum(draft,published"),
+            ErrorKind::EnumUnclosedParenthesis
+        );
+        assert_eq!(kind("status:enum"), ErrorKind::EnumUnclosedParenthesis);
+    }
+
+    #[test]
+    fn an_empty_enum_list_is_rejected() {
+        assert_eq!(kind("status:enum()"), ErrorKind::EnumEmptyList);
+    }
+
+    #[test]
+    fn a_non_snake_case_enum_value_is_rejected() {
+        assert_eq!(
+            kind("status:enum(Draft,published)"),
+            ErrorKind::EnumValueNotSnakeCase {
+                value: "Draft".to_string()
+            }
+        );
+    }
+
+    #[test]
+    fn a_duplicated_enum_value_is_rejected() {
+        assert_eq!(
+            kind("status:enum(draft,draft)"),
+            ErrorKind::EnumDuplicateValue {
+                value: "draft".to_string()
+            }
+        );
+    }
+
+    /// Le type de l'énumération est nommé d'après le champ : une collision avec un type
+    /// que `model.rs` déclare déjà romprait la compilation du projet engendré.
+    #[test]
+    fn an_enum_field_name_colliding_with_a_model_type_is_rejected() {
+        for (name, type_name) in [
+            ("model", "Model"),
+            ("active_model", "ActiveModel"),
+            ("entity", "Entity"),
+            ("column", "Column"),
+            ("primary_key", "PrimaryKey"),
+            ("relation", "Relation"),
+        ] {
+            assert_eq!(
+                kind(&format!("{name}:enum(a,b)")),
+                ErrorKind::EnumTypeNameCollision {
+                    type_name: type_name.to_string()
+                },
+                "nom « {name} »"
+            );
+        }
+    }
+
+    #[test]
+    fn an_enum_field_serialises_its_variants_and_type() {
+        let fields = fields("status:enum(draft,published)");
+        let json = serde_json::to_value(&fields[0]).expect("Champ est sérialisable");
+
+        assert_eq!(json["type"], "enum");
+        assert_eq!(
+            json["enum_variants"],
+            serde_json::json!(["draft", "published"])
+        );
+        assert_eq!(json["enum_type"], "Status");
+    }
+
+    #[test]
+    fn a_non_enum_field_serialises_empty_enum_projections() {
+        let fields = fields("title:string");
+        let json = serde_json::to_value(&fields[0]).expect("Champ est sérialisable");
+
+        assert_eq!(json["enum_variants"], serde_json::json!([]));
+        assert_eq!(json["enum_type"], "");
+    }
+
+    /// Le type Rust d'un champ `enum` est l'énumération que le modèle déclare pour lui :
+    /// `String` nommerait la colonne, pas ce que les DTO et le filtre manipulent.
+    #[test]
+    fn an_enum_field_is_typed_by_its_own_enumeration() {
+        let fields =
+            parse("status:enum(draft,published),state:enum(a,b):optional").expect("champs valides");
+
+        assert_eq!(fields[0].rust_type(), "Status");
+        assert_eq!(fields[1].rust_type(), "Option<State>");
+        assert_eq!(fields[1].bare_rust_type(), "State");
+    }
+
+    /// La colonne porte la longueur de la plus longue valeur : `string()` rendrait un
+    /// `varchar` sans borne sur PostgreSQL, et le `CHECK` y serait la seule garde.
+    #[test]
+    fn an_enum_column_is_a_string_bounded_by_its_longest_value() {
+        let fields = parse("status:enum(draft,published)").expect("champs valides");
+
+        assert_eq!(fields[0].migration_method(), "string_len(9)");
+    }
+
+    /// « enum(draft,,published) » : une valeur vide n'est pas une faute de casse. Le
+    /// message qui parlait de snake_case citait une valeur invisible.
+    #[test]
+    fn an_empty_enum_value_is_named_as_such() {
+        let error = parse("status:enum(draft,,published)").expect_err("valeur vide refusée");
+
+        assert_eq!(error.errors.len(), 1, "{error}");
+        assert_eq!(error.errors[0].kind, ErrorKind::EnumEmptyValue);
+    }
+
+    /// `a_1` et `a1` ne diffèrent que par un souligné, que la recasse mange : la même
+    /// variante `A1` deux fois dans l'énumération, et un projet que rustc refuse.
+    #[test]
+    fn two_values_that_recase_into_the_same_variant_are_refused() {
+        let error = parse("status:enum(a_1,a1)").expect_err("recasse ambiguë refusée");
+
+        assert_eq!(
+            error.errors[0].kind,
+            ErrorKind::EnumVariantCollision {
+                value: "a1".to_string(),
+                previous: "a_1".to_string(),
+                variant: "A1".to_string(),
+            }
+        );
+    }
+
+    /// `is_snake_case` accepte `self`, dont la forme PascalCase est `Self` : un
+    /// identifiant que Rust réserve et qui ne peut nommer aucune variante.
+    #[test]
+    fn a_value_whose_variant_rust_reserves_is_refused() {
+        let error = parse("status:enum(self)").expect_err("variante réservée refusée");
+
+        assert_eq!(
+            error.errors[0].kind,
+            ErrorKind::EnumVariantReserved {
+                value: "self".to_string(),
+                variant: "Self".to_string(),
+            }
+        );
+    }
+
+    /// Une énumération n'a que ses valeurs : `unique` borne la table à autant de lignes,
+    /// le seed rejouerait la même valeur sur sa seconde ligne, et les tests engendrés
+    /// n'ont rien à tirer hors de la liste.
+    #[test]
+    fn unique_on_an_enum_is_refused_like_unique_on_a_bool() {
+        let error = parse("status:enum(draft,published):unique").expect_err("« unique » refusé");
+
+        assert_eq!(error.errors[0].kind, ErrorKind::UniqueOnEnum { values: 2 });
+
+        let seule = parse("status:enum(draft):unique").expect_err("« unique » refusé");
+
+        assert_eq!(seule.errors[0].kind, ErrorKind::UniqueOnEnum { values: 1 });
+    }
+
+    /// Les nouvelles gardes ne mordent pas une énumération légitime : `index` reste
+    /// accepté, et deux valeurs dont les recasses diffèrent le sont aussi.
+    #[test]
+    fn an_ordinary_enum_still_passes_the_new_guards() {
+        let fields = parse("status:enum(draft,in_review,published):index").expect("champs valides");
+
+        assert_eq!(fields[0].enum_variants().len(), 3);
+        assert!(fields[0].index);
     }
 }

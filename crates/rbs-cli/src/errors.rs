@@ -40,6 +40,21 @@ pub(crate) struct WorkingTreeSale {
 /// Le message des commandes qui ne nomment pas la commande fautive.
 pub(crate) const PAS_UN_PROJET: &str = "cette commande attend un projet rbs : aucun Cargo.toml portant [package.metadata.rbs] au-dessus d'ici";
 
+/// Le refus d'un champ `decimal` sur un projet SQLite.
+///
+/// Deux commandes le prononcent — `generate crud`, qui crée la table, et `generate
+/// migration`, qui ajoute la colonne — et aucune ne nomme la commande fautive : c'est le
+/// moteur qui refuse, pas le chemin par lequel la colonne arrive. Le texte est donc porté
+/// une seule fois, et les deux `Display` s'y adossent.
+pub(crate) fn decimal_sous_sqlite(champ: &str) -> String {
+    format!(
+        "le champ `{champ}` est un `decimal`, que SQLite ne porte pas : sqlx-sqlite refuse \
+         délibérément de lier un décimal exact — un NUMERIC n'y garde que quinze chiffres \
+         significatifs, et les centimes s'y perdraient sans un mot. Déclarez `{champ}:float`, \
+         ou un entier de centimes `{champ}:int`, ou créez le projet sous PostgreSQL ou MySQL"
+    )
+}
+
 /// Déclare, pour une énumération portant `PasUnProjet` et `Metadata`, la conversion
 /// depuis la faute de remontée : une faute du manifeste se nomme, seule son absence vaut
 /// « pas un projet rbs ».

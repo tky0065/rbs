@@ -117,6 +117,84 @@ mod tests {
         );
     }
 
+    /// `Date` est écrit tel quel — sans alias — et utoipa le reconnaît par son nom
+    /// littéral, à la différence de `DateTimeWithTimeZone` : `due` n'a donc besoin
+    /// d'aucune annotation `#[schema(…)]`, contrairement à un `datetime`.
+    #[test]
+    fn a_date_field_needs_no_explicit_openapi_annotation() {
+        let rendered = dto("events", "due:date");
+
+        let creation = extract(&rendered, "pub struct CreateEvent {");
+        assert!(creation.contains("pub due: Date,"), "{creation}");
+        assert!(
+            !creation.contains("#[schema("),
+            "un champ `date` ne porte aucune annotation OpenAPI explicite :\n{creation}"
+        );
+
+        let response = extract(&rendered, "pub struct EventResponse {");
+        assert!(response.contains("pub due: Date,"), "{response}");
+    }
+
+    /// `Date` n'entre dans `sea_orm::prelude` que par un import explicite : sans lui, un
+    /// champ `date` échouerait à la compilation du projet engendré.
+    #[test]
+    fn a_date_field_is_imported_and_only_when_needed() {
+        let rendered = dto("events", "due:date");
+        assert!(
+            rendered.contains("use sea_orm::prelude::Date;"),
+            "l'import de `Date` manque :\n{rendered}"
+        );
+
+        let sans_date = dto("users", "nom:string");
+        assert!(
+            !sans_date.contains("sea_orm::prelude::Date;"),
+            "l'import de `Date` est présent sans servir :\n{sans_date}"
+        );
+    }
+
+    /// Un décimal exact voyage en chaîne (`"12.5000"`) : un nombre JSON passerait par le
+    /// flottant d'un client JavaScript, qui perdrait précisément les centimes que ce type
+    /// existe pour garder. Le document le dit, champ par champ.
+    #[test]
+    fn a_decimal_field_is_documented_as_a_string() {
+        let rendered = dto("orders", "price:decimal,remise:decimal:optional");
+
+        let creation = extract(&rendered, "pub struct CreateOrder {");
+        assert!(
+            creation
+                .contains("#[schema(value_type = String, format = \"decimal\")]\n    pub price:"),
+            "le format d'un décimal obligatoire manque :\n{creation}"
+        );
+        assert!(
+            creation.contains(
+                "#[schema(value_type = Option<String>, format = \"decimal\")]\n    pub remise:"
+            ),
+            "le format d'un décimal optionnel manque :\n{creation}"
+        );
+        assert!(creation.contains("pub price: Decimal,"), "{creation}");
+
+        let response = extract(&rendered, "pub struct OrderResponse {");
+        assert!(response.contains("pub price: Decimal,"), "{response}");
+    }
+
+    /// `Decimal` n'entre dans `sea_orm::prelude` que par un import explicite, et que sous
+    /// la feature `with-rust_decimal` : sans lui, un champ `decimal` ne compilerait pas —
+    /// avec lui sans servir, le projet échouerait sous `-D warnings`.
+    #[test]
+    fn a_decimal_field_is_imported_and_only_when_needed() {
+        let rendered = dto("orders", "price:decimal");
+        assert!(
+            rendered.contains("use sea_orm::prelude::Decimal;"),
+            "l'import de `Decimal` manque :\n{rendered}"
+        );
+
+        let sans_decimal = dto("users", "nom:string");
+        assert!(
+            !sans_decimal.contains("sea_orm::prelude::Decimal;"),
+            "l'import de `Decimal` est présent sans servir :\n{sans_decimal}"
+        );
+    }
+
     #[test]
     fn the_response_timestamps_declare_their_format() {
         let rendered = dto("users", "nom:string");
@@ -292,5 +370,57 @@ mod tests {
         let fin = reste.find("\n}").map_or(reste.len(), |offset| offset + 2);
 
         &reste[..fin]
+    }
+
+    /// Un champ `enum` porte dans les DTO le type que le modèle déclare pour lui, et le
+    /// fichier l'importe à côté de `Model`.
+    #[test]
+    fn an_enum_field_carries_its_enumeration_in_the_three_dtos() {
+        let rendered = dto("articles", "status:enum(draft,published)");
+
+        assert!(
+            rendered.contains("use super::model::{Model, Status};"),
+            "l'import de l'énumération manque :\n{rendered}"
+        );
+
+        let creation = extract(&rendered, "pub struct CreateArticle {");
+        assert!(creation.contains("pub status: Status,"), "{creation}");
+
+        let mise_a_jour = extract(&rendered, "pub struct UpdateArticle {");
+        assert!(
+            mise_a_jour.contains("pub status: Option<Status>,"),
+            "{mise_a_jour}"
+        );
+
+        let response = extract(&rendered, "pub struct ArticleResponse {");
+        assert!(response.contains("pub status: Status,"), "{response}");
+    }
+
+    /// Un champ optionnel d'un type neuf rend bien `Option<T>` là où le champ requis rend
+    /// `T` — la création porte l'`Option` du champ, non celle de la mise à jour.
+    #[test]
+    fn an_optional_enum_field_is_optional_in_the_creation_and_the_response() {
+        let rendered = dto("articles", "status:enum(draft,published):optional");
+
+        let creation = extract(&rendered, "pub struct CreateArticle {");
+        assert!(
+            creation.contains("pub status: Option<Status>,"),
+            "{creation}"
+        );
+
+        let response = extract(&rendered, "pub struct ArticleResponse {");
+        assert!(
+            response.contains("pub status: Option<Status>,"),
+            "{response}"
+        );
+    }
+
+    /// Une entité sans énumération n'importe qu'elle : un `use` inutile est refusé sous
+    /// `-D warnings`.
+    #[test]
+    fn an_entity_without_an_enum_imports_only_the_model() {
+        let rendered = dto("articles", "title:string");
+
+        assert!(rendered.contains("use super::model::Model;"), "{rendered}");
     }
 }

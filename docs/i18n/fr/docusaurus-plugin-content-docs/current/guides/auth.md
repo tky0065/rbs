@@ -6,7 +6,7 @@ title: Authentification
 # Authentification
 
 `rbs add auth` installe une authentification qui fonctionne dans un projet existant :
-vingt-et-un fichiers sous `src/auth/`, trois gabarits de courriel, une migration, et treize
+trente-deux fichiers sous `src/auth/`, trois gabarits de courriel, une migration, et treize
 routes montées sur le routeur. Ce qu'elle dépose est du code ordinaire dans votre
 arborescence — une entité, un service, un controller, une garde — et il est fait pour être
 lu et modifié.
@@ -45,8 +45,19 @@ plan pour /private/tmp/rbs-demo/blog
   + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
-  + src/auth/tests/session.rs                              créé
-  + src/auth/tests/password.rs                             créé
+  + src/auth/tests/change.rs                               créé
+  + src/auth/tests/guard.rs                                créé
+  + src/auth/tests/http.rs                                 créé
+  + src/auth/tests/login.rs                                créé
+  + src/auth/tests/logout.rs                               créé
+  + src/auth/tests/openapi.rs                              créé
+  + src/auth/tests/refresh.rs                              créé
+  + src/auth/tests/registration.rs                         créé
+  + src/auth/tests/replay.rs                               créé
+  + src/auth/tests/reset.rs                                créé
+  + src/auth/tests/roles.rs                                créé
+  + src/auth/tests/sessions.rs                             créé
+  + src/auth/tests/tokens.rs                               créé
   + src/auth/tests/verification.rs                         créé
   + migration/src/m20260910_162209_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
@@ -60,8 +71,8 @@ plan pour /private/tmp/rbs-demo/blog
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  25 à créer, 10 à modifier
-✓ auth installée — 25 créés, 10 modifiés
+  36 à créer, 10 à modifier
+✓ auth installée — 36 créés, 10 modifiés
 
   rbs migrate up
 ```
@@ -79,19 +90,20 @@ Treize routes viennent avec. Cinq ouvrent le cycle central :
 `register` rend le même 202 que l'adresse soit neuve ou porte déjà un compte, et hache le
 mot de passe dans les deux cas — un 409, un profil rendu à la seule adresse neuve, ou une
 réponse qui aurait sauté Argon2 diraient chacun à qui essaie plusieurs adresses lesquelles
-sont inscrites. Une adresse neuve voit son compte écrit avant la réponse, si bien que le
-client peut se connecter aussitôt ; une adresse prise n'est pas touchée, et son titulaire
-reçoit un courriel, `templates/mail/inscription.html`, qui le prévient de la tentative et
-le renvoie vers `forgot-password`.
+sont inscrites. Une adresse neuve voit son compte écrit avant la réponse, et son lien de vérification part
+dans une tâche détachée ; une adresse prise n'est pas touchée, et son titulaire reçoit un
+courriel, `templates/mail/inscription.html`, qui le prévient de la tentative et le renvoie
+vers `forgot-password`.
 
-Ce que le 202 ne ferme pas, c'est une connexion avec le mot de passe tout juste soumis.
-Une adresse neuve porte désormais un compte qui s'ouvre avec lui ; une adresse prise le
-refuse d'un 401 — si bien que `register` suivi de `login` distingue encore les deux, en
-deux requêtes au lieu d'une, au rythme que la limite de débit autorise (`/auth/register`
-en accepte 10 par heure et par client). Le fermer reviendrait à refuser la connexion d'un
-compte dont l'adresse n'est pas vérifiée, ce que le fragment ne fait pas : ce serait
-interdire de se connecter juste après l'inscription. Une route qui ne doit pas servir une
-adresse non prouvée prend `VerifiedIdentity` à la place.
+Une connexion avec le mot de passe tout juste soumis ne les distingue pas davantage. Un
+compte ne se connecte qu'une fois son adresse vérifiée — `login_requires_verification`,
+`true` par défaut dans `[auth]` — et reçoit sinon le 401 d'un mauvais mot de passe, après
+le même Argon2 : l'adresse neuve n'est pas encore vérifiée, la prise ne porte pas ce mot de
+passe, et les deux répondent pareil. Mettre la clé à `false` connecte un compte dès son
+inscription, et rouvre cet écart — `register` suivi de `login` distingue alors les deux, en
+deux requêtes, au rythme que la limite de débit autorise (`/auth/register` en accepte 10
+par heure et par client). Un projet qui fait ce choix pose `VerifiedIdentity` sur les
+routes qui ne doivent pas servir une adresse non prouvée.
 
 Une sixième, `POST /auth/change-password`, laisse un appelant qui porte déjà un jeton en
 faire autant sans lien courriel — couverte juste en dessous. Les sept autres portent sur un
@@ -241,7 +253,7 @@ jeton porteur :
 | Route | Ce qu'elle fait |
 |---|---|
 | `POST /auth/forgot-password` | Envoie un lien de réinitialisation si l'adresse est inscrite. Toujours 202. |
-| `POST /auth/reset-password` | Consomme le jeton de ce lien et pose un nouveau mot de passe. 204, toutes les sessions du compte révoquées. |
+| `POST /auth/reset-password` | Consomme le jeton de ce lien et pose un nouveau mot de passe. 204, toutes les sessions du compte révoquées, et l'adresse vérifiée. |
 
 `forgot-password` rend 202 que l'adresse porte un compte ou non, et le corps ne diffère pas
 davantage — le même risque d'énumération que le hash témoin de la connexion écarte de
@@ -274,6 +286,13 @@ détient aucun des trois :
 
 ```rust file=examples/blog-auth/src/auth/controller/password.rs region=reset_password
 ```
+
+Une réinitialisation vérifie aussi l'adresse, si elle ne l'était pas encore, dans la même
+transaction que le nouveau mot de passe : le jeton est arrivé dans la boîte exactement
+comme un lien de vérification. Sans cela, un compte qui n'a jamais cliqué son lien de
+vérification recevrait le 401 d'un mauvais mot de passe sous `login_requires_verification`,
+passerait par `forgot-password` comme tout le monde, et retrouverait le même 401 avec son
+nouveau mot de passe. Une adresse déjà vérifiée garde sa date.
 
 `auth` tire `mail` pour cela — cette route et celle qui vérifie une adresse ont toutes deux
 besoin d'un endroit où envoyer un lien, et la dépendance est déclarée plutôt que laissée
@@ -316,8 +335,9 @@ le temps de réponse dire ce que le code de statut refuse de dire :
 `verify-email` rend le même 401 pour quatre causes distinctes : un jeton inconnu, périmé,
 déjà consommé, ou — ce quatrième cas est ce qui fait d'une table de jetons partagée une
 économie plutôt qu'une faille — émis pour l'autre parcours. La recherche filtre sur l'usage
-autant que sur l'empreinte, si bien qu'un lien de réinitialisation ne peut jamais vérifier
-une adresse :
+autant que sur l'empreinte, si bien qu'un lien de réinitialisation ne se consomme jamais
+ici — seule `reset-password` le consomme, et vérifie l'adresse avec le nouveau mot de
+passe :
 
 ```rust file=examples/blog-auth/src/auth/controller/verification.rs region=verify_email
 ```
@@ -331,10 +351,12 @@ bien que le compte tient quoi qu'il advienne du courriel :
 ```rust file=examples/blog-auth/src/auth/service/verification.rs region=send_link
 ```
 
-**`login` n'exige pas une adresse vérifiée.** Un compte qui ne clique jamais son lien se
-connecte quand même — cette feature livre le cycle du jeton et les deux routes qui le
-ferment, pas un avis sur celles de vos routes qui devraient refuser un appelant non
-vérifié. Une garde pour cela est une pièce à part, couverte [plus bas](#exiger-une-adresse-vérifiée).
+**`login` exige une adresse vérifiée, sauf si vous coupez la clé.** Sous le défaut
+`login_requires_verification = true`, un compte qui ne clique jamais son lien — ni ne
+réinitialise son mot de passe — reçoit le 401 d'un mauvais mot de passe ; un client qui
+vient d'appeler `register` doit dire « vérifiez votre boîte », puisque ce 401 ne le dira
+pas. La clé à `false`, le compte se connecte aussitôt, et celles de vos routes qui refusent
+un appelant non vérifié relèvent d'une garde, couverte [plus bas](#exiger-une-adresse-vérifiée).
 
 ## Protéger une route
 
@@ -364,14 +386,17 @@ l'appelant de s'identifier, non qu'il manque de droits. Et c'est la ligne
 
 Un second extracteur, `VerifiedIdentity`, enveloppe `Identity` plutôt que de se poser à
 côté : un handler qui le prend à la place reçoit la même 401 pour un jeton absent ou
-invalide, puis une 403 par-dessus, tirée en relisant le compte et en vérifiant
-`email_verified_at`.
+invalide, puis une 403 par-dessus quand `email_verified_at` est vide. La date qu'elle
+examine vient du compte qu'`Identity` vient de lire pour accepter le jeton : `accept_in`
+laisse cette date dans la requête — la date seule, et non la ligne avec son hash de mot de
+passe —, et la garde ne relit pas la même ligne.
 
 L'état vient de la base et non du jeton, délibérément : le jeton d'accès porte `sub` et
 `role` pour ses quinze minutes entières, et lire la vérification dessus continuerait de
 répondre faux pour ce qu'il reste de cette fenêtre après que `verify-email` l'a levée.
-Aucune route du fragment ne prend `VerifiedIdentity` — `login` n'exige pas une adresse
-vérifiée, comme ci-dessus — si bien qu'elle démarre en code mort, derrière
+Aucune route du fragment ne prend `VerifiedIdentity` — sous le défaut
+`login_requires_verification = true`, seul un compte vérifié se connecte, et la garde sert
+le projet qui a mis la clé à `false` — si bien qu'elle démarre en code mort, derrière
 `#[allow(dead_code)]`, dans `src/auth/guard.rs`, de la même façon que `require_role` le
 serait si aucune route engendrée ne l'appelait. Prendre `VerifiedIdentity` au lieu
 d'`Identity` sur la signature d'un handler est ce qui met une route derrière elle.
@@ -411,7 +436,7 @@ sur le handler à ouvrir, retirez le paramètre `identite`, l'appel à `require_
 `security` et les réponses 401 et 403 de son annotation. Quatre suppressions dans un fichier
 de votre propre arborescence. Rien dans le CLI ne les fait pour vous, et rien ne les remet.
 
-Le `tests.rs` engendré suit. Il signe le jeton qu'il présente par `rbs_core::jwt::sign` —
+Le `tests/` engendré suit. Il signe le jeton qu'il présente par `rbs_core::jwt::sign` —
 `Identity` ne vérifie qu'une signature, il n'y a donc aucun compte à créer — et exerce avec
 lui le cycle d'écriture complet. Deux de ses tests ne présentent aucun jeton, une écriture
 et une lecture, et tiennent la 401 que l'une et l'autre reçoivent.
@@ -456,21 +481,21 @@ deux sémantiques votre projet porte dépend de la version qui l'a engendré. La
 
 **Aucune route ne donne un rôle.** L'inscription rend toujours un `user`, par défaut de la
 table, et la promotion passe par la base. C'est délibéré : une route HTTP qui distribue
-`admin` est une route que quelqu'un finira par atteindre. Le `src/auth/tests/session.rs`
+`admin` est une route que quelqu'un finira par atteindre. Le `src/auth/tests/roles.rs`
 engendré promeut un compte exactement ainsi, et se connecte seulement après — un jeton émis
 avant la promotion porterait l'ancien rôle :
 
-```rust file=examples/blog-auth/src/auth/tests/session.rs region=jeton_admin
+```rust file=examples/blog-auth/src/auth/tests/roles.rs region=jeton_admin
 ```
 
 ## Tester une route protégée
 
 Les tests d'une feature créent un compte. `Identity` vérifie la signature, puis relit la
-ligne du compte : un jeton signé pour un `sub` inventé est refusé. Le `tests.rs` engendré
+ligne du compte : un jeton signé pour un `sub` inventé est refusé. Le `tests/mod.rs` engendré
 inscrit donc un compte au rôle que ses routes exigent, à la première montée de
 `application()`, signe un jeton pour lui, et chaque requête le porte :
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=jeton
+```rust file=examples/blog-auth/src/posts/tests/mod.rs region=jeton
 ```
 
 Trois tests tiennent ensuite les refus, et il ne faut pas les laisser se confondre. Deux
@@ -478,13 +503,18 @@ sont engendrés — une écriture et une lecture, anonymes toutes deux, auxquell
 répond 401 avant que le handler s'exécute. Le troisième appartient à l'exemple : un appelant
 bien identifié mais d'un rôle trop court, à qui la garde répond 403 dans le handler.
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=refus
+```rust file=examples/blog-auth/src/posts/tests/access.rs region=refus
 ```
 
-Les routes de la feature elle-même sont couvertes de la même façon, réparties entre
-`src/auth/tests/session.rs`, `password.rs` et `verification.rs` — l'inscription, les 401
-identiques, la rotation, la révocation, et les parcours de mot de passe et de vérification
-ci-dessus. Tous passent par HTTP contre une vraie base, et tous portent donc `#[ignore]` :
+Les routes de la feature elle-même sont couvertes de la même façon, réparties par sujet
+sous `src/auth/tests/` — `registration.rs`, `login.rs`, `refresh.rs`, `replay.rs`,
+`logout.rs`, `sessions.rs`, `roles.rs`, `tokens.rs`, `change.rs`, `reset.rs`,
+`verification.rs`, `guard.rs` et `openapi.rs`, autour du harnais partagé de `mod.rs` et des
+aides de requête de `http.rs` — l'inscription, les 401 identiques, la rotation, le rejeu, la
+révocation, les parcours de mot de passe et de vérification ci-dessus, la garde d'adresse
+vérifiée et le document OpenAPI. Tous passent par
+HTTP contre une vraie base, et tous
+portent donc `#[ignore]` :
 le `cargo test` d'un projet neuf réussit sans serveur démarré, et `cargo test -- --ignored`
 les lance contre la base que nomme votre `.env`, migrations appliquées. Voir le
 [guide des tests](./testing.md).

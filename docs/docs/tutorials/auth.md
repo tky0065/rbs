@@ -71,8 +71,19 @@ plan pour …/demo
   + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
-  + src/auth/tests/session.rs                              créé
-  + src/auth/tests/password.rs                             créé
+  + src/auth/tests/change.rs                               créé
+  + src/auth/tests/guard.rs                                créé
+  + src/auth/tests/http.rs                                 créé
+  + src/auth/tests/login.rs                                créé
+  + src/auth/tests/logout.rs                               créé
+  + src/auth/tests/openapi.rs                              créé
+  + src/auth/tests/refresh.rs                              créé
+  + src/auth/tests/registration.rs                         créé
+  + src/auth/tests/replay.rs                               créé
+  + src/auth/tests/reset.rs                                créé
+  + src/auth/tests/roles.rs                                créé
+  + src/auth/tests/sessions.rs                             créé
+  + src/auth/tests/tokens.rs                               créé
   + src/auth/tests/verification.rs                         créé
   + migration/src/m20260909_093150_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
@@ -80,8 +91,8 @@ plan pour …/demo
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  36 à créer, 11 à modifier
-✓ auth installée — 36 créés, 11 modifiés
+  47 à créer, 11 à modifier
+✓ auth installée — 47 créés, 11 modifiés
 
   rbs migrate up
 ```
@@ -127,19 +138,23 @@ plan pour …/demo
   + src/posts/repository.rs                          créé
   + src/posts/service.rs                             créé
   + src/posts/controller.rs                          créé
-  + src/posts/tests.rs                               créé
+  + src/posts/tests/mod.rs                           créé
+  + src/posts/tests/lifecycle.rs                     créé
+  + src/posts/tests/errors.rs                        créé
+  + src/posts/tests/filter.rs                        créé
+  + src/posts/tests/access.rs                        créé
   + src/seeds/posts.rs                               créé
   + migration/src/m20260909_093231_create_posts.rs   créé
   ~ src/lib.rs                                       modifié
   ~ src/router.rs                                    modifié
   ~ src/openapi.rs                                   modifié
-  ~ migration/src/lib.rs                              modifié
+  ~ migration/src/lib.rs                             modifié
   ~ src/seeds/main.rs                                modifié
   ~ Cargo.toml                                       modifié
   ~ AGENTS.md                                        modifié
 
-  10 à créer, 7 à modifier
-✓ posts générée — 10 créés, 7 modifiés
+  14 à créer, 7 à modifier
+✓ posts générée — 14 créés, 7 modifiés
 
   la migration m20260909_093231_create_posts reste à appliquer avant de lancer le projet
 ```
@@ -195,12 +210,34 @@ HTTP/1.1 202 Accepted
 content-length: 0
 ```
 
-202 without a body, whether or not the address was already taken: the answer itself does
-not say which — a login with the password just sent still would, as the auth guide
-explains —, and a taken address gets an email warning its holder instead of a second account.
+202 without a body, whether or not the address was already taken: the answer does not say
+which, and a taken address gets an email warning its holder instead of a second account.
 The account exists as soon as the 202 arrives, and it is always a `user` — no route on
 this page hands out `admin` for the asking; the account you get here can read, but not
 write, `posts`.
+
+It cannot log in yet: `login_requires_verification`, `true` in `[auth]`, keeps an account
+out until its address is proven — a login with the password just sent would otherwise
+tell a new address from a taken one, as the auth guide explains. The proof comes by mail.
+`auth` ships with `mail`, and `mail`'s default SMTP is Mailpit — the `mailpit` service
+`docker-compose.yml` already carries, catching every message the project sends without a
+real inbox on the other end. Open [`http://localhost:8025`](http://localhost:8025) in a
+browser and leave it there: a message titled *Confirmez votre adresse* is waiting, with a
+link shaped like `http://localhost:3000/verify-email#token=…`. Copy the token out of it:
+
+```bash
+curl -i -X POST http://127.0.0.1:8080/auth/verify-email \
+  -H 'Content-Type: application/json' \
+  -d '{"token":"<le token du lien>"}'
+```
+
+```text
+HTTP/1.1 204 No Content
+```
+
+A link goes stale after `verification_ttl_secs`; a client that finds it expired asks for a
+fresh one with `POST /auth/resend-verification`. The address is proven, and the password
+now opens the account:
 
 ```bash
 TOKEN=$(curl -s -X POST http://127.0.0.1:8080/auth/login \
@@ -270,13 +307,9 @@ date: Wed, 09 Sep 2026 09:33:06 GMT
 Proof that `--role admin` never touched this route: the same `user` token that was
 forbidden on the write reads the empty list without complaint.
 
-## Changing, resetting, and confirming
+## Changing and resetting
 
-`auth` also ships with `mail`, and `mail`'s default SMTP is Mailpit — the `mailpit`
-service `docker-compose.yml` already carries, catching every message the project sends
-without a real inbox on the other end. Open
-[`http://localhost:8025`](http://localhost:8025) in a browser and leave it there: the
-next three requests each drop something into it.
+Keep the Mailpit tab open: the next requests drop more into it.
 
 Alice, still holding `$TOKEN` from above, changes her own password:
 
@@ -323,37 +356,7 @@ HTTP/1.1 204 No Content
 ```
 
 204, and every session of the account is revoked again — logging in from here on needs
-the password just set. Registration also opened a verification token, back in `## 1`,
-in a task detached from its answer; Mailpit already holds that one too,
-titled *Confirmez votre adresse*. A link goes stale after `verification_ttl_secs`, so a
-real client leans on the other route to get a fresh one:
-
-```bash
-curl -i -X POST http://127.0.0.1:8080/auth/resend-verification \
-  -H 'Content-Type: application/json' \
-  -d '{"email":"alice@example.com"}'
-```
-
-```text
-HTTP/1.1 202 Accepted
-content-length: 0
-```
-
-Take the token from the newest *Confirmez votre adresse* message in Mailpit and spend it:
-
-```bash
-curl -i -X POST http://127.0.0.1:8080/auth/verify-email \
-  -H 'Content-Type: application/json' \
-  -d '{"token":"<le token du lien>"}'
-```
-
-```text
-HTTP/1.1 204 No Content
-```
-
-`GET /auth/me`, logged back in with the newest password, now answers with
-`"email_verified_at"` set instead of `null` — the one field on the account these three
-requests, together, moved.
+the password just set.
 
 ## What was installed
 
@@ -384,7 +387,7 @@ asks for `User`.
 Two 401s and a 403 look alike from a status code alone. This test is the one that pins
 down which is which — a `user` token forbidden on the write, and reading anyway.
 
-```rust file=examples/blog-auth/src/posts/tests.rs region=refus
+```rust file=examples/blog-auth/src/posts/tests/access.rs region=refus
 ```
 
 ## Going further
@@ -396,7 +399,7 @@ down which is which — a `user` token forbidden on the write, and reading anywa
 - [`rbs generate`](../cli/generate.md) has the full grammar of `--role`, including what
   it does under `--with-upload`, and [what to remove to reopen a
   route](../guides/auth.md#closed-by-default-at-generation-time).
-- [Testing](../guides/testing.md) is the harness `posts/tests.rs` runs against, the same
+- [Testing](../guides/testing.md) is the harness `posts/tests/` runs against, the same
   one this page's third excerpt extends by hand.
 - [Taking a file](./storage.md) is the next tutorial: a client deposits a file, and
   `PUT /uploads/{id}/content` stores it.

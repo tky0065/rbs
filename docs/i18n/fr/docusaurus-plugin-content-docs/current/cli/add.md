@@ -48,17 +48,17 @@ Options :
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, et ses services `api`/`migrate` insérés dans le compose du projet — un `docker-compose.yml` entier s'il n'y en a pas | `docker compose --profile app up --build` |
 | `ci` | `.github/workflows/ci.yml`, ses actions épinglées par SHA, et `.github/dependabot.yml`, qui en propose les montées chaque semaine | `git push` |
-| `auth` | vingt-et-un fichiers sous `src/auth/`, trois gabarits de courriel, une migration, neuf fichiers du projet modifiés en propre — et `mail` et `rate-limit`, qu'elle exige | `rbs migrate up` |
-| `jobs` | sept fichiers sous `src/modules/jobs/`, une migration, et une section `[jobs]` de configuration | `rbs migrate up`, puis inscrire vos jobs dans `src/modules/jobs/mod.rs` |
-| `scheduler` | six fichiers sous `src/modules/scheduler/`, une migration, une section `[scheduler]`, un ticker dans `// <rbs:startup>` — et `jobs`, qu'elle exige | `rbs migrate up`, puis déclarer vos échéances dans `src/modules/scheduler/mod.rs` |
+| `auth` | trente-deux fichiers sous `src/auth/`, trois gabarits de courriel, une migration, neuf fichiers du projet modifiés en propre — et `mail` et `rate-limit`, qu'elle exige | `rbs migrate up` |
+| `jobs` | treize fichiers sous `src/modules/jobs/`, une migration, et une section `[jobs]` de configuration | `rbs migrate up`, puis inscrire vos jobs dans `src/modules/jobs/mod.rs` |
+| `scheduler` | neuf fichiers sous `src/modules/scheduler/`, une migration, une section `[scheduler]`, un ticker dans `// <rbs:startup>` — et `jobs`, qu'elle exige | `rbs migrate up`, puis déclarer vos échéances dans `src/modules/scheduler/mod.rs` |
 | `redis` | trois fichiers sous `src/modules/cache/`, et un service `redis` inséré dans le compose du projet | le compose le porte déjà — `docker compose up -d` le démarre |
 | `mail` | cinq fichiers sous `src/modules/mail/`, un gabarit d'exemple, et un service `mailpit` inséré dans le compose du projet | régler `[mail]` dans `config/default.toml` — un SMTP local par défaut |
-| `storage` | quatre fichiers sous `src/modules/storage/` | ignorer `./storage`, ou passer le backend à `s3` |
+| `storage` | six fichiers sous `src/modules/storage/` | ignorer `./storage`, ou passer le backend à `s3` |
 | `cors` | trois fichiers sous `src/modules/cors/`, une section `[cors]` de configuration, et une couche dans `// <rbs:layers>` | énumérer vos origines dans `[cors]` — vide, donc rien d'origine croisée ne passe |
 | `rate-limit` | quatre fichiers sous `src/modules/rate_limit/`, une section `[rate_limit]`, un champ sur `AppState`, et une couche dans `// <rbs:layers>` | derrière un reverse proxy, régler `rate_limit.trust_forwarded_for` |
 | `observability` | quatre fichiers sous `src/modules/observability/`, une section `[observability]`, une couche dans `// <rbs:layers>`, et un second listener dans `// <rbs:startup>` | nommer un collecteur dans `OTEL_EXPORTER_OTLP_ENDPOINT` — sans lui rien n'est exporté |
 | `audit` | quatre fichiers sous `src/modules/audit/`, et une migration | `rbs migrate up`, puis appeler `audit::record` dans vos services — l'entrée s'écrit dans la transaction du changement |
-| `webhooks` | dix fichiers sous `src/modules/webhooks/`, une migration, une section `[webhooks]`, trois routes, un champ sur `AppState` — et `jobs` et `auth`, qu'elle exige | `rbs migrate up`, puis appeler `webhooks::emit` là où votre code écrit |
+| `webhooks` | seize fichiers sous `src/modules/webhooks/`, une migration, une section `[webhooks]`, trois routes, un champ sur `AppState` — et `jobs` et `auth`, qu'elle exige | `rbs migrate up`, puis appeler `webhooks::emit` là où votre code écrit |
 
 `cors`, `rate-limit` et `observability` sont les trois qui empilent un middleware au lieu
 de monter une route : leur couche va dans `// <rbs:layers>`, à l'intérieur de `trace` et
@@ -265,8 +265,19 @@ plan pour /private/tmp/rbs-demo/blog
   + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
   + src/auth/tests/mod.rs                                  créé
-  + src/auth/tests/session.rs                              créé
-  + src/auth/tests/password.rs                             créé
+  + src/auth/tests/change.rs                               créé
+  + src/auth/tests/guard.rs                                créé
+  + src/auth/tests/http.rs                                 créé
+  + src/auth/tests/login.rs                                créé
+  + src/auth/tests/logout.rs                               créé
+  + src/auth/tests/openapi.rs                              créé
+  + src/auth/tests/refresh.rs                              créé
+  + src/auth/tests/registration.rs                         créé
+  + src/auth/tests/replay.rs                               créé
+  + src/auth/tests/reset.rs                                créé
+  + src/auth/tests/roles.rs                                créé
+  + src/auth/tests/sessions.rs                             créé
+  + src/auth/tests/tokens.rs                               créé
   + src/auth/tests/verification.rs                         créé
   + migration/src/m20260910_171229_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
@@ -292,8 +303,8 @@ plan pour /private/tmp/rbs-demo/blog
   + src/modules/rate_limit/tests.rs                        créé
   ~ AGENTS.md                                              modifié
 
-  36 à créer, 11 à modifier
-✓ auth installée — 36 créés, 11 modifiés
+  47 à créer, 11 à modifier
+✓ auth installée — 47 créés, 11 modifiés
 
   rbs migrate up
 ```

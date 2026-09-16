@@ -101,9 +101,9 @@ fn an_english_project_answers_its_clients_in_english() {
         "`cargo test --workspace -- --include-ignored` a échoué :\n{journal}"
     );
     for test in [
-        "articles::tests::a_replayed_unique_value_returns_409",
-        "articles::tests::an_unknown_id_returns_404",
-        "modules::webhooks::tests::an_admin_subscribing_a_private_url_gets_400",
+        "articles::tests::errors::a_replayed_unique_value_returns_409",
+        "articles::tests::errors::an_unknown_id_returns_404",
+        "modules::webhooks::tests::blocked::an_admin_subscribing_a_private_url_gets_400",
     ] {
         assert!(
             journal.contains(&format!("test {test} ... ok")),
@@ -408,6 +408,9 @@ impl Serveur {
             .current_dir(racine)
             .env("RBS_SERVER__PORT", port.to_string())
             .env("RUST_LOG", journal)
+            // Ce parcours éprouve la langue des réponses et non la preuve d'adresse, que
+            // `integration_auth` couvre : il se connecte dès l'inscription.
+            .env("RBS_AUTH__LOGIN_REQUIRES_VERIFICATION", "false")
             .stdout(Stdio::piped())
             .stderr(Stdio::piped())
             .spawn()

@@ -150,12 +150,12 @@ mistake the client needs to be told about, but `per_page=abc` is.
 
 The generated tests check both ends of that boundary. An unknown identifier:
 
-```rust file=examples/hello-crud/src/articles/tests.rs region=erreur_404
+```rust file=examples/hello-crud/src/articles/tests/errors.rs region=erreur_404
 ```
 
 And a body that cannot be parsed at all:
 
-```rust file=examples/hello-crud/src/articles/tests.rs region=corps_illisible
+```rust file=examples/hello-crud/src/articles/tests/errors.rs region=corps_illisible
 ```
 
 ## Judge for yourself

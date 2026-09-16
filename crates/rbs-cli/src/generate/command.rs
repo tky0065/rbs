@@ -15,7 +15,7 @@ use crate::metadata;
 use crate::plan;
 
 use super::feature::Feature;
-use super::fields::to_pascal_case;
+use super::fields::{FieldType, to_pascal_case};
 use super::{
     controller, dto, entities, entity, fields, filter, format, migration, mount, name, relations,
     repository, seed, service, tests_http,
@@ -179,6 +179,16 @@ pub(crate) enum Error {
     )]
     UploadStorageHorsModules,
 
+    /// Un champ `decimal` sur un projet SQLite, dont le pilote ne lie aucun décimal exact.
+    ///
+    /// Le texte vit sur `errors::decimal_sous_sqlite` : `generate migration` prononce le
+    /// même refus, et deux copies auraient divergé à la première reformulation.
+    #[error("{}", crate::errors::decimal_sous_sqlite(.champ))]
+    DecimalSousSqlite {
+        /// Nom du champ fautif, tel qu'il a été déclaré.
+        champ: String,
+    },
+
     /// `--soft-delete` sur une entité qui déclare déjà la colonne que le drapeau injecte.
     #[error(
         "`--soft-delete` pose lui-même la colonne `{colonne}` : retirez-la de `--fields`, \
@@ -250,6 +260,7 @@ impl Codee for Error {
             Error::RoleSansAuth { .. } => "role_sans_auth",
             Error::UploadSansStorage => "upload_sans_storage",
             Error::UploadStorageHorsModules => "storage_hors_modules",
+            Error::DecimalSousSqlite { .. } => "decimal_sous_sqlite",
             Error::SoftDeleteColonneReservee { .. } => "colonne_reservee",
             Error::RoleInconnu { .. } => "role_inconnu",
             Error::EnfantSansCle { .. } => "enfant_sans_cle",
@@ -326,6 +337,21 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     let mut fields =
         fields::parse(options.fields.as_deref().unwrap_or_default()).map_err(Error::Fields)?;
+
+    // Avant tout rendu, comme les gardes ci-dessus : sqlx-sqlite écarte délibérément
+    // `rust_decimal`, son affinité NUMERIC ne gardant que quinze chiffres significatifs,
+    // et sea-query ne lie un `Decimal` que pour PostgreSQL et MySQL. Engendrer quand même
+    // rendrait un projet qui ne compile pas — et, s'il compilait, une colonne qui perd
+    // les centimes en silence.
+    if metadonnees.database == crate::database::Database::Sqlite
+        && let Some(champ) = fields
+            .iter()
+            .find(|champ| champ.column_type() == FieldType::Decimal)
+    {
+        return Err(Error::DecimalSousSqlite {
+            champ: champ.name.clone(),
+        });
+    }
 
     // La colonne est injectée par le drapeau, non déclarée. Hors du drapeau elle reste un
     // nom libre : la réserver dans `NAMES_SET_BY_RBS` casserait un `--fields` légitime
@@ -455,6 +481,14 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     }
 
     builder.patch(plan::PatchToml::InscrireFeature(module.clone()))?;
+
+    // L'épingle vit sur `generate::patches_decimal`, que `generate migration` emploie
+    // aussi : deux copies auraient divergé à la première montée de version.
+    if feature.has_decimal() {
+        for patch in super::patches_decimal() {
+            builder.patch(patch)?;
+        }
+    }
 
     // L'inventaire décrit le projet tel que ce plan le laissera : c'est `module` qui l'y
     // fait nommer la feature, le manifeste du disque l'ignorant encore.
@@ -634,7 +668,13 @@ pub(crate) fn fichiers(feature: &Feature, complete: bool) -> Result<Vec<File>, E
     ];
 
     if complete {
-        files.push(("tests.rs", tests_http::render(feature)));
+        // Les tests forment un répertoire, un fichier par préoccupation : chacun rejoint la
+        // liste sous le chemin qu'il portera. Une template fautive se signale sur le
+        // répertoire, le rendu ne disant pas laquelle a échoué.
+        match tests_http::render(feature) {
+            Ok(tests) => files.extend(tests.into_iter().map(|(name, content)| (name, Ok(content)))),
+            Err(source) => files.push(("tests/", Err(source))),
+        }
     }
 
     let mut rendus = Vec::with_capacity(files.len());
@@ -712,6 +752,7 @@ impl crate::errors::Classee for Error {
             | Self::Absente { .. }
             | Self::RoleSansAuth { .. }
             | Self::UploadSansStorage
+            | Self::DecimalSousSqlite { .. }
             | Self::SoftDeleteColonneReservee { .. }
             | Self::RoleInconnu { .. }
             | Self::EnfantSansCle { .. } => Sortie::Usage,
@@ -954,6 +995,86 @@ mod tests {
         assert_eq!(fingerprint(&root), avant, "rien ne doit avoir été écrit");
     }
 
+    /// Le refus est prononcé avant le rendu : sqlx-sqlite ne lie aucun décimal exact, et
+    /// un projet engendré ne compilerait pas. Le message doit nommer le champ fautif et
+    /// les deux replis, faute de quoi il ne reste qu'à deviner.
+    #[test]
+    fn a_decimal_field_under_sqlite_is_refused_before_anything_is_written() {
+        let (_parent, root) = Project::new()
+            .database(crate::database::Database::Sqlite)
+            .url("sqlite://demo_api.db?mode=rwc")
+            .create();
+        let avant = fingerprint(&root);
+
+        let error = run(&options(&root, "orders", Some("price:decimal"), true))
+            .expect_err("SQLite ne porte pas de décimal exact");
+
+        let message = error.to_string();
+        assert!(
+            message.contains("price"),
+            "le refus doit nommer le champ : {message}"
+        );
+        assert!(
+            message.contains("SQLite"),
+            "le refus doit nommer le moteur : {message}"
+        );
+        assert!(
+            message.contains("float") && message.contains("centimes"),
+            "le refus doit proposer les deux replis : {message}"
+        );
+        assert_eq!(fingerprint(&root), avant, "rien ne doit avoir été écrit");
+    }
+
+    /// Le même champ passe sous PostgreSQL : c'est le moteur qui est en cause, pas le
+    /// type.
+    #[test]
+    fn a_decimal_field_is_accepted_under_postgres() {
+        let (_parent, root) = project();
+
+        run(&options(&root, "orders", Some("price:decimal"), true))
+            .expect("un décimal se génère sous PostgreSQL");
+
+        let model = read(&root.join("src/orders/model.rs"));
+        assert!(model.contains("pub price: Decimal,"), "{model}");
+    }
+
+    /// Le manifeste du projet reçoit de quoi porter le type : `sea_orm::prelude::Decimal`
+    /// n'existe que sous `with-rust_decimal`, et la représentation JSON du décimal est
+    /// épinglée par la feature `serde-str` plutôt que laissée au défaut de la crate.
+    #[test]
+    fn a_decimal_field_adds_what_the_manifest_needs() {
+        let (_parent, root) = project();
+
+        run(&options(&root, "orders", Some("price:decimal"), true))
+            .expect("un décimal se génère sous PostgreSQL");
+
+        let manifest = read(&root.join("Cargo.toml"));
+        assert!(
+            manifest.contains(r#"rust_decimal = { version = "1.43", features = ["serde-str"] }"#),
+            "la dépendance au décimal manque :\n{manifest}"
+        );
+        assert!(
+            manifest.contains("with-rust_decimal"),
+            "la feature de sea-orm manque :\n{manifest}"
+        );
+    }
+
+    /// Une feature sans champ décimal ne touche pas au manifeste : une dépendance posée
+    /// pour rien se traînerait dans chaque compilation du projet.
+    #[test]
+    fn a_feature_without_a_decimal_field_leaves_the_manifest_alone() {
+        let (_parent, root) = project();
+
+        run(&options(&root, "articles", Some("title:string"), true))
+            .expect("articles doit se générer");
+
+        let manifest = read(&root.join("Cargo.toml"));
+        assert!(
+            !manifest.contains("rust_decimal"),
+            "dépendance posée sans champ décimal :\n{manifest}"
+        );
+    }
+
     #[test]
     fn upload_without_the_storage_feature_names_the_command_that_repairs_it() {
         let message = Error::UploadSansStorage.to_string();
@@ -1080,15 +1201,16 @@ mod tests {
 
         run(&guarded(&root, "articles", "admin")).expect("la génération doit aboutir");
 
-        let tests = read(&root.join("src/articles/tests.rs"));
+        let cycle = read(&root.join("src/articles/tests/lifecycle.rs"));
+        let acces = read(&root.join("src/articles/tests/access.rs"));
 
         assert!(
-            tests.contains("the_full_lifecycle_goes_through_the_api"),
-            "le cycle complet doit rester exercé :\n{tests}"
+            cycle.contains("the_full_lifecycle_goes_through_the_api"),
+            "le cycle complet doit rester exercé :\n{cycle}"
         );
         assert!(
-            tests.contains("an_anonymous_request_returns_401"),
-            "le refus sans jeton doit être éprouvé :\n{tests}"
+            acces.contains("an_anonymous_request_returns_401"),
+            "le refus sans jeton doit être éprouvé :\n{acces}"
         );
     }
 
@@ -1107,7 +1229,10 @@ mod tests {
             "repository.rs",
             "service.rs",
             "controller.rs",
-            "tests.rs",
+            "tests/mod.rs",
+            "tests/lifecycle.rs",
+            "tests/errors.rs",
+            "tests/filter.rs",
         ] {
             assert!(
                 root.join("src/articles").join(file).exists(),
@@ -1478,14 +1603,14 @@ mod tests {
 
         assert_eq!(planned.required_reference.as_deref(), Some("author"));
 
-        let engendres = read(&root.join("src/posts/tests.rs"));
         assert!(
-            !engendres.contains("the_full_lifecycle_goes_through_the_api"),
-            "le scénario qui crée violerait la clé étrangère :\n{engendres}"
+            !root.join("src/posts/tests/lifecycle.rs").exists(),
+            "le scénario qui crée violerait la clé étrangère"
         );
+        let harnais = read(&root.join("src/posts/tests/mod.rs"));
         assert!(
-            engendres.contains("« author »"),
-            "le fichier doit dire ce qui manque et pourquoi :\n{engendres}"
+            harnais.contains("« author »"),
+            "le harnais doit dire ce qui manque et pourquoi :\n{harnais}"
         );
     }
 
@@ -1518,7 +1643,7 @@ mod tests {
 
         assert!(root.join("src/notes/controller.rs").exists());
         assert!(
-            !root.join("src/notes/tests.rs").exists(),
+            !root.join("src/notes/tests").exists(),
             "une feature écrite à la main ne porte pas de tests générés"
         );
         assert_eq!(generated.migration, None);

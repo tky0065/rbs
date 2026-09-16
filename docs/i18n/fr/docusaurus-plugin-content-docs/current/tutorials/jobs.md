@@ -31,10 +31,16 @@ plan pour …/demo
   + src/modules/jobs/mod.rs                         créé
   + src/modules/jobs/config.rs                      créé
   + src/modules/jobs/model.rs                       créé
-  + src/modules/jobs/queue.rs                       créé
+  + src/modules/jobs/queue/mod.rs                   créé
+  + src/modules/jobs/queue/reserve.rs               créé
+  + src/modules/jobs/queue/outcome.rs               créé
   + src/modules/jobs/worker.rs                      créé
   + src/modules/jobs/demo.rs                        créé
-  + src/modules/jobs/tests.rs                       créé
+  + src/modules/jobs/tests/mod.rs                   créé
+  + src/modules/jobs/tests/lease.rs                 créé
+  + src/modules/jobs/tests/reservation.rs           créé
+  + src/modules/jobs/tests/retry.rs                 créé
+  + src/modules/jobs/tests/worker.rs                créé
   + migration/src/m20260909_090303_create_jobs.rs   créé
   ~ migration/src/lib.rs                            modifié
   + src/modules/mod.rs                              créé
@@ -44,8 +50,8 @@ plan pour …/demo
   ~ config/default.toml                             modifié
   ~ AGENTS.md                                       modifié
 
-  9 à créer, 6 à modifier
-✓ jobs installée — 9 créés, 6 modifiés
+  15 à créer, 6 à modifier
+✓ jobs installée — 15 créés, 6 modifiés
 
   rbs migrate up, puis `rbs generate job <nom>` pour écrire un job
 ```
@@ -96,10 +102,10 @@ cargo test modules::jobs::tests:: -- --ignored
 
 ```text
 running 4 tests
-test modules::jobs::tests::a_job_enqueued_in_a_rolled_back_transaction_does_not_exist ... ok
-test modules::jobs::tests::a_job_enqueued_in_a_committed_transaction_is_visible_to_the_worker ... ok
-test modules::jobs::tests::a_failing_job_is_retried_then_marked_failed_after_the_last_attempt ... ok
-test modules::jobs::tests::two_concurrent_workers_never_reserve_the_same_job ... ok
+test modules::jobs::tests::reservation::a_job_enqueued_in_a_rolled_back_transaction_does_not_exist ... ok
+test modules::jobs::tests::reservation::a_job_enqueued_in_a_committed_transaction_is_visible_to_the_worker ... ok
+test modules::jobs::tests::lease::a_failing_job_is_retried_then_marked_failed_after_the_last_attempt ... ok
+test modules::jobs::tests::reservation::two_concurrent_workers_never_reserve_the_same_job ... ok
 
 test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.43s
 ```
@@ -162,7 +168,7 @@ perdre ou dupliquer, en bloc.
   comment programmer un job pour plus tard avec `enqueue_at`.
 - [`rbs add`](../cli/add.md) couvre les douze autres features que `demo` pourrait
   encore installer, `jobs` désormais dessus.
-- [Tests](../guides/testing.md) est le harnais contre lequel `jobs/tests.rs` engendré
+- [Tests](../guides/testing.md) est le harnais contre lequel `jobs/tests/` engendré
   tourne, et ce que `-- --ignored` atteint qu'un simple `cargo test` n'atteint pas.
 - [Voir ce que fait l'API](./observability.md) est le tutoriel suivant : une route est
   devenue lente, et `/metrics` dit enfin depuis quand.

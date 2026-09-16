@@ -190,6 +190,12 @@ pub async fn reset(db: &DatabaseConnection, input: ResetPasswordRequest) -> Resu
 
     repository::user::set_password(&transaction, ligne.user_id, &nouveau).await?;
 
+    // Le jeton consommé prouve la boîte aux lettres autant qu'un lien de vérification :
+    // il y est arrivé de la même façon. Sans cela, un compte jamais vérifié qui passe par
+    // `forgot-password` retrouverait, avec son nouveau mot de passe, le 401 qui l'y a
+    // mené. `mark_verified` ne réécrit pas la date d'une adresse déjà vérifiée.
+    repository::user::mark_verified(&transaction, ligne.user_id).await?;
+
     // Symétrique à `change` : un mot de passe qui vient d'être posé rend caducs les
     // autres liens de réinitialisation en attente, plutôt que d'en laisser un survivre à
     // côté du mot de passe qu'il prétendait remplacer.

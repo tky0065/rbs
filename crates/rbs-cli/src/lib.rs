@@ -172,6 +172,25 @@ pub fn run() {
 
                     return;
                 }
+
+                // La migration d'évolution non plus : elle ne crée pas de feature, ne
+                // touche à aucun `src/`, et ses refus lui sont propres.
+                GenerateCommands::Migration {
+                    name,
+                    add_column,
+                    fields,
+                    force,
+                    dry_run,
+                    json,
+                } => {
+                    let resultat =
+                        generate_migration(name, add_column, fields, force, dry_run, json);
+                    if let Err(error) = resultat {
+                        echec(&error, None, json);
+                    }
+
+                    return;
+                }
             };
 
             let json = args.json;
@@ -974,6 +993,95 @@ fn generate_job(
     }
 
     Ok(())
+}
+
+/// Écrit une migration d'évolution dans le projet courant, plan affiché avant écriture.
+fn generate_migration(
+    name: String,
+    table: String,
+    fields: String,
+    force: bool,
+    dry_run: bool,
+    json: bool,
+) -> Result<(), generate::alter::Error> {
+    let directory = std::env::current_dir()
+        .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
+
+    let planned = generate::alter::plan_for(
+        &generate::alter::Options {
+            name,
+            table,
+            fields,
+            directory,
+            force,
+        },
+        &generate::migration::current_timestamp(),
+    )?;
+
+    // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande
+    // s'apprête à faire ne doit pas se découvrir après coup.
+    if !json {
+        ui::line(&plan::render::plan(&planned.plan));
+    }
+
+    if let Some(avertissement) = &planned.avertissement {
+        ui::warn(avertissement);
+    }
+
+    // `model.rs` et `dto.rs` n'ont pas d'ancre, et le CLI ne réécrit pas d'AST : ces
+    // lignes-là se collent à la main. Les taire laisserait une colonne que la base porte
+    // et que l'entité ignore — le projet compilerait, et la lecture échouerait.
+    for bloc in &planned.blocs {
+        hors_du_document(
+            &format!(
+                "\n  à coller dans {} :\n\n{}",
+                bloc.fichier,
+                indente(&bloc.lignes)
+            ),
+            json,
+        );
+    }
+
+    let applique = appliquer(&planned.plan, force, dry_run, json)?;
+
+    if json {
+        ui::line(&plan::json::plan(
+            "generate migration",
+            &planned.plan,
+            applique,
+        ));
+        return Ok(());
+    }
+
+    if !applique {
+        return Ok(());
+    }
+
+    ui::success(&format!("{} écrite", planned.fichier));
+    ui::info(&format!(
+        "\n  la migration {} reste à appliquer avant de lancer le projet",
+        planned.module
+    ));
+
+    Ok(())
+}
+
+/// Indente un bloc à coller, en laissant vides les lignes qui le sont.
+///
+/// Une ligne vide indentée porterait des blancs de fin, que le presse-papier emporte et
+/// que le premier `cargo fmt` du projet retirerait.
+fn indente(lignes: &[String]) -> String {
+    lignes
+        .iter()
+        .map(|ligne| {
+            if ligne.is_empty() {
+                String::new()
+            } else {
+                format!("    {ligne}")
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Aligne le manifeste du projet courant sur la version du CLI, plan affiché avant

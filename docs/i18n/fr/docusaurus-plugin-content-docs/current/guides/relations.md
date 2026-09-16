@@ -8,7 +8,7 @@ title: Relations
 Un générateur qui produit une feature CRUD mais ne sait pas produire de clé étrangère laisse
 son utilisateur écrire à la main la partie exacte que SeaORM rend la plus fastidieuse : la
 variante `Relation`, l'`impl Related`, la contrainte de la migration, et l'index qu'elle exige.
-Le huitième type de [`--fields`](../cli/generate.md#les-huit-types), `references`, referme ce
+Le onzième type de [`--fields`](../cli/generate.md#les-onze-types), `references`, referme ce
 trou — entièrement depuis la ligne de commande, sans qu'aucune base ne tourne.
 
 ```text

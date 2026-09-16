@@ -26,11 +26,12 @@ Génère une feature dans un projet existant
 Utilisation : rbs generate <COMMANDE>
 
 Commandes :
-  crud     Génère une feature CRUD complète, entité et migration comprises
-  feature  Génère une feature vide : six fichiers, aucun champ
-  client   Engendre un client typé depuis le document OpenAPI du projet
-  job      Génère un job de la file, et son échéance sous --every ; exige la feature jobs
-  help     Affiche cette aide, ou celle des commandes données
+  crud       Génère une feature CRUD complète, entité et migration comprises
+  feature    Génère une feature vide : six fichiers, aucun champ
+  client     Engendre un client typé depuis le document OpenAPI du projet
+  job        Génère un job de la file, et son échéance sous --every ; exige la feature jobs
+  migration  Écrit une migration d'évolution : des colonnes de plus sur une table existante
+  help       Affiche cette aide, ou celle des commandes données
 
 Options :
   -h, --help     Affiche l'aide
@@ -57,7 +58,7 @@ Arguments :
   <NAME>  Nom de la feature, au pluriel
 
 Options :
-      --fields <CHAMPS>    Champs de l'entité, ex. "name:string,email:string:unique"
+      --fields <CHAMPS>    Champs de l'entité, ex. "name:string,status:enum(draft,published)"
       --singular <NOM>     Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force              Écrit même si le working tree Git est sale
       --dry-run            Affiche le plan sans rien écrire
@@ -81,7 +82,7 @@ Options :
 | `--has-many <ENTITE>` | Répare le côté lointain d'une relation : écrit dans le modèle d'une feature déjà générée la variante `has_many` qui vise l'enfant nommé, et rien d'autre. Répétable. [Le guide des relations](../guides/relations.md) dit quand c'est nécessaire. |
 | `--role <ROLE>` | Relève le seuil des écritures — `create`, `update`, `delete`, et le `PUT` de la route de contenu quand `--with-upload` l'accompagne — à ce rôle plutôt qu'au `Role::User` par défaut. Il n'ouvre ni ne ferme rien : sur un projet portant `auth`, *toutes* les routes engendrées prennent déjà une `Identity` et appellent `require_role`, et les lectures (`list`, `find`, `filter`, et les `GET` et `HEAD` de la route de contenu) gardent simplement le seuil par défaut. Exige la feature [`auth`](../guides/auth.md), et un rôle que son enum `Role` déclare — les deux sont vérifiés avant toute écriture. [Le guide de l'authentification](../guides/auth.md#fermées-par-défaut-à-la-génération) dit ce qu'il faut retirer pour rouvrir une route. |
 | `--soft-delete` | Rend `DELETE` logique plutôt que de retirer la ligne. Le contrat HTTP ne change pas, et la contrainte d'un champ `unique` se restreint aux lignes vivantes — sur MySQL elle reste globale, si bien qu'une valeur supprimée y reste réservée. [Le guide des migrations](../guides/migrations.md#suppression-logique) a le reste. |
-| `--with-upload` | Monte trois routes sur `/<ressource>/{id}/content` — `PUT`, `GET`, `HEAD` — contre le trait du fragment `storage`. Exige la feature [`storage`](../guides/storage.md), et le fragment sous `src/modules/storage/`, là où `rbs add` le pose depuis la 1.3.0 — les deux sont vérifiés avant toute écriture, et un projet qui porte encore `src/storage/` est refusé tant que le répertoire n'est pas déplacé et ses `use` corrigés. Avec `--role`, le `PUT` rejoint les écritures dont le drapeau relève le seuil ; avec `--soft-delete`, le contenu survit à la ligne que le `DELETE` se contente d'estampiller. Il écrit aussi leurs tests dans `tests.rs` — le cycle, les 404, le 413, et le 401 sous `auth`. [Le guide du stockage](../guides/storage.md#les-routes-de-contenu-engendrées) a les deux. |
+| `--with-upload` | Monte trois routes sur `/<ressource>/{id}/content` — `PUT`, `GET`, `HEAD` — contre le trait du fragment `storage`. Exige la feature [`storage`](../guides/storage.md), et le fragment sous `src/modules/storage/`, là où `rbs add` le pose depuis la 1.3.0 — les deux sont vérifiés avant toute écriture, et un projet qui porte encore `src/storage/` est refusé tant que le répertoire n'est pas déplacé et ses `use` corrigés. Avec `--role`, le `PUT` rejoint les écritures dont le drapeau relève le seuil ; avec `--soft-delete`, le contenu survit à la ligne que le `DELETE` se contente d'estampiller. Il écrit aussi leurs tests dans `tests/content.rs` — le cycle, les 404, le 413, et le 401 sous `auth`. [Le guide du stockage](../guides/storage.md#les-routes-de-contenu-engendrées) a les deux. |
 | `--cursor` | Pagine `GET /<ressource>` par curseur plutôt que par numéro de page : la route prend `after` et `per_page`, et rend `data` avec `meta.next` — l'`id` à passer comme `after` suivant, `null` une fois la marche terminée — et aucun `total`. `POST /<ressource>/filter` garde ses pages, quel que soit son tri : un curseur sur l'`id` est faux dès que l'ordre suit une autre colonne. Se combine avec `--role`, avec `--soft-delete` — les lignes supprimées restent hors de la marche — et avec `--with-upload`. Pour une entité que ses tests peuvent créer — sans référence requise —, les tests engendrés parcourent chaque page jusqu'à l'extinction de `next`, et vérifient qu'aucune ligne ne revient deux fois. [Le guide du filtrage](../guides/filtering.md#pagination-par-curseur-pour-les-listes-qui-débordent-un-offset) a le reste. |
 
 ## `rbs generate feature`
@@ -192,6 +193,143 @@ promettre `--fix`, et le
 [guide scheduler](../guides/scheduler.md#un-calendrier-antérieur-à-lancre) montre la
 réécriture.
 
+## `rbs generate migration`
+
+{/* rbs:transcript cmd="rbs generate migration --help" */}
+```text
+$ rbs generate migration --help
+Écrit une migration d'évolution : des colonnes de plus sur une table existante
+
+Utilisation : rbs generate migration [OPTIONS] --add-column <TABLE> --fields <CHAMPS> <NAME>
+
+Arguments :
+  <NAME>  Nom de la migration, en snake_case : celui de son module
+
+Options :
+      --add-column <TABLE>  Table à modifier, telle que le projet la déclare
+      --fields <CHAMPS>     Colonnes à ajouter, toutes optionnelles, ex. "statut:enum(draft,published):optional"
+      --force               Écrit même si le working tree Git est sale
+      --dry-run             Affiche le plan sans rien écrire
+      --json                Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
+  -h, --help                Affiche l'aide
+  -V, --version             Affiche la version
+```
+
+Les quatre autres sous-commandes écrivent une feature ; celle-ci modifie une table qui
+existe déjà. Elle écrit un seul fichier — `migration/src/m<horodatage>_<nom>.rs` —, déclaré
+entre `// <rbs:migration_modules>` et inscrit dans `// <rbs:migrations>`, comme toute
+migration qu'engendre rbs. `up` empile un `alter_table().add_column()` par champ, une
+instruction par colonne parce que SQLite n'accepte qu'une modification par `ALTER TABLE` ;
+`down` les défait dans l'ordre inverse, en retirant un index avant la colonne qu'il nomme —
+ce que SQLite exige également. Le fichier déclare son propre `Iden` minimal : la table, et
+les colonnes qu'il ajoute, et rien d'autre — les autres appartiennent à la migration qui
+les a créées.
+
+```bash
+rbs generate migration ajoute_statut --add-column articles \
+  --fields "statut:enum(draft,published):optional,prix:decimal:optional"
+```
+
+`--fields` est la grammaire décrite plus bas, analysée par le même parseur, avec les mêmes
+fautes et les mêmes refus. Ce qui diffère, c'est ce qu'une colonne *ajoutée* peut être :
+
+| Refusé | Pourquoi |
+|---|---|
+| une colonne qui n'est pas `optional` | La table porte déjà des lignes, qui n'ont pas de valeur pour la colonne nouvelle. SQLite exige un défaut pour une colonne `NOT NULL` ajoutée après coup ; les deux autres refusent l'ajout tout court. Le refus nomme le champ et le `:optional` qui le lève. Aucun défaut n'est proposé : il vaudrait pour les lignes anciennes comme pour les nouvelles, et ce choix-là appartient au schéma, pas au CLI. |
+| `unique` | SQLite ne sait pas ajouter une colonne sous contrainte d'unicité. Le refus tient sur les trois moteurs, PostgreSQL compris — une migration engendrée doit s'appliquer partout, et une règle est une règle — et renvoie à `rbs migrate new` pour l'index unique écrit à la main. |
+| `references` | SQLite ne sait pas ajouter de clé étrangère à une table existante. Ajoutez la colonne en `uuid:optional`, puis posez la contrainte à la main. |
+| `decimal` sous SQLite | Le refus que `rbs generate crud` prononce, au mot près : sqlx-sqlite écarte délibérément le décimal exact, quel que soit le chemin par lequel la colonne arrive. |
+
+Une table dont aucun module ne porte l'entité est refusée elle aussi, et le message nomme
+ce qui a été cherché — `src/*/model.rs` — et les tables que le projet déclare. La recherche
+passe par cet inventaire plutôt que par un répertoire : la table `users` d'un projet
+authentifié vit sous `src/auth/model.rs`, et non dans un `src/users/`.
+
+Un champ `decimal` demande toujours au manifeste ce que le type exige, par les mêmes
+actions de plan que `generate crud` : `rust_decimal` avec `serde-str`, et la feature
+`with-rust_decimal` de `sea-orm`.
+
+### Ce qu'elle affiche sans l'écrire
+
+La migration apprend la colonne à la base ; l'entité et ses DTO ont encore à l'apprendre.
+`model.rs` et `dto.rs` ne portent pas d'ancre, et le CLI ne réécrit pas d'AST — la commande
+affiche donc les lignes à coller, et n'en écrit aucune :
+
+```text
+$ rbs generate migration ajoute_statut --add-column articles --fields "statut:enum(draft,published):optional,prix:decimal:optional" --dry-run
+plan pour /private/tmp/rbs-demo/demo
+
+  + migration/src/m20260916_133333_ajoute_statut.rs   créé
+  ~ migration/src/lib.rs                              modifié
+  ~ Cargo.toml                                        modifié
+
+  1 à créer, 2 à modifier
+
+  à coller dans src/articles/model.rs :
+
+    // aux imports, en tête du fichier
+    use serde::{Deserialize, Serialize};
+    use utoipa::ToSchema;
+
+    /// Valeurs acceptées par la colonne « statut ».
+    ///
+    /// Une valeur de plus s'ajoute ici et dans le `CHECK` que porte une migration nouvelle :
+    /// la base refuse d'elle-même celles qu'elle ne connaît pas. Plus longue que toutes les
+    /// actuelles, elle demande en troisième lieu d'élargir le `StringLen::N` ci-dessous, et
+    /// avec lui le `string_len` de cette migration.
+    #[derive(
+        Clone, Copy, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, Deserialize, Serialize, ToSchema,
+    )]
+    #[sea_orm(rs_type = "String", db_type = "String(StringLen::N(9))")]
+    pub enum Statut {
+        #[sea_orm(string_value = "draft")]
+        #[serde(rename = "draft")]
+        Draft,
+        #[sea_orm(string_value = "published")]
+        #[serde(rename = "published")]
+        Published,
+    }
+
+    // dans `struct Model`
+        pub statut: Option<Statut>,
+        pub prix: Option<Decimal>,
+
+  à coller dans src/articles/dto.rs :
+
+    // aux imports, en tête du fichier
+    use sea_orm::prelude::Decimal;
+
+    // remplacez `use super::model::Model;` par :
+    use super::model::{Model, Statut};
+
+    // dans `CreateArticle`, `UpdateArticle` et `ArticleResponse`
+        pub statut: Option<Statut>,
+        #[schema(value_type = Option<String>, format = "decimal")]
+        pub prix: Option<Decimal>,
+
+  rien n'a été écrit (--dry-run)
+```
+
+Toute colonne ajoutée étant optionnelle, les trois DTO portent la même ligne `Option<T>` —
+une colonne obligatoire les aurait distingués. Pour un champ `enum(a,b,c)`, le bloc du
+modèle porte en plus le type `DeriveActiveEnum` à coller, tel que `generate crud` le rend :
+le `CHECK` de la migration et les variantes du modèle décrivent une seule et même colonne,
+et un modèle qui divergerait refuserait une valeur que la base porte, ou en offrirait une
+qu'elle rejette.
+
+Les blocs sont calculés contre les fichiers de ce module-là, et non affichés à l'aveugle :
+les suivre à la lettre compile. N'y paraissent que les `use` qui lui manquent réellement —
+ceux de `serde` et d'`utoipa` qu'un `DeriveActiveEnum` réclame, que le modèle engendré ne
+porte que s'il avait déjà une énumération, et le nom de `sea_orm::prelude` qu'une colonne
+`date` ou `decimal` demande aux DTO. L'import du modèle est donné comme une **modification**
+et non comme un ajout : la ligne existe déjà, et le type de l'énumération s'y joint —
+l'ajouter entière la déclarerait deux fois. Un module qui porte déjà une énumération ne se
+voit proposer ni l'un ni l'autre.
+
+Comme les autres sous-commandes, celle-ci respecte `--dry-run`, `--json` et `--force`, et
+passe par le même plan : rien n'est écrit tant qu'il n'est pas entier, et un échec partiel
+restaure ce qu'il a touché.
+
 ## La grammaire de `--fields`
 
 Un champ par virgule ; à l'intérieur d'un champ, les deux-points séparent un nom, un type,
@@ -206,9 +344,9 @@ unique "` et `"titre:string,email:string:unique"` décrivent les deux mêmes cha
 `--fields` vide ne déclare aucun champ. Les champs gardent leur ordre de déclaration dans
 l'entité comme dans la migration.
 
-### Les huit types
+### Les onze types
 
-Il n'y en a pas un neuvième, ni de type `email` : un format de chaîne n'est pas un type de
+Il n'y en a pas un douzième, ni de type `email` : un format de chaîne n'est pas un type de
 colonne.
 
 | Type | Rust | Migration |
@@ -217,14 +355,43 @@ colonne.
 | `text` | `String` | `text()` |
 | `int` | `i32` | `integer()` |
 | `float` | `f64` | `double()` |
+| `decimal` | `Decimal` | `decimal_len(19, 4)` |
 | `bool` | `bool` | `boolean()` |
 | `uuid` | `Uuid` | `uuid()` |
 | `datetime` | `DateTimeWithTimeZone` | `timestamp_with_time_zone()` |
+| `date` | `Date` | `date()` |
+| `enum(a,b,c)` | une énumération nommée d'après le champ | `string_len(n)` sous un `CHECK` |
 
 `string` et `text` partagent leur type Rust : `text` est donc le seul à porter en plus un
 type de colonne explicite sur l'entité, sans quoi SeaORM déduirait un `varchar`.
 
-Le huitième, `references`, n'est pas un scalaire du tout : il pointe la colonne vers une
+`float` et `decimal` portent tous deux un nombre à virgule, et seul le second le porte
+exactement : `rust_decimal::Decimal`, une colonne `DECIMAL(19, 4)` — écrite en toutes
+lettres, faute de quoi MySQL ramènerait un `DECIMAL` nu à `DECIMAL(10, 0)` — et une chaîne
+en JSON (`"12.5000"`), pour qu'un client JavaScript n'y perde aucun centime. En déclarer un
+ajoute au manifeste du projet `rust_decimal` et la feature `with-rust_decimal` de sea-orm ;
+la forme en chaîne y est épinglée par `serde-str` plutôt que laissée au défaut de la crate, et
+un nombre JSON est refusé plutôt qu'arrondi en silence — ce qui est tout l'objet du type.
+**SQLite le refuse**, avant toute écriture : sqlx-sqlite écarte délibérément le décimal
+exact — son affinité `NUMERIC` ne garde que quinze chiffres significatifs — et sea-query ne
+lie un `Decimal` que pour PostgreSQL et MySQL. Le refus nomme le champ et propose les deux
+replis : `float`, ou un entier en centimes. Un projet qui a déjà épinglé `rust_decimal`
+lui-même, dans une autre version, voit toute la génération refusée avant la moindre
+écriture : une version choisie par quelqu'un n'est jamais réécrite, et le refus nomme les
+deux. Alignez l'épingle sur la version demandée, ou retirez-la et laissez la génération la
+déclarer.
+
+`enum(a,b,c)` est le seul type à porter ses propres valeurs. Elles sont en snake_case,
+distinctes, et au moins une. Le modèle déclare une énumération nommée d'après le champ en
+PascalCase — `status` donne `Status` —, une variante par valeur, et la migration borne la
+colonne à la plus longue valeur sous un `CHECK (status IN ('draft', 'published'))` que
+tiennent PostgreSQL, MySQL et SQLite. Une colonne `optional` reste nullable : un `NULL` passe
+un `CHECK`. Un champ dont la forme PascalCase heurte un type que le modèle déclare déjà —
+`Model`, `ActiveModel`, `Entity`, `Column`, `PrimaryKey`, `Relation` — est refusé avant toute
+écriture. Une telle colonne se filtre par `eq`, `in` et `is_null`, et non par les comparaisons
+d'une colonne ordonnée ; [Filtrage](../guides/filtering.md) en donne la table.
+
+Le onzième, `references`, n'est pas un scalaire du tout : il pointe la colonne vers une
 autre entité plutôt que de lui donner un type propre.
 
 ```text
@@ -307,13 +474,13 @@ Toutes les fautes de la ligne sont collectées en une passe : la ligne se corrig
 plutôt qu'une faute par exécution. Un champ qui en porte deux ne remonte que la première.
 
 ```text
-$ rbs generate crud tags --fields "Title:string,type:text,prix:decimal,slug:string:unique:index,email:string,email:int" --dry-run
+$ rbs generate crud tags --fields "Title:string,type:text,prix:money,slug:string:unique:index,email:string,email:int" --dry-run
 erreur : champ 1 « Title » — le nom doit être en snake_case : minuscules ASCII, chiffres et souligné
         → essayez « title »
 erreur : champ 2 « type » — « type » est un mot-clé Rust
         → essayez « kind » ou « type_ »
-erreur : champ 3 « prix » — type inconnu « decimal »
-        → string, int, float, bool, uuid, datetime, text, references:<table>
+erreur : champ 3 « prix » — type inconnu « money »
+        → string, int, float, decimal, bool, uuid, datetime, date, text, references:<table>, enum(a,b,c)
 erreur : champ 4 « slug » — « index » redondant : « unique » pose déjà un index
         → retirez « index »
 erreur : champ 6 « email » — « email » est déjà déclaré au champ 5
@@ -353,10 +520,14 @@ plan pour /private/tmp/rbs-demo/blog
   + src/articles/mod.rs                                 créé
   + src/articles/model.rs                               créé
   + src/articles/dto.rs                                 créé
+  + src/articles/filter.rs                              créé
   + src/articles/repository.rs                          créé
   + src/articles/service.rs                             créé
   + src/articles/controller.rs                          créé
-  + src/articles/tests.rs                               créé
+  + src/articles/tests/mod.rs                           créé
+  + src/articles/tests/lifecycle.rs                     créé
+  + src/articles/tests/errors.rs                        créé
+  + src/articles/tests/filter.rs                        créé
   + src/seeds/articles.rs                               créé
   + migration/src/m20260830_110925_create_articles.rs   créé
   ~ src/lib.rs                                          modifié
@@ -367,7 +538,7 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  9 à créer, 7 à modifier
+  13 à créer, 7 à modifier
 
   rien n'a été écrit (--dry-run)
 ```
@@ -381,10 +552,14 @@ plan pour /private/tmp/rbs-demo/blog
   + src/articles/mod.rs                                 créé
   + src/articles/model.rs                               créé
   + src/articles/dto.rs                                 créé
+  + src/articles/filter.rs                              créé
   + src/articles/repository.rs                          créé
   + src/articles/service.rs                             créé
   + src/articles/controller.rs                          créé
-  + src/articles/tests.rs                               créé
+  + src/articles/tests/mod.rs                           créé
+  + src/articles/tests/lifecycle.rs                     créé
+  + src/articles/tests/errors.rs                        créé
+  + src/articles/tests/filter.rs                        créé
   + src/seeds/articles.rs                               créé
   + migration/src/m20260830_110925_create_articles.rs   créé
   ~ src/lib.rs                                          modifié
@@ -395,13 +570,13 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  9 à créer, 7 à modifier
-✓ articles générée — 9 créés, 7 modifiés
+  13 à créer, 7 à modifier
+✓ articles générée — 13 créés, 7 modifiés
 
   la migration m20260830_110925_create_articles reste à appliquer avant de lancer le projet
 ```
 
-Neuf fichiers créés, sept modifiés par leurs ancres. La feature est ensuite inscrite dans le
+Treize fichiers créés, sept modifiés par leurs ancres. La feature est ensuite inscrite dans le
 manifeste, ce qui rend la commande idempotente :
 
 ```text

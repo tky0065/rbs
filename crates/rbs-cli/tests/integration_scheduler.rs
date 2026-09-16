@@ -15,29 +15,49 @@ use tempfile::TempDir;
 
 mod common;
 
-/// Ce que le fragment livre et que `cargo test` joue sans base.
+/// Ce que le fragment livre et que `cargo test` joue sans base, toutes dans le
+/// sous-module `expression`.
 const TESTS_ORDINAIRES: [&str; 3] = [
     "a_five_field_expression_means_the_same_as_its_six_field_form",
     "an_expression_of_any_other_length_is_refused_by_name",
     "an_unparsable_expression_is_refused_even_with_the_right_field_count",
 ];
 
-/// Ce qu'il livre et qui joint la base.
-const TESTS_SOUS_CONTENEUR: [&str; 10] = [
-    "a_newly_declared_schedule_is_inserted_with_its_next_occurrence",
-    "a_schedule_removed_from_the_code_is_removed_from_the_table",
-    "a_redeploy_does_not_move_the_next_occurrence_of_a_known_schedule",
-    "a_changed_expression_moves_the_next_occurrence",
-    "a_due_schedule_is_not_moved_by_a_changed_expression",
-    "an_unparsable_expression_stops_the_reconciliation",
-    "a_due_schedule_enqueues_its_job_and_moves_on",
-    "a_schedule_that_is_not_due_is_left_alone",
-    "concurrent_tickers_trigger_a_due_schedule_exactly_once",
-    "the_ticker_stops_when_shutdown_is_requested",
+/// Ce qu'il livre et qui joint la base, nommé avec le sous-module — `sync` ou `ticker` —
+/// où le découpage des tests l'a rangé.
+const TESTS_SOUS_CONTENEUR: [(&str, &str); 10] = [
+    (
+        "sync",
+        "a_newly_declared_schedule_is_inserted_with_its_next_occurrence",
+    ),
+    (
+        "sync",
+        "a_schedule_removed_from_the_code_is_removed_from_the_table",
+    ),
+    (
+        "sync",
+        "a_redeploy_does_not_move_the_next_occurrence_of_a_known_schedule",
+    ),
+    ("sync", "a_changed_expression_moves_the_next_occurrence"),
+    ("sync", "an_unparsable_expression_stops_the_reconciliation"),
+    (
+        "ticker",
+        "a_due_schedule_is_not_moved_by_a_changed_expression",
+    ),
+    ("ticker", "a_due_schedule_enqueues_its_job_and_moves_on"),
+    ("ticker", "a_schedule_that_is_not_due_is_left_alone"),
+    (
+        "ticker",
+        "concurrent_tickers_trigger_a_due_schedule_exactly_once",
+    ),
+    ("ticker", "the_ticker_stops_when_shutdown_is_requested"),
 ];
 
 /// Le test de concurrence, exigé nommément sur chacun des trois moteurs.
-const CONCURRENCE: &str = "concurrent_tickers_trigger_a_due_schedule_exactly_once";
+const CONCURRENCE: (&str, &str) = (
+    "ticker",
+    "concurrent_tickers_trigger_a_due_schedule_exactly_once",
+);
 
 #[test]
 #[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
@@ -60,7 +80,9 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     assert!(abouti, "`cargo test` du projet a échoué :\n{ordinaires}");
     for test in TESTS_ORDINAIRES {
         assert!(
-            ordinaires.contains(&format!("test modules::scheduler::tests::{test} ... ok")),
+            ordinaires.contains(&format!(
+                "test modules::scheduler::tests::expression::{test} ... ok"
+            )),
             "`{test}` n'a pas été exécuté :\n{ordinaires}"
         );
     }
@@ -74,9 +96,11 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     // `cargo test -- --ignored` sort en 0 même quand il ne filtre **aucun** test : sans
     // ces neuf lignes, un fragment qui cesserait de livrer ses tests laisserait celui-ci
     // au vert sans qu'une seule transaction ait été ouverte.
-    for test in TESTS_SOUS_CONTENEUR {
+    for (sous_module, test) in TESTS_SOUS_CONTENEUR {
         assert!(
-            sous_conteneur.contains(&format!("test modules::scheduler::tests::{test} ... ok")),
+            sous_conteneur.contains(&format!(
+                "test modules::scheduler::tests::{sous_module}::{test} ... ok"
+            )),
             "`{test}` n'a pas été exécuté :\n{sous_conteneur}"
         );
     }
@@ -133,9 +157,10 @@ fn a_due_schedule_is_triggered_once_on_the_three_engines() {
             abouti,
             "les tests du projet ont échoué sur {moteur} :\n{joues}"
         );
+        let (sous_module, test) = CONCURRENCE;
         assert!(
             joues.contains(&format!(
-                "test modules::scheduler::tests::{CONCURRENCE} ... ok"
+                "test modules::scheduler::tests::{sous_module}::{test} ... ok"
             )),
             "le test de concurrence n'a pas été joué sur {moteur} :\n{joues}"
         );

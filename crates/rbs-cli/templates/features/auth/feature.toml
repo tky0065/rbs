@@ -98,12 +98,56 @@ source      = "tests/mod.rs.jinja"
 destination = "src/auth/tests/mod.rs"
 
 [[files]]
-source      = "tests/session.rs.jinja"
-destination = "src/auth/tests/session.rs"
+source      = "tests/change.rs.jinja"
+destination = "src/auth/tests/change.rs"
 
 [[files]]
-source      = "tests/password.rs.jinja"
-destination = "src/auth/tests/password.rs"
+source      = "tests/guard.rs.jinja"
+destination = "src/auth/tests/guard.rs"
+
+[[files]]
+source      = "tests/http.rs.jinja"
+destination = "src/auth/tests/http.rs"
+
+[[files]]
+source      = "tests/login.rs.jinja"
+destination = "src/auth/tests/login.rs"
+
+[[files]]
+source      = "tests/logout.rs.jinja"
+destination = "src/auth/tests/logout.rs"
+
+[[files]]
+source      = "tests/openapi.rs.jinja"
+destination = "src/auth/tests/openapi.rs"
+
+[[files]]
+source      = "tests/refresh.rs.jinja"
+destination = "src/auth/tests/refresh.rs"
+
+[[files]]
+source      = "tests/registration.rs.jinja"
+destination = "src/auth/tests/registration.rs"
+
+[[files]]
+source      = "tests/replay.rs.jinja"
+destination = "src/auth/tests/replay.rs"
+
+[[files]]
+source      = "tests/reset.rs.jinja"
+destination = "src/auth/tests/reset.rs"
+
+[[files]]
+source      = "tests/roles.rs.jinja"
+destination = "src/auth/tests/roles.rs"
+
+[[files]]
+source      = "tests/sessions.rs.jinja"
+destination = "src/auth/tests/sessions.rs"
+
+[[files]]
+source      = "tests/tokens.rs.jinja"
+destination = "src/auth/tests/tokens.rs"
 
 [[files]]
 source      = "tests/verification.rs.jinja"
@@ -173,6 +217,11 @@ verification_ttl_secs = 86400
 # L'application du client, et non ce serveur : rbs engendre une API, et le lien du
 # courriel mène à l'écran qui postera le jeton.
 app_url = "http://localhost:3000"
+
+# Une adresse non vérifiée ne se connecte pas : sans cette règle, `register` suivi de
+# `login` avec le même mot de passe dirait si l'adresse était déjà inscrite. `false`
+# connecte dès l'inscription, et rouvre cet écart.
+login_requires_verification = true
 """
 
 [[env]]

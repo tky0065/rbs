@@ -95,17 +95,19 @@ mod tests {
     fn each_type_of_the_grammar_projects_into_the_entity() {
         let rendered = entity(
             "samples",
-            "title:string,quantity:int,price:float,active:bool,owner:uuid,\
-             published_at:datetime,body:text",
+            "title:string,quantity:int,ratio:float,price:decimal,active:bool,owner:uuid,\
+             published_at:datetime,due:date,body:text",
         );
 
         for expected in [
             "pub title: String,",
             "pub quantity: i32,",
-            "pub price: f64,",
+            "pub ratio: f64,",
+            "pub price: Decimal,",
             "pub active: bool,",
             "pub owner: Uuid,",
             "pub published_at: DateTimeWithTimeZone,",
+            "pub due: Date,",
             "pub body: String,",
         ] {
             assert!(
@@ -519,6 +521,81 @@ mod tests {
         assert!(
             !rendered.contains("deleted_at"),
             "sans le drapeau, rien n'est injecté :\n{rendered}"
+        );
+    }
+
+    /// Un champ `enum` déclare son propre type avant le modèle : c'est ce type que la
+    /// colonne porte, et que les DTO comme le filtre nomment ensuite.
+    #[test]
+    fn an_enum_field_declares_its_active_enum_before_the_model() {
+        let rendered = entity("articles", "status:enum(draft,published)");
+
+        let (avant, _) = rendered
+            .split_once("pub struct Model {")
+            .expect("le modèle doit se rendre");
+
+        for attendu in [
+            "#[sea_orm(rs_type = \"String\", db_type = \"String(StringLen::N(9))\")]",
+            "pub enum Status {",
+            "#[sea_orm(string_value = \"draft\")]",
+            "#[serde(rename = \"draft\")]",
+            "    Draft,",
+            "#[sea_orm(string_value = \"published\")]",
+            "    Published,",
+        ] {
+            assert!(
+                avant.contains(attendu),
+                "« {attendu} » absent de la déclaration :\n{rendered}"
+            );
+        }
+
+        assert!(
+            rendered.contains("pub status: Status,"),
+            "la colonne ne porte pas son énumération :\n{rendered}"
+        );
+    }
+
+    /// Les DTO sérialisent et documentent ce type : sans ces dérives, le projet engendré
+    /// ne compilerait pas dès le premier champ `enum`.
+    #[test]
+    fn the_generated_enumeration_derives_what_the_dtos_need() {
+        let rendered = entity("articles", "status:enum(draft,published)");
+
+        assert!(
+            rendered.contains(
+                "#[derive(\n    Clone, Copy, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, \
+                 Deserialize, Serialize, ToSchema,\n)]"
+            ),
+            "dérives inattendues :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("use serde::{Deserialize, Serialize};"),
+            "l'import de serde manque :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("use utoipa::ToSchema;"),
+            "l'import d'utoipa manque :\n{rendered}"
+        );
+    }
+
+    /// Le projet engendré compile sous `-D warnings` : un `use` qui ne sert à rien y est
+    /// une erreur, et une entité sans énumération n'en a aucun besoin.
+    #[test]
+    fn an_entity_without_an_enum_imports_neither_serde_nor_utoipa() {
+        let rendered = entity("articles", "title:string");
+
+        assert!(!rendered.contains("use serde::"), "{rendered}");
+        assert!(!rendered.contains("use utoipa::"), "{rendered}");
+        assert!(!rendered.contains("DeriveActiveEnum"), "{rendered}");
+    }
+
+    #[test]
+    fn an_optional_enum_field_becomes_an_option_of_its_enumeration() {
+        let rendered = entity("articles", "status:enum(draft,published):optional");
+
+        assert!(
+            rendered.contains("pub status: Option<Status>,"),
+            "{rendered}"
         );
     }
 }

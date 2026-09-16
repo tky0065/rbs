@@ -95,6 +95,11 @@ verification_ttl_secs = 86400
 # courriel mène à l'écran qui postera le jeton.
 app_url = "http://localhost:3000"
 
+# Une adresse non vérifiée ne se connecte pas : sans cette règle, `register` suivi de
+# `login` avec le même mot de passe dirait si l'adresse était déjà inscrite. `false`
+# connecte dès l'inscription, et rouvre cet écart.
+login_requires_verification = true
+
 # region: webhooks
 [webhooks]
 # Temps laissé au receveur pour répondre. Au-delà, la livraison compte pour un échec et

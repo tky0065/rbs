@@ -5,7 +5,7 @@ title: Scheduler
 
 # Le déclenchement calendaire
 
-`rbs add scheduler` donne un calendrier à un projet : six fichiers sous `src/modules/scheduler/`,
+`rbs add scheduler` donne un calendrier à un projet : neuf fichiers sous `src/modules/scheduler/`,
 une migration pour la table `schedules`, et un ticker démarré avec le serveur. C'est la
 réponse à la dernière ligne du [guide des jobs](./jobs.md) — une file sait exécuter un
 travail et le réessayer, mais rien ne l'enfile sinon un événement que vous écrivez.
@@ -31,10 +31,16 @@ plan pour …/demo
   + src/modules/jobs/mod.rs                              créé
   + src/modules/jobs/config.rs                           créé
   + src/modules/jobs/model.rs                            créé
-  + src/modules/jobs/queue.rs                            créé
+  + src/modules/jobs/queue/mod.rs                        créé
+  + src/modules/jobs/queue/reserve.rs                    créé
+  + src/modules/jobs/queue/outcome.rs                    créé
   + src/modules/jobs/worker.rs                           créé
   + src/modules/jobs/demo.rs                             créé
-  + src/modules/jobs/tests.rs                            créé
+  + src/modules/jobs/tests/mod.rs                        créé
+  + src/modules/jobs/tests/lease.rs                      créé
+  + src/modules/jobs/tests/reservation.rs                créé
+  + src/modules/jobs/tests/retry.rs                      créé
+  + src/modules/jobs/tests/worker.rs                     créé
   + migration/src/m20260913_132217_create_jobs.rs        créé
   ~ migration/src/lib.rs                                 modifié
   + src/modules/mod.rs                                   créé
@@ -47,12 +53,15 @@ plan pour …/demo
   + src/modules/scheduler/model.rs                       créé
   + src/modules/scheduler/sync.rs                        créé
   + src/modules/scheduler/ticker.rs                      créé
-  + src/modules/scheduler/tests.rs                       créé
+  + src/modules/scheduler/tests/mod.rs                   créé
+  + src/modules/scheduler/tests/expression.rs            créé
+  + src/modules/scheduler/tests/sync.rs                  créé
+  + src/modules/scheduler/tests/ticker.rs                créé
   + migration/src/m20260913_132217_create_schedules.rs   créé
   ~ AGENTS.md                                            modifié
 
-  16 à créer, 6 à modifier
-✓ scheduler installée — 16 créés, 6 modifiés
+  25 à créer, 6 à modifier
+✓ scheduler installée — 25 créés, 6 modifiés
 
   rbs migrate up, puis `rbs generate job <nom> --every "<cron>"` pour déclarer une échéance dans src/modules/scheduler/mod.rs — les expressions sont évaluées en UTC
 ```
@@ -242,9 +251,9 @@ la main, si bien que `main` ne l'attend pas trente secondes avant de sortir.
 
 ## Les tests
 
-Le `src/modules/scheduler/tests.rs` engendré tourne contre une vraie base, comme tout test qui en
-touche une — voir le [guide des tests](./testing.md). Cinq d'entre eux sont ceux qu'il vaut
-la peine de garder si vous éditez le fragment :
+Le `src/modules/scheduler/tests/` engendré tourne contre une vraie base, comme tout test qui
+en touche une — voir le [guide des tests](./testing.md). Cinq d'entre eux sont ceux qu'il
+vaut la peine de garder si vous éditez le fragment :
 
 - une expression à cinq champs et sa forme à six donnent la même prochaine occurrence, et
   toute autre longueur est refusée ;

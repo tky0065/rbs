@@ -2,6 +2,7 @@ use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use rbs_core::{Error, HasCoreState, Identity, Result};
 use sea_orm::ActiveEnum;
+use sea_orm::prelude::DateTimeWithTimeZone;
 
 use super::model::Role;
 use super::repository;
@@ -50,8 +51,9 @@ impl RequireRole for Identity {
 
 /// Une identité dont l'adresse est prouvée.
 ///
-/// À poser sur les routes que vous jugez sensibles : `login` ne réclame pas la
-/// vérification, et c'est ici que votre projet décide où elle devient obligatoire.
+/// Sous le défaut `login_requires_verification = true`, seul un compte vérifié se
+/// connecte : la garde sert le projet qui a mis la clé à `false` pour connecter dès
+/// l'inscription, et décide alors des routes où la vérification devient obligatoire.
 ///
 /// L'état est relu en base et non lu dans le jeton : le jeton d'accès porte `sub` et
 /// `role`, et y mettre la vérification la figerait pour sa durée — une adresse tout juste
@@ -66,6 +68,15 @@ impl RequireRole for Identity {
 #[allow(dead_code)]
 pub struct VerifiedIdentity(pub Identity);
 
+/// La date de vérification du compte qu'`accept_in` a relu pour juger le jeton, laissée
+/// dans la requête.
+///
+/// La date seule, et non le compte : la garde ne lit rien d'autre, et le hash du mot de
+/// passe n'a pas à voyager dans les extensions de chaque requête authentifiée. Un type
+/// propre au fragment plutôt qu'une date nue : seule l'acceptation peut l'y avoir mise.
+#[derive(Clone)]
+pub(super) struct Accepted(pub(super) Option<DateTimeWithTimeZone>);
+
 impl FromRequestParts<AppState> for VerifiedIdentity {
     type Rejection = Error;
 
@@ -74,15 +85,22 @@ impl FromRequestParts<AppState> for VerifiedIdentity {
         // à qui n'est pas identifié.
         let identite = Identity::from_request_parts(parts, state).await?;
 
-        let id = identite.user_uuid()?;
+        // `accept_in` vient de relire le compte pour juger le jeton, et en a laissé là la
+        // date de vérification.
+        let verifiee = match parts.extensions.remove::<Accepted>() {
+            Some(Accepted(date)) => date,
+            // Un `accept_in` réécrit qui ne la dépose plus : relire plutôt que laisser
+            // passer. Un compte disparu ne vaut pas mieux qu'un jeton invalide —
+            // `Forbidden` laisserait entendre qu'il existe.
+            None => {
+                repository::find(state.core().db(), identite.user_uuid()?)
+                    .await?
+                    .ok_or(Error::Unauthorized)?
+                    .email_verified_at
+            }
+        };
 
-        // Un jeton valide dont le compte a disparu ne vaut pas mieux qu'un jeton
-        // invalide : `Forbidden` laisserait entendre que le compte existe.
-        let utilisateur = repository::find(state.core().db(), id)
-            .await?
-            .ok_or(Error::Unauthorized)?;
-
-        if utilisateur.email_verified_at.is_none() {
+        if verifiee.is_none() {
             return Err(Error::Forbidden);
         }
 

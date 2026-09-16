@@ -28,21 +28,23 @@ storage : stockage d'objets : un trait à cinq méthodes, deux backends — fich
 
 plan pour …/demo
 
-  + src/modules/storage/mod.rs     créé
-  + src/modules/storage/files.rs   créé
-  + src/modules/storage/s3.rs      créé
-  + src/modules/storage/tests.rs   créé
-  + src/modules/mod.rs             créé
-  ~ src/lib.rs                     modifié
-  ~ src/state.rs                   modifié
-  ~ src/health/controller.rs       modifié
-  ~ Cargo.toml                     modifié
-  ~ config/default.toml            modifié
-  ~ .env.example                   modifié
-  ~ AGENTS.md                      modifié
+  + src/modules/storage/mod.rs           créé
+  + src/modules/storage/files.rs         créé
+  + src/modules/storage/s3.rs            créé
+  + src/modules/storage/tests/mod.rs     créé
+  + src/modules/storage/tests/files.rs   créé
+  + src/modules/storage/tests/s3.rs      créé
+  + src/modules/mod.rs                   créé
+  ~ src/lib.rs                           modifié
+  ~ src/state.rs                         modifié
+  ~ src/health/controller.rs             modifié
+  ~ Cargo.toml                           modifié
+  ~ config/default.toml                  modifié
+  ~ .env.example                         modifié
+  ~ AGENTS.md                            modifié
 
-  5 à créer, 7 à modifier
-✓ storage installée — 5 créés, 7 modifiés
+  7 à créer, 7 à modifier
+✓ storage installée — 7 créés, 7 modifiés
 
   les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example
 ```
@@ -73,19 +75,23 @@ plan pour …/demo
   + src/uploads/repository.rs                          créé
   + src/uploads/service.rs                             créé
   + src/uploads/controller.rs                          créé
-  + src/uploads/tests.rs                                créé
+  + src/uploads/tests/mod.rs                           créé
+  + src/uploads/tests/lifecycle.rs                     créé
+  + src/uploads/tests/errors.rs                        créé
+  + src/uploads/tests/filter.rs                        créé
+  + src/uploads/tests/content.rs                       créé
   + src/seeds/uploads.rs                               créé
   + migration/src/m20260909_094423_create_uploads.rs   créé
   ~ src/lib.rs                                         modifié
   ~ src/router.rs                                      modifié
-  ~ src/openapi.rs                                      modifié
+  ~ src/openapi.rs                                     modifié
   ~ migration/src/lib.rs                               modifié
-  ~ src/seeds/main.rs                                   modifié
-  ~ Cargo.toml                                          modifié
-  ~ AGENTS.md                                           modifié
+  ~ src/seeds/main.rs                                  modifié
+  ~ Cargo.toml                                         modifié
+  ~ AGENTS.md                                          modifié
 
-  10 à créer, 7 à modifier
-✓ uploads générée — 10 créés, 7 modifiés
+  14 à créer, 7 à modifier
+✓ uploads générée — 14 créés, 7 modifiés
 
   la migration m20260909_094423_create_uploads reste à appliquer avant de lancer le projet
 ```
@@ -272,7 +278,7 @@ would be thrown away.
   install.
 - [`rbs generate`](../cli/generate.md) has the full grammar of `--with-upload`, including
   how it combines with `--role` and `--soft-delete`.
-- [Testing](../guides/testing.md) is the harness `uploads/tests.rs` runs against, and
+- [Testing](../guides/testing.md) is the harness `uploads/tests/` runs against, and
   the `storage` fragment's own `round` test this page's extracts never open.
 - [Sending mail](./mail.md) is the next tutorial: the moment this page's deposit
   succeeds, its owner gets a mail confirming it.

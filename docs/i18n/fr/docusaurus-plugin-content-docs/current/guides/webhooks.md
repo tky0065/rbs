@@ -5,7 +5,7 @@ title: Webhooks
 
 # Webhooks sortants
 
-`rbs add webhooks` donne au projet de quoi dire au dehors ce qui vient d'arriver : onze
+`rbs add webhooks` donne au projet de quoi dire au dehors ce qui vient d'arriver : seize
 fichiers sous `src/modules/webhooks/` — `target.rs` compris —, une migration pour la table
 `webhook_subscriptions`, trois routes, et un POST HTTP signé vers chaque abonné qui écoute.
 
@@ -44,12 +44,17 @@ plan pour …/demo
   + src/modules/webhooks/signature.rs                                créé
   + src/modules/webhooks/target.rs                                   créé
   + src/modules/webhooks/delivery.rs                                 créé
-  + src/modules/webhooks/tests.rs                                    créé
+  + src/modules/webhooks/tests/mod.rs                                créé
+  + src/modules/webhooks/tests/blocked.rs                            créé
+  + src/modules/webhooks/tests/emission.rs                           créé
+  + src/modules/webhooks/tests/routes.rs                             créé
+  + src/modules/webhooks/tests/signature.rs                          créé
+  + src/modules/webhooks/tests/target.rs                             créé
   + migration/src/m20260913_132216_create_webhook_subscriptions.rs   créé
   ~ AGENTS.md                                                        modifié
 
-  56 à créer, 12 à modifier
-✓ webhooks installée — 56 créés, 12 modifiés
+  78 à créer, 12 à modifier
+✓ webhooks installée — 78 créés, 12 modifiés
 
   rbs migrate up, inscrivez un abonné par POST /webhooks/subscriptions — son secret n'est rendu qu'à cet instant — puis appelez webhooks::emit dans vos services
 ```
@@ -108,10 +113,13 @@ ouvrir une route à tout compte, remplacez `Role::Admin` par `Role::User` sur so
 L'URL d'un abonnement est vérifiée deux fois. À l'inscription, hors du profil
 `development`, elle doit être en `https` et son hôte ne peut être ni une adresse de
 boucle locale, privée, de lien local ou de CGNAT, ni `localhost` ; la requête reçoit un
-400 qui nomme la règle. À la livraison, l'hôte est résolu et toute adresse non publique
-est écartée, avant l'envoi puis de nouveau dans le résolveur du client HTTP, si bien qu'un
-nom qui change de réponse entre les deux n'atteint jamais un service interne. Les
-redirections ne sont jamais suivies : un 3xx est une livraison échouée comme tout autre
+400 qui nomme la règle. À la livraison, l'hôte est résolu une seule fois, dans le
+résolveur du client HTTP, qui écarte toute adresse non publique au moment de la
+connexion : aucun nom ne peut changer de réponse entre le contrôle et l'envoi, ni donc
+atteindre un service interne. Le client des livraisons ignore les réglages de mandataire
+de l'environnement — `HTTP_PROXY`, `HTTPS_PROXY`, `ALL_PROXY` : derrière un mandataire, une
+livraison HTTPS part en tunnel `CONNECT`, c'est le mandataire qui résout la cible, et le
+résolveur ne verrait jamais que l'hôte du mandataire. Les redirections ne sont jamais suivies : un 3xx est une livraison échouée comme tout autre
 hors 2xx. Une livraison dont la cible est interdite est abandonnée, non réessayée — rien ne
 changerait au cinquième essai.
 
@@ -243,7 +251,7 @@ démarrage plutôt que de se découvrir six heures plus tard dans le journal d'u
 
 ## Les tests
 
-Le `src/modules/webhooks/tests.rs` engendré couvre les deux moitiés séparément. La signature est
+Le `src/modules/webhooks/tests/` engendré couvre les deux moitiés séparément. La signature est
 prouvée contre **un vecteur calculé hors de Rust**, si bien que le test survivrait à une
 réécriture du code de signature et attraperait un changement de schéma ; la correspondance
 des motifs est prouvée sur ses trois formes.

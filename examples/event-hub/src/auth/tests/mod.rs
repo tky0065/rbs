@@ -1,17 +1,29 @@
 use axum::Router;
-use axum::body::{Body, to_bytes};
+use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use sea_orm::{ColumnTrait, DatabaseConnection, EntityTrait, PaginatorTrait, QueryFilter};
 use serde_json::{Value, json};
-use tower::ServiceExt;
 use uuid::Uuid;
 
 use crate::router::router;
 use crate::state::AppState;
 
-mod password;
-mod session;
+mod change;
+mod guard;
+mod http;
+mod login;
+mod logout;
+mod openapi;
+mod refresh;
+mod registration;
+mod replay;
+mod reset;
+mod roles;
+mod sessions;
+mod tokens;
 mod verification;
+
+use http::*;
 
 /// Un mot de passe qui satisfait la validation du DTO, partagé par les tests.
 const PASSWORD: &str = "un mot de passe assez long";
@@ -62,73 +74,6 @@ pub(super) async fn one_time_tokens_count_for(db: &DatabaseConnection, user_id: 
         .count(db)
         .await
         .expect("le comptage aboutit")
-}
-
-/// Fait traverser le routeur à `requete`, et rend son statut avec son corps.
-async fn call(api: &Router, requete: Request<Body>) -> (StatusCode, Value) {
-    let response = api
-        .clone()
-        .oneshot(requete)
-        .await
-        .expect("l'application doit répondre");
-    let status = response.status();
-    let octets = to_bytes(response.into_body(), usize::MAX)
-        .await
-        .expect("corps de réponse lisible");
-
-    // Une réponse sans corps se lit `null` plutôt que d'arrêter le test.
-    let body = serde_json::from_slice(&octets).unwrap_or(Value::Null);
-
-    (status, body)
-}
-
-fn without_body(methode: &str, chemin: &str) -> Request<Body> {
-    Request::builder()
-        .method(methode)
-        .uri(chemin)
-        .body(Body::empty())
-        .expect("requête bien formée")
-}
-
-fn post_json(chemin: &str, body: Value) -> Request<Body> {
-    Request::builder()
-        .method("POST")
-        .uri(chemin)
-        .header("content-type", "application/json")
-        .body(Body::from(body.to_string()))
-        .expect("requête bien formée")
-}
-
-/// `post_json`, porteur d'un jeton d'accès. `get_authenticated` et `delete_authenticated`
-/// suivront le même modèle pour les routes protégées des autres méthodes.
-fn post_json_authenticated(chemin: &str, jeton: &str, body: Value) -> Request<Body> {
-    Request::builder()
-        .method("POST")
-        .uri(chemin)
-        .header("content-type", "application/json")
-        .header("authorization", format!("Bearer {jeton}"))
-        .body(Body::from(body.to_string()))
-        .expect("requête bien formée")
-}
-
-/// `without_body`, porteur d'un jeton d'accès.
-fn get_authenticated(chemin: &str, jeton: &str) -> Request<Body> {
-    Request::builder()
-        .method("GET")
-        .uri(chemin)
-        .header("authorization", format!("Bearer {jeton}"))
-        .body(Body::empty())
-        .expect("requête bien formée")
-}
-
-/// `without_body`, porteur d'un jeton d'accès.
-fn delete_authenticated(chemin: &str, jeton: &str) -> Request<Body> {
-    Request::builder()
-        .method("DELETE")
-        .uri(chemin)
-        .header("authorization", format!("Bearer {jeton}"))
-        .body(Body::empty())
-        .expect("requête bien formée")
 }
 
 /// Une adresse jamais inscrite : les tests partagent une base qu'ils ne vident pas.
@@ -222,6 +167,84 @@ async fn login(api: &Router, email: &str, mot_de_passe: &str) -> Value {
     assert_eq!(status, StatusCode::OK, "{paire}");
 
     paire
+}
+
+/// Pose la preuve d'adresse que le lien du courriel aurait apportée.
+///
+/// `login_requires_verification` vaut `true` par défaut : un compte qui doit se connecter
+/// passe d'abord par là.
+async fn verified(email: &str) {
+    crate::auth::repository::user::mark_verified(&connection().await, account(email).await.id)
+        .await
+        .expect("l'adresse se vérifie");
+}
+
+/// Inscrit `email` et vérifie son adresse : un compte prêt à se connecter.
+async fn signed_up(api: &Router, email: &str) {
+    let (status, corps) = register(api, email).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{corps}");
+    verified(email).await;
+}
+
+/// Signe un jeton d'accès pour `compte` sans passer par `login`, qui refuse une adresse
+/// non vérifiée.
+fn access_token_for(compte: &crate::auth::repository::Model) -> String {
+    let config = rbs_core::Config::load().expect("configuration lisible");
+    let maintenant = chrono::Utc::now().timestamp();
+    let claims = rbs_core::jwt::Claims {
+        sub: compte.id.to_string(),
+        role: sea_orm::ActiveEnum::to_value(&compte.role),
+        exp: maintenant + 300,
+        iat: maintenant,
+        jti: Uuid::new_v4().to_string(),
+    };
+
+    rbs_core::jwt::sign(&claims, &config.auth.secret).expect("jeton signable")
+}
+
+/// Inscrit une adresse neuve et ouvre une session : l'identifiant du compte et sa paire.
+async fn login_as(api: &Router) -> (Uuid, Value) {
+    let email = fresh_email();
+    signed_up(api, &email).await;
+    let id = account(&email).await.id;
+
+    let (status, paire) = authenticate(api, &email, PASSWORD).await;
+    assert_eq!(status, StatusCode::OK, "{paire}");
+
+    (id, paire)
+}
+
+/// Le jeton de rafraîchissement d'une paire.
+fn refresh_for(paire: &Value) -> String {
+    paire["refresh_token"]
+        .as_str()
+        .expect("la paire doit porter un jeton de rafraîchissement")
+        .to_owned()
+}
+
+async fn refresh(api: &Router, token: &str) -> (StatusCode, Value) {
+    call(
+        api,
+        post_json("/auth/refresh", json!({ "refresh_token": token })),
+    )
+    .await
+}
+
+/// Le jeton d'accès d'une paire.
+fn access_for(paire: &Value) -> String {
+    paire["access_token"]
+        .as_str()
+        .expect("la paire doit porter un jeton d'accès")
+        .to_owned()
+}
+
+fn with_token(methode: &str, chemin: &str, token: &str) -> Request<Body> {
+    Request::builder()
+        .method(methode)
+        .uri(chemin)
+        .header("authorization", format!("Bearer {token}"))
+        .body(Body::empty())
+        .expect("requête bien formée")
 }
 
 /// Le jeton part dans le fragment : un navigateur ne l'envoie jamais au serveur, donc ni

@@ -360,6 +360,7 @@ says where it goes. A code shared by several commands means the same thing in al
 | `upload_sans_storage` | `generate` | `--with-upload` requires the `storage` feature. |
 | `storage_hors_modules` | `generate` | `storage` was installed before 1.3.0, under `src/storage/`. |
 | `colonne_reservee` | `generate` | `--soft-delete` sets `deleted_at` itself: remove it from `--fields`. |
+| `decimal_sous_sqlite` | `generate` | A `decimal` field on a SQLite project: the driver binds no exact decimal. |
 | `enfant_sans_cle` | `generate` | The child named by `--has-many` has no column referencing this table. |
 | `nom_reserve` | `generate job` | The name is taken: a module of the queue, `jobs` itself, or a crate the queue's code names. |
 | `disposition_anterieure` | `generate job` | `jobs` or `scheduler` was installed before 1.3.0, outside `src/modules/`; the message names the move to make. |

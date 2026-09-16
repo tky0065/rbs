@@ -68,6 +68,21 @@ between minor versions with no deprecation cycle.
   date — each of which needs the one before — are printed to paste rather than written
   without what they name. A project that received `jobs` or `scheduler` before 1.3.0 is
   refused, with the move to make by hand.
+- **`rbs generate migration <name> --add-column <table> --fields "…"` writes a
+  schema-evolution migration.** A fifth `generate` subcommand, next to `crud`, `feature`,
+  `client` and `job`. It writes one file, `migration/src/m<timestamp>_<name>.rs`, declared
+  and registered in the same two anchors as every generated migration: `up` stacks one
+  `alter_table().add_column()` per field — one statement per column, SQLite accepting a
+  single alteration per `ALTER TABLE` — and `down` drops them in reverse, indexes first.
+  The file declares its own minimal `Iden`, naming the table and the columns it adds and
+  nothing else. An added column must be `optional`: the table already holds rows that have
+  no value for it. `unique` and `references` are refused on all three engines, SQLite being
+  able to add neither a uniqueness constraint nor a foreign key after the fact, and a
+  `decimal` under SQLite draws the same refusal `generate crud` prints; a `decimal` still
+  patches the manifest through the same plan actions. Because `model.rs` and `dto.rs` carry
+  no anchor and the CLI never rewrites an AST, the lines they need are printed rather than
+  written — including, for an `enum(a,b,c)` field, the `DeriveActiveEnum` type to paste,
+  exactly as `generate crud` renders it.
 - **`rbs doctor` checks seven more fragments.** `cors` warns on an empty `origins`,
   `rate-limit` wants its section, `scheduler` reads every literal expression of the
   calendar as the startup will, `webhooks` wants the delivery registered with the queue,
@@ -122,9 +137,58 @@ between minor versions with no deprecation cycle.
   them: a file served as is keeps its `content-length`, and an archive already compressed
   is not compressed twice. A project generated earlier keeps its router; the upgrade note
   gives the lines to paste.
+- **`HasAuth::accept_in(&claims, &mut extensions)`**, a provided method that `Identity`
+  now calls in place of `accept`, with the request's extensions in reach. Its default
+  calls `accept`, so a project that only implements `accept` behaves as before. The
+  `auth` fragment implements both: `accept_in` leaves in the request the verification
+  date of the account it reads — that date alone, not the row and its password hash — and
+  `VerifiedIdentity` takes it from there: one read of `users` per request on a route
+  behind the guard, down from two. A project generated earlier keeps its guard, which
+  still reads the account itself.
+- **`--fields` takes three more types: `date`, `enum(a,b,c)` and `decimal`.** `due:date`
+  gives a `Date` column — a `chrono::NaiveDate`, a `date()` in the migration, a
+  `"2026-09-15"` in JSON — where `datetime` forced an hour nobody had.
+  `status:enum(draft,published)` declares in the feature's `model.rs` a `DeriveActiveEnum`
+  named after the field, one variant per value, and bounds the column to the longest of
+  them under a `CHECK (status IN ('draft', 'published'))` that PostgreSQL, MySQL 8.0.16+
+  and SQLite all hold; the values are snake_case, distinct and at least one, and the
+  parser no longer splits `--fields` on a comma placed between parentheses.
+  `price:decimal` gives a `rust_decimal::Decimal` and a `DECIMAL(19, 4)` column — written
+  out, because MySQL narrows a bare `DECIMAL` to `DECIMAL(10, 0)` — carried in JSON as a
+  string (`"12.5000"`), so that no cent is lost to a float: declaring one adds
+  `rust_decimal` (feature `serde-str`) and sea-orm's `with-rust_decimal` to the project's
+  manifest, and a JSON number is then refused rather than quietly rounded. **SQLite
+  refuses `decimal`** before anything is written, sqlx-sqlite deliberately declining to
+  bind an exact decimal; the message offers `float` or an integer of cents. `rbs-core`
+  gains what the generated filters need: the `OneOf<T>` operator — `eq`, `in`, `is_null`,
+  read from a bare value or an object, which an enum column takes instead of `Comparison`
+  — and the `OneOfSchema<T>`, `DateComparisonSchema` and `DecimalComparisonSchema`
+  documentation schemas. `OneOfSchema` takes the generated enum as its parameter, so the
+  document names the accepted values on the filter side as much as in the response body.
 
 ### Changed
 
+- **Generated tests are split by concern.** The test files a project receives no longer
+  run to hundreds of lines — `add auth` laid down a `session.rs` of 1300. Each fragment
+  that ships long tests — `auth`, `jobs`, `scheduler`, `storage`, `webhooks` — now puts
+  them in a `tests/` directory: a `mod.rs` holding the shared harness, and one file per
+  route or mechanism, about 250 lines at most. `rbs generate crud` does the same: the
+  feature gets `src/<name>/tests/` instead of `src/<name>/tests.rs`, with its lifecycle,
+  error, filter, access and content scenarios each in their own file, written only when
+  the options give them something to test. `jobs/queue.rs` becomes `jobs/queue/`, with the
+  enqueueing, the reservation and the outcome of a job in three files; every path the
+  project calls stays the same. A project generated earlier keeps its files.
+- **An account logs in only once its address is verified.** `register` answers the same
+  202 to a new address and a taken one, but a login with the password just submitted
+  still told them apart: the new account logged in, the taken one did not. The `[auth]`
+  section of the `auth` fragment gains `login_requires_verification`, `true` by default:
+  an unverified account now gets the 401 of a wrong password, after the same Argon2, and
+  the verification link — in Mailpit during development — comes before the first login.
+  A password reset marks the address verified too: its token reached the inbox as a
+  verification link does, and an unverified account sent to `forgot-password` by that
+  401 would otherwise meet it again with its new password. `false` restores logging in
+  right after signing up, and the gap with it. A project generated earlier keeps its
+  `login`; the upgrade note gives the lines to change.
 - **`rbs` speaks French from end to end in its help screens and usage errors.** clap
   wrote its own parts in English — `Usage:`, `Commands:`, `Options:`, `Print help`,
   `[default: …]`, `[possible values: …]`, and every usage error (`error:`, `tip:`,

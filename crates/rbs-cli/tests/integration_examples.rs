@@ -75,7 +75,7 @@ const EXEMPLES: &[Exemple] = &[
         // `require_role` sous `auth`, et le `#[allow(dead_code)]` que la template porte
         // reste ici tel quel — le retirer coûtait la surveillance du fichier entier pour
         // une ligne dont aucune route ne dépend.
-        edite_a_la_main: &["src/posts/tests.rs"],
+        edite_a_la_main: &["src/posts/tests/access.rs"],
         engendre_a_part: &[],
     },
     Exemple {
@@ -711,14 +711,14 @@ fn each_example_file_is_tracked_by_git() {
 /// Le seul fichier exclu de la comparaison porte-t-il encore ce pour quoi il l'est ?
 ///
 /// `generate crud` pose désormais la garde lui-même : de l'inventaire d'hier il ne reste
-/// que le 403, qu'aucune commande n'engendre — le `tests.rs` généré n'inscrit qu'un
+/// que le 403, qu'aucune commande n'engendre — le `tests/` généré n'inscrit qu'un
 /// compte `admin`, et ne sait donc rien refuser à un rôle trop court. Ce test sorti de
 /// la comparaison, rien ne verrait ce refus disparaître au fil d'une régénération.
 #[test]
 fn the_hand_edits_of_blog_auth_are_in_place() {
     let racine = common::depot().join("examples").join("blog-auth");
-    let tests = std::fs::read_to_string(racine.join("src/posts/tests.rs"))
-        .expect("src/posts/tests.rs lisible");
+    let tests = std::fs::read_to_string(racine.join("src/posts/tests/access.rs"))
+        .expect("src/posts/tests/access.rs lisible");
 
     assert!(
         tests.contains("async fn a_non_admin_write_returns_403()"),

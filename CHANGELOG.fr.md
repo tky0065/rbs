@@ -73,6 +73,22 @@ dépréciation.
   suppose la précédente — s'affichent à reporter plutôt que de s'écrire sans ce qu'elles
   nomment. Un projet qui a reçu `jobs` ou `scheduler` avant 1.3.0 est refusé, avec le
   déplacement à faire à la main.
+- **`rbs generate migration <nom> --add-column <table> --fields "…"` écrit une migration
+  d'évolution du schéma.** Une cinquième sous-commande de `generate`, à côté de `crud`,
+  `feature`, `client` et `job`. Elle écrit un fichier,
+  `migration/src/m<horodatage>_<nom>.rs`, déclaré et inscrit dans les deux ancres de toute
+  migration engendrée : `up` empile un `alter_table().add_column()` par champ — une
+  instruction par colonne, SQLite n'acceptant qu'une modification par `ALTER TABLE` — et
+  `down` les défait dans l'ordre inverse, les index avant les colonnes qu'ils nomment. Le
+  fichier déclare son propre `Iden` minimal : la table, les colonnes qu'il ajoute, et rien
+  d'autre. Une colonne ajoutée doit être `optional` — la table porte déjà des lignes, qui
+  n'ont pas de valeur pour elle. `unique` et `references` sont refusés sur les trois
+  moteurs, SQLite ne sachant ajouter après coup ni contrainte d'unicité ni clé étrangère,
+  et un `decimal` sous SQLite reçoit le refus que `generate crud` prononce déjà ; un
+  `decimal` demande toujours au manifeste ce que le type exige. Comme `model.rs` et
+  `dto.rs` ne portent pas d'ancre et que le CLI ne réécrit pas d'AST, les lignes qui leur
+  reviennent sont affichées plutôt qu'écrites — y compris, pour un champ `enum(a,b,c)`, le
+  type `DeriveActiveEnum` à coller, tel que `generate crud` le rend.
 - **`rbs doctor` contrôle sept fragments de plus.** `cors` avertit d'un `origins` vide,
   `rate-limit` veut sa section, `scheduler` lit chaque expression littérale du calendrier
   comme le démarrage la lira, `webhooks` veut la livraison inscrite à la file, `audit` sa
@@ -129,9 +145,62 @@ dépréciation.
   un fichier servi tel quel garde son `content-length`, et une archive déjà compressée ne
   l'est pas une seconde fois. Un projet engendré avant garde son routeur ; la note de
   montée donne les lignes à coller.
+- **`HasAuth::accept_in(&claims, &mut extensions)`**, une méthode fournie qu'`Identity`
+  appelle désormais à la place d'`accept`, les extensions de la requête à portée. Son
+  défaut appelle `accept` : un projet qui n'implémente qu'`accept` se comporte comme avant.
+  Le fragment `auth` implémente les deux : `accept_in` laisse dans la requête la date de
+  vérification du compte qu'il lit — cette date seule, et non la ligne avec son hash de mot
+  de passe — et `VerifiedIdentity` l'y reprend : une lecture de `users` par requête sur une
+  route derrière la garde, au lieu de deux. Un projet engendré plus tôt garde sa garde, qui
+  relit toujours le compte elle-même.
+- **`--fields` prend trois types de plus : `date`, `enum(a,b,c)` et `decimal`.**
+  `due:date` donne une colonne `Date` — un `chrono::NaiveDate`, un `date()` dans la
+  migration, un `"2026-09-15"` en JSON — là où `datetime` imposait une heure que personne
+  n'avait. `status:enum(draft,published)` déclare dans le `model.rs` de la feature une
+  énumération `DeriveActiveEnum` nommée d'après le champ, une variante par valeur, et
+  borne la colonne à la plus longue d'entre elles sous un
+  `CHECK (status IN ('draft', 'published'))` que tiennent PostgreSQL, MySQL 8.0.16+ et
+  SQLite ; les valeurs sont en snake_case, distinctes et au moins une, et l'analyseur ne
+  coupe plus `--fields` sur une virgule placée entre parenthèses. `price:decimal` donne un
+  `rust_decimal::Decimal` et une colonne `DECIMAL(19, 4)` — écrite en toutes lettres,
+  MySQL ramenant un `DECIMAL` nu à `DECIMAL(10, 0)` — portée en JSON par une chaîne
+  (`"12.5000"`), pour qu'aucun centime ne se perde dans un flottant : en déclarer un
+  ajoute au manifeste du projet `rust_decimal` (feature `serde-str`) et la feature
+  `with-rust_decimal` de sea-orm, et un nombre JSON est dès lors refusé plutôt qu'arrondi
+  en silence. **SQLite refuse `decimal`** avant toute écriture, sqlx-sqlite écartant
+  délibérément le décimal exact ; le message propose `float` ou un entier en centimes. Le
+  noyau gagne ce qu'exigent les filtres engendrés : l'opérateur `OneOf<T>` — `eq`, `in`,
+  `is_null`, lu d'une valeur nue ou d'un objet, qu'une colonne énumérée prend à la place
+  de `Comparison` — et les schémas de documentation `OneOfSchema<T>`,
+  `DateComparisonSchema` et `DecimalComparisonSchema`. `OneOfSchema` prend en paramètre
+  l'énumération engendrée : le document nomme dès lors les valeurs acceptées du côté du
+  filtre autant que dans le corps de la réponse.
 
 ### Modifié
 
+- **Les tests engendrés se rangent par préoccupation.** Les fichiers de tests que reçoit
+  un projet ne courent plus sur des centaines de lignes — `add auth` posait un
+  `session.rs` de 1300. Chaque fragment qui livre de longs tests — `auth`, `jobs`,
+  `scheduler`, `storage`, `webhooks` — les range désormais dans un répertoire `tests/` :
+  un `mod.rs` qui porte le harnais partagé, et un fichier par route ou par mécanisme,
+  autour de 250 lignes au plus. `rbs generate crud` fait de même : la feature reçoit
+  `src/<nom>/tests/` au lieu de `src/<nom>/tests.rs`, ses scénarios de cycle de vie,
+  d'erreurs, de filtre, d'accès et de contenu chacun dans son fichier, écrit seulement si
+  les options lui donnent de quoi éprouver. `jobs/queue.rs` devient `jobs/queue/`, dépôt,
+  réservation et issue d'un job dans trois fichiers ; chaque chemin qu'appelle le projet
+  reste le même. Un projet engendré plus tôt garde ses fichiers.
+- **Un compte ne se connecte qu'une fois son adresse vérifiée.** `register` rend le même
+  202 à une adresse neuve et à une prise, mais une connexion avec le mot de passe tout
+  juste soumis les distinguait encore : le compte neuf se connectait, la prise non. La
+  section `[auth]` du fragment `auth` gagne `login_requires_verification`, `true` par
+  défaut : un compte non vérifié reçoit désormais le 401 d'un mauvais mot de passe, après
+  le même Argon2, et le lien de vérification — dans Mailpit en développement — précède la
+  première connexion. Une réinitialisation du mot de passe vérifie aussi l'adresse : son
+  jeton est arrivé dans la boîte comme un lien de vérification, et un compte non vérifié
+  que ce 401 envoie vers `forgot-password` le retrouverait sinon avec son nouveau mot de
+  passe. `false` rend la connexion dès l'inscription, et l'écart avec elle. Un projet
+  engendré plus tôt garde son `login` ; la note de montée de version donne les lignes à
+  changer.
 - **`rbs` parle français de bout en bout dans son aide et ses erreurs d'usage.** clap
   écrivait en anglais ce qui lui revient — `Usage:`, `Commands:`, `Options:`,
   `Print help`, `[default: …]`, `[possible values: …]`, et chaque erreur d'usage

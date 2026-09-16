@@ -1066,4 +1066,18 @@ mod tests {
 
         assert!(rendu.contains("interface ProblemDetails"), "{rendu}");
     }
+
+    /// Le champ `enum` d'une entité engendrée atteint le client par le composant que le
+    /// modèle déclare : une union de littéraux, et non un `string` qui accepterait tout.
+    #[test]
+    fn the_component_of_a_generated_enum_becomes_a_union_of_its_written_values() {
+        let document = schemas(
+            r#"{"openapi":"3.1.0","components":{"schemas":{"Status":{"type":"string",
+                 "enum":["draft","published"]}}}}"#,
+        );
+
+        let rendues = interfaces(&document).expect("rendu");
+
+        assert_eq!(rendues[0].corps, "\"draft\" | \"published\"");
+    }
 }

@@ -24,11 +24,12 @@ Génère une feature dans un projet existant
 Utilisation : rbs generate <COMMANDE>
 
 Commandes :
-  crud     Génère une feature CRUD complète, entité et migration comprises
-  feature  Génère une feature vide : six fichiers, aucun champ
-  client   Engendre un client typé depuis le document OpenAPI du projet
-  job      Génère un job de la file, et son échéance sous --every ; exige la feature jobs
-  help     Affiche cette aide, ou celle des commandes données
+  crud       Génère une feature CRUD complète, entité et migration comprises
+  feature    Génère une feature vide : six fichiers, aucun champ
+  client     Engendre un client typé depuis le document OpenAPI du projet
+  job        Génère un job de la file, et son échéance sous --every ; exige la feature jobs
+  migration  Écrit une migration d'évolution : des colonnes de plus sur une table existante
+  help       Affiche cette aide, ou celle des commandes données
 
 Options :
   -h, --help     Affiche l'aide
@@ -55,7 +56,7 @@ Arguments :
   <NAME>  Nom de la feature, au pluriel
 
 Options :
-      --fields <CHAMPS>    Champs de l'entité, ex. "name:string,email:string:unique"
+      --fields <CHAMPS>    Champs de l'entité, ex. "name:string,status:enum(draft,published)"
       --singular <NOM>     Forme singulière du nom, quand l'heuristique se trompe (ex. news)
       --force              Écrit même si le working tree Git est sale
       --dry-run            Affiche le plan sans rien écrire
@@ -79,7 +80,7 @@ Options :
 | `--has-many <ENTITE>` | Repairs the far side of a relation: writes into the model of an already generated feature the `has_many` variant pointing at the named child, and nothing else. Repeatable. [The relations guide](../guides/relations.md) covers when it is needed. |
 | `--role <ROLE>` | Raises the threshold on the writes — `create`, `update`, `delete`, and the `PUT` of the content route when `--with-upload` comes along — to that role instead of the default `Role::User`. It opens nothing and closes nothing: on a project carrying `auth`, *every* generated route already takes an `Identity` and calls `require_role`, and the reads (`list`, `find`, `filter`, and the content route's `GET` and `HEAD`) simply keep the default threshold. Requires the [`auth`](../guides/auth.md) feature, and a role its `Role` enum declares — both are checked before anything is written. [The authentication guide](../guides/auth.md#closed-by-default-at-generation-time) explains what to remove to reopen a route. |
 | `--soft-delete` | Makes `DELETE` logical instead of removing the row. The HTTP contract does not change, and a `unique` field's constraint narrows to live rows — on MySQL it stays global, so a deleted value stays reserved there. [The migrations guide](../guides/migrations.md#soft-delete) has the rest. |
-| `--with-upload` | Mounts three routes on `/<resource>/{id}/content` — `PUT`, `GET`, `HEAD` — against the `storage` fragment's trait. Requires the [`storage`](../guides/storage.md) feature, and the fragment under `src/modules/storage/` where `rbs add` has laid it out since 1.3.0 — both are checked before anything is written, and a project that still carries `src/storage/` is refused until the directory is moved and its `use` statements fixed. With `--role`, the `PUT` joins the writes whose threshold the flag raises; with `--soft-delete`, the content outlives the row that `DELETE` only stamps. It also writes their tests into `tests.rs` — the round trip, the 404s, the 413, and the 401 under `auth`. [The storage guide](../guides/storage.md#generated-content-routes) has both. |
+| `--with-upload` | Mounts three routes on `/<resource>/{id}/content` — `PUT`, `GET`, `HEAD` — against the `storage` fragment's trait. Requires the [`storage`](../guides/storage.md) feature, and the fragment under `src/modules/storage/` where `rbs add` has laid it out since 1.3.0 — both are checked before anything is written, and a project that still carries `src/storage/` is refused until the directory is moved and its `use` statements fixed. With `--role`, the `PUT` joins the writes whose threshold the flag raises; with `--soft-delete`, the content outlives the row that `DELETE` only stamps. It also writes their tests into `tests/content.rs` — the round trip, the 404s, the 413, and the 401 under `auth`. [The storage guide](../guides/storage.md#generated-content-routes) has both. |
 | `--cursor` | Pages `GET /<resource>` by cursor instead of by page number: the route takes `after` and `per_page`, and returns `data` with `meta.next` — the `id` to pass as the next `after`, `null` once the walk is over — and no `total`. `POST /<resource>/filter` keeps its pages, whatever its sort: a cursor on `id` is wrong as soon as the order follows another column. Combines with `--role`, with `--soft-delete` — deleted rows stay out of the walk — and with `--with-upload`. For an entity its tests can create — one without a required reference — the generated tests walk every page until `next` goes out, and check that no row comes back twice. [The filtering guide](../guides/filtering.md#cursor-pagination-for-lists-that-outgrow-an-offset) has the rest. |
 
 ## `rbs generate feature`
@@ -190,6 +191,139 @@ rather than promising `--fix`, and the
 [scheduler guide](../guides/scheduler.md#a-calendar-predating-the-anchor) shows the
 rewrite.
 
+## `rbs generate migration`
+
+{/* rbs:transcript cmd="rbs generate migration --help" */}
+```text
+$ rbs generate migration --help
+Écrit une migration d'évolution : des colonnes de plus sur une table existante
+
+Utilisation : rbs generate migration [OPTIONS] --add-column <TABLE> --fields <CHAMPS> <NAME>
+
+Arguments :
+  <NAME>  Nom de la migration, en snake_case : celui de son module
+
+Options :
+      --add-column <TABLE>  Table à modifier, telle que le projet la déclare
+      --fields <CHAMPS>     Colonnes à ajouter, toutes optionnelles, ex. "statut:enum(draft,published):optional"
+      --force               Écrit même si le working tree Git est sale
+      --dry-run             Affiche le plan sans rien écrire
+      --json                Rend le plan, ou l'erreur, en un document JSON sur la sortie standard
+  -h, --help                Affiche l'aide
+  -V, --version             Affiche la version
+```
+
+The other four subcommands write a feature; this one changes a table that already exists.
+It writes a single file — `migration/src/m<timestamp>_<name>.rs` — declared between
+`// <rbs:migration_modules>` and registered in `// <rbs:migrations>`, like every migration
+rbs generates. `up` stacks one `alter_table().add_column()` per field, one statement per
+column because SQLite accepts a single alteration per `ALTER TABLE`; `down` undoes them in
+reverse, dropping an index before the column it names, which SQLite also insists on. The
+file declares its own minimal `Iden` — the table, and the columns it adds, and nothing
+else: the others belong to the migration that created them.
+
+```bash
+rbs generate migration ajoute_statut --add-column articles \
+  --fields "statut:enum(draft,published):optional,prix:decimal:optional"
+```
+
+`--fields` is the grammar described below, parsed by the same parser, with the same faults
+and the same refusals. What differs is what an *added* column may be:
+
+| Refused | Why |
+|---|---|
+| a column that is not `optional` | The table already holds rows, and they have no value for the new column. SQLite demands a default for a `NOT NULL` column added after the fact; the other two refuse the addition outright. The refusal names the field and the `:optional` that lifts it. A default is not offered: it would apply to the old rows and the new ones alike, and that choice belongs to the schema, not to the CLI. |
+| `unique` | SQLite cannot add a column under a uniqueness constraint. The refusal holds on all three engines, PostgreSQL included — a generated migration is meant to run anywhere, and one rule is one rule — and points at `rbs migrate new` for the unique index written by hand. |
+| `references` | SQLite cannot add a foreign key to a table that already exists. Add the column as `uuid:optional`, then write the constraint by hand. |
+| `decimal` under SQLite | The refusal `rbs generate crud` prints, word for word: sqlx-sqlite declines to bind an exact decimal, whichever path the column arrives by. |
+
+A table no module declares is refused too, and the message names what was searched —
+`src/*/model.rs` — and the tables the project does declare. The lookup is that inventory
+rather than a directory: the `users` table of an authenticated project lives under
+`src/auth/model.rs`, not in a `src/users/`.
+
+A `decimal` column still patches the manifest, through the same plan actions as
+`generate crud`: `rust_decimal` with `serde-str`, and sea-orm's `with-rust_decimal`.
+
+### What it prints rather than writes
+
+The migration teaches the database about the column; the entity and its DTOs still have to
+learn about it. `model.rs` and `dto.rs` carry no anchor, and the CLI never rewrites an AST
+— so the command prints the lines to paste, and writes none of them:
+
+```text
+$ rbs generate migration ajoute_statut --add-column articles --fields "statut:enum(draft,published):optional,prix:decimal:optional" --dry-run
+plan pour /private/tmp/rbs-demo/demo
+
+  + migration/src/m20260916_133333_ajoute_statut.rs   créé
+  ~ migration/src/lib.rs                              modifié
+  ~ Cargo.toml                                        modifié
+
+  1 à créer, 2 à modifier
+
+  à coller dans src/articles/model.rs :
+
+    // aux imports, en tête du fichier
+    use serde::{Deserialize, Serialize};
+    use utoipa::ToSchema;
+
+    /// Valeurs acceptées par la colonne « statut ».
+    ///
+    /// Une valeur de plus s'ajoute ici et dans le `CHECK` que porte une migration nouvelle :
+    /// la base refuse d'elle-même celles qu'elle ne connaît pas. Plus longue que toutes les
+    /// actuelles, elle demande en troisième lieu d'élargir le `StringLen::N` ci-dessous, et
+    /// avec lui le `string_len` de cette migration.
+    #[derive(
+        Clone, Copy, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, Deserialize, Serialize, ToSchema,
+    )]
+    #[sea_orm(rs_type = "String", db_type = "String(StringLen::N(9))")]
+    pub enum Statut {
+        #[sea_orm(string_value = "draft")]
+        #[serde(rename = "draft")]
+        Draft,
+        #[sea_orm(string_value = "published")]
+        #[serde(rename = "published")]
+        Published,
+    }
+
+    // dans `struct Model`
+        pub statut: Option<Statut>,
+        pub prix: Option<Decimal>,
+
+  à coller dans src/articles/dto.rs :
+
+    // aux imports, en tête du fichier
+    use sea_orm::prelude::Decimal;
+
+    // remplacez `use super::model::Model;` par :
+    use super::model::{Model, Statut};
+
+    // dans `CreateArticle`, `UpdateArticle` et `ArticleResponse`
+        pub statut: Option<Statut>,
+        #[schema(value_type = Option<String>, format = "decimal")]
+        pub prix: Option<Decimal>,
+
+  rien n'a été écrit (--dry-run)
+```
+
+Every added column being optional, the three DTOs take the same `Option<T>` line — a
+required column would have told them apart. For an `enum(a,b,c)` field the model block also
+carries the `DeriveActiveEnum` type to paste, exactly as `generate crud` renders it: the
+migration's `CHECK` and the model's variants describe one and the same column, and a model
+that disagreed would either refuse a value the database holds or offer one it rejects.
+
+The blocks are computed against that module's own files rather than printed blindly, so
+that following them to the letter compiles. Only the `use` lines it actually lacks appear:
+the `serde` and `utoipa` imports a `DeriveActiveEnum` needs — the generated model carries
+them only when it already had an enum — and the `sea_orm::prelude` name a `date` or
+`decimal` column needs in the DTOs. The model import is given as an **edit** rather than an
+addition, because that line already exists and the enum type joins it: adding it whole
+would declare it twice. A module that already carries an enum is offered neither import.
+
+Like the other subcommands, this one honours `--dry-run`, `--json` and `--force`, and goes
+through the same plan: nothing is written until the whole plan is computed, and a partial
+failure restores what it touched.
+
 ## The `--fields` grammar
 
 One field per comma; within a field, colons separate a name, a type, and any number of
@@ -204,9 +338,9 @@ unique "` and `"titre:string,email:string:unique"` describe the same two fields.
 `--fields` declares no field at all. Fields keep their declaration order in the entity and
 in the migration.
 
-### The eight types
+### The eleven types
 
-There is no ninth, and no `email` type: a string format is not a column type.
+There is no twelfth, and no `email` type: a string format is not a column type.
 
 | Type | Rust | Migration |
 |---|---|---|
@@ -214,14 +348,43 @@ There is no ninth, and no `email` type: a string format is not a column type.
 | `text` | `String` | `text()` |
 | `int` | `i32` | `integer()` |
 | `float` | `f64` | `double()` |
+| `decimal` | `Decimal` | `decimal_len(19, 4)` |
 | `bool` | `bool` | `boolean()` |
 | `uuid` | `Uuid` | `uuid()` |
 | `datetime` | `DateTimeWithTimeZone` | `timestamp_with_time_zone()` |
+| `date` | `Date` | `date()` |
+| `enum(a,b,c)` | an enum named after the field | `string_len(n)` under a `CHECK` |
 
 `string` and `text` share a Rust type, so `text` is the only one that also carries an
 explicit column type on the entity — without it SeaORM would infer `varchar`.
 
-The eighth, `references`, is not a scalar at all: it points the column at another entity
+`float` and `decimal` both carry a fractional number, and only the second one carries it
+exactly: `rust_decimal::Decimal`, a `DECIMAL(19, 4)` column — written out, because MySQL
+would otherwise narrow a bare `DECIMAL` to `DECIMAL(10, 0)` — and a JSON string
+(`"12.5000"`), so that a JavaScript client loses no cent to a float. Declaring one adds
+`rust_decimal` to the project's manifest and sea-orm's `with-rust_decimal` feature; the
+string form is pinned there by `serde-str` rather than left to the crate's default, and a
+JSON number is refused rather than quietly rounded — which is the whole point of the type.
+**SQLite refuses it**, before anything is written: sqlx-sqlite deliberately declines to
+bind an exact decimal — its `NUMERIC` affinity keeps only fifteen significant digits — and
+sea-query binds a `Decimal` for PostgreSQL and MySQL only. The refusal names the field and
+offers the two fallbacks: `float`, or an integer of cents. A project that has already
+pinned `rust_decimal` itself, at another version, gets the whole generation refused before
+anything is written: a version someone chose is never rewritten, and the refusal names
+both. Align the pin on the version asked for, or drop it and let the generation declare
+it.
+
+`enum(a,b,c)` is the only type carrying its own values. They are snake_case, distinct, and
+at least one. The model declares an enum named after the field in PascalCase — `status`
+gives `Status` — one variant per value, and the migration bounds the column to the longest
+value under a `CHECK (status IN ('draft', 'published'))` that holds on PostgreSQL, MySQL and
+SQLite alike. An `optional` column stays nullable: a `NULL` passes a `CHECK`. A field whose
+PascalCase form collides with a type the model already declares — `Model`, `ActiveModel`,
+`Entity`, `Column`, `PrimaryKey`, `Relation` — is refused before anything is written. Such a
+column is filtered by `eq`, `in` and `is_null` rather than by the comparisons of an ordered
+one; [Filtering](../guides/filtering.md) has that table.
+
+The eleventh, `references`, is not a scalar at all: it points the column at another entity
 instead of giving it a type of its own.
 
 ```text
@@ -300,13 +463,13 @@ Every fault on the line is collected in one pass, so the line gets fixed in one 
 than one fault per run. A field carrying two faults reports only the first.
 
 ```text
-$ rbs generate crud tags --fields "Title:string,type:text,prix:decimal,slug:string:unique:index,email:string,email:int" --dry-run
+$ rbs generate crud tags --fields "Title:string,type:text,prix:money,slug:string:unique:index,email:string,email:int" --dry-run
 erreur : champ 1 « Title » — le nom doit être en snake_case : minuscules ASCII, chiffres et souligné
         → essayez « title »
 erreur : champ 2 « type » — « type » est un mot-clé Rust
         → essayez « kind » ou « type_ »
-erreur : champ 3 « prix » — type inconnu « decimal »
-        → string, int, float, bool, uuid, datetime, text, references:<table>
+erreur : champ 3 « prix » — type inconnu « money »
+        → string, int, float, decimal, bool, uuid, datetime, date, text, references:<table>, enum(a,b,c)
 erreur : champ 4 « slug » — « index » redondant : « unique » pose déjà un index
         → retirez « index »
 erreur : champ 6 « email » — « email » est déjà déclaré au champ 5
@@ -346,10 +509,14 @@ plan pour /private/tmp/rbs-demo/blog
   + src/articles/mod.rs                                 créé
   + src/articles/model.rs                               créé
   + src/articles/dto.rs                                 créé
+  + src/articles/filter.rs                              créé
   + src/articles/repository.rs                          créé
   + src/articles/service.rs                             créé
   + src/articles/controller.rs                          créé
-  + src/articles/tests.rs                               créé
+  + src/articles/tests/mod.rs                           créé
+  + src/articles/tests/lifecycle.rs                     créé
+  + src/articles/tests/errors.rs                        créé
+  + src/articles/tests/filter.rs                        créé
   + src/seeds/articles.rs                               créé
   + migration/src/m20260830_110925_create_articles.rs   créé
   ~ src/lib.rs                                          modifié
@@ -360,7 +527,7 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  9 à créer, 7 à modifier
+  13 à créer, 7 à modifier
 
   rien n'a été écrit (--dry-run)
 ```
@@ -374,10 +541,14 @@ plan pour /private/tmp/rbs-demo/blog
   + src/articles/mod.rs                                 créé
   + src/articles/model.rs                               créé
   + src/articles/dto.rs                                 créé
+  + src/articles/filter.rs                              créé
   + src/articles/repository.rs                          créé
   + src/articles/service.rs                             créé
   + src/articles/controller.rs                          créé
-  + src/articles/tests.rs                               créé
+  + src/articles/tests/mod.rs                           créé
+  + src/articles/tests/lifecycle.rs                     créé
+  + src/articles/tests/errors.rs                        créé
+  + src/articles/tests/filter.rs                        créé
   + src/seeds/articles.rs                               créé
   + migration/src/m20260830_110925_create_articles.rs   créé
   ~ src/lib.rs                                          modifié
@@ -388,13 +559,13 @@ plan pour /private/tmp/rbs-demo/blog
   ~ Cargo.toml                                          modifié
   ~ AGENTS.md                                           modifié
 
-  9 à créer, 7 à modifier
-✓ articles générée — 9 créés, 7 modifiés
+  13 à créer, 7 à modifier
+✓ articles générée — 13 créés, 7 modifiés
 
   la migration m20260830_110925_create_articles reste à appliquer avant de lancer le projet
 ```
 
-Nine files created, seven modified through their anchors. The feature is then recorded in
+Thirteen files created, seven modified through their anchors. The feature is then recorded in
 the manifest, which is what makes the command idempotent:
 
 ```text

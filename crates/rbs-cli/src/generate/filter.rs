@@ -22,8 +22,9 @@ struct FilterField {
     name: String,
     pascal_name: String,
     operator: String,
-    schema: &'static str,
+    schema: String,
     textual: bool,
+    one_of: bool,
 }
 
 /// Rend le filtre de `feature`.
@@ -43,22 +44,40 @@ pub(crate) fn render(feature: &Feature) -> Result<String, minijinja::Error> {
             fields => fields,
             colonnes => colonnes,
             lang => feature.lang.name(),
+            has_date => feature.has_date(),
+            has_decimal => feature.has_decimal(),
+            has_enum => !feature.enum_types().is_empty(),
+            // `Column` et `Entity` sont importés de toute entité ; une énumération les
+            // rejoint dans le même `use`, que rustfmt trie.
+            model_imports => model_imports(feature),
         },
     )
 }
 
+/// Les noms que le filtre importe du modèle, triés comme rustfmt les trierait.
+fn model_imports(feature: &Feature) -> Vec<String> {
+    let mut noms = vec!["Column".to_owned(), "Entity".to_owned()];
+    noms.extend(feature.enum_types());
+    noms.sort();
+
+    noms
+}
+
 fn champ(field: &Field) -> FilterField {
     let textual = textual(field);
+    let one_of = !field.enum_variants().is_empty();
 
     FilterField {
         name: field.column_name(),
         pascal_name: field.pascal_name(),
-        operator: match textual {
-            true => "TextMatch".to_owned(),
-            false => format!("Comparison<{}>", scalar_type(field)),
+        operator: match (one_of, textual) {
+            (true, _) => format!("OneOf<{}>", field.enum_type()),
+            (_, true) => "TextMatch".to_owned(),
+            (_, false) => format!("Comparison<{}>", scalar_type(field)),
         },
         schema: schema(field),
         textual,
+        one_of,
     }
 }
 
@@ -67,19 +86,32 @@ fn champ(field: &Field) -> FilterField {
 /// Un schéma par type, et non un seul portant une valeur libre : c'est ce qui fait écrire
 /// `"published": true` au document plutôt que `"published": "string"`, et ce qui y nomme la
 /// forme courte à côté des opérateurs.
-fn schema(field: &Field) -> &'static str {
+fn schema(field: &Field) -> String {
     if field.reference().is_some() {
-        return "UuidComparisonSchema";
+        return "UuidComparisonSchema".to_owned();
     }
 
-    match field.column_type() {
+    // Une énumération est physiquement une chaîne, mais ne se cherche pas par
+    // sous-chaîne : le document doit offrir ses valeurs, pas un `contains`. Le schéma
+    // porte l'énumération du modèle plutôt qu'une chaîne, faute de quoi les valeurs
+    // n'atteindraient que le corps de la réponse, et un client typé accepterait dans le
+    // filtre n'importe quel texte.
+    if !field.enum_variants().is_empty() {
+        return format!("OneOfSchema<{}>", field.enum_type());
+    }
+
+    let scalaire = match field.column_type() {
         FieldType::String | FieldType::Text => "TextMatchSchema",
         FieldType::Int => "IntComparisonSchema",
         FieldType::Float => "FloatComparisonSchema",
+        FieldType::Decimal => "DecimalComparisonSchema",
         FieldType::Bool => "BoolComparisonSchema",
         FieldType::Uuid => "UuidComparisonSchema",
         FieldType::Datetime => "DateTimeComparisonSchema",
-    }
+        FieldType::Date => "DateComparisonSchema",
+    };
+
+    scalaire.to_owned()
 }
 
 /// Un texte se cherche par sous-chaîne, tout le reste se compare.
@@ -87,6 +119,7 @@ fn schema(field: &Field) -> &'static str {
 /// Une référence n'en est jamais une : elle porte un identifiant, que l'on compare.
 fn textual(field: &Field) -> bool {
     field.reference().is_none()
+        && field.enum_variants().is_empty()
         && matches!(field.column_type(), FieldType::String | FieldType::Text)
 }
 
@@ -176,11 +209,11 @@ mod tests {
         }
     }
 
-    /// Une colonne décimale a son propre schéma : `float` est le seul type de `--fields`
+    /// Une colonne flottante a son propre schéma : `float` est le seul type de `--fields`
     /// que `CHAMPS` ne porte pas, et un type sans schéma serait une erreur de compilation
     /// dans le projet engendré.
     #[test]
-    fn a_decimal_column_cites_the_decimal_schema() {
+    fn a_float_column_cites_the_float_schema() {
         let rendered = filtre("meters", "ratio:float");
 
         assert!(
@@ -204,6 +237,74 @@ mod tests {
         assert!(
             rendered.contains("use rbs_core::{Comparison, Error, Result, Sort, TextMatch};"),
             "l'import du noyau a changé de forme :\n{rendered}"
+        );
+    }
+
+    /// Une colonne `date` se compare sur `Date`, et cite le schéma de son propre type —
+    /// pas celui d'un horodatage, qui documenterait un format qu'elle ne rend jamais.
+    #[test]
+    fn a_date_column_compares_on_date_and_cites_its_own_schema() {
+        let rendered = filtre("agendas", "due:date");
+
+        assert!(
+            rendered.contains("pub due: Option<Comparison<Date>>,"),
+            "« due » ne compare pas sur `Date` :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(
+                "#[schema(value_type = Option<rbs_core::DateComparisonSchema>)]\n    pub due:"
+            ),
+            "le schéma de date manque :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("use sea_orm::prelude::Date;"),
+            "l'import de `Date` manque :\n{rendered}"
+        );
+    }
+
+    /// Une entité sans colonne `date` n'importe pas `Date` : le projet engendré échouerait
+    /// sous `-D warnings` sur un import qui ne sert à rien.
+    #[test]
+    fn an_entity_without_a_date_column_does_not_import_date() {
+        let rendered = filtre("meters", "views:int,published:bool");
+
+        assert!(
+            !rendered.contains("sea_orm::prelude::Date;"),
+            "l'import de `Date` est présent sans servir :\n{rendered}"
+        );
+    }
+
+    /// Une colonne `decimal` se compare sur `Decimal`, et cite son propre schéma : celui
+    /// d'un `float` documenterait un nombre là où la condition s'écrit en chaîne.
+    #[test]
+    fn a_decimal_column_compares_on_decimal_and_cites_its_own_schema() {
+        let rendered = filtre("orders", "price:decimal");
+
+        assert!(
+            rendered.contains("pub price: Option<Comparison<Decimal>>,"),
+            "« price » ne compare pas sur `Decimal` :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(
+                "#[schema(value_type = Option<rbs_core::DecimalComparisonSchema>)]\n    pub price:"
+            ),
+            "le schéma du décimal exact manque :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("use sea_orm::prelude::Decimal;"),
+            "l'import de `Decimal` manque :\n{rendered}"
+        );
+    }
+
+    /// Une entité sans colonne `decimal` n'importe pas `Decimal` : le projet engendré
+    /// échouerait sous `-D warnings` sur un import qui ne sert à rien.
+    #[test]
+    fn an_entity_without_a_decimal_column_does_not_import_decimal() {
+        let rendered = filtre("meters", "views:int,published:bool");
+
+        assert!(
+            !rendered.contains("sea_orm::prelude::Decimal;"),
+            "l'import de `Decimal` est présent sans servir :\n{rendered}"
         );
     }
 
@@ -401,6 +502,65 @@ mod tests {
     #[test]
     fn the_render_is_already_what_rustfmt_would_write() {
         let divergentes = bench::longueurs_divergentes(|name| filtre(name, CHAMPS));
+
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu du filtre diverge de rustfmt à ces longueurs de nom"
+        );
+    }
+
+    /// Une colonne à valeurs énumérées ne se compare ni ne se cherche : elle s'égale ou
+    /// appartient à une liste, ce que porte `OneOf`.
+    #[test]
+    fn an_enum_column_is_filtered_by_one_of() {
+        let rendered = filtre("articles", "status:enum(draft,published)");
+
+        assert!(
+            rendered.contains("pub status: Option<OneOf<Status>>,"),
+            "« status » ne porte pas `OneOf` :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(
+                "#[schema(value_type = Option<rbs_core::OneOfSchema<Status>>)]\n    pub status:"
+            ),
+            "le schéma de l'énumération manque :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("use rbs_core::{Comparison, Error, OneOf, Result, Sort, TextMatch};"),
+            "l'import de `OneOf` manque :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("use super::model::{Column, Entity, Status};"),
+            "l'import de l'énumération manque :\n{rendered}"
+        );
+        assert!(
+            rendered.contains(".add(one_of(Column::Status, filtre.status.as_ref()))"),
+            "la condition n'est pas posée :\n{rendered}"
+        );
+        for traduction in ["colonne.eq(valeur)", "colonne.is_in(valeurs)"] {
+            assert!(
+                rendered.contains(traduction),
+                "« {traduction} » absent :\n{rendered}"
+            );
+        }
+    }
+
+    /// Une entité sans énumération n'importe ni `OneOf` ni l'aide qui le traduit : le
+    /// projet engendré échouerait sous `-D warnings`.
+    #[test]
+    fn an_entity_without_an_enum_carries_neither_one_of_nor_its_helper() {
+        let rendered = filtre("meters", "views:int,published:bool");
+
+        assert!(!rendered.contains("OneOf"), "{rendered}");
+        assert!(!rendered.contains("fn one_of"), "{rendered}");
+    }
+
+    /// Le rendu reste ce que rustfmt écrirait, la colonne d'énumération comprise.
+    #[test]
+    fn the_enum_render_is_already_what_rustfmt_would_write() {
+        let divergentes =
+            bench::longueurs_divergentes(|name| filtre(name, "status:enum(draft,published)"));
 
         assert_eq!(
             divergentes,

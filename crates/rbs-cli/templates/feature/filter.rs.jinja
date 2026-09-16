@@ -1,11 +1,17 @@
-use rbs_core::{Comparison, Error, Result, Sort, TextMatch};
+use rbs_core::{Comparison, Error, {% if has_enum %}OneOf, {% endif %}Result, Sort, TextMatch};
+{%- if has_date %}
+use sea_orm::prelude::Date;
+{%- endif %}
+{%- if has_decimal %}
+use sea_orm::prelude::Decimal;
+{%- endif %}
 use sea_orm::prelude::{DateTimeUtc, Uuid};
 use sea_orm::sea_query::LikeExpr;
 use sea_orm::{ColumnTrait, Condition, QueryFilter, QueryOrder, Select, Value};
 use serde::Deserialize;
 use utoipa::ToSchema;
 
-use super::model::{Column, Entity};
+use super::model::{{@ model_imports | join(", ") @}};
 
 // Toute colonne est filtrable, indexée ou non : un filtre sur une colonne sans index
 // parcourt la table. Ajoutez « index » au champ dans `--fields` si la table grandit.
@@ -75,7 +81,9 @@ pub(super) fn apply(
         .add(compare(Column::CreatedAt, filtre.created_at.as_ref()))
         .add(compare(Column::UpdatedAt, filtre.updated_at.as_ref()))
 {%- for field in fields %}
-{%- if field.textual %}
+{%- if field.one_of %}
+        .add(one_of(Column::{@ field.pascal_name @}, filtre.{@ field.name @}.as_ref()))
+{%- elif field.textual %}
         .add(matches(Column::{@ field.pascal_name @}, filtre.{@ field.name @}.as_ref()))
 {%- else %}
         .add(compare(Column::{@ field.pascal_name @}, filtre.{@ field.name @}.as_ref()))
@@ -126,6 +134,22 @@ fn matches(colonne: Column, recherche: Option<&TextMatch>) -> Condition {
         .add_option(recherche.eq.clone().map(|valeur| colonne.eq(valeur)))
         .add_option(recherche.contains.as_ref().map(|v| colonne.like(motif(v))))
 }
+{%- if has_enum %}
+
+/// Les conditions portées sur une colonne à valeurs énumérées, en ET entre elles.
+///
+/// Une liste `in` vide n'accepte aucune valeur : sea-query écrit alors `1 = 2` plutôt
+/// qu'un `IN ()` qu'aucun moteur n'accepterait.
+fn one_of<T: Into<Value> + Clone>(colonne: Column, choix: Option<&OneOf<T>>) -> Condition {
+    let Some(choix) = choix else {
+        return Condition::all();
+    };
+
+    null_condition(colonne, choix.is_null)
+        .add_option(choix.eq.clone().map(|valeur| colonne.eq(valeur)))
+        .add_option(choix.r#in.clone().map(|valeurs| colonne.is_in(valeurs)))
+}
+{%- endif %}
 
 fn motif(valeur: &str) -> LikeExpr {
     let mut echappee = String::with_capacity(valeur.len() + 2);

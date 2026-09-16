@@ -364,6 +364,7 @@ où il va. Un code partagé par plusieurs commandes a le même sens dans toutes.
 | `upload_sans_storage` | `generate` | `--with-upload` exige la feature `storage`. |
 | `storage_hors_modules` | `generate` | `storage` a été installée avant la 1.3.0, sous `src/storage/`. |
 | `colonne_reservee` | `generate` | `--soft-delete` pose lui-même `deleted_at` : retirez-la de `--fields`. |
+| `decimal_sous_sqlite` | `generate` | Un champ `decimal` sur un projet SQLite : le pilote n'y lie aucun décimal exact. |
 | `enfant_sans_cle` | `generate` | L'enfant nommé par `--has-many` ne porte aucune colonne référençant cette table. |
 | `nom_reserve` | `generate job` | Le nom est pris : un module de la file, `jobs` lui-même, ou une crate que nomme le code de la file. |
 | `disposition_anterieure` | `generate job` | `jobs` ou `scheduler` a été installée avant la 1.3.0, hors de `src/modules/` ; le message nomme le déplacement à faire. |
