@@ -658,11 +658,7 @@ pub(crate) fn insert(source: &str, anchor: Anchor, lines: &[String]) -> Result<S
         // Le bloc est réécrit entier plutôt que complété : la ligne nouvelle doit pouvoir
         // se glisser entre deux anciennes, ce qu'une insertion avant la balise fermante ne
         // permet pas.
-        // `opening` et `closing` sont les débuts des deux lignes de balise : le corps
-        // commence après le saut de ligne de la première.
-        let debut = source[opening..closing]
-            .find('\n')
-            .map_or(closing, |fin| opening + fin + 1);
+        let debut = debut_du_corps(source, opening, closing);
         let mut corps: Vec<&str> = source[debut..closing]
             .lines()
             .map(str::trim)
@@ -692,6 +688,16 @@ pub(crate) fn insert(source: &str, anchor: Anchor, lines: &[String]) -> Result<S
     ))
 }
 
+/// Début du corps d'un bloc dont les balises commencent à `opening` et `closing`.
+///
+/// `opening` est le début de la ligne de balise ouvrante : le corps commence après le
+/// saut de ligne qui la termine.
+fn debut_du_corps(source: &str, opening: usize, closing: usize) -> usize {
+    source[opening..closing]
+        .find('\n')
+        .map_or(closing, |fin| opening + fin + 1)
+}
+
 /// Rend `source` privé des `lines` que porte le bloc de `anchor`.
 ///
 /// Pas de branche `sorted`, à la différence d'[`insert`] : retirer une ligne d'un bloc
@@ -716,10 +722,7 @@ pub(crate) fn retire(source: &str, anchor: &Anchor, lines: &[String]) -> Result<
         return Err(absente());
     }
 
-    // `opening` est le début de la ligne de balise : le corps commence après son saut.
-    let debut = source[opening..closing]
-        .find('\n')
-        .map_or(closing, |fin| opening + fin + 1);
+    let debut = debut_du_corps(source, opening, closing);
 
     let a_retirer: Vec<&str> = lines.iter().map(|line| line.trim()).collect();
     let corps: String = source[debut..closing]
@@ -1182,6 +1185,18 @@ services:
             retire(source, &ROUTES, &[".merge(a::routes())".to_string()]).expect("l'ancre est là");
 
         assert_eq!(apres.matches("a::routes").count(), 1);
+    }
+
+    /// Un bloc déjà vide n'a rien à perdre : `debut` et `closing` coïncident, et le
+    /// retrait ne panique pas sur une tranche vide.
+    #[test]
+    fn retiring_from_an_already_empty_anchor_changes_nothing() {
+        let source = "// <rbs:routes>\n// </rbs:routes>\n";
+
+        let apres =
+            retire(source, &ROUTES, &[".merge(a::routes())".to_string()]).expect("l'ancre est là");
+
+        assert_eq!(apres, source);
     }
 
     /// Une ancre absente est une faute, comme pour l'insertion.
