@@ -387,7 +387,12 @@ pub(crate) fn plan_for(options: &Options, timestamp: &str) -> Result<Planned, Er
     // Le trio que l'en-tête du bloc nomme est celui que le module porte : l'heuristique
     // singulière le manque dès qu'un CRUD a été engendré avec `--singular`, et elle ne
     // sert plus que de repli à un `dto.rs` qui ne dit rien.
-    let entity = entite_des_dto(&dto_source).unwrap_or_else(|| {
+    // Deux usages, deux exigences. Le préfixe du type d'énumération veut un nom dans tous
+    // les cas, et l'heuristique y fait l'affaire : c'est celui que `generate crud` aurait
+    // écrit. L'en-tête du bloc, lui, ne peut nommer un trio que si le module le déclare
+    // vraiment — le prêter à un module qui n'en a pas envoie chercher l'introuvable.
+    let trio = entite_des_dto(&dto_source);
+    let entity = trio.clone().unwrap_or_else(|| {
         // Seul le nom de la table entre dans l'entité ; les champs n'y ont aucune part.
         Feature::fresh(&options.table, Vec::new()).entity()
     });
@@ -442,7 +447,7 @@ pub(crate) fn plan_for(options: &Options, timestamp: &str) -> Result<Planned, Er
             },
             Bloc {
                 fichier: dto_path,
-                lignes: bloc_des_dto(&entity, &champs, &dto_source),
+                lignes: bloc_des_dto(trio.as_deref(), &champs, &dto_source),
             },
         ],
         avertissement,
@@ -739,7 +744,7 @@ fn import_du_modele(champs: &[Field], source: &str) -> Option<ImportDuModele> {
 /// Toute colonne ajoutée étant optionnelle — c'est ce que cette commande exige —, `Create`,
 /// `Update` et la réponse portent le même `Option<T>` ; un champ obligatoire les aurait
 /// distingués.
-fn bloc_des_dto(entity: &str, champs: &[Field], source: &str) -> Vec<String> {
+fn bloc_des_dto(trio: Option<&str>, champs: &[Field], source: &str) -> Vec<String> {
     let mut lignes = Vec::new();
 
     let mut imports: Vec<String> = Vec::new();
@@ -770,9 +775,17 @@ fn bloc_des_dto(entity: &str, champs: &[Field], source: &str) -> Vec<String> {
         lignes.push(String::new());
     }
 
-    lignes.push(format!(
-        "// dans `Create{entity}`, `Update{entity}` et `{entity}Response`"
-    ));
+    // Le trio ne se nomme que si le module le déclare. Le fragment `auth` n'en porte
+    // aucun — ses entrées sont `RegisterRequest`, `LoginRequest`…, et `UserResponse` est
+    // seule de son espèce —, or ses tables sont précisément celles que le refus de la
+    // commande cite en exemple : l'heuristique y nommait `CreateUser` et `UpdateUser`,
+    // introuvables l'un comme l'autre.
+    lignes.push(match trio {
+        Some(entity) => {
+            format!("// dans `Create{entity}`, `Update{entity}` et `{entity}Response`")
+        }
+        None => "// dans les DTO de ce module qui exposent la colonne".to_string(),
+    });
 
     for champ in champs {
         if let Some(attribut) = schema_format(champ) {
@@ -1680,10 +1693,12 @@ mod tests {
         );
     }
 
-    /// Un `dto.rs` qui ne nomme aucun trio — réécrit à la main, ou absent — ne dit rien :
-    /// l'heuristique reprend alors la main, et c'est le meilleur nom qui reste.
+    /// Un `dto.rs` réécrit à la main ne nomme plus de trio, et le bloc ne lui en prête
+    /// aucun. L'heuristique n'a pas disparu pour autant : elle reste le préfixe du type
+    /// d'énumération, ce que `generate crud` aurait écrit — mais elle ne sert plus d'en-tête,
+    /// où elle désignerait des structures que le fichier ne déclare pas.
     #[test]
-    fn the_dto_block_falls_back_to_the_heuristic_when_the_file_names_no_trio() {
+    fn the_dto_block_names_no_trio_when_the_file_says_nothing() {
         let (_parent, root) = projet();
         fs::write(
             root.join("src/articles/dto.rs"),
@@ -1701,8 +1716,8 @@ mod tests {
 
         let colle = bloc(&planned, "src/articles/dto.rs");
         assert!(
-            colle.contains("// dans `CreateArticle`, `UpdateArticle` et `ArticleResponse`"),
-            "sans trio lisible, l'en-tête reste celui de l'heuristique :\n{colle}"
+            !colle.contains("CreateArticle") && !colle.contains("UpdateArticle"),
+            "sans trio lisible, l'en-tête ne doit nommer aucune structure :\n{colle}"
         );
     }
 
@@ -1730,6 +1745,30 @@ mod tests {
         assert!(
             !colle.contains("remplacez"),
             "le fichier ne porte aucune ligne d'import du modèle : rien à remplacer :\n{colle}"
+        );
+    }
+
+    /// Le module `auth` ne déclare aucun trio : ses entrées sont `RegisterRequest`,
+    /// `LoginRequest`… et `UserResponse` est seule de son espèce. L'heuristique y nommait
+    /// `CreateUser` et `UpdateUser`, deux structures qui n'existent nulle part — et ce
+    /// sont précisément les tables que le refus de la commande cite en exemple. Mieux vaut
+    /// ne nommer aucun trio que d'envoyer chercher ce qui n'existe pas.
+    #[test]
+    fn the_dto_block_names_no_trio_when_the_module_declares_none() {
+        let (_parent, root) = crate::fixtures::Project::new().features(&["auth"]).create();
+
+        let planned = run(&options(
+            &root,
+            "ajoute_statut",
+            "users",
+            "statut:enum(actif,suspendu):optional",
+        ))
+        .expect("la migration doit s'écrire");
+
+        let colle = bloc(&planned, "src/auth/dto.rs");
+        assert!(
+            !colle.contains("CreateUser") && !colle.contains("UpdateUser"),
+            "l'en-tête ne doit nommer aucune structure que le module ne déclare pas :\n{colle}"
         );
     }
 
