@@ -111,7 +111,7 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
     // besoin d'aucune base et sortent sous `cargo test` ordinaire, les treize autres sous
     // `--ignored`. Les confondre ferait passer ce test sans qu'un seul des deux groupes
     // soit vraiment joué.
-    let (abouti, ordinaires) = cargo_test_brut(&racine, &common::cible(), &[]);
+    let (abouti, ordinaires) = cargo_test_brut(&racine, &common::cible(), &[], &[]);
     assert!(abouti, "`cargo test` du projet a échoué :\n{ordinaires}");
     for (sous_module, test) in TESTS_ORDINAIRES {
         assert!(
@@ -122,7 +122,54 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
         );
     }
 
-    let (abouti, sous_conteneur) = cargo_test_brut(&racine, &common::cible(), &["--", "--ignored"]);
+    // Le client des livraisons appelle `.no_proxy()` pour que son résolveur filtrant voie
+    // la cible elle-même : derrière un mandataire, une livraison HTTPS partirait en tunnel
+    // CONNECT, et c'est lui qui résoudrait l'hôte, hors de toute politique. Rien ne
+    // retenait cet appel — le cas n'avait été éprouvé qu'une fois, à la main. Rejouer les
+    // tests de `target` sous un mandataire injoignable le fige : `.no_proxy()` retiré,
+    // reqwest composerait avec ce mandataire, le refus du résolveur ne serait plus dans la
+    // chaîne des causes, et `a_refusal_from_the_resolver_is_found_in_the_client_error`
+    // tomberait.
+    //
+    // L'ordre compte, et il a été vérifié à ses dépens : le projet est déjà compilé par
+    // l'invocation ci-dessus, celle-ci ne fait que rejouer. Un mandataire posé sur une
+    // compilation froide ne prouverait rien du client — le script de construction
+    // d'`utoipa-swagger-ui` télécharge par `curl`, qui suit `ALL_PROXY` et échoue le
+    // premier, avant qu'un seul test n'ait tourné. `CARGO_NET_OFFLINE` garde cargo du même
+    // piège pour l'index, et `NO_PROXY` vidé empêche l'environnement de la machine de
+    // lever la garde en silence.
+    const INJOIGNABLE: &str = "http://127.0.0.1:9";
+    let (abouti, sous_mandataire) = cargo_test_brut(
+        &racine,
+        &common::cible(),
+        &["modules::webhooks::tests::target"],
+        &[
+            ("HTTP_PROXY", INJOIGNABLE),
+            ("HTTPS_PROXY", INJOIGNABLE),
+            ("ALL_PROXY", INJOIGNABLE),
+            ("NO_PROXY", ""),
+            ("CARGO_NET_OFFLINE", "true"),
+        ],
+    );
+    assert!(
+        abouti,
+        "les tests de `target` échouent sous mandataire : le client des livraisons ne \
+         l'ignore plus.\n{sous_mandataire}"
+    );
+    for test in [
+        "a_refusal_from_the_resolver_is_found_in_the_client_error",
+        "a_connection_failure_is_not_a_refusal",
+    ] {
+        assert!(
+            sous_mandataire.contains(&format!(
+                "test modules::webhooks::tests::target::{test} ... ok"
+            )),
+            "`{test}` n'a pas été rejoué sous mandataire :\n{sous_mandataire}"
+        );
+    }
+
+    let (abouti, sous_conteneur) =
+        cargo_test_brut(&racine, &common::cible(), &["--", "--ignored"], &[]);
     assert!(
         abouti,
         "`cargo test -- --ignored` du projet a échoué :\n{sous_conteneur}"
@@ -206,15 +253,28 @@ fn migrate_dans(racine: &Path, cible: &Path) {
 }
 
 /// Joue `cargo test` dans le projet et rend son issue et ses deux flux réunis.
-fn cargo_test_brut(racine: &Path, cible: &Path, arguments: &[&str]) -> (bool, String) {
-    let output = std::process::Command::new("cargo")
+///
+/// `env` pose des variables sur l'invocation : cargo comme le binaire de test les
+/// reçoivent, ce dont la garde du mandataire a besoin pour atteindre reqwest.
+fn cargo_test_brut(
+    racine: &Path,
+    cible: &Path,
+    arguments: &[&str],
+    env: &[(&str, &str)],
+) -> (bool, String) {
+    let mut commande = std::process::Command::new("cargo");
+    commande
         .current_dir(racine)
         .env("CARGO_TARGET_DIR", cible)
         .arg("test")
         .arg("--workspace")
-        .args(arguments)
-        .output()
-        .expect("cargo doit se lancer");
+        .args(arguments);
+
+    for (cle, valeur) in env {
+        commande.env(cle, valeur);
+    }
+
+    let output = commande.output().expect("cargo doit se lancer");
 
     let journal = format!(
         "{}{}",
