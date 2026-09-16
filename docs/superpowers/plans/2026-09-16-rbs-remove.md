@@ -1225,6 +1225,13 @@ git commit -m "feat(remove): refuse avant d'écrire ce qu'un dépendant exige en
 
 ### Task 10: Le branchement de la commande
 
+> **Correction du contrôleur (R7) — trouvé par une revue, hors de son diff.**
+> `Plan::bilan` (`crates/rbs-cli/src/plan/mod.rs`) classe chaque fichier écrit en *créé* ou
+> *modifié* selon `before.is_some()`, sans connaître la suppression. Le bilan que tu
+> affiches annoncerait donc un fichier **supprimé** comme « modifié ». Corrige `bilan` pour
+> compter les suppressions à part, et dis-les dans le bilan de `remove` — un utilisateur à
+> qui l'on annonce « 7 fichiers modifiés » après une désinstallation est mal renseigné.
+
 > **Correction du contrôleur (R6).** La tâche 2 a posé deux `#[allow(dead_code)]`
 > — sur `Builder::supprimer` (`plan/mod.rs`) et `Effect::Supprimer` (`plan/action.rs`) —
 > parce que rien ne les appelait encore. **C'est ta tâche qui câble l'appel : retire-les.**
