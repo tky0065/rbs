@@ -725,6 +725,10 @@ fn the_three_new_types_migrate_and_pass_their_tests_against_postgresql() {
             "-tA",
             "-v",
             "ON_ERROR_STOP=1",
+            // Cette ligne `draft` est aussi le témoin du filtre `in: ["draft"]` joué plus
+            // bas : la retirer n'y ferait rien échouer, mais y rendrait une page vide, et
+            // l'assertion qui exige d'en voir la ligne `published` absente ne dirait plus
+            // rien.
             "-c",
             "insert into invoices (id, due, status, price, created_at, updated_at) \
              values ('00000000-0000-4000-8000-000000000001', '2024-01-15', 'draft', 12.5, now(), now());",
@@ -1073,8 +1077,13 @@ fn a_date_and_an_enum_migrate_and_pass_their_tests_on_sqlite() {
         String::from_utf8_lossy(&refus.stderr)
     );
 
+    // Le message qu'imprime le moteur est le critère, ici comme aux bancs PostgreSQL et
+    // MySQL : un insert accepté n'imprime rien, et l'assertion tombe alors d'elle-même.
+    // Juger en plus le code de sortie ne vaudrait que pour ce banc-ci, les deux autres
+    // passant par `docker exec`, et laisserait croire que le code de sortie est le critère
+    // là où il ne l'est pas.
     assert!(
-        !refus.status.success() && sortie_refus.to_lowercase().contains("check constraint"),
+        sortie_refus.to_lowercase().contains("check constraint"),
         "SQLite a accepté une valeur hors de l'énumération : le CHECK ne tient \
          pas :\n{sortie_refus}"
     );
