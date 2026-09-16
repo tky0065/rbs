@@ -502,11 +502,11 @@ async fn les_semis_sont_rendus_par_l_api() {
         let rendered = seed("articles", "status:enum(draft,published)");
 
         assert!(
-            rendered.contains("status: Set(model::Status::Draft)"),
+            rendered.contains("status: Set(model::ArticleStatus::Draft)"),
             "première ligne :\n{rendered}"
         );
         assert!(
-            rendered.contains("status: Set(model::Status::Published)"),
+            rendered.contains("status: Set(model::ArticleStatus::Published)"),
             "seconde ligne :\n{rendered}"
         );
     }
@@ -518,7 +518,7 @@ async fn les_semis_sont_rendus_par_l_api() {
 
         assert_eq!(
             rendered
-                .matches("status: Set(model::Status::Draft)")
+                .matches("status: Set(model::ArticleStatus::Draft)")
                 .count(),
             LIGNES,
             "{rendered}"
@@ -532,7 +532,7 @@ async fn les_semis_sont_rendus_par_l_api() {
         let rendered = seed("articles", "status:enum(draft,published):optional");
 
         assert!(
-            rendered.contains("status: Set(Some(model::Status::Draft))"),
+            rendered.contains("status: Set(Some(model::ArticleStatus::Draft))"),
             "{rendered}"
         );
     }

@@ -277,7 +277,7 @@ plan pour /private/tmp/rbs-demo/demo
         Clone, Copy, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, Deserialize, Serialize, ToSchema,
     )]
     #[sea_orm(rs_type = "String", db_type = "String(StringLen::N(9))")]
-    pub enum Statut {
+    pub enum ArticleStatut {
         #[sea_orm(string_value = "draft")]
         #[serde(rename = "draft")]
         Draft,
@@ -287,7 +287,7 @@ plan pour /private/tmp/rbs-demo/demo
     }
 
     // dans `struct Model`
-        pub statut: Option<Statut>,
+        pub statut: Option<ArticleStatut>,
         pub prix: Option<Decimal>,
 
   à coller dans src/articles/dto.rs :
@@ -296,10 +296,10 @@ plan pour /private/tmp/rbs-demo/demo
     use sea_orm::prelude::Decimal;
 
     // remplacez `use super::model::Model;` par :
-    use super::model::{Model, Statut};
+    use super::model::{ArticleStatut, Model};
 
     // dans `CreateArticle`, `UpdateArticle` et `ArticleResponse`
-        pub statut: Option<Statut>,
+        pub statut: Option<ArticleStatut>,
         #[schema(value_type = Option<String>, format = "decimal")]
         pub prix: Option<Decimal>,
 
@@ -353,7 +353,7 @@ There is no twelfth, and no `email` type: a string format is not a column type.
 | `uuid` | `Uuid` | `uuid()` |
 | `datetime` | `DateTimeWithTimeZone` | `timestamp_with_time_zone()` |
 | `date` | `Date` | `date()` |
-| `enum(a,b,c)` | an enum named after the field | `string_len(n)` under a `CHECK` |
+| `enum(a,b,c)` | an enum named after the entity and the field | `string_len(n)` under a `CHECK` |
 
 `string` and `text` share a Rust type, so `text` is the only one that also carries an
 explicit column type on the entity — without it SeaORM would infer `varchar`.
@@ -375,14 +375,18 @@ both. Align the pin on the version asked for, or drop it and let the generation 
 it.
 
 `enum(a,b,c)` is the only type carrying its own values. They are snake_case, distinct, and
-at least one. The model declares an enum named after the field in PascalCase — `status`
-gives `Status` — one variant per value, and the migration bounds the column to the longest
-value under a `CHECK (status IN ('draft', 'published'))` that holds on PostgreSQL, MySQL and
-SQLite alike. An `optional` column stays nullable: a `NULL` passes a `CHECK`. A field whose
-PascalCase form collides with a type the model already declares — `Model`, `ActiveModel`,
-`Entity`, `Column`, `PrimaryKey`, `Relation` — is refused before anything is written. Such a
-column is filtered by `eq`, `in` and `is_null` rather than by the comparisons of an ordered
-one; [Filtering](../guides/filtering.md) has that table.
+at least one. The model declares an enum named after the entity and the field in PascalCase
+— `status` on `articles` gives `ArticleStatus` — one variant per value, and the migration
+bounds the column to the longest value under a `CHECK (status IN ('draft', 'published'))`
+that holds on PostgreSQL, MySQL and SQLite alike. The entity is part of the name because
+utoipa derives the OpenAPI component name from the Rust type name: two features each
+declaring `status:enum(…)` would otherwise write both enums to the document under a single
+name, and the document — like the typed client reading it — would keep only one. An
+`optional` column stays nullable: a `NULL` passes a `CHECK`. A field named `response` or
+`filter` is refused before anything is written: its type would then be named like the DTO
+or the filter that the CRUD already declares, in the very file that imports it from the
+model. Such a column is filtered by `eq`, `in` and `is_null` rather than by the comparisons
+of an ordered one; [Filtering](../guides/filtering.md) has that table.
 
 The eleventh, `references`, is not a scalar at all: it points the column at another entity
 instead of giving it a type of its own.

@@ -379,21 +379,27 @@ mod tests {
         let rendered = dto("articles", "status:enum(draft,published)");
 
         assert!(
-            rendered.contains("use super::model::{Model, Status};"),
+            rendered.contains("use super::model::{ArticleStatus, Model};"),
             "l'import de l'énumération manque :\n{rendered}"
         );
 
         let creation = extract(&rendered, "pub struct CreateArticle {");
-        assert!(creation.contains("pub status: Status,"), "{creation}");
+        assert!(
+            creation.contains("pub status: ArticleStatus,"),
+            "{creation}"
+        );
 
         let mise_a_jour = extract(&rendered, "pub struct UpdateArticle {");
         assert!(
-            mise_a_jour.contains("pub status: Option<Status>,"),
+            mise_a_jour.contains("pub status: Option<ArticleStatus>,"),
             "{mise_a_jour}"
         );
 
         let response = extract(&rendered, "pub struct ArticleResponse {");
-        assert!(response.contains("pub status: Status,"), "{response}");
+        assert!(
+            response.contains("pub status: ArticleStatus,"),
+            "{response}"
+        );
     }
 
     /// Un champ optionnel d'un type neuf rend bien `Option<T>` là où le champ requis rend
@@ -404,13 +410,13 @@ mod tests {
 
         let creation = extract(&rendered, "pub struct CreateArticle {");
         assert!(
-            creation.contains("pub status: Option<Status>,"),
+            creation.contains("pub status: Option<ArticleStatus>,"),
             "{creation}"
         );
 
         let response = extract(&rendered, "pub struct ArticleResponse {");
         assert!(
-            response.contains("pub status: Option<Status>,"),
+            response.contains("pub status: Option<ArticleStatus>,"),
             "{response}"
         );
     }

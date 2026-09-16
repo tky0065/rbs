@@ -305,7 +305,7 @@ pub(crate) fn plan_for(options: &Options, timestamp: &str) -> Result<Planned, Er
 
     name::validate_identifier(&options.name).map_err(Error::Nom)?;
 
-    let champs = fields::parse(&options.fields).map_err(Error::Fields)?;
+    let mut champs = fields::parse(&options.fields).map_err(Error::Fields)?;
 
     // Le parseur rend un vecteur vide sans se plaindre : c'est ce dont `rbs migrate new` a
     // besoin, et non cette commande-ci, dont le rendu n'altérerait alors aucune table.
@@ -384,6 +384,21 @@ pub(crate) fn plan_for(options: &Options, timestamp: &str) -> Result<Planned, Er
         });
     }
 
+    // Le trio que l'en-tête du bloc nomme est celui que le module porte : l'heuristique
+    // singulière le manque dès qu'un CRUD a été engendré avec `--singular`, et elle ne
+    // sert plus que de repli à un `dto.rs` qui ne dit rien.
+    let entity = entite_des_dto(&dto_source).unwrap_or_else(|| {
+        // Seul le nom de la table entre dans l'entité ; les champs n'y ont aucune part.
+        Feature::fresh(&options.table, Vec::new()).entity()
+    });
+
+    // Les champs de cette commande-ci ne transitent par aucune `Feature` : c'est donc ici
+    // qu'ils reçoivent l'entité dont le type de leur énumération est préfixé. Le bloc
+    // affiché nomme ainsi le type que `generate crud` aurait écrit.
+    for champ in &mut champs {
+        champ.entity.clone_from(&entity);
+    }
+
     let module_migration = format!("m{timestamp}_{}", options.name);
     let fichier = format!("migration/src/{module_migration}.rs");
 
@@ -395,14 +410,6 @@ pub(crate) fn plan_for(options: &Options, timestamp: &str) -> Result<Planned, Er
     // Après le rendu et avant le plan : le plan porte le contenu exact qui sera écrit, et
     // c'est lui que `--dry-run` montre.
     let avertissement = format::format_batch(std::iter::once(&mut contenu));
-
-    // Le trio que l'en-tête du bloc nomme est celui que le module porte : l'heuristique
-    // singulière le manque dès qu'un CRUD a été engendré avec `--singular`, et elle ne
-    // sert plus que de repli à un `dto.rs` qui ne dit rien.
-    let entity = entite_des_dto(&dto_source).unwrap_or_else(|| {
-        // Seul le nom de la table entre dans l'entité ; les champs n'y ont aucune part.
-        Feature::fresh(&options.table, Vec::new()).entity()
-    });
 
     // Les deux fichiers s'écrivent ensemble ou pas du tout : une migration que le `lib.rs`
     // ne déclare pas est un module que cargo refuse, et le projet ne compilerait plus pour
@@ -1579,7 +1586,8 @@ mod tests {
         let declaration = &modele[debut..fin];
 
         assert!(
-            declaration.contains("DeriveActiveEnum") && declaration.contains("pub enum Statut {"),
+            declaration.contains("DeriveActiveEnum")
+                && declaration.contains("pub enum ArticleStatut {"),
             "l'extraction doit couvrir la déclaration entière :\n{declaration}"
         );
         for ligne in declaration.lines().map(str::trim).filter(|l| !l.is_empty()) {
@@ -1651,7 +1659,7 @@ mod tests {
             !colle.contains("use utoipa::"),
             "import déjà présent, proposé une seconde fois :\n{colle}"
         );
-        assert!(colle.contains("pub enum Etat {"), "{colle}");
+        assert!(colle.contains("pub enum FactureEtat {"), "{colle}");
     }
 
     /// Le trio que l'en-tête du bloc nomme est celui que le module porte, et non celui
@@ -1700,7 +1708,7 @@ mod tests {
 
     /// Un `dto.rs` sans ligne `use super::model::` n'a rien à remplacer — ceux du
     /// fragment `auth` n'en portent pas, et ce sont les tables que le refus de la
-    /// commande cite en exemple. Se taire livrerait un `Option<Statut>` sans dire d'où
+    /// commande cite en exemple. Se taire livrerait un `Option<UserStatut>` sans dire d'où
     /// vient le type.
     #[test]
     fn the_dto_block_gives_the_whole_import_when_the_file_has_no_line_to_edit() {
@@ -1716,7 +1724,7 @@ mod tests {
 
         let colle = bloc(&planned, "src/auth/dto.rs");
         assert!(
-            colle.contains("use super::model::Statut;"),
+            colle.contains("use super::model::UserStatut;"),
             "le bloc doit donner l'import à ajouter :\n{colle}"
         );
         assert!(
@@ -1746,7 +1754,7 @@ mod tests {
             "le bloc doit dire que la ligne se remplace :\n{colle}"
         );
         assert!(
-            colle.contains("use super::model::{Model, Statut};"),
+            colle.contains("use super::model::{ArticleStatut, Model};"),
             "le bloc doit donner la ligne complète :\n{colle}"
         );
     }

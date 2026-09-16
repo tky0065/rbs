@@ -195,6 +195,14 @@ pub(crate) struct Field {
     pub max: Option<u32>,
     /// Posée par `relations::resolve`, absente jusque-là et pour tout scalaire.
     pub relation: Option<RelationView>,
+    /// Entité qui porte le champ, en PascalCase — vide tant qu'aucune ne l'a réclamé.
+    ///
+    /// C'est le préfixe du type d'énumération, et la seule voie par laquelle l'entité
+    /// l'atteint : un `Field` est sérialisé vers minijinja **seul**, sans contexte
+    /// d'entité, et [`Field::enum_type`] n'a donc rien d'autre à lire. La `Feature` qui
+    /// contient le champ l'appose ; `generate migration --add-column`, dont les champs ne
+    /// transitent par aucune, le fait pour son compte.
+    pub entity: String,
 }
 
 impl Field {
@@ -298,11 +306,17 @@ impl Field {
         }
     }
 
-    /// Nom PascalCase du type d'énumération engendré pour ce champ, d'après son propre
-    /// nom — vide pour tout champ qui n'en est pas une.
+    /// Nom PascalCase du type d'énumération engendré pour ce champ — vide pour tout champ
+    /// qui n'en est pas une.
+    ///
+    /// L'entité préfixe le nom du champ. Sans elle, deux features qui déclarent chacune
+    /// `status:enum(…)` engendrent deux types Rust distincts que utoipa, qui tire le nom
+    /// du composant OpenAPI du nom du type, inscrit au document sous un seul et même nom —
+    /// `Status` côté réponse, `OneOfSchema_Status` côté filtre. Le document, et le client
+    /// typé qui le lit, n'en gardent qu'un.
     pub(crate) fn enum_type(&self) -> String {
         match &self.kind {
-            FieldKind::Enum(_) => to_pascal_case(&self.name),
+            FieldKind::Enum(_) => format!("{}{}", self.entity, to_pascal_case(&self.name)),
             FieldKind::Scalar(_) | FieldKind::Reference(_) => String::new(),
         }
     }
@@ -585,12 +599,21 @@ fn parse_field(rank: usize, chunk: &str) -> Result<Field, FieldError> {
     } else if raw_type == "enum" || raw_type.starts_with("enum(") {
         let values = parse_enum_values(raw_type).map_err(|kind| error(name, kind))?;
 
-        // Le type de l'énumération est nommé d'après le champ, en PascalCase : une
-        // collision avec un type que `model.rs` déclare déjà pour toute entité romprait
-        // la compilation du projet engendré.
+        // Le type de l'énumération est nommé de l'entité suivie du champ, en PascalCase :
+        // il ne heurte plus les types que `model.rs` déclare, qui n'ont pas de préfixe,
+        // mais il heurterait ceux que le CRUD nomme comme lui.
         let type_name = to_pascal_case(name);
-        if MODEL_TYPE_NAMES.contains(&type_name.as_str()) {
-            return Err(error(name, ErrorKind::EnumTypeNameCollision { type_name }));
+        if let Some((_, fichier)) = ENTITY_SUFFIXES_IN_USE
+            .iter()
+            .find(|(suffixe, _)| *suffixe == type_name)
+        {
+            return Err(error(
+                name,
+                ErrorKind::EnumTypeNameCollision {
+                    type_name,
+                    fichier: (*fichier).to_string(),
+                },
+            ));
         }
 
         FieldKind::Enum(values)
@@ -614,6 +637,7 @@ fn parse_field(rank: usize, chunk: &str) -> Result<Field, FieldError> {
         index: false,
         max: None,
         relation: None,
+        entity: String::new(),
     };
 
     // `cascade` et `nullify` ne sont pas des drapeaux du champ : ils ne choisissent
@@ -769,17 +793,18 @@ const NAMES_SET_BY_RBS: [&str; 3] = ["id", "created_at", "updated_at"];
 /// Variante que `#[derive(DeriveIden)]` réserve au nom de la table dans la migration.
 const TABLE_NAME_IN_MIGRATION: &str = "table";
 
-/// Types que `model.rs` déclare déjà pour toute entité engendrée : la structure
-/// `DeriveActiveEnum` d'un champ `enum` porte le nom du champ en PascalCase, qui les
-/// heurterait.
-const MODEL_TYPE_NAMES: [&str; 6] = [
-    "Model",
-    "ActiveModel",
-    "Entity",
-    "Column",
-    "PrimaryKey",
-    "Relation",
-];
+/// Suffixes que le CRUD engendré accole déjà au nom de l'entité, et le fichier qui les
+/// déclare.
+///
+/// Le type `DeriveActiveEnum` d'un champ `enum` porte ce même nom d'entité en préfixe :
+/// `response:enum(…)` nomme dans `model.rs` le type que `dto.rs` déclare *et* importe du
+/// modèle, soit deux déclarations d'un seul nom dans un seul module — ce que rustc refuse.
+/// La concordance se juge sur le seul suffixe, l'entité étant la même des deux côtés.
+///
+/// Un champ qui ne heurterait qu'une fois l'entité concaténée — `model` sur une table
+/// `actives` — n'est pas couvert : `--fields` s'analyse sans savoir de quelle table il est
+/// la ligne.
+const ENTITY_SUFFIXES_IN_USE: [(&str, &str); 2] = [("Response", "dto.rs"), ("Filter", "filter.rs")];
 
 /// Identifiants que Rust réserve et qu'une recasse en PascalCase peut produire.
 ///
@@ -1049,6 +1074,7 @@ mod tests {
             index: false,
             max: None,
             relation: None,
+            entity: String::new(),
         };
         let optional = Field {
             optional: true,
@@ -1684,26 +1710,33 @@ mod tests {
         );
     }
 
-    /// Le type de l'énumération est nommé d'après le champ : une collision avec un type
-    /// que `model.rs` déclare déjà romprait la compilation du projet engendré.
+    /// Le type de l'énumération est préfixé du nom de l'entité : il heurte donc les types
+    /// que le CRUD nomme de la même façon — `ArticleResponse`, `ArticleFilter` —, que
+    /// leur fichier importe précisément du modèle.
     #[test]
-    fn an_enum_field_name_colliding_with_a_model_type_is_rejected() {
-        for (name, type_name) in [
-            ("model", "Model"),
-            ("active_model", "ActiveModel"),
-            ("entity", "Entity"),
-            ("column", "Column"),
-            ("primary_key", "PrimaryKey"),
-            ("relation", "Relation"),
+    fn an_enum_field_name_colliding_with_a_generated_type_is_rejected() {
+        for (name, type_name, fichier) in [
+            ("response", "Response", "dto.rs"),
+            ("filter", "Filter", "filter.rs"),
         ] {
             assert_eq!(
                 kind(&format!("{name}:enum(a,b)")),
                 ErrorKind::EnumTypeNameCollision {
-                    type_name: type_name.to_string()
+                    type_name: type_name.to_string(),
+                    fichier: fichier.to_string(),
                 },
                 "nom « {name} »"
             );
         }
+    }
+
+    /// Les six types que `model.rs` déclare ne sont plus heurtés : préfixé de l'entité,
+    /// `model:enum(…)` nomme `ArticleModel`, qui ne heurte rien.
+    #[test]
+    fn an_enum_field_named_after_a_model_type_is_accepted() {
+        let fields = fields("model:enum(a,b)");
+
+        assert_eq!(fields[0].name, "model");
     }
 
     #[test]

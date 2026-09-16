@@ -536,7 +536,7 @@ mod tests {
 
         for attendu in [
             "#[sea_orm(rs_type = \"String\", db_type = \"String(StringLen::N(9))\")]",
-            "pub enum Status {",
+            "pub enum ArticleStatus {",
             "#[sea_orm(string_value = \"draft\")]",
             "#[serde(rename = \"draft\")]",
             "    Draft,",
@@ -550,8 +550,26 @@ mod tests {
         }
 
         assert!(
-            rendered.contains("pub status: Status,"),
+            rendered.contains("pub status: ArticleStatus,"),
             "la colonne ne porte pas son énumération :\n{rendered}"
+        );
+    }
+
+    /// `--singular` corrige l'entité *après* la construction de la feature : un préfixe
+    /// posé à la seule construction nommerait ici `NewsStatus`, d'après l'heuristique que
+    /// la forme imposée vient précisément de remplacer.
+    #[test]
+    fn an_imposed_singular_names_the_enumeration_the_module_will_carry() {
+        let champs = fields::parse("status:enum(draft,published)")
+            .expect("les champs du test doivent être valides");
+        let rendered =
+            render(&Feature::fresh("news", champs).with_singular(Some("news_item".to_string())))
+                .expect("l'entité doit se rendre");
+
+        assert!(rendered.contains("pub enum NewsItemStatus {"), "{rendered}");
+        assert!(
+            rendered.contains("pub status: NewsItemStatus,"),
+            "{rendered}"
         );
     }
 
@@ -594,7 +612,7 @@ mod tests {
         let rendered = entity("articles", "status:enum(draft,published):optional");
 
         assert!(
-            rendered.contains("pub status: Option<Status>,"),
+            rendered.contains("pub status: Option<ArticleStatus>,"),
             "{rendered}"
         );
     }

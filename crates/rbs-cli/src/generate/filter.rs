@@ -510,6 +510,21 @@ mod tests {
         );
     }
 
+    /// Le type d'une énumération porte désormais le nom de l'entité : la ligne d'import du
+    /// modèle et l'annotation de schéma croissent donc avec lui, là où elles étaient fixes.
+    /// Le balayage le mesure sur le seul rendu qui en porte un.
+    #[test]
+    fn an_enum_column_keeps_the_render_a_fixed_point_of_rustfmt() {
+        let divergentes =
+            bench::longueurs_divergentes(|name| filtre(name, "status:enum(draft,published)"));
+
+        assert_eq!(
+            divergentes,
+            Vec::<usize>::new(),
+            "le rendu du filtre diverge de rustfmt à ces longueurs de nom"
+        );
+    }
+
     /// Une colonne à valeurs énumérées ne se compare ni ne se cherche : elle s'égale ou
     /// appartient à une liste, ce que porte `OneOf`.
     #[test]
@@ -517,12 +532,12 @@ mod tests {
         let rendered = filtre("articles", "status:enum(draft,published)");
 
         assert!(
-            rendered.contains("pub status: Option<OneOf<Status>>,"),
+            rendered.contains("pub status: Option<OneOf<ArticleStatus>>,"),
             "« status » ne porte pas `OneOf` :\n{rendered}"
         );
         assert!(
             rendered.contains(
-                "#[schema(value_type = Option<rbs_core::OneOfSchema<Status>>)]\n    pub status:"
+                "#[schema(value_type = Option<rbs_core::OneOfSchema<ArticleStatus>>)]\n    pub status:"
             ),
             "le schéma de l'énumération manque :\n{rendered}"
         );
@@ -531,7 +546,7 @@ mod tests {
             "l'import de `OneOf` manque :\n{rendered}"
         );
         assert!(
-            rendered.contains("use super::model::{Column, Entity, Status};"),
+            rendered.contains("use super::model::{ArticleStatus, Column, Entity};"),
             "l'import de l'énumération manque :\n{rendered}"
         );
         assert!(

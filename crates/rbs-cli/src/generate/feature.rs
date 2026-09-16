@@ -57,6 +57,25 @@ impl Feature {
             singular: None,
             lang: crate::lang::Lang::Fr,
         }
+        .stamped()
+    }
+
+    /// La même feature, l'entité apposée à chacun de ses champs.
+    ///
+    /// Un `Field` est sérialisé vers minijinja seul, sans contexte : le préfixe dont
+    /// [`Field::enum_type`] a besoin ne peut lui venir que d'ici. L'apposition est rappelée
+    /// par `with_singular` autant que par `fresh`, l'entité se dérivant de `name` *et* de
+    /// `singular` — posée à la seule construction, elle nommerait les énumérations d'après
+    /// l'heuristique singulière que `--singular` vient précisément de corriger.
+    ///
+    /// [`Field::enum_type`]: super::fields::Field::enum_type
+    fn stamped(mut self) -> Self {
+        let entity = self.entity();
+        for field in &mut self.fields {
+            field.entity.clone_from(&entity);
+        }
+
+        self
     }
 
     /// La même feature, sa forme singulière imposée plutôt que devinée.
@@ -65,7 +84,7 @@ impl Feature {
     /// reçue, sans avoir à la déballer.
     pub(crate) fn with_singular(mut self, singular: Option<String>) -> Self {
         self.singular = singular;
-        self
+        self.stamped()
     }
 
     /// La même feature, ses écritures réservées au rôle `role`.
@@ -515,6 +534,35 @@ mod tests {
         let feature = Feature::fresh("articles", Vec::new()).with_singular(None);
 
         assert_eq!(feature.entity(), "Article");
+    }
+
+    /// utoipa tire le nom du composant OpenAPI du nom du type Rust : deux features qui
+    /// déclarent chacune `status:enum(…)` inscriraient leurs deux énumérations sous un
+    /// seul et même nom, et le document — comme le client TypeScript qui le lit — n'en
+    /// garderait qu'une.
+    #[test]
+    fn two_features_declaring_the_same_enum_field_do_not_share_its_type_name() {
+        let champs = || {
+            crate::generate::fields::parse("status:enum(draft,published)").expect("champs valides")
+        };
+        let articles = Feature::fresh("articles", champs());
+        let commandes = Feature::fresh("commandes", champs());
+
+        assert_eq!(articles.enum_types(), ["ArticleStatus"]);
+        assert_eq!(commandes.enum_types(), ["CommandeStatus"]);
+    }
+
+    /// Le préfixe est l'entité, que `--singular` peut imposer *après* `fresh` : posé une
+    /// seule fois à la construction, il nommerait le type d'après l'heuristique que la
+    /// forme imposée vient justement de corriger.
+    #[test]
+    fn the_enum_type_follows_the_imposed_singular() {
+        let champs =
+            crate::generate::fields::parse("status:enum(draft,published)").expect("champs valides");
+        let feature = Feature::fresh("news", champs).with_singular(Some("news_item".to_string()));
+
+        assert_eq!(feature.enum_types(), ["NewsItemStatus"]);
+        assert_eq!(feature.model_import(), "{Model, NewsItemStatus}");
     }
 
     #[test]

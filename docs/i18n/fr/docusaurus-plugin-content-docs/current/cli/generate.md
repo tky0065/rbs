@@ -281,7 +281,7 @@ plan pour /private/tmp/rbs-demo/demo
         Clone, Copy, Debug, PartialEq, Eq, EnumIter, DeriveActiveEnum, Deserialize, Serialize, ToSchema,
     )]
     #[sea_orm(rs_type = "String", db_type = "String(StringLen::N(9))")]
-    pub enum Statut {
+    pub enum ArticleStatut {
         #[sea_orm(string_value = "draft")]
         #[serde(rename = "draft")]
         Draft,
@@ -291,7 +291,7 @@ plan pour /private/tmp/rbs-demo/demo
     }
 
     // dans `struct Model`
-        pub statut: Option<Statut>,
+        pub statut: Option<ArticleStatut>,
         pub prix: Option<Decimal>,
 
   à coller dans src/articles/dto.rs :
@@ -300,10 +300,10 @@ plan pour /private/tmp/rbs-demo/demo
     use sea_orm::prelude::Decimal;
 
     // remplacez `use super::model::Model;` par :
-    use super::model::{Model, Statut};
+    use super::model::{ArticleStatut, Model};
 
     // dans `CreateArticle`, `UpdateArticle` et `ArticleResponse`
-        pub statut: Option<Statut>,
+        pub statut: Option<ArticleStatut>,
         #[schema(value_type = Option<String>, format = "decimal")]
         pub prix: Option<Decimal>,
 
@@ -360,7 +360,7 @@ colonne.
 | `uuid` | `Uuid` | `uuid()` |
 | `datetime` | `DateTimeWithTimeZone` | `timestamp_with_time_zone()` |
 | `date` | `Date` | `date()` |
-| `enum(a,b,c)` | une énumération nommée d'après le champ | `string_len(n)` sous un `CHECK` |
+| `enum(a,b,c)` | une énumération nommée d'après l'entité et le champ | `string_len(n)` sous un `CHECK` |
 
 `string` et `text` partagent leur type Rust : `text` est donc le seul à porter en plus un
 type de colonne explicite sur l'entité, sans quoi SeaORM déduirait un `varchar`.
@@ -382,13 +382,17 @@ deux. Alignez l'épingle sur la version demandée, ou retirez-la et laissez la g
 déclarer.
 
 `enum(a,b,c)` est le seul type à porter ses propres valeurs. Elles sont en snake_case,
-distinctes, et au moins une. Le modèle déclare une énumération nommée d'après le champ en
-PascalCase — `status` donne `Status` —, une variante par valeur, et la migration borne la
-colonne à la plus longue valeur sous un `CHECK (status IN ('draft', 'published'))` que
-tiennent PostgreSQL, MySQL et SQLite. Une colonne `optional` reste nullable : un `NULL` passe
-un `CHECK`. Un champ dont la forme PascalCase heurte un type que le modèle déclare déjà —
-`Model`, `ActiveModel`, `Entity`, `Column`, `PrimaryKey`, `Relation` — est refusé avant toute
-écriture. Une telle colonne se filtre par `eq`, `in` et `is_null`, et non par les comparaisons
+distinctes, et au moins une. Le modèle déclare une énumération nommée d'après l'entité et le
+champ en PascalCase — `status` sur `articles` donne `ArticleStatus` —, une variante par
+valeur, et la migration borne la colonne à la plus longue valeur sous un
+`CHECK (status IN ('draft', 'published'))` que tiennent PostgreSQL, MySQL et SQLite. L'entité
+entre dans le nom parce que utoipa tire le nom du composant OpenAPI du nom du type Rust :
+deux features déclarant chacune `status:enum(…)` inscriraient sinon leurs deux énumérations
+au document sous un seul nom, et le document — comme le client typé qui le lit — n'en
+garderait qu'une. Une colonne `optional` reste nullable : un `NULL` passe un `CHECK`. Un champ
+nommé `response` ou `filter` est refusé avant toute écriture : son type porterait alors le nom
+du DTO ou du filtre que le CRUD déclare déjà, dans le fichier même qui l'importe du modèle.
+Une telle colonne se filtre par `eq`, `in` et `is_null`, et non par les comparaisons
 d'une colonne ordonnée ; [Filtrage](../guides/filtering.md) en donne la table.
 
 Le onzième, `references`, n'est pas un scalaire du tout : il pointe la colonne vers une

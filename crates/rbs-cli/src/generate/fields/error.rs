@@ -85,7 +85,10 @@ pub(crate) enum ErrorKind {
         value: String,
     },
     EnumTypeNameCollision {
+        /// Le suffixe heurté, entité non comprise : `Response`.
         type_name: String,
+        /// Le fichier du CRUD qui déclare déjà ce nom-là : `dto.rs`.
+        fichier: String,
     },
 }
 
@@ -173,8 +176,9 @@ impl ErrorKind {
             Self::EnumDuplicateValue { value } => {
                 format!("la valeur « {value} » est déclarée deux fois")
             }
-            Self::EnumTypeNameCollision { type_name } => format!(
-                "« {label} » nommerait le type « {type_name} », que « model.rs » déclare déjà"
+            Self::EnumTypeNameCollision { type_name, fichier } => format!(
+                "« {label} » nommerait le type « <entité>{type_name} », que « {fichier} » \
+                 déclare déjà"
             ),
         }
     }
@@ -253,8 +257,8 @@ impl ErrorKind {
                 Some("chaque valeur ne doit apparaître qu'une fois".to_string())
             }
             Self::EnumTypeNameCollision { .. } => Some(
-                "choisissez un autre nom de champ : son PascalCase nomme le type de \
-                 l'énumération"
+                "choisissez un autre nom de champ : le type de l'énumération porte le nom \
+                 de l'entité suivi du sien, en PascalCase"
                     .to_string(),
             ),
         }
@@ -711,12 +715,15 @@ mod tests {
     fn an_enum_type_name_collision_names_the_colliding_type() {
         let text = rendered(
             ErrorKind::EnumTypeNameCollision {
-                type_name: "Model".to_string(),
+                type_name: "Response".to_string(),
+                fichier: "dto.rs".to_string(),
             },
-            "model",
+            "response",
         );
         assert!(
-            text.contains("« model » nommerait le type « Model », que « model.rs » déclare déjà"),
+            text.contains(
+                "« response » nommerait le type « <entité>Response », que « dto.rs » déclare déjà"
+            ),
             "{text}"
         );
     }
@@ -733,18 +740,19 @@ mod tests {
     }
 
     /// Les messages citent entre guillemets français, jamais entre accents graves : celui
-    /// de la collision était le seul à écrire `model.rs` comme du code.
+    /// de la collision était le seul à écrire son fichier comme du code.
     #[test]
     fn the_enum_type_collision_quotes_the_file_like_every_other_message() {
         let text = rendered(
             ErrorKind::EnumTypeNameCollision {
-                type_name: "Column".to_string(),
+                type_name: "Filter".to_string(),
+                fichier: "filter.rs".to_string(),
             },
-            "column",
+            "filter",
         );
 
-        assert!(text.contains("« model.rs »"), "{text}");
-        assert!(!text.contains("`model.rs`"), "{text}");
+        assert!(text.contains("« filter.rs »"), "{text}");
+        assert!(!text.contains("`filter.rs`"), "{text}");
     }
 
     #[test]
