@@ -69,6 +69,10 @@ enum EffectJson<'a> {
         ancre: &'a str,
         lignes: &'a [String],
     },
+    RetirerLignes {
+        ancre: &'a str,
+        lignes: &'a [String],
+    },
     ReposerAncre {
         ancre: &'a str,
     },
@@ -98,6 +102,10 @@ impl<'a> From<&'a Effect> for EffectJson<'a> {
         match effet {
             Effect::Creer { content } => EffectJson::Creer { contenu: content },
             Effect::Inserer { anchor, lines } => EffectJson::Inserer {
+                ancre: anchor.name.as_ref(),
+                lignes: lines,
+            },
+            Effect::RetirerLignes { anchor, lines } => EffectJson::RetirerLignes {
                 ancre: anchor.name.as_ref(),
                 lignes: lines,
             },

@@ -404,6 +404,44 @@ impl Builder {
         Ok(())
     }
 
+    /// Planifie le retrait de `lines` du bloc de `anchor`.
+    ///
+    /// Un fichier porteur absent n'est une faute que si l'ancre ne l'est pas : le compose
+    /// d'un projet SQLite n'existe pas, et le service qu'un fragment y aurait posé n'a
+    /// rien à y perdre. Rien n'est consigné en [`Sautee`] — celle-ci annonce un bloc *à
+    /// coller*, et il n'y a ici rien à coller.
+    ///
+    // Sans appelant avant que `rbs remove` n'existe : `-D warnings` la dirait morte, alors
+    // que les tests en prouvent déjà le contrat.
+    #[allow(dead_code)]
+    pub fn retirer_lignes(&mut self, anchor: Anchor, lines: &[String]) -> Result<(), Error> {
+        let path = anchor.file.to_string();
+
+        let states = self.states(&path)?;
+        let Some(courant) = states.courant else {
+            return if anchor.optional {
+                Ok(())
+            } else {
+                Err(Error::FichierAbsent { path })
+            };
+        };
+
+        let after = crate::anchors::retire(&courant, &anchor, lines).map_err(Error::Anchor)?;
+        let statut = combined_status(states.origin.as_deref(), Some(after.as_str()));
+
+        self.project_onto(&path, states.origin, Some(after), statut);
+        self.actions.push(Action {
+            path,
+            effet: Effect::RetirerLignes {
+                anchor,
+                lines: lines.to_vec(),
+            },
+            statut,
+        });
+
+        Ok(())
+    }
+
     /// Comme [`Builder::insert`], mais une ancre optionnelle absente d'un fichier présent
     /// saute l'insertion au lieu d'arrêter le plan.
     ///
@@ -2004,5 +2042,84 @@ mod tests {
                 "{erreur:?}"
             );
         }
+    }
+
+    /// Le retrait passe par le plan, et le fichier projeté perd la ligne.
+    #[test]
+    fn a_planned_removal_drops_the_line_from_the_projected_file() {
+        let projet = projet_avec(&[(
+            "src/router.rs",
+            "// <rbs:routes>\n        .merge(a::routes())\n        // </rbs:routes>\n",
+        )]);
+        let mut builder = Builder::new(projet.path());
+
+        builder
+            .retirer_lignes(anchors::ROUTES, &[".merge(a::routes())".to_string()])
+            .expect("le retrait se planifie");
+
+        let plan = builder.finir();
+        assert_eq!(plan.files()[0].statut, Status::AFaire);
+        assert!(
+            !plan.files()[0]
+                .after
+                .as_deref()
+                .expect("le fichier reste")
+                .contains("a::routes")
+        );
+    }
+
+    /// Une ancre optionnelle dont le fichier manque ne fait rien, et ne faute pas.
+    #[test]
+    fn an_optional_anchor_without_its_file_removes_nothing() {
+        let projet = projet_avec(&[]);
+        let mut builder = Builder::new(projet.path());
+
+        builder
+            .retirer_lignes(anchors::SERVICES, &["  mailpit:".to_string()])
+            .expect("l'absence du compose n'est pas une faute");
+
+        assert!(builder.finir().files().is_empty());
+    }
+
+    /// Une ancre obligatoire dont le fichier manque reste une faute, comme pour `insert`.
+    #[test]
+    fn a_mandatory_anchor_without_its_file_is_an_error() {
+        let projet = projet_avec(&[]);
+        let mut builder = Builder::new(projet.path());
+
+        let erreur = builder
+            .retirer_lignes(anchors::ROUTES, &[".merge(a::routes())".to_string()])
+            .expect_err("le fichier obligatoire manque");
+
+        assert!(matches!(erreur, Error::FichierAbsent { .. }));
+    }
+
+    /// Une ancre présente mais dépourvue de ses balises reste une faute `Anchor`.
+    #[test]
+    fn removing_from_a_present_file_without_the_anchor_is_an_anchor_error() {
+        let projet = projet_avec(&[("src/router.rs", "pub fn router() {}\n")]);
+        let mut builder = Builder::new(projet.path());
+
+        let erreur = builder
+            .retirer_lignes(anchors::ROUTES, &[".merge(a::routes())".to_string()])
+            .expect_err("l'ancre manque du fichier");
+
+        assert!(matches!(erreur, Error::Anchor(_)));
+    }
+
+    /// Un retrait sans effet sur le contenu — la ligne n'y était pas — reste `DejaFait`.
+    #[test]
+    fn removing_a_line_absent_from_the_anchor_is_already_done() {
+        let projet = projet_avec(&[(
+            "src/router.rs",
+            "// <rbs:routes>\n        // </rbs:routes>\n",
+        )]);
+        let mut builder = Builder::new(projet.path());
+
+        builder
+            .retirer_lignes(anchors::ROUTES, &[".merge(a::routes())".to_string()])
+            .expect("le retrait se planifie");
+
+        assert_eq!(builder.finir().files()[0].statut, Status::DejaFait);
     }
 }

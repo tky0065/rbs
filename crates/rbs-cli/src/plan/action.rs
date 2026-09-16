@@ -23,6 +23,15 @@ pub(crate) enum Effect {
     Creer { content: String },
     /// Ajoute des lignes dans une ancre, juste avant sa balise fermante.
     Inserer { anchor: Anchor, lines: Vec<String> },
+    /// Retire d'une ancre les lignes qu'un fragment y avait posées.
+    // Idem `Builder::retirer_lignes` : sans appelant hors des tests avant `rbs remove`.
+    #[allow(dead_code)]
+    RetirerLignes {
+        /// L'ancre visée.
+        anchor: Anchor,
+        /// Les lignes à retirer, telles que le manifeste du fragment les déclare.
+        lines: Vec<String>,
+    },
     /// Retire un fichier que le projet ne doit plus porter.
     // Idem `Builder::supprimer` : sa seule source avant `rbs remove`.
     #[allow(dead_code)]
