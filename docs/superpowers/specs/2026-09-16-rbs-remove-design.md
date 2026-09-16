@@ -183,9 +183,16 @@ Fonctions neuves, chacune posée contre celle qu'elle inverse :
 | `plan::text::remove_section` | `plan::text::add_section` |
 | `plan::Builder::supprimer` | `plan::Builder::create` |
 
-Coût mesuré de la bascule : onze constructions de `File` dans `plan/`, le rayon se
-concentrant sur `plan/{mod,application,json,render}.rs`. Un `grep .after` en rend
-soixante-deux, mais il mélange `File.after` et `Anchor.after`, un champ sans rapport.
+Coût de la bascule, **mesuré après exécution** et non estimé : neuf fichiers, 228 lignes
+ajoutées et 103 retirées. Les quatre de `plan/` portent le gros du changement, mais cinq
+autres consomment `File.after` et ont dû suivre — `add/mod.rs`, `add/installation.rs`,
+`generate/command.rs`, `generate/job.rs` et `upgrade.rs`.
+
+L'estimation initiale — onze constructions de `File`, « le rayon se concentrant sur
+`plan/` » — était fausse, et sa cause mérite d'être écrite : un `grep .after` rend deux
+champs homonymes et sans rapport, `File.after` et le `Anchor.after` qui porte la ligne
+d'accroche d'une ancre. Écarter le bruit en écartant tout ce qui vivait hors de `plan/`
+a écarté cinq vrais appelants du même coup. Le compilateur, lui, ne s'y est pas trompé.
 
 ## 6. Découpage
 
