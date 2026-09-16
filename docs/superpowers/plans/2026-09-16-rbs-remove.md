@@ -776,6 +776,14 @@ git commit -m "feat(plan): retire d'un document de configuration la section d'un
 
 ### Task 7: Les nouvelles variantes en JSON
 
+> **Correction du contrôleur (R3) — prime sur le code de l'étape 1 ci-dessous.**
+> Le helper `json_of(&[Action…])` **n'existe pas**. Le module de tests de
+> `crates/rbs-cli/src/plan/json.rs` construit par `minimal_plan(effect, statut)` puis
+> `document(&plan)`, qui rend un `serde_json::Value`. Suis cet idiome : assertions sur
+> `document(&plan)["actions"][0]["effet"]["type"]`, et non par recherche de sous-chaîne.
+> Même remarque pour `PatchTomlJson`, que le plan ne décrit qu'en prose : ses trois
+> variantes suivent la forme des existantes.
+
 **Files:**
 - Modify: `crates/rbs-cli/src/plan/json.rs:64-91` (`EffectJson`), `:93-125` (`From<&Effect>`), et `PatchTomlJson`
 - Test: `crates/rbs-cli/src/plan/json.rs` (module `tests`)
@@ -1069,6 +1077,11 @@ git commit -m "feat(remove): parcourt à l'envers ce que le manifeste d'un fragm
 
 ### Task 9: `remove::mod` — les quatre refus
 
+> **Correction du contrôleur (R2).** `Retires.migration` (tâche 8) est un
+> `Option<String>` — le chemin du fichier retrouvé ; `Planned.migration` ci-dessous est un
+> `bool` — le rapport n'a besoin que de savoir s'il faut avertir. `plan_for` convertit par
+> `.is_some()`. Les deux types divergent à dessein.
+
 **Files:**
 - Modify: `crates/rbs-cli/src/remove/mod.rs`
 - Test: `crates/rbs-cli/src/remove/mod.rs` (module `tests`)
@@ -1185,6 +1198,13 @@ git commit -m "feat(remove): refuse avant d'écrire ce qu'un dépendant exige en
 
 ### Task 10: Le branchement de la commande
 
+> **Correction du contrôleur (R1) — prime sur l'étape 1 ci-dessous.**
+> Le test `a_dry_run_writes_nothing` **ne va pas ici** : il appelle `empreinte` et
+> `assert_intact`, qui vivent dans `crates/rbs-cli/tests/common/mod.rs` et ne sont
+> atteignables que depuis un test d'intégration — `src/lib.rs` n'en a aucun équivalent.
+> Il est déplacé en tâche 11. Cette tâche ne garde que le test de parsing clap, et sa
+> ligne `Test:` se lit `crates/rbs-cli/src/cli.rs` seul.
+
 **Files:**
 - Modify: `crates/rbs-cli/src/cli.rs` (après `Add`, `:92-113`)
 - Modify: `crates/rbs-cli/src/lib.rs` (`Commands::Remove` vers `:84`, `fn remove`/`fn remove_in` vers `:551`)
@@ -1288,6 +1308,13 @@ git commit -m "feat(cli): branche la commande de retrait d'une feature"
 ---
 
 ### Task 11: La preuve — un projet qui compile après le retrait
+
+> **Correction du contrôleur (R1).** Cette tâche reçoit en plus le test
+> `a_dry_run_writes_nothing` que la tâche 10 ne pouvait pas porter, **sans `#[ignore]`** :
+> il ne compile pas le projet engendré, donc il tourne sur chaque PR. Il pose un projet,
+> lance `rbs remove cors --dry-run`, et vérifie par `common::empreinte` puis
+> `common::assert_intact` que rien n'a été écrit — même forme que son précédent dans
+> `integration_add.rs`.
 
 **Files:**
 - Create: `crates/rbs-cli/tests/integration_remove.rs`
