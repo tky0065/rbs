@@ -176,9 +176,13 @@ impl MigrationTrait for Migration {
         Ok(())
     }
 }
-
 {#- L'identifiant ne déclare que ce que cette migration nomme : la table, et les colonnes
-    qu'elle ajoute. Les autres appartiennent à la migration qui les a créées. #}
+    qu'elle ajoute. Les autres appartiennent à la migration qui les a créées.
+
+    Le `{#-` mange le blanc qui le précède : la ligne vide qui sépare l'impl de l'enum se
+    pose donc après le commentaire, et non avant. rustfmt n'insère jamais de ligne vide
+    entre deux items — perdue, elle ne serait rattrapée par aucune garde. #}
+
 #[derive(DeriveIden)]
 enum {@ iden @} {
     Table,
