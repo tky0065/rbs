@@ -251,9 +251,10 @@ The migration teaches the database about the column; the entity and its DTOs sti
 learn about it. `model.rs` and `dto.rs` carry no anchor, and the CLI never rewrites an AST
 — so the command prints the lines to paste, and writes none of them:
 
+{/* rbs:transcript cmd="rbs generate migration ajoute_statut --add-column articles --fields statut:enum(draft,published):optional,prix:decimal:optional --dry-run" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate crud articles --fields titre:string && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m crud" dans="demo" extrait="oui" */}
 ```text
-$ rbs generate migration ajoute_statut --add-column articles --fields "statut:enum(draft,published):optional,prix:decimal:optional" --dry-run
-plan pour /private/tmp/rbs-demo/demo
+$ rbs generate migration ajoute_statut --add-column articles --fields statut:enum(draft,published):optional,prix:decimal:optional --dry-run
+plan pour …/demo
 
   + migration/src/m20260916_133333_ajoute_statut.rs   créé
   ~ migration/src/lib.rs                              modifié
