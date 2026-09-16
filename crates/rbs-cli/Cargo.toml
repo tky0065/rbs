@@ -22,6 +22,7 @@ include_dir.workspace = true
 inquire.workspace = true
 minijinja.workspace = true
 rand.workspace = true
+semver = "1.0.28"
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

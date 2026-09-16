@@ -3309,6 +3309,7 @@ dependencies = [
  "inquire",
  "minijinja",
  "rand 0.10.2",
+ "semver",
  "serde",
  "serde_json",
  "tempfile",

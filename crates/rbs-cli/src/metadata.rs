@@ -7,6 +7,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
+use semver::{Op, Version, VersionReq};
 use toml_edit::{Array, DocumentMut, InlineTable, Item, Value};
 
 use crate::database::Database;
@@ -192,8 +193,8 @@ pub enum Error {
         key: String,
     },
 
-    /// La dépendance est déjà déclarée, dans une version que le patch ne peut pas
-    /// remplacer sans décider à la place du développeur.
+    /// La dépendance est déjà déclarée, dans une exigence qu'aucune version ne concilie
+    /// avec celle que le patch réclame.
     #[error("{path} déclare déjà `{dependency}` en version {present}, et non {demandee}")]
     VersionIncompatible {
         /// Chemin du manifeste.
@@ -335,9 +336,9 @@ pub fn record_feature(text: &str, feature: &str, name: &str) -> Result<Option<St
 /// Rend le manifeste avec `dep` déclarée dans `[dependencies]`, ou `None` s'il la porte
 /// déjà avec au moins ce qui est demandé.
 ///
-/// Une version déjà déclarée qui diffère est un conflit, pas un silence : la remplacer
-/// casserait un choix du développeur, la taire installerait une feature contre une version
-/// qui ne la porte pas.
+/// Une exigence déjà déclarée n'est jamais réécrite — ce serait trancher à la place du
+/// développeur — mais elle n'est un conflit que si aucune version ne la concilie avec celle
+/// que le patch réclame : les features demandées s'ajoutent alors à la déclaration en place.
 pub fn add_dependency(text: &str, dep: &Dependency, name: &str) -> Result<Option<String>, Error> {
     let mut document = parse(text, name)?;
 
@@ -357,6 +358,7 @@ pub fn add_dependency(text: &str, dep: &Dependency, name: &str) -> Result<Option
 
     if let Some(present) = declared_version(declared)
         && present != dep.version
+        && !conciliables(present, &dep.version)
     {
         return Err(Error::VersionIncompatible {
             path: name.to_string(),
@@ -569,6 +571,47 @@ fn declared_version(declared: &Item) -> Option<&str> {
     declared
         .as_str()
         .or_else(|| declared.get("version").and_then(Item::as_str))
+}
+
+/// Deux exigences de version admettent-elles une même version ?
+///
+/// Une déclaration cargo n'est pas une version mais une exigence — `"1.42"` vaut `^1.42` —
+/// et deux exigences se concilient dès qu'une version les satisfait toutes deux : le projet
+/// qui porte `rust_decimal = "1.42"` résoudra vers 1.43 ou au-delà, là où la feature
+/// réclamée existe. Les comparer à la lettre refusait cette résolution, et avec elle la
+/// commande entière.
+///
+/// La version témoin est cherchée là où chaque exigence s'ouvre, les deux seules candidates
+/// qui vaillent pour des exigences en accent circonflexe. Celle dont la borne basse échappe
+/// à ce calcul penche vers l'acceptation : un refus à tort arrête toute une génération, là
+/// où une acceptation à tort laisse cargo rendre l'erreur de résolution, les deux exigences
+/// sous les yeux.
+fn conciliables(present: &str, demandee: &str) -> bool {
+    // Une exigence que `semver` refuse, cargo la refusera aussi : il n'y a rien à concilier.
+    let (Ok(present), Ok(demandee)) = (VersionReq::parse(present), VersionReq::parse(demandee))
+    else {
+        return false;
+    };
+
+    ouverture(&demandee).is_some_and(|version| present.matches(&version))
+        || ouverture(&present).is_some_and(|version| demandee.matches(&version))
+}
+
+/// La plus petite version que l'exigence puisse admettre, ou `None` si rien ne la borne par
+/// le bas.
+fn ouverture(exigence: &VersionReq) -> Option<Version> {
+    exigence
+        .comparators
+        .iter()
+        .filter(|borne| !matches!(borne.op, Op::Less | Op::LessEq))
+        .map(|borne| {
+            Version::new(
+                borne.major,
+                borne.minor.unwrap_or(0),
+                borne.patch.unwrap_or(0),
+            )
+        })
+        .max()
 }
 
 /// Coupe les défauts d'une déclaration, en rendant `false` s'ils l'étaient déjà et `None`
@@ -1022,6 +1065,152 @@ tokio = { version = "1", features = ["macros"] }
             message.contains("0.8") && message.contains("0.9"),
             "{message}"
         );
+    }
+
+    /// Le manifeste d'un projet dont `rust_decimal` porte `declaration`.
+    ///
+    /// La crate est celle du champ `decimal` : un crate ordinaire, que le développeur a pu
+    /// déclarer lui-même bien avant d'appeler `rbs generate crud`.
+    fn manifeste_decimal(declaration: &str) -> String {
+        format!(
+            r#"[package]
+name = "demo"
+version = "0.1.0"
+
+[dependencies]
+rust_decimal = {declaration}
+"#
+        )
+    }
+
+    /// Ce que `generate crud --fields 'price:decimal'` réclame au manifeste.
+    fn decimal() -> Dependency {
+        Dependency {
+            name: "rust_decimal".into(),
+            version: "1.43".into(),
+            features: vec!["serde-str".into()],
+            default_features: true,
+        }
+    }
+
+    /// Exigence identique : rien à concilier, et la feature s'ajoute tout de même.
+    #[test]
+    fn an_identical_declared_version_receives_the_requested_features() {
+        let rendered = add_dependency(&manifeste_decimal(r#""1.43""#), &decimal(), "Cargo.toml")
+            .expect("les deux exigences se concilient")
+            .expect("la feature manque");
+
+        assert_eq!(
+            line_of(&rendered, "rust_decimal"),
+            r#"rust_decimal = { version = "1.43", features = ["serde-str"] }"#
+        );
+    }
+
+    /// `"1.43.0"` et `"1.43"` admettent les mêmes versions : s'en plaindre serait refuser
+    /// un manifeste correct.
+    #[test]
+    fn a_more_precise_declared_version_is_accepted() {
+        let rendered = add_dependency(&manifeste_decimal(r#""1.43.0""#), &decimal(), "Cargo.toml")
+            .expect("les deux exigences se concilient")
+            .expect("la feature manque");
+
+        assert_eq!(
+            line_of(&rendered, "rust_decimal"),
+            r#"rust_decimal = { version = "1.43.0", features = ["serde-str"] }"#
+        );
+    }
+
+    /// L'exigence du projet est plus ancienne que celle du patch, mais `^1.42` admet 1.43 :
+    /// c'est le manifeste qui faisait refuser toute la génération.
+    #[test]
+    fn an_older_compatible_declared_version_is_accepted() {
+        let rendered = add_dependency(&manifeste_decimal(r#""1.42""#), &decimal(), "Cargo.toml")
+            .expect("les deux exigences se concilient")
+            .expect("la feature manque");
+
+        assert_eq!(
+            line_of(&rendered, "rust_decimal"),
+            r#"rust_decimal = { version = "1.42", features = ["serde-str"] }"#
+        );
+    }
+
+    /// Une exigence bien plus lâche admet elle aussi la version réclamée.
+    #[test]
+    fn a_looser_declared_version_is_accepted() {
+        let rendered = add_dependency(&manifeste_decimal(r#""1.0""#), &decimal(), "Cargo.toml")
+            .expect("les deux exigences se concilient")
+            .expect("la feature manque");
+
+        assert_eq!(
+            line_of(&rendered, "rust_decimal"),
+            r#"rust_decimal = { version = "1.0", features = ["serde-str"] }"#
+        );
+    }
+
+    /// Le projet a pris de l'avance sur le patch : `^1.44` et `^1.43` se rencontrent en
+    /// 1.44, et c'est le cas le plus probable une fois la crate montée d'un cran.
+    #[test]
+    fn a_newer_compatible_declared_version_is_accepted() {
+        let rendered = add_dependency(&manifeste_decimal(r#""1.44""#), &decimal(), "Cargo.toml")
+            .expect("les deux exigences se concilient")
+            .expect("la feature manque");
+
+        assert_eq!(
+            line_of(&rendered, "rust_decimal"),
+            r#"rust_decimal = { version = "1.44", features = ["serde-str"] }"#
+        );
+    }
+
+    /// Aucune version ne satisfait `^2.0` et `^1.43` : le refus reste dû.
+    #[test]
+    fn an_incompatible_major_declared_version_is_still_a_conflict() {
+        let error = add_dependency(&manifeste_decimal(r#""2.0""#), &decimal(), "Cargo.toml")
+            .expect_err("les deux exigences ne se concilient pas");
+
+        assert!(
+            matches!(error, Error::VersionIncompatible { .. }),
+            "{error}"
+        );
+        let message = error.to_string();
+        assert!(message.contains("rust_decimal"), "{message}");
+        assert!(
+            message.contains("2.0") && message.contains("1.43"),
+            "{message}"
+        );
+    }
+
+    /// Une déclaration en table garde sa version et ses features, et reçoit celle du patch.
+    #[test]
+    fn a_compatible_version_in_a_table_receives_the_requested_features() {
+        let rendered = add_dependency(
+            &manifeste_decimal(r#"{ version = "1.42", features = ["maths"] }"#),
+            &decimal(),
+            "Cargo.toml",
+        )
+        .expect("les deux exigences se concilient")
+        .expect("la feature manque");
+
+        assert_eq!(
+            line_of(&rendered, "rust_decimal"),
+            r#"rust_decimal = { version = "1.42", features = ["maths", "serde-str"] }"#
+        );
+    }
+
+    /// Une dépendance en `git` ne porte aucune exigence à concilier : le patch n'y touche
+    /// que les features.
+    #[test]
+    fn a_git_declaration_receives_its_features_without_a_version_check() {
+        let rendered = add_dependency(
+            &manifeste_decimal(r#"{ git = "https://github.com/paupino/rust-decimal" }"#),
+            &decimal(),
+            "Cargo.toml",
+        )
+        .expect("une dépendance en git ne porte pas de version")
+        .expect("la feature manque");
+
+        let ligne = line_of(&rendered, "rust_decimal");
+        assert!(ligne.contains(r#"features = ["serde-str"]"#), "{ligne}");
+        assert!(ligne.contains("git = "), "{ligne}");
     }
 
     #[test]
