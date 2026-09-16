@@ -63,6 +63,17 @@ pub(crate) enum ErrorKind {
     InvalidMaxLength {
         value: String,
     },
+    EnumUnclosedParenthesis,
+    EnumEmptyList,
+    EnumValueNotSnakeCase {
+        value: String,
+    },
+    EnumDuplicateValue {
+        value: String,
+    },
+    EnumTypeNameCollision {
+        type_name: String,
+    },
 }
 
 impl ErrorKind {
@@ -120,6 +131,19 @@ impl ErrorKind {
             Self::InvalidMaxLength { value } => {
                 format!("« max » attend un entier strictement positif, et non « {value} »")
             }
+            Self::EnumUnclosedParenthesis => {
+                "la liste de valeurs de « enum » n'est pas refermée par une parenthèse".to_string()
+            }
+            Self::EnumEmptyList => "« enum » attend au moins une valeur".to_string(),
+            Self::EnumValueNotSnakeCase { value } => {
+                format!("la valeur « {value} » n'est pas en snake_case")
+            }
+            Self::EnumDuplicateValue { value } => {
+                format!("la valeur « {value} » est déclarée deux fois")
+            }
+            Self::EnumTypeNameCollision { type_name } => format!(
+                "« {label} » nommerait le type « {type_name} », que `model.rs` déclare déjà"
+            ),
         }
     }
 
@@ -152,7 +176,7 @@ impl ErrorKind {
             // sans argument, comme les huit autres.
             Self::UnknownType { .. } => {
                 let mut names = FieldType::NAMES.join(", ");
-                names.push_str(", references:<table>");
+                names.push_str(", references:<table>, enum(a,b,c)");
                 Some(names)
             }
             Self::UnknownModifier { .. } => Some(
@@ -176,6 +200,20 @@ impl ErrorKind {
                 Some("« max » s'écrit sur un champ « string » ou « text »".to_string())
             }
             Self::InvalidMaxLength { .. } => Some(format!("exemple : « {label}:string:max=200 »")),
+            Self::EnumUnclosedParenthesis | Self::EnumEmptyList => {
+                Some("exemple : « status:enum(draft,published) »".to_string())
+            }
+            Self::EnumValueNotSnakeCase { .. } => {
+                Some("minuscules ASCII, chiffres et souligné, comme un nom de champ".to_string())
+            }
+            Self::EnumDuplicateValue { .. } => {
+                Some("chaque valeur ne doit apparaître qu'une fois".to_string())
+            }
+            Self::EnumTypeNameCollision { .. } => Some(
+                "choisissez un autre nom de champ : son PascalCase nomme le type de \
+                 l'énumération"
+                    .to_string(),
+            ),
         }
     }
 }
@@ -573,5 +611,81 @@ mod tests {
             "{text}"
         );
         assert!(text.contains("→ retirez « index »"), "{text}");
+    }
+
+    #[test]
+    fn an_unclosed_enum_parenthesis_shows_an_example() {
+        let text = rendered(ErrorKind::EnumUnclosedParenthesis, "status");
+        assert!(text.contains("n'est pas refermée"), "{text}");
+        assert!(
+            text.contains("→ exemple : « status:enum(draft,published) »"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn an_empty_enum_list_shows_an_example() {
+        let text = rendered(ErrorKind::EnumEmptyList, "status");
+        assert!(
+            text.contains("« enum » attend au moins une valeur"),
+            "{text}"
+        );
+        assert!(
+            text.contains("→ exemple : « status:enum(draft,published) »"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_non_snake_case_enum_value_names_it() {
+        let text = rendered(
+            ErrorKind::EnumValueNotSnakeCase {
+                value: "Draft".to_string(),
+            },
+            "status",
+        );
+        assert!(
+            text.contains("la valeur « Draft » n'est pas en snake_case"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn a_duplicated_enum_value_names_it() {
+        let text = rendered(
+            ErrorKind::EnumDuplicateValue {
+                value: "draft".to_string(),
+            },
+            "status",
+        );
+        assert!(
+            text.contains("la valeur « draft » est déclarée deux fois"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn an_enum_type_name_collision_names_the_colliding_type() {
+        let text = rendered(
+            ErrorKind::EnumTypeNameCollision {
+                type_name: "Model".to_string(),
+            },
+            "model",
+        );
+        assert!(
+            text.contains("« model » nommerait le type « Model », que `model.rs` déclare déjà"),
+            "{text}"
+        );
+    }
+
+    #[test]
+    fn an_unknown_type_also_mentions_the_enum_grammar() {
+        let text = rendered(
+            ErrorKind::UnknownType {
+                name: "decimal".to_string(),
+            },
+            "price",
+        );
+        assert!(text.contains("enum(a,b,c)"), "« enum » absent de : {text}");
     }
 }
