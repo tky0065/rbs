@@ -243,14 +243,12 @@ plan pour …/demo
 erreur : src/modules/cors/config.rs — relancer avec --force pour les écraser
 ```
 
-This is what protects a hand-edited file from disappearing without a trace: the conflict
-marks only the one file that diverges — `remove` still deletes `mod.rs` and `tests.rs`,
-whose content it recognises, and still edits the five files around them; only
-`config.rs`, and the manifest line its own removal would otherwise write, are held back.
-`remove` recomputes what `add` would have written today and compares it to what is
-actually on disk, byte for byte. Anything that diverges — a line added, a value
-changed — stops the plan there, that one file marked rather than the whole plan withheld.
-`--force` removes it anyway, the same plan shown first:
+This is what protects a hand-edited file from disappearing without a trace: `remove`
+recomputes what `add` would have written today and compares it to what is actually on
+disk, byte for byte. Anything that diverges — a line added, a value changed — marks that
+one file `!`, but withholds the whole plan: without `--force`, nothing is written at
+all — not `config.rs`, not the two deletions, not the five edits around them.
+`--force` writes the whole plan anyway, `config.rs` included, the same plan shown first:
 
 ```text
 $ rbs remove cors --force
@@ -275,10 +273,10 @@ plan pour …/demo
 ```
 
 Both blocks above are captured for real, on a project where `config.rs` was hand-edited
-after `cors` was installed — the same scenario `add`'s own conflict is captured from —
-but neither carries a `{/* rbs:transcript */}` marker: reproducing the divergence needs a
-line appended to a file Git already tracks, which the transcript harness's `setup=` can
-only do by running `rbs` and `git`, neither of which edits an arbitrary file's content.
+after `cors` was installed — what's common with `add`'s own conflict is the missing
+guard, not the scenario it comes from. Neither carries a `{/* rbs:transcript */}` marker:
+these two blocks come from a scenario the automatic capture cannot replay — appending a
+line to a file Git already tracks.
 
 ## The compiler is the oracle
 

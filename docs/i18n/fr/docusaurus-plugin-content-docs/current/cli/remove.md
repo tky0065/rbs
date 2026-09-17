@@ -255,14 +255,13 @@ plan pour …/demo
 erreur : src/modules/cors/config.rs — relancer avec --force pour les écraser
 ```
 
-C'est ce qui protège un fichier retouché à la main de disparaître sans trace : le conflit
-ne marque que le seul fichier qui diverge — `remove` supprime quand même `mod.rs` et
-`tests.rs`, dont elle reconnaît le contenu, et édite quand même les cinq fichiers autour ;
-seuls `config.rs` et la ligne de manifeste que son propre retrait aurait sinon écrite sont
-retenus. `remove` recalcule ce qu'`add` aurait écrit aujourd'hui et le compare à ce qui
-est réellement sur le disque, octet pour octet. Tout ce qui diverge — une ligne ajoutée,
-une valeur changée — arrête le plan là, ce seul fichier marqué plutôt que le plan entier
-retenu. `--force` retire quand même, le même plan affiché d'abord :
+C'est ce qui protège un fichier retouché à la main de disparaître sans trace : `remove`
+recalcule ce qu'`add` aurait écrit aujourd'hui et le compare à ce qui est réellement sur
+le disque, octet pour octet. Tout ce qui diverge — une ligne ajoutée, une valeur
+changée — marque ce seul fichier `!`, mais retient le plan tout entier : sans `--force`,
+rien n'est écrit du tout — ni `config.rs`, ni les deux suppressions, ni les cinq
+modifications autour. `--force` écrit le plan tout entier quand même, `config.rs`
+compris, le même plan affiché d'abord :
 
 ```text
 $ rbs remove cors --force
@@ -287,11 +286,10 @@ plan pour …/demo
 ```
 
 Les deux blocs ci-dessus sont capturés pour de vrai, sur un projet où `config.rs` a été
-retouché à la main après l'installation de `cors` — le même scénario dont vient le
-conflit propre à `add` — mais aucun ne porte de marqueur `{/* rbs:transcript */}` :
-reproduire la divergence exige une ligne ajoutée à un fichier que Git suit déjà, ce que le
-`setup=` du banc de test ne sait faire qu'en lançant `rbs` et `git`, dont aucun n'édite le
-contenu d'un fichier arbitraire.
+retouché à la main après l'installation de `cors` — ce qui est commun avec le conflit
+propre à `add`, c'est l'absence de garde, pas le scénario dont il vient. Aucun ne porte de
+marqueur `{/* rbs:transcript */}` : ces deux blocs viennent d'un scénario que la capture
+automatique ne sait pas rejouer — une ligne ajoutée à un fichier que Git suit déjà.
 
 ## Le compilateur est l'oracle
 
