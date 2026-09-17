@@ -35,7 +35,10 @@
   ainsi. Une mutation qui casse la compilation ne compte pas.
 - **Les sorties de commandes se collent, ne s'affirment pas.** `cargo fmt --all --check` et
   `cargo clippy --workspace --all-targets -- -D warnings` déclarés verts en prose, sans
-  trace, sont un constat de revue.
+  trace, sont un constat de revue. **Une commande qui n'émet rien quand tout va bien —
+  `cargo fmt --all --check` en premier lieu — n'a pas de sortie à coller : prouve-la par son
+  code de retour**, `cargo fmt --all --check; echo "exit: $?"`, et colle ces deux lignes.
+  « Silencieux, code de sortie 0 » écrit en prose n'est pas une trace, c'est une affirmation.
 - **Un wrapper de `Builder` reçoit ses propres tests, au niveau `Builder`.** Tester la
   fonction pure qu'il appelle ne suffit pas : le wrapper calcule un statut, propage des
   erreurs et projette sur `files()`, et rien de tout cela n'est exercé par un test de la
