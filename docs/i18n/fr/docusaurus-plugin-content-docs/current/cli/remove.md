@@ -159,10 +159,6 @@ plan pour …/demo
   POSTGRES_USER n'est pas retirée de .env, à faire à la main si elle ne sert plus
   POSTGRES_PASSWORD n'est pas retirée de .env, à faire à la main si elle ne sert plus
   POSTGRES_DB n'est pas retirée de .env, à faire à la main si elle ne sert plus
-  MYSQL_ROOT_PASSWORD n'est pas retirée de .env, à faire à la main si elle ne sert plus
-  MYSQL_DATABASE n'est pas retirée de .env, à faire à la main si elle ne sert plus
-  MYSQL_USER n'est pas retirée de .env, à faire à la main si elle ne sert plus
-  MYSQL_PASSWORD n'est pas retirée de .env, à faire à la main si elle ne sert plus
 
   lancez `cargo build` : le compilateur nomme ce qui référençait encore la feature
 ```
@@ -290,6 +286,14 @@ retouché à la main après l'installation de `cors` — ce qui est commun avec 
 propre à `add`, c'est l'absence de garde, pas le scénario dont il vient. Aucun ne porte de
 marqueur `{/* rbs:transcript */}` : ces deux blocs viennent d'un scénario que la capture
 automatique ne sait pas rejouer — une ligne ajoutée à un fichier que Git suit déjà.
+
+Un conflit ne dit pas toujours qu'un fichier a été modifié. `remove` rend le fragment tel
+qu'il se rendrait *aujourd'hui*, et certains fragments ne se rendent pas de la même façon
+sur tous les projets : le compteur de `rate-limit` s'écrit contre Redis quand le projet
+porte `redis`, en mémoire sinon. Poser `rate-limit`, puis `redis` — rien n'oblige les deux
+à arriver ensemble, `rate-limit` n'exigeant aucune autre feature — fait diverger les
+fichiers de `rate-limit` d'un rendu neuf, et le retrait les marque `!` sans que personne y
+ait touché. `--force` est là aussi la réponse.
 
 ## Le compilateur est l'oracle
 

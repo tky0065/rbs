@@ -153,10 +153,6 @@ plan pour …/demo
   POSTGRES_USER n'est pas retirée de .env, à faire à la main si elle ne sert plus
   POSTGRES_PASSWORD n'est pas retirée de .env, à faire à la main si elle ne sert plus
   POSTGRES_DB n'est pas retirée de .env, à faire à la main si elle ne sert plus
-  MYSQL_ROOT_PASSWORD n'est pas retirée de .env, à faire à la main si elle ne sert plus
-  MYSQL_DATABASE n'est pas retirée de .env, à faire à la main si elle ne sert plus
-  MYSQL_USER n'est pas retirée de .env, à faire à la main si elle ne sert plus
-  MYSQL_PASSWORD n'est pas retirée de .env, à faire à la main si elle ne sert plus
 
   lancez `cargo build` : le compilateur nomme ce qui référençait encore la feature
 ```
@@ -277,6 +273,14 @@ after `cors` was installed — what's common with `add`'s own conflict is the mi
 guard, not the scenario it comes from. Neither carries a `{/* rbs:transcript */}` marker:
 these two blocks come from a scenario the automatic capture cannot replay — appending a
 line to a file Git already tracks.
+
+A conflict does not always mean the file was edited. `remove` renders the fragment as it
+would render *today*, and some fragments do not render the same way on every project:
+`rate-limit`'s counter is written against Redis when the project carries `redis`, in memory
+otherwise. Installing `rate-limit`, then `redis` — nothing makes the two arrive together,
+`rate-limit` requiring no other feature — leaves `rate-limit`'s own files diverging from a
+fresh render, and a removal marks them `!` though no one has touched them. `--force` is the
+answer there too.
 
 ## The compiler is the oracle
 
