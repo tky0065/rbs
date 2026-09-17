@@ -1420,6 +1420,16 @@ git commit -m "feat(cli): branche la commande de retrait d'une feature"
 
 ### Task 11: La preuve — un projet qui compile après le retrait
 
+> **Correction du contrôleur (R12) — le test doit prouver plus que la compilation.**
+> Une revue a établi qu'un retrait pourtant propre faisait **échouer `rbs doctor`** : la
+> feature quittait le manifeste sans que l'inventaire d'`AGENTS.md` soit rafraîchi, et
+> `doctor/agents.rs` compare les deux. La tâche 10 l'a corrigé — mais ce test-ci est le seul
+> témoin permanent possible, et il ne lançait pas `doctor`.
+> **Ajoute-le** : après le retrait, lance `rbs doctor` sur le projet engendré et exige un
+> succès. Un projet qui vient de subir un retrait propre doit se diagnostiquer sans faute,
+> pas seulement compiler. Sans ce témoin, la garde qu'on vient de poser se redégraderait en
+> silence — c'est le défaut que cette séquence a déjà rencontré trois fois.
+
 > **Correction du contrôleur (R1).** Cette tâche reçoit en plus le test
 > `a_dry_run_writes_nothing` que la tâche 10 ne pouvait pas porter, **sans `#[ignore]`** :
 > il ne compile pas le projet engendré, donc il tourne sur chaque PR. Il pose un projet,
