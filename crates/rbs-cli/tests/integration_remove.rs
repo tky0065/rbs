@@ -1,11 +1,13 @@
 //! Ce que `rbs remove` garantit, éprouvé par la commande telle que l'utilisateur la lance.
 //!
 //! Un test unitaire prouve que le moteur sait faire ; celui-ci prouve que le projet
-//! survit — c'est le seul de la séquence à le faire. Trois de ses quatre tests sont
+//! survit — c'est le seul de la séquence à le faire. Deux de ses quatre tests sont
 //! `#[ignore]` : ils compilent le projet engendré, ce qu'aucune PR ne peut se payer sur
-//! chaque poussée. `a_dry_run_writes_nothing` fait exception — même précédent que
+//! chaque poussée. Les deux autres n'appellent ni cargo ni Docker, donc tournent à chaque
+//! PR : `a_dry_run_writes_nothing`, même précédent que
 //! `adding_auth_to_a_sqlite_project_succeeds_and_names_the_service_left_to_mount` dans
-//! `integration_add.rs` : il n'appelle ni cargo ni Docker, donc il tourne à chaque PR.
+//! `integration_add.rs`, et `a_file_the_developer_changed_stops_the_command`, aussi bon
+//! marché malgré l'étiquette qu'il portait à tort.
 //!
 //! `a_project_still_compiles_and_stays_diagnosable_once_the_fragment_is_removed` va plus
 //! loin que son nom initial : une revue a établi qu'un retrait pourtant propre faisait
@@ -141,8 +143,10 @@ fn a_project_still_compiles_and_stays_diagnosable_once_the_fragment_is_removed()
 }
 
 /// Un fichier que le développeur a modifié arrête la commande, et rien n'est écrit.
+///
+/// N'appelle ni cargo ni Docker : aussi bon marché que `a_dry_run_writes_nothing`, il
+/// tourne à chaque PR.
 #[test]
-#[ignore = "compile le projet engendré"]
 fn a_file_the_developer_changed_stops_the_command() {
     let parent = TempDir::new().expect("le répertoire temporaire se crée");
     let racine = common::projet(parent.path());
