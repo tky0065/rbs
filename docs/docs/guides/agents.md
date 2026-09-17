@@ -348,14 +348,14 @@ says where it goes. A code shared by several commands means the same thing in al
 | `fragment_invalide` | `add`, `remove` | The fragment's `feature.toml` is invalid. |
 | `template_absente` | `add`, `remove` | The fragment's manifest declares a template the fragment does not carry. |
 | `ancre_inconnue` | `add`, `remove` | The fragment's manifest targets an anchor rbs does not know. |
-| `rendu_impossible` | `add`, `generate`, `remove` | A template does not render. |
+| `rendu_impossible` | `add`, `generate`, `generate job`, `generate migration`, `remove` | A template does not render. |
 | `env_illisible` | `add`, `remove` | The project's `.env` is missing, unreadable, or says nothing of the database. |
 | `url_indecomposable` | `add`, `remove` | The database URL cannot be split into user, password and host. |
 | `fragment_inconnu` | `remove` | The name is not a fragment: a typo, or a CRUD `rbs generate crud` recorded in the very same list. |
 | `feature_exigee` | `remove` | Another installed fragment still requires this one; the message names them all. |
 | `migration_ambigue` | `remove` | Two migration files match the fragment's suffix; neither is picked. |
-| `nom_invalide` | `generate` | The feature name, or the one given to `--singular`, is not usable. |
-| `champs_invalides` | `generate` | `--fields` does not parse. |
+| `nom_invalide` | `generate`, `generate job`, `generate migration` | The feature name, or the one given to `--singular`, is not usable. |
+| `champs_invalides` | `generate`, `generate migration` | `--fields` does not parse. |
 | `feature_deja_presente` | `generate` | The feature's directory already exists. |
 | `relation_invalide` | `generate` | A reference cannot be resolved: target not found, or two relations claiming the same variant. |
 | `migration_absente` | `generate` | A referenced entity has no migration in the project. |
@@ -366,7 +366,7 @@ says where it goes. A code shared by several commands means the same thing in al
 | `upload_sans_storage` | `generate` | `--with-upload` requires the `storage` feature. |
 | `storage_hors_modules` | `generate` | `storage` was installed before 1.3.0, under `src/storage/`. |
 | `colonne_reservee` | `generate` | `--soft-delete` sets `deleted_at` itself: remove it from `--fields`. |
-| `decimal_sous_sqlite` | `generate` | A `decimal` field on a SQLite project: the driver binds no exact decimal. |
+| `decimal_sous_sqlite` | `generate`, `generate migration` | A `decimal` field on a SQLite project: the driver binds no exact decimal. |
 | `enfant_sans_cle` | `generate` | The child named by `--has-many` has no column referencing this table. |
 | `champs_vides` | `generate migration` | `--fields` declares no column: the rendered migration would alter nothing. |
 | `table_sans_module` | `generate migration` | No entity of the project declares that table; the message lists the ones it knows. |

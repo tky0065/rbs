@@ -352,14 +352,14 @@ où il va. Un code partagé par plusieurs commandes a le même sens dans toutes.
 | `fragment_invalide` | `add`, `remove` | Le `feature.toml` du fragment est invalide. |
 | `template_absente` | `add`, `remove` | Le manifeste du fragment déclare une template que le fragment ne porte pas. |
 | `ancre_inconnue` | `add`, `remove` | Le manifeste du fragment vise une ancre que rbs ne connaît pas. |
-| `rendu_impossible` | `add`, `generate`, `remove` | Une template ne se rend pas. |
+| `rendu_impossible` | `add`, `generate`, `generate job`, `generate migration`, `remove` | Une template ne se rend pas. |
 | `env_illisible` | `add`, `remove` | Le `.env` du projet est absent, illisible, ou muet sur la base. |
 | `url_indecomposable` | `add`, `remove` | L'URL de la base ne se décompose pas en utilisateur, mot de passe et hôte. |
 | `fragment_inconnu` | `remove` | Le nom ne désigne aucun fragment : une faute de frappe, ou un CRUD engendré par `rbs generate crud`, qu'inscrit la même liste. |
 | `feature_exigee` | `remove` | Un autre fragment installé exige encore celui-ci ; le message les nomme tous. |
 | `migration_ambigue` | `remove` | Deux fichiers de migration correspondent au suffixe du fragment ; aucun n'est choisi. |
-| `nom_invalide` | `generate` | Le nom de la feature, ou celui donné à `--singular`, est inutilisable. |
-| `champs_invalides` | `generate` | `--fields` ne s'analyse pas. |
+| `nom_invalide` | `generate`, `generate job`, `generate migration` | Le nom de la feature, ou celui donné à `--singular`, est inutilisable. |
+| `champs_invalides` | `generate`, `generate migration` | `--fields` ne s'analyse pas. |
 | `feature_deja_presente` | `generate` | Le répertoire de la feature existe déjà. |
 | `relation_invalide` | `generate` | Une référence ne se résout pas : cible introuvable, ou deux relations réclamant la même variante. |
 | `migration_absente` | `generate` | Une entité référencée n'a pas de migration dans le projet. |
@@ -370,7 +370,7 @@ où il va. Un code partagé par plusieurs commandes a le même sens dans toutes.
 | `upload_sans_storage` | `generate` | `--with-upload` exige la feature `storage`. |
 | `storage_hors_modules` | `generate` | `storage` a été installée avant la 1.3.0, sous `src/storage/`. |
 | `colonne_reservee` | `generate` | `--soft-delete` pose lui-même `deleted_at` : retirez-la de `--fields`. |
-| `decimal_sous_sqlite` | `generate` | Un champ `decimal` sur un projet SQLite : le pilote n'y lie aucun décimal exact. |
+| `decimal_sous_sqlite` | `generate`, `generate migration` | Un champ `decimal` sur un projet SQLite : le pilote n'y lie aucun décimal exact. |
 | `enfant_sans_cle` | `generate` | L'enfant nommé par `--has-many` ne porte aucune colonne référençant cette table. |
 | `champs_vides` | `generate migration` | `--fields` ne déclare aucune colonne : la migration rendue n'altérerait rien. |
 | `table_sans_module` | `generate migration` | Aucune entité du projet ne déclare cette table ; le message énumère celles qu'il connaît. |
