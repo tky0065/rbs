@@ -3,7 +3,7 @@
 //! Les deux commandes rendent les mêmes templates de fragment : la pose écrit ce rendu,
 //! le retrait le rejoue pour comparer au disque ce que l'installation avait écrit. Deux
 //! constructeurs recopiés l'un sur l'autre finissent par diverger, et celui du retrait
-//! avait déjà perdu sept clés. Le moteur étant en [`minijinja::UndefinedBehavior::Strict`],
+//! avait déjà perdu huit clés. Le moteur étant en [`minijinja::UndefinedBehavior::Strict`],
 //! le premier fragment à en interpoler une dans un fichier non `if_absent`, dans le contenu
 //! d'une ancre ou dans le `when` d'un `[[env]]` aurait fait échouer `rbs remove` chez
 //! l'utilisateur, où les fragments se rendent, et non en CI, où personne ne les retire.
@@ -146,7 +146,7 @@ mod tests {
     /// vide, c'est un `rbs add` ou un `rbs remove` qui s'arrête chez l'utilisateur. La liste
     /// des clés à porter ne s'écrit donc pas à la main — elle se dérive des fragments, seuls
     /// à savoir ce qu'ils réclament. C'est le contrôle qui manquait quand le retrait portait
-    /// sa propre copie du contexte, amputée de sept clés : rien ne les réclamait sur le
+    /// sa propre copie du contexte, amputée de huit clés : rien ne les réclamait sur le
     /// chemin du retrait ce jour-là, et rien n'aurait dit que le premier à le faire
     /// échouerait.
     #[test]
