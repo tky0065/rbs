@@ -11,12 +11,8 @@
 pub(crate) mod desinstallation;
 
 use std::collections::BTreeSet;
-use std::io;
 use std::path::{Path, PathBuf};
 
-use minijinja::context;
-
-use crate::dotenv;
 use crate::errors::Codee;
 use crate::git;
 use crate::manifest;
@@ -143,6 +139,15 @@ pub(crate) enum Error {
     /// Le plan n'a pu être appliqué au projet.
     #[error("{0}")]
     Application(#[from] plan::application::Error),
+}
+
+impl From<crate::contexte::Erreur> for Error {
+    fn from(faute: crate::contexte::Erreur) -> Self {
+        match faute {
+            crate::contexte::Erreur::Env(source) => Error::Env(source),
+            crate::contexte::Erreur::UrlIndecomposable { url } => Error::UrlIndecomposable { url },
+        }
+    }
 }
 
 // Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
@@ -304,9 +309,10 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         git::garde(&root)?;
     }
 
-    // 5. Le plan. Rejouer le rendu que l'installation avait produit exige le même
-    // contexte qu'`add` construit — nom du paquet, moteur, URL du `.env` — sans quoi
-    // chaque fichier comparerait le disque à un rendu que l'installation n'a jamais écrit.
+    // 5. Le plan. Rejouer le rendu que l'installation avait produit exige le contexte
+    // qu'`add` construit — littéralement le même, `contexte::projet` le portant pour les
+    // deux commandes — sans quoi chaque fichier comparerait le disque à un rendu que
+    // l'installation n'a jamais écrit.
     let reclamees = desinstallation::reclamees_ailleurs(
         options.template_dir.as_deref(),
         &options.feature,
@@ -314,55 +320,12 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     )?;
 
     let nom_projet = metadonnees.package_name(&root.join("Cargo.toml"))?;
-    let crate_name = nom_projet.replace('-', "_");
-    let database = metadonnees.database;
-
-    // L'URL du projet, non une valeur par défaut : c'est elle que l'installation avait
-    // décomposée pour rendre `docker`, et un repli silencieux ferait diverger le rendu
-    // comparé au disque dès que le mot de passe n'est pas celui de la démonstration.
-    let url = match migrate::project_variables(&root) {
-        Ok(variables) => dotenv::value(&variables, migrate::URL).map(str::to_string),
-        Err(migrate::Error::SansUrl) => None,
-        Err(migrate::Error::Env(dotenv::Error::Acces(faute)))
-            if faute.source.kind() == io::ErrorKind::NotFound =>
-        {
-            None
-        }
-        Err(faute) => return Err(Error::Env(faute)),
-    }
-    .unwrap_or_else(|| database.default_url(&crate_name));
-    let connexion = crate::url::parse(&url);
-
-    if database.a_un_serveur() && connexion.is_none() {
-        return Err(Error::UrlIndecomposable { url });
-    }
-
-    let utilisateur = connexion
-        .as_ref()
-        .map(|c| c.user.clone())
-        .unwrap_or_default();
-
-    let context = context! {
-        project_name => nom_projet,
-        crate_name => crate_name.clone(),
-        // Par où le binaire principal atteint un module de feature : la bibliothèque du
-        // projet, ou `crate::` sur un projet engendré avant qu'elle n'existe.
-        crate_path => if root.join("src/lib.rs").exists() {
-            crate_name.clone()
-        } else {
-            "crate".to_string()
-        },
-        features => metadonnees.features.clone(),
-        rust_image => templates::rust_image(),
-        database => database.name(),
-        database_a_un_serveur => database.a_un_serveur(),
-        database_url_compose => crate::url::interne(database, &utilisateur)
-            .unwrap_or_else(|| database.compose_url(&crate_name)),
-        database_url_par_defaut => database.default_url(&crate_name),
-        // `[server] lang` de `config/default.toml`, non la métadonnée : celle-ci ne
-        // gouverne plus que `AGENTS.md` depuis 1.5.0.
-        lang => crate::lang::Lang::of_project(&root).name(),
-    };
+    let context = crate::contexte::projet(
+        &root,
+        &nom_projet,
+        metadonnees.database,
+        metadonnees.features.clone(),
+    )?;
 
     let mut builder = plan::Builder::new(root.clone());
     let fragment = desinstallation::Fragment {

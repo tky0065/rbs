@@ -5,6 +5,7 @@ mod cargo;
 mod cli;
 mod client;
 mod completions;
+mod contexte;
 mod cron;
 mod database;
 mod dev;

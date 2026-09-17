@@ -11,12 +11,8 @@
 pub(crate) mod installation;
 
 use std::collections::{BTreeMap, BTreeSet};
-use std::io;
 use std::path::{Path, PathBuf};
 
-use minijinja::context;
-
-use crate::dotenv;
 use crate::errors::Codee;
 use crate::git;
 use crate::manifest;
@@ -208,6 +204,15 @@ impl Error {
     }
 }
 
+impl From<crate::contexte::Erreur> for Error {
+    fn from(faute: crate::contexte::Erreur) -> Self {
+        match faute {
+            crate::contexte::Erreur::Env(source) => Error::Env(source),
+            crate::contexte::Erreur::UrlIndecomposable { url } => Error::UrlIndecomposable { url },
+        }
+    }
+}
+
 impl Codee for Error {
     fn code(&self) -> &'static str {
         match self {
@@ -285,89 +290,11 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     features.extend(a_poser.iter().map(|fragment| fragment.name.clone()));
 
     let nom_projet = metadonnees.package_name(&root.join("Cargo.toml"))?;
-    let crate_name = nom_projet.replace('-', "_");
     // Le moteur vient du manifeste, seul endroit où le choix de `rbs new` a survécu : un
     // fragment posé six mois plus tard n'a plus les flags de la création.
     let database = metadonnees.database;
 
-    // L'URL du projet, non une valeur par défaut : le compose que le fragment engendre
-    // doit se connecter à la base que le projet interroge, avec ses identifiants. Un
-    // `.env` qu'on ne sait pas ouvrir en porte peut-être d'autres, et les remplacer en
-    // silence poserait un compose qui ne se connecte à rien : seule l'absence se replie,
-    // parce qu'un projet neuf n'a rien encore à contredire.
-    let url = match migrate::project_variables(&root) {
-        Ok(variables) => dotenv::value(&variables, migrate::URL).map(str::to_string),
-        Err(migrate::Error::SansUrl) => None,
-        Err(migrate::Error::Env(dotenv::Error::Acces(faute)))
-            if faute.source.kind() == io::ErrorKind::NotFound =>
-        {
-            None
-        }
-        Err(faute) => return Err(Error::Env(faute)),
-    }
-    .unwrap_or_else(|| database.default_url(&crate_name));
-    let connexion = crate::url::parse(&url);
-
-    // Refuser plutôt que se replier : des identifiants vides posent un `POSTGRES_USER=`
-    // que Compose substitue par rien, et le service `db` ne monte jamais — panne à
-    // l'exécution, pour une URL que la commande avait sous les yeux. SQLite n'a pas
-    // d'autorité à décomposer, et n'est donc pas concerné.
-    if database.a_un_serveur() && connexion.is_none() {
-        return Err(Error::UrlIndecomposable { url });
-    }
-
-    // Une URL sans chemin rend un nom de base vide, que le repli ne rattraperait pas
-    // s'il ne guettait que `None` : le compose porterait un `POSTGRES_DB:` vide, et le
-    // service ne deviendrait jamais sain.
-    let nom_base = connexion
-        .as_ref()
-        .map(|c| c.database.clone())
-        .filter(|base| !base.is_empty())
-        .unwrap_or_else(|| crate_name.clone());
-    let utilisateur = connexion
-        .as_ref()
-        .map(|c| c.user.clone())
-        .unwrap_or_default();
-
-    // Les identifiants que `.env.example` documente sont ceux de l'URL de démonstration
-    // du moteur, comme le squelette les écrit : les recopier à la main dans le fragment
-    // les ferait diverger de `default_url`.
-    let demonstration = crate::url::parse(&database.default_url(&crate_name));
-
-    let context = context! {
-        project_name => nom_projet.clone(),
-        crate_name => crate_name.clone(),
-        rust_version => crate::templates::RUST_VERSION,
-        rust_image => crate::templates::rust_image(),
-        features => features,
-        // Par où le binaire principal atteint un module de feature : la bibliothèque du
-        // projet, ou `crate::` sur un projet engendré avant qu'elle n'existe, où ces
-        // modules vivent dans le binaire lui-même.
-        crate_path => if root.join("src/lib.rs").exists() {
-            crate_name.clone()
-        } else {
-            "crate".to_string()
-        },
-        database => database.name(),
-        database_a_un_serveur => database.a_un_serveur(),
-        // Le moteur décide, et non la lecture de l'URL : une URL que rien ne décompose
-        // ferait sinon tomber un moteur à serveur sur `compose_url`, dont les identifiants
-        // en dur partiraient dans un fichier versionné.
-        database_url_compose => crate::url::interne(database, &utilisateur)
-            .unwrap_or_else(|| database.compose_url(&crate_name)),
-        database_url_par_defaut => database.default_url(&crate_name),
-        database_user => utilisateur.clone(),
-        database_password => connexion.as_ref().map(|c| c.password.clone()).unwrap_or_default(),
-        database_name => nom_base,
-        database_port => connexion.as_ref().map(|c| c.port).unwrap_or_default(),
-        database_user_par_defaut => demonstration.as_ref().map(|c| c.user.clone()).unwrap_or_default(),
-        database_password_par_defaut => demonstration.as_ref().map(|c| c.password.clone()).unwrap_or_default(),
-        database_name_par_defaut => demonstration.as_ref().map(|c| c.database.clone()).unwrap_or_default(),
-        // `[server] lang` de `config/default.toml`, non la métadonnée : celle-ci ne
-        // gouverne plus que `AGENTS.md`, et pouvait diverger de la langue des réponses HTTP
-        // avant 1.5.0, quand elle se remplissait de la locale.
-        lang => crate::lang::Lang::of_project(&root).name(),
-    };
+    let context = crate::contexte::projet(&root, &nom_projet, database, features)?;
 
     let mut builder = plan::Builder::new(root.clone());
     let timestamp = crate::generate::migration::current_timestamp();
