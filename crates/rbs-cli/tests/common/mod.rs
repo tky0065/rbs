@@ -3,6 +3,10 @@
 //! Ces tests compilent des projets Axum + SeaORM complets. La cible commune n'est pas un
 //! détail de confort : sans elle, chaque test recompile toute l'arborescence de
 //! dépendances pour son compte.
+//!
+//! Et les masques qu'une empreinte ou une sortie citée réclament. `integration_remove`
+//! et `integration_docs` effaçaient tous deux l'horodatage d'une migration, par deux
+//! implémentations distinctes de la même règle : celle qui reste est la seule.
 
 // Chaque test d'intégration compile ce module pour son propre compte, et aucun n'en
 // appelle la totalité : ce qui sert à l'un est mort pour l'autre.
@@ -231,4 +235,56 @@ pub fn url_of(postgres: &Container<GenericImage>) -> String {
         .expect("le port de PostgreSQL doit être publié");
 
     format!("postgres://{UTILISATEUR}:{MOT_DE_PASSE}@127.0.0.1:{port}/{BASE}")
+}
+
+/// `m20260902_122330` → `m<horodatage>` : le nom d'une migration porte l'instant où elle
+/// a été créée.
+pub fn masque_horodatage(texte: &str) -> String {
+    remplace_motif(texte, |lettres, debut| {
+        if lettres[debut] != 'm' || debut + 16 > lettres.len() {
+            return None;
+        }
+        if !lettres[debut + 1..debut + 9]
+            .iter()
+            .all(char::is_ascii_digit)
+        {
+            return None;
+        }
+        if lettres[debut + 9] != '_' {
+            return None;
+        }
+        if !lettres[debut + 10..debut + 16]
+            .iter()
+            .all(char::is_ascii_digit)
+        {
+            return None;
+        }
+
+        Some((debut + 16, "m<horodatage>".to_string()))
+    })
+}
+
+/// Balaye `texte` et remplace ce que `motif` reconnaît, de gauche à droite.
+pub fn remplace_motif(
+    texte: &str,
+    motif: impl Fn(&[char], usize) -> Option<(usize, String)>,
+) -> String {
+    let lettres: Vec<char> = texte.chars().collect();
+    let mut rendu = String::with_capacity(texte.len());
+    let mut rang = 0;
+
+    while rang < lettres.len() {
+        match motif(&lettres, rang) {
+            Some((fin, remplacement)) => {
+                rendu.push_str(&remplacement);
+                rang = fin;
+            }
+            None => {
+                rendu.push(lettres[rang]);
+                rang += 1;
+            }
+        }
+    }
+
+    rendu
 }

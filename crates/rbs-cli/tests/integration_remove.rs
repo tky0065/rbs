@@ -251,41 +251,11 @@ fn empreinte_datee(racine: &Path) -> common::Empreinte {
         .into_iter()
         .map(|(chemin, contenu)| {
             (
-                masque_horodatage(&chemin.to_string_lossy()).into(),
-                masque_horodatage(&contenu),
+                common::masque_horodatage(&chemin.to_string_lossy()).into(),
+                common::masque_horodatage(&contenu),
             )
         })
         .collect()
-}
-
-/// `m20260917_141948` → `m<horodatage>`.
-fn masque_horodatage(texte: &str) -> String {
-    let lettres: Vec<char> = texte.chars().collect();
-    let chiffres = |debut: usize, combien: usize| {
-        debut + combien <= lettres.len()
-            && lettres[debut..debut + combien]
-                .iter()
-                .all(char::is_ascii_digit)
-    };
-
-    let mut rendu = String::with_capacity(texte.len());
-    let mut rang = 0;
-    while rang < lettres.len() {
-        if lettres[rang] == 'm'
-            && chiffres(rang + 1, 8)
-            && lettres.get(rang + 9) == Some(&'_')
-            && chiffres(rang + 10, 6)
-        {
-            rendu.push_str("m<horodatage>");
-            rang += 16;
-            continue;
-        }
-
-        rendu.push(lettres[rang]);
-        rang += 1;
-    }
-
-    rendu
 }
 
 /// Échoue si les deux empreintes diffèrent, en ne montrant que ce qui diffère.

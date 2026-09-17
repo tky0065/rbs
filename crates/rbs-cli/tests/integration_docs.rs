@@ -206,7 +206,7 @@ fn normalise(sortie: &str, tmp: &Path) -> String {
     texte = unifie_separateurs(&texte);
     texte = masque_moteur(&texte);
     texte = masque_version(&texte);
-    texte = masque_horodatage(&texte);
+    texte = common::masque_horodatage(&texte);
     texte = masque_duree(&texte);
     texte = masque_adresse(&texte);
 
@@ -265,7 +265,7 @@ fn efface_ansi(texte: &str) -> String {
 
 /// `postgres 18.6` → `<moteur>` : la version du serveur est celle de la machine.
 fn masque_moteur(texte: &str) -> String {
-    remplace_motif(texte, |lettres, debut| {
+    common::remplace_motif(texte, |lettres, debut| {
         if debut > 0 && lettres[debut - 1].is_ascii_alphanumeric() {
             return None;
         }
@@ -301,7 +301,7 @@ fn masque_moteur(texte: &str) -> String {
 /// `1.2.0` → `<version>` : le dépôt travaille toujours sur la version qui suit celle que
 /// la documentation cite, et une page ne se réécrit pas à chaque montée de version.
 fn masque_version(texte: &str) -> String {
-    remplace_motif(texte, |lettres, debut| {
+    common::remplace_motif(texte, |lettres, debut| {
         let mut rang = debut;
         for point in 0..3 {
             let chiffres = compte_chiffres(lettres, rang);
@@ -328,36 +328,9 @@ fn masque_version(texte: &str) -> String {
     })
 }
 
-/// `m20260902_122330` → `m<horodatage>` : le nom d'une migration porte l'instant où elle
-/// a été créée.
-fn masque_horodatage(texte: &str) -> String {
-    remplace_motif(texte, |lettres, debut| {
-        if lettres[debut] != 'm' || debut + 16 > lettres.len() {
-            return None;
-        }
-        if !lettres[debut + 1..debut + 9]
-            .iter()
-            .all(char::is_ascii_digit)
-        {
-            return None;
-        }
-        if lettres[debut + 9] != '_' {
-            return None;
-        }
-        if !lettres[debut + 10..debut + 16]
-            .iter()
-            .all(char::is_ascii_digit)
-        {
-            return None;
-        }
-
-        Some((debut + 16, "m<horodatage>".to_string()))
-    })
-}
-
 /// `in 0.11s`, `en 1.2 s`, `in 1m 12s` → `<durée>`.
 fn masque_duree(texte: &str) -> String {
-    remplace_motif(texte, |lettres, debut| {
+    common::remplace_motif(texte, |lettres, debut| {
         let prefixe: String = lettres[debut..(debut + 3).min(lettres.len())]
             .iter()
             .collect();
@@ -450,31 +423,6 @@ fn compte_chiffres(lettres: &[char], debut: usize) -> usize {
         .iter()
         .take_while(|lettre| lettre.is_ascii_digit())
         .count()
-}
-
-/// Balaye `texte` et remplace ce que `motif` reconnaît, de gauche à droite.
-fn remplace_motif(
-    texte: &str,
-    motif: impl Fn(&[char], usize) -> Option<(usize, String)>,
-) -> String {
-    let lettres: Vec<char> = texte.chars().collect();
-    let mut rendu = String::with_capacity(texte.len());
-    let mut rang = 0;
-
-    while rang < lettres.len() {
-        match motif(&lettres, rang) {
-            Some((fin, remplacement)) => {
-                rendu.push_str(&remplacement);
-                rang = fin;
-            }
-            None => {
-                rendu.push(lettres[rang]);
-                rang += 1;
-            }
-        }
-    }
-
-    rendu
 }
 
 // --- Rejouer -----------------------------------------------------------------------
