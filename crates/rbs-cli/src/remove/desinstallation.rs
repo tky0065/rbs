@@ -3,8 +3,11 @@
 //! Le miroir d'`add::installation` : la même lecture de manifeste, parcourue à l'envers.
 //! Chaque section qu'`add` sait poser, celle-ci sait la défaire — sauf ce qu'aucun retrait
 //! ne doit toucher : la variable d'environnement, qu'un `git checkout` ne réparerait pas
-//! puisqu'elle vit dans un `.env` gitignoré, et la dépendance ou la feature Cargo qu'un
-//! autre fragment installé réclame encore.
+//! puisqu'elle vit dans un `.env` gitignoré ; la dépendance ou la feature Cargo qu'un
+//! autre fragment installé réclame encore ; et le fichier posé `if_absent`, dont
+//! l'installation désavoue déjà la paternité quand il préexistait — le retrait ne peut
+//! pas savoir lequel des deux cas s'est produit, et le supprimer à tort emporterait par
+//! exemple le `docker-compose.yml` où `mail` ou `redis` ont depuis inséré leurs services.
 //!
 //! Cette dernière règle — l'union des réclamations — est le piège de ce module : lire le
 //! seul manifeste du fragment qui part ne dit rien de ce que les autres exigent encore de
@@ -144,12 +147,13 @@ pub(crate) enum Error {
 
 /// Retire du plan ce que le manifeste déclare, dans l'ordre inverse de son installation.
 ///
-/// Chaque section qu'`installation::actions` sait poser trouve ici son inverse, à trois
-/// exceptions près, documentées section par section : les variables d'environnement ne
-/// sont jamais retirées, une dépendance ou une feature encore réclamée reste en place, et
-/// le point de montage de `src/modules/` ne se supprime jamais — seule la ligne que le
-/// fragment y a inscrite s'en va, portée comme n'importe quelle autre ancre par la
-/// section 3.
+/// Chaque section qu'`installation::actions` sait poser trouve ici son inverse, à quatre
+/// exceptions près, documentées section par section : un fichier `if_absent` n'est jamais
+/// supprimé, faute de savoir si ce fragment en est l'auteur ; les variables
+/// d'environnement ne sont jamais retirées ; une dépendance ou une feature encore
+/// réclamée reste en place ; et le point de montage de `src/modules/` ne se supprime
+/// jamais — seule la ligne que le fragment y a inscrite s'en va, portée comme n'importe
+/// quelle autre ancre par la section 3.
 // Sans appelant avant que `rbs remove` ne soit câblée à cette commande : `-D warnings`
 // la dirait morte, alors que les tests en prouvent déjà le contrat.
 #[allow(dead_code)]
@@ -158,12 +162,24 @@ pub(crate) fn actions(fragment: &Fragment, builder: &mut plan::Builder) -> Resul
     let mut fichiers = Vec::new();
     let mut laissees = Vec::new();
 
-    // 1. Les fichiers : chaque destination déclarée est rendue puis planifiée en retrait,
-    // qu'elle ait ou non été posée sous `if_absent` — elle l'a été, ou ne l'a pas été, et
-    // `Builder::supprimer` rend `DejaFait` dans le second cas.
-    for (destination, source, _if_absent) in
+    // 1. Les fichiers : chaque destination déclarée est rendue puis planifiée en retrait —
+    // sauf sous `if_absent`, qui ne veut pas dire « posé par ce fragment » mais « posé
+    // seulement s'il manquait » : le fragment y désavoue la paternité du fichier quand il
+    // préexistait, et le retrait ne peut pas savoir lequel des deux cas s'est produit.
+    // `docker-compose.yml` en est un exemple qui mord : `mail` et `redis` y insèrent leurs
+    // services par ailleurs, et le supprimer emporterait leur travail. Ces fichiers sont
+    // donc laissés en place, et seulement nommés.
+    for (destination, source, if_absent) in
         installation::a_deposer(fragment.name, fragment.manifest, fragment.templates)?
     {
+        if if_absent {
+            laissees.push(format!(
+                "{destination} n'est pas retiré : posé seulement s'il manquait, le retrait \
+                 ne peut pas savoir si ce fragment en est l'auteur"
+            ));
+            continue;
+        }
+
         let content = render(&renderer, fragment, source, &destination)?;
         builder.supprimer(&destination, &content)?;
         fichiers.push(destination);
@@ -322,10 +338,19 @@ pub(crate) fn reclamees_ailleurs(
 
         let manifest = manifest::read(&texte, &format!("{nom}/feature.toml"))?;
 
+        // Chaque source alimente les deux ensembles : une crate déclarée en
+        // `[[dependencies]]` par ce fragment reste réclamée même vue par un `[cargo.X]`
+        // ailleurs, et réciproquement — sans quoi une crate réclamée d'une manière et
+        // retirée de l'autre passerait entre les deux réclamations.
         for declared in &manifest.dependencies {
             dependencies.insert(declared.name.clone());
+            cargo
+                .entry(declared.name.clone())
+                .or_default()
+                .extend(declared.features.iter().cloned());
         }
         for (dependency, patch) in &manifest.cargo {
+            dependencies.insert(dependency.clone());
             cargo
                 .entry(dependency.clone())
                 .or_default()
@@ -434,7 +459,11 @@ mod tests {
     /// Le contexte de rendu du projet par défaut de [`crate::fixtures::Project`], qui
     /// crée toujours en français : `rate-limit` choisit son message d'erreur sur `lang`
     /// et son compteur sur la présence de `redis` dans `features` — absente ici, aucun
-    /// des fragments posés par les tests de ce module ne l'installant avec lui.
+    /// des fragments posés par les tests de ce module ne l'installant avec lui. `docker`
+    /// interpole `project_name` et `rust_image` dans son `Dockerfile`, et
+    /// `database_url_compose` / `database_a_un_serveur` dans le contenu de son ancre
+    /// `services` — `docker-compose.yml` lui-même étant `if_absent`, jamais rendu par le
+    /// retrait, seule cette ancre l'est encore.
     fn context() -> minijinja::Value {
         minijinja::context! {
             project_name => "demo-api",
@@ -442,6 +471,9 @@ mod tests {
             crate_path => "demo_api",
             lang => "fr",
             features => Vec::<String>::new(),
+            rust_image => templates::rust_image(),
+            database_a_un_serveur => true,
+            database_url_compose => "postgres://rbs:rbs@db:5432/demo_api",
         }
     }
 
@@ -697,6 +729,200 @@ mod tests {
         );
     }
 
+    /// Un fichier `if_absent` — posé seulement si le projet ne le portait pas déjà —
+    /// n'est jamais supprimé, même quand son rendu coïncide avec le disque : le retrait
+    /// ne peut pas savoir si le fragment en est l'auteur ou si le projet l'a adopté.
+    /// `docker` en déclare deux ; `docker-compose.yml` est le plus dangereux des deux à
+    /// perdre, `mail` ou `redis` pouvant y avoir inséré leurs propres services.
+    #[test]
+    fn an_if_absent_file_is_never_removed_and_is_named_in_laissees() {
+        let (projet, fragment) = fragment_pose("docker");
+        let mut builder = plan::Builder::new(projet.path());
+
+        let retires = actions(&fragment, &mut builder).expect("le retrait se planifie");
+
+        // Seuls `Dockerfile` et `.dockerignore` sont retirés ; les deux `if_absent`
+        // (`docker-compose.yml`, `config/production.toml`) ne le sont pas.
+        assert_eq!(retires.fichiers.len(), 2, "{:?}", retires.fichiers);
+        assert!(
+            !retires.fichiers.iter().any(|f| f == "docker-compose.yml"),
+            "{:?}",
+            retires.fichiers
+        );
+
+        for nomme in ["docker-compose.yml", "config/production.toml"] {
+            assert!(
+                retires
+                    .laissees
+                    .iter()
+                    .any(|laissee| laissee.contains(nomme)),
+                "{nomme} doit être nommé comme laissé : {:?}",
+                retires.laissees
+            );
+        }
+
+        // `docker-compose.yml` reste touché par ailleurs — l'ancre `services` que
+        // `docker` déclare lui-même y retire ses propres blocs — mais jamais par une
+        // suppression : son `after` ne doit jamais être `None`.
+        let plan = builder.finir();
+        for chemin in ["docker-compose.yml", "config/production.toml"] {
+            assert!(
+                plan.files()
+                    .iter()
+                    .find(|file| file.path == chemin)
+                    .is_none_or(|file| file.after.is_some()),
+                "{chemin} ne doit jamais être planifié en suppression"
+            );
+        }
+    }
+
+    /// Une dépendance qu'aucun autre fragment ne réclame est réellement retirée du
+    /// manifeste — la survie d'une dépendance partagée, seule prouvée jusqu'ici, ne dit
+    /// rien de ce qui doit au contraire disparaître.
+    #[test]
+    fn a_dependency_no_longer_claimed_is_actually_removed() {
+        let (projet, fragment) = fragment_pose("mail");
+        let mut builder = plan::Builder::new(projet.path());
+
+        actions(&fragment, &mut builder).expect("le retrait se planifie");
+
+        let plan = builder.finir();
+        let cargo = plan
+            .files()
+            .iter()
+            .find(|file| file.path == "Cargo.toml")
+            .expect("le manifeste est visé");
+        let apres = cargo.after.as_deref().expect("le manifeste reste");
+        assert!(
+            !apres
+                .lines()
+                .any(|ligne| ligne.trim_start().starts_with("lettre")),
+            "lettre devait disparaître, réclamée par aucun autre fragment : {apres}"
+        );
+        assert!(
+            !apres
+                .lines()
+                .any(|ligne| ligne.trim_start().starts_with("minijinja")),
+            "minijinja devait disparaître, réclamée par aucun autre fragment : {apres}"
+        );
+    }
+
+    /// Une feature cargo qu'aucun autre fragment ne réclame est réellement désactivée.
+    #[test]
+    fn a_cargo_feature_no_longer_claimed_is_actually_removed() {
+        let (projet, fragment) = fragment_pose("jobs");
+        let mut builder = plan::Builder::new(projet.path());
+
+        actions(&fragment, &mut builder).expect("le retrait se planifie");
+
+        let plan = builder.finir();
+        let cargo = plan
+            .files()
+            .iter()
+            .find(|file| file.path == "Cargo.toml")
+            .expect("le manifeste est visé");
+        let apres = cargo.after.as_deref().expect("le manifeste reste");
+        let tokio = apres
+            .lines()
+            .find(|ligne| ligne.trim_start().starts_with("tokio"))
+            .expect("tokio appartient au squelette, il reste déclaré");
+        assert!(!tokio.contains("\"time\""), "{tokio}");
+        assert!(!tokio.contains("\"sync\""), "{tokio}");
+    }
+
+    /// La migration n'est pas seulement retrouvée : elle est réellement retirée du plan,
+    /// fichier et enregistrement dans la crate `migration` compris.
+    #[test]
+    fn a_declared_migration_is_actually_removed() {
+        let (projet, fragment) = fragment_pose("jobs");
+        let mut builder = plan::Builder::new(projet.path());
+
+        let retires = actions(&fragment, &mut builder).expect("le retrait se planifie");
+
+        let migration = retires
+            .migration
+            .as_deref()
+            .expect("`jobs` déclare une migration");
+        assert!(
+            migration.starts_with("migration/src/m") && migration.ends_with("_create_jobs.rs"),
+            "{migration}"
+        );
+
+        let plan = builder.finir();
+        let fichier_migration = plan
+            .files()
+            .iter()
+            .find(|file| file.path == migration)
+            .expect("la migration est visée par le plan");
+        assert!(
+            fichier_migration.after.is_none(),
+            "la migration doit être planifiée en suppression"
+        );
+
+        let lib = plan
+            .files()
+            .iter()
+            .find(|file| file.path == "migration/src/lib.rs")
+            .expect("migration/src/lib.rs est visé");
+        let apres = lib.after.as_deref().expect("le fichier reste");
+        assert!(
+            !apres.contains("create_jobs"),
+            "les deux lignes d'enregistrement doivent disparaître : {apres}"
+        );
+    }
+
+    /// La section de configuration est réellement retirée du document, pas seulement
+    /// visée par une action sans effet.
+    #[test]
+    fn a_configuration_section_is_actually_removed() {
+        let (projet, fragment) = fragment_pose("cors");
+        let mut builder = plan::Builder::new(projet.path());
+
+        actions(&fragment, &mut builder).expect("le retrait se planifie");
+
+        let plan = builder.finir();
+        let config = plan
+            .files()
+            .iter()
+            .find(|file| file.path == "config/default.toml")
+            .expect("le fichier de configuration est visé");
+        let apres = config.after.as_deref().expect("le fichier reste");
+        assert!(
+            !apres.contains("[cors]"),
+            "la section doit disparaître : {apres}"
+        );
+    }
+
+    /// La feature quitte réellement `[package.metadata.rbs] features`, et pas seulement
+    /// les dépendances qui portent le même nom par coïncidence — `tower-http` porte lui
+    /// aussi une feature `cors`, que ce retrait ne doit pas confondre avec la métadonnée.
+    #[test]
+    fn the_feature_is_actually_removed_from_the_metadata() {
+        let (projet, fragment) = fragment_pose("cors");
+        let mut builder = plan::Builder::new(projet.path());
+
+        actions(&fragment, &mut builder).expect("le retrait se planifie");
+
+        let plan = builder.finir();
+        let cargo = plan
+            .files()
+            .iter()
+            .find(|file| file.path == "Cargo.toml")
+            .expect("le manifeste est visé");
+        let apres = cargo.after.as_deref().expect("le manifeste reste");
+
+        let document: toml_edit::DocumentMut = apres.parse().expect("le manifeste se relit");
+        let features = document["package"]["metadata"]["rbs"]["features"]
+            .as_array()
+            .expect("la liste des features existe");
+        assert!(
+            !features
+                .iter()
+                .any(|valeur| valeur.as_str() == Some("cors")),
+            "{features:?}"
+        );
+    }
+
     /// La migration est retrouvée par son suffixe, son horodatage n'étant nulle part gardé.
     #[test]
     fn the_migration_is_found_by_its_suffix() {
@@ -770,6 +996,46 @@ mod tests {
 
         assert!(reclamees.dependencies.is_empty());
         assert!(reclamees.cargo.is_empty());
+    }
+
+    /// Une crate réclamée d'une manière ne doit pas échapper à la garde de l'autre :
+    /// un fragment qui ne la vise que par `[cargo.X]` la protège aussi côté
+    /// `dependencies`, sans quoi un fragment partant qui la déclarait en
+    /// `[[dependencies]]` la retirerait entièrement malgré la feature encore active.
+    /// Injoignable avec les fragments embarqués — aucun ne se recoupe ainsi — donc
+    /// prouvé par un `--template-dir` fabriqué, exactement le cas que ce garde-fou vise.
+    #[test]
+    fn a_crate_claimed_by_one_source_is_protected_on_both_fronts() {
+        let repertoire = TempDir::new().expect("le répertoire temporaire se crée");
+        let fragment_dir = repertoire.path().join("compagnon");
+        std::fs::create_dir_all(&fragment_dir).expect("le répertoire du fragment se crée");
+        std::fs::write(
+            fragment_dir.join("feature.toml"),
+            "[feature]\ndescription = \"compagnon\"\n\n\
+             [cargo.tokio]\nfeatures = [\"time\"]\n",
+        )
+        .expect("le manifeste du compagnon s'écrit");
+
+        let reclamees = reclamees_ailleurs(
+            Some(repertoire.path()),
+            "partant",
+            &["compagnon".to_string(), "partant".to_string()],
+        )
+        .expect("le calcul aboutit");
+
+        assert!(
+            reclamees
+                .cargo
+                .get("tokio")
+                .is_some_and(|features| features.contains("time")),
+            "{:?}",
+            reclamees.cargo
+        );
+        assert!(
+            reclamees.dependencies.contains("tokio"),
+            "la crate doit aussi être protégée côté dépendances : {:?}",
+            reclamees.dependencies
+        );
     }
 
     /// Le partant lui-même n'entre jamais dans ses propres réclamations.
