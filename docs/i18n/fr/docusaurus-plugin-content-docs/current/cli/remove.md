@@ -46,10 +46,10 @@ Options :
 | `--json` | Rend le plan — ou l'erreur — en un seul document JSON sur la sortie standard, au lieu du texte coloré. [Le guide des agents](../guides/agents.md#lire-un-plan-en-json) porte le document et les codes d'erreur. |
 | `--template-dir <CHEMIN>` | Lit le manifeste du fragment dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire — le même répertoire qu'`add` aurait utilisé pour l'installer. |
 
-Seuls les treize noms qu'`add` installe sont acceptés par `remove`. Un CRUD engendré par
-`rbs generate crud` n'en fait pas partie, même si son nom voisine les vrais fragments dans
-`[package.metadata.rbs] features` : `remove` le refuse exactement comme il refuse un nom
-qui n'a jamais désigné une feature.
+Sans `--template-dir`, seuls les treize noms qu'`add` installe sont acceptés par `remove`.
+Un CRUD engendré par `rbs generate crud` n'en fait pas partie, même si son nom voisine les
+vrais fragments dans `[package.metadata.rbs] features` : `remove` le refuse exactement
+comme il refuse un nom qui n'a jamais désigné une feature.
 
 ## Retirer une feature
 
@@ -77,8 +77,8 @@ plan pour …/demo
 ```
 
 Les marqueurs du plan rejoignent les trois qu'[`add`](./add.md#lidempotence) porte déjà :
-`-` supprimé, `~` modifié, `·` inchangé, `!` en conflit. Le plan reconstruit — et
-reformate — exactement les fichiers qu'`add` avait écrits, ce qui lui permet de distinguer
+`-` supprimé, `~` modifié, `·` inchangé, `!` en conflit. Le plan reconstruit exactement
+les fichiers qu'`add` avait écrits, ce qui lui permet de distinguer
 une ligne que le fragment avait lui-même insérée d'une ligne que le développeur a ajoutée à
 côté, et de ne retirer que la première : `src/modules/mod.rs` perd ici son
 `pub mod cors;` mais garde tout ce qu'un fragment posé plus tard y a monté.
@@ -110,8 +110,10 @@ $ rbs remove jobs
 base. Défaire les tables qu'une migration a créées est le travail de `rbs migrate down`, et
 il doit s'exécuter **avant** le retrait — une fois le fichier de migration disparu,
 `sea-orm-cli` n'a plus rien à lire pour écrire le `DOWN`. Un schéma laissé ainsi reste
-invisible à [`rbs doctor`](./doctor.md), dont le contrôle `base` ne compare que les
-migrations *déclarées* du projet à ce que la base a déjà appliqué.
+invisible à [`rbs doctor`](./doctor.md) : aucun de ses contrôles n'interroge jamais la
+base pour savoir quelles migrations y ont réellement été appliquées — `base` se borne à
+vérifier que le pilote compilé dans le projet correspond au schéma de l'URL, qu'une
+connexion répond dans les trois secondes, puis la version du serveur.
 
 Une deuxième migration portant le même suffixe — un renommage, une copie faite à la
 main — est refusée plutôt que devinée : `remove` ne tranchera pas entre deux candidates à
@@ -134,7 +136,7 @@ retirez-les d'abord, dans l'ordre qui vous convient.
 
 ## Ce qui n'est jamais retiré
 
-Quatre choses qu'un retrait laisse intactes, toutes nommées dans le rapport plutôt que
+Cinq choses qu'un retrait laisse intactes, toutes nommées dans le rapport plutôt que
 traitées :
 
 {/* rbs:transcript cmd="rbs remove docker" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add docker && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m docker" dans="demo" */}
@@ -176,10 +178,13 @@ plan pour …/demo
   qu'aucun `git checkout` ne défera jamais — la décision de retirer une ligne y appartient
   donc au développeur, jamais prise à sa place. `.env.example`, versionné, n'est pas touché
   non plus : il continue de documenter la variable pour qui lira le projet ensuite.
-- **Les dépendances qu'un autre fragment installé déclare encore.**
-  `reclamees_ailleurs` lit chaque autre manifeste installé avant de planifier le moindre
-  retrait, si bien qu'une crate réclamée par deux fragments survit tant que l'un des deux
-  reste.
+- **Les dépendances qu'un autre fragment installé déclare encore.** Chaque autre
+  manifeste installé est lu avant de planifier le moindre retrait, si bien qu'une crate
+  réclamée par deux fragments survit tant que l'un des deux reste.
+- **Une feature d'une dépendance qu'un autre fragment installé réclame encore**,
+  distincte de la crate elle-même : `auth`, `scheduler`, `rate-limit` et `redis` activent
+  tous la feature `time` de tokio, si bien que retirer l'un d'eux pendant qu'un autre reste
+  installé la laisse en place.
 - **Les dépendances que le squelette lui-même déclare**, `tower-http` ci-dessus en étant
   une : `rbs new` les pose dans `Cargo.toml` avant même qu'aucune feature n'existe, et
   aucun retrait ne les réclame.
@@ -237,21 +242,56 @@ cors : CORS : origines, méthodes et en-têtes autorisés, énumérés par la co
 
 plan pour …/demo
 
+  - src/modules/cors/mod.rs      supprimé
   ! src/modules/cors/config.rs   conflit — relancer avec --force
+  - src/modules/cors/tests.rs    supprimé
   ~ src/modules/mod.rs           modifié
   ~ src/router.rs                modifié
   ~ Cargo.toml                   modifié
   ~ config/default.toml          modifié
   ~ AGENTS.md                    modifié
 
-  5 à modifier, 1 en conflit
+  5 à modifier, 2 à supprimer, 1 en conflit
 erreur : src/modules/cors/config.rs — relancer avec --force pour les écraser
 ```
 
-C'est ce qui protège un fichier retouché à la main de disparaître sans trace : `remove`
-recalcule ce qu'`add` aurait écrit aujourd'hui et le compare à ce qui est réellement sur le
-disque, octet pour octet. Tout ce qui diverge — une ligne ajoutée, une valeur changée —
-arrête le plan là. `--force` retire quand même, le même plan affiché d'abord.
+C'est ce qui protège un fichier retouché à la main de disparaître sans trace : le conflit
+ne marque que le seul fichier qui diverge — `remove` supprime quand même `mod.rs` et
+`tests.rs`, dont elle reconnaît le contenu, et édite quand même les cinq fichiers autour ;
+seuls `config.rs` et la ligne de manifeste que son propre retrait aurait sinon écrite sont
+retenus. `remove` recalcule ce qu'`add` aurait écrit aujourd'hui et le compare à ce qui
+est réellement sur le disque, octet pour octet. Tout ce qui diverge — une ligne ajoutée,
+une valeur changée — arrête le plan là, ce seul fichier marqué plutôt que le plan entier
+retenu. `--force` retire quand même, le même plan affiché d'abord :
+
+```text
+$ rbs remove cors --force
+cors : CORS : origines, méthodes et en-têtes autorisés, énumérés par la configuration
+
+plan pour …/demo
+
+  - src/modules/cors/mod.rs      supprimé
+  ! src/modules/cors/config.rs   conflit — relancer avec --force
+  - src/modules/cors/tests.rs    supprimé
+  ~ src/modules/mod.rs           modifié
+  ~ src/router.rs                modifié
+  ~ Cargo.toml                   modifié
+  ~ config/default.toml          modifié
+  ~ AGENTS.md                    modifié
+
+  5 à modifier, 2 à supprimer, 1 en conflit
+✓ cors retirée — 5 modifiés, 3 supprimés
+  tower-http appartient au squelette, jamais retirée
+
+  lancez `cargo build` : le compilateur nomme ce qui référençait encore la feature
+```
+
+Les deux blocs ci-dessus sont capturés pour de vrai, sur un projet où `config.rs` a été
+retouché à la main après l'installation de `cors` — le même scénario dont vient le
+conflit propre à `add` — mais aucun ne porte de marqueur `{/* rbs:transcript */}` :
+reproduire la divergence exige une ligne ajoutée à un fichier que Git suit déjà, ce que le
+`setup=` du banc de test ne sait faire qu'en lançant `rbs` et `git`, dont aucun n'édite le
+contenu d'un fichier arbitraire.
 
 ## Le compilateur est l'oracle
 

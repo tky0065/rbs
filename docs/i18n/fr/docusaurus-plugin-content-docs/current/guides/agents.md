@@ -203,8 +203,8 @@ plan pour /private/tmp/rbs-demo/blog2
 ## Lire un plan en JSON
 
 Le plan qu'une commande affiche avant d'écrire est fait pour un humain : couleurs, puces, un
-décompte en bas. `rbs add`, `rbs generate crud`, `feature`, `client` et `job`, et
-`rbs upgrade` prennent `--json`, et la sortie standard porte alors
+décompte en bas. `rbs add`, `rbs remove`, `rbs generate crud`, `feature`, `client` et
+`job`, et `rbs upgrade` prennent `--json`, et la sortie standard porte alors
 un seul document JSON à la place — le plan, ou l'erreur. C'est lui qu'un agent doit lire.
 
 ```text

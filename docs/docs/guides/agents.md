@@ -200,8 +200,8 @@ plan pour /private/tmp/rbs-demo/blog2
 ## Reading a plan as JSON
 
 The plan a command prints before writing is meant for a human: colours, bullets, a count
-at the bottom. `rbs add`, `rbs generate crud`, `feature`, `client` and `job`, and
-`rbs upgrade` take `--json`, and standard output then carries a single JSON document
+at the bottom. `rbs add`, `rbs remove`, `rbs generate crud`, `feature`, `client` and `job`,
+and `rbs upgrade` take `--json`, and standard output then carries a single JSON document
 instead — the plan, or the error. That is what an agent should read.
 
 ```text

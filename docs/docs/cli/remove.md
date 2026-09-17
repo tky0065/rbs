@@ -44,10 +44,10 @@ Options :
 | `--json` | Prints the plan — or the error — as one JSON document on standard output instead of the coloured text. [The agents guide](../guides/agents.md#reading-a-plan-as-json) has the document and the error codes. |
 | `--template-dir <CHEMIN>` | Reads the fragment's manifest from a directory holding one subdirectory per feature, instead of the ones embedded in the binary — the same directory `add` would have installed from. |
 
-The same thirteen names `add` installs are the only ones `remove` accepts. A CRUD
-`rbs generate crud` wrote is not one of them, even though its name sits in
-`[package.metadata.rbs] features` next to the real fragments — `remove` refuses it exactly
-as it refuses a name that was never a feature at all.
+Without `--template-dir`, the same thirteen names `add` installs are the only ones
+`remove` accepts. A CRUD `rbs generate crud` wrote is not one of them, even though its
+name sits in `[package.metadata.rbs] features` next to the real fragments — `remove`
+refuses it exactly as it refuses a name that was never a feature at all.
 
 ## Removing a feature
 
@@ -75,8 +75,8 @@ plan pour …/demo
 ```
 
 Markers in the plan join the three [`add`](./add.md#idempotence) already uses: `-` removed,
-`~` modified, `·` unchanged, `!` conflicting. The plan reconstructs — and reformats — the
-exact files `add` had written, so it can tell a line the fragment itself inserted from one
+`~` modified, `·` unchanged, `!` conflicting. The plan reconstructs the exact files `add`
+had written, so it can tell a line the fragment itself inserted from one
 the developer added next to it, and remove only the former; `src/modules/mod.rs` here loses
 its `pub mod cors;` but keeps whatever else a later fragment mounted there.
 
@@ -106,8 +106,10 @@ $ rbs remove jobs
 Dropping the tables a migration created is `rbs migrate down`'s job, and it has to run
 **before** the removal — once the migration file is gone, `sea-orm-cli` has nothing left to
 read to write the `DOWN` half. A schema left behind this way is invisible to
-[`rbs doctor`](./doctor.md), whose `base` check only compares the project's *declared*
-migrations against what the database has already applied.
+[`rbs doctor`](./doctor.md): none of its checks ever query the database for which
+migrations have actually been applied there — `base` only confirms that the driver
+compiled into the project matches the URL's scheme, that a connection answers within
+three seconds, and the server's version.
 
 A second migration matching the same suffix — a rename, a hand-made copy — is refused
 rather than guessed at: `remove` will not pick one of two candidates on the developer's
@@ -129,7 +131,7 @@ either dependant is still installed; remove them first, in whichever order suits
 
 ## What is never removed
 
-Four things a removal leaves untouched, all named in the report rather than acted on:
+Five things a removal leaves untouched, all named in the report rather than acted on:
 
 {/* rbs:transcript cmd="rbs remove docker" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add docker && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m docker" dans="demo" */}
 ```text
@@ -159,19 +161,22 @@ plan pour …/demo
   lancez `cargo build` : le compilateur nomme ce qui référençait encore la feature
 ```
 
-- **Files posted only when they were missing.** `docker`'s manifest marks
+- **Files written only when they were missing.** `docker`'s manifest marks
   `docker-compose.yml` and `config/production.toml` this way: `add` writes them only on a
   project that had none, so a project that already carried one keeps it as it found it. A
-  fragment posted this way never claims authorship, and removal has no way to tell whether
+  fragment written this way never claims authorship, and removal has no way to tell whether
   this install wrote the file or merely found it — `mail` and `redis` both insert their own
   service into the very same compose, and deleting it here would carry their work away too.
 - **Environment variables.** `.env` is gitignored — the one write in a removal that no
   `git checkout` would ever undo — so the decision to drop a line from it is left to the
   developer, never taken for them. `.env.example`, versioned, is not touched either: it
   still documents the variable for whoever reads the project next.
-- **Dependencies another installed fragment still declares.** `reclamees_ailleurs` reads
-  every other installed manifest before planning a single removal, so a crate two fragments
+- **Dependencies another installed fragment still declares.** Every other installed
+  fragment's manifest is read before planning a single removal, so a crate two fragments
   both need survives as long as either does.
+- **A dependency's feature another installed fragment still needs**, distinct from the
+  crate itself: `auth`, `scheduler`, `rate-limit` and `redis` all turn on tokio's `time`
+  feature, so removing one of them while another is still installed leaves it on.
 - **Dependencies the skeleton itself declares**, `tower-http` above being one: `rbs new`
   puts them in `Cargo.toml` before any feature exists, and no removal claims them.
 
@@ -225,26 +230,60 @@ cors : CORS : origines, méthodes et en-têtes autorisés, énumérés par la co
 
 plan pour …/demo
 
+  - src/modules/cors/mod.rs      supprimé
   ! src/modules/cors/config.rs   conflit — relancer avec --force
+  - src/modules/cors/tests.rs    supprimé
   ~ src/modules/mod.rs           modifié
   ~ src/router.rs                modifié
   ~ Cargo.toml                   modifié
   ~ config/default.toml          modifié
   ~ AGENTS.md                    modifié
 
-  5 à modifier, 1 en conflit
+  5 à modifier, 2 à supprimer, 1 en conflit
 erreur : src/modules/cors/config.rs — relancer avec --force pour les écraser
 ```
 
-This is what protects a hand-edited file from disappearing without a trace: `remove`
-recomputes what `add` would have written today and compares it to what is actually on
-disk, byte for byte. Anything that diverges — a line added, a value changed — stops the
-plan there. `--force` removes it anyway, the same plan shown first.
+This is what protects a hand-edited file from disappearing without a trace: the conflict
+marks only the one file that diverges — `remove` still deletes `mod.rs` and `tests.rs`,
+whose content it recognises, and still edits the five files around them; only
+`config.rs`, and the manifest line its own removal would otherwise write, are held back.
+`remove` recomputes what `add` would have written today and compares it to what is
+actually on disk, byte for byte. Anything that diverges — a line added, a value
+changed — stops the plan there, that one file marked rather than the whole plan withheld.
+`--force` removes it anyway, the same plan shown first:
+
+```text
+$ rbs remove cors --force
+cors : CORS : origines, méthodes et en-têtes autorisés, énumérés par la configuration
+
+plan pour …/demo
+
+  - src/modules/cors/mod.rs      supprimé
+  ! src/modules/cors/config.rs   conflit — relancer avec --force
+  - src/modules/cors/tests.rs    supprimé
+  ~ src/modules/mod.rs           modifié
+  ~ src/router.rs                modifié
+  ~ Cargo.toml                   modifié
+  ~ config/default.toml          modifié
+  ~ AGENTS.md                    modifié
+
+  5 à modifier, 2 à supprimer, 1 en conflit
+✓ cors retirée — 5 modifiés, 3 supprimés
+  tower-http appartient au squelette, jamais retirée
+
+  lancez `cargo build` : le compilateur nomme ce qui référençait encore la feature
+```
+
+Both blocks above are captured for real, on a project where `config.rs` was hand-edited
+after `cors` was installed — the same scenario `add`'s own conflict is captured from —
+but neither carries a `{/* rbs:transcript */}` marker: reproducing the divergence needs a
+line appended to a file Git already tracks, which the transcript harness's `setup=` can
+only do by running `rbs` and `git`, neither of which edits an arbitrary file's content.
 
 ## The compiler is the oracle
 
 `remove` never searches the project's own code for a reference to the feature it just took
-out — a call to `webhooks::emit`, an `mail::Service` still held on `AppState`, an `use`
+out — a call to `webhooks::emit`, a `mail::Service` still held on `AppState`, a `use`
 left dangling. It only knows what the fragment itself declared: its files, its anchor
 lines, its migration, its dependencies. Everything the developer wrote *against* the
 feature is invisible to it, and that is exactly what `cargo build` is for — the line every
