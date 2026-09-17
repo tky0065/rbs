@@ -25,6 +25,7 @@ mod openapi;
 mod plan;
 mod preset;
 mod prompts;
+mod remove;
 mod routes;
 mod secret;
 mod seed;

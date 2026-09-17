@@ -8,7 +8,7 @@
 //! même raison : ce qui modifie un projet existant se montre avant de s'écrire, et
 //! s'écrit en entier ou pas du tout.
 
-mod installation;
+pub(crate) mod installation;
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::io;

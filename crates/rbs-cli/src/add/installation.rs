@@ -115,7 +115,9 @@ pub(crate) fn actions(
     let renderer = Renderer::new();
     let mut deposes = Vec::new();
 
-    for (destination, source, if_absent) in a_deposer(fragment)? {
+    for (destination, source, if_absent) in
+        a_deposer(fragment.name, fragment.manifest, fragment.templates)?
+    {
         if if_absent && builder.exists(&destination)? {
             continue;
         }
@@ -134,7 +136,7 @@ pub(crate) fn actions(
         let content = render(
             &renderer,
             fragment,
-            template(fragment, &declared.source)?,
+            template(fragment.name, fragment.templates, &declared.source)?,
             &path,
         )?;
 
@@ -293,7 +295,10 @@ fn ouvre_le_point_de_montage(
 ///
 /// Une ancre en reçoit souvent plusieurs — les cinq chemins OpenAPI d'une feature — et
 /// une chaîne TOML multiligne est la façon naturelle de les écrire.
-fn lines(content: &str) -> Vec<String> {
+///
+/// `pub(crate)` : `remove::desinstallation` en a besoin pour retirer les mêmes lignes
+/// qu'`add` a insérées, depuis le même contenu déclaré.
+pub(crate) fn lines(content: &str) -> Vec<String> {
     content
         .lines()
         .filter(|line| !line.trim().is_empty())
@@ -341,10 +346,17 @@ fn render(
 /// Sans `[[files]]`, le fragment est copié tel quel : un fragment qui n'apporte pas de
 /// code Rust n'a rien à déclarer pour que ses fichiers arrivent où leur arborescence les
 /// place déjà.
-fn a_deposer<'a>(fragment: &'a Fragment) -> Result<Vec<(String, &'a str, bool)>, Error> {
-    if fragment.manifest.files.is_empty() {
-        return Ok(fragment
-            .templates
+///
+/// Prend ses trois champs plutôt qu'un `&Fragment` : `remove::desinstallation` porte le
+/// sien, dont la forme diffère par le contexte de retrait qu'il ajoute, mais parcourt le
+/// même manifeste pour retrouver les mêmes destinations.
+pub(crate) fn a_deposer<'a>(
+    feature: &str,
+    manifest: &Manifest,
+    templates: &'a [templates::File],
+) -> Result<Vec<(String, &'a str, bool)>, Error> {
+    if manifest.files.is_empty() {
+        return Ok(templates
             .iter()
             .map(|template| {
                 (
@@ -356,26 +368,28 @@ fn a_deposer<'a>(fragment: &'a Fragment) -> Result<Vec<(String, &'a str, bool)>,
             .collect());
     }
 
-    fragment
-        .manifest
+    manifest
         .files
         .iter()
         .map(|declare| {
-            let source = template(fragment, &declare.source)?;
+            let source = template(feature, templates, &declare.source)?;
             Ok((declare.destination.clone(), source, declare.if_absent))
         })
         .collect()
 }
 
 /// La source de la template que le manifeste désigne par `name`.
-fn template<'a>(fragment: &'a Fragment, name: &str) -> Result<&'a str, Error> {
-    fragment
-        .templates
+pub(crate) fn template<'a>(
+    feature: &str,
+    templates: &'a [templates::File],
+    name: &str,
+) -> Result<&'a str, Error> {
+    templates
         .iter()
         .find(|template| template.origin == Path::new(name))
         .map(|template| template.source.as_str())
         .ok_or_else(|| Error::TemplateAbsente {
-            feature: fragment.name.to_string(),
+            feature: feature.to_string(),
             template: name.to_string(),
         })
 }

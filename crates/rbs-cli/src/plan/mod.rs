@@ -294,6 +294,20 @@ impl Builder {
         }
     }
 
+    /// Racine du projet, telle que passée à [`Builder::new`].
+    ///
+    /// `remove::desinstallation` en a besoin pour parcourir `migration/src/` à la
+    /// recherche d'un fichier par son suffixe : une recherche par motif, que le reste du
+    /// builder n'a pas à savoir faire pour les autres actions, qui visent toutes un
+    /// chemin déjà connu.
+    ///
+    // Sans appelant avant que `rbs remove` ne soit câblée à cette commande : `-D
+    // warnings` la dirait morte, alors que les tests en prouvent déjà le contrat.
+    #[allow(dead_code)]
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
     /// Planifie l'écriture de `path` avec `content`.
     ///
     /// Refuse un chemin qu'une action précédente a déjà projeté : voir
