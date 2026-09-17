@@ -75,10 +75,23 @@ Le quatrième est le garde-fou central, et il n'est pas une réutilisation gratu
 test inverse — *présent et différent du rendu* — porté par une méthode neuve,
 `Builder::supprimer(path, rendu_attendu)`.
 
-Rejouer ce rendu exige le contexte qu'`add` construit : nom du paquet, `crate_name`,
-moteur, langue, URL du `.env`. Le contenu d'une migration, lui, ne porte pas son
-horodatage — `generate::migration::render` ne le passe qu'au nom du module — donc elle se
-compare comme les autres fichiers.
+Rejouer ce rendu exige le contexte qu'`add` construit. Ce document ne l'énumère pas, et
+c'est délibéré : une liste écrite en prose se périme au premier fragment qui interpole une
+clé de plus, et le moteur étant en `UndefinedBehavior::Strict`, une clé absente n'est pas
+une chaîne vide — c'est un `rbs remove` qui s'arrête chez l'utilisateur, où les fragments
+se rendent, et non en CI, où personne ne les retire.
+
+Le contexte est donc **le même objet**, construit une fois pour les deux commandes
+(`crates/rbs-cli/src/contexte.rs`), et non deux constructeurs jumeaux. La première
+rédaction de ce paragraphe nommait cinq clés ; le constructeur partagé en porte dix-huit,
+et la copie qu'avait d'abord reçue le retrait en portait dix — huit de moins, sans que rien
+ne le signale. C'est cette énumération partielle, tenue pour exhaustive, qui a failli
+livrer le défaut. Un test dérivé tient désormais la propriété à la place de cette prose :
+il rend chaque fichier, chaque migration, chaque contenu d'ancre et chaque `when` de
+`[[env]]` des treize fragments embarqués, et assert avoir parcouru les treize.
+
+Le contenu d'une migration, lui, ne porte pas son horodatage — `generate::migration::render`
+ne le passe qu'au nom du module — donc elle se compare comme les autres fichiers.
 
 ### 3.2 Aucune conversation avec la base
 
