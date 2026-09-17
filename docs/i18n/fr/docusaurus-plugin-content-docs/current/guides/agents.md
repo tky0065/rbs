@@ -338,23 +338,26 @@ où il va. Un code partagé par plusieurs commandes a le même sens dans toutes.
 | `arbre_sale` | toutes | Le working tree Git porte des modifications non commitées. Commitez, ou relancez avec `--force`. |
 | `fichier_inaccessible` | toutes | Un fichier du projet ou d'une template n'a pu être lu ou écrit. |
 | `manifeste_illisible` | toutes | Le `Cargo.toml` du projet n'a pu être lu ou patché. |
-| `ancre_absente` | `add`, `generate`, `upgrade` | Une ancre manque à son fichier. `bloc` porte les deux balises à coller, `remede` nomme le fichier. |
-| `ancre_mal_placee` | `add`, `generate`, `upgrade` | Une ancre est placée sous la ligne qu'elle doit précéder. `bloc` est le bloc à remonter, `remede` nomme la ligne. |
-| `zone_absente` | `add`, `generate`, `upgrade` | Une zone d'`AGENTS.md` manque. `bloc` porte ses marqueurs. |
-| `fichier_absent` | `add`, `generate`, `upgrade` | Le fichier qui doit porter une ancre n'existe pas. |
-| `manifeste_absent` | `add`, `generate`, `upgrade` | Le `Cargo.toml` visé par une modification n'existe pas. |
-| `toml_invalide` | `add`, `generate`, `upgrade` | Un document TOML du projet ne s'analyse pas. |
-| `conflit` | `add`, `generate`, `generate client`, `upgrade` | Le plan écraserait des fichiers que rbs n'a pas écrits. Relancez avec `--force` pour les écraser. |
-| `ecriture_impossible` | `add`, `generate`, `generate client`, `upgrade` | Une écriture a échoué ; ce que le plan avait déjà écrit a été défait. |
-| `plan_incoherent` | `add`, `generate`, `generate client`, `upgrade` | Deux actions prétendent écrire le même fichier de bout en bout — un défaut de rbs, à signaler. |
+| `ancre_absente` | `add`, `generate`, `remove`, `upgrade` | Une ancre manque à son fichier. `bloc` porte les deux balises à coller, `remede` nomme le fichier. |
+| `ancre_mal_placee` | `add`, `generate`, `remove`, `upgrade` | Une ancre est placée sous la ligne qu'elle doit précéder. `bloc` est le bloc à remonter, `remede` nomme la ligne. |
+| `zone_absente` | `add`, `generate`, `remove`, `upgrade` | Une zone d'`AGENTS.md` manque. `bloc` porte ses marqueurs. |
+| `fichier_absent` | `add`, `generate`, `remove`, `upgrade` | Le fichier qui doit porter une ancre n'existe pas. |
+| `manifeste_absent` | `add`, `generate`, `remove`, `upgrade` | Le `Cargo.toml` visé par une modification n'existe pas. |
+| `toml_invalide` | `add`, `generate`, `remove`, `upgrade` | Un document TOML du projet ne s'analyse pas. |
+| `conflit` | `add`, `generate`, `generate client`, `remove`, `upgrade` | Le plan écraserait des fichiers que rbs n'a pas écrits. Relancez avec `--force` pour les écraser. |
+| `ecriture_impossible` | `add`, `generate`, `generate client`, `remove`, `upgrade` | Une écriture a échoué ; ce que le plan avait déjà écrit a été défait. |
+| `plan_incoherent` | `add`, `generate`, `generate client`, `remove`, `upgrade` | Deux actions prétendent écrire le même fichier de bout en bout — un défaut de rbs, à signaler. |
 | `feature_inconnue` | `add` | Aucun fragment ne porte ce nom. |
 | `fragment_sans_manifeste` | `add` | Le fragment n'a pas de `feature.toml`. |
-| `fragment_invalide` | `add` | Le `feature.toml` du fragment est invalide. |
-| `template_absente` | `add` | Le manifeste du fragment déclare une template que le fragment ne porte pas. |
-| `ancre_inconnue` | `add` | Le manifeste du fragment vise une ancre que rbs ne connaît pas. |
-| `rendu_impossible` | `add`, `generate` | Une template ne se rend pas. |
-| `env_illisible` | `add` | Le `.env` du projet est absent, illisible, ou muet sur la base. |
-| `url_indecomposable` | `add` | L'URL de la base ne se décompose pas en utilisateur, mot de passe et hôte. |
+| `fragment_invalide` | `add`, `remove` | Le `feature.toml` du fragment est invalide. |
+| `template_absente` | `add`, `remove` | Le manifeste du fragment déclare une template que le fragment ne porte pas. |
+| `ancre_inconnue` | `add`, `remove` | Le manifeste du fragment vise une ancre que rbs ne connaît pas. |
+| `rendu_impossible` | `add`, `generate`, `remove` | Une template ne se rend pas. |
+| `env_illisible` | `add`, `remove` | Le `.env` du projet est absent, illisible, ou muet sur la base. |
+| `url_indecomposable` | `add`, `remove` | L'URL de la base ne se décompose pas en utilisateur, mot de passe et hôte. |
+| `fragment_inconnu` | `remove` | Le nom ne désigne aucun fragment : une faute de frappe, ou un CRUD engendré par `rbs generate crud`, qu'inscrit la même liste. |
+| `feature_exigee` | `remove` | Un autre fragment installé exige encore celui-ci ; le message les nomme tous. |
+| `migration_ambigue` | `remove` | Deux fichiers de migration correspondent au suffixe du fragment ; aucun n'est choisi. |
 | `nom_invalide` | `generate` | Le nom de la feature, ou celui donné à `--singular`, est inutilisable. |
 | `champs_invalides` | `generate` | `--fields` ne s'analyse pas. |
 | `feature_deja_presente` | `generate` | Le répertoire de la feature existe déjà. |

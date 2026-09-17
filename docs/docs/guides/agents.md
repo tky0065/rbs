@@ -334,23 +334,26 @@ says where it goes. A code shared by several commands means the same thing in al
 | `arbre_sale` | all | The Git working tree has uncommitted changes. Commit, or rerun with `--force`. |
 | `fichier_inaccessible` | all | A file of the project or of a template could not be read or written. |
 | `manifeste_illisible` | all | The project's `Cargo.toml` could not be read or patched. |
-| `ancre_absente` | `add`, `generate`, `upgrade` | An anchor is missing from its file. `bloc` holds the two markers to paste, `remede` names the file. |
-| `ancre_mal_placee` | `add`, `generate`, `upgrade` | An anchor sits below the line it must precede. `bloc` is the block to move up, `remede` names the line. |
-| `zone_absente` | `add`, `generate`, `upgrade` | A zone of `AGENTS.md` is missing. `bloc` holds its markers. |
-| `fichier_absent` | `add`, `generate`, `upgrade` | The file that should carry an anchor does not exist. |
-| `manifeste_absent` | `add`, `generate`, `upgrade` | The `Cargo.toml` a change targets does not exist. |
-| `toml_invalide` | `add`, `generate`, `upgrade` | A TOML document of the project does not parse. |
-| `conflit` | `add`, `generate`, `generate client`, `upgrade` | The plan would overwrite files rbs did not write. Rerun with `--force` to overwrite them. |
-| `ecriture_impossible` | `add`, `generate`, `generate client`, `upgrade` | A write failed; what the plan had already written was undone. |
-| `plan_incoherent` | `add`, `generate`, `generate client`, `upgrade` | Two actions claim to write the same file whole — a defect of rbs, to report. |
+| `ancre_absente` | `add`, `generate`, `remove`, `upgrade` | An anchor is missing from its file. `bloc` holds the two markers to paste, `remede` names the file. |
+| `ancre_mal_placee` | `add`, `generate`, `remove`, `upgrade` | An anchor sits below the line it must precede. `bloc` is the block to move up, `remede` names the line. |
+| `zone_absente` | `add`, `generate`, `remove`, `upgrade` | A zone of `AGENTS.md` is missing. `bloc` holds its markers. |
+| `fichier_absent` | `add`, `generate`, `remove`, `upgrade` | The file that should carry an anchor does not exist. |
+| `manifeste_absent` | `add`, `generate`, `remove`, `upgrade` | The `Cargo.toml` a change targets does not exist. |
+| `toml_invalide` | `add`, `generate`, `remove`, `upgrade` | A TOML document of the project does not parse. |
+| `conflit` | `add`, `generate`, `generate client`, `remove`, `upgrade` | The plan would overwrite files rbs did not write. Rerun with `--force` to overwrite them. |
+| `ecriture_impossible` | `add`, `generate`, `generate client`, `remove`, `upgrade` | A write failed; what the plan had already written was undone. |
+| `plan_incoherent` | `add`, `generate`, `generate client`, `remove`, `upgrade` | Two actions claim to write the same file whole — a defect of rbs, to report. |
 | `feature_inconnue` | `add` | No fragment carries that name. |
 | `fragment_sans_manifeste` | `add` | The fragment has no `feature.toml`. |
-| `fragment_invalide` | `add` | The fragment's `feature.toml` is invalid. |
-| `template_absente` | `add` | The fragment's manifest declares a template the fragment does not carry. |
-| `ancre_inconnue` | `add` | The fragment's manifest targets an anchor rbs does not know. |
-| `rendu_impossible` | `add`, `generate` | A template does not render. |
-| `env_illisible` | `add` | The project's `.env` is missing, unreadable, or says nothing of the database. |
-| `url_indecomposable` | `add` | The database URL cannot be split into user, password and host. |
+| `fragment_invalide` | `add`, `remove` | The fragment's `feature.toml` is invalid. |
+| `template_absente` | `add`, `remove` | The fragment's manifest declares a template the fragment does not carry. |
+| `ancre_inconnue` | `add`, `remove` | The fragment's manifest targets an anchor rbs does not know. |
+| `rendu_impossible` | `add`, `generate`, `remove` | A template does not render. |
+| `env_illisible` | `add`, `remove` | The project's `.env` is missing, unreadable, or says nothing of the database. |
+| `url_indecomposable` | `add`, `remove` | The database URL cannot be split into user, password and host. |
+| `fragment_inconnu` | `remove` | The name is not a fragment: a typo, or a CRUD `rbs generate crud` recorded in the very same list. |
+| `feature_exigee` | `remove` | Another installed fragment still requires this one; the message names them all. |
+| `migration_ambigue` | `remove` | Two migration files match the fragment's suffix; neither is picked. |
 | `nom_invalide` | `generate` | The feature name, or the one given to `--singular`, is not usable. |
 | `champs_invalides` | `generate` | `--fields` does not parse. |
 | `feature_deja_presente` | `generate` | The feature's directory already exists. |
