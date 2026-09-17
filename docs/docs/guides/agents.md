@@ -267,15 +267,18 @@ actions and carries the full content of every file it creates, and the root is c
   "sautees": [],
   "fichiers": {
     "crees": 4,
-    "modifies": 5
+    "modifies": 5,
+    "supprimes": 0
   }
 }
 ```
 
 The document lists actions, not files: a file two actions touch appears twice —
 `src/modules/mod.rs` is created, then receives `pub mod cors;` in its anchor. `fichiers`
-counts files, once each: created when they did not exist, modified otherwise, unchanged ones
-left out. `statut` is `a_faire` when the action changes something, `deja_fait` when the
+counts files, once each: created when they did not exist, modified otherwise, removed when
+the plan deletes them — [`rbs remove`](../cli/remove.md) is the command whose `supprimes` is
+usually not zero — unchanged ones left out. `statut` is `a_faire` when the action changes
+something, `deja_fait` when the
 project already carries it, `conflit` when the file exists with a content rbs did not
 write — only `--force` overwrites it. `sautees` lists the insertions rbs left for you to
 write, each with its `bloc` and its `cause`. `cause.type` is `fichier_absent` when the

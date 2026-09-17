@@ -209,7 +209,10 @@ Quatre garde-fous en découlent :
 - **Working tree sale = avertissement**, contournable par `--force`. `rbs add` modifie
   des fichiers déjà édités par le développeur : `git checkout` doit toujours pouvoir
   annuler l'opération. C'est le filet de sécurité, plus fiable qu'un système de backup
-  maison.
+  maison. Depuis `rbs remove`, ce n'est plus l'unique chemin de retour : la commande
+  défait ce qu'un fragment a posé — fichiers, lignes d'ancre, migration, dépendances non
+  réclamées ailleurs — sans toucher à l'historique Git ; `git checkout` reste le seul
+  recours pour les variables d'environnement, qu'aucun retrait ne touche.
 - **Tout ou rien.** Si l'écriture du quatrième fichier échoue, les trois premiers sont
   restaurés.
 

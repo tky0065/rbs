@@ -271,7 +271,8 @@ le contenu complet de chaque fichier qu'il crée, et la racine est coupée :
   "sautees": [],
   "fichiers": {
     "crees": 4,
-    "modifies": 5
+    "modifies": 5,
+    "supprimes": 0
   }
 }
 ```
@@ -279,7 +280,9 @@ le contenu complet de chaque fichier qu'il crée, et la racine est coupée :
 Le document énumère des actions, non des fichiers : un fichier que deux actions touchent
 paraît deux fois — `src/modules/mod.rs` est créé, puis reçoit `pub mod cors;` dans son
 ancre. `fichiers` compte les fichiers, une fois chacun : créés quand ils n'existaient pas,
-modifiés sinon, les inchangés laissés dehors. `statut` vaut `a_faire` quand l'action change
+modifiés sinon, supprimés quand le plan les efface — [`rbs remove`](../cli/remove.md) est
+la commande dont `supprimes` n'est d'ordinaire pas nul — les inchangés laissés dehors.
+`statut` vaut `a_faire` quand l'action change
 quelque chose, `deja_fait` quand le projet la porte déjà, `conflit` quand le fichier existe
 avec un contenu que rbs n'a pas écrit — seul `--force` l'écrase. `sautees` énumère les
 insertions que rbs vous laisse écrire, chacune avec son `bloc` et sa `cause`. `cause.type`

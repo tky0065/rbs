@@ -10,6 +10,31 @@ between minor versions with no deprecation cycle.
 
 *[Version française](CHANGELOG.fr.md).*
 
+## [Unreleased]
+
+### Added
+
+- **`rbs remove <feature>`** uninstalls a feature `rbs add` installed: its files, the
+  lines it inserted at each anchor, its migration, and — where no other installed
+  fragment still claims them — its dependencies. It follows the same read → plan →
+  check → show → apply sequence as every other command that touches a project, in the
+  opposite order from the one that installed the fragment, and refuses before writing
+  anything on four counts: a name that never was a fragment; a dependant, found by
+  transitive closure, that still requires it — removing `mail` while `auth` and
+  `webhooks` are installed names both at once; a file that has diverged from a fresh
+  render of the fragment, `--force` overriding; and, like `add`, a dirty Git working
+  tree. Removing a fragment already absent is a success, not an error — the same
+  idempotence `add` has, read off `[package.metadata.rbs]` rather than the files on
+  disk. The command never opens a database connection: a migration it removes still
+  leaves its tables in place, and `rbs migrate down` has to run first. Environment
+  variables, files a fragment only posts when they are missing, and dependencies the
+  skeleton or another installed fragment still declares are never removed, only named
+  in the report — `.env` is gitignored, so it is the one write no `git checkout` would
+  ever undo. What the developer's own code still calls is not searched for either:
+  `cargo build` is the oracle, and the report says so. `--json` renders the same
+  document `add` does, `fichiers` carrying a third counter, `supprimes`, alongside
+  `crees` and `modifies`.
+
 ## [1.5.0] — 2026-09-12
 
 ### Added

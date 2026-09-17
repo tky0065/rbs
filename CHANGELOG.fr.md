@@ -11,6 +11,31 @@ dépréciation.
 
 *[English version](CHANGELOG.md).*
 
+## [Non publié]
+
+### Ajouté
+
+- **`rbs remove <feature>`** retire une feature qu'`rbs add` avait installée : ses
+  fichiers, les lignes qu'elle avait insérées dans chaque ancre, sa migration et — quand
+  plus aucun autre fragment installé ne les réclame — ses dépendances. Elle suit la même
+  séquence lire → planifier → vérifier → afficher → appliquer que toute autre commande
+  qui touche un projet, dans l'ordre inverse de celui qui avait posé le fragment, et
+  refuse avant toute écriture sur quatre points : un nom qui n'a jamais été un fragment ;
+  un dépendant, trouvé par fermeture transitive, qui l'exige encore — retirer `mail`
+  quand `auth` et `webhooks` sont installées nomme les deux d'un coup ; un fichier qui a
+  divergé d'un rendu neuf du fragment, `--force` passant outre ; et, comme `add`, un
+  working tree Git sale. Retirer un fragment déjà absent est un succès, pas une erreur —
+  la même idempotence qu'`add`, lue sur `[package.metadata.rbs]` plutôt que sur les
+  fichiers du disque. La commande n'ouvre jamais de connexion à la base : une migration
+  qu'elle retire laisse ses tables en place, et `rbs migrate down` doit s'exécuter
+  avant. Les variables d'environnement, les fichiers qu'un fragment ne pose que s'ils
+  manquent, et les dépendances que le squelette ou un autre fragment installé déclarent
+  encore ne sont jamais retirés, seulement nommés dans le rapport — `.env` est gitignoré,
+  la seule écriture qu'aucun `git checkout` ne défera jamais. Ce que le code du
+  développeur appelle encore n'est pas non plus recherché : `cargo build` est l'oracle, et
+  le rapport le dit. `--json` rend le même document qu'`add`, `fichiers` portant un
+  troisième compteur, `supprimes`, à côté de `crees` et `modifies`.
+
 ## [1.5.0] — 2026-09-12
 
 ### Ajouté
