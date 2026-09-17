@@ -71,7 +71,39 @@ pub(crate) fn apply(plan: &Plan, force: bool) -> Result<Vec<String>, Error> {
         }
     }
 
+    // Un fichier retiré laisse son répertoire derrière lui : `write` supprime des fichiers,
+    // et rien ne remonte purger le parent que la dernière suppression vient de vider.
+    // `cors` n'en souffre pas — `src/modules/` garde son `mod.rs` — mais `auth`, seul
+    // fragment installé hors de `src/modules/`, laisserait un `src/auth/` vide que
+    // `rbs doctor` nomme ensuite « écrit hors du CLI ».
+    //
+    // Une seule fois, ici, et sur le seul chemin du succès : dans `write`, la purge
+    // précéderait l'écriture qui recrée le répertoire ; dans `undo`, elle emporterait celui
+    // où la restauration doit remettre le fichier.
+    for file in plan.files() {
+        if file.after.is_none() {
+            purge_les_parents_vides(plan.root(), &file.path);
+        }
+    }
+
     Ok(journal.ecrits)
+}
+
+/// Retire, de `path` vers `root`, les répertoires que la suppression vient de vider.
+///
+/// `fs::remove_dir` décide seul : il ne retire qu'un répertoire vide, et son échec sur le
+/// premier qui ne l'est pas arrête la remontée. `root` n'est jamais atteint — le projet
+/// lui-même n'appartient à aucun plan.
+fn purge_les_parents_vides(root: &Path, path: &str) {
+    let mut courant = root.join(path);
+
+    while let Some(parent) = courant.parent() {
+        if parent == root || fs::remove_dir(parent).is_err() {
+            return;
+        }
+
+        courant = parent.to_path_buf();
+    }
 }
 
 /// Ce que l'application a fait, dans l'ordre, pour pouvoir le défaire.
@@ -386,6 +418,42 @@ mod tests {
         assert_eq!(
             fs::read_to_string(racine.join("src/parti.rs")).expect("le fichier est revenu"),
             "// à retirer\n"
+        );
+    }
+
+    /// Le répertoire que la dernière suppression vide s'en va avec elle.
+    ///
+    /// Sans quoi `src/auth/` survit vide au retrait d'`auth`, et `rbs doctor` le nomme
+    /// « écrit hors du CLI » — un avertissement faux sur un projet qui vient pourtant de
+    /// subir un retrait propre.
+    #[test]
+    fn the_directory_a_removal_empties_goes_with_it() {
+        let projet = project();
+        let racine = projet.path();
+        fs::create_dir_all(racine.join("src/auth/service")).expect("les répertoires se créent");
+        fs::write(racine.join("src/auth/service/mod.rs"), "// à retirer\n")
+            .expect("le fichier s'écrit");
+        fs::write(racine.join("src/main.rs"), "fn main() {}\n").expect("le fichier s'écrit");
+
+        let plan = plan_of(
+            racine,
+            vec![File {
+                path: "src/auth/service/mod.rs".to_string(),
+                before: Some("// à retirer\n".to_string()),
+                after: None,
+                statut: Status::AFaire,
+            }],
+        );
+
+        apply(&plan, false).expect("le plan s'applique");
+
+        assert!(
+            !racine.join("src/auth").exists(),
+            "src/auth devait partir avec son dernier fichier"
+        );
+        assert!(
+            racine.join("src/main.rs").exists(),
+            "src/ porte encore main.rs : la remontée doit s'arrêter là"
         );
     }
 
