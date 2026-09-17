@@ -2165,4 +2165,54 @@ mod tests {
 
         assert_eq!(builder.finir().files()[0].statut, Status::DejaFait);
     }
+
+    /// Le retrait passe par le plan, et le fichier projeté perd la section.
+    #[test]
+    fn a_planned_section_removal_drops_it_from_the_projected_file() {
+        let projet = projet_avec(&[(
+            "config/default.toml",
+            "[server]\nport = 3000\n\n[mail]\nfrom = \"a@b.c\"\n",
+        )]);
+        let mut builder = Builder::new(projet.path());
+
+        builder
+            .retirer_section("config/default.toml", "mail")
+            .expect("le retrait se planifie");
+
+        let plan = builder.finir();
+        assert_eq!(plan.files()[0].statut, Status::AFaire);
+        assert!(
+            !plan.files()[0]
+                .after
+                .as_deref()
+                .expect("le fichier reste")
+                .contains("[mail]")
+        );
+    }
+
+    /// Une section absente laisse le retrait sans effet, donc `DejaFait`.
+    #[test]
+    fn removing_an_absent_section_is_already_done() {
+        let projet = projet_avec(&[("config/default.toml", "[server]\nport = 3000\n")]);
+        let mut builder = Builder::new(projet.path());
+
+        builder
+            .retirer_section("config/default.toml", "mail")
+            .expect("le retrait se planifie");
+
+        assert_eq!(builder.finir().files()[0].statut, Status::DejaFait);
+    }
+
+    /// Un fichier absent est une faute, comme pour `add_section`.
+    #[test]
+    fn removing_a_section_from_a_missing_file_is_an_error() {
+        let projet = projet_avec(&[]);
+        let mut builder = Builder::new(projet.path());
+
+        let erreur = builder
+            .retirer_section("config/default.toml", "mail")
+            .expect_err("le fichier manque");
+
+        assert!(matches!(erreur, Error::FichierAbsent { .. }));
+    }
 }
