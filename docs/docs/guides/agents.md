@@ -368,6 +368,12 @@ says where it goes. A code shared by several commands means the same thing in al
 | `colonne_reservee` | `generate` | `--soft-delete` sets `deleted_at` itself: remove it from `--fields`. |
 | `decimal_sous_sqlite` | `generate` | A `decimal` field on a SQLite project: the driver binds no exact decimal. |
 | `enfant_sans_cle` | `generate` | The child named by `--has-many` has no column referencing this table. |
+| `champs_vides` | `generate migration` | `--fields` declares no column: the rendered migration would alter nothing. |
+| `table_sans_module` | `generate migration` | No entity of the project declares that table; the message lists the ones it knows. |
+| `colonne_deja_declaree` | `generate migration` | The table already carries a column of that name; the message names the file that attests it. |
+| `colonne_obligatoire` | `generate migration` | A column added to a populated table has no value for the rows already there: declare the field `:optional`. |
+| `unique_sur_colonne_ajoutee` | `generate migration` | `unique` on an added column: SQLite refuses it, and a generated migration must apply on all three engines. |
+| `reference_interdite` | `generate migration` | A `references` field on an added column: SQLite cannot add a foreign key to an existing table. |
 | `nom_reserve` | `generate job` | The name is taken: a module of the queue, `jobs` itself, or a crate the queue's code names. |
 | `disposition_anterieure` | `generate job` | `jobs` or `scheduler` was installed before 1.3.0, outside `src/modules/`; the message names the move to make. |
 | `jobs_absent` | `generate job` | The project has no `jobs` feature; `remede` is `rbs add jobs`. |

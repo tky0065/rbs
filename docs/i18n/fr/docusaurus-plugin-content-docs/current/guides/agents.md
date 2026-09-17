@@ -372,6 +372,12 @@ où il va. Un code partagé par plusieurs commandes a le même sens dans toutes.
 | `colonne_reservee` | `generate` | `--soft-delete` pose lui-même `deleted_at` : retirez-la de `--fields`. |
 | `decimal_sous_sqlite` | `generate` | Un champ `decimal` sur un projet SQLite : le pilote n'y lie aucun décimal exact. |
 | `enfant_sans_cle` | `generate` | L'enfant nommé par `--has-many` ne porte aucune colonne référençant cette table. |
+| `champs_vides` | `generate migration` | `--fields` ne déclare aucune colonne : la migration rendue n'altérerait rien. |
+| `table_sans_module` | `generate migration` | Aucune entité du projet ne déclare cette table ; le message énumère celles qu'il connaît. |
+| `colonne_deja_declaree` | `generate migration` | La table porte déjà une colonne de ce nom ; le message nomme le fichier qui l'atteste. |
+| `colonne_obligatoire` | `generate migration` | Une colonne ajoutée à une table peuplée n'a pas de valeur pour les lignes qui s'y trouvent déjà : déclarez le champ `:optional`. |
+| `unique_sur_colonne_ajoutee` | `generate migration` | `unique` sur une colonne ajoutée : SQLite le refuse, et une migration engendrée doit s'appliquer sur les trois moteurs. |
+| `reference_interdite` | `generate migration` | Un champ `references` sur une colonne ajoutée : SQLite ne sait pas ajouter de clé étrangère à une table existante. |
 | `nom_reserve` | `generate job` | Le nom est pris : un module de la file, `jobs` lui-même, ou une crate que nomme le code de la file. |
 | `disposition_anterieure` | `generate job` | `jobs` ou `scheduler` a été installée avant la 1.3.0, hors de `src/modules/` ; le message nomme le déplacement à faire. |
 | `jobs_absent` | `generate job` | Le projet n'a pas la feature `jobs` ; `remede` vaut `rbs add jobs`. |

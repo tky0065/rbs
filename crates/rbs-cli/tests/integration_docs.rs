@@ -7,6 +7,7 @@
 //! structure et les liens ; `integration_examples` ne couvre que le code d'`examples/`.
 //! Ce test est le seul endroit d'où le mensonge d'une sortie citée est visible.
 
+use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 
 mod common;
@@ -797,4 +798,191 @@ avant\n\
             );
         }
     }
+}
+
+// --- Le tableau des codes d'erreur -------------------------------------------------
+
+/// Les fichiers `.rs` de `racine`, récursivement.
+fn collecte_sources(repertoire: &Path, trouvees: &mut Vec<PathBuf>) {
+    let entrees = std::fs::read_dir(repertoire).expect("répertoire de sources lisible");
+
+    for entree in entrees {
+        let chemin = entree.expect("entrée lisible").path();
+
+        if chemin.is_dir() {
+            collecte_sources(&chemin, trouvees);
+        } else if chemin.extension().is_some_and(|suffixe| suffixe == "rs") {
+            trouvees.push(chemin);
+        }
+    }
+}
+
+/// Le corps de chaque `fn code(` de la crate, un par implémentation.
+///
+/// Les codes ne sont pas énumérables à l'exécution — ce sont des bras de `match` rendant
+/// un `&'static str` — et c'est donc le texte des sources qu'on balaie, faute de mieux.
+/// Le découpage se fait par comptage d'accolades depuis la signature ; la déclaration du
+/// trait, qui finit sur `;`, rend un corps vide et se compte quand même. C'est leur
+/// nombre qui dit qu'aucune implémentation n'a échappé au balayage : sans lui, un
+/// découpage cassé rendrait zéro corps et le test passerait au vert.
+fn corps_des_code(racine: &Path) -> Vec<String> {
+    let mut fichiers = Vec::new();
+    collecte_sources(racine, &mut fichiers);
+    fichiers.sort();
+
+    let mut corps = Vec::new();
+    for fichier in fichiers {
+        let texte = std::fs::read_to_string(&fichier).expect("source lisible");
+        let octets = texte.as_bytes();
+        let mut depuis = 0;
+
+        while let Some(decalage) = texte[depuis..].find("fn code(") {
+            let mut rang = depuis + decalage;
+            while octets[rang] != b'{' && octets[rang] != b';' {
+                rang += 1;
+            }
+
+            // La déclaration du trait n'a pas de corps : elle se compte, et n'apporte
+            // aucun code.
+            if octets[rang] == b';' {
+                corps.push(String::new());
+                depuis = rang + 1;
+                continue;
+            }
+
+            let ouverture = rang;
+            let mut profondeur = 0;
+            loop {
+                match octets[rang] {
+                    b'{' => profondeur += 1,
+                    b'}' => {
+                        profondeur -= 1;
+                        if profondeur == 0 {
+                            break;
+                        }
+                    }
+                    _ => {}
+                }
+                rang += 1;
+            }
+
+            corps.push(texte[ouverture..=rang].to_string());
+            depuis = rang + 1;
+        }
+    }
+
+    corps
+}
+
+/// Les littéraux d'un corps de `code()` qui ont la forme d'un code : snake_case ASCII.
+///
+/// Le corps d'un `fn code(&self) -> i32` n'en porte aucun, et n'en apporte donc aucun.
+fn codes_du_corps(corps: &str) -> BTreeSet<String> {
+    let mut trouves = BTreeSet::new();
+    let mut reste = corps;
+
+    while let Some(debut) = reste.find('"') {
+        let apres = &reste[debut + 1..];
+        let Some(fin) = apres.find('"') else {
+            break;
+        };
+
+        let litteral = &apres[..fin];
+        if !litteral.is_empty()
+            && litteral.chars().all(|lettre| {
+                lettre.is_ascii_lowercase() || lettre.is_ascii_digit() || lettre == '_'
+            })
+        {
+            trouves.insert(litteral.to_string());
+        }
+
+        reste = &apres[fin + 1..];
+    }
+
+    trouves
+}
+
+/// Les codes que le tableau d'une page énumère, dans l'ordre où elle les écrit.
+fn codes_du_tableau(page: &Path) -> Vec<String> {
+    let contenu = std::fs::read_to_string(page).expect("page lisible");
+    let mut lignes = contenu
+        .lines()
+        .skip_while(|ligne| !ligne.starts_with("| Code |"));
+
+    lignes.next().expect("le tableau des codes a un en-tête");
+    lignes.next().expect("le tableau des codes a un séparateur");
+
+    lignes
+        .take_while(|ligne| ligne.starts_with('|'))
+        .map(|ligne| {
+            ligne
+                .split('`')
+                .nth(1)
+                .unwrap_or_else(|| panic!("ligne de tableau sans code : {ligne}"))
+                .to_string()
+        })
+        .collect()
+}
+
+/// Le tableau des codes d'`agents.md` nomme exactement ce que le CLI peut rendre.
+///
+/// C'est le contrat sur lequel un agent branche : le message est français et peut changer
+/// d'une relecture à l'autre, le `code` non. Rien ne le gardait — `parite.mjs` ne voit pas
+/// les tableaux, et aucun test de `tests/` ne le lisait : toutes ses lignes étaient sans
+/// garde, pas seulement les dernières ajoutées.
+///
+/// Le balayage se fait dans les deux sens. Un code rendu qu'on oublie d'inscrire laisse un
+/// agent sans branche ; un code inscrit que plus rien ne rend l'envoie attendre une panne
+/// qui n'arrivera pas.
+#[test]
+fn the_error_code_table_names_exactly_the_codes_the_cli_can_render() {
+    let corps = corps_des_code(&common::depot().join("crates/rbs-cli/src"));
+    assert_eq!(
+        corps.len(),
+        13,
+        "treize `fn code(` sont attendus, la déclaration du trait et le code de sortie compris"
+    );
+
+    let mut sources = BTreeSet::new();
+    for un in &corps {
+        sources.extend(codes_du_corps(un));
+    }
+    assert!(
+        sources.len() >= 50,
+        "un balayage qui ne trouve presque rien passe au vert sans rien prouver : {} codes",
+        sources.len()
+    );
+
+    let anglais = codes_du_tableau(&common::depot().join("docs/docs/guides/agents.md"));
+    let francais = codes_du_tableau(
+        &common::depot()
+            .join("docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/agents.md"),
+    );
+    assert!(
+        !anglais.is_empty(),
+        "le tableau des codes n'a pas été trouvé dans la page anglaise"
+    );
+    assert_eq!(
+        anglais, francais,
+        "les deux tableaux doivent porter les mêmes codes, dans le même ordre"
+    );
+
+    let tableau: BTreeSet<String> = anglais.iter().cloned().collect();
+    assert_eq!(
+        tableau.len(),
+        anglais.len(),
+        "un code est inscrit deux fois au tableau"
+    );
+
+    let manquants: Vec<&String> = sources.difference(&tableau).collect();
+    assert!(
+        manquants.is_empty(),
+        "codes qu'un `code()` rend et que le tableau n'inscrit pas : {manquants:?}"
+    );
+
+    let fantomes: Vec<&String> = tableau.difference(&sources).collect();
+    assert!(
+        fantomes.is_empty(),
+        "codes inscrits au tableau que plus aucun `code()` ne rend : {fantomes:?}"
+    );
 }
