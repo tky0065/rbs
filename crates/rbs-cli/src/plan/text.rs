@@ -64,6 +64,20 @@ pub(crate) fn add_variable(
     Some(format!("{text}{separator}{comment}{key}={value}\n"))
 }
 
+/// Rend le document privé de `section`, ou `None` s'il ne la porte pas.
+///
+/// Comme [`add_section`], le document n'est pas re-sérialisé au-delà de ce que `toml_edit`
+/// préserve : l'ordre, les commentaires et la mise en forme du développeur traversent le
+/// retrait.
+pub(crate) fn remove_section(text: &str, section: &str) -> Result<Option<String>, TomlError> {
+    let mut document: DocumentMut = text.parse()?;
+
+    Ok(document
+        .remove(section)
+        .is_some()
+        .then(|| document.to_string()))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,5 +151,47 @@ mod tests {
             add_variable("", "RBS_AUTH__SECRET", "changez-moi", None).expect("la clé manque");
 
         assert_eq!(rendered, "RBS_AUTH__SECRET=changez-moi\n");
+    }
+
+    /// La section s'en va, le reste du document la traverse intact.
+    #[test]
+    fn the_section_leaves_and_the_rest_of_the_document_survives() {
+        let source = "[server]\nport = 3000\n\n[mail]\nfrom = \"a@b.c\"\n";
+
+        let apres = remove_section(source, "mail")
+            .expect("le document se lit")
+            .expect("la section part");
+
+        assert!(!apres.contains("[mail]"));
+        assert!(apres.contains("port = 3000"));
+    }
+
+    /// Une section absente ne fait rien réécrire.
+    #[test]
+    fn an_absent_section_rewrites_nothing() {
+        assert_eq!(
+            remove_section("[server]\nport = 3000\n", "mail").expect("le document se lit"),
+            None
+        );
+    }
+
+    /// Ce que le retrait ne vise pas — un commentaire du développeur, l'ordre des autres
+    /// sections — traverse l'opération sans y bouger.
+    #[test]
+    fn removing_a_section_preserves_the_comments_and_order_of_the_rest() {
+        let source = "# la configuration par défaut\n[server]\nport = 8080\n\n[mail]\nfrom = \"a@b.c\"\n\n[auth]\nsecret = \"x\"\n";
+
+        let apres = remove_section(source, "mail")
+            .expect("le document se lit")
+            .expect("la section part");
+
+        assert!(apres.starts_with("# la configuration par défaut\n[server]\nport = 8080\n"));
+        assert!(apres.contains("[auth]\nsecret = \"x\"\n"));
+        assert!(!apres.contains("[mail]"));
+    }
+
+    #[test]
+    fn an_invalid_document_is_reported_on_removal() {
+        remove_section("[server\n", "mail").expect_err("le document ne s'analyse pas");
     }
 }

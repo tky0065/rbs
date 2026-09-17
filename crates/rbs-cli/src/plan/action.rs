@@ -47,6 +47,13 @@ pub(crate) enum Effect {
         /// Corps de la section, tel que le manifeste du fragment le déclare.
         content: String,
     },
+    /// Retire d'un document TOML la section qu'un fragment y avait posée.
+    // Idem `Effect::Supprimer` : sans construction hors des tests avant `rbs remove`.
+    #[allow(dead_code)]
+    RetirerSection {
+        /// Nom de la section, tel qu'il paraît entre crochets.
+        section: String,
+    },
     /// Ajoute une variable à un fichier d'environnement.
     AjouterVariable {
         /// Nom de la variable.

@@ -651,6 +651,37 @@ impl Builder {
         Ok(())
     }
 
+    /// Planifie le retrait de la section `section` du document TOML `path`.
+    ///
+    /// Sans appelant avant que `rbs remove` n'existe : `-D warnings` la dirait morte, alors
+    /// que les tests de [`text::remove_section`] en prouvent déjà le contrat.
+    #[allow(dead_code)]
+    pub fn retirer_section(&mut self, path: &str, section: &str) -> Result<(), Error> {
+        let states = self.states(path)?;
+        let courant = states.courant.ok_or_else(|| Error::FichierAbsent {
+            path: path.to_string(),
+        })?;
+
+        let rendered = text::remove_section(&courant, section).map_err(|source| Error::Toml {
+            path: path.to_string(),
+            source,
+        })?;
+
+        let after = rendered.unwrap_or(courant);
+        let statut = combined_status(states.origin.as_deref(), Some(&after));
+
+        self.project_onto(path, states.origin, Some(after), statut);
+        self.actions.push(Action {
+            path: path.to_string(),
+            effet: Effect::RetirerSection {
+                section: section.to_string(),
+            },
+            statut,
+        });
+
+        Ok(())
+    }
+
     /// Planifie l'ajout de la variable `key` au fichier d'environnement `path`.
     pub fn add_variable(
         &mut self,

@@ -83,6 +83,9 @@ enum EffectJson<'a> {
         section: &'a str,
         contenu: &'a str,
     },
+    RetirerSection {
+        section: &'a str,
+    },
     AjouterVariable {
         cle: &'a str,
         valeur: &'a str,
@@ -119,6 +122,7 @@ impl<'a> From<&'a Effect> for EffectJson<'a> {
                 section,
                 contenu: content,
             },
+            Effect::RetirerSection { section } => EffectJson::RetirerSection { section },
             Effect::AjouterVariable {
                 key,
                 value,
