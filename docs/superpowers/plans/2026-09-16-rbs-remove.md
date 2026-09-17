@@ -1550,6 +1550,16 @@ git commit -m "test(remove): prouve qu'un projet compile encore après le retrai
 
 ### Task 12: La documentation
 
+> **Correction du contrôleur (R13) — une dérive documentaire causée par la tâche 10.**
+> `docs/docs/guides/agents.md` (vers la ligne 268) et sa jumelle française montrent un
+> exemple de document `--json` avec `"fichiers": {"crees": 4, "modifies": 5}`. Il est
+> désormais **incomplet** : la sérialisation porte un troisième champ `supprimes`, et cela
+> pour **toutes** les commandes, `add` compris. Aucune transcription ne garde cette page —
+> rien ne rougit en CI, elle ment simplement par omission, dans les deux langues.
+> Corrige-la en même temps que le reste, et pose-toi la question de la garder : c'est
+> exactement le défaut que ce dépôt connaît déjà, dix-neuf guides sans témoin dont un qui
+> ment.
+
 **Files:**
 - Create: `docs/docs/cli/remove.md`, `docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/remove.md`
 - Modify: `docs/sidebars.ts`, `crates/rbs-cli/templates/agents/{en,fr}.md.jinja`, `docs/docs/cli/completions.md` et sa jumelle, `CHANGELOG.md`, `docs/superpowers/specs/2026-08-25-rbs-design.md` (§4.4)
