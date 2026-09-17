@@ -697,6 +697,38 @@ mod tests {
         );
     }
 
+    /// La dérivation ne rend ni plus ni moins que les quatorze dépendances que le
+    /// squelette déclare — épinglées ici plutôt que devinées, pour qu'une troncature
+    /// silencieuse (un commentaire de fin de ligne sur `[dependencies]`, un `[` au
+    /// milieu d'une valeur) fasse rougir ce test au lieu de passer inaperçue jusqu'au
+    /// jour où un fragment redéclare la dépendance tombée dans le trou. `uuid`, isolée
+    /// par un bloc de commentaire en toute fin de table, est le cas qui mord le plus
+    /// facilement une lecture qui s'arrêterait trop tôt.
+    #[test]
+    fn the_derived_skeleton_is_pinned_to_its_fourteen_dependencies() {
+        let attendues: BTreeSet<String> = [
+            "anyhow",
+            "axum",
+            "chrono",
+            "rbs-core",
+            "sea-orm",
+            "serde",
+            "serde_json",
+            "tokio",
+            "tower-http",
+            "tracing",
+            "utoipa",
+            "utoipa-swagger-ui",
+            "uuid",
+            "validator",
+        ]
+        .into_iter()
+        .map(str::to_string)
+        .collect();
+
+        assert_eq!(squelette(), attendues);
+    }
+
     /// Même un fragment qui déclarerait `tokio` en `[[dependencies]]` propre — ce
     /// qu'aucun fragment embarqué ne fait aujourd'hui pour `tokio` spécifiquement,
     /// `[cargo.tokio]` suffisant à tous — ne la retire jamais : la garde porte sur le nom
