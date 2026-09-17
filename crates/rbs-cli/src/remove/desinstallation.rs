@@ -36,14 +36,14 @@ use crate::templates;
 /// source qui ne peut pas se désynchroniser d'elle-même, `templates/project/Cargo.toml.jinja`.
 ///
 /// Ce fichier n'est pas du TOML valide — `rbs-core = {@ rbs_core_dep @}` et les autres
-/// expressions Jinja le rendraient illisible par `toml_edit` — mais seuls les noms de clé
-/// de `[dependencies]` comptent ici, jamais leurs valeurs : une lecture ligne à ligne du
-/// corps de la table les retrouve sans avoir à rendre le gabarit.
+/// expressions Jinja le rendraient illisible par `toml_edit` — mais une lecture ligne à
+/// ligne du corps de la table suffit à ce qu'on lui demande : le nom de chaque dépendance,
+/// et les features que sa valeur active, sans avoir à rendre le gabarit.
 ///
 /// Toujours le squelette **embarqué**, jamais celui d'un `--template-dir` : la garde
 /// protège le binaire que `cargo build` verra, quel que soit le squelette qu'un fragment
 /// de test aura par ailleurs visé.
-fn squelette() -> BTreeSet<String> {
+fn squelette() -> BTreeMap<String, BTreeSet<String>> {
     let fichiers = templates::Source::fresh(None)
         .files()
         .expect("le squelette embarqué se lit toujours");
@@ -52,7 +52,7 @@ fn squelette() -> BTreeSet<String> {
         .find(|file| file.destination == Path::new("Cargo.toml"))
         .expect("le squelette embarqué porte toujours un Cargo.toml.jinja");
 
-    let mut noms = BTreeSet::new();
+    let mut noms = BTreeMap::new();
     let mut dans_dependencies = false;
     for ligne in cargo.source.lines() {
         let ligne = ligne.trim();
@@ -68,12 +68,43 @@ fn squelette() -> BTreeSet<String> {
             continue;
         }
 
-        if let Some((nom, _)) = ligne.split_once('=') {
-            noms.insert(nom.trim().to_string());
+        if let Some((nom, valeur)) = ligne.split_once('=') {
+            noms.insert(nom.trim().to_string(), features_declarees(valeur));
         }
     }
 
     noms
+}
+
+/// Les features qu'une ligne de `[dependencies]` active, quand elle en nomme.
+///
+/// Le même gabarit que [`squelette`], lu de la même façon et pour la même raison : une
+/// liste écrite à la main se périmerait au premier flag ajouté au squelette. La valeur
+/// n'est pas du TOML — `features = ["{@ sea_orm_feature @}", …]` porte une expression
+/// Jinja — mais la liste tient sur la ligne, entre crochets, et ses éléments sont des
+/// chaînes : une expression Jinja y entre comme un nom qu'aucun fragment ne réclame.
+fn features_declarees(valeur: &str) -> BTreeSet<String> {
+    let Some(apres) = valeur.split_once("features").map(|(_, apres)| apres) else {
+        return BTreeSet::new();
+    };
+    let Some(liste) = apres
+        .split_once('[')
+        .and_then(|(_, reste)| reste.split_once(']'))
+        .map(|(liste, _)| liste)
+    else {
+        return BTreeSet::new();
+    };
+
+    liste
+        .split(',')
+        .filter_map(|element| {
+            element
+                .trim()
+                .strip_prefix('"')
+                .and_then(|nu| nu.strip_suffix('"'))
+        })
+        .map(str::to_string)
+        .collect()
 }
 
 /// Le fragment tel que le retrait le voit.
@@ -256,7 +287,7 @@ pub(crate) fn actions(fragment: &Fragment, builder: &mut plan::Builder) -> Resul
     // réclame encore, et jamais si elles appartiennent au squelette.
     let squelette = squelette();
     for declared in &fragment.manifest.dependencies {
-        if squelette.contains(&declared.name) {
+        if squelette.contains_key(&declared.name) {
             laissees.push(format!(
                 "{} appartient au squelette, jamais retirée",
                 declared.name
@@ -298,7 +329,16 @@ pub(crate) fn actions(fragment: &Fragment, builder: &mut plan::Builder) -> Resul
     // 7. Les variables d'environnement : jamais retirées, seulement nommées. `.env` est
     // gitignoré — c'est la seule écriture qu'aucun `git checkout` ne réparerait, et la
     // décision de la retirer appartient au développeur, pas à cette commande.
+    //
+    // Filtrées par la condition de l'installation : `add` n'écrit un `[[env]]` que si son
+    // `when` est vrai sur ce projet, et nommer les autres enverrait le développeur chercher
+    // dans son `.env` des lignes qui n'y ont jamais été — les quatre clés `MYSQL_*` que
+    // `docker` déclare, sur un projet PostgreSQL.
     for variable in &fragment.manifest.env {
+        if !installation::declaree(&renderer, fragment.name, &fragment.context, variable)? {
+            continue;
+        }
+
         laissees.push(format!(
             "{} n'est pas retirée de .env, à faire à la main si elle ne sert plus",
             variable.key
@@ -481,25 +521,20 @@ mod tests {
         }
     }
 
-    /// Le contexte de rendu du projet par défaut de [`crate::fixtures::Project`], qui
-    /// crée toujours en français : `rate-limit` choisit son message d'erreur sur `lang`
-    /// et son compteur sur la présence de `redis` dans `features` — absente ici, aucun
-    /// des fragments posés par les tests de ce module ne l'installant avec lui. `docker`
-    /// interpole `project_name` et `rust_image` dans son `Dockerfile`, et
-    /// `database_url_compose` / `database_a_un_serveur` dans le contenu de son ancre
-    /// `services` — `docker-compose.yml` lui-même étant `if_absent`, jamais rendu par le
-    /// retrait, seule cette ancre l'est encore.
-    fn context() -> minijinja::Value {
-        minijinja::context! {
-            project_name => "demo-api",
-            crate_name => "demo_api",
-            crate_path => "demo_api",
-            lang => "fr",
-            features => Vec::<String>::new(),
-            rust_image => templates::rust_image(),
-            database_a_un_serveur => true,
-            database_url_compose => "postgres://rbs:rbs@db:5432/demo_api",
-        }
+    /// Le contexte de rendu du projet posé, par le constructeur de la production.
+    ///
+    /// Une copie écrite à la main a longtemps servi ici : elle ne portait que les clés
+    /// qu'un fragment interpolait le jour où le test a été écrit, si bien qu'aucun de ces
+    /// tests n'aurait vu la production en perdre une. C'est `contexte::projet` qui décide,
+    /// et lui seul.
+    fn context(root: &Path, features: Vec<String>) -> minijinja::Value {
+        crate::contexte::projet(
+            root,
+            "demo-api",
+            crate::database::Database::default(),
+            features,
+        )
+        .expect("le contexte du projet de test se déduit")
     }
 
     /// Pose `name`, et les fragments d'`autres` avec lui, sur un projet neuf, par le
@@ -537,7 +572,7 @@ mod tests {
             name: Box::leak(name.to_string().into_boxed_str()),
             manifest: Box::leak(Box::new(manifest)),
             templates: Box::leak(templates.into_boxed_slice()),
-            context: context(),
+            context: context(&root, metadonnees.features.clone()),
             reclamees: Box::leak(Box::new(reclamees)),
         };
 
@@ -709,7 +744,59 @@ mod tests {
         .map(str::to_string)
         .collect();
 
-        assert_eq!(squelette(), attendues);
+        assert_eq!(squelette().into_keys().collect::<BTreeSet<_>>(), attendues);
+    }
+
+    /// Aucun `[cargo.X]` de fragment n'active une feature que le squelette déclare déjà.
+    ///
+    /// La section 5 ne consulte pas le squelette, là où la section 4 le fait : une feature
+    /// que les deux réclameraient quitterait `Cargo.toml` au retrait du fragment, alors que
+    /// le squelette la déclarait avant lui et continue d'en dépendre — la famille du défaut
+    /// qui avait fait retirer `tower-http`, un cran plus bas. Aucune collision aujourd'hui ;
+    /// ce test rougit le jour où un manifeste écrira `[cargo.tokio] features = ["macros"]`.
+    #[test]
+    fn no_fragment_turns_on_a_cargo_feature_the_skeleton_already_declares() {
+        let squelette = squelette();
+
+        // `feature_names`, et non `feature_names_with_manifest` : sur la source embarquée,
+        // la seconde rend une liste vide — mesuré — et ce garde ne parcourrait rien. Un
+        // fragment sans manifeste se saute donc ici, ce qu'aucun fragment embarqué n'est.
+        let mut vus = 0;
+        for nom in templates::feature_names(None) {
+            let source =
+                templates::Source::feature(None, &nom).expect("le fragment embarqué s'ouvre");
+            let (manifeste, _) = source.manifest_and_files().expect("le fragment se lit");
+            let Some(manifeste) = manifeste else {
+                continue;
+            };
+            let manifest = manifest::read(&manifeste, &format!("{nom}/feature.toml"))
+                .expect("le manifeste embarqué est valide");
+            vus += 1;
+
+            for (dependance, patch) in &manifest.cargo {
+                let Some(deja) = squelette.get(dependance) else {
+                    continue;
+                };
+
+                let collisions: Vec<&String> = patch
+                    .features
+                    .iter()
+                    .filter(|feature| deja.contains(*feature))
+                    .collect();
+
+                assert!(
+                    collisions.is_empty(),
+                    "{nom} : [cargo.{dependance}] réclame {collisions:?}, que le squelette \
+                     déclare déjà — un retrait les ôterait à une dépendance qui en dépend"
+                );
+            }
+        }
+
+        // Un garde qui ne parcourt rien passe au vert sans rien prouver.
+        assert_eq!(
+            vus, 13,
+            "les treize fragments embarqués doivent être parcourus"
+        );
     }
 
     /// Même un fragment qui déclarerait `tokio` en `[[dependencies]]` propre — ce
@@ -740,7 +827,7 @@ mod tests {
             name: "essai",
             manifest: &manifest,
             templates: &[],
-            context: context(),
+            context: context(projet.path(), Vec::new()),
             reclamees: &reclamees,
         };
         let mut builder = plan::Builder::new(projet.path());
@@ -901,6 +988,47 @@ mod tests {
                     .find(|file| file.path == chemin)
                     .is_none_or(|file| file.after.is_some()),
                 "{chemin} ne doit jamais être planifié en suppression"
+            );
+        }
+    }
+
+    /// Un `[[env]]` que son `when` écarte n'est pas nommé.
+    ///
+    /// `docker` déclare sept clés pour trois moteurs : `add` n'en écrit que les trois que
+    /// la condition retient sur un projet PostgreSQL, et nommer les quatre autres
+    /// enverrait le développeur chercher dans son `.env` des lignes qui n'y ont jamais
+    /// été.
+    #[test]
+    fn an_environment_variable_its_condition_rules_out_is_not_named() {
+        let (projet, fragment) = fragment_pose("docker");
+        let mut builder = plan::Builder::new(projet.path());
+
+        let retires = actions(&fragment, &mut builder).expect("le retrait se planifie");
+
+        let nomme = |cle: &str| {
+            retires
+                .laissees
+                .iter()
+                .any(|laissee| laissee.starts_with(&format!("{cle} ")))
+        };
+
+        for retenue in ["POSTGRES_USER", "POSTGRES_PASSWORD", "POSTGRES_DB"] {
+            assert!(
+                nomme(retenue),
+                "{retenue} est écrite sur un projet PostgreSQL : {:?}",
+                retires.laissees
+            );
+        }
+        for ecartee in [
+            "MYSQL_ROOT_PASSWORD",
+            "MYSQL_DATABASE",
+            "MYSQL_USER",
+            "MYSQL_PASSWORD",
+        ] {
+            assert!(
+                !nomme(ecartee),
+                "{ecartee} n'a jamais été écrite sur ce projet : {:?}",
+                retires.laissees
             );
         }
     }

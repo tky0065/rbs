@@ -192,7 +192,7 @@ pub(crate) fn actions(
     }
 
     for variable in &fragment.manifest.env {
-        if !declaree(&renderer, fragment, variable)? {
+        if !declaree(&renderer, fragment.name, &fragment.context, variable)? {
             continue;
         }
 
@@ -309,9 +309,17 @@ pub(crate) fn lines(content: &str) -> Vec<String> {
 /// La variable est-elle déclarée sur ce projet ?
 ///
 /// Sans `when`, toujours : c'est le cas des six fragments qui ne dépendent pas du moteur.
-fn declaree(
+///
+/// `pub(crate)` : `remove::desinstallation` nomme les variables qu'un retrait laisse dans
+/// le `.env`, et doit les filtrer par la même condition — celles que ce filtre écarte,
+/// l'installation ne les a jamais écrites.
+///
+/// Le nom et le contexte sont passés séparément plutôt que le fragment : l'installation et
+/// le retrait n'en portent pas le même type, et la condition ne lit ni l'un ni l'autre.
+pub(crate) fn declaree(
     renderer: &Renderer,
-    fragment: &Fragment,
+    feature: &str,
+    context: &Value,
     variable: &crate::manifest::DeclaredVariable,
 ) -> Result<bool, Error> {
     let Some(condition) = &variable.when else {
@@ -319,9 +327,9 @@ fn declaree(
     };
 
     renderer
-        .condition(condition, fragment.context.clone())
+        .condition(condition, context.clone())
         .map_err(|source| Error::Rendu {
-            file: format!("{}/feature.toml ({})", fragment.name, variable.key),
+            file: format!("{feature}/feature.toml ({})", variable.key),
             source,
         })
 }
