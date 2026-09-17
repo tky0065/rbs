@@ -36,6 +36,14 @@
 - **Les sorties de commandes se collent, ne s'affirment pas.** `cargo fmt --all --check` et
   `cargo clippy --workspace --all-targets -- -D warnings` déclarés verts en prose, sans
   trace, sont un constat de revue.
+- **Un wrapper de `Builder` reçoit ses propres tests, au niveau `Builder`.** Tester la
+  fonction pure qu'il appelle ne suffit pas : le wrapper calcule un statut, propage des
+  erreurs et projette sur `files()`, et rien de tout cela n'est exercé par un test de la
+  couche du dessous. Le précédent du dépôt est établi — `Builder::supprimer` en a trois,
+  `Builder::retirer_lignes` en a cinq. Au minimum : un retrait effectif à `Status::AFaire`,
+  un retrait sans effet à `Status::DejaFait`, et la propagation de l'erreur spécifique.
+- **Une mutation par comportement neuf**, pas une par tâche. Le chemin de succès, le
+  branchement qui ne fait rien, et le chemin d'erreur sont trois comportements distincts.
 
 ---
 
