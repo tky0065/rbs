@@ -167,9 +167,15 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         .manifest_and_files()
         .map_err(|source| crate::errors::Acces::new(Path::new(&options.feature), source))?;
     let Some(manifeste_texte) = manifeste_texte else {
+        // `feature_names` listerait ici le nom qu'on vient de refuser : son répertoire
+        // existe bel et bien, seul son manifeste manque. `feature_names_with_manifest`
+        // exclut les répertoires qui n'installent rien, pour ne jamais nommer parmi les
+        // fragments valides celui que ce message vient de refuser.
         return Err(Error::PasUnFragment {
             feature: options.feature.clone(),
-            known: templates::feature_names(options.template_dir.as_deref()).join(", "),
+            known: templates::enumerate(templates::feature_names_with_manifest(
+                options.template_dir.as_deref(),
+            )),
         });
     };
     let manifest = manifest::read(
@@ -448,6 +454,34 @@ mod tests {
             plan_for(&options(projet.path(), "n-existe-pas")).expect_err("le retrait est refusé");
 
         assert!(matches!(faute, Error::PasUnFragment { .. }), "{faute}");
+    }
+
+    /// Un répertoire de `--template-dir` qui porte le nom demandé mais aucun
+    /// `feature.toml` est refusé sans se contredire : il ne doit pas se citer lui-même
+    /// parmi les fragments valides qu'il énumère.
+    #[test]
+    fn a_directory_without_a_manifest_does_not_list_itself_among_valid_fragments() {
+        let repertoire = TempDir::new().expect("le répertoire temporaire se crée");
+        std::fs::create_dir_all(repertoire.path().join("sans-manifeste"))
+            .expect("le répertoire du fragment se crée");
+        let projet = projet_avec_features(&["health"]);
+
+        let mut sans_manifeste = options(projet.path(), "sans-manifeste");
+        sans_manifeste.template_dir = Some(repertoire.path().to_path_buf());
+
+        let faute = plan_for(&sans_manifeste).expect_err("le retrait est refusé");
+
+        let Error::PasUnFragment { known, .. } = &faute else {
+            panic!("attendu PasUnFragment, reçu {faute:?}");
+        };
+        assert!(
+            !known.split(", ").any(|nom| nom == "sans-manifeste"),
+            "le fragment refusé ne doit pas figurer parmi les valides : {known}"
+        );
+        // Seul répertoire du `--template-dir`, et sans manifeste : aucun fragment valide
+        // n'y est disponible, et le message doit le dire plutôt que rendre une chaîne
+        // vide.
+        assert_eq!(known, "aucune n'est disponible");
     }
 
     /// Un fragment qu'un autre exige est refusé, et le dépendant est nommé.

@@ -212,8 +212,31 @@ pub(crate) fn feature_names(directory: Option<&Path>) -> Vec<String> {
     }
 }
 
+/// Les features de [`feature_names`] qui portent effectivement un `feature.toml`.
+///
+/// `feature_names` liste tout répertoire, manifeste ou non : un fragment sans manifeste
+/// n'installe rien (voir `add::Error::SansManifeste`), et une liste qui l'énumère comme
+/// « valide » se contredirait elle-même dans un message qui refuse précisément ce nom pour
+/// cette raison — le cas que `remove` doit distinguer de `PasUnFragment`.
+pub(crate) fn feature_names_with_manifest(directory: Option<&Path>) -> Vec<String> {
+    feature_names(directory)
+        .into_iter()
+        .filter(|name| has_manifest(directory, name))
+        .collect()
+}
+
+/// Le répertoire de `name` porte-t-il un `feature.toml` ?
+fn has_manifest(directory: Option<&Path>, name: &str) -> bool {
+    match directory {
+        Some(directory) => directory.join(name).join(MANIFESTE).is_file(),
+        None => FEATURES
+            .get_dir(name)
+            .is_some_and(|dir| dir.get_file(MANIFESTE).is_some()),
+    }
+}
+
 /// Rend une liste de features lisible dans un message d'erreur.
-fn enumerate(names: Vec<String>) -> String {
+pub(crate) fn enumerate(names: Vec<String>) -> String {
     if names.is_empty() {
         "aucune n'est disponible".to_string()
     } else {
