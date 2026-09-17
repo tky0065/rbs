@@ -1,13 +1,15 @@
 //! Ce que `rbs remove` garantit, éprouvé par la commande telle que l'utilisateur la lance.
 //!
 //! Un test unitaire prouve que le moteur sait faire ; celui-ci prouve que le projet
-//! survit — c'est le seul de la séquence à le faire. Deux de ses quatre tests sont
+//! survit — c'est le seul de la séquence à le faire. Deux de ses cinq tests sont
 //! `#[ignore]` : ils compilent le projet engendré, ce qu'aucune PR ne peut se payer sur
-//! chaque poussée. Les deux autres n'appellent ni cargo ni Docker, donc tournent à chaque
+//! chaque poussée. Les trois autres n'appellent ni cargo ni Docker, donc tournent à chaque
 //! PR : `a_dry_run_writes_nothing`, même précédent que
 //! `adding_auth_to_a_sqlite_project_succeeds_and_names_the_service_left_to_mount` dans
-//! `integration_add.rs`, et `a_file_the_developer_changed_stops_the_command`, aussi bon
-//! marché malgré l'étiquette qu'il portait à tort.
+//! `integration_add.rs`, `a_file_the_developer_changed_stops_the_command`, aussi bon
+//! marché malgré l'étiquette qu'il portait à tort, et
+//! `the_directory_of_a_removed_fragment_does_not_survive_it`, que seul `auth` met à
+//! l'épreuve.
 //!
 //! `a_project_still_compiles_and_stays_diagnosable_once_the_fragment_is_removed` va plus
 //! loin que son nom initial : une revue a établi qu'un retrait pourtant propre faisait
@@ -104,17 +106,17 @@ fn a_project_still_compiles_and_stays_diagnosable_once_the_fragment_is_removed()
 
     rbs(&racine).args(["remove", "cors"]).assert().success();
 
-    // Un par un, et non le répertoire `src/modules/cors` entier : celui-ci reste sur le
-    // disque, vide — `Applicateur::write` supprime les fichiers d'un plan de retrait mais
-    // ne remonte jamais purger un parent devenu vide. Git ne suit pas les répertoires
-    // vides et la compilation n'en dépend pas, donc rien ici ne le prouverait à tort ;
-    // c'est un manque réel, distinct de ce que R12 corrige, à consigner pour la revue.
-    for fichier in ["mod.rs", "config.rs", "tests.rs"] {
-        assert!(
-            !racine.join("src/modules/cors").join(fichier).exists(),
-            "{fichier} doit partir"
-        );
-    }
+    // Le répertoire entier, et non ses trois fichiers un à un : l'application purge le
+    // parent que la dernière suppression vide. Le point de montage, lui, garde son
+    // `mod.rs` et reste — la remontée s'arrête au premier répertoire non vide.
+    assert!(
+        !racine.join("src/modules/cors").exists(),
+        "le répertoire du fragment doit partir avec ses fichiers"
+    );
+    assert!(
+        racine.join("src/modules/mod.rs").is_file(),
+        "src/modules/ garde son point de montage"
+    );
     assert!(
         !std::fs::read_to_string(racine.join("src/router.rs"))
             .expect("le routeur se lit")
@@ -176,7 +178,39 @@ fn a_file_the_developer_changed_stops_the_command() {
         .success();
 }
 
-/// L'aller-retour rend un projet qui compile encore.
+/// Le répertoire d'un fragment retiré ne survit pas au retrait.
+///
+/// `cors` ne le prouverait pas : il s'installe sous `src/modules/`, dont le `mod.rs`
+/// survit et garde le répertoire non vide. `auth` est le seul fragment qui s'installe
+/// ailleurs, sous `src/auth/`, et c'est lui qui mord : laissé vide, il fait dire à
+/// `rbs doctor` « écrit hors du CLI : auth » sur un projet qui vient pourtant de subir un
+/// retrait propre. N'appelle ni cargo ni Docker.
+#[test]
+fn the_directory_of_a_removed_fragment_does_not_survive_it() {
+    let parent = TempDir::new().expect("le répertoire temporaire se crée");
+    let racine = common::projet(parent.path());
+    common::commiter(&racine, "projet neuf");
+
+    rbs(&racine).args(["add", "auth"]).assert().success();
+    common::commiter(&racine, "auth posée");
+    assert!(
+        racine.join("src/auth").is_dir(),
+        "`auth` s'installe bien hors de src/modules/"
+    );
+
+    rbs(&racine).args(["remove", "auth"]).assert().success();
+
+    assert!(
+        !racine.join("src/auth").exists(),
+        "src/auth survit vide : `rbs doctor` le nommerait « écrit hors du CLI »"
+    );
+}
+
+/// L'aller-retour rend un projet identique, aux horodatages de migration près — le critère
+/// de la section 8 de la spec — et qui compile encore.
+///
+/// Deux fragments plutôt qu'un : `cors` n'a pas de migration, `jobs` en a une, et c'est
+/// elle qui met à l'épreuve la seule exception que la spec accorde.
 ///
 /// Chaque étape est commitée : `remove`, comme `add`, refuse un working tree sale, et
 /// laisser le résultat d'une pose non commitée ferait échouer le retrait qui la suit — pas
@@ -184,19 +218,98 @@ fn a_file_the_developer_changed_stops_the_command() {
 /// commande touchant au projet.
 #[test]
 #[ignore = "compile le projet engendré"]
-fn the_round_trip_leaves_a_project_that_still_compiles() {
+fn the_round_trip_leaves_an_identical_project_that_still_compiles() {
     let parent = TempDir::new().expect("le répertoire temporaire se crée");
     let racine = common::projet(parent.path());
     common::commiter(&racine, "projet neuf");
 
-    rbs(&racine).args(["add", "cors"]).assert().success();
-    common::commiter(&racine, "cors posée");
+    for feature in ["cors", "jobs"] {
+        rbs(&racine).args(["add", feature]).assert().success();
+        common::commiter(&racine, "feature posée");
 
-    rbs(&racine).args(["remove", "cors"]).assert().success();
-    common::commiter(&racine, "cors retirée");
+        let avant = empreinte_datee(&racine);
 
-    rbs(&racine).args(["add", "cors"]).assert().success();
+        rbs(&racine).args(["remove", feature]).assert().success();
+        common::commiter(&racine, "feature retirée");
+        rbs(&racine).args(["add", feature]).assert().success();
+
+        assert_identique(&avant, &empreinte_datee(&racine), feature);
+        common::commiter(&racine, "feature reposée");
+    }
 
     let _cible = common::verrou(&common::cible());
     cargo_check(&racine).assert().success();
+}
+
+/// L'empreinte du projet, horodatages de migration masqués.
+///
+/// `rbs add` date la migration qu'il pose de l'instant où il la pose : son nom de fichier
+/// et la ligne qui l'enregistre dans `migration/src/lib.rs` diffèrent d'une pose à l'autre,
+/// et c'est la seule différence que la spec accorde.
+fn empreinte_datee(racine: &Path) -> common::Empreinte {
+    common::empreinte(racine)
+        .into_iter()
+        .map(|(chemin, contenu)| {
+            (
+                masque_horodatage(&chemin.to_string_lossy()).into(),
+                masque_horodatage(&contenu),
+            )
+        })
+        .collect()
+}
+
+/// `m20260917_141948` → `m<horodatage>`.
+fn masque_horodatage(texte: &str) -> String {
+    let lettres: Vec<char> = texte.chars().collect();
+    let chiffres = |debut: usize, combien: usize| {
+        debut + combien <= lettres.len()
+            && lettres[debut..debut + combien]
+                .iter()
+                .all(char::is_ascii_digit)
+    };
+
+    let mut rendu = String::with_capacity(texte.len());
+    let mut rang = 0;
+    while rang < lettres.len() {
+        if lettres[rang] == 'm'
+            && chiffres(rang + 1, 8)
+            && lettres.get(rang + 9) == Some(&'_')
+            && chiffres(rang + 10, 6)
+        {
+            rendu.push_str("m<horodatage>");
+            rang += 16;
+            continue;
+        }
+
+        rendu.push(lettres[rang]);
+        rang += 1;
+    }
+
+    rendu
+}
+
+/// Échoue si les deux empreintes diffèrent, en ne montrant que ce qui diffère.
+fn assert_identique(avant: &common::Empreinte, apres: &common::Empreinte, feature: &str) {
+    let mut ecarts = Vec::new();
+
+    for (chemin, contenu) in avant {
+        match apres.get(chemin) {
+            None => ecarts.push(format!("  - {} a disparu", chemin.display())),
+            Some(actuel) if actuel != contenu => {
+                ecarts.push(format!("  ~ {} a changé", chemin.display()));
+            }
+            Some(_) => {}
+        }
+    }
+    for chemin in apres.keys() {
+        if !avant.contains_key(chemin) {
+            ecarts.push(format!("  + {} est apparu", chemin.display()));
+        }
+    }
+
+    assert!(
+        ecarts.is_empty(),
+        "l'aller-retour de {feature} n'a pas rendu le projet identique :\n{}",
+        ecarts.join("\n")
+    );
 }
