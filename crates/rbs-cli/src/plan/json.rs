@@ -430,6 +430,37 @@ mod tests {
     }
 
     #[test]
+    fn the_retirer_lignes_effect_carries_the_anchor_name_and_lines() {
+        let plan = minimal_plan(
+            Effect::RetirerLignes {
+                anchor: anchor("routes", "src/router.rs"),
+                lines: vec![".merge(a::routes())".to_string()],
+            },
+            Status::AFaire,
+        );
+        let effet = &document(&plan)["actions"][0]["effet"];
+
+        assert_eq!(effet["type"], "retirer_lignes");
+        assert_eq!(effet["ancre"], "routes");
+        assert_eq!(effet["lignes"][0], ".merge(a::routes())");
+    }
+
+    /// Sans champ, comme le type interne qu'il reflète : `chemin` porte déjà le fichier
+    /// visé, `type` suffit à un lecteur pour savoir qu'il disparaît.
+    #[test]
+    fn the_supprimer_effect_renders_only_its_type() {
+        let plan = minimal_plan(Effect::Supprimer, Status::AFaire);
+        let effet = &document(&plan)["actions"][0]["effet"];
+
+        assert_eq!(effet["type"], "supprimer");
+        assert_eq!(
+            effet.as_object().expect("effet est un objet").len(),
+            1,
+            "{effet}"
+        );
+    }
+
+    #[test]
     fn the_inscrire_feature_patch_carries_its_feature_name() {
         let plan = minimal_plan(
             Effect::PatcherToml {
@@ -503,6 +534,52 @@ mod tests {
     }
 
     #[test]
+    fn the_retirer_feature_patch_carries_its_feature_name() {
+        let plan = minimal_plan(
+            Effect::PatcherToml {
+                patch: PatchToml::RetirerFeature("cors".to_string()),
+            },
+            Status::AFaire,
+        );
+        let patch = &document(&plan)["actions"][0]["effet"]["patch"];
+
+        assert_eq!(patch["type"], "retirer_feature");
+        assert_eq!(patch["feature"], "cors");
+    }
+
+    #[test]
+    fn the_retirer_dependance_patch_carries_the_dependency_name() {
+        let plan = minimal_plan(
+            Effect::PatcherToml {
+                patch: PatchToml::RetirerDependance("tower-http".to_string()),
+            },
+            Status::AFaire,
+        );
+        let patch = &document(&plan)["actions"][0]["effet"]["patch"];
+
+        assert_eq!(patch["type"], "retirer_dependance");
+        assert_eq!(patch["nom"], "tower-http");
+    }
+
+    #[test]
+    fn the_retirer_feature_a_dependance_patch_carries_the_dependency_and_feature() {
+        let plan = minimal_plan(
+            Effect::PatcherToml {
+                patch: PatchToml::RetirerFeatureADependance {
+                    dependency: "tokio".to_string(),
+                    feature: "macros".to_string(),
+                },
+            },
+            Status::AFaire,
+        );
+        let patch = &document(&plan)["actions"][0]["effet"]["patch"];
+
+        assert_eq!(patch["type"], "retirer_feature_a_dependance");
+        assert_eq!(patch["dependance"], "tokio");
+        assert_eq!(patch["feature"], "macros");
+    }
+
+    #[test]
     fn the_ajouter_section_effect_carries_the_section_name_and_content() {
         let plan = minimal_plan(
             Effect::AjouterSection {
@@ -516,6 +593,20 @@ mod tests {
         assert_eq!(effet["type"], "ajouter_section");
         assert_eq!(effet["section"], "storage");
         assert_eq!(effet["contenu"], "driver = \"s3\"\n");
+    }
+
+    #[test]
+    fn the_retirer_section_effect_carries_the_section_name() {
+        let plan = minimal_plan(
+            Effect::RetirerSection {
+                section: "storage".to_string(),
+            },
+            Status::AFaire,
+        );
+        let effet = &document(&plan)["actions"][0]["effet"];
+
+        assert_eq!(effet["type"], "retirer_section");
+        assert_eq!(effet["section"], "storage");
     }
 
     #[test]
