@@ -113,8 +113,18 @@ que rustc.
 - **Une feature cargo qu'un autre fragment installé demande encore.** `[cargo.tokio]` est
   déclarée par huit fragments, `[cargo.sea-orm]` par trois, `[cargo.rbs-core]` par trois.
   Même règle d'union.
-- **Les dépendances du squelette.** `tokio`, `sea-orm` et `rbs-core` ne sont jamais
-  supprimées : un fragment leur ajoute des features, il ne les apporte pas.
+- **Les dépendances du squelette**, *toutes*, et la liste se **dérive** de
+  `templates/project/Cargo.toml.jinja` plutôt que de s'écrire à la main : un fragment leur
+  ajoute des features, il ne les apporte pas. Le squelette en déclare treize, et deux
+  fragments en redéclarent une pour y ajouter un flag — `tower-http` par `cors`,
+  `serde_json` par `redis`. Une liste écrite à la main les avait manqués, et
+  `rbs remove cors` vidait `tower-http` d'un manifeste dont `router.rs` dépend
+  inconditionnellement : le projet ne compilait plus. Une liste dérivée reste juste le jour
+  où le squelette gagne une dépendance ; une liste écrite à la main rouvre le trou en
+  silence.
+- **Les fichiers déclarés `if_absent`.** Le fragment ne les pose que s'ils manquent, et
+  désavoue donc leur paternité quand ils préexistent : le retrait n'a aucun moyen de savoir
+  lequel des deux cas s'est produit. Ils sont signalés, jamais supprimés.
 - **Les variables d'environnement.** `RBS_AUTH__SECRET` est tirée au hasard à
   l'installation, et `.env` est gitignoré : la supprimer est la seule écriture de `remove`
   qu'aucun `git checkout` ne répare. La garder a de plus une vertu — un `rbs add auth`
@@ -222,8 +232,10 @@ doit être juste le jour où la commande prendra plusieurs noms.
 ## 7. Ce que le rapport dit
 
 Le bilan nomme, quand elles s'appliquent : la migration retirée et le fait que le schéma
-garde ses tables ; les variables d'environnement laissées ; les dépendances laissées parce
-qu'un autre fragment les réclame ; et l'avertissement que le projet peut ne plus compiler,
+garde ses tables ; les variables d'environnement laissées ; les fichiers `if_absent`
+laissés, dont le fragment ne revendique pas la paternité ; les dépendances laissées parce
+qu'un autre fragment les réclame ou parce que le squelette les déclare ; et l'avertissement
+que le projet peut ne plus compiler,
 avec l'invitation à lancer `cargo build`.
 
 ## 8. Tests
