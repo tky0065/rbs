@@ -909,6 +909,19 @@ git commit -m "feat(plan): sérialise les effets de retrait dans le document JSO
 
 ### Task 8: `remove::desinstallation` — le parcours inverse du manifeste
 
+> **Correction du contrôleur (R10) — un fichier `if_absent` ne se supprime JAMAIS.**
+> Mon texte disait qu'il « est traité comme les autres : il a été posé ou il ne l'a pas
+> été ». C'est faux, et une revue l'a prouvé : `docker/config/production.toml.jinja` et
+> `project/config/production.toml.jinja` sont identiques octet pour octet, donc le rendu
+> coïncide avec le disque, donc `Status::AFaire`, donc `rbs remove docker` effacerait sans
+> `--force` un fichier que le squelette écrit sur tout projet. Pire, `docker-compose.yml`
+> est `if_absent` lui aussi, et `mail` comme `redis` y insèrent leurs services : le
+> supprimer emporterait le travail d'autres fragments installés.
+> `if_absent` veut dire « ne le pose que s'il manque » — le fragment y désavoue la
+> paternité du fichier quand il préexiste, et le retrait ne peut pas savoir lequel des deux
+> cas s'est produit. **Ces fichiers sont signalés dans `laissees`, comme les variables
+> d'environnement, jamais supprimés.**
+
 > **Correction du contrôleur (R8) — le point de montage ne se supprime jamais.**
 > `installation::ouvre_le_point_de_montage` crée `src/modules/mod.rs` s'il manque, puis y
 > insère `pub mod <feature>;`. L'inverse s'arrête à la ligne : **retire le `pub mod`, ne

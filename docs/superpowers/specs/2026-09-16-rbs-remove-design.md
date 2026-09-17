@@ -125,7 +125,7 @@ que rustc.
 
 | Section | Inverse |
 |---|---|
-| `[[files]]` | suppression, après le contrôle de divergence de §3.1 |
+| `[[files]]` | suppression, après le contrôle de divergence de §3.1 — **sauf `if_absent`, jamais supprimé** (voir ci-dessous) |
 | `[migration]` | `migration/src/m*_{name}.rs`, retrouvé **par suffixe** — l'horodatage n'est mémorisé nulle part — et les deux lignes de `mount::for_migration` |
 | `[[anchors]]` | retrait des lignes exactes, `services` du compose compris |
 | `[[dependencies]]` | retirée seulement sous la règle d'union de §3.4 |
@@ -134,6 +134,18 @@ que rustc.
 | `[[env]]` | **laissée**, et signalée |
 | `requires` | ne sert qu'au refus 3 |
 | métadonnées | `PatchToml::RetirerFeature` |
+
+**Un fichier déclaré `if_absent` n'est jamais supprimé.** Il est signalé, comme les
+variables d'environnement. La raison est que `if_absent` signifie « ne le pose que s'il
+manque » : le fragment y **désavoue explicitement la paternité** du fichier quand celui-ci
+préexiste, et le retrait n'a aucun moyen de savoir lequel des deux cas s'est produit. Le
+contrôle de divergence ne le sauve pas : `templates/features/docker/config/production.toml.jinja`
+et `templates/project/config/production.toml.jinja` sont octet pour octet identiques et sans
+la moindre expression Jinja, si bien que le rendu coïncide avec le disque et qu'un
+`rbs remove docker` effacerait sans `--force` un fichier écrit par le squelette. Le second
+`if_absent`, `docker-compose.yml`, est plus grave encore : `mail` et `redis` y insèrent
+leurs services par l'ancre `services`, et le supprimer emporterait le travail d'autres
+fragments encore installés.
 
 Les deux lignes de la migration sont littérales et connues : `mod {module};` dans
 `<rbs:migration_modules>`, `Box::new({module}::Migration),` dans `<rbs:migrations>`
