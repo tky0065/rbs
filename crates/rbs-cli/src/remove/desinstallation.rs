@@ -26,17 +26,58 @@ use crate::plan;
 use crate::template::Renderer;
 use crate::templates;
 
-/// Ce que `add` apporte au squelette, et n'en retire donc jamais.
+/// Les dépendances que le squelette apporte, et qu'aucun fragment ne retire jamais.
 ///
-/// Un fragment leur ajoute des flags de feature par `[cargo.<crate>]` ; aucun n'en fait
-/// une `[[dependencies]]` propre, ce qu'aucun fragment embarqué ne déclare aujourd'hui.
-/// La garde reste explicite : un `--template-dir` pourrait écrire un manifeste qui s'y
-/// risque, et le squelette ne doit pas dépendre de ce que les fragments choisissent de
-/// ne pas faire.
+/// Une liste écrite à la main — `tokio`, `sea-orm`, `rbs-core` — a longtemps servi ici, et
+/// s'est révélée fausse par omission : `cors` et `redis` redéclarent respectivement
+/// `tower-http` et `serde_json`, que le squelette porte déjà, pour y ajouter une feature.
+/// Une liste plus longue reproduirait le même bug à la prochaine dépendance ajoutée au
+/// squelette, sans que personne ne s'en aperçoive : la garde se dérive donc de la seule
+/// source qui ne peut pas se désynchroniser d'elle-même, `templates/project/Cargo.toml.jinja`.
+///
+/// Ce fichier n'est pas du TOML valide — `rbs-core = {@ rbs_core_dep @}` et les autres
+/// expressions Jinja le rendraient illisible par `toml_edit` — mais seuls les noms de clé
+/// de `[dependencies]` comptent ici, jamais leurs valeurs : une lecture ligne à ligne du
+/// corps de la table les retrouve sans avoir à rendre le gabarit.
+///
+/// Toujours le squelette **embarqué**, jamais celui d'un `--template-dir` : la garde
+/// protège le binaire que `cargo build` verra, quel que soit le squelette qu'un fragment
+/// de test aura par ailleurs visé.
 // Sans appelant avant que `rbs remove` ne soit câblée à cette commande : `-D warnings`
 // la dirait morte, alors que les tests en prouvent déjà le contrat.
 #[allow(dead_code)]
-const SQUELETTE: [&str; 3] = ["tokio", "sea-orm", "rbs-core"];
+fn squelette() -> BTreeSet<String> {
+    let fichiers = templates::Source::fresh(None)
+        .files()
+        .expect("le squelette embarqué se lit toujours");
+    let cargo = fichiers
+        .iter()
+        .find(|file| file.destination == Path::new("Cargo.toml"))
+        .expect("le squelette embarqué porte toujours un Cargo.toml.jinja");
+
+    let mut noms = BTreeSet::new();
+    let mut dans_dependencies = false;
+    for ligne in cargo.source.lines() {
+        let ligne = ligne.trim();
+
+        if ligne == "[dependencies]" {
+            dans_dependencies = true;
+            continue;
+        }
+        if dans_dependencies && ligne.starts_with('[') {
+            break;
+        }
+        if !dans_dependencies || ligne.is_empty() || ligne.starts_with('#') {
+            continue;
+        }
+
+        if let Some((nom, _)) = ligne.split_once('=') {
+            noms.insert(nom.trim().to_string());
+        }
+    }
+
+    noms
+}
 
 /// Le fragment tel que le retrait le voit.
 // Idem : construit par les seuls tests avant que la commande n'existe.
@@ -221,8 +262,9 @@ pub(crate) fn actions(fragment: &Fragment, builder: &mut plan::Builder) -> Resul
 
     // 4. Les dépendances : retirées seulement si aucun autre fragment installé ne les
     // réclame encore, et jamais si elles appartiennent au squelette.
+    let squelette = squelette();
     for declared in &fragment.manifest.dependencies {
-        if SQUELETTE.contains(&declared.name.as_str()) {
+        if squelette.contains(&declared.name) {
             laissees.push(format!(
                 "{} appartient au squelette, jamais retirée",
                 declared.name
@@ -656,9 +698,11 @@ mod tests {
     }
 
     /// Même un fragment qui déclarerait `tokio` en `[[dependencies]]` propre — ce
-    /// qu'aucun fragment embarqué ne fait aujourd'hui, `[cargo.tokio]` suffisant à tous —
-    /// ne la retire jamais : la garde du squelette porte sur le nom, pas sur la façon
-    /// dont un manifeste choisit de le réclamer.
+    /// qu'aucun fragment embarqué ne fait aujourd'hui pour `tokio` spécifiquement,
+    /// `[cargo.tokio]` suffisant à tous — ne la retire jamais : la garde porte sur le nom
+    /// tel que le squelette le déclare, pas sur la façon dont un manifeste choisit de le
+    /// réclamer. `cors`/`tower-http` et `redis`/`serde_json`, testés plus bas, sont les
+    /// deux cas réels où un fragment embarqué emprunte ce chemin.
     #[test]
     fn a_dependency_declared_on_a_skeleton_crate_is_left_in_place_and_named() {
         let projet = projet_avec(&[(
@@ -709,6 +753,76 @@ mod tests {
                 .expect("le manifeste reste")
                 .contains("tokio"),
             "{:?}",
+            cargo.after
+        );
+    }
+
+    /// Le cas réel qui a fait découvrir la garde du squelette : `cors` redéclare
+    /// `tower-http`, déjà porté par le squelette pour `router.rs`
+    /// (`CompressionLayer`, `TimeoutLayer`), pour y activer sa propre feature. Retirer
+    /// `cors` ne doit jamais faire disparaître la dépendance entière.
+    #[test]
+    fn removing_cors_leaves_tower_http_in_place_and_named() {
+        let (projet, fragment) = fragment_pose("cors");
+        let mut builder = plan::Builder::new(projet.path());
+
+        let retires = actions(&fragment, &mut builder).expect("le retrait se planifie");
+
+        assert!(
+            retires
+                .laissees
+                .iter()
+                .any(|laissee| laissee.contains("tower-http")),
+            "tower-http doit être nommée comme laissée : {:?}",
+            retires.laissees
+        );
+        let plan = builder.finir();
+        let cargo = plan
+            .files()
+            .iter()
+            .find(|file| file.path == "Cargo.toml")
+            .expect("le manifeste est visé");
+        assert!(
+            cargo
+                .after
+                .as_deref()
+                .expect("le manifeste reste")
+                .contains("tower-http"),
+            "tower-http appartient au squelette, que cors ne fait qu'enrichir : {:?}",
+            cargo.after
+        );
+    }
+
+    /// Même cas que `tower-http`, côté `redis` : `serde_json` est déjà une dépendance du
+    /// squelette, que `redis` redéclare sans y ajouter de feature particulière.
+    #[test]
+    fn removing_redis_leaves_serde_json_in_place_and_named() {
+        let (projet, fragment) = fragment_pose("redis");
+        let mut builder = plan::Builder::new(projet.path());
+
+        let retires = actions(&fragment, &mut builder).expect("le retrait se planifie");
+
+        assert!(
+            retires
+                .laissees
+                .iter()
+                .any(|laissee| laissee.contains("serde_json")),
+            "serde_json doit être nommée comme laissée : {:?}",
+            retires.laissees
+        );
+        let plan = builder.finir();
+        let cargo = plan
+            .files()
+            .iter()
+            .find(|file| file.path == "Cargo.toml")
+            .expect("le manifeste est visé");
+        assert!(
+            cargo
+                .after
+                .as_deref()
+                .expect("le manifeste reste")
+                .contains("serde_json"),
+            "serde_json appartient au squelette, que redis ne fait que redéclarer : {:?}",
             cargo.after
         );
     }
