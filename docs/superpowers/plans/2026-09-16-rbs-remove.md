@@ -1269,6 +1269,15 @@ git commit -m "feat(remove): refuse avant d'écrire ce qu'un dépendant exige en
 
 ### Task 10: Le branchement de la commande
 
+> **Correction du contrôleur (R11) — `remove::Error` n'est pas encore classée.**
+> La tâche 9 a signalé, sans l'implémenter, que `remove::Error` ne porte ni `Codee` ni
+> `Classee` : ni son brief ni celui-ci ne les mentionnaient. **Tu en as besoin** — c'est toi
+> qui câbles `--json` et l'appel `echec(&error, error.remedy(), json)` de `lib.rs`, qui
+> exigent un code stable en `snake_case` et une famille de sortie. Implémente-les sur le
+> modèle d'`add::Error`, et vérifie que chaque variante reçoit le bon code de sortie :
+> `Faute` (1) pour ce que le projet porte, `Usage` (2) pour un mauvais appel, `Environnement`
+> (3) pour un fichier illisible ou un service injoignable.
+
 > **Correction du contrôleur (R9) — un commentaire qui ment, trouvé par une revue.**
 > Le doc-commentaire de `Builder::retirer_section` (`crates/rbs-cli/src/plan/mod.rs`, vers
 > la ligne 650) affirme que « les tests de `text::remove_section` en prouvent déjà le
