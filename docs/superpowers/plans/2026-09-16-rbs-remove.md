@@ -1253,6 +1253,16 @@ git commit -m "feat(remove): refuse avant d'écrire ce qu'un dépendant exige en
 
 ### Task 10: Le branchement de la commande
 
+> **Correction du contrôleur (R9) — un commentaire qui ment, trouvé par une revue.**
+> Le doc-commentaire de `Builder::retirer_section` (`crates/rbs-cli/src/plan/mod.rs`, vers
+> la ligne 650) affirme que « les tests de `text::remove_section` en prouvent déjà le
+> contrat ». C'est faux et cela a été établi : le wrapper a depuis ses trois tests propres,
+> et la couche texte ne prouve ni le statut, ni la propagation d'erreur, ni la projection.
+> Tu édites déjà ce voisinage pour retirer les attributs : **corrige ce commentaire au
+> passage**, et vérifie qu'aucun autre doc-commentaire de wrapper ne répète la même
+> affirmation. Ce dépôt a déjà dû nettoyer une fois des commentaires devenus faux ; ils ne
+> doivent pas revenir par cette porte.
+
 > **Correction du contrôleur (R7) — trouvé par une revue, hors de son diff.**
 > `Plan::bilan` (`crates/rbs-cli/src/plan/mod.rs`) classe chaque fichier écrit en *créé* ou
 > *modifié* selon `before.is_some()`, sans connaître la suppression. Le bilan que tu
