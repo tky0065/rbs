@@ -115,7 +115,7 @@ que rustc.
   Même règle d'union.
 - **Les dépendances du squelette**, *toutes*, et la liste se **dérive** de
   `templates/project/Cargo.toml.jinja` plutôt que de s'écrire à la main : un fragment leur
-  ajoute des features, il ne les apporte pas. Le squelette en déclare treize, et deux
+  ajoute des features, il ne les apporte pas. Le squelette en déclare quatorze, et deux
   fragments en redéclarent une pour y ajouter un flag — `tower-http` par `cors`,
   `serde_json` par `redis`. Une liste écrite à la main les avait manqués, et
   `rbs remove cors` vidait `tower-http` d'un manifeste dont `router.rs` dépend
