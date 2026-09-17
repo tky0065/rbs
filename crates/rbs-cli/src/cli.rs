@@ -128,7 +128,7 @@ pub enum Commands {
         #[arg(long)]
         json: bool,
 
-        /// Répertoire de templates remplaçant celles embarquées.
+        /// Répertoire de templates remplaçant celles embarquées dans le binaire.
         #[arg(long, value_name = "CHEMIN")]
         template_dir: Option<PathBuf>,
     },

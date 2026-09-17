@@ -270,6 +270,7 @@ impl<'a> From<&'a super::CauseSautee> for CauseJson<'a> {
 struct Fichiers {
     crees: usize,
     modifies: usize,
+    supprimes: usize,
 }
 
 impl From<&[File]> for Fichiers {
@@ -277,6 +278,7 @@ impl From<&[File]> for Fichiers {
         let mut fichiers = Fichiers {
             crees: 0,
             modifies: 0,
+            supprimes: 0,
         };
 
         for file in files {
@@ -284,9 +286,13 @@ impl From<&[File]> for Fichiers {
                 continue;
             }
 
-            match file.before {
-                None => fichiers.crees += 1,
-                Some(_) => fichiers.modifies += 1,
+            // `after` porte l'état visé : son absence est une suppression, quel que soit
+            // ce que le fichier valait avant — voir `Plan::bilan`, dont c'est la même
+            // règle côté rendu humain.
+            match (&file.before, &file.after) {
+                (_, None) => fichiers.supprimes += 1,
+                (Some(_), Some(_)) => fichiers.modifies += 1,
+                (None, Some(_)) => fichiers.crees += 1,
             }
         }
 
@@ -772,6 +778,39 @@ mod tests {
 
         assert_eq!(fichiers["crees"], 1);
         assert_eq!(fichiers["modifies"], 1);
+        assert_eq!(fichiers["supprimes"], 0);
+    }
+
+    /// `rbs remove` retire des fichiers : `after` est `None`, quel que soit `before`. Le
+    /// classer sur `before.is_some()` seul l'aurait compté parmi les modifiés — le même
+    /// défaut que celui corrigé sur `Plan::bilan` et sur `plan::render`, ici sur la
+    /// surface que `--json` rend.
+    #[test]
+    fn fichiers_counts_deletions_apart_from_modifications() {
+        let plan = Plan {
+            root: PathBuf::from("/projet"),
+            actions: Vec::new(),
+            files: vec![
+                File {
+                    path: "src/router.rs".to_string(),
+                    before: Some("ancien".to_string()),
+                    after: Some("nouveau".to_string()),
+                    statut: Status::AFaire,
+                },
+                File {
+                    path: "src/modules/cors/mod.rs".to_string(),
+                    before: Some("existant".to_string()),
+                    after: None,
+                    statut: Status::AFaire,
+                },
+            ],
+            sautees: Vec::new(),
+        };
+        let fichiers = &document(&plan)["fichiers"];
+
+        assert_eq!(fichiers["crees"], 0);
+        assert_eq!(fichiers["modifies"], 1);
+        assert_eq!(fichiers["supprimes"], 1);
     }
 
     #[test]

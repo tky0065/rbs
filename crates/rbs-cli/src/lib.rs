@@ -711,9 +711,19 @@ fn remove_in(
         ui::line(&plan::render::plan(&planned.plan));
     }
 
+    signaler_zone_manquante(planned.zone_manquante.as_ref(), json);
+
     let applique = appliquer(&planned.plan, force, dry_run, json)?;
 
+    // Ce que le rapport doit dire une fois les fichiers écrits : la migration retirée ne
+    // défait rien en base, et le reste — variables, dépendances, features encore
+    // réclamées — est resté sciemment en place, énuméré par le plan lui-même. Rien de
+    // ceci ne rejoint le document JSON, mais un script qui pilote le retrait doit tout de
+    // même l'apprendre — sur la sortie d'erreur, comme le remède qu'`add` y renvoie déjà.
     if json {
+        if applique {
+            annoncer_ce_qui_reste(&planned, ui::warn_detail);
+        }
         ui::line(&plan::json::plan("remove", &planned.plan, applique));
         return Ok(());
     }
@@ -728,25 +738,29 @@ fn remove_in(
         ui::bilan(ecrits.crees, ecrits.modifies, ecrits.supprimes)
     ));
 
-    // Ce qui reste à savoir une fois les fichiers écrits : la migration retirée ne défait
-    // rien en base, et le reste — variables, dépendances, features encore réclamées — est
-    // resté sciemment en place, énuméré par le plan lui-même.
-    if planned.migration {
-        ui::info(
-            "\n  la migration est retirée du projet, mais le schéma garde ses tables : \
-             `rbs migrate down` devait passer avant",
-        );
-    }
-
-    for laissee in &planned.laissees {
-        ui::info(&format!("  {laissee}"));
-    }
+    annoncer_ce_qui_reste(&planned, ui::info);
 
     ui::info(
         "\n  lancez `cargo build` : le compilateur nomme ce qui référençait encore la feature",
     );
 
     Ok(())
+}
+
+/// La migration retirée et ce que le retrait a sciemment laissé en place, portées vers
+/// `sortie` — `ui::info` sur l'affichage humain, `ui::warn_detail` sous `--json`, où
+/// elles rejoignent la sortie d'erreur plutôt que le document.
+fn annoncer_ce_qui_reste(planned: &remove::Planned, sortie: fn(&str)) {
+    if planned.migration {
+        sortie(
+            "\n  la migration est retirée du projet, mais le schéma garde ses tables : \
+             `rbs migrate down` devait passer avant",
+        );
+    }
+
+    for laissee in &planned.laissees {
+        sortie(&format!("  {laissee}"));
+    }
 }
 
 /// Les conseils de suite des features que `new` vient d'installer, dans l'ordre

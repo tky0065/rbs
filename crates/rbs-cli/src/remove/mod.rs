@@ -55,6 +55,12 @@ pub(crate) struct Planned {
     /// Le projet n'inscrivait déjà pas cette feature : le plan est vide et rien ne sera
     /// écrit.
     pub deja_absente: bool,
+    /// La zone de l'`AGENTS.md` que le projet ne porte pas, s'il en manque une.
+    ///
+    /// Symétrique de celle d'`add::Planned` : la section 8 retire la feature du
+    /// manifeste, et l'inventaire doit dire la même chose — sans quoi `rbs doctor`
+    /// verrait diverger un projet qui vient pourtant de subir un retrait propre.
+    pub zone_manquante: Option<crate::agents::MissingZone>,
 }
 
 /// Ce qui peut empêcher de retirer une feature.
@@ -130,6 +136,10 @@ pub(crate) enum Error {
     #[error("{0}")]
     Desinstallation(#[from] desinstallation::Error),
 
+    /// L'inventaire de l'`AGENTS.md` n'a pu être rafraîchi.
+    #[error("{0}")]
+    Inventaire(#[from] plan::Error),
+
     /// Le plan n'a pu être appliqué au projet.
     #[error("{0}")]
     Application(#[from] plan::application::Error),
@@ -150,6 +160,7 @@ impl Error {
     fn plan(&self) -> Option<&plan::Error> {
         match self {
             Error::Desinstallation(desinstallation::Error::Plan(error)) => Some(error),
+            Error::Inventaire(error) => Some(error),
             _ => None,
         }
     }
@@ -176,6 +187,7 @@ impl Codee for Error {
                 desinstallation::Error::Manifest(_) => "fragment_invalide",
                 desinstallation::Error::MigrationAmbigue { .. } => "migration_ambigue",
             },
+            Error::Inventaire(erreur) => erreur.code(),
             Error::Application(erreur) => erreur.code(),
         }
     }
@@ -212,6 +224,7 @@ impl crate::errors::Classee for Error {
                 | desinstallation::Error::Manifest(_)
                 | desinstallation::Error::MigrationAmbigue { .. } => Sortie::Faute,
             },
+            Self::Inventaire(cause) => cause.sortie(),
             Self::Application(cause) => cause.sortie(),
         }
     }
@@ -265,6 +278,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
             migration: false,
             laissees: Vec::new(),
             deja_absente: true,
+            zone_manquante: None,
         });
     }
 
@@ -350,7 +364,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         lang => crate::lang::Lang::of_project(&root).name(),
     };
 
-    let mut builder = plan::Builder::new(root);
+    let mut builder = plan::Builder::new(root.clone());
     let fragment = desinstallation::Fragment {
         name: &options.feature,
         manifest: &manifest,
@@ -360,12 +374,26 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     };
     let retires = desinstallation::actions(&fragment, &mut builder)?;
 
+    // La section 8 vient de retirer la feature du manifeste projeté : l'inventaire de
+    // l'`AGENTS.md` doit dire la même chose, ou `rbs doctor` — qui compare la zone au
+    // manifeste — verrait diverger un projet qui vient pourtant de subir un retrait
+    // propre. `agents::refresh` sait ajouter des features à une liste, jamais en retirer
+    // une : la métadonnée passée porte donc déjà l'état d'après, la feature retirée
+    // exclue de sa liste, sans rien à ajouter par-dessus.
+    let mut metadonnees_apres_retrait = metadonnees.clone();
+    metadonnees_apres_retrait
+        .features
+        .retain(|feature| feature != &options.feature);
+    let zone_manquante =
+        crate::agents::refresh(&mut builder, &root, &metadonnees_apres_retrait, &[])?;
+
     Ok(Planned {
         plan: builder.finir(),
         description: manifest.feature.description,
         migration: retires.migration.is_some(),
         laissees: retires.laissees,
         deja_absente: false,
+        zone_manquante,
     })
 }
 
@@ -632,6 +660,41 @@ mod tests {
                 .all(|file| file.statut != Status::Conflit),
             "un rendu reconstruit à tort diffère du disque : {:?}",
             planned.plan.files()
+        );
+    }
+
+    /// Symétrique de ce qu'`add` fait pour `agents::refresh` : la section 8 retire la
+    /// feature du manifeste, et l'inventaire de l'`AGENTS.md` doit dire la même chose —
+    /// sans quoi `rbs doctor` verrait diverger un projet qui vient pourtant de subir un
+    /// retrait propre.
+    #[test]
+    fn the_agents_inventory_no_longer_names_a_removed_feature() {
+        let (_parent, root) = crate::fixtures::Project::new().features(&["jobs"]).create();
+
+        let planned = plan_for(&options(&root, "jobs")).expect("le retrait se planifie");
+
+        let agents = planned
+            .plan
+            .files()
+            .iter()
+            .find(|file| file.path == "AGENTS.md")
+            .expect("AGENTS.md fait partie du plan");
+        let after = agents
+            .after
+            .as_deref()
+            .expect("AGENTS.md n'est pas supprimé");
+
+        let debut = after
+            .find("<!-- rbs:inventory -->")
+            .expect("la zone d'inventaire est présente");
+        let fin = after
+            .find("<!-- /rbs:inventory -->")
+            .expect("la zone se referme");
+        let inventaire = &after[debut..fin];
+
+        assert!(
+            !inventaire.contains("jobs"),
+            "l'inventaire doit avoir perdu `jobs` : {inventaire}"
         );
     }
 }
