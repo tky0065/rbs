@@ -26,6 +26,16 @@
 - **Aucun scan des références** depuis le code de l'utilisateur.
 - **Aucune template modifiée** : `integration_examples` doit rester vert sans régénération d'`examples/`.
 - Toolchain locale possiblement en retard sur la CI : `rustup update` avant la passe finale.
+- **Preuve que les tests discriminent.** Un rouge obtenu par une fonction absente — « la
+  fonction n'existe pas encore », donc une erreur de compilation — ne prouve rien de la
+  qualité des assertions. Pour chaque comportement neuf, le rapport doit porter une
+  **mutation délibérée** : casser l'implémentation d'une manière qui **laisse le code
+  compiler**, lancer le test couvrant, coller sa sortie rouge réelle, restaurer. C'est le
+  standard du dépôt — plusieurs entrées de son backlog portent un « rouge prouvé » obtenu
+  ainsi. Une mutation qui casse la compilation ne compte pas.
+- **Les sorties de commandes se collent, ne s'affirment pas.** `cargo fmt --all --check` et
+  `cargo clippy --workspace --all-targets -- -D warnings` déclarés verts en prose, sans
+  trace, sont un constat de revue.
 
 ---
 
