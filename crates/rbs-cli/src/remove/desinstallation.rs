@@ -680,6 +680,57 @@ mod tests {
         );
     }
 
+    /// `templates/mail/` est partagé, et le retrait de l'un de ses deux auteurs le laisse.
+    ///
+    /// `mail` y dépose `bienvenue.html`, `auth` ses trois courriels : c'est le seul
+    /// répertoire où deux fragments embarqués écrivent. `auth` exige `mail`, jamais
+    /// l'inverse — c'est donc `auth` qui peut partir. La purge des parents vidés s'arrête
+    /// sur un répertoire non vide parce que `fs::remove_dir` y échoue, et rien ne le
+    /// prouvait pour ce cas, le seul où cet échec est autre chose qu'une hypothèse.
+    ///
+    /// Le plan ne suffit pas à le dire : la purge vit dans l'application, après la
+    /// dernière écriture. Ce test applique donc pour de bon, sur le projet temporaire.
+    #[test]
+    fn removing_a_fragment_leaves_the_shared_mail_templates_of_the_other() {
+        let (projet, fragment) = fragment_pose("auth");
+        let gabarits = projet.path().join("templates/mail");
+
+        for html in [
+            "bienvenue.html",
+            "reinitialisation.html",
+            "verification.html",
+            "inscription.html",
+        ] {
+            assert!(
+                gabarits.join(html).exists(),
+                "{html} doit être posé avant le retrait"
+            );
+        }
+
+        let mut builder = plan::Builder::new(projet.path());
+        actions(&fragment, &mut builder).expect("le retrait se planifie");
+        plan::application::apply(&builder.finir(), false).expect("le retrait s'applique");
+
+        assert!(
+            gabarits.is_dir(),
+            "templates/mail/ devait survivre : la purge s'arrête sur un répertoire non vide"
+        );
+        assert!(
+            gabarits.join("bienvenue.html").exists(),
+            "le gabarit de `mail` devait rester, son fragment n'étant pas celui qui part"
+        );
+        for html in [
+            "reinitialisation.html",
+            "verification.html",
+            "inscription.html",
+        ] {
+            assert!(
+                !gabarits.join(html).exists(),
+                "{html} appartient à `auth` et devait partir avec lui"
+            );
+        }
+    }
+
     /// Une dépendance qu'un autre fragment installé déclare encore reste en place.
     #[test]
     fn a_dependency_another_installed_fragment_still_declares_stays() {
