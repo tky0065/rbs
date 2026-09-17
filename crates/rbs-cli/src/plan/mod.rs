@@ -117,6 +117,7 @@ impl Plan {
         let mut bilan = Bilan {
             crees: 0,
             modifies: 0,
+            supprimes: 0,
         };
         for file in &self.files {
             let ecrit = match file.statut {
@@ -127,10 +128,13 @@ impl Plan {
             if !ecrit {
                 continue;
             }
-            if file.before.is_some() {
-                bilan.modifies += 1;
-            } else {
-                bilan.crees += 1;
+            // `after` porte l'état visé : son absence est une suppression, quel que soit
+            // ce que le fichier valait avant — un fichier « modifié » existe toujours une
+            // fois l'application terminée, ce qu'une suppression contredit.
+            match (&file.before, &file.after) {
+                (_, None) => bilan.supprimes += 1,
+                (Some(_), Some(_)) => bilan.modifies += 1,
+                (None, Some(_)) => bilan.crees += 1,
             }
         }
         bilan
@@ -144,6 +148,8 @@ pub(crate) struct Bilan {
     pub crees: usize,
     /// Fichiers existants réécrits.
     pub modifies: usize,
+    /// Fichiers que le plan retire.
+    pub supprimes: usize,
 }
 
 /// Ce qui peut empêcher de planifier.
@@ -300,10 +306,6 @@ impl Builder {
     /// recherche d'un fichier par son suffixe : une recherche par motif, que le reste du
     /// builder n'a pas à savoir faire pour les autres actions, qui visent toutes un
     /// chemin déjà connu.
-    ///
-    // Sans appelant avant que `rbs remove` ne soit câblée à cette commande : `-D
-    // warnings` la dirait morte, alors que les tests en prouvent déjà le contrat.
-    #[allow(dead_code)]
     pub fn root(&self) -> &Path {
         &self.root
     }
@@ -345,10 +347,6 @@ impl Builder {
     /// conflit quand le fichier existe, supprimer n'en est un que s'il existe **et diffère**
     /// de ce qu'une installation neuve produirait. C'est ce test, et lui seul, qui distingue
     /// un fichier que le CLI a posé d'un fichier que le développeur a fait sien.
-    ///
-    // Sans appelant avant que `rbs remove` n'existe : `-D warnings` la dirait morte,
-    // alors que les tests en prouvent déjà le contrat.
-    #[allow(dead_code)]
     pub fn supprimer(&mut self, path: &str, rendu_attendu: &str) -> Result<(), Error> {
         if self.projected(path) {
             return Err(Error::DejaProjete {
@@ -424,10 +422,6 @@ impl Builder {
     /// d'un projet SQLite n'existe pas, et le service qu'un fragment y aurait posé n'a
     /// rien à y perdre. Rien n'est consigné en [`Sautee`] — celle-ci annonce un bloc *à
     /// coller*, et il n'y a ici rien à coller.
-    ///
-    // Sans appelant avant que `rbs remove` n'existe : `-D warnings` la dirait morte, alors
-    // que les tests en prouvent déjà le contrat.
-    #[allow(dead_code)]
     pub fn retirer_lignes(&mut self, anchor: Anchor, lines: &[String]) -> Result<(), Error> {
         let path = anchor.file.to_string();
 
@@ -666,10 +660,6 @@ impl Builder {
     }
 
     /// Planifie le retrait de la section `section` du document TOML `path`.
-    ///
-    /// Sans appelant avant que `rbs remove` n'existe : `-D warnings` la dirait morte, alors
-    /// que les tests de [`text::remove_section`] en prouvent déjà le contrat.
-    #[allow(dead_code)]
     pub fn retirer_section(&mut self, path: &str, section: &str) -> Result<(), Error> {
         let states = self.states(path)?;
         let courant = states.courant.ok_or_else(|| Error::FichierAbsent {
@@ -890,6 +880,16 @@ mod tests {
         }
     }
 
+    /// Un fichier que le plan retire : `after` est `None`, l'état visé ne le porte plus.
+    fn fichier_supprimee(path: &str, before: &str, statut: Status) -> File {
+        File {
+            path: path.to_string(),
+            before: Some(before.to_string()),
+            after: None,
+            statut,
+        }
+    }
+
     /// La règle d'`application::apply` : un fichier inchangé n'est pas réécrit, un
     /// conflit ne l'est que sous `--force`.
     #[test]
@@ -913,14 +913,50 @@ mod tests {
             plan.bilan(false),
             Bilan {
                 crees: 3,
-                modifies: 2
+                modifies: 2,
+                supprimes: 0
             }
         );
         assert_eq!(
             plan.bilan(true),
             Bilan {
                 crees: 3,
-                modifies: 3
+                modifies: 3,
+                supprimes: 0
+            }
+        );
+    }
+
+    /// Un fichier retiré existait avant l'application (`before` porte son contenu) mais
+    /// n'existera plus après (`after` est `None`) : le classer sur `before.is_some()`
+    /// l'aurait compté parmi les fichiers modifiés, alors qu'il a disparu.
+    #[test]
+    fn a_removed_file_is_counted_as_a_deletion_not_a_modification() {
+        let plan = Plan {
+            root: std::path::PathBuf::from("/projets/demo-api"),
+            actions: Vec::new(),
+            files: vec![
+                fichier("src/router.rs", Some("avant"), Status::AFaire),
+                fichier_supprimee("src/mail/mod.rs", "avant", Status::AFaire),
+                fichier_supprimee("src/mail/service.rs", "avant", Status::Conflit),
+            ],
+            sautees: Vec::new(),
+        };
+
+        assert_eq!(
+            plan.bilan(false),
+            Bilan {
+                crees: 0,
+                modifies: 1,
+                supprimes: 1
+            }
+        );
+        assert_eq!(
+            plan.bilan(true),
+            Bilan {
+                crees: 0,
+                modifies: 1,
+                supprimes: 2
             }
         );
     }

@@ -108,14 +108,19 @@ fn geste(anchor: &Anchor) -> String {
 }
 
 /// Ce qu'une ligne dit d'un fichier : sa puce, son chemin, ce qu'il adviendra de lui.
+///
+/// `after` tranche avant `before` : un fichier que le plan retire (`after: None`) l'est
+/// quel que soit son état d'origine, et le classer sur `before` seul l'aurait confondu
+/// avec une modification.
 fn line(file: &File, width: usize) -> String {
     let path = format!("{:width$}", file.path);
 
-    let (puce, libelle) = match (file.statut, &file.before) {
-        (Status::AFaire, None) => (ui::green("+"), ui::green("créé")),
-        (Status::AFaire, Some(_)) => (ui::green("~"), ui::green("modifié")),
-        (Status::DejaFait, _) => (ui::dimmed("·"), ui::dimmed("inchangé")),
-        (Status::Conflit, _) => (ui::red("!"), ui::red("conflit — relancer avec --force")),
+    let (puce, libelle) = match (file.statut, &file.before, &file.after) {
+        (Status::AFaire, _, None) => (ui::yellow("-"), ui::yellow("supprimé")),
+        (Status::AFaire, None, Some(_)) => (ui::green("+"), ui::green("créé")),
+        (Status::AFaire, Some(_), Some(_)) => (ui::green("~"), ui::green("modifié")),
+        (Status::DejaFait, _, _) => (ui::dimmed("·"), ui::dimmed("inchangé")),
+        (Status::Conflit, _, _) => (ui::red("!"), ui::red("conflit — relancer avec --force")),
     };
 
     format!("  {puce} {path}   {libelle}")
@@ -124,21 +129,22 @@ fn line(file: &File, width: usize) -> String {
 /// Le compte, par ce qui adviendra des fichiers.
 ///
 /// Les conflits se comptent à part : sans `--force`, ils ne seront pas écrits, et les
-/// ranger avec le reste ferait annoncer une écriture qui n'aura pas lieu. Créés et
-/// modifiés se distinguent comme sur les lignes au-dessus, et comme dans le bilan que la
-/// commande affiche une fois le plan appliqué.
+/// ranger avec le reste ferait annoncer une écriture qui n'aura pas lieu. Créés, modifiés
+/// et supprimés se distinguent comme sur les lignes au-dessus, et comme dans le bilan que
+/// la commande affiche une fois le plan appliqué.
 fn footer(files: &[File]) -> String {
     let compter = |statut: Status| files.iter().filter(|f| f.statut == statut).count();
-    let a_faire = |existant: bool| {
+    let a_faire = |a_faire_si: &dyn Fn(&File) -> bool| {
         files
             .iter()
-            .filter(|f| f.statut == Status::AFaire && f.before.is_some() == existant)
+            .filter(|f| f.statut == Status::AFaire && a_faire_si(f))
             .count()
     };
 
-    let (a_creer, a_modifier, inchanges, conflits) = (
-        a_faire(false),
-        a_faire(true),
+    let (a_creer, a_modifier, a_supprimer, inchanges, conflits) = (
+        a_faire(&|f| f.before.is_none() && f.after.is_some()),
+        a_faire(&|f| f.before.is_some() && f.after.is_some()),
+        a_faire(&|f| f.after.is_none()),
         compter(Status::DejaFait),
         compter(Status::Conflit),
     );
@@ -149,6 +155,9 @@ fn footer(files: &[File]) -> String {
     }
     if a_modifier > 0 {
         segments.push(format!("{a_modifier} à modifier"));
+    }
+    if a_supprimer > 0 {
+        segments.push(format!("{a_supprimer} à supprimer"));
     }
     if inchanges > 0 {
         let pluriel = if inchanges > 1 { "s" } else { "" };
@@ -173,6 +182,16 @@ mod tests {
             path: path.to_string(),
             before: before.map(str::to_string),
             after: Some("peu importe".to_string()),
+            statut,
+        }
+    }
+
+    /// Un fichier que le plan retire : `after` est `None`, l'état visé ne le porte plus.
+    fn file_supprime(path: &str, before: &str, statut: Status) -> File {
+        File {
+            path: path.to_string(),
+            before: Some(before.to_string()),
+            after: None,
             statut,
         }
     }
@@ -230,6 +249,24 @@ mod tests {
             line_of(&rendered, "Cargo.toml").contains("modifié"),
             "{rendered}"
         );
+    }
+
+    /// `rbs remove` retire un fichier qui existait : `before` porte son contenu, mais
+    /// `after` ne porte plus rien. Le classer sur `before` seul l'aurait annoncé
+    /// « modifié », ce qui aurait caché sa disparition à l'utilisateur qui lit le plan.
+    #[test]
+    fn a_removed_file_is_announced_deleted_not_modified() {
+        let rendered = plan(&plan_of(vec![file_supprime(
+            "src/modules/cors/mod.rs",
+            "avant",
+            Status::AFaire,
+        )]));
+
+        assert!(
+            line_of(&rendered, "src/modules/cors/mod.rs").contains("supprimé"),
+            "{rendered}"
+        );
+        assert!(!rendered.contains("modifié"), "{rendered}");
     }
 
     #[test]
@@ -308,6 +345,22 @@ mod tests {
         assert!(
             tout.ends_with("3 à créer, 2 à modifier, 1 inchangé, 1 en conflit"),
             "{tout}"
+        );
+    }
+
+    /// Le pied de `rbs remove` doit nommer les suppressions à part : les compter parmi
+    /// les modifications aurait annoncé un projet moins retouché qu'il ne l'est.
+    #[test]
+    fn the_footer_also_separates_files_to_delete_from_files_to_modify() {
+        let rendered = plan(&plan_of(vec![
+            file("src/router.rs", Some("x"), Status::AFaire),
+            file_supprime("src/modules/cors/mod.rs", "avant", Status::AFaire),
+            file_supprime("src/modules/cors/config.rs", "avant", Status::AFaire),
+        ]));
+
+        assert!(
+            rendered.ends_with("1 à modifier, 2 à supprimer"),
+            "{rendered}"
         );
     }
 

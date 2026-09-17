@@ -707,9 +707,6 @@ fn debut_du_corps(source: &str, opening: usize, closing: usize) -> usize {
 /// Les lignes qui restent gardent leur terminaison d'origine telle quelle : le corps est
 /// filtré, jamais reformé ligne à ligne, si bien qu'un fichier CRLF n'a pas besoin d'
 /// [`eol`] pour le rester — seule une ligne entièrement retirée en perd la sienne.
-// Sans appelant hors des tests tant que `rbs remove` n'existe pas : à retirer quand une
-// tâche ultérieure câble cet appel.
-#[allow(dead_code)]
 pub(crate) fn retire(source: &str, anchor: &Anchor, lines: &[String]) -> Result<String, Missing> {
     let absente = || Missing {
         anchor: anchor.clone(),

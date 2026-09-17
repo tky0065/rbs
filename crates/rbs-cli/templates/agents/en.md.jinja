@@ -20,6 +20,7 @@ written between their markers is lost, without warning, on the next `rbs upgrade
 |---|---|---|
 | `rbs new <name>` | creates a project; `--lang fr\|en` sets the project's language — this file and the HTTP responses | the whole skeleton |
 | `rbs add <feature>` | installs audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks | the feature's wiring |
+| `rbs remove <feature>` | removes an installed feature: its files, anchors, migration and dependencies | — |
 | `rbs generate crud <name> --fields "..."` | a full CRUD feature | seven files, their `tests/` directory, the seed and the migration |
 | `rbs generate feature <name>` | an empty feature | seven files |
 | `rbs generate job <name> [--every "<cron>"]` | a job of the queue, and its due date under `--every` | the job's file, its registration and its due date |
@@ -34,7 +35,7 @@ written between their markers is lost, without warning, on the next `rbs upgrade
 | `rbs upgrade` | aligns the project with the CLI's version | — |
 | `rbs completions <shell>` | writes the shell's completion script | — |
 
-`rbs generate`, `rbs add` and `rbs upgrade` accept `--dry-run`: the plan is shown, nothing is written. With `--json`, the plan — or the refusal — is a single JSON document on standard output: read that rather than the coloured rendering.
+`rbs generate`, `rbs add`, `rbs remove` and `rbs upgrade` accept `--dry-run`: the plan is shown, nothing is written. With `--json`, the plan — or the refusal — is a single JSON document on standard output: read that rather than the coloured rendering.
 
 ## Recipes
 

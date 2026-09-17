@@ -24,8 +24,6 @@ pub(crate) enum Effect {
     /// Ajoute des lignes dans une ancre, juste avant sa balise fermante.
     Inserer { anchor: Anchor, lines: Vec<String> },
     /// Retire d'une ancre les lignes qu'un fragment y avait posées.
-    // Idem `Builder::retirer_lignes` : sans appelant hors des tests avant `rbs remove`.
-    #[allow(dead_code)]
     RetirerLignes {
         /// L'ancre visée.
         anchor: Anchor,
@@ -33,8 +31,6 @@ pub(crate) enum Effect {
         lines: Vec<String>,
     },
     /// Retire un fichier que le projet ne doit plus porter.
-    // Idem `Builder::supprimer` : sa seule source avant `rbs remove`.
-    #[allow(dead_code)]
     Supprimer,
     /// Repose une ancre disparue, sous la ligne d'accroche qu'elle déclare.
     ReposerAncre { anchor: Anchor },
@@ -48,8 +44,6 @@ pub(crate) enum Effect {
         content: String,
     },
     /// Retire d'un document TOML la section qu'un fragment y avait posée.
-    // Idem `Effect::Supprimer` : sans construction hors des tests avant `rbs remove`.
-    #[allow(dead_code)]
     RetirerSection {
         /// Nom de la section, tel qu'il paraît entre crochets.
         section: String,
@@ -98,17 +92,13 @@ pub(crate) enum PatchToml {
         version: String,
     },
     /// Retire une feature de `[package.metadata.rbs]`.
-    // Idem `Effect::Supprimer` : sans construction hors des tests avant `rbs remove`.
-    #[allow(dead_code)]
     RetirerFeature(String),
     /// Retire une dépendance de `[dependencies]`.
     ///
     /// La règle d'union — savoir si un autre fragment installé la réclame encore —
     /// appartient à l'appelant : ce patch retire ce qu'on lui nomme, point.
-    #[allow(dead_code)]
     RetirerDependance(String),
     /// Désactive une feature sur une dépendance que le manifeste déclare déjà.
-    #[allow(dead_code)]
     RetirerFeatureADependance {
         /// Nom de la dépendance visée.
         dependency: String,

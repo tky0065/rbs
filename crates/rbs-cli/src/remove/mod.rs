@@ -17,6 +17,7 @@ use std::path::{Path, PathBuf};
 use minijinja::context;
 
 use crate::dotenv;
+use crate::errors::Codee;
 use crate::git;
 use crate::manifest;
 use crate::metadata;
@@ -25,9 +26,6 @@ use crate::plan;
 use crate::templates;
 
 /// Ce qu'il faut savoir pour retirer une feature.
-// Sans appelant avant que `rbs remove` ne soit câblée à cette commande : `-D warnings`
-// la dirait morte, alors que les tests en prouvent déjà le contrat.
-#[allow(dead_code)]
 pub(crate) struct Options {
     /// Feature à retirer, telle que son répertoire de fragment la nomme.
     pub feature: String,
@@ -40,8 +38,6 @@ pub(crate) struct Options {
 }
 
 /// Ce qu'un retrait fera au projet, entièrement calculé et rien d'écrit.
-// Idem : construit par les seuls tests avant que `rbs remove` ne soit câblée.
-#[allow(dead_code)]
 #[derive(Debug)]
 pub(crate) struct Planned {
     /// Le plan, à afficher puis à appliquer.
@@ -62,9 +58,6 @@ pub(crate) struct Planned {
 }
 
 /// Ce qui peut empêcher de retirer une feature.
-// Idem : rendu par les seules fonctions de ce module, sans appelant avant que `rbs
-// remove` ne soit câblée.
-#[allow(dead_code)]
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     /// La commande n'a pas été lancée dans un projet rbs.
@@ -136,10 +129,93 @@ pub(crate) enum Error {
     /// Le parcours inverse du manifeste n'a pas pu être planifié.
     #[error("{0}")]
     Desinstallation(#[from] desinstallation::Error),
+
+    /// Le plan n'a pu être appliqué au projet.
+    #[error("{0}")]
+    Application(#[from] plan::application::Error),
 }
 
 // Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
 crate::errors::depuis_la_racine!(Error);
+
+impl Error {
+    /// Ce que le développeur peut coller ou déplacer pour réparer, quand la panne se
+    /// répare ainsi.
+    pub(crate) fn remedy(&self) -> Option<String> {
+        self.plan()?.remede()
+    }
+
+    /// L'erreur de planification que celle-ci porte, par le parcours inverse du
+    /// manifeste.
+    fn plan(&self) -> Option<&plan::Error> {
+        match self {
+            Error::Desinstallation(desinstallation::Error::Plan(error)) => Some(error),
+            _ => None,
+        }
+    }
+}
+
+impl Codee for Error {
+    fn code(&self) -> &'static str {
+        match self {
+            Error::PasUnProjet => "pas_un_projet",
+            Error::PasUnFragment { .. } => "fragment_inconnu",
+            Error::Exigee { .. } => "feature_exigee",
+            Error::Acces(_) => "fichier_inaccessible",
+            Error::Manifest(_) => "fragment_invalide",
+            Error::Metadata(_) => "manifeste_illisible",
+            Error::WorkingTreeSale(_) => "arbre_sale",
+            Error::Env(_) => "env_illisible",
+            Error::UrlIndecomposable { .. } => "url_indecomposable",
+            Error::Desinstallation(cause) => match cause {
+                desinstallation::Error::AncreInconnue { .. } => "ancre_inconnue",
+                desinstallation::Error::Installation(erreur) => erreur.code(),
+                desinstallation::Error::Rendu { .. } => "rendu_impossible",
+                desinstallation::Error::Plan(erreur) => erreur.code(),
+                desinstallation::Error::Acces(_) => "fichier_inaccessible",
+                desinstallation::Error::Manifest(_) => "fragment_invalide",
+                desinstallation::Error::MigrationAmbigue { .. } => "migration_ambigue",
+            },
+            Error::Application(erreur) => erreur.code(),
+        }
+    }
+
+    fn remede(&self) -> Option<String> {
+        self.remedy()
+    }
+
+    fn bloc(&self) -> Option<String> {
+        self.plan().and_then(plan::Error::bloc)
+    }
+}
+
+impl crate::errors::Classee for Error {
+    fn sortie(&self) -> crate::errors::Sortie {
+        use crate::errors::Sortie;
+
+        match self {
+            Self::PasUnProjet | Self::PasUnFragment { .. } | Self::WorkingTreeSale(_) => {
+                Sortie::Usage
+            }
+            Self::Acces(_) => Sortie::Environnement,
+            Self::Exigee { .. } | Self::Manifest(_) | Self::UrlIndecomposable { .. } => {
+                Sortie::Faute
+            }
+            Self::Metadata(cause) => cause.sortie(),
+            Self::Env(cause) => cause.sortie(),
+            Self::Desinstallation(cause) => match cause {
+                desinstallation::Error::Acces(_) => Sortie::Environnement,
+                desinstallation::Error::Plan(erreur) => erreur.sortie(),
+                desinstallation::Error::AncreInconnue { .. }
+                | desinstallation::Error::Installation(_)
+                | desinstallation::Error::Rendu { .. }
+                | desinstallation::Error::Manifest(_)
+                | desinstallation::Error::MigrationAmbigue { .. } => Sortie::Faute,
+            },
+            Self::Application(cause) => cause.sortie(),
+        }
+    }
+}
 
 /// Calcule ce que le retrait de `options` ferait au projet, sans rien écrire.
 ///
@@ -147,9 +223,6 @@ crate::errors::depuis_la_racine!(Error);
 /// fragment (`PasUnFragment`) ; le projet l'inscrit-il encore (sinon rien à faire) ; un
 /// autre fragment installé l'exige-t-il (`Exigee`) ; le working tree est-il propre
 /// (`WorkingTreeSale`). Le plan ne se construit qu'une fois les quatre passés.
-// Sans appelant avant que `rbs remove` ne soit câblée à cette commande : `-D warnings`
-// la dirait morte, alors que les tests en prouvent déjà le contrat.
-#[allow(dead_code)]
 // `desinstallation::Error` porte des variantes de plus de 128 octets (les messages
 // d'ambiguïté de migration, notamment) : la boxer changerait la forme que la tâche 8 a
 // arrêtée, pour un chemin d'erreur qui n'est jamais le chemin chaud de la commande.
@@ -303,8 +376,6 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 /// trouvé à un tour peut lui-même être exigé par un autre, encore à découvrir. Un nom
 /// installé sans fragment embarqué (un CRUD engendré) est ignoré en silence plutôt que de
 /// faire échouer le calcul — la même règle que suit [`desinstallation::reclamees_ailleurs`].
-// Sans appelant hors de `plan_for`, elle-même sans appelant avant `rbs remove`.
-#[allow(dead_code)]
 #[allow(clippy::result_large_err)]
 fn dependants_de(
     template_dir: Option<&Path>,

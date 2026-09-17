@@ -94,6 +94,18 @@ pub fn run() {
             }
         }
 
+        Commands::Remove {
+            feature,
+            force,
+            dry_run,
+            json,
+            template_dir,
+        } => {
+            if let Err(error) = remove(feature, force, dry_run, json, template_dir) {
+                echec(&error, error.remedy(), json);
+            }
+        }
+
         Commands::Generate { command } => {
             let args = match command {
                 GenerateCommands::Crud {
@@ -633,7 +645,7 @@ fn add_in(
     let ecrits = planned.plan.bilan(force);
     ui::success(&format!(
         "{feature} installée — {}",
-        ui::bilan(ecrits.crees, ecrits.modifies)
+        ui::bilan(ecrits.crees, ecrits.modifies, ecrits.supprimes)
     ));
 
     if let Some(remedy) = ouverts {
@@ -643,6 +655,96 @@ fn add_in(
     if let Some(suite) = suite(&feature) {
         ui::info(&format!("\n  {suite}"));
     }
+
+    Ok(())
+}
+
+/// Retire une feature installée du projet courant, plan affiché avant écriture.
+// `remove::Error` porte des variantes de plus de 128 octets (les messages d'ambiguïté de
+// migration, notamment) : la boxer changerait la forme que la tâche 8 a arrêtée, pour un
+// chemin d'erreur qui n'est jamais le chemin chaud de la commande.
+#[allow(clippy::result_large_err)]
+fn remove(
+    feature: String,
+    force: bool,
+    dry_run: bool,
+    json: bool,
+    template_dir: Option<PathBuf>,
+) -> Result<(), remove::Error> {
+    let directory = std::env::current_dir()
+        .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
+
+    remove_in(directory, feature, force, dry_run, json, template_dir)
+}
+
+/// La même, le projet visé donné en paramètre — la jumelle d'[`add_in`], pour la même
+/// raison : un test ne peut pas déplacer le répertoire courant qu'il partage avec tous
+/// les autres.
+#[allow(clippy::result_large_err)]
+fn remove_in(
+    directory: PathBuf,
+    feature: String,
+    force: bool,
+    dry_run: bool,
+    json: bool,
+    template_dir: Option<PathBuf>,
+) -> Result<(), remove::Error> {
+    let planned = remove::plan_for(&remove::Options {
+        feature: feature.clone(),
+        directory,
+        force,
+        template_dir,
+    })?;
+
+    if planned.deja_absente {
+        if json {
+            ui::line(&plan::json::plan("remove", &planned.plan, false));
+        } else {
+            ui::success(&format!("{feature} n'est pas installée — rien à faire"));
+        }
+        return Ok(());
+    }
+
+    if !json {
+        ui::info(&format!("{feature} : {}", planned.description));
+        ui::line("");
+        ui::line(&plan::render::plan(&planned.plan));
+    }
+
+    let applique = appliquer(&planned.plan, force, dry_run, json)?;
+
+    if json {
+        ui::line(&plan::json::plan("remove", &planned.plan, applique));
+        return Ok(());
+    }
+
+    if !applique {
+        return Ok(());
+    }
+
+    let ecrits = planned.plan.bilan(force);
+    ui::success(&format!(
+        "{feature} retirée — {}",
+        ui::bilan(ecrits.crees, ecrits.modifies, ecrits.supprimes)
+    ));
+
+    // Ce qui reste à savoir une fois les fichiers écrits : la migration retirée ne défait
+    // rien en base, et le reste — variables, dépendances, features encore réclamées — est
+    // resté sciemment en place, énuméré par le plan lui-même.
+    if planned.migration {
+        ui::info(
+            "\n  la migration est retirée du projet, mais le schéma garde ses tables : \
+             `rbs migrate down` devait passer avant",
+        );
+    }
+
+    for laissee in &planned.laissees {
+        ui::info(&format!("  {laissee}"));
+    }
+
+    ui::info(
+        "\n  lancez `cargo build` : le compilateur nomme ce qui référençait encore la feature",
+    );
 
     Ok(())
 }
@@ -843,7 +945,7 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
         let ecrits = planned.plan.bilan(force);
         ui::success(&format!(
             "{feature} générée — {}",
-            ui::bilan(ecrits.crees, ecrits.modifies)
+            ui::bilan(ecrits.crees, ecrits.modifies, ecrits.supprimes)
         ));
     }
 
@@ -970,7 +1072,7 @@ fn generate_job(
         } => {
             ui::success(&format!(
                 "job {name} écrit — {}",
-                ui::bilan(crees, modifies)
+                ui::bilan(crees, modifies, 0)
             ));
             if a_reporter > 0 {
                 ui::warn(&format!(

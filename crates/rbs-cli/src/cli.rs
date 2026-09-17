@@ -111,6 +111,28 @@ pub enum Commands {
         template_dir: Option<PathBuf>,
     },
 
+    /// Retire une feature installée : ses fichiers, ses ancres, sa migration et ses dépendances.
+    Remove {
+        /// Feature à retirer.
+        feature: String,
+
+        /// Retire même si un fichier a été modifié, ou si le working tree Git est sale.
+        #[arg(long)]
+        force: bool,
+
+        /// Affiche le plan sans rien écrire.
+        #[arg(long)]
+        dry_run: bool,
+
+        /// Rend le plan, ou l'erreur, en un document JSON sur la sortie standard.
+        #[arg(long)]
+        json: bool,
+
+        /// Répertoire de templates remplaçant celles embarquées.
+        #[arg(long, value_name = "CHEMIN")]
+        template_dir: Option<PathBuf>,
+    },
+
     /// Génère une feature dans un projet existant.
     #[command(alias = "g")]
     Generate {
@@ -913,6 +935,27 @@ mod tests {
             panic!("`upgrade` attendue");
         };
         assert!(dry_run);
+    }
+
+    /// La commande prend les mêmes drapeaux qu'`add`.
+    #[test]
+    fn the_removal_takes_the_same_flags_as_the_installation() {
+        let parsed =
+            Cli::try_parse_from(["rbs", "remove", "mail", "--force", "--dry-run", "--json"])
+                .expect("la commande se parse");
+
+        let Commands::Remove {
+            feature,
+            force,
+            dry_run,
+            json,
+            ..
+        } = parsed.command
+        else {
+            panic!("attendu Remove");
+        };
+        assert_eq!(feature, "mail");
+        assert!(force && dry_run && json);
     }
 
     #[test]

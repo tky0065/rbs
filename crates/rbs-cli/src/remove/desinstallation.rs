@@ -43,9 +43,6 @@ use crate::templates;
 /// Toujours le squelette **embarqué**, jamais celui d'un `--template-dir` : la garde
 /// protège le binaire que `cargo build` verra, quel que soit le squelette qu'un fragment
 /// de test aura par ailleurs visé.
-// Sans appelant avant que `rbs remove` ne soit câblée à cette commande : `-D warnings`
-// la dirait morte, alors que les tests en prouvent déjà le contrat.
-#[allow(dead_code)]
 fn squelette() -> BTreeSet<String> {
     let fichiers = templates::Source::fresh(None)
         .files()
@@ -80,8 +77,6 @@ fn squelette() -> BTreeSet<String> {
 }
 
 /// Le fragment tel que le retrait le voit.
-// Idem : construit par les seuls tests avant que la commande n'existe.
-#[allow(dead_code)]
 pub(crate) struct Fragment<'a> {
     /// Nom de la feature, pour les messages d'erreur.
     pub name: &'a str,
@@ -101,8 +96,6 @@ pub(crate) struct Fragment<'a> {
 /// Calculé une fois par [`reclamees_ailleurs`] et prêté au retrait : lui seul sait quels
 /// autres fragments tournent, la question n'ayant de sens que pour l'appelant qui les
 /// connaît tous.
-// Idem : construit par les seuls tests avant que la commande n'existe.
-#[allow(dead_code)]
 pub(crate) struct Reclamees {
     /// Noms des crates tierces qu'au moins un autre fragment déclare en `[[dependencies]]`.
     pub dependencies: BTreeSet<String>,
@@ -112,10 +105,12 @@ pub(crate) struct Reclamees {
 }
 
 /// Ce que le retrait a fait, pour que l'appelant l'affiche.
-// Idem : construit par les seuls tests avant que la commande n'existe.
-#[allow(dead_code)]
 pub(crate) struct Retires {
     /// Chemins des fichiers déclarés par le fragment, dans l'ordre où ils sont planifiés.
+    ///
+    /// Seuls les tests les lisent : le rapport de la commande se tire du plan, qui sait
+    /// déjà quels fichiers il retire.
+    #[cfg(test)]
     pub fichiers: Vec<String>,
     /// Chemin de la migration retirée, si le fragment en déclarait une et qu'elle a été
     /// retrouvée.
@@ -126,9 +121,6 @@ pub(crate) struct Retires {
 }
 
 /// Ce qui peut empêcher d'interpréter un manifeste à l'envers.
-// Idem : rendu par les seules fonctions de ce module, sans appelant avant que la
-// commande `rbs remove` ne soit câblée.
-#[allow(dead_code)]
 #[derive(Debug, thiserror::Error)]
 pub(crate) enum Error {
     /// Le manifeste vise une ancre que le squelette ne porte pas.
@@ -195,11 +187,9 @@ pub(crate) enum Error {
 /// réclamée reste en place ; et le point de montage de `src/modules/` ne se supprime
 /// jamais — seule la ligne que le fragment y a inscrite s'en va, portée comme n'importe
 /// quelle autre ancre par la section 3.
-// Sans appelant avant que `rbs remove` ne soit câblée à cette commande : `-D warnings`
-// la dirait morte, alors que les tests en prouvent déjà le contrat.
-#[allow(dead_code)]
 pub(crate) fn actions(fragment: &Fragment, builder: &mut plan::Builder) -> Result<Retires, Error> {
     let renderer = Renderer::new();
+    #[cfg(test)]
     let mut fichiers = Vec::new();
     let mut laissees = Vec::new();
 
@@ -223,6 +213,7 @@ pub(crate) fn actions(fragment: &Fragment, builder: &mut plan::Builder) -> Resul
 
         let content = render(&renderer, fragment, source, &destination)?;
         builder.supprimer(&destination, &content)?;
+        #[cfg(test)]
         fichiers.push(destination);
     }
 
@@ -235,6 +226,7 @@ pub(crate) fn actions(fragment: &Fragment, builder: &mut plan::Builder) -> Resul
         let source = installation::template(fragment.name, fragment.templates, &declared.source)?;
         let content = render(&renderer, fragment, source, &path)?;
         builder.supprimer(&path, &content)?;
+        #[cfg(test)]
         fichiers.push(path.clone());
         migration = Some(path);
 
@@ -318,6 +310,7 @@ pub(crate) fn actions(fragment: &Fragment, builder: &mut plan::Builder) -> Resul
     builder.patch(plan::PatchToml::RetirerFeature(fragment.name.to_string()))?;
 
     Ok(Retires {
+        #[cfg(test)]
         fichiers,
         migration,
         laissees,
@@ -325,8 +318,6 @@ pub(crate) fn actions(fragment: &Fragment, builder: &mut plan::Builder) -> Resul
 }
 
 /// L'ancre du squelette que le manifeste désigne par `name`, résolue comme à l'installation.
-// Sans appelant hors de `actions`, elle-même sans appelant avant `rbs remove`.
-#[allow(dead_code)]
 fn anchor(fragment: &Fragment, name: &str, builder: &plan::Builder) -> Result<Anchor, Error> {
     let anchor = anchors::ANCRES
         .into_iter()
@@ -351,9 +342,6 @@ fn anchor(fragment: &Fragment, name: &str, builder: &plan::Builder) -> Result<An
 /// et l'absence de fragment est ici son seul signe distinctif. Ce n'est pas une faute —
 /// c'est le régime ordinaire d'un projet qui a généré des ressources — et le nom est donc
 /// ignoré en silence plutôt que de faire échouer le retrait.
-// Sans appelant avant que `rbs remove` ne soit câblée à cette commande : `-D warnings`
-// la dirait morte, alors que les tests en prouvent déjà le contrat.
-#[allow(dead_code)]
 pub(crate) fn reclamees_ailleurs(
     template_dir: Option<&Path>,
     partant: &str,
@@ -414,9 +402,6 @@ pub(crate) fn reclamees_ailleurs(
 /// refusée plutôt que tranchée : `add` étant idempotent, elle ne peut venir que d'une
 /// réécriture manuelle — un renommage, une copie — que cette commande ne doit pas juger
 /// à la place de l'utilisateur.
-// Sans appelant hors de `actions`, elle-même sans appelant avant `rbs remove` ; les
-// tests de ce module l'appellent directement, ce que la seule compilation `--lib` ignore.
-#[allow(dead_code)]
 pub(crate) fn migration_de(
     builder: &plan::Builder,
     declared: &manifest::DeclaredMigration,
@@ -460,8 +445,6 @@ pub(crate) fn migration_de(
 }
 
 /// Rend `source` dans le contexte du fragment, en nommant `destination` si elle échoue.
-// Sans appelant hors de `actions`, elle-même sans appelant avant `rbs remove`.
-#[allow(dead_code)]
 fn render(
     renderer: &Renderer,
     fragment: &Fragment,

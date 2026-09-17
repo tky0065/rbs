@@ -128,8 +128,9 @@ pub fn yellow(text: &str) -> String {
 /// Ce qu'une commande a écrit, par ce qui est arrivé aux fichiers.
 ///
 /// Le seul total mentait : `add cors` annonçait neuf fichiers à écrire puis se disait
-/// installé en trois, ne comptant que ceux qu'il avait créés.
-pub fn bilan(crees: usize, modifies: usize) -> String {
+/// installé en trois, ne comptant que ceux qu'il avait créés. `rbs remove` ferait mentir
+/// le compte à son tour s'il classait un fichier supprimé parmi les modifiés.
+pub fn bilan(crees: usize, modifies: usize, supprimes: usize) -> String {
     let pluriel = |n: usize| if n > 1 { "s" } else { "" };
     let mut segments = Vec::new();
     if crees > 0 {
@@ -137,6 +138,9 @@ pub fn bilan(crees: usize, modifies: usize) -> String {
     }
     if modifies > 0 {
         segments.push(format!("{modifies} modifié{}", pluriel(modifies)));
+    }
+    if supprimes > 0 {
+        segments.push(format!("{supprimes} supprimé{}", pluriel(supprimes)));
     }
     if segments.is_empty() {
         return "aucun fichier".to_string();
@@ -172,10 +176,18 @@ impl Write for Rompue {
 mod tests {
     #[test]
     fn the_summary_separates_created_and_modified_files() {
-        assert_eq!(super::bilan(3, 6), "3 créés, 6 modifiés");
-        assert_eq!(super::bilan(1, 0), "1 créé");
-        assert_eq!(super::bilan(0, 1), "1 modifié");
-        assert_eq!(super::bilan(0, 0), "aucun fichier");
+        assert_eq!(super::bilan(3, 6, 0), "3 créés, 6 modifiés");
+        assert_eq!(super::bilan(1, 0, 0), "1 créé");
+        assert_eq!(super::bilan(0, 1, 0), "1 modifié");
+        assert_eq!(super::bilan(0, 0, 0), "aucun fichier");
+    }
+
+    /// `rbs remove` a besoin d'un troisième compte, distinct des deux autres : un
+    /// fichier supprimé n'est ni créé ni modifié.
+    #[test]
+    fn the_summary_also_names_deleted_files_apart_from_the_other_two_counts() {
+        assert_eq!(super::bilan(0, 0, 2), "2 supprimés");
+        assert_eq!(super::bilan(1, 1, 1), "1 créé, 1 modifié, 1 supprimé");
     }
 
     use super::*;

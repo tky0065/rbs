@@ -134,8 +134,8 @@ mod tests {
     use crate::metadata;
     use crate::prompts::PromptError;
     use crate::{
-        add, anchors, client, dev, doctor, generate::command, migrate, new, openapi, plan, seed,
-        upgrade,
+        add, anchors, client, dev, doctor, generate::command, migrate, new, openapi, plan, remove,
+        seed, upgrade,
     };
 
     #[test]
@@ -159,6 +159,7 @@ mod tests {
     fn a_command_run_outside_a_project_is_a_call_to_correct() {
         let sorties = [
             add::Error::PasUnProjet.sortie(),
+            remove::Error::PasUnProjet.sortie(),
             command::Error::PasUnProjet.sortie(),
             job::Error::PasUnProjet.sortie(),
             migrate::Error::PasUnProjet.sortie(),
@@ -184,6 +185,7 @@ mod tests {
     fn a_file_or_a_tool_out_of_reach_is_the_environment() {
         let sorties = [
             add::Error::Acces(acces()).sortie(),
+            remove::Error::Acces(acces()).sortie(),
             command::Error::Acces(acces()).sortie(),
             job::Error::Acces(acces()).sortie(),
             seed::Error::Acces(acces()).sortie(),
@@ -319,6 +321,50 @@ mod tests {
         );
     }
 
+    /// `remove` n'est pas lifté par `--force` quand un dépendant l'exige : contrairement
+    /// au conflit et au working tree sale, aucun drapeau ne le résout, seul un autre
+    /// retrait le peut — d'où `Faute`, et non `Usage`.
+    #[test]
+    fn a_dependant_still_requiring_a_feature_is_a_fault_of_the_project() {
+        assert_eq!(
+            remove::Error::Exigee {
+                feature: "mail".to_string(),
+                dependants: "auth".to_string(),
+            }
+            .sortie(),
+            Sortie::Faute
+        );
+    }
+
+    /// Un nom qui ne désigne aucun fragment est un mauvais appel, comme `Unknown` chez
+    /// `add`.
+    #[test]
+    fn an_unknown_fragment_name_is_a_call_to_correct() {
+        assert_eq!(
+            remove::Error::PasUnFragment {
+                feature: "n-existe-pas".to_string(),
+                known: "cors, mail".to_string(),
+            }
+            .sortie(),
+            Sortie::Usage
+        );
+    }
+
+    /// `Desinstallation` n'est pas une seule famille figée comme l'est `Installation`
+    /// chez `add` : elle porte elle-même une panne d'environnement (`Acces`) à côté de
+    /// fautes du projet, et une erreur de plan qui garde la famille de sa cause.
+    #[test]
+    fn the_wrapped_uninstallation_error_keeps_the_family_of_its_own_variant() {
+        assert_eq!(
+            remove::Error::Desinstallation(remove::desinstallation::Error::Acces(acces())).sortie(),
+            Sortie::Environnement
+        );
+        assert_eq!(
+            remove::Error::Desinstallation(remove::desinstallation::Error::Plan(ancre())).sortie(),
+            Sortie::Faute
+        );
+    }
+
     /// Un test rouge garde le code que `cargo test` a rendu : une CI le distingue d'une
     /// commande qui n'a pas pu démarrer.
     #[test]
@@ -345,6 +391,17 @@ mod tests {
                 files: "a".to_string(),
             })
             .code(),
+            remove::Error::PasUnFragment {
+                feature: "n-existe-pas".to_string(),
+                known: "cors, mail".to_string(),
+            }
+            .code(),
+            remove::Error::Exigee {
+                feature: "mail".to_string(),
+                dependants: "auth".to_string(),
+            }
+            .code(),
+            remove::Error::Desinstallation(remove::desinstallation::Error::Acces(acces())).code(),
             command::Error::PasUnProjet.code(),
             command::Error::DejaPresente {
                 path: "src/articles".to_string(),
