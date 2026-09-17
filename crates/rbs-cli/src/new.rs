@@ -352,7 +352,15 @@ fn validate_features(features: &[String], disponibles: &[String]) -> Result<(), 
 /// Le pilote se choisit ici, et les défauts du noyau sont coupés : les laisser actifs
 /// ferait compiler PostgreSQL à un projet MySQL, les features de Cargo s'unifiant sur
 /// toute la dépendance.
-fn core_dependency(core_path: Option<&Path>, database: Database) -> Result<String, Error> {
+///
+/// Visible de toute la crate parce que le retrait en dépend : la ligne `rbs-core` du
+/// squelette est *entièrement* une expression Jinja, et la garde qui vérifie qu'aucun
+/// fragment ne rallume une feature que le squelette déclare doit la résoudre par son
+/// producteur plutôt que par une liste écrite à la main, qui se périmerait ici même.
+pub(crate) fn core_dependency(
+    core_path: Option<&Path>,
+    database: Database,
+) -> Result<String, Error> {
     let provenance = match core_path {
         None => format!("version = \"{}\"", env!("CARGO_PKG_VERSION")),
         Some(path) => {

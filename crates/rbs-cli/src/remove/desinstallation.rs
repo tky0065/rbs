@@ -20,6 +20,7 @@ use std::path::Path;
 
 use crate::add::installation;
 use crate::anchors::{self, Anchor};
+use crate::database::Database;
 use crate::generate::mount;
 use crate::manifest::{self, Manifest};
 use crate::plan;
@@ -37,8 +38,10 @@ use crate::templates;
 ///
 /// Ce fichier n'est pas du TOML valide — `rbs-core = {@ rbs_core_dep @}` et les autres
 /// expressions Jinja le rendraient illisible par `toml_edit` — mais une lecture ligne à
-/// ligne du corps de la table suffit à ce qu'on lui demande : le nom de chaque dépendance,
-/// et les features que sa valeur active, sans avoir à rendre le gabarit.
+/// ligne du corps de la table suffit à en tirer le nom de chaque dépendance. Les features
+/// que sa valeur active demandent un pas de plus, que [`features_resolues`] fait : deux de
+/// ces quatorze valeurs sont elles-mêmes des expressions Jinja, qu'il faut rendre avant
+/// de pouvoir les lire.
 ///
 /// Toujours le squelette **embarqué**, jamais celui d'un `--template-dir` : la garde
 /// protège le binaire que `cargo build` verra, quel que soit le squelette qu'un fragment
@@ -52,6 +55,7 @@ fn squelette() -> BTreeMap<String, BTreeSet<String>> {
         .find(|file| file.destination == Path::new("Cargo.toml"))
         .expect("le squelette embarqué porte toujours un Cargo.toml.jinja");
 
+    let renderer = Renderer::new();
     let mut noms = BTreeMap::new();
     let mut dans_dependencies = false;
     for ligne in cargo.source.lines() {
@@ -69,20 +73,58 @@ fn squelette() -> BTreeMap<String, BTreeSet<String>> {
         }
 
         if let Some((nom, valeur)) = ligne.split_once('=') {
-            noms.insert(nom.trim().to_string(), features_declarees(valeur));
+            noms.insert(nom.trim().to_string(), features_resolues(&renderer, valeur));
         }
     }
 
     noms
 }
 
-/// Les features qu'une ligne de `[dependencies]` active, quand elle en nomme.
+/// Les features qu'une ligne de `[dependencies]` active, les trois moteurs réunis.
+///
+/// Deux des quatorze lignes du squelette sont opaques à une lecture littérale, et ce sont
+/// justement celles que six blocs `[cargo.X]` de fragment visent : la valeur de `rbs-core`
+/// est *entièrement* une expression Jinja — sans même une sous-chaîne `features` à y
+/// trouver — et la première feature de `sea-orm` en est une, qui entrait comme un nom
+/// littéral. La garde annonçait quatorze dépendances et n'en couvrait réellement que douze.
+///
+/// La ligne est donc rendue avant d'être lue, par les producteurs de `rbs new` eux-mêmes —
+/// [`crate::new::core_dependency`] et [`Database::sea_orm_feature`] — et une fois par
+/// moteur : le squelette embarqué ne dit pas lequel le projet portera, l'union est la
+/// seule réponse sûre. `rbs-core` rend ainsi `postgres`, `mysql` et `sqlite` ; `sea-orm`,
+/// ses `sqlx-*` en plus de ses features littérales.
+///
+/// Un rendu qui échoue retombe sur la lecture littérale : une variable ajoutée au
+/// squelette dégraderait la garde, jamais `rbs remove` chez l'utilisateur — et
+/// `the_resolved_skeleton_carries_what_its_jinja_expressions_produce` la rattrape.
+fn features_resolues(renderer: &Renderer, valeur: &str) -> BTreeSet<String> {
+    Database::TOUS
+        .iter()
+        .flat_map(|moteur| {
+            // `core_dependency` n'échoue que sur un `--core-path` illisible, et il n'y en
+            // a pas ici : le squelette se lit sans projet ni ligne de commande.
+            let rbs_core_dep = crate::new::core_dependency(None, *moteur).unwrap_or_default();
+            let rendue = renderer
+                .render(
+                    valeur,
+                    minijinja::context! {
+                        rbs_core_dep => rbs_core_dep,
+                        sea_orm_feature => moteur.sea_orm_feature(),
+                    },
+                )
+                .unwrap_or_else(|_| valeur.to_string());
+
+            features_declarees(&rendue)
+        })
+        .collect()
+}
+
+/// Les features qu'une ligne rendue de `[dependencies]` nomme, quand elle en nomme.
 ///
 /// Le même gabarit que [`squelette`], lu de la même façon et pour la même raison : une
 /// liste écrite à la main se périmerait au premier flag ajouté au squelette. La valeur
-/// n'est pas du TOML — `features = ["{@ sea_orm_feature @}", …]` porte une expression
-/// Jinja — mais la liste tient sur la ligne, entre crochets, et ses éléments sont des
-/// chaînes : une expression Jinja y entre comme un nom qu'aucun fragment ne réclame.
+/// n'est pas du TOML même une fois rendue — c'est un fragment de table inline — mais la
+/// liste tient sur la ligne, entre crochets, et ses éléments sont des chaînes.
 fn features_declarees(valeur: &str) -> BTreeSet<String> {
     let Some(apres) = valeur.split_once("features").map(|(_, apres)| apres) else {
         return BTreeSet::new();
@@ -747,6 +789,46 @@ mod tests {
         assert_eq!(squelette().into_keys().collect::<BTreeSet<_>>(), attendues);
     }
 
+    /// La vue résolue rend ce que les expressions Jinja du squelette produisent.
+    ///
+    /// Sans elle, `rbs-core = {@ rbs_core_dep @}` n'offre pas même une sous-chaîne
+    /// `features` à lire, et la première feature de `sea-orm` entre comme le nom littéral
+    /// `{@ sea_orm_feature @}` : les deux dépendances que les fragments patchent le plus
+    /// étaient les deux que la garde ne couvrait pas. Ce test est ce qui empêche la
+    /// résolution de redevenir vide en silence — le défaut exact qu'elle corrige.
+    #[test]
+    fn the_resolved_skeleton_carries_what_its_jinja_expressions_produce() {
+        let squelette = squelette();
+
+        let moteurs: BTreeSet<String> = Database::TOUS
+            .iter()
+            .map(|moteur| moteur.name().to_string())
+            .collect();
+        assert_eq!(
+            squelette.get("rbs-core"),
+            Some(&moteurs),
+            "le noyau ne porte que le moteur, et l'union vaut les trois projets possibles"
+        );
+
+        let sea_orm = squelette
+            .get("sea-orm")
+            .expect("le squelette déclare sea-orm");
+        for moteur in Database::TOUS {
+            assert!(
+                sea_orm.contains(moteur.sea_orm_feature()),
+                "sea-orm doit porter {} : {sea_orm:?}",
+                moteur.sea_orm_feature()
+            );
+        }
+        for litterale in ["runtime-tokio-rustls", "macros", "with-chrono", "with-uuid"] {
+            assert!(
+                sea_orm.contains(litterale),
+                "la résolution ne doit rien perdre des features littérales, {litterale} \
+                 comprise : {sea_orm:?}"
+            );
+        }
+    }
+
     /// Aucun `[cargo.X]` de fragment n'active une feature que le squelette déclare déjà.
     ///
     /// La section 5 ne consulte pas le squelette, là où la section 4 le fait : une feature
@@ -757,6 +839,20 @@ mod tests {
     #[test]
     fn no_fragment_turns_on_a_cargo_feature_the_skeleton_already_declares() {
         let squelette = squelette();
+
+        // Une garde qui certifie quatorze dépendances et n'en couvre que douze ne vaut
+        // pas mieux qu'une garde qui ne parcourt rien : les deux opaques sont celles que
+        // six blocs `[cargo.X]` visent, et c'est ici qu'on s'assure qu'elles ont un
+        // contenu à comparer.
+        for (dependance, attendue) in [("rbs-core", "postgres"), ("sea-orm", "sqlx-postgres")] {
+            assert!(
+                squelette
+                    .get(dependance)
+                    .is_some_and(|features| features.contains(attendue)),
+                "{dependance} doit entrer résolue, {attendue} comprise : {:?}",
+                squelette.get(dependance)
+            );
+        }
 
         // `feature_names`, et non `feature_names_with_manifest` : sur la source embarquée,
         // la seconde rend une liste vide — mesuré — et ce garde ne parcourrait rien. Un
