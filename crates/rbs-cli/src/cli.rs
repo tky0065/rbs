@@ -1122,6 +1122,7 @@ mod tests {
     fn json_de(commande: &Commands) -> bool {
         match commande {
             Commands::Add { json, .. }
+            | Commands::Remove { json, .. }
             | Commands::Upgrade { json, .. }
             | Commands::Generate {
                 command:
@@ -1135,13 +1136,14 @@ mod tests {
         }
     }
 
-    /// Les sept commandes qui planifient rendent leur plan en JSON sur demande, et
+    /// Les huit commandes qui planifient rendent leur plan en JSON sur demande, et
     /// seulement sur demande : sans le drapeau, le rendu humain que la documentation
     /// transcrit reste celui qui s'affiche.
     #[test]
-    fn the_seven_planning_commands_accept_json_and_default_to_the_human_rendering() {
+    fn the_eight_planning_commands_accept_json_and_default_to_the_human_rendering() {
         for commande in [
             vec!["rbs", "add", "cors"],
+            vec!["rbs", "remove", "cors"],
             vec!["rbs", "generate", "crud", "articles"],
             vec!["rbs", "generate", "feature", "articles"],
             vec!["rbs", "generate", "client", "--lang", "ts"],
