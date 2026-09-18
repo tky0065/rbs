@@ -111,6 +111,24 @@ pub trait HasAuth: HasCoreState {
         let _ = extensions;
         self.accept(claims)
     }
+
+    /// Ce que le projet fait d'une clé d'API portée par `X-Api-Key`.
+    ///
+    /// Le défaut refuse : un projet qui n'a pas installé le fragment `api-keys` ne connaît
+    /// aucune clé, et l'en-tête n'y ouvre rien. Le fragment surcharge cette méthode pour
+    /// lire sa table, plafonner le rôle et rendre les claims de l'appelant.
+    ///
+    /// Les extensions sont à portée pour la même raison que dans [`HasAuth::accept_in`] :
+    /// le projet vient de lire le compte pour juger la clé, et peut y laisser ce qu'il en
+    /// sait plutôt que de le faire relire à l'extracteur suivant.
+    fn accept_key(
+        &self,
+        key: &str,
+        extensions: &mut axum::http::Extensions,
+    ) -> impl std::future::Future<Output = Result<crate::jwt::Claims, crate::Error>> + Send {
+        let _ = (key, extensions);
+        async { Err(crate::Error::Unauthorized) }
+    }
 }
 
 #[cfg(feature = "auth")]
@@ -234,5 +252,33 @@ mod tests {
         let core = state("bonjour").core;
 
         assert_eq!(core.core().config().env, core.config().env);
+    }
+
+    /// Un état qui n'a pas installé le fragment `api-keys` : il ne surcharge rien.
+    #[cfg(feature = "auth")]
+    #[derive(Clone)]
+    struct SansCles(CoreState);
+
+    #[cfg(feature = "auth")]
+    impl HasCoreState for SansCles {
+        fn core(&self) -> &CoreState {
+            &self.0
+        }
+    }
+
+    #[cfg(feature = "auth")]
+    impl HasAuth for SansCles {}
+
+    /// Le défaut refuse, et c'est ce qui rend l'ajout inoffensif : un projet qui ignore les
+    /// clés n'en accepte aucune, quelle que soit la valeur présentée.
+    #[cfg(feature = "auth")]
+    #[tokio::test]
+    async fn a_state_that_declares_no_key_store_refuses_every_key() {
+        let etat = SansCles(CoreState::new(DatabaseConnection::default(), config()));
+        let mut extensions = axum::http::Extensions::new();
+
+        let verdict = etat.accept_key("rbs_peu_importe", &mut extensions).await;
+
+        assert!(matches!(verdict, Err(crate::Error::Unauthorized)));
     }
 }
