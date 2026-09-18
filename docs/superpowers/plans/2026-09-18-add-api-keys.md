@@ -928,7 +928,7 @@ pub mod service;
 mod tests;
 
 use axum::Router;
-use axum::routing::{delete, get, post};
+use axum::routing::{delete, post};
 
 use crate::state::AppState;
 
