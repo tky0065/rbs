@@ -1,0 +1,96 @@
+[feature]
+description = "clés d'API : authentification machine, rôle plafonné par le porteur, trace d'usage"
+# Une clé appartient à un compte et porte un rôle : les deux viennent d'`auth`, qui livre
+# la table `users`, l'énumération `Role` et la garde `require_role`. Le fragment y pose
+# aussi sa méthode de jugement, dans l'implémentation de `HasAuth` qu'`auth` dépose —
+# `requires` est donc une dépendance dure, non un confort.
+requires = ["auth"]
+
+[[files]]
+source      = "mod.rs.jinja"
+destination = "src/modules/api_keys/mod.rs"
+
+[[files]]
+source      = "model.rs.jinja"
+destination = "src/modules/api_keys/model.rs"
+
+[[files]]
+source      = "dto.rs.jinja"
+destination = "src/modules/api_keys/dto.rs"
+
+[[files]]
+source      = "repository.rs.jinja"
+destination = "src/modules/api_keys/repository.rs"
+
+[[files]]
+source      = "service.rs.jinja"
+destination = "src/modules/api_keys/service.rs"
+
+[[files]]
+source      = "controller.rs.jinja"
+destination = "src/modules/api_keys/controller.rs"
+
+[[files]]
+source      = "tests/mod.rs.jinja"
+destination = "src/modules/api_keys/tests/mod.rs"
+
+[[files]]
+source      = "tests/accept.rs.jinja"
+destination = "src/modules/api_keys/tests/accept.rs"
+
+[[files]]
+source      = "tests/routes.rs.jinja"
+destination = "src/modules/api_keys/tests/routes.rs"
+
+[[anchors]]
+anchor  = "modules"
+content = "pub mod api_keys;"
+
+[[anchors]]
+anchor  = "routes"
+content = ".merge(crate::modules::api_keys::routes())"
+
+[[anchors]]
+anchor  = "openapi"
+content = """
+crate::modules::api_keys::controller::create,
+crate::modules::api_keys::controller::list,
+crate::modules::api_keys::controller::revoke,
+crate::modules::api_keys::controller::revoke_all,
+"""
+
+# Le seul endroit où le projet peut dire ce qu'est une clé : `HasAuth` ne s'implémente
+# qu'une fois, et c'est `auth` qui tient cette implémentation. `Extensions` et `Claims` y
+# sont déjà importés — l'insertion n'a aucun `use` à ajouter.
+#
+# Indentation **relative** : `insert` préfixe chaque ligne par celle de la balise
+# fermante, qui vaut quatre espaces ici.
+[[anchors]]
+anchor  = "auth_impl"
+content = """
+/// Ce que vaut une clé d'API présentée en `X-Api-Key`.
+///
+/// Le noyau ne connaît ni la table des clés ni la règle du plafond : il demande.
+async fn accept_key(
+    &self,
+    key: &str,
+    extensions: &mut Extensions,
+) -> rbs_core::Result<Claims> {
+    crate::modules::api_keys::service::accept(self, key, extensions).await
+}
+"""
+
+[migration]
+source = "migration.rs.jinja"
+name   = "create_api_keys"
+
+# `token::random` et `token::fingerprint` tirent et empreignent la clé, `Claims` la porte
+# jusqu'à l'extracteur : les trois vivent derrière cette feature du noyau. `auth` l'active
+# déjà — la redéclarer dit qu'`api-keys` en dépend pour son propre compte.
+[cargo.rbs-core]
+features = ["auth"]
+
+# `sync` : les tests livrés se relaient sur l'unique table `api_keys`, et leur verrou
+# traverse un `await`.
+[cargo.tokio]
+features = ["sync"]

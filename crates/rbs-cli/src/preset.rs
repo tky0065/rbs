@@ -75,6 +75,7 @@ mod tests {
 
     fn disponibles() -> Vec<String> {
         [
+            "api-keys",
             "audit",
             "auth",
             "ci",

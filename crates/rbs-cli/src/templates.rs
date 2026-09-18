@@ -769,7 +769,8 @@ mod tests {
     /// demande « telle feature est-elle posée ? » répond oui : sans ce contexte, une
     /// chaîne anglaise cachée derrière une feature absente du `[][..]` ou `["redis"][..]`
     /// des autres tests ne serait jamais exercée.
-    const TOUTES: [&str; 13] = [
+    const TOUTES: [&str; 14] = [
+        "api-keys",
         "audit",
         "auth",
         "ci",
@@ -949,6 +950,7 @@ mod tests {
         // Énumérées une à une plutôt qu'en un bloc : la liste s'allonge à chaque fragment
         // livré, et l'ordre alphabétique intercale les nouveaux venus.
         for installable in [
+            "api-keys",
             "audit",
             "auth",
             "ci",
@@ -990,6 +992,60 @@ mod tests {
         assert!(ancres.contains(&"jobs"), "{ancres:?}");
         assert!(ancres.contains(&"routes"), "{ancres:?}");
         assert!(ancres.contains(&"openapi"), "{ancres:?}");
+    }
+
+    /// Le fragment n'a de sens qu'avec des comptes et des rôles : il tient son `Role` et sa
+    /// garde du fragment `auth`, et pose sa méthode dans l'implémentation que celui-ci
+    /// dépose.
+    #[test]
+    fn the_api_keys_fragment_requires_auth_and_writes_into_its_implementation() {
+        let source = read(&Path::new(RACINE_FEATURES).join("api-keys/feature.toml"));
+        let manifest = crate::manifest::read(&source, "api-keys/feature.toml")
+            .expect("le manifeste du fragment api-keys doit se lire");
+
+        assert_eq!(manifest.feature.requires, ["auth"]);
+
+        let ancres: Vec<&str> = manifest
+            .anchors
+            .iter()
+            .map(|insertion| insertion.anchor.as_str())
+            .collect();
+        assert!(ancres.contains(&"auth_impl"), "ancres : {ancres:?}");
+        assert!(ancres.contains(&"modules"), "ancres : {ancres:?}");
+        assert!(ancres.contains(&"routes"), "ancres : {ancres:?}");
+        assert!(ancres.contains(&"openapi"), "ancres : {ancres:?}");
+
+        let migration = manifest
+            .migration
+            .expect("le fragment pose une table : il doit déclarer sa migration");
+        assert_eq!(migration.name, "create_api_keys");
+    }
+
+    /// Le contenu d'une ancre est écrit en indentation **relative** : `insert` préfixe
+    /// chaque ligne par celle de la balise fermante, qui vaut quatre espaces à l'intérieur
+    /// de l'`impl`. Une ligne déjà indentée dans le manifeste ressortirait à huit.
+    #[test]
+    fn the_auth_impl_insertion_carries_no_leading_indentation_on_its_first_line() {
+        let source = read(&Path::new(RACINE_FEATURES).join("api-keys/feature.toml"));
+        let manifest = crate::manifest::read(&source, "api-keys/feature.toml")
+            .expect("le manifeste du fragment api-keys doit se lire");
+
+        let contenu = &manifest
+            .anchors
+            .iter()
+            .find(|insertion| insertion.anchor == "auth_impl")
+            .expect("le fragment insère dans `auth_impl`")
+            .content;
+
+        let premiere = contenu
+            .lines()
+            .find(|ligne| !ligne.trim().is_empty())
+            .expect("le contenu n'est pas vide");
+        assert_eq!(
+            premiere,
+            premiere.trim_start(),
+            "la première ligne ne doit porter aucune indentation : {premiere:?}"
+        );
     }
 
     #[test]
