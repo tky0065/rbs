@@ -10,6 +10,14 @@ requires = ["auth"]
 source      = "model.rs.jinja"
 destination = "src/modules/api_keys/model.rs"
 
+[[files]]
+source      = "repository.rs.jinja"
+destination = "src/modules/api_keys/repository.rs"
+
+[[files]]
+source      = "service.rs.jinja"
+destination = "src/modules/api_keys/service.rs"
+
 [[anchors]]
 anchor  = "modules"
 content = "pub mod api_keys;"
