@@ -7,6 +7,10 @@ description = "clés d'API : authentification machine, rôle plafonné par le po
 requires = ["auth"]
 
 [[files]]
+source      = "mod.rs.jinja"
+destination = "src/modules/api_keys/mod.rs"
+
+[[files]]
 source      = "model.rs.jinja"
 destination = "src/modules/api_keys/model.rs"
 
@@ -25,6 +29,18 @@ destination = "src/modules/api_keys/dto.rs"
 [[files]]
 source      = "controller.rs.jinja"
 destination = "src/modules/api_keys/controller.rs"
+
+[[files]]
+source      = "tests/mod.rs.jinja"
+destination = "src/modules/api_keys/tests/mod.rs"
+
+[[files]]
+source      = "tests/accept.rs.jinja"
+destination = "src/modules/api_keys/tests/accept.rs"
+
+[[files]]
+source      = "tests/routes.rs.jinja"
+destination = "src/modules/api_keys/tests/routes.rs"
 
 [[anchors]]
 anchor  = "modules"
