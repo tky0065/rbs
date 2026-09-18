@@ -1,7 +1,7 @@
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use rbs_core::{Error, HasCoreState, Identity, ProblemDetails, Result, ValidatedJson};
+use rbs_core::{Error, Identity, ProblemDetails, Result, ValidatedJson};
 use sea_orm::ActiveEnum;
 use sea_orm::prelude::Uuid;
 
@@ -26,6 +26,7 @@ use crate::state::AppState;
     request_body = CreateApiKey,
     responses(
         (status = 201, description = "clé tirée, rendue cette seule fois", body = ApiKeyCreated),
+        (status = 400, description = "rôle inconnu", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 401, description = "justificatif absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "rôle demandé supérieur à celui de l'appelant", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 422, description = "entrée invalide", body = ProblemDetails, content_type = "application/problem+json")
