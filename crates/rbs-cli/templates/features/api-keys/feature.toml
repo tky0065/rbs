@@ -14,34 +14,6 @@ destination = "src/modules/api_keys/mod.rs"
 source      = "model.rs.jinja"
 destination = "src/modules/api_keys/model.rs"
 
-[[files]]
-source      = "dto.rs.jinja"
-destination = "src/modules/api_keys/dto.rs"
-
-[[files]]
-source      = "repository.rs.jinja"
-destination = "src/modules/api_keys/repository.rs"
-
-[[files]]
-source      = "service.rs.jinja"
-destination = "src/modules/api_keys/service.rs"
-
-[[files]]
-source      = "controller.rs.jinja"
-destination = "src/modules/api_keys/controller.rs"
-
-[[files]]
-source      = "tests/mod.rs.jinja"
-destination = "src/modules/api_keys/tests/mod.rs"
-
-[[files]]
-source      = "tests/accept.rs.jinja"
-destination = "src/modules/api_keys/tests/accept.rs"
-
-[[files]]
-source      = "tests/routes.rs.jinja"
-destination = "src/modules/api_keys/tests/routes.rs"
-
 [[anchors]]
 anchor  = "modules"
 content = "pub mod api_keys;"

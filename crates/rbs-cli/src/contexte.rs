@@ -219,8 +219,8 @@ mod tests {
         // Un garde qui ne parcourt rien passe au vert sans rien prouver : c'est exactement
         // ce qu'il a fait tant qu'il lisait `feature_names_with_manifest`.
         assert_eq!(
-            vus, 13,
-            "les treize fragments embarqués doivent être parcourus"
+            vus, 14,
+            "les quatorze fragments embarqués doivent être parcourus"
         );
     }
 }
