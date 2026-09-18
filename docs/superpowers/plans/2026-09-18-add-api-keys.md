@@ -2686,9 +2686,20 @@ Dans un worktree neuf, `npm ci` sous `docs/` avant `npm run build`.
 
 **Files:**
 - Modify: `docs/docs/cli/add.md:8,21,44,344,478`, `docs/docs/cli/new.md:278,348`, `docs/docs/cli/remove.md:47,184`
-- Modify: les trois jumelles sous `docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/`
+- Modify: `docs/docs/cli/completions.md` — la page fige un **script de complétion bash**
+  dont la ligne `rbs__subcmd__add` énumère les fragments séparés par des espaces
+- Modify: les **quatre** jumelles sous `docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/`
+  (`add.md`, `new.md`, `remove.md`, `completions.md`)
 
-Deux natures, à ne pas confondre :
+**Huit pages** figent cette liste, relevées par `grep` et non supposées — quatre en
+anglais, quatre en français — sous **deux formes** qu'il faut chercher séparément :
+
+- la forme **à espaces**, celle du script de complétion : `audit auth ci cors docker …`
+  (`completions.md` et sa jumelle) ;
+- la forme **à virgules**, celle des messages d'erreur du CLI : `audit, auth, ci, cors, …`
+  (`add.md`, `new.md`, `remove.md` et leurs jumelles).
+
+Trois natures de garde, à ne pas confondre :
 
 - **Gardées par une transcription**, donc **rouges dès la tâche 5** tant qu'elles ne sont
   pas reprises : `new.md:345` (`rbs new site --with graphql --yes`) et `remove.md:181`
@@ -2696,6 +2707,11 @@ Deux natures, à ne pas confondre :
 - **Non gardées**, donc à reprendre à la main sous peine de mentir en silence : **toutes
   celles d'`add.md`** — ce fichier ne porte aucun marqueur `{/* rbs:transcript */}`, dans
   aucune des deux langues. Le bloc `rbs add graphql` de la ligne 344 en fait partie.
+- **Gardée et déjà rouge** : `completions.md:85` et sa jumelle. C'est la **seule** page que
+  la suite ait signalée après la tâche 5 — `the_marked_transcripts_still_render_what_the_docs_show`
+  s'arrête au premier écart, si bien qu'elle ne nomme qu'une page à la fois. **L'inventaire
+  ci-dessus fait foi, pas la suite** : la corriger ne fera qu'avancer le test jusqu'à la
+  suivante.
 
 Ne pas oublier le titre `## The thirteen features` / `## Les treize features` **et le lien**
 qui le vise (`#the-thirteen-features`, `#les-treize-features`), ainsi que la ligne du
