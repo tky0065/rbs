@@ -23,6 +23,10 @@ use sea_orm::prelude::Uuid;
 #[cfg(feature = "auth")]
 const SCHEMA: &str = "bearer";
 
+/// En-tête portant une clé d'API. Insensible à la casse, comme tout nom d'en-tête HTTP.
+#[cfg(feature = "auth")]
+const API_KEY: &str = "x-api-key";
+
 /// Identité authentifiée, extraite du jeton porté par la requête.
 ///
 /// L'extracteur lit les en-têtes et ne touche pas au corps : un extracteur qui le
@@ -53,15 +57,34 @@ impl<S: HasAuth> FromRequestParts<S> for Identity {
     type Rejection = Error;
 
     async fn from_request_parts(parts: &mut Parts, state: &S) -> Result<Self, Self::Rejection> {
-        let token = parts
+        // Le jeton d'abord : c'est le justificatif le plus spécifique, et un mandataire qui
+        // injecterait une clé de service ne doit pas supplanter celui que l'appelant a
+        // présenté.
+        if let Some(token) = parts
             .headers
             .get(AUTHORIZATION)
             .and_then(|value| value.to_str().ok())
             .and_then(bearer)
-            .ok_or(Error::Unauthorized)?;
+        {
+            let claims = crate::jwt::verify(token, &state.auth().secret)?;
+            state.accept_in(&claims, &mut parts.extensions).await?;
 
-        let claims = crate::jwt::verify(token, &state.auth().secret)?;
-        state.accept_in(&claims, &mut parts.extensions).await?;
+            return Ok(Self {
+                user_id: claims.sub,
+                role: claims.role,
+            });
+        }
+
+        let key = parts
+            .headers
+            .get(API_KEY)
+            .and_then(|value| value.to_str().ok())
+            .ok_or(Error::Unauthorized)?
+            .to_owned();
+
+        // Le projet est seul à savoir ce qu'est une clé : le noyau n'a ni la table ni la
+        // règle. Le défaut du trait refuse, un projet sans le fragment n'ouvre donc rien.
+        let claims = state.accept_key(&key, &mut parts.extensions).await?;
 
         Ok(Self {
             user_id: claims.sub,
@@ -494,6 +517,121 @@ mod tests {
                 StatusCode::UNAUTHORIZED,
                 "un token nu, hors du schéma `Bearer`, n'est pas une autorisation : {body}"
             );
+        }
+
+        /// Un état qui accepte une clé unique et lui donne un rôle : ce que le fragment
+        /// `api-keys` écrira, réduit à ce que l'extracteur doit en voir.
+        #[derive(Clone)]
+        struct AvecCles(AppState);
+
+        impl HasCoreState for AvecCles {
+            fn core(&self) -> &CoreState {
+                self.0.core()
+            }
+        }
+
+        impl HasAuth for AvecCles {
+            async fn accept_key(
+                &self,
+                key: &str,
+                extensions: &mut axum::http::Extensions,
+            ) -> Result<Claims, crate::Error> {
+                if key != "rbs_la_bonne" {
+                    return Err(crate::Error::Unauthorized);
+                }
+                extensions.insert(Relu("par la clé".to_owned()));
+                Ok(Claims {
+                    sub: "u7".to_owned(),
+                    role: "user".to_owned(),
+                    exp: LATER,
+                    iat: 0,
+                    jti: "cle-1".to_owned(),
+                })
+            }
+        }
+
+        /// Appelle un handler protégé en présentant les en-têtes donnés.
+        async fn call_with(autorisation: Option<&str>, cle: Option<&str>) -> (StatusCode, String) {
+            async fn handler(identite: Identity) -> String {
+                format!("{} {}", identite.user_id, identite.role)
+            }
+
+            let mut requete = Request::builder().uri("/");
+            if let Some(autorisation) = autorisation {
+                requete = requete.header(header::AUTHORIZATION, autorisation);
+            }
+            if let Some(cle) = cle {
+                requete = requete.header("x-api-key", cle);
+            }
+
+            let response = Router::new()
+                .route("/", get(handler))
+                .with_state(AvecCles(state()))
+                .oneshot(requete.body(Body::empty()).expect("requête valide"))
+                .await
+                .expect("le router doit répondre");
+
+            let status = response.status();
+            let bytes = to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("corps lisible");
+
+            (status, String::from_utf8_lossy(&bytes).into_owned())
+        }
+
+        #[tokio::test]
+        async fn a_valid_key_alone_identifies_the_caller() {
+            let (status, body) = call_with(None, Some("rbs_la_bonne")).await;
+
+            assert_eq!(status, StatusCode::OK, "obtenu : {body}");
+            assert_eq!(body, "u7 user");
+        }
+
+        #[tokio::test]
+        async fn an_unknown_key_is_unauthorized() {
+            let (status, _) = call_with(None, Some("rbs_pas_celle_la")).await;
+
+            assert_eq!(status, StatusCode::UNAUTHORIZED);
+        }
+
+        /// Le jeton l'emporte : c'est le justificatif le plus spécifique, et un mandataire qui
+        /// injecterait une clé de service ne doit pas supplanter celui que l'appelant présente.
+        #[tokio::test]
+        async fn a_bearer_token_wins_over_a_key_presented_at_the_same_time() {
+            let bearer = format!("Bearer {}", token(LATER, SECRET));
+
+            let (status, body) = call_with(Some(&bearer), Some("rbs_la_bonne")).await;
+
+            assert_eq!(status, StatusCode::OK, "obtenu : {body}");
+            assert_eq!(body, "u1 admin", "le jeton doit gouverner : {body}");
+        }
+
+        /// Ce que `accept_key` dépose est à portée de l'extracteur suivant, comme pour
+        /// `accept_in` : sans quoi une garde relirait le compte que le service vient de lire.
+        #[tokio::test]
+        async fn what_accept_key_leaves_in_the_extensions_reaches_the_next_extractor() {
+            async fn handler(_: Identity, axum::Extension(relu): axum::Extension<Relu>) -> String {
+                relu.0
+            }
+
+            let response = Router::new()
+                .route("/", get(handler))
+                .with_state(AvecCles(state()))
+                .oneshot(
+                    Request::builder()
+                        .uri("/")
+                        .header("x-api-key", "rbs_la_bonne")
+                        .body(Body::empty())
+                        .expect("requête valide"),
+                )
+                .await
+                .expect("le router doit répondre");
+
+            assert_eq!(response.status(), StatusCode::OK);
+            let corps = to_bytes(response.into_body(), usize::MAX)
+                .await
+                .expect("corps lisible");
+            assert_eq!(&corps[..], b"par la cl\xc3\xa9");
         }
     }
 }
