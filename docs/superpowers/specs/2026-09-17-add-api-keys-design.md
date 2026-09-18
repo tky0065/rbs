@@ -372,10 +372,11 @@ compilé avant la passe Docker.
 
 ## Ce qui reste ouvert pour le mainteneur
 
-1. **La version.** `v1.4.0` est le dernier tag et le `CHANGELOG` porte une section
-   `[Unreleased]` qui est la 1.5.0. Le fragment y entre, sauf si la 1.5.0 est gelée — et
-   il faudrait alors ouvrir une 1.6.0. La rupture reste **mineure dans les deux cas** : une
-   méthode à corps par défaut ajoutée à un trait public, un schéma de sécurité de plus.
+1. **La version.** Le `CHANGELOG` porte `## [1.5.0] — 2026-09-12` *sous* `## [Unreleased]` :
+   la 1.5.0 est écrite et datée, seulement pas encore taguée — `v1.4.0` reste le dernier
+   tag. `[Unreleased]` est donc la **1.6.0**, et c'est là qu'entrent les entrées de ce
+   fragment, aux côtés de `rbs remove`. Le rang est le bon : une méthode à corps par défaut
+   ajoutée à un trait public et un schéma de sécurité de plus font une **mineure**.
 2. **`api-keys` dans le preset `api`.** `Preset::Full` le prendra automatiquement, étant
    dérivé de la liste des fragments disponibles. `Preset::Api` est nommé, lui : l'y ajouter
    est un choix, et je ne l'ai pas fait.
