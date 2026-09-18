@@ -2281,7 +2281,26 @@ use super::Check;
 
 pub(crate) const TITRE: &str = "api-keys";
 const FICHIER: &str = "src/auth/mod.rs";
+/// L'aiguille de détection : la ligne intérieure de la méthode, cherchée entière et
+/// ébarbée, de sorte que l'indentation de l'insertion ne la fasse pas manquer.
 const DELEGATION: &str = "crate::modules::api_keys::service::accept(self, key, extensions).await";
+
+/// Le bloc que le fragment insère : une méthode, non une instruction.
+///
+/// Le remède le cite en entier parce qu'une instruction nue n'est pas un item d'`impl` —
+/// collée seule entre les balises, elle ne compilerait pas. C'est ce qui distingue ce
+/// contrôle de celui des webhooks, dont l'ancre tient sur une ligne et dont la constante
+/// sert donc à la fois d'aiguille et de remède.
+const BLOC: &str = r#"/// Ce que vaut une clé d'API présentée en `X-Api-Key`.
+///
+/// Le noyau ne connaît ni la table des clés ni la règle du plafond : il demande.
+async fn accept_key(
+    &self,
+    key: &str,
+    extensions: &mut Extensions,
+) -> rbs_core::Result<Claims> {
+    crate::modules::api_keys::service::accept(self, key, extensions).await
+}"#;
 
 pub(crate) fn check(root: &Path) -> Check {
     let source = match super::lire(root, TITRE, FICHIER) {
@@ -2297,7 +2316,7 @@ pub(crate) fn check(root: &Path) -> Check {
     Check::failed(
         TITRE,
         "la délégation des clés d'API n'est pas posée : toute clé rendra 401",
-        format!("dans {FICHIER}, entre les balises de `// <rbs:auth_impl>` :\n{DELEGATION}"),
+        format!("dans {FICHIER}, entre les balises de `// <rbs:auth_impl>` :\n{BLOC}"),
     )
 }
 ```
@@ -2406,6 +2425,11 @@ mod tests {
         assert!(
             inseree.lines().any(|ligne| ligne.trim() == DELEGATION),
             "le manifeste n'insère pas la ligne cherchée :\n{inseree}"
+        );
+        assert_eq!(
+            inseree.trim(),
+            BLOC,
+            "le bloc du remède doit être exactement ce que le fragment insère"
         );
     }
 }
