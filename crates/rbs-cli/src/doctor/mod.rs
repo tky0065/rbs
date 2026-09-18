@@ -6,6 +6,7 @@
 
 pub mod agents;
 pub mod anchors;
+pub mod api_keys;
 pub mod audit;
 pub mod auth;
 pub mod base;
@@ -339,12 +340,19 @@ fn plan(manifeste: &Manifeste) -> Vec<Controle> {
 ///
 /// Une feature peut y figurer deux fois : `auth` amène de quoi vérifier son secret, et de
 /// quoi juger les routes que les rôles qu'elle installe pourraient protéger.
-const FEATURE_CHECKS: [(&str, Controle); 14] = [
+const FEATURE_CHECKS: [(&str, Controle); 15] = [
     (
         "auth",
         Controle {
             titre: auth::TITRE,
             executer: |projet, _| auth::check(&projet.root, &projet.config),
+        },
+    ),
+    (
+        "api-keys",
+        Controle {
+            titre: api_keys::TITRE,
+            executer: |projet, _| api_keys::check(&projet.root),
         },
     ),
     (
