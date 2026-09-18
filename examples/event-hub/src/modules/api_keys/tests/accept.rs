@@ -1,0 +1,181 @@
+use super::*;
+
+use axum::http::Extensions;
+
+/// Le cœur de la feature : une clé ouvre ce qu'un jeton ouvre, sans qu'aucun contrôleur
+/// n'ait été récrit.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_valid_key_identifies_its_bearer() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db().clone();
+    let porteur = compte(&db, Role::User).await;
+    let clair = cle(&state, porteur, Role::User, None).await;
+
+    let claims = super::super::service::accept(&state, &clair, &mut Extensions::new())
+        .await
+        .expect("la clé est bonne");
+
+    assert_eq!(claims.sub, porteur.to_string());
+    assert_eq!(claims.role, "user");
+}
+
+/// Le plafond, dans le sens qui compte : une clé d'administrateur cesse d'administrer le
+/// jour où son porteur est rétrogradé, sans qu'on ait eu à penser à la révoquer.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_key_of_a_demoted_owner_no_longer_administers() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db().clone();
+    let porteur = compte(&db, Role::Admin).await;
+    let clair = cle(&state, porteur, Role::Admin, Some("admin")).await;
+
+    let avant = super::super::service::accept(&state, &clair, &mut Extensions::new())
+        .await
+        .expect("la clé est bonne");
+    assert_eq!(avant.role, "admin");
+
+    let compte_lu = crate::auth::repository::find(&db, porteur)
+        .await
+        .expect("lecture possible")
+        .expect("le compte existe");
+    let mut retrograde: crate::auth::model::user::ActiveModel = compte_lu.into();
+    retrograde.role = Set(Role::User);
+    retrograde.update(&db).await.expect("rétrogradation");
+
+    let apres = super::super::service::accept(&state, &clair, &mut Extensions::new())
+        .await
+        .expect("la clé reste valide, son rôle non");
+
+    assert_eq!(apres.role, "user", "le plafond doit suivre le porteur");
+}
+
+/// Nul ne délègue plus qu'il ne détient.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_user_cannot_mint_an_admin_key() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db().clone();
+    let porteur = compte(&db, Role::User).await;
+
+    let refus = super::super::service::create(
+        &state,
+        porteur,
+        Role::User,
+        super::super::dto::CreateApiKey {
+            name: "escalade".to_owned(),
+            role: Some("admin".to_owned()),
+            expires_in_days: Some(1),
+        },
+    )
+    .await;
+
+    assert!(matches!(refus, Err(rbs_core::Error::Forbidden)));
+}
+
+/// Révoquée, périmée, inconnue : la même réponse pour les trois.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_revoked_key_is_refused_like_an_unknown_one() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db().clone();
+    let porteur = compte(&db, Role::User).await;
+    let clair = cle(&state, porteur, Role::User, None).await;
+
+    let revoquees = super::super::service::revoke_all(&state, porteur)
+        .await
+        .expect("la révocation aboutit");
+    assert_eq!(revoquees, 1);
+
+    let refus = super::super::service::accept(&state, &clair, &mut Extensions::new()).await;
+    let inconnue =
+        super::super::service::accept(&state, "rbs_inconnue", &mut Extensions::new()).await;
+
+    assert!(matches!(refus, Err(rbs_core::Error::Unauthorized)));
+    assert!(matches!(inconnue, Err(rbs_core::Error::Unauthorized)));
+}
+
+/// Le troisième état de la même propriété : inconnue, révoquée, périmée — la même réponse
+/// pour les trois. Sans ce test, la condition de péremption n'est éprouvée par rien, et
+/// une clé morte pourrait continuer d'ouvrir.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_expired_key_is_refused_like_an_unknown_one() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db().clone();
+    let porteur = compte(&db, Role::User).await;
+    let perimee = cle_perimee(&state, porteur).await;
+
+    let refus = super::super::service::accept(&state, &perimee, &mut Extensions::new()).await;
+    let inconnue =
+        super::super::service::accept(&state, "rbs_inconnue", &mut Extensions::new()).await;
+
+    assert!(matches!(refus, Err(rbs_core::Error::Unauthorized)));
+    assert!(matches!(inconnue, Err(rbs_core::Error::Unauthorized)));
+}
+
+/// La trace est bornée : trois acceptations rapprochées n'écrivent qu'une fois.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn three_close_calls_write_the_usage_trace_once() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db().clone();
+    let porteur = compte(&db, Role::User).await;
+    let clair = cle(&state, porteur, Role::User, None).await;
+
+    for _ in 0..3 {
+        super::super::service::accept(&state, &clair, &mut Extensions::new())
+            .await
+            .expect("la clé est bonne");
+    }
+    // L'écriture part détachée : lui laisser le temps d'aboutir avant de lire.
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+    let lue = Entity::find()
+        .all(&db)
+        .await
+        .expect("lecture possible")
+        .pop()
+        .expect("la clé est en base");
+    let premier = lue.last_used_at.expect("la première acceptation a tracé");
+
+    for _ in 0..3 {
+        super::super::service::accept(&state, &clair, &mut Extensions::new())
+            .await
+            .expect("la clé est bonne");
+    }
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+
+    let relue = Entity::find()
+        .all(&db)
+        .await
+        .expect("lecture possible")
+        .pop()
+        .expect("la clé est en base");
+
+    assert_eq!(
+        relue.last_used_at.expect("la trace reste"),
+        premier,
+        "six acceptations dans la même minute ne doivent écrire qu'une fois"
+    );
+}
+
+/// Ce que l'acceptation dépose épargne une lecture à la garde qui suit.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn accepting_a_key_leaves_the_verification_date_in_the_extensions() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db().clone();
+    let porteur = compte(&db, Role::User).await;
+    let clair = cle(&state, porteur, Role::User, None).await;
+    let mut extensions = Extensions::new();
+
+    super::super::service::accept(&state, &clair, &mut extensions)
+        .await
+        .expect("la clé est bonne");
+
+    assert!(
+        extensions.get::<crate::auth::guard::Accepted>().is_some(),
+        "sans ce dépôt, `VerifiedIdentity` relirait le compte"
+    );
+}

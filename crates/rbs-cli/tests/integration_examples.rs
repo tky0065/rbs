@@ -150,7 +150,15 @@ const EXEMPLES: &[Exemple] = &[
         // descendent d'un seul plan, dont les trois migrations portent le même horodatage.
         // C'est le seul exemple où l'ancre `migration_modules` doit trier des noms nés dans
         // la même seconde.
-        features: &["webhooks", "scheduler", "audit", "cors", "docker", "ci"],
+        features: &[
+            "webhooks",
+            "scheduler",
+            "audit",
+            "cors",
+            "docker",
+            "ci",
+            "api-keys",
+        ],
         crud: "orders",
         champs: "reference:string,amount:int",
         role: None,

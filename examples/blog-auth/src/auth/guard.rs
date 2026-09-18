@@ -75,9 +75,12 @@ pub struct VerifiedIdentity(pub Identity);
 ///
 /// La date seule, et non le compte : la garde ne lit rien d'autre, et le hash du mot de
 /// passe n'a pas à voyager dans les extensions de chaque requête authentifiée. Un type
-/// propre au fragment plutôt qu'une date nue : seule l'acceptation peut l'y avoir mise.
+/// propre au projet plutôt qu'une date nue : seule une acceptation peut l'y avoir mise.
+///
+/// `pub(crate)` et non `pub(super)` : un fragment installé sous `src/modules/` peut juger
+/// un justificatif — une clé d'API — et doit pouvoir y déposer ce qu'il a lu du compte.
 #[derive(Clone)]
-pub(super) struct Accepted(pub(super) Option<DateTimeWithTimeZone>);
+pub(crate) struct Accepted(pub(crate) Option<DateTimeWithTimeZone>);
 
 impl FromRequestParts<AppState> for VerifiedIdentity {
     type Rejection = Error;

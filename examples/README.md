@@ -116,7 +116,7 @@ cd .. && mv newsletter-queue examples/newsletter-queue
 ### `event-hub`
 
 `add` refuses a dirty working tree, and each feature leaves one behind: the commit is
-taken before **each** of the six, not once for all of them.
+taken before **each** of the seven, not once for all of them.
 
 ```bash
 cargo run -p rbs-cli --bin rbs -- new event-hub --yes \
@@ -124,7 +124,7 @@ cargo run -p rbs-cli --bin rbs -- new event-hub --yes \
   --database-url 'postgres://rbs:rbs@localhost:5432/event_hub' \
   --lang fr
 cd event-hub
-for f in webhooks scheduler audit cors docker ci; do
+for f in webhooks scheduler audit cors docker ci api-keys; do
   git add -A && git commit -q -m "before $f"
   cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add "$f"
 done

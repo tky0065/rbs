@@ -38,6 +38,15 @@ impl HasAuth for AppState {
         extensions.insert(guard::Accepted(compte.email_verified_at));
         Ok(())
     }
+
+    // <rbs:auth_impl>
+    /// Ce que vaut une clé d'API présentée en `X-Api-Key`.
+    ///
+    /// Le noyau ne connaît ni la table des clés ni la règle du plafond : il demande.
+    async fn accept_key(&self, key: &str, extensions: &mut Extensions) -> rbs_core::Result<Claims> {
+        crate::modules::api_keys::service::accept(self, key, extensions).await
+    }
+    // </rbs:auth_impl>
 }
 
 /// Ce que la signature ne dit pas : le compte existe-t-il encore, a-t-il fermé ses

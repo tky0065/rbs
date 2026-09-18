@@ -27,6 +27,7 @@ pub fn router(state: AppState) -> Router {
         // <rbs:routes>
         .merge(crate::auth::routes())
         .merge(crate::modules::webhooks::routes())
+        .merge(crate::modules::api_keys::routes())
         .merge(crate::orders::routes())
         // </rbs:routes>
         .merge(docs)

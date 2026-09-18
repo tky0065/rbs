@@ -1,6 +1,7 @@
 //! Les modules d'infrastructure que `rbs add` installe.
 
 // <rbs:modules>
+pub mod api_keys;
 pub mod audit;
 pub mod cors;
 pub mod jobs;

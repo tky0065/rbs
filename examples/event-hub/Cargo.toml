@@ -12,7 +12,7 @@ default-run = "event-hub"
 
 [package.metadata.rbs]
 version = "1.5.0"
-features = ["health", "jobs", "mail", "rate-limit", "auth", "webhooks", "scheduler", "audit", "cors", "docker", "ci", "orders"]
+features = ["health", "jobs", "mail", "rate-limit", "auth", "webhooks", "scheduler", "audit", "cors", "docker", "ci", "api-keys", "orders"]
 database = "postgres"
 lang = "fr"
 

@@ -23,11 +23,7 @@ const DELEGATION: &str = "crate::modules::api_keys::service::accept(self, key, e
 const BLOC: &str = r#"/// Ce que vaut une clé d'API présentée en `X-Api-Key`.
 ///
 /// Le noyau ne connaît ni la table des clés ni la règle du plafond : il demande.
-async fn accept_key(
-    &self,
-    key: &str,
-    extensions: &mut Extensions,
-) -> rbs_core::Result<Claims> {
+async fn accept_key(&self, key: &str, extensions: &mut Extensions) -> rbs_core::Result<Claims> {
     crate::modules::api_keys::service::accept(self, key, extensions).await
 }"#;
 

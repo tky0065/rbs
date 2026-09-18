@@ -22,7 +22,7 @@ du projet », en bas, est faite pour l'accueillir.
 | Commande | Ce qu'elle fait | Ce qu'elle dispense d'écrire |
 |---|---|---|
 | `rbs new <nom>` | crée un projet ; `--lang fr\|en` fixe la langue du projet — ce fichier et les réponses HTTP | tout le squelette |
-| `rbs add <feature>` | installe audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks | le câblage de la feature |
+| `rbs add <feature>` | installe api-keys, audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks | le câblage de la feature |
 | `rbs remove <feature>` | retire une feature installée : ses fichiers, ses ancres, sa migration et ses dépendances | — |
 | `rbs generate crud <nom> --fields "..."` | une feature CRUD complète | sept fichiers, leur répertoire `tests/`, le seed et la migration |
 | `rbs generate feature <nom>` | une feature vide | sept fichiers |
@@ -86,6 +86,7 @@ faire.
 - `<rbs:jobs>` dans `src/modules/jobs/mod.rs`
 - `<rbs:job_modules>` dans `src/modules/jobs/mod.rs`
 - `<rbs:schedules>` dans `src/modules/scheduler/mod.rs`
+- `<rbs:auth_impl>` dans `src/auth/mod.rs`
 - `<rbs:relations:<table>>` et `<rbs:related:<table>>` dans le modèle de chaque entité
 
 ## Ce que rbs ne couvre pas
@@ -123,9 +124,9 @@ et `cargo test` seul ne les lance pas. Ils demandent la base du `.env` démarré
 
 <!-- rbs:inventory -->
 - rbs 1.5.0 · base postgres
-- Fragments installés : jobs, mail, rate-limit, auth, webhooks, scheduler, audit, cors, docker, ci
+- Fragments installés : jobs, mail, rate-limit, auth, webhooks, scheduler, audit, cors, docker, ci, api-keys
 - Entités engendrées : orders
-- Ancres du projet : features (src/lib.rs), modules (src/modules/mod.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), health_probes (src/health/controller.rs), jobs (src/modules/jobs/mod.rs), job_modules (src/modules/jobs/mod.rs), schedules (src/modules/scheduler/mod.rs)
+- Ancres du projet : features (src/lib.rs), modules (src/modules/mod.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), health_probes (src/health/controller.rs), jobs (src/modules/jobs/mod.rs), job_modules (src/modules/jobs/mod.rs), schedules (src/modules/scheduler/mod.rs), auth_impl (src/auth/mod.rs)
 <!-- /rbs:inventory -->
 
 ## Notes du projet
