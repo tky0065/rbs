@@ -850,6 +850,12 @@ fn suite(feature: &str) -> Option<&'static str> {
              secret n'est rendu qu'à cet instant — puis appelez webhooks::emit dans vos \
              services",
         ),
+        // La table naît vide et aucune clé n'existe : sans une première émission, le
+        // fragment est installé et rien ne change: c'est le seul endroit où le geste se dit.
+        "api-keys" => Some(
+            "rbs migrate up, puis POST /api-keys pour tirer une clé — elle n'est rendue \
+             qu'à cet instant — et présentez-la en X-Api-Key",
+        ),
         _ => None,
     }
 }
@@ -1695,6 +1701,17 @@ mod tests {
 
         assert!(conseil.contains("rbs migrate up"), "{conseil}");
         assert!(conseil.contains("webhooks::emit"), "{conseil}");
+    }
+
+    /// La table est vide, et une clé ne se tire que par une route : installé et jamais
+    /// appelé, le fragment paraît sans effet.
+    #[test]
+    fn the_api_keys_fragment_advises_the_migration_and_the_minting_route() {
+        let conseil = suite("api-keys").expect("le fragment pose une table : il doit conseiller");
+
+        assert!(conseil.contains("rbs migrate up"), "{conseil}");
+        assert!(conseil.contains("POST /api-keys"), "{conseil}");
+        assert!(conseil.contains("X-Api-Key"), "{conseil}");
     }
 
     /// `rbs new --with auth` pose la feature mais avalait le conseil qu'`add auth` aurait
