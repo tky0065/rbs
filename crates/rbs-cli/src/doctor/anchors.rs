@@ -181,8 +181,9 @@ mod tests {
     /// Un projet frais ne porte pas *toutes* les ancres du registre : `jobs` et
     /// `job_modules` vivent dans `src/modules/jobs/mod.rs`, `schedules` dans
     /// `src/modules/scheduler/mod.rs`, `modules` dans `src/modules/mod.rs` — que seul
-    /// `rbs add` dépose, contrairement au compose que `new` écrit déjà. Quatre des cinq
-    /// ancres optionnelles sont donc inapplicables ici.
+    /// `rbs add` dépose, contrairement au compose que `new` écrit déjà — et `auth_impl`
+    /// dans `src/auth/mod.rs`, que seul le fragment `auth` pose. Cinq des six ancres
+    /// optionnelles sont donc inapplicables ici.
     #[test]
     fn a_fresh_project_carries_every_anchor_that_applies_to_it() {
         let (_parent, root) = project();
@@ -191,7 +192,7 @@ mod tests {
 
         assert_eq!(check.state, State::Bon);
         assert!(
-            check.detail.contains(&(ANCRES.len() - 4).to_string()),
+            check.detail.contains(&(ANCRES.len() - 5).to_string()),
             "{}",
             check.detail
         );
@@ -309,13 +310,14 @@ mod tests {
         let check = check(&root);
 
         assert_eq!(check.state, State::Bon, "{check:?}");
-        // Le compose retiré à la main, `jobs`, `job_modules`, `schedules` et `modules`
-        // déjà absents par défaut (v. le test précédent) : les cinq ancres optionnelles
-        // sont inapplicables.
+        // Le compose retiré à la main, `jobs`, `job_modules`, `schedules`, `modules` et
+        // `auth_impl` déjà absents par défaut (v. le test précédent) : les six ancres
+        // optionnelles sont inapplicables.
         assert!(
-            check.detail.contains(&(ANCRES.len() - 5).to_string()),
+            check.detail.contains(&(ANCRES.len() - 6).to_string()),
             "ni le compose, ni le registre de la file, ni ses modules, ni le calendrier, \
-             ni le point de montage ne comptent parmi les applicables : {}",
+             ni le point de montage, ni l'implémentation d'authentification ne comptent \
+             parmi les applicables : {}",
             check.detail
         );
     }

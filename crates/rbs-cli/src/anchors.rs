@@ -313,6 +313,26 @@ pub(crate) const SCHEDULES: Anchor = Anchor {
     after: "let mut calendrier = Vec::new();",
 };
 
+/// Méthodes que les fragments ajoutent à l'`impl HasAuth for AppState` du projet.
+///
+/// Le seul point d'insertion du registre qui vive **à l'intérieur** d'un bloc `impl`, et
+/// non entre deux items. La raison est que le trait `HasAuth` ne peut être implémenté
+/// qu'une fois : un fragment qui voudrait juger un justificatif de plus — une clé d'API —
+/// n'a aucun autre endroit où poser sa méthode, et le CLI ne réécrit pas d'AST.
+///
+/// L'accroche est la ligne d'ouverture de l'`impl`, stable et unique dans le fichier. Le
+/// bloc n'est pas trié : rustfmt ne réordonne pas les méthodes d'une implémentation.
+pub(crate) const AUTH_IMPL: Anchor = Anchor {
+    name: Cow::Borrowed("auth_impl"),
+    file: Cow::Borrowed("src/auth/mod.rs"),
+    comment: "//",
+    sorted: false,
+    // Le fichier est déposé par le fragment `auth` : un projet qui ne l'a pas installé n'a
+    // pas ce fichier, et n'est pas incomplet pour autant.
+    optional: true,
+    after: "impl HasAuth for AppState {",
+};
+
 /// Variantes de l'énumération `Relation` du modèle d'une entité.
 ///
 /// Hors du registre statique : son fichier et son nom dépendent tous deux de l'entité
@@ -343,7 +363,7 @@ pub(crate) const RELATED: Anchor = Anchor {
 ///
 /// La génération vise chaque ancre nommément ; `rbs doctor` parcourt cette liste pour
 /// vérifier qu'un projet les porte toutes.
-pub(crate) const ANCRES: [Anchor; 16] = [
+pub(crate) const ANCRES: [Anchor; 17] = [
     FEATURES,
     MODULES,
     ROUTES,
@@ -360,6 +380,7 @@ pub(crate) const ANCRES: [Anchor; 16] = [
     JOBS,
     JOB_MODULES,
     SCHEDULES,
+    AUTH_IMPL,
 ];
 
 /// Résout l'ancre `<rbs:features>` par repli, entre `src/lib.rs` et `src/main.rs`.
@@ -1477,10 +1498,11 @@ struct AppState {
     }
 
     /// Une ancre optionnelle est l'exception : les onze autres décrivent un fichier que le
-    /// squelette écrit toujours, et leur absence est un défaut. Les cinq qui le sont
+    /// squelette écrit toujours, et leur absence est un défaut. Les six qui le sont
     /// vivent dans un fichier qu'un fragment dépose — le point de montage des `modules`,
     /// le compose de `docker`, le registre de `jobs`, la liste de ses modules, le calendrier
-    /// du `scheduler` — et manquent légitimement à qui n'a pas installé ce fragment.
+    /// du `scheduler`, l'implémentation d'authentification — et manquent légitimement à qui
+    /// n'a pas installé ce fragment.
     #[test]
     fn only_the_anchors_of_a_fragment_deposited_file_are_optional() {
         let optionnelles: Vec<&str> = ANCRES
@@ -1491,7 +1513,14 @@ struct AppState {
 
         assert_eq!(
             optionnelles,
-            ["modules", "services", "jobs", "job_modules", "schedules"]
+            [
+                "modules",
+                "services",
+                "jobs",
+                "job_modules",
+                "schedules",
+                "auth_impl"
+            ]
         );
     }
 
@@ -1506,6 +1535,43 @@ struct AppState {
         assert_eq!(JOBS.opening(), "// <rbs:jobs>");
         assert!(JOBS.optional);
         assert!(ANCRES.contains(&JOBS));
+    }
+
+    /// L'ancre vit dans un fichier que le fragment `auth` dépose : un projet sans `auth`
+    /// n'a pas ce fichier, et `doctor` ne doit pas le tenir pour incomplet.
+    // `AUTH_IMPL` étant un `const`, clippy évalue `.optional` et `.sorted` à la
+    // compilation et signale les assertions comme triviales ; elles mordent pourtant si
+    // quelqu'un change ces champs.
+    #[allow(clippy::assertions_on_constants)]
+    #[test]
+    fn the_auth_impl_anchor_is_optional_and_lives_in_the_auth_module() {
+        assert!(ANCRES.contains(&AUTH_IMPL));
+        assert!(AUTH_IMPL.optional);
+        assert!(!AUTH_IMPL.sorted);
+        assert_eq!(AUTH_IMPL.file, "src/auth/mod.rs");
+        assert_eq!(AUTH_IMPL.comment, "//");
+    }
+
+    /// L'accroche d'une ancre effacée doit exister dans la template qui la porte, sans quoi
+    /// `doctor --fix` n'a aucun endroit où la reposer.
+    #[test]
+    fn the_auth_impl_hook_is_a_line_of_its_own_template() {
+        let gabarit = std::fs::read_to_string(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/templates/features/auth/mod.rs.jinja"
+        ))
+        .expect("le gabarit du fragment auth se lit");
+
+        assert_eq!(
+            gabarit
+                .lines()
+                .filter(|ligne| ligne.trim() == AUTH_IMPL.after)
+                .count(),
+            1,
+            "l'accroche doit être présente une fois et une seule"
+        );
+        assert!(gabarit.contains(&AUTH_IMPL.opening()));
+        assert!(gabarit.contains(&AUTH_IMPL.closing()));
     }
 
     /// L'ancre des modules vit dans un fichier que le squelette ne pose pas : la déclarer
