@@ -9,10 +9,29 @@ use std::path::Path;
 
 use super::Check;
 
+/// Ce que ce contrôle vérifie, tel qu'il paraît au rapport.
 pub(crate) const TITRE: &str = "api-keys";
+/// Où la délégation doit vivre : c'est là que le fragment `auth` pose `impl HasAuth`.
 const FICHIER: &str = "src/auth/mod.rs";
+/// L'aiguille de détection : la seule instruction du corps de la méthode, insensible à
+/// l'indentation qu'elle porte dans le fichier du projet.
 const DELEGATION: &str = "crate::modules::api_keys::service::accept(self, key, extensions).await";
+/// Le bloc que le fragment insère : une méthode, non une instruction.
+///
+/// Le remède le cite en entier parce qu'une instruction nue n'est pas un item d'`impl` —
+/// collée seule entre les balises, elle ne compilerait pas.
+const BLOC: &str = r#"/// Ce que vaut une clé d'API présentée en `X-Api-Key`.
+///
+/// Le noyau ne connaît ni la table des clés ni la règle du plafond : il demande.
+async fn accept_key(
+    &self,
+    key: &str,
+    extensions: &mut Extensions,
+) -> rbs_core::Result<Claims> {
+    crate::modules::api_keys::service::accept(self, key, extensions).await
+}"#;
 
+/// Vérifie que le projet délègue au noyau le jugement des clés d'API qu'on lui présente.
 pub(crate) fn check(root: &Path) -> Check {
     let source = match super::lire(root, TITRE, FICHIER) {
         Ok(source) => source,
@@ -27,7 +46,7 @@ pub(crate) fn check(root: &Path) -> Check {
     Check::failed(
         TITRE,
         "la délégation des clés d'API n'est pas posée : toute clé rendra 401",
-        format!("dans {FICHIER}, entre les balises de `// <rbs:auth_impl>` :\n{DELEGATION}"),
+        format!("dans {FICHIER}, entre les balises de `// <rbs:auth_impl>` :\n{BLOC}"),
     )
 }
 
@@ -132,6 +151,11 @@ mod tests {
         assert!(
             inseree.lines().any(|ligne| ligne.trim() == DELEGATION),
             "le manifeste n'insère pas la ligne cherchée :\n{inseree}"
+        );
+        assert_eq!(
+            inseree.trim(),
+            BLOC,
+            "le bloc du remède doit être exactement ce que le fragment insère"
         );
     }
 }
