@@ -888,11 +888,7 @@ content = """
 /// Ce que vaut une clé d'API présentée en `X-Api-Key`.
 ///
 /// Le noyau ne connaît ni la table des clés ni la règle du plafond : il demande.
-async fn accept_key(
-    &self,
-    key: &str,
-    extensions: &mut Extensions,
-) -> rbs_core::Result<Claims> {
+async fn accept_key(&self, key: &str, extensions: &mut Extensions) -> rbs_core::Result<Claims> {
     crate::modules::api_keys::service::accept(self, key, extensions).await
 }
 """
@@ -1753,6 +1749,13 @@ Sujet : `feat(cli): donne quatre routes à l'administration des clés d'API`
 
 **Files:**
 - Create: `crates/rbs-cli/templates/features/api-keys/tests/mod.rs.jinja`, `tests/accept.rs.jinja`, `tests/routes.rs.jinja`
+> **La signature du contenu d'ancre tient sur une ligne**, et ce n'est pas cosmétique : ce
+> texte part dans le `feature.toml` du fragment, donc dans **chaque projet installé**.
+> Écrite sur quatre lignes, elle faisait échouer le `cargo fmt --check` de l'utilisateur —
+> rustfmt la joint, ses cent colonnes indentées étant la limite, inclusive. À ne pas
+> confondre avec la déclaration du trait dans `rbs-core`, plus longue et plus indentée, qui
+> reste sur quatre lignes.
+
 - Create: `crates/rbs-cli/templates/features/api-keys/mod.rs.jinja` — reporté de la tâche 5,
   son `routes()` référençant des handlers qui n'existaient pas encore (voir l'amendement de
   la tâche 5). Le code à écrire est celui que la tâche 5 donne.
@@ -2294,11 +2297,7 @@ const DELEGATION: &str = "crate::modules::api_keys::service::accept(self, key, e
 const BLOC: &str = r#"/// Ce que vaut une clé d'API présentée en `X-Api-Key`.
 ///
 /// Le noyau ne connaît ni la table des clés ni la règle du plafond : il demande.
-async fn accept_key(
-    &self,
-    key: &str,
-    extensions: &mut Extensions,
-) -> rbs_core::Result<Claims> {
+async fn accept_key(&self, key: &str, extensions: &mut Extensions) -> rbs_core::Result<Claims> {
     crate::modules::api_keys::service::accept(self, key, extensions).await
 }"#;
 
@@ -2643,6 +2642,10 @@ Sujet : `test(cli): éprouve les clés d'API sur un projet compilé et une vraie
 ### Task 12: `event-hub` porte le fragment
 
 **Files:**
+- Modify: `crates/rbs-cli/tests/integration_examples.rs` — ajouter `"api-keys"` au tableau
+  `EXEMPLES`. C'est lui qui rejoue l'installation pour bâtir le côté **attendu** de la
+  comparaison : sans le fragment dedans, le test compare le projet régénéré à un projet qui
+  ne le porte pas.
 - Modify: **les cinq** projets d'`examples/` (régénérés). `event-hub` gagne le fragment ;
   `blog-auth` suit les deux gabarits `auth` retouchés ; et `hello-crud`, `file-drop` et
   `newsletter-queue`, qui n'ont pourtant pas d'`auth`, dérivent eux aussi — voir ci-dessous
