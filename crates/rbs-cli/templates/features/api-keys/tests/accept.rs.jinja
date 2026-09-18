@@ -95,6 +95,25 @@ async fn a_revoked_key_is_refused_like_an_unknown_one() {
     assert!(matches!(inconnue, Err(rbs_core::Error::Unauthorized)));
 }
 
+/// Le troisième état de la même propriété : inconnue, révoquée, périmée — la même réponse
+/// pour les trois. Sans ce test, la condition de péremption n'est éprouvée par rien, et
+/// une clé morte pourrait continuer d'ouvrir.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn an_expired_key_is_refused_like_an_unknown_one() {
+    let (_garde, state) = table_a_soi().await;
+    let db = state.core().db().clone();
+    let porteur = compte(&db, Role::User).await;
+    let perimee = cle_perimee(&state, porteur).await;
+
+    let refus = super::super::service::accept(&state, &perimee, &mut Extensions::new()).await;
+    let inconnue =
+        super::super::service::accept(&state, "rbs_inconnue", &mut Extensions::new()).await;
+
+    assert!(matches!(refus, Err(rbs_core::Error::Unauthorized)));
+    assert!(matches!(inconnue, Err(rbs_core::Error::Unauthorized)));
+}
+
 /// La trace est bornée : trois acceptations rapprochées n'écrivent qu'une fois.
 #[tokio::test]
 #[ignore = "joint la base du projet"]

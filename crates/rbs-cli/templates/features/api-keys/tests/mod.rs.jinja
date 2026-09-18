@@ -82,6 +82,43 @@ async fn cle(state: &AppState, porteur: Uuid, createur: Role, role: Option<&str>
     .key
 }
 
+/// Une clé déjà périmée : tirée avec une échéance, puis reculée dans le passé.
+///
+/// L'échéance ne se demande pas négative — le DTO la borne à un jour au moins — et c'est
+/// bien le but : la seule façon d'obtenir une clé périmée est d'en vieillir une, comme le
+/// temps le ferait.
+async fn cle_perimee(state: &AppState, porteur: Uuid) -> String {
+    let clair = super::service::create(
+        state,
+        porteur,
+        Role::User,
+        super::dto::CreateApiKey {
+            name: "périmée".to_owned(),
+            role: None,
+            expires_in_days: Some(1),
+        },
+    )
+    .await
+    .expect("la clé se tire")
+    .key;
+
+    let passe = chrono::Utc::now().fixed_offset() - chrono::TimeDelta::days(1);
+    let ligne = Entity::find()
+        .all(state.core().db())
+        .await
+        .expect("lecture possible")
+        .pop()
+        .expect("la clé est en base");
+    let mut vieillie: super::model::ActiveModel = ligne.into();
+    vieillie.expires_at = Set(Some(passe));
+    vieillie
+        .update(state.core().db())
+        .await
+        .expect("l'échéance se recule");
+
+    clair
+}
+
 /// Une requête portant la clé en `X-Api-Key`.
 fn par_cle(method: &str, path: &str, cle: &str, body: Option<Value>) -> Request<Body> {
     let builder = Request::builder()
