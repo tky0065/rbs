@@ -633,5 +633,55 @@ mod tests {
                 .expect("corps lisible");
             assert_eq!(&corps[..], b"par la cl\xc3\xa9");
         }
+
+        /// Un état qui accepte **n'importe quelle** clé, la vide comprise : ce qu'écrirait un
+        /// projet dont le jugement des clés est permissif, ou simplement bogué.
+        #[derive(Clone)]
+        struct ToutAccepter(AppState);
+
+        impl HasCoreState for ToutAccepter {
+            fn core(&self) -> &CoreState {
+                self.0.core()
+            }
+        }
+
+        impl HasAuth for ToutAccepter {
+            async fn accept_key(
+                &self,
+                _: &str,
+                _: &mut axum::http::Extensions,
+            ) -> Result<Claims, crate::Error> {
+                Ok(Claims {
+                    sub: "u9".to_owned(),
+                    role: "user".to_owned(),
+                    exp: LATER,
+                    iat: 0,
+                    jti: "permissive".to_owned(),
+                })
+            }
+        }
+
+        /// L'absence de justificatif est tranchée par le noyau, et non déléguée au projet : un
+        /// `accept_key` permissif ne doit pas pouvoir ouvrir une requête qui ne présente rien.
+        #[tokio::test]
+        async fn a_request_without_any_credential_is_refused_even_by_a_permissive_state() {
+            async fn handler(identite: Identity) -> String {
+                identite.user_id
+            }
+
+            let response = Router::new()
+                .route("/", get(handler))
+                .with_state(ToutAccepter(state()))
+                .oneshot(
+                    Request::builder()
+                        .uri("/")
+                        .body(Body::empty())
+                        .expect("requête valide"),
+                )
+                .await
+                .expect("le router doit répondre");
+
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+        }
     }
 }
