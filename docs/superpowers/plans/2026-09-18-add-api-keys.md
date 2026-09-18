@@ -1895,7 +1895,13 @@ Ajouter `use tower::ServiceExt;` en tête — `oneshot` en dépend.
 
 - [ ] **Step 2: Écrire les tests d'acceptation**
 
-`tests/accept.rs.jinja` — six tests, dont les trois qui portent les décisions de la spec :
+`tests/accept.rs.jinja` — **sept** tests, dont les trois qui portent les décisions de la
+spec. Le septième, `an_expired_key_is_refused_like_an_unknown_one`, a été ajouté après
+revue : sans lui, la branche `ExpiresAt.gt(maintenant)` de `repository::active` n'était
+éprouvée par rien — l'aide `cle()` codant `expires_in_days: None` en dur, les dix clés des
+tests passaient toutes par `is_null()`, et une inversion du comparateur serait restée
+invisible. Il exige une aide voisine, `cle_perimee`, qui tire une clé avec échéance puis la
+recule dans le passé par l'entité.
 
 ```rust
 use super::*;
@@ -2561,11 +2567,12 @@ chacun des tests livrés ait tourné sous `-- --ignored`. Un `cargo test -- --ig
 livrer ses tests laisserait la suite au vert.
 
 ```rust
-const TESTS_SOUS_CONTENEUR: [(&str, &str); 10] = [
+const TESTS_SOUS_CONTENEUR: [(&str, &str); 11] = [
     ("accept", "a_valid_key_identifies_its_bearer"),
     ("accept", "a_key_of_a_demoted_owner_no_longer_administers"),
     ("accept", "a_user_cannot_mint_an_admin_key"),
     ("accept", "a_revoked_key_is_refused_like_an_unknown_one"),
+    ("accept", "an_expired_key_is_refused_like_an_unknown_one"),
     ("accept", "three_close_calls_write_the_usage_trace_once"),
     ("accept", "accepting_a_key_leaves_the_verification_date_in_the_extensions"),
     ("routes", "the_key_is_returned_once_and_never_by_the_list"),
