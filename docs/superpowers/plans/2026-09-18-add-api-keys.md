@@ -796,6 +796,24 @@ Attendu : `api-keys/feature.toml` introuvable, et la liste de l'erreur n'énumè
 
 `crates/rbs-cli/templates/features/api-keys/feature.toml` :
 
+> **Amendement, décidé à l'exécution.** Le manifeste ci-dessous déclare les neuf `[[files]]`
+> du fragment fini, mais six d'entre eux ne sont écrits qu'aux tâches 6 à 8. Or un manifeste
+> est atomique : trois tests qui parcourent tous les fragments — `new::every_embedded_feature_is_accepted_by_name`,
+> `contexte::every_variable_an_embedded_fragment_interpolates_resolves_in_the_context` et
+> `templates::each_rust_template_of_each_fragment_conforms_to_rustfmt` — échouent dès qu'un
+> `source =` désigne un fichier absent. **Ne déclare donc ici que `mod.rs.jinja` et
+> `model.rs.jinja`** ; les tâches 6, 7 et 8 ajouteront leurs entrées en écrivant leurs
+> gabarits. Les sections `[migration]`, `[[anchors]]`, `[cargo.*]` sont posées dès maintenant.
+>
+> **Second amendement, même cause.** `mod.rs.jinja` ne peut pas non plus être écrit ici :
+> il déclare `pub mod controller;`, `dto`, `repository`, `service` et `tests`, et le test
+> `templates::each_rust_template_of_each_fragment_conforms_to_rustfmt` **parcourt le
+> répertoire du fragment**, non son manifeste — rustfmt refuse alors de formater un module
+> qu'il ne peut pas résoudre. L'élaguer n'est pas possible : son `routes()` référence les
+> handlers du contrôleur. **`mod.rs.jinja` est donc écrit à la tâche 8**, quand les six
+> modules existent. La tâche 5 ne pose que `model.rs.jinja`, la migration et le manifeste,
+> ce dernier avec **une seule** entrée `[[files]]`.
+
 ```toml
 [feature]
 description = "clés d'API : authentification machine, rôle plafonné par le porteur, trace d'usage"
@@ -1146,6 +1164,9 @@ Sujet : `feat(cli): pose la table des clés d'API et le manifeste de son fragmen
 
 **Files:**
 - Create: `crates/rbs-cli/templates/features/api-keys/repository.rs.jinja`, `service.rs.jinja`
+- Modify: `crates/rbs-cli/templates/features/api-keys/feature.toml` — y ajouter les deux
+  `[[files]]` correspondants. Un `source =` qui désigne un fichier absent fait échouer trois
+  tests parcourant tous les fragments : le manifeste ne déclare que ce qui existe.
 
 **Interfaces:**
 - Consomme : l'entité (tâche 5), `HasAuth::accept_key` (tâche 1), `crate::auth::guard::Accepted` désormais `pub(crate)` (tâche 4).
@@ -1483,6 +1504,8 @@ Sujet : `feat(cli): juge une clé par deux lectures, un plafond et une trace bor
 
 **Files:**
 - Create: `crates/rbs-cli/templates/features/api-keys/dto.rs.jinja`, `controller.rs.jinja`
+- Modify: `crates/rbs-cli/templates/features/api-keys/feature.toml` — y ajouter les deux
+  `[[files]]` correspondants, même raison qu'à la tâche 6.
 
 **Interfaces:**
 - Consomme : `service::{create, list, revoke, revoke_all}` (tâche 6).
@@ -1723,6 +1746,12 @@ Sujet : `feat(cli): donne quatre routes à l'administration des clés d'API`
 
 **Files:**
 - Create: `crates/rbs-cli/templates/features/api-keys/tests/mod.rs.jinja`, `tests/accept.rs.jinja`, `tests/routes.rs.jinja`
+- Create: `crates/rbs-cli/templates/features/api-keys/mod.rs.jinja` — reporté de la tâche 5,
+  son `routes()` référençant des handlers qui n'existaient pas encore (voir l'amendement de
+  la tâche 5). Le code à écrire est celui que la tâche 5 donne.
+- Modify: `crates/rbs-cli/templates/features/api-keys/feature.toml` — y ajouter les trois
+  `[[files]]` des tests **et celui de `mod.rs.jinja`**. Le manifeste est alors complet :
+  neuf entrées, neuf gabarits, et les tests qui parcourent les fragments repassent au vert.
 
 **Interfaces:**
 - Consomme : tout le fragment (tâches 5 à 7).
