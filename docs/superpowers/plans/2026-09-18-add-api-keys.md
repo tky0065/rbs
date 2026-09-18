@@ -1534,6 +1534,12 @@ pub struct CreateApiKey {
     /// omission. Refusé au-delà du rôle du créateur.
     pub role: Option<String>,
     /// Sans échéance, la clé ne périme pas — c'est un choix, pas un oubli.
+    ///
+    /// Bornée des deux côtés : à zéro la clé naîtrait déjà périmée, silencieusement
+    /// inutile ; au-delà de dix ans, le calcul d'échéance sort de ce que `chrono` sait
+    /// représenter et l'addition panique, ce qu'un appelant authentifié ne doit pas
+    /// pouvoir provoquer avec un seul champ.
+    #[validate(range(min = 1, max = 3650))]
     pub expires_in_days: Option<u32>,
 }
 
@@ -1613,7 +1619,7 @@ impl From<super::model::Model> for ApiKeyResponse {
 use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
-use rbs_core::{Error, HasCoreState, Identity, ProblemDetails, Result, ValidatedJson};
+use rbs_core::{Error, Identity, ProblemDetails, Result, ValidatedJson};
 use sea_orm::ActiveEnum;
 use sea_orm::prelude::Uuid;
 
@@ -1638,6 +1644,7 @@ use crate::state::AppState;
     request_body = CreateApiKey,
     responses(
         (status = 201, description = "clé tirée, rendue cette seule fois", body = ApiKeyCreated),
+        (status = 400, description = "rôle inconnu", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 401, description = "justificatif absent ou invalide", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 403, description = "rôle demandé supérieur à celui de l'appelant", body = ProblemDetails, content_type = "application/problem+json"),
         (status = 422, description = "entrée invalide", body = ProblemDetails, content_type = "application/problem+json")
