@@ -18,6 +18,14 @@ destination = "src/modules/api_keys/repository.rs"
 source      = "service.rs.jinja"
 destination = "src/modules/api_keys/service.rs"
 
+[[files]]
+source      = "dto.rs.jinja"
+destination = "src/modules/api_keys/dto.rs"
+
+[[files]]
+source      = "controller.rs.jinja"
+destination = "src/modules/api_keys/controller.rs"
+
 [[anchors]]
 anchor  = "modules"
 content = "pub mod api_keys;"
