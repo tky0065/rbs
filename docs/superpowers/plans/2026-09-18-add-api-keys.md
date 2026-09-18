@@ -2528,6 +2528,18 @@ fn adding_the_fragment_writes_the_delegation_inside_the_auth_implementation() {
         .assert()
         .success()
         .stdout(predicates::str::contains("api-keys"));
+```
+
+> **Deux inexactitudes relevées à l'exécution.** `predicates` **n'est pas** une dépendance
+> de `rbs-cli` : employer `predicates::str::contains` ne compile pas. Capturer la sortie et
+> l'éprouver par un `assert!` ordinaire.
+>
+> Et `Anchor::block()` ne rend que `"{ouvrante}\n{fermante}"` — **les balises nues**. Le
+> bloc qu'affiche `rbs add` pour une ancre absente est donc générique : il ne porte pas le
+> contenu du fragment, contrairement au remède de `rbs doctor`. N'exiger de lui que la
+> présence des balises.
+
+```rust
 }
 ```
 
@@ -2574,10 +2586,8 @@ fn without_the_anchor_nothing_is_written_and_the_block_is_shown() {
     let rendu = String::from_utf8_lossy(&sortie.get_output().stderr).into_owned();
 
     assert!(rendu.contains("<rbs:auth_impl>"), "{rendu}");
-    assert!(
-        rendu.contains("crate::modules::api_keys::service::accept"),
-        "le bloc à coller doit porter la délégation :\n{rendu}"
-    );
+    // `Anchor::block()` ne rend que les deux balises : le bloc affiché est générique, il
+    // ne porte pas le contenu du fragment. C'est le remède de `doctor` qui, lui, le porte.
     common::assert_intact(&avant, &racine, "une ancre absente n'autorise aucune écriture");
 }
 ```
@@ -2586,7 +2596,16 @@ fn without_the_anchor_nothing_is_written_and_the_block_is_shown() {
 
 Sur le modèle de `the_tests_shipped_with_the_fragment_run_against_a_real_database` : démarrer
 PostgreSQL, engendrer le projet, `rbs add api-keys`, migrer, puis exiger **nommément** que
-chacun des tests livrés ait tourné sous `-- --ignored`. Un `cargo test -- --ignored` sort en
+chacun des tests livrés ait tourné sous `-- --ignored`.
+
+**Filtrer la passe sur `modules::api_keys::`**, et le dire en commentaire. Mesuré à
+l'exécution : le projet engendré porte aussi `mail`, entraîné par `auth`, et son test
+`a_templated_message_goes_out_to_the_smtp_server` réclame un serveur SMTP — il échoue en
+`Connection refused` si la suite ne le monte pas. Le monter dupliquerait
+`integration_mail`, qui démarre déjà un Mailpit pour lui seul. Sans ce filtre, la suite
+échoue sur un voisin alors que les onze tests du fragment passent. Le filtre permet de
+continuer d'exiger le **succès** de la commande, ce qui est plus fort que de l'ignorer ; la
+liste nommée reste la garde contre une passe vide. Un `cargo test -- --ignored` sort en
 0 même quand il ne filtre aucun test : sans la liste nommée, un fragment qui cesserait de
 livrer ses tests laisserait la suite au vert.
 
