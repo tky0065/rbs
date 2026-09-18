@@ -2212,7 +2212,7 @@ Attendu : `called 'Option::expect()' on a 'None' value`.
 
 ```rust
         // La table naît vide et aucune clé n'existe : sans une première émission, le
-        // fragment est installé et rien ne change: c'est le seul endroit où le geste se dit.
+        // fragment est installé et rien ne change : c'est le seul endroit où le geste se dit.
         "api-keys" => Some(
             "rbs migrate up, puis POST /api-keys pour tirer une clé — elle n'est rendue \
              qu'à cet instant — et présentez-la en X-Api-Key",
