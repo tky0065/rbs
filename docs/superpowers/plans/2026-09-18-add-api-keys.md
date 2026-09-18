@@ -2557,7 +2557,9 @@ Sujet : `test(cli): éprouve les clés d'API sur un projet compilé et une vraie
 ### Task 12: `event-hub` porte le fragment
 
 **Files:**
-- Modify: `examples/event-hub/**` (régénéré), `examples/blog-auth/**` (régénéré : le gabarit `auth` a changé)
+- Modify: **les cinq** projets d'`examples/` (régénérés). `event-hub` gagne le fragment ;
+  `blog-auth` suit les deux gabarits `auth` retouchés ; et `hello-crud`, `file-drop` et
+  `newsletter-queue`, qui n'ont pourtant pas d'`auth`, dérivent eux aussi — voir ci-dessous
 - Modify: `examples/README.md`, `examples/README.fr.md` (la recette d'`event-hub`)
 
 **Interfaces:**
@@ -2566,9 +2568,18 @@ Sujet : `test(cli): éprouve les clés d'API sur un projet compilé et une vraie
 
 - [ ] **Step 1: Régénérer les deux exemples**
 
-`blog-auth` d'abord — il ne gagne pas le fragment, mais son `src/auth/mod.rs` et son
-`src/auth/guard.rs` ont changé (tâche 4). **Par diff entre deux générations, jamais par
-écrasement** : régénérer à côté, comparer, reporter les seules lignes qui doivent bouger.
+**Les cinq exemples ont dérivé, et pas seulement les deux qui portent `auth`.** Mesuré
+après la tâche 4 : `integration_examples` rend 17 passés / 5 échoués, et les cinq échecs
+nomment `AGENTS.md` ligne 89. La raison n'est pas le gabarit `auth` : `AGENTS.md` est
+engendré dans **chaque** projet et **y énumère les ancres**. Le registre passant à
+dix-sept, cette liste gagne `<rbs:auth_impl>` partout, `auth` ou non.
+
+Les deux projets sous `auth` cumulent cette ligne avec les vraies retouches de gabarit :
+`src/auth/guard.rs:76` (la documentation d'`Accepted`, reformulée avec `pub(crate)`) et
+`src/auth/mod.rs:41` (les deux balises de l'ancre).
+
+**Par diff entre deux générations, jamais par écrasement** : régénérer à côté, comparer,
+reporter les seules lignes qui doivent bouger.
 
 ```bash
 # la recette exacte de chaque exemple est dans examples/README.md
@@ -2577,8 +2588,10 @@ cd "$SCRATCH" && rm -rf regen && mkdir regen && cd regen
 diff -ru "$SCRATCH/regen/blog-auth/src/auth" /Users/yacoubakone/dev/rs/examples/blog-auth/src/auth
 ```
 
-Attendu : le diff ne porte **que** les deux balises `<rbs:auth_impl>` et le `pub(crate)`
-d'`Accepted`. Toute autre ligne signale un gabarit touché par erreur.
+Attendu, et rien d'autre : la ligne 89 d'`AGENTS.md` dans les cinq projets, plus — dans
+`blog-auth` et `event-hub` seuls — les deux balises `<rbs:auth_impl>` de `src/auth/mod.rs`
+et la documentation d'`Accepted` dans `src/auth/guard.rs`. Toute ligne au-delà signale un
+gabarit touché par erreur.
 
 Pour `event-hub`, ajouter `api-keys` à la boucle de la recette, **après** `webhooks` :
 l'ordre d'installation décide de l'ordre des insertions dans les ancres, et donc des octets
