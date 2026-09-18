@@ -45,7 +45,9 @@
   colonne 0, le corps à 4, le `}` final à 0 — et l'insertion le rend à 4/8/4 dans l'`impl`.
 - **Toolchain locale possiblement en retard sur la CI** : `rustup update` avant la passe
   finale ; clippy vert en local ne dit rien de la version que prend `@stable`.
-- **Tests Docker** : `--no-fail-fast` obligatoire, sans quoi la suite s'arrête au premier
+- **Tests Docker** : `--no-fail-fast` obligatoire, et c'est un drapeau **de cargo** — il se
+  place *avant* le `--`, jamais après, où le harnais de test le refuse par
+  `error: Unrecognized option: 'no-fail-fast'` et ne lance rien. Sans lui la suite s'arrête au premier
   binaire et masque les échecs suivants. Une seule commande dépasse les 600 s du shell :
   un job par suite, et rediriger vers le scratchpad, sinon les chiffres sont rognés.
 - **Preuve que les tests discriminent.** Un rouge obtenu par une fonction absente — donc
@@ -2541,7 +2543,7 @@ const TESTS_SOUS_CONTENEUR: [(&str, &str); 10] = [
 
 ```bash
 cargo test -p rbs-cli --test integration_api_keys 2>&1 | tail -20
-cargo test -p rbs-cli --test integration_api_keys -- --ignored --no-fail-fast > "$SCRATCH/api-keys-docker.txt" 2>&1; echo "exit: $?"; tail -30 "$SCRATCH/api-keys-docker.txt"
+cargo test --no-fail-fast -p rbs-cli --test integration_api_keys -- --ignored > "$SCRATCH/api-keys-docker.txt" 2>&1; echo "exit: $?"; tail -30 "$SCRATCH/api-keys-docker.txt"
 ```
 
 Rediriger vers le scratchpad : une suite longue voit ses chiffres rognés sinon.
@@ -2600,7 +2602,7 @@ C'est ici que les fautes du fragment se voient — pas dans une suite Docker de 
 - [ ] **Step 3: Le test de non-dérive est l'oracle**
 
 ```bash
-cargo test -p rbs-cli --test integration_examples -- --no-fail-fast 2>&1 | tail -20
+cargo test --no-fail-fast -p rbs-cli --test integration_examples 2>&1 | tail -20
 ```
 
 Attendu : 22 passés. Si un blanc diffère, c'est un `-%}` qui a mangé une indentation.
@@ -2657,7 +2659,7 @@ Ne pas oublier le titre `## The thirteen features` / `## Les treize features` **
 qui le vise (`#the-thirteen-features`, `#les-treize-features`), ainsi que la ligne du
 tableau décrivant le nouveau fragment.
 
-- [ ] **Step 1: Reprendre les six fichiers** — [ ] **Step 2: `cargo test -p rbs-cli --test integration_docs -- --no-fail-fast`** — [ ] **Step 3: `npm run build` et `npm run parite`** — [ ] **Step 4: Commit**
+- [ ] **Step 1: Reprendre les six fichiers** — [ ] **Step 2: `cargo test --no-fail-fast -p rbs-cli --test integration_docs`** — [ ] **Step 3: `npm run build` et `npm run parite`** — [ ] **Step 4: Commit**
 
 Sujet : `docs(cli): compte quatorze fragments installables`
 
@@ -2702,8 +2704,8 @@ cargo clippy --workspace --all-targets -- -D warnings; echo "exit: $?"
 ```bash
 cargo test -p rbs-cli --lib 2>&1 | tail -5
 cargo test -p rbs-core --all-features 2>&1 | tail -5
-cargo test -p rbs-cli --test integration_examples -- --no-fail-fast 2>&1 | tail -5
-cargo test -p rbs-cli --test integration_docs -- --no-fail-fast 2>&1 | tail -5
+cargo test --no-fail-fast -p rbs-cli --test integration_examples 2>&1 | tail -5
+cargo test --no-fail-fast -p rbs-cli --test integration_docs 2>&1 | tail -5
 ```
 
 - [ ] **Step 4: La compatibilité du noyau**
@@ -2722,7 +2724,7 @@ du shell, `auth` seule fait 500 s. Rediriger chaque sortie vers le scratchpad.
 
 ```bash
 for suite in api_keys auth crud new; do
-  cargo test -p rbs-cli --test "integration_$suite" -- --ignored --no-fail-fast \
+  cargo test --no-fail-fast -p rbs-cli --test "integration_$suite" -- --ignored \
     > "$SCRATCH/$suite.txt" 2>&1; echo "$suite exit: $?"
 done
 ```
