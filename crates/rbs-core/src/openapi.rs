@@ -9,7 +9,7 @@ use crate::lang::{self, Lang};
 use serde::Serialize;
 use utoipa::openapi::path::Operation;
 #[cfg(feature = "auth")]
-use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
+use utoipa::openapi::security::{ApiKey, ApiKeyValue, HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::openapi::{Content, RefOr, Response, ResponseBuilder, Schema};
 use utoipa::{Modify, PartialSchema, ToSchema};
 
@@ -77,6 +77,10 @@ fn named(lang: Lang) -> [(&'static str, &'static str); 6] {
 #[cfg(feature = "auth")]
 pub const SCHEME_NAME: &str = "bearer";
 
+/// Nom du schéma de la clé d'API, tel que les handlers le référencent dans `security(...)`.
+#[cfg(feature = "auth")]
+pub const KEY_SCHEME_NAME: &str = "api_key";
+
 /// Réponses ajoutées d'office à chaque opération, avec leur description dans `lang`.
 fn universal(lang: Lang) -> [(&'static str, &'static str); 2] {
     match lang {
@@ -126,6 +130,15 @@ fn declare(openapi: &mut utoipa::openapi::OpenApi, lang: Lang) {
                 .bearer_format("JWT")
                 .build(),
         ),
+    );
+
+    // Le second justificatif que l'extracteur accepte. Déclaré inconditionnellement avec
+    // `auth` : le noyau ne sait pas si le projet a installé le fragment `api-keys`, et un
+    // schéma déclaré qu'aucune opération ne cite ne coûte qu'une ligne au document.
+    #[cfg(feature = "auth")]
+    composants.add_security_scheme(
+        KEY_SCHEME_NAME,
+        SecurityScheme::ApiKey(ApiKey::Header(ApiKeyValue::new("X-Api-Key"))),
     );
 
     for path in openapi.paths.paths.values_mut() {
@@ -291,6 +304,20 @@ mod tests {
         assert_eq!(schema["type"], "http", "{schema}");
         assert_eq!(schema["scheme"], "bearer", "{schema}");
         assert_eq!(schema["bearerFormat"], "JWT", "{schema}");
+    }
+
+    /// Le document dit comment présenter une clé, comme il dit comment présenter un jeton :
+    /// une opération qui annonce 401 sans nommer le justificatif laisse le client deviner.
+    #[cfg(feature = "auth")]
+    #[test]
+    fn the_api_key_security_scheme_is_declared() {
+        let doc = document();
+
+        let schema = &doc["components"]["securitySchemes"][KEY_SCHEME_NAME];
+
+        assert_eq!(schema["type"], "apiKey", "{schema}");
+        assert_eq!(schema["in"], "header", "{schema}");
+        assert_eq!(schema["name"], "X-Api-Key", "{schema}");
     }
 
     /// Le schéma se déclare, il ne s'impose pas : une opération qui ne l'a pas demandé ne
