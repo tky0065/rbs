@@ -1,18 +1,28 @@
-//! `rbs add frontend` sur un projet neuf, puis sa compilation.
+//! `rbs add frontend` sur un projet neuf, puis sa compilation et celle de son client.
 //!
-//! Le fragment ne dépose encore aucune ligne de client : il pose le module qui servira le
-//! build, et la page d'amorçage que le projet rend tant que ce build n'existe pas. Ce test
-//! est le seul endroit où cette page est réellement servie — par le routeur du projet,
-//! monté comme `main.rs` le monte, avec la documentation OpenAPI et la sonde de santé à
-//! côté d'elle.
+//! Deux suites, parce que les deux chaînes n'ont rien en commun. La première compile le
+//! Rust : elle prouve que le module sert la page d'amorçage par le routeur réel du projet,
+//! avec la documentation OpenAPI et la sonde de santé à côté d'elle. La seconde installe
+//! les dépendances du client, vérifie ses types et le construit.
 //!
-//! Il vaut aussi pour ce qu'il ne fait pas : `cargo` ne lance ni `npm`, ni `node`, ni
-//! aucun outil du client. Un projet qui a installé le frontend compile sur une machine qui
-//! n'a pas Node — c'est la contrepartie du mécanisme purement déclaratif des fragments.
+//! La première vaut aussi pour ce qu'elle ne fait pas : `cargo` ne lance ni `npm`, ni
+//! `node`, ni aucun outil du client. Un projet qui a installé le frontend compile sur une
+//! machine qui n'a pas Node — c'est la contrepartie du mécanisme purement déclaratif des
+//! fragments.
 //!
 //! Pas de conteneur : le repli ne joint aucun service, et l'état se monte sur une
-//! connexion non établie. Le `#[ignore]` ne tient qu'à la compilation d'un projet
-//! Axum + SeaORM complet.
+//! connexion non établie. Le `#[ignore]` de la première ne tient qu'à la compilation d'un
+//! projet Axum + SeaORM complet ; celui de la seconde au registre npm, qu'il faut
+//! joindre.
+//!
+//! La seconde est le seul endroit du dépôt où du TypeScript est compilé. Sans elle, le
+//! fragment livrerait des fichiers que rien n'a jamais vérifiés.
+
+use std::io::{BufRead, BufReader, Read, Write};
+use std::net::{TcpListener, TcpStream};
+use std::path::Path;
+use std::process::{Child, Command as Processus, Stdio};
+use std::time::{Duration, Instant};
 
 use assert_cmd::Command;
 use tempfile::TempDir;
@@ -40,7 +50,7 @@ fn the_fragment_compiles_and_serves_its_bootstrap_page() {
     // premier cargo et se tient jusqu'au dernier.
     let _cible = common::verrou(&common::cible());
 
-    let output = Command::new("cargo")
+    let output = Processus::new("cargo")
         .current_dir(&projet)
         .env("CARGO_TARGET_DIR", common::cible())
         // Filtré sur le module : les tests de santé du squelette exigeraient une base de
@@ -71,8 +81,217 @@ fn the_fragment_compiles_and_serves_its_bootstrap_page() {
     }
 }
 
+/// La chaîne Node, du registre au build servi.
+///
+/// Une seule suite pour les quatre gestes : l'installation seule coûte la moitié du temps
+/// du test, et la découper en autant de `#[test]` la paierait autant de fois.
+#[test]
+#[ignore = "installe les dépendances du client depuis le registre npm : lent et en ligne"]
+fn the_client_installs_typechecks_builds_and_proxies_the_api() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+
+    rbs(&projet).args(["add", "frontend"]).assert().success();
+
+    let client = projet.join("frontend");
+    // `npm ci` demanderait un fichier de verrouillage, qu'un fragment ne peut pas livrer :
+    // il est le produit d'une installation, et le versionner figerait chez l'utilisateur
+    // l'arbre résolu le jour où la template a été écrite.
+    npm(&client, &["install", "--no-audit", "--no-fund"]);
+    npm(&client, &["run", "typecheck"]);
+    npm(&client, &["run", "build"]);
+
+    // Le build sort là où la section `[frontend]` de la configuration dit au binaire de
+    // regarder, et le chemin se lit dans cette configuration plutôt qu'il ne se recopie
+    // ici : c'est cette égalité-là qui fait disparaître la page d'amorçage, et elle est le
+    // seul point où les deux moitiés du fragment se touchent.
+    let index = projet
+        .join(configure(&projet, "dir"))
+        .join(configure(&projet, "index"));
+    let rendu = std::fs::read_to_string(&index)
+        .unwrap_or_else(|_| panic!("{} doit exister après le build", index.display()));
+    assert!(
+        rendu.contains("<div id=\"app\">"),
+        "l'index construit ne monte pas l'application :\n{rendu}"
+    );
+
+    // Le nom du projet a traversé toute la chaîne — la génération, le moteur de template,
+    // le compilateur Vue, l'empaqueteur — et se lit dans ce qui part au navigateur.
+    let bundles = std::fs::read_dir(client.join("dist/assets"))
+        .expect("le build écrit ses assets")
+        .filter_map(Result::ok)
+        .map(|entree| std::fs::read_to_string(entree.path()).unwrap_or_default())
+        .collect::<String>();
+    assert!(
+        bundles.contains("demo-api"),
+        "le nom du projet n'a pas atteint le bundle"
+    );
+
+    proxy_atteint_l_api(&client);
+}
+
+/// Le développement sur un port distinct atteint l'API par le relais.
+///
+/// Sans lui, le client appellerait `/health` sur le port de Vite et recevrait
+/// l'application en retour ; en visant le port du binaire, il se heurterait à l'origine.
+/// Une API postiche suffit à le prouver : ce qui est en cause est le relais, non ce qu'il
+/// relaie.
+fn proxy_atteint_l_api(client: &Path) {
+    let api = TcpListener::bind("127.0.0.1:0").expect("l'API postiche doit s'ouvrir");
+    let port_api = api.local_addr().expect("l'adresse est connue").port();
+    let postiche = std::thread::spawn(move || repond_une_fois(&api, "{\"status\":\"ok\"}"));
+
+    // Un port libre, pris puis rendu : `--strictPort` fait échouer Vite plutôt que glisser
+    // sur le suivant, ce qui rendrait la suite muette sur ce qu'elle a réellement joint.
+    let port_client = TcpListener::bind("127.0.0.1:0")
+        .and_then(|prise| prise.local_addr())
+        .expect("un port libre doit se trouver")
+        .port();
+
+    // `node` sur le binaire de Vite, et non `npm run dev` : `npm` n'est qu'un lanceur, et
+    // le tuer laisserait le serveur derrière lui.
+    let mut serveur = Vite(
+        Processus::new("node")
+            .current_dir(client)
+            .env("RBS_API_URL", format!("http://127.0.0.1:{port_api}"))
+            // `--host` explicite : par défaut Vite écoute `localhost`, que cette machine
+            // résout d'abord en IPv6, et le test viserait une adresse où rien n'écoute.
+            .args([
+                "node_modules/vite/bin/vite.js",
+                "--host",
+                "127.0.0.1",
+                "--port",
+                &port_client.to_string(),
+                "--strictPort",
+            ])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("le serveur de développement doit se lancer"),
+    );
+
+    // La racine d'abord, pour savoir que Vite écoute : l'API postiche ne répond qu'une
+    // fois, et une attente qui passerait par le relais la consommerait avant la mesure.
+    attendre(port_client, "/").expect("le serveur de développement doit démarrer");
+    let corps = interroge(port_client, "/health").expect("le relais doit répondre");
+    serveur.0.kill().expect("le serveur s'arrête");
+
+    assert!(
+        corps.contains("{\"status\":\"ok\"}"),
+        "le relais n'a pas atteint l'API :\n{corps}"
+    );
+    postiche.join().expect("l'API postiche se referme");
+}
+
+/// Un serveur de développement qu'on abat quel que soit le chemin de sortie du test.
+///
+/// Sans ce garde, une assertion rompue entre le lancement et l'arrêt laisserait un Vite
+/// vivant, sur un port que la suite suivante croirait libre.
+struct Vite(Child);
+
+impl Drop for Vite {
+    fn drop(&mut self) {
+        let _ = self.0.kill();
+        let _ = self.0.wait();
+    }
+}
+
+/// Interroge `uri` jusqu'à ce que le serveur de développement rende un 200.
+///
+/// Le premier appel arrive avant que Vite n'écoute, et les suivants pendant qu'il résout
+/// ses dépendances : c'est une attente, pas une tentative.
+fn attendre(port: u16, uri: &str) -> Option<String> {
+    let limite = Instant::now() + Duration::from_secs(60);
+
+    while Instant::now() < limite {
+        match interroge(port, uri) {
+            Some(reponse) if reponse.starts_with("HTTP/1.1 200") => return Some(reponse),
+            _ => std::thread::sleep(Duration::from_millis(250)),
+        }
+    }
+
+    None
+}
+
+/// Un `GET uri` en HTTP/1.1, réponse entière rendue telle quelle, statut compris.
+fn interroge(port: u16, uri: &str) -> Option<String> {
+    let requete = format!("GET {uri} HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n");
+    let mut prise = TcpStream::connect(("127.0.0.1", port)).ok()?;
+    prise
+        .set_read_timeout(Some(Duration::from_secs(10)))
+        .expect("la borne de lecture se pose");
+    prise.write_all(requete.as_bytes()).ok()?;
+
+    let mut reponse = String::new();
+    prise.read_to_string(&mut reponse).ok()?;
+
+    Some(reponse)
+}
+
+/// Répond une fois, puis se tait : le relais n'est interrogé qu'une fois.
+fn repond_une_fois(prise: &TcpListener, corps: &str) {
+    let (mut flux, _) = prise.accept().expect("le relais doit se connecter");
+
+    // La requête se lit jusqu'à sa ligne vide : sans cela, la réponse partirait pendant
+    // que le relais écrit encore, et certains le prennent pour une connexion rompue.
+    let mut entete = BufReader::new(flux.try_clone().expect("le flux se dédouble"));
+    let mut ligne = String::new();
+    while entete.read_line(&mut ligne).unwrap_or(0) > 0 {
+        if ligne == "\r\n" || ligne == "\n" {
+            break;
+        }
+        ligne.clear();
+    }
+
+    let _ = flux.write_all(
+        format!(
+            "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{corps}",
+            corps.len()
+        )
+        .as_bytes(),
+    );
+}
+
+/// Une clé de la section `[frontend]` de la configuration du projet engendré.
+///
+/// Lue plutôt que recopiée : le test prouve alors que le build sort là où le binaire
+/// regarde, et non que deux chaînes écrites côte à côte se ressemblent.
+fn configure(projet: &Path, cle: &str) -> String {
+    let configuration = std::fs::read_to_string(projet.join("config/default.toml"))
+        .expect("la configuration du projet se lit");
+    let section = configuration
+        .split("[frontend]")
+        .nth(1)
+        .expect("le fragment a posé sa section");
+
+    section
+        .lines()
+        .take_while(|ligne| !ligne.starts_with('['))
+        .find_map(|ligne| ligne.strip_prefix(&format!("{cle} = ")))
+        .unwrap_or_else(|| panic!("`{cle}` manque à la section [frontend] :\n{section}"))
+        .trim_matches('"')
+        .to_string()
+}
+
+/// `npm` dans le répertoire du client, sa sortie rendue au test quand il échoue.
+fn npm(client: &Path, arguments: &[&str]) {
+    let output = Processus::new("npm")
+        .current_dir(client)
+        .args(arguments)
+        .output()
+        .unwrap_or_else(|faute| panic!("npm {} doit se lancer : {faute}", arguments.join(" ")));
+
+    assert!(
+        output.status.success(),
+        "npm {} a échoué :\n{}{}",
+        arguments.join(" "),
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+}
+
 /// Le binaire livré, lancé depuis `repertoire`.
-fn rbs(repertoire: impl AsRef<std::path::Path>) -> Command {
+fn rbs(repertoire: impl AsRef<Path>) -> Command {
     let mut commande = Command::cargo_bin("rbs").expect("le binaire rbs doit être compilé");
     commande.current_dir(repertoire);
     commande

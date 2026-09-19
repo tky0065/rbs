@@ -1,0 +1,63 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+
+/** Le nom du projet, tel que `rbs new` l'a fixé. */
+const PROJET = '{@ project_name @}'
+
+{% if lang == "en" -%}
+const TITRE = 'The client is in place'
+const SOUS_TITRE =
+  'This is the only route of the base. It asks the service, and nothing it shows is written in advance.'
+const ETAT = 'Health probe'
+const LIBELLE = {
+  attente: 'asking…',
+  ok: 'answering',
+  degradee: 'degraded',
+  injoignable: 'unreachable',
+} as const
+{% else -%}
+const TITRE = 'Le client est en place'
+const SOUS_TITRE =
+  "C'est l'unique route du socle. Elle interroge le service, et rien de ce qu'elle affiche n'est écrit d'avance."
+const ETAT = 'Sonde de santé'
+const LIBELLE = {
+  attente: 'interrogation…',
+  ok: 'répond',
+  degradee: 'dégradée',
+  injoignable: 'injoignable',
+} as const
+{% endif %}
+type Etat = keyof typeof LIBELLE
+
+const etat = ref<Etat>('attente')
+
+// Interrogée réellement : la page ne dit de l'API que ce qu'elle vient d'en obtenir. En
+// développement, l'appel passe par le relais déclaré dans la configuration de build ; une
+// fois construit, il part vers le binaire qui sert cette page.
+onMounted(async () => {
+  try {
+    const reponse = await fetch('/health')
+    etat.value = reponse.ok ? 'ok' : 'degradee'
+  } catch {
+    etat.value = 'injoignable'
+  }
+})
+</script>
+
+<template>
+  <main class="feuille">
+    <header class="bande">
+      <p class="projet">{{ PROJET }}</p>
+      <h1>{{ TITRE }}</h1>
+      <p class="tenue">{{ SOUS_TITRE }}</p>
+    </header>
+
+    <section class="bande bande--paire">
+      <h2>{{ ETAT }}</h2>
+      <dl class="releve">
+        <dt><code>/health</code></dt>
+        <dd :class="{ manque: etat !== 'ok' }">{{ LIBELLE[etat] }}</dd>
+      </dl>
+    </section>
+  </main>
+</template>

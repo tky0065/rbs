@@ -1,10 +1,12 @@
 [feature]
-description = "frontend : le build du client servi par le binaire, et une page d'amorçage tant qu'il manque"
-# Le CLI n'exécute rien : le client se construit de la main du développeur, et c'est la
-# page d'amorçage qui nomme les commandes restantes, avec le chemin que la configuration
-# porte réellement. La ligne ci-dessous dit où aller les lire.
+description = "une application Vue 3 servie par le binaire, et une page d'amorçage tant qu'elle n'est pas construite"
+# Le CLI n'exécute rien : le client se construit de la main du développeur. Ces trois
+# lignes sont donc les seules à dire le geste, et la page d'amorçage les répète à qui
+# démarre le binaire sans les avoir lues.
 next_steps = [
-  "{% if lang == 'en' %}cargo run: the root serves the bootstrap page, which names what is left to build{% else %}cargo run : la racine sert la page d'amorçage, qui nomme ce qu'il reste à construire{% endif %}",
+  "cd frontend && npm install",
+  "{% if lang == 'en' %}npm run build (or npm run dev, which serves the client on its own port){% else %}npm run build (ou npm run dev, qui sert le client sur son propre port){% endif %}",
+  "{% if lang == 'en' %}cargo run: the binary serves the build, and until then a page that names what is left to type{% else %}cargo run : le binaire sert le build, et jusque-là une page qui nomme ce qu'il reste à taper{% endif %}",
 ]
 
 [[files]]
@@ -27,6 +29,46 @@ destination = "src/modules/frontend/feuille.rs"
 source      = "tests.rs.jinja"
 destination = "src/modules/frontend/tests.rs"
 
+# Le client lui-même. Son arbre est plat et sans surprise : c'est celui qu'un
+# `npm create vue` produirait, pour qu'un développeur qui connaît Vue n'ait rien à
+# réapprendre — et parce que `rbs generate crud` viendra y déposer des écrans, ce qui fige
+# la disposition autant que le ferait une API.
+[[files]]
+source      = "client/package.json.jinja"
+destination = "frontend/package.json"
+
+[[files]]
+source      = "client/tsconfig.json.jinja"
+destination = "frontend/tsconfig.json"
+
+[[files]]
+source      = "client/vite.config.ts.jinja"
+destination = "frontend/vite.config.ts"
+
+[[files]]
+source      = "client/index.html.jinja"
+destination = "frontend/index.html"
+
+[[files]]
+source      = "client/src/main.ts.jinja"
+destination = "frontend/src/main.ts"
+
+[[files]]
+source      = "client/src/App.vue.jinja"
+destination = "frontend/src/App.vue"
+
+[[files]]
+source      = "client/src/router/index.ts.jinja"
+destination = "frontend/src/router/index.ts"
+
+[[files]]
+source      = "client/src/views/Accueil.vue.jinja"
+destination = "frontend/src/views/Accueil.vue"
+
+[[files]]
+source      = "client/src/assets/main.css.jinja"
+destination = "frontend/src/assets/main.css"
+
 [[anchors]]
 anchor  = "modules"
 content = "pub mod frontend;"
@@ -37,6 +79,16 @@ content = "pub mod frontend;"
 [[anchors]]
 anchor  = "routes"
 content = ".merge(crate::modules::frontend::routes())"
+
+# Les deux répertoires que le client engendre et que personne ne versionne : les
+# dépendances installées, et le build que le binaire sert. Sans cette ancre, le premier
+# `git status` après un `npm install` proposerait des dizaines de milliers de fichiers.
+[[anchors]]
+anchor  = "ignore"
+content = """
+/frontend/node_modules/
+/frontend/dist/
+"""
 
 # `tower` n'était jusqu'ici qu'une dépendance de développement, pour les tests engendrés :
 # le repli appelle `ServeDir` en service, ce qui demande `oneshot` à l'exécution.

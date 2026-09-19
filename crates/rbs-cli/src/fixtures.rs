@@ -55,6 +55,13 @@ impl Project {
         self
     }
 
+    /// La langue du projet, celle que `config/default.toml` portera et dans laquelle les
+    /// fragments rendront leurs textes.
+    pub(crate) fn lang(mut self, lang: Lang) -> Self {
+        self.options.lang = lang;
+        self
+    }
+
     /// Le chemin du noyau, quand le test a besoin d'une dépendance locale.
     pub(crate) fn core_path(mut self, core_path: Option<PathBuf>) -> Self {
         self.options.core_path = core_path;

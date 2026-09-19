@@ -769,13 +769,14 @@ mod tests {
     /// demande « telle feature est-elle posée ? » répond oui : sans ce contexte, une
     /// chaîne anglaise cachée derrière une feature absente du `[][..]` ou `["redis"][..]`
     /// des autres tests ne serait jamais exercée.
-    const TOUTES: [&str; 14] = [
+    const TOUTES: [&str; 15] = [
         "api-keys",
         "audit",
         "auth",
         "ci",
         "cors",
         "docker",
+        "frontend",
         "jobs",
         "mail",
         "observability",
@@ -1456,10 +1457,11 @@ mod tests {
         }
     }
 
-    /// Le fragment du frontend ne pose ni table ni route nommée : un module, un repli, et
-    /// sa section de configuration. Une ancre de plus dirait qu'il en fait davantage que
-    /// ce que la spec lui donne à faire — et une ancre `layers` à la place de `routes`
-    /// mettrait le repli sur le chemin de toutes les requêtes de l'API.
+    /// Le fragment du frontend ne pose ni table ni route nommée : un module, un repli, sa
+    /// section de configuration, et les deux répertoires que le client engendre. Une ancre
+    /// de plus dirait qu'il en fait davantage que ce que la spec lui donne à faire — et une
+    /// ancre `layers` à la place de `routes` mettrait le repli sur le chemin de toutes les
+    /// requêtes de l'API.
     #[test]
     fn the_frontend_fragment_mounts_a_module_and_a_fallback_and_nothing_else() {
         let source = read(&Path::new(RACINE_FEATURES).join("frontend/feature.toml"));
@@ -1471,12 +1473,23 @@ mod tests {
             .iter()
             .map(|ancre| ancre.anchor.as_str())
             .collect();
-        assert_eq!(ancres, ["modules", "routes"]);
+        assert_eq!(ancres, ["modules", "routes", "ignore"]);
         assert!(
             manifest.anchors[1].content.contains("merge"),
             "le repli se monte sur le routeur : {}",
             manifest.anchors[1].content
         );
+
+        // Les deux seuls répertoires que le client engendre, et le premier fragment à se
+        // servir de l'ancre des exclusions. Un `npm install` non ignoré, ce sont des
+        // dizaines de milliers de fichiers au premier `git status`.
+        let exclusions = &manifest.anchors[2].content;
+        for repertoire in ["/frontend/node_modules/", "/frontend/dist/"] {
+            assert!(
+                exclusions.contains(repertoire),
+                "`{repertoire}` n'est pas exclu du dépôt : {exclusions}"
+            );
+        }
 
         assert!(
             manifest.migration.is_none(),
@@ -1507,6 +1520,136 @@ mod tests {
             !manifest.feature.next_steps.is_empty(),
             "le fragment livre du non-Rust : il doit dire où lire ce qu'il reste à faire"
         );
+    }
+
+    /// Le relais du serveur de développement vise le port où le binaire écoute.
+    ///
+    /// Deux fichiers portent ce port, et rien ne les tient ensemble : la configuration du
+    /// squelette, que lit le binaire, et la configuration de build du client, que lit
+    /// Vite. Les voir diverger coûte une erreur d'origine en développement, que rien
+    /// d'autre ne signalerait — le build, lui, n'a pas de relais.
+    #[test]
+    fn the_development_proxy_targets_the_port_the_skeleton_listens_on() {
+        let configuration = read(&Path::new(RACINE).join("config/default.toml.jinja"));
+        let port = configuration
+            .lines()
+            .find_map(|ligne| ligne.strip_prefix("port = "))
+            .expect("le squelette déclare le port de son serveur");
+
+        let build = read(&Path::new(RACINE_FEATURES).join("frontend/client/vite.config.ts.jinja"));
+        assert!(
+            build.contains(&format!("http://127.0.0.1:{port}")),
+            "le relais ne vise pas le port {port} du squelette :\n{build}"
+        );
+
+        assert!(
+            build.contains("changeOrigin"),
+            "sans cela le binaire verrait l'origine de Vite :\n{build}"
+        );
+    }
+
+    /// Le relais couvre les routes du squelette, et rien qui n'existe pas.
+    ///
+    /// Les deux sens comptent. Une route montée qu'il oublierait rendrait l'application
+    /// au lieu d'elle-même, en silence — c'est ce qui arrive à la documentation OpenAPI.
+    /// Un préfixe qu'aucune route ne sert, à l'inverse, ne se voit jamais : il n'échoue
+    /// pas, il ne fait rien, et il laisse croire que la question est réglée.
+    #[test]
+    fn the_development_proxy_relays_the_routes_the_skeleton_mounts_and_only_those() {
+        let montees = routes_du_squelette();
+        let build = read(&Path::new(RACINE_FEATURES).join("frontend/client/vite.config.ts.jinja"));
+        let relayes: Vec<&str> = build
+            .lines()
+            .find_map(|ligne| ligne.strip_prefix("const RELAYE = ["))
+            .expect("la configuration de build déclare ce qu'elle relaie")
+            .trim_end_matches(']')
+            .split(',')
+            .map(|prefixe| prefixe.trim().trim_matches('\''))
+            .collect();
+
+        for route in &montees {
+            assert!(
+                relayes.iter().any(|prefixe| route.starts_with(prefixe)),
+                "`{route}` n'est pas relayée : en développement, elle rendrait l'application"
+            );
+        }
+
+        for prefixe in &relayes {
+            assert!(
+                montees.iter().any(|route| route.starts_with(prefixe)),
+                "`{prefixe}` est relayé alors qu'aucune route du squelette ne commence par lui"
+            );
+        }
+    }
+
+    /// Les deux feuilles du fragment nomment les mêmes couleurs sous les mêmes noms.
+    ///
+    /// Le binaire sert la page d'amorçage, puis le client prend sa place : deux feuilles
+    /// écrites dans deux langages, que rien ne tient ensemble. Les voir diverger ne casse
+    /// rien — c'est ce qui rend la dérive silencieuse, et elle avait déjà commencé.
+    ///
+    /// Le sens compte : la feuille du client ne peut rien nommer que la page d'amorçage
+    /// ne nomme pas de même, mais celle-ci garde le droit d'en porter davantage, ayant
+    /// seule à composer sans classe utilitaire.
+    #[test]
+    fn both_stylesheets_of_the_fragment_agree_on_the_colours_they_name() {
+        let variables = |source: &str| {
+            source
+                .lines()
+                .filter_map(|ligne| ligne.trim().strip_prefix("--"))
+                .filter_map(|ligne| ligne.split_once(": "))
+                .map(|(nom, valeur)| (nom.to_string(), valeur.trim_end_matches(';').to_string()))
+                .collect::<std::collections::BTreeMap<_, _>>()
+        };
+
+        let racine = Path::new(RACINE_FEATURES).join("frontend");
+        let amorcage = variables(&read(&racine.join("feuille.rs.jinja")));
+        let client = variables(&read(&racine.join("client/src/assets/main.css.jinja")));
+
+        assert!(
+            !client.is_empty(),
+            "la feuille du client ne nomme aucune couleur"
+        );
+        for (nom, valeur) in &client {
+            assert_eq!(
+                amorcage.get(nom),
+                Some(valeur),
+                "`--{nom}` diffère entre la page d'amorçage et le client"
+            );
+        }
+    }
+
+    /// Les routes que le squelette monte de lui-même, lues dans ses templates.
+    ///
+    /// Lues et non recopiées : déplacer l'interface OpenAPI sans déplacer le relais est
+    /// exactement la faute que le test ci-dessus existe pour voir.
+    fn routes_du_squelette() -> Vec<String> {
+        let sante = read(&Path::new(RACINE).join("src/health/mod.rs.jinja"));
+        let documentation = read(&Path::new(RACINE).join("src/openapi.rs.jinja"));
+
+        let entre_guillemets = |source: &str, apres: &str| {
+            source
+                .split(apres)
+                .skip(1)
+                .filter_map(|reste| reste.split('"').nth(1))
+                .map(str::to_string)
+                .collect::<Vec<_>>()
+        };
+
+        let mut routes = entre_guillemets(&sante, ".route(");
+        routes.extend(entre_guillemets(&documentation, "SwaggerUi::new("));
+        routes.extend(entre_guillemets(&documentation, ".route("));
+        routes.extend(entre_guillemets(&documentation, ".url("));
+        routes.sort();
+        routes.dedup();
+
+        assert!(
+            routes.iter().any(|route| route == "/health")
+                && routes.iter().any(|route| route.contains("openapi.json")),
+            "la lecture des routes du squelette n'a rien trouvé : {routes:?}"
+        );
+
+        routes
     }
 
     #[test]

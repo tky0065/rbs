@@ -1,0 +1,10 @@
+import { createRouter, createWebHistory } from 'vue-router'
+
+import Accueil from '@/views/Accueil.vue'
+
+// L'historique du navigateur suppose que le serveur rende l'index pour une route qu'il ne
+// connaît pas : le module de service du projet le fait, et les deux tiennent ensemble.
+export const router = createRouter({
+  history: createWebHistory(),
+  routes: [{ path: '/', name: 'accueil', component: Accueil }],
+})

@@ -3024,7 +3024,8 @@ mod tests {
     }
 
     /// Ce que le fragment du frontend dépose, et où : un module sous le point de montage,
-    /// un repli sur le routeur, sa section dans la configuration du projet.
+    /// un repli sur le routeur, sa section dans la configuration du projet, et le client
+    /// que ce repli servira.
     #[test]
     fn the_frontend_fragment_plans_a_module_a_fallback_and_its_configuration() {
         let (_parent, root) = project();
@@ -3040,8 +3041,37 @@ mod tests {
                 "src/modules/frontend/amorcage.rs",
                 "src/modules/frontend/feuille.rs",
                 "src/modules/frontend/tests.rs",
+                "frontend/package.json",
+                "frontend/tsconfig.json",
+                "frontend/vite.config.ts",
+                "frontend/index.html",
+                "frontend/src/main.ts",
+                "frontend/src/App.vue",
+                "frontend/src/router/index.ts",
+                "frontend/src/views/Accueil.vue",
+                "frontend/src/assets/main.css",
             ]
         );
+
+        // Les deux moitiés du fragment ne se rencontrent qu'ici : le binaire sert `dir`,
+        // et Vite écrit sous son défaut, `dist` à la racine du client. Déplacer l'un des
+        // deux — une clé changée, un `outDir` posé dans la configuration de build —
+        // rendrait la page d'amorçage éternelle, sans que rien n'échoue.
+        let config = projected(&planned, "config/default.toml");
+        assert!(config.contains("dir = \"frontend/dist\""), "{config}");
+        let vite = projected(&planned, "frontend/vite.config.ts");
+        assert!(
+            !vite.contains("outDir"),
+            "le build sort ailleurs que là où le binaire regarde :\n{vite}"
+        );
+
+        // Les deux répertoires que `npm` engendre n'entrent pas au dépôt.
+        let exclusions = projected(&planned, ".gitignore");
+        assert!(
+            exclusions.contains("/frontend/node_modules/"),
+            "{exclusions}"
+        );
+        assert!(exclusions.contains("/frontend/dist/"), "{exclusions}");
 
         let montage = projected(&planned, "src/modules/mod.rs");
         assert!(montage.contains("pub mod frontend;"), "{montage}");
@@ -3066,9 +3096,7 @@ mod tests {
             "le repli n'est pas dans l'ancre des routes :\n{routeur}"
         );
 
-        let config = projected(&planned, "config/default.toml");
         assert!(config.contains("[frontend]"), "{config}");
-        assert!(config.contains("dir = \"frontend/dist\""), "{config}");
 
         // `tower` ne vivait qu'en dépendance de développement, et `tower-http` sans sa
         // feature `fs` : le service de fichiers a besoin des deux à l'exécution.
@@ -3082,8 +3110,11 @@ mod tests {
         assert_eq!(fingerprint(&root), before, "la planification a écrit");
     }
 
-    /// Le fragment livre du code que le CLI ne sait pas construire : il dit donc où lire
-    /// ce qu'il reste à faire, par le champ du manifeste et non par la table du CLI.
+    /// Le fragment livre du code que le CLI ne sait pas construire : il dit donc les
+    /// gestes qui restent, par le champ du manifeste et non par la table du CLI.
+    ///
+    /// Les trois lignes sont l'unique endroit où le geste se dit avant l'exécution du
+    /// binaire — la page d'amorçage, elle, ne se lit qu'une fois le serveur lancé.
     #[test]
     fn the_frontend_fragment_says_where_to_read_what_is_left_to_do() {
         let (_parent, root) = project();
@@ -3095,11 +3126,82 @@ mod tests {
             .iter()
             .find(|pose| pose.name == "frontend")
             .expect("le fragment est posé");
-        assert_eq!(pose.next_steps.len(), 1, "{:?}", pose.next_steps);
-        assert!(
-            pose.next_steps[0].contains("cargo run"),
-            "{:?}",
-            pose.next_steps
+        let etapes = pose.next_steps.join("\n");
+        for geste in ["cd frontend && npm install", "npm run build", "cargo run"] {
+            assert!(
+                etapes.contains(geste),
+                "`{geste}` n'est pas dit :\n{etapes}"
+            );
+        }
+    }
+
+    /// Le seul filet contre un délimiteur de bloc égaré dans un composant, ou une variable
+    /// hors contexte : le moteur rend chaque fichier *pendant* la planification, si bien
+    /// qu'un plan calculé est déjà un rendu de tout ce que le fragment livre.
+    ///
+    /// Deux projets, et non un. Le socle porte deux jeux de textes et se branche sur la
+    /// langue ; un projet neuf en français n'exerce qu'une moitié des fichiers, et c'est
+    /// l'autre qui casserait chez l'utilisateur. Le second projet est aussi celui où tous
+    /// les autres fragments sont posés : une branche qui se demande « tel fragment est-il
+    /// là ? » y répond oui.
+    #[test]
+    fn the_frontend_fragment_renders_every_file_it_ships_on_a_bare_and_on_a_full_project() {
+        let livres = |root: &std::path::Path| {
+            let planned = plan_for(&options(root, "frontend")).expect("le plan doit se calculer");
+
+            // Tout ce que le fragment dépose, le module Rust compris : `projected` rend le
+            // contenu que le plan porte, et le plan ne le porte que si le moteur l'a rendu.
+            for chemin in &planned.files {
+                let rendu = projected(&planned, chemin);
+                assert!(!rendu.is_empty(), "{chemin} est rendu vide");
+            }
+
+            // Un plan dont le client serait absent passerait la boucle à vide sur la
+            // moitié qui nous occupe : ce sont les fichiers rendus qu'on compte.
+            let client: Vec<String> = planned
+                .files
+                .iter()
+                .filter(|chemin| chemin.starts_with("frontend/"))
+                .cloned()
+                .collect();
+            assert_eq!(client.len(), 9, "{client:?}");
+
+            client
+        };
+
+        let (_nu, nu) = project();
+        let (_complet, complet) = crate::fixtures::Project::new()
+            .lang(crate::lang::Lang::En)
+            .features(&[
+                "api-keys",
+                "audit",
+                "auth",
+                "ci",
+                "cors",
+                "docker",
+                "jobs",
+                "mail",
+                "observability",
+                "rate-limit",
+                "redis",
+                "scheduler",
+                "storage",
+                "webhooks",
+            ])
+            .create();
+
+        assert_eq!(
+            livres(&nu),
+            livres(&complet),
+            "le socle ne dépend d'aucun autre fragment : il livre le même arbre des deux côtés"
         );
+
+        // Et les textes, eux, suivent bien la langue du projet : sans ce contrôle, un
+        // socle qui ne se brancherait sur rien passerait le test ci-dessus sans avoir
+        // jamais exercé sa seconde moitié.
+        let anglais = plan_for(&options(&complet, "frontend")).expect("le plan doit se calculer");
+        let accueil = projected(&anglais, "frontend/src/views/Accueil.vue");
+        assert!(accueil.contains("The client is in place"), "{accueil}");
+        assert!(!accueil.contains("Le client est en place"), "{accueil}");
     }
 }

@@ -767,5 +767,23 @@ mod tests {
             !dependances.contains("tower ="),
             "`tower` est restée en dépendance d'exécution : {dependances}"
         );
+
+        // Le client s'en va avec le module qui le servait : le laisser derrière poserait
+        // un arbre npm que plus rien ne construit ni ne sert.
+        assert!(
+            !root.join("frontend/package.json").exists()
+                && !root.join("frontend/src/views/Accueil.vue").exists(),
+            "le client est resté"
+        );
+
+        // Et les exclusions qu'il avait posées repartent : une ligne laissée là ferait
+        // ignorer un répertoire dont plus rien ne parle.
+        let exclusions = lire(".gitignore");
+        assert!(!exclusions.contains("node_modules"), "{exclusions}");
+        assert!(!exclusions.contains("frontend/dist"), "{exclusions}");
+        assert!(
+            exclusions.contains("# <rbs:ignore>"),
+            "l'ancre reste, seules les lignes partent : {exclusions}"
+        );
     }
 }
