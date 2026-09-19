@@ -276,7 +276,7 @@ MAISON=1
 ## `--with` installe
 
 `--with` nomme les features à installer à la création, séparées par des virgules. rbs en
-connaît treize — `audit`, `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`,
+connaît quatorze — `api-keys`, `audit`, `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`,
 `observability`, `rate-limit`, `redis`, `scheduler`, `storage` et `webhooks` — et
 installe chacune des nommées, dans la même passe qui écrit le projet :
 
@@ -345,7 +345,7 @@ Un nom qui n'est pas une feature du tout est refusé avant que le premier fichie
 {/* rbs:transcript cmd="rbs new site --with graphql --yes" */}
 ```text
 $ rbs new site --with graphql --yes
-erreur : `graphql` n'est pas une feature rbs — disponibles : audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
+erreur : `graphql` n'est pas une feature rbs — disponibles : api-keys, audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 ```
 
 ## Un preset nomme un jeu
