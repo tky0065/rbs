@@ -132,6 +132,55 @@ jobs:
           RBS_TEST_PG: ${{ matrix.postgres }}
         run: cargo test --workspace --all-features --no-fail-fast -- --ignored
 
+  # `admin-console` est le seul exemple construit deux fois : en Rust comme les quatre
+  # autres, par la boucle clippy du job ci-dessus, et côté client ici. Sans ce job, les
+  # centaines de lignes de TypeScript que le socle, le shell et l'écran engendré déposent
+  # ne seraient compilées nulle part — la documentation les citerait sans que rien ne les
+  # ait jamais vérifiées, et un exemple périmé fait mentir des pages entières.
+  #
+  # Hors du job `linux` : celui-ci n'installe pas Node, et une chaîne npm de plusieurs
+  # minutes y noierait le verdict de `cargo fmt` derrière une installation de paquets.
+  exemple-frontend:
+    name: admin-console · frontend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: rbs
+        run: cargo build -p rbs-cli --bin rbs
+
+      # La commande compile l'exemple pour lire le document que son binaire publie : c'est
+      # la première des deux constructions, et la seule preuve que le contrat lu est celui
+      # que le projet sert. L'exemple déclare son propre `[workspace]`, que le workspace
+      # racine exclut : le binaire se lance depuis sa cible, et non par `cargo run`.
+      - name: client typé
+        working-directory: examples/admin-console
+        run: ../../target/debug/rbs generate client --lang ts --out frontend/src/api --force
+
+      # Le client versionné sort de la comparaison octet à octet du jeu d'exemples — le
+      # rejeu ne lance pas cette commande-ci, qui compile. C'est ici qu'il est gardé :
+      # régénéré, il doit être celui que le dépôt porte.
+      - name: le client versionné est celui que la commande produit
+        run: git diff --exit-code -- examples/admin-console/frontend/src/api/client.ts
+
+      # `npm install` et non `npm ci` : l'exemple ne versionne aucun verrou de dépendances,
+      # le rejeu du jeu d'exemples n'exécutant jamais l'installateur — et un verrou commité
+      # que rien ne régénère se périmerait en silence.
+      - name: frontend
+        working-directory: examples/admin-console/frontend
+        run: |
+          npm install --no-audit --no-fund
+          npm run typecheck
+          npm run build
+
   # Un audit ne compile rien : le tenir hors du job `linux` le rend en quelques secondes,
   # et son verdict ne se perd pas derrière vingt minutes de compilation.
   #

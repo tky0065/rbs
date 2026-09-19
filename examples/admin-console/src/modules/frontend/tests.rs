@@ -1,5 +1,5 @@
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use axum::Router;
 use axum::body::Body;
@@ -20,7 +20,7 @@ fn racine(nom: &str) -> PathBuf {
 }
 
 /// Une configuration visant `dir`, le reste au défaut.
-fn visant(dir: &PathBuf) -> Config {
+fn visant(dir: &Path) -> Config {
     Config {
         dir: dir.display().to_string(),
         ..Config::default()

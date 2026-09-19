@@ -13,6 +13,7 @@ lit ces fichiers, et la CI les compile.
 | `file-drop` | Les trois features de la v0.3 sur un même projet — `redis`, `mail`, `storage` — câblées dans un CRUD `uploads`. |
 | `newsletter-queue` | `jobs`, `mail` et `observability` : une route de diffusion qui enfile une lettre par abonné confirmé, dans la transaction qui les lit — et un listener `/metrics` à lui. |
 | `event-hub` | `webhooks`, `scheduler`, `audit`, `cors`, `docker`, `ci` et `api-keys` : la création d'une commande écrit sa trace d'audit et émet `order.created` dans la transaction qui l'insère. |
+| `admin-console` | `cors` et `frontend-admin` : une application Vue 3 que le binaire sert lui-même — l'accueil public, le shell d'administration authentifié, et les écrans d'`incidents` qu'a émis `rbs generate crud` en même temps que l'entité. Le seul exemple construit deux fois, en Rust et côté client. |
 
 Ils ne sont pas membres du workspace racine — un projet engendré déclare son propre
 `[workspace]`, et Cargo interdit l'imbrication. Le manifeste racine les exclut et la CI
@@ -111,6 +112,45 @@ cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
   generate crud subscribers --fields 'email:string:unique,name:string,confirmed:bool' --force
 cd .. && mv newsletter-queue examples/newsletter-queue
 ```
+
+### `admin-console`
+
+Le shell exige `auth`, qui tire `mail` et `rate-limit` : les cinq fragments descendent d'un
+seul plan. Le commit se prend avant chaque `add`, comme partout ailleurs.
+
+```bash
+cargo run -p rbs-cli --bin rbs -- new admin-console --yes \
+  --core-path ./crates/rbs-core \
+  --database-url 'postgres://rbs:rbs@localhost:5432/admin_console' \
+  --lang fr
+cd admin-console
+for f in cors frontend-admin; do
+  git add -A && git commit -q -m "before $f"
+  cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add "$f"
+done
+cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
+  generate crud incidents \
+  --fields 'reference:string:unique,sujet:string,detail:text,gravite:enum(basse,moyenne,haute),ouvert:bool,duree_minutes:int:optional,echeance:date:optional,constate_le:datetime' \
+  --force
+cd .. && mv admin-console examples/admin-console
+cd examples/admin-console && cargo run --manifest-path ../../Cargo.toml -p rbs-cli --bin rbs -- \
+  generate client --lang ts --out frontend/src/api --force
+```
+
+`generate crud` a écrit `frontend/src/admin/vues/Incidents.vue` de lui-même et l'a monté
+dans le rail et la table de routage : sur un projet portant `frontend-admin`, la commande
+lit les fragments installés et adapte sa sortie, comme elle écrit des routes fermées dès
+que `auth` est là. `--no-admin` est la sortie de secours, et cet exemple ne la prend pas.
+
+Les huit colonnes sont là pour couvrir les huit contrôles que le formulaire engendré sait
+porter — une chaîne, un texte long, une énumération, un booléen, un entier facultatif, une
+date facultative et un instant. C'est le seul endroit du dépôt où ce formulaire est compilé
+pour de bon.
+
+Le client vient en dernier, et c'est une seconde commande plutôt qu'une étape du rejeu :
+elle compile le projet pour lire le document que son binaire publie. Le test de non-dérive
+laisse donc `frontend/src/api/client.ts` hors de la comparaison, et le job de CI
+`admin-console · frontend` le régénère en exigeant qu'il n'ait pas bougé.
 
 ### `event-hub`
 
@@ -306,10 +346,18 @@ admin` d'`EXEMPLES` et les deux côtés régénèrent des écritures au seuil pa
 mot. C'est `blog_auth_carries_the_two_regimes_of_the_guard` qui en répond — il compte trois
 `Role::Admin` et trois `Role::User` dans le contrôleur engendré.
 
-## Un piège à connaître
+## Deux pièges à connaître
 
-Docusaurus met en cache par fichier Markdown. Changez une source sous `examples/` sans
+Docusaurus met en cache par fichier Markdown. Modifiez une source sous `examples/` sans
 toucher à la page qui la cite, et un `npm run build` local servira sans broncher l'ancien
-extrait — il ignore que la page dépend de ce fichier. Lancez `npm run clear` d'abord quand
-vous avez édité un exemple. La CI le fait explicitement plutôt que de compter sur un
-checkout neuf.
+extrait — il ne sait pas que la page dépend de ce fichier. Lancez `npm run clear` d'abord
+quand vous avez édité un exemple. La CI le fait explicitement plutôt que de se reposer sur
+la fraîcheur de son checkout.
+
+Construire le frontend d'`admin-console` y laisse trois choses, et le test de non-dérive
+compare le système de fichiers et non ce que Git suit : `frontend/node_modules/` et
+`frontend/dist/` sont couverts par le `.gitignore` engendré, mais
+**`frontend/package-lock.json` ne l'est pas**. Supprimez le verrou après tout `npm install`
+local. C'est voulu et non un oubli — un vrai projet committe son verrou, un exemple ne doit
+pas : le rejeu ne lance jamais l'installateur, donc rien ne le régénérerait, et il se
+périmerait en silence. C'est le test de non-dérive qui le dit, en nommant le fichier.

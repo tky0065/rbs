@@ -13,6 +13,7 @@ the site reads these files, and CI compiles them.
 | `file-drop` | The three v0.3 features on one project — `redis`, `mail`, `storage` — wired into an `uploads` CRUD. |
 | `newsletter-queue` | `jobs`, `mail` and `observability`: a broadcast route that enqueues one letter per confirmed subscriber, inside the transaction that reads them — and a `/metrics` listener of its own. |
 | `event-hub` | `webhooks`, `scheduler`, `audit`, `cors`, `docker`, `ci` and `api-keys`: creating an order writes its audit entry and emits `order.created` inside the transaction that inserts it. |
+| `admin-console` | `cors` and `frontend-admin`: a Vue 3 application served by the binary itself — the public home page, the authenticated admin shell, and the `incidents` screens `rbs generate crud` emitted along with the entity. The only example built twice, in Rust and on the client. |
 
 They are not members of the root workspace — a generated project declares its own
 `[workspace]`, and Cargo forbids nesting. The root manifest excludes them and CI compiles
@@ -112,6 +113,44 @@ cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
   generate crud subscribers --fields 'email:string:unique,name:string,confirmed:bool' --force
 cd .. && mv newsletter-queue examples/newsletter-queue
 ```
+
+### `admin-console`
+
+Le shell exige `auth`, qui tire `mail` et `rate-limit` : the five fragments come down from
+one plan. The commit is taken before each `add`, like everywhere else.
+
+```bash
+cargo run -p rbs-cli --bin rbs -- new admin-console --yes \
+  --core-path ./crates/rbs-core \
+  --database-url 'postgres://rbs:rbs@localhost:5432/admin_console' \
+  --lang fr
+cd admin-console
+for f in cors frontend-admin; do
+  git add -A && git commit -q -m "before $f"
+  cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- add "$f"
+done
+cargo run --manifest-path ../Cargo.toml -p rbs-cli --bin rbs -- \
+  generate crud incidents \
+  --fields 'reference:string:unique,sujet:string,detail:text,gravite:enum(basse,moyenne,haute),ouvert:bool,duree_minutes:int:optional,echeance:date:optional,constate_le:datetime' \
+  --force
+cd .. && mv admin-console examples/admin-console
+cd examples/admin-console && cargo run --manifest-path ../../Cargo.toml -p rbs-cli --bin rbs -- \
+  generate client --lang ts --out frontend/src/api --force
+```
+
+`generate crud` wrote `frontend/src/admin/vues/Incidents.vue` on its own and mounted it in
+the rail and the routing table: on a project carrying `frontend-admin`, the command reads
+the installed fragments and adapts its output, the same way it writes closed routes as soon
+as `auth` is there. `--no-admin` is the way out, and this example does not take it.
+
+The eight columns are there to cover the eight controls the generated form can hold — a
+string, a long text, an enumeration, a boolean, an optional integer, an optional date and
+an instant. This is the only place in the repository where that form is compiled for real.
+
+The client comes last, and it is a second command rather than part of the replay: it
+compiles the project to read the document its binary publishes. The drift test therefore
+leaves `frontend/src/api/client.ts` out of the comparison, and the
+`admin-console · frontend` CI job regenerates it and requires that it has not moved.
 
 ### `event-hub`
 
@@ -299,9 +338,17 @@ admin` from `EXEMPLES` and both sides regenerate writes at the default threshold
 silence. `blog_auth_carries_the_two_regimes_of_the_guard` is what answers for that — it
 counts three `Role::Admin` and three `Role::User` in the generated controller.
 
-## One trap worth knowing
+## Two traps worth knowing
 
 Docusaurus caches by Markdown file. Change a source under `examples/` without touching the
 page that quotes it, and a local `npm run build` will happily serve the old snippet — it
 does not know the page depends on that file. Run `npm run clear` first when you have
 edited an example. CI does this explicitly rather than relying on its checkout being new.
+
+Building `admin-console`'s frontend leaves three things behind in it, and the drift test
+compares the filesystem rather than what Git tracks: `frontend/node_modules/` and
+`frontend/dist/` the generated `.gitignore` covers, but **`frontend/package-lock.json` it
+does not**. Delete the lockfile after any local `npm install` there. That is by design
+rather than an oversight — a real project commits its lockfile, an example must not: the
+replay never runs the installer, so nothing would ever regenerate it, and it would go stale
+in silence. The drift test is what says so, naming the file.

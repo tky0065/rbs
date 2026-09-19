@@ -172,6 +172,30 @@ const EXEMPLES: &[Exemple] = &[
         ],
         engendre_a_part: &[],
     },
+    Exemple {
+        nom: "admin-console",
+        database_url: "postgres://rbs:rbs@localhost:5432/admin_console",
+        // `frontend-admin` tire `frontend` et `auth`, et par elle `mail` et `rate-limit` :
+        // cinq fragments descendent d'un seul plan. `cors` vient avant, pour que la couche
+        // qu'il pose enveloppe celle de la limite de débit — c'est aussi ce qui rend le
+        // serveur de développement de Vite joignable depuis son propre port.
+        features: &["cors", "frontend-admin"],
+        crud: "incidents",
+        // Huit colonnes, et huit contrôles à couvrir : une chaîne, un texte long, une
+        // énumération, un booléen, un entier facultatif, une date facultative et un
+        // instant. C'est le seul endroit du dépôt où le formulaire engendré est compilé
+        // pour de bon, et une seule forme non couverte ici ne l'est nulle part.
+        champs: "reference:string:unique,sujet:string,detail:text,\
+                 gravite:enum(basse,moyenne,haute),ouvert:bool,duree_minutes:int:optional,\
+                 echeance:date:optional,constate_le:datetime",
+        role: None,
+        with_upload: false,
+        edite_a_la_main: &[],
+        // Le client typé que le shell importe. Le rejeu ne lance pas la commande qui
+        // l'écrit — elle compile le projet — et c'est le job `admin-console · frontend`
+        // qui répond de lui, en le régénérant puis en exigeant qu'il n'ait pas bougé.
+        engendre_a_part: &["frontend/src/api/client.ts"],
+    },
 ];
 
 const REGENERER: &str = "examples/README.md donne la commande de régénération";
@@ -201,6 +225,11 @@ fn file_drop_is_what_the_cli_produces_today() {
 #[test]
 fn newsletter_queue_is_what_the_cli_produces_today() {
     assert_no_drift(example("newsletter-queue"));
+}
+
+#[test]
+fn admin_console_is_what_the_cli_produces_today() {
+    assert_no_drift(example("admin-console"));
 }
 
 #[test]
@@ -1072,6 +1101,56 @@ fn the_hand_edits_of_event_hub_are_in_place() {
     assert!(
         controller.contains("service::create(state.core().db(), input, &identite.user_id)"),
         "src/orders/controller.rs : l'identité doit descendre jusqu'au journal :\n{controller}"
+    );
+}
+
+/// Ce que `rbs generate client` a déposé dans `admin-console`, et que la comparaison exclut.
+///
+/// Le shell d'administration importe ce fichier, et l'écran engendré y prend le corps de
+/// la ressource : un client qui cesserait de publier une des cinq méthodes du CRUD ferait
+/// échouer la vérification des types, mais seulement dans le job qui construit le
+/// frontend. Ce test-ci répond du fichier versionné sans installer Node.
+///
+/// Il n'est pas régénéré ici — la commande compile le projet, ce qu'un test rapide ne peut
+/// pas faire. Le job `admin-console · frontend` le régénère et exige qu'il n'ait pas bougé.
+#[test]
+fn the_typescript_client_of_admin_console_is_in_place() {
+    let client = std::fs::read_to_string(
+        common::depot()
+            .join("examples/admin-console")
+            .join("frontend/src/api/client.ts"),
+    )
+    .expect("le client versionné doit être lisible");
+
+    // Les cinq méthodes que l'écran engendré appelle, et celles du shell.
+    for methode in [
+        "incidentsFilter(",
+        "incidentsFind(",
+        "incidentsCreate(",
+        "incidentsUpdate(",
+        "incidentsDelete(",
+        "authLogin(",
+        "authMe(",
+        "authListSessions(",
+        "health(",
+    ] {
+        assert!(
+            client.contains(methode),
+            "{methode} absente du client versionné de admin-console"
+        );
+    }
+
+    // Le composant de l'énumération se déclare en alias de type : rendu en `interface`, il
+    // n'était pas du TypeScript, et le fichier entier cessait de s'analyser.
+    assert!(
+        client.contains(r#"export type IncidentGravite = "basse" | "moyenne" | "haute""#),
+        "{client}"
+    );
+
+    // Et le type que l'écran importe nommément.
+    assert!(
+        client.contains("export interface IncidentResponse {"),
+        "{client}"
     );
 }
 

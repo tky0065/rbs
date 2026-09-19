@@ -150,7 +150,13 @@ fn collect(racine: &Path, repertoire: &Path, fichiers: &mut Empreinte) {
         let chemin = entree.expect("entrée lisible").path();
         let nom = chemin.file_name().unwrap_or_default().to_string_lossy();
 
-        if nom == ".git" || nom == "target" {
+        // Trois répertoires qu'aucun projet ne versionne, et qu'un relevé n'a donc rien à
+        // dire. `node_modules` s'y ajoute depuis qu'un exemple porte un frontend : un `npm
+        // install` lancé sur place y dépose des dizaines de milliers de fichiers, et un
+        // relevé qui les parcourrait rendrait le test de non-dérive illisible plutôt que
+        // simplement rouge. Le répertoire de build et le verrou de npm, eux, restent
+        // relevés : ils ne doivent pas être là, et c'est ce test qui le dit.
+        if nom == ".git" || nom == "target" || nom == "node_modules" {
             continue;
         }
 
