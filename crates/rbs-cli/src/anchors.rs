@@ -707,9 +707,9 @@ pub(crate) fn repose(source: &str, anchor: &Anchor) -> Result<String, Cause> {
 /// L'indentation que prend le bloc reposé sous sa ligne d'accroche.
 ///
 /// Une ligne qui ouvre un bloc — `vec![`, `seeds! {`, `services:` — indente d'un cran ce
-/// qui la suit ; les autres la partagent. Le pas est celui du langage porteur, que le
-/// marqueur de commentaire désigne : quatre colonnes en Rust, deux en YAML, où poser le
-/// bloc à côté ferait insérer un service hors de `services:`.
+/// qui la suit ; les autres la partagent. Le pas vient du langage porteur et lui seul
+/// (voir `Anchor::pas`) : quatre colonnes en Rust, deux ailleurs, où poser le bloc à côté
+/// ferait insérer un service hors de `services:`.
 fn indentation(accroche: &str, pas: &str) -> String {
     let propre = accroche.trim();
     let courante = &accroche[..accroche.len() - accroche.trim_start().len()];

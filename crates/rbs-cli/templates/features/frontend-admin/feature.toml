@@ -69,7 +69,6 @@ destination = "frontend/src/admin/textes.ts"
 source      = "client/src/admin/Shell.vue.jinja"
 destination = "frontend/src/admin/Shell.vue"
 
-
 [[files]]
 source      = "client/src/admin/vues/Connexion.vue.jinja"
 destination = "frontend/src/admin/vues/Connexion.vue"

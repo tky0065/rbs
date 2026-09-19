@@ -138,8 +138,8 @@ fichier appartient au développeur, qui peut l'avoir supprimé.
 méthode, et une ancre mal placée y romprait la compilation plutôt que d'ajouter une ligne
 morte.
 
-`admin_routes` et `admin_rail` sont les deux seules hors du Rust et du YAML, et les deux
-seules du frontend. Il n'y en a pas de troisième pour déclarer le module d'un écran : en
+`admin_routes` et `admin_rail` sont les deux seules du frontend, et les seules en
+TypeScript — `ignore`, elle, vit dans le fichier d'exclusions. Il n'y en a pas de troisième pour déclarer le module d'un écran : en
 TypeScript, l'import qui donne son composant à la route *est* la déclaration, là où Rust
 demande un `pub mod` distinct du montage. `admin_rail` vit dans un module `.ts` et non
 dans le `<template>` de la coquille — le mécanisme ne sait ouvrir une ancre que derrière

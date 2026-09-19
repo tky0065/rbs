@@ -861,4 +861,42 @@ mod tests {
         // comptes qui disparaîtrait avec une interface serait une perte de données.
         assert!(root.join("src/auth/mod.rs").exists(), "auth est partie");
     }
+
+    /// Une ancre effacée à la main rend le fichier en conflit, et n'arrête pas la commande.
+    ///
+    /// Le retrait rejoue les insertions du fragment avant de comparer le disque à ses
+    /// templates : c'est ainsi qu'il reconnaît un fichier qu'il a lui-même écrit *et*
+    /// visé. Le rejeu part de la template, où les balises sont toujours là, et ce que le
+    /// développeur a fait du fichier ne peut donc pas faire lever la commande — seulement
+    /// l'écarter de ce que le retrait attendait. C'est un conflit, et le plan le dit.
+    #[test]
+    fn an_anchor_wiped_by_hand_makes_the_file_a_conflict_rather_than_an_error() {
+        let (_parent, root) = crate::fixtures::Project::new()
+            .features(&["frontend", "auth", "frontend-admin"])
+            .create();
+
+        let montage = root.join("frontend/src/admin/montage.ts");
+        let sans_ancre = std::fs::read_to_string(&montage)
+            .expect("le montage est lisible")
+            .lines()
+            .filter(|ligne| !ligne.contains("rbs:admin_routes"))
+            .collect::<Vec<_>>()
+            .join("\n");
+        std::fs::write(&montage, sans_ancre).expect("le montage est réinscriptible");
+
+        let planned = plan_for(&options(&root, "frontend-admin")).expect("le retrait se planifie");
+
+        let statut = planned
+            .plan
+            .files()
+            .iter()
+            .find(|fichier| fichier.path == "frontend/src/admin/montage.ts")
+            .map(|fichier| fichier.statut)
+            .expect("le montage est au plan");
+        assert_eq!(
+            statut,
+            crate::plan::Status::Conflit,
+            "un fichier dont l'ancre a été effacée doit être un conflit"
+        );
+    }
 }
