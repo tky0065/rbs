@@ -9,7 +9,7 @@ modifier.
 
 ## Statut
 
-Version 1.5.0. Les six jalons de la feuille de route sont livrés — le socle,
+Version 1.6.0. Les six jalons de la feuille de route sont livrés — le socle,
 l'authentification, les intégrations, le confort, la stabilité, les agents — et
 [`CHANGELOG.fr.md`](CHANGELOG.fr.md) dit ce que chacun apporte.
 
@@ -33,7 +33,7 @@ cargo install rbs-cli
 
 Le paquet s'appelle `rbs-cli` ; le binaire installé s'appelle `rbs`.
 
-À partir de la 1.5.0, chaque [release GitHub](https://github.com/tky0065/rbs/releases)
+À partir de la 1.6.0, chaque [release GitHub](https://github.com/tky0065/rbs/releases)
 porte des binaires précompilés pour Linux, macOS et Windows, et
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) télécharge celui de votre
 plateforme au lieu de le compiler :

@@ -136,6 +136,14 @@ webhooks, les correctifs de sécurité d'`auth` (rejeu des jetons, révocation e
 adresses normalisées, parcours transactionnels), le dépôt atomique de `storage`, et
 `rbs new --lang` qui fixe désormais la langue des réponses HTTP (`[server] lang`).
 
+### v1.6 — Retrait et clés d'API
+
+`rbs remove <feature>` défait ce qu'`add` a posé — fichiers, lignes d'ancre, migration et
+dépendances devenues orphelines — dans l'ordre inverse de l'installation, et refuse avant
+d'écrire sur quatre motifs. `rbs add api-keys` authentifie les machines plutôt que les
+personnes : une clé présentée dans `X-Api-Key` satisfait `Identity` partout où un jeton de
+session le fait, sans qu'une ligne d'un CRUD engendré plus tôt change.
+
 ---
 
 ## Hors périmètre
@@ -163,4 +171,5 @@ servis par des crates dédiées que par un générateur généraliste.
 | v1.2 Intégrations sortantes | ✅ livré — publiée le 2026-09-04 |
 | v1.3 Routes fermées | ✅ livré — publiée le 2026-09-08, corrigée par la 1.3.1 le 2026-09-09 |
 | v1.4 Parcours de compte | ✅ livré — publiée le 2026-09-11 |
-| v1.5 Robustesse | prête, non publiée |
+| v1.5 Robustesse | ✅ livré — publiée dans la 1.6.0, le numéro 1.5.0 n'ayant jamais été tagué |
+| v1.6 Retrait et clés d'API | ✅ livré — publiée le 2026-09-19 |

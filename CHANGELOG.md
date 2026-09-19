@@ -12,6 +12,8 @@ between minor versions with no deprecation cycle.
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-09-19
+
 ### Added
 
 - **`rbs remove <feature>`** uninstalls a feature `rbs add` installed: its files, the
@@ -1052,7 +1054,8 @@ architecture, CLI reference and guides, in English and French.
 Rust 1.85 or later, Rust edition 2024. A generated project runs on PostgreSQL 14 or later,
 MySQL 8.0 or later, or SQLite 3.35 or later — `rbs doctor` refuses anything below those.
 
-[Unreleased]: https://github.com/tky0065/rbs/compare/v1.5.0...HEAD
+[Unreleased]: https://github.com/tky0065/rbs/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/tky0065/rbs/releases/tag/v1.6.0
 [1.5.0]: https://github.com/tky0065/rbs/releases/tag/v1.5.0
 [1.4.0]: https://github.com/tky0065/rbs/releases/tag/v1.4.0
 [1.3.1]: https://github.com/tky0065/rbs/releases/tag/v1.3.1

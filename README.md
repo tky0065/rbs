@@ -9,7 +9,7 @@ read it and change it.
 
 ## Status
 
-Version 1.5.0. The six milestones of the roadmap are delivered — the foundation,
+Version 1.6.0. The six milestones of the roadmap are delivered — the foundation,
 authentication, integrations, comfort, stability, agents — and [`CHANGELOG.md`](CHANGELOG.md) says
 what each one gives you.
 
@@ -32,7 +32,7 @@ cargo install rbs-cli
 
 The package is `rbs-cli`; the binary it installs is `rbs`.
 
-From 1.5.0 on, each [GitHub release](https://github.com/tky0065/rbs/releases) carries
+From 1.6.0 on, each [GitHub release](https://github.com/tky0065/rbs/releases) carries
 prebuilt binaries for Linux, macOS and Windows, and
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) downloads the one for
 your platform instead of compiling it:

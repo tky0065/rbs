@@ -11,7 +11,7 @@ rust-version = "1.94.1"
 default-run = "event-hub"
 
 [package.metadata.rbs]
-version = "1.5.0"
+version = "1.6.0"
 features = ["health", "jobs", "mail", "rate-limit", "auth", "webhooks", "scheduler", "audit", "cors", "docker", "ci", "api-keys", "orders"]
 database = "postgres"
 lang = "fr"

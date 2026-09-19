@@ -39,7 +39,7 @@ cargo install rbs-cli
 ```
 
 Cette commande compile rbs depuis ses sources, ce qui prend quelques minutes. À partir de
-la 1.5.0, chaque [release GitHub](https://github.com/tky0065/rbs/releases) porte aussi des
+la 1.6.0, chaque [release GitHub](https://github.com/tky0065/rbs/releases) porte aussi des
 binaires précompilés pour Linux, macOS et Windows, et
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) télécharge celui de votre
 plateforme à la place :

@@ -36,7 +36,7 @@ crates.io belongs to an unrelated project:
 cargo install rbs-cli
 ```
 
-That compiles rbs from source, which takes a few minutes. From 1.5.0 on, each
+That compiles rbs from source, which takes a few minutes. From 1.6.0 on, each
 [GitHub release](https://github.com/tky0065/rbs/releases) also carries prebuilt binaries
 for Linux, macOS and Windows, and
 [`cargo binstall`](https://github.com/cargo-bins/cargo-binstall) downloads the one for
