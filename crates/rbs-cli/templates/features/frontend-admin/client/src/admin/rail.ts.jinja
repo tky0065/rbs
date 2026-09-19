@@ -20,9 +20,15 @@ export interface EntreeDuRail {
  * panneau latéral. Portées à la main dans les deux, les entrées divergeaient à la
  * première retouche : un écran ajouté d'un seul côté restait invisible sur téléphone,
  * sans que rien n'échoue.
+ *
+ * C'est aussi ce qui permet à un écran engendré de s'y poser par une ancre : le mécanisme
+ * ne connaît que les commentaires `//` et `#`, et n'aurait su viser aucune ligne d'un
+ * `<template>`.
  */
 export const RAIL: EntreeDuRail[] = [
   { route: 'admin-tableau', libelle: TEXTES.tableau, icone: GaugeIcon },
   { route: 'admin-sessions', libelle: TEXTES.sessions, icone: KeyRoundIcon },
   { route: 'admin-profil', libelle: TEXTES.profil, icone: UserRoundIcon },
+  // <rbs:admin_rail>
+  // </rbs:admin_rail>
 ]

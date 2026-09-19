@@ -181,10 +181,11 @@ mod tests {
     /// Un projet frais ne porte pas *toutes* les ancres du registre : `jobs` et
     /// `job_modules` vivent dans `src/modules/jobs/mod.rs`, `schedules` dans
     /// `src/modules/scheduler/mod.rs`, `modules` dans `src/modules/mod.rs` — que seul
-    /// `rbs add` dépose, contrairement au compose que `new` écrit déjà — et `auth_impl`
-    /// dans `src/auth/mod.rs`, que seul le fragment `auth` pose. Cinq des sept ancres
-    /// optionnelles sont donc inapplicables ici ; le compose et le fichier d'exclusions,
-    /// que `new` écrit tous deux, comptent parmi les applicables.
+    /// `rbs add` dépose, contrairement au compose que `new` écrit déjà —, `auth_impl`
+    /// dans `src/auth/mod.rs`, que seul le fragment `auth` pose, et `admin_routes` comme
+    /// `admin_rail` sous `frontend/src/admin/`, que seul `frontend-admin` dépose. Sept
+    /// des neuf ancres optionnelles sont donc inapplicables ici ; le compose et le fichier
+    /// d'exclusions, que `new` écrit tous deux, comptent parmi les applicables.
     #[test]
     fn a_fresh_project_carries_every_anchor_that_applies_to_it() {
         let (_parent, root) = project();
@@ -193,7 +194,7 @@ mod tests {
 
         assert_eq!(check.state, State::Bon);
         assert!(
-            check.detail.contains(&(ANCRES.len() - 5).to_string()),
+            check.detail.contains(&(ANCRES.len() - 7).to_string()),
             "{}",
             check.detail
         );
@@ -311,14 +312,15 @@ mod tests {
         let check = check(&root);
 
         assert_eq!(check.state, State::Bon, "{check:?}");
-        // Le compose retiré à la main, `jobs`, `job_modules`, `schedules`, `modules` et
-        // `auth_impl` déjà absents par défaut (v. le test précédent) : six des sept ancres
-        // optionnelles sont inapplicables, `ignore` restant portée par le `.gitignore`.
+        // Le compose retiré à la main, `jobs`, `job_modules`, `schedules`, `modules`,
+        // `auth_impl`, `admin_routes` et `admin_rail` déjà absents par défaut (v. le test
+        // précédent) : huit des neuf ancres optionnelles sont inapplicables, `ignore`
+        // restant portée par le `.gitignore`.
         assert!(
-            check.detail.contains(&(ANCRES.len() - 6).to_string()),
+            check.detail.contains(&(ANCRES.len() - 8).to_string()),
             "ni le compose, ni le registre de la file, ni ses modules, ni le calendrier, \
-             ni le point de montage, ni l'implémentation d'authentification ne comptent \
-             parmi les applicables : {}",
+             ni le point de montage, ni l'implémentation d'authentification, ni les deux \
+             ancres de l'administration ne comptent parmi les applicables : {}",
             check.detail
         );
     }
@@ -382,6 +384,60 @@ mod tests {
             indentation(&apres, "// <rbs:routes>"),
             indentation(&avant, "// <rbs:routes>")
         );
+    }
+
+    /// Les deux ancres de l'administration entrent dans le parcours dès que le fragment
+    /// qui les dépose est posé, et `--fix` les repose sous leur accroche.
+    ///
+    /// Le test voisin ne les voit pas : un projet frais n'a pas d'espace d'administration,
+    /// et elles y sont — à juste titre — inapplicables. Sans celui-ci, une accroche fausse
+    /// ne se verrait que le jour où un développeur efface une ancre.
+    #[test]
+    fn the_two_admin_anchors_are_walked_once_the_shell_is_there() {
+        let (_parent, root) = Project::new()
+            .features(&["frontend", "auth", "frontend-admin"])
+            .create();
+
+        assert_eq!(check(&root).state, State::Bon);
+
+        for anchor in [anchors::ADMIN_ROUTES, anchors::ADMIN_RAIL] {
+            let path = root.join(anchor.file.as_ref());
+            let avant = fs::read_to_string(&path).expect("le fichier porteur est lisible");
+
+            remove(&root, &anchor.file, &anchor.opening());
+            remove(&root, &anchor.file, &anchor.closing());
+
+            let manquante = check(&root);
+            assert_eq!(manquante.state, State::Echec, "{manquante:?}");
+            assert!(
+                manquante.detail.contains(anchor.name.as_ref()),
+                "`{}` n'est pas réclamée : {}",
+                anchor.name,
+                manquante.detail
+            );
+
+            let repair = repair(&root).expect("la réparation se planifie");
+            crate::plan::application::apply(&repair.plan, false).expect("le plan s'applique");
+            assert_eq!(
+                repair.reposees,
+                vec![anchor.name.to_string()],
+                "{} n'a pas été reposée : {:?}",
+                anchor.name,
+                repair.laissees
+            );
+
+            let apres = fs::read_to_string(&path).expect("le fichier porteur est lisible");
+            assert_eq!(
+                indentation(&apres, &anchor.opening()),
+                indentation(&avant, &anchor.opening()),
+                "{} est reposée à une autre colonne",
+                anchor.name
+            );
+
+            fs::write(&path, &avant).expect("le fichier se rétablit");
+        }
+
+        assert_eq!(check(&root).state, State::Bon);
     }
 
     /// Chaque ancre du registre déclare une accroche, et cette accroche doit reposer le

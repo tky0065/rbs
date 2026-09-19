@@ -88,6 +88,8 @@ faire.
 - `<rbs:job_modules>` dans `src/modules/jobs/mod.rs`
 - `<rbs:schedules>` dans `src/modules/scheduler/mod.rs`
 - `<rbs:auth_impl>` dans `src/auth/mod.rs`
+- `<rbs:admin_routes>` dans `frontend/src/admin/montage.ts`
+- `<rbs:admin_rail>` dans `frontend/src/admin/rail.ts`
 - `<rbs:relations:<table>>` et `<rbs:related:<table>>` dans le modèle de chaque entité
 
 ## Ce que rbs ne couvre pas

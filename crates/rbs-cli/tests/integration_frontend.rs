@@ -248,6 +248,7 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
         "TableauDeBord-",
         "Sessions-",
         "Profil-",
+        "Demonstration-",
     ] {
         assert!(
             morceaux.iter().any(|nom| nom.starts_with(ecran)),
@@ -277,6 +278,14 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
          l'accueil"
     );
 
+    // L'écran de démonstration non plus : c'est le patron dont sortiront tous les écrans
+    // engendrés, et une importation statique le long de sa chaîne les ferait tous
+    // descendre chez le visiteur de l'accueil, table par table.
+    assert!(
+        !entree.contains("DEM-001"),
+        "l'écran de démonstration part dans le morceau d'entrée"
+    );
+
     // Et les textes du shell ont traversé la chaîne entière : la génération, le moteur de
     // template, le compilateur Vue et l'empaqueteur.
     //
@@ -292,6 +301,25 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
     assert!(
         bundles.contains(&refus),
         "`{refus}` ne part pas au navigateur"
+    );
+
+    // Et l'écran patron a bien été compilé pour de bon, colonnes et lignes comprises : un
+    // morceau nommé `Demonstration-` sortirait même d'un composant vide, ce que ces deux
+    // témoins-ci ne feraient pas. La référence d'une ligne, et le tri d'une colonne.
+    for temoin in ["DEM-001", "admin-demonstration"] {
+        assert!(
+            bundles.contains(temoin),
+            "`{temoin}` ne part pas au navigateur : l'écran patron n'a pas compilé"
+        );
+    }
+
+    // Le rail tient dans une seule liste, et l'écran s'y est inscrit par son ancre : le
+    // voir dans le build est ce qui prouve que la coquille la parcourt vraiment.
+    let rail = std::fs::read_to_string(repertoire.join("src/admin/rail.ts"))
+        .expect("le rail du shell se lit");
+    assert!(
+        rail.contains("route: 'admin-demonstration'"),
+        "l'écran ne s'est pas inscrit au rail :\n{rail}"
     );
 }
 

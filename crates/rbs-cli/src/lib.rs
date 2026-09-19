@@ -11,6 +11,7 @@ mod database;
 mod dev;
 mod doctor;
 mod dotenv;
+mod ecran;
 mod errors;
 #[cfg(test)]
 mod fixtures;

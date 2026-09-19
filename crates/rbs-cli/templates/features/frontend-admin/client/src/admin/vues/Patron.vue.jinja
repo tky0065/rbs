@@ -1,0 +1,249 @@
+<script setup lang="ts">
+import { ArrowDownIcon, ArrowUpIcon, ChevronLeftIcon, ChevronRightIcon } from '@lucide/vue'
+import { computed, ref, watch } from 'vue'
+
+import Bande from '@/components/Bande.vue'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableEmpty,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+
+/**
+ * Les libellés de cet écran, rendus dans la langue du projet à sa création.
+ *
+ * Ici et non dans les libellés du shell : un écran engendré s'ajoute sans qu'aucun
+ * fichier partagé n'ait à recevoir de ligne, et le registre d'ancres n'en porte donc que
+ * deux pour toute l'administration.
+ */
+const TEXTES = {
+  titre: '{@ ecran.titre @}',
+  sous_titre: '{@ ecran.sous_titre @}',
+  filtre: '{@ ecran.textes.filtre @}',
+  lignes: '{@ ecran.textes.lignes @}',
+  aucune: '{@ ecran.textes.aucune @}',
+  chargement: '{@ ecran.textes.chargement @}',
+  erreur: '{@ ecran.textes.erreur @}',
+  page: '{@ ecran.textes.page @}',
+  sur: '{@ ecran.textes.sur @}',
+  precedent: '{@ ecran.textes.precedent @}',
+  suivant: '{@ ecran.textes.suivant @}',
+} as const
+
+/** Combien de lignes une page porte. */
+const TAILLE = 5
+
+/** La colonne sur laquelle la table est triée, et dans quel sens. */
+interface Tri {
+  cle: string
+  sens: 'asc' | 'desc'
+}
+
+/** Ce que l'écran demande à sa source pour remplir une page. */
+interface Requete {
+  filtre: string
+  tri: Tri | null
+  page: number
+  taille: number
+}
+
+/** Une ligne de la table, une propriété par colonne. */
+interface Ligne {{% for colonne in ecran.colonnes %}
+  {@ colonne.cle @}: string
+{%- endfor %}
+}
+
+// D'ici à la fin de `interroger`, la source des lignes. C'est la seule part de cet écran
+// qui dépende d'un contrat : tout ce qui suit — filtre, tri, pagination, rendu — ne
+// connaît que `Requete` et `Ligne`, et ne change pas d'une table à l'autre.
+const LIGNES: Ligne[] = [{% for ligne in ecran.lignes %}
+  {@ ligne @},
+{%- endfor %}
+]
+
+async function interroger(requete: Requete): Promise<{ lignes: Ligne[]; total: number }> {
+  const motif = requete.filtre.trim().toLowerCase()
+  const retenues = LIGNES.filter(
+    (ligne) => motif === '' || Object.values(ligne).some((valeur) => valeur.toLowerCase().includes(motif)),
+  )
+
+  const ordre = requete.tri
+  if (ordre !== null) {
+    const cle = ordre.cle as keyof Ligne
+    const sens = ordre.sens === 'asc' ? 1 : -1
+    retenues.sort((gauche, droite) => sens * String(gauche[cle]).localeCompare(String(droite[cle])))
+  }
+
+  const debut = (requete.page - 1) * requete.taille
+
+  return { lignes: retenues.slice(debut, debut + requete.taille), total: retenues.length }
+}
+
+/** Ce qui s'affiche quand la source refuse de répondre. */
+function raison(_cause: unknown): string {
+  return TEXTES.erreur
+}
+
+/** Une colonne de la table : ce qu'elle lit d'une ligne, et si l'on peut trier dessus. */
+interface Colonne {
+  cle: keyof Ligne
+  libelle: string
+  triable: boolean
+}
+
+const COLONNES: readonly Colonne[] = [{% for colonne in ecran.colonnes %}
+  { cle: '{@ colonne.cle @}', libelle: '{@ colonne.libelle @}', triable: {% if colonne.triable %}true{% else %}false{% endif %} },
+{%- endfor %}
+]
+
+const filtre = ref('')
+const tri = ref<Tri | null>(null)
+const page = ref(1)
+
+const lignes = ref<Ligne[]>([])
+const total = ref(0)
+const enCours = ref(false)
+const faute = ref<string | null>(null)
+
+const pages = computed(() => Math.max(1, Math.ceil(total.value / TAILLE)))
+
+// Une seule veille, sur la demande entière : le filtre et le tri ramènent eux-mêmes à la
+// première page, et veiller sur chacun d'eux séparément relancerait deux fois la même
+// interrogation pour un seul geste de l'opérateur.
+const requete = computed<Requete>(() => ({
+  filtre: filtre.value,
+  tri: tri.value,
+  page: page.value,
+  taille: TAILLE,
+}))
+
+watch(requete, () => void charger(), { immediate: true })
+
+async function charger(): Promise<void> {
+  enCours.value = true
+  faute.value = null
+
+  try {
+    const reponse = await interroger(requete.value)
+    lignes.value = reponse.lignes
+    total.value = reponse.total
+  } catch (cause) {
+    lignes.value = []
+    total.value = 0
+    faute.value = raison(cause)
+  } finally {
+    enCours.value = false
+  }
+}
+
+function filtrer(valeur: string | number): void {
+  filtre.value = String(valeur)
+  page.value = 1
+}
+
+// Trois états et non deux : la troisième pression rend la colonne au tri naturel de la
+// source, que rien d'autre ne saurait retrouver.
+function trier(cle: keyof Ligne): void {
+  const courant = tri.value
+
+  if (courant === null || courant.cle !== cle) {
+    tri.value = { cle, sens: 'asc' }
+  } else if (courant.sens === 'asc') {
+    tri.value = { cle, sens: 'desc' }
+  } else {
+    tri.value = null
+  }
+
+  page.value = 1
+}
+</script>
+
+<!--
+  La table : une bande pour ce qu'elle est, une bande pour ce qu'elle porte. Le tri est
+  une flèche et la pagination un chevron — les deux seules icônes admises ici, parce
+  qu'elles sont l'affordance du geste et non son ornement.
+-->
+<template>
+  <div class="flex flex-col border-x border-border">
+    <Bande>
+      <h1 class="mb-3 text-2xl leading-tight">{{ TEXTES.titre }}</h1>
+      <p class="max-w-prose text-muted-foreground">{{ TEXTES.sous_titre }}</p>
+    </Bande>
+
+    <Bande>
+      <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <Input
+          class="max-w-xs"
+          :model-value="filtre"
+          :placeholder="TEXTES.filtre"
+          :aria-label="TEXTES.filtre"
+          @update:model-value="filtrer"
+        />
+        <p class="text-sm text-muted-foreground" role="status">
+          {{ total }} {{ TEXTES.lignes }}
+        </p>
+      </div>
+
+      <Table>
+        <TableHeader>
+          <TableRow>
+            <TableHead v-for="colonne in COLONNES" :key="colonne.cle">
+              <button
+                v-if="colonne.triable"
+                type="button"
+                class="inline-flex items-center gap-1 uppercase tracking-[0.2em]"
+                @click="trier(colonne.cle)"
+              >
+                {{ colonne.libelle }}
+                <ArrowUpIcon
+                  v-if="tri?.cle === colonne.cle && tri.sens === 'asc'"
+                  class="size-3"
+                  aria-hidden="true"
+                />
+                <ArrowDownIcon
+                  v-else-if="tri?.cle === colonne.cle"
+                  class="size-3"
+                  aria-hidden="true"
+                />
+              </button>
+              <span v-else class="uppercase tracking-[0.2em]">{{ colonne.libelle }}</span>
+            </TableHead>
+          </TableRow>
+        </TableHeader>
+
+        <TableBody>
+          <TableEmpty v-if="lignes.length === 0" :colspan="COLONNES.length">
+            {{ enCours ? TEXTES.chargement : (faute ?? TEXTES.aucune) }}
+          </TableEmpty>
+          <template v-else>
+            <TableRow v-for="ligne in lignes" :key="ligne.{@ ecran.cle @}">
+              <TableCell v-for="colonne in COLONNES" :key="colonne.cle">
+                {{ ligne[colonne.cle] }}
+              </TableCell>
+            </TableRow>
+          </template>
+        </TableBody>
+      </Table>
+
+      <div class="mt-5 flex items-center justify-between gap-3">
+        <Button variant="outline" size="sm" :disabled="page === 1" @click="page -= 1">
+          <ChevronLeftIcon aria-hidden="true" />
+          {{ TEXTES.precedent }}
+        </Button>
+        <p class="text-sm text-muted-foreground">
+          {{ TEXTES.page }} {{ page }} {{ TEXTES.sur }} {{ pages }}
+        </p>
+        <Button variant="outline" size="sm" :disabled="page >= pages" @click="page += 1">
+          {{ TEXTES.suivant }}
+          <ChevronRightIcon aria-hidden="true" />
+        </Button>
+      </div>
+    </Bande>
+  </div>
+</template>

@@ -98,7 +98,7 @@ Chaque couche ne voit que la suivante. Un `service` n'accède jamais *directemen
 requête SeaORM ; un `controller` n'en construit jamais. Cette règle rend chaque fichier
 lisible isolément.
 
-**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires, dix-huit au
+**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires, vingt au
 total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est cette liste que
 `rbs doctor` parcourt, et non celle-ci :
 
@@ -123,17 +123,27 @@ total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est 
 | `// <rbs:job_modules>` | `src/modules/jobs/mod.rs` — la déclaration du module qu'engendre `rbs generate job`, optionnelle |
 | `// <rbs:schedules>` | `src/modules/scheduler/mod.rs` — l'échéance qu'engendre `rbs generate job --every`, optionnelle |
 | `// <rbs:auth_impl>` | `src/auth/mod.rs` — la seule ancre *intérieure* à un bloc `impl`, posée par le fragment `auth`, optionnelle |
+| `// <rbs:admin_routes>` | `frontend/src/admin/montage.ts` — la table de routage de l'espace d'administration, posée par le fragment `frontend-admin`, optionnelle |
+| `// <rbs:admin_rail>` | `frontend/src/admin/rail.ts` — les entrées du rail, posées par le même fragment, optionnelle |
 
-Sept sont optionnelles. Six le sont parce que leur fichier porteur peut manquer :
+Neuf sont optionnelles. Huit le sont parce que leur fichier porteur peut manquer :
 `modules`, sur un projet qui n'a encore reçu aucun fragment ; `services`, sur un projet
 sans compose ; `jobs` et `job_modules`, sans le fragment `jobs` ; `schedules`, sans le
-fragment `scheduler` ; `auth_impl`, sans le fragment `auth`. La septième, `ignore`, vit
+fragment `scheduler` ; `auth_impl`, sans le fragment `auth` ; `admin_routes` et
+`admin_rail`, sans le fragment `frontend-admin`. La neuvième, `ignore`, vit
 dans un fichier que le squelette écrit toujours : elle est optionnelle parce que ce
 fichier appartient au développeur, qui peut l'avoir supprimé.
 
 `auth_impl` est la seule à vivre *dans* un bloc `impl` : ce qu'on y insère est une
 méthode, et une ancre mal placée y romprait la compilation plutôt que d'ajouter une ligne
 morte.
+
+`admin_routes` et `admin_rail` sont les deux seules hors du Rust et du YAML, et les deux
+seules du frontend. Il n'y en a pas de troisième pour déclarer le module d'un écran : en
+TypeScript, l'import qui donne son composant à la route *est* la déclaration, là où Rust
+demande un `pub mod` distinct du montage. `admin_rail` vit dans un module `.ts` et non
+dans le `<template>` de la coquille — le mécanisme ne sait ouvrir une ancre que derrière
+`//` ou `#` — et le rail, servi deux fois, parcourt cette liste aux deux endroits.
 
 `generate crud` en emploie six ; `generate job` en emploie trois — `job_modules` et
 `schedules`, qui ne servent qu'à lui, et `jobs`, où le fragment `webhooks` inscrit aussi sa
