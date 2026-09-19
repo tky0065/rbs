@@ -648,6 +648,54 @@ axum = \"0.8\"
         );
     }
 
+    /// L'idempotence de l'insertion elle-même, au seam que `[package.metadata.rbs]`
+    /// n'arrête pas : deux fragments peuvent vouloir exclure le même répertoire de build,
+    /// et la seconde pose ne doit pas doubler la ligne.
+    #[test]
+    fn an_exclusion_already_in_place_is_a_no_op_the_second_time() {
+        const EXCLUSION: &str = "[feature]\ndescription = \"essai\"\n\n\
+                                 [[anchors]]\nanchor = \"ignore\"\ncontent = \"/node_modules\"\n";
+        let project = TempDir::new().expect("répertoire temporaire créable");
+        avec(
+            project.path(),
+            &[(
+                ".gitignore",
+                "/target\n.env\n# <rbs:ignore>\n# </rbs:ignore>\n",
+            )],
+        );
+
+        let (_, premier) =
+            plan_for(project.path(), EXCLUSION, &[]).expect("le plan doit se calculer");
+        for file in premier.files() {
+            avec(
+                project.path(),
+                &[(&file.path, file.after.as_deref().unwrap_or_default())],
+            );
+        }
+        assert!(
+            projected(&premier, ".gitignore").contains("/node_modules"),
+            "le test ne prouverait rien : {}",
+            projected(&premier, ".gitignore")
+        );
+
+        let (_, second) = plan_for(project.path(), EXCLUSION, &[]).expect("le plan se recalcule");
+
+        let exclusions = second
+            .files()
+            .iter()
+            .find(|file| file.path == ".gitignore")
+            .expect("le plan vise toujours le fichier d'exclusions");
+        assert_eq!(exclusions.statut, plan::Status::DejaFait);
+        assert_eq!(
+            projected(&second, ".gitignore")
+                .matches("/node_modules")
+                .count(),
+            1,
+            "la ligne est doublée : {}",
+            projected(&second, ".gitignore")
+        );
+    }
+
     /// Le critère de la tâche : un patch déjà posé ne se repose pas.
     #[test]
     fn the_three_patches_are_no_ops_the_second_time() {
