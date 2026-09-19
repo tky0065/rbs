@@ -12,7 +12,7 @@ the site reads these files, and CI compiles them.
 | `blog-auth` | The same, plus `rbs add auth`: posts any signed-in caller can read, and only an admin can write. |
 | `file-drop` | The three v0.3 features on one project — `redis`, `mail`, `storage` — wired into an `uploads` CRUD. |
 | `newsletter-queue` | `jobs`, `mail` and `observability`: a broadcast route that enqueues one letter per confirmed subscriber, inside the transaction that reads them — and a `/metrics` listener of its own. |
-| `event-hub` | `webhooks`, `scheduler`, `audit`, `cors`, `docker` and `ci`: creating an order writes its audit entry and emits `order.created` inside the transaction that inserts it. |
+| `event-hub` | `webhooks`, `scheduler`, `audit`, `cors`, `docker`, `ci` and `api-keys`: creating an order writes its audit entry and emits `order.created` inside the transaction that inserts it. |
 
 They are not members of the root workspace — a generated project declares its own
 `[workspace]`, and Cargo forbids nesting. The root manifest excludes them and CI compiles

@@ -98,9 +98,10 @@ Chaque couche ne voit que la suivante. Un `service` n'accède jamais *directemen
 requête SeaORM ; un `controller` n'en construit jamais. Cette règle rend chaque fichier
 lisible isolément.
 
-**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires, seize au
+**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires, dix-sept au
 total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est cette liste que
 `rbs doctor` parcourt, et non celle-ci :
+
 
 | Ancre | Fichier |
 |---|---|
@@ -120,10 +121,14 @@ total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est 
 | `// <rbs:jobs>` | `src/modules/jobs/mod.rs` — le registre que pose le fragment `jobs`, optionnelle |
 | `// <rbs:job_modules>` | `src/modules/jobs/mod.rs` — la déclaration du module qu'engendre `rbs generate job`, optionnelle |
 | `// <rbs:schedules>` | `src/modules/scheduler/mod.rs` — l'échéance qu'engendre `rbs generate job --every`, optionnelle |
+| `// <rbs:auth_impl>` | `src/auth/mod.rs` — la seule ancre *intérieure* à un bloc `impl`, posée par le fragment `auth`, optionnelle |
 
-Cinq sont optionnelles, leur fichier porteur pouvant manquer : `modules`, sur un projet qui
+Six sont optionnelles, leur fichier porteur pouvant manquer : `modules`, sur un projet qui
 n'a encore reçu aucun fragment ; `services`, sur un projet sans compose ; `jobs` et
-`job_modules`, sans le fragment `jobs` ; `schedules`, sans le fragment `scheduler`.
+`job_modules`, sans le fragment `jobs` ; `schedules`, sans le fragment `scheduler` ;
+`auth_impl`, sans le fragment `auth`. Cette dernière est la seule à vivre *dans* un bloc
+`impl` : ce qu'on y insère est une méthode, et une ancre mal placée y romprait la
+compilation plutôt que d'ajouter une ligne morte.
 `generate crud` en emploie six ; `generate job` en emploie trois — `job_modules` et
 `schedules`, qui ne servent qu'à lui, et `jobs`, où le fragment `webhooks` inscrit aussi sa
 livraison ; les autres appartiennent aux fragments qu'installe `add`. Une ancre insérée dans `<rbs:layers>` est *intérieure* à `trace` et `request_id` :

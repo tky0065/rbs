@@ -36,6 +36,29 @@ dépréciation.
   le rapport le dit. `--json` rend le même document qu'`add`, `fichiers` portant un
   troisième compteur, `supprimes`, à côté de `crees` et `modifies`.
 
+- **`rbs add api-keys`** authentifie des machines plutôt que des personnes. Une clé
+  présentée en `X-Api-Key` vaut `Identity` partout où vaut un jeton de session — un CRUD
+  engendré six mois plus tôt l'accepte sans une ligne à récrire, parce que les deux moyens
+  se rejoignent dans l'unique extracteur que traverse déjà chaque handler. Le noyau a reçu
+  pour cela une seule méthode additive, `HasAuth::accept_key`, dont le défaut refuse : un
+  projet qui n'installe jamais le fragment continue d'écarter toute clé, et aucune
+  implémentation 1.x du trait ne rompt. Ce qui borne cette portée, c'est le rôle. Chaque
+  clé porte le sien, plafonné à chaque requête par celui de son porteur — `min(clé,
+  porteur)` recalculé plutôt que figé à l'émission, si bien que déclasser un compte
+  déclasse ses clés du même geste, et qu'une clé en lecture seule d'un administrateur
+  devient quelque chose qu'on peut réellement confier. La clé elle-même n'est rendue
+  qu'une fois, à la création, et n'est conservée que hachée ; `expires_at` est facultative
+  et `expires_in_days` est bornée à 1..3650, si bien qu'aucun appelant n'atteint
+  l'arithmétique qui déborderait. `last_used_at` est tracée à la minute, et la décision de
+  l'écrire se prend en mémoire avant tout aller-retour — c'est ce qui évite qu'une clé
+  employée mille fois par seconde ne fasse mille écritures. La révocation est un geste à
+  part : `DELETE /api-keys/{id}` laisse les sessions intactes et `DELETE /auth/sessions`
+  laisse les clés intactes, parce qu'une clé fuitée et un portable volé ne sont pas le
+  même incident. Quatre routes, un schéma de sécurité `api_key` dans le document OpenAPI,
+  et une dix-septième ancre — `<rbs:auth_impl>`, la seule à vivre dans un bloc `impl`, que
+  `rbs doctor` contrôle et propose à coller quand la délégation manque. Le client
+  TypeScript engendré ne présente pas de clé : il est écrit pour la session du navigateur.
+
 ## [1.5.0] — 2026-09-12
 
 ### Ajouté

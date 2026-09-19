@@ -35,6 +35,29 @@ between minor versions with no deprecation cycle.
   document `add` does, `fichiers` carrying a third counter, `supprimes`, alongside
   `crees` and `modifies`.
 
+- **`rbs add api-keys`** authenticates machines rather than people. A key presented in
+  `X-Api-Key` satisfies `Identity` everywhere a session token does — a CRUD generated
+  six months earlier accepts it with no line rewritten, because both credentials meet
+  in the one extractor every handler already goes through. The core gained a single
+  additive method for it, `HasAuth::accept_key`, whose default refuses: a project that
+  never installs the fragment keeps turning every key away, and no 1.x implementation
+  of the trait breaks. What bounds that reach is the role. Each key carries its own,
+  capped by its owner's at every request — `min(key, owner)` recomputed rather than
+  frozen at issue, so demoting an account demotes its keys in the same breath, and a
+  read-only key of an administrator becomes something you can actually hand out. The
+  key itself is returned once, at creation, and kept only as a hash; `expires_at` is
+  optional and `expires_in_days` is bounded to 1..3650, so no caller reaches the
+  arithmetic that would overflow. `last_used_at` is traced to the minute, and the
+  decision to write it is taken in memory before any round trip — that is what keeps a
+  key used a thousand times a second from being a thousand writes. Revocation is its
+  own gesture: `DELETE /api-keys/{id}` leaves the sessions alone and `DELETE
+  /auth/sessions` leaves the keys alone, because a leaked key and a stolen laptop are
+  not the same incident. Four routes, an `api_key` security scheme in the OpenAPI
+  document, and a seventeenth anchor — `<rbs:auth_impl>`, the only one that lives
+  inside an `impl` block, which `rbs doctor` checks and offers to paste when the
+  delegation is missing. The generated TypeScript client does not present a key: it is
+  written for the browser session.
+
 ## [1.5.0] — 2026-09-12
 
 ### Added

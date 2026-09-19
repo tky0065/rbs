@@ -12,7 +12,7 @@ lit ces fichiers, et la CI les compile.
 | `blog-auth` | Le même, plus `rbs add auth` : des billets que tout compte identifié peut lire, et que seul un administrateur peut écrire. |
 | `file-drop` | Les trois features de la v0.3 sur un même projet — `redis`, `mail`, `storage` — câblées dans un CRUD `uploads`. |
 | `newsletter-queue` | `jobs`, `mail` et `observability` : une route de diffusion qui enfile une lettre par abonné confirmé, dans la transaction qui les lit — et un listener `/metrics` à lui. |
-| `event-hub` | `webhooks`, `scheduler`, `audit`, `cors`, `docker` et `ci` : la création d'une commande écrit sa trace d'audit et émet `order.created` dans la transaction qui l'insère. |
+| `event-hub` | `webhooks`, `scheduler`, `audit`, `cors`, `docker`, `ci` et `api-keys` : la création d'une commande écrit sa trace d'audit et émet `order.created` dans la transaction qui l'insère. |
 
 Ils ne sont pas membres du workspace racine — un projet engendré déclare son propre
 `[workspace]`, et Cargo interdit l'imbrication. Le manifeste racine les exclut et la CI
