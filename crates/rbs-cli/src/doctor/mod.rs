@@ -349,17 +349,17 @@ const FEATURE_CHECKS: [(&str, Controle); 15] = [
         },
     ),
     (
-        "api-keys",
-        Controle {
-            titre: api_keys::TITRE,
-            executer: |projet, _| api_keys::check(&projet.root),
-        },
-    ),
-    (
         "auth",
         Controle {
             titre: guards::TITRE,
             executer: |projet, _| guards::check(&projet.root),
+        },
+    ),
+    (
+        "api-keys",
+        Controle {
+            titre: api_keys::TITRE,
+            executer: |projet, _| api_keys::check(&projet.root),
         },
     ),
     (
@@ -993,7 +993,8 @@ mod tests {
     /// portant les mêmes fragments se lisent pareil.
     #[test]
     fn the_fragment_checks_follow_the_order_of_the_table() {
-        const ORDRE: [&str; 7] = [
+        const ORDRE: [&str; 8] = [
+            "api-keys",
             "cors",
             "rate-limit",
             "scheduler",
@@ -1004,6 +1005,7 @@ mod tests {
         ];
         let (_parent, root) = project(&[
             "health",
+            "api-keys",
             "ci",
             "docker",
             "audit",
