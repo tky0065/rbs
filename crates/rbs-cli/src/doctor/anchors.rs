@@ -182,8 +182,9 @@ mod tests {
     /// `job_modules` vivent dans `src/modules/jobs/mod.rs`, `schedules` dans
     /// `src/modules/scheduler/mod.rs`, `modules` dans `src/modules/mod.rs` — que seul
     /// `rbs add` dépose, contrairement au compose que `new` écrit déjà — et `auth_impl`
-    /// dans `src/auth/mod.rs`, que seul le fragment `auth` pose. Cinq des six ancres
-    /// optionnelles sont donc inapplicables ici.
+    /// dans `src/auth/mod.rs`, que seul le fragment `auth` pose. Cinq des sept ancres
+    /// optionnelles sont donc inapplicables ici ; le compose et le fichier d'exclusions,
+    /// que `new` écrit tous deux, comptent parmi les applicables.
     #[test]
     fn a_fresh_project_carries_every_anchor_that_applies_to_it() {
         let (_parent, root) = project();
@@ -311,8 +312,8 @@ mod tests {
 
         assert_eq!(check.state, State::Bon, "{check:?}");
         // Le compose retiré à la main, `jobs`, `job_modules`, `schedules`, `modules` et
-        // `auth_impl` déjà absents par défaut (v. le test précédent) : les six ancres
-        // optionnelles sont inapplicables.
+        // `auth_impl` déjà absents par défaut (v. le test précédent) : six des sept ancres
+        // optionnelles sont inapplicables, `ignore` restant portée par le `.gitignore`.
         assert!(
             check.detail.contains(&(ANCRES.len() - 6).to_string()),
             "ni le compose, ni le registre de la file, ni ses modules, ni le calendrier, \
@@ -563,6 +564,40 @@ mod tests {
             "pub fn schedules() -> Vec<Schedule> {\n    vec![]\n}\n",
         )
         .expect("le calendrier est écrivable");
+    }
+
+    /// L'ancre des exclusions est parcourue comme les autres : effacée d'un fichier qui
+    /// existe, elle manque, et le bloc à coller sort avec le marqueur de commentaire de
+    /// Git — un `//` collé dans un `.gitignore` deviendrait un motif d'exclusion.
+    #[test]
+    fn the_exclusions_anchor_is_walked_like_the_others() {
+        let (_parent, root) = project();
+        remove(&root, ".gitignore", "<rbs:ignore>");
+        remove(&root, ".gitignore", "</rbs:ignore>");
+
+        let check = check(&root);
+
+        assert_eq!(check.state, State::Echec, "{check:?}");
+        assert!(
+            check.detail.contains("ignore manque dans .gitignore"),
+            "{}",
+            check.detail
+        );
+        let remedy = check.remedy.expect("un échec porte son remède");
+        assert!(remedy.contains("# <rbs:ignore>"), "{remedy}");
+        assert!(remedy.contains("# </rbs:ignore>"), "{remedy}");
+    }
+
+    /// Un projet dont le développeur a supprimé le fichier d'exclusions n'est pas un projet
+    /// incomplet : l'ancre est optionnelle, et son fichier absent la rend inapplicable.
+    #[test]
+    fn a_project_without_exclusions_is_not_reported_incomplete() {
+        let (_parent, root) = project();
+        fs::remove_file(root.join(".gitignore")).expect("le squelette pose un .gitignore");
+
+        let check = check(&root);
+
+        assert_eq!(check.state, State::Bon, "{check:?}");
     }
 
     /// Un projet qui installe `jobs` et `scheduler` porte les deux ancres que

@@ -98,7 +98,7 @@ Chaque couche ne voit que la suivante. Un `service` n'accède jamais *directemen
 requête SeaORM ; un `controller` n'en construit jamais. Cette règle rend chaque fichier
 lisible isolément.
 
-**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires, dix-sept au
+**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires, dix-huit au
 total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est cette liste que
 `rbs doctor` parcourt, et non celle-ci :
 
@@ -117,16 +117,19 @@ total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est 
 | `// <rbs:startup>` | `src/main.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
 | `# <rbs:services>` | `docker-compose.yml` — la seule en YAML, optionnelle |
+| `# <rbs:ignore>` | `.gitignore` — ce qu'un fragment exclut du dépôt, optionnelle |
 | `// <rbs:health_probes>` | `src/health/controller.rs` |
 | `// <rbs:jobs>` | `src/modules/jobs/mod.rs` — le registre que pose le fragment `jobs`, optionnelle |
 | `// <rbs:job_modules>` | `src/modules/jobs/mod.rs` — la déclaration du module qu'engendre `rbs generate job`, optionnelle |
 | `// <rbs:schedules>` | `src/modules/scheduler/mod.rs` — l'échéance qu'engendre `rbs generate job --every`, optionnelle |
 | `// <rbs:auth_impl>` | `src/auth/mod.rs` — la seule ancre *intérieure* à un bloc `impl`, posée par le fragment `auth`, optionnelle |
 
-Six sont optionnelles, leur fichier porteur pouvant manquer : `modules`, sur un projet qui
-n'a encore reçu aucun fragment ; `services`, sur un projet sans compose ; `jobs` et
-`job_modules`, sans le fragment `jobs` ; `schedules`, sans le fragment `scheduler` ;
-`auth_impl`, sans le fragment `auth`. Cette dernière est la seule à vivre *dans* un bloc
+Sept sont optionnelles. Six le sont parce que leur fichier porteur peut manquer :
+`modules`, sur un projet qui n'a encore reçu aucun fragment ; `services`, sur un projet
+sans compose ; `jobs` et `job_modules`, sans le fragment `jobs` ; `schedules`, sans le
+fragment `scheduler` ; `auth_impl`, sans le fragment `auth`. La septième, `ignore`, vit
+dans un fichier que le squelette écrit toujours : elle est optionnelle parce que ce
+fichier appartient au développeur, qui peut l'avoir supprimé. Cette dernière est la seule à vivre *dans* un bloc
 `impl` : ce qu'on y insère est une méthode, et une ancre mal placée y romprait la
 compilation plutôt que d'ajouter une ligne morte.
 `generate crud` en emploie six ; `generate job` en emploie trois — `job_modules` et

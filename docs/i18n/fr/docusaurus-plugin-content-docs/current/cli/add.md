@@ -479,11 +479,14 @@ toutes les trois.
 
 `docker` est le seul fragment que `rbs add` installe à faire lui-même exception : ses
 services `api` et `migrate` vont dans `# <rbs:services>`, l'ancre YAML que porte un
-compose — voir [plus haut](#les-quatorze-features). La règle est la même partout : aucun AST
+compose — voir [plus haut](#les-quatorze-features). À côté d'elle vit l'autre ancre hors
+du Rust, `# <rbs:ignore>` dans `.gitignore`, où un fragment exclut du dépôt ce qu'il y
+dépose ; elle est optionnelle elle aussi, un projet dont le propriétaire a supprimé le
+`.gitignore` n'en étant pas moins complet. La règle est la même partout : aucun AST
 n'est jamais réécrit, et une ancre absente fait que la commande n'écrit rien et affiche le
-bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les dix-sept — onze sur
-un projet qui ne porte ni compose, ni file, ni fragment déplacé sous `src/modules/`, les
-six optionnelles.
+bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les dix-huit — douze sur
+un projet qui ne porte ni compose, ni file, ni fragment déplacé sous `src/modules/`, six
+des sept optionnelles.
 
 Un projet engendré avant l'existence de `// <rbs:layers>` ne la porte pas, et `rbs upgrade`
 ne l'ajoute pas : cette commande aligne le manifeste et les zones de l'`AGENTS.md`, et ne

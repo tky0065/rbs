@@ -2844,4 +2844,95 @@ mod tests {
             assert!(via_installation.remede().is_some(), "{via_installation:?}");
         }
     }
+
+    /// Le critère de la tâche : un fragment peut ajouter une ligne aux exclusions Git du
+    /// projet, et rejouer la pose ne la double pas.
+    ///
+    /// Sans cette ancre, un fragment qui dépose un répertoire volumineux — les dépendances
+    /// d'un frontend — n'avait que deux issues : livrer un `.gitignore` entier, qui entre
+    /// en conflit avec celui du squelette, ou laisser le développeur le découvrir à son
+    /// premier `git status`.
+    #[test]
+    fn a_fragment_can_add_a_line_to_the_project_exclusions() {
+        let (_parent, root) = project();
+        let fragments = fragment(
+            "[feature]\ndescription = \"essai\"\n\n\
+             [[anchors]]\nanchor = \"ignore\"\ncontent = \"/node_modules\"\n",
+            &[],
+        );
+
+        run(&fragment_options(&root, &fragments)).expect("l'installation doit aboutir");
+
+        let exclusions = fs::read_to_string(root.join(".gitignore")).expect(".gitignore lisible");
+        assert!(exclusions.contains("# <rbs:ignore>"), "{exclusions}");
+        assert_eq!(
+            exclusions.matches("/node_modules").count(),
+            1,
+            "{exclusions}"
+        );
+
+        // La seconde pose passe par `installation::actions`, seul seam que
+        // `[package.metadata.rbs]` n'arrête pas : l'idempotence éprouvée est celle de
+        // l'insertion elle-même, non celle du manifeste.
+        let mut relance = fragment_options(&root, &fragments);
+        relance.force = true;
+        let planned = plan_for(&relance).expect("la relance doit se planifier");
+        assert!(
+            planned.deja_installee,
+            "le manifeste inscrit déjà le fragment"
+        );
+
+        let apres = fs::read_to_string(root.join(".gitignore")).expect(".gitignore lisible");
+        assert_eq!(apres, exclusions, "la relance ne touche pas le fichier");
+    }
+
+    /// Le critère de la tâche : l'ancre est optionnelle. Un projet dont le développeur a
+    /// supprimé le `.gitignore` reçoit le fragment quand même, et le bloc lui est montré.
+    #[test]
+    fn a_project_without_exclusions_still_receives_the_fragment() {
+        let (_parent, root) = project();
+        fs::remove_file(root.join(".gitignore")).expect("le squelette pose un .gitignore");
+        let fragments = fragment(
+            "[feature]\ndescription = \"essai\"\n\n\
+             [[anchors]]\nanchor = \"ignore\"\ncontent = \"/node_modules\"\n",
+            &[],
+        );
+
+        let planned =
+            plan_for(&fragment_options(&root, &fragments)).expect("le plan doit se calculer");
+
+        assert!(
+            !planned.plan.files().iter().any(|f| f.path == ".gitignore"),
+            "le plan ne doit pas inventer de .gitignore"
+        );
+        let sautees = planned.plan.sautees();
+        assert_eq!(sautees.len(), 1, "{sautees:?}");
+        assert_eq!(sautees[0].anchor, crate::anchors::IGNORE);
+
+        let rendered = plan::render::plan(&planned.plan);
+        assert!(
+            rendered.contains(".gitignore absent"),
+            "le rendu ne nomme pas le fichier absent :\n{rendered}"
+        );
+        assert!(
+            rendered.contains("/node_modules"),
+            "le rendu ne montre pas la ligne à coller :\n{rendered}"
+        );
+    }
+
+    /// Le critère de la tâche : planifier n'écrit rien, l'ancre des exclusions comprise.
+    #[test]
+    fn planning_an_exclusion_leaves_the_project_untouched() {
+        let (_parent, root) = project();
+        let fragments = fragment(
+            "[feature]\ndescription = \"essai\"\n\n\
+             [[anchors]]\nanchor = \"ignore\"\ncontent = \"/node_modules\"\n",
+            &[],
+        );
+        let before = fingerprint(&root);
+
+        plan_for(&fragment_options(&root, &fragments)).expect("le plan doit se calculer");
+
+        assert_eq!(fingerprint(&root), before, "la planification a écrit");
+    }
 }

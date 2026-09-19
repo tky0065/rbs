@@ -478,9 +478,12 @@ three use it.
 
 `docker` is the one fragment `rbs add` installs that is itself an exception: its `api` and
 `migrate` services go into `# <rbs:services>`, the YAML anchor a compose carries — see
-[above](#the-fourteen-features). The rule is the same everywhere: no AST is ever rewritten,
+[above](#the-fourteen-features). Beside it sits the other anchor outside Rust,
+`# <rbs:ignore>` in `.gitignore`, where a fragment excludes from the repository what it
+drops in it; it is optional too, a project whose `.gitignore` its owner deleted being no
+less complete for it. The rule is the same everywhere: no AST is ever rewritten,
 and a missing anchor makes the command write nothing and print the block to paste back.
-[`rbs doctor`](./doctor.md) checks all seventeen — eleven on a project carrying no compose, no queue and no fragment moved under `src/modules/`, the six optional ones.
+[`rbs doctor`](./doctor.md) checks all eighteen — twelve on a project carrying no compose, no queue and no fragment moved under `src/modules/`, six of the seven optional ones.
 
 A project generated before `// <rbs:layers>` existed does not have it, and `rbs upgrade`
 does not add it: that command aligns the manifest and the `AGENTS.md` zones, and touches

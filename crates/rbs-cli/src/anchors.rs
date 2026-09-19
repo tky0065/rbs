@@ -244,6 +244,27 @@ pub(crate) const SERVICES: Anchor = Anchor {
     after: "services:",
 };
 
+/// Exclusions Git que les fragments ajoutent au `.gitignore` du projet.
+///
+/// Un fragment ne pouvait jusqu'ici rien y écrire : le squelette pose le fichier, et un
+/// fragment qui le déposerait à son tour entrerait en conflit avec lui. Le premier besoin
+/// est le frontend — un `node_modules/` non ignoré, ce sont des dizaines de milliers de
+/// fichiers proposés au premier `git status` — mais la lacune n'a rien qui lui soit propre.
+///
+/// Optionnelle : le développeur peut avoir supprimé le fichier, et un projet sans
+/// exclusions n'est pas un projet incomplet. Le bloc lui est alors montré.
+///
+/// Non triée : l'ordre d'un fichier d'exclusions porte du sens — une négation ne vaut que
+/// sous le motif qu'elle rouvre.
+pub(crate) const IGNORE: Anchor = Anchor {
+    name: Cow::Borrowed("ignore"),
+    file: Cow::Borrowed(".gitignore"),
+    comment: "#",
+    sorted: false,
+    optional: true,
+    after: ".env",
+};
+
 /// Sondes de santé que les fragments ajoutent au contrôle de `GET /health`.
 ///
 /// Le noyau porte la mécanique du contrôle, jamais la façon de joindre un cache ou un
@@ -363,7 +384,7 @@ pub(crate) const RELATED: Anchor = Anchor {
 ///
 /// La génération vise chaque ancre nommément ; `rbs doctor` parcourt cette liste pour
 /// vérifier qu'un projet les porte toutes.
-pub(crate) const ANCRES: [Anchor; 17] = [
+pub(crate) const ANCRES: [Anchor; 18] = [
     FEATURES,
     MODULES,
     ROUTES,
@@ -376,6 +397,7 @@ pub(crate) const ANCRES: [Anchor; 17] = [
     STARTUP,
     SEEDS,
     SERVICES,
+    IGNORE,
     HEALTH_PROBES,
     JOBS,
     JOB_MODULES,
@@ -1498,13 +1520,18 @@ struct AppState {
     }
 
     /// Une ancre optionnelle est l'exception : les onze autres décrivent un fichier que le
-    /// squelette écrit toujours, et leur absence est un défaut. Les six qui le sont
-    /// vivent dans un fichier qu'un fragment dépose — le point de montage des `modules`,
-    /// le compose de `docker`, le registre de `jobs`, la liste de ses modules, le calendrier
-    /// du `scheduler`, l'implémentation d'authentification — et manquent légitimement à qui
-    /// n'a pas installé ce fragment.
+    /// squelette écrit toujours et que rien n'invite à supprimer, et leur absence est un
+    /// défaut. Six des sept qui le sont vivent dans un fichier qu'un fragment dépose — le
+    /// point de montage des `modules`, le compose de `docker`, le registre de `jobs`, la
+    /// liste de ses modules, le calendrier du `scheduler`, l'implémentation
+    /// d'authentification — et manquent légitimement à qui n'a pas installé ce fragment.
+    ///
+    /// `ignore` est la seule à l'être pour une autre raison : le squelette écrit bien le
+    /// fichier d'exclusions, mais celui-ci appartient au développeur, qui peut l'avoir
+    /// supprimé — un dépôt dont le `.gitignore` vit à la racine d'un monorepo, par
+    /// exemple. Réclamer l'ancre ferait passer ce projet pour incomplet.
     #[test]
-    fn only_the_anchors_of_a_fragment_deposited_file_are_optional() {
+    fn an_optional_anchor_is_either_deposited_by_a_fragment_or_the_developer_s_to_delete() {
         let optionnelles: Vec<&str> = ANCRES
             .iter()
             .filter(|anchor| anchor.optional)
@@ -1516,12 +1543,33 @@ struct AppState {
             [
                 "modules",
                 "services",
+                "ignore",
                 "jobs",
                 "job_modules",
                 "schedules",
                 "auth_impl"
             ]
         );
+    }
+
+    /// L'ancre des exclusions est la seule, avec celle du compose, à ne pas vivre dans du
+    /// Rust : son marqueur de commentaire est celui de Git, et le bloc à coller doit sortir
+    /// avec ce marqueur-là.
+    // `IGNORE` étant un `const`, clippy évalue `.optional` à la compilation et signale
+    // l'assertion comme triviale ; elle mord pourtant si quelqu'un change le champ.
+    #[allow(clippy::assertions_on_constants)]
+    #[test]
+    fn the_ignore_anchor_lives_in_the_exclusions_with_the_git_comment_marker() {
+        assert_eq!(IGNORE.file, ".gitignore");
+        assert_eq!(IGNORE.comment, "#");
+        assert_eq!(IGNORE.opening(), "# <rbs:ignore>");
+        assert_eq!(IGNORE.block(), "# <rbs:ignore>\n# </rbs:ignore>");
+        assert!(IGNORE.optional);
+        assert!(
+            !IGNORE.sorted,
+            "l'ordre d'un fichier d'exclusions porte du sens"
+        );
+        assert!(ANCRES.contains(&IGNORE));
     }
 
     /// Sans elle, un fragment ne peut pas inscrire de job : le worker n'exécute que ce que

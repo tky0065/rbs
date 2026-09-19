@@ -82,6 +82,7 @@ faire.
 - `<rbs:startup>` dans `src/main.rs`
 - `<rbs:seeds>` dans `src/seeds/main.rs`
 - `<rbs:services>` dans `docker-compose.yml`
+- `<rbs:ignore>` dans `.gitignore`
 - `<rbs:health_probes>` dans `src/health/controller.rs`
 - `<rbs:jobs>` dans `src/modules/jobs/mod.rs`
 - `<rbs:job_modules>` dans `src/modules/jobs/mod.rs`
@@ -126,7 +127,7 @@ et `cargo test` seul ne les lance pas. Ils demandent la base du `.env` démarré
 - rbs 1.6.0 · base postgres
 - Fragments installés : mail, rate-limit, auth
 - Entités engendrées : posts
-- Ancres du projet : features (src/lib.rs), modules (src/modules/mod.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), health_probes (src/health/controller.rs), auth_impl (src/auth/mod.rs)
+- Ancres du projet : features (src/lib.rs), modules (src/modules/mod.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), ignore (.gitignore), health_probes (src/health/controller.rs), auth_impl (src/auth/mod.rs)
 <!-- /rbs:inventory -->
 
 ## Notes du projet

@@ -622,7 +622,7 @@ suggests and what the run above used.
 ## Anchors
 
 `rbs generate` never rewrites an AST. It inserts between comment markers the skeleton
-carries. `rbs generate crud` and `rbs generate feature` use six of the seventeen — the two in
+carries. `rbs generate crud` and `rbs generate feature` use six of the eighteen — the two in
 `src/state.rs`, `// <rbs:layers>` and `// <rbs:startup>` belong to the fragments
 [`rbs add`](./add.md) installs:
 
@@ -664,8 +664,8 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) checks all seventeen anchors — eleven on a project carrying no
-compose, no queue and no fragment moved under `src/modules/`, the six optional ones —
+[`rbs doctor`](./doctor.md) checks all eighteen anchors — twelve on a project carrying no
+compose, no queue and no fragment moved under `src/modules/`, six of the seven optional ones —
 so a missing one can be found before a generation trips over it.
 
 ## Failures

@@ -660,4 +660,52 @@ mod tests {
             "l'inventaire doit avoir perdu `jobs` : {inventaire}"
         );
     }
+
+    /// Le critère de la tâche : ce qu'un fragment a exclu du dépôt, son retrait le rend.
+    ///
+    /// L'ancre des exclusions passe par le même chemin que les autres — le manifeste relu
+    /// à l'envers — mais elle est la première à vivre dans un fichier que le squelette
+    /// écrit : une ligne laissée là ferait ignorer un répertoire dont plus rien ne parle.
+    #[test]
+    fn removing_a_fragment_gives_back_the_lines_it_excluded() {
+        let (_parent, root) = crate::fixtures::project();
+        let fragments = TempDir::new().expect("répertoire temporaire créable");
+        let essai = fragments.path().join("essai");
+        std::fs::create_dir(&essai).expect("le fragment se crée");
+        std::fs::write(
+            essai.join("feature.toml"),
+            "[feature]\ndescription = \"essai\"\n\n\
+             [[anchors]]\nanchor = \"ignore\"\ncontent = \"/node_modules\"\n",
+        )
+        .expect("le manifeste s'écrit");
+
+        let pose = crate::add::plan_for(&crate::add::Options {
+            features: vec!["essai".to_string()],
+            directory: root.clone(),
+            force: true,
+            template_dir: Some(fragments.path().to_path_buf()),
+        })
+        .expect("la pose se planifie");
+        crate::plan::application::apply(&pose.plan, false).expect("la pose s'applique");
+        assert!(
+            std::fs::read_to_string(root.join(".gitignore"))
+                .expect(".gitignore lisible")
+                .contains("/node_modules"),
+            "le test ne prouverait rien"
+        );
+
+        let mut retrait = options(&root, "essai");
+        retrait.force = true;
+        retrait.template_dir = Some(fragments.path().to_path_buf());
+        let planned = plan_for(&retrait).expect("le retrait se planifie");
+        crate::plan::application::apply(&planned.plan, false).expect("le retrait s'applique");
+
+        let exclusions =
+            std::fs::read_to_string(root.join(".gitignore")).expect(".gitignore lisible");
+        assert!(!exclusions.contains("/node_modules"), "{exclusions}");
+        assert!(
+            exclusions.contains("# <rbs:ignore>"),
+            "l'ancre reste, seule la ligne part : {exclusions}"
+        );
+    }
 }
