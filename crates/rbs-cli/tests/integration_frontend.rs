@@ -127,6 +127,19 @@ fn the_client_installs_typechecks_builds_and_proxies_the_api() {
         "le nom du projet n'a pas atteint le bundle"
     );
 
+    // La galerie part dans son propre morceau, parce que la route la charge paresseusement.
+    // Le vérifier ici est ce qui prouve qu'elle a compilé : le reste de la suite passerait
+    // aussi bien sur un socle qui ne l'aurait jamais montée.
+    let morceaux = std::fs::read_dir(client.join("dist/assets"))
+        .expect("le build écrit ses assets")
+        .filter_map(Result::ok)
+        .map(|entree| entree.file_name().to_string_lossy().into_owned())
+        .collect::<Vec<_>>();
+    assert!(
+        morceaux.iter().any(|nom| nom.starts_with("Galerie-")),
+        "la galerie n'est pas dans le build :\n{morceaux:?}"
+    );
+
     proxy_atteint_l_api(&client);
 }
 

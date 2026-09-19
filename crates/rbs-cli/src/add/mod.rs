@@ -3033,14 +3033,23 @@ mod tests {
 
         let planned = plan_for(&options(&root, "frontend")).expect("le plan doit se calculer");
 
+        // L'ossature, nommée en entier ; les composants d'interface, eux, sont comptés
+        // par le test voisin. Les lister ici en ferait une copie du manifeste, que tout
+        // composant ajouté déplacerait sans rien apprendre de plus.
+        let ossature: Vec<&String> = planned
+            .files
+            .iter()
+            .filter(|chemin| !chemin.starts_with("frontend/src/components/ui/"))
+            .collect();
         assert_eq!(
-            planned.files,
+            ossature,
             [
                 "src/modules/frontend/mod.rs",
                 "src/modules/frontend/config.rs",
                 "src/modules/frontend/amorcage.rs",
                 "src/modules/frontend/feuille.rs",
                 "src/modules/frontend/tests.rs",
+                "frontend/README.md",
                 "frontend/package.json",
                 "frontend/tsconfig.json",
                 "frontend/vite.config.ts",
@@ -3048,9 +3057,15 @@ mod tests {
                 "frontend/src/main.ts",
                 "frontend/src/App.vue",
                 "frontend/src/router/index.ts",
-                "frontend/src/views/Accueil.vue",
+                "frontend/src/lib/utils.ts",
                 "frontend/src/assets/main.css",
+                "frontend/src/components/Bande.vue",
+                "frontend/src/views/Accueil.vue",
+                "frontend/src/views/Galerie.vue",
+                "frontend/src/views/galerie-textes.ts",
             ]
+            .iter()
+            .collect::<Vec<_>>()
         );
 
         // Les deux moitiés du fragment ne se rencontrent qu'ici : le binaire sert `dir`,
@@ -3164,7 +3179,7 @@ mod tests {
                 .filter(|chemin| chemin.starts_with("frontend/"))
                 .cloned()
                 .collect();
-            assert_eq!(client.len(), 9, "{client:?}");
+            assert_eq!(client.len(), 96, "{client:?}");
 
             client
         };
@@ -3203,5 +3218,205 @@ mod tests {
         let accueil = projected(&anglais, "frontend/src/views/Accueil.vue");
         assert!(accueil.contains("The client is in place"), "{accueil}");
         assert!(!accueil.contains("Le client est en place"), "{accueil}");
+    }
+
+    /// Les quatorze composants d'interface, et la route qui les montre.
+    ///
+    /// Le décompte compte autant que la liste : le composant de formulaire a été écarté
+    /// parce qu'il entraîne deux dépendances de validation, et un quinzième répertoire
+    /// signalerait qu'il est rentré par la bande.
+    #[test]
+    fn the_frontend_fragment_ships_fourteen_components_and_a_gallery_that_renders_them() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "frontend")).expect("le plan doit se calculer");
+
+        for composant in COMPOSANTS {
+            let prefixe = format!("frontend/src/components/ui/{composant}/");
+            assert!(
+                planned
+                    .files
+                    .iter()
+                    .any(|chemin| chemin.starts_with(&prefixe)),
+                "le composant `{composant}` n'est pas déposé"
+            );
+        }
+
+        let repertoires: std::collections::BTreeSet<&str> = planned
+            .files
+            .iter()
+            .filter_map(|chemin| chemin.strip_prefix("frontend/src/components/ui/"))
+            .filter_map(|reste| reste.split('/').next())
+            .collect();
+        assert_eq!(repertoires.len(), COMPOSANTS.len(), "{repertoires:?}");
+
+        // La galerie est le seul endroit du socle où ils se trouvent ensemble : en
+        // retirer un la casse, ce qu'aucun autre test ne verrait.
+        //
+        // Le quatorzième fait exception, et c'est sa nature qui le veut : une pile de
+        // notifications se monte une fois pour l'application entière, sinon les écrans
+        // qui viendront s'y ajouter n'en auraient aucune. La galerie ne l'importe donc
+        // pas — elle le déclenche.
+        let galerie = projected(&planned, "frontend/src/views/Galerie.vue");
+        for composant in COMPOSANTS
+            .iter()
+            .filter(|composant| **composant != "sonner")
+        {
+            assert!(
+                galerie.contains(&format!("@/components/ui/{composant}")),
+                "la galerie ne rend pas `{composant}`"
+            );
+        }
+        assert!(galerie.contains("toast."), "la galerie ne notifie rien");
+        let racine = projected(&planned, "frontend/src/App.vue");
+        assert!(
+            racine.contains("@/components/ui/sonner"),
+            "les notifications ne sont montées nulle part :\n{racine}"
+        );
+
+        let routeur = projected(&planned, "frontend/src/router/index.ts");
+        assert!(routeur.contains("/galerie"), "{routeur}");
+    }
+
+    /// Le thème est un bloc, et rien de ce que le fragment livre ne lui échappe.
+    ///
+    /// C'est la promesse entière de la tranche : réécrire ce bloc réécrit l'identité. Une
+    /// seule couleur en clair dans un composant, et elle devient fausse sans que rien
+    /// n'échoue — c'est pourquoi la fouille est mécanique et porte sur tout l'arbre du
+    /// client, vues comprises.
+    #[test]
+    fn nothing_the_fragment_ships_escapes_its_single_theme_block() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "frontend")).expect("le plan doit se calculer");
+
+        // La version actuelle du générateur n'inline plus son thème : la feuille qu'il
+        // engendre importe un fichier de son propre paquet, qui atterrit alors dans les
+        // dépendances du projet sans commande pour s'en défaire — ce que vendoriser
+        // devait précisément éviter.
+        let feuille = projected(&planned, "frontend/src/assets/main.css");
+        assert_eq!(feuille.matches("@theme").count(), 1, "{feuille}");
+        for importation in feuille.lines().filter(|ligne| ligne.starts_with("@import")) {
+            assert!(
+                !importation.contains("shadcn"),
+                "la feuille tire son thème du paquet du générateur : {importation}"
+            );
+        }
+        let npm = projected(&planned, "frontend/package.json");
+        assert!(!npm.contains("shadcn"), "{npm}");
+
+        for chemin in &planned.files {
+            // La feuille est le seul fichier admis à écrire une couleur : c'est elle qui
+            // les nomme.
+            if !chemin.starts_with("frontend/src/") || chemin.ends_with("assets/main.css") {
+                continue;
+            }
+            let rendu = projected(&planned, chemin);
+
+            assert_eq!(
+                couleur_en_clair(rendu),
+                None,
+                "{chemin} écrit une couleur en clair"
+            );
+
+            // Les échelles nommées de Tailwind sont des jetons, mais pas ceux de ce
+            // projet : `bg-red-500` pour une erreur contourne le thème aussi sûrement
+            // qu'un code hexadécimal.
+            for echappee in [
+                "text-white",
+                "bg-white",
+                "text-black",
+                "bg-black",
+                "rounded-full",
+                "rounded-[",
+                "-slate-",
+                "-gray-",
+                "-zinc-",
+                "-neutral-",
+                "-stone-",
+                "-red-",
+                "-amber-",
+                "-green-",
+                "-blue-",
+            ] {
+                assert!(
+                    !rendu.contains(echappee),
+                    "{chemin} échappe au thème par `{echappee}`"
+                );
+            }
+        }
+    }
+
+    /// Aucun emoji nulle part.
+    ///
+    /// Ce qui sert d'icône vient du jeu vectoriel ; un emoji glissé dans un libellé
+    /// traverserait la génération, le compilateur et l'empaqueteur sans rien faire
+    /// échouer, et ne se verrait qu'à l'écran.
+    #[test]
+    fn nothing_the_fragment_ships_carries_an_emoji() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "frontend")).expect("le plan doit se calculer");
+
+        for chemin in &planned.files {
+            if !chemin.starts_with("frontend/") {
+                continue;
+            }
+            let rendu = projected(&planned, chemin);
+            assert!(
+                !rendu.chars().any(emoji),
+                "{chemin} porte un emoji : {:?}",
+                rendu.chars().find(|caractere| emoji(*caractere))
+            );
+        }
+    }
+
+    /// Les quatorze composants d'interface que le socle dépose, par le nom de leur
+    /// répertoire.
+    const COMPOSANTS: [&str; 14] = [
+        "badge",
+        "button",
+        "card",
+        "checkbox",
+        "dialog",
+        "dropdown-menu",
+        "input",
+        "label",
+        "select",
+        "separator",
+        "sheet",
+        "skeleton",
+        "sonner",
+        "table",
+    ];
+
+    /// La première couleur écrite en clair dans `source`, s'il y en a une.
+    ///
+    /// Un `#` suivi de trois ou six chiffres hexadécimaux que rien d'alphanumérique ne
+    /// prolonge : de quoi distinguer `#f2efe6` d'un `#app` ou d'un lien de documentation.
+    fn couleur_en_clair(source: &str) -> Option<String> {
+        source.match_indices('#').find_map(|(depart, _)| {
+            let suite = &source[depart + 1..];
+            [6, 3].into_iter().find_map(|longueur| {
+                let chiffres = suite.get(..longueur)?;
+                (chiffres
+                    .chars()
+                    .all(|caractere| caractere.is_ascii_hexdigit())
+                    && !suite[longueur..]
+                        .starts_with(|caractere: char| caractere.is_alphanumeric()))
+                .then(|| format!("#{chiffres}"))
+            })
+        })
+    }
+
+    /// Les blocs Unicode dont le socle n'admet aucun caractère.
+    ///
+    /// Les pictogrammes et les dingbats, pas les flèches ni la ponctuation : une ellipse
+    /// ou un tiret cadratin sont de la typographie, et le socle en emploie.
+    fn emoji(caractere: char) -> bool {
+        matches!(
+            caractere as u32,
+            0x1F000..=0x1FAFF | 0x2600..=0x27BF | 0xFE0F
+        )
     }
 }

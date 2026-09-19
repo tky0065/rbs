@@ -1,5 +1,8 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
+import { RouterLink } from 'vue-router'
+
+import Bande from '@/components/Bande.vue'
 
 /** Le nom du projet, tel que `rbs new` l'a fixé. */
 const PROJET = '{@ project_name @}'
@@ -7,8 +10,10 @@ const PROJET = '{@ project_name @}'
 {% if lang == "en" -%}
 const TITRE = 'The client is in place'
 const SOUS_TITRE =
-  'This is the only route of the base. It asks the service, and nothing it shows is written in advance.'
+  'The base serves this page and a gallery of its interface components, and nothing else. It asks the service, and nothing it shows is written in advance.'
 const ETAT = 'Health probe'
+const COMPOSANTS = 'Interface components'
+const GALERIE = 'See the gallery'
 const LIBELLE = {
   attente: 'asking…',
   ok: 'answering',
@@ -18,8 +23,10 @@ const LIBELLE = {
 {% else -%}
 const TITRE = 'Le client est en place'
 const SOUS_TITRE =
-  "C'est l'unique route du socle. Elle interroge le service, et rien de ce qu'elle affiche n'est écrit d'avance."
+  "Le socle sert cette page et une galerie de ses composants d'interface, et rien d'autre. Elle interroge le service, et rien de ce qu'elle affiche n'est écrit d'avance."
 const ETAT = 'Sonde de santé'
+const COMPOSANTS = "Composants d'interface"
+const GALERIE = 'Voir la galerie'
 const LIBELLE = {
   attente: 'interrogation…',
   ok: 'répond',
@@ -45,19 +52,24 @@ onMounted(async () => {
 </script>
 
 <template>
-  <main class="feuille">
-    <header class="bande">
-      <p class="projet">{{ PROJET }}</p>
-      <h1>{{ TITRE }}</h1>
-      <p class="tenue">{{ SOUS_TITRE }}</p>
-    </header>
+  <main class="mx-auto max-w-4xl border-x border-border">
+    <Bande>
+      <p class="mb-6 uppercase tracking-[0.35em] text-muted-foreground">{{ PROJET }}</p>
+      <h1 class="mb-4 text-3xl leading-tight">{{ TITRE }}</h1>
+      <p class="text-muted-foreground">{{ SOUS_TITRE }}</p>
+    </Bande>
 
-    <section class="bande bande--paire">
-      <h2>{{ ETAT }}</h2>
-      <dl class="releve">
-        <dt><code>/health</code></dt>
-        <dd :class="{ manque: etat !== 'ok' }">{{ LIBELLE[etat] }}</dd>
+    <Bande :titre="ETAT">
+      <dl class="grid grid-cols-[minmax(10rem,auto)_1fr] gap-x-6 gap-y-1">
+        <dt class="text-muted-foreground">
+          <code class="border border-border bg-background px-1.5 py-0.5">/health</code>
+        </dt>
+        <dd :class="etat === 'ok' ? '' : 'text-destructive'">{{ LIBELLE[etat] }}</dd>
       </dl>
-    </section>
+    </Bande>
+
+    <Bande :titre="COMPOSANTS">
+      <RouterLink to="/galerie" class="underline underline-offset-4">{{ GALERIE }}</RouterLink>
+    </Bande>
   </main>
 </template>

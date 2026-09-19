@@ -1582,41 +1582,88 @@ mod tests {
         }
     }
 
-    /// Les deux feuilles du fragment nomment les mêmes couleurs sous les mêmes noms.
+    /// Les deux feuilles du fragment montrent le même monde.
     ///
     /// Le binaire sert la page d'amorçage, puis le client prend sa place : deux feuilles
     /// écrites dans deux langages, que rien ne tient ensemble. Les voir diverger ne casse
     /// rien — c'est ce qui rend la dérive silencieuse, et elle avait déjà commencé.
     ///
-    /// Le sens compte : la feuille du client ne peut rien nommer que la page d'amorçage
-    /// ne nomme pas de même, mais celle-ci garde le droit d'en porter davantage, ayant
-    /// seule à composer sans classe utilitaire.
+    /// Les *noms* ont cessé de coïncider le jour où le client est passé au thème : la page
+    /// d'amorçage nomme des matériaux — papier, bande, filet — là où le thème nomme des
+    /// rôles, qu'un composant consomme sans savoir de quoi ils sont faits. La table
+    /// ci-dessous est ce qui les tient ensemble. Comparer les seules valeurs ne suffirait
+    /// pas : deux rôles échangés montreraient la même palette et pas le même monde.
     #[test]
-    fn both_stylesheets_of_the_fragment_agree_on_the_colours_they_name() {
-        let variables = |source: &str| {
+    fn both_stylesheets_of_the_fragment_show_the_same_world() {
+        /// Le rôle que nomme le thème du client, et le matériau dont la page d'amorçage
+        /// le fait.
+        const CORRESPONDANCE: [(&str, &str); 18] = [
+            ("color-background", "papier"),
+            ("color-foreground", "encre"),
+            ("color-card", "creux"),
+            ("color-card-foreground", "encre"),
+            ("color-popover", "creux"),
+            ("color-popover-foreground", "encre"),
+            ("color-primary", "encre"),
+            ("color-primary-foreground", "papier"),
+            ("color-secondary", "bande"),
+            ("color-secondary-foreground", "encre"),
+            ("color-muted", "bande"),
+            ("color-muted-foreground", "pale"),
+            ("color-accent", "filet"),
+            ("color-accent-foreground", "encre"),
+            ("color-border", "filet"),
+            ("color-input", "filet"),
+            ("color-ring", "pale"),
+            ("color-destructive", "alerte"),
+        ];
+
+        let couleurs = |source: &str| {
             source
                 .lines()
                 .filter_map(|ligne| ligne.trim().strip_prefix("--"))
                 .filter_map(|ligne| ligne.split_once(": "))
-                .map(|(nom, valeur)| (nom.to_string(), valeur.trim_end_matches(';').to_string()))
+                .map(|(nom, valeur)| {
+                    (
+                        nom.to_string(),
+                        valeur.trim().trim_end_matches(';').to_string(),
+                    )
+                })
+                .filter(|(_, valeur)| valeur.starts_with('#'))
                 .collect::<std::collections::BTreeMap<_, _>>()
         };
 
         let racine = Path::new(RACINE_FEATURES).join("frontend");
-        let amorcage = variables(&read(&racine.join("feuille.rs.jinja")));
-        let client = variables(&read(&racine.join("client/src/assets/main.css.jinja")));
+        let amorcage = couleurs(&read(&racine.join("feuille.rs.jinja")));
+        let client = couleurs(&read(&racine.join("client/src/assets/main.css.jinja")));
 
-        assert!(
-            !client.is_empty(),
-            "la feuille du client ne nomme aucune couleur"
-        );
-        for (nom, valeur) in &client {
+        for (role, materiau) in CORRESPONDANCE {
             assert_eq!(
-                amorcage.get(nom),
-                Some(valeur),
-                "`--{nom}` diffère entre la page d'amorçage et le client"
+                client.get(role),
+                amorcage.get(materiau),
+                "`--{role}` n'est plus fait du même matériau que `--{materiau}`"
             );
         }
+
+        // Le client ne nomme que ces rôles-là : un rôle ajouté au thème sans entrée dans
+        // la table passerait sinon sans que personne n'ait dit de quoi il est fait.
+        let roles: std::collections::BTreeSet<&str> =
+            CORRESPONDANCE.iter().map(|(role, _)| *role).collect();
+        let nommes: std::collections::BTreeSet<&str> = client.keys().map(String::as_str).collect();
+        assert_eq!(roles, nommes, "un rôle du thème n'est pas dans la table");
+
+        // Et la page d'amorçage ne nomme aucun matériau que le client laisserait de côté :
+        // c'est elle qui compose sans classe utilitaire, mais pas dans un autre monde.
+        let materiaux: std::collections::BTreeSet<&str> = CORRESPONDANCE
+            .iter()
+            .map(|(_, materiau)| *materiau)
+            .collect();
+        let disponibles: std::collections::BTreeSet<&str> =
+            amorcage.keys().map(String::as_str).collect();
+        assert_eq!(
+            materiaux, disponibles,
+            "les deux feuilles ne sont pas faites des mêmes matériaux"
+        );
     }
 
     /// Les routes que le squelette monte de lui-même, lues dans ses templates.

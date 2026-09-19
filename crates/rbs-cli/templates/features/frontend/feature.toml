@@ -33,6 +33,30 @@ destination = "src/modules/frontend/tests.rs"
 # `npm create vue` produirait, pour qu'un développeur qui connaît Vue n'ait rien à
 # réapprendre — et parce que `rbs generate crud` viendra y déposer des écrans, ce qui fige
 # la disposition autant que le ferait une API.
+#
+# Les composants d'interface sont figés ici plutôt que tirés d'un générateur : le manifeste
+# npm ne porte aucune dépendance vers la ligne de commande qui a servi à les produire, et
+# le thème que celle-ci importe depuis son propre paquet est inliné dans
+# `src/assets/main.css`. La contrepartie est une tâche de mise à jour récurrente.
+#
+# Trois versions du manifeste npm s'écartent du dernier stable, chacune sur une
+# incompatibilité vérifiée plutôt que par prudence : `typescript`, dont la 7 ne publie plus
+# le module que `vue-tsc` charge ; `@vueuse/core`, que `reka-ui` tire en 14 et qui
+# doublerait dans le bundle en 15 ; et `@vue/devtools-api`, pair non optionnel de Pinia 4
+# qu'aucun projet neuf ne pose de lui-même. Le détail de chacune est écrit dans le
+# `README.md` livré au projet, et non ici : c'est son propriétaire, et non le mainteneur de
+# `rbs`, qui décidera un jour de les relever.
+#
+# `tw-animate-css` ne figure pas dans la pile choisie, et n'est pas non plus un choix :
+# c'est la feuille où vivent les `animate-in`, `slide-in-from-*` et `fade-out-0` que les
+# composants livrés écrivent dans leurs classes. Sans elle, ces classes ne désignent rien,
+# une boîte de dialogue apparaît sans transition et un panneau latéral ne dit plus de quel
+# bord il vient.
+
+[[files]]
+source      = "client/README.md.jinja"
+destination = "frontend/README.md"
+
 [[files]]
 source      = "client/package.json.jinja"
 destination = "frontend/package.json"
@@ -62,12 +86,356 @@ source      = "client/src/router/index.ts.jinja"
 destination = "frontend/src/router/index.ts"
 
 [[files]]
-source      = "client/src/views/Accueil.vue.jinja"
-destination = "frontend/src/views/Accueil.vue"
+source      = "client/src/lib/utils.ts.jinja"
+destination = "frontend/src/lib/utils.ts"
 
 [[files]]
 source      = "client/src/assets/main.css.jinja"
 destination = "frontend/src/assets/main.css"
+
+[[files]]
+source      = "client/src/components/Bande.vue.jinja"
+destination = "frontend/src/components/Bande.vue"
+
+[[files]]
+source      = "client/src/views/Accueil.vue.jinja"
+destination = "frontend/src/views/Accueil.vue"
+
+[[files]]
+source      = "client/src/views/Galerie.vue.jinja"
+destination = "frontend/src/views/Galerie.vue"
+
+[[files]]
+source      = "client/src/views/galerie-textes.ts.jinja"
+destination = "frontend/src/views/galerie-textes.ts"
+
+[[files]]
+source      = "client/src/components/ui/badge/Badge.vue.jinja"
+destination = "frontend/src/components/ui/badge/Badge.vue"
+
+[[files]]
+source      = "client/src/components/ui/badge/index.ts.jinja"
+destination = "frontend/src/components/ui/badge/index.ts"
+
+[[files]]
+source      = "client/src/components/ui/button/Button.vue.jinja"
+destination = "frontend/src/components/ui/button/Button.vue"
+
+[[files]]
+source      = "client/src/components/ui/button/index.ts.jinja"
+destination = "frontend/src/components/ui/button/index.ts"
+
+[[files]]
+source      = "client/src/components/ui/card/Card.vue.jinja"
+destination = "frontend/src/components/ui/card/Card.vue"
+
+[[files]]
+source      = "client/src/components/ui/card/CardAction.vue.jinja"
+destination = "frontend/src/components/ui/card/CardAction.vue"
+
+[[files]]
+source      = "client/src/components/ui/card/CardContent.vue.jinja"
+destination = "frontend/src/components/ui/card/CardContent.vue"
+
+[[files]]
+source      = "client/src/components/ui/card/CardDescription.vue.jinja"
+destination = "frontend/src/components/ui/card/CardDescription.vue"
+
+[[files]]
+source      = "client/src/components/ui/card/CardFooter.vue.jinja"
+destination = "frontend/src/components/ui/card/CardFooter.vue"
+
+[[files]]
+source      = "client/src/components/ui/card/CardHeader.vue.jinja"
+destination = "frontend/src/components/ui/card/CardHeader.vue"
+
+[[files]]
+source      = "client/src/components/ui/card/CardTitle.vue.jinja"
+destination = "frontend/src/components/ui/card/CardTitle.vue"
+
+[[files]]
+source      = "client/src/components/ui/card/index.ts.jinja"
+destination = "frontend/src/components/ui/card/index.ts"
+
+[[files]]
+source      = "client/src/components/ui/checkbox/Checkbox.vue.jinja"
+destination = "frontend/src/components/ui/checkbox/Checkbox.vue"
+
+[[files]]
+source      = "client/src/components/ui/checkbox/index.ts.jinja"
+destination = "frontend/src/components/ui/checkbox/index.ts"
+
+[[files]]
+source      = "client/src/components/ui/dialog/Dialog.vue.jinja"
+destination = "frontend/src/components/ui/dialog/Dialog.vue"
+
+[[files]]
+source      = "client/src/components/ui/dialog/DialogClose.vue.jinja"
+destination = "frontend/src/components/ui/dialog/DialogClose.vue"
+
+[[files]]
+source      = "client/src/components/ui/dialog/DialogContent.vue.jinja"
+destination = "frontend/src/components/ui/dialog/DialogContent.vue"
+
+[[files]]
+source      = "client/src/components/ui/dialog/DialogDescription.vue.jinja"
+destination = "frontend/src/components/ui/dialog/DialogDescription.vue"
+
+[[files]]
+source      = "client/src/components/ui/dialog/DialogFooter.vue.jinja"
+destination = "frontend/src/components/ui/dialog/DialogFooter.vue"
+
+[[files]]
+source      = "client/src/components/ui/dialog/DialogHeader.vue.jinja"
+destination = "frontend/src/components/ui/dialog/DialogHeader.vue"
+
+[[files]]
+source      = "client/src/components/ui/dialog/DialogOverlay.vue.jinja"
+destination = "frontend/src/components/ui/dialog/DialogOverlay.vue"
+
+[[files]]
+source      = "client/src/components/ui/dialog/DialogScrollContent.vue.jinja"
+destination = "frontend/src/components/ui/dialog/DialogScrollContent.vue"
+
+[[files]]
+source      = "client/src/components/ui/dialog/DialogTitle.vue.jinja"
+destination = "frontend/src/components/ui/dialog/DialogTitle.vue"
+
+[[files]]
+source      = "client/src/components/ui/dialog/DialogTrigger.vue.jinja"
+destination = "frontend/src/components/ui/dialog/DialogTrigger.vue"
+
+[[files]]
+source      = "client/src/components/ui/dialog/index.ts.jinja"
+destination = "frontend/src/components/ui/dialog/index.ts"
+
+[[files]]
+source      = "client/src/components/ui/dropdown-menu/DropdownMenu.vue.jinja"
+destination = "frontend/src/components/ui/dropdown-menu/DropdownMenu.vue"
+
+[[files]]
+source      = "client/src/components/ui/dropdown-menu/DropdownMenuCheckboxItem.vue.jinja"
+destination = "frontend/src/components/ui/dropdown-menu/DropdownMenuCheckboxItem.vue"
+
+[[files]]
+source      = "client/src/components/ui/dropdown-menu/DropdownMenuContent.vue.jinja"
+destination = "frontend/src/components/ui/dropdown-menu/DropdownMenuContent.vue"
+
+[[files]]
+source      = "client/src/components/ui/dropdown-menu/DropdownMenuGroup.vue.jinja"
+destination = "frontend/src/components/ui/dropdown-menu/DropdownMenuGroup.vue"
+
+[[files]]
+source      = "client/src/components/ui/dropdown-menu/DropdownMenuItem.vue.jinja"
+destination = "frontend/src/components/ui/dropdown-menu/DropdownMenuItem.vue"
+
+[[files]]
+source      = "client/src/components/ui/dropdown-menu/DropdownMenuLabel.vue.jinja"
+destination = "frontend/src/components/ui/dropdown-menu/DropdownMenuLabel.vue"
+
+[[files]]
+source      = "client/src/components/ui/dropdown-menu/DropdownMenuRadioGroup.vue.jinja"
+destination = "frontend/src/components/ui/dropdown-menu/DropdownMenuRadioGroup.vue"
+
+[[files]]
+source      = "client/src/components/ui/dropdown-menu/DropdownMenuRadioItem.vue.jinja"
+destination = "frontend/src/components/ui/dropdown-menu/DropdownMenuRadioItem.vue"
+
+[[files]]
+source      = "client/src/components/ui/dropdown-menu/DropdownMenuSeparator.vue.jinja"
+destination = "frontend/src/components/ui/dropdown-menu/DropdownMenuSeparator.vue"
+
+[[files]]
+source      = "client/src/components/ui/dropdown-menu/DropdownMenuShortcut.vue.jinja"
+destination = "frontend/src/components/ui/dropdown-menu/DropdownMenuShortcut.vue"
+
+[[files]]
+source      = "client/src/components/ui/dropdown-menu/DropdownMenuSub.vue.jinja"
+destination = "frontend/src/components/ui/dropdown-menu/DropdownMenuSub.vue"
+
+[[files]]
+source      = "client/src/components/ui/dropdown-menu/DropdownMenuSubContent.vue.jinja"
+destination = "frontend/src/components/ui/dropdown-menu/DropdownMenuSubContent.vue"
+
+[[files]]
+source      = "client/src/components/ui/dropdown-menu/DropdownMenuSubTrigger.vue.jinja"
+destination = "frontend/src/components/ui/dropdown-menu/DropdownMenuSubTrigger.vue"
+
+[[files]]
+source      = "client/src/components/ui/dropdown-menu/DropdownMenuTrigger.vue.jinja"
+destination = "frontend/src/components/ui/dropdown-menu/DropdownMenuTrigger.vue"
+
+[[files]]
+source      = "client/src/components/ui/dropdown-menu/index.ts.jinja"
+destination = "frontend/src/components/ui/dropdown-menu/index.ts"
+
+[[files]]
+source      = "client/src/components/ui/input/Input.vue.jinja"
+destination = "frontend/src/components/ui/input/Input.vue"
+
+[[files]]
+source      = "client/src/components/ui/input/index.ts.jinja"
+destination = "frontend/src/components/ui/input/index.ts"
+
+[[files]]
+source      = "client/src/components/ui/label/Label.vue.jinja"
+destination = "frontend/src/components/ui/label/Label.vue"
+
+[[files]]
+source      = "client/src/components/ui/label/index.ts.jinja"
+destination = "frontend/src/components/ui/label/index.ts"
+
+[[files]]
+source      = "client/src/components/ui/select/Select.vue.jinja"
+destination = "frontend/src/components/ui/select/Select.vue"
+
+[[files]]
+source      = "client/src/components/ui/select/SelectContent.vue.jinja"
+destination = "frontend/src/components/ui/select/SelectContent.vue"
+
+[[files]]
+source      = "client/src/components/ui/select/SelectGroup.vue.jinja"
+destination = "frontend/src/components/ui/select/SelectGroup.vue"
+
+[[files]]
+source      = "client/src/components/ui/select/SelectItem.vue.jinja"
+destination = "frontend/src/components/ui/select/SelectItem.vue"
+
+[[files]]
+source      = "client/src/components/ui/select/SelectItemText.vue.jinja"
+destination = "frontend/src/components/ui/select/SelectItemText.vue"
+
+[[files]]
+source      = "client/src/components/ui/select/SelectLabel.vue.jinja"
+destination = "frontend/src/components/ui/select/SelectLabel.vue"
+
+[[files]]
+source      = "client/src/components/ui/select/SelectScrollDownButton.vue.jinja"
+destination = "frontend/src/components/ui/select/SelectScrollDownButton.vue"
+
+[[files]]
+source      = "client/src/components/ui/select/SelectScrollUpButton.vue.jinja"
+destination = "frontend/src/components/ui/select/SelectScrollUpButton.vue"
+
+[[files]]
+source      = "client/src/components/ui/select/SelectSeparator.vue.jinja"
+destination = "frontend/src/components/ui/select/SelectSeparator.vue"
+
+[[files]]
+source      = "client/src/components/ui/select/SelectTrigger.vue.jinja"
+destination = "frontend/src/components/ui/select/SelectTrigger.vue"
+
+[[files]]
+source      = "client/src/components/ui/select/SelectValue.vue.jinja"
+destination = "frontend/src/components/ui/select/SelectValue.vue"
+
+[[files]]
+source      = "client/src/components/ui/select/index.ts.jinja"
+destination = "frontend/src/components/ui/select/index.ts"
+
+[[files]]
+source      = "client/src/components/ui/separator/Separator.vue.jinja"
+destination = "frontend/src/components/ui/separator/Separator.vue"
+
+[[files]]
+source      = "client/src/components/ui/separator/index.ts.jinja"
+destination = "frontend/src/components/ui/separator/index.ts"
+
+[[files]]
+source      = "client/src/components/ui/sheet/Sheet.vue.jinja"
+destination = "frontend/src/components/ui/sheet/Sheet.vue"
+
+[[files]]
+source      = "client/src/components/ui/sheet/SheetClose.vue.jinja"
+destination = "frontend/src/components/ui/sheet/SheetClose.vue"
+
+[[files]]
+source      = "client/src/components/ui/sheet/SheetContent.vue.jinja"
+destination = "frontend/src/components/ui/sheet/SheetContent.vue"
+
+[[files]]
+source      = "client/src/components/ui/sheet/SheetDescription.vue.jinja"
+destination = "frontend/src/components/ui/sheet/SheetDescription.vue"
+
+[[files]]
+source      = "client/src/components/ui/sheet/SheetFooter.vue.jinja"
+destination = "frontend/src/components/ui/sheet/SheetFooter.vue"
+
+[[files]]
+source      = "client/src/components/ui/sheet/SheetHeader.vue.jinja"
+destination = "frontend/src/components/ui/sheet/SheetHeader.vue"
+
+[[files]]
+source      = "client/src/components/ui/sheet/SheetOverlay.vue.jinja"
+destination = "frontend/src/components/ui/sheet/SheetOverlay.vue"
+
+[[files]]
+source      = "client/src/components/ui/sheet/SheetTitle.vue.jinja"
+destination = "frontend/src/components/ui/sheet/SheetTitle.vue"
+
+[[files]]
+source      = "client/src/components/ui/sheet/SheetTrigger.vue.jinja"
+destination = "frontend/src/components/ui/sheet/SheetTrigger.vue"
+
+[[files]]
+source      = "client/src/components/ui/sheet/index.ts.jinja"
+destination = "frontend/src/components/ui/sheet/index.ts"
+
+[[files]]
+source      = "client/src/components/ui/skeleton/Skeleton.vue.jinja"
+destination = "frontend/src/components/ui/skeleton/Skeleton.vue"
+
+[[files]]
+source      = "client/src/components/ui/skeleton/index.ts.jinja"
+destination = "frontend/src/components/ui/skeleton/index.ts"
+
+[[files]]
+source      = "client/src/components/ui/sonner/Sonner.vue.jinja"
+destination = "frontend/src/components/ui/sonner/Sonner.vue"
+
+[[files]]
+source      = "client/src/components/ui/sonner/index.ts.jinja"
+destination = "frontend/src/components/ui/sonner/index.ts"
+
+[[files]]
+source      = "client/src/components/ui/table/Table.vue.jinja"
+destination = "frontend/src/components/ui/table/Table.vue"
+
+[[files]]
+source      = "client/src/components/ui/table/TableBody.vue.jinja"
+destination = "frontend/src/components/ui/table/TableBody.vue"
+
+[[files]]
+source      = "client/src/components/ui/table/TableCaption.vue.jinja"
+destination = "frontend/src/components/ui/table/TableCaption.vue"
+
+[[files]]
+source      = "client/src/components/ui/table/TableCell.vue.jinja"
+destination = "frontend/src/components/ui/table/TableCell.vue"
+
+[[files]]
+source      = "client/src/components/ui/table/TableEmpty.vue.jinja"
+destination = "frontend/src/components/ui/table/TableEmpty.vue"
+
+[[files]]
+source      = "client/src/components/ui/table/TableFooter.vue.jinja"
+destination = "frontend/src/components/ui/table/TableFooter.vue"
+
+[[files]]
+source      = "client/src/components/ui/table/TableHead.vue.jinja"
+destination = "frontend/src/components/ui/table/TableHead.vue"
+
+[[files]]
+source      = "client/src/components/ui/table/TableHeader.vue.jinja"
+destination = "frontend/src/components/ui/table/TableHeader.vue"
+
+[[files]]
+source      = "client/src/components/ui/table/TableRow.vue.jinja"
+destination = "frontend/src/components/ui/table/TableRow.vue"
+
+[[files]]
+source      = "client/src/components/ui/table/index.ts.jinja"
+destination = "frontend/src/components/ui/table/index.ts"
 
 [[anchors]]
 anchor  = "modules"

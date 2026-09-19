@@ -1,106 +1,100 @@
-/* L'entrée de la feuille de style du client.
+@import 'tailwindcss';
+@import 'tw-animate-css';
+@import 'vue-sonner/style.css';
+
+/* La variante sombre, accrochée à une classe que rien ne porte — et c'est une extinction,
+ * pas une préparation.
  *
- * Volontairement pauvre : elle donne au socle de quoi être lisible, pas son monde visuel.
- * Les variables ci-dessous sont celles de la page d'amorçage que sert le binaire, pour que
- * la seconde page ne dépayse pas après la première — le reste est du style d'élément
- * ordinaire, qu'un thème remplacera.
- */
-:root {
-  color-scheme: light;
-  --papier: #f2efe6;
-  --bande: #e9e5d8;
-  --encre: #1b1a17;
-  --pale: #6f6a5e;
-  --filet: #cbc5b4;
-  --alerte: #a8322a;
+ * Les composants livrés portent les classes `dark:` que shadcn-vue leur donne. Laissées à
+ * la variante par défaut, elles répondent à la préférence du système : sur une machine
+ * réglée en sombre, `dark:bg-input/30` et ses voisines s'appliqueraient par-dessus une
+ * palette qui n'a, elle, qu'un seul jeu de valeurs — un champ assombri sur du papier
+ * clair. Les accrocher ici les éteint sans toucher à un composant, ni empêcher qui
+ * voudra d'un second jeu de valeurs de les rallumer. */
+@custom-variant dark (&:where(.sombre, .sombre *));
+
+/* Le monde visuel du projet, en entier.
+ *
+ * Sept couleurs, les mêmes que celles de la page d'amorçage que sert le binaire, pour que
+ * la seconde page ne dépayse pas après la première. Une sortie d'imprimante ligne : papier
+ * en continu, bandes pleine largeur, encre de ruban d'impact, et une seule seconde couleur
+ * pour l'alerte.
+ *
+ * Remplacer ce bloc remplace l'identité. Aucun composant ne nomme une couleur : ils ne
+ * connaissent que les rôles ci-dessous. */
+@theme {
+  /* Le papier, et l'encre qui s'y dépose. */
+  --color-background: #f2efe6;
+  --color-foreground: #1b1a17;
+
+  /* Le creux — une fenêtre non imprimée, d'où sort ce qui se détache de la page. */
+  --color-card: #f7f5ee;
+  --color-card-foreground: #1b1a17;
+  --color-popover: #f7f5ee;
+  --color-popover-foreground: #1b1a17;
+
+  /* L'encre pleine : ce sur quoi le regard tombe en premier. */
+  --color-primary: #1b1a17;
+  --color-primary-foreground: #f2efe6;
+
+  /* La bande, matériau des aplats de second rang. */
+  --color-secondary: #e9e5d8;
+  --color-secondary-foreground: #1b1a17;
+  --color-muted: #e9e5d8;
+  --color-muted-foreground: #6f6a5e;
+
+  /* Le filet, pour ce que le curseur touche : une bande pressée sous le ruban. */
+  --color-accent: #cbc5b4;
+  --color-accent-foreground: #1b1a17;
+
+  /* Les traits, et le halo du focus. */
+  --color-border: #cbc5b4;
+  --color-input: #cbc5b4;
+  --color-ring: #6f6a5e;
+
+  /* La seconde couleur, et la seule. */
+  --color-destructive: #a8322a;
+
+  /* Rien n'est arrondi : une imprimante ligne ne sait pas tracer de courbe. Les quatre
+   * échelons sont à zéro plutôt que supprimés, pour que `rounded-md` reste écrivable dans
+   * un composant sans lui rendre un angle que le monde n'a pas. */
+  --radius: 0px;
+  --radius-sm: 0px;
+  --radius-md: 0px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+
+  /* Une seule graisse, une seule chasse : tout est sorti de la même machine. */
+  --font-sans:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  --font-mono: var(--font-sans);
 }
 
-* {
-  box-sizing: border-box;
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  body {
+    margin: 0;
+    color-scheme: light;
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.6;
+  }
 }
 
-body {
-  margin: 0;
-  background: var(--papier);
-  color: var(--encre);
-  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono',
-    monospace;
-  font-size: 15px;
-  line-height: 1.6;
-}
-
-.feuille {
-  max-width: 62rem;
-  margin: 0 auto;
-  border-left: 1px solid var(--filet);
-  border-right: 1px solid var(--filet);
-}
-
-.bande {
-  padding: 2rem 1.5rem;
-  border-bottom: 1px solid var(--filet);
-}
-
-.bande:last-child {
-  border-bottom: 0;
-}
-
-.bande--paire {
-  background: var(--bande);
-}
-
-.projet {
-  margin: 0 0 1.5rem;
-  letter-spacing: 0.35em;
-  text-transform: uppercase;
-  color: var(--pale);
-}
-
-h1 {
-  margin: 0 0 1rem;
-  font-size: 2rem;
-  line-height: 1.2;
-}
-
-h2 {
-  margin: 0 0 1.25rem;
-  font-size: 1rem;
-  letter-spacing: 0.28em;
-  text-transform: uppercase;
-  color: var(--pale);
-}
-
-p {
-  margin: 0;
-}
-
-.tenue {
-  color: var(--pale);
-}
-
-.releve {
-  display: grid;
-  grid-template-columns: minmax(10rem, auto) 1fr;
-  gap: 0.35rem 1.5rem;
-  margin: 0;
-}
-
-dt {
-  color: var(--pale);
-}
-
-dd {
-  margin: 0;
-}
-
-/* Le verdict passe par une classe et non par un mot de couleur écrit dans le balisage :
- * une autre palette se pose alors en réécrivant les seules variables. */
-dd.manque {
-  color: var(--alerte);
-}
-
-code {
-  padding: 0.1rem 0.4rem;
-  border: 1px solid var(--filet);
-  background: var(--papier);
+/* Les composants animent leur entrée pour dire d'où elles viennent — un panneau glisse du
+ * bord qu'il occupe. Qui a demandé moins de mouvement obtient le même état final, posé
+ * sans trajet. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }

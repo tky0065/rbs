@@ -4,7 +4,13 @@ import Accueil from '@/views/Accueil.vue'
 
 // L'historique du navigateur suppose que le serveur rende l'index pour une route qu'il ne
 // connaît pas : le module de service du projet le fait, et les deux tiennent ensemble.
+//
+// La galerie est chargée paresseusement, et l'accueil non : elle n'existe que pour être
+// consultée une fois, et le visiteur qui ne l'ouvre jamais n'en paie pas le poids.
 export const router = createRouter({
   history: createWebHistory(),
-  routes: [{ path: '/', name: 'accueil', component: Accueil }],
+  routes: [
+    { path: '/', name: 'accueil', component: Accueil },
+    { path: '/galerie', name: 'galerie', component: () => import('@/views/Galerie.vue') },
+  ],
 })
