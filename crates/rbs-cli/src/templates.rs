@@ -1522,6 +1522,54 @@ mod tests {
         );
     }
 
+    /// Le fragment du frontend ne livre que du texte.
+    ///
+    /// Le mécanisme est UTF-8 par construction : une police, une image matricielle ou un
+    /// favicon `.ico` n'en sortiraient pas — le planificateur lit chaque template en
+    /// `String`. C'est cette contrainte qui commande deux choix visibles du socle : la
+    /// police vient du registre npm, et l'icône d'onglet est un SVG. Le jour où un
+    /// fichier serait déposé à la main dans l'arbre du client, c'est ici qu'on le verrait,
+    /// et non chez l'utilisateur.
+    #[test]
+    fn the_frontend_fragment_ships_nothing_but_text() {
+        let racine = Path::new(RACINE_FEATURES).join("frontend");
+        let mut trouvees = Vec::new();
+        walk(&racine, &mut trouvees);
+
+        assert!(
+            !trouvees.is_empty(),
+            "aucune template sous {}",
+            racine.display()
+        );
+
+        for path in &trouvees {
+            let octets = fs::read(path).unwrap_or_else(|error| {
+                panic!("{} illisible : {error}", path.display());
+            });
+            assert!(
+                String::from_utf8(octets).is_ok(),
+                "{} n'est pas de l'UTF-8",
+                path.display()
+            );
+
+            let nom = path
+                .file_name()
+                .expect("un fichier porte un nom")
+                .to_string_lossy()
+                .into_owned();
+            let destination = nom.strip_suffix(".jinja").unwrap_or(&nom);
+            for binaire in [
+                ".woff", ".woff2", ".ttf", ".otf", ".eot", ".ico", ".png", ".jpg",
+            ] {
+                assert!(
+                    !destination.ends_with(binaire),
+                    "{} : le fragment ne peut livrer aucun binaire",
+                    path.display()
+                );
+            }
+        }
+    }
+
     /// Le relais du serveur de développement vise le port où le binaire écoute.
     ///
     /// Deux fichiers portent ce port, et rien ne les tient ensemble : la configuration du

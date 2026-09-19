@@ -3054,6 +3054,7 @@ mod tests {
                 "frontend/tsconfig.json",
                 "frontend/vite.config.ts",
                 "frontend/index.html",
+                "frontend/public/favicon.svg",
                 "frontend/src/main.ts",
                 "frontend/src/App.vue",
                 "frontend/src/router/index.ts",
@@ -3061,6 +3062,7 @@ mod tests {
                 "frontend/src/assets/main.css",
                 "frontend/src/components/Bande.vue",
                 "frontend/src/views/Accueil.vue",
+                "frontend/src/views/accueil-textes.ts",
                 "frontend/src/views/Galerie.vue",
                 "frontend/src/views/galerie-textes.ts",
             ]
@@ -3179,7 +3181,7 @@ mod tests {
                 .filter(|chemin| chemin.starts_with("frontend/"))
                 .cloned()
                 .collect();
-            assert_eq!(client.len(), 96, "{client:?}");
+            assert_eq!(client.len(), 98, "{client:?}");
 
             client
         };
@@ -3215,9 +3217,9 @@ mod tests {
         // socle qui ne se brancherait sur rien passerait le test ci-dessus sans avoir
         // jamais exercé sa seconde moitié.
         let anglais = plan_for(&options(&complet, "frontend")).expect("le plan doit se calculer");
-        let accueil = projected(&anglais, "frontend/src/views/Accueil.vue");
-        assert!(accueil.contains("The client is in place"), "{accueil}");
-        assert!(!accueil.contains("Le client est en place"), "{accueil}");
+        let textes = projected(&anglais, "frontend/src/views/accueil-textes.ts");
+        assert!(textes.contains("The API is up"), "{textes}");
+        assert!(!textes.contains("L'API tourne"), "{textes}");
     }
 
     /// Les quatorze composants d'interface, et la route qui les montre.
@@ -3369,6 +3371,231 @@ mod tests {
                 rendu.chars().find(|caractere| emoji(*caractere))
             );
         }
+    }
+
+    /// L'accueil n'affirme rien qu'il n'ait demandé.
+    ///
+    /// Le nom du projet vient de la génération, l'état de la sonde et la table des routes
+    /// d'un appel au service qui sert la page. Une table de routes écrite en dur mentirait
+    /// dès la première entité engendrée ; un lien de documentation écrit en dur mentirait
+    /// dès qu'un drapeau de `[docs]` serait coupé.
+    #[test]
+    fn the_home_page_states_only_what_it_reads_from_the_service() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "frontend")).expect("le plan doit se calculer");
+        let accueil = projected(&planned, "frontend/src/views/Accueil.vue");
+
+        assert!(
+            accueil.contains("'demo-api'"),
+            "le nom du projet n'est pas interpolé :\n{accueil}"
+        );
+
+        for route in ["'/health'", "'/api-docs/openapi.json'", "'/docs'"] {
+            assert!(
+                accueil.contains(route),
+                "{route} n'est pas nommée :\n{accueil}"
+            );
+        }
+        assert_eq!(
+            accueil.matches("await fetch(").count(),
+            3,
+            "trois routes nommées, et pas trois appels :\n{accueil}"
+        );
+
+        // La table sort du document, et non d'une liste recopiée : c'est `paths` qu'elle
+        // parcourt.
+        assert!(
+            accueil.contains(".paths ?? {}"),
+            "la table des routes ne vient pas du document :\n{accueil}"
+        );
+    }
+
+    /// La sonde s'imprime, elle ne se met pas à jour.
+    ///
+    /// Chaque interrogation ajoute une ligne sous la précédente : la page accumule un
+    /// journal, comme le ferait une imprimante ligne. Un état muté sur place effacerait
+    /// l'avant-dernière lecture, qui est précisément ce qu'on regarde quand on se demande
+    /// si le service vient de tomber.
+    #[test]
+    fn the_home_page_prints_each_probe_under_the_previous_one() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "frontend")).expect("le plan doit se calculer");
+        let accueil = projected(&planned, "frontend/src/views/Accueil.vue");
+
+        assert!(
+            accueil.contains("v-for=\"releve in releves\""),
+            "le journal n'est pas parcouru :\n{accueil}"
+        );
+        assert!(
+            accueil.contains("[...releves.value, releve]"),
+            "la lecture remplace au lieu de s'ajouter :\n{accueil}"
+        );
+        assert!(
+            accueil.contains("setInterval(sonder"),
+            "la sonde n'est jamais réinterrogée :\n{accueil}"
+        );
+    }
+
+    /// La commande d'essai vise l'adresse qui a servi la page, et se copie d'un geste.
+    ///
+    /// Un port écrit d'avance serait faux la moitié du temps : en développement la page
+    /// vient de Vite, qui relaie l'API, et une fois construite du binaire lui-même.
+    #[test]
+    fn the_home_page_offers_a_curl_that_runs_where_it_is_served() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "frontend")).expect("le plan doit se calculer");
+        let accueil = projected(&planned, "frontend/src/views/Accueil.vue");
+
+        assert!(
+            accueil.contains("window.location.origin"),
+            "la commande ne vise pas l'origine servie :\n{accueil}"
+        );
+        assert!(
+            accueil.contains("curl -s ${ORIGINE}/health"),
+            "la commande d'essai n'est pas celle qu'on annonce :\n{accueil}"
+        );
+        assert!(
+            accueil.contains("navigator.clipboard.writeText(COMMANDE)"),
+            "la commande ne se copie pas :\n{accueil}"
+        );
+    }
+
+    /// La police vient du registre, et la pile système reste derrière.
+    ///
+    /// Le mécanisme des fragments est UTF-8 : un `.woff2` n'en sort pas. La police est
+    /// donc une dépendance npm, et tant que l'installation n'a pas eu lieu — ou si le
+    /// paquet s'en va — la page se lit dans la chasse de la machine, celle-là même que
+    /// la page d'amorçage emploie.
+    #[test]
+    fn the_font_comes_from_the_registry_and_keeps_a_system_fallback() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "frontend")).expect("le plan doit se calculer");
+
+        let npm = projected(&planned, "frontend/package.json");
+        assert!(
+            npm.contains("\"@fontsource/ibm-plex-mono\""),
+            "la police n'est pas au manifeste :\n{npm}"
+        );
+
+        let feuille = projected(&planned, "frontend/src/assets/main.css");
+        for graisse in ["latin-400", "latin-700"] {
+            assert!(
+                feuille.contains(&format!(
+                    "@import '@fontsource/ibm-plex-mono/{graisse}.css';"
+                )),
+                "`{graisse}` n'est pas importée :\n{feuille}"
+            );
+        }
+
+        let pile = feuille
+            .split("--font-sans:")
+            .nth(1)
+            .and_then(|reste| reste.split(';').next())
+            .expect("le thème déclare une pile de polices");
+        assert!(pile.contains("'IBM Plex Mono'"), "{pile}");
+        for repli in ["ui-monospace", "monospace"] {
+            assert!(
+                pile.contains(repli),
+                "la pile système ne prend pas le relais : {pile}"
+            );
+        }
+
+        for chemin in &planned.files {
+            for binaire in [".woff", ".woff2", ".ttf", ".otf"] {
+                assert!(
+                    !chemin.ends_with(binaire),
+                    "{chemin} : le fragment ne peut livrer aucun binaire"
+                );
+            }
+        }
+    }
+
+    /// L'icône d'onglet est un vecteur que le fragment dépose.
+    ///
+    /// Un `.ico` est un binaire, et le mécanisme n'en livre aucun : le SVG est du texte,
+    /// et c'est la seule forme d'icône qu'un fragment sache poser.
+    #[test]
+    fn the_tab_icon_is_a_vector_the_fragment_ships() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "frontend")).expect("le plan doit se calculer");
+
+        assert!(
+            planned
+                .files
+                .iter()
+                .any(|chemin| chemin == "frontend/public/favicon.svg"),
+            "l'icône n'est pas déposée : {:?}",
+            planned.files
+        );
+
+        let icone = projected(&planned, "frontend/public/favicon.svg");
+        assert!(icone.starts_with("<svg"), "{icone}");
+        assert!(icone.contains("viewBox"), "{icone}");
+
+        let index = projected(&planned, "frontend/index.html");
+        for morceau in ["rel=\"icon\"", "type=\"image/svg+xml\"", "/favicon.svg"] {
+            assert!(
+                index.contains(morceau),
+                "`{morceau}` manque au document :\n{index}"
+            );
+        }
+    }
+
+    /// Qui a demandé moins de mouvement obtient la ligne posée, non imprimée.
+    ///
+    /// L'animation est accrochée à `motion-safe`, donc absente sous la préférence, plutôt
+    /// que jouée puis neutralisée : rien à casser, puisque rien n'est posé.
+    #[test]
+    fn the_print_animation_is_dropped_under_reduced_motion() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "frontend")).expect("le plan doit se calculer");
+
+        let accueil = projected(&planned, "frontend/src/views/Accueil.vue");
+        assert!(
+            accueil.contains("motion-safe:animate-impression"),
+            "l'animation n'est pas conditionnée à la préférence :\n{accueil}"
+        );
+
+        let feuille = projected(&planned, "frontend/src/assets/main.css");
+        assert!(feuille.contains("--animate-impression:"), "{feuille}");
+        assert!(feuille.contains("@keyframes impression"), "{feuille}");
+        assert!(feuille.contains("prefers-reduced-motion"), "{feuille}");
+    }
+
+    /// L'accueil est une pile de bandes, chacune remplaçable seule.
+    ///
+    /// C'est ce qui en fait une vitrine et non une page : son propriétaire remplacera la
+    /// section d'essai par la sienne sans toucher aux autres, et ses libellés vivent dans
+    /// un fichier à part, rendu dans la langue du projet.
+    #[test]
+    fn the_home_page_is_a_stack_of_bands_each_replaceable_alone() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "frontend")).expect("le plan doit se calculer");
+        let accueil = projected(&planned, "frontend/src/views/Accueil.vue");
+
+        assert!(
+            accueil.matches("<Bande").count() >= 6,
+            "l'accueil ne se décompose pas en sections :\n{accueil}"
+        );
+        assert!(
+            accueil.contains(":titre=\"TEXTES.sonde\""),
+            "une section porte son titre ailleurs que dans sa bande :\n{accueil}"
+        );
+        assert!(
+            planned
+                .files
+                .iter()
+                .any(|chemin| chemin == "frontend/src/views/accueil-textes.ts"),
+            "les libellés ne vivent pas à part : {:?}",
+            planned.files
+        );
     }
 
     /// Les quatorze composants d'interface que le socle dépose, par le nom de leur

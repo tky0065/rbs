@@ -47,6 +47,10 @@ destination = "src/modules/frontend/tests.rs"
 # `README.md` livré au projet, et non ici : c'est son propriétaire, et non le mainteneur de
 # `rbs`, qui décidera un jour de les relever.
 #
+# La police vient de ce manifeste et non des templates : le mécanisme est UTF-8, et aucun
+# fichier de police n'en sortirait. `--font-sans` la place devant une pile système
+# complète, qui reprend la main si l'installation n'a pas eu lieu.
+#
 # `tw-animate-css` ne figure pas dans la pile choisie, et n'est pas non plus un choix :
 # c'est la feuille où vivent les `animate-in`, `slide-in-from-*` et `fade-out-0` que les
 # composants livrés écrivent dans leurs classes. Sans elle, ces classes ne désignent rien,
@@ -72,6 +76,13 @@ destination = "frontend/vite.config.ts"
 [[files]]
 source      = "client/index.html.jinja"
 destination = "frontend/index.html"
+
+# L'icône d'onglet, en SVG : un `.ico` est un binaire, et le mécanisme n'en livre aucun.
+# Sous `public/`, que la construction recopie telle quelle à la racine du build — c'est là
+# que le binaire la servira, et là que le serveur de développement la sert déjà.
+[[files]]
+source      = "client/public/favicon.svg.jinja"
+destination = "frontend/public/favicon.svg"
 
 [[files]]
 source      = "client/src/main.ts.jinja"
@@ -100,6 +111,10 @@ destination = "frontend/src/components/Bande.vue"
 [[files]]
 source      = "client/src/views/Accueil.vue.jinja"
 destination = "frontend/src/views/Accueil.vue"
+
+[[files]]
+source      = "client/src/views/accueil-textes.ts.jinja"
+destination = "frontend/src/views/accueil-textes.ts"
 
 [[files]]
 source      = "client/src/views/Galerie.vue.jinja"

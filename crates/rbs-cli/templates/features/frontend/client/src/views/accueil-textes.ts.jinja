@@ -1,0 +1,80 @@
+/** Les libellés de l'accueil, rendus dans la langue du projet à sa création. */
+{% if lang == "en" -%}
+export const TEXTES = {
+  titre: 'The API is up, and this page came from it',
+  sous_titre:
+    'Nothing below is written in advance: the page asks the service that serves it, and prints what comes back.',
+  sonde: 'Health probe',
+  journal_vide: 'first reading on its way…',
+  reimprimer: 'Print again',
+  cadence: 'Re-read every fifteen seconds. Each reading prints under the last.',
+  injoignable: 'unreachable',
+  essai: 'Try the API',
+  essai_note: 'As it stands, against the address that served this page.',
+  copier: 'Copy',
+  copie: 'Copied',
+  routes: 'Mounted routes',
+  routes_source: 'Read from the OpenAPI document this service publishes.',
+  routes_attente: 'reading the document…',
+  routes_absentes:
+    'The document is not served: `openapi_json` under `[docs]`, in `config/default.toml`.',
+  methode: 'Method',
+  chemin: 'Route',
+  operation: 'Operation',
+  route_une: 'route',
+  routes_plusieurs: 'routes',
+  documentation: 'Documentation',
+  interface_docs: 'Interface',
+  document_docs: 'Document',
+  non_servi: 'not served',
+  swagger_absent: '`swagger_ui` is off under `[docs]`.',
+  document_absent: '`openapi_json` is off under `[docs]`.',
+  attente: 'asking…',
+  composants: 'Interface components',
+  galerie: 'See the gallery',
+  galerie_note:
+    'The fourteen components the base dropped into this project, each in its main states.',
+  pied_fichier:
+    'This page is `frontend/src/views/Accueil.vue`, its wording `frontend/src/views/accueil-textes.ts`.',
+  pied_bandes: 'Every section above is a `Bande`: replacing one touches none of the others.',
+}
+{% else -%}
+export const TEXTES = {
+  titre: "L'API tourne, et cette page en vient",
+  sous_titre:
+    "Rien de ce qui suit n'est écrit d'avance : la page interroge le service qui la sert, et imprime ce qui revient.",
+  sonde: 'Sonde de santé',
+  journal_vide: 'première lecture en route…',
+  reimprimer: 'Réimprimer',
+  cadence: "Relue toutes les quinze secondes. Chaque lecture s'imprime sous la précédente.",
+  injoignable: 'injoignable',
+  essai: "Essayer l'API",
+  essai_note: "Telle quelle, contre l'adresse qui a servi cette page.",
+  copier: 'Copier',
+  copie: 'Copiée',
+  routes: 'Routes montées',
+  routes_source: 'Lues dans le document OpenAPI que ce service publie.',
+  routes_attente: 'lecture du document…',
+  routes_absentes:
+    "Le document n'est pas servi : `openapi_json` sous `[docs]`, dans `config/default.toml`.",
+  methode: 'Méthode',
+  chemin: 'Route',
+  operation: 'Opération',
+  route_une: 'route',
+  routes_plusieurs: 'routes',
+  documentation: 'Documentation',
+  interface_docs: 'Interface',
+  document_docs: 'Document',
+  non_servi: 'non servi',
+  swagger_absent: '`swagger_ui` est coupé sous `[docs]`.',
+  document_absent: '`openapi_json` est coupé sous `[docs]`.',
+  attente: 'interrogation…',
+  composants: "Composants d'interface",
+  galerie: 'Voir la galerie',
+  galerie_note:
+    'Les quatorze composants que le socle a déposés dans le projet, chacun dans ses états principaux.',
+  pied_fichier:
+    'Cette page est `frontend/src/views/Accueil.vue`, ses libellés `frontend/src/views/accueil-textes.ts`.',
+  pied_bandes: "Les sections ci-dessus sont des `Bande` : en remplacer une n'en touche aucune autre.",
+}
+{% endif %}
