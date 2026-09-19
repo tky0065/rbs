@@ -33,7 +33,15 @@ const RACINE = path.join(DOCS, '..');
 // d'homologue anglais et n'en attendent pas. Tout autre « .md » de la racine s'adresse à
 // qui installe rbs, et la liste étant close, un fichier neuf y est réclamé dans les deux
 // langues plutôt que laissé à l'appréciation d'une revue.
-const RACINE_MONOLINGUE = new Set(['CLAUDE.md', 'IMPROVE.md', 'IMPROVE_OLD.md', 'ROADMAP.md', 'TODO.md']);
+const RACINE_MONOLINGUE = new Set([
+  'CLAUDE.md',
+  'CONTEXT.md',
+  'IMPROVE.md',
+  'IMPROVE_OLD.md',
+  'PRODUCT.md',
+  'ROADMAP.md',
+  'TODO.md',
+]);
 
 // Les « README » hors de la racine : celui d'« examples/ » et celui de chaque crate
 // publiée, que crates.io affiche. La liste est close, et c'est le raisonnement de

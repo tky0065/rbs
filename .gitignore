@@ -11,3 +11,6 @@
 # Espace de travail des sessions d'exécution de plan : un journal et des paquets de revue,
 # régénérables, sans valeur une fois la branche fondue.
 /.superpowers
+
+# État local du skill de design : journaux de pages de décision, régénérables.
+/.impeccable
