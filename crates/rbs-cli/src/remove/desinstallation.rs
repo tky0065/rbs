@@ -941,8 +941,8 @@ mod tests {
 
         // Un garde qui ne parcourt rien passe au vert sans rien prouver.
         assert_eq!(
-            vus, 15,
-            "les quinze fragments embarqués doivent être parcourus"
+            vus, 16,
+            "les seize fragments embarqués doivent être parcourus"
         );
     }
 

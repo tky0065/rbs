@@ -5,9 +5,9 @@ title: rbs add
 
 # `rbs add`
 
-Installs a feature into an existing project. Fifteen are shipped: `api-keys`, `audit`, `auth`,
-`ci`, `cors`, `docker`, `frontend`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`,
-`scheduler`, `storage` and `webhooks`.
+Installs a feature into an existing project. Sixteen are shipped: `api-keys`, `audit`,
+`auth`, `ci`, `cors`, `docker`, `frontend`, `frontend-admin`, `jobs`, `mail`,
+`observability`, `rate-limit`, `redis`, `scheduler`, `storage` and `webhooks`.
 
 :::note
 rbs speaks French in its help screens and in its output. Every terminal block on this page
@@ -18,7 +18,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ```text
 $ rbs add --help
-Ajoute une feature : api-keys, audit, auth, ci, cors, docker, frontend, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
+Ajoute une feature : api-keys, audit, auth, ci, cors, docker, frontend, frontend-admin, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 
 Utilisation : rbs add [OPTIONS] <FEATURE>
 
@@ -343,7 +343,7 @@ Anything else is refused with the list of what is installable:
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : api-keys, audit, auth, ci, cors, docker, frontend, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
+erreur : `graphql` n'est pas une feature installable : api-keys, audit, auth, ci, cors, docker, frontend, frontend-admin, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 ```
 
 ## Idempotence

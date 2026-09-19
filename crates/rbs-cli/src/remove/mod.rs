@@ -786,4 +786,57 @@ mod tests {
             "l'ancre reste, seules les lignes partent : {exclusions}"
         );
     }
+
+    /// Le retrait du shell défait l'administration et laisse le socle intact.
+    ///
+    /// C'est le premier fragment qui ne se monte par aucune ancre : il n'a donc aucune
+    /// ligne insérée à reprendre, et le contrôle porte sur l'autre bord — que le socle,
+    /// lui, n'ait rien perdu. Un routeur ou un accueil emportés avec l'administration
+    /// laisseraient un projet qui ne construit plus.
+    #[test]
+    fn removing_the_admin_shell_leaves_the_base_it_stood_on() {
+        let (_parent, root) = crate::fixtures::Project::new()
+            .features(&["frontend", "auth", "frontend-admin"])
+            .create();
+        assert!(root.join("frontend/src/admin/Shell.vue").exists());
+
+        let mut retrait = options(&root, "frontend-admin");
+        retrait.force = true;
+        let planned = plan_for(&retrait).expect("le retrait se planifie");
+        crate::plan::application::apply(&planned.plan, false).expect("le retrait s'applique");
+
+        for parti in [
+            "frontend/src/admin/Shell.vue",
+            "frontend/src/admin/montage.ts",
+            "frontend/src/admin/garde.ts",
+            "frontend/src/admin/vues/Connexion.vue",
+            "frontend/src/api/index.ts",
+            "frontend/src/api/jetons.ts",
+            "frontend/src/stores/authentification.ts",
+            "frontend/src/stores/interface.ts",
+        ] {
+            assert!(!root.join(parti).exists(), "{parti} est resté");
+        }
+
+        // Le socle, lui, ne bouge pas : son routeur cherche toujours un montage, et n'en
+        // trouve plus — c'est exactement l'état d'un projet qui n'a jamais posé le shell.
+        let lire = |relatif: &str| {
+            std::fs::read_to_string(root.join(relatif))
+                .unwrap_or_else(|_| panic!("{relatif} doit être lisible"))
+        };
+        let routeur = lire("frontend/src/router/index.ts");
+        assert!(routeur.contains("montage.ts"), "{routeur}");
+        for garde in [
+            "frontend/src/views/Accueil.vue",
+            "frontend/src/main.ts",
+            "frontend/package.json",
+            "src/modules/frontend/mod.rs",
+        ] {
+            assert!(root.join(garde).exists(), "{garde} est parti avec le shell");
+        }
+
+        // `auth` reste : le shell l'exigeait, l'inverse n'est pas vrai, et une table de
+        // comptes qui disparaîtrait avec une interface serait une perte de données.
+        assert!(root.join("src/auth/mod.rs").exists(), "auth est partie");
+    }
 }

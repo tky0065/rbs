@@ -1,0 +1,28 @@
+import type { Montage } from '@/router'
+
+import { garde } from './garde'
+
+/**
+ * Ce que l'espace d'administration monte dans le routeur du socle.
+ *
+ * Une seule route publique — la connexion — et tout le reste derrière la garde. Chaque
+ * écran part dans son propre morceau : qui ne visite que l'accueil ne télécharge jamais
+ * l'administration.
+ */
+export const routes: Montage['routes'] = [
+  {
+    path: '/admin/connexion',
+    name: 'admin-connexion',
+    component: () => import('./vues/Connexion.vue'),
+  },
+  {
+    path: '/admin',
+    name: 'admin',
+    component: () => import('./Shell.vue'),
+    children: [
+      // Les écrans de l'administration viennent ici, entité par entité.
+    ],
+  },
+]
+
+export { garde }

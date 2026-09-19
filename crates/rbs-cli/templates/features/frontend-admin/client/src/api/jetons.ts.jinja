@@ -1,0 +1,66 @@
+/**
+ * Où vivent les deux jetons de la session, et ce que ce partage coûte.
+ *
+ * Le fragment `auth` rend une paire en JSON — un jeton d'accès signé de courte durée, un
+ * jeton de rafraîchissement opaque de longue durée — présentée en en-tête
+ * `Authorization`, sans cookie ni session côté serveur.
+ *
+ * Le jeton d'accès reste donc en mémoire : il part avec l'onglet, et rien ne le relit
+ * ailleurs. Le jeton de rafraîchissement va dans le stockage local, et pour une seule
+ * raison : sans lui, recharger la page déconnecterait. Le prix est réel et il est assumé
+ * — un script injecté dans cette application lit le stockage local et repart avec une
+ * session de longue durée, là où le jeton d'accès, lui, n'aurait pas survécu à l'onglet.
+ *
+ * L'alternative sûre est un flux par cookie `HttpOnly`, qui demande de modifier le
+ * fragment `auth` côté serveur : c'est un autre chantier, pas un réglage d'ici. En
+ * attendant, `POST /auth/logout` révoque la session côté serveur, et la liste des
+ * sessions permet de couper un accès qu'on ne reconnaît pas.
+ */
+
+/**
+ * La clé du stockage local, préfixée du nom du projet.
+ *
+ * Deux projets servis tour à tour depuis la même origine en développement partagent le
+ * stockage du navigateur : sans le préfixe, le second reprendrait la session du premier.
+ */
+const CLE = '{@ project_name @}.rafraichissement'
+
+// Hors du store, et volontairement : le client HTTP relit ce jeton à chaque requête, et
+// le faire passer par la couche d'état ferait dépendre le transport de celle-ci.
+let acces: string | null = null
+
+/** Le jeton d'accès courant, ou rien tant qu'aucune session n'est ouverte. */
+export function jetonAcces(): string | null {
+  return acces
+}
+
+/** Retient le jeton d'accès, ou l'oublie quand on lui passe `null`. */
+export function poserJetonAcces(jeton: string | null): void {
+  acces = jeton
+}
+
+/** Le jeton de rafraîchissement que le stockage porte, s'il en porte un. */
+export function jetonRafraichissement(): string | null {
+  // Le stockage jette au lieu de rendre `null` quand la page est servie sans lui —
+  // navigation privée, stockage tiers coupé. L'application doit alors tenir le temps de
+  // l'onglet, et non s'arrêter.
+  try {
+    return window.localStorage.getItem(CLE)
+  } catch {
+    return null
+  }
+}
+
+/** Retient le jeton de rafraîchissement, ou l'efface quand on lui passe `null`. */
+export function poserJetonRafraichissement(jeton: string | null): void {
+  try {
+    if (jeton === null) {
+      window.localStorage.removeItem(CLE)
+    } else {
+      window.localStorage.setItem(CLE, jeton)
+    }
+  } catch {
+    // Sans stockage, la session ne survit pas au rechargement. C'est une dégradation, et
+    // la connexion reste possible : rien à signaler à l'opérateur.
+  }
+}

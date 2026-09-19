@@ -90,13 +90,13 @@ pour la complétion — les features qu'installe [`rbs add`](./add.md) :
 ```text
 $ rbs completions bash
         rbs__subcmd__add)
-            opts="-h -V --force --dry-run --json --template-dir --help --version api-keys audit auth ci cors docker frontend jobs mail observability rate-limit redis scheduler storage webhooks"
+            opts="-h -V --force --dry-run --json --template-dir --help --version api-keys audit auth ci cors docker frontend frontend-admin jobs mail observability rate-limit redis scheduler storage webhooks"
 ```
 
 {/* rbs:transcript cmd="rbs completions zsh" extrait="oui" */}
 ```text
 $ rbs completions zsh
-':feature -- Feature à installer:(api-keys audit auth ci cors docker frontend jobs mail observability rate-limit redis scheduler storage webhooks)' \
+':feature -- Feature à installer:(api-keys audit auth ci cors docker frontend frontend-admin jobs mail observability rate-limit redis scheduler storage webhooks)' \
 ```
 
 Ces noms viennent des fragments embarqués dans le binaire, et sont ceux qu'un shell

@@ -17,6 +17,11 @@
 //!
 //! La seconde est le seul endroit du dépôt où du TypeScript est compilé. Sans elle, le
 //! fragment livrerait des fichiers que rien n'a jamais vérifiés.
+//!
+//! Une troisième suit la même chaîne pour le shell d'administration. Elle est la moitié
+//! manquante d'une paire : la seconde prouve que le socle seul se vérifie — son routeur
+//! cherche un montage et n'en trouve aucun —, celle-ci qu'il se vérifie encore une fois
+//! le montage posé. Aucun autre endroit ne regarde les deux côtés de cette découverte.
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
@@ -141,6 +146,117 @@ fn the_client_installs_typechecks_builds_and_proxies_the_api() {
     );
 
     proxy_atteint_l_api(&client);
+}
+
+/// Le shell d'administration, du fragment posé au morceau construit.
+///
+/// La chaîne entière en une suite, parce qu'elle n'a qu'un enchaînement : le shell importe
+/// un client que le fragment ne livre pas — il sort du document OpenAPI de ce projet-ci —
+/// et la vérification des types ne veut rien dire tant qu'il n'est pas là. Engendrer ce
+/// client demande de compiler le projet, ce qui est aussi la seule preuve que le contrat
+/// lu est celui que le binaire publie.
+#[test]
+#[ignore = "compile le projet engendré, puis installe les dépendances du client : lent et en ligne"]
+fn the_admin_shell_generates_its_client_typechecks_and_builds() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+
+    rbs(&projet)
+        .args(["add", "frontend-admin"])
+        .assert()
+        .success();
+
+    let client = projet.join("frontend/src/api/client.ts");
+    assert!(
+        !client.exists(),
+        "le fragment livre un client figé : il mentirait dès la première route ajoutée"
+    );
+
+    {
+        // La cible est partagée par tous les binaires de `tests/`, et `rbs generate
+        // client` lance cargo : le verrou se prend avant, et se rend avant npm, qui n'en
+        // a que faire.
+        let _cible = common::verrou(&common::cible());
+
+        rbs(&projet)
+            .env("CARGO_TARGET_DIR", common::cible())
+            .args([
+                "generate",
+                "client",
+                "--lang",
+                "ts",
+                "--out",
+                "frontend/src/api",
+            ])
+            .assert()
+            .success();
+    }
+
+    let engendre = std::fs::read_to_string(&client).expect("le client doit être engendré");
+    for methode in ["authLogin(", "authRefresh(", "authLogout(", "authMe("] {
+        assert!(
+            engendre.contains(methode),
+            "`{methode}` manque au client : le shell ne compilera pas\n{engendre}"
+        );
+    }
+
+    let repertoire = projet.join("frontend");
+    npm(&repertoire, &["install", "--no-audit", "--no-fund"]);
+    npm(&repertoire, &["run", "typecheck"]);
+    npm(&repertoire, &["run", "build"]);
+
+    // Le shell part dans ses propres morceaux : le visiteur de l'accueil ne télécharge
+    // jamais l'administration, et les voir sortir prouve qu'ils ont compilé — un montage
+    // que le routeur du socle n'aurait pas trouvé passerait la vérification des types
+    // sans laisser une ligne dans le build.
+    let morceaux: Vec<String> = std::fs::read_dir(repertoire.join("dist/assets"))
+        .expect("le build écrit ses assets")
+        .filter_map(Result::ok)
+        .map(|entree| entree.file_name().to_string_lossy().into_owned())
+        .collect();
+    for ecran in ["Shell-", "Connexion-"] {
+        assert!(
+            morceaux.iter().any(|nom| nom.starts_with(ecran)),
+            "`{ecran}` n'est pas dans le build :\n{morceaux:?}"
+        );
+    }
+
+    // Et les textes du shell ont traversé la chaîne entière : la génération, le moteur de
+    // template, le compilateur Vue et l'empaqueteur.
+    //
+    // Le libellé est relu dans le projet plutôt que recopié ici : le fragment en porte un
+    // par langue, et la langue du projet est celle de sa création. Une chaîne écrite en
+    // dur ne vaudrait que d'un côté, et passerait pour une régression de l'autre.
+    let bundles = std::fs::read_dir(repertoire.join("dist/assets"))
+        .expect("le build écrit ses assets")
+        .filter_map(Result::ok)
+        .map(|entree| std::fs::read_to_string(entree.path()).unwrap_or_default())
+        .collect::<String>();
+    let refus = libelle(&repertoire.join("src/admin/textes.ts"), "refuse");
+    assert!(
+        bundles.contains(&refus),
+        "`{refus}` ne part pas au navigateur"
+    );
+}
+
+/// La valeur du libellé `cle`, tronquée à son premier caractère non ASCII.
+///
+/// L'empaqueteur échappe ce qui sort de l'ASCII, et la comparaison porterait alors sur
+/// deux écritures du même mot. Le préfixe suffit à distinguer les deux langues.
+fn libelle(textes: &Path, cle: &str) -> String {
+    let source = std::fs::read_to_string(textes).expect("les libellés du shell se lisent");
+    let valeur = source
+        .split(&format!("{cle}: '"))
+        .nth(1)
+        .unwrap_or_else(|| panic!("`{cle}` absent de {} :\n{source}", textes.display()))
+        .split('\'')
+        .next()
+        .expect("le littéral se referme");
+
+    valeur
+        .chars()
+        .take_while(char::is_ascii)
+        .collect::<String>()
 }
 
 /// Le développement sur un port distinct atteint l'API par le relais.
