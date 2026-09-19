@@ -11,6 +11,7 @@ import { defineConfig } from 'vite'
 // Sans ce relais, l'appel partirait sur le port de Vite et rendrait l'application en
 // retour. Une route que le projet ajoute — un CRUD engendré, par exemple — se déclare
 // ici, faute de quoi elle ne répondra qu'une fois le build en place.
+// region: relais
 const RELAYE = ['/health', '/docs', '/api-docs']
 
 // Le shell d'administration appelle les routes d'`auth` ; sans ce relais, sa connexion
@@ -22,6 +23,7 @@ const RELAYE = ['/health', '/docs', '/api-docs']
 if (existsSync(fileURLToPath(new URL('./src/admin', import.meta.url)))) {
   RELAYE.push('/auth')
 }
+// endregion: relais
 
 // Le port de `[server]` dans `config/default.toml`. Les deux se déplacent ensemble, et
 // `RBS_API_URL` ne sert qu'à viser ailleurs le temps d'un lancement : c'est un réglage du

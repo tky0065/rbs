@@ -41,7 +41,7 @@ Options :
 | `--json` | Prints the plan — or the error — as one JSON document on standard output instead of the coloured text: every action with its effect, the full content of created files, and `applique` to say whether anything was written. Independent of `--dry-run`. [The agents guide](../guides/agents.md#reading-a-plan-as-json) has the document and the error codes. |
 | `--template-dir <CHEMIN>` | Reads the fragments from a directory holding one subdirectory per feature, instead of the ones embedded in the binary. |
 
-## The fifteen features
+## The sixteen features
 
 | Feature | Files | Next step |
 |---|---|---|
@@ -56,6 +56,7 @@ Options :
 | `storage` | six files under `src/modules/storage/` | ignore `./storage`, or switch the backend to `s3` |
 | `cors` | three files under `src/modules/cors/`, a `[cors]` config section, and a layer in `// <rbs:layers>` | list your origins in `[cors]` — empty, so nothing cross-origin passes |
 | `frontend` | four files under `src/modules/frontend/`, a `[frontend]` config section, and a fallback in `// <rbs:routes>` that serves the client's build — or, until that build exists, a self-contained bootstrap page | `cargo run`: the root serves the bootstrap page, which names what is left to build |
+| `frontend-admin` | fifteen files inside the tree `frontend` laid down — the authenticated admin shell, its route guard, its two Pinia stores, four account-and-health screens and the pattern screen — and `frontend` and `auth`, which it requires, and through `auth`, `mail` and `rate-limit` | `rbs generate client --lang ts --out frontend/src/api` **before** `npm run build`: the shell imports the generated client. [The frontend guide](../guides/frontend.md) has the rest |
 | `rate-limit` | four files under `src/modules/rate_limit/`, a `[rate_limit]` config section, a field on `AppState`, and a layer in `// <rbs:layers>` | behind a reverse proxy, set `rate_limit.trust_forwarded_for` |
 | `observability` | four files under `src/modules/observability/`, an `[observability]` config section, a layer in `// <rbs:layers>`, and a second listener in `// <rbs:startup>` | name a collector in `OTEL_EXPORTER_OTLP_ENDPOINT` — without it nothing is exported |
 | `audit` | four files under `src/modules/audit/`, and one migration | `rbs migrate up`, then call `audit::record` in your services — the entry is written in the transaction of the change |
@@ -479,12 +480,15 @@ three use it.
 
 `docker` is the one fragment `rbs add` installs that is itself an exception: its `api` and
 `migrate` services go into `# <rbs:services>`, the YAML anchor a compose carries — see
-[above](#the-fifteen-features). Beside it sits the other anchor outside Rust,
+[above](#the-sixteen-features). Beside it sits the other anchor under Git's `#` marker,
 `# <rbs:ignore>` in `.gitignore`, where a fragment excludes from the repository what it
 drops in it; it is optional too, a project whose `.gitignore` its owner deleted being no
-less complete for it. The rule is the same everywhere: no AST is ever rewritten,
+less complete for it. Two more sit outside Rust without leaving its comment syntax:
+`// <rbs:admin_routes>` and `// <rbs:admin_rail>`, which `frontend-admin` lays down in
+TypeScript and [`rbs generate crud`](./generate.md#anchors) fills — the
+[frontend guide](../guides/frontend.md#the-generated-screens) has them. The rule is the same everywhere: no AST is ever rewritten,
 and a missing anchor makes the command write nothing and print the block to paste back.
-[`rbs doctor`](./doctor.md) checks all eighteen — twelve on a project carrying no compose, no queue and no fragment moved under `src/modules/`, six of the seven optional ones.
+[`rbs doctor`](./doctor.md) checks all twenty — thirteen on a project carrying no queue, no calendar, no sign-in and no admin shell, nine of the twenty being optional.
 
 A project generated before `// <rbs:layers>` existed does not have it, and `rbs upgrade`
 does not add it: that command aligns the manifest and the `AGENTS.md` zones, and touches

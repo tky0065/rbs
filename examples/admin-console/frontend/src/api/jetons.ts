@@ -23,6 +23,7 @@
  * Deux projets servis tour à tour depuis la même origine en développement partagent le
  * stockage du navigateur : sans le préfixe, le second reprendrait la session du premier.
  */
+// region: jetons
 const CLE = 'admin-console.rafraichissement'
 
 // Hors du store, et volontairement : le client HTTP relit ce jeton à chaque requête, et
@@ -62,3 +63,4 @@ export function poserJetonRafraichissement(jeton: string | null): void {
     // la connexion reste possible : rien à signaler à l'opérateur.
   }
 }
+// endregion: jetons

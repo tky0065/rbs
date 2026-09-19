@@ -42,7 +42,7 @@ Options :
 | `--json` | Rend le plan — ou l'erreur — en un seul document JSON sur la sortie standard, à la place du texte coloré : chaque action avec son effet, le contenu complet des fichiers créés, et `applique` pour dire si quelque chose a été écrit. Indépendant de `--dry-run`. [Le guide des agents](../guides/agents.md#lire-un-plan-en-json) donne le document et les codes d'erreur. |
 | `--template-dir <CHEMIN>` | Lit les fragments dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire. |
 
-## Les quinze features
+## Les seize features
 
 | Feature | Fichiers | Suite |
 |---|---|---|
@@ -57,6 +57,7 @@ Options :
 | `storage` | six fichiers sous `src/modules/storage/` | ignorer `./storage`, ou passer le backend à `s3` |
 | `cors` | trois fichiers sous `src/modules/cors/`, une section `[cors]` de configuration, et une couche dans `// <rbs:layers>` | énumérer vos origines dans `[cors]` — vide, donc rien d'origine croisée ne passe |
 | `frontend` | quatre fichiers sous `src/modules/frontend/`, une section `[frontend]` de configuration, et un repli dans `// <rbs:routes>` qui sert le build du client — ou, tant que ce build n'existe pas, une page d'amorçage autonome | `cargo run` : la racine sert la page d'amorçage, qui nomme ce qu'il reste à construire |
+| `frontend-admin` | quinze fichiers dans l'arbre que `frontend` a posé — le shell d'administration authentifié, sa garde de route, ses deux stores Pinia, quatre écrans de compte et de santé, et l'écran patron — et `frontend` et `auth`, qu'il exige, et par `auth`, `mail` et `rate-limit` | `rbs generate client --lang ts --out frontend/src/api` **avant** `npm run build` : le shell importe le client engendré. [Le guide du frontend](../guides/frontend.md) dit le reste |
 | `rate-limit` | quatre fichiers sous `src/modules/rate_limit/`, une section `[rate_limit]`, un champ sur `AppState`, et une couche dans `// <rbs:layers>` | derrière un reverse proxy, régler `rate_limit.trust_forwarded_for` |
 | `observability` | quatre fichiers sous `src/modules/observability/`, une section `[observability]`, une couche dans `// <rbs:layers>`, et un second listener dans `// <rbs:startup>` | nommer un collecteur dans `OTEL_EXPORTER_OTLP_ENDPOINT` — sans lui rien n'est exporté |
 | `audit` | quatre fichiers sous `src/modules/audit/`, et une migration | `rbs migrate up`, puis appeler `audit::record` dans vos services — l'entrée s'écrit dans la transaction du changement |
@@ -480,14 +481,18 @@ toutes les trois.
 
 `docker` est le seul fragment que `rbs add` installe à faire lui-même exception : ses
 services `api` et `migrate` vont dans `# <rbs:services>`, l'ancre YAML que porte un
-compose — voir [plus haut](#les-quinze-features). À côté d'elle vit l'autre ancre hors
-du Rust, `# <rbs:ignore>` dans `.gitignore`, où un fragment exclut du dépôt ce qu'il y
-dépose ; elle est optionnelle elle aussi, un projet dont le propriétaire a supprimé le
-`.gitignore` n'en étant pas moins complet. La règle est la même partout : aucun AST
+compose — voir [plus haut](#les-seize-features). À côté d'elle vit l'autre ancre au
+marqueur `#` de Git, `# <rbs:ignore>` dans `.gitignore`, où un fragment exclut du dépôt ce
+qu'il y dépose ; elle est optionnelle elle aussi, un projet dont le propriétaire a supprimé
+le `.gitignore` n'en étant pas moins complet. Deux autres vivent hors du Rust sans quitter
+sa syntaxe de commentaire : `// <rbs:admin_routes>` et `// <rbs:admin_rail>`, que
+`frontend-admin` dépose en TypeScript et que remplit
+[`rbs generate crud`](./generate.md#les-ancres) — le
+[guide du frontend](../guides/frontend.md#les-écrans-engendrés) les donne. La règle est la même partout : aucun AST
 n'est jamais réécrit, et une ancre absente fait que la commande n'écrit rien et affiche le
-bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les dix-huit — douze sur
-un projet qui ne porte ni compose, ni file, ni fragment déplacé sous `src/modules/`, six
-des sept optionnelles.
+bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les vingt — treize sur un
+projet qui ne porte ni file, ni calendrier, ni authentification, ni shell
+d'administration, neuf des vingt étant optionnelles.
 
 Un projet engendré avant l'existence de `// <rbs:layers>` ne la porte pas, et `rbs upgrade`
 ne l'ajoute pas : cette commande aligne le manifeste et les zones de l'`AGENTS.md`, et ne

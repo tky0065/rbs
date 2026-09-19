@@ -197,4 +197,4 @@ liste à laquelle on ne peut plus se fier.
 | v1.4 Parcours de compte | ✅ livré — publiée le 2026-09-11 |
 | v1.5 Robustesse | ✅ livré — publiée dans la 1.6.0, le numéro 1.5.0 n'ayant jamais été tagué |
 | v1.6 Retrait et clés d'API | ✅ livré — publiée le 2026-09-19 |
-| v1.7 Frontend | 🚧 en cours |
+| v1.7 Frontend | ✅ livré sur `feat/frontend` le 2026-09-19 — pas encore publié |

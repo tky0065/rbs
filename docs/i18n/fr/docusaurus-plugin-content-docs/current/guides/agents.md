@@ -372,6 +372,7 @@ où il va. Un code partagé par plusieurs commandes a le même sens dans toutes.
 | `colonne_reservee` | `generate` | `--soft-delete` pose lui-même `deleted_at` : retirez-la de `--fields`. |
 | `decimal_sous_sqlite` | `generate`, `generate migration` | Un champ `decimal` sur un projet SQLite : le pilote n'y lie aucun décimal exact. |
 | `enfant_sans_cle` | `generate` | L'enfant nommé par `--has-many` ne porte aucune colonne référençant cette table. |
+| `ecran_occupe` | `generate` | L'écran d'administration de la table prendrait le fichier et la route de l'écran de démonstration : renommez la table, ou passez `--no-admin`. |
 | `champs_vides` | `generate migration` | `--fields` ne déclare aucune colonne : la migration rendue n'altérerait rien. |
 | `table_sans_module` | `generate migration` | Aucune entité du projet ne déclare cette table ; le message énumère celles qu'il connaît. |
 | `colonne_deja_declaree` | `generate migration` | La table porte déjà une colonne de ce nom ; le message nomme le fichier qui l'atteste. |

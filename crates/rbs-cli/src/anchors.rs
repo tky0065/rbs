@@ -1637,6 +1637,55 @@ struct AppState {
         }
     }
 
+    /// La documentation nomme les vingt ancres, et aucune autre, dans les quatre pages qui
+    /// en dressent la liste.
+    ///
+    /// C'est la promesse de compatibilité qui rend ce contrôle nécessaire : elle porte sur
+    /// les noms d'ancres et leur syntaxe, et une page qui en oublierait une la rendrait
+    /// fausse. Rien ne le signalait — le jalon du frontend a laissé « dix-huit ancres » sur
+    /// cinq pages dans deux langues pendant tout un lot, sans qu'une suite ne bronche.
+    ///
+    /// Les deux ancres d'un modèle sont attendues en plus : leur nom porte la table, elles
+    /// sortent du registre, et les pages le disent.
+    #[test]
+    fn the_documentation_names_every_anchor_and_no_other() {
+        /// Les ancres d'un modèle, hors du registre parce que leur nom porte la table.
+        const HORS_REGISTRE: [&str; 2] = ["relations:table", "related:table"];
+
+        const PAGES: [&str; 4] = [
+            "docs/docs/compatibility.md",
+            "docs/docs/cli/doctor.md",
+            "docs/i18n/fr/docusaurus-plugin-content-docs/current/compatibility.md",
+            "docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md",
+        ];
+
+        let depot = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let mut attendues: Vec<&str> = ANCRES
+            .iter()
+            .map(|anchor| anchor.name.as_ref())
+            .chain(HORS_REGISTRE)
+            .collect();
+        attendues.sort_unstable();
+
+        for page in PAGES {
+            let source = std::fs::read_to_string(depot.join(page))
+                .unwrap_or_else(|faute| panic!("{page} doit se lire : {faute}"));
+
+            let mut nommees: Vec<&str> = source
+                .split("<rbs:")
+                .skip(1)
+                .filter_map(|reste| reste.split('>').next())
+                .collect();
+            nommees.sort_unstable();
+            nommees.dedup();
+
+            assert_eq!(
+                nommees, attendues,
+                "{page} ne nomme pas les mêmes ancres que le registre"
+            );
+        }
+    }
+
     /// L'ancre des exclusions est la seule, avec celle du compose, à ne pas vivre dans du
     /// Rust : son marqueur de commentaire est celui de Git, et le bloc à coller doit sortir
     /// avec ce marqueur-là.

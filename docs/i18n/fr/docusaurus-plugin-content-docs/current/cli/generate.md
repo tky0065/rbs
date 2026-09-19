@@ -635,7 +635,7 @@ le message suggère et ce que l'exécution ci-dessus a utilisé.
 ## Les ancres
 
 `rbs generate` ne réécrit jamais d'AST. Il insère entre des marqueurs en commentaires que le
-squelette porte. `rbs generate crud` et `rbs generate feature` en emploient six sur dix-huit —
+squelette porte. `rbs generate crud` et `rbs generate feature` en emploient six sur vingt —
 les deux de `src/state.rs`, `// <rbs:layers>` et `// <rbs:startup>` appartiennent aux
 fragments qu'installe [`rbs add`](./add.md) :
 
@@ -647,6 +647,17 @@ fragments qu'installe [`rbs add`](./add.md) :
 | `// <rbs:migration_modules>` | `migration/src/lib.rs` |
 | `// <rbs:migrations>` | `migration/src/lib.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
+
+Sur un projet qui porte `frontend-admin`, `rbs generate crud` en emploie deux de plus — les
+seules qu'il vise sans que le squelette les porte, et les seules qu'il *saute* plutôt que de
+refuser quand l'ancre a disparu : l'entité et sa migration n'y sont pour rien.
+
+| Ancre | Fichier |
+|---|---|
+| `// <rbs:admin_routes>` | `frontend/src/admin/montage.ts` |
+| `// <rbs:admin_rail>` | `frontend/src/admin/rail.ts` |
+
+[Le guide du frontend](../guides/frontend.md#les-écrans-engendrés) dit ce qu'elles reçoivent.
 
 `rbs generate job` en emploie trois, sans en partager aucune avec les deux commandes
 ci-dessus ni avec le squelette : chacune vit dans un fichier qu'un fragment dépose, et
@@ -679,10 +690,10 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) contrôle les dix-huit ancres — douze sur un projet qui ne
-porte ni compose, ni file, ni fragment déplacé sous `src/modules/`, six des sept
-optionnelles — si bien qu'une ancre disparue se trouve avant qu'une génération ne bute
-dessus.
+[`rbs doctor`](./doctor.md) contrôle les vingt ancres — treize sur un projet qui ne porte
+ni file, ni calendrier, ni authentification, ni shell d'administration, neuf des vingt
+étant optionnelles — si bien qu'une ancre disparue se trouve avant qu'une génération ne
+bute dessus.
 
 ## Les échecs
 

@@ -15,6 +15,7 @@ export const routes: Montage['routes'] = [
     name: 'admin-connexion',
     component: () => import('./vues/Connexion.vue'),
   },
+  // region: montage
   // Sans nom : le tableau de bord occupe le chemin vide, et un nom porté par le parent
   // désignerait une route que le routeur ne saurait pas rendre seule.
   {
@@ -50,6 +51,7 @@ export const routes: Montage['routes'] = [
       // </rbs:admin_routes>
     ],
   },
+  // endregion: montage
 ]
 
 export { garde }

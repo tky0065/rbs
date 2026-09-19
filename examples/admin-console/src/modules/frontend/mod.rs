@@ -19,6 +19,7 @@ pub use config::Config;
 
 use crate::state::AppState;
 
+// region: repli
 /// Le repli du projet : le build du client, ou la page d'amorçage tant qu'il manque.
 ///
 /// Un repli et non des routes nommées. Ce qui est monté ailleurs — l'API, `/health`, la
@@ -47,7 +48,9 @@ pub fn routes() -> Router<AppState> {
         }
     })
 }
+// endregion: repli
 
+// region: servir
 /// Le repli lui-même, l'état déjà interrogé.
 ///
 /// Le booléen entre plutôt que l'état : la page d'amorçage se rend alors sans base, et
@@ -73,3 +76,4 @@ pub(crate) async fn servir(config: &Config, base_joignable: bool, request: Reque
             IntoResponse::into_response,
         )
 }
+// endregion: servir

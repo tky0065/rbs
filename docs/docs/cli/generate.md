@@ -624,7 +624,7 @@ suggests and what the run above used.
 ## Anchors
 
 `rbs generate` never rewrites an AST. It inserts between comment markers the skeleton
-carries. `rbs generate crud` and `rbs generate feature` use six of the eighteen — the two in
+carries. `rbs generate crud` and `rbs generate feature` use six of the twenty — the two in
 `src/state.rs`, `// <rbs:layers>` and `// <rbs:startup>` belong to the fragments
 [`rbs add`](./add.md) installs:
 
@@ -636,6 +636,17 @@ carries. `rbs generate crud` and `rbs generate feature` use six of the eighteen 
 | `// <rbs:migration_modules>` | `migration/src/lib.rs` |
 | `// <rbs:migrations>` | `migration/src/lib.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
+
+On a project carrying `frontend-admin`, `rbs generate crud` uses two more — the only ones it
+targets that the skeleton does not carry, and the only ones it *skips* rather than refuses on
+when the anchor is gone: the entity and its migration have nothing to do with it.
+
+| Anchor | File |
+|---|---|
+| `// <rbs:admin_routes>` | `frontend/src/admin/montage.ts` |
+| `// <rbs:admin_rail>` | `frontend/src/admin/rail.ts` |
+
+[The frontend guide](../guides/frontend.md#the-generated-screens) has what they receive.
 
 `rbs generate job` uses three, none shared with the two commands above and none carried by
 the skeleton either — each lives in a file a fragment deposits, and `// <rbs:jobs>` also
@@ -666,9 +677,9 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) checks all eighteen anchors — twelve on a project carrying no
-compose, no queue and no fragment moved under `src/modules/`, six of the seven optional ones —
-so a missing one can be found before a generation trips over it.
+[`rbs doctor`](./doctor.md) checks all twenty anchors — thirteen on a project carrying no
+queue, no calendar, no sign-in and no admin shell, nine of the twenty being optional — so a
+missing one can be found before a generation trips over it.
 
 ## Failures
 

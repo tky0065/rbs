@@ -13,6 +13,56 @@ dépréciation.
 
 ## [Non publié]
 
+### Ajouté
+
+- **`rbs add frontend`** pose une application Vue 3 dans un projet existant : l'application,
+  son routeur, un thème Tailwind v4, quatorze composants shadcn-vue vendorisés, et un accueil
+  public dont le contenu par défaut est vrai au premier démarrage — il nomme le projet réel,
+  interroge sa sonde de santé, renvoie à la documentation OpenAPI que le service sert déjà, et
+  montre une commande `curl` qui marche. Un module dédié sert le build en production et
+  retombe, tant que ce build n'existe pas, sur une page d'amorçage autonome qui nomme les
+  commandes restant à taper ; la page s'efface dès que le build a écrit. Le repli
+  n'intercepte ni l'API ni le document OpenAPI, et un rechargement en route profonde rend
+  l'application plutôt qu'un 404. `cargo build` réussit toujours sur une machine sans Node :
+  le mécanisme des fragments reste déclaratif, si bien que le CLI ne lance jamais `npm`. Le
+  `.gitignore` reçoit les répertoires de dépendances et de build du client, par une ancre
+  neuve `# <rbs:ignore>`.
+
+- **`rbs add frontend-admin`** ajoute le shell d'administration dans l'arbre que le socle a
+  posé : quinze fichiers, un espace authentifié de quatre écrans de compte et de santé — la
+  connexion avec sa demande de réinitialisation, un tableau de bord des sondes réelles, les
+  sessions ouvertes avec leur révocation unitaire et globale, le profil avec son changement de
+  mot de passe — chacun adossé à une route qu'`auth` expose réellement. Une application, deux
+  régimes de route : l'espace d'administration est un morceau paresseux derrière une garde de
+  route. Deux stores Pinia et pas plus ; toute ressource passe par le client typé qu'écrit
+  [`rbs generate client`](https://tky0065.github.io/rbs/fr/cli/client) depuis le document OpenAPI
+  du projet, que le shell importe et qui est donc la commande à lancer avant le premier
+  `npm run build`. Il exige `frontend` et `auth`, et par `auth`, `mail` et `rate-limit`.
+
+- **`rbs generate crud` émet les écrans d'administration de la table** sur un projet portant
+  `frontend-admin` : la liste filtrée, le formulaire et le détail, montés dans le rail et la
+  table de routage par deux ancres neuves — `// <rbs:admin_routes>` et
+  `// <rbs:admin_rail>`, le registre passant de dix-huit à vingt. Aucun drapeau ne le
+  demande, pas plus qu'aucun ne demande les routes fermées que vaut `auth` ; `--no-admin` est
+  la sortie de secours, pour une table que personne ne doit administrer depuis l'interface.
+  Sans le fragment, la commande se comporte exactement comme avant. L'écran de démonstration
+  que le fragment dépose et chaque écran engendré sortent de la même template, si bien que ce
+  qu'on voit à l'installation est ce qu'on obtiendra ensuite. C'est un renversement de
+  portée : « interface d'administration générée » quitte le hors-périmètre de la feuille de
+  route, où elle figurait depuis l'origine.
+
+- **Un champ `next_steps`** dans la section `[feature]` du manifeste d'un fragment : une
+  liste de lignes, rendues comme le reste et affichées après l'application du plan. Rien n'est
+  exécuté — le CLI reste hors-ligne et déterministe.
+
+### Corrigé
+
+- **`rbs generate client --lang ts`** rendait tout composant non-objet en
+  `export interface X <union>`, qui n'est pas du TypeScript : toute entité portant un champ
+  `enum` déclare un tel composant, et le client entier cessait de s'analyser à cause de lui.
+  La panne était invisible au CLI et ne paraissait qu'à `npm run typecheck`. Ces composants se
+  déclarent désormais en alias de type.
+
 ## [1.6.0] — 2026-09-19
 
 ### Ajouté

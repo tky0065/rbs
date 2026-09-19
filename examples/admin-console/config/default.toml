@@ -24,9 +24,11 @@ headers = ["authorization", "content-type"]
 credentials = false
 max_age_secs = 3600
 
+# region: frontend
 [frontend]
 dir = "frontend/dist"
 index = "index.html"
+# endregion: frontend
 
 [mail]
 # Mailpit et MailHog écoutent sur 1025, en clair : c'est le serveur de développement.

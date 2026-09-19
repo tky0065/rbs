@@ -12,6 +12,54 @@ between minor versions with no deprecation cycle.
 
 ## [Unreleased]
 
+### Added
+
+- **`rbs add frontend`** puts a Vue 3 application into an existing project: the application,
+  its router, a Tailwind v4 theme, fourteen vendored shadcn-vue components, and a public home
+  page whose default content is true on the first boot — it names the real project, queries
+  its health probe, links to the OpenAPI documentation the service already serves, and shows
+  a `curl` command that works. A dedicated module serves the build in production and falls
+  back, until that build exists, to a self-contained bootstrap page naming the commands left
+  to type; the page erases itself the moment the build lands. The fallback intercepts neither
+  the API nor the OpenAPI document, and a reload on a deep client route renders the
+  application rather than a 404. `cargo build` still succeeds on a machine without Node: the
+  fragment mechanism stays declarative, so the CLI never runs `npm`. `.gitignore` gains the
+  client's dependency and build directories through a new `# <rbs:ignore>` anchor.
+
+- **`rbs add frontend-admin`** adds the admin shell inside the tree the base laid down:
+  fifteen files, an authenticated space of four account-and-health screens — sign-in with its
+  password-reset request, a dashboard of the real probes, the open sessions with single and
+  global revocation, the profile with its password change — each backed by a route `auth`
+  actually exposes. One application, two route regimes: the admin space is a lazy chunk
+  behind a route guard. Two Pinia stores and no more; every resource goes through the typed
+  client [`rbs generate client`](https://tky0065.github.io/rbs/cli/client) writes from the
+  project's own OpenAPI document, which the shell imports and which is therefore the command
+  to run before the first `npm run build`. It requires `frontend` and `auth`, and through
+  `auth`, `mail` and `rate-limit`.
+
+- **`rbs generate crud` emits the table's admin screens** on a project carrying
+  `frontend-admin`: the filtered list, the form and the detail, mounted in the rail and the
+  routing table through two new anchors — `// <rbs:admin_routes>` and `// <rbs:admin_rail>`,
+  the registry going from eighteen to twenty. No flag asks for it, the same way none asks for
+  the closed routes `auth` earns; `--no-admin` is the way out, for a table nobody should
+  administer from the interface. Without the fragment the command behaves exactly as before.
+  The demonstration screen the fragment lays down and every generated screen come out of the
+  same template, so what you see at installation time is what you get next. This reverses a
+  scope decision: "generated admin interface" leaves the roadmap's out-of-scope list, where
+  it had sat from the start.
+
+- **A `next_steps` field** in a fragment manifest's `[feature]` section: a list of lines,
+  rendered like the rest and printed after the plan is applied. Nothing is executed — the CLI
+  stays offline and deterministic.
+
+### Fixed
+
+- **`rbs generate client --lang ts`** rendered any non-object component as
+  `export interface X <union>`, which is not TypeScript: every entity carrying an `enum`
+  field declares such a component, and the whole client stopped parsing because of it. The
+  failure was invisible to the CLI and only showed at `npm run typecheck`. Those components
+  are now declared as type aliases.
+
 ## [1.6.0] — 2026-09-19
 
 ### Added

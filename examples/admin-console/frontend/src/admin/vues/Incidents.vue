@@ -172,6 +172,7 @@ function saisie(ligne: Ligne): Formulaire {
   }
 }
 
+// region: source
 // D'ici à la fin de `raison`, la source des lignes. C'est la seule part de cet écran qui
 // dépende d'un contrat : tout ce qui suit — filtre, tri, pagination, formulaire, détail,
 // rendu — ne connaît que `Ligne`, `Requete` et `Formulaire`, et ne change pas d'une table
@@ -231,6 +232,7 @@ async function supprimer(cle: string): Promise<void> {
 function raison(cause: unknown, defaut: string): string {
   return phrase(cause, defaut)
 }
+// endregion: source
 
 /** Une colonne de la table : ce qu'elle lit d'une ligne, et si l'on peut trier dessus. */
 interface Colonne {
