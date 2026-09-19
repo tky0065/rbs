@@ -174,9 +174,13 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         .map(|chemin| chemin.operations.len())
         .sum();
 
+    // Ce chemin est montré à l'utilisateur et porté par le plan. `join` y pose le
+    // séparateur de la plateforme, qui jurerait sous Windows avec la barre oblique du
+    // littéral `clients/ts` — `clients/ts\\client.ts` — là où la documentation, elle,
+    // montre un chemin à barres obliques sur toutes les plateformes.
     let fichier = sortie(options.out.as_deref(), options.lang)
         .to_string_lossy()
-        .into_owned();
+        .replace('\\', "/");
 
     let mut builder = plan::Builder::new(root);
     builder.create(&fichier, &rendu)?;
