@@ -14,7 +14,6 @@ import Accueil from '@/views/Accueil.vue'
  * trouvé — et le socle garde exactement le routage qu'il avait.
  */
 export interface Montage {
-  /** Les routes à ajouter à celles du socle. */
   routes: RouteRecordRaw[]
   /** Ce que le fragment décide avant chaque navigation, s'il a de quoi le décider. */
   garde?: NavigationGuardWithThis<undefined>

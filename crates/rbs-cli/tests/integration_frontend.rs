@@ -221,6 +221,28 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
         );
     }
 
+    // Un morceau séparé par écran ne suffit pas : le routeur du socle lit le montage sans
+    // attendre, et une importation statique le long de cette chaîne — la garde, puis la
+    // couche d'état, puis le client engendré — reviendrait à livrer toute l'administration
+    // dans le morceau d'entrée sans qu'aucun nom de fichier ne le dise.
+    //
+    // La route de réinitialisation est le témoin : le client l'expose, et seul
+    // l'espace d'administration l'appelle.
+    let entree = std::fs::read_dir(repertoire.join("dist/assets"))
+        .expect("le build écrit ses assets")
+        .filter_map(Result::ok)
+        .find(|entree| {
+            let nom = entree.file_name().to_string_lossy().into_owned();
+            nom.starts_with("index-") && nom.ends_with(".js")
+        })
+        .expect("le build écrit un morceau d'entrée");
+    let entree = std::fs::read_to_string(entree.path()).expect("le morceau d'entrée se lit");
+    assert!(
+        !entree.contains("forgot-password"),
+        "le client engendré part dans le morceau d'entrée, que télécharge le visiteur de \
+         l'accueil"
+    );
+
     // Et les textes du shell ont traversé la chaîne entière : la génération, le moteur de
     // template, le compilateur Vue et l'empaqueteur.
     //

@@ -22,9 +22,12 @@ next_steps = [
 # Le fragment dépose ses fichiers dans l'arbre que le socle a posé, et n'en redépose
 # aucun : une application, deux régimes de route.
 #
-# Aucune ancre. Le registre en compte vingt et il est clos ; l'espace d'administration se
-# monte donc par découverte de fichier — le routeur du socle lit tout module nommé
-# `montage.ts` sous `src/`, et n'en trouve aucun tant que ce fragment n'est pas posé.
+# Aucune ancre, et aucune à poser : celles qui manquent au registre appartiennent à la
+# commande qui engendrera les écrans, et montent ces écrans *dans* l'espace
+# d'administration — aucune ne monterait cet espace dans le socle. Un fragment ne pouvant
+# pas redéposer un fichier qu'un autre a posé, l'espace se monte donc par découverte — le
+# routeur du socle lit tout module nommé `montage.ts` sous `src/`, et n'en trouve aucun
+# tant que ce fragment n'est pas posé.
 # C'est aussi ce qui fait que son retrait ne laisse rien derrière lui : il n'y a pas de
 # ligne insérée à retrouver, seulement des fichiers à reprendre.
 

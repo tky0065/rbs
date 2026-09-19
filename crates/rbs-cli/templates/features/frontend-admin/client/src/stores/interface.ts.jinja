@@ -27,7 +27,6 @@ export const useInterface = defineStore('interface', () => {
 
   appliquer(theme.value)
 
-  /** Passe d'une palette à l'autre, et retient le choix. */
   function basculerTheme(): void {
     theme.value = theme.value === 'clair' ? 'sombre' : 'clair'
     appliquer(theme.value)

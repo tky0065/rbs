@@ -109,18 +109,29 @@
 
 @layer components {
   /* La marge perforée du papier en continu, tracée par la feuille plutôt que par une
-   * image — un fragment n'en livrerait aucune. Les trous tombent dans la gouttière du
-   * conteneur, hors des bandes, qui gardent chacune leur propre fond. */
-  .feuille {
+   * image — un fragment n'en livrerait aucune. Un seul motif, deux emplois : la feuille
+   * le porte sur ses deux bords, la marge d'un rail sur un seul. Ni l'une ni l'autre ne
+   * connaît sa géométrie, qui est au thème — remplacer celui-ci les efface ensemble. */
+  .feuille,
+  .marge {
     --trou: radial-gradient(
       circle at calc(var(--perforation-pas) / 2) calc(var(--perforation-pas) / 2),
       var(--perforation-encre) var(--perforation-rayon),
       transparent calc(var(--perforation-rayon) + 1px)
     );
+    --bande-de-trous: var(--perforation-pas) var(--perforation-pas) repeat-y;
+  }
 
+  .feuille {
     background:
-      var(--trou) left top / var(--perforation-pas) var(--perforation-pas) repeat-y,
-      var(--trou) right top / var(--perforation-pas) var(--perforation-pas) repeat-y;
+      var(--trou) left top / var(--bande-de-trous),
+      var(--trou) right top / var(--bande-de-trous);
+  }
+
+  /* Large d'un pas, pour que le trou tombe en son milieu comme sur la feuille. */
+  .marge {
+    width: var(--perforation-pas);
+    background: var(--trou) left top / var(--bande-de-trous);
   }
 }
 

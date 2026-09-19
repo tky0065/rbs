@@ -1,7 +1,5 @@
 import type { NavigationGuardWithThis } from 'vue-router'
 
-import { useAuthentification } from '@/stores/authentification'
-
 /** Le préfixe de tout ce que cette garde protège. */
 const ESPACE = '/admin'
 
@@ -18,6 +16,11 @@ export const garde: NavigationGuardWithThis<undefined> = async (vers) => {
     return true
   }
 
+  // Importé ici et non en tête de fichier : le routeur du socle lit ce module dès le
+  // premier écran, et une importation statique tirerait la couche d'état et tout le
+  // client engendré dans le morceau d'entrée — que télécharge le visiteur de l'accueil,
+  // qui n'ira jamais dans l'administration.
+  const { useAuthentification } = await import('@/stores/authentification')
   const authentification = useAuthentification()
 
   if (await authentification.restaurer()) {

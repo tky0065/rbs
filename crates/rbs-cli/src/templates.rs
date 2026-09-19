@@ -1576,8 +1576,9 @@ mod tests {
     ///
     /// `requires` est ici une dépendance dure des deux côtés : sans le socle il n'y a pas
     /// d'arbre où se poser, sans `auth` aucune des routes que le shell appelle n'existe.
-    /// Et le registre d'ancres est clos à vingt : une dix-neuvième insertion déclarée ici
-    /// voudrait dire qu'une ancre a été posée sans passer par la spec.
+    /// Le registre en compte dix-huit, et les deux qui manquent appartiennent à la tranche
+    /// qui engendrera les écrans : une insertion déclarée ici voudrait dire qu'une ancre a
+    /// été posée sans passer par la spec.
     #[test]
     fn the_frontend_admin_fragment_requires_the_base_and_the_authentication() {
         let source = read(&Path::new(RACINE_FEATURES).join("frontend-admin/feature.toml"));

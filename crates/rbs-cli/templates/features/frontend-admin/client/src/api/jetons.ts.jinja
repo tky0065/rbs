@@ -29,12 +29,10 @@ const CLE = '{@ project_name @}.rafraichissement'
 // le faire passer par la couche d'état ferait dépendre le transport de celle-ci.
 let acces: string | null = null
 
-/** Le jeton d'accès courant, ou rien tant qu'aucune session n'est ouverte. */
 export function jetonAcces(): string | null {
   return acces
 }
 
-/** Retient le jeton d'accès, ou l'oublie quand on lui passe `null`. */
 export function poserJetonAcces(jeton: string | null): void {
   acces = jeton
 }
