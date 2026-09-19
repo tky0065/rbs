@@ -1,10 +1,38 @@
 <script setup lang="ts">
+{%- if ecran.api %}
+import type { {@ ecran.api.reponse @} } from '@/api/client'
+{% endif %}
 import { ArrowDownIcon, ArrowUpIcon, ChevronLeftIcon, ChevronRightIcon } from '@lucide/vue'
 import { computed, ref, watch } from 'vue'
 
-import Bande from '@/components/Bande.vue'
+{% if ecran.api %}import { api, phrase } from '@/api'
+{% endif %}import Bande from '@/components/Bande.vue'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+{% if 'checkbox' in ecran.composants %}import { Checkbox } from '@/components/ui/checkbox'
+{% endif %}import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+{% if 'input' in ecran.composants %}import { Input } from '@/components/ui/input'
+{% endif %}{% if 'label' in ecran.composants %}import { Label } from '@/components/ui/label'
+{% endif %}{% if 'select' in ecran.composants %}import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
+{% endif %}import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from '@/components/ui/sheet'
 import {
   Table,
   TableBody,
@@ -14,6 +42,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { useInterface } from '@/stores/interface'
 
 /**
  * Les libellés de cet écran, rendus dans la langue du projet à sa création.
@@ -34,10 +63,28 @@ const TEXTES = {
   sur: '{@ ecran.textes.sur @}',
   precedent: '{@ ecran.textes.precedent @}',
   suivant: '{@ ecran.textes.suivant @}',
+  actions: '{@ ecran.textes.actions @}',
+  creer: '{@ ecran.textes.creer @}',
+  modifier: '{@ ecran.textes.modifier @}',
+  supprimer: '{@ ecran.textes.supprimer @}',
+  detail: '{@ ecran.textes.detail @}',
+  enregistrer: '{@ ecran.textes.enregistrer @}',
+  enregistrement: '{@ ecran.textes.enregistrement @}',
+  annuler: '{@ ecran.textes.annuler @}',
+  suppression_titre: '{@ ecran.textes.suppression_titre @}',
+  suppression_detail: '{@ ecran.textes.suppression_detail @}',
+  enregistree: '{@ ecran.textes.enregistree @}',
+  supprimee: '{@ ecran.textes.supprimee @}',
+  refus_enregistrement: '{@ ecran.textes.refus_enregistrement @}',
+  refus_suppression: '{@ ecran.textes.refus_suppression @}',
+  introuvable: '{@ ecran.textes.introuvable @}',
+  vide: '{@ ecran.textes.vide @}',
+  oui: '{@ ecran.textes.oui @}',
+  non: '{@ ecran.textes.non @}',
 } as const
 
 /** Combien de lignes une page porte. */
-const TAILLE = 5
+const TAILLE = {@ ecran.taille @}
 
 /** La colonne sur laquelle la table est triée, et dans quel sens. */
 interface Tri {
@@ -47,30 +94,152 @@ interface Tri {
 
 /** Ce que l'écran demande à sa source pour remplir une page. */
 interface Requete {
+{%- if ecran.filtrable %}
   filtre: string
+{%- endif %}
   tri: Tri | null
   page: number
   taille: number
 }
 
-/** Une ligne de la table, une propriété par colonne. */
-interface Ligne {{% for colonne in ecran.colonnes %}
-  {@ colonne.cle @}: string
+/** Une ligne de la table, une propriété par colonne du corps. */
+interface Ligne {
+{%- for propriete in ecran.proprietes %}
+  {@ propriete.cle @}: {@ propriete.type_base @}{% if propriete.optionnel %} | null{% endif %}
 {%- endfor %}
 }
 
-// D'ici à la fin de `interroger`, la source des lignes. C'est la seule part de cet écran
-// qui dépende d'un contrat : tout ce qui suit — filtre, tri, pagination, rendu — ne
-// connaît que `Requete` et `Ligne`, et ne change pas d'une table à l'autre.
-const LIGNES: Ligne[] = [{% for ligne in ecran.lignes %}
+/** Ce que le formulaire saisit : un booléen par case, une chaîne partout ailleurs. */
+interface Formulaire {
+{%- for champ in ecran.champs %}
+  {@ champ.cle @}: {% if champ.controle == 'booleen' %}boolean{% else %}string{% endif %}
+{%- endfor %}
+}
+
+/** Un formulaire vierge : ce qu'ouvre la création. */
+const VIERGE: Formulaire = {
+{%- for champ in ecran.champs %}
+{%- if champ.controle == 'booleen' %}
+  {@ champ.cle @}: false,
+{%- elif champ.controle == 'liste' and not champ.optionnel %}
+  {@ champ.cle @}: '{@ champ.valeurs[0] @}',
+{%- else %}
+  {@ champ.cle @}: '',
+{%- endif %}
+{%- endfor %}
+}
+
+/**
+ * Ce que la source reçoit, tiré de ce que le formulaire porte.
+ *
+ * Un champ laissé vide vaut l'absence de valeur et non la chaîne vide : c'est la seule
+ * lecture qui laisse remettre à zéro une colonne facultative depuis le formulaire. Un
+ * instant repart au fuseau que le contrat attend, et que le contrôle natif ne porte pas.
+ */
+function corps({% if ecran.champs %}formulaire{% else %}_formulaire{% endif %}: Formulaire) {
+  return {
+{%- for champ in ecran.champs %}
+{%- if champ.controle == 'booleen' %}
+    {@ champ.cle @}: formulaire.{@ champ.cle @},
+{%- elif champ.controle == 'nombre' %}
+    {@ champ.cle @}: {% if champ.optionnel %}formulaire.{@ champ.cle @} === '' ? null : Number(formulaire.{@ champ.cle @}){% else %}Number(formulaire.{@ champ.cle @}){% endif %},
+{%- elif champ.controle == 'instant' %}
+    {@ champ.cle @}: {% if champ.optionnel %}formulaire.{@ champ.cle @} === '' ? null : new Date(formulaire.{@ champ.cle @}).toISOString(){% else %}new Date(formulaire.{@ champ.cle @}).toISOString(){% endif %},
+{%- elif champ.controle == 'liste' %}
+    {@ champ.cle @}: {% if champ.optionnel %}formulaire.{@ champ.cle @} === '' ? null : (formulaire.{@ champ.cle @} as {@ champ.type_base @}){% else %}formulaire.{@ champ.cle @} as {@ champ.type_base @}{% endif %},
+{%- else %}
+    {@ champ.cle @}: {% if champ.optionnel %}formulaire.{@ champ.cle @} === '' ? null : formulaire.{@ champ.cle @}{% else %}formulaire.{@ champ.cle @}{% endif %},
+{%- endif %}
+{%- endfor %}
+  }
+}
+
+/** Le formulaire prérempli d'une ligne existante. */
+function saisie({% if ecran.champs %}ligne{% else %}_ligne{% endif %}: Ligne): Formulaire {
+  return {
+{%- for champ in ecran.champs %}
+{%- if champ.controle == 'booleen' %}
+    {@ champ.cle @}: ligne.{@ champ.cle @},
+{%- elif champ.controle == 'nombre' %}
+    {@ champ.cle @}: {% if champ.optionnel %}ligne.{@ champ.cle @} === null ? '' : String(ligne.{@ champ.cle @}){% else %}String(ligne.{@ champ.cle @}){% endif %},
+{%- elif champ.controle == 'instant' %}
+    {@ champ.cle @}: {% if champ.optionnel %}(ligne.{@ champ.cle @} ?? ''){% else %}ligne.{@ champ.cle @}{% endif %}.slice(0, 16),
+{%- else %}
+    {@ champ.cle @}: {% if champ.optionnel %}ligne.{@ champ.cle @} ?? ''{% else %}ligne.{@ champ.cle @}{% endif %},
+{%- endif %}
+{%- endfor %}
+  }
+}
+
+// D'ici à la fin de `raison`, la source des lignes. C'est la seule part de cet écran qui
+// dépende d'un contrat : tout ce qui suit — filtre, tri, pagination, formulaire, détail,
+// rendu — ne connaît que `Ligne`, `Requete` et `Formulaire`, et ne change pas d'une table
+// à l'autre.
+{%- if ecran.api %}
+
+/** La ligne que la table affiche, tirée du corps que le contrat rend. */
+function depuis(recu: {@ ecran.api.reponse @}): Ligne {
+  return {
+{%- for propriete in ecran.proprietes %}
+    {@ propriete.cle @}: recu.{@ propriete.cle @}{% if propriete.optionnel %} ?? null{% endif %},
+{%- endfor %}
+  }
+}
+
+async function interroger(requete: Requete): Promise<{ lignes: Ligne[]; total: number }> {
+  const ordre = requete.tri
+{%- if ecran.filtrable %}
+  const motif = requete.filtre.trim()
+{%- endif %}
+
+  // La route de filtre et non celle de liste : elle porte les conditions dans son corps,
+  // et garde ses pages même quand la liste pagine par curseur.
+  const recue = await api.{@ ecran.api.liste @}(
+    {
+      sort: ordre === null ? undefined : [ordre.sens === 'asc' ? ordre.cle : `-${ordre.cle}`],
+{%- if ecran.filtrable %}
+      {@ ecran.api.recherche @}: motif === '' ? undefined : { contains: motif },
+{%- endif %}
+    },
+    { page: requete.page, per_page: requete.taille },
+  )
+
+  return { lignes: recue.data.map(depuis), total: recue.meta.total }
+}
+
+async function lire(cle: string): Promise<Ligne> {
+  return depuis(await api.{@ ecran.api.lire @}(cle))
+}
+
+async function enregistrer(cle: string | null, formulaire: Formulaire): Promise<void> {
+  if (cle === null) {
+    await api.{@ ecran.api.creer @}(corps(formulaire))
+  } else {
+    await api.{@ ecran.api.modifier @}(cle, corps(formulaire))
+  }
+}
+
+async function supprimer(cle: string): Promise<void> {
+  await api.{@ ecran.api.supprimer @}(cle)
+}
+
+/** La phrase que porte une panne, ou `defaut` quand elle n'en porte pas. */
+function raison(cause: unknown, defaut: string): string {
+  return phrase(cause, defaut)
+}
+{%- else %}
+
+const SOURCE: Ligne[] = [{% for ligne in ecran.lignes %}
   {@ ligne @},
 {%- endfor %}
 ]
 
 async function interroger(requete: Requete): Promise<{ lignes: Ligne[]; total: number }> {
   const motif = requete.filtre.trim().toLowerCase()
-  const retenues = LIGNES.filter(
-    (ligne) => motif === '' || Object.values(ligne).some((valeur) => valeur.toLowerCase().includes(motif)),
+  const retenues = SOURCE.filter(
+    (ligne) =>
+      motif === '' ||
+      Object.values(ligne).some((valeur) => String(valeur).toLowerCase().includes(motif)),
   )
 
   const ordre = requete.tri
@@ -85,10 +254,40 @@ async function interroger(requete: Requete): Promise<{ lignes: Ligne[]; total: n
   return { lignes: retenues.slice(debut, debut + requete.taille), total: retenues.length }
 }
 
-/** Ce qui s'affiche quand la source refuse de répondre. */
-function raison(_cause: unknown): string {
-  return TEXTES.erreur
+async function lire(cle: string): Promise<Ligne> {
+  const trouvee = SOURCE.find((ligne) => ligne.{@ ecran.cle @} === cle)
+
+  if (trouvee === undefined) {
+    throw new Error(TEXTES.introuvable)
+  }
+
+  return trouvee
 }
+
+async function enregistrer(cle: string | null, formulaire: Formulaire): Promise<void> {
+  const rang =
+    cle === null ? -1 : SOURCE.findIndex((ligne) => ligne.{@ ecran.cle @} === cle)
+
+  if (rang === -1) {
+    SOURCE.push(corps(formulaire))
+  } else {
+    SOURCE.splice(rang, 1, corps(formulaire))
+  }
+}
+
+async function supprimer(cle: string): Promise<void> {
+  const rang = SOURCE.findIndex((ligne) => ligne.{@ ecran.cle @} === cle)
+
+  if (rang !== -1) {
+    SOURCE.splice(rang, 1)
+  }
+}
+
+/** La phrase que porte une panne, ou `defaut` quand elle n'en porte pas. */
+function raison(cause: unknown, defaut: string): string {
+  return cause instanceof Error ? cause.message : defaut
+}
+{%- endif %}
 
 /** Une colonne de la table : ce qu'elle lit d'une ligne, et si l'on peut trier dessus. */
 interface Colonne {
@@ -102,7 +301,17 @@ const COLONNES: readonly Colonne[] = [{% for colonne in ecran.colonnes %}
 {%- endfor %}
 ]
 
+/** Les propriétés du détail : la ligne entière, et non le seul sous-ensemble affiché. */
+const PROPRIETES: readonly { cle: keyof Ligne; libelle: string }[] = [{% for propriete in ecran.proprietes %}
+  { cle: '{@ propriete.cle @}', libelle: '{@ propriete.libelle @}' },
+{%- endfor %}
+]
+
+const interfaces = useInterface()
+
+{% if ecran.filtrable -%}
 const filtre = ref('')
+{% endif -%}
 const tri = ref<Tri | null>(null)
 const page = ref(1)
 
@@ -111,13 +320,35 @@ const total = ref(0)
 const enCours = ref(false)
 const faute = ref<string | null>(null)
 
+// Le formulaire porte la clé de la ligne qu'il modifie, ou `null` quand il en crée une :
+// c'est la seule chose qui sépare les deux gestes, et un second dialogue les aurait
+// dédoublés.
+const formulaireOuvert = ref(false)
+const modifiee = ref<string | null>(null)
+const valeurs = ref<Formulaire>({ ...VIERGE })
+const enregistrementEnCours = ref(false)
+const fauteFormulaire = ref<string | null>(null)
+
+// Le détail relit la ligne plutôt que de reprendre celle de la table : celle-ci date de
+// la dernière page chargée, et une valeur changée depuis se lirait encore à son ancienne.
+const detailOuvert = ref(false)
+const detaillee = ref<Ligne | null>(null)
+const detailEnCours = ref(false)
+const fauteDetail = ref<string | null>(null)
+
+const suppressionOuverte = ref(false)
+const aSupprimer = ref<string | null>(null)
+const suppressionEnCours = ref(false)
+
 const pages = computed(() => Math.max(1, Math.ceil(total.value / TAILLE)))
 
 // Une seule veille, sur la demande entière : le filtre et le tri ramènent eux-mêmes à la
 // première page, et veiller sur chacun d'eux séparément relancerait deux fois la même
 // interrogation pour un seul geste de l'opérateur.
 const requete = computed<Requete>(() => ({
+{%- if ecran.filtrable %}
   filtre: filtre.value,
+{%- endif %}
   tri: tri.value,
   page: page.value,
   taille: TAILLE,
@@ -136,17 +367,17 @@ async function charger(): Promise<void> {
   } catch (cause) {
     lignes.value = []
     total.value = 0
-    faute.value = raison(cause)
+    faute.value = raison(cause, TEXTES.erreur)
   } finally {
     enCours.value = false
   }
 }
-
+{% if ecran.filtrable %}
 function filtrer(valeur: string | number): void {
   filtre.value = String(valeur)
   page.value = 1
 }
-
+{% endif %}
 // Trois états et non deux : la troisième pression rend la colonne au tri naturel de la
 // source, que rien d'autre ne saurait retrouver.
 function trier(cle: keyof Ligne): void {
@@ -162,12 +393,96 @@ function trier(cle: keyof Ligne): void {
 
   page.value = 1
 }
+
+function creer(): void {
+  modifiee.value = null
+  valeurs.value = { ...VIERGE }
+  fauteFormulaire.value = null
+  formulaireOuvert.value = true
+}
+
+function modifier(ligne: Ligne): void {
+  modifiee.value = ligne.{@ ecran.cle @}
+  valeurs.value = saisie(ligne)
+  fauteFormulaire.value = null
+  formulaireOuvert.value = true
+}
+
+async function soumettre(): Promise<void> {
+  enregistrementEnCours.value = true
+  fauteFormulaire.value = null
+
+  try {
+    await enregistrer(modifiee.value, valeurs.value)
+    formulaireOuvert.value = false
+    interfaces.informer(TEXTES.enregistree)
+    await charger()
+  } catch (cause) {
+    fauteFormulaire.value = raison(cause, TEXTES.refus_enregistrement)
+  } finally {
+    enregistrementEnCours.value = false
+  }
+}
+
+async function detailler(cle: string): Promise<void> {
+  detaillee.value = null
+  fauteDetail.value = null
+  detailEnCours.value = true
+  detailOuvert.value = true
+
+  try {
+    detaillee.value = await lire(cle)
+  } catch (cause) {
+    fauteDetail.value = raison(cause, TEXTES.introuvable)
+  } finally {
+    detailEnCours.value = false
+  }
+}
+
+function demander(cle: string): void {
+  aSupprimer.value = cle
+  suppressionOuverte.value = true
+}
+
+async function confirmer(): Promise<void> {
+  const cle = aSupprimer.value
+
+  if (cle === null) {
+    return
+  }
+
+  suppressionEnCours.value = true
+
+  try {
+    await supprimer(cle)
+    suppressionOuverte.value = false
+    interfaces.informer(TEXTES.supprimee)
+    await charger()
+  } catch (cause) {
+    faute.value = raison(cause, TEXTES.refus_suppression)
+  } finally {
+    suppressionEnCours.value = false
+  }
+}
+
+/** Ce que l'opérateur lit d'une valeur : un booléen se dit, une absence se marque. */
+function afficher(valeur: string | number | boolean | null): string {
+  if (valeur === null) {
+    return TEXTES.vide
+  }
+  if (typeof valeur === 'boolean') {
+    return valeur ? TEXTES.oui : TEXTES.non
+  }
+
+  return String(valeur)
+}
 </script>
 
 <!--
   La table : une bande pour ce qu'elle est, une bande pour ce qu'elle porte. Le tri est
   une flèche et la pagination un chevron — les deux seules icônes admises ici, parce
-  qu'elles sont l'affordance du geste et non son ornement.
+  qu'elles sont l'affordance du geste et non son ornement. Les trois gestes de ligne sont
+  des mots : une corbeille à côté du verbe « supprimer » serait l'ornement qu'on refuse.
 -->
 <template>
   <div class="flex flex-col border-x border-border">
@@ -178,6 +493,7 @@ function trier(cle: keyof Ligne): void {
 
     <Bande>
       <div class="mb-5 flex flex-wrap items-center justify-between gap-3">
+{%- if ecran.filtrable %}
         <Input
           class="max-w-xs"
           :model-value="filtre"
@@ -185,9 +501,11 @@ function trier(cle: keyof Ligne): void {
           :aria-label="TEXTES.filtre"
           @update:model-value="filtrer"
         />
+{%- endif %}
         <p class="text-sm text-muted-foreground" role="status">
           {{ total }} {{ TEXTES.lignes }}
         </p>
+        <Button size="sm" @click="creer">{{ TEXTES.creer }}</Button>
       </div>
 
       <Table>
@@ -214,22 +532,40 @@ function trier(cle: keyof Ligne): void {
               </button>
               <span v-else class="uppercase tracking-[0.2em]">{{ colonne.libelle }}</span>
             </TableHead>
+            <TableHead class="text-right uppercase tracking-[0.2em]">
+              {{ TEXTES.actions }}
+            </TableHead>
           </TableRow>
         </TableHeader>
 
         <TableBody>
-          <TableEmpty v-if="lignes.length === 0" :colspan="COLONNES.length">
+          <TableEmpty v-if="lignes.length === 0" :colspan="COLONNES.length + 1">
             {{ enCours ? TEXTES.chargement : (faute ?? TEXTES.aucune) }}
           </TableEmpty>
           <template v-else>
             <TableRow v-for="ligne in lignes" :key="ligne.{@ ecran.cle @}">
               <TableCell v-for="colonne in COLONNES" :key="colonne.cle">
-                {{ ligne[colonne.cle] }}
+                {{ afficher(ligne[colonne.cle]) }}
+              </TableCell>
+              <TableCell class="whitespace-nowrap text-right">
+                <Button variant="ghost" size="sm" @click="detailler(ligne.{@ ecran.cle @})">
+                  {{ TEXTES.detail }}
+                </Button>
+                <Button variant="ghost" size="sm" @click="modifier(ligne)">
+                  {{ TEXTES.modifier }}
+                </Button>
+                <Button variant="ghost" size="sm" @click="demander(ligne.{@ ecran.cle @})">
+                  {{ TEXTES.supprimer }}
+                </Button>
               </TableCell>
             </TableRow>
           </template>
         </TableBody>
       </Table>
+
+      <p v-if="faute && lignes.length > 0" class="mt-5 text-destructive" role="alert">
+        {{ faute }}
+      </p>
 
       <div class="mt-5 flex items-center justify-between gap-3">
         <Button variant="outline" size="sm" :disabled="page === 1" @click="page -= 1">
@@ -245,5 +581,105 @@ function trier(cle: keyof Ligne): void {
         </Button>
       </div>
     </Bande>
+
+    <Dialog v-model:open="formulaireOuvert">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{{ modifiee === null ? TEXTES.creer : TEXTES.modifier }}</DialogTitle>
+          <DialogDescription>{{ TEXTES.titre }}</DialogDescription>
+        </DialogHeader>
+
+        <form class="flex flex-col gap-5" novalidate @submit.prevent="soumettre">
+{%- for champ in ecran.champs %}
+          <div class="flex flex-col gap-2">
+            <Label for="champ-{@ champ.cle @}">{@ champ.libelle @}</Label>
+{%- if champ.controle == 'booleen' %}
+            <Checkbox
+              id="champ-{@ champ.cle @}"
+              :model-value="valeurs.{@ champ.cle @}"
+              @update:model-value="(valeur) => (valeurs.{@ champ.cle @} = valeur === true)"
+            />
+{%- elif champ.controle == 'liste' %}
+            <Select
+              :model-value="valeurs.{@ champ.cle @}"
+              @update:model-value="(valeur) => (valeurs.{@ champ.cle @} = String(valeur))"
+            >
+              <SelectTrigger id="champ-{@ champ.cle @}">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+{%- for valeur in champ.valeurs %}
+                <SelectItem value="{@ valeur @}">{@ valeur @}</SelectItem>
+{%- endfor %}
+              </SelectContent>
+            </Select>
+{%- else %}
+            <Input
+              id="champ-{@ champ.cle @}"
+              type="{% if champ.controle == 'nombre' %}number{% elif champ.controle == 'date' %}date{% elif champ.controle == 'instant' %}datetime-local{% else %}text{% endif %}"
+              :model-value="valeurs.{@ champ.cle @}"
+              {% if not champ.optionnel %}required
+              {% endif %}@update:model-value="(valeur) => (valeurs.{@ champ.cle @} = String(valeur))"
+            />
+{%- endif %}
+          </div>
+{%- endfor %}
+
+          <p v-if="fauteFormulaire" class="text-destructive" role="alert">
+            {{ fauteFormulaire }}
+          </p>
+
+          <DialogFooter>
+            <Button variant="outline" type="button" @click="formulaireOuvert = false">
+              {{ TEXTES.annuler }}
+            </Button>
+            <Button type="submit" :disabled="enregistrementEnCours">
+              {{ enregistrementEnCours ? TEXTES.enregistrement : TEXTES.enregistrer }}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
+
+    <Sheet v-model:open="detailOuvert">
+      <SheetContent>
+        <SheetHeader>
+          <SheetTitle>{{ TEXTES.detail }}</SheetTitle>
+          <SheetDescription>{{ TEXTES.titre }}</SheetDescription>
+        </SheetHeader>
+
+        <p v-if="detailEnCours" class="px-4 text-muted-foreground" role="status">
+          {{ TEXTES.chargement }}
+        </p>
+        <p v-else-if="fauteDetail" class="px-4 text-destructive" role="alert">
+          {{ fauteDetail }}
+        </p>
+        <dl v-else-if="detaillee !== null" class="flex flex-col gap-4 px-4">
+          <div v-for="propriete in PROPRIETES" :key="propriete.cle" class="flex flex-col gap-1">
+            <dt class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
+              {{ propriete.libelle }}
+            </dt>
+            <dd class="break-all">{{ afficher(detaillee[propriete.cle]) }}</dd>
+          </div>
+        </dl>
+      </SheetContent>
+    </Sheet>
+
+    <Dialog v-model:open="suppressionOuverte">
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{{ TEXTES.suppression_titre }}</DialogTitle>
+          <DialogDescription>{{ TEXTES.suppression_detail }}</DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" @click="suppressionOuverte = false">
+            {{ TEXTES.annuler }}
+          </Button>
+          <Button variant="destructive" :disabled="suppressionEnCours" @click="confirmer">
+            {{ TEXTES.supprimer }}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   </div>
 </template>

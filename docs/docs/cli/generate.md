@@ -66,6 +66,7 @@ Options :
       --soft-delete        Rend le DELETE logique : la ligne reste, marquée d'une date de suppression
       --with-upload        Ajoute trois routes de contenu binaire ; exige la feature storage
       --cursor             Pagine GET /<ressource> par curseur ; la route de filtre garde ses pages
+      --no-admin           N'émet pas les écrans d'administration de la table, même si le shell est posé
   -h, --help               Affiche l'aide
   -V, --version            Affiche la version
 ```

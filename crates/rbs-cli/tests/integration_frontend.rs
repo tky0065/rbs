@@ -172,6 +172,39 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
         "le fragment livre un client figé : il mentirait dès la première route ajoutée"
     );
 
+    // Une table réelle, et ses écrans engendrés : c'est le second producteur de l'écran
+    // patron, et le seul endroit du dépôt où son rendu passe par le compilateur. Les types
+    // couverts sont ceux dont chaque contrôle du formulaire dépend — chaîne, texte long,
+    // entier, décimal, booléen, date, instant, énumération, colonne facultative.
+    rbs(&projet)
+        .args([
+            "generate",
+            "crud",
+            "bordereaux",
+            "--fields",
+            "titre:string,corps:text,vues:int,prix:decimal,publie:bool,paru:date,vu:datetime,\
+             statut:enum(draft,published),note:string:optional",
+        ])
+        .assert()
+        .success();
+
+    // Et une table qui les refuse : le drapeau ne doit rien laisser derrière lui.
+    rbs(&projet)
+        .args([
+            "generate",
+            "crud",
+            "jetons",
+            "--fields",
+            "valeur:string",
+            "--no-admin",
+        ])
+        .assert()
+        .success();
+    assert!(
+        !projet.join("frontend/src/admin/vues/Jetons.vue").exists(),
+        "`--no-admin` a laissé un écran"
+    );
+
     {
         // La cible est partagée par tous les binaires de `tests/`, et `rbs generate
         // client` lance cargo : le verrou se prend avant, et se rend avant npm, qui n'en
@@ -203,6 +236,11 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
         "authRevokeSessions(",
         "authChangePassword(",
         "health(",
+        "bordereauxFilter(",
+        "bordereauxFind(",
+        "bordereauxCreate(",
+        "bordereauxUpdate(",
+        "bordereauxDelete(",
     ] {
         assert!(
             engendre.contains(methode),
@@ -249,6 +287,7 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
         "Sessions-",
         "Profil-",
         "Demonstration-",
+        "Bordereaux-",
     ] {
         assert!(
             morceaux.iter().any(|nom| nom.starts_with(ecran)),

@@ -162,25 +162,25 @@ fn membre(nom: &str, schema: &Schema, required: &BTreeSet<String>) -> String {
     format!("{nom}{marque}: {}", type_de(schema))
 }
 
-/// Le corps d'une interface pour un schéma de composant : identique à `type_de`, sauf
-/// pour un objet à propriétés déclarées, qui se rend alors sur plusieurs lignes — la
-/// seule différence entre les deux rendus, l'un étant une expression et l'autre une
-/// déclaration.
-fn corps_de(schema: &Schema) -> String {
+/// Comment un composant se déclare : en interface s'il est un objet à propriétés, en
+/// alias de type sinon — et son corps, rendu en conséquence.
+///
+/// Une interface ne peut porter qu'un corps entre accolades : `export interface Status
+/// "draft" | "published"` n'est pas du TypeScript, et c'est pourtant ce qu'un composant
+/// énuméré donnait — celui que déclare toute entité engendrée portant un champ `enum`.
+/// Le fichier entier cessait alors de s'analyser, et rien dans le CLI ne le disait : la
+/// panne n'apparaissait qu'à `npm run typecheck`, en ligne et ignoré par défaut. Un objet
+/// nullable relève du même refus, son `| null` tombant hors des accolades.
+fn declaration_de(schema: &Schema) -> (bool, String) {
     match schema {
         Schema::Object {
             properties,
             required,
             additional: None,
-            nullable,
+            nullable: false,
             ..
-        } if !properties.is_empty() => {
-            // `objet_corps` ignore `nullable`, à la différence de `type_de` : sans ce
-            // second `avec_nullable`, un composant nullable à propriétés perdait son
-            // `| null` en devenant une déclaration multi-lignes.
-            avec_nullable(objet_corps(properties, required), *nullable)
-        }
-        _ => type_de(schema),
+        } if !properties.is_empty() => (false, objet_corps(properties, required)),
+        _ => (true, type_de(schema)),
     }
 }
 
@@ -205,12 +205,14 @@ fn commentaire(description: &str) -> String {
 }
 
 /// Une interface prête à écrire : nom déjà passé par `identifiant`, doc déjà formatée
-/// en `/** … */`, corps déjà rendu par `corps_de`.
+/// en `/** … */`, corps déjà rendu par `declaration_de`.
 #[derive(Debug)]
 pub(crate) struct Interface {
     pub nom: String,
     pub doc: Option<String>,
     pub corps: String,
+    /// Le composant se déclare en `type X = …` plutôt qu'en `interface X {…}`.
+    pub alias: bool,
 }
 
 /// Traduit chaque schéma de composant du document en `Interface`.
@@ -241,10 +243,12 @@ pub(crate) fn interfaces(document: &Document) -> Result<Vec<Interface>, Erreur> 
             .filter(|description| !description.trim().is_empty())
             .map(|description| commentaire(&description));
 
+        let (alias, corps) = declaration_de(schema);
         rendues.push(Interface {
             nom: identifiant,
             doc,
-            corps: corps_de(schema),
+            corps,
+            alias,
         });
     }
 
@@ -349,7 +353,7 @@ pub(crate) struct Methode {
 /// chaque tronçon suivant `map`pé par `capitalise`, garde le premier tel quel hormis
 /// sa casse initiale — un `operationId` déjà en casse mixte n'est pas retouché plus
 /// qu'il ne faut.
-fn nom_de_methode(operation_id: &str) -> String {
+pub(crate) fn nom_de_methode(operation_id: &str) -> String {
     let mut troncons = operation_id
         .split(['_', '-', ' '])
         .filter(|tronc| !tronc.is_empty());
@@ -452,6 +456,7 @@ struct InterfaceVue {
     nom: String,
     doc: String,
     corps: String,
+    alias: bool,
 }
 
 impl From<Interface> for InterfaceVue {
@@ -462,6 +467,7 @@ impl From<Interface> for InterfaceVue {
                 .doc
                 .map_or_else(String::new, |doc| format!("{doc}\n")),
             corps: interface.corps,
+            alias: interface.alias,
         }
     }
 }
@@ -573,6 +579,7 @@ pub(crate) fn rendre(document: &Document, projet: &str) -> Result<String, Erreur
                     nom: nom_query.clone(),
                     doc: String::new(),
                     corps: objet_corps(&properties, &required),
+                    alias: false,
                 });
 
                 let defaut = if toutes_optionnelles { " = {}" } else { "" };
@@ -805,6 +812,11 @@ mod tests {
         );
     }
 
+    /// Un objet nullable garde son `| null`, et se déclare alors en alias de type.
+    ///
+    /// `interface S {…} | null` n'est pas du TypeScript : l'union tombe hors des
+    /// accolades, et le fichier entier cesse de s'analyser. Seul `npm run typecheck` le
+    /// dirait, en ligne et ignoré par défaut.
     #[test]
     fn a_nullable_object_with_properties_keeps_its_null_union() {
         let document = schemas(
@@ -814,7 +826,32 @@ mod tests {
 
         let rendues = interfaces(&document).expect("rendu");
 
-        assert_eq!(rendues[0].corps, "{\n  a?: string;\n} | null");
+        assert!(rendues[0].alias, "{:?}", rendues[0]);
+        assert_eq!(rendues[0].corps, "{ a?: string } | null");
+    }
+
+    /// Un composant énuméré se déclare en alias, et le fichier rendu le dit.
+    ///
+    /// Toute entité engendrée portant un champ `enum` en déclare un : rendu en
+    /// `interface`, il emportait le client entier avec lui.
+    #[test]
+    fn an_enumerated_component_is_declared_as_a_type_alias() {
+        let mut document = une_operation("/a", "get", r#"{"operationId":"a","responses":{}}"#);
+        document.schemas.extend(
+            schemas(
+                r#"{"openapi":"3.1.0","components":{"schemas":{"Status":{"type":"string",
+                     "enum":["draft","published"]}}}}"#,
+            )
+            .schemas,
+        );
+
+        let rendu = rendre(&document, "demo").expect("rendu");
+
+        assert!(
+            rendu.contains("export type Status = \"draft\" | \"published\""),
+            "{rendu}"
+        );
+        assert!(!rendu.contains("interface Status"), "{rendu}");
     }
 
     #[test]

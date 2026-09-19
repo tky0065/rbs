@@ -16,7 +16,7 @@ export interface ProblemDetails {
 
 {% endif -%}
 {% for interface in interfaces -%}
-{@ interface.doc @}export interface {@ interface.nom @} {@ interface.corps @}
+{@ interface.doc @}export {% if interface.alias %}type {@ interface.nom @} = {% else %}interface {@ interface.nom @} {% endif %}{@ interface.corps @}
 
 {% endfor -%}
 /** Ce que le client jette sur une réponse hors 2xx. */

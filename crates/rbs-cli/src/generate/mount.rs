@@ -102,6 +102,28 @@ pub(crate) fn for_inverse(inverse: &relations::Inverse) -> Vec<Mount> {
     montages
 }
 
+/// Ce que l'écran d'administration d'une table ajoute à l'espace d'administration.
+///
+/// Deux ancres et deux seulement : la table de routage et le rail. Pas de troisième pour
+/// déclarer le module — en TypeScript, l'import qui donne son composant à la route *est*
+/// la déclaration, là où Rust demande un `pub mod` distinct du montage.
+///
+/// Les deux lignes viennent de l'écran lui-même et non d'ici : ce sont celles que le
+/// fragment `frontend-admin` inscrit pour son écran de démonstration, à l'entité près, et
+/// deux écritures de la même ligne finiraient par diverger.
+pub(crate) fn for_admin_screen(ecran: &crate::ecran::Ecran) -> Vec<Mount> {
+    vec![
+        Mount {
+            anchor: anchors::ADMIN_ROUTES,
+            lines: ecran.montage.lines().map(str::to_string).collect(),
+        },
+        Mount {
+            anchor: anchors::ADMIN_RAIL,
+            lines: vec![ecran.rail.clone()],
+        },
+    ]
+}
+
 /// Ce que le seed de `module` ajoute au binaire des seeds.
 ///
 /// Séparé de [`pour`] pour la même raison que [`for_migration`] : une feature écrite à la
@@ -280,6 +302,44 @@ mod tests {
                 .any(|mount| mount.anchor.file == anchors::MIGRATIONS.file),
             "la crate migration ne doit pas être touchée : {montages:?}"
         );
+    }
+
+    /// Les deux ancres de l'administration reçoivent la route et l'entrée de rail, et
+    /// elles seules : pas de troisième pour déclarer le module.
+    #[test]
+    fn the_admin_screen_targets_the_two_anchors_of_the_shell() {
+        let ecran = crate::ecran::Ecran::pour(
+            &super::super::feature::Feature::fresh(
+                "blog_posts",
+                super::super::fields::parse("title:string").expect("les champs s'analysent"),
+            ),
+            crate::lang::Lang::Fr,
+        );
+
+        let montages = for_admin_screen(&ecran);
+
+        assert_eq!(montages.len(), 2, "{montages:?}");
+        assert_eq!(
+            lines(&montages, anchors::ADMIN_ROUTES),
+            [
+                "{",
+                "  path: 'blog-posts',",
+                "  name: 'admin-blog-posts',",
+                "  component: () => import('./vues/BlogPosts.vue'),",
+                "},",
+            ]
+        );
+        assert_eq!(
+            lines(&montages, anchors::ADMIN_RAIL),
+            ["{ route: 'admin-blog-posts', libelle: 'Blog posts' },"]
+        );
+        for mount in &montages {
+            assert!(
+                anchors::ANCRES.contains(&mount.anchor),
+                "`{}` n'est pas une ancre du registre",
+                mount.anchor.name
+            );
+        }
     }
 
     #[test]

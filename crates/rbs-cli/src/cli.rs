@@ -286,6 +286,10 @@ pub enum GenerateCommands {
         /// Pagine GET /<ressource> par curseur ; la route de filtre garde ses pages.
         #[arg(long)]
         cursor: bool,
+
+        /// N'émet pas les écrans d'administration de la table, même si le shell est posé.
+        #[arg(long)]
+        no_admin: bool,
     },
 
     /// Génère une feature vide : six fichiers, aucun champ.
@@ -842,6 +846,39 @@ mod tests {
         };
 
         assert!(cursor);
+    }
+
+    #[test]
+    fn generate_crud_accepts_no_admin() {
+        let cli = Cli::try_parse_from(["rbs", "generate", "crud", "jetons", "--no-admin"])
+            .expect("la ligne doit être acceptée");
+
+        let Commands::Generate {
+            command: GenerateCommands::Crud { no_admin, .. },
+        } = cli.command
+        else {
+            panic!("la sous-commande doit être `generate crud`");
+        };
+
+        assert!(no_admin);
+    }
+
+    /// Le défaut est d'émettre : la commande lit les fragments installés, sans drapeau —
+    /// il n'y a donc pas de `--with-admin` à chercher.
+    #[test]
+    fn generate_crud_emits_the_screens_by_default() {
+        let cli = Cli::try_parse_from(["rbs", "generate", "crud", "articles"])
+            .expect("la ligne doit être acceptée");
+
+        let Commands::Generate {
+            command: GenerateCommands::Crud { no_admin, .. },
+        } = cli.command
+        else {
+            panic!("la sous-commande doit être `generate crud`");
+        };
+
+        assert!(!no_admin);
+        assert!(Cli::try_parse_from(["rbs", "generate", "crud", "a", "--with-admin"]).is_err());
     }
 
     #[test]

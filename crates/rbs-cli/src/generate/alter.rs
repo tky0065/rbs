@@ -901,6 +901,7 @@ mod tests {
             with_upload: false,
             cursor: false,
             singular,
+            no_admin: false,
         })
         .expect("le CRUD du test doit se planifier");
 

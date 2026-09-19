@@ -122,6 +122,7 @@ pub fn run() {
                     with_upload,
                     cursor,
                     singular,
+                    no_admin,
                 } => GenerateArgs {
                     name,
                     fields,
@@ -135,6 +136,7 @@ pub fn run() {
                     with_upload,
                     cursor,
                     singular,
+                    no_admin,
                 },
                 GenerateCommands::Feature {
                     name,
@@ -155,6 +157,9 @@ pub fn run() {
                     with_upload: false,
                     cursor: false,
                     singular,
+                    // `generate feature` ne pose ni entité ni migration : il n'y a pas de
+                    // table à administrer, et le drapeau n'a donc personne à refuser.
+                    no_admin: true,
                 },
 
                 // Le client ne partage ni les options ni l'erreur des deux autres : il se
@@ -895,6 +900,7 @@ struct GenerateArgs {
     with_upload: bool,
     cursor: bool,
     singular: Option<String>,
+    no_admin: bool,
 }
 
 fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
@@ -911,6 +917,7 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
         with_upload,
         cursor,
         singular,
+        no_admin,
     } = args;
 
     let commande = if complete {
@@ -936,6 +943,7 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
         with_upload,
         cursor,
         singular,
+        no_admin,
     })?;
 
     // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande

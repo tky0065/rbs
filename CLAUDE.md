@@ -145,7 +145,11 @@ demande un `pub mod` distinct du montage. `admin_rail` vit dans un module `.ts` 
 dans le `<template>` de la coquille — le mécanisme ne sait ouvrir une ancre que derrière
 `//` ou `#` — et le rail, servi deux fois, parcourt cette liste aux deux endroits.
 
-`generate crud` en emploie six ; `generate job` en emploie trois — `job_modules` et
+`generate crud` en emploie six, huit sur un projet portant le fragment `frontend-admin` :
+il y écrit aussi l'écran d'administration de la table, et le monte par `admin_routes` et
+`admin_rail` — les deux seules ancres que la commande vise sans qu'elles appartiennent au
+squelette, et les deux seules qu'elle saute plutôt que de refuser quand la balise manque.
+`generate job` en emploie trois — `job_modules` et
 `schedules`, qui ne servent qu'à lui, et `jobs`, où le fragment `webhooks` inscrit aussi sa
 livraison ; les autres appartiennent aux fragments qu'installe `add`. Une ancre insérée dans `<rbs:layers>` est *intérieure* à `trace` et `request_id` :
 un `.layer()` enveloppe ce qui le précède, si bien qu'un middleware posé là voit le
