@@ -181,3 +181,20 @@ Le corps porte le *pourquoi* technique du changement et, sous un intertitre
 détail des preuves — `TODO.md` n'en garde qu'une ligne.
 
 Travailler sur une branche dédiée, jamais directement sur `main`.
+
+## Agent skills
+
+### Issue tracker
+
+Les issues vivent dans les GitHub Issues de `tky0065/rbs`, via la CLI `gh`.
+Voir `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Les cinq labels canoniques, chacun nommé comme son rôle.
+Voir `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context : un `CONTEXT.md` à la racine, les ADR sous `docs/adr/`.
+Voir `docs/agents/domain.md`.
