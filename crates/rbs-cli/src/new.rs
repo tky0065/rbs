@@ -69,6 +69,8 @@ pub struct InstalledFeature {
     pub files: usize,
     /// Le fragment a posé une migration.
     pub migration: bool,
+    /// Ce que son manifeste dit rester à faire, rendu, et vide s'il ne dit rien.
+    pub next_steps: Vec<String>,
 }
 
 /// Ce que la pose des features a laissé : les fragments écrits, et ce qu'ils n'ont pu
@@ -289,6 +291,7 @@ fn install(
             name: pose.name,
             files: pose.files,
             migration: pose.migration,
+            next_steps: pose.next_steps,
         })
         .collect();
 

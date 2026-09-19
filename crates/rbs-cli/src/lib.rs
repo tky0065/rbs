@@ -657,6 +657,15 @@ fn add_in(
         ui::info(&format!("\n  {suite}"));
     }
 
+    // Après l'application, et jamais pendant la planification : ces lignes disent ce qu'il
+    // reste à faire d'un projet déjà modifié. Celles des fragments entraînés comptent —
+    // `auth` arrive avec `mail`, dont le SMTP reste à régler.
+    for pose in &planned.poses {
+        for etape in &pose.next_steps {
+            ui::info(&format!("\n  {etape}"));
+        }
+    }
+
     Ok(())
 }
 
@@ -770,10 +779,18 @@ fn annoncer_ce_qui_reste(planned: &remove::Planned, sortie: fn(&str)) {
 /// `rbs new --with` passe par le même `install` qu'`rbs add` (`new::install`), mais
 /// n'appelait jamais `suite()` : le développeur perdait le seul avertissement qui compte
 /// pour `auth`, dont le projet ne démarre pas sans lui.
-fn suites_installees(installed: &[new::InstalledFeature]) -> Vec<&'static str> {
+fn suites_installees(installed: &[new::InstalledFeature]) -> Vec<String> {
     installed
         .iter()
-        .filter_map(|pose| suite(&pose.name))
+        .flat_map(|pose| {
+            // Le conseil que le CLI connaît par cœur d'abord, puis ce que le manifeste du
+            // fragment déclare : les deux disent la même sorte de chose, et un fragment
+            // qui livre du code non Rust n'a que le second.
+            suite(&pose.name)
+                .map(str::to_string)
+                .into_iter()
+                .chain(pose.next_steps.iter().cloned())
+        })
         .collect()
 }
 
@@ -1724,11 +1741,13 @@ mod tests {
                 name: "auth".to_string(),
                 files: 9,
                 migration: true,
+                next_steps: Vec::new(),
             },
             new::InstalledFeature {
                 name: "redis".to_string(),
                 files: 3,
                 migration: false,
+                next_steps: Vec::new(),
             },
         ];
 
@@ -1736,7 +1755,10 @@ mod tests {
 
         assert_eq!(
             suites,
-            vec![suite("auth").unwrap(), suite("redis").unwrap()]
+            vec![
+                suite("auth").unwrap().to_string(),
+                suite("redis").unwrap().to_string()
+            ]
         );
     }
 
@@ -1748,11 +1770,34 @@ mod tests {
             name: "storage".to_string(),
             files: 4,
             migration: false,
+            next_steps: Vec::new(),
         }];
 
         assert_eq!(
             suites_installees(&installed),
-            vec![suite("storage").unwrap()]
+            vec![suite("storage").unwrap().to_string()]
+        );
+    }
+
+    /// Le critère de la tâche : ce qu'un fragment déclare rester à faire s'affiche aussi
+    /// à la création, à la suite du conseil que le CLI connaît par cœur — sans quoi
+    /// `rbs new --with <fragment livrant du non-Rust>` laisserait une page blanche sans
+    /// jamais dire quelle commande la remplit.
+    #[test]
+    fn new_names_what_a_fragment_declares_is_left_to_do() {
+        let installed = vec![new::InstalledFeature {
+            name: "auth".to_string(),
+            files: 9,
+            migration: true,
+            next_steps: vec!["cd frontend && npm install".to_string()],
+        }];
+
+        assert_eq!(
+            suites_installees(&installed),
+            vec![
+                suite("auth").unwrap().to_string(),
+                "cd frontend && npm install".to_string()
+            ]
         );
     }
 

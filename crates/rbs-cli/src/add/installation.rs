@@ -349,6 +349,24 @@ fn render(
         })
 }
 
+/// Ce que le fragment dit rester à faire, ses lignes rendues dans son contexte.
+///
+/// Séparée d'[`actions`] : ce n'est pas une action de plan. Rien ne s'écrit et rien ne
+/// s'exécute — le mécanisme des fragments n'a aucun hook et n'en aura pas — et ces lignes
+/// ne paraissent qu'une fois le plan appliqué, là où le bilan de la commande se dit.
+pub(crate) fn next_steps(fragment: &Fragment) -> Result<Vec<String>, Error> {
+    let renderer = Renderer::new();
+    let origine = format!("{}/feature.toml", fragment.name);
+
+    fragment
+        .manifest
+        .feature
+        .next_steps
+        .iter()
+        .map(|ligne| render(&renderer, fragment, ligne, &origine))
+        .collect()
+}
+
 /// Les templates à déposer, avec leur chemin dans le projet.
 ///
 /// Sans `[[files]]`, le fragment est copié tel quel : un fragment qui n'apporte pas de

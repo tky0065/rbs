@@ -85,6 +85,12 @@ pub(crate) struct Pose {
     pub files: usize,
     /// Le fragment pose une migration.
     pub migration: bool,
+    /// Ce que son manifeste dit rester à faire, rendu, et vide s'il ne dit rien.
+    ///
+    /// Porté par la pose et non par le `Planned` : un fragment entraîné a ses propres
+    /// gestes — `auth` arrive avec `mail`, dont le SMTP reste à régler — et les fondre
+    /// dans une liste unique perdrait à qui ils appartiennent.
+    pub next_steps: Vec<String>,
 }
 
 impl Planned {
@@ -318,6 +324,13 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
             name: fragment.name.clone(),
             files: deposes.len(),
             migration: fragment.manifest.migration.is_some(),
+            next_steps: installation::next_steps(&installation::Fragment {
+                name: &fragment.name,
+                manifest: &fragment.manifest,
+                templates: &fragment.templates,
+                context: context.clone(),
+                timestamp: &timestamp,
+            })?,
         });
         #[cfg(test)]
         files.extend(deposes);
@@ -2934,5 +2947,74 @@ mod tests {
         plan_for(&fragment_options(&root, &fragments)).expect("le plan doit se calculer");
 
         assert_eq!(fingerprint(&root), before, "la planification a écrit");
+    }
+
+    /// Le critère de la tâche : les lignes de `next_steps` passent par le moteur de
+    /// template comme le reste du manifeste, et arrivent sur la pose du fragment.
+    #[test]
+    fn a_fragment_can_say_what_is_left_to_do() {
+        let (_parent, root) = project();
+        let fragments = fragment(
+            "[feature]\ndescription = \"essai\"\n\
+             next_steps = [\"cd frontend && npm install\", \"{@ project_name @} : npm run build\"]\n",
+            &[],
+        );
+
+        let planned =
+            plan_for(&fragment_options(&root, &fragments)).expect("le plan doit se calculer");
+
+        let pose = planned
+            .poses
+            .iter()
+            .find(|pose| pose.name == "essai")
+            .expect("le fragment est posé");
+        assert_eq!(
+            pose.next_steps,
+            [
+                // Rendue sans être interprétée : ce qui ressemble à une commande reste du
+                // texte, le mécanisme des fragments n'exécutant rien.
+                "cd frontend && npm install".to_string(),
+                "demo-api : npm run build".to_string(),
+            ]
+        );
+    }
+
+    /// Le critère de la tâche : ces lignes ne paraissent pas dans le plan. Le plan dit ce
+    /// qui va s'écrire ; ce qu'il reste à faire ne se lit qu'une fois qu'il s'est écrit.
+    #[test]
+    fn what_is_left_to_do_is_not_part_of_the_plan() {
+        let (_parent, root) = project();
+        let fragments = fragment(
+            "[feature]\ndescription = \"essai\"\n\
+             next_steps = [\"cd frontend && npm install\"]\n",
+            &[],
+        );
+        let before = fingerprint(&root);
+
+        let planned =
+            plan_for(&fragment_options(&root, &fragments)).expect("le plan doit se calculer");
+
+        let rendered = plan::render::plan(&planned.plan);
+        assert!(
+            !rendered.contains("npm install"),
+            "le plan annonce une étape qui n'est pas une écriture :\n{rendered}"
+        );
+        assert_eq!(fingerprint(&root), before, "la planification a écrit");
+    }
+
+    /// Un manifeste qui ne déclare rien se comporte exactement comme avant : une liste
+    /// vide, et pas une ligne de plus à l'affichage.
+    #[test]
+    fn a_silent_manifest_leaves_the_pose_without_any_step() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "cors")).expect("le plan doit se calculer");
+
+        let pose = planned
+            .poses
+            .iter()
+            .find(|pose| pose.name == "cors")
+            .expect("le fragment est posé");
+        assert!(pose.next_steps.is_empty(), "{:?}", pose.next_steps);
     }
 }

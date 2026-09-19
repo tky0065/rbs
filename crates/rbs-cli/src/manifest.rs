@@ -44,6 +44,14 @@ pub(crate) struct Description {
     /// devient un déni de service à la portée de n'importe qui.
     #[serde(default)]
     pub requires: Vec<String>,
+    /// Ce qu'il reste à faire de la main du développeur, une fois le fragment posé.
+    ///
+    /// Une ligne par geste, rendue par le moteur de template comme le reste du manifeste
+    /// et affichée une fois le plan appliqué. Le mécanisme des fragments est purement
+    /// déclaratif — aucun hook, aucune exécution — et un fragment qui livre du code non
+    /// Rust n'avait jusqu'ici aucun moyen de dire qu'il restait une commande à taper.
+    #[serde(default)]
+    pub next_steps: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -216,6 +224,30 @@ value      = "changez-moi"
 comment = "Secret de signature HS256, au moins 32 octets"
 "#;
 
+    /// Le critère de la tâche : un fragment peut énumérer ce qu'il reste à faire, et un
+    /// manifeste qui se tait rend une liste vide plutôt qu'une absence à traiter partout.
+    #[test]
+    fn a_fragment_can_declare_what_is_left_to_do() {
+        let manifest = read(
+            "[feature]\ndescription = \"frontend\"\n\
+             next_steps = [\"cd frontend && npm install\", \"npm run build\"]\n",
+            "features/frontend/feature.toml",
+        )
+        .expect("le manifeste est valide");
+
+        assert_eq!(
+            manifest.feature.next_steps,
+            ["cd frontend && npm install", "npm run build"]
+        );
+
+        let muet = read(
+            "[feature]\ndescription = \"cors\"\n",
+            "features/cors/feature.toml",
+        )
+        .expect("le manifeste est valide");
+        assert!(muet.feature.next_steps.is_empty());
+    }
+
     /// Un fragment qui n'installe qu'une moitié de ce qu'il promet sans un autre le dit
     /// dans son `[feature]`, et le CLI n'a pas à connaître la paire par son nom.
     #[test]
@@ -357,5 +389,6 @@ comment = "Secret de signature HS256, au moins 32 octets"
         assert!(manifest.cargo.is_empty());
         assert!(manifest.config.is_empty());
         assert!(manifest.env.is_empty());
+        assert!(manifest.feature.next_steps.is_empty());
     }
 }
