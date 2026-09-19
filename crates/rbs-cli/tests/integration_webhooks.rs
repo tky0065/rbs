@@ -168,8 +168,21 @@ fn the_tests_shipped_with_the_fragment_run_against_a_real_database() {
         );
     }
 
-    let (abouti, sous_conteneur) =
-        cargo_test_brut(&racine, &common::cible(), &["--", "--ignored"], &[]);
+    // Le test SMTP du fragment `mail`, qu'`auth` entraîne, joint le serveur de sa section
+    // `[mail]` — que ce banc ne démarre pas ; `integration_mail` le joue contre Mailpit.
+    // Sans ce filtre, la suite du projet échoue sur un « Connection refused » qui ne dit
+    // rien de ce que reçoit l'utilisateur.
+    let (abouti, sous_conteneur) = cargo_test_brut(
+        &racine,
+        &common::cible(),
+        &[
+            "--",
+            "--ignored",
+            "--skip",
+            "a_templated_message_goes_out_to_the_smtp_server",
+        ],
+        &[],
+    );
     assert!(
         abouti,
         "`cargo test -- --ignored` du projet a échoué :\n{sous_conteneur}"

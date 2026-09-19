@@ -94,8 +94,20 @@ fn an_english_project_answers_its_clients_in_english() {
     // Un seul passage avec `--include-ignored` : il rejoue à la fois ce que le projet
     // teste sans base et ce qu'il teste contre PostgreSQL. Sans les lignes qui suivent, un
     // filtre qui ne retiendrait plus aucun de ces tests sortirait quand même en 0.
-    let (abouti, journal) =
-        cargo_test_brut(&racine, &common::cible(), &["--", "--include-ignored"]);
+    // Le test SMTP du fragment `mail`, qu'`auth` entraîne, joint le serveur de sa section
+    // `[mail]` — que ce banc ne démarre pas ; `integration_mail` le joue contre Mailpit.
+    // Sans ce filtre, la suite du projet échoue sur un « Connection refused » qui ne dit
+    // rien de ce que reçoit l'utilisateur.
+    let (abouti, journal) = cargo_test_brut(
+        &racine,
+        &common::cible(),
+        &[
+            "--",
+            "--include-ignored",
+            "--skip",
+            "a_templated_message_goes_out_to_the_smtp_server",
+        ],
+    );
     assert!(
         abouti,
         "`cargo test --workspace -- --include-ignored` a échoué :\n{journal}"

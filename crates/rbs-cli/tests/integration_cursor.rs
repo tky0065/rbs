@@ -95,7 +95,11 @@ fn a_cursor_paginated_crud_with_auth_storage_and_a_role_passes_and_renders_its_c
     // `--no-fail-fast` avant le `--` : sans lui la suite s'arrêterait au premier binaire de
     // test en échec et masquerait les suivants.
     //
-    // Les deux `--skip` excluent les tests du fragment `storage` qui exigent un vrai S3 :
+    // Le troisième `--skip` exclut le test SMTP du fragment `mail`, qu'`auth` entraîne : il
+    // joint le serveur de sa section `[mail]`, que ce banc ne démarre pas, et
+    // `integration_mail` le joue contre Mailpit.
+    //
+    // Les deux premiers excluent les tests du fragment `storage` qui exigent un vrai S3 :
     // sans MinIO démarré, `GetObjectEndpointParamsInterceptor` refuse faute de `bucket`.
     // `--with-upload` n'en a pas besoin — ses trois routes de contenu passent par le
     // backend `file` — mais `storage` embarque ces deux scénarios dès qu'il est installé.
@@ -113,6 +117,8 @@ fn a_cursor_paginated_crud_with_auth_storage_and_a_role_passes_and_renders_its_c
             "an_object_put_by_the_trait_reads_back_through_the_s3_client",
             "--skip",
             "the_s3_backend_passes_the_same_round_as_the_file_backend",
+            "--skip",
+            "a_templated_message_goes_out_to_the_smtp_server",
         ])
         .output()
         .expect("cargo doit être lançable");

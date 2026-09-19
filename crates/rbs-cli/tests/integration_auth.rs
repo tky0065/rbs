@@ -494,10 +494,21 @@ fn the_auth_tests_of_the_generated_project_pass() {
     // `--include-ignored` : les tests du fragment joignent la base et sont `#[ignore]`.
     // Sans lui, `cargo test` sortait en 0 sans en jouer un seul, et ce test passait au
     // vert sans rien prouver de ce que reçoit l'utilisateur.
+    // Le test SMTP du fragment `mail`, qu'`auth` entraîne, joint le serveur de sa section
+    // `[mail]` — que ce banc ne démarre pas ; `integration_mail` le joue contre Mailpit.
+    // Sans ce filtre, la suite du projet échoue sur un « Connection refused » qui ne dit
+    // rien de ce que reçoit l'utilisateur.
     let sortie = Command::new("cargo")
         .current_dir(&racine)
         .env("CARGO_TARGET_DIR", common::cible())
-        .args(["test", "--workspace", "--", "--include-ignored"])
+        .args([
+            "test",
+            "--workspace",
+            "--",
+            "--include-ignored",
+            "--skip",
+            "a_templated_message_goes_out_to_the_smtp_server",
+        ])
         .output()
         .expect("cargo doit être lançable");
 
@@ -566,10 +577,21 @@ fn the_auth_tests_of_the_generated_project_pass_on_sqlite() {
         .assert()
         .success();
 
+    // Le test SMTP du fragment `mail`, qu'`auth` entraîne, joint le serveur de sa section
+    // `[mail]` — que ce banc ne démarre pas ; `integration_mail` le joue contre Mailpit.
+    // Sans ce filtre, la suite du projet échoue sur un « Connection refused » qui ne dit
+    // rien de ce que reçoit l'utilisateur.
     let sortie = Command::new("cargo")
         .current_dir(&racine)
         .env("CARGO_TARGET_DIR", &cible)
-        .args(["test", "--workspace", "--", "--include-ignored"])
+        .args([
+            "test",
+            "--workspace",
+            "--",
+            "--include-ignored",
+            "--skip",
+            "a_templated_message_goes_out_to_the_smtp_server",
+        ])
         .output()
         .expect("cargo doit être lançable");
 
@@ -653,8 +675,9 @@ fn the_tests_of_a_crud_generated_under_auth_pass() {
 
     migrate(&racine);
 
-    // Les deux tests S3 du fragment `storage` joignent le service de sa section, que ce
-    // banc ne démarre pas ; `integration_storage` les joue contre MinIO.
+    // Trois tests des fragments joignent un service que ce banc ne démarre pas : les deux
+    // du stockage S3, que `integration_storage` joue contre MinIO, et celui du courrier,
+    // qu'`auth` entraîne et qu'`integration_mail` joue contre Mailpit.
     let sortie = Command::new("cargo")
         .current_dir(&racine)
         .env("CARGO_TARGET_DIR", common::cible())
@@ -667,6 +690,8 @@ fn the_tests_of_a_crud_generated_under_auth_pass() {
             "the_s3_backend_passes_the_same_round_as_the_file_backend",
             "--skip",
             "an_object_put_by_the_trait_reads_back_through_the_s3_client",
+            "--skip",
+            "a_templated_message_goes_out_to_the_smtp_server",
         ])
         .output()
         .expect("cargo doit être lançable");

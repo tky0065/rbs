@@ -14,7 +14,14 @@ use testcontainers::runners::SyncRunner;
 
 mod common;
 
-const IMAGE: (&str, &str) = ("minio/minio", "latest");
+/// L'image de MinIO, prise sur `quay.io` et non sur le registre par défaut.
+///
+/// `minio/minio` n'y est plus servi : le tirage rend un 404 « pull access denied for
+/// minio/minio, repository does not exist or may require docker login », et ce test échouait
+/// sur l'absence de l'image plutôt que sur le stockage. Les images officielles du projet
+/// vivent désormais sur `quay.io`, et un nom qualifié par son registre est la seule forme
+/// qui ne dépende pas de ce que le démon a pour défaut.
+const IMAGE: (&str, &str) = ("quay.io/minio/minio", "latest");
 
 const BUCKET: &str = "demo";
 const CLE: &str = "rbs-test";
