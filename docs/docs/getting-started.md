@@ -408,7 +408,7 @@ rbs doctor
 
 {/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
-  ✓ ancres        les 12 points d'insertion sont en place
+  ✓ ancres        les 13 points d'insertion sont en place
   ✓ agents        guide et inventaire à jour
   ✓ relations     les modèles portent leurs ancres de relation
   ✓ .env          les 7 variables de .env.example sont renseignées
