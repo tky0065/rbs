@@ -13,6 +13,8 @@ dépréciation.
 
 ## [Non publié]
 
+## [1.7.0] — 2026-09-19
+
 ### Ajouté
 
 - **`rbs add frontend`** pose une application Vue 3 dans un projet existant : l'application,
@@ -1157,7 +1159,8 @@ démarrage, architecture, référence du CLI et guides, en français et en angla
 Rust 1.85 ou plus, édition 2024. Un projet généré tourne sur PostgreSQL 14 ou plus,
 MySQL 8.0 ou plus, ou SQLite 3.35 ou plus — `rbs doctor` refuse tout ce qui est en dessous.
 
-[Non publié]: https://github.com/tky0065/rbs/compare/v1.6.0...HEAD
+[Non publié]: https://github.com/tky0065/rbs/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/tky0065/rbs/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/tky0065/rbs/releases/tag/v1.6.0
 [1.5.0]: https://github.com/tky0065/rbs/releases/tag/v1.5.0
 [1.4.0]: https://github.com/tky0065/rbs/releases/tag/v1.4.0

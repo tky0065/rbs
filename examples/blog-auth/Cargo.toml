@@ -11,7 +11,7 @@ rust-version = "1.94.1"
 default-run = "blog-auth"
 
 [package.metadata.rbs]
-version = "1.6.0"
+version = "1.7.0"
 features = ["health", "mail", "rate-limit", "auth", "posts"]
 database = "postgres"
 lang = "fr"

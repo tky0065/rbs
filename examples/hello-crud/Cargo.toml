@@ -11,7 +11,7 @@ rust-version = "1.94.1"
 default-run = "hello-crud"
 
 [package.metadata.rbs]
-version = "1.6.0"
+version = "1.7.0"
 features = ["health", "articles"]
 database = "postgres"
 lang = "fr"

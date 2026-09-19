@@ -9,7 +9,7 @@ read it and change it.
 
 ## Status
 
-Version 1.6.0. The six milestones of the roadmap are delivered — the foundation,
+Version 1.7.0. The seven milestones of the roadmap are delivered — the foundation,
 authentication, integrations, comfort, stability, agents — and [`CHANGELOG.md`](CHANGELOG.md) says
 what each one gives you.
 
