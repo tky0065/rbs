@@ -97,6 +97,15 @@ onMounted(() => {
       </p>
 
       <template v-else>
+        <!-- Le verdict d'ensemble avant le détail : c'est la seule ligne que l'opérateur
+             lit quand tout va bien, et le service la rend à côté des sondes. -->
+        <p v-if="sante?.status" class="mb-5">
+          <span class="text-muted-foreground">{{ TEXTES.verdict_ensemble }}</span>
+          <span :class="sante.status === 'ok' ? '' : 'text-destructive'">
+            {{ sante.status }}
+          </span>
+        </p>
+
         <Table v-if="sante">
           <TableHeader>
             <TableRow>

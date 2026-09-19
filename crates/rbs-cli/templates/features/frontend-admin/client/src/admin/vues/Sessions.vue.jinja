@@ -36,15 +36,16 @@ const sessions = ref<SessionResponse[]>([])
 const enCours = ref(true)
 const faute = ref<string | null>(null)
 
-// L'identifiant de la ligne en cours de révocation, pour n'éteindre que son bouton :
-// désactiver toute la table ferait clignoter des lignes qui n'ont rien demandé.
-const revoquee = ref<string | null>(null)
+// Les lignes dont la révocation est partie, pour n'éteindre que leurs boutons :
+// désactiver toute la table ferait clignoter des lignes qui n'ont rien demandé. Un
+// ensemble et non un seul identifiant, parce que rien n'empêche d'en révoquer deux.
+const revoquees = ref(new Set<string>())
 
 const toutOuvert = ref(false)
 const toutEnCours = ref(false)
 
-async function lire(): Promise<void> {
-  enCours.value = true
+async function lire(silencieuse = false): Promise<void> {
+  enCours.value = !silencieuse
 
   try {
     sessions.value = await api.authListSessions()
@@ -58,17 +59,19 @@ async function lire(): Promise<void> {
 }
 
 async function revoquer(id: string): Promise<void> {
-  revoquee.value = id
+  revoquees.value.add(id)
   faute.value = null
 
   try {
     await api.authRevokeSession(id)
     interfaces.informer(TEXTES.session_revoquee)
-    await lire()
+    // Silencieuse : la table reste à l'écran le temps de la relecture. La remplacer par
+    // « chargement » serait le clignotement qu'on vient justement d'éviter ligne à ligne.
+    await lire(true)
   } catch (cause) {
     faute.value = phrase(cause, TEXTES.revocation_refusee)
   } finally {
-    revoquee.value = null
+    revoquees.value.delete(id)
   }
 }
 
@@ -133,10 +136,12 @@ onMounted(() => {
                 <Button
                   variant="outline"
                   size="sm"
-                  :disabled="revoquee !== null"
+                  :disabled="revoquees.has(session.id)"
                   @click="revoquer(session.id)"
                 >
-                  {{ revoquee === session.id ? TEXTES.revocation_en_cours : TEXTES.revoquer }}
+                  {{
+                    revoquees.has(session.id) ? TEXTES.revocation_en_cours : TEXTES.revoquer
+                  }}
                 </Button>
               </TableCell>
             </TableRow>

@@ -3753,7 +3753,7 @@ mod tests {
         assert_eq!(fingerprint(&root), before, "la planification a écrit");
     }
 
-    /// Le shell dépose ses neuf fichiers dans l'arbre du socle, et n'en redépose aucun.
+    /// Le shell dépose ses quatorze fichiers dans l'arbre du socle, et n'en redépose aucun.
     #[test]
     fn the_admin_shell_lands_in_the_tree_the_base_laid_down() {
         let (_parent, root) = crate::fixtures::Project::new()
@@ -4164,6 +4164,16 @@ mod tests {
             document.contains("const DOCUMENT = '/api-docs/openapi.json'")
                 && document.contains("fetch(DOCUMENT"),
             "le document n'est pas lu là où il est publié :\n{document}"
+        );
+
+        // Ce module est la seule exception à « tout passe par le client engendré », et
+        // elle ne tient qu'à ce que le document ne soit pas une opération du contrat. Un
+        // second appel ici viserait forcément une route, et l'exception deviendrait une
+        // porte : le compte est donc tenu, et non la seule présence.
+        assert_eq!(
+            document.matches("fetch(").count(),
+            1,
+            "l'exception au client engendré porte plus d'un appel :\n{document}"
         );
 
         // Un 503 porte le même corps qu'un 200, et c'est le cas où l'opérateur a le plus
