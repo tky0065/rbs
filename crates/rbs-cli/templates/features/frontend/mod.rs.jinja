@@ -7,6 +7,11 @@ use tower_http::services::{ServeDir, ServeFile};
 pub mod amorcage;
 pub mod config;
 
+// Privé : la feuille de style n'est pas une API du module, c'est le matériau de la page
+// d'amorçage. Un projet qui veut un autre monde visuel réécrit ce fichier, il ne l'appelle
+// pas d'ailleurs.
+mod feuille;
+
 #[cfg(test)]
 mod tests;
 

@@ -23,7 +23,7 @@ mod common;
 /// servie par le routeur réel, et le service qui ne masque rien.
 const PROMESSES: [&str; 4] = [
     "the_project_router_serves_the_bootstrap_page_at_its_root",
-    "the_project_router_still_answers_its_own_health_probe",
+    "the_project_router_keeps_its_probe_and_its_openapi_document",
     "a_mounted_route_is_never_reached_by_the_fallback",
     "the_build_erases_the_bootstrap_page_as_soon_as_it_exists",
 ];

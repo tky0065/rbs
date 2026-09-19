@@ -309,28 +309,22 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let mut poses = Vec::new();
 
     for fragment in &a_poser {
-        let deposes = installation::actions(
-            &installation::Fragment {
-                name: &fragment.name,
-                manifest: &fragment.manifest,
-                templates: &fragment.templates,
-                context: context.clone(),
-                timestamp: &timestamp,
-            },
-            &mut builder,
-        )?;
+        // Un seul exemplaire pour les deux lectures du manifeste : le plan et ce qu'il
+        // restera à faire décrivent le même fragment, rendu dans le même contexte.
+        let vu = installation::Fragment {
+            name: &fragment.name,
+            manifest: &fragment.manifest,
+            templates: &fragment.templates,
+            context: context.clone(),
+            timestamp: &timestamp,
+        };
+        let deposes = installation::actions(&vu, &mut builder)?;
 
         poses.push(Pose {
             name: fragment.name.clone(),
             files: deposes.len(),
             migration: fragment.manifest.migration.is_some(),
-            next_steps: installation::next_steps(&installation::Fragment {
-                name: &fragment.name,
-                manifest: &fragment.manifest,
-                templates: &fragment.templates,
-                context: context.clone(),
-                timestamp: &timestamp,
-            })?,
+            next_steps: installation::next_steps(&vu)?,
         });
         #[cfg(test)]
         files.extend(deposes);
@@ -2884,19 +2878,30 @@ mod tests {
             "{exclusions}"
         );
 
-        // La seconde pose passe par `installation::actions`, seul seam que
-        // `[package.metadata.rbs]` n'arrête pas : l'idempotence éprouvée est celle de
-        // l'insertion elle-même, non celle du manifeste.
-        let mut relance = fragment_options(&root, &fragments);
-        relance.force = true;
-        let planned = plan_for(&relance).expect("la relance doit se planifier");
-        assert!(
-            planned.deja_installee,
-            "le manifeste inscrit déjà le fragment"
-        );
+        // Une seconde pose réelle, et non la relance du même fragment — que
+        // `[package.metadata.rbs]` arrêterait avant toute insertion : deux fragments
+        // peuvent vouloir exclure le même répertoire de build, et la ligne doit rester
+        // unique. L'idempotence de l'insertion nue est éprouvée sous ce seam, par
+        // `installation::tests::an_exclusion_already_in_place_is_a_no_op_the_second_time`.
+        fs::create_dir(fragments.path().join("autre")).expect("le second fragment se crée");
+        fs::write(
+            fragments.path().join("autre/feature.toml"),
+            "[feature]\ndescription = \"autre\"\n\n\
+             [[anchors]]\nanchor = \"ignore\"\ncontent = \"/node_modules\"\n",
+        )
+        .expect("le manifeste s'écrit");
+
+        let mut seconde = fragment_options(&root, &fragments);
+        seconde.features = vec!["autre".to_string()];
+        seconde.force = true;
+        run(&seconde).expect("la seconde installation doit aboutir");
 
         let apres = fs::read_to_string(root.join(".gitignore")).expect(".gitignore lisible");
-        assert_eq!(apres, exclusions, "la relance ne touche pas le fichier");
+        assert_eq!(
+            apres.matches("/node_modules").count(),
+            1,
+            "la ligne est doublée : {apres}"
+        );
     }
 
     /// Le critère de la tâche : l'ancre est optionnelle. Un projet dont le développeur a
@@ -3033,6 +3038,7 @@ mod tests {
                 "src/modules/frontend/mod.rs",
                 "src/modules/frontend/config.rs",
                 "src/modules/frontend/amorcage.rs",
+                "src/modules/frontend/feuille.rs",
                 "src/modules/frontend/tests.rs",
             ]
         );

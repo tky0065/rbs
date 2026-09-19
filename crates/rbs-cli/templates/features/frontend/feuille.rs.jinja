@@ -1,0 +1,133 @@
+//! La feuille de style de la page d'amorçage, et les deux bouts de document qui
+//! l'encadrent.
+//!
+//! Séparée de la page : le monde visuel du projet tient ici en entier, et le remplacer
+//! revient à réécrire ce seul fichier, sans toucher à ce qui assemble le contenu.
+
+/// Le document jusqu'au nom du projet, qui ouvre le titre.
+pub(super) const OUVERTURE: &str = r#"<!doctype html>
+<html lang="{@ lang @}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>"#;
+
+/// La feuille de style, et l'ouverture du corps.
+///
+/// Le monde visuel du projet tient dans les variables du premier bloc : le remplacer, c'est
+/// réécrire ces huit lignes, sans toucher au balisage. Une sortie d'imprimante ligne —
+/// marge perforée, bandes pleine largeur, encre de ruban — tracée par la feuille elle-même
+/// plutôt que par une image, qu'un fragment ne saurait de toute façon pas livrer.
+pub(super) const FEUILLE: &str = r#"</title>
+<style>
+:root {
+  color-scheme: light;
+  --papier: #f2efe6;
+  --bande: #e9e5d8;
+  --creux: #f7f5ee;
+  --encre: #1b1a17;
+  --pale: #6f6a5e;
+  --filet: #cbc5b4;
+  --alerte: #a8322a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--papier);
+  color: var(--encre);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.feuille {
+  max-width: 62rem;
+  margin: 0 auto;
+  border-left: 1px solid var(--filet);
+  border-right: 1px solid var(--filet);
+  background:
+    radial-gradient(circle at 0.75rem 0, transparent 0.22rem, var(--papier) 0.23rem)
+      left top / 1.5rem 1.5rem repeat-y,
+    radial-gradient(circle at 0.75rem 0, transparent 0.22rem, var(--papier) 0.23rem)
+      right top / 1.5rem 1.5rem repeat-y;
+  padding: 0 1.5rem;
+}
+.bande {
+  padding: 2rem 1.25rem;
+  border-bottom: 1px solid var(--filet);
+}
+.bande--paire { background: var(--bande); }
+.bande--titre { padding-top: 3rem; }
+.bande:last-child { border-bottom: 0; }
+.projet {
+  margin: 0 0 1.5rem;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: var(--pale);
+}
+h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(1.9rem, 6vw, 3.1rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+h2 {
+  margin: 0 0 1.25rem;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--pale);
+}
+p { margin: 0; }
+.tenue { color: var(--pale); }
+.releve {
+  display: grid;
+  grid-template-columns: minmax(10rem, auto) 1fr;
+  gap: 0.35rem 1.5rem;
+  margin: 0 0 1.5rem;
+}
+dt { color: var(--pale); }
+dd {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+dd::before {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: none;
+  border: 1px solid currentColor;
+}
+dd.bon::before { background: currentColor; }
+dd.manque { color: var(--alerte); }
+.gestes {
+  margin: 0 0 1.5rem;
+  padding-left: 1.4rem;
+}
+.gestes li { margin-bottom: 0.35rem; }
+code {
+  background: var(--papier);
+  border: 1px solid var(--filet);
+  padding: 0.1rem 0.4rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.bande--paire code { background: var(--creux); }
+a { color: var(--encre); }
+@media (max-width: 34rem) {
+  .bande { padding: 1.5rem 0.5rem; }
+  .releve { grid-template-columns: 1fr; gap: 0 0; }
+  dt { margin-top: 0.75rem; }
+}
+</style>
+</head>
+<body>
+<main class="feuille">"#;
+
+/// La fermeture du document.
+pub(super) const FERMETURE: &str = r#"</main></body></html>"#;

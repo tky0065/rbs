@@ -129,9 +129,12 @@ Sept sont optionnelles. Six le sont parce que leur fichier porteur peut manquer 
 sans compose ; `jobs` et `job_modules`, sans le fragment `jobs` ; `schedules`, sans le
 fragment `scheduler` ; `auth_impl`, sans le fragment `auth`. La septième, `ignore`, vit
 dans un fichier que le squelette écrit toujours : elle est optionnelle parce que ce
-fichier appartient au développeur, qui peut l'avoir supprimé. Cette dernière est la seule à vivre *dans* un bloc
-`impl` : ce qu'on y insère est une méthode, et une ancre mal placée y romprait la
-compilation plutôt que d'ajouter une ligne morte.
+fichier appartient au développeur, qui peut l'avoir supprimé.
+
+`auth_impl` est la seule à vivre *dans* un bloc `impl` : ce qu'on y insère est une
+méthode, et une ancre mal placée y romprait la compilation plutôt que d'ajouter une ligne
+morte.
+
 `generate crud` en emploie six ; `generate job` en emploie trois — `job_modules` et
 `schedules`, qui ne servent qu'à lui, et `jobs`, où le fragment `webhooks` inscrit aussi sa
 livraison ; les autres appartiennent aux fragments qu'installe `add`. Une ancre insérée dans `<rbs:layers>` est *intérieure* à `trace` et `request_id` :

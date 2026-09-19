@@ -212,13 +212,39 @@ async fn the_project_router_serves_the_bootstrap_page_at_its_root() {
     assert!(corps.contains("{@ project_name @}"), "{corps}");
 }
 
-/// Et dans ce routeur-là, la sonde de santé répond toujours pour elle-même : le repli ne
-/// prend que ce qu'aucune route n'a réclamé.
+/// Et dans ce routeur-là, la sonde de santé et le document OpenAPI répondent toujours pour
+/// eux-mêmes : le repli ne prend que ce qu'aucune route n'a réclamé.
+///
+/// Le document est monté *après* le repli dans `src/router.rs`, et c'est précisément ce que
+/// ce test garde : l'ordre du `.merge()` ne décide de rien, seule la correspondance de
+/// route décide.
 #[tokio::test]
-async fn the_project_router_still_answers_its_own_health_probe() {
-    let (_, _, content_type) = reponse(routeur(), "/health").await;
+async fn the_project_router_keeps_its_probe_and_its_openapi_document() {
+    for uri in ["/health", "/api-docs/openapi.json"] {
+        let (_, corps, content_type) = reponse(routeur(), uri).await;
 
-    assert_eq!(content_type.as_deref(), Some("application/json"));
+        assert_eq!(
+            content_type.as_deref(),
+            Some("application/json"),
+            "{uri} est passé au repli"
+        );
+        assert!(!corps.contains("npm run build"), "{uri} : {corps}");
+    }
+}
+
+/// Un build qui sort à la racine du projet n'a aucun répertoire où se rendre : la page
+/// n'imprime alors pas de `cd`, plutôt qu'un `cd` vers le répertoire de sortie lui-même.
+#[tokio::test]
+async fn a_build_at_the_project_root_gets_no_change_of_directory() {
+    let config = Config {
+        dir: "dist".to_string(),
+        ..Config::default()
+    };
+
+    let (_, corps, _) = reponse(application(config, true), "/").await;
+
+    assert!(!corps.contains("cd "), "{corps}");
+    assert!(corps.contains("npm run build"), "{corps}");
 }
 
 /// Le routeur du projet, sur un état dont la base n'est pas établie.

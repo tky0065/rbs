@@ -20,6 +20,10 @@ source      = "amorcage.rs.jinja"
 destination = "src/modules/frontend/amorcage.rs"
 
 [[files]]
+source      = "feuille.rs.jinja"
+destination = "src/modules/frontend/feuille.rs"
+
+[[files]]
 source      = "tests.rs.jinja"
 destination = "src/modules/frontend/tests.rs"
 

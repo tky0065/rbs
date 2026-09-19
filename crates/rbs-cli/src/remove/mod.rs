@@ -756,5 +756,16 @@ mod tests {
             cargo.contains("compression-gzip"),
             "les features que le squelette déclare ne se retirent pas : {cargo}"
         );
+
+        // `tower` n'était qu'une dépendance de développement avant la pose : le retrait
+        // doit lui rendre ce rang, et non la laisser en dépendance d'exécution.
+        let dependances = cargo
+            .split("[dev-dependencies]")
+            .next()
+            .expect("la section des dépendances précède celle de développement");
+        assert!(
+            !dependances.contains("tower ="),
+            "`tower` est restée en dépendance d'exécution : {dependances}"
+        );
     }
 }

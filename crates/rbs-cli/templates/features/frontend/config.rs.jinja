@@ -38,12 +38,14 @@ impl Config {
     ///
     /// Déduit de `dir` et non déclaré à côté : deux clés qui décrivent la même
     /// arborescence divergent le jour où l'une est modifiée sans l'autre.
-    pub fn projet(&self) -> &str {
-        let dir = self.dir.trim_end_matches('/');
-
-        match dir.rsplit_once('/') {
-            Some((parent, _)) if !parent.is_empty() => parent,
-            _ => dir,
+    ///
+    /// `None` quand le build sort à la racine du projet — `dir = "dist"` : il n'y a alors
+    /// aucun répertoire où se rendre, et la page d'amorçage a mieux à faire que d'imprimer
+    /// un `cd` vers le répertoire de sortie lui-même.
+    pub fn projet(&self) -> Option<&str> {
+        match self.dir.trim_end_matches('/').rsplit_once('/') {
+            Some((parent, _)) if !parent.is_empty() => Some(parent),
+            _ => None,
         }
     }
 }
