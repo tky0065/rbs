@@ -135,19 +135,19 @@ impl Listeners {
         })
     }
 
+    #[cfg(unix)]
     async fn wait(mut self) {
-        #[cfg(unix)]
-        {
-            tokio::select! {
-                _ = tokio::signal::ctrl_c() => {}
-                _ = self.terminate.recv() => {}
-            }
+        tokio::select! {
+            _ = tokio::signal::ctrl_c() => {}
+            _ = self.terminate.recv() => {}
         }
+    }
 
-        #[cfg(not(unix))]
-        {
-            let _ = tokio::signal::ctrl_c().await;
-        }
+    /// Hors unix, `self` ne porte aucun gestionnaire à interroger : le lier `mut` serait
+    /// un `unused_mut`, que `-D warnings` change en erreur sous Windows seulement.
+    #[cfg(not(unix))]
+    async fn wait(self) {
+        let _ = tokio::signal::ctrl_c().await;
     }
 }
 
