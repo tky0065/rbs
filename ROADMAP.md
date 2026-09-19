@@ -144,17 +144,41 @@ d'écrire sur quatre motifs. `rbs add api-keys` authentifie les machines plutôt
 personnes : une clé présentée dans `X-Api-Key` satisfait `Identity` partout où un jeton de
 session le fait, sans qu'une ligne d'un CRUD engendré plus tôt change.
 
+### v1.7 — Frontend
+
+Deux fragments posent une application Vue 3 dans le projet : `frontend` livre le socle —
+routeur, deux stores Pinia, thème Tailwind v4, quatorze composants shadcn-vue figés dans
+les templates — et une page d'accueil dont le contenu par défaut est vrai au premier
+démarrage : elle interroge `/health`, nomme le projet et renvoie à sa propre documentation
+OpenAPI. `frontend-admin` y ajoute un shell authentifié de cinq écrans, chacun adossé à
+une route que le fragment `auth` expose réellement. Un module `src/modules/frontend/` sert
+le build en production et, tant qu'il n'existe pas, une page d'amorçage qui nomme les
+commandes manquantes — le CLI n'ayant aucun moyen de lancer `npm` lui-même.
+
+Ce jalon **modifie le hors-périmètre ci-dessous** : `rbs generate crud` émet désormais,
+en plus de l'entité et de sa migration, les écrans d'administration de la table, dès lors
+que `frontend-admin` est posé — sur le même principe qu'il écrit des routes fermées dès que
+`auth` l'est, acquis en v1.3. Deux ancres côté TypeScript portent l'insertion, la table de
+routage et le rail, ce qui monte le registre à vingt. Un `--no-admin` reste la sortie de
+secours. Motif et renversement en `docs/adr/0003`.
+
 ---
 
 ## Hors périmètre
 
 Explicitement, et non pas « plus tard » :
 
-GraphQL · multi-tenancy · WebSockets · gRPC · interface d'administration générée ·
-gestion des paiements
+GraphQL · multi-tenancy · WebSockets · gRPC · gestion des paiements
 
 Un starter qui tente de tout couvrir ne couvre rien proprement. Ces sujets sont mieux
 servis par des crates dédiées que par un générateur généraliste.
+
+**L'interface d'administration générée a quitté cette liste le 2026-09-19.** Elle y
+figurait depuis l'origine ; le jalon v1.7 la fait entrer dans le périmètre, `rbs generate
+crud` émettant désormais ses écrans d'administration quand le fragment `frontend-admin`
+est posé. Le renversement et son motif sont consignés en `docs/adr/0003`, qui abroge
+`docs/adr/0001`. Une liste de hors-périmètre qui perd une entrée sans le dire est une
+liste à laquelle on ne peut plus se fier.
 
 ---
 
@@ -173,3 +197,4 @@ servis par des crates dédiées que par un générateur généraliste.
 | v1.4 Parcours de compte | ✅ livré — publiée le 2026-09-11 |
 | v1.5 Robustesse | ✅ livré — publiée dans la 1.6.0, le numéro 1.5.0 n'ayant jamais été tagué |
 | v1.6 Retrait et clés d'API | ✅ livré — publiée le 2026-09-19 |
+| v1.7 Frontend | 🚧 en cours |
