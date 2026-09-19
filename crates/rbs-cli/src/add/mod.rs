@@ -3687,7 +3687,7 @@ mod tests {
     /// Il pose ses fichiers *dans* l'arbre du socle : une seule application, deux régimes
     /// de route. Un fichier du socle redéposé ici ferait un conflit de plan, et non une
     /// installation.
-    const SHELL: [&str; 9] = [
+    const SHELL: [&str; 11] = [
         "frontend/src/api/jetons.ts",
         "frontend/src/api/index.ts",
         "frontend/src/stores/authentification.ts",
@@ -3696,7 +3696,9 @@ mod tests {
         "frontend/src/admin/garde.ts",
         "frontend/src/admin/textes.ts",
         "frontend/src/admin/Shell.vue",
+        "frontend/src/admin/rail.ts",
         "frontend/src/admin/vues/Connexion.vue",
+        "frontend/src/admin/vues/Demonstration.vue",
     ];
 
     /// Le shell exige le socle et l'authentification, et le plan nomme ce qu'il entraîne.
@@ -3741,7 +3743,7 @@ mod tests {
         assert_eq!(fingerprint(&root), before, "la planification a écrit");
     }
 
-    /// Le shell dépose ses neuf fichiers dans l'arbre du socle, et n'en redépose aucun.
+    /// Le shell dépose ses onze fichiers dans l'arbre du socle, et n'en redépose aucun.
     #[test]
     fn the_admin_shell_lands_in_the_tree_the_base_laid_down() {
         let (_parent, root) = crate::fixtures::Project::new()
@@ -3763,10 +3765,14 @@ mod tests {
 
     /// L'espace d'administration se monte sans ancre, et les deux moitiés se cherchent.
     ///
-    /// Le registre d'ancres est clos, et un fragment ne peut pas redéposer le routeur du
-    /// socle : le montage se fait donc par découverte de fichier. Rien ne tient ensemble
-    /// le motif que le routeur cherche et le chemin où le shell dépose — les voir diverger
-    /// ne casse aucune compilation, cela rend seulement l'administration inatteignable.
+    /// Un fragment ne peut pas redéposer le routeur du socle, et aucune ancre ne monterait
+    /// cet espace-là : le montage se fait donc par découverte de fichier. Rien ne tient
+    /// ensemble le motif que le routeur cherche et le chemin où le shell dépose — les voir
+    /// diverger ne casse aucune compilation, cela rend seulement l'administration
+    /// inatteignable.
+    ///
+    /// Les deux ancres du shell font l'inverse, et le test voisin les regarde : elles
+    /// montent un écran *dans* cet espace, une fois celui-ci découvert.
     #[test]
     fn the_admin_space_mounts_itself_without_an_anchor() {
         let (_parent, root) = project();
@@ -3774,23 +3780,15 @@ mod tests {
         let planned =
             plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
 
-        let manifeste = crate::manifest::read(
-            &std::fs::read_to_string(std::path::Path::new(concat!(
-                env!("CARGO_MANIFEST_DIR"),
-                "/templates/features/frontend-admin/feature.toml"
-            )))
-            .expect("le manifeste du shell doit se lire"),
-            "frontend-admin/feature.toml",
-        )
-        .expect("le manifeste du shell doit s'analyser");
+        let manifeste = manifeste_du_shell();
+        let visees: Vec<&str> = manifeste
+            .anchors
+            .iter()
+            .map(|ancre| ancre.anchor.as_str())
+            .collect();
         assert!(
-            manifeste.anchors.is_empty(),
-            "le shell insère dans une ancre : {:?}",
-            manifeste
-                .anchors
-                .iter()
-                .map(|ancre| ancre.anchor.as_str())
-                .collect::<Vec<_>>()
+            !visees.contains(&"routes") && !visees.contains(&"modules"),
+            "le shell se monte dans le socle par une ancre : {visees:?}"
         );
 
         // Le motif que le routeur du socle parcourt, et le fichier que le shell y dépose.
@@ -3828,6 +3826,125 @@ mod tests {
             garde.contains("await authentification.restaurer()"),
             "la garde tranche sans attendre la session : un écran s'afficherait à moitié \
              chargé avant d'être remplacé\n{garde}"
+        );
+    }
+
+    /// Le manifeste du shell, lu sur le disque de la crate.
+    fn manifeste_du_shell() -> crate::manifest::Manifest {
+        crate::manifest::read(
+            &std::fs::read_to_string(std::path::Path::new(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/templates/features/frontend-admin/feature.toml"
+            )))
+            .expect("le manifeste du shell doit se lire"),
+            "frontend-admin/feature.toml",
+        )
+        .expect("le manifeste du shell doit s'analyser")
+    }
+
+    /// L'écran de démonstration se monte par les deux ancres, et par elles seules.
+    ///
+    /// C'est le geste entier que `rbs generate crud` refera table par table : une route
+    /// dans la table de routage de l'espace, une entrée dans le rail, et rien d'autre.
+    /// Le voir passer ici est ce qui prouve que les deux ancres sont posées au bon endroit
+    /// — une ancre écrite dans un fichier que le fragment ne dépose pas, ou sous une ligne
+    /// que le rendu n'écrit pas, laisserait le plan sauter l'insertion en silence.
+    #[test]
+    fn the_demonstration_screen_mounts_itself_through_the_two_anchors() {
+        let (_parent, root) = project();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        let manifeste = manifeste_du_shell();
+        let visees: Vec<&str> = manifeste
+            .anchors
+            .iter()
+            .map(|ancre| ancre.anchor.as_str())
+            .collect();
+        assert_eq!(visees, ["admin_routes", "admin_rail"]);
+
+        // Rien n'a été sauté : une ancre absente de son fichier, ou un fichier absent,
+        // ferait consigner l'insertion au lieu de l'écrire — et le plan afficherait le
+        // bloc à reporter à la main plutôt que de monter l'écran.
+        assert!(
+            planned.plan.sautees().is_empty(),
+            "une insertion a été sautée : {:?}",
+            planned
+                .plan
+                .sautees()
+                .iter()
+                .map(|sautee| sautee.anchor.name.as_ref())
+                .collect::<Vec<_>>()
+        );
+
+        let montage = projected(&planned, "frontend/src/admin/montage.ts");
+        let dans = |source: &str, ancre: &str, ligne: &str| {
+            let situe = |motif: &str| {
+                source
+                    .find(motif)
+                    .unwrap_or_else(|| panic!("`{motif}` absent :\n{source}"))
+            };
+            assert!(
+                situe(&format!("// <rbs:{ancre}>")) < situe(ligne)
+                    && situe(ligne) < situe(&format!("// </rbs:{ancre}>")),
+                "`{ligne}` n'est pas dans l'ancre `{ancre}` :\n{source}"
+            );
+        };
+
+        dans(montage, "admin_routes", "name: 'admin-demonstration',");
+        assert!(
+            montage.contains("component: () => import('./vues/Demonstration.vue'),"),
+            "l'écran ne part pas dans son propre morceau :\n{montage}"
+        );
+
+        let rail = projected(&planned, "frontend/src/admin/rail.ts");
+        dans(
+            rail,
+            "admin_rail",
+            "{ route: 'admin-demonstration', libelle: 'Démonstration' },",
+        );
+
+        // Le rail est servi deux fois, et l'écran ne s'y inscrit qu'une : c'est la
+        // coquille qui parcourt la liste, aux deux endroits.
+        let coquille = projected(&planned, "frontend/src/admin/Shell.vue");
+        assert_eq!(
+            coquille.matches("v-for=\"entree in ENTREES\"").count(),
+            2,
+            "le rail n'est pas servi deux fois depuis la même liste :\n{coquille}"
+        );
+    }
+
+    /// Un projet neuf n'ouvre pas une administration vide et muette.
+    ///
+    /// L'écran de démonstration est la template dont sortiront les écrans engendrés, et
+    /// non un second gabarit : ce que l'on voit à l'installation est ce que la commande
+    /// donnera ensuite. Il montre donc pour de bon une table filtrée, triée et paginée.
+    #[test]
+    fn a_fresh_project_opens_on_a_screen_that_shows_what_generation_will_give() {
+        let (_parent, root) = project();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        let ecran = projected(&planned, "frontend/src/admin/vues/Demonstration.vue");
+        for geste in [
+            "function filtrer(",
+            "function trier(",
+            "const pages = computed(",
+        ] {
+            assert!(ecran.contains(geste), "`{geste}` manque :\n{ecran}");
+        }
+
+        // Onze lignes et cinq par page : la pagination a de quoi se montrer.
+        assert_eq!(ecran.matches("reference: 'DEM-").count(), 11, "{ecran}");
+        assert!(ecran.contains("const TAILLE = 5"), "{ecran}");
+
+        // Les lignes vivent dans le fichier : la démonstration n'appelle aucune route que
+        // ce projet-ci n'expose pas, et le client engendré ne lui manque pas.
+        assert!(
+            !ecran.contains("@/api"),
+            "l'écran de démonstration appelle une API que le projet n'a pas :\n{ecran}"
         );
     }
 

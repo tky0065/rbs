@@ -284,7 +284,7 @@ pub(crate) fn actions(fragment: &Fragment, builder: &mut plan::Builder) -> Resul
             continue;
         }
 
-        let content = render(&renderer, fragment, source, &destination)?;
+        let content = rendu_pose(&renderer, fragment, source, &destination, builder)?;
         builder.supprimer(&destination, &content)?;
         #[cfg(test)]
         fichiers.push(destination);
@@ -397,6 +397,45 @@ pub(crate) fn actions(fragment: &Fragment, builder: &mut plan::Builder) -> Resul
         migration,
         laissees,
     })
+}
+
+/// Le fichier tel que l'installation l'a écrit : la template rendue, puis les insertions
+/// que ce même fragment y a faites.
+///
+/// Un fragment qui dépose un fichier portant une de ses propres ancres y écrit deux fois :
+/// la template d'abord, sa ligne ensuite. Comparer le disque à la seule template classerait
+/// le fichier en conflit, et le retrait le laisserait sur place — avec les lignes qu'il
+/// devait justement reprendre. C'est le cas du shell d'administration, qui monte son écran
+/// de démonstration dans la table de routage et le rail qu'il dépose lui-même.
+///
+/// Les lignes d'un *autre* producteur — un écran engendré par `rbs generate crud` — ne sont
+/// pas rejouées, et le conflit qu'elles causent est le bon : le développeur les a
+/// demandées, et rien ne dit qu'il veut les perdre.
+fn rendu_pose(
+    renderer: &Renderer,
+    fragment: &Fragment,
+    source: &str,
+    destination: &str,
+    builder: &plan::Builder,
+) -> Result<String, Error> {
+    let mut content = render(renderer, fragment, source, destination)?;
+
+    for insertion in &fragment.manifest.anchors {
+        let anchor = anchor(fragment, &insertion.anchor, builder)?;
+        if anchor.file != destination {
+            continue;
+        }
+
+        let lignes = installation::lines(&render(
+            renderer,
+            fragment,
+            &insertion.content,
+            destination,
+        )?);
+        content = anchors::insert(&content, anchor, &lignes).map_err(plan::Error::Anchor)?;
+    }
+
+    Ok(content)
 }
 
 /// L'ancre du squelette que le manifeste désigne par `name`, résolue comme à l'installation.

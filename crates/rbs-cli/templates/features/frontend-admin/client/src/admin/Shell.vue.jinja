@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { LogOutIcon, MenuIcon } from '@lucide/vue'
 import { watch } from 'vue'
-import { RouterView, useRouter } from 'vue-router'
+import { RouterLink, RouterView, useRouter } from 'vue-router'
 
 import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
@@ -9,6 +9,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import { useAuthentification } from '@/stores/authentification'
 import { useInterface } from '@/stores/interface'
 
+import { ENTREES } from './rail'
 import { TEXTES } from './textes'
 
 /** Le nom du projet, tel que `rbs new` l'a fixé. */
@@ -52,8 +53,8 @@ async function sortir(): Promise<void> {
   écrite nulle part ici, et réécrire le thème l'efface avec le reste.
 
   Le rail est servi deux fois — à demeure au-delà de la largeur d'un ordinateur, dans un
-  panneau en deçà — et ses entrées s'inscrivent dans les deux. Les écrire à un seul
-  endroit demanderait un composant de plus pour deux liens.
+  panneau en deçà — et ses entrées viennent de `rail.ts` : un écran s'y inscrit par une
+  seule ligne, et paraît aux deux endroits.
 -->
 <template>
   <div class="flex min-h-screen">
@@ -67,7 +68,14 @@ async function sortir(): Promise<void> {
         </div>
 
         <nav class="flex flex-1 flex-col gap-1 p-3">
-          <!-- Les entrées du rail viennent ici, écran par écran. -->
+          <RouterLink
+            v-for="entree in ENTREES"
+            :key="entree.route"
+            :to="{ name: entree.route }"
+            class="truncate rounded-md px-2 py-1.5 text-sm hover:bg-muted [&.router-link-active]:bg-muted"
+          >
+            {{ entree.libelle }}
+          </RouterLink>
         </nav>
 
         <Separator />
@@ -90,7 +98,14 @@ async function sortir(): Promise<void> {
           <SheetTitle class="uppercase tracking-[0.3em]">{{ TEXTES.espace }}</SheetTitle>
         </SheetHeader>
         <nav class="flex flex-col gap-1 p-3" @click="interfaces.fermerRail()">
-          <!-- Les mêmes entrées, servies en deçà de la largeur d'un ordinateur. -->
+          <RouterLink
+            v-for="entree in ENTREES"
+            :key="entree.route"
+            :to="{ name: entree.route }"
+            class="truncate rounded-md px-2 py-1.5 text-sm hover:bg-muted [&.router-link-active]:bg-muted"
+          >
+            {{ entree.libelle }}
+          </RouterLink>
         </nav>
         <div class="mt-auto border-t border-border p-3">
           <Button variant="outline" size="sm" class="w-full justify-start" @click="sortir">

@@ -49,6 +49,10 @@ pub(crate) fn projet(
     features: Vec<String>,
 ) -> Result<Value, Erreur> {
     let crate_name = nom_projet.replace('-', "_");
+    // `[server] lang` de `config/default.toml`, non la métadonnée : celle-ci ne gouverne
+    // plus que `AGENTS.md`, et pouvait diverger de la langue des réponses HTTP avant
+    // 1.5.0, quand elle se remplissait de la locale.
+    let lang = crate::lang::Lang::of_project(root);
 
     // L'URL du projet, non une valeur par défaut : le compose qu'un fragment engendre doit
     // se connecter à la base que le projet interroge, avec ses identifiants, et un retrait
@@ -124,10 +128,12 @@ pub(crate) fn projet(
         database_user_par_defaut => demonstration.as_ref().map(|c| c.user.clone()).unwrap_or_default(),
         database_password_par_defaut => demonstration.as_ref().map(|c| c.password.clone()).unwrap_or_default(),
         database_name_par_defaut => demonstration.as_ref().map(|c| c.database.clone()).unwrap_or_default(),
-        // `[server] lang` de `config/default.toml`, non la métadonnée : celle-ci ne
-        // gouverne plus que `AGENTS.md`, et pouvait diverger de la langue des réponses HTTP
-        // avant 1.5.0, quand elle se remplissait de la locale.
-        lang => crate::lang::Lang::of_project(root).name(),
+        lang => lang.name(),
+        // L'écran de démonstration que le shell d'administration dépose. Dans le contexte
+        // commun et non dans celui du seul fragment qui le lit : un fragment n'a pas de
+        // contexte à lui, et c'est la même clé que `rbs generate crud` remplira pour une
+        // table réelle — même template, même nom de variable, deux producteurs.
+        ecran => Value::from_serialize(crate::ecran::Ecran::demonstration(lang)),
     })
 }
 

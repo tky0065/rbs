@@ -787,12 +787,17 @@ mod tests {
         );
     }
 
-    /// Le retrait du shell défait l'administration et laisse le socle intact.
+    /// Le retrait du shell défait l'administration, lignes insérées comprises, et laisse
+    /// le socle intact.
     ///
-    /// C'est le premier fragment qui ne se monte par aucune ancre : il n'a donc aucune
-    /// ligne insérée à reprendre, et le contrôle porte sur l'autre bord — que le socle,
-    /// lui, n'ait rien perdu. Un routeur ou un accueil emportés avec l'administration
-    /// laisseraient un projet qui ne construit plus.
+    /// Le shell est le seul fragment à viser des ancres qu'il dépose lui-même : la table
+    /// de routage de l'espace et son rail portent, une fois posés, l'écran de
+    /// démonstration qu'il y a monté. Le retrait rejoue donc ces insertions avant de
+    /// comparer — sans quoi les deux fichiers passeraient pour modifiés à la main, le plan
+    /// les classerait en conflit, et l'administration resterait là, à demi démontée.
+    ///
+    /// L'autre bord compte autant : un routeur ou un accueil emportés avec
+    /// l'administration laisseraient un projet qui ne construit plus.
     #[test]
     fn removing_the_admin_shell_leaves_the_base_it_stood_on() {
         let (_parent, root) = crate::fixtures::Project::new()
@@ -803,13 +808,30 @@ mod tests {
         let mut retrait = options(&root, "frontend-admin");
         retrait.force = true;
         let planned = plan_for(&retrait).expect("le retrait se planifie");
+
+        // `force` ne vaut ici que pour l'arbre de travail : un fichier classé en conflit
+        // ne serait pas écrit pour autant, et le retrait s'arrêterait à mi-chemin.
+        let conflits: Vec<&str> = planned
+            .plan
+            .files()
+            .iter()
+            .filter(|fichier| fichier.statut == crate::plan::Status::Conflit)
+            .map(|fichier| fichier.path.as_str())
+            .collect();
+        assert!(
+            conflits.is_empty(),
+            "le retrait ne reconnaît pas ce qu'il avait écrit : {conflits:?}"
+        );
+
         crate::plan::application::apply(&planned.plan, false).expect("le retrait s'applique");
 
         for parti in [
             "frontend/src/admin/Shell.vue",
             "frontend/src/admin/montage.ts",
+            "frontend/src/admin/rail.ts",
             "frontend/src/admin/garde.ts",
             "frontend/src/admin/vues/Connexion.vue",
+            "frontend/src/admin/vues/Demonstration.vue",
             "frontend/src/api/index.ts",
             "frontend/src/api/jetons.ts",
             "frontend/src/stores/authentification.ts",

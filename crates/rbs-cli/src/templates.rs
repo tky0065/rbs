@@ -752,6 +752,9 @@ mod tests {
             database_password_par_defaut => "postgres",
             database_name_par_defaut => "mon_api",
             lang => lang,
+            ecran => Value::from_serialize(crate::ecran::Ecran::demonstration(
+                crate::lang::Lang::parse(lang).expect("la langue du contexte est connue"),
+            )),
         }
     }
 
@@ -1572,13 +1575,14 @@ mod tests {
     }
 
     /// Le shell d'administration exige le socle et l'authentification, et pose ses
-    /// fichiers dans l'arbre du premier sans toucher à une ancre.
+    /// fichiers dans l'arbre du premier sans en redéposer aucun.
     ///
     /// `requires` est ici une dépendance dure des deux côtés : sans le socle il n'y a pas
     /// d'arbre où se poser, sans `auth` aucune des routes que le shell appelle n'existe.
-    /// Le registre en compte dix-huit, et les deux qui manquent appartiennent à la tranche
-    /// qui engendrera les écrans : une insertion déclarée ici voudrait dire qu'une ancre a
-    /// été posée sans passer par la spec.
+    ///
+    /// Les deux seules ancres qu'il vise sont les siennes — celles qu'il dépose, et où un
+    /// écran vient se monter. Une insertion de plus déclarée ici voudrait dire qu'une
+    /// ancre a été posée sans passer par la spec, qui en borne le nombre à deux.
     #[test]
     fn the_frontend_admin_fragment_requires_the_base_and_the_authentication() {
         let source = read(&Path::new(RACINE_FEATURES).join("frontend-admin/feature.toml"));
@@ -1586,14 +1590,13 @@ mod tests {
             .expect("le manifeste du shell doit se lire");
 
         assert_eq!(manifest.feature.requires, ["frontend", "auth"]);
-        assert!(
-            manifest.anchors.is_empty(),
-            "le shell se monte par découverte de fichier, sans ancre : {:?}",
+        assert_eq!(
             manifest
                 .anchors
                 .iter()
                 .map(|ancre| ancre.anchor.as_str())
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>(),
+            ["admin_routes", "admin_rail"]
         );
 
         // Aucun fichier du socle redéposé : le plan classerait le doublon en conflit, et

@@ -61,6 +61,20 @@ impl Anchor {
         format!("{}\n{}", self.opening(), self.closing())
     }
 
+    /// Le pas d'indentation du langage porteur : quatre colonnes en Rust, deux ailleurs.
+    ///
+    /// Sert à reposer le bloc d'une ancre disparue sous une accroche qui ouvre un bloc.
+    /// Le marqueur de commentaire ne suffisait pas à le dire : le TypeScript se commente
+    /// comme le Rust et s'indente comme le YAML, et la table de routage de
+    /// l'administration recevait son ancre deux colonnes trop loin.
+    pub(crate) fn pas(&self) -> &'static str {
+        if self.file.ends_with(".rs") {
+            "    "
+        } else {
+            "  "
+        }
+    }
+
     /// La même ancre, dans un autre fichier.
     ///
     /// Sert aux ancres du modèle d'une feature : leur fichier n'est connu qu'à
@@ -354,6 +368,45 @@ pub(crate) const AUTH_IMPL: Anchor = Anchor {
     after: "impl HasAuth for AppState {",
 };
 
+/// Les écrans que l'espace d'administration monte dans sa table de routage.
+///
+/// La première des deux ancres du frontend, et la seule déclaration d'un écran : en
+/// TypeScript, l'import qui donne le composant à la route *est* la déclaration du module,
+/// là où Rust demande un `pub mod` distinct du montage. Le registre s'épargne ainsi la
+/// troisième ancre que la symétrie avec [`MODULES`] aurait réclamée.
+///
+/// Optionnelle : son fichier est déposé par le fragment `frontend-admin`, et un projet
+/// sans espace d'administration n'a pas de table de routage à porter.
+///
+/// L'accroche est l'ouverture du tableau des enfants, et non la route de la coquille qui
+/// la précède : c'est sous cette ligne que les écrans se montent, et elle ne paraît
+/// qu'une fois dans le fichier.
+pub(crate) const ADMIN_ROUTES: Anchor = Anchor {
+    name: Cow::Borrowed("admin_routes"),
+    file: Cow::Borrowed("frontend/src/admin/montage.ts"),
+    comment: "//",
+    sorted: false,
+    optional: true,
+    after: "children: [",
+};
+
+/// Les entrées que les écrans inscrivent au rail de l'espace d'administration.
+///
+/// Dans un module TypeScript et non dans la coquille : le rail y est servi deux fois — à
+/// demeure au-delà de la largeur d'un ordinateur, dans un panneau en deçà — et le
+/// mécanisme d'ancres ne connaît que les commentaires `//` et `#`, jamais ceux d'un
+/// `<template>`. Une entrée posée ici paraît donc aux deux endroits, par une seule ligne.
+///
+/// Optionnelle, pour la même raison que [`ADMIN_ROUTES`] : le fragment dépose son fichier.
+pub(crate) const ADMIN_RAIL: Anchor = Anchor {
+    name: Cow::Borrowed("admin_rail"),
+    file: Cow::Borrowed("frontend/src/admin/rail.ts"),
+    comment: "//",
+    sorted: false,
+    optional: true,
+    after: "export const ENTREES: Entree[] = [",
+};
+
 /// Variantes de l'énumération `Relation` du modèle d'une entité.
 ///
 /// Hors du registre statique : son fichier et son nom dépendent tous deux de l'entité
@@ -384,7 +437,7 @@ pub(crate) const RELATED: Anchor = Anchor {
 ///
 /// La génération vise chaque ancre nommément ; `rbs doctor` parcourt cette liste pour
 /// vérifier qu'un projet les porte toutes.
-pub(crate) const ANCRES: [Anchor; 18] = [
+pub(crate) const ANCRES: [Anchor; 20] = [
     FEATURES,
     MODULES,
     ROUTES,
@@ -403,6 +456,8 @@ pub(crate) const ANCRES: [Anchor; 18] = [
     JOB_MODULES,
     SCHEDULES,
     AUTH_IMPL,
+    ADMIN_ROUTES,
+    ADMIN_RAIL,
 ];
 
 /// Résout l'ancre `<rbs:features>` par repli, entre `src/lib.rs` et `src/main.rs`.
@@ -631,7 +686,7 @@ pub(crate) fn repose(source: &str, anchor: &Anchor) -> Result<String, Cause> {
     };
 
     let mut lines: Vec<String> = source.lines().map(str::to_string).collect();
-    let indentation = indentation(&lines[accroche], anchor.comment);
+    let indentation = indentation(&lines[accroche], anchor.pas());
 
     lines.insert(accroche + 1, format!("{indentation}{}", anchor.closing()));
     lines.insert(accroche + 1, format!("{indentation}{}", anchor.opening()));
@@ -655,12 +710,11 @@ pub(crate) fn repose(source: &str, anchor: &Anchor) -> Result<String, Cause> {
 /// qui la suit ; les autres la partagent. Le pas est celui du langage porteur, que le
 /// marqueur de commentaire désigne : quatre colonnes en Rust, deux en YAML, où poser le
 /// bloc à côté ferait insérer un service hors de `services:`.
-fn indentation(accroche: &str, comment: &str) -> String {
+fn indentation(accroche: &str, pas: &str) -> String {
     let propre = accroche.trim();
     let courante = &accroche[..accroche.len() - accroche.trim_start().len()];
 
     if propre.ends_with(['[', '{', '(', ':']) {
-        let pas = if comment == "#" { "  " } else { "    " };
         format!("{courante}{pas}")
     } else {
         courante.to_string()
@@ -1521,10 +1575,11 @@ struct AppState {
 
     /// Une ancre optionnelle est l'exception : les onze autres décrivent un fichier que le
     /// squelette écrit toujours et que rien n'invite à supprimer, et leur absence est un
-    /// défaut. Six des sept qui le sont vivent dans un fichier qu'un fragment dépose — le
+    /// défaut. Huit des neuf qui le sont vivent dans un fichier qu'un fragment dépose — le
     /// point de montage des `modules`, le compose de `docker`, le registre de `jobs`, la
     /// liste de ses modules, le calendrier du `scheduler`, l'implémentation
-    /// d'authentification — et manquent légitimement à qui n'a pas installé ce fragment.
+    /// d'authentification, la table de routage et le rail du shell d'administration — et
+    /// manquent légitimement à qui n'a pas installé ce fragment.
     ///
     /// `ignore` est la seule à l'être pour une autre raison : le squelette écrit bien le
     /// fichier d'exclusions, mais celui-ci appartient au développeur, qui peut l'avoir
@@ -1547,9 +1602,39 @@ struct AppState {
                 "jobs",
                 "job_modules",
                 "schedules",
-                "auth_impl"
+                "auth_impl",
+                "admin_routes",
+                "admin_rail"
             ]
         );
+    }
+
+    /// Les deux ancres du frontend, et deux seulement : en TypeScript, l'import qui donne
+    /// le composant à la route est la déclaration du module.
+    ///
+    /// Rien n'empêcherait d'en poser une troisième — pour un fichier de libellés partagé,
+    /// pour un registre de modules — et c'est précisément ce que ce contrôle garde :
+    /// chaque ancre est une condition de plus pour qu'un projet reste générable, et une
+    /// ligne de plus dans ce que `doctor` parcourt.
+    #[test]
+    fn the_admin_space_carries_two_anchors_and_two_only() {
+        let frontend: Vec<&str> = ANCRES
+            .iter()
+            .filter(|anchor| anchor.file.starts_with("frontend/"))
+            .map(|anchor| anchor.name.as_ref())
+            .collect();
+
+        assert_eq!(frontend, ["admin_routes", "admin_rail"]);
+        assert_eq!(ADMIN_ROUTES.file, "frontend/src/admin/montage.ts");
+        assert_eq!(ADMIN_RAIL.file, "frontend/src/admin/rail.ts");
+
+        // Dans un module TypeScript, et non dans le `<template>` de la coquille : le
+        // mécanisme ne sait ouvrir une ancre que derrière `//` ou `#`.
+        for anchor in [ADMIN_ROUTES, ADMIN_RAIL] {
+            assert_eq!(anchor.comment, "//");
+            assert!(anchor.file.ends_with(".ts"), "{}", anchor.file);
+            assert!(anchor.optional, "{}", anchor.name);
+        }
     }
 
     /// L'ancre des exclusions est la seule, avec celle du compose, à ne pas vivre dans du

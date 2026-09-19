@@ -22,14 +22,12 @@ next_steps = [
 # Le fragment dépose ses fichiers dans l'arbre que le socle a posé, et n'en redépose
 # aucun : une application, deux régimes de route.
 #
-# Aucune ancre, et aucune à poser : celles qui manquent au registre appartiennent à la
-# commande qui engendrera les écrans, et montent ces écrans *dans* l'espace
-# d'administration — aucune ne monterait cet espace dans le socle. Un fragment ne pouvant
-# pas redéposer un fichier qu'un autre a posé, l'espace se monte donc par découverte — le
-# routeur du socle lit tout module nommé `montage.ts` sous `src/`, et n'en trouve aucun
-# tant que ce fragment n'est pas posé.
-# C'est aussi ce qui fait que son retrait ne laisse rien derrière lui : il n'y a pas de
-# ligne insérée à retrouver, seulement des fichiers à reprendre.
+# L'espace lui-même se monte dans le socle par découverte et non par une ancre : un
+# fragment ne peut pas redéposer un fichier qu'un autre a posé, et le routeur du socle lit
+# donc tout module nommé `montage.ts` sous `src/` — il n'en trouve aucun tant que ce
+# fragment n'est pas posé. Les deux ancres ci-dessous font l'inverse : elles montent un
+# écran *dans* cet espace, et ce fragment les emploie pour son écran de démonstration
+# exactement comme `rbs generate crud` les emploiera pour une table.
 
 [[files]]
 source      = "client/src/api/jetons.ts.jinja"
@@ -64,5 +62,29 @@ source      = "client/src/admin/Shell.vue.jinja"
 destination = "frontend/src/admin/Shell.vue"
 
 [[files]]
+source      = "client/src/admin/rail.ts.jinja"
+destination = "frontend/src/admin/rail.ts"
+
+[[files]]
 source      = "client/src/admin/vues/Connexion.vue.jinja"
 destination = "frontend/src/admin/vues/Connexion.vue"
+
+# L'écran patron, rendu ici pour l'entité de démonstration et nulle part ailleurs : c'est
+# le même fichier que `rbs generate crud` rendra pour chaque table. Un projet neuf n'a
+# aucune table à administrer, et sans cet écran son espace d'administration s'ouvrirait
+# vide et muet — sans rien montrer de ce que la commande donnera ensuite.
+[[files]]
+source      = "client/src/admin/vues/Patron.vue.jinja"
+destination = "frontend/src/admin/vues/Demonstration.vue"
+
+# Les deux lignes viennent du même endroit que l'écran lui-même — `src/ecran.rs` — et non
+# de ce manifeste : la route et l'entrée de rail d'un écran engendré doivent être celles de
+# l'écran de démonstration, à l'entité près, et deux écritures de la même ligne finiraient
+# par diverger comme deux gabarits l'auraient fait.
+[[anchors]]
+anchor  = "admin_routes"
+content = "{@ ecran.montage @}"
+
+[[anchors]]
+anchor  = "admin_rail"
+content = "{@ ecran.rail @}"

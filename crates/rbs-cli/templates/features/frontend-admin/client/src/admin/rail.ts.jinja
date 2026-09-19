@@ -1,0 +1,20 @@
+/**
+ * Les entrées du rail de l'espace d'administration, dans l'ordre où elles y paraissent.
+ *
+ * Un tableau, et non deux listes de liens dans le shell : le rail est servi deux fois —
+ * à demeure au-delà de la largeur d'un ordinateur, dans un panneau en deçà — et un écran
+ * qui s'y inscrirait à la main devrait le faire aux deux endroits. C'est aussi ce qui
+ * permet à un écran engendré de s'y poser par une ancre : le mécanisme ne connaît que les
+ * commentaires `//` et `#`, et n'aurait su viser aucune ligne d'un `<template>`.
+ */
+export interface Entree {
+  /** Le nom de la route, tel que la table de routage le déclare. */
+  route: string
+  /** Ce que l'opérateur lit dans le rail. */
+  libelle: string
+}
+
+export const ENTREES: Entree[] = [
+  // <rbs:admin_rail>
+  // </rbs:admin_rail>
+]
