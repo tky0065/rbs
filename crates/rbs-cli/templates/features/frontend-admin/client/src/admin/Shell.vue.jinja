@@ -1,0 +1,116 @@
+<script setup lang="ts">
+import { LogOutIcon, MenuIcon } from '@lucide/vue'
+import { RouterView, useRouter } from 'vue-router'
+
+import { Button } from '@/components/ui/button'
+import { Separator } from '@/components/ui/separator'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import { useAuthentification } from '@/stores/authentification'
+import { useInterface } from '@/stores/interface'
+
+import { TEXTES } from './textes'
+
+/** Le nom du projet, tel que `rbs new` l'a fixé. */
+const PROJET = '{@ project_name @}'
+
+/**
+ * La marge perforée, bord de la bande de listing.
+ *
+ * Un motif répété plutôt qu'une liste d'éléments : le pas reste le même quelle que soit la
+ * hauteur de l'écran, là où une liste de longueur fixe s'étirerait ou déborderait. La
+ * couleur vient du thème, comme partout ailleurs — c'est le filet, pas une encre à part.
+ */
+const MARGE = {
+  background:
+    'repeating-linear-gradient(to bottom, var(--color-border) 0 4px, transparent 4px 20px)',
+  backgroundSize: '4px 100%',
+  backgroundPosition: 'center top',
+  backgroundRepeat: 'repeat-y',
+}
+
+const authentification = useAuthentification()
+const interfaces = useInterface()
+const routeur = useRouter()
+
+async function sortir(): Promise<void> {
+  await authentification.deconnexion()
+  interfaces.informer(TEXTES.deconnecte)
+  await routeur.push({ name: 'admin-connexion' })
+}
+</script>
+
+<!--
+  La coquille : une marge perforée, un rail, et la bande où les écrans viennent se monter.
+
+  Le rail est servi deux fois — à demeure au-delà de la largeur d'un ordinateur, dans un
+  panneau en deçà — et ses entrées s'inscrivent dans les deux. Les écrire à un seul
+  endroit demanderait un composant de plus pour deux liens.
+-->
+<template>
+  <div class="flex min-h-screen">
+    <aside class="hidden w-60 shrink-0 border-r border-border md:flex">
+      <div class="w-5 shrink-0 border-r border-border" :style="MARGE" aria-hidden="true" />
+
+      <div class="flex min-w-0 flex-1 flex-col">
+        <div class="border-b border-border px-4 py-4">
+          <p class="truncate uppercase tracking-[0.3em] text-muted-foreground">{{ PROJET }}</p>
+          <p class="truncate text-sm">{{ TEXTES.espace }}</p>
+        </div>
+
+        <nav class="flex flex-1 flex-col gap-1 p-3">
+          <!-- Les entrées du rail viennent ici, écran par écran. -->
+        </nav>
+
+        <Separator />
+
+        <div class="p-3">
+          <p class="truncate px-2 pb-2 text-sm text-muted-foreground">
+            {{ authentification.utilisateur?.email }}
+          </p>
+          <Button variant="outline" size="sm" class="w-full justify-start" @click="sortir">
+            <LogOutIcon />
+            {{ TEXTES.sortir }}
+          </Button>
+        </div>
+      </div>
+    </aside>
+
+    <Sheet v-model:open="interfaces.railOuvert">
+      <SheetContent side="left" class="w-60 p-0">
+        <SheetHeader class="border-b border-border">
+          <SheetTitle class="uppercase tracking-[0.3em]">{{ TEXTES.espace }}</SheetTitle>
+        </SheetHeader>
+        <nav class="flex flex-col gap-1 p-3" @click="interfaces.fermerRail()">
+          <!-- Les mêmes entrées, servies en deçà de la largeur d'un ordinateur. -->
+        </nav>
+        <div class="mt-auto border-t border-border p-3">
+          <Button variant="outline" size="sm" class="w-full justify-start" @click="sortir">
+            <LogOutIcon />
+            {{ TEXTES.sortir }}
+          </Button>
+        </div>
+      </SheetContent>
+    </Sheet>
+
+    <div class="flex min-w-0 flex-1 flex-col">
+      <header class="flex items-center gap-3 border-b border-border px-5 py-3 md:hidden">
+        <Button
+          variant="ghost"
+          size="icon"
+          :aria-label="TEXTES.menu"
+          @click="interfaces.basculerRail()"
+        >
+          <MenuIcon />
+        </Button>
+        <p class="truncate uppercase tracking-[0.3em] text-muted-foreground">{{ PROJET }}</p>
+      </header>
+
+      <main class="flex-1 px-5 py-6">
+        <RouterView v-slot="{ Component }">
+          <component :is="Component" v-if="Component" />
+          <p v-else class="max-w-prose text-muted-foreground">{{ TEXTES.aucun_ecran }}</p>
+        </RouterView>
+      </main>
+    </div>
+  </div>
+</template>

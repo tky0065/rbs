@@ -1,0 +1,65 @@
+[feature]
+description = "le shell d'administration : connexion, jetons, garde de route et les deux stores de l'application"
+# Le socle porte l'application, son routeur et son thème ; `auth` porte les routes que ce
+# shell appelle, la table des comptes et la paire de jetons. Ni l'une ni l'autre ne se
+# déduit : sans la première il n'y a rien où se monter, sans la seconde rien à appeler.
+# `auth` entraîne à son tour `rate-limit` et `mail`, que le plan nomme avant d'écrire.
+requires = ["frontend", "auth"]
+# Le client typé est engendré depuis le document OpenAPI du projet et non livré ici : le
+# contrat d'un projet n'est pas celui d'un autre, et un client figé mentirait dès la
+# première route ajoutée. C'est la première ligne parce que la vérification des types du
+# client en dépend — le shell l'importe, et rien d'autre ne parle HTTP.
+#
+# Les gestes du socle s'affichent avant ceux-ci, `npm run build` compris : la ligne qui
+# suit la commande dit donc l'ordre, faute de quoi la construction échouerait sur un
+# import que rien n'a encore écrit.
+next_steps = [
+  "rbs generate client --lang ts --out frontend/src/api",
+  "{% if lang == 'en' %}that one comes before npm run build: the shell imports the generated client, and the type check stops without it{% else %}celle-ci passe avant npm run build : le shell importe le client engendré, et la vérification des types s'arrête sans lui{% endif %}",
+  "{% if lang == 'en' %}then cargo run: the sign-in screen is served at /admin{% else %}puis cargo run : l'écran de connexion est servi sur /admin{% endif %}",
+]
+
+# Le fragment dépose ses fichiers dans l'arbre que le socle a posé, et n'en redépose
+# aucun : une application, deux régimes de route.
+#
+# Aucune ancre. Le registre en compte vingt et il est clos ; l'espace d'administration se
+# monte donc par découverte de fichier — le routeur du socle lit tout module nommé
+# `montage.ts` sous `src/`, et n'en trouve aucun tant que ce fragment n'est pas posé.
+# C'est aussi ce qui fait que son retrait ne laisse rien derrière lui : il n'y a pas de
+# ligne insérée à retrouver, seulement des fichiers à reprendre.
+
+[[files]]
+source      = "client/src/api/jetons.ts.jinja"
+destination = "frontend/src/api/jetons.ts"
+
+[[files]]
+source      = "client/src/api/index.ts.jinja"
+destination = "frontend/src/api/index.ts"
+
+[[files]]
+source      = "client/src/stores/authentification.ts.jinja"
+destination = "frontend/src/stores/authentification.ts"
+
+[[files]]
+source      = "client/src/stores/interface.ts.jinja"
+destination = "frontend/src/stores/interface.ts"
+
+[[files]]
+source      = "client/src/admin/montage.ts.jinja"
+destination = "frontend/src/admin/montage.ts"
+
+[[files]]
+source      = "client/src/admin/garde.ts.jinja"
+destination = "frontend/src/admin/garde.ts"
+
+[[files]]
+source      = "client/src/admin/textes.ts.jinja"
+destination = "frontend/src/admin/textes.ts"
+
+[[files]]
+source      = "client/src/admin/Shell.vue.jinja"
+destination = "frontend/src/admin/Shell.vue"
+
+[[files]]
+source      = "client/src/admin/vues/Connexion.vue.jinja"
+destination = "frontend/src/admin/vues/Connexion.vue"

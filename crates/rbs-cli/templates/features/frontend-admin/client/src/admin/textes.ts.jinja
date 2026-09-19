@@ -1,0 +1,54 @@
+/** Les libellés du shell, rendus dans la langue du projet à sa création. */
+{% if lang == "en" -%}
+export const TEXTES = {
+  espace: 'Administration',
+  connexion: 'Sign in',
+  connexion_sous_titre:
+    'This space belongs to the account that administers the service. The credentials are those of the accounts table this project carries.',
+  adresse: 'Email',
+  mot_de_passe: 'Password',
+  entrer: 'Sign in',
+  entree_en_cours: 'Checking…',
+  refuse: 'Email or password refused.',
+  injoignable: 'The service did not answer.',
+  oubli: 'Forgot the password',
+  oubli_titre: 'Reset the password',
+  oubli_detail:
+    'A reset link goes to that address if an account uses it. The answer is the same either way: it does not say who is registered.',
+  envoyer: 'Send',
+  envoi_en_cours: 'Sending…',
+  envoye: 'Request recorded. Look in the inbox of that address.',
+  annuler: 'Cancel',
+  menu: 'Show the rail',
+  sortir: 'Sign out',
+  deconnecte: 'Session closed.',
+  aucun_ecran:
+    'No screen is mounted here yet. The ones you generate will come and sit in this frame.',
+} as const
+{% else -%}
+export const TEXTES = {
+  espace: 'Administration',
+  connexion: 'Connexion',
+  connexion_sous_titre:
+    'Cet espace est celui du compte qui administre le service. Les identifiants sont ceux de la table des comptes que ce projet porte.',
+  adresse: 'Adresse',
+  mot_de_passe: 'Mot de passe',
+  entrer: 'Entrer',
+  entree_en_cours: 'Vérification…',
+  refuse: 'Adresse ou mot de passe refusé.',
+  injoignable: "Le service n'a pas répondu.",
+  oubli: 'Mot de passe oublié',
+  oubli_titre: 'Réinitialiser le mot de passe',
+  oubli_detail:
+    "Un lien de réinitialisation part à cette adresse si un compte l'utilise. La réponse est la même dans les deux cas : elle ne dit pas qui est inscrit.",
+  envoyer: 'Envoyer',
+  envoi_en_cours: 'Envoi…',
+  envoye: 'Demande enregistrée. Regardez la boîte de réception de cette adresse.',
+  annuler: 'Annuler',
+  menu: 'Afficher le rail',
+  sortir: 'Se déconnecter',
+  deconnecte: 'Session fermée.',
+  aucun_ecran:
+    "Aucun écran n'est monté ici pour l'instant. Ceux que vous engendrerez viendront s'y poser.",
+} as const
+{% endif %}

@@ -769,7 +769,7 @@ mod tests {
     /// demande « telle feature est-elle posée ? » répond oui : sans ce contexte, une
     /// chaîne anglaise cachée derrière une feature absente du `[][..]` ou `["redis"][..]`
     /// des autres tests ne serait jamais exercée.
-    const TOUTES: [&str; 15] = [
+    const TOUTES: [&str; 16] = [
         "api-keys",
         "audit",
         "auth",
@@ -777,6 +777,7 @@ mod tests {
         "cors",
         "docker",
         "frontend",
+        "frontend-admin",
         "jobs",
         "mail",
         "observability",
@@ -1568,6 +1569,67 @@ mod tests {
                 );
             }
         }
+    }
+
+    /// Le shell d'administration exige le socle et l'authentification, et pose ses
+    /// fichiers dans l'arbre du premier sans toucher à une ancre.
+    ///
+    /// `requires` est ici une dépendance dure des deux côtés : sans le socle il n'y a pas
+    /// d'arbre où se poser, sans `auth` aucune des routes que le shell appelle n'existe.
+    /// Et le registre d'ancres est clos à vingt : une dix-neuvième insertion déclarée ici
+    /// voudrait dire qu'une ancre a été posée sans passer par la spec.
+    #[test]
+    fn the_frontend_admin_fragment_requires_the_base_and_the_authentication() {
+        let source = read(&Path::new(RACINE_FEATURES).join("frontend-admin/feature.toml"));
+        let manifest = crate::manifest::read(&source, "frontend-admin/feature.toml")
+            .expect("le manifeste du shell doit se lire");
+
+        assert_eq!(manifest.feature.requires, ["frontend", "auth"]);
+        assert!(
+            manifest.anchors.is_empty(),
+            "le shell se monte par découverte de fichier, sans ancre : {:?}",
+            manifest
+                .anchors
+                .iter()
+                .map(|ancre| ancre.anchor.as_str())
+                .collect::<Vec<_>>()
+        );
+
+        // Aucun fichier du socle redéposé : le plan classerait le doublon en conflit, et
+        // la pose exigerait `--force` — une installation qui écrase n'en est pas une.
+        let socle = crate::manifest::read(
+            &read(&Path::new(RACINE_FEATURES).join("frontend/feature.toml")),
+            "frontend/feature.toml",
+        )
+        .expect("le manifeste du socle doit se lire");
+        for fichier in &manifest.files {
+            assert!(
+                !socle
+                    .files
+                    .iter()
+                    .any(|pose| pose.destination == fichier.destination),
+                "`{}` est déjà posé par le socle",
+                fichier.destination
+            );
+            assert!(
+                fichier.destination.starts_with("frontend/src/"),
+                "`{}` sort de l'arbre du socle",
+                fichier.destination
+            );
+        }
+
+        assert!(
+            manifest.migration.is_none(),
+            "le shell lit les tables d'`auth` : il n'en pose aucune"
+        );
+        assert!(
+            manifest.config.is_empty() && manifest.env.is_empty(),
+            "le shell ne configure rien côté serveur : tout ce qu'il appelle vient d'`auth`"
+        );
+        assert!(
+            !manifest.feature.next_steps.is_empty(),
+            "le client typé s'engendre : le fragment doit le dire"
+        );
     }
 
     /// Le relais du serveur de développement vise le port où le binaire écoute.

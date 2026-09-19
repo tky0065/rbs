@@ -1,0 +1,30 @@
+import type { NavigationGuardWithThis } from 'vue-router'
+
+import { useAuthentification } from '@/stores/authentification'
+
+/** Le préfixe de tout ce que cette garde protège. */
+const ESPACE = '/admin'
+
+/**
+ * Renvoie à la connexion toute route d'administration atteinte sans session.
+ *
+ * L'attente est ici, et non dans l'écran visé : restaurer la session pendant que l'écran
+ * se monte le montrerait vide, puis rempli, puis remplacé par la connexion. La garde ne
+ * rend la main qu'une fois la question tranchée, et le navigateur n'affiche rien entre
+ * les deux.
+ */
+export const garde: NavigationGuardWithThis<undefined> = async (vers) => {
+  if (!vers.path.startsWith(ESPACE) || vers.name === 'admin-connexion') {
+    return true
+  }
+
+  const authentification = useAuthentification()
+
+  if (await authentification.restaurer()) {
+    return true
+  }
+
+  // La route visée voyage avec la redirection : l'opérateur revient là où il allait, et
+  // non sur une page qu'il n'a pas demandée.
+  return { name: 'admin-connexion', query: { suite: vers.fullPath } }
+}

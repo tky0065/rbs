@@ -3681,4 +3681,458 @@ mod tests {
             0x1F000..=0x1FAFF | 0x2600..=0x27BF | 0xFE0F
         )
     }
+
+    /// Ce que le shell d'administration dépose, et rien d'autre.
+    ///
+    /// Il pose ses fichiers *dans* l'arbre du socle : une seule application, deux régimes
+    /// de route. Un fichier du socle redéposé ici ferait un conflit de plan, et non une
+    /// installation.
+    const SHELL: [&str; 9] = [
+        "frontend/src/api/jetons.ts",
+        "frontend/src/api/index.ts",
+        "frontend/src/stores/authentification.ts",
+        "frontend/src/stores/interface.ts",
+        "frontend/src/admin/montage.ts",
+        "frontend/src/admin/garde.ts",
+        "frontend/src/admin/textes.ts",
+        "frontend/src/admin/Shell.vue",
+        "frontend/src/admin/vues/Connexion.vue",
+    ];
+
+    /// Le shell exige le socle et l'authentification, et le plan nomme ce qu'il entraîne.
+    ///
+    /// Un développeur qui demande une interface d'administration reçoit aussi une table
+    /// de comptes, une limite de débit et un SMTP à régler : quatre fragments qu'il n'a
+    /// pas nommés, et qu'il doit lire avant que le plan ne s'applique, non après.
+    #[test]
+    fn the_admin_shell_drags_in_the_base_the_authentication_and_what_it_carries() {
+        let (_parent, root) = project();
+        let before = fingerprint(&root);
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        let mut entrainees = planned.entrainees.clone();
+        entrainees.sort();
+        assert_eq!(
+            entrainees,
+            ["auth", "frontend", "mail", "rate-limit"],
+            "l'entraînement transitif ne paraît pas dans le plan : {:?}",
+            planned.entrainees
+        );
+
+        // Et posés dans cet ordre : le shell écrit dans l'arbre du socle, et appelle les
+        // routes d'`auth`. Le voir passer en premier voudrait dire qu'il se pose sur un
+        // répertoire qui n'existe pas encore.
+        let ordre = ordre_de_pose(&planned);
+        let rang = |nom: &str| {
+            ordre
+                .iter()
+                .position(|pose| *pose == nom)
+                .unwrap_or_else(|| panic!("`{nom}` n'est pas posée : {ordre:?}"))
+        };
+        for amont in ["frontend", "auth"] {
+            assert!(
+                rang(amont) < rang("frontend-admin"),
+                "`{amont}` se pose après le shell : {ordre:?}"
+            );
+        }
+
+        assert_eq!(fingerprint(&root), before, "la planification a écrit");
+    }
+
+    /// Le shell dépose ses neuf fichiers dans l'arbre du socle, et n'en redépose aucun.
+    #[test]
+    fn the_admin_shell_lands_in_the_tree_the_base_laid_down() {
+        let (_parent, root) = crate::fixtures::Project::new()
+            .features(&["frontend", "auth"])
+            .create();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        assert_eq!(
+            planned.files,
+            SHELL
+                .iter()
+                .map(|chemin| (*chemin).to_string())
+                .collect::<Vec<_>>(),
+            "le shell ne dépose pas exactement ce qu'il annonce"
+        );
+    }
+
+    /// L'espace d'administration se monte sans ancre, et les deux moitiés se cherchent.
+    ///
+    /// Le registre d'ancres est clos, et un fragment ne peut pas redéposer le routeur du
+    /// socle : le montage se fait donc par découverte de fichier. Rien ne tient ensemble
+    /// le motif que le routeur cherche et le chemin où le shell dépose — les voir diverger
+    /// ne casse aucune compilation, cela rend seulement l'administration inatteignable.
+    #[test]
+    fn the_admin_space_mounts_itself_without_an_anchor() {
+        let (_parent, root) = project();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        let manifeste = crate::manifest::read(
+            &std::fs::read_to_string(std::path::Path::new(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/templates/features/frontend-admin/feature.toml"
+            )))
+            .expect("le manifeste du shell doit se lire"),
+            "frontend-admin/feature.toml",
+        )
+        .expect("le manifeste du shell doit s'analyser");
+        assert!(
+            manifeste.anchors.is_empty(),
+            "le shell insère dans une ancre : {:?}",
+            manifeste
+                .anchors
+                .iter()
+                .map(|ancre| ancre.anchor.as_str())
+                .collect::<Vec<_>>()
+        );
+
+        // Le motif que le routeur du socle parcourt, et le fichier que le shell y dépose.
+        let routeur = projected(&planned, "frontend/src/router/index.ts");
+        assert!(
+            routeur.contains("import.meta.glob<Montage>('../**/montage.ts', { eager: true })"),
+            "le routeur du socle ne cherche aucun montage :\n{routeur}"
+        );
+        assert!(
+            planned
+                .files
+                .iter()
+                .any(|chemin| chemin == "frontend/src/admin/montage.ts"),
+            "le shell ne dépose rien que ce motif trouverait : {:?}",
+            planned.files
+        );
+
+        // La garde voyage par le même contrat : une route protégée atteinte sans session
+        // n'a personne pour la détourner si le routeur ne la pose pas.
+        assert!(
+            routeur.contains("router.beforeEach(montage.garde)"),
+            "le routeur du socle ne pose aucune garde :\n{routeur}"
+        );
+        let montage = projected(&planned, "frontend/src/admin/montage.ts");
+        assert!(
+            montage.contains("export { garde }"),
+            "le shell ne rend aucune garde au routeur :\n{montage}"
+        );
+        assert!(
+            montage.contains("name: 'admin-connexion'"),
+            "la route où la garde renvoie n'est pas déclarée :\n{montage}"
+        );
+        let garde = projected(&planned, "frontend/src/admin/garde.ts");
+        assert!(
+            garde.contains("await authentification.restaurer()"),
+            "la garde tranche sans attendre la session : un écran s'afficherait à moitié \
+             chargé avant d'être remplacé\n{garde}"
+        );
+    }
+
+    /// Le serveur de développement relaie les routes d'`auth` dès que le shell est là.
+    ///
+    /// La connexion part vers la même origine que l'application. En développement, celle-ci
+    /// est le port de Vite : sans relais, `POST /auth/login` rend l'index du client, avec
+    /// un 200 et un corps que le client engendré lit comme une paire de jetons. Rien
+    /// n'échoue — l'opérateur entre, et ressort à la première requête.
+    ///
+    /// La condition porte sur le répertoire du shell, et non sur les features de la pose :
+    /// le socle est peut-être posé des mois avant lui, et rendu une seule fois. Le chemin
+    /// qu'elle vise et celui où le shell dépose sont donc à tenir ensemble, comme le motif
+    /// du routeur et le montage.
+    #[test]
+    fn the_development_proxy_relays_the_auth_routes_the_shell_calls() {
+        let (_parent, root) = project();
+        let planned = plan_for(&options(&root, "frontend-admin")).expect("le plan se calcule");
+
+        let vite = projected(&planned, "frontend/vite.config.ts");
+        assert!(
+            vite.contains("RELAYE.push('/auth')"),
+            "les routes d'`auth` ne sont pas relayées :\n{vite}"
+        );
+        assert!(
+            vite.contains("existsSync(fileURLToPath(new URL('./src/admin'"),
+            "le relais ne se conditionne pas à la présence du shell :\n{vite}"
+        );
+        assert!(
+            planned
+                .files
+                .iter()
+                .any(|chemin| chemin.starts_with("frontend/src/admin/")),
+            "le shell ne dépose rien sous le répertoire que le relais guette : {:?}",
+            planned.files
+        );
+    }
+
+    /// Les appels passent par le client engendré, et aucune couche HTTP n'est réécrite.
+    ///
+    /// C'est ce qui rend les appels vérifiés à la compilation : le client sort du document
+    /// OpenAPI du projet, ses chemins et ses corps sont ceux du contrat. Un `fetch` écrit
+    /// à la main les reprendrait en chaînes de caractères, que rien ne relit.
+    #[test]
+    fn every_call_of_the_shell_goes_through_the_generated_client() {
+        let (_parent, root) = project();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        for chemin in SHELL {
+            let rendu = projected(&planned, chemin);
+            for reecriture in ["fetch(", "XMLHttpRequest", "axios", "ofetch"] {
+                assert!(
+                    !rendu.contains(reecriture),
+                    "{chemin} parle HTTP par lui-même, avec `{reecriture}`"
+                );
+            }
+        }
+
+        let client = projected(&planned, "frontend/src/api/index.ts");
+        assert!(
+            client.contains("from './client'") && client.contains("new ApiClient("),
+            "le shell ne consomme pas le client engendré :\n{client}"
+        );
+
+        // Le client n'est pas livré : il sort du contrat de ce projet-ci, et un client
+        // figé mentirait dès la première route ajoutée. La commande qui l'engendre est
+        // donc dite, et avant celle qui construirait sans lui.
+        assert!(
+            !planned
+                .files
+                .iter()
+                .any(|chemin| chemin == "frontend/src/api/client.ts"),
+            "le shell livre un client figé"
+        );
+        let etapes = planned
+            .poses
+            .iter()
+            .find(|pose| pose.name == "frontend-admin")
+            .expect("le shell est posé")
+            .next_steps
+            .clone();
+        assert_eq!(
+            etapes.first().map(String::as_str),
+            Some("rbs generate client --lang ts --out frontend/src/api"),
+            "la génération du client n'ouvre pas les gestes qui restent : {etapes:?}"
+        );
+    }
+
+    /// La réinitialisation du mot de passe s'atteint depuis la connexion.
+    ///
+    /// C'est le seul écran qu'un opérateur enfermé dehors peut encore ouvrir : la demande
+    /// vit donc sur celui-là, et non derrière la garde qu'il ne franchit plus. Elle part
+    /// sur la route réelle du fragment `auth`, qui répond la même chose que l'adresse soit
+    /// inscrite ou non — l'écran ne doit donc pas prétendre savoir laquelle il a touchée.
+    #[test]
+    fn the_password_reset_is_reachable_from_the_sign_in_screen() {
+        let (_parent, root) = project();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        let connexion = projected(&planned, "frontend/src/admin/vues/Connexion.vue");
+        assert!(
+            connexion.contains("api.authForgotPassword("),
+            "la connexion n'offre aucune demande de réinitialisation :\n{connexion}"
+        );
+        assert!(
+            connexion.contains("TEXTES.oubli"),
+            "rien n'y renvoie depuis l'écran :\n{connexion}"
+        );
+
+        // La demande reste sur l'écran de connexion, et n'ouvre aucune route de plus :
+        // l'espace n'en compte que deux, et la seconde est fermée.
+        let montage = projected(&planned, "frontend/src/admin/montage.ts");
+        assert_eq!(
+            montage.matches("path: '/admin").count(),
+            2,
+            "l'espace déclare une route de plus que la connexion et le shell :\n{montage}"
+        );
+    }
+
+    /// Deux stores, et deux seulement.
+    ///
+    /// Un store par entité est le réflexe dont Pinia s'est précisément affranchi : il
+    /// doublerait le code à recopier pour chaque écran engendré. Ce que le shell garde est
+    /// ce qui ne se rattache à aucun écran — la session, et l'état de l'interface.
+    #[test]
+    fn the_shell_keeps_two_stores_and_no_more() {
+        let (_parent, root) = project();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        let stores: Vec<&String> = planned
+            .files
+            .iter()
+            .filter(|chemin| chemin.starts_with("frontend/src/stores/"))
+            .collect();
+        assert_eq!(
+            stores,
+            [
+                "frontend/src/stores/authentification.ts",
+                "frontend/src/stores/interface.ts"
+            ]
+            .iter()
+            .collect::<Vec<_>>()
+        );
+
+        // Le décompte compte autant que la liste : un `defineStore` glissé dans un écran
+        // passerait le contrôle ci-dessus sans rien déplacer.
+        let definitions: usize = planned
+            .files
+            .iter()
+            .map(|chemin| projected(&planned, chemin).matches("defineStore(").count())
+            .sum();
+        assert_eq!(definitions, 2, "un troisième store est apparu");
+    }
+
+    /// Le jeton d'accès ne touche jamais le stockage, et le compromis est écrit sur place.
+    ///
+    /// Le stockage local survit à l'onglet, et c'est tout l'intérêt pour le jeton long ;
+    /// c'est aussi ce qui le rend lisible par un script injecté. Y laisser passer le jeton
+    /// d'accès ne changerait rien de visible et rendrait le partage gratuit.
+    #[test]
+    fn only_the_refresh_token_reaches_the_local_storage() {
+        let (_parent, root) = project();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        let jetons = projected(&planned, "frontend/src/api/jetons.ts");
+        assert!(
+            jetons.contains("const CLE = 'demo-api.rafraichissement'"),
+            "la clé du stockage n'est pas celle du jeton long :\n{jetons}"
+        );
+        for ligne in jetons
+            .lines()
+            .filter(|ligne| ligne.contains("localStorage"))
+        {
+            assert!(
+                ligne.contains("(CLE"),
+                "le stockage est touché ailleurs que sur la clé du jeton long : {ligne}"
+            );
+        }
+
+        // Et nulle part ailleurs : le thème est le seul autre état qui survit à l'onglet.
+        for chemin in SHELL {
+            if chemin.ends_with("api/jetons.ts") || chemin.ends_with("stores/interface.ts") {
+                continue;
+            }
+            assert!(
+                !projected(&planned, chemin).contains("localStorage"),
+                "{chemin} écrit dans le stockage du navigateur"
+            );
+        }
+
+        // Le compromis se lit là où il se prend, et non seulement dans la documentation :
+        // c'est ce fichier que relira celui qui voudra le reprendre.
+        for terme in ["stockage local", "HttpOnly"] {
+            assert!(
+                jetons.contains(terme),
+                "le compromis du transport n'est pas commenté sur place : `{terme}` absent"
+            );
+        }
+    }
+
+    /// Le seul filet contre un délimiteur de bloc égaré ou une variable hors contexte :
+    /// planifier, c'est rendre.
+    ///
+    /// Deux projets, et non un. Le shell porte deux jeux de textes et se branche sur la
+    /// langue du projet ; un projet neuf en français n'en exercerait qu'une moitié, et
+    /// c'est l'autre qui casserait chez l'utilisateur.
+    #[test]
+    fn the_admin_shell_renders_every_file_it_ships_in_both_languages() {
+        let (_nu, nu) = project();
+        let francais = plan_for(&options(&nu, "frontend-admin")).expect("le plan se calcule");
+
+        for chemin in SHELL {
+            assert!(
+                !projected(&francais, chemin).is_empty(),
+                "{chemin} est rendu vide"
+            );
+        }
+
+        let textes = projected(&francais, "frontend/src/admin/textes.ts");
+        assert!(
+            textes.contains("Adresse ou mot de passe refusé."),
+            "{textes}"
+        );
+        assert!(!textes.contains("Email or password refused."), "{textes}");
+
+        let (_complet, complet) = crate::fixtures::Project::new()
+            .lang(crate::lang::Lang::En)
+            .features(&["auth", "frontend"])
+            .create();
+        let anglais = plan_for(&options(&complet, "frontend-admin")).expect("le plan se calcule");
+
+        assert_eq!(
+            anglais.files,
+            SHELL
+                .iter()
+                .map(|chemin| (*chemin).to_string())
+                .collect::<Vec<_>>(),
+            "le shell ne livre pas le même arbre des deux côtés"
+        );
+        let traduits = projected(&anglais, "frontend/src/admin/textes.ts");
+        assert!(
+            traduits.contains("Email or password refused."),
+            "{traduits}"
+        );
+        assert!(
+            !traduits.contains("Adresse ou mot de passe refusé."),
+            "{traduits}"
+        );
+    }
+
+    /// Le shell ne nomme aucune couleur, et ne porte aucun emoji.
+    ///
+    /// Le thème est un bloc : réécrire ce bloc réécrit l'identité, et une seule couleur en
+    /// clair dans un écran la rend fausse sans que rien n'échoue. Un emoji, lui, traverse
+    /// la génération, le compilateur et l'empaqueteur, et ne se voit qu'à l'écran.
+    #[test]
+    fn nothing_the_admin_shell_ships_escapes_the_theme_nor_carries_an_emoji() {
+        let (_parent, root) = project();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        for chemin in SHELL {
+            let rendu = projected(&planned, chemin);
+
+            assert_eq!(
+                couleur_en_clair(rendu),
+                None,
+                "{chemin} écrit une couleur en clair"
+            );
+            for echappee in [
+                "text-white",
+                "bg-white",
+                "text-black",
+                "bg-black",
+                "rounded-full",
+                "rounded-[",
+                "-slate-",
+                "-gray-",
+                "-zinc-",
+                "-neutral-",
+                "-stone-",
+                "-red-",
+                "-amber-",
+                "-green-",
+                "-blue-",
+            ] {
+                assert!(
+                    !rendu.contains(echappee),
+                    "{chemin} échappe au thème par `{echappee}`"
+                );
+            }
+            assert!(
+                !rendu.chars().any(emoji),
+                "{chemin} porte un emoji : {:?}",
+                rendu.chars().find(|caractere| emoji(*caractere))
+            );
+        }
+    }
 }
