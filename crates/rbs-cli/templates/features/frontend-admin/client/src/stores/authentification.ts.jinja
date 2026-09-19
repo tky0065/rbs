@@ -126,6 +126,19 @@ export const useAuthentification = defineStore('authentification', () => {
     return renouveler()
   }
 
+  /**
+   * Change le mot de passe, et adopte la paire que le service réémet.
+   *
+   * Celui-ci ferme toutes les sessions du compte, celle de l'appelant comprise : rien ne
+   * relie un jeton d'accès à la ligne qui l'a émis, donc la sienne ne peut pas être
+   * épargnée. Il réémet aussitôt, et jeter cette paire déconnecterait au renouvellement
+   * suivant quelqu'un qui vient de faire exactement la bonne chose. C'est ici et non dans
+   * l'écran, parce que c'est la session que cela déplace.
+   */
+  async function changerMotDePasse(courant: string, nouveau: string): Promise<void> {
+    retenir(await api.authChangePassword({ current_password: courant, new_password: nouveau }))
+  }
+
   /** Ferme la session ici et côté serveur. */
   async function deconnexion(): Promise<void> {
     const jeton = jetonRafraichissement()
@@ -144,5 +157,13 @@ export const useAuthentification = defineStore('authentification', () => {
     oublier()
   }
 
-  return { utilisateur, connecte, connexion, deconnexion, renouveler, restaurer }
+  return {
+    utilisateur,
+    connecte,
+    changerMotDePasse,
+    connexion,
+    deconnexion,
+    renouveler,
+    restaurer,
+  }
 })

@@ -3687,16 +3687,28 @@ mod tests {
     /// Il pose ses fichiers *dans* l'arbre du socle : une seule application, deux régimes
     /// de route. Un fichier du socle redéposé ici ferait un conflit de plan, et non une
     /// installation.
-    const SHELL: [&str; 9] = [
+    const SHELL: [&str; 14] = [
         "frontend/src/api/jetons.ts",
         "frontend/src/api/index.ts",
         "frontend/src/stores/authentification.ts",
         "frontend/src/stores/interface.ts",
         "frontend/src/admin/montage.ts",
         "frontend/src/admin/garde.ts",
+        "frontend/src/admin/rail.ts",
+        "frontend/src/admin/document.ts",
         "frontend/src/admin/textes.ts",
         "frontend/src/admin/Shell.vue",
         "frontend/src/admin/vues/Connexion.vue",
+        "frontend/src/admin/vues/TableauDeBord.vue",
+        "frontend/src/admin/vues/Sessions.vue",
+        "frontend/src/admin/vues/Profil.vue",
+    ];
+
+    /// Les trois écrans de compte et de santé, et le nom de la route de chacun.
+    const ECRANS: [(&str, &str); 3] = [
+        ("frontend/src/admin/vues/TableauDeBord.vue", "admin-tableau"),
+        ("frontend/src/admin/vues/Sessions.vue", "admin-sessions"),
+        ("frontend/src/admin/vues/Profil.vue", "admin-profil"),
     ];
 
     /// Le shell exige le socle et l'authentification, et le plan nomme ce qu'il entraîne.
@@ -3880,12 +3892,23 @@ mod tests {
 
         for chemin in SHELL {
             let rendu = projected(&planned, chemin);
-            for reecriture in ["fetch(", "XMLHttpRequest", "axios", "ofetch"] {
+            for reecriture in ["XMLHttpRequest", "axios", "ofetch"] {
                 assert!(
                     !rendu.contains(reecriture),
                     "{chemin} parle HTTP par lui-même, avec `{reecriture}`"
                 );
             }
+
+            // Une seule exception, et elle ne vise aucune route du contrat : le document
+            // OpenAPI n'est pas une opération, et le client qui en sort ne saurait s'y
+            // décrire. Elle vit dans un module à elle, pour que cette liste reste close.
+            if chemin == "frontend/src/admin/document.ts" {
+                continue;
+            }
+            assert!(
+                !rendu.contains("fetch("),
+                "{chemin} parle HTTP par lui-même, avec `fetch(`"
+            );
         }
 
         let client = projected(&planned, "frontend/src/api/index.ts");
@@ -3948,6 +3971,275 @@ mod tests {
             montage.matches("path: '/admin").count(),
             2,
             "l'espace déclare une route de plus que la connexion et le shell :\n{montage}"
+        );
+    }
+
+    /// Les trois écrans se montent dans le routage et dans le rail, par le même nom.
+    ///
+    /// Rien ne tient ensemble ces deux moitiés : une entrée de rail qui nommerait une
+    /// route absente rendrait un lien mort, que ni la vérification des types ni la
+    /// construction ne verraient. Chacun part en outre dans son propre morceau — le
+    /// visiteur de l'accueil ne télécharge pas l'administration.
+    #[test]
+    fn the_three_account_screens_mount_in_the_routing_and_in_the_rail() {
+        let (_parent, root) = project();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        let montage = projected(&planned, "frontend/src/admin/montage.ts");
+        let rail = projected(&planned, "frontend/src/admin/rail.ts");
+
+        for (chemin, route) in ECRANS {
+            let fichier = chemin
+                .rsplit('/')
+                .next()
+                .expect("le chemin porte un nom de fichier");
+
+            assert!(
+                planned.files.iter().any(|pose| pose == chemin),
+                "{chemin} n'est pas déposé : {:?}",
+                planned.files
+            );
+            assert!(
+                montage.contains(&format!("name: '{route}'")),
+                "la route `{route}` n'est pas déclarée :\n{montage}"
+            );
+            assert!(
+                montage.contains(&format!("() => import('./vues/{fichier}')")),
+                "`{fichier}` n'est pas chargé paresseusement :\n{montage}"
+            );
+            assert!(
+                rail.contains(&format!("route: '{route}'")),
+                "`{route}` n'est pas dans le rail :\n{rail}"
+            );
+        }
+
+        // Sous le shell, et non à côté : un écran monté en dehors n'aurait ni rail, ni
+        // garde, et s'afficherait nu à qui n'est pas connecté.
+        assert_eq!(
+            montage.matches("path: '/admin").count(),
+            2,
+            "un écran s'est monté hors de l'espace :\n{montage}"
+        );
+
+        // Le commentaire que la commande de génération remplacera reste en dernier :
+        // ce que le fragment monte et ce qu'elle montera ne se disputent pas la ligne.
+        let enfants = montage
+            .split("children: [")
+            .nth(1)
+            .expect("le shell porte des enfants");
+        let derniere = enfants
+            .lines()
+            .map(str::trim)
+            .filter(|ligne| !ligne.is_empty())
+            .take_while(|ligne| *ligne != "],")
+            .last()
+            .expect("les enfants ne sont pas vides");
+        assert!(
+            derniere.starts_with("// "),
+            "le point d'insertion des écrans engendrés n'est plus en dernier : {derniere}"
+        );
+    }
+
+    /// Le rail est servi deux fois et n'est écrit qu'une.
+    ///
+    /// Le shell le rend à demeure et dans un panneau latéral. Les entrées portées à la
+    /// main dans les deux `<nav>` divergeaient à la première retouche ; un écran ajouté
+    /// dans un seul des deux restait invisible sur téléphone, sans que rien n'échoue.
+    #[test]
+    fn the_shell_reads_its_rail_from_a_single_list() {
+        let (_parent, root) = project();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        let shell = projected(&planned, "frontend/src/admin/Shell.vue");
+        assert_eq!(
+            shell.matches("v-for=\"entree in RAIL\"").count(),
+            2,
+            "les deux rails ne parcourent pas la même liste :\n{shell}"
+        );
+
+        // Un lien de navigation, et non un gestionnaire de clic : c'est ce qui en fait
+        // une ancre atteignable au clavier, et ce qui la rend ouvrable dans un onglet.
+        assert_eq!(
+            shell.matches("<RouterLink").count(),
+            2,
+            "le rail ne rend pas des liens :\n{shell}"
+        );
+
+        // Et les libellés ne sont écrits qu'à un endroit : le rail les tient des textes.
+        let rail = projected(&planned, "frontend/src/admin/rail.ts");
+        for (_, route) in ECRANS {
+            assert!(
+                !shell.contains(route),
+                "`{route}` est recopiée dans le shell :\n{shell}"
+            );
+        }
+        assert_eq!(
+            rail.matches("libelle: TEXTES.").count(),
+            ECRANS.len(),
+            "une entrée du rail porte son libellé en dur :\n{rail}"
+        );
+    }
+
+    /// Aucun écran ne s'affiche vide, ne confond « rien » et « cassé », ni ne rend un code.
+    ///
+    /// Les trois états se voient à l'écran et nulle part ailleurs : ce qui est éprouvable
+    /// ici est qu'ils sont branchés. `phrase()` lit le `detail` RFC 9457 que le noyau rend
+    /// — c'est lui qui distingue une phrase d'un `HTTP 422`.
+    #[test]
+    fn every_account_screen_says_what_it_is_doing_and_what_it_has_found() {
+        let (_parent, root) = project();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        for (chemin, _) in ECRANS {
+            let rendu = projected(&planned, chemin);
+
+            assert!(
+                rendu.contains("TEXTES.chargement"),
+                "{chemin} n'annonce pas son chargement :\n{rendu}"
+            );
+            assert!(
+                rendu.contains("phrase("),
+                "{chemin} montre ses pannes sans les lire :\n{rendu}"
+            );
+            // Un code de statut recopié dans l'écran est exactement ce que `phrase()`
+            // existe pour éviter.
+            assert!(
+                !rendu.contains("HTTP "),
+                "{chemin} affiche un code brut :\n{rendu}"
+            );
+        }
+
+        // Les deux écrans qui portent une liste la disent vide plutôt que muette, et le
+        // disent autrement qu'ils ne diraient une panne.
+        for (chemin, cle) in [
+            ("frontend/src/admin/vues/TableauDeBord.vue", "aucune_sonde"),
+            ("frontend/src/admin/vues/Sessions.vue", "aucune_session"),
+        ] {
+            let rendu = projected(&planned, chemin);
+            assert!(
+                rendu.contains(&format!("TEXTES.{cle}")),
+                "{chemin} laisse une liste vide sans rien dire :\n{rendu}"
+            );
+
+            let textes = projected(&planned, "frontend/src/admin/textes.ts");
+            assert!(
+                textes.contains(&format!("{cle}:")),
+                "`{cle}` n'a pas de libellé :\n{textes}"
+            );
+        }
+    }
+
+    /// Le tableau de bord ne montre que ce que le service publie vraiment.
+    ///
+    /// Les sondes viennent de `GET /health`, qui est une route du contrat. La version et
+    /// le nombre de routes ne sont exposés par aucune opération : ils sont des propriétés
+    /// du document OpenAPI, que le client engendré ne peut pas porter puisqu'il en sort.
+    /// C'est la seule requête du shell qui ne passe pas par lui, et elle est bornée à ce
+    /// module-là.
+    #[test]
+    fn the_dashboard_reads_the_probes_from_the_contract_and_the_rest_from_the_document() {
+        let (_parent, root) = project();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        let tableau = projected(&planned, "frontend/src/admin/vues/TableauDeBord.vue");
+        assert!(
+            tableau.contains("api.health()"),
+            "le tableau de bord n'interroge pas la sonde :\n{tableau}"
+        );
+        assert!(
+            tableau.contains("lireLeContrat()"),
+            "le tableau de bord n'ouvre pas le document :\n{tableau}"
+        );
+
+        let document = projected(&planned, "frontend/src/admin/document.ts");
+        assert!(
+            document.contains("const DOCUMENT = '/api-docs/openapi.json'")
+                && document.contains("fetch(DOCUMENT"),
+            "le document n'est pas lu là où il est publié :\n{document}"
+        );
+
+        // Un 503 porte le même corps qu'un 200, et c'est le cas où l'opérateur a le plus
+        // besoin de le lire : le rendre illisible reviendrait à n'afficher les sondes que
+        // lorsqu'elles vont toutes bien.
+        assert!(
+            tableau.contains("ApiError"),
+            "un service dégradé n'affiche aucune sonde :\n{tableau}"
+        );
+    }
+
+    /// Les sessions se révoquent une par une et toutes d'un coup, par les routes réelles.
+    ///
+    /// La révocation globale emporte la session de l'appelant — le service le dit. La
+    /// laisser ouverte ici rendrait un écran qui marche encore et cessera de marcher à la
+    /// première requête, sans que rien ne l'ait annoncé.
+    #[test]
+    fn the_sessions_screen_revokes_one_and_all_and_sees_itself_out() {
+        let (_parent, root) = project();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        let sessions = projected(&planned, "frontend/src/admin/vues/Sessions.vue");
+        for appel in [
+            "api.authListSessions()",
+            "api.authRevokeSession(",
+            "api.authRevokeSessions()",
+        ] {
+            assert!(
+                sessions.contains(appel),
+                "`{appel}` manque à l'écran des sessions :\n{sessions}"
+            );
+        }
+        assert!(
+            sessions.contains("authentification.deconnexion()"),
+            "la révocation globale laisse la session de l'appelant ouverte :\n{sessions}"
+        );
+    }
+
+    /// Le profil change le mot de passe, et la paire neuve remplace celle qui vient de
+    /// tomber.
+    ///
+    /// Le service ferme toutes les sessions du compte, celle de l'appelant comprise, puis
+    /// réémet. Jeter cette paire déconnecterait au renouvellement suivant quelqu'un qui
+    /// vient de faire exactement la bonne chose ; c'est le store qui la retient, parce que
+    /// c'est lui qui tient la session.
+    #[test]
+    fn changing_the_password_keeps_the_session_the_service_just_reissued() {
+        let (_parent, root) = project();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        let profil = projected(&planned, "frontend/src/admin/vues/Profil.vue");
+        assert!(
+            profil.contains("api.authMe()"),
+            "le profil n'interroge pas le compte courant :\n{profil}"
+        );
+        assert!(
+            profil.contains("authentification.changerMotDePasse("),
+            "le changement de mot de passe ne passe pas par le store :\n{profil}"
+        );
+
+        let store = projected(&planned, "frontend/src/stores/authentification.ts");
+        let changement = store
+            .split("async function changerMotDePasse(")
+            .nth(1)
+            .unwrap_or_else(|| panic!("le store ne sait pas changer de mot de passe :\n{store}"));
+        assert!(
+            changement.contains("api.authChangePassword("),
+            "le store ne change rien par le contrat :\n{changement}"
+        );
+        assert!(
+            changement.contains("retenir("),
+            "la paire neuve est jetée :\n{changement}"
         );
     }
 

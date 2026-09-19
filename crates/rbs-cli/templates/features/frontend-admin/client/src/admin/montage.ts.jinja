@@ -15,11 +15,27 @@ export const routes: Montage['routes'] = [
     name: 'admin-connexion',
     component: () => import('./vues/Connexion.vue'),
   },
+  // Sans nom : le tableau de bord occupe le chemin vide, et un nom porté par le parent
+  // désignerait une route que le routeur ne saurait pas rendre seule.
   {
     path: '/admin',
-    name: 'admin',
     component: () => import('./Shell.vue'),
     children: [
+      {
+        path: '',
+        name: 'admin-tableau',
+        component: () => import('./vues/TableauDeBord.vue'),
+      },
+      {
+        path: 'sessions',
+        name: 'admin-sessions',
+        component: () => import('./vues/Sessions.vue'),
+      },
+      {
+        path: 'profil',
+        name: 'admin-profil',
+        component: () => import('./vues/Profil.vue'),
+      },
       // Les écrans de l'administration viennent ici, entité par entité.
     ],
   },

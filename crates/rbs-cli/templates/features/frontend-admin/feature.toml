@@ -56,6 +56,14 @@ source      = "client/src/admin/garde.ts.jinja"
 destination = "frontend/src/admin/garde.ts"
 
 [[files]]
+source      = "client/src/admin/rail.ts.jinja"
+destination = "frontend/src/admin/rail.ts"
+
+[[files]]
+source      = "client/src/admin/document.ts.jinja"
+destination = "frontend/src/admin/document.ts"
+
+[[files]]
 source      = "client/src/admin/textes.ts.jinja"
 destination = "frontend/src/admin/textes.ts"
 
@@ -66,3 +74,15 @@ destination = "frontend/src/admin/Shell.vue"
 [[files]]
 source      = "client/src/admin/vues/Connexion.vue.jinja"
 destination = "frontend/src/admin/vues/Connexion.vue"
+
+[[files]]
+source      = "client/src/admin/vues/TableauDeBord.vue.jinja"
+destination = "frontend/src/admin/vues/TableauDeBord.vue"
+
+[[files]]
+source      = "client/src/admin/vues/Sessions.vue.jinja"
+destination = "frontend/src/admin/vues/Sessions.vue"
+
+[[files]]
+source      = "client/src/admin/vues/Profil.vue.jinja"
+destination = "frontend/src/admin/vues/Profil.vue"

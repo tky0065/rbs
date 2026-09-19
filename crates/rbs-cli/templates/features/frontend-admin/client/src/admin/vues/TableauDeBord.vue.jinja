@@ -1,0 +1,145 @@
+<script setup lang="ts">
+import { onMounted, ref } from 'vue'
+
+import { ApiError, api, phrase } from '@/api'
+import Bande from '@/components/Bande.vue'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableEmpty,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+
+import type { Contrat } from '../document'
+
+import { lireLeContrat } from '../document'
+import { TEXTES } from '../textes'
+
+/**
+ * Ce que `GET /health` rend.
+ *
+ * Le contrat déclare la route mais pas son corps : le client engendré la rend donc
+ * `void`, alors que la réponse porte bien le verdict et le détail par dépendance. La
+ * forme est affirmée ici, à un seul endroit, et ce type s'en ira le jour où le contrat
+ * la portera.
+ */
+type Sante = { status?: string; checks?: Record<string, string> }
+
+const sante = ref<Sante | null>(null)
+const sondesEnCours = ref(true)
+const fauteSante = ref<string | null>(null)
+
+const contrat = ref<Contrat | null>(null)
+const contratEnCours = ref(true)
+const fauteContrat = ref<string | null>(null)
+
+/**
+ * Interroge la sonde, et lit son corps quel que soit le statut.
+ *
+ * Un service dégradé répond 503 avec le même corps qu'un 200, et c'est précisément le cas
+ * où l'opérateur a besoin de le lire : ne l'afficher que sur un 200 reviendrait à ne
+ * montrer les sondes que lorsqu'elles vont toutes bien.
+ */
+async function sonder(): Promise<void> {
+  sondesEnCours.value = true
+
+  try {
+    sante.value = lit(await api.health())
+    fauteSante.value = sante.value === null ? TEXTES.sante_illisible : null
+  } catch (cause) {
+    const corps = cause instanceof ApiError ? lit(cause.body) : null
+
+    sante.value = corps
+    fauteSante.value = corps === null ? phrase(cause, TEXTES.sante_injoignable) : null
+  } finally {
+    sondesEnCours.value = false
+  }
+}
+
+function lit(corps: unknown): Sante | null {
+  return typeof corps === 'object' && corps !== null && 'checks' in corps
+    ? (corps as Sante)
+    : null
+}
+
+async function ouvrirLeContrat(): Promise<void> {
+  contratEnCours.value = true
+
+  try {
+    contrat.value = await lireLeContrat()
+    fauteContrat.value = null
+  } catch (cause) {
+    contrat.value = null
+    fauteContrat.value = phrase(cause, TEXTES.document_injoignable)
+  } finally {
+    contratEnCours.value = false
+  }
+}
+
+onMounted(() => {
+  void sonder()
+  void ouvrirLeContrat()
+})
+</script>
+
+<template>
+  <div class="feuille mx-auto max-w-4xl border-x border-border px-4 sm:px-6">
+    <Bande>
+      <h1 class="text-2xl leading-tight">{{ TEXTES.tableau }}</h1>
+    </Bande>
+
+    <Bande :titre="TEXTES.sondes">
+      <p v-if="sondesEnCours" class="text-muted-foreground" role="status">
+        {{ TEXTES.chargement }}
+      </p>
+
+      <template v-else>
+        <Table v-if="sante">
+          <TableHeader>
+            <TableRow>
+              <TableHead>{{ TEXTES.sonde }}</TableHead>
+              <TableHead>{{ TEXTES.verdict }}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            <TableRow v-for="(verdict, nom) in sante.checks" :key="nom">
+              <TableCell>{{ nom }}</TableCell>
+              <TableCell :class="verdict === 'ok' ? '' : 'text-destructive'">
+                {{ verdict }}
+              </TableCell>
+            </TableRow>
+            <TableEmpty
+              v-if="Object.keys(sante.checks ?? {}).length === 0"
+              :colspan="2"
+              class="whitespace-normal"
+            >
+              {{ TEXTES.aucune_sonde }}
+            </TableEmpty>
+          </TableBody>
+        </Table>
+
+        <p v-if="fauteSante" class="text-destructive" role="alert">{{ fauteSante }}</p>
+      </template>
+    </Bande>
+
+    <Bande :titre="TEXTES.contrat">
+      <p v-if="contratEnCours" class="text-muted-foreground" role="status">
+        {{ TEXTES.chargement }}
+      </p>
+
+      <dl v-else-if="contrat" class="grid gap-x-6 gap-y-1 sm:grid-cols-[minmax(10rem,auto)_1fr]">
+        <dt class="text-muted-foreground">{{ TEXTES.version }}</dt>
+        <dd class="m-0">{{ contrat.version ?? TEXTES.inconnu }}</dd>
+        <dt class="text-muted-foreground max-sm:mt-3">{{ TEXTES.routes }}</dt>
+        <dd class="m-0">{{ contrat.routes }}</dd>
+      </dl>
+
+      <p v-else class="text-destructive" role="alert">{{ fauteContrat }}</p>
+
+      <p v-if="contrat" class="mt-5 text-muted-foreground">{{ TEXTES.routes_source }}</p>
+    </Bande>
+  </div>
+</template>

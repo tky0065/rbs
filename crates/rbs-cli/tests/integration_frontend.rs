@@ -193,10 +193,38 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
     }
 
     let engendre = std::fs::read_to_string(&client).expect("le client doit être engendré");
-    for methode in ["authLogin(", "authRefresh(", "authLogout(", "authMe("] {
+    for methode in [
+        "authLogin(",
+        "authRefresh(",
+        "authLogout(",
+        "authMe(",
+        "authListSessions(",
+        "authRevokeSession(",
+        "authRevokeSessions(",
+        "authChangePassword(",
+        "health(",
+    ] {
         assert!(
             engendre.contains(methode),
             "`{methode}` manque au client : le shell ne compilera pas\n{engendre}"
+        );
+    }
+
+    // Et l'inverse : chaque appel que le shell écrit correspond à une méthode que le
+    // client publie. La liste ci-dessus est un plancher, que l'ajout d'un écran ne
+    // relèverait pas — celle-ci se relit toute seule, et c'est elle qui attrape un appel
+    // à une route que le contrat n'expose pas.
+    let appels = appels_du_shell(&projet.join("frontend/src"));
+    // Un relevé vide passerait la boucle sans rien prouver : le shell appelle au moins ce
+    // par quoi il ouvre une session.
+    assert!(
+        appels.iter().any(|appel| appel == "authLogin"),
+        "le relevé des appels du shell n'a rien trouvé : {appels:?}"
+    );
+    for appel in appels {
+        assert!(
+            engendre.contains(&format!("{appel}(")),
+            "le shell appelle `api.{appel}()`, que le contrat n'expose pas\n{engendre}"
         );
     }
 
@@ -214,7 +242,13 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
         .filter_map(Result::ok)
         .map(|entree| entree.file_name().to_string_lossy().into_owned())
         .collect();
-    for ecran in ["Shell-", "Connexion-"] {
+    for ecran in [
+        "Shell-",
+        "Connexion-",
+        "TableauDeBord-",
+        "Sessions-",
+        "Profil-",
+    ] {
         assert!(
             morceaux.iter().any(|nom| nom.starts_with(ecran)),
             "`{ecran}` n'est pas dans le build :\n{morceaux:?}"
@@ -259,6 +293,67 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
         bundles.contains(&refus),
         "`{refus}` ne part pas au navigateur"
     );
+}
+
+/// Les méthodes du client que le shell appelle, relevées sous `racine`.
+///
+/// Le relevé porte sur `api.<methode>(`, la seule forme par laquelle le shell atteint le
+/// contrat : `api` est l'instance unique que `src/api/index.ts` construit, et rien
+/// d'autre ne parle HTTP — un test de plan le tient.
+fn appels_du_shell(racine: &Path) -> Vec<String> {
+    let mut appels = Vec::new();
+
+    for source in sources(racine) {
+        let lu = std::fs::read_to_string(&source).unwrap_or_default();
+
+        for (debut, _) in lu.match_indices("api.") {
+            // `openapi.json` porte les mêmes quatre caractères : ce qui précède décide,
+            // et un identifiant ne se poursuit pas par la variable qu'on cherche.
+            if lu[..debut]
+                .chars()
+                .next_back()
+                .is_some_and(|avant| avant.is_ascii_alphanumeric() || avant == '_')
+            {
+                continue;
+            }
+
+            let apres = &lu[debut + "api.".len()..];
+            let methode: String = apres
+                .chars()
+                .take_while(char::is_ascii_alphanumeric)
+                .collect();
+
+            if !methode.is_empty() && apres[methode.len()..].starts_with('(') {
+                appels.push(methode);
+            }
+        }
+    }
+
+    appels.sort();
+    appels.dedup();
+    appels
+}
+
+/// Les fichiers `.ts` et `.vue` sous `racine`, le client engendré mis à part.
+fn sources(racine: &Path) -> Vec<std::path::PathBuf> {
+    let mut trouves = Vec::new();
+
+    for entree in std::fs::read_dir(racine).into_iter().flatten().flatten() {
+        let chemin = entree.path();
+
+        if chemin.is_dir() {
+            trouves.extend(sources(&chemin));
+        } else if chemin.ends_with("client.ts") {
+            continue;
+        } else if matches!(
+            chemin.extension().and_then(|suffixe| suffixe.to_str()),
+            Some("ts" | "vue")
+        ) {
+            trouves.push(chemin);
+        }
+    }
+
+    trouves
 }
 
 /// La valeur du libellé `cle`, tronquée à son premier caractère non ASCII.
