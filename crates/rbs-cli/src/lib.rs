@@ -1002,6 +1002,16 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
         ));
     }
 
+    // L'écran engendré importe le corps de la ressource depuis le client typé : celui-ci
+    // ne connaît pas encore la table, et la vérification des types du frontend s'arrête
+    // jusqu'à ce qu'il soit régénéré. Le CLI ne le fait pas de lui-même — la commande
+    // compile le projet, ce qu'une génération n'a jamais fait.
+    if let Some(geste) = &planned.geste_suivant {
+        ui::info(&format!(
+            "\n  l'écran engendré appelle le client typé : relancez `{geste}`"
+        ));
+    }
+
     Ok(())
 }
 

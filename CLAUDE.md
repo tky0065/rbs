@@ -148,7 +148,7 @@ dans le `<template>` de la coquille — le mécanisme ne sait ouvrir une ancre q
 `generate crud` en emploie six, huit sur un projet portant le fragment `frontend-admin` :
 il y écrit aussi l'écran d'administration de la table, et le monte par `admin_routes` et
 `admin_rail` — les deux seules ancres que la commande vise sans qu'elles appartiennent au
-squelette, et les deux seules qu'elle saute plutôt que de refuser quand la balise manque.
+squelette, et les deux seules qu'elle saute plutôt que de refuser quand l'ancre manque.
 `generate job` en emploie trois — `job_modules` et
 `schedules`, qui ne servent qu'à lui, et `jobs`, où le fragment `webhooks` inscrit aussi sa
 livraison ; les autres appartiennent aux fragments qu'installe `add`. Une ancre insérée dans `<rbs:layers>` est *intérieure* à `trace` et `request_id` :

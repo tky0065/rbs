@@ -17,11 +17,16 @@ la promesse d'ADR-0003 : « ce qu'on voit à l'installation est exactement ce qu
 ensuite ». Donc l'écran de démonstration gagne lui aussi son formulaire et son détail : une
 seule forme, deux producteurs.
 
-Ce qui varie entre les deux producteurs tient dans **quatre fonctions de source** —
-`interroger`, `lire`, `enregistrer`, `supprimer`. Le fragment les rend sur un tableau
-écrit dans le fichier ; la commande les rend sur le client typé (`api.<module>Filter`,
-`Find`, `Create`, `Update`, `Delete`). Tout le reste de l'écran — filtre, tri, pagination,
-dialogue, panneau, rendu — ne connaît que `Ligne`, `Requete` et `Formulaire`.
+Ce qui dépend d'un contrat entre les deux producteurs tient dans **quatre fonctions de
+source** — `interroger`, `lire`, `enregistrer`, `supprimer` — plus `depuis` et `raison`, qui
+les accompagnent. Le fragment les rend sur un tableau écrit dans le fichier ; la commande
+les rend sur le client typé (`api.<module>Filter`, `Find`, `Create`, `Update`, `Delete`).
+Tout le reste de l'écran — filtre, tri, pagination, dialogue, panneau, rendu — ne connaît
+que `Ligne`, `Requete` et `Formulaire`.
+
+Une cinquième valeur les sépare, qui ne dépend d'aucun contrat : la **taille de page**,
+cinq sur la démonstration — ses onze lignes doivent montrer trois pages — et vingt sur une
+table réelle. Elle est nommée des deux côtés dans `src/ecran.rs`.
 
 `Ecran` porte donc trois listes, chacune avec un rôle distinct :
 

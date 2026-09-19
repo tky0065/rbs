@@ -29,11 +29,42 @@ use crate::generate::feature::Feature;
 use crate::generate::fields::{Field, FieldType};
 use crate::lang::Lang;
 
-/// Combien de lignes une page d'écran engendré porte.
+/// Combien de lignes une page porte : cinq sur la démonstration, dont les onze lignes
+/// doivent montrer trois pages, vingt sur une table réelle, où une page de cinq ferait
+/// paginer ce qui tiendrait à l'écran.
 ///
-/// Cinq sur la démonstration, dont les onze lignes doivent montrer trois pages ; vingt sur
-/// une table réelle, où une page de cinq ferait paginer ce qui tiendrait à l'écran.
+/// C'est, avec les quatre fonctions de source, la seule chose qui sépare les deux
+/// producteurs — et la seule qui ne dépende pas d'un contrat.
+const TAILLE_DEMONSTRATION: u32 = 5;
 const TAILLE_ENGENDREE: u32 = 20;
+
+/// Le composant de l'écran que le fragment dépose pour son entité de démonstration.
+///
+/// Une table qui porterait ce nom rendrait son écran sur le même fichier et sous la même
+/// route : l'écran du fragment tomberait sous `--force`, sa route resterait pointée dessus,
+/// et le rail porterait deux entrées sur un nom de route déclaré deux fois — le routeur n'en
+/// monterait plus aucune. `generate crud` le refuse, et `--no-admin` lève le refus.
+pub(crate) const DEMONSTRATION: &str = "Demonstration";
+
+/// Où le shell d'administration attend le client typé.
+///
+/// C'est le couplage qu'ADR-0003 assume les yeux ouverts : la commande connaît désormais la
+/// disposition des fichiers du socle. Le fragment nomme le même chemin dans ses gestes
+/// suivants, et un test des deux côtés le garde — déplacer ce répertoire casse la
+/// génération, et c'est le prix annoncé.
+pub(crate) const CLIENT: &str = "frontend/src/api";
+
+/// L'écran patron, pris là où le fragment `frontend-admin` le dépose.
+///
+/// Le seul `include_str!` de la crate à le viser, et c'est ce qui rend structurelle la
+/// promesse « une seule template, deux producteurs » : [`Ecran::rendre`] est la seule voie
+/// par laquelle `rbs generate crud` atteint un écran, et elle ne peut rendre que ce
+/// fichier-ci. Un second gabarit demanderait d'écrire un second `include_str!`, ce qu'un
+/// test refuse.
+const PATRON: &str = include_str!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/templates/features/frontend-admin/client/src/admin/vues/Patron.vue.jinja"
+));
 
 /// Une propriété d'une ligne : ce que `interface Ligne` déclare, et ce que le détail montre.
 ///
@@ -70,10 +101,18 @@ pub(crate) struct Champ {
     pub cle: String,
     /// Ce que l'opérateur lit au-dessus du contrôle.
     pub libelle: String,
-    /// Le contrôle qui saisit la valeur : `texte`, `nombre`, `decimal`, `booleen`,
-    /// `date`, `instant` ou `liste`.
+    /// Le nom du contrôle : la template s'en sert pour brancher la *forme* des deux
+    /// expressions qui traversent le formulaire — ce qui part vers la source, et ce qui en
+    /// revient.
     pub controle: String,
-    /// Les valeurs admises, pour le seul contrôle `liste`.
+    /// Le composant d'interface qui rend le contrôle : `input`, `checkbox` ou `select`.
+    ///
+    /// Distinct du nom : c'est lui que la template lit pour choisir le balisage, et lui que
+    /// [`composants`] compte pour savoir quoi importer.
+    pub composant: String,
+    /// L'attribut `type` du champ de saisie ; vide hors du composant `input`.
+    pub type_html: String,
+    /// Les valeurs admises, pour le seul composant `select`.
     pub valeurs: Vec<String>,
     /// Le type TypeScript de la valeur envoyée, sa nullité exceptée.
     pub type_base: String,
@@ -219,18 +258,22 @@ impl Ecran {
         // quatre champs : une entité sans identifiant serveur ni horodatage automatique,
         // ce qui est précisément ce qui la rend lisible dans le fichier.
         let declarees = [
-            ("reference", "Référence", "Reference", "texte", true),
-            ("libelle", "Libellé", "Label", "texte", true),
-            ("etat", "État", "State", "liste", false),
-            ("maj", "Mise à jour", "Updated", "date", true),
+            ("reference", "Référence", "Reference", Controle::Texte, true),
+            ("libelle", "Libellé", "Label", Controle::Texte, true),
+            ("etat", "État", "State", Controle::Liste, false),
+            ("maj", "Mise à jour", "Updated", Controle::Date, true),
         ];
+        let valeurs_de = |controle: Controle| match controle {
+            Controle::Liste => etats.iter().map(|etat| (*etat).to_string()).collect(),
+            _ => Vec::new(),
+        };
 
         let proprietes = declarees
             .iter()
             .map(|(cle, fr, en, controle, _)| Propriete {
                 cle: (*cle).to_string(),
                 libelle: dans(lang, fr, en),
-                type_base: type_de_controle(controle, &etats),
+                type_base: controle.type_ts(&valeurs_de(*controle)),
                 optionnel: false,
             })
             .collect();
@@ -246,17 +289,14 @@ impl Ecran {
 
         let champs: Vec<Champ> = declarees
             .iter()
-            .map(|(cle, fr, en, controle, _)| Champ {
-                cle: (*cle).to_string(),
-                libelle: dans(lang, fr, en),
-                controle: (*controle).to_string(),
-                valeurs: if *controle == "liste" {
-                    etats.iter().map(|etat| (*etat).to_string()).collect()
-                } else {
-                    Vec::new()
-                },
-                type_base: type_de_controle(controle, &etats),
-                optionnel: false,
+            .map(|(cle, fr, en, controle, _)| {
+                champ_de(
+                    cle,
+                    dans(lang, fr, en),
+                    *controle,
+                    valeurs_de(*controle),
+                    false,
+                )
             })
             .collect();
 
@@ -297,7 +337,7 @@ impl Ecran {
 
         let route = "admin-demonstration".to_string();
         let segment = "demonstration".to_string();
-        let composant = "Demonstration".to_string();
+        let composant = DEMONSTRATION.to_string();
 
         Self {
             montage: montage(&segment, &route, &composant),
@@ -308,7 +348,7 @@ impl Ecran {
             route,
             composant,
             cle: "reference".to_string(),
-            taille: 5,
+            taille: TAILLE_DEMONSTRATION,
             filtrable: true,
             composants: composants(&champs, true),
             proprietes,
@@ -434,6 +474,16 @@ impl Ecran {
     pub(crate) fn fichier(&self) -> String {
         format!("frontend/src/admin/vues/{}.vue", self.composant)
     }
+
+    /// L'écran rendu, prêt à écrire.
+    ///
+    /// La seule voie par laquelle `rbs generate crud` atteint un écran : elle ne sait rendre
+    /// que [`PATRON`], et un second gabarit demanderait donc de toucher ce module-ci. C'est
+    /// ce qui rend la promesse « une seule template, deux producteurs » structurelle plutôt
+    /// que gardée par un test.
+    pub(crate) fn rendre(&self) -> Result<String, minijinja::Error> {
+        crate::template::Renderer::new().render(PATRON, minijinja::context! { ecran => self })
+    }
 }
 
 impl Textes {
@@ -485,29 +535,22 @@ impl Textes {
 /// Les composants d'interface qu'un écran importe, au-delà de ceux qu'il importe toujours.
 ///
 /// Le bouton, la table, la boîte de dialogue et le panneau sont de tous les écrans — la
-/// création, le détail et la suppression en dépendent quelle que soit la table. Les
-/// quatre autres suivent les contrôles du formulaire, et le champ suit aussi le filtre.
+/// création, le détail et la suppression en dépendent quelle que soit la table. Les trois
+/// autres suivent les composants que réclament les champs, et le champ de saisie suit
+/// aussi le filtre.
 fn composants(champs: &[Champ], filtrable: bool) -> Vec<String> {
-    let porte = |controle: &str| champs.iter().any(|champ| champ.controle == controle);
-
     let mut retenus = Vec::new();
-    if filtrable
-        || porte("texte")
-        || porte("nombre")
-        || porte("decimal")
-        || porte("date")
-        || porte("instant")
-    {
+
+    if filtrable || champs.iter().any(|champ| champ.composant == "input") {
         retenus.push("input".to_string());
     }
     if !champs.is_empty() {
         retenus.push("label".to_string());
     }
-    if porte("booleen") {
-        retenus.push("checkbox".to_string());
-    }
-    if porte("liste") {
-        retenus.push("select".to_string());
+    for composant in ["checkbox", "select"] {
+        if champs.iter().any(|champ| champ.composant == composant) {
+            retenus.push(composant.to_string());
+        }
     }
 
     retenus
@@ -536,42 +579,120 @@ fn humanise(nom: &str) -> String {
     }
 }
 
-/// Le contrôle qui saisit un champ, et le type TypeScript de ce qu'il envoie.
+/// Le contrôle qui saisit un champ.
 ///
 /// Une énumération se saisit dans une liste, un booléen dans une case, une date et un
-/// instant dans les contrôles natifs qui les rendent — leur format de sortie est
-/// exactement celui que le contrat attend, à l'instant près, dont le fuseau se repose à
-/// l'envoi. Un texte long passe par le même champ qu'une chaîne courte : les quatorze
-/// composants figés n'en portent pas d'autre, et en ajouter un ferait dépendre l'écran
-/// engendré de ce que le socle n'a pas.
-fn controle(field: &Field) -> (&'static str, String) {
-    if !field.enum_variants().is_empty() {
-        return ("liste", union(field.enum_variants()));
-    }
-    if field.reference().is_some() {
-        return ("texte", "string".to_string());
+/// instant dans les contrôles natifs qui les rendent — leur format de sortie est exactement
+/// celui que le contrat attend, à l'instant près, dont le fuseau se repose à l'envoi. Un
+/// texte long passe par le même champ qu'une chaîne courte : les quatorze composants figés
+/// n'en portent pas d'autre, et en ajouter un ferait dépendre l'écran engendré de ce que le
+/// socle n'a pas.
+///
+/// Une énumération, et elle seule, plutôt que sept chaînes nues : le contrôle décide de
+/// quatre choses — le composant, l'attribut `type`, le type TypeScript, et la forme des
+/// deux expressions que la template écrit — et sept comparaisons de chaînes dispersées les
+/// auraient fait diverger à la première variante ajoutée.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Controle {
+    /// Une chaîne, un texte long, un identifiant, une référence.
+    Texte,
+    /// Un entier ou un flottant.
+    Nombre,
+    /// Un décimal, que le contrat porte en chaîne : un nombre JavaScript y perdrait les
+    /// centimes, ce que la représentation choisie par le noyau évite précisément.
+    Decimal,
+    /// Un booléen.
+    Booleen,
+    /// Une date.
+    Date,
+    /// Un instant.
+    Instant,
+    /// Une valeur parmi celles qu'une énumération déclare.
+    Liste,
+}
+
+impl Controle {
+    /// Celui qui saisit `field`.
+    fn of(field: &Field) -> Self {
+        if !field.enum_variants().is_empty() {
+            return Self::Liste;
+        }
+        if field.reference().is_some() {
+            return Self::Texte;
+        }
+
+        match field.column_type() {
+            FieldType::String | FieldType::Text | FieldType::Uuid => Self::Texte,
+            FieldType::Int | FieldType::Float => Self::Nombre,
+            FieldType::Decimal => Self::Decimal,
+            FieldType::Bool => Self::Booleen,
+            FieldType::Date => Self::Date,
+            FieldType::Datetime => Self::Instant,
+        }
     }
 
-    match field.column_type() {
-        FieldType::String | FieldType::Text | FieldType::Uuid => ("texte", "string".to_string()),
-        FieldType::Int | FieldType::Float => ("nombre", "number".to_string()),
-        // Le contrat porte le décimal en chaîne : un nombre JavaScript y perdrait les
-        // centimes, ce que la représentation choisie par le noyau évite précisément.
-        FieldType::Decimal => ("decimal", "string".to_string()),
-        FieldType::Bool => ("booleen", "boolean".to_string()),
-        FieldType::Date => ("date", "string".to_string()),
-        FieldType::Datetime => ("instant", "string".to_string()),
+    /// Le nom que la template lit pour brancher la forme d'une expression.
+    fn nom(self) -> &'static str {
+        match self {
+            Self::Texte => "texte",
+            Self::Nombre => "nombre",
+            Self::Decimal => "decimal",
+            Self::Booleen => "booleen",
+            Self::Date => "date",
+            Self::Instant => "instant",
+            Self::Liste => "liste",
+        }
+    }
+
+    /// Le composant d'interface qui le rend.
+    fn composant(self) -> &'static str {
+        match self {
+            Self::Booleen => "checkbox",
+            Self::Liste => "select",
+            _ => "input",
+        }
+    }
+
+    /// L'attribut `type` du champ de saisie, vide hors du composant `input`.
+    fn type_html(self) -> &'static str {
+        match self {
+            Self::Nombre => "number",
+            Self::Date => "date",
+            Self::Instant => "datetime-local",
+            Self::Booleen | Self::Liste => "",
+            Self::Texte | Self::Decimal => "text",
+        }
+    }
+
+    /// Le type TypeScript de la valeur envoyée, sa nullité exceptée. `valeurs` ne sert
+    /// qu'à la liste, dont le type *est* l'union de ce qu'elle déclare.
+    fn type_ts(self, valeurs: &[String]) -> String {
+        match self {
+            Self::Nombre => "number".to_string(),
+            Self::Booleen => "boolean".to_string(),
+            Self::Liste => union(valeurs),
+            Self::Texte | Self::Decimal | Self::Date | Self::Instant => "string".to_string(),
+        }
     }
 }
 
-/// Le type TypeScript d'un contrôle de la démonstration, dont les champs n'ont pas de
-/// `Field` derrière eux.
-fn type_de_controle(controle: &str, valeurs: &[&str]) -> String {
-    match controle {
-        "liste" => union(valeurs),
-        "nombre" => "number".to_string(),
-        "booleen" => "boolean".to_string(),
-        _ => "string".to_string(),
+/// Le champ de formulaire d'une propriété, quel que soit son producteur.
+fn champ_de(
+    cle: &str,
+    libelle: String,
+    controle: Controle,
+    valeurs: Vec<String>,
+    optionnel: bool,
+) -> Champ {
+    Champ {
+        cle: cle.to_string(),
+        libelle,
+        controle: controle.nom().to_string(),
+        composant: controle.composant().to_string(),
+        type_html: controle.type_html().to_string(),
+        type_base: controle.type_ts(&valeurs),
+        valeurs,
+        optionnel,
     }
 }
 
@@ -586,28 +707,23 @@ fn union<S: AsRef<str>>(valeurs: &[S]) -> String {
 
 /// La propriété qu'un champ déclaré ajoute à une ligne.
 fn propriete(field: &Field) -> Propriete {
-    let (_, type_base) = controle(field);
-
     Propriete {
         cle: field.column_name(),
         libelle: humanise(&field.column_name()),
-        type_base,
+        type_base: Controle::of(field).type_ts(field.enum_variants()),
         optionnel: field.optional,
     }
 }
 
 /// Le champ de formulaire qu'un champ déclaré reçoit.
 fn champ(field: &Field) -> Champ {
-    let (controle, type_base) = controle(field);
-
-    Champ {
-        cle: field.column_name(),
-        libelle: humanise(&field.column_name()),
-        controle: controle.to_string(),
-        valeurs: field.enum_variants().to_vec(),
-        type_base,
-        optionnel: field.optional,
-    }
+    champ_de(
+        &field.column_name(),
+        humanise(&field.column_name()),
+        Controle::of(field),
+        field.enum_variants().to_vec(),
+        field.optional,
+    )
 }
 
 /// La route d'un écran, telle qu'elle s'écrit dans la table de routage.
@@ -669,49 +785,89 @@ mod tests {
             .unwrap_or_else(|faute| panic!("l'écran patron doit se rendre : {faute}"))
     }
 
-    /// La template embarquée est bien le fichier que le fragment dépose, et non une copie.
+    /// Ce qu'un écran d'administration porte et que rien d'autre ne porte : la table de
+    /// ses colonnes. Sert de signature pour compter les gabarits d'écran du dépôt.
+    const SIGNATURE: &str = "const COLONNES: readonly Colonne[] = [";
+
+    /// Le fragment rend exactement la template que [`Ecran::rendre`] rend.
+    ///
+    /// C'est le contrôle central de la conception : une seule forme, deux producteurs. Le
+    /// fragment atteint sa template par l'arborescence qu'`include_dir` embarque, la
+    /// commande par un `include_str!` — deux chemins de lecture, qui doivent aboutir aux
+    /// mêmes octets. Sans ce test, rien ne signalerait qu'ils ont cessé de le faire.
     #[test]
-    fn the_embedded_pattern_screen_is_the_one_the_fragment_lays_down() {
-        let sur_disque =
-            std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join(CHEMIN))
-                .expect("l'écran patron doit se lire dans le fragment");
+    fn the_fragment_renders_the_very_template_the_command_renders() {
+        let source =
+            crate::templates::Source::feature(None, "frontend-admin").expect("le fragment s'ouvre");
+        let (manifeste, fichiers) = source.manifest_and_files().expect("le fragment se lit");
+        let manifeste = crate::manifest::read(
+            &manifeste.expect("le fragment porte un manifeste"),
+            "frontend-admin/feature.toml",
+        )
+        .expect("le manifeste embarqué est valide");
 
-        assert_eq!(sur_disque, PATRON);
+        let depose = crate::add::installation::a_deposer("frontend-admin", &manifeste, &fichiers)
+            .expect("les templates du fragment sont là");
+        let (_, template, _) = depose
+            .iter()
+            .find(|(destination, _, _)| destination == "frontend/src/admin/vues/Demonstration.vue")
+            .expect("le fragment dépose l'écran de démonstration");
 
-        let manifeste = std::fs::read_to_string(Path::new(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/templates/features/frontend-admin/feature.toml"
-        )))
-        .expect("le manifeste du shell doit se lire");
-        assert!(
-            manifeste.contains("client/src/admin/vues/Patron.vue.jinja"),
-            "le fragment ne dépose pas l'écran patron :\n{manifeste}"
+        assert_eq!(
+            *template, PATRON,
+            "le fragment et la commande ne rendent plus le même fichier"
         );
 
-        // Et la commande de génération n'en a pas pris de copie sous `templates/feature/`,
-        // d'où sortent ses autres templates : deux exemplaires divergeraient, et la
-        // divergence est le défaut même que la conception voulait éviter.
-        let copies: Vec<_> = std::fs::read_dir(Path::new(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/templates/feature"
-        )))
-        .expect("le répertoire des templates de feature se lit")
-        .filter_map(Result::ok)
-        .map(|entree| entree.file_name().to_string_lossy().into_owned())
-        .filter(|nom| nom.contains(".vue"))
-        .collect();
+        // Et le fragment nomme le même répertoire de client que la commande annonce ensuite.
         assert!(
-            copies.is_empty(),
-            "une seconde template d'écran vit sous templates/feature/ : {copies:?}"
+            manifeste
+                .feature
+                .next_steps
+                .iter()
+                .any(|geste| geste.contains(&format!("--out {CLIENT}"))),
+            "le fragment et la commande divergent sur le répertoire du client : {:?}",
+            manifeste.feature.next_steps
         );
+    }
 
-        // La commande lit bien celle du fragment, et non une chaîne à elle.
-        let commande = std::fs::read_to_string(Path::new(concat!(
-            env!("CARGO_MANIFEST_DIR"),
-            "/src/generate/command.rs"
-        )))
-        .expect("la commande se lit");
-        assert!(commande.contains(CHEMIN), "{commande}");
+    /// Un seul gabarit d'écran dans tout le dépôt.
+    ///
+    /// Le balayage est récursif et porte sur le contenu, non sur un nom de fichier ni sur
+    /// un répertoire : une copie posée sous `templates/feature/tests/` et rebaptisée
+    /// `ecran.jinja` serait exactement la divergence que la conception refuse, et un
+    /// contrôle qui ne regarderait qu'un répertoire ou qu'une extension la laisserait
+    /// passer.
+    #[test]
+    fn the_repository_carries_exactly_one_screen_template() {
+        let racine = Path::new(env!("CARGO_MANIFEST_DIR")).join("templates");
+        let mut gabarits = Vec::new();
+        let mut a_visiter = vec![racine.clone()];
+
+        while let Some(repertoire) = a_visiter.pop() {
+            for entree in std::fs::read_dir(&repertoire).expect("le répertoire se lit") {
+                let chemin = entree.expect("l'entrée se lit").path();
+                if chemin.is_dir() {
+                    a_visiter.push(chemin);
+                } else if std::fs::read_to_string(&chemin)
+                    .is_ok_and(|contenu| contenu.contains(SIGNATURE))
+                {
+                    gabarits.push(
+                        chemin
+                            .strip_prefix(&racine)
+                            .expect("sous la racine")
+                            .to_path_buf(),
+                    );
+                }
+            }
+        }
+
+        assert_eq!(
+            gabarits,
+            [Path::new(CHEMIN)
+                .strip_prefix("templates")
+                .expect("le chemin part de templates/")],
+            "un seul gabarit d'écran doit vivre dans le dépôt"
+        );
     }
 
     /// Le patron n'a rien de l'entité qu'il montre : c'est ce qui lui permet d'en servir

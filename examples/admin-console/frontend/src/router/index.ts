@@ -1,0 +1,44 @@
+import type { NavigationGuardWithThis, RouteRecordRaw } from 'vue-router'
+
+import { createRouter, createWebHistory } from 'vue-router'
+
+import Accueil from '@/views/Accueil.vue'
+
+/**
+ * Ce qu'un fragment vient monter dans ce routeur.
+ *
+ * Le générateur insère d'ordinaire dans une ancre en commentaire ; son registre est clos,
+ * et un fragment ne peut pas redéposer un fichier qu'un autre a déjà posé. Le montage se
+ * fait donc par découverte : tout module nommé `montage.ts` sous `src/` est lu par Vite à
+ * la construction, et ce qu'il exporte s'ajoute ici. Aucun fragment posé, aucun module
+ * trouvé — et le socle garde exactement le routage qu'il avait.
+ */
+export interface Montage {
+  routes: RouteRecordRaw[]
+  /** Ce que le fragment décide avant chaque navigation, s'il a de quoi le décider. */
+  garde?: NavigationGuardWithThis<undefined>
+}
+
+const montages = Object.values(import.meta.glob<Montage>('../**/montage.ts', { eager: true }))
+
+// L'historique du navigateur suppose que le serveur rende l'index pour une route qu'il ne
+// connaît pas : le module de service du projet le fait, et les deux tiennent ensemble.
+//
+// La galerie est chargée paresseusement, et l'accueil non : elle n'existe que pour être
+// consultée une fois, et le visiteur qui ne l'ouvre jamais n'en paie pas le poids.
+export const router = createRouter({
+  history: createWebHistory(),
+  routes: [
+    { path: '/', name: 'accueil', component: Accueil },
+    { path: '/galerie', name: 'galerie', component: () => import('@/views/Galerie.vue') },
+    ...montages.flatMap((montage) => montage.routes),
+  ],
+})
+
+// Posées après coup, et non dans la liste : une garde vaut pour toute navigation, y
+// compris vers une route que le socle a déclarée lui-même.
+for (const montage of montages) {
+  if (montage.garde) {
+    router.beforeEach(montage.garde)
+  }
+}

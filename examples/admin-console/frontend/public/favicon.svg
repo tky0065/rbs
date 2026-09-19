@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img">
+  <!--
+    Une sortie d'imprimante ligne, en trois éléments et rien d'autre : le papier, deux
+    colonnes de perforations, deux traits d'encre.
+
+    Les quatre valeurs sont écrites ici, et c'est la seule exception au thème : un
+    document d'icône est chargé hors de la page et ne lit aucune variable de sa feuille.
+    Elles sont celles de `src/assets/main.css` — papier, bande, filet, encre.
+  -->
+  <rect width="32" height="32" fill="#f2efe6" />
+  <rect x="7" y="0" width="18" height="32" fill="#e9e5d8" />
+
+  <g fill="#cbc5b4">
+    <circle cx="3.5" cy="5" r="1.7" />
+    <circle cx="3.5" cy="12" r="1.7" />
+    <circle cx="3.5" cy="19" r="1.7" />
+    <circle cx="3.5" cy="26" r="1.7" />
+    <circle cx="28.5" cy="5" r="1.7" />
+    <circle cx="28.5" cy="12" r="1.7" />
+    <circle cx="28.5" cy="19" r="1.7" />
+    <circle cx="28.5" cy="26" r="1.7" />
+  </g>
+
+  <g fill="#1b1a17">
+    <rect x="9" y="9" width="14" height="4" />
+    <rect x="9" y="19" width="9" height="4" />
+  </g>
+</svg>

@@ -112,16 +112,16 @@ interface Ligne {
 /** Ce que le formulaire saisit : un booléen par case, une chaîne partout ailleurs. */
 interface Formulaire {
 {%- for champ in ecran.champs %}
-  {@ champ.cle @}: {% if champ.controle == 'booleen' %}boolean{% else %}string{% endif %}
+  {@ champ.cle @}: {% if champ.composant == 'checkbox' %}boolean{% else %}string{% endif %}
 {%- endfor %}
 }
 
 /** Un formulaire vierge : ce qu'ouvre la création. */
 const VIERGE: Formulaire = {
 {%- for champ in ecran.champs %}
-{%- if champ.controle == 'booleen' %}
+{%- if champ.composant == 'checkbox' %}
   {@ champ.cle @}: false,
-{%- elif champ.controle == 'liste' and not champ.optionnel %}
+{%- elif champ.composant == 'select' and not champ.optionnel %}
   {@ champ.cle @}: '{@ champ.valeurs[0] @}',
 {%- else %}
   {@ champ.cle @}: '',
@@ -593,13 +593,13 @@ function afficher(valeur: string | number | boolean | null): string {
 {%- for champ in ecran.champs %}
           <div class="flex flex-col gap-2">
             <Label for="champ-{@ champ.cle @}">{@ champ.libelle @}</Label>
-{%- if champ.controle == 'booleen' %}
+{%- if champ.composant == 'checkbox' %}
             <Checkbox
               id="champ-{@ champ.cle @}"
               :model-value="valeurs.{@ champ.cle @}"
               @update:model-value="(valeur) => (valeurs.{@ champ.cle @} = valeur === true)"
             />
-{%- elif champ.controle == 'liste' %}
+{%- elif champ.composant == 'select' %}
             <Select
               :model-value="valeurs.{@ champ.cle @}"
               @update:model-value="(valeur) => (valeurs.{@ champ.cle @} = String(valeur))"
@@ -616,7 +616,7 @@ function afficher(valeur: string | number | boolean | null): string {
 {%- else %}
             <Input
               id="champ-{@ champ.cle @}"
-              type="{% if champ.controle == 'nombre' %}number{% elif champ.controle == 'date' %}date{% elif champ.controle == 'instant' %}datetime-local{% else %}text{% endif %}"
+              type="{@ champ.type_html @}"
               :model-value="valeurs.{@ champ.cle @}"
               {% if not champ.optionnel %}required
               {% endif %}@update:model-value="(valeur) => (valeurs.{@ champ.cle @} = String(valeur))"

@@ -1,0 +1,26 @@
+{
+  // TypeScript est épinglé une majeure en arrière dans `package.json`, et cet écart au
+  // dernier stable est délibéré : la 7 ne publie plus `typescript/lib/tsc`, que `vue-tsc`
+  // charge pour envelopper le compilateur — `npm run typecheck` s'arrête alors sur
+  // `ERR_PACKAGE_PATH_NOT_EXPORTED` avant d'avoir lu une ligne. À relever le jour où
+  // `vue-tsc` publiera une version qui s'en passe.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    // `vite/client` pour les types du serveur de développement, `node` pour le
+    // `node:url` de la configuration de build, seule à tourner hors du navigateur.
+    "types": ["vite/client", "node"],
+    "paths": { "@/*": ["./src/*"] },
+    "strict": true,
+    "noEmit": true,
+    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*", "src/**/*.vue", "vite.config.ts"]
+}

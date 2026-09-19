@@ -110,6 +110,14 @@ pub struct Metadata {
 }
 
 impl Metadata {
+    /// Le projet porte-t-il `feature` ?
+    ///
+    /// Le manifeste et non le disque : c'est lui que `rbs add` inscrit, et un répertoire
+    /// qu'un fragment a posé puis qu'on a déplacé ne dit plus rien de ce qui est installé.
+    pub fn porte(&self, feature: &str) -> bool {
+        self.features.iter().any(|installee| installee == feature)
+    }
+
     /// Le nom du paquet, ou la faute qui le dit absent.
     ///
     /// C'est le nom du binaire du projet, et la racine de celui de sa base : les fragments

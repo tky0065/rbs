@@ -21,16 +21,6 @@ use super::{
     repository, seed, service, tests_http,
 };
 
-/// L'écran patron, pris là où le fragment `frontend-admin` le dépose.
-///
-/// Une seule template pour les deux producteurs, et donc aucune copie sous
-/// `templates/feature/` : un second gabarit divergerait du premier, et la divergence est
-/// précisément ce que la conception voulait éviter. Un test de `crate::ecran` le tient.
-const PATRON: &str = include_str!(concat!(
-    env!("CARGO_MANIFEST_DIR"),
-    "/templates/features/frontend-admin/client/src/admin/vues/Patron.vue.jinja"
-));
-
 /// Ce qu'il faut savoir pour générer une feature.
 pub(crate) struct Options {
     /// Nom de la feature, au pluriel.
@@ -82,6 +72,12 @@ pub(crate) struct Planned {
     pub required_reference: Option<String>,
     /// La zone de l'`AGENTS.md` que le projet ne porte pas, s'il en manque une.
     pub zone_manquante: Option<crate::agents::MissingZone>,
+    /// La commande à relancer après celle-ci, quand il y en a une.
+    ///
+    /// L'écran engendré importe le corps de la ressource depuis le client typé, que le CLI
+    /// ne régénère pas de lui-même : sans cette ligne, un frontend qui se vérifiait cesse de
+    /// se vérifier après une génération, et rien ne dit pourquoi.
+    pub geste_suivant: Option<String>,
 }
 
 /// Ce qui peut empêcher de générer une feature.
@@ -228,6 +224,19 @@ pub(crate) enum Error {
         known: String,
     },
 
+    /// Le nom de route de l'écran est déjà pris, dans la table de routage, par un autre
+    /// composant — l'écran de démonstration du fragment, ou un écran écrit à la main.
+    #[error(
+        "{occupant} est l'écran de démonstration du shell, monté sur la route `{route}` : \
+         renommez la table, ou passez `--no-admin` pour ne pas engendrer ses écrans"
+    )]
+    EcranOccupe {
+        /// Nom de route que l'écran voulait poser.
+        route: String,
+        /// Fichier que le fragment occupe déjà, relatif à la racine.
+        occupant: String,
+    },
+
     /// `--has-many` nomme une entité enfant qui ne porte pas la clé attendue.
     #[error(
         "{child} ne porte aucune colonne référençant `{table}` : ajoutez-la avant de relancer `--has-many {child}`"
@@ -281,6 +290,7 @@ impl Codee for Error {
             Error::SoftDeleteColonneReservee { .. } => "colonne_reservee",
             Error::RoleInconnu { .. } => "role_inconnu",
             Error::EnfantSansCle { .. } => "enfant_sans_cle",
+            Error::EcranOccupe { .. } => "ecran_occupe",
         }
     }
 
@@ -330,12 +340,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // Avant tout rendu, comme le garde de rôle : sans le fragment, `state.storage()`
     // n'existe pas et le projet engendré cesserait de compiler — une erreur de rustc sur
     // du code que l'utilisateur n'a pas écrit.
-    if options.with_upload
-        && !metadonnees
-            .features
-            .iter()
-            .any(|feature| feature == "storage")
-    {
+    if options.with_upload && !metadonnees.porte("storage") {
         return Err(Error::UploadSansStorage);
     }
 
@@ -396,7 +401,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let feature = Feature::fresh(&options.name, fields)
         .with_singular(options.singular.clone())
         .speaking(crate::lang::Lang::of_project(&root));
-    let feature = if metadonnees.features.iter().any(|feature| feature == "auth") {
+    let feature = if metadonnees.porte("auth") {
         feature.authenticated()
     } else {
         feature
@@ -461,31 +466,6 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // et c'est lui que `--dry-run` montre.
     let avertissement = format::format_batch(files.iter_mut().map(|(_, content)| content));
 
-    // Hors du lot que rustfmt vient de traverser : un composant Vue n'est pas du Rust, et
-    // le lui donner rendrait un fichier vide ou un avertissement pour chaque génération.
-    //
-    // La présence du fragment suffit, comme pour `auth` : la commande lit les fragments
-    // installés et adapte sa sortie. `--no-admin` est la seule sortie de secours.
-    let ecran = (options.complete
-        && !options.no_admin
-        && metadonnees
-            .features
-            .iter()
-            .any(|feature| feature == "frontend-admin"))
-    .then(|| crate::ecran::Ecran::pour(&feature, crate::lang::Lang::of_project(&root)));
-    let ecran_rendu = match &ecran {
-        Some(ecran) => Some((
-            ecran.fichier(),
-            crate::template::Renderer::new()
-                .render(PATRON, minijinja::context! { ecran => ecran })
-                .map_err(|source| Error::Rendu {
-                    file: ecran.fichier(),
-                    source,
-                })?,
-        )),
-        None => None,
-    };
-
     // Calculé avant le builder, qui prend `root` par valeur : le contenu actuel du
     // fichier cible sert à détecter une variante homonyme visant une autre entité.
     let inverses = relations::inverses(&feature.fields, &feature, &entities);
@@ -498,6 +478,41 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
             });
         }
     }
+
+    // Après tous les refus, et hors du lot que rustfmt vient de traverser. Après, parce
+    // qu'un rendu qui échoue ne doit pas prendre la préséance d'une garde antérieure — le
+    // refus que l'utilisateur lit doit nommer sa faute, non la nôtre. Hors du lot, parce
+    // qu'un composant Vue n'est pas du Rust : le donner à rustfmt rendrait un fichier vide
+    // ou un avertissement à chaque génération.
+    //
+    // La présence du fragment suffit, comme pour `auth` : la commande lit les fragments
+    // installés et adapte sa sortie. `--no-admin` est la seule sortie de secours.
+    let ecran = (options.complete && !options.no_admin && metadonnees.porte("frontend-admin"))
+        .then(|| crate::ecran::Ecran::pour(&feature, crate::lang::Lang::of_project(&root)));
+
+    // Avant le rendu : l'écran de démonstration du fragment occupe déjà son fichier et sa
+    // route. La condition porte sur le fichier autant que sur le nom — un développeur qui
+    // aurait supprimé cet écran a le droit de nommer sa table comme il veut.
+    if let Some(ecran) = &ecran
+        && ecran.composant == crate::ecran::DEMONSTRATION
+        && root.join(ecran.fichier()).exists()
+    {
+        return Err(Error::EcranOccupe {
+            route: ecran.route.clone(),
+            occupant: ecran.fichier(),
+        });
+    }
+
+    let ecran_rendu = match &ecran {
+        Some(ecran) => Some((
+            ecran.fichier(),
+            ecran.rendre().map_err(|source| Error::Rendu {
+                file: ecran.fichier(),
+                source,
+            })?,
+        )),
+        None => None,
+    };
 
     // Résolue avant le builder, qui prend `root` par valeur : sur un projet antérieur à
     // ce jalon, dépourvu de bibliothèque, l'ancre reste dans `src/main.rs`.
@@ -560,6 +575,12 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         avertissement,
         required_reference,
         zone_manquante,
+        geste_suivant: ecran.map(|_| {
+            format!(
+                "rbs generate client --lang ts --out {}",
+                crate::ecran::CLIENT
+            )
+        }),
     })
 }
 
@@ -570,7 +591,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 /// produirait une variante que `rustc` ne connaît pas — le refuser ici évite de rendre au
 /// développeur un projet qui ne compile plus.
 fn validate_role(role: &str, metadonnees: &metadata::Metadata, root: &Path) -> Result<(), Error> {
-    if !metadonnees.features.iter().any(|feature| feature == "auth") {
+    if !metadonnees.porte("auth") {
         return Err(Error::RoleSansAuth {
             role: role.to_string(),
         });
@@ -699,6 +720,7 @@ fn plan_repair(
         avertissement: None,
         required_reference: None,
         zone_manquante,
+        geste_suivant: None,
     })
 }
 
@@ -810,7 +832,8 @@ impl crate::errors::Classee for Error {
             | Self::DecimalSousSqlite { .. }
             | Self::SoftDeleteColonneReservee { .. }
             | Self::RoleInconnu { .. }
-            | Self::EnfantSansCle { .. } => Sortie::Usage,
+            | Self::EnfantSansCle { .. }
+            | Self::EcranOccupe { .. } => Sortie::Usage,
             Self::Acces(_) => Sortie::Environnement,
             Self::Rendu { .. } | Self::MigrationsAbsentes(_) | Self::UploadStorageHorsModules => {
                 Sortie::Faute
@@ -2554,7 +2577,7 @@ mod tests {
             "api.articlesDelete(",
             "{ cle: 'title', libelle: 'Title', triable: true },",
         ] {
-            assert!(temoin_dans(&ecran, temoin), "`{temoin}` manque :\n{ecran}");
+            assert!(ecran.contains(temoin), "`{temoin}` manque :\n{ecran}");
         }
 
         let montage = read(&root.join("frontend/src/admin/montage.ts"));
@@ -2590,8 +2613,45 @@ mod tests {
     }
 
     /// Sans le fragment, la commande se comporte exactement comme avant, silencieusement.
+    ///
+    /// « Silencieusement » se mesure sur le plan, et non sur deux arbres comparés : aucune
+    /// action ne vise le frontend, aucune insertion n'est sautée, et rien n'est annoncé
+    /// comme geste suivant. Un plan qui porterait une action sans effet, ou un bloc à
+    /// coller, serait déjà un changement de comportement pour tout le parc existant.
     #[test]
-    fn a_project_without_the_shell_generates_exactly_what_it_generated_before() {
+    fn a_project_without_the_shell_is_left_untouched_and_unaddressed() {
+        let (_parent, root) = project();
+
+        let planned = run(&options(&root, "articles", Some("title:string"), true))
+            .expect("articles doit se générer");
+
+        let frontend: Vec<&str> = planned
+            .plan
+            .files()
+            .iter()
+            .map(|fichier| fichier.path.as_str())
+            .filter(|chemin| chemin.starts_with("frontend/"))
+            .collect();
+        assert!(frontend.is_empty(), "{frontend:?}");
+        assert!(
+            planned.plan.sautees().is_empty(),
+            "{:?}",
+            planned.plan.sautees()
+        );
+        assert!(
+            planned.geste_suivant.is_none(),
+            "{:?}",
+            planned.geste_suivant
+        );
+        assert!(!root.join("frontend").exists());
+    }
+
+    /// Le drapeau de refus ne change rien à un projet qui n'a pas le fragment.
+    ///
+    /// Le témoin de la garde ci-dessus : sans lui, `--no-admin` pourrait retirer autre
+    /// chose que les écrans sans que rien ne le dise.
+    #[test]
+    fn the_refusal_flag_changes_nothing_on_a_project_without_the_shell() {
         let (_parent, sans) = project();
         let (_autre, avec) = project();
 
@@ -2599,12 +2659,7 @@ mod tests {
             .expect("articles doit se générer");
         run(&without_admin(&avec, "articles")).expect("articles doit se générer");
 
-        assert!(
-            !sans.join("frontend").exists(),
-            "aucun fichier de frontend ne doit apparaître"
-        );
-        // Le drapeau posé sur un projet qui n'a pas le fragment ne change rien : les deux
-        // arbres sont le même, à l'horodatage de la migration près.
+        // À l'horodatage de la migration près, les deux arbres sont le même.
         assert_eq!(
             sans_migrations(&fingerprint(&sans)),
             sans_migrations(&fingerprint(&avec))
@@ -2653,17 +2708,62 @@ mod tests {
 
         let ecran = read(&root.join("frontend/src/admin/vues/Articles.vue"));
         assert!(
-            temoin_dans(
-                &ecran,
-                "{ cle: 'statut', libelle: 'Statut', triable: true },"
-            ),
+            ecran.contains("{ cle: 'statut', libelle: 'Statut', triable: true },"),
             "{ecran}"
         );
-        assert!(temoin_dans(&ecran, "'draft' | 'published'"), "{ecran}");
+        assert!(ecran.contains("'draft' | 'published'"), "{ecran}");
 
-        // Et le rail n'a pas reçu de seconde entrée : l'insertion est idempotente.
+        // Et les deux ancres n'ont pas reçu de seconde ligne : l'insertion est idempotente.
+        // Une route déclarée deux fois sous le même nom, le routeur n'en monte aucune.
         let rail = read(&root.join("frontend/src/admin/rail.ts"));
         assert_eq!(rail.matches("route: 'admin-articles'").count(), 1, "{rail}");
+        let montage = read(&root.join("frontend/src/admin/montage.ts"));
+        assert_eq!(
+            montage.matches("name: 'admin-articles',").count(),
+            1,
+            "{montage}"
+        );
+    }
+
+    /// Une table nommée comme l'écran de démonstration est refusée avant tout rendu.
+    ///
+    /// Sans ce refus, `--force` écrasait l'écran du fragment tandis que sa route restait
+    /// pointée dessus, et le rail recevait une seconde entrée sur un nom de route déclaré
+    /// deux fois — le routeur n'en montait plus aucune.
+    #[test]
+    fn a_table_named_like_the_demonstration_screen_is_refused() {
+        let (_parent, root) = project_with_admin();
+
+        let erreur = plan_for(&options(&root, "demonstration", Some("title:string"), true))
+            .expect_err("la collision doit être refusée");
+
+        let message = erreur.to_string();
+        assert!(message.contains("admin-demonstration"), "{message}");
+        assert!(message.contains("vues/Demonstration.vue"), "{message}");
+        assert!(message.contains("--no-admin"), "{message}");
+        assert_eq!(erreur.code(), "ecran_occupe");
+
+        // Et le drapeau la laisse passer : la table est légitime, ce sont ses écrans qui
+        // ne le sont pas.
+        run(&without_admin(&root, "demonstration")).expect("le drapeau doit lever le refus");
+    }
+
+    /// La commande dit de régénérer le client typé, dont l'écran engendré dépend.
+    ///
+    /// Sans cette ligne, un frontend qui se vérifiait cesse de se vérifier après une
+    /// génération — l'écran importe le corps de la ressource, que le client ne connaît pas
+    /// encore — et rien ne dirait pourquoi.
+    #[test]
+    fn the_command_names_the_client_to_regenerate() {
+        let (_parent, root) = project_with_admin();
+
+        let planned = run(&options(&root, "articles", Some("title:string"), true))
+            .expect("articles doit se générer");
+
+        assert_eq!(
+            planned.geste_suivant.as_deref(),
+            Some("rbs generate client --lang ts --out frontend/src/api")
+        );
     }
 
     /// Une balise retirée du frontend n'empêche pas d'engendrer l'entité : le bloc à
@@ -2699,11 +2799,5 @@ mod tests {
             .filter(|(chemin, _)| !chemin.starts_with("migration"))
             .map(|(chemin, contenu)| (chemin.clone(), contenu.clone()))
             .collect()
-    }
-
-    /// `contains`, mais qui dit où quand il échoue : les écrans font plusieurs centaines
-    /// de lignes, et un `assert!` nu y renvoie le fichier entier sans le témoin.
-    fn temoin_dans(source: &str, temoin: &str) -> bool {
-        source.contains(temoin)
     }
 }
