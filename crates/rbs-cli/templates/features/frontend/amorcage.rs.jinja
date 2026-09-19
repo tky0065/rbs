@@ -1,0 +1,265 @@
+use axum::http::{StatusCode, header};
+use axum::response::{IntoResponse, Response};
+
+use super::Config;
+
+/// Le nom du projet, tel que `rbs new` l'a fixé.
+const PROJET: &str = "{@ project_name @}";
+
+{% if lang == "en" -%}
+const TITRE: &str = "The client is not built yet";
+const SOUS_TITRE: &str =
+    "The API is running. Below is what the server still needs to hand you a page.";
+const ETAT: &str = "Service state";
+const API: &str = "API";
+const API_VALEUR: &str = "answering — this page comes from it";
+const BASE: &str = "Database";
+const BASE_OK: &str = "reachable";
+const BASE_KO: &str = "unreachable";
+const CLIENT: &str = "Client build";
+const CLIENT_KO: &str = "absent";
+const ATTENDU: &str = "Expected at";
+const GESTES: &str = "What is left to type";
+const NOTE: &str = "This page disappears on its own as soon as the build exists. \
+                    There is no switch to flip.";
+const SONDE: &str = "Health probe";
+{% else -%}
+const TITRE: &str = "Le client n'est pas encore construit";
+const SOUS_TITRE: &str =
+    "L'API tourne. Ce qui suit est ce qui manque au serveur pour vous rendre une page.";
+const ETAT: &str = "État du service";
+const API: &str = "API";
+const API_VALEUR: &str = "répond — cette page en vient";
+const BASE: &str = "Base de données";
+const BASE_OK: &str = "joignable";
+const BASE_KO: &str = "injoignable";
+const CLIENT: &str = "Build du client";
+const CLIENT_KO: &str = "absent";
+const ATTENDU: &str = "Attendu sous";
+const GESTES: &str = "Ce qu'il reste à taper";
+const NOTE: &str = "Cette page disparaît d'elle-même dès que le build existe. \
+                    Il n'y a aucun interrupteur à basculer.";
+const SONDE: &str = "Sonde de santé";
+{% endif -%}
+
+/// La page servie tant que le client n'est pas construit.
+///
+/// Autonome par nécessité : elle est rendue avant qu'aucune dépendance du client ne soit
+/// installée, donc sans police, sans feuille de style et sans image distantes. Tout ce
+/// qu'elle affiche est vrai à l'instant du rendu — le nom du projet vient de la
+/// génération, l'état de la base d'un ping, le répertoire attendu de la configuration.
+pub fn page(config: &Config, base_joignable: bool) -> Response {
+    let index = config.index().display().to_string();
+    let mut corps = String::with_capacity(OUVERTURE.len() + FEUILLE.len() + 2048);
+
+    corps.push_str(OUVERTURE);
+    corps.push_str(&echappe(PROJET));
+    corps.push_str(FEUILLE);
+
+    corps.push_str("<header class=\"bande bande--titre\"><p class=\"projet\">");
+    corps.push_str(&echappe(PROJET));
+    corps.push_str("</p><h1>");
+    corps.push_str(&echappe(TITRE));
+    corps.push_str("</h1><p class=\"tenue\">");
+    corps.push_str(&echappe(SOUS_TITRE));
+    corps.push_str("</p></header>");
+
+    corps.push_str("<section class=\"bande\"><h2>");
+    corps.push_str(&echappe(ETAT));
+    corps.push_str("</h2><dl class=\"releve\">");
+    releve(&mut corps, API, API_VALEUR, true);
+    releve(
+        &mut corps,
+        BASE,
+        if base_joignable { BASE_OK } else { BASE_KO },
+        base_joignable,
+    );
+    releve(&mut corps, CLIENT, CLIENT_KO, false);
+    corps.push_str("</dl><p class=\"tenue\">");
+    corps.push_str(&echappe(ATTENDU));
+    corps.push_str(" <code>");
+    corps.push_str(&echappe(&index));
+    corps.push_str("</code></p></section>");
+
+    corps.push_str("<section class=\"bande bande--paire\"><h2>");
+    corps.push_str(&echappe(GESTES));
+    corps.push_str("</h2><ol class=\"gestes\">");
+    for geste in [
+        format!("cd {}", config.projet()),
+        "npm install".to_string(),
+        "npm run build".to_string(),
+    ] {
+        corps.push_str("<li><code>");
+        corps.push_str(&echappe(&geste));
+        corps.push_str("</code></li>");
+    }
+    corps.push_str("</ol><p class=\"tenue\">");
+    corps.push_str(&echappe(NOTE));
+    corps.push_str("</p></section>");
+
+    corps.push_str("<footer class=\"bande\"><p class=\"tenue\">");
+    corps.push_str(&echappe(SONDE));
+    corps.push_str(" <a href=\"/health\">/health</a></p></footer>");
+
+    corps.push_str(FERMETURE);
+
+    (
+        StatusCode::OK,
+        [(header::CONTENT_TYPE, "text/html; charset=utf-8")],
+        corps,
+    )
+        .into_response()
+}
+
+/// Une ligne du relevé d'état. Le verdict passe par une classe : un mot de couleur écrit
+/// dans le balisage ne se remplace pas en réécrivant le seul bloc de thème.
+fn releve(corps: &mut String, terme: &str, valeur: &str, bon: bool) {
+    corps.push_str("<dt>");
+    corps.push_str(&echappe(terme));
+    corps.push_str("</dt><dd class=\"");
+    corps.push_str(if bon { "bon" } else { "manque" });
+    corps.push_str("\">");
+    corps.push_str(&echappe(valeur));
+    corps.push_str("</dd>");
+}
+
+/// Échappe ce qui part dans le document.
+///
+/// Le nom du projet est contraint par `rbs new`, mais le répertoire de build vient de la
+/// configuration, qu'un développeur écrit à la main : une page de secours qui injecterait
+/// du balisage serait une faille née d'un message d'aide.
+fn echappe(texte: &str) -> String {
+    texte
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+}
+
+/// Le document jusqu'au nom du projet, qui ouvre le titre.
+const OUVERTURE: &str = r#"<!doctype html>
+<html lang="{@ lang @}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>"#;
+
+/// La feuille de style, et l'ouverture du corps.
+///
+/// Le monde visuel du projet tient dans les variables du premier bloc : le remplacer, c'est
+/// réécrire ces huit lignes, sans toucher au balisage. Une sortie d'imprimante ligne —
+/// marge perforée, bandes pleine largeur, encre de ruban — tracée par la feuille elle-même
+/// plutôt que par une image, qu'un fragment ne saurait de toute façon pas livrer.
+const FEUILLE: &str = r#"</title>
+<style>
+:root {
+  color-scheme: light;
+  --papier: #f2efe6;
+  --bande: #e9e5d8;
+  --creux: #f7f5ee;
+  --encre: #1b1a17;
+  --pale: #6f6a5e;
+  --filet: #cbc5b4;
+  --alerte: #a8322a;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--papier);
+  color: var(--encre);
+  font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+    "Liberation Mono", monospace;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.feuille {
+  max-width: 62rem;
+  margin: 0 auto;
+  border-left: 1px solid var(--filet);
+  border-right: 1px solid var(--filet);
+  background:
+    radial-gradient(circle at 0.75rem 0, transparent 0.22rem, var(--papier) 0.23rem)
+      left top / 1.5rem 1.5rem repeat-y,
+    radial-gradient(circle at 0.75rem 0, transparent 0.22rem, var(--papier) 0.23rem)
+      right top / 1.5rem 1.5rem repeat-y;
+  padding: 0 1.5rem;
+}
+.bande {
+  padding: 2rem 1.25rem;
+  border-bottom: 1px solid var(--filet);
+}
+.bande--paire { background: var(--bande); }
+.bande--titre { padding-top: 3rem; }
+.bande:last-child { border-bottom: 0; }
+.projet {
+  margin: 0 0 1.5rem;
+  letter-spacing: 0.35em;
+  text-transform: uppercase;
+  color: var(--pale);
+}
+h1 {
+  margin: 0 0 1rem;
+  font-size: clamp(1.9rem, 6vw, 3.1rem);
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+h2 {
+  margin: 0 0 1.25rem;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--pale);
+}
+p { margin: 0; }
+.tenue { color: var(--pale); }
+.releve {
+  display: grid;
+  grid-template-columns: minmax(10rem, auto) 1fr;
+  gap: 0.35rem 1.5rem;
+  margin: 0 0 1.5rem;
+}
+dt { color: var(--pale); }
+dd {
+  margin: 0;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+}
+dd::before {
+  content: "";
+  width: 0.55rem;
+  height: 0.55rem;
+  flex: none;
+  border: 1px solid currentColor;
+}
+dd.bon::before { background: currentColor; }
+dd.manque { color: var(--alerte); }
+.gestes {
+  margin: 0 0 1.5rem;
+  padding-left: 1.4rem;
+}
+.gestes li { margin-bottom: 0.35rem; }
+code {
+  background: var(--papier);
+  border: 1px solid var(--filet);
+  padding: 0.1rem 0.4rem;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.bande--paire code { background: var(--creux); }
+a { color: var(--encre); }
+@media (max-width: 34rem) {
+  .bande { padding: 1.5rem 0.5rem; }
+  .releve { grid-template-columns: 1fr; gap: 0 0; }
+  dt { margin-top: 0.75rem; }
+}
+</style>
+</head>
+<body>
+<main class="feuille">"#;
+
+/// La fermeture du document.
+const FERMETURE: &str = r#"</main></body></html>"#;

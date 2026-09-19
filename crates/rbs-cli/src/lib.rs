@@ -1680,10 +1680,32 @@ mod tests {
 
         for feature in installables.split(", ") {
             assert!(
-                suite(feature).is_some(),
+                suite(feature).is_some() || declare_ses_etapes(feature),
                 "`{feature}` s'installe sans dire ce qu'il reste à faire"
             );
         }
+    }
+
+    /// Le fragment déclare-t-il lui-même ses étapes, dans son manifeste ?
+    ///
+    /// Deux sources honorent la règle depuis que `next_steps` existe : la table que le CLI
+    /// porte, et le manifeste du fragment. Un fragment neuf n'a aucune raison de passer
+    /// par la première, qui n'est là que pour ceux qui la précèdent.
+    fn declare_ses_etapes(feature: &str) -> bool {
+        let source =
+            templates::Source::feature(None, feature).expect("le fragment vient du catalogue");
+        let (manifeste, _) = source
+            .manifest_and_files()
+            .expect("le fragment embarqué se lit");
+        let Some(manifeste) = manifeste else {
+            return false;
+        };
+
+        !manifest::read(&manifeste, feature)
+            .expect("le manifeste embarqué est valide")
+            .feature
+            .next_steps
+            .is_empty()
     }
 
     /// Le fragment n'est branché sur aucune route : installé et jamais appelé, il

@@ -1456,6 +1456,59 @@ mod tests {
         }
     }
 
+    /// Le fragment du frontend ne pose ni table ni route nommée : un module, un repli, et
+    /// sa section de configuration. Une ancre de plus dirait qu'il en fait davantage que
+    /// ce que la spec lui donne à faire — et une ancre `layers` à la place de `routes`
+    /// mettrait le repli sur le chemin de toutes les requêtes de l'API.
+    #[test]
+    fn the_frontend_fragment_mounts_a_module_and_a_fallback_and_nothing_else() {
+        let source = read(&Path::new(RACINE_FEATURES).join("frontend/feature.toml"));
+        let manifest = crate::manifest::read(&source, "frontend/feature.toml")
+            .expect("le manifeste du fragment frontend doit se lire");
+
+        let ancres: Vec<&str> = manifest
+            .anchors
+            .iter()
+            .map(|ancre| ancre.anchor.as_str())
+            .collect();
+        assert_eq!(ancres, ["modules", "routes"]);
+        assert!(
+            manifest.anchors[1].content.contains("merge"),
+            "le repli se monte sur le routeur : {}",
+            manifest.anchors[1].content
+        );
+
+        assert!(
+            manifest.migration.is_none(),
+            "servir des fichiers ne demande aucune table"
+        );
+        assert!(
+            manifest.feature.requires.is_empty(),
+            "le socle s'installe seul : ni authentification, ni table d'utilisateurs"
+        );
+
+        // La configuration du frontend vit dans le fichier du projet, et pas à côté : un
+        // second mécanisme de configuration serait un second mécanisme à apprendre.
+        assert_eq!(manifest.config.len(), 1);
+        assert_eq!(manifest.config[0].file, "config/default.toml");
+        assert_eq!(manifest.config[0].section, "frontend");
+
+        // Aucun interrupteur : ce qui décide de la page d'amorçage est la présence de
+        // l'index, jamais un booléen que le développeur devrait penser à basculer.
+        for interrupteur in ["enabled", "bootstrap", "amorcage"] {
+            assert!(
+                !manifest.config[0].content.contains(interrupteur),
+                "`{interrupteur}` dans la section : {}",
+                manifest.config[0].content
+            );
+        }
+
+        assert!(
+            !manifest.feature.next_steps.is_empty(),
+            "le fragment livre du non-Rust : il doit dire où lire ce qu'il reste à faire"
+        );
+    }
+
     #[test]
     fn the_audit_fragment_declares_its_migration_and_its_single_anchor() {
         let source = read(&Path::new(RACINE_FEATURES).join("audit/feature.toml"));

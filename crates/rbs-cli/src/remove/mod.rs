@@ -708,4 +708,53 @@ mod tests {
             "l'ancre reste, seule la ligne part : {exclusions}"
         );
     }
+
+    /// Le retrait du frontend défait ce que la pose a fait : le module, le repli sur le
+    /// routeur, la section de configuration et les dépendances devenues orphelines.
+    ///
+    /// C'est le premier fragment dont le retrait doit rendre une feature à une dépendance
+    /// que le squelette déclare — `tower-http` garde sa compression et sa borne de temps,
+    /// et ne perd que `fs`.
+    #[test]
+    fn removing_the_frontend_gives_the_project_back_its_router_and_its_configuration() {
+        let (_parent, root) = crate::fixtures::Project::new()
+            .features(&["frontend"])
+            .create();
+        assert!(root.join("src/modules/frontend/mod.rs").exists());
+
+        let mut retrait = options(&root, "frontend");
+        retrait.force = true;
+        let planned = plan_for(&retrait).expect("le retrait se planifie");
+        crate::plan::application::apply(&planned.plan, false).expect("le retrait s'applique");
+
+        assert!(
+            !root.join("src/modules/frontend/mod.rs").exists(),
+            "le module est resté"
+        );
+
+        let lire = |relatif: &str| {
+            std::fs::read_to_string(root.join(relatif))
+                .unwrap_or_else(|_| panic!("{relatif} doit être lisible"))
+        };
+
+        let routeur = lire("src/router.rs");
+        assert!(!routeur.contains("modules::frontend"), "{routeur}");
+        assert!(
+            routeur.contains("// <rbs:routes>"),
+            "l'ancre reste, seule la ligne part : {routeur}"
+        );
+
+        let config = lire("config/default.toml");
+        assert!(!config.contains("[frontend]"), "{config}");
+
+        let cargo = lire("Cargo.toml");
+        assert!(
+            !cargo.contains("\nfs\"") && !cargo.contains("\"fs\""),
+            "la feature `fs` est restée à tower-http : {cargo}"
+        );
+        assert!(
+            cargo.contains("compression-gzip"),
+            "les features que le squelette déclare ne se retirent pas : {cargo}"
+        );
+    }
 }

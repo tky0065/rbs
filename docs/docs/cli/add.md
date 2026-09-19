@@ -5,8 +5,8 @@ title: rbs add
 
 # `rbs add`
 
-Installs a feature into an existing project. Fourteen are shipped: `api-keys`, `audit`, `auth`,
-`ci`, `cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`,
+Installs a feature into an existing project. Fifteen are shipped: `api-keys`, `audit`, `auth`,
+`ci`, `cors`, `docker`, `frontend`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`,
 `scheduler`, `storage` and `webhooks`.
 
 :::note
@@ -18,7 +18,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ```text
 $ rbs add --help
-Ajoute une feature : api-keys, audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
+Ajoute une feature : api-keys, audit, auth, ci, cors, docker, frontend, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 
 Utilisation : rbs add [OPTIONS] <FEATURE>
 
@@ -41,7 +41,7 @@ Options :
 | `--json` | Prints the plan — or the error — as one JSON document on standard output instead of the coloured text: every action with its effect, the full content of created files, and `applique` to say whether anything was written. Independent of `--dry-run`. [The agents guide](../guides/agents.md#reading-a-plan-as-json) has the document and the error codes. |
 | `--template-dir <CHEMIN>` | Reads the fragments from a directory holding one subdirectory per feature, instead of the ones embedded in the binary. |
 
-## The fourteen features
+## The fifteen features
 
 | Feature | Files | Next step |
 |---|---|---|
@@ -55,6 +55,7 @@ Options :
 | `mail` | five files under `src/modules/mail/`, a sample template, and a `mailpit` service inserted into the project's compose | set `[mail]` in `config/default.toml` — a local SMTP by default |
 | `storage` | six files under `src/modules/storage/` | ignore `./storage`, or switch the backend to `s3` |
 | `cors` | three files under `src/modules/cors/`, a `[cors]` config section, and a layer in `// <rbs:layers>` | list your origins in `[cors]` — empty, so nothing cross-origin passes |
+| `frontend` | four files under `src/modules/frontend/`, a `[frontend]` config section, and a fallback in `// <rbs:routes>` that serves the client's build — or, until that build exists, a self-contained bootstrap page | `cargo run`: the root serves the bootstrap page, which names what is left to build |
 | `rate-limit` | four files under `src/modules/rate_limit/`, a `[rate_limit]` config section, a field on `AppState`, and a layer in `// <rbs:layers>` | behind a reverse proxy, set `rate_limit.trust_forwarded_for` |
 | `observability` | four files under `src/modules/observability/`, an `[observability]` config section, a layer in `// <rbs:layers>`, and a second listener in `// <rbs:startup>` | name a collector in `OTEL_EXPORTER_OTLP_ENDPOINT` — without it nothing is exported |
 | `audit` | four files under `src/modules/audit/`, and one migration | `rbs migrate up`, then call `audit::record` in your services — the entry is written in the transaction of the change |
@@ -342,7 +343,7 @@ Anything else is refused with the list of what is installable:
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : api-keys, audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
+erreur : `graphql` n'est pas une feature installable : api-keys, audit, auth, ci, cors, docker, frontend, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 ```
 
 ## Idempotence
@@ -478,7 +479,7 @@ three use it.
 
 `docker` is the one fragment `rbs add` installs that is itself an exception: its `api` and
 `migrate` services go into `# <rbs:services>`, the YAML anchor a compose carries — see
-[above](#the-fourteen-features). Beside it sits the other anchor outside Rust,
+[above](#the-fifteen-features). Beside it sits the other anchor outside Rust,
 `# <rbs:ignore>` in `.gitignore`, where a fragment excludes from the repository what it
 drops in it; it is optional too, a project whose `.gitignore` its owner deleted being no
 less complete for it. The rule is the same everywhere: no AST is ever rewritten,

@@ -5,8 +5,8 @@ title: rbs add
 
 # `rbs add`
 
-Installe une feature dans un projet existant. Elle en livre quatorze : `api-keys`, `audit`, `auth`,
-`ci`, `cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`,
+Installe une feature dans un projet existant. Elle en livre quinze : `api-keys`, `audit`, `auth`,
+`ci`, `cors`, `docker`, `frontend`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`,
 `scheduler`, `storage` et `webhooks`.
 
 :::note
@@ -19,7 +19,7 @@ sortie de terminal ne se traduit pas.
 
 ```text
 $ rbs add --help
-Ajoute une feature : api-keys, audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
+Ajoute une feature : api-keys, audit, auth, ci, cors, docker, frontend, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 
 Utilisation : rbs add [OPTIONS] <FEATURE>
 
@@ -42,7 +42,7 @@ Options :
 | `--json` | Rend le plan — ou l'erreur — en un seul document JSON sur la sortie standard, à la place du texte coloré : chaque action avec son effet, le contenu complet des fichiers créés, et `applique` pour dire si quelque chose a été écrit. Indépendant de `--dry-run`. [Le guide des agents](../guides/agents.md#lire-un-plan-en-json) donne le document et les codes d'erreur. |
 | `--template-dir <CHEMIN>` | Lit les fragments dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire. |
 
-## Les quatorze features
+## Les quinze features
 
 | Feature | Fichiers | Suite |
 |---|---|---|
@@ -56,6 +56,7 @@ Options :
 | `mail` | cinq fichiers sous `src/modules/mail/`, un gabarit d'exemple, et un service `mailpit` inséré dans le compose du projet | régler `[mail]` dans `config/default.toml` — un SMTP local par défaut |
 | `storage` | six fichiers sous `src/modules/storage/` | ignorer `./storage`, ou passer le backend à `s3` |
 | `cors` | trois fichiers sous `src/modules/cors/`, une section `[cors]` de configuration, et une couche dans `// <rbs:layers>` | énumérer vos origines dans `[cors]` — vide, donc rien d'origine croisée ne passe |
+| `frontend` | quatre fichiers sous `src/modules/frontend/`, une section `[frontend]` de configuration, et un repli dans `// <rbs:routes>` qui sert le build du client — ou, tant que ce build n'existe pas, une page d'amorçage autonome | `cargo run` : la racine sert la page d'amorçage, qui nomme ce qu'il reste à construire |
 | `rate-limit` | quatre fichiers sous `src/modules/rate_limit/`, une section `[rate_limit]`, un champ sur `AppState`, et une couche dans `// <rbs:layers>` | derrière un reverse proxy, régler `rate_limit.trust_forwarded_for` |
 | `observability` | quatre fichiers sous `src/modules/observability/`, une section `[observability]`, une couche dans `// <rbs:layers>`, et un second listener dans `// <rbs:startup>` | nommer un collecteur dans `OTEL_EXPORTER_OTLP_ENDPOINT` — sans lui rien n'est exporté |
 | `audit` | quatre fichiers sous `src/modules/audit/`, et une migration | `rbs migrate up`, puis appeler `audit::record` dans vos services — l'entrée s'écrit dans la transaction du changement |
@@ -342,7 +343,7 @@ Tout autre nom est refusé avec la liste de ce qui est installable :
 
 ```text
 $ rbs add graphql
-erreur : `graphql` n'est pas une feature installable : api-keys, audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
+erreur : `graphql` n'est pas une feature installable : api-keys, audit, auth, ci, cors, docker, frontend, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 ```
 
 ## L'idempotence
@@ -479,7 +480,7 @@ toutes les trois.
 
 `docker` est le seul fragment que `rbs add` installe à faire lui-même exception : ses
 services `api` et `migrate` vont dans `# <rbs:services>`, l'ancre YAML que porte un
-compose — voir [plus haut](#les-quatorze-features). À côté d'elle vit l'autre ancre hors
+compose — voir [plus haut](#les-quinze-features). À côté d'elle vit l'autre ancre hors
 du Rust, `# <rbs:ignore>` dans `.gitignore`, où un fragment exclut du dépôt ce qu'il y
 dépose ; elle est optionnelle elle aussi, un projet dont le propriétaire a supprimé le
 `.gitignore` n'en étant pas moins complet. La règle est la même partout : aucun AST

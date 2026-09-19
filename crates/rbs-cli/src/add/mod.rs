@@ -3017,4 +3017,83 @@ mod tests {
             .expect("le fragment est posé");
         assert!(pose.next_steps.is_empty(), "{:?}", pose.next_steps);
     }
+
+    /// Ce que le fragment du frontend dépose, et où : un module sous le point de montage,
+    /// un repli sur le routeur, sa section dans la configuration du projet.
+    #[test]
+    fn the_frontend_fragment_plans_a_module_a_fallback_and_its_configuration() {
+        let (_parent, root) = project();
+        let before = fingerprint(&root);
+
+        let planned = plan_for(&options(&root, "frontend")).expect("le plan doit se calculer");
+
+        assert_eq!(
+            planned.files,
+            [
+                "src/modules/frontend/mod.rs",
+                "src/modules/frontend/config.rs",
+                "src/modules/frontend/amorcage.rs",
+                "src/modules/frontend/tests.rs",
+            ]
+        );
+
+        let montage = projected(&planned, "src/modules/mod.rs");
+        assert!(montage.contains("pub mod frontend;"), "{montage}");
+
+        let routeur = projected(&planned, "src/router.rs");
+        assert!(
+            routeur.contains(".merge(crate::modules::frontend::routes())"),
+            "{routeur}"
+        );
+
+        // Le repli est intérieur à `routes`, et non à `layers` : une couche verrait passer
+        // toutes les requêtes de l'API, là où un repli ne voit que ce que personne n'a
+        // réclamé.
+        let ancre = |balise: &str| {
+            routeur
+                .find(balise)
+                .unwrap_or_else(|| panic!("{balise} absente :\n{routeur}"))
+        };
+        assert!(
+            ancre("// <rbs:routes>") < ancre(".merge(crate::modules::frontend::routes())")
+                && ancre(".merge(crate::modules::frontend::routes())") < ancre("// </rbs:routes>"),
+            "le repli n'est pas dans l'ancre des routes :\n{routeur}"
+        );
+
+        let config = projected(&planned, "config/default.toml");
+        assert!(config.contains("[frontend]"), "{config}");
+        assert!(config.contains("dir = \"frontend/dist\""), "{config}");
+
+        // `tower` ne vivait qu'en dépendance de développement, et `tower-http` sans sa
+        // feature `fs` : le service de fichiers a besoin des deux à l'exécution.
+        let cargo = projected(&planned, "Cargo.toml");
+        assert!(cargo.contains("tower ="), "{cargo}");
+        assert!(
+            cargo.contains("\"fs\""),
+            "la feature `fs` de tower-http manque :\n{cargo}"
+        );
+
+        assert_eq!(fingerprint(&root), before, "la planification a écrit");
+    }
+
+    /// Le fragment livre du code que le CLI ne sait pas construire : il dit donc où lire
+    /// ce qu'il reste à faire, par le champ du manifeste et non par la table du CLI.
+    #[test]
+    fn the_frontend_fragment_says_where_to_read_what_is_left_to_do() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "frontend")).expect("le plan doit se calculer");
+
+        let pose = planned
+            .poses
+            .iter()
+            .find(|pose| pose.name == "frontend")
+            .expect("le fragment est posé");
+        assert_eq!(pose.next_steps.len(), 1, "{:?}", pose.next_steps);
+        assert!(
+            pose.next_steps[0].contains("cargo run"),
+            "{:?}",
+            pose.next_steps
+        );
+    }
 }

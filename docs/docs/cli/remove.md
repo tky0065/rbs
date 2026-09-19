@@ -44,7 +44,7 @@ Options :
 | `--json` | Prints the plan — or the error — as one JSON document on standard output instead of the coloured text. [The agents guide](../guides/agents.md#reading-a-plan-as-json) has the document and the error codes. |
 | `--template-dir <CHEMIN>` | Reads the fragment's manifest from a directory holding one subdirectory per feature, instead of the ones embedded in the binary — the same directory `add` would have installed from. |
 
-Without `--template-dir`, the same fourteen names `add` installs are the only ones
+Without `--template-dir`, the same fifteen names `add` installs are the only ones
 `remove` accepts. A CRUD `rbs generate crud` wrote is not one of them, even though its
 name sits in `[package.metadata.rbs] features` next to the real fragments — `remove`
 refuses it exactly as it refuses a name that was never a feature at all.
@@ -181,7 +181,7 @@ plan pour …/demo
 {/* rbs:transcript cmd="rbs remove graphql" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs remove graphql
-erreur : `graphql` n'est pas un fragment : api-keys, audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
+erreur : `graphql` n'est pas un fragment : api-keys, audit, auth, ci, cors, docker, frontend, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 ```
 
 Checked before the project's manifest is even read: a name that was never a fragment does

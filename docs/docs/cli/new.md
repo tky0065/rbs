@@ -275,9 +275,9 @@ MAISON=1
 
 ## `--with` installs
 
-`--with` names features to install at creation, comma-separated. rbs knows fourteen —
-`api-keys`, `audit`, `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`,
-`redis`, `scheduler`, `storage` and `webhooks` — and installs every one named, in the
+`--with` names features to install at creation, comma-separated. rbs knows fifteen —
+`api-keys`, `audit`, `auth`, `ci`, `cors`, `docker`, `frontend`, `jobs`, `mail`, `observability`,
+`rate-limit`, `redis`, `scheduler`, `storage` and `webhooks` — and installs every one named, in the
 same pass that writes the project:
 
 {/* rbs:transcript cmd="rbs new site --with auth --yes" */}
@@ -345,7 +345,7 @@ A name that is no feature at all is refused before the first file is written:
 {/* rbs:transcript cmd="rbs new site --with graphql --yes" */}
 ```text
 $ rbs new site --with graphql --yes
-erreur : `graphql` n'est pas une feature rbs — disponibles : api-keys, audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
+erreur : `graphql` n'est pas une feature rbs — disponibles : api-keys, audit, auth, ci, cors, docker, frontend, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 ```
 
 ## A preset names a set

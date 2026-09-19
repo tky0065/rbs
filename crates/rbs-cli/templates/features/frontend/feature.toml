@@ -1,0 +1,58 @@
+[feature]
+description = "frontend : le build du client servi par le binaire, et une page d'amorçage tant qu'il manque"
+# Le CLI n'exécute rien : le client se construit de la main du développeur, et c'est la
+# page d'amorçage qui nomme les commandes restantes, avec le chemin que la configuration
+# porte réellement. La ligne ci-dessous dit où aller les lire.
+next_steps = [
+  "{% if lang == 'en' %}cargo run: the root serves the bootstrap page, which names what is left to build{% else %}cargo run : la racine sert la page d'amorçage, qui nomme ce qu'il reste à construire{% endif %}",
+]
+
+[[files]]
+source      = "mod.rs.jinja"
+destination = "src/modules/frontend/mod.rs"
+
+[[files]]
+source      = "config.rs.jinja"
+destination = "src/modules/frontend/config.rs"
+
+[[files]]
+source      = "amorcage.rs.jinja"
+destination = "src/modules/frontend/amorcage.rs"
+
+[[files]]
+source      = "tests.rs.jinja"
+destination = "src/modules/frontend/tests.rs"
+
+[[anchors]]
+anchor  = "modules"
+content = "pub mod frontend;"
+
+# Dans `routes` et non dans `layers` : ce que le fragment pose est un repli, que le
+# routeur ne consulte qu'une fois toutes ses routes essayées. Une couche, elle, verrait
+# passer les requêtes de l'API.
+[[anchors]]
+anchor  = "routes"
+content = ".merge(crate::modules::frontend::routes())"
+
+# `tower` n'était jusqu'ici qu'une dépendance de développement, pour les tests engendrés :
+# le repli appelle `ServeDir` en service, ce qui demande `oneshot` à l'exécution.
+[[dependencies]]
+name     = "tower"
+version  = "0.5"
+features = ["util"]
+
+# Le service de fichiers statiques : `tower-http` est déjà là pour la compression et la
+# borne de temps, seule sa feature `fs` manque.
+[cargo.tower-http]
+features = ["fs"]
+
+# Le répertoire est celui qu'écrit la construction du client, l'index ce qui est rendu pour
+# une route que le serveur ne connaît pas. Deux clés, et aucun interrupteur : la page
+# d'amorçage s'efface d'elle-même quand l'index existe.
+[[config]]
+file    = "config/default.toml"
+section = "frontend"
+content = """
+dir = "frontend/dist"
+index = "index.html"
+"""

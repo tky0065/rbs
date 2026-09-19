@@ -1,0 +1,68 @@
+use std::path::PathBuf;
+
+use serde::Deserialize;
+
+/// Section `[frontend]` de la configuration du projet.
+///
+/// Elle vit dans `config/default.toml`, avec le reste : un frontend n'a pas de raison
+/// d'avoir son propre mécanisme de configuration, et `config/{env}.toml` comme les
+/// variables `RBS_FRONTEND__*` la surchargent comme n'importe quelle autre section.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Config {
+    /// Répertoire du build du client, relatif à la racine du projet.
+    ///
+    /// C'est ce que la commande de build du client écrit, et ce que le binaire sert. Tant
+    /// qu'il ne porte pas d'index, la page d'amorçage prend sa place.
+    #[serde(default = "default_dir")]
+    pub dir: String,
+    /// Document rendu pour toute route que le serveur ne connaît pas.
+    ///
+    /// Relatif à `dir`. C'est lui qui fait qu'un rechargement sur une route profonde du
+    /// client rend l'application plutôt qu'un 404.
+    #[serde(default = "default_index")]
+    pub index: String,
+}
+
+impl Config {
+    /// Relit la cascade de configuration pour la seule section `[frontend]`.
+    pub fn load() -> Result<Self, rbs_core::config::ConfigError> {
+        rbs_core::config::section("frontend")
+    }
+
+    /// Le chemin de l'index, d'où se juge la présence d'un build.
+    pub fn index(&self) -> PathBuf {
+        PathBuf::from(&self.dir).join(&self.index)
+    }
+
+    /// Le répertoire du projet client, d'où se lancent les commandes de construction.
+    ///
+    /// Déduit de `dir` et non déclaré à côté : deux clés qui décrivent la même
+    /// arborescence divergent le jour où l'une est modifiée sans l'autre.
+    pub fn projet(&self) -> &str {
+        let dir = self.dir.trim_end_matches('/');
+
+        match dir.rsplit_once('/') {
+            Some((parent, _)) if !parent.is_empty() => parent,
+            _ => dir,
+        }
+    }
+}
+
+// Dérivée, `Default` rendrait des chaînes vides là où serde met les valeurs ci-dessous :
+// une section absente et une section vide ne serviraient pas le même répertoire.
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            dir: default_dir(),
+            index: default_index(),
+        }
+    }
+}
+
+fn default_dir() -> String {
+    "frontend/dist".to_string()
+}
+
+fn default_index() -> String {
+    "index.html".to_string()
+}

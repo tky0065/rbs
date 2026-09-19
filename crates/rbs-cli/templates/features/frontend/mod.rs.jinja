@@ -1,0 +1,70 @@
+use axum::Router;
+use axum::extract::{Request, State};
+use axum::response::{IntoResponse, Response};
+use tower::ServiceExt;
+use tower_http::services::{ServeDir, ServeFile};
+
+pub mod amorcage;
+pub mod config;
+
+#[cfg(test)]
+mod tests;
+
+pub use config::Config;
+
+use crate::state::AppState;
+
+/// Le repli du projet : le build du client, ou la page d'amorçage tant qu'il manque.
+///
+/// Un repli et non des routes nommées. Ce qui est monté ailleurs — l'API, `/health`, la
+/// documentation OpenAPI — est trouvé avant lui, et il ne voit que ce que personne n'a
+/// réclamé : il ne peut donc masquer aucune route du service. C'est aussi ce qui rend
+/// l'application sur un rechargement en route profonde, au lieu d'un 404.
+pub fn routes() -> Router<AppState> {
+    let config = Config::load().unwrap_or_else(|error| {
+        tracing::error!(%error, "section [frontend] inexploitable : les défauts s'appliquent");
+        Config::default()
+    });
+
+    Router::new().fallback(move |State(state): State<AppState>, request: Request| {
+        let config = config.clone();
+        async move {
+            // La borne est celle du pool : `acquire_timeout_secs` de `[database]`. Une
+            // page d'amorçage qui pend n'apprendrait rien de plus qu'une page qui dit que
+            // la base ne répond pas.
+            let joignable = rbs_core::HasCoreState::core(&state)
+                .db()
+                .ping()
+                .await
+                .is_ok();
+
+            servir(&config, joignable, request).await
+        }
+    })
+}
+
+/// Le repli lui-même, l'état déjà interrogé.
+///
+/// Le booléen entre plutôt que l'état : la page d'amorçage se rend alors sans base, et
+/// les tests du module l'exercent sans en monter une.
+pub(crate) async fn servir(config: &Config, base_joignable: bool, request: Request) -> Response {
+    let index = config.index();
+
+    // Interrogé à chaque requête et non au démarrage : la page d'amorçage s'efface d'elle-
+    // même dès que la construction du client a écrit, sans réglage à basculer ni serveur à
+    // relancer. Le coût est un appel système, sur le seul chemin du repli.
+    if !index.is_file() {
+        return amorcage::page(config, base_joignable);
+    }
+
+    ServeDir::new(&config.dir)
+        .fallback(ServeFile::new(&index))
+        .oneshot(request)
+        .await
+        .map_or_else(
+            // `ServeDir` déclare `Infallible` : la branche n'est pas atteignable, et
+            // `unwrap()` dirait la même chose sans nommer ce qui la rend vraie.
+            |_| amorcage::page(config, base_joignable),
+            IntoResponse::into_response,
+        )
+}

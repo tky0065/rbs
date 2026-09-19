@@ -46,7 +46,7 @@ Options :
 | `--json` | Rend le plan — ou l'erreur — en un seul document JSON sur la sortie standard, au lieu du texte coloré. [Le guide des agents](../guides/agents.md#lire-un-plan-en-json) porte le document et les codes d'erreur. |
 | `--template-dir <CHEMIN>` | Lit le manifeste du fragment dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire — le même répertoire qu'`add` aurait utilisé pour l'installer. |
 
-Sans `--template-dir`, seuls les quatorze noms qu'`add` installe sont acceptés par `remove`.
+Sans `--template-dir`, seuls les quinze noms qu'`add` installe sont acceptés par `remove`.
 Un CRUD engendré par `rbs generate crud` n'en fait pas partie, même si son nom voisine les
 vrais fragments dans `[package.metadata.rbs] features` : `remove` le refuse exactement
 comme il refuse un nom qui n'a jamais désigné une feature.
@@ -190,7 +190,7 @@ plan pour …/demo
 {/* rbs:transcript cmd="rbs remove graphql" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs remove graphql
-erreur : `graphql` n'est pas un fragment : api-keys, audit, auth, ci, cors, docker, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
+erreur : `graphql` n'est pas un fragment : api-keys, audit, auth, ci, cors, docker, frontend, jobs, mail, observability, rate-limit, redis, scheduler, storage, webhooks
 ```
 
 Vérifié avant même que le manifeste du projet ne soit lu : un nom qui n'a jamais été un
