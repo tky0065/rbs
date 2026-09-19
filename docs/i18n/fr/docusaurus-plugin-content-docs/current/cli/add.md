@@ -457,7 +457,7 @@ sinon un plan vide, donc une commande qui réussit sans rien faire.
 ## Les ancres
 
 `rbs add` écrit surtout des fichiers entiers et modifie le manifeste ; c'est [`rbs
-generate`](./generate.md#les-ancres) qui insère dans les quinze ancres en commentaires
+generate`](./generate.md#les-ancres) qui insère dans les seize ancres en commentaires
 Rust du projet — `// <rbs:features>` (dans `src/lib.rs`, ou dans `src/main.rs` sur un
 projet sans bibliothèque — voir [plus bas](./generate.md#les-ancres)),
 `// <rbs:modules>` (optionnelle : seul un projet qui a installé un fragment sous
@@ -465,8 +465,9 @@ projet sans bibliothèque — voir [plus bas](./generate.md#les-ancres)),
 `// <rbs:migration_modules>`, `// <rbs:migrations>`, `// <rbs:state_champs>`,
 `// <rbs:state_init>`, `// <rbs:startup>`, `// <rbs:seeds>`, `// <rbs:health_probes>`,
 `// <rbs:jobs>` et `// <rbs:job_modules>` (optionnelles aussi : seul un projet qui porte la
-file les porte), et `// <rbs:schedules>` (optionnelle aussi : seul un projet qui porte le
-calendrier la porte).
+file les porte), `// <rbs:schedules>` (optionnelle aussi : seul un projet qui porte le
+calendrier la porte), et `// <rbs:auth_impl>` (optionnelle aussi : seul un projet qui
+porte l'authentification la porte — la seule ancre intérieure à un bloc `impl`).
 
 `// <rbs:layers>` est l'endroit où un fragment empile un middleware, et elle ne
 s'interchange pas avec `// <rbs:routes>` qui la précède de quelques lignes : un `.layer()`
@@ -480,9 +481,9 @@ toutes les trois.
 services `api` et `migrate` vont dans `# <rbs:services>`, l'ancre YAML que porte un
 compose — voir [plus haut](#les-quatorze-features). La règle est la même partout : aucun AST
 n'est jamais réécrit, et une ancre absente fait que la commande n'écrit rien et affiche le
-bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les seize — onze sur
+bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les dix-sept — onze sur
 un projet qui ne porte ni compose, ni file, ni fragment déplacé sous `src/modules/`, les
-cinq optionnelles.
+six optionnelles.
 
 Un projet engendré avant l'existence de `// <rbs:layers>` ne la porte pas, et `rbs upgrade`
 ne l'ajoute pas : cette commande aligne le manifeste et les zones de l'`AGENTS.md`, et ne

@@ -633,7 +633,7 @@ le message suggère et ce que l'exécution ci-dessus a utilisé.
 ## Les ancres
 
 `rbs generate` ne réécrit jamais d'AST. Il insère entre des marqueurs en commentaires que le
-squelette porte. `rbs generate crud` et `rbs generate feature` en emploient six sur seize —
+squelette porte. `rbs generate crud` et `rbs generate feature` en emploient six sur dix-sept —
 les deux de `src/state.rs`, `// <rbs:layers>` et `// <rbs:startup>` appartiennent aux
 fragments qu'installe [`rbs add`](./add.md) :
 
@@ -677,8 +677,8 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) contrôle les seize ancres — onze sur un projet qui ne
-porte ni compose, ni file, ni fragment déplacé sous `src/modules/`, les cinq
+[`rbs doctor`](./doctor.md) contrôle les dix-sept ancres — onze sur un projet qui ne
+porte ni compose, ni file, ni fragment déplacé sous `src/modules/`, les six
 optionnelles — si bien qu'une ancre disparue se trouve avant qu'une génération ne bute
 dessus.
 

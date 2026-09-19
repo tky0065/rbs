@@ -46,7 +46,7 @@ plan pour …/demo
   rbs migrate up, puis POST /api-keys pour tirer une clé — elle n'est rendue qu'à cet instant — et présentez-la en X-Api-Key
 ```
 
-Trois migrations l'accompagnent : [`rbs migrate up`](../cli/migrate.md) est la commande
+Deux migrations l'accompagnent : [`rbs migrate up`](../cli/migrate.md) est la commande
 suivante.
 
 ## Ce que vaut une clé
@@ -165,6 +165,16 @@ ouvrir la requête en cours.
   administre les siennes, comme chacun administre ses sessions. Si votre projet veut réserver
   l'émission aux administrateurs, ajoutez `identite.require_role(Role::Admin)?` à
   `controller::create`.
+- **L'échéance d'une clé ne borne pas ce que cette clé émet.** Le plafond porte sur le rôle,
+  à chaque requête ; rien ne plafonne le temps. Une clé créée avec `expires_in_days: 1` peut
+  appeler `POST /api-keys` et recevoir une clé de même rôle sans aucune échéance — un accès
+  qui survit à la péremption censée le fermer. La conception autorise qu'une clé en tire une
+  autre, le provisionnement en dépend, et le plafond de rôle interdit l'escalade ; l'échéance,
+  elle, n'a jamais été arbitrée. Tant qu'elle ne l'est pas, traitez une clé fuitée comme un
+  compte fuité : `GET /api-keys` montre ce qu'elle a émis, `DELETE /api-keys` ferme tout d'un
+  coup. Pour faire propager l'échéance, plafonnez l'`expires_at` de la fille par celle de
+  l'appelant dans `service::create` — `Claims.jti` dit déjà que la requête vient d'une clé et
+  non d'une session.
 
 ## Les tests
 

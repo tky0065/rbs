@@ -45,7 +45,7 @@ plan pour …/demo
   rbs migrate up, puis POST /api-keys pour tirer une clé — elle n'est rendue qu'à cet instant — et présentez-la en X-Api-Key
 ```
 
-Three migrations come with it, so [`rbs migrate up`](../cli/migrate.md) is the next command.
+Two migrations come with it, so [`rbs migrate up`](../cli/migrate.md) is the next command.
 
 ## What a key is worth
 
@@ -159,6 +159,15 @@ it: a key revoked between the read and the check must not open the request in fl
 - **Choosing who may mint.** The four routes require no role: everyone administers their own
   keys, as everyone administers their own sessions. If your project wants minting reserved to
   administrators, add `identite.require_role(Role::Admin)?` to `controller::create`.
+- **A key's deadline does not bound what that key issues.** The cap applies to the role, at
+  every request; nothing caps time. A key created with `expires_in_days: 1` may call `POST
+  /api-keys` and receive a key of the same role with no deadline at all — an access that
+  outlives the expiry meant to close it. The design allows a key to mint a key, because
+  provisioning depends on it, and the role cap forbids escalation; the deadline was never
+  arbitrated. Until it is, treat a leaked key as a leaked account: `GET /api-keys` shows what
+  it has minted and `DELETE /api-keys` closes all of them at once. To make the deadline
+  propagate, cap the child's `expires_at` by the caller's in `service::create` — `Claims.jti`
+  already tells you the request came from a key rather than a session.
 
 ## Testing
 

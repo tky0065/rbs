@@ -416,9 +416,9 @@ volumes:
 ```
 
 `docker compose up -d` la démarre. L'ancre `# <rbs:services>` est là où [`rbs
-add`](./add.md) insère les services qu'apporte `docker`, et c'est l'une des seize
+add`](./add.md) insère les services qu'apporte `docker`, et c'est l'une des dix-sept
 ancres que vérifie [`rbs doctor`](./doctor.md) — onze sur un projet qui ne porte ni
-compose, ni file, ni fragment déplacé sous `src/modules/`, les cinq optionnelles.
+compose, ni file, ni fragment déplacé sous `src/modules/`, les six optionnelles.
 
 Quatre cas n'écrivent rien :
 
