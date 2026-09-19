@@ -3397,10 +3397,17 @@ mod tests {
                 "{route} n'est pas nommée :\n{accueil}"
             );
         }
+        // Les trois sont nommées *et* demandées : la sonde directement, les deux routes de
+        // documentation par le même interrogateur. Une route citée dans un libellé sans
+        // être jamais appelée serait exactement l'affirmation non vérifiée qu'on interdit.
+        assert!(
+            accueil.contains("await fetch('/health')"),
+            "la sonde n'est pas interrogée :\n{accueil}"
+        );
         assert_eq!(
-            accueil.matches("await fetch(").count(),
-            3,
-            "trois routes nommées, et pas trois appels :\n{accueil}"
+            accueil.matches("await interroge(").count(),
+            2,
+            "les deux routes de documentation ne sont pas interrogées :\n{accueil}"
         );
 
         // La table sort du document, et non d'une liste recopiée : c'est `paths` qu'elle
@@ -3408,6 +3415,27 @@ mod tests {
         assert!(
             accueil.contains(".paths ?? {}"),
             "la table des routes ne vient pas du document :\n{accueil}"
+        );
+
+        // Un 200 ne prouve rien : le repli rend l'application pour toute route inconnue.
+        // Le document n'est déclaré servi que parce qu'il s'est nommé.
+        assert!(
+            accueil.contains("typeof publie.openapi !== 'string'"),
+            "le document est cru sur son seul code de retour :\n{accueil}"
+        );
+
+        // Et un échec ne prouve rien non plus : un service muet ne dit rien du fichier de
+        // configuration, et la page n'a pas le droit d'y nommer un drapeau qu'elle n'a pas
+        // lu. C'est tout l'objet du quatrième état.
+        assert!(
+            accueil.contains("type Verdict = 'attente' | 'servi' | 'coupe' | 'injoignable'"),
+            "« coupé » et « injoignable » sont confondus :\n{accueil}"
+        );
+
+        let textes = projected(&planned, "frontend/src/views/accueil-textes.ts");
+        assert!(
+            textes.contains("docs_muet:"),
+            "aucun libellé ne dit l'ignorance :\n{textes}"
         );
     }
 
@@ -3565,14 +3593,21 @@ mod tests {
         let feuille = projected(&planned, "frontend/src/assets/main.css");
         assert!(feuille.contains("--animate-impression:"), "{feuille}");
         assert!(feuille.contains("@keyframes impression"), "{feuille}");
-        assert!(feuille.contains("prefers-reduced-motion"), "{feuille}");
+
+        // L'animation n'est jamais *posée* sous la préférence, plutôt que posée puis
+        // neutralisée : c'est `motion-safe:` qui le fait, et la page ne doit donc porter
+        // aucune classe d'impression inconditionnelle.
+        assert!(
+            !accueil.contains("\"animate-impression"),
+            "l'animation est posée sans condition :\n{accueil}"
+        );
     }
 
     /// L'accueil est une pile de bandes, chacune remplaçable seule.
     ///
     /// C'est ce qui en fait une vitrine et non une page : son propriétaire remplacera la
-    /// section d'essai par la sienne sans toucher aux autres, et ses libellés vivent dans
-    /// un fichier à part, rendu dans la langue du projet.
+    /// bande d'essai par la sienne sans toucher aux autres, et ses libellés vivent dans un
+    /// fichier à part, rendu dans la langue du projet.
     #[test]
     fn the_home_page_is_a_stack_of_bands_each_replaceable_alone() {
         let (_parent, root) = project();
@@ -3582,11 +3617,11 @@ mod tests {
 
         assert!(
             accueil.matches("<Bande").count() >= 6,
-            "l'accueil ne se décompose pas en sections :\n{accueil}"
+            "l'accueil ne se décompose pas en bandes :\n{accueil}"
         );
         assert!(
             accueil.contains(":titre=\"TEXTES.sonde\""),
-            "une section porte son titre ailleurs que dans sa bande :\n{accueil}"
+            "une bande porte son titre ailleurs qu'en prop :\n{accueil}"
         );
         assert!(
             planned

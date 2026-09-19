@@ -91,6 +91,12 @@
    * une préférence de mouvement réduit ne pose pas. */
   --animate-impression: impression 260ms steps(14, end);
 
+  /* La perforation de la marge : son pas, son diamètre et son encre. Elle est du thème et
+   * non de la feuille — remplacer l'identité doit suffire à la faire disparaître. */
+  --perforation-pas: 1.5rem;
+  --perforation-rayon: 0.2rem;
+  --perforation-encre: var(--color-accent);
+
   @keyframes impression {
     from {
       clip-path: inset(0 100% 0 0);
@@ -106,11 +112,15 @@
    * image — un fragment n'en livrerait aucune. Les trous tombent dans la gouttière du
    * conteneur, hors des bandes, qui gardent chacune leur propre fond. */
   .feuille {
+    --trou: radial-gradient(
+      circle at calc(var(--perforation-pas) / 2) calc(var(--perforation-pas) / 2),
+      var(--perforation-encre) var(--perforation-rayon),
+      transparent calc(var(--perforation-rayon) + 1px)
+    );
+
     background:
-      radial-gradient(circle at 0.75rem 0.75rem, var(--color-accent) 0.2rem, transparent 0.21rem)
-        left top / 1.5rem 1.5rem repeat-y,
-      radial-gradient(circle at 0.75rem 0.75rem, var(--color-accent) 0.2rem, transparent 0.21rem)
-        right top / 1.5rem 1.5rem repeat-y;
+      var(--trou) left top / var(--perforation-pas) var(--perforation-pas) repeat-y,
+      var(--trou) right top / var(--perforation-pas) var(--perforation-pas) repeat-y;
   }
 }
 

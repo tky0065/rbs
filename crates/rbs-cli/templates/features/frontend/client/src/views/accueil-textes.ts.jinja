@@ -13,11 +13,14 @@ export const TEXTES = {
   essai_note: 'As it stands, against the address that served this page.',
   copier: 'Copy',
   copie: 'Copied',
-  routes: 'Mounted routes',
+  routes: 'Documented routes',
   routes_source: 'Read from the OpenAPI document this service publishes.',
-  routes_attente: 'reading the document…',
-  routes_absentes:
-    'The document is not served: `openapi_json` under `[docs]`, in `config/default.toml`.',
+  routes_vides: {
+    attente: 'reading the document…',
+    servi: 'the document is served, and declares no route.',
+    coupe: 'the document is not served: `openapi_json` under `[docs]`, in `config/default.toml`.',
+    injoignable: 'the service did not answer: nothing can be said of its document.',
+  },
   methode: 'Method',
   chemin: 'Route',
   operation: 'Operation',
@@ -29,6 +32,7 @@ export const TEXTES = {
   non_servi: 'not served',
   swagger_absent: '`swagger_ui` is off under `[docs]`.',
   document_absent: '`openapi_json` is off under `[docs]`.',
+  docs_muet: 'the service did not answer: nothing can be said of `[docs]`.',
   attente: 'asking…',
   composants: 'Interface components',
   galerie: 'See the gallery',
@@ -36,7 +40,7 @@ export const TEXTES = {
     'The fourteen components the base dropped into this project, each in its main states.',
   pied_fichier:
     'This page is `frontend/src/views/Accueil.vue`, its wording `frontend/src/views/accueil-textes.ts`.',
-  pied_bandes: 'Every section above is a `Bande`: replacing one touches none of the others.',
+  pied_bandes: 'Each band above is a `Bande`: replacing one touches none of the others.',
 }
 {% else -%}
 export const TEXTES = {
@@ -52,11 +56,14 @@ export const TEXTES = {
   essai_note: "Telle quelle, contre l'adresse qui a servi cette page.",
   copier: 'Copier',
   copie: 'Copiée',
-  routes: 'Routes montées',
+  routes: 'Routes documentées',
   routes_source: 'Lues dans le document OpenAPI que ce service publie.',
-  routes_attente: 'lecture du document…',
-  routes_absentes:
-    "Le document n'est pas servi : `openapi_json` sous `[docs]`, dans `config/default.toml`.",
+  routes_vides: {
+    attente: 'lecture du document…',
+    servi: 'le document est servi, et ne déclare aucune route.',
+    coupe: "le document n'est pas servi : `openapi_json` sous `[docs]`, dans `config/default.toml`.",
+    injoignable: "le service n'a pas répondu : rien ne peut être dit de son document.",
+  },
   methode: 'Méthode',
   chemin: 'Route',
   operation: 'Opération',
@@ -68,6 +75,7 @@ export const TEXTES = {
   non_servi: 'non servi',
   swagger_absent: '`swagger_ui` est coupé sous `[docs]`.',
   document_absent: '`openapi_json` est coupé sous `[docs]`.',
+  docs_muet: "le service n'a pas répondu : rien ne peut être dit de `[docs]`.",
   attente: 'interrogation…',
   composants: "Composants d'interface",
   galerie: 'Voir la galerie',
@@ -75,6 +83,6 @@ export const TEXTES = {
     'Les quatorze composants que le socle a déposés dans le projet, chacun dans ses états principaux.',
   pied_fichier:
     'Cette page est `frontend/src/views/Accueil.vue`, ses libellés `frontend/src/views/accueil-textes.ts`.',
-  pied_bandes: "Les sections ci-dessus sont des `Bande` : en remplacer une n'en touche aucune autre.",
+  pied_bandes: "Chaque bande ci-dessus est une `Bande` : en remplacer une n'en touche aucune autre.",
 }
 {% endif %}

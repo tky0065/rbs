@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckIcon, CopyIcon, ExternalLinkIcon, RefreshCwIcon } from '@lucide/vue'
+import { CheckIcon, CopyIcon, RefreshCwIcon } from '@lucide/vue'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { RouterLink } from 'vue-router'
 
@@ -24,7 +24,6 @@ const PROJET = '{@ project_name @}'
 // faux la moitié du temps, et la commande affichée ne marcherait pas telle quelle.
 const ORIGINE = window.location.origin
 
-/** La commande d'essai, telle qu'elle s'affiche et telle qu'elle se copie. */
 const COMMANDE = `curl -s ${ORIGINE}/health`
 
 /** Ce que rend la sonde du squelette : un verdict, et le détail par dépendance. */
@@ -49,12 +48,9 @@ const RELEVES_GARDES = 12
 const releves = ref<Releve[]>([])
 let imprimees = 0
 
-/** L'intervalle entre deux interrogations, en millisecondes. */
 const CADENCE = 15_000
 
 async function sonder() {
-  const heure = new Date().toTimeString().slice(0, 8)
-
   try {
     const reponse = await fetch('/health')
     const corps = (await reponse.json()) as Sante
@@ -63,14 +59,20 @@ async function sonder() {
       .join('  ')
 
     imprime({
-      heure,
+      heure: maintenant(),
       statut: String(reponse.status),
       detail: [`status=${corps.status ?? '?'}`, controles].filter(Boolean).join('  '),
       bon: reponse.ok,
     })
   } catch {
-    imprime({ heure, statut: '---', detail: TEXTES.injoignable, bon: false })
+    imprime({ heure: maintenant(), statut: '---', detail: TEXTES.injoignable, bon: false })
   }
+}
+
+// L'heure est celle de la réponse et non celle de la demande : deux interrogations
+// concurrentes s'imprimeraient sinon dans le désordre de leurs propres horodatages.
+function maintenant() {
+  return new Date().toTimeString().slice(0, 8)
 }
 
 function imprime(ligne: Omit<Releve, 'numero'>) {
@@ -81,7 +83,7 @@ function imprime(ligne: Omit<Releve, 'numero'>) {
 
 /** Ce que l'accueil lit du document OpenAPI : les routes, et de quoi les nommer. */
 type Operation = { summary?: string; operationId?: string }
-type DocumentOpenApi = { paths?: Record<string, Record<string, Operation>> }
+type DocumentOpenApi = { openapi?: string; paths?: Record<string, Record<string, Operation>> }
 
 /** Une route montée, telle que la table l'imprime. */
 type Route = { methode: string; chemin: string; operation: string }
@@ -95,36 +97,98 @@ const INTERFACE = '/docs'
 
 const routes = ref<Route[]>([])
 
-// `null` tant que le service n'a pas répondu : la page dit « interrogation » plutôt que
-// « non servi », qui serait faux pendant le temps de l'appel.
-const documentServi = ref<boolean | null>(null)
-const interfaceServie = ref<boolean | null>(null)
+/**
+ * Ce qu'une route de documentation a répondu.
+ *
+ * Quatre états et non deux, parce que « absent » et « injoignable » n'ont pas la même
+ * cause et que la page n'a pas le droit d'inventer celle qu'elle n'a pas vue : un
+ * service muet ne dit rien du fichier de configuration.
+ */
+type Verdict = 'attente' | 'servi' | 'coupe' | 'injoignable'
+
+const documentOpenApi = ref<Verdict>('attente')
+const interfaceOpenApi = ref<Verdict>('attente')
 
 const decompte = computed(() => {
   const nombre = routes.value.length
   return `${nombre} ${nombre > 1 ? TEXTES.routes_plusieurs : TEXTES.route_une}`
 })
 
-// La table n'est pas recopiée du squelette : elle sort du document que le service publie.
-// Recopiée, elle mentirait dès la première entité engendrée — et elle ment déjà si un
-// drapeau de `[docs]` est coupé, ce que seul l'appel peut dire.
-async function lireLeDocument() {
+// Les deux clés de `[docs]` se coupent l'une sans l'autre, et le lecteur ne peut le
+// deviner : chacune est donc dite séparément. Une seule forme, parcourue, plutôt que deux
+// blocs jumeaux qu'une retouche laisserait diverger.
+const CIBLES = computed(() => [
+  {
+    libelle: TEXTES.interface_docs,
+    route: INTERFACE,
+    verdict: interfaceOpenApi.value,
+    absence:
+      interfaceOpenApi.value === 'coupe'
+        ? `${TEXTES.non_servi} — ${TEXTES.swagger_absent}`
+        : TEXTES.docs_muet,
+  },
+  {
+    libelle: TEXTES.document_docs,
+    route: DOCUMENT,
+    verdict: documentOpenApi.value,
+    absence:
+      documentOpenApi.value === 'coupe'
+        ? `${TEXTES.non_servi} — ${TEXTES.document_absent}`
+        : TEXTES.docs_muet,
+  },
+])
+
+/**
+ * Interroge une route de documentation, et ne conclut que de ce qu'elle a vu.
+ *
+ * Un 200 ne prouve rien : le binaire rend l'application pour toute route qu'il ne connaît
+ * pas, si bien qu'un drapeau coupé sous `[docs]` ferait répondre cette page-ci à la place
+ * de ce qu'on demandait. C'est donc la reconnaissance du corps, et elle seule, qui atteste
+ * la présence.
+ *
+ * Un échec ne prouve pas davantage. Un service qui ne répond pas ne dit rien de son
+ * fichier de configuration, et nommer là un drapeau qu'on n'a pas lu serait l'affirmation
+ * inventée que cette page s'interdit.
+ */
+async function interroge(
+  route: string,
+  reconnait: (reponse: Response) => Promise<boolean>,
+): Promise<Verdict> {
+  let reponse: Response
   try {
-    const reponse = await fetch(DOCUMENT)
-    if (!reponse.ok) {
-      throw new Error(String(reponse.status))
-    }
+    reponse = await fetch(route)
+  } catch {
+    return 'injoignable'
+  }
 
-    // Un 200 ne prouve rien : le binaire rend l'application pour toute route qu'il ne
-    // connaît pas, et `openapi_json` coupé ferait donc répondre cette page-ci à sa propre
-    // place. Ce qui prouve que le document est là, c'est qu'il porte des routes.
+  if (!reponse.ok) {
+    return 'injoignable'
+  }
+
+  try {
+    return (await reconnait(reponse)) ? 'servi' : 'coupe'
+  } catch {
+    // Le service a répondu, mais pas ce qu'on demandait : c'est le repli qui a rendu
+    // l'application, donc le drapeau est coupé.
+    return 'coupe'
+  }
+}
+
+// La table n'est pas recopiée du squelette : elle sort du document que le service publie.
+// Recopiée, elle mentirait dès la première entité engendrée.
+async function lireLeDocument() {
+  documentOpenApi.value = await interroge(DOCUMENT, async (reponse) => {
     const publie = (await reponse.json()) as DocumentOpenApi
-    const chemins = publie.paths ?? {}
-    if (Object.keys(chemins).length === 0) {
-      throw new Error('document sans routes')
+
+    // Ce qui atteste le document, c'est qu'il se déclare : `openapi` est le seul champ que
+    // la spécification impose. Le reconnaître à ses routes ferait passer pour « coupé » un
+    // document bien servi mais vide, ce qui est faux — et un projet qui n'annoterait
+    // aucune route est exactement le cas où le lecteur a besoin de la vérité.
+    if (typeof publie.openapi !== 'string') {
+      return false
     }
 
-    routes.value = Object.entries(chemins)
+    routes.value = Object.entries(publie.paths ?? {})
       .flatMap(([chemin, operations]) =>
         Object.entries(operations)
           .filter(([methode]) => METHODES.includes(methode))
@@ -139,27 +203,14 @@ async function lireLeDocument() {
           gauche.chemin.localeCompare(droite.chemin) ||
           gauche.methode.localeCompare(droite.methode),
       )
-    documentServi.value = true
-  } catch {
-    documentServi.value = false
-  }
+    return true
+  })
 }
 
-// Interrogée séparément : les deux clés de `[docs]` se coupent l'une sans l'autre, et un
-// lien vers une interface absente est précisément le genre de chose fausse que cette page
-// n'a pas le droit d'afficher.
-//
-// Reconnue plutôt que supposée, et pour la même raison que le document : le repli rendrait
-// cette page-ci sous un 200. On ne déclare l'interface servie que lorsqu'elle s'est
-// nommée — et dans le doute, la page dit qu'elle ne l'est pas.
 async function sonderInterface() {
-  try {
-    const reponse = await fetch(INTERFACE)
-    const corps = await reponse.text()
-    interfaceServie.value = reponse.ok && corps.includes('swagger-ui')
-  } catch {
-    interfaceServie.value = false
-  }
+  interfaceOpenApi.value = await interroge(INTERFACE, async (reponse) =>
+    (await reponse.text()).includes('swagger-ui'),
+  )
 }
 
 const copie = ref(false)
@@ -180,11 +231,18 @@ async function copier() {
 
 let minuterie: number | undefined
 
-onMounted(() => {
+// Sonder réarme la cadence : sans cela une impression à la demande avancerait la minuterie
+// d'autant, et la ligne d'après tomberait presque aussitôt.
+function rythme() {
+  window.clearInterval(minuterie)
   void sonder()
+  minuterie = window.setInterval(sonder, CADENCE)
+}
+
+onMounted(() => {
+  rythme()
   void lireLeDocument()
   void sonderInterface()
-  minuterie = window.setInterval(sonder, CADENCE)
 })
 
 onUnmounted(() => {
@@ -194,9 +252,9 @@ onUnmounted(() => {
 </script>
 
 <!--
-  L'accueil, en sept bandes. Chacune est une section entière — son titre, son contenu, sa
-  place dans l'alternance — et se remplace sans qu'aucune autre bouge : c'est ce qui en
-  fait une vitrine plutôt qu'une page.
+  L'accueil, en sept bandes. Chacune porte son titre, son contenu et son rang dans
+  l'alternance, et se remplace sans qu'aucune autre bouge : c'est ce qui en fait une
+  vitrine plutôt qu'une page.
 
   La gouttière de `feuille` porte la marge perforée du papier en continu ; les bandes,
   elles, gardent leur propre fond.
@@ -227,7 +285,7 @@ onUnmounted(() => {
       </ol>
 
       <div class="flex flex-wrap items-center gap-x-6 gap-y-3">
-        <Button variant="outline" @click="sonder">
+        <Button variant="outline" @click="rythme">
           <RefreshCwIcon aria-hidden="true" />
           {{ TEXTES.reimprimer }}
         </Button>
@@ -265,48 +323,33 @@ onUnmounted(() => {
             <TableCell class="text-muted-foreground">{{ route.operation }}</TableCell>
           </TableRow>
           <TableEmpty v-if="routes.length === 0" :colspan="3" class="whitespace-normal">
-            {{ documentServi === false ? TEXTES.routes_absentes : TEXTES.routes_attente }}
+            {{ TEXTES.routes_vides[documentOpenApi] }}
           </TableEmpty>
         </TableBody>
       </Table>
-      <p v-if="documentServi" class="text-muted-foreground">
+      <p v-if="documentOpenApi === 'servi'" class="text-muted-foreground">
         {{ decompte }} — {{ TEXTES.routes_source }}
       </p>
     </Bande>
 
     <Bande :titre="TEXTES.documentation">
       <dl class="grid gap-x-6 gap-y-1 sm:grid-cols-[minmax(10rem,auto)_1fr]">
-        <dt class="text-muted-foreground">{{ TEXTES.interface_docs }}</dt>
-        <dd class="m-0">
-          <a
-            v-if="interfaceServie"
-            :href="INTERFACE"
-            class="inline-flex items-center gap-1.5 underline underline-offset-4"
-          >
-            {{ INTERFACE }}
-            <ExternalLinkIcon class="size-4" aria-hidden="true" />
-          </a>
-          <span v-else-if="interfaceServie === false" class="text-destructive">
-            {{ TEXTES.non_servi }} — {{ TEXTES.swagger_absent }}
-          </span>
-          <span v-else class="text-muted-foreground">{{ TEXTES.attente }}</span>
-        </dd>
-
-        <dt class="text-muted-foreground max-sm:mt-3">{{ TEXTES.document_docs }}</dt>
-        <dd class="m-0">
-          <a
-            v-if="documentServi"
-            :href="DOCUMENT"
-            class="inline-flex items-center gap-1.5 break-all underline underline-offset-4"
-          >
-            {{ DOCUMENT }}
-            <ExternalLinkIcon class="size-4 shrink-0" aria-hidden="true" />
-          </a>
-          <span v-else-if="documentServi === false" class="text-destructive">
-            {{ TEXTES.non_servi }} — {{ TEXTES.document_absent }}
-          </span>
-          <span v-else class="text-muted-foreground">{{ TEXTES.attente }}</span>
-        </dd>
+        <template v-for="cible in CIBLES" :key="cible.route">
+          <dt class="text-muted-foreground max-sm:not-first:mt-3">{{ cible.libelle }}</dt>
+          <dd class="m-0">
+            <a
+              v-if="cible.verdict === 'servi'"
+              :href="cible.route"
+              class="break-all underline underline-offset-4"
+            >
+              {{ cible.route }}
+            </a>
+            <span v-else-if="cible.verdict === 'attente'" class="text-muted-foreground">
+              {{ TEXTES.attente }}
+            </span>
+            <span v-else class="text-destructive">{{ cible.absence }}</span>
+          </dd>
+        </template>
       </dl>
     </Bande>
 
