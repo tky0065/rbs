@@ -483,17 +483,19 @@ toutes les trois.
 services `api` et `migrate` vont dans `# <rbs:services>`, l'ancre YAML que porte un
 compose — voir [plus haut](#les-seize-features). À côté d'elle vit l'autre ancre au
 marqueur `#` de Git, `# <rbs:ignore>` dans `.gitignore`, où un fragment exclut du dépôt ce
-qu'il y dépose ; elle est optionnelle elle aussi, un projet dont le propriétaire a supprimé
-le `.gitignore` n'en étant pas moins complet. Trois autres vivent hors du Rust sans quitter
+qu'il y dépose, et `# <rbs:make>` dans le `Makefile`, où un fragment qui apporte un
+exécutable de plus à lancer pose son raccourci ; toutes deux sont optionnelles elles aussi,
+un projet dont le propriétaire a supprimé le `.gitignore` ou le `Makefile` n'en étant pas
+moins complet. Trois autres vivent hors du Rust sans quitter
 sa syntaxe de commentaire : `// <rbs:vite_proxy>`, que `frontend` dépose dans
 `vite.config.ts`, puis `// <rbs:admin_routes>` et `// <rbs:admin_rail>`, que
 `frontend-admin` dépose en TypeScript — les trois remplies par
 [`rbs generate crud`](./generate.md#les-ancres), et le
 [guide du frontend](../guides/frontend.md#les-écrans-engendrés) les donne. La règle est la même partout : aucun AST
 n'est jamais réécrit, et une ancre absente fait que la commande n'écrit rien et affiche le
-bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les vingt-et-une — treize
+bloc à recoller. [`rbs doctor`](./doctor.md) les contrôle toutes les vingt-deux — quatorze
 sur un projet qui ne porte ni file, ni calendrier, ni authentification, ni client, ni shell
-d'administration, dix des vingt-et-une étant optionnelles.
+d'administration, onze des vingt-deux étant optionnelles.
 
 Un projet engendré avant l'existence de `// <rbs:layers>` ne la porte pas, et `rbs upgrade`
 ne l'ajoute pas : cette commande aligne le manifeste et les zones de l'`AGENTS.md`, et ne

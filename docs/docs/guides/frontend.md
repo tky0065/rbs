@@ -48,12 +48,13 @@ plan pour …/demo
   ~ src/lib.rs                                                              modifié
   ~ src/router.rs                                                           modifié
   ~ .gitignore                                                              modifié
+  ~ Makefile                                                                modifié
   ~ Cargo.toml                                                              modifié
   ~ config/default.toml                                                     modifié
   ~ AGENTS.md                                                               modifié
 
-  104 à créer, 6 à modifier
-✓ frontend installée — 104 créés, 6 modifiés
+  104 à créer, 7 à modifier
+✓ frontend installée — 104 créés, 7 modifiés
 
   cd frontend && npm install
 
@@ -169,8 +170,8 @@ plan pour …/demo
   + frontend/src/admin/vues/Profil.vue                                      créé
   + frontend/src/admin/vues/Demonstration.vue                               créé
 
-  165 à créer, 12 à modifier
-✓ frontend-admin installée — 165 créés, 12 modifiés
+  165 à créer, 13 à modifier
+✓ frontend-admin installée — 165 créés, 13 modifiés
 
   cd frontend && npm install
 
@@ -306,6 +307,12 @@ render its screen onto the demonstration screen's own file and route. The comman
 names `--no-admin`.
 
 ## Development and production
+
+The fragment writes its shortcuts into the project's
+[`Makefile`](../cli/new.md#the-projects-shortcuts) as it installs: `make front` for the dev
+server, `make front-build` for the build the binary serves, `make typecheck` for `vue-tsc`.
+It also adds its half of `make dev`, which from then on runs the binary and Vite together
+in one process group — a single Ctrl-C stops both.
 
 In production the binary serves the build itself: no second server, no reverse proxy. In
 development, `npm run dev` serves the client on Vite's port with hot reload, and proxies to

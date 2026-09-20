@@ -49,12 +49,13 @@ plan pour …/demo
   ~ src/lib.rs                                                              modifié
   ~ src/router.rs                                                           modifié
   ~ .gitignore                                                              modifié
+  ~ Makefile                                                                modifié
   ~ Cargo.toml                                                              modifié
   ~ config/default.toml                                                     modifié
   ~ AGENTS.md                                                               modifié
 
-  104 à créer, 6 à modifier
-✓ frontend installée — 104 créés, 6 modifiés
+  104 à créer, 7 à modifier
+✓ frontend installée — 104 créés, 7 modifiés
 
   cd frontend && npm install
 
@@ -174,8 +175,8 @@ plan pour …/demo
   + frontend/src/admin/vues/Profil.vue                                      créé
   + frontend/src/admin/vues/Demonstration.vue                               créé
 
-  165 à créer, 12 à modifier
-✓ frontend-admin installée — 165 créés, 12 modifiés
+  165 à créer, 13 à modifier
+✓ frontend-admin installée — 165 créés, 13 modifiés
 
   cd frontend && npm install
 
@@ -319,6 +320,12 @@ rendrait son écran sur le fichier et la route de l'écran de démonstration. La
 et nomme `--no-admin`.
 
 ## Développement et production
+
+Le fragment écrit ses raccourcis dans le
+[`Makefile`](../cli/new.md#les-raccourcis-du-projet) en s'installant : `make front` pour le
+serveur de développement, `make front-build` pour le build que sert le binaire, `make
+typecheck` pour `vue-tsc`. Il y ajoute aussi sa moitié de `make dev`, qui mène dès lors le
+binaire et Vite de front, dans un même groupe de processus — un seul Ctrl-C arrête les deux.
 
 En production, le binaire sert le build lui-même : ni second serveur, ni reverse proxy. En
 développement, `npm run dev` sert le client sur le port de Vite avec son rechargement à

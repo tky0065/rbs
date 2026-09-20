@@ -13,6 +13,29 @@ dépréciation.
 
 ## [Non publié]
 
+### Ajouté
+
+- **Un projet engendré porte désormais un `Makefile`, et ne dépend plus de son générateur.**
+  Jusqu'ici, les seuls gestes documentés passaient par le CLI — `rbs dev`, `rbs migrate` — si
+  bien que le collègue qui clonait le dépôt devait installer `rbs-cli` avant de taper quoi que
+  ce soit. Le squelette écrit à la place treize raccourcis : `dev`, `back`, `build`, `test`,
+  `lint`, `fmt`, `migrate`, `seed`, `up`, `down`, `openapi`, `clean`, et un `help` qui se lit
+  dans le fichier lui-même et que rend un `make` nu. Chaque recette enveloppe `cargo`, `npm`
+  ou `docker compose` ; aucune n'appelle `rbs`. `make dev` mène de front tout ce que le projet
+  porte, dans un même groupe de processus — un seul Ctrl-C arrête l'ensemble — sans aucune
+  dépendance nouvelle : un `trap 'kill 0' INT TERM EXIT` et un `wait`. Les noms de cibles sont
+  les mêmes dans toutes les langues ; seules les descriptions qu'affiche `make help` suivent
+  `--lang`.
+
+- **Une ancre `# <rbs:make>`**, la vingt-deuxième du registre et la troisième au marqueur `#`
+  de Git, est là où un fragment pose un raccourci à lui — `rbs add frontend` y écrit `front`,
+  `front-build`, `typecheck` et sa moitié de `make dev`, `rbs add docker` y écrit `image`. Un
+  fragment n'en pose un que s'il apporte un exécutable de plus à lancer : `jobs` et
+  `observability` n'en posent aucun. L'ancre est optionnelle, pour la même raison que
+  `# <rbs:ignore>` : le squelette écrit bien le fichier, mais celui-ci appartient au
+  développeur, qui peut l'avoir supprimé. Le registre passe de vingt-et-une ancres à
+  vingt-deux, dont onze optionnelles.
+
 ### Corrigé
 
 - **Le serveur de développement relaie désormais les préfixes qu'ajoute `rbs generate crud`.**

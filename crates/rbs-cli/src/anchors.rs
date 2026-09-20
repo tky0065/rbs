@@ -279,6 +279,38 @@ pub(crate) const IGNORE: Anchor = Anchor {
     after: ".env",
 };
 
+/// Les raccourcis que les fragments ajoutent au `Makefile` du projet.
+///
+/// La troisième et dernière ancre à porter le marqueur `#`, après celle du compose et
+/// celle des exclusions — et la seule à vivre dans un fichier de tâches, où une
+/// tabulation ouvre une recette et un espace ne l'ouvre pas.
+///
+/// Ce qui s'y écrit n'est pas qu'une cible : le fragment `frontend` y ajoute aussi une
+/// commande à `DEV`, la liste que `make dev` mène de front. Make développe la recette au
+/// moment de l'exécuter, non à la lecture du fichier, si bien qu'une ligne `DEV +=` posée
+/// *sous* la recette compte quand même — c'est ce qui permet à l'ancre de vivre en fin de
+/// fichier, où une cible nouvelle paraît en queue de `make help`.
+///
+/// Optionnelle, pour la même raison qu'[`IGNORE`] et pour elle seule : le squelette écrit
+/// bien le fichier, mais celui-ci appartient au développeur, qui peut l'avoir supprimé —
+/// un dépôt dont les tâches vivent dans un `justfile`, ou à la racine d'un monorepo.
+/// Réclamer l'ancre ferait passer ce projet pour incomplet.
+///
+/// L'accroche est la ligne qui déclare les cibles du squelette en `.PHONY` : invariante
+/// quelle que soit la langue du projet — les noms de cibles ne se traduisent pas — et
+/// unique dans le fichier.
+pub(crate) const MAKE: Anchor = Anchor {
+    name: Cow::Borrowed("make"),
+    file: Cow::Borrowed("Makefile"),
+    comment: "#",
+    // L'ordre porte du sens : les cibles d'un fragment paraissent dans `make help` dans
+    // l'ordre où elles ont été installées, et la ligne `DEV +=` du client doit suivre
+    // l'affectation que le squelette pose, non la précéder.
+    sorted: false,
+    optional: true,
+    after: ".PHONY: help dev back build test lint fmt migrate seed up down openapi clean",
+};
+
 /// Sondes de santé que les fragments ajoutent au contrôle de `GET /health`.
 ///
 /// Le noyau porte la mécanique du contrôle, jamais la façon de joindre un cache ou un
@@ -465,7 +497,7 @@ pub(crate) const RELATED: Anchor = Anchor {
 ///
 /// La génération vise chaque ancre nommément ; `rbs doctor` parcourt cette liste pour
 /// vérifier qu'un projet les porte toutes.
-pub(crate) const ANCRES: [Anchor; 21] = [
+pub(crate) const ANCRES: [Anchor; 22] = [
     FEATURES,
     MODULES,
     ROUTES,
@@ -479,6 +511,7 @@ pub(crate) const ANCRES: [Anchor; 21] = [
     SEEDS,
     SERVICES,
     IGNORE,
+    MAKE,
     HEALTH_PROBES,
     JOBS,
     JOB_MODULES,
@@ -1604,17 +1637,18 @@ struct AppState {
 
     /// Une ancre optionnelle est l'exception : les onze autres décrivent un fichier que le
     /// squelette écrit toujours et que rien n'invite à supprimer, et leur absence est un
-    /// défaut. Neuf des dix qui le sont vivent dans un fichier qu'un fragment dépose — le
+    /// défaut. Neuf des onze qui le sont vivent dans un fichier qu'un fragment dépose — le
     /// point de montage des `modules`, le compose de `docker`, le registre de `jobs`, la
     /// liste de ses modules, le calendrier du `scheduler`, l'implémentation
     /// d'authentification, le relais du serveur de développement du client, la table de
     /// routage et le rail du shell d'administration — et manquent légitimement à qui n'a
     /// pas installé ce fragment.
     ///
-    /// `ignore` est la seule à l'être pour une autre raison : le squelette écrit bien le
-    /// fichier d'exclusions, mais celui-ci appartient au développeur, qui peut l'avoir
-    /// supprimé — un dépôt dont le `.gitignore` vit à la racine d'un monorepo, par
-    /// exemple. Réclamer l'ancre ferait passer ce projet pour incomplet.
+    /// `ignore` et `make` sont les deux seules à l'être pour une autre raison : le
+    /// squelette écrit bien le fichier d'exclusions et le fichier de tâches, mais tous
+    /// deux appartiennent au développeur, qui peut les avoir supprimés — un dépôt dont le
+    /// `.gitignore` vit à la racine d'un monorepo, un autre dont les tâches vivent dans un
+    /// `justfile`. Réclamer l'ancre ferait passer ces projets pour incomplets.
     #[test]
     fn an_optional_anchor_is_either_deposited_by_a_fragment_or_the_developer_s_to_delete() {
         let optionnelles: Vec<&str> = ANCRES
@@ -1629,6 +1663,7 @@ struct AppState {
                 "modules",
                 "services",
                 "ignore",
+                "make",
                 "jobs",
                 "job_modules",
                 "schedules",
@@ -1673,21 +1708,21 @@ struct AppState {
         }
     }
 
-    /// Les deux seules ancres du registre à porter le marqueur `#`, et les deux seules à
+    /// Les trois seules ancres du registre à porter le marqueur `#`, et les trois seules à
     /// vivre hors d'un fichier `.rs` ou `.ts`.
     ///
     /// Le contrôle tient la règle dans les deux sens : un `#` posé dans un fichier que
     /// TypeScript construit n'y ouvre pas un commentaire, et le relais du client — la
     /// tentation, l'ancre ayant d'abord été écrite ainsi — arrêterait `npm run build`.
     #[test]
-    fn only_the_compose_and_the_exclusions_carry_the_hash_marker() {
+    fn only_the_compose_the_exclusions_and_the_makefile_carry_the_hash_marker() {
         let dieses: Vec<&str> = ANCRES
             .iter()
             .filter(|anchor| anchor.comment == "#")
             .map(|anchor| anchor.name.as_ref())
             .collect();
 
-        assert_eq!(dieses, ["services", "ignore"]);
+        assert_eq!(dieses, ["services", "ignore", "make"]);
         for anchor in ANCRES {
             if anchor.file.ends_with(".ts") || anchor.file.ends_with(".rs") {
                 assert_eq!(anchor.comment, "//", "{}", anchor.file);
@@ -1695,7 +1730,7 @@ struct AppState {
         }
     }
 
-    /// La documentation nomme les vingt-et-une ancres, et aucune autre, dans les quatre
+    /// La documentation nomme les vingt-deux ancres, et aucune autre, dans les quatre
     /// pages qui en dressent la liste.
     ///
     /// C'est la promesse de compatibilité qui rend ce contrôle nécessaire : elle porte sur
@@ -1762,6 +1797,91 @@ struct AppState {
             "l'ordre d'un fichier d'exclusions porte du sens"
         );
         assert!(ANCRES.contains(&IGNORE));
+    }
+
+    /// Le fichier de tâches du projet porte la troisième ancre en `#`, et la seule qui
+    /// vive dans un fichier où une tabulation ouvre une recette.
+    // `MAKE` étant un `const`, clippy évalue `.optional` et `.sorted` à la compilation et
+    // signale les assertions comme triviales ; elles mordent pourtant si quelqu'un change
+    // ces champs.
+    #[allow(clippy::assertions_on_constants)]
+    #[test]
+    fn the_make_anchor_lives_in_the_task_file_with_the_hash_marker() {
+        assert_eq!(MAKE.file, "Makefile");
+        assert_eq!(MAKE.comment, "#");
+        assert_eq!(MAKE.opening(), "# <rbs:make>");
+        assert_eq!(MAKE.block(), "# <rbs:make>\n# </rbs:make>");
+        assert!(MAKE.optional, "le fichier appartient au développeur");
+        assert!(
+            !MAKE.sorted,
+            "l'ordre d'installation décide de l'ordre de `make help`"
+        );
+        assert!(ANCRES.contains(&MAKE));
+    }
+
+    /// Les deux ancres du squelette dont la balise ouvrante suit immédiatement l'accroche.
+    ///
+    /// Même contrat que pour les ancres des fragments, et même raison : c'est ce qui rend
+    /// `rbs doctor --fix` exact à l'octet quand il repose une ancre effacée. Celle du
+    /// compose en est exclue à dessein — le service `db` s'intercale entre `services:` et
+    /// le bloc, et l'accroche n'y vise que le début de la section.
+    ///
+    /// Pour le fichier de tâches, l'enjeu dépasse l'octet : l'accroche est une ligne sans
+    /// indentation, et c'est elle qui décide de celle que `repose` donne au bloc. Sous une
+    /// ligne de recette, le bloc reposé prendrait la tabulation, et make le lirait comme
+    /// une commande de la cible précédente.
+    #[test]
+    fn the_skeleton_anchors_that_hook_directly_under_their_line_do_so_in_their_template() {
+        for (anchor, template) in [(IGNORE, ".gitignore.jinja"), (MAKE, "Makefile.jinja")] {
+            let source = std::fs::read_to_string(
+                Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("templates/project/{template}")),
+            )
+            .unwrap_or_else(|_| panic!("la template {template} doit se lire"));
+
+            assert_eq!(source.matches(&anchor.opening()).count(), 1, "{template}");
+            assert_eq!(source.matches(&anchor.closing()).count(), 1, "{template}");
+
+            let accroches: Vec<usize> = source
+                .lines()
+                .enumerate()
+                .filter(|(_, ligne)| ligne.trim() == anchor.after)
+                .map(|(rang, _)| rang)
+                .collect();
+            assert_eq!(
+                accroches.len(),
+                1,
+                "{} : l'accroche doit paraître une fois exactement",
+                anchor.name
+            );
+
+            let lignes: Vec<&str> = source.lines().collect();
+            assert_eq!(
+                lignes[accroches[0] + 1].trim(),
+                anchor.opening(),
+                "{} : la ligne qui suit l'accroche doit être la balise ouvrante",
+                anchor.name
+            );
+            assert_eq!(
+                lignes[accroches[0]], anchor.after,
+                "{} : une accroche indentée donnerait son indentation au bloc reposé",
+                anchor.name
+            );
+        }
+    }
+
+    /// Le fichier de tâches est le seul où l'indentation change le sens d'une ligne : une
+    /// tabulation y ouvre une recette. `repose` prend celle de l'accroche, qui n'en a pas.
+    #[test]
+    fn a_reposed_make_anchor_carries_no_indentation() {
+        let source = format!("{}\ncargo clean\n", MAKE.after);
+
+        let rendu = repose(&source, &MAKE).expect("l'accroche est là");
+
+        assert_eq!(
+            rendu,
+            format!("{}\n# <rbs:make>\n# </rbs:make>\ncargo clean\n", MAKE.after),
+            "le bloc reposé ne doit porter aucune indentation : {rendu}"
+        );
     }
 
     /// Sans elle, un fragment ne peut pas inscrire de job : le worker n'exécute que ce que

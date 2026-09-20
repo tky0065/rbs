@@ -1,6 +1,9 @@
 target
 .git
 .github
+# Le fichier de tâches enveloppe `docker build` : l'image se construit sans lui, et une
+# ligne d'aide retouchée n'a pas à invalider la couche de copie.
+Makefile
 
 # La configuration du conteneur vient du compose : un `.env` copié dans l'image la
 # contredirait, et y porterait des identifiants qui n'ont rien à y faire.

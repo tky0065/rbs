@@ -482,14 +482,15 @@ three use it.
 `migrate` services go into `# <rbs:services>`, the YAML anchor a compose carries — see
 [above](#the-sixteen-features). Beside it sits the other anchor under Git's `#` marker,
 `# <rbs:ignore>` in `.gitignore`, where a fragment excludes from the repository what it
-drops in it; it is optional too, a project whose `.gitignore` its owner deleted being no
-less complete for it. Three more sit outside Rust without leaving its comment syntax:
+drops in it, and `# <rbs:make>` in the `Makefile`, where a fragment that brings one more
+executable to run adds its shortcut; both are optional too, a project whose owner deleted
+the `.gitignore` or the `Makefile` being no less complete for it. Three more sit outside Rust without leaving its comment syntax:
 `// <rbs:vite_proxy>`, which `frontend` lays down in `vite.config.ts`, and
 `// <rbs:admin_routes>` and `// <rbs:admin_rail>`, which `frontend-admin` lays down in
 TypeScript — all three filled by [`rbs generate crud`](./generate.md#anchors), and the
 [frontend guide](../guides/frontend.md#the-generated-screens) has them. The rule is the same everywhere: no AST is ever rewritten,
 and a missing anchor makes the command write nothing and print the block to paste back.
-[`rbs doctor`](./doctor.md) checks all twenty-one — thirteen on a project carrying no queue, no calendar, no sign-in, no client and no admin shell, ten of the twenty-one being optional.
+[`rbs doctor`](./doctor.md) checks all twenty-two — fourteen on a project carrying no queue, no calendar, no sign-in, no client and no admin shell, eleven of the twenty-two being optional.
 
 A project generated before `// <rbs:layers>` existed does not have it, and `rbs upgrade`
 does not add it: that command aligns the manifest and the `AGENTS.md` zones, and touches

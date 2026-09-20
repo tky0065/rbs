@@ -11,7 +11,7 @@ your terminal prints matches, you have not drifted — timings, identifiers and 
 excepted, which are yours. Only one thing was edited out of the blocks: the absolute
 path of the directory the run happened in, written `…/demo` below.
 
-The CLI speaks French: `✓ demo créé — 22 fichiers` is a success line, not an error.
+The CLI speaks French: `✓ demo créé — 23 fichiers` is a success line, not an error.
 Only the messages are translated-in-waiting; the flags, the file names and the generated
 code are the same in every locale.
 
@@ -81,7 +81,7 @@ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 
 {/* rbs:transcript cmd="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" */}
 ```text
-✓ demo créé — 22 fichiers
+✓ demo créé — 23 fichiers
 
   cd demo
   docker compose up -d   # la base du .env, montée
@@ -102,7 +102,7 @@ run without a terminal to ask in, so `--yes` is what a script or a CI job needs:
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
 ```
 
-Twenty-two files, and none of them a black box:
+Twenty-three files, and none of them a black box:
 
 - `src/main.rs`, `src/router.rs`, `src/state.rs`, `src/openapi.rs` — the wiring.
 - `src/lib.rs` — the library `src/main.rs` and `src/seeds/main.rs` both build on. They are
@@ -116,6 +116,10 @@ Twenty-two files, and none of them a black box:
 - `docker-compose.yml` — the project's database, built from the URL below.
 - `.env` — the database URL and the log settings, kept out of Git.
 - `.env.example` — the same keys with no secrets, committed.
+- `Makefile` — the project's shortcuts: `make dev`, `make migrate`, `make test`. They call
+  `cargo`, `npm` and `docker compose`, never `rbs`, so a colleague who clones the
+  repository runs it without installing the generator. [`rbs new`](./cli/new.md#the-projects-shortcuts)
+  lists them.
 - `AGENTS.md` and `CLAUDE.md` — the handbook an agent reads before touching the project,
   and the one-line import through which Claude Code reaches it.
 
@@ -408,7 +412,7 @@ rbs doctor
 
 {/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
-  ✓ ancres        les 13 points d'insertion sont en place
+  ✓ ancres        les 14 points d'insertion sont en place
   ✓ agents        guide et inventaire à jour
   ✓ relations     les modèles portent leurs ancres de relation
   ✓ .env          les 7 variables de .env.example sont renseignées

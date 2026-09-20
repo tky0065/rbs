@@ -32,7 +32,7 @@ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 {/* rbs:transcript cmd="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" */}
 ```text
 $ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
-✓ demo créé — 22 fichiers
+✓ demo créé — 23 fichiers
 
   cd demo
   docker compose up -d   # la base du .env, montée
@@ -40,7 +40,7 @@ $ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 ```
 
 Cette ligne est un succès, pas une erreur — [Démarrage rapide](../getting-started.md)
-explique pourquoi le CLI répond en français quelle que soit votre locale. Vingt et un
+explique pourquoi le CLI répond en français quelle que soit votre locale. Vingt-trois
 fichiers, une seule commande : la preuve que le projet existe avec une fonctionnalité
 `health` déjà câblée, et rien d'autre, puisque `--yes` a pris tous les défauts.
 [Architecture](../architecture.md) détaille le rôle de chacun de ces fichiers ; cette

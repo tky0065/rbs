@@ -346,11 +346,12 @@ mod tests {
     ///
     /// `docker-compose.yml` en fait partie : la source les rend tous, et c'est `rbs new`
     /// qui l'écarte pour un projet qui n'a rien à monter.
-    const DESTINATIONS: [&str; 20] = [
+    const DESTINATIONS: [&str; 21] = [
         ".env",
         ".env.example",
         ".gitignore",
         "Cargo.toml",
+        "Makefile",
         "config/default.toml",
         "config/development.toml",
         "config/production.toml",
@@ -1462,10 +1463,10 @@ mod tests {
     }
 
     /// Le fragment du frontend ne pose ni table ni route nommée : un module, un repli, sa
-    /// section de configuration, et les deux répertoires que le client engendre. Une ancre
-    /// de plus dirait qu'il en fait davantage que ce que la spec lui donne à faire — et une
-    /// ancre `layers` à la place de `routes` mettrait le repli sur le chemin de toutes les
-    /// requêtes de l'API.
+    /// section de configuration, les deux répertoires que le client engendre et les
+    /// raccourcis de son serveur de développement. Une ancre de plus dirait qu'il en fait
+    /// davantage que ce que la spec lui donne à faire — et une ancre `layers` à la place de
+    /// `routes` mettrait le repli sur le chemin de toutes les requêtes de l'API.
     #[test]
     fn the_frontend_fragment_mounts_a_module_and_a_fallback_and_nothing_else() {
         let source = read(&Path::new(RACINE_FEATURES).join("frontend/feature.toml"));
@@ -1477,7 +1478,7 @@ mod tests {
             .iter()
             .map(|ancre| ancre.anchor.as_str())
             .collect();
-        assert_eq!(ancres, ["modules", "routes", "ignore"]);
+        assert_eq!(ancres, ["modules", "routes", "ignore", "make"]);
         assert!(
             manifest.anchors[1].content.contains("merge"),
             "le repli se monte sur le routeur : {}",

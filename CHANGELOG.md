@@ -12,6 +12,28 @@ between minor versions with no deprecation cycle.
 
 ## [Unreleased]
 
+### Added
+
+- **A generated project now carries a `Makefile`, and no longer depends on its generator.**
+  Until now the only documented way to run anything was through the CLI — `rbs dev`, `rbs
+  migrate` — so a colleague who cloned the repository had to install `rbs-cli` before typing
+  a single command. The skeleton writes thirteen shortcuts instead: `dev`, `back`, `build`,
+  `test`, `lint`, `fmt`, `migrate`, `seed`, `up`, `down`, `openapi`, `clean`, and a `help`
+  that reads the file itself and is what a bare `make` runs. Every recipe wraps `cargo`,
+  `npm` or `docker compose`; none of them calls `rbs`. `make dev` runs everything the
+  project carries in one process group — a single Ctrl-C stops all of it — with no new
+  dependency: a `trap 'kill 0' INT TERM EXIT` and a `wait`. Target names are the same in
+  every language, only the descriptions `make help` prints follow `--lang`.
+
+- **A new `# <rbs:make>` anchor**, the twenty-second of the registry and the third carrying
+  Git's `#` marker, is where a fragment adds a shortcut of its own — `rbs add frontend`
+  writes `front`, `front-build`, `typecheck` and its half of `make dev`, `rbs add docker`
+  writes `image`. A fragment writes one only when it brings one more executable to run, so
+  `jobs` and `observability` write none. The anchor is optional, for the same reason
+  `# <rbs:ignore>` is: the skeleton writes the file, but the file belongs to the developer,
+  who may have deleted it. The registry goes from twenty-one anchors to twenty-two, eleven
+  of them optional.
+
 ### Fixed
 
 - **The dev server now relays the prefixes `rbs generate crud` adds.** `frontend/vite.config.ts`
