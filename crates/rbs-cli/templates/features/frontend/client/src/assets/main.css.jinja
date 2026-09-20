@@ -17,15 +17,15 @@
 @import '@fontsource/ibm-plex-mono/latin-ext-400.css';
 @import '@fontsource/ibm-plex-mono/latin-ext-700.css';
 
-/* La variante sombre, accrochée à une classe que rien ne porte — et c'est une extinction,
- * pas une préparation.
+/* La variante sombre, accrochée à la classe que `src/lib/theme.ts` pose sur la racine du
+ * document.
  *
  * Les composants livrés portent les classes `dark:` que shadcn-vue leur donne. Laissées à
- * la variante par défaut, elles répondent à la préférence du système : sur une machine
- * réglée en sombre, `dark:bg-input/30` et ses voisines s'appliqueraient par-dessus une
- * palette qui n'a, elle, qu'un seul jeu de valeurs — un champ assombri sur du papier
- * clair. Les accrocher ici les éteint sans toucher à un composant, ni empêcher qui
- * voudra d'un second jeu de valeurs de les rallumer. */
+ * la variante par défaut, elles répondraient directement à la préférence du système, sans
+ * qu'un choix explicite puisse la renverser : une machine réglée en sombre appliquerait
+ * `dark:bg-input/30` et ses voisines quoi qu'on en dise. Le socle lit cette préférence en
+ * TypeScript, la confronte au choix retenu, et n'en tire qu'une classe — un seul
+ * interrupteur, pour la charte comme pour les composants. */
 @custom-variant dark (&:where(.sombre, .sombre *));
 
 /* Le monde visuel du projet, en entier.
@@ -107,6 +107,43 @@
   }
 }
 
+/* Le second jeu de valeurs : le même monde tiré sur du papier carbone.
+ *
+ * Sept couleurs à nouveau, sur les mêmes rôles : le papier et l'encre s'échangent, et la
+ * seconde couleur s'éclaircit assez pour rester lisible sur du sombre. La géométrie, la
+ * chasse et les animations n'en dépendent pas et restent au bloc ci-dessus.
+ *
+ * Hors de toute couche, pour passer devant les valeurs que le bloc ci-dessus dépose sur
+ * `:root`. */
+:root.sombre {
+  color-scheme: dark;
+
+  --color-background: #16150f;
+  --color-foreground: #e6e2d4;
+
+  --color-card: #1d1c15;
+  --color-card-foreground: #e6e2d4;
+  --color-popover: #1d1c15;
+  --color-popover-foreground: #e6e2d4;
+
+  --color-primary: #e6e2d4;
+  --color-primary-foreground: #16150f;
+
+  --color-secondary: #262419;
+  --color-secondary-foreground: #e6e2d4;
+  --color-muted: #262419;
+  --color-muted-foreground: #9a9484;
+
+  --color-accent: #3a3728;
+  --color-accent-foreground: #e6e2d4;
+
+  --color-border: #3a3728;
+  --color-input: #3a3728;
+  --color-ring: #9a9484;
+
+  --color-destructive: #e0776d;
+}
+
 @layer components {
   /* La marge perforée du papier en continu, tracée par la feuille plutôt que par une
    * image — un fragment n'en livrerait aucune. Un seul motif, deux emplois : la feuille
@@ -140,9 +177,14 @@
     border-color: var(--color-border);
   }
 
+  /* Sur la racine et non sur le corps : la propriété s'hérite, et `.sombre` se pose sur
+   * la racine — la laisser ici la redonnerait à tout le document. */
+  :root {
+    color-scheme: light;
+  }
+
   body {
     margin: 0;
-    color-scheme: light;
     background: var(--color-background);
     color: var(--color-foreground);
     font-family: var(--font-sans);

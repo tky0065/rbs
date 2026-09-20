@@ -23,7 +23,7 @@ and builds. Nothing here is written by hand for the documentation.
 
 ## What the base installs
 
-A hundred and four files, of which eighty-two are the vendored components. The plan's file
+A hundred and six files, of which eighty-two are the vendored components. The plan's file
 lines are cut below; what stays is the head and the tail.
 
 {/* rbs:transcript cmd="rbs add frontend" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
@@ -54,17 +54,37 @@ plan pour …/demo
   ~ config/default.toml                                                     modifié
   ~ AGENTS.md                                                               modifié
 
-  104 à créer, 7 à modifier
-✓ frontend installée — 104 créés, 7 modifiés
+  106 à créer, 7 à modifier
+✓ frontend installée — 106 créés, 7 modifiés
 
   cd frontend && npm install
+
+  rbs generate client --lang ts
+
+  celle-ci passe avant npm run build : le socle importe le client engendré, et la vérification des types s'arrête sans lui
 
   npm run build (ou npm run dev, qui sert le client sur son propre port)
 
   cargo run : le binaire sert le build, et jusque-là une page qui nomme ce qu'il reste à taper
 ```
 
-Two of those lines matter beyond the count. `.gitignore` gains `frontend/node_modules/`
+The order of those steps is not decoration. **The base imports the typed client, and the
+client is not shipped** — it is generated from *your* project's OpenAPI document by
+[`rbs generate client`](../cli/client.md), because one project's contract is not another's
+and a frozen client would lie from the first route added. Skip that command and `npm run
+typecheck` stops on an import nothing has written. No `--out`: on a project carrying
+`frontend`, the command already writes where the base reads.
+
+The transport layer belongs to the base and not to the admin shell — a base that could not
+call its own API would be a shop window. The home page's probe goes through it. One
+instance, one place; the only `fetch` calls left in the application are the two
+documentation routes the home page questions, which are not operations of the contract and
+which a client generated from it could not describe:
+
+```ts file=examples/admin-console/frontend/src/api/index.ts
+```
+
+Two other lines matter beyond the count. `.gitignore` gains `frontend/node_modules/`
 and `frontend/dist/`, so the first `npm install` does not offer you thirty thousand files
 to commit. And `Cargo.toml` gains nothing that needs Node: **`cargo build` succeeds on a
 machine without it**, which is the counterpart of a purely declarative fragment mechanism —
@@ -137,9 +157,15 @@ rule or a perforation.
 dialog's cross, a sort arrow — never as ornament. On the bootstrap page, which has no access
 to the npm registry, they are hand-written SVG.
 
-The world is fully tokenised. Replacing it means rewriting one theme block, `@theme` in
+The world is fully tokenised. Replacing it means rewriting the theme block, `@theme` in
 `frontend/src/assets/main.css`: no component names a colour, they only know the roles that
 block defines.
+
+**Two sets of values, one switch.** A second block, `:root.sombre`, gives the same roles
+their carbon-paper values; `frontend/src/lib/theme.ts` puts that class on the document root
+at boot, from the choice that was stored or, failing that, from the system preference. The
+dark side therefore lights up on a project carrying the base alone — the admin shell only
+adds the switch that flips it.
 
 ## What the admin shell adds
 
@@ -156,7 +182,7 @@ frontend-admin exige frontend, mail, rate-limit, auth : posée avec elle
 plan pour …/demo
 
   + frontend/src/api/jetons.ts                                              créé
-  + frontend/src/api/index.ts                                               créé
+  + frontend/src/api/entetes.ts                                             créé
   + frontend/src/stores/authentification.ts                                 créé
   + frontend/src/stores/interface.ts                                        créé
   + frontend/src/admin/montage.ts                                           créé
@@ -175,10 +201,14 @@ plan pour …/demo
   + frontend/src/admin/vues/Profil.vue                                      créé
   + frontend/src/admin/vues/Demonstration.vue                               créé
 
-  173 à créer, 15 à modifier
-✓ frontend-admin installée — 173 créés, 15 modifiés
+  175 à créer, 15 à modifier
+✓ frontend-admin installée — 175 créés, 15 modifiés
 
   cd frontend && npm install
+
+  rbs generate client --lang ts
+
+  celle-ci passe avant npm run build : le socle importe le client engendré, et la vérification des types s'arrête sans lui
 
   npm run build (ou npm run dev, qui sert le client sur son propre port)
 
@@ -186,23 +216,16 @@ plan pour …/demo
 
   rbs seed pose le compte d'administration dans la table des comptes : ADMIN_EMAIL (admin@demo.test) et ADMIN_PASSWORD, tiré dans votre .env, sont les identifiants que l'écran de connexion demande
 
-  rbs generate client --lang ts --out frontend/src/api
-
-  celle-ci passe avant npm run build : le shell importe le client engendré, et la vérification des types s'arrête sans lui
-
   puis cargo run : l'écran de connexion est servi sur /admin
 ```
 
-The order of those last steps is not decoration. **The shell imports the typed client, and
-the client is not shipped** — it is generated from *your* project's OpenAPI document by
-[`rbs generate client`](../cli/client.md), because one project's
-contract is not another's and a frozen client would lie from the first route added. Skip
-that command and `npm run typecheck` stops on an import nothing has written.
+The shell says nothing about the typed client: that step belongs to the base, which owns
+the module instantiating it, and the base's steps are printed first.
 
-Nothing else in the shell speaks HTTP:
-
-```ts file=examples/admin-console/frontend/src/api/index.ts
-```
+All the shell adds to the transport layer is one header. `frontend/src/api/entetes.ts`
+reads the access token and returns an `authorization` header, and the base's
+`src/api/index.ts` discovers it the way the router discovers a mount — a fragment cannot
+re-lay a file another fragment has laid.
 
 ### Eight screens, each backed by a real route
 

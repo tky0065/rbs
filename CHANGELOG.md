@@ -85,6 +85,32 @@ between minor versions with no deprecation cycle.
   default — the port the binary serves the built client on — and `http://localhost:5173`,
   Vite's, in development.
 
+- **The module that instantiates the API client moved from the admin shell to the base.**
+  `frontend/src/api/index.ts` was laid down by `frontend-admin`; `frontend` lays it down
+  now. A project carrying the base alone could not call its own API — the transport layer
+  lived in the fragment *above* the one that needs it — and its home page probed `/health`
+  with a hand-written `fetch` that no contract checked. The base now instantiates the
+  client and the home page's probe goes through it; the shell adds nothing but an
+  `authorization` header, in a `frontend/src/api/entetes.ts` of its own that
+  `src/api/index.ts` discovers the way the router discovers a mount. A project carrying
+  both fragments behaves exactly as before. The base's steps therefore name `rbs generate
+  client` before `npm run build`, and the shell's no longer repeat it.
+
+- **`rbs generate client` writes where the frontend will read it.** With no `--out`, the
+  command always wrote `clients/ts/client.ts` — outside the client's tree, so invisible to
+  the dev server, while `frontend-admin` dictated `--out frontend/src/api` in its own next
+  steps. On a project carrying `frontend`, the default is now
+  `frontend/src/api/client.ts`. **A project without a frontend keeps the old default**, and
+  `--out` still overrides both.
+
+- **The theme's dark side exists, and lights up on a project carrying the base alone.** It
+  was hooked to a `sombre` class that only the shell's interface store laid down, over a
+  theme block with a single set of values: half the world was dead code. A second block,
+  `:root.sombre`, gives the same roles their carbon-paper values, and a new
+  `frontend/src/lib/theme.ts` — the base's — puts that class on the document root at boot,
+  from the stored choice or, failing that, from the system preference. The shell's store
+  keeps the switch and delegates to that module.
+
 ### Fixed
 
 - **A project generated with `auth` had no account able to reach its admin space.**

@@ -1,10 +1,16 @@
 [feature]
 description = "une application Vue 3 servie par le binaire, et une page d'amorçage tant qu'elle n'est pas construite"
-# Le CLI n'exécute rien : le client se construit de la main du développeur. Ces trois
-# lignes sont donc les seules à dire le geste, et la page d'amorçage les répète à qui
-# démarre le binaire sans les avoir lues.
+# Le CLI n'exécute rien : le client se construit de la main du développeur. Ces lignes
+# sont donc les seules à dire le geste, et la page d'amorçage les répète à qui démarre le
+# binaire sans les avoir lues.
+#
+# Le client typé n'est pas livré : il sort du **contrat** de ce projet-ci, et un client
+# figé mentirait dès la première route ajoutée. La ligne qui l'engendre précède celle qui
+# construit, faute de quoi la construction échouerait sur un import que rien n'a écrit.
 next_steps = [
   "cd frontend && npm install",
+  "rbs generate client --lang ts",
+  "{% if lang == 'en' %}that one comes before npm run build: the base imports the generated client, and the type check stops without it{% else %}celle-ci passe avant npm run build : le socle importe le client engendré, et la vérification des types s'arrête sans lui{% endif %}",
   "{% if lang == 'en' %}npm run build (or npm run dev, which serves the client on its own port){% else %}npm run build (ou npm run dev, qui sert le client sur son propre port){% endif %}",
   "{% if lang == 'en' %}cargo run: the binary serves the build, and until then a page that names what is left to type{% else %}cargo run : le binaire sert le build, et jusque-là une page qui nomme ce qu'il reste à taper{% endif %}",
 ]
@@ -99,6 +105,18 @@ destination = "frontend/src/router/index.ts"
 [[files]]
 source      = "client/src/lib/utils.ts.jinja"
 destination = "frontend/src/lib/utils.ts"
+
+# Le thème vit au socle, qui porte la charte : deux pages du même binaire ne peuvent pas
+# être l'une claire et l'autre sombre.
+[[files]]
+source      = "client/src/lib/theme.ts.jinja"
+destination = "frontend/src/lib/theme.ts"
+
+# La couche de transport, prérequis de l'application et non complément : le socle parle à
+# son API, et le shell d'administration n'y ajoute qu'un en-tête.
+[[files]]
+source      = "client/src/api/index.ts.jinja"
+destination = "frontend/src/api/index.ts"
 
 [[files]]
 source      = "client/src/assets/main.css.jinja"

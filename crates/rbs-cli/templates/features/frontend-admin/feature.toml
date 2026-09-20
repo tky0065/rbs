@@ -5,17 +5,11 @@ description = "le shell d'administration : connexion, jetons, garde de route et 
 # déduit : sans la première il n'y a rien où se monter, sans la seconde rien à appeler.
 # `auth` entraîne à son tour `rate-limit` et `mail`, que le plan nomme avant d'écrire.
 requires = ["frontend", "auth"]
-# Le client typé est engendré depuis le document OpenAPI du projet et non livré ici : le
-# contrat d'un projet n'est pas celui d'un autre, et un client figé mentirait dès la
-# première route ajoutée. C'est la première ligne parce que la vérification des types du
-# client en dépend — le shell l'importe, et rien d'autre ne parle HTTP.
-#
-# Les gestes du socle s'affichent avant ceux-ci, `npm run build` compris : la ligne qui
-# suit la commande dit donc l'ordre, faute de quoi la construction échouerait sur un
-# import que rien n'a encore écrit.
+# Le geste qui engendre le client typé n'est plus dit ici : il appartient au socle, qui
+# porte désormais le module l'instanciant, et les gestes du socle s'affichent avant
+# ceux-ci. Le répertoire de sortie du client n'est plus dicté non plus — c'est celui que
+# la commande vise d'elle-même dès que le fragment `frontend` est posé.
 next_steps = [
-  "rbs generate client --lang ts --out frontend/src/api",
-  "{% if lang == 'en' %}that one comes before npm run build: the shell imports the generated client, and the type check stops without it{% else %}celle-ci passe avant npm run build : le shell importe le client engendré, et la vérification des types s'arrête sans lui{% endif %}",
   "{% if lang == 'en' %}then cargo run: the sign-in screen is served at /admin{% else %}puis cargo run : l'écran de connexion est servi sur /admin{% endif %}",
 ]
 
@@ -33,9 +27,11 @@ next_steps = [
 source      = "client/src/api/jetons.ts.jinja"
 destination = "frontend/src/api/jetons.ts"
 
+# Tout ce que le shell ajoute à la couche de transport du socle : un en-tête. Le module
+# est découvert par `src/api/index.ts` comme un montage l'est par le routeur.
 [[files]]
-source      = "client/src/api/index.ts.jinja"
-destination = "frontend/src/api/index.ts"
+source      = "client/src/api/entetes.ts.jinja"
+destination = "frontend/src/api/entetes.ts"
 
 [[files]]
 source      = "client/src/stores/authentification.ts.jinja"

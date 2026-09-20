@@ -24,7 +24,7 @@ le frontend. Rien ici n'est écrit à la main pour la documentation.
 
 ## Ce que le socle installe
 
-Cent quatre fichiers, dont quatre-vingt-deux sont les composants vendorisés. Les lignes de
+Cent six fichiers, dont quatre-vingt-deux sont les composants vendorisés. Les lignes de
 fichiers du plan sont coupées ci-dessous ; il n'en reste que la tête et la queue.
 
 {/* rbs:transcript cmd="rbs add frontend" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
@@ -55,17 +55,37 @@ plan pour …/demo
   ~ config/default.toml                                                     modifié
   ~ AGENTS.md                                                               modifié
 
-  104 à créer, 7 à modifier
-✓ frontend installée — 104 créés, 7 modifiés
+  106 à créer, 7 à modifier
+✓ frontend installée — 106 créés, 7 modifiés
 
   cd frontend && npm install
+
+  rbs generate client --lang ts
+
+  celle-ci passe avant npm run build : le socle importe le client engendré, et la vérification des types s'arrête sans lui
 
   npm run build (ou npm run dev, qui sert le client sur son propre port)
 
   cargo run : le binaire sert le build, et jusque-là une page qui nomme ce qu'il reste à taper
 ```
 
-Deux de ces lignes comptent au-delà du décompte. `.gitignore` reçoit
+L'ordre de ces gestes n'est pas décoratif. **Le socle importe le client typé, et ce client
+n'est pas livré** — il est engendré depuis le document OpenAPI de *votre* projet par
+[`rbs generate client`](../cli/client.md), parce que le contrat d'un projet n'est pas celui
+d'un autre et qu'un client figé mentirait dès la première route ajoutée. Sautez cette
+commande et `npm run typecheck` s'arrête sur un import que rien n'a écrit. Pas de `--out` :
+sur un projet qui porte `frontend`, la commande écrit déjà là où le socle lit.
+
+La couche de transport appartient au socle et non au shell d'administration — un socle qui
+ne saurait pas appeler sa propre API serait une vitrine. La sonde de l'accueil passe par
+elle. Une instance, un endroit ; les seuls `fetch` qui restent dans l'application sont les
+deux routes de documentation que l'accueil interroge, qui ne sont pas des opérations du
+contrat et qu'un client engendré depuis lui ne saurait décrire :
+
+```ts file=examples/admin-console/frontend/src/api/index.ts
+```
+
+Deux autres lignes comptent au-delà du décompte. `.gitignore` reçoit
 `frontend/node_modules/` et `frontend/dist/`, si bien que le premier `npm install` ne vous
 propose pas trente mille fichiers à commiter. Et `Cargo.toml` ne reçoit rien qui réclame
 Node : **`cargo build` réussit sur une machine qui n'en a pas**, ce qui est la contrepartie
@@ -142,9 +162,15 @@ caractère, un filet ou une perforation.
 chevron d'un menu, croix d'une boîte de dialogue, flèche de tri — jamais comme ornement. Sur
 la page d'amorçage, qui n'a pas accès au registre npm, elles sont en SVG écrit à la main.
 
-Le monde est entièrement tokenisé. Le remplacer revient à réécrire un bloc de thème, `@theme`
+Le monde est entièrement tokenisé. Le remplacer revient à réécrire le bloc de thème, `@theme`
 dans `frontend/src/assets/main.css` : aucun composant ne nomme une couleur, ils ne
 connaissent que les rôles que ce bloc définit.
+
+**Deux jeux de valeurs, un seul interrupteur.** Un second bloc, `:root.sombre`, donne aux
+mêmes rôles leurs valeurs de papier carbone ; `frontend/src/lib/theme.ts` pose cette classe
+sur la racine du document au démarrage, à partir du choix retenu ou, à défaut, de la
+préférence du système. La variante sombre s'allume donc sur un projet à socle seul — le
+shell d'administration n'ajoute que l'interrupteur qui la bascule.
 
 ## Ce que le shell d'administration ajoute
 
@@ -161,7 +187,7 @@ frontend-admin exige frontend, mail, rate-limit, auth : posée avec elle
 plan pour …/demo
 
   + frontend/src/api/jetons.ts                                              créé
-  + frontend/src/api/index.ts                                               créé
+  + frontend/src/api/entetes.ts                                             créé
   + frontend/src/stores/authentification.ts                                 créé
   + frontend/src/stores/interface.ts                                        créé
   + frontend/src/admin/montage.ts                                           créé
@@ -180,10 +206,14 @@ plan pour …/demo
   + frontend/src/admin/vues/Profil.vue                                      créé
   + frontend/src/admin/vues/Demonstration.vue                               créé
 
-  173 à créer, 15 à modifier
-✓ frontend-admin installée — 173 créés, 15 modifiés
+  175 à créer, 15 à modifier
+✓ frontend-admin installée — 175 créés, 15 modifiés
 
   cd frontend && npm install
+
+  rbs generate client --lang ts
+
+  celle-ci passe avant npm run build : le socle importe le client engendré, et la vérification des types s'arrête sans lui
 
   npm run build (ou npm run dev, qui sert le client sur son propre port)
 
@@ -191,23 +221,16 @@ plan pour …/demo
 
   rbs seed pose le compte d'administration dans la table des comptes : ADMIN_EMAIL (admin@demo.test) et ADMIN_PASSWORD, tiré dans votre .env, sont les identifiants que l'écran de connexion demande
 
-  rbs generate client --lang ts --out frontend/src/api
-
-  celle-ci passe avant npm run build : le shell importe le client engendré, et la vérification des types s'arrête sans lui
-
   puis cargo run : l'écran de connexion est servi sur /admin
 ```
 
-L'ordre de ces derniers gestes n'est pas décoratif. **Le shell importe le client typé, et ce
-client n'est pas livré** — il est engendré depuis le document OpenAPI de *votre* projet par
-[`rbs generate client`](../cli/client.md), parce que le contrat d'un projet n'est pas celui
-d'un autre et qu'un client figé mentirait dès la première route ajoutée. Sautez cette
-commande et `npm run typecheck` s'arrête sur un import que rien n'a écrit.
+Le shell ne dit rien du client typé : ce geste appartient au socle, qui porte le module
+l'instanciant, et les gestes du socle s'affichent avant les siens.
 
-Rien d'autre, dans le shell, ne parle HTTP :
-
-```ts file=examples/admin-console/frontend/src/api/index.ts
-```
+Tout ce que le shell ajoute à la couche de transport est un en-tête.
+`frontend/src/api/entetes.ts` lit le jeton d'accès et rend un en-tête `authorization`, et
+le `src/api/index.ts` du socle le découvre comme le routeur découvre un montage — un
+fragment ne peut pas redéposer un fichier qu'un autre a posé.
 
 ### Huit écrans, chacun adossé à une vraie route
 

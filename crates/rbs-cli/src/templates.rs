@@ -1793,9 +1793,23 @@ mod tests {
                 .collect::<std::collections::BTreeMap<_, _>>()
         };
 
+        // Un bloc de la feuille, entête exclue : les deux qui nous occupent sont des
+        // listes plates, et seule leur accolade fermante tient la première colonne.
+        let bloc = |source: &str, entete: &str| {
+            source
+                .split_once(entete)
+                .unwrap_or_else(|| panic!("`{entete}` manque à la feuille du client"))
+                .1
+                .lines()
+                .take_while(|ligne| *ligne != "}")
+                .collect::<Vec<_>>()
+                .join("\n")
+        };
+
         let racine = Path::new(RACINE_FEATURES).join("frontend");
         let amorcage = couleurs(&read(&racine.join("feuille.rs.jinja")));
-        let client = couleurs(&read(&racine.join("client/src/assets/main.css.jinja")));
+        let feuille = read(&racine.join("client/src/assets/main.css.jinja"));
+        let client = couleurs(&bloc(&feuille, "@theme {"));
 
         for (role, materiau) in CORRESPONDANCE {
             assert_eq!(
@@ -1824,6 +1838,23 @@ mod tests {
             materiaux, disponibles,
             "les deux feuilles ne sont pas faites des mêmes matériaux"
         );
+
+        // La seconde palette nomme exactement les mêmes rôles que la première, et aucune
+        // de leurs valeurs ne coïncide : un rôle oublié laisserait, sur du papier carbone,
+        // une encre claire là où tout le reste a basculé.
+        let sombre = couleurs(&bloc(&feuille, ":root.sombre {"));
+        assert_eq!(
+            sombre.keys().collect::<Vec<_>>(),
+            client.keys().collect::<Vec<_>>(),
+            "les deux jeux de valeurs ne portent pas les mêmes rôles"
+        );
+        for (role, valeur) in &sombre {
+            assert_ne!(
+                Some(valeur),
+                client.get(role),
+                "`--{role}` ne change pas d'un jeu de valeurs à l'autre"
+            );
+        }
     }
 
     /// Les routes que le squelette monte de lui-même, lues dans ses templates.

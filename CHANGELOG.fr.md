@@ -90,6 +90,32 @@ dépréciation.
   défaut — le port sur lequel le binaire sert le client construit — et
   `http://localhost:5173`, celui de Vite, en développement.
 
+- **Le module qui instancie le client d'API descend du shell d'administration vers le
+  socle.** `frontend/src/api/index.ts` était déposé par `frontend-admin` ; il l'est
+  désormais par `frontend`. Un projet à socle seul ne savait pas appeler sa propre API — la
+  couche de transport vivait dans le fragment *au-dessus* de celui qui en a besoin — et son
+  accueil sondait `/health` par un `fetch` écrit à la main, qu'aucun contrat ne vérifiait.
+  Le socle instancie maintenant le client, et la sonde de l'accueil passe par lui ; le shell
+  n'ajoute qu'un en-tête `authorization`, dans un `frontend/src/api/entetes.ts` à lui que
+  `src/api/index.ts` découvre comme le routeur découvre un montage. Un projet portant les
+  deux fragments se comporte exactement comme avant. Les gestes du socle nomment donc `rbs
+  generate client` avant `npm run build`, et ceux du shell ne le répètent plus.
+
+- **`rbs generate client` écrit là où le frontend le lira.** Sans `--out`, la commande
+  écrivait toujours dans `clients/ts/client.ts` — hors de l'arbre du client, donc invisible
+  du serveur de développement, quand `frontend-admin` dictait lui-même `--out
+  frontend/src/api` dans ses gestes suivants. Sur un projet qui porte `frontend`, le défaut
+  est désormais `frontend/src/api/client.ts`. **Un projet sans frontend garde l'ancien
+  défaut**, et `--out` continue de les remplacer tous les deux.
+
+- **La variante sombre du thème existe, et s'allume sur un projet à socle seul.** Elle était
+  accrochée à une classe `sombre` que seul le store d'interface du shell posait, par-dessus
+  un bloc de thème qui n'avait qu'un jeu de valeurs : la moitié du monde était du code mort.
+  Un second bloc, `:root.sombre`, donne aux mêmes rôles leurs valeurs de papier carbone, et
+  un `frontend/src/lib/theme.ts` neuf — celui du socle — pose cette classe sur la racine du
+  document au démarrage, à partir du choix retenu ou, à défaut, de la préférence du système.
+  Le store du shell garde l'interrupteur et s'en remet à ce module.
+
 ### Corrigé
 
 - **Un projet engendré avec `auth` n'avait aucun compte capable d'entrer dans son espace

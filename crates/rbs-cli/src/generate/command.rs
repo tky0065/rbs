@@ -590,12 +590,9 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         avertissement,
         required_reference,
         zone_manquante,
-        geste_suivant: ecran.map(|_| {
-            format!(
-                "rbs generate client --lang ts --out {}",
-                crate::ecran::CLIENT
-            )
-        }),
+        // Sans `--out` : le projet porte le socle, puisqu'il porte le shell, et le défaut
+        // de la commande est alors le répertoire où ce socle importe son client.
+        geste_suivant: ecran.map(|_| "rbs generate client --lang ts".to_string()),
     })
 }
 
@@ -2835,7 +2832,7 @@ mod tests {
 
         assert_eq!(
             planned.geste_suivant.as_deref(),
-            Some("rbs generate client --lang ts --out frontend/src/api")
+            Some("rbs generate client --lang ts")
         );
     }
 
