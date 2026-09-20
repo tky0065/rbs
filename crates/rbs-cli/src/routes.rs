@@ -126,8 +126,19 @@ pub(crate) fn json(routes: &[Route]) -> String {
 }
 
 /// Les routes du projet qui contient `directory`, rendues en tableau ou en JSON.
-pub(crate) fn run(directory: &Path, json: bool) -> Result<String, openapi::Error> {
-    let texte = openapi::document(directory)?;
+///
+/// `from` désigne un contrat déjà exporté, relatif à `directory` : la commande le lit tel
+/// quel et ne réclame alors même pas un projet rbs autour d'elle — c'est ce qu'une CI qui
+/// versionne son `openapi.json` a besoin de faire sans chaîne de compilation Rust.
+pub(crate) fn run(
+    directory: &Path,
+    json: bool,
+    from: Option<&Path>,
+) -> Result<String, openapi::Error> {
+    let texte = match from {
+        Some(fichier) => openapi::depuis(&directory.join(fichier))?,
+        None => openapi::document(directory)?,
+    };
     let routes = lister(&document::parse(&texte)?);
 
     Ok(if json {
@@ -164,6 +175,32 @@ mod tests {
 
     fn routes() -> Vec<Route> {
         lister(&document::parse(DOCUMENT).expect("le document fixe s'analyse"))
+    }
+
+    /// `--from` lit un contrat figé et ne réclame rien autour de lui : ni projet rbs, ni
+    /// binaire à lancer. C'est ce dont une CI a besoin pour relire le contrat qu'elle
+    /// versionne sans chaîne de compilation Rust.
+    #[test]
+    fn a_frozen_contract_is_listed_without_a_project_around_it() {
+        let ailleurs = tempfile::TempDir::new().expect("répertoire temporaire créable");
+        std::fs::write(ailleurs.path().join("openapi.json"), DOCUMENT)
+            .expect("le contrat figé s'écrit");
+
+        let rendu = run(ailleurs.path(), false, Some(Path::new("openapi.json")))
+            .expect("le contrat figé se lit hors d'un projet");
+
+        assert!(rendu.contains("users_list"), "{rendu}");
+    }
+
+    /// Un `--from` qui ne désigne rien nomme le fichier, et non « pas un projet rbs ».
+    #[test]
+    fn a_missing_frozen_contract_names_the_file_it_could_not_read() {
+        let ailleurs = tempfile::TempDir::new().expect("répertoire temporaire créable");
+
+        let erreur = run(ailleurs.path(), false, Some(Path::new("absent.json")))
+            .expect_err("le fichier absent doit être refusé");
+
+        assert!(erreur.to_string().contains("absent.json"), "{erreur}");
     }
 
     #[test]

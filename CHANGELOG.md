@@ -12,6 +12,44 @@ between minor versions with no deprecation cycle.
 
 ## [Unreleased]
 
+### Added
+
+- **`rbs routes` and `rbs generate client` take `--from <FILE>`**, a contract already frozen
+  by `rbs openapi export --out openapi.json`, read instead of compiling the project. `rbs
+  routes --from` does not even ask for an rbs project around it. It is what a CI job that
+  commits its contract needs to review it or to build its client with no Rust toolchain, and
+  the way out when the memorised contract below is wrong. `rbs openapi export` deliberately
+  has none: it is the command that *produces* the contract, and reading one file to write
+  another would reduce it to a copy.
+
+### Changed
+
+- **The contract is memorised, and the three commands that read it no longer recompile the
+  project each time.** `rbs routes`, `rbs openapi export` and `rbs generate client` all run
+  the project's `openapi` binary — a full debug build of an Axum + SeaORM + utoipa project,
+  around a minute on a cold target — and they are usually typed one after another. The
+  document now lands in `target/rbs/openapi.json`, keyed by the SHA-256 digest of the path
+  **and** the content of every file under `src/` and `migration/src/`, plus `Cargo.lock`: a
+  file edited, renamed or deleted invalidates it, and so does a dependency bump that moves
+  the contract without touching a line of the project. On a fresh project, a first `rbs
+  routes` takes 30.2 s and the next one 12 ms. `target/` is already ignored by git and
+  already erased by `cargo clean`, which is the reason for that location rather than a
+  directory of its own. The cache never fails a command: an unwritable `target/`, a
+  truncated document or an unreadable digest all end in a plain recompilation.
+
+- **`rbs generate crud` rewrites the generated client right after the entity**, on a project
+  that already carries one. The admin screen it emits imports `@/api/client`, so until now
+  `npm run typecheck` was broken by construction after every generation and the command
+  merely printed the line to run. The client is rewritten from the **contract**, never from
+  the entity spec the command has just produced: deducing it would give the client two
+  producers drawing on two sources, and nothing would say which one lies the day they
+  diverge. The generation therefore pays one incremental rebuild, by construction — the
+  module has just been added, so the memorised contract is stale at the moment the command
+  needs it. It stays conditional: a project with no client keeps the old behaviour, the
+  command printing the `rbs generate client` line rather than inventing a `frontend/src/api`
+  nobody asked for. A project that does not compile gets a warning and the line to rerun; the
+  entity and its migration are on disk either way.
+
 ### Fixed
 
 - **The dev server now relays the prefixes `rbs generate crud` adds.** `frontend/vite.config.ts`

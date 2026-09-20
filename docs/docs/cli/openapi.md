@@ -43,6 +43,29 @@ openapi.json` write the same bytes.
 The text is parsed before it is written. A binary edited to print something else would
 otherwise leave a file named like a contract that the first tool to read it rejects.
 
+## The memorised contract
+
+That `cargo run` is a full debug build of an Axum + SeaORM + utoipa project — around a
+minute on a cold target, and the three commands that read the contract are usually typed
+one after another. So the document is memorised under `target/rbs/openapi.json`, next to
+the SHA-256 digest of the sources that produced it, `target/rbs/openapi.sha256`. Unchanged
+sources, and the answer is immediate.
+
+The digest covers the path **and** the content of every file under `src/` and
+`migration/src/`, plus `Cargo.lock`. A file edited, renamed or deleted changes it, and so
+does a dependency bump that moves the contract without touching a line of the project.
+`target/` is already ignored by git and already erased by `cargo clean`, which is the
+reason for that location rather than a directory of its own — there is nothing new to learn
+to clean up.
+
+The cache never fails a command: an unwritable `target/`, a truncated document, a source
+that cannot be read all end in a plain recompilation.
+
+`rbs openapi export` deliberately has no `--from`: it is the command that *produces* the
+contract, and reading one file to write another would reduce it to a copy. When the
+memorised contract has to be bypassed, what is needed is a rebuild — `rm -rf target/rbs`,
+or `cargo clean` — not a file to read.
+
 ## Freezing the contract
 
 The document is what a client, a gateway or another team relies on. Committing it and
@@ -63,4 +86,6 @@ cargo runs. A project that does not compile stops on
 `` `cargo run --bin openapi` a échoué (code …) : le projet ne compile pas ``, with the
 compiler's own errors above it.
 
-[`rbs routes`](./routes.md) reads the same document and lists its operations.
+[`rbs routes`](./routes.md) reads the same document and lists its operations, and both
+it and [`rbs generate client`](./client.md) take `--from <FILE>` to read a contract this
+command has already frozen.

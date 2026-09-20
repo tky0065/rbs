@@ -22,6 +22,11 @@ rather than editing it: the command refuses to overwrite a file that has been to
 `ApiDoc::openapi()` returns; `generate client` runs `cargo run --bin openapi` in the project
 and reads its standard output.
 
+The document is memorised under `target/rbs/`, keyed by a digest of the project's
+sources: a second run on an unchanged project answers without compiling anything.
+[`rbs openapi export`](./openapi.md#the-memorised-contract) describes what the digest
+covers.
+
 That is what makes the client follow the code rather than an approximate reading of the
 sources: the document carries the routes your fragments mounted, the DTOs your `--fields`
 produced, and the `operationId` of every handler — including the ones you wrote by hand.
@@ -36,8 +41,9 @@ stay empty.
 |---|---|
 | `--lang <LANGAGE>` | **Required.** `ts` is the only value today. No default: the day a second language arrives, no existing invocation changes meaning. |
 | `--out <DIR>` | Output directory, relative to the project root. The file name does not change — it is the name the client carries in an import. |
+| `--from <FILE>` | Reads a contract already exported by [`rbs openapi export`](./openapi.md), relative to the directory the command runs from, instead of compiling the project. The client is then written with no Rust toolchain involved — what a CI job that commits its `openapi.json` needs, and the way out when the memorised contract is wrong. |
 | `--force` | Writes even though the Git working tree is dirty, and overwrites a client reported as conflicting. |
-| `--dry-run` | Prints the plan and stops. rbs writes nothing — but the project is still compiled, since that is how the document is read. |
+| `--dry-run` | Prints the plan and stops. rbs writes nothing — but the project is still compiled, since that is how the document is read, unless `--from` supplies it. |
 | `--json` | Prints the plan — or the error — as one JSON document on standard output, the client's full content included; the project's compilation stays on standard error. Independent of `--dry-run`. [The agents guide](../guides/agents.md#reading-a-plan-as-json) has the document and the error codes. |
 
 ## What the client looks like
@@ -94,6 +100,24 @@ conflict instead of being silently overwritten:
 
 This is the point at which to move your own code out of the generated file rather than to
 reach for `--force`.
+
+## Called after `rbs generate crud`
+
+On a project that already carries a generated client, you do not have to: `rbs generate
+crud` rewrites it right after writing the entity, from the contract and never from the
+entity it has just produced — [ADR-0004](https://github.com/tky0065/rbs/blob/main/docs/adr/0004-une-seule-source-pour-le-client-engendre.md)
+explains why the client has exactly one source. The generation therefore pays one
+incremental rebuild, by construction: the module has just been added, so the memorised
+contract is stale at the moment the command needs it.
+
+It stays conditional. A project with no client yet keeps the old behaviour — the command
+prints the `rbs generate client` line to run and invents no `frontend/src/api` nobody asked
+for.
+
+The rewrite is a full overwrite, not a conflict: a contract that has just gained a table
+makes every existing client differ, so refusing would refuse every time. What protects a
+client you edited is `generate crud`'s own guard — it does not run on a dirty working tree
+without `--force`, so the previous version is a `git checkout` away.
 
 ## Two refusals
 

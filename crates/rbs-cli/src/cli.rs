@@ -192,6 +192,10 @@ pub enum Commands {
         /// Rend les routes en JSON sur la sortie standard, pour un script ou un agent.
         #[arg(long)]
         json: bool,
+
+        /// Lit un document OpenAPI déjà exporté, au lieu de compiler le projet.
+        #[arg(long, value_name = "FICHIER")]
+        from: Option<PathBuf>,
     },
 
     /// Lit le document OpenAPI du projet, sans démarrer de serveur.
@@ -323,6 +327,10 @@ pub enum GenerateCommands {
         /// Répertoire de sortie, relatif à la racine du projet.
         #[arg(long, value_name = "DIR")]
         out: Option<PathBuf>,
+
+        /// Lit un document OpenAPI déjà exporté, au lieu de compiler le projet.
+        #[arg(long, value_name = "FICHIER")]
+        from: Option<PathBuf>,
 
         /// Écrit même si le working tree Git est sale.
         #[arg(long)]
@@ -725,7 +733,13 @@ mod tests {
     #[test]
     fn routes_and_openapi_export_parse_their_flags() {
         let routes = Cli::try_parse_from(["rbs", "routes", "--json"]).expect("commande valide");
-        assert_eq!(routes.command, Commands::Routes { json: true });
+        assert_eq!(
+            routes.command,
+            Commands::Routes {
+                json: true,
+                from: None
+            }
+        );
 
         let export = Cli::try_parse_from(["rbs", "openapi", "export", "--out", "doc.json"])
             .expect("commande valide");
