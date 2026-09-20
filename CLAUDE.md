@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## État du dépôt
 
 Le workspace est en place et les six jalons de la feuille de route, de la v0.1 à la v1.1,
-sont livrés ; les versions 1.2 à 1.4, la 1.6.0 et la 1.7.0 sont publiées (`ROADMAP.md`,
+sont livrés ; les versions 1.2 à 1.4, la 1.6.0, la 1.7.0 et la 1.8.0 sont publiées (`ROADMAP.md`,
 `CHANGELOG.md`). La racine porte deux crates publiables — `crates/rbs-core` et `crates/rbs-cli`,
 publiées séparément sur crates.io — six projets d'exemple compilés en CI, et le site
 Docusaurus sous `docs/`. Le nom `rbs` étant déjà pris sur crates.io, le binaire s'installe

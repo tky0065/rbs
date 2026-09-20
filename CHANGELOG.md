@@ -12,6 +12,8 @@ between minor versions with no deprecation cycle.
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-09-20
+
 ### Added
 
 - **`rbs routes` and `rbs generate client` take `--from <FILE>`**, a contract already frozen
@@ -1272,7 +1274,8 @@ architecture, CLI reference and guides, in English and French.
 Rust 1.85 or later, Rust edition 2024. A generated project runs on PostgreSQL 14 or later,
 MySQL 8.0 or later, or SQLite 3.35 or later — `rbs doctor` refuses anything below those.
 
-[Unreleased]: https://github.com/tky0065/rbs/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/tky0065/rbs/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/tky0065/rbs/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/tky0065/rbs/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/tky0065/rbs/releases/tag/v1.6.0
 [1.5.0]: https://github.com/tky0065/rbs/releases/tag/v1.5.0
