@@ -8,6 +8,7 @@ use uuid::Uuid;
 use crate::router::router;
 use crate::state::AppState;
 
+mod account;
 mod change;
 mod guard;
 mod http;
@@ -32,12 +33,28 @@ const PASSWORD: &str = "un mot de passe assez long";
 ///
 /// Les migrations sont supposées appliquées : elles précèdent `cargo test`.
 async fn application() -> Router {
+    configured(|_| {}).await
+}
+
+/// La même, les réglages du parcours retouchés avant le montage.
+///
+/// Les règles que ces tests éprouvent sont posées ici plutôt que lues : `cargo test`
+/// tourne sous le profil du `.env`, `config/development.toml` lève la preuve d'adresse, et
+/// un projet qui la lève aussi en production — ou qui ferme ses inscriptions — verrait
+/// sinon échouer des tests qui ne parlent pas de son choix.
+async fn configured(ajuster: impl FnOnce(&mut crate::auth::config::FlowConfig)) -> Router {
     let config = rbs_core::Config::load().expect("configuration lisible");
     let db = rbs_core::db::connect(&config.database)
         .await
         .expect("base joignable — les migrations doivent avoir été appliquées");
 
-    router(AppState::new(db, config).expect("état partagé constructible"))
+    let mut state = AppState::new(db, config).expect("état partagé constructible");
+
+    state.flows.login_requires_verification = true;
+    state.flows.registration_enabled = true;
+    ajuster(&mut state.flows);
+
+    router(state)
 }
 
 /// Ouvre une connexion à la même base que l'application.
@@ -171,8 +188,8 @@ async fn login(api: &Router, email: &str, mot_de_passe: &str) -> Value {
 
 /// Pose la preuve d'adresse que le lien du courriel aurait apportée.
 ///
-/// `login_requires_verification` vaut `true` par défaut : un compte qui doit se connecter
-/// passe d'abord par là.
+/// `application` pose `login_requires_verification` à `true` : un compte qui doit se
+/// connecter passe d'abord par là.
 async fn verified(email: &str) {
     crate::auth::repository::user::mark_verified(&connection().await, account(email).await.id)
         .await
@@ -236,6 +253,21 @@ fn access_for(paire: &Value) -> String {
         .as_str()
         .expect("la paire doit porter un jeton d'accès")
         .to_owned()
+}
+
+/// Le jeton d'accès d'un compte tout juste inscrit, son adresse rendue avec.
+///
+/// Les écritures de profil n'ont pas besoin d'une session ouverte par `login` : elles se
+/// contentent d'un jeton signé, et celui-ci part sans exiger la preuve d'adresse.
+async fn account_with_token(api: &Router) -> (crate::auth::repository::Model, String) {
+    let email = fresh_email();
+    let (status, corps) = register(api, &email).await;
+    assert_eq!(status, StatusCode::ACCEPTED, "{corps}");
+
+    let compte = account(&email).await;
+    let jeton = access_token_for(&compte);
+
+    (compte, jeton)
 }
 
 fn with_token(methode: &str, chemin: &str, token: &str) -> Request<Body> {

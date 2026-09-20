@@ -90,10 +90,17 @@ impl AppState {
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/auth/register", post(controller::register))
+        .route("/auth/registration", get(controller::registration_status))
         .route("/auth/login", post(controller::login))
         .route("/auth/refresh", post(controller::refresh))
         .route("/auth/logout", post(controller::logout))
-        .route("/auth/me", get(controller::me))
+        // Les deux méthodes du même chemin en une fois, comme `/auth/sessions` plus bas :
+        // axum refuse deux `route()` sur un chemin identique, et le dit par une panique au
+        // démarrage.
+        .route(
+            "/auth/me",
+            get(controller::me).patch(controller::account::update_me),
+        )
         .route(
             "/auth/change-password",
             post(controller::password::change_password),

@@ -140,6 +140,56 @@ async fn registration_lowercases_the_address() {
     );
 }
 
+/// `registration_enabled = false` ferme la route elle-même, et non le seul écran : la
+/// réponse est un 403 nommé, et aucun compte n'est inscrit.
+///
+/// Un interrupteur qui n'aurait masqué qu'un bouton aurait fermé l'inscription pour les
+/// navigateurs et pour eux seuls.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn a_closed_registration_refuses_the_route_itself() {
+    let api = configured(|flows| flows.registration_enabled = false).await;
+    let db = connection().await;
+    let email = fresh_email();
+
+    let (statut, corps) = call(
+        &api,
+        post_json(
+            "/auth/register",
+            json!({ "email": email, "password": PASSWORD }),
+        ),
+    )
+    .await;
+
+    assert_eq!(statut, StatusCode::FORBIDDEN, "{corps}");
+    assert_eq!(
+        corps["title"], "registration_closed",
+        "le refus ne se distingue pas d'un autre 403 : {corps}"
+    );
+    assert!(
+        crate::auth::repository::find_by_email(&db, &email)
+            .await
+            .expect("la lecture aboutit")
+            .is_none(),
+        "une inscription fermée a tout de même inscrit"
+    );
+}
+
+/// L'écran ne devine pas l'état de l'interrupteur : une route le dit, et c'est la même
+/// valeur que celle qui ferme l'inscription.
+#[tokio::test]
+#[ignore = "joint la base du projet"]
+async fn the_registration_status_says_what_the_route_will_do() {
+    for ouverte in [true, false] {
+        let api = configured(|flows| flows.registration_enabled = ouverte).await;
+
+        let (statut, corps) = call(&api, without_body("GET", "/auth/registration")).await;
+
+        assert_eq!(statut, StatusCode::OK, "{corps}");
+        assert_eq!(corps["enabled"], ouverte, "{corps}");
+    }
+}
+
 /// Ce que la base voit d'une adresse : ni casse ni blancs, quel que soit le parcours
 /// qui la reçoit.
 #[test]

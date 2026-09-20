@@ -75,10 +75,23 @@ reset_ttl_secs = 3600
 verification_ttl_secs = 86400
 
 # L'application du client, et non ce serveur : rbs engendre une API, et le lien du
-# courriel mène à l'écran qui postera le jeton.
-app_url = "http://localhost:3000"
+# courriel mène à l'écran qui postera le jeton. Le binaire sert le frontend construit sur
+# le port du serveur ; en développement, Vite tient le sien, d'où la clé dédoublée dans
+# config/development.toml.
+app_url = "http://localhost:8080"
+
+# Ouvre `POST /auth/register`. `false` la ferme côté serveur — la route refuse avant de
+# lire l'adresse — et non côté écran seulement : un interrupteur qui ne masquerait qu'un
+# bouton laisserait l'inscription ouverte à qui poste directement. Le shell
+# d'administration, lui, cesse alors d'offrir son écran d'inscription.
+registration_enabled = true
 
 # Une adresse non vérifiée ne se connecte pas : sans cette règle, `register` suivi de
 # `login` avec le même mot de passe dirait si l'adresse était déjà inscrite. `false`
 # connecte dès l'inscription, et rouvre cet écart.
+#
+# Le profil de développement la met à `false` : le compte que `rbs seed` pose est vérifié
+# d'emblée, mais un compte inscrit par l'API ne l'est pas, et aucun écran n'appelle
+# `/auth/verify-email`. L'écart ne s'ouvre que sur un poste de travail ; ce défaut-ci,
+# qui gouverne la production, garde la preuve d'adresse.
 login_requires_verification = true

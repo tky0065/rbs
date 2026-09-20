@@ -50,6 +50,17 @@ pub(super) fn post_json_authenticated(chemin: &str, jeton: &str, body: Value) ->
         .expect("requête bien formée")
 }
 
+/// `post_json_authenticated`, mais en `PATCH` : une écriture partielle de la ressource.
+pub(super) fn patch_json_authenticated(chemin: &str, jeton: &str, body: Value) -> Request<Body> {
+    Request::builder()
+        .method("PATCH")
+        .uri(chemin)
+        .header("content-type", "application/json")
+        .header("authorization", format!("Bearer {jeton}"))
+        .body(Body::from(body.to_string()))
+        .expect("requête bien formée")
+}
+
 /// `without_body`, porteur d'un jeton d'accès.
 pub(super) fn get_authenticated(chemin: &str, jeton: &str) -> Request<Body> {
     Request::builder()

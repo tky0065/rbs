@@ -5,7 +5,8 @@ use rbs_core::{HasAuth, HasCoreState, Identity, ProblemDetails, Result, Validate
 use sea_orm::prelude::Uuid;
 
 use super::super::dto::{
-    LoginRequest, RefreshRequest, RegisterRequest, SessionResponse, TokenPair, UserResponse,
+    LoginRequest, RefreshRequest, RegisterRequest, RegistrationStatus, SessionResponse, TokenPair,
+    UserResponse,
 };
 use super::super::service;
 use crate::state::AppState;
@@ -31,6 +32,24 @@ pub async fn register(
     service::register(state.core().db(), state.mail(), state.flows(), input).await?;
 
     Ok(StatusCode::ACCEPTED)
+}
+
+// Publique et sans corps : une application servie en fichiers statiques n'a aucun autre
+// moyen de connaître un réglage que le serveur lit à son démarrage, et l'écran
+// d'inscription doit pouvoir ne pas s'afficher plutôt que faire remplir un formulaire que
+// la route refusera. Rien n'est divulgué ici qu'une seule requête à `/auth/register`
+// n'apprendrait déjà.
+#[utoipa::path(
+    get,
+    path = "/auth/registration",
+    tag = "auth",
+    operation_id = "auth_registration_status",
+    responses((status = 200, description = "l'inscription est-elle ouverte", body = RegistrationStatus))
+)]
+pub async fn registration_status(State(state): State<AppState>) -> Json<RegistrationStatus> {
+    Json(RegistrationStatus {
+        enabled: state.flows().registration_enabled,
+    })
 }
 
 // Un mot de passe erroné et un email inconnu rendent la même réponse : distinguer les
