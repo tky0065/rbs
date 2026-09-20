@@ -62,8 +62,12 @@ _Avoid_: page 404, fallback, page d'erreur, placeholder
 
 **Shell d'administration** :
 Ce que dépose le fragment `frontend-admin` : la coquille authentifiée — rail, garde de
-route, quatre écrans de compte et de santé — dans laquelle viennent se monter les **écrans
+route, écrans de compte et de santé — dans laquelle viennent se monter les **écrans
 engendrés**. Le shell est posé une fois ; les écrans arrivent ensuite, entité par entité.
+Il porte aussi ses **pages publiques** : tout ce qu'un visiteur doit atteindre sans jeton
+pour obtenir le sien — connexion, inscription, réinitialisation, vérification. Une garde
+sans page de connexion serait incomplète ; c'est le shell, et non le **socle**, qui répond
+de ce parcours.
 _Avoid_: back-office, dashboard, admin panel
 
 **Écran engendré** :
@@ -88,3 +92,25 @@ _Avoid_: thème, skin, charte
 L'unité de composition de ce monde : une rangée pleine largeur qui porte son propre fond.
 Aucun contenu ne repose sur du blanc indifférencié.
 _Avoid_: section, bloc, row, stripe
+
+### Le contrat et l'outillage
+
+**Contrat** :
+Le document OpenAPI qu'imprime le binaire `openapi` du projet. Il est la seule source du
+**client engendré** et de ce qu'affiche `rbs routes` — obtenu en compilant le projet, jamais
+en relisant ses sources.
+_Avoid_: schéma, spec, swagger, document
+
+**Client engendré** :
+Le fichier TypeScript que `rbs generate client` rend depuis le **contrat** : une méthode
+par opération, un type par composant. Deux commandes le produisent — `generate client`
+directement, `generate crud` à sa suite — mais d'une seule source, faute de quoi les deux
+**dérivent**. Voir ADR-0004.
+_Avoid_: SDK, wrapper, bindings, api client
+
+**Raccourci** :
+Une cible du `Makefile` que pose le squelette. Elle enveloppe `cargo`, `npm` ou `docker
+compose` — jamais `rbs` : un projet engendré appartient à son auteur et doit tourner sur
+une machine qui n'a pas le générateur. Un fragment n'en inscrit une que s'il apporte un
+exécutable de plus à lancer.
+_Avoid_: script, tâche, alias, commande make
