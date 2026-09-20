@@ -315,6 +315,11 @@ La réparation passe avant le diagnostic, pour que le contrôle `ancres` du mêm
 compte ce qui vient d'être reposé plutôt que d'annoncer rouge un projet que la commande
 vient de remettre d'aplomb.
 
+La sortie ci-dessous a été capturée sur un projet engendré en 1.2.0, et elle est gardée
+telle quelle : les comptes qu'elle montre — onze ancres, quatre variables — sont ceux de ce
+projet-là, et aucun projet d'aujourd'hui ne les donne. Ce qu'elle illustre est l'ordre des
+deux étapes, qui n'a pas bougé depuis.
+
 Ci-dessous, un projet dont `// <rbs:openapi>` et `// <rbs:state_init>` ont été supprimées :
 
 ```text
@@ -442,6 +447,11 @@ $ rbs doctor --fix --force --json
 sortie standard porte le document, et rien d'autre.
 
 ## Joignable mais illisible
+
+La sortie ci-dessous a été capturée sur un projet engendré en 1.2.0 — de là les quinze
+ancres, les sept variables et la ligne des versions. Rien de ce qu'elle illustre ne dépend
+de l'âge du projet : les deux moitiés du contrôle `base` échouent séparément sur n'importe
+quelle version.
 
 Les deux moitiés du contrôle `base` échouent séparément. Ici l'hôte répond sur le port, mais
 la version n'a pas pu être lue, la crate `migration` n'ayant pas abouti — le remède nomme la
