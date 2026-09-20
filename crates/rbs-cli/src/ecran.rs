@@ -79,6 +79,8 @@ pub(crate) struct Propriete {
     /// Le type TypeScript de la valeur, sa nullité exceptée : `string`, `number`, ou
     /// l'union des valeurs d'une énumération.
     pub type_base: String,
+    /// Comment la valeur se lit : voir [`Colonne::rendu`].
+    pub rendu: String,
     /// La colonne accepte l'absence de valeur : le type gagne alors `| null`.
     pub optionnel: bool,
 }
@@ -90,6 +92,16 @@ pub(crate) struct Colonne {
     pub cle: String,
     /// Ce que l'opérateur lit en tête de colonne.
     pub libelle: String,
+    /// Comment la valeur se lit : `texte`, `date` ou `instant`.
+    ///
+    /// Le contrat porte ses horodatages en ISO 8601, que personne ne lit — une table qui
+    /// affiche `2026-09-20T16:24:47.272129Z` donne l'heure sans la dire. La template
+    /// n'aurait pas pu le deviner : [`Propriete::type_base`] vaut `string` pour une date
+    /// comme pour un texte, et une clé qui *ressemble* à un horodatage n'en est pas un.
+    ///
+    /// Trois valeurs et non les sept du contrôle : un booléen se dit déjà sans rien savoir
+    /// de la colonne, et un nombre s'écrit comme il vient.
+    pub rendu: String,
     /// Un clic sur l'en-tête trie-t-il la table dessus ?
     pub triable: bool,
 }
@@ -207,6 +219,10 @@ pub(crate) struct Ecran {
     /// projet engendré, et un composant importé sans être employé — la case à cocher sur
     /// une table qui n'a pas de booléen — arrêterait la vérification des types.
     pub composants: Vec<String>,
+    /// Les conversions de temps que l'écran porte, pour la même raison.
+    pub formats: Vec<String>,
+    /// L'étiquette BCP 47 dans laquelle l'écran formate ses dates.
+    pub locale: String,
     /// La forme d'une ligne, une propriété par clé.
     pub proprietes: Vec<Propriete>,
     /// Les colonnes, dans l'ordre où elles paraissent.
@@ -268,21 +284,23 @@ impl Ecran {
             _ => Vec::new(),
         };
 
-        let proprietes = declarees
+        let proprietes: Vec<Propriete> = declarees
             .iter()
             .map(|(cle, fr, en, controle, _)| Propriete {
                 cle: (*cle).to_string(),
                 libelle: dans(lang, fr, en),
                 type_base: controle.type_ts(&valeurs_de(*controle)),
+                rendu: controle.rendu().to_string(),
                 optionnel: false,
             })
             .collect();
 
-        let colonnes = declarees
+        let colonnes: Vec<Colonne> = declarees
             .iter()
-            .map(|(cle, fr, en, _, triable)| Colonne {
+            .map(|(cle, fr, en, controle, triable)| Colonne {
                 cle: (*cle).to_string(),
                 libelle: dans(lang, fr, en),
+                rendu: controle.rendu().to_string(),
                 triable: *triable,
             })
             .collect();
@@ -351,6 +369,8 @@ impl Ecran {
             taille: TAILLE_DEMONSTRATION,
             filtrable: true,
             composants: composants(&champs, true),
+            formats: formats(&colonnes, &proprietes, &champs),
+            locale: lang.tag().to_string(),
             proprietes,
             colonnes,
             champs,
@@ -386,9 +406,12 @@ impl Ecran {
             cle: "id".to_string(),
             libelle: dans(lang, "Identifiant", "Identifier"),
             type_base: "string".to_string(),
+            rendu: "texte".to_string(),
             optionnel: false,
         }];
         proprietes.extend(feature.fields.iter().map(propriete));
+        // Les deux horodatages que le noyau tient lui-même : aucun champ ne les déclare,
+        // donc aucun contrôle ne dit comment ils se lisent.
         for (cle, fr, en) in [
             ("created_at", "Créé le", "Created"),
             ("updated_at", "Mise à jour", "Updated"),
@@ -397,6 +420,7 @@ impl Ecran {
                 cle: cle.to_string(),
                 libelle: dans(lang, fr, en),
                 type_base: "string".to_string(),
+                rendu: Controle::Instant.rendu().to_string(),
                 optionnel: false,
             });
         }
@@ -407,12 +431,14 @@ impl Ecran {
             .map(|field| Colonne {
                 cle: field.column_name(),
                 libelle: humanise(&field.column_name()),
+                rendu: Controle::of(field).rendu().to_string(),
                 triable: true,
             })
             .collect();
         colonnes.push(Colonne {
             cle: "updated_at".to_string(),
             libelle: dans(lang, "Mise à jour", "Updated"),
+            rendu: Controle::Instant.rendu().to_string(),
             triable: true,
         });
 
@@ -461,6 +487,8 @@ impl Ecran {
             taille: TAILLE_ENGENDREE,
             filtrable: !recherche.is_empty(),
             composants: composants(&champs, !recherche.is_empty()),
+            formats: formats(&colonnes, &proprietes, &champs),
+            locale: lang.tag().to_string(),
             proprietes,
             colonnes,
             champs,
@@ -530,6 +558,33 @@ impl Textes {
             non: dit("Non", "No"),
         }
     }
+}
+
+/// Les conversions de temps qu'un écran porte, parmi trois.
+///
+/// `date` et `instant` sont les deux formateurs que la lecture demande — la table et le
+/// détail passant par la même fonction, une propriété suffit à en exiger un, même quand
+/// aucune colonne ne l'affiche : les deux horodatages du noyau sont dans ce cas. `saisie`
+/// est l'aller-retour du formulaire, qu'un seul champ instant réclame.
+///
+/// Calculées ici et non devinées dans la template, pour la raison qui vaut aux composants :
+/// `noUnusedLocals` arrête la vérification des types sur un formateur construit et jamais
+/// lu — une table sans colonne de temps n'en porte aucun.
+fn formats(colonnes: &[Colonne], proprietes: &[Propriete], champs: &[Champ]) -> Vec<String> {
+    let mut retenus = Vec::new();
+
+    for rendu in ["date", "instant"] {
+        let lu = colonnes.iter().any(|colonne| colonne.rendu == rendu)
+            || proprietes.iter().any(|propriete| propriete.rendu == rendu);
+        if lu {
+            retenus.push(rendu.to_string());
+        }
+    }
+    if champs.iter().any(|champ| champ.controle == "instant") {
+        retenus.push("saisie".to_string());
+    }
+
+    retenus
 }
 
 /// Les composants d'interface qu'un écran importe, au-delà de ceux qu'il importe toujours.
@@ -644,6 +699,18 @@ impl Controle {
         }
     }
 
+    /// Comment une valeur ainsi saisie se relit dans la table et dans le détail.
+    ///
+    /// Les cinq contrôles qui ne portent pas de temps se lisent tels quels : voir
+    /// [`Colonne::rendu`].
+    fn rendu(self) -> &'static str {
+        match self {
+            Self::Date => "date",
+            Self::Instant => "instant",
+            _ => "texte",
+        }
+    }
+
     /// Le composant d'interface qui le rend.
     fn composant(self) -> &'static str {
         match self {
@@ -707,10 +774,13 @@ fn union<S: AsRef<str>>(valeurs: &[S]) -> String {
 
 /// La propriété qu'un champ déclaré ajoute à une ligne.
 fn propriete(field: &Field) -> Propriete {
+    let controle = Controle::of(field);
+
     Propriete {
         cle: field.column_name(),
         libelle: humanise(&field.column_name()),
-        type_base: Controle::of(field).type_ts(field.enum_variants()),
+        type_base: controle.type_ts(field.enum_variants()),
+        rendu: controle.rendu().to_string(),
         optionnel: field.optional,
     }
 }
@@ -903,7 +973,7 @@ mod tests {
 
         assert!(rendu.contains("  title: string\n"), "{rendu}");
         assert!(
-            rendu.contains("{ cle: 'title', libelle: 'Title', triable: true },"),
+            rendu.contains("{ cle: 'title', libelle: 'Title', rendu: 'texte', triable: true },"),
             "{rendu}"
         );
         assert!(
@@ -976,6 +1046,115 @@ mod tests {
                 "`{temoin}` manque au formulaire engendré :\n{rendu}"
             );
         }
+    }
+
+    /// Les trois colonnes de temps se lisent formatées, et les autres telles quelles.
+    ///
+    /// La table rendait `2026-09-20T16:24:47.272129Z` : l'ISO du contrat, que personne ne
+    /// lit de l'œil. Les deux horodatages du noyau en sont, bien qu'aucun champ ne les
+    /// déclare.
+    #[test]
+    fn a_column_carrying_time_is_read_formatted_and_the_others_as_they_come() {
+        let ecran = Ecran::pour(&feature(), Lang::Fr);
+
+        for (cle, attendu) in [
+            ("title", "texte"),
+            ("vues", "texte"),
+            ("paru", "date"),
+            ("vu", "instant"),
+            ("updated_at", "instant"),
+        ] {
+            let colonne = ecran
+                .colonnes
+                .iter()
+                .find(|colonne| colonne.cle == cle)
+                .unwrap_or_else(|| panic!("la colonne `{cle}` doit être là"));
+            assert_eq!(colonne.rendu, attendu, "{colonne:?}");
+        }
+        let cree = ecran
+            .proprietes
+            .iter()
+            .find(|propriete| propriete.cle == "created_at")
+            .expect("le détail montre la date de création");
+        assert_eq!(cree.rendu, "instant", "{cree:?}");
+
+        let rendu = rendu(&ecran);
+        for temoin in [
+            "const INSTANT = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: \
+             'short' })",
+            "const JOUR = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeZone: 'UTC' })",
+            "{{ afficher(ligne[colonne.cle], colonne.rendu) }}",
+            "{{ afficher(detaillee[propriete.cle], propriete.rendu) }}",
+        ] {
+            assert!(rendu.contains(temoin), "`{temoin}` manque :\n{rendu}");
+        }
+        assert!(
+            !rendu.contains("{{ afficher(ligne[colonne.cle]) }}"),
+            "la table rend encore l'ISO brut :\n{rendu}"
+        );
+    }
+
+    /// La locale se fige à la génération, comme les libellés qu'elle accompagne.
+    #[test]
+    fn the_locale_of_the_dates_follows_the_language_of_the_project() {
+        let anglais = rendu(&Ecran::pour(&feature(), Lang::En));
+
+        assert!(
+            anglais.contains("new Intl.DateTimeFormat('en-US',"),
+            "{anglais}"
+        );
+        assert!(!anglais.contains("'fr-FR'"), "{anglais}");
+    }
+
+    /// Un écran ne porte que les conversions qu'il emploie.
+    ///
+    /// `noUnusedLocals` et `noUnusedParameters` sont posés sur le projet engendré : un
+    /// formateur construit et jamais lu arrêterait la vérification des types. La
+    /// démonstration en est le témoin — sa seule colonne de temps est un jour, et aucun de
+    /// ses champs ne se saisit en instant.
+    #[test]
+    fn a_screen_carries_only_the_time_conversions_it_uses() {
+        let demonstration = Ecran::demonstration(Lang::Fr);
+        assert_eq!(demonstration.formats, ["date"]);
+
+        let rendu = rendu(&demonstration);
+        assert!(
+            rendu.contains("const JOUR = new Intl.DateTimeFormat("),
+            "{rendu}"
+        );
+        for absent in [
+            "const INSTANT",
+            "function pourControle",
+            "rendu === 'instant'",
+        ] {
+            assert!(!rendu.contains(absent), "`{absent}` est de trop :\n{rendu}");
+        }
+    }
+
+    /// Un instant se saisit à l'heure de l'opérateur, et n'est plus décalé par l'édition.
+    ///
+    /// `datetime-local` ne porte pas de fuseau : l'ISO du contrat, simplement tronqué,
+    /// entrait décalé dans le contrôle et ressortait décalé une seconde fois — ouvrir puis
+    /// enregistrer une ligne sans y toucher déplaçait son horodatage.
+    #[test]
+    fn an_instant_makes_the_round_trip_of_the_form_without_moving() {
+        let ecran = Ecran::pour(&feature(), Lang::Fr);
+        assert!(
+            ecran.formats.contains(&"saisie".to_string()),
+            "{:?}",
+            ecran.formats
+        );
+
+        let rendu = rendu(&ecran);
+        assert!(rendu.contains("    vu: pourControle(ligne.vu),"), "{rendu}");
+        assert!(
+            rendu.contains("instant.getTime() - instant.getTimezoneOffset() * 60_000"),
+            "{rendu}"
+        );
+        assert!(
+            !rendu.contains("ligne.vu.slice(0, 16)"),
+            "l'instant entre encore tronqué dans le contrôle :\n{rendu}"
+        );
     }
 
     /// Une colonne facultative accepte le vide, et l'envoie en `null`.

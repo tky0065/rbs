@@ -35,6 +35,20 @@ impl Lang {
         }
     }
 
+    /// L'étiquette BCP 47 que prend une API d'internationalisation du navigateur.
+    ///
+    /// Un territoire et non la seule langue : `Intl.DateTimeFormat` rend `20/09/2026` sur
+    /// `fr-FR` et `2026-09-20` sur le `fr` nu, que l'implémentation résout où elle veut.
+    /// Épinglée à la génération plutôt que laissée au navigateur de l'opérateur : l'écran
+    /// engendré porte déjà tous ses libellés dans la langue du projet, et une date au
+    /// format d'un autre pays y jurerait.
+    pub fn tag(self) -> &'static str {
+        match self {
+            Self::Fr => "fr-FR",
+            Self::En => "en-US",
+        }
+    }
+
     /// La langue que ce nom désigne, ou `None` s'il n'en désigne aucune.
     pub fn parse(name: &str) -> Option<Self> {
         match name {
@@ -93,6 +107,13 @@ mod tests {
     fn each_language_carries_the_name_written_in_the_manifest() {
         assert_eq!(Lang::Fr.name(), "fr");
         assert_eq!(Lang::En.name(), "en");
+    }
+
+    /// Le territoire compte : `fr` nu laisserait le format de date à l'implémentation.
+    #[test]
+    fn each_language_carries_a_territory_in_its_tag() {
+        assert_eq!(Lang::Fr.tag(), "fr-FR");
+        assert_eq!(Lang::En.tag(), "en-US");
     }
 
     #[test]
