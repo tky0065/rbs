@@ -46,12 +46,12 @@ const TAILLE_ENGENDREE: u32 = 20;
 /// monterait plus aucune. `generate crud` le refuse, et `--no-admin` lève le refus.
 pub(crate) const DEMONSTRATION: &str = "Demonstration";
 
-/// Où le shell d'administration attend le client typé.
+/// Où le socle attend le client typé, et où le shell d'administration l'importe.
 ///
 /// C'est le couplage qu'ADR-0003 assume les yeux ouverts : la commande connaît désormais la
-/// disposition des fichiers du socle. Le fragment nomme le même chemin dans ses gestes
-/// suivants, et un test des deux côtés le garde — déplacer ce répertoire casse la
-/// génération, et c'est le prix annoncé.
+/// disposition des fichiers du socle. C'est aussi le répertoire que `generate client` vise
+/// par défaut dès que le fragment `frontend` est posé, et un test des deux côtés le garde —
+/// déplacer ce répertoire casse la génération, et c'est le prix annoncé.
 pub(crate) const CLIENT: &str = "frontend/src/api";
 
 /// L'écran patron, pris là où le fragment `frontend-admin` le dépose.
@@ -818,15 +818,36 @@ mod tests {
             "le fragment et la commande ne rendent plus le même fichier"
         );
 
-        // Et le fragment nomme le même répertoire de client que la commande annonce ensuite.
+        // Et personne ne dicte plus le répertoire du client : c'est celui que la commande
+        // vise d'elle-même dès que le socle est posé, et le shell s'en remet à elle.
         assert!(
-            manifeste
+            !manifeste
                 .feature
                 .next_steps
                 .iter()
-                .any(|geste| geste.contains(&format!("--out {CLIENT}"))),
-            "le fragment et la commande divergent sur le répertoire du client : {:?}",
+                .any(|geste| geste.contains("--out")),
+            "le shell dicte encore un répertoire de client : {:?}",
             manifeste.feature.next_steps
+        );
+
+        // Le geste appartient au socle, qui porte le module instanciant le client. Sans
+        // `--out` : le répertoire qu'il obtiendra est `CLIENT`, et c'est le défaut de la
+        // commande qui le lui donne.
+        let socle = crate::templates::Source::feature(None, "frontend").expect("le socle s'ouvre");
+        let (socle, _) = socle.manifest_and_files().expect("le socle se lit");
+        let socle = crate::manifest::read(
+            &socle.expect("le socle porte un manifeste"),
+            "frontend/feature.toml",
+        )
+        .expect("le manifeste embarqué est valide");
+        assert!(
+            socle
+                .feature
+                .next_steps
+                .iter()
+                .any(|geste| geste == "rbs generate client --lang ts"),
+            "le socle ne dit plus comment engendrer le client qu'il importe : {:?}",
+            socle.feature.next_steps
         );
     }
 

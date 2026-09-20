@@ -836,7 +836,7 @@ mod tests {
             "frontend/src/admin/vues/Reinitialisation.vue",
             "frontend/src/admin/vues/Verification.vue",
             "frontend/src/admin/vues/Demonstration.vue",
-            "frontend/src/api/index.ts",
+            "frontend/src/api/entetes.ts",
             "frontend/src/api/jetons.ts",
             "frontend/src/stores/authentification.ts",
             "frontend/src/stores/interface.ts",
@@ -854,6 +854,8 @@ mod tests {
         assert!(routeur.contains("montage.ts"), "{routeur}");
         for garde in [
             "frontend/src/views/Accueil.vue",
+            "frontend/src/api/index.ts",
+            "frontend/src/lib/theme.ts",
             "frontend/src/main.ts",
             "frontend/package.json",
             "src/modules/frontend/mod.rs",

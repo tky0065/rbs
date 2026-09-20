@@ -3318,6 +3318,8 @@ mod tests {
                 "frontend/src/App.vue",
                 "frontend/src/router/index.ts",
                 "frontend/src/lib/utils.ts",
+                "frontend/src/lib/theme.ts",
+                "frontend/src/api/index.ts",
                 "frontend/src/assets/main.css",
                 "frontend/src/components/Bande.vue",
                 "frontend/src/views/Accueil.vue",
@@ -3440,7 +3442,7 @@ mod tests {
                 .filter(|chemin| chemin.starts_with("frontend/"))
                 .cloned()
                 .collect();
-            assert_eq!(client.len(), 98, "{client:?}");
+            assert_eq!(client.len(), 100, "{client:?}");
 
             client
         };
@@ -3650,18 +3652,20 @@ mod tests {
             "le nom du projet n'est pas interpolé :\n{accueil}"
         );
 
-        for route in ["'/health'", "'/api-docs/openapi.json'", "'/docs'"] {
+        for route in ["/health", "'/api-docs/openapi.json'", "'/docs'"] {
             assert!(
                 accueil.contains(route),
                 "{route} n'est pas nommée :\n{accueil}"
             );
         }
-        // Les trois sont nommées *et* demandées : la sonde directement, les deux routes de
-        // documentation par le même interrogateur. Une route citée dans un libellé sans
-        // être jamais appelée serait exactement l'affirmation non vérifiée qu'on interdit.
+        // Les trois sont nommées *et* demandées : la sonde par le client engendré, les
+        // deux routes de documentation par le même interrogateur — elles ne sont pas du
+        // contrat, et le client qui en sort ne saurait s'y décrire. Une route citée dans
+        // un libellé sans être jamais appelée serait exactement l'affirmation non
+        // vérifiée qu'on interdit.
         assert!(
-            accueil.contains("await fetch('/health')"),
-            "la sonde n'est pas interrogée :\n{accueil}"
+            accueil.contains("await api.health()"),
+            "la sonde n'est pas interrogée par le client engendré :\n{accueil}"
         );
         assert_eq!(
             accueil.matches("await interroge(").count(),
@@ -3948,7 +3952,7 @@ mod tests {
     /// installation.
     const SHELL: [&str; 19] = [
         "frontend/src/api/jetons.ts",
-        "frontend/src/api/index.ts",
+        "frontend/src/api/entetes.ts",
         "frontend/src/stores/authentification.ts",
         "frontend/src/stores/interface.ts",
         "frontend/src/admin/montage.ts",
@@ -4313,10 +4317,21 @@ mod tests {
             );
         }
 
+        // Le module qui l'instancie appartient au socle ; le shell n'y ajoute qu'un
+        // en-tête, que ce module découvre comme le routeur découvre un montage.
         let client = projected(&planned, "frontend/src/api/index.ts");
         assert!(
             client.contains("from './client'") && client.contains("new ApiClient("),
-            "le shell ne consomme pas le client engendré :\n{client}"
+            "le socle ne consomme pas le client engendré :\n{client}"
+        );
+        let entetes = projected(&planned, "frontend/src/api/entetes.ts");
+        assert!(
+            entetes.contains("authorization: `Bearer ${jeton}`"),
+            "le shell ne pose plus l'en-tête d'autorisation :\n{entetes}"
+        );
+        assert!(
+            client.contains("import.meta.glob<Entetes>('../**/entetes.ts'"),
+            "le socle ne découvre pas ce que le shell ajoute :\n{client}"
         );
 
         // Le client n'est pas livré : il sort du contrat de ce projet-ci, et un client
@@ -4329,17 +4344,29 @@ mod tests {
                 .any(|chemin| chemin == "frontend/src/api/client.ts"),
             "le shell livre un client figé"
         );
+        // Le geste qui l'engendre appartient au socle, qui porte désormais le module
+        // l'instanciant : le shell ne le redit pas, et le socle le dit avant la ligne qui
+        // construirait sans lui.
         let etapes = planned
             .poses
             .iter()
-            .find(|pose| pose.name == "frontend-admin")
-            .expect("le shell est posé")
+            .find(|pose| pose.name == "frontend")
+            .expect("le socle est posé")
             .next_steps
             .clone();
-        assert_eq!(
-            etapes.first().map(String::as_str),
-            Some("rbs generate client --lang ts --out frontend/src/api"),
-            "la génération du client n'ouvre pas les gestes qui restent : {etapes:?}"
+        let rang = |geste: &str| {
+            etapes
+                .iter()
+                .position(|etape| etape.starts_with(geste))
+                .unwrap_or_else(|| panic!("`{geste}` manque aux gestes du socle : {etapes:?}"))
+        };
+        assert!(
+            rang("rbs generate client --lang ts") < rang("npm run build"),
+            "le client s'engendre après la construction qui en dépend : {etapes:?}"
+        );
+        assert!(
+            !etapes.iter().any(|etape| etape.contains("--out")),
+            "le socle dicte encore un répertoire que la commande vise d'elle-même : {etapes:?}"
         );
     }
 

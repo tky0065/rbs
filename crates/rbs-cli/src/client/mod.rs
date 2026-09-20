@@ -152,8 +152,19 @@ impl Codee for Error {
 /// `--out` remplace le répertoire, jamais le nom du fichier : c'est le nom que le client
 /// porte dans un import, et le laisser varier ferait d'une régénération dans un autre
 /// répertoire un second fichier plutôt qu'une mise à jour.
-fn sortie(out: Option<&Path>, lang: Lang) -> PathBuf {
-    out.map_or_else(|| PathBuf::from(lang.repertoire()), Path::to_path_buf)
+///
+/// Sans `--out`, le défaut suit le projet : un projet qui porte le fragment `frontend`
+/// veut son client là où son socle l'importe, et le serveur de développement ne sert rien
+/// d'écrit hors de l'arbre du client. Un projet sans frontend garde le répertoire neutre
+/// qu'il a toujours eu — il n'a aucun arbre où déposer quoi que ce soit.
+fn sortie(out: Option<&Path>, lang: Lang, frontend: bool) -> PathBuf {
+    let defaut = if frontend && matches!(lang, Lang::Ts) {
+        crate::ecran::CLIENT
+    } else {
+        lang.repertoire()
+    };
+
+    out.map_or_else(|| PathBuf::from(defaut), Path::to_path_buf)
         .join(lang.fichier())
 }
 
@@ -183,9 +194,13 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     // séparateur de la plateforme, qui jurerait sous Windows avec la barre oblique du
     // littéral `clients/ts` — `clients/ts\\client.ts` — là où la documentation, elle,
     // montre un chemin à barres obliques sur toutes les plateformes.
-    let fichier = sortie(options.out.as_deref(), options.lang)
-        .to_string_lossy()
-        .replace('\\', "/");
+    let fichier = sortie(
+        options.out.as_deref(),
+        options.lang,
+        metadonnees.porte("frontend"),
+    )
+    .to_string_lossy()
+    .replace('\\', "/");
 
     let mut builder = plan::Builder::new(root);
     builder.create(&fichier, &rendu)?;
@@ -204,7 +219,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 /// commande n'invente pas un répertoire que l'utilisateur n'a pas demandé, comme elle
 /// saute plutôt qu'elle n'exige les ancres du frontend.
 pub(crate) fn engendre(root: &Path) -> Option<PathBuf> {
-    let fichier = sortie(Some(Path::new(crate::ecran::CLIENT)), Lang::Ts);
+    let fichier = sortie(Some(Path::new(crate::ecran::CLIENT)), Lang::Ts, true);
 
     root.join(&fichier).exists().then_some(fichier)
 }
@@ -394,18 +409,29 @@ mod tests {
         );
     }
 
+    /// Un projet sans frontend n'a aucun arbre de client : son défaut ne bouge pas.
     #[test]
-    fn the_default_output_is_the_typescript_directory_of_clients() {
+    fn the_default_output_of_a_project_without_a_frontend_is_the_neutral_directory() {
         assert_eq!(
-            sortie(None, Lang::Ts),
+            sortie(None, Lang::Ts, false),
             PathBuf::from("clients/ts/client.ts")
+        );
+    }
+
+    /// Avec le socle, le défaut est l'endroit où le socle importe son client : ailleurs,
+    /// le serveur de développement ne le verrait pas.
+    #[test]
+    fn the_default_output_of_a_project_carrying_the_base_is_where_the_base_imports_it() {
+        assert_eq!(
+            sortie(None, Lang::Ts, true),
+            PathBuf::from(crate::ecran::CLIENT).join("client.ts")
         );
     }
 
     #[test]
     fn an_explicit_output_replaces_the_directory_but_not_the_file_name() {
         assert_eq!(
-            sortie(Some(Path::new("web/src/api")), Lang::Ts),
+            sortie(Some(Path::new("web/src/api")), Lang::Ts, true),
             PathBuf::from("web/src/api/client.ts")
         );
     }
