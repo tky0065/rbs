@@ -12,6 +12,30 @@ between minor versions with no deprecation cycle.
 
 ## [Unreleased]
 
+## [1.8.1] — 2026-09-20
+
+### Fixed
+
+- **An admin screen now reads its dates instead of showing the contract's ISO.** The table
+  and the detail panel printed `2026-09-20T16:24:47.272129Z` in the update column, and in
+  every column a `date` or `datetime` field declares. The screen could not have guessed it:
+  a date is a string like any other in the contract, so a column now carries how it reads —
+  plain, as a day, or as a date and time — and the two generated timestamps carry it by
+  construction. The locale is the project's own, pinned at generation like every label on
+  the screen; the time zone is the operator's, except for a bare day, which is read at
+  Greenwich so that no zone to the west moves it back a date.
+
+- **Editing a `datetime` column no longer shifts its value.** `datetime-local` carries no
+  zone: the contract's UTC timestamp went into the control merely truncated, hence offset,
+  and came back out offset a second time. Opening a row, then saving it without touching
+  the field, moved the timestamp by the operator's offset from UTC. The form now converts
+  in both directions.
+
+  **Nothing breaks.** A project generated earlier compiles and runs untouched. Regenerating
+  the screen — `rbs generate crud <table> --fields ... --force` — is what gives it the
+  fix; if you compare generated output to a reference, `frontend/src/admin/vues/<Entity>.vue`
+  diverges.
+
 ## [1.8.0] — 2026-09-20
 
 ### Added
@@ -1274,7 +1298,8 @@ architecture, CLI reference and guides, in English and French.
 Rust 1.85 or later, Rust edition 2024. A generated project runs on PostgreSQL 14 or later,
 MySQL 8.0 or later, or SQLite 3.35 or later — `rbs doctor` refuses anything below those.
 
-[Unreleased]: https://github.com/tky0065/rbs/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/tky0065/rbs/compare/v1.8.1...HEAD
+[1.8.1]: https://github.com/tky0065/rbs/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/tky0065/rbs/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/tky0065/rbs/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/tky0065/rbs/releases/tag/v1.6.0

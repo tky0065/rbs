@@ -221,4 +221,4 @@ liste à laquelle on ne peut plus se fier.
 | v1.5 Robustesse | ✅ livré — publiée dans la 1.6.0, le numéro 1.5.0 n'ayant jamais été tagué |
 | v1.6 Retrait et clés d'API | ✅ livré — publiée le 2026-09-19 |
 | v1.7 Frontend | ✅ livré — publiée le 2026-09-20 |
-| v1.8 Le projet engendré s'ouvre | ✅ livré — publiée le 2026-09-20 |
+| v1.8 Le projet engendré s'ouvre | ✅ livré — publiée le 2026-09-20, corrigée par la 1.8.1 le 2026-09-20 |
