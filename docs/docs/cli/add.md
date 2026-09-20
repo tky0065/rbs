@@ -483,12 +483,13 @@ three use it.
 [above](#the-sixteen-features). Beside it sits the other anchor under Git's `#` marker,
 `# <rbs:ignore>` in `.gitignore`, where a fragment excludes from the repository what it
 drops in it; it is optional too, a project whose `.gitignore` its owner deleted being no
-less complete for it. Two more sit outside Rust without leaving its comment syntax:
+less complete for it. Three more sit outside Rust without leaving its comment syntax:
+`// <rbs:vite_proxy>`, which `frontend` lays down in `vite.config.ts`, and
 `// <rbs:admin_routes>` and `// <rbs:admin_rail>`, which `frontend-admin` lays down in
-TypeScript and [`rbs generate crud`](./generate.md#anchors) fills — the
+TypeScript — all three filled by [`rbs generate crud`](./generate.md#anchors), and the
 [frontend guide](../guides/frontend.md#the-generated-screens) has them. The rule is the same everywhere: no AST is ever rewritten,
 and a missing anchor makes the command write nothing and print the block to paste back.
-[`rbs doctor`](./doctor.md) checks all twenty — thirteen on a project carrying no queue, no calendar, no sign-in and no admin shell, nine of the twenty being optional.
+[`rbs doctor`](./doctor.md) checks all twenty-one — thirteen on a project carrying no queue, no calendar, no sign-in, no client and no admin shell, ten of the twenty-one being optional.
 
 A project generated before `// <rbs:layers>` existed does not have it, and `rbs upgrade`
 does not add it: that command aligns the manifest and the `AGENTS.md` zones, and touches

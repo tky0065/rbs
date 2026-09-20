@@ -12,6 +12,19 @@ between minor versions with no deprecation cycle.
 
 ## [Unreleased]
 
+### Fixed
+
+- **The dev server now relays the prefixes `rbs generate crud` adds.** `frontend/vite.config.ts`
+  relayed a fixed list — `/health`, `/docs`, `/api-docs`, plus `/auth` when the admin shell is
+  there — while every generated table adds a route prefix of its own: under `npm run dev`, the
+  admin screen the command had just written called `/articles` on Vite's port and got the
+  application back instead of a page of rows. A new `// <rbs:vite_proxy>` anchor sits in that
+  list, and `rbs generate crud` writes the table's prefix into it, idempotently, on any project
+  carrying `frontend` — `--no-admin` does not take it away, the relay being about the API rather
+  than the screen. The registry goes from twenty anchors to twenty-one, ten of them optional. A
+  project generated before this release has the fixed list and no anchor: `rbs doctor` names it
+  and prints the block, and `rbs doctor --fix` puts it back under `'/api-docs',`.
+
 ## [1.7.0] — 2026-09-19
 
 ### Added

@@ -13,6 +13,20 @@ dépréciation.
 
 ## [Non publié]
 
+### Corrigé
+
+- **Le serveur de développement relaie désormais les préfixes qu'ajoute `rbs generate crud`.**
+  `frontend/vite.config.ts` relayait une liste figée — `/health`, `/docs`, `/api-docs`, plus
+  `/auth` quand le shell d'administration est là — quand chaque table engendrée ajoute son
+  propre préfixe de route : sous `npm run dev`, l'écran d'administration que la commande venait
+  d'écrire appelait `/articles` sur le port de Vite, qui lui rendait l'application au lieu d'une
+  page de lignes. Une ancre `// <rbs:vite_proxy>` vit dans cette liste, et `rbs generate crud` y
+  inscrit le préfixe de la table, de façon idempotente, sur tout projet portant `frontend` —
+  `--no-admin` ne la retire pas, le relais visant l'API et non l'écran. Le registre passe de
+  vingt ancres à vingt-et-une, dont dix optionnelles. Un projet engendré avant cette version
+  porte la liste figée sans l'ancre : `rbs doctor` la nomme et affiche le bloc, et `rbs doctor
+  --fix` la repose sous `'/api-docs',`.
+
 ## [1.7.0] — 2026-09-19
 
 ### Ajouté

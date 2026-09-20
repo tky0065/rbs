@@ -182,9 +182,10 @@ mod tests {
     /// `job_modules` vivent dans `src/modules/jobs/mod.rs`, `schedules` dans
     /// `src/modules/scheduler/mod.rs`, `modules` dans `src/modules/mod.rs` — que seul
     /// `rbs add` dépose, contrairement au compose que `new` écrit déjà —, `auth_impl`
-    /// dans `src/auth/mod.rs`, que seul le fragment `auth` pose, et `admin_routes` comme
-    /// `admin_rail` sous `frontend/src/admin/`, que seul `frontend-admin` dépose. Sept
-    /// des neuf ancres optionnelles sont donc inapplicables ici ; le compose et le fichier
+    /// dans `src/auth/mod.rs`, que seul le fragment `auth` pose, `vite_proxy` dans
+    /// `frontend/vite.config.ts`, que seul `frontend` dépose, et `admin_routes` comme
+    /// `admin_rail` sous `frontend/src/admin/`, que seul `frontend-admin` dépose. Huit
+    /// des dix ancres optionnelles sont donc inapplicables ici ; le compose et le fichier
     /// d'exclusions, que `new` écrit tous deux, comptent parmi les applicables.
     #[test]
     fn a_fresh_project_carries_every_anchor_that_applies_to_it() {
@@ -194,7 +195,7 @@ mod tests {
 
         assert_eq!(check.state, State::Bon);
         assert!(
-            check.detail.contains(&(ANCRES.len() - 7).to_string()),
+            check.detail.contains(&(ANCRES.len() - 8).to_string()),
             "{}",
             check.detail
         );
@@ -313,14 +314,15 @@ mod tests {
 
         assert_eq!(check.state, State::Bon, "{check:?}");
         // Le compose retiré à la main, `jobs`, `job_modules`, `schedules`, `modules`,
-        // `auth_impl`, `admin_routes` et `admin_rail` déjà absents par défaut (v. le test
-        // précédent) : huit des neuf ancres optionnelles sont inapplicables, `ignore`
-        // restant portée par le `.gitignore`.
+        // `auth_impl`, `vite_proxy`, `admin_routes` et `admin_rail` déjà absents par
+        // défaut (v. le test précédent) : neuf des dix ancres optionnelles sont
+        // inapplicables, `ignore` restant portée par le `.gitignore`.
         assert!(
-            check.detail.contains(&(ANCRES.len() - 8).to_string()),
+            check.detail.contains(&(ANCRES.len() - 9).to_string()),
             "ni le compose, ni le registre de la file, ni ses modules, ni le calendrier, \
-             ni le point de montage, ni l'implémentation d'authentification, ni les deux \
-             ancres de l'administration ne comptent parmi les applicables : {}",
+             ni le point de montage, ni l'implémentation d'authentification, ni le relais \
+             du client, ni les deux ancres de l'administration ne comptent parmi les \
+             applicables : {}",
             check.detail
         );
     }
@@ -386,21 +388,25 @@ mod tests {
         );
     }
 
-    /// Les deux ancres de l'administration entrent dans le parcours dès que le fragment
-    /// qui les dépose est posé, et `--fix` les repose sous leur accroche.
+    /// Les trois ancres du client entrent dans le parcours dès que les fragments qui les
+    /// déposent sont posés, et `--fix` les repose sous leur accroche.
     ///
-    /// Le test voisin ne les voit pas : un projet frais n'a pas d'espace d'administration,
-    /// et elles y sont — à juste titre — inapplicables. Sans celui-ci, une accroche fausse
-    /// ne se verrait que le jour où un développeur efface une ancre.
+    /// Le test voisin ne les voit pas : un projet frais n'a ni client ni espace
+    /// d'administration, et elles y sont — à juste titre — inapplicables. Sans celui-ci,
+    /// une accroche fausse ne se verrait que le jour où un développeur efface une ancre.
     #[test]
-    fn the_two_admin_anchors_are_walked_once_the_shell_is_there() {
+    fn the_three_client_anchors_are_walked_once_their_fragments_are_there() {
         let (_parent, root) = Project::new()
             .features(&["frontend", "auth", "frontend-admin"])
             .create();
 
         assert_eq!(check(&root).state, State::Bon);
 
-        for anchor in [anchors::ADMIN_ROUTES, anchors::ADMIN_RAIL] {
+        for anchor in [
+            anchors::VITE_PROXY,
+            anchors::ADMIN_ROUTES,
+            anchors::ADMIN_RAIL,
+        ] {
             let path = root.join(anchor.file.as_ref());
             let avant = fs::read_to_string(&path).expect("le fichier porteur est lisible");
 

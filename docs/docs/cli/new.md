@@ -415,9 +415,9 @@ volumes:
 ```
 
 `docker compose up -d` starts it. The `# <rbs:services>` anchor is where [`rbs
-add`](./add.md) inserts the services `docker` brings, and it is one of the twenty
+add`](./add.md) inserts the services `docker` brings, and it is one of the twenty-one
 anchors [`rbs doctor`](./doctor.md) checks — thirteen on a project carrying no queue, no
-calendar, no sign-in and no admin shell, nine of the twenty being optional.
+calendar, no sign-in, no client and no admin shell, ten of the twenty-one being optional.
 
 Four cases write nothing:
 
