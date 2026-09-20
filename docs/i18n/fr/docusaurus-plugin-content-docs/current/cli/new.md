@@ -416,10 +416,10 @@ volumes:
 ```
 
 `docker compose up -d` la démarre. L'ancre `# <rbs:services>` est là où [`rbs
-add`](./add.md) insère les services qu'apporte `docker`, et c'est l'une des vingt
+add`](./add.md) insère les services qu'apporte `docker`, et c'est l'une des vingt-et-une
 ancres que vérifie [`rbs doctor`](./doctor.md) — treize sur un projet qui ne porte ni file,
-ni calendrier, ni authentification, ni shell d'administration, neuf des vingt étant
-optionnelles.
+ni calendrier, ni authentification, ni client, ni shell d'administration, dix des
+vingt-et-une étant optionnelles.
 
 Quatre cas n'écrivent rien :
 

@@ -624,7 +624,7 @@ suggests and what the run above used.
 ## Anchors
 
 `rbs generate` never rewrites an AST. It inserts between comment markers the skeleton
-carries. `rbs generate crud` and `rbs generate feature` use six of the twenty — the two in
+carries. `rbs generate crud` and `rbs generate feature` use six of the twenty-one — the two in
 `src/state.rs`, `// <rbs:layers>` and `// <rbs:startup>` belong to the fragments
 [`rbs add`](./add.md) installs:
 
@@ -637,16 +637,20 @@ carries. `rbs generate crud` and `rbs generate feature` use six of the twenty �
 | `// <rbs:migrations>` | `migration/src/lib.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
 
-On a project carrying `frontend-admin`, `rbs generate crud` uses two more — the only ones it
-targets that the skeleton does not carry, and the only ones it *skips* rather than refuses on
-when the anchor is gone: the entity and its migration have nothing to do with it.
+On a project carrying the client, `rbs generate crud` uses up to three more — the only ones
+it targets that the skeleton does not carry, and the only ones it *skips* rather than refuses
+on when the anchor is gone: the entity and its migration have nothing to do with it.
 
-| Anchor | File |
-|---|---|
-| `// <rbs:admin_routes>` | `frontend/src/admin/montage.ts` |
-| `// <rbs:admin_rail>` | `frontend/src/admin/rail.ts` |
+| Anchor | File | Deposited by |
+|---|---|---|
+| `// <rbs:vite_proxy>` | `frontend/vite.config.ts` | `frontend` |
+| `// <rbs:admin_routes>` | `frontend/src/admin/montage.ts` | `frontend-admin` |
+| `// <rbs:admin_rail>` | `frontend/src/admin/rail.ts` | `frontend-admin` |
 
-[The frontend guide](../guides/frontend.md#the-generated-screens) has what they receive.
+The first receives the route prefix of the table — `'/articles',` — so that `npm run dev`
+relays it to the binary instead of answering with the application; it does not depend on the
+admin shell, and `--no-admin` does not take it away. [The frontend
+guide](../guides/frontend.md#the-generated-screens) has what the other two receive.
 
 `rbs generate job` uses three, none shared with the two commands above and none carried by
 the skeleton either — each lives in a file a fragment deposits, and `// <rbs:jobs>` also
@@ -677,9 +681,9 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) checks all twenty anchors — thirteen on a project carrying no
-queue, no calendar, no sign-in and no admin shell, nine of the twenty being optional — so a
-missing one can be found before a generation trips over it.
+[`rbs doctor`](./doctor.md) checks all twenty-one anchors — thirteen on a project carrying
+no queue, no calendar, no sign-in, no client and no admin shell, ten of the twenty-one being
+optional — so a missing one can be found before a generation trips over it.
 
 ## Failures
 

@@ -314,9 +314,11 @@ the binary what it does not serve itself:
 ```ts file=examples/admin-console/frontend/vite.config.ts region=relais
 ```
 
-A route your project adds — a generated CRUD, for instance — is declared there too, failing
-which it will only answer once the build is in place. The proxy is also why the default
-setup needs no CORS: the browser sees a single origin. [`rbs add cors`](../cli/add.md#the-sixteen-features) is for the
+A route your project adds is declared there too, failing which it will only answer once the
+build is in place. `rbs generate crud` writes its own into the `// <rbs:vite_proxy>` anchor
+— `'/articles',` for a table named `articles` — so a generated screen works under `npm run
+dev` without a line to add by hand; a route you write yourself goes beside it, by hand. The
+proxy is also why the default setup needs no CORS: the browser sees a single origin. [`rbs add cors`](../cli/add.md#the-sixteen-features) is for the
 case where the client is served from *another* origin, which `admin-console` carries so the
 configuration is on show.
 

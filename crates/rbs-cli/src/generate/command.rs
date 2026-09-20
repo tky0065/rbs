@@ -542,8 +542,19 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
 
     // `insert_ou_sauter`, et non `insert` : une balise retirée du frontend afficherait le
     // bloc à coller plutôt que de refuser d'engendrer l'entité et sa migration, qui n'y
-    // sont pour rien. C'est la seule insertion de la commande dont l'ancre appartienne à
-    // un fragment, et non au squelette.
+    // sont pour rien. Ce sont les seules insertions de la commande dont l'ancre appartienne
+    // à un fragment, et non au squelette.
+    //
+    // Le relais ne dépend que de `frontend`, et non de l'écran : le préfixe vaut pour un
+    // client écrit à la main comme pour un écran engendré, et `--no-admin` ne le retire
+    // donc pas. Sans lui, `npm run dev` rendrait l'application en réponse à l'appel de la
+    // nouvelle table. La présence du fragment est lue comme celle du shell : un projet sans
+    // client n'a pas de bloc à se voir proposer.
+    if metadonnees.porte("frontend") {
+        for mount in mount::for_vite_proxy(&module) {
+            builder.insert_ou_sauter(mount.anchor, &mount.lines)?;
+        }
+    }
     if let Some(ecran) = &ecran {
         for mount in mount::for_admin_screen(ecran) {
             builder.insert_ou_sauter(mount.anchor, &mount.lines)?;
@@ -2592,6 +2603,63 @@ mod tests {
             rail.contains("{ route: 'admin-articles', libelle: 'Articles' },"),
             "{rail}"
         );
+    }
+
+    /// Le préfixe de la table entre dans le relais du serveur de développement.
+    ///
+    /// Sans lui, l'écran que la commande vient d'écrire appellerait `/articles` sur le port
+    /// de Vite, qui lui rendrait l'application en guise de page de données — et rien, ni à
+    /// la construction ni à la vérification des types, ne le dirait.
+    #[test]
+    fn generating_a_crud_relays_the_prefix_of_the_table_to_the_binary() {
+        let (_parent, root) = project_with_admin();
+
+        run(&options(&root, "articles", Some("title:string"), true))
+            .expect("articles doit se générer");
+
+        let vite = read(&root.join("frontend/vite.config.ts"));
+        assert!(
+            vite.contains("  // <rbs:vite_proxy>\n  '/articles',\n  // </rbs:vite_proxy>"),
+            "{vite}"
+        );
+        // La liste figée reste : l'ancre s'ajoute à ces trois préfixes, elle ne les
+        // remplace pas.
+        for temoin in ["'/health',", "'/docs',", "'/api-docs',"] {
+            assert!(vite.contains(temoin), "`{temoin}` manque :\n{vite}");
+        }
+    }
+
+    /// Le relais ne dépend pas du shell : `frontend` seul suffit, et `--no-admin` le laisse.
+    #[test]
+    fn the_relay_is_written_on_a_client_without_the_admin_shell() {
+        let (_parent, root) = Project::new().features(&["frontend"]).create();
+
+        run(&options(&root, "articles", Some("title:string"), true))
+            .expect("articles doit se générer");
+
+        assert!(
+            read(&root.join("frontend/vite.config.ts")).contains("'/articles',"),
+            "le préfixe doit être relayé sans le shell"
+        );
+        assert!(!root.join("frontend/src/admin").exists());
+    }
+
+    /// Régénérer la même table ne double pas la ligne du relais.
+    #[test]
+    fn regenerating_a_table_does_not_relay_its_prefix_twice() {
+        let (_parent, root) = project_with_admin();
+        let options = options(&root, "articles", Some("title:string"), true);
+
+        run(&options).expect("articles doit se générer");
+        fs::remove_dir_all(root.join("src/articles")).expect("le répertoire s'efface");
+        run(&Options {
+            force: true,
+            ..options
+        })
+        .expect("articles doit se régénérer");
+
+        let vite = read(&root.join("frontend/vite.config.ts"));
+        assert_eq!(vite.matches("'/articles',").count(), 1, "{vite}");
     }
 
     /// `--no-admin` supprime cette sortie, pour une entité purement interne.

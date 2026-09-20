@@ -124,6 +124,22 @@ pub(crate) fn for_admin_screen(ecran: &crate::ecran::Ecran) -> Vec<Mount> {
     ]
 }
 
+/// Ce que les routes d'une feature ajoutent au relais du serveur de développement.
+///
+/// Le préfixe est celui que le routeur monte — `/{module}`, en `snake_case` — et non le
+/// segment kebab de l'écran d'administration : c'est l'API que le client appelle, pas sa
+/// propre table de routage.
+///
+/// Séparé de [`pour`], dont les insertions refusent une ancre absente : celle-ci appartient
+/// au fragment `frontend`, et une entité n'a pas à échouer sur un client que le projet n'a
+/// pas installé.
+pub(crate) fn for_vite_proxy(module: &str) -> Vec<Mount> {
+    vec![Mount {
+        anchor: anchors::VITE_PROXY,
+        lines: vec![format!("'/{module}',")],
+    }]
+}
+
 /// Ce que le seed de `module` ajoute au binaire des seeds.
 ///
 /// Séparé de [`pour`] pour la même raison que [`for_migration`] : une feature écrite à la
@@ -340,6 +356,17 @@ mod tests {
                 mount.anchor.name
             );
         }
+    }
+
+    /// Le relais du serveur de développement reçoit le préfixe de l'entité, et lui seul :
+    /// c'est le chemin que le routeur monte, non le segment kebab de l'écran.
+    #[test]
+    fn the_dev_proxy_receives_the_route_prefix_of_the_entity() {
+        let montages = for_vite_proxy("blog_posts");
+
+        assert_eq!(montages.len(), 1, "{montages:?}");
+        assert_eq!(lines(&montages, anchors::VITE_PROXY), ["'/blog_posts',"]);
+        assert!(anchors::ANCRES.contains(&montages[0].anchor));
     }
 
     #[test]

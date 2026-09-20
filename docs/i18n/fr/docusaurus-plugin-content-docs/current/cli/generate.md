@@ -635,7 +635,7 @@ le message suggère et ce que l'exécution ci-dessus a utilisé.
 ## Les ancres
 
 `rbs generate` ne réécrit jamais d'AST. Il insère entre des marqueurs en commentaires que le
-squelette porte. `rbs generate crud` et `rbs generate feature` en emploient six sur vingt —
+squelette porte. `rbs generate crud` et `rbs generate feature` en emploient six sur vingt-et-une —
 les deux de `src/state.rs`, `// <rbs:layers>` et `// <rbs:startup>` appartiennent aux
 fragments qu'installe [`rbs add`](./add.md) :
 
@@ -648,16 +648,20 @@ fragments qu'installe [`rbs add`](./add.md) :
 | `// <rbs:migrations>` | `migration/src/lib.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
 
-Sur un projet qui porte `frontend-admin`, `rbs generate crud` en emploie deux de plus — les
-seules qu'il vise sans que le squelette les porte, et les seules qu'il *saute* plutôt que de
-refuser quand l'ancre a disparu : l'entité et sa migration n'y sont pour rien.
+Sur un projet qui porte le client, `rbs generate crud` en emploie jusqu'à trois de plus —
+les seules qu'il vise sans que le squelette les porte, et les seules qu'il *saute* plutôt que
+de refuser quand l'ancre a disparu : l'entité et sa migration n'y sont pour rien.
 
-| Ancre | Fichier |
-|---|---|
-| `// <rbs:admin_routes>` | `frontend/src/admin/montage.ts` |
-| `// <rbs:admin_rail>` | `frontend/src/admin/rail.ts` |
+| Ancre | Fichier | Déposée par |
+|---|---|---|
+| `// <rbs:vite_proxy>` | `frontend/vite.config.ts` | `frontend` |
+| `// <rbs:admin_routes>` | `frontend/src/admin/montage.ts` | `frontend-admin` |
+| `// <rbs:admin_rail>` | `frontend/src/admin/rail.ts` | `frontend-admin` |
 
-[Le guide du frontend](../guides/frontend.md#les-écrans-engendrés) dit ce qu'elles reçoivent.
+La première reçoit le préfixe de route de la table — `'/articles',` — pour que `npm run dev`
+le relaie au binaire au lieu de répondre l'application ; elle ne dépend pas du shell
+d'administration, et `--no-admin` ne la retire pas. [Le guide du
+frontend](../guides/frontend.md#les-écrans-engendrés) dit ce que reçoivent les deux autres.
 
 `rbs generate job` en emploie trois, sans en partager aucune avec les deux commandes
 ci-dessus ni avec le squelette : chacune vit dans un fichier qu'un fragment dépose, et
@@ -690,10 +694,10 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) contrôle les vingt ancres — treize sur un projet qui ne porte
-ni file, ni calendrier, ni authentification, ni shell d'administration, neuf des vingt
-étant optionnelles — si bien qu'une ancre disparue se trouve avant qu'une génération ne
-bute dessus.
+[`rbs doctor`](./doctor.md) contrôle les vingt-et-une ancres — treize sur un projet qui ne
+porte ni file, ni calendrier, ni authentification, ni client, ni shell d'administration, dix
+des vingt-et-une étant optionnelles — si bien qu'une ancre disparue se trouve avant qu'une
+génération ne bute dessus.
 
 ## Les échecs
 

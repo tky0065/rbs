@@ -6,12 +6,19 @@ import vue from '@vitejs/plugin-vue'
 import { defineConfig } from 'vite'
 
 // Ce que le serveur de développement ne sert pas lui-même et relaie au binaire : les
-// routes que le squelette monte — sonde de santé, interface et document OpenAPI.
+// routes que le squelette monte — sonde de santé, interface et document OpenAPI — puis
+// celles que le projet ajoute.
 //
 // Sans ce relais, l'appel partirait sur le port de Vite et rendrait l'application en
-// retour. Une route que le projet ajoute — un CRUD engendré, par exemple — se déclare
-// ici, faute de quoi elle ne répondra qu'une fois le build en place.
-const RELAYE = ['/health', '/docs', '/api-docs']
+// retour. `rbs generate crud` inscrit lui-même le préfixe de chaque table qu'il engendre
+// dans l'ancre ci-dessous ; une route écrite à la main se déclare à côté, à la main.
+const RELAYE = [
+  '/health',
+  '/docs',
+  '/api-docs',
+  // <rbs:vite_proxy>
+  // </rbs:vite_proxy>
+]
 
 // Le shell d'administration appelle les routes d'`auth` ; sans ce relais, sa connexion
 // partirait sur le port de Vite, qui rendrait l'application en guise de paire de jetons.

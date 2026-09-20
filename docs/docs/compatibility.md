@@ -55,17 +55,19 @@ modifier. Their shape is frozen more tightly than the rest, not less.
 
 This is the scope one forgets, and the one whose loss hurts most.
 
-Alongside your code, a generated project carries two things you never call: twenty comment
-anchors — sixteen Rust ones, `// <rbs:features>`, `// <rbs:modules>` for whatever project
-has installed a fragment, `// <rbs:routes>`, `// <rbs:layers>`,
+Alongside your code, a generated project carries two things you never call: twenty-one
+comment anchors — sixteen Rust ones, `// <rbs:features>`, `// <rbs:modules>` for whatever
+project has installed a fragment, `// <rbs:routes>`, `// <rbs:layers>`,
 `// <rbs:openapi>`, `// <rbs:migration_modules>`, `// <rbs:migrations>`,
 `// <rbs:state_champs>`, `// <rbs:state_init>`, `// <rbs:startup>`, `// <rbs:seeds>`,
 `// <rbs:health_probes>`, `// <rbs:jobs>` and `// <rbs:job_modules>` for whatever project
 carries the queue, `// <rbs:schedules>` for whatever project carries the calendar, `// <rbs:auth_impl>`
-inside the `impl HasAuth` block for whatever project carries sign-in, two in TypeScript,
-which comments the way Rust does — `// <rbs:admin_routes>` in `frontend/src/admin/montage.ts`
-and `// <rbs:admin_rail>` in `frontend/src/admin/rail.ts`, for whatever project carries the
-[admin shell](./guides/frontend.md) — plus two outside both,
+inside the `impl HasAuth` block for whatever project carries sign-in, three in TypeScript,
+which comments the way Rust does — `// <rbs:vite_proxy>` in `frontend/vite.config.ts`, the
+list of prefixes the dev server relays to the binary, for whatever project carries the
+[client](./guides/frontend.md), and `// <rbs:admin_routes>` in
+`frontend/src/admin/montage.ts` and `// <rbs:admin_rail>` in `frontend/src/admin/rail.ts`,
+for whatever project carries the admin shell — plus two outside both,
 with Git's `#` comment marker: `# <rbs:services>` in `docker-compose.yml` for whatever
 project has one, and `# <rbs:ignore>` in `.gitignore`, where a fragment excludes what it
 drops — and a `[package.metadata.rbs]` section in `Cargo.toml` recording
@@ -82,8 +84,8 @@ generated under an earlier version: it is the promise holding, not an exception 
 
 A model can also carry two anchors of its own once it has a relation —
 `// <rbs:relations:table>`, inside its `Relation` enum, and `// <rbs:related:table>`
-beside it — the table's name standing in for the fixed name the twenty above have, since a
-file can hold more than one entity. They sit outside the count of twenty because which file
+beside it — the table's name standing in for the fixed name the twenty-one above have, since a
+file can hold more than one entity. They sit outside the count of twenty-one because which file
 carries them depends on the project's own features, not on the skeleton every project
 shares; their comment syntax and their naming convention are frozen exactly the same way.
 
@@ -99,7 +101,7 @@ hand — on every command, forever.
 
 So the format is covered exactly as the Rust API is. Inside 1.x:
 
-- the twenty anchor names and their comment syntax do not change, and neither does the rule
+- the twenty-one anchor names and their comment syntax do not change, and neither does the rule
   that a command writes nothing when its anchor is missing;
 - the keys of `[package.metadata.rbs]` keep their name and their meaning. A key may be
   added; an absent key reads as a default, never as an error.
@@ -107,9 +109,9 @@ So the format is covered exactly as the Rust API is. Inside 1.x:
 What this does not promise is that a project generated in 0.4.0 already carries every
 anchor a later feature wants. It does not, and it never will — new features bring new
 anchors. That case is designed for rather than broken by: the command reports the anchor it
-could not find and prints the block, and [`rbs doctor`](./cli/doctor.md) checks all twenty
-— thirteen on a project carrying no queue, no calendar, no sign-in and no admin shell, nine
-of the twenty being optional — before anything goes wrong.
+could not find and prints the block, and [`rbs doctor`](./cli/doctor.md) checks all
+twenty-one — thirteen on a project carrying no queue, no calendar, no sign-in, no client and
+no admin shell, ten of the twenty-one being optional — before anything goes wrong.
 
 ## What the promise leaves out
 

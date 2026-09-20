@@ -327,10 +327,12 @@ chaud, et relaie au binaire ce qu'il ne sert pas lui-même :
 ```ts file=examples/admin-console/frontend/vite.config.ts region=relais
 ```
 
-Une route que votre projet ajoute — un CRUD engendré, par exemple — se déclare là aussi,
-faute de quoi elle ne répondra qu'une fois le build en place. Le relais est aussi la raison
-pour laquelle l'installation par défaut n'a pas besoin de CORS : le navigateur ne voit qu'une
-origine. [`rbs add cors`](../cli/add.md#les-seize-features) vise le cas où le client est
+Une route que votre projet ajoute se déclare là aussi, faute de quoi elle ne répondra qu'une
+fois le build en place. `rbs generate crud` y inscrit lui-même la sienne, dans l'ancre
+`// <rbs:vite_proxy>` — `'/articles',` pour une table nommée `articles` — si bien qu'un écran
+engendré fonctionne sous `npm run dev` sans une ligne à ajouter ; une route que vous écrivez
+vous-même se déclare à côté, à la main. Le relais est aussi la raison pour laquelle
+l'installation par défaut n'a pas besoin de CORS : le navigateur ne voit qu'une origine. [`rbs add cors`](../cli/add.md#les-seize-features) vise le cas où le client est
 servi depuis une *autre* origine, et `admin-console` le porte pour que la configuration soit
 sous les yeux.
 
