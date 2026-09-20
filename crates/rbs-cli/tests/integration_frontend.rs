@@ -155,8 +155,15 @@ fn the_client_installs_typechecks_builds_and_proxies_the_api() {
 /// et la vérification des types ne veut rien dire tant qu'il n'est pas là. Engendrer ce
 /// client demande de compiler le projet, ce qui est aussi la seule preuve que le contrat
 /// lu est celui que le binaire publie.
+///
+/// Le client n'est engendré à la main qu'une fois, et **avant** la table : c'est le
+/// terrain sans lequel `generate crud` n'a rien à refaire, comme elle saute les ancres du
+/// frontend plutôt que de les exiger. Aucune commande ne le retouche ensuite, et il porte
+/// pourtant les méthodes de la table — c'est la génération d'entité qui les y a écrites,
+/// depuis le contrat. Un `rbs generate client` de plus entre la table et la vérification
+/// des types rendrait la suite verte sans que rien ne l'ait prouvé.
 #[test]
-#[ignore = "compile le projet engendré, puis installe les dépendances du client : lent et en ligne"]
+#[ignore = "compile deux fois le projet engendré, puis installe les dépendances du client : lent et en ligne"]
 fn the_admin_shell_generates_its_client_typechecks_and_builds() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let projet = common::projet(parent.path());
@@ -172,43 +179,10 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
         "le fragment livre un client figé : il mentirait dès la première route ajoutée"
     );
 
-    // Une table réelle, et ses écrans engendrés : c'est le second producteur de l'écran
-    // patron, et le seul endroit du dépôt où son rendu passe par le compilateur. Les types
-    // couverts sont ceux dont chaque contrôle du formulaire dépend — chaîne, texte long,
-    // entier, décimal, booléen, date, instant, énumération, colonne facultative.
-    rbs(&projet)
-        .args([
-            "generate",
-            "crud",
-            "bordereaux",
-            "--fields",
-            "titre:string,corps:text,vues:int,prix:decimal,publie:bool,paru:date,vu:datetime,\
-             statut:enum(draft,published),note:string:optional",
-        ])
-        .assert()
-        .success();
-
-    // Et une table qui les refuse : le drapeau ne doit rien laisser derrière lui.
-    rbs(&projet)
-        .args([
-            "generate",
-            "crud",
-            "jetons",
-            "--fields",
-            "valeur:string",
-            "--no-admin",
-        ])
-        .assert()
-        .success();
-    assert!(
-        !projet.join("frontend/src/admin/vues/Jetons.vue").exists(),
-        "`--no-admin` a laissé un écran"
-    );
-
     {
-        // La cible est partagée par tous les binaires de `tests/`, et `rbs generate
-        // client` lance cargo : le verrou se prend avant, et se rend avant npm, qui n'en
-        // a que faire.
+        // La cible est partagée par tous les binaires de `tests/`, et tout ce bloc lance
+        // cargo — la génération de client comme celle de la table, qui relit le contrat :
+        // le verrou se prend avant le premier, et se rend avant npm, qui n'en a que faire.
         let _cible = common::verrou(&common::cible());
 
         rbs(&projet)
@@ -223,7 +197,54 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
             ])
             .assert()
             .success();
+
+        // Ce client-là sort d'un contrat où la table n'existe pas encore. Le relire ici
+        // est ce qui donne son sens à tout ce qui suit : les méthodes de `bordereaux`
+        // n'ont, à cet instant, aucune raison d'y être.
+        let amorce = std::fs::read_to_string(&client).expect("le client doit être engendré");
+        assert!(
+            !amorce.contains("bordereauxFilter("),
+            "le client d'amorce porte déjà la table : la suite ne prouverait plus rien\n{amorce}"
+        );
+
+        // Une table réelle, et ses écrans engendrés : c'est le second producteur de l'écran
+        // patron, et le seul endroit du dépôt où son rendu passe par le compilateur. Les
+        // types couverts sont ceux dont chaque contrôle du formulaire dépend — chaîne,
+        // texte long, entier, décimal, booléen, date, instant, énumération, colonne
+        // facultative.
+        rbs(&projet)
+            .env("CARGO_TARGET_DIR", common::cible())
+            .args([
+                "generate",
+                "crud",
+                "bordereaux",
+                "--fields",
+                "titre:string,corps:text,vues:int,prix:decimal,publie:bool,paru:date,vu:datetime,\
+                 statut:enum(draft,published),note:string:optional",
+            ])
+            .assert()
+            .success();
+
+        // Et une table qui les refuse : le drapeau ne doit rien laisser derrière lui. Sans
+        // écran, pas de client à refaire non plus — celui-ci ne compile rien.
+        rbs(&projet)
+            .env("CARGO_TARGET_DIR", common::cible())
+            .args([
+                "generate",
+                "crud",
+                "jetons",
+                "--fields",
+                "valeur:string",
+                "--no-admin",
+            ])
+            .assert()
+            .success();
     }
+
+    assert!(
+        !projet.join("frontend/src/admin/vues/Jetons.vue").exists(),
+        "`--no-admin` a laissé un écran"
+    );
 
     let engendre = std::fs::read_to_string(&client).expect("le client doit être engendré");
     for methode in [
