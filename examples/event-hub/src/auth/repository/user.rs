@@ -61,6 +61,35 @@ pub async fn set_password(db: &impl ConnectionTrait, id: Uuid, hash: &str) -> Re
     Ok(())
 }
 
+/// Remplace l'adresse et retire du même coup la preuve, qui portait sur l'ancienne.
+///
+/// `false` quand l'adresse est déjà prise, comme `create` : la lecture qui précède ne
+/// suffit pas — deux changements simultanés vers la même adresse la franchissent tous
+/// deux, et seule la contrainte d'unicité les départage. La perdante n'est pas une erreur
+/// interne, elle reçoit la même réponse que la gagnante.
+///
+/// Les deux colonnes dans le même `UPDATE` : une adresse changée qui garderait la date de
+/// l'ancienne serait une adresse prouvée que personne n'a prouvée.
+pub async fn set_email(db: &impl ConnectionTrait, id: Uuid, email: &str) -> Result<bool> {
+    let ecriture = Entity::update_many()
+        .col_expr(user::Column::Email, Expr::value(email))
+        .col_expr(
+            user::Column::EmailVerifiedAt,
+            Expr::value(None::<DateTimeWithTimeZone>),
+        )
+        .filter(user::Column::Id.eq(id))
+        .exec(db)
+        .await;
+
+    match ecriture {
+        Ok(_) => Ok(true),
+        Err(error) if matches!(error.sql_err(), Some(SqlErr::UniqueConstraintViolation(_))) => {
+            Ok(false)
+        }
+        Err(error) => Err(Error::from(error)),
+    }
+}
+
 /// Date la vérification de l'adresse, si elle ne l'est pas déjà.
 ///
 /// La date et non un booléen : savoir *quand* une adresse a été prouvée est ce qui

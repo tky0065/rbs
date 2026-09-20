@@ -38,7 +38,7 @@ async fn me_with_an_unreadable_token_returns_401() {
 }
 
 /// Une adresse non vérifiée ne se connecte pas, et reçoit le 401 d'un mauvais mot de
-/// passe : `login_requires_verification` vaut `true` par défaut. La preuve d'adresse
+/// passe : `application` pose `login_requires_verification` à `true`. La preuve d'adresse
 /// l'ouvre.
 #[tokio::test]
 #[ignore = "joint la base du projet"]

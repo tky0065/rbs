@@ -1,5 +1,6 @@
 use std::sync::LazyLock;
 
+use axum::http::StatusCode;
 use chrono::Utc;
 use rbs_core::config::AuthConfig;
 use rbs_core::{Error, Result, hash, token};
@@ -11,7 +12,7 @@ use super::super::dto::{
     LoginRequest, RefreshRequest, RegisterRequest, SessionResponse, TokenPair, UserResponse,
 };
 use super::super::repository::{self, refresh_token::Rotation};
-use super::{close_every_session, detach, issue, normalise, notify, profile, session_view};
+use super::{close_every_session, issue, normalise, profile, session_view, warn_taken};
 use crate::modules::mail::Mailer;
 
 /// Le hash vérifié quand l'adresse est inconnue.
@@ -37,6 +38,14 @@ pub async fn register(
     flows: &FlowConfig,
     input: RegisterRequest,
 ) -> Result<()> {
+    // Le refus est ici et non dans l'écran : la route est ouverte à qui poste, et un
+    // interrupteur qui ne masquerait qu'un bouton n'aurait fermé l'inscription que pour
+    // les navigateurs. Il est aussi avant Argon2 : un service fermé n'a rien à cacher sur
+    // l'état de ses adresses, et n'a donc aucune raison de payer le hachage.
+    if !flows.registration_enabled {
+        return Err(registration_closed());
+    }
+
     let email = normalise(&input.email);
 
     // Argon2 avant tout, dans les deux branches : c'est lui qui coûte, et ne le calculer
@@ -65,23 +74,17 @@ pub async fn register(
     Ok(())
 }
 
-/// Prévient le titulaire d'une adresse qu'on a tenté de l'inscrire.
+/// Le refus qu'oppose une inscription fermée.
 ///
-/// Détaché comme le lien d'une adresse neuve : les deux branches de `register` répondent
-/// dans le même temps.
-fn warn_taken(mail: &Mailer, flows: &FlowConfig, titulaire: repository::Model) {
-    let (mail, flows) = (mail.clone(), flows.clone());
-    detach(titulaire.id, "inscription", async move {
-        notify(
-            &mail,
-            &titulaire,
-            "Tentative d'inscription avec votre adresse",
-            "inscription.html",
-            minijinja::context! { forgot_url => flows.page("forgot-password") },
-        );
-
-        Ok(())
-    });
+/// `Error::Domain` et non `Error::Forbidden` : le code `registration_closed` est ce qui
+/// distingue ce 403 de tous les autres, et c'est sur lui que l'écran d'inscription sait
+/// qu'il n'a pas à s'afficher plutôt qu'à afficher une panne.
+fn registration_closed() -> Error {
+    Error::Domain {
+        status: StatusCode::FORBIDDEN,
+        code: "registration_closed",
+        message: "l'inscription est fermée sur ce service".to_owned(),
+    }
 }
 
 pub async fn login(

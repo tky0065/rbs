@@ -1,3 +1,11 @@
 [database]
 max_connections = 5
 min_connections = 1
+
+[auth]
+# Le port de Vite, qui sert le client en développement.
+app_url = "http://localhost:5173"
+
+# Le poste de travail connecte dès l'inscription : sans cela, un compte créé par l'API ne
+# pourrait jamais entrer, faute d'écran appelant `/auth/verify-email`.
+login_requires_verification = false

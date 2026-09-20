@@ -22,6 +22,10 @@ const compte = ref<UserResponse | null>(null)
 const enCours = ref(true)
 const faute = ref<string | null>(null)
 
+const nouvelleAdresse = ref('')
+const adresseEnCours = ref(false)
+const fauteAdresse = ref<string | null>(null)
+
 const courant = ref('')
 const nouveau = ref('')
 const confirmation = ref('')
@@ -39,6 +43,30 @@ async function lire(): Promise<void> {
     faute.value = phrase(cause, TEXTES.profil_illisible)
   } finally {
     enCours.value = false
+  }
+}
+
+/**
+ * Change l'adresse du compte.
+ *
+ * Le service répond la même chose que la nouvelle adresse ait été libre ou déjà prise :
+ * l'écran ne prétend donc pas savoir laquelle il a touchée, et renvoie vers la boîte de
+ * réception. Le compte est relu dans la foulée — la preuve de l'ancienne adresse est
+ * tombée, et le laisser affiché comme prouvé mentirait.
+ */
+async function changerAdresse(): Promise<void> {
+  adresseEnCours.value = true
+  fauteAdresse.value = null
+
+  try {
+    await api.authUpdateMe({ email: nouvelleAdresse.value })
+    nouvelleAdresse.value = ''
+    interfaces.informer(TEXTES.adresse_envoyee)
+    await lire()
+  } catch (cause) {
+    fauteAdresse.value = phrase(cause, TEXTES.adresse_refusee)
+  } finally {
+    adresseEnCours.value = false
   }
 }
 
@@ -105,6 +133,31 @@ onMounted(() => {
       </dl>
 
       <p v-else class="text-destructive" role="alert">{{ faute }}</p>
+    </Bande>
+
+    <Bande :titre="TEXTES.adresse_titre">
+      <p class="mb-6 text-muted-foreground">{{ TEXTES.adresse_detail }}</p>
+
+      <form class="flex max-w-md flex-col gap-5" novalidate @submit.prevent="changerAdresse">
+        <div class="flex flex-col gap-2">
+          <Label for="nouvelle-adresse">{{ TEXTES.nouvelle_adresse }}</Label>
+          <Input
+            id="nouvelle-adresse"
+            v-model="nouvelleAdresse"
+            type="email"
+            autocomplete="username"
+            required
+          />
+        </div>
+
+        <p v-if="fauteAdresse" class="text-destructive" role="alert">{{ fauteAdresse }}</p>
+
+        <div>
+          <Button type="submit" :disabled="adresseEnCours">
+            {{ adresseEnCours ? TEXTES.envoi_en_cours : TEXTES.changer }}
+          </Button>
+        </div>
+      </form>
     </Bande>
 
     <Bande :titre="TEXTES.mot_de_passe_titre">
