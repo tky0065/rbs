@@ -1,0 +1,59 @@
+/**
+ * Le thème de l'application : les deux jeux de valeurs que la charte porte, et la classe
+ * qui décide lequel s'applique.
+ *
+ * Il appartient au socle, qui porte la charte : une page publique et un écran
+ * d'administration servis par le même binaire ne peuvent pas être l'un clair et l'autre
+ * sombre. Le shell d'administration ne fait que basculer ce qui est ici.
+ */
+
+/** La clé du stockage local, préfixée du nom du projet comme celle de la session. */
+const CLE = 'admin-console.theme'
+
+/** Les deux jeux de valeurs que le bloc de thème porte. */
+export type Theme = 'clair' | 'sombre'
+
+/**
+ * Le thème à appliquer au démarrage : celui qu'on a choisi, la préférence du système à
+ * défaut.
+ *
+ * La préférence du système plutôt qu'un clair par défaut : sans choix explicite, la
+ * seconde palette ne s'allumerait jamais sur un projet qui n'a posé que le socle, et la
+ * moitié de la charte y serait du code mort.
+ */
+export function themeInitial(): Theme {
+  const retenu = lu()
+
+  if (retenu !== null) {
+    return retenu
+  }
+
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches === true
+    ? 'sombre'
+    : 'clair'
+}
+
+/** Accroche la classe que le bloc de thème attend, sur la racine du document. */
+export function appliquerTheme(theme: Theme): void {
+  document.documentElement.classList.toggle('sombre', theme === 'sombre')
+}
+
+/** Retient le choix, pour que le prochain chargement n'ait pas à le redemander. */
+export function retenirTheme(theme: Theme): void {
+  try {
+    window.localStorage.setItem(CLE, theme)
+  } catch {
+    // Sans stockage, le choix ne vaut que pour cet onglet.
+  }
+}
+
+/** Le thème choisi au dernier passage, ou `null` si personne n'a jamais choisi. */
+function lu(): Theme | null {
+  try {
+    const retenu = window.localStorage.getItem(CLE)
+
+    return retenu === 'clair' || retenu === 'sombre' ? retenu : null
+  } catch {
+    return null
+  }
+}

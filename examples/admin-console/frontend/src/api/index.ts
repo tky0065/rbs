@@ -1,25 +1,47 @@
 /**
  * Le client de l'API, et le seul de l'application.
  *
- * `./client` est engendré par `rbs generate client --lang ts --out frontend/src/api`
- * depuis le document OpenAPI du projet : ses chemins, ses corps et ses réponses sont ceux
- * du contrat, vérifiés à la compilation. Le régénérer après chaque changement de contrat
- * est le seul entretien — rien ici ne réécrit de couche HTTP par-dessus lui, et un écran
- * qui appellerait `fetch` de lui-même perdrait cette vérification.
+ * `./client` est le **client engendré** par `rbs generate client --lang ts` depuis le
+ * **contrat** du projet : ses chemins, ses corps et ses réponses sont ceux du contrat,
+ * vérifiés à la compilation. Le régénérer après chaque changement de contrat est le seul
+ * entretien — rien ici ne réécrit de couche HTTP par-dessus lui, et un écran qui
+ * appellerait `fetch` de lui-même perdrait cette vérification.
+ *
+ * Ce module appartient au socle et non au shell d'administration : la couche de transport
+ * est le prérequis de l'application, pas son complément. Un projet qui n'a posé que le
+ * socle parle donc déjà à son API.
  */
 import { ApiClient, ApiError } from './client'
-import { jetonAcces } from './jetons'
+
+/**
+ * Ce qu'un fragment ajoute aux en-têtes de chaque requête.
+ *
+ * Même mécanisme que le montage du routeur, et pour la même raison : le registre des
+ * ancres est clos, et un fragment ne peut pas redéposer un fichier qu'un autre a posé.
+ * Tout module nommé `entetes.ts` sous `src/` est lu par Vite à la construction, et ce
+ * qu'il exporte s'ajoute ici. Aucun fragment posé, aucun module trouvé — et le socle
+ * appelle son API sans en-tête, ce qui suffit à toute route ouverte.
+ */
+export interface Entetes {
+  entetes: () => Record<string, string>
+}
+
+const fournisseurs = Object.values(import.meta.glob<Entetes>('../**/entetes.ts', { eager: true }))
 
 // L'application est servie par le binaire qui sert l'API : même origine, donc racine
 // vide. En développement, c'est le relais déclaré dans `vite.config.ts` qui l'atteint.
 export const api = new ApiClient({
   baseUrl: '',
   // Une fonction, et non une carte figée : le client la rappelle à chaque requête, et le
-  // jeton d'accès change à chaque renouvellement.
+  // jeton d'accès que pose le shell d'administration change à chaque renouvellement.
   headers: (): Record<string, string> => {
-    const jeton = jetonAcces()
+    const entetes: Record<string, string> = {}
 
-    return jeton === null ? {} : { authorization: `Bearer ${jeton}` }
+    for (const fournisseur of fournisseurs) {
+      Object.assign(entetes, fournisseur.entetes())
+    }
+
+    return entetes
   },
 })
 
