@@ -546,6 +546,8 @@ fn the_auth_tests_of_the_generated_project_pass() {
         "auth::tests::verification::a_verified_address_is_not_sent_a_new_token",
         "auth::tests::verification::verifying_again_keeps_the_first_date",
         "auth::tests::tokens::an_emission_purges_the_expired_tokens_of_every_account",
+        "auth::tests::account::a_taken_address_returns_the_same_202_and_changes_nothing",
+        "auth::tests::account::the_route_writes_nothing_but_the_address",
     ] {
         assert!(
             rendu.contains(&format!("test {test} ... ok")),
