@@ -58,7 +58,10 @@ rattrapés à l'intégration venaient tous de la fusion, aucun du travail d'un a
 isolément** — quatre dénombrements de transcription et une liste de fichiers incomplète,
 qu'un agent corrigeait là où il les déplaçait sans voir ceux que son voisin déplaçait en
 même temps, plus un témoin de test devenu non discriminant. Les transcriptions gardées et
-le test de non-dérive les ont tous nommés. Seule la **107** reste ouverte.
+le test de non-dérive les ont tous nommés. La **107** a suivi le même jour. **Le backlog est
+vide** ; les sept issues du jalon sont closes, chacune avec l'état de ses critères — trois
+d'entre eux n'étaient pas tenables tels qu'écrits, et le motif est consigné sur l'issue plutôt
+que dissimulé par une case cochée.
 
 **Légende** — Tags : `[Bug]` `[Sécu]` `[Perf]` `[UX]` `[Dette]` `[Doc]` `[Feature]`
 `[Arch]`. Difficulté : Easy (< 1 j) · Medium (1-3 j) · Hard (3-10 j). Les chemins
