@@ -149,11 +149,12 @@ plan pour …/demo
   - Dockerfile           supprimé
   - .dockerignore        supprimé
   ~ docker-compose.yml   modifié
+  ~ Makefile             modifié
   ~ Cargo.toml           modifié
   ~ AGENTS.md            modifié
 
-  3 à modifier, 2 à supprimer
-✓ docker retirée — 3 modifiés, 2 supprimés
+  4 à modifier, 2 à supprimer
+✓ docker retirée — 4 modifiés, 2 supprimés
   docker-compose.yml n'est pas retiré : posé seulement s'il manquait, le retrait ne peut pas savoir si ce fragment en est l'auteur
   config/production.toml n'est pas retiré : posé seulement s'il manquait, le retrait ne peut pas savoir si ce fragment en est l'auteur
   POSTGRES_USER n'est pas retirée de .env, à faire à la main si elle ne sert plus

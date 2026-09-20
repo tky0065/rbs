@@ -6,8 +6,8 @@ title: Authentification
 # Authentification
 
 `rbs add auth` installe une authentification qui fonctionne dans un projet existant :
-trente-deux fichiers sous `src/auth/`, trois gabarits de courriel, une migration, et treize
-routes montées sur le routeur. Ce qu'elle dépose est du code ordinaire dans votre
+trente-cinq fichiers sous `src/auth/`, trois gabarits de courriel, un seed, une migration,
+et quinze routes — sur treize chemins — montées sur le routeur. Ce qu'elle dépose est du code ordinaire dans votre
 arborescence — une entité, un service, un controller, une garde — et il est fait pour être
 lu et modifié.
 
@@ -34,17 +34,21 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/repository/one_time_token.rs                  créé
   + src/auth/service/mod.rs                                créé
   + src/auth/service/session.rs                            créé
+  + src/auth/service/account.rs                            créé
   + src/auth/service/password.rs                           créé
   + src/auth/service/verification.rs                       créé
   + src/auth/controller/mod.rs                             créé
   + src/auth/controller/session.rs                         créé
+  + src/auth/controller/account.rs                         créé
   + src/auth/controller/password.rs                        créé
   + src/auth/controller/verification.rs                    créé
   + templates/mail/reinitialisation.html                   créé
   + templates/mail/verification.html                       créé
   + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
+  + src/seeds/admin.rs                                     créé
   + src/auth/tests/mod.rs                                  créé
+  + src/auth/tests/account.rs                              créé
   + src/auth/tests/change.rs                               créé
   + src/auth/tests/guard.rs                                créé
   + src/auth/tests/http.rs                                 créé
@@ -64,20 +68,24 @@ plan pour /private/tmp/rbs-demo/blog
   ~ src/lib.rs                                             modifié
   ~ src/router.rs                                          modifié
   ~ src/openapi.rs                                         modifié
+  ~ src/seeds/main.rs                                      modifié
   ~ src/state.rs                                           modifié
   ~ Cargo.toml                                             modifié
   ~ config/default.toml                                    modifié
+  ~ config/development.toml                                modifié
   ~ .env.example                                           modifié
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  36 à créer, 10 à modifier
-✓ auth installée — 36 créés, 10 modifiés
+  40 à créer, 12 à modifier
+✓ auth installée — 40 créés, 12 modifiés
 
   rbs migrate up
 ```
 
-Treize routes viennent avec. Cinq ouvrent le cycle central :
+Quinze routes viennent avec, sur treize chemins — `/auth/sessions` porte à la fois la liste
+et la révocation globale, `/auth/me` à la fois le profil et la seule écriture qu'il accepte.
+Six ouvrent le cycle central :
 
 | Route | Ce qu'elle fait |
 |---|---|
@@ -86,6 +94,7 @@ Treize routes viennent avec. Cinq ouvrent le cycle central :
 | `POST /auth/refresh` | Fait tourner la paire : le jeton présenté est marqué remplacé. |
 | `POST /auth/logout` | Révoque une session. 204. |
 | `GET /auth/me` | Le profil de l'appelant. |
+| `PATCH /auth/me` | Change l'adresse de l'appelant, et rien d'autre. Toujours 202, sans corps. |
 
 `register` rend le même 202 que l'adresse soit neuve ou porte déjà un compte, et hache le
 mot de passe dans les deux cas — un 409, un profil rendu à la seule adresse neuve, ou une
@@ -105,15 +114,38 @@ deux requêtes, au rythme que la limite de débit autorise (`/auth/register` en 
 par heure et par client). Un projet qui fait ce choix pose `VerifiedIdentity` sur les
 routes qui ne doivent pas servir une adresse non prouvée.
 
-Une sixième, `POST /auth/change-password`, laisse un appelant qui porte déjà un jeton en
-faire autant sans lien courriel — couverte juste en dessous. Les sept autres portent sur un
-mot de passe oublié, une adresse non confirmée, ou les sessions de l'appelant, chacune dans
-sa propre section plus bas sur cette page.
+Une septième, `GET /auth/registration`, dit si `POST /auth/register` est ouverte — la
+section ci-dessous explique pourquoi un écran doit le demander. Une huitième,
+`POST /auth/change-password`, laisse un appelant qui porte déjà un jeton changer son mot de
+passe sans lien courriel — couverte juste en dessous. Les sept autres portent sur un mot de
+passe oublié, une adresse non confirmée, ou les sessions de l'appelant, chacune dans sa
+propre section plus bas sur cette page.
+
+`PATCH /auth/me` prend une adresse et rien d'autre : le corps est l'`EmailRequest` que
+lisent déjà `forgot-password` et `resend-verification`, si bien qu'un champ ajouté là
+serait visible aux trois endroits à la fois. Elle écrit la nouvelle adresse, remet
+`email_verified_at` à `NULL` — la preuve portait sur l'ancienne — et envoie un lien de
+vérification neuf, dans la même tâche détachée qu'une inscription. La réponse est le même
+202 que l'adresse ait été libre ou qu'elle porte déjà un compte, et dans le second cas rien
+n'est écrit et son titulaire reçoit le courriel d'avertissement qu'une inscription lui
+aurait envoyé : sans cela, un seul compte suffirait à savoir quelles adresses le service
+connaît.
 
 La migration crée `users`, `refresh_tokens` et `one_time_tokens`, avec une contrainte
 d'unicité sur l'adresse courriel et un `email_verified_at` nullable sur `users`.
 `rbs migrate down` les remporte toutes trois : les tables arrivent et repartent avec la
 feature.
+
+### Fermer les inscriptions
+
+`registration_enabled`, dans `[auth]`, vaut `true` par défaut. Mise à `false`, elle fait
+refuser `POST /auth/register` avant même la lecture de l'adresse — un 403 dont le document
+de problème porte le code stable `registration_closed` — et non pas seulement masquer un
+bouton : la route est ouverte à qui poste, et un interrupteur qui n'aurait atteint que les
+navigateurs n'aurait rien fermé. `GET /auth/registration` rend alors `{"enabled": false}`,
+qui est le seul moyen pour une application servie en fichiers statiques de connaître un
+réglage que le serveur lit à son démarrage ; l'écran d'inscription du shell
+d'administration le demande, et affiche le refus au lieu du formulaire.
 
 ## Le secret, et où il vit
 
@@ -149,6 +181,18 @@ toucher au code :
 
 `access_ttl_secs` fait quinze minutes, `refresh_ttl_secs` trente jours. La section `[auth]`
 est ajoutée par `rbs add auth` ; tout ce qui la précède était déjà là.
+
+Deux de ses clés sont dédoublées dans `config/development.toml`, que le profil
+`development` pose par-dessus les défauts. `app_url` vaut `http://localhost:8080` par
+défaut — le port sur lequel le binaire sert le client construit — et
+`http://localhost:5173` sur un poste de travail, qui est celui de Vite.
+`login_requires_verification` vaut `true` par défaut et `false` sur un poste de travail :
+un compte inscrit par l'API n'est pas vérifié, le lien qui le prouve part vers le client et
+non vers ce serveur, et l'écart que `false` rouvre est un écart qu'un poste de travail peut
+porter quand la production ne le peut pas. Cet écart se resserre dès que le shell
+d'administration est posé : il porte l'écran public qui poste sur `/auth/verify-email`, et
+un compte inscrit par l'API peut alors prouver son adresse sur un poste de travail comme en
+production.
 
 ## Le cycle des jetons
 
@@ -488,6 +532,18 @@ avant la promotion porterait l'ancien rôle :
 ```rust file=examples/blog-auth/src/auth/tests/roles.rs region=jeton_admin
 ```
 
+**Le premier administrateur vient d'un seed.** `auth` dépose `src/seeds/admin.rs` et le
+déclare dans le binaire des seeds du projet : `rbs seed` écrit un compte portant
+`Role::Admin`, son adresse datée comme vérifiée — sans cette date,
+`login_requires_verification` le refuserait. Ses identifiants sont `ADMIN_EMAIL` et
+`ADMIN_PASSWORD` : `rbs add auth` pose les deux dans votre `.env`, que git ignore —
+l'adresse déduite du nom du projet, le mot de passe tiré à l'installation — et laisse des
+repères dans le `.env.example` versionné. Le seed n'écrit rien si le compte existe déjà,
+rien si l'une des deux variables manque ou est vide, et rien du tout sous
+`RBS_ENV=production` — ce dernier refus vit dans le seed et non dans la commande, parce que
+`cargo run --bin seed` ne passe jamais par la garde que porte
+[`rbs seed`](../cli/seed.md).
+
 ## Tester une route protégée
 
 Les tests d'une feature créent un compte. `Identity` vérifie la signature, puis relit la
@@ -508,11 +564,11 @@ bien identifié mais d'un rôle trop court, à qui la garde répond 403 dans le 
 
 Les routes de la feature elle-même sont couvertes de la même façon, réparties par sujet
 sous `src/auth/tests/` — `registration.rs`, `login.rs`, `refresh.rs`, `replay.rs`,
-`logout.rs`, `sessions.rs`, `roles.rs`, `tokens.rs`, `change.rs`, `reset.rs`,
+`logout.rs`, `sessions.rs`, `roles.rs`, `tokens.rs`, `change.rs`, `account.rs`, `reset.rs`,
 `verification.rs`, `guard.rs` et `openapi.rs`, autour du harnais partagé de `mod.rs` et des
-aides de requête de `http.rs` — l'inscription, les 401 identiques, la rotation, le rejeu, la
-révocation, les parcours de mot de passe et de vérification ci-dessus, la garde d'adresse
-vérifiée et le document OpenAPI. Tous passent par HTTP contre une vraie base, et tous
+aides de requête de `http.rs` — l'inscription et son interrupteur, les 401 identiques, la
+rotation, le rejeu, la révocation, le changement d'adresse, les parcours de mot de passe et
+de vérification ci-dessus, la garde d'adresse vérifiée et le document OpenAPI. Tous passent par HTTP contre une vraie base, et tous
 portent donc `#[ignore]` : le `cargo test` d'un projet neuf réussit sans serveur démarré,
 et `cargo test -- --ignored` les lance contre la base que nomme votre `.env`, migrations
 appliquées. Un test échappe à la règle et reste un `#[test]` ordinaire, dans `mod.rs` : il

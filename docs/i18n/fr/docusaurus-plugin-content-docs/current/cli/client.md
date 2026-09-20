@@ -22,6 +22,10 @@ contrat plutôt que de le retoucher : la commande refuse d'écraser un fichier m
 imprime ce que rend `ApiDoc::openapi()` ; `generate client` lance `cargo run --bin openapi`
 dans le projet et lit sa sortie standard.
 
+Le document est mémorisé sous `target/rbs/`, indexé par un condensat des sources du
+projet : une seconde exécution sur un projet inchangé répond sans rien compiler.
+[`rbs openapi export`](./openapi.md#le-contrat-mémorisé) dit ce que le condensat couvre.
+
 C'est ce qui fait suivre le code au client, et non une lecture approximative des sources :
 le document porte les routes que vos fragments ont montées, les DTO que vos `--fields` ont
 produits, et l'`operationId` de chaque handler — y compris ceux que vous avez écrits à la
@@ -37,8 +41,9 @@ rester vide.
 |---|---|
 | `--lang <LANGAGE>` | **Requis.** `ts` en est aujourd'hui la seule valeur. Aucun défaut : le jour où un second langage arrive, aucune invocation existante ne change de sens. |
 | `--out <DIR>` | Répertoire de sortie, relatif à la racine du projet. Le nom du fichier ne change pas — c'est celui que le client porte dans un import. |
+| `--from <FICHIER>` | Lit un contrat déjà exporté par [`rbs openapi export`](./openapi.md), relatif au répertoire d'où la commande est lancée, au lieu de compiler le projet. Le client s'écrit alors sans aucune chaîne de compilation Rust — ce qu'il faut à une CI qui commite son `openapi.json`, et l'échappatoire quand le contrat mémorisé se trompe. |
 | `--force` | Écrit même si le working tree Git est sale, et écrase un client signalé en conflit. |
-| `--dry-run` | Affiche le plan et s'arrête. rbs n'écrit rien — mais le projet est tout de même compilé, puisque c'est ainsi que le document se lit. |
+| `--dry-run` | Affiche le plan et s'arrête. rbs n'écrit rien — mais le projet est tout de même compilé, puisque c'est ainsi que le document se lit, à moins que `--from` ne le fournisse. |
 | `--json` | Rend le plan — ou l'erreur — en un seul document JSON sur la sortie standard, contenu complet du client compris ; la compilation du projet reste sur la sortie d'erreur. Indépendant de `--dry-run`. [Le guide des agents](../guides/agents.md#lire-un-plan-en-json) donne le document et les codes d'erreur. |
 
 ## À quoi ressemble le client
@@ -97,6 +102,25 @@ en conflit plutôt que d'être écrasé en silence :
 
 C'est le moment de sortir votre propre code du fichier engendré, plutôt que d'attraper
 `--force`.
+
+## Appelée après `rbs generate crud`
+
+Sur un projet qui porte déjà un client engendré, vous n'avez pas à le faire : `rbs generate
+crud` le réécrit juste après avoir écrit l'entité, depuis le contrat et jamais depuis
+l'entité qu'il vient de produire — [l'ADR-0004](https://github.com/tky0065/rbs/blob/main/docs/adr/0004-une-seule-source-pour-le-client-engendre.md)
+dit pourquoi le client n'a qu'une source. La génération paie donc une recompilation
+incrémentale, par construction : le module vient d'être ajouté, et le contrat mémorisé est
+invalide à l'instant où la commande en a besoin.
+
+Cela reste conditionnel. Un projet sans client garde l'ancien comportement — la commande
+affiche la ligne `rbs generate client` à relancer, et n'invente pas un `frontend/src/api`
+que personne n'a demandé.
+
+La réécriture est un écrasement, non un conflit : un contrat qui vient de gagner une table
+rend tout client existant différent, et refuser reviendrait à refuser chaque fois. Ce qui
+protège un client que vous avez retouché est la garde de `generate crud` elle-même — elle ne
+tourne pas sur un working tree sale sans `--force`, et la version précédente est donc à un
+`git checkout` de là.
 
 ## Les deux refus
 

@@ -473,6 +473,27 @@ content = """
 /frontend/dist/
 """
 
+# Le client est le premier exécutable que le projet ait à lancer à côté du binaire : il
+# apporte donc ses raccourcis, et la moitié frontend de `make dev`. `DEV` se développe au
+# moment d'exécuter la recette et non à la lecture du fichier, si bien que la ligne compte
+# bien qu'elle suive la cible qui la lit.
+#
+# Les noms de cibles ne se traduisent pas — ce ne sont que des raccourcis de `npm`, qui
+# n'en a qu'un jeu ; seules les descriptions que `make help` affiche suivent la langue du
+# projet.
+[[anchors]]
+anchor  = "make"
+content = """
+DEV += cd frontend && npm run dev &
+.PHONY: front front-build typecheck
+front: ## {% if lang == 'en' %}run the client's dev server{% else %}lance le serveur de développement du client{% endif %}
+\tcd frontend && npm run dev
+front-build: ## {% if lang == 'en' %}build the client the binary serves{% else %}construit le client que sert le binaire{% endif %}
+\tcd frontend && npm run build
+typecheck: ## {% if lang == 'en' %}type-check the client{% else %}contrôle les types du client{% endif %}
+\tcd frontend && npm run typecheck
+"""
+
 # `tower` n'était jusqu'ici qu'une dépendance de développement, pour les tests engendrés :
 # le repli appelle `ServeDir` en service, ce qui demande `oneshot` à l'exécution.
 [[dependencies]]

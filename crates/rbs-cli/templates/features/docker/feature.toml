@@ -67,6 +67,17 @@ api:
 {%- endif %}
 """
 
+# Le fragment apporte un exécutable de plus à lancer — `docker build` — et pose donc un
+# raccourci. Le nom de l'image est celui du projet, en minuscules : un registre n'accepte
+# rien d'autre.
+[[anchors]]
+anchor  = "make"
+content = """
+.PHONY: image
+image: ## {% if lang == 'en' %}build the project image{% else %}construit l'image du projet{% endif %}
+\tdocker build -t {@ project_name | lower @} .
+"""
+
 # Le service `db` interpole ces clés depuis le `.env` du projet, que git ignore ; le
 # compose, lui, est versionné et ne fait que les nommer. Un projet créé avant que le
 # squelette les y écrive n'en porte aucune : sans cet ajout, Compose y substituerait une

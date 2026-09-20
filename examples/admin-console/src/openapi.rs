@@ -14,10 +14,12 @@ use crate::state::AppState;
         crate::health::controller::health,
         // <rbs:openapi>
         crate::auth::controller::register,
+        crate::auth::controller::registration_status,
         crate::auth::controller::login,
         crate::auth::controller::refresh,
         crate::auth::controller::logout,
         crate::auth::controller::me,
+        crate::auth::controller::account::update_me,
         crate::auth::controller::password::change_password,
         crate::auth::controller::password::forgot_password,
         crate::auth::controller::password::reset_password,

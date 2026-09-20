@@ -83,7 +83,7 @@ Options :
 | `--soft-delete` | Makes `DELETE` logical instead of removing the row. The HTTP contract does not change, and a `unique` field's constraint narrows to live rows — on MySQL it stays global, so a deleted value stays reserved there. [The migrations guide](../guides/migrations.md#soft-delete) has the rest. |
 | `--with-upload` | Mounts three routes on `/<resource>/{id}/content` — `PUT`, `GET`, `HEAD` — against the `storage` fragment's trait. Requires the [`storage`](../guides/storage.md) feature, and the fragment under `src/modules/storage/` where `rbs add` has laid it out since 1.3.0 — both are checked before anything is written, and a project that still carries `src/storage/` is refused until the directory is moved and its `use` statements fixed. With `--role`, the `PUT` joins the writes whose threshold the flag raises; with `--soft-delete`, the content outlives the row that `DELETE` only stamps. It also writes their tests into `tests/content.rs` — the round trip, the 404s, the 413, and the 401 under `auth`. [The storage guide](../guides/storage.md#generated-content-routes) has both. |
 | `--cursor` | Pages `GET /<resource>` by cursor instead of by page number: the route takes `after` and `per_page`, and returns `data` with `meta.next` — the `id` to pass as the next `after`, `null` once the walk is over — and no `total`. `POST /<resource>/filter` keeps its pages, whatever its sort: a cursor on `id` is wrong as soon as the order follows another column. Combines with `--role`, with `--soft-delete` — deleted rows stay out of the walk — and with `--with-upload`. For an entity its tests can create — one without a required reference — the generated tests walk every page until `next` goes out, and check that no row comes back twice. [The filtering guide](../guides/filtering.md#cursor-pagination-for-lists-that-outgrow-an-offset) has the rest. |
-| `--no-admin` | Drops the admin screens this command otherwise emits. On a project carrying `frontend-admin`, `generate crud` also writes `frontend/src/admin/vues/<Entity>.vue` — the table's filtered list, form and detail — and mounts it in the rail and the routing table through the space's two anchors. No flag asks for that, the same way none asks for the closed routes `auth` earns; this one is the way out, for a table nobody should administer from the interface. Without the fragment the command behaves exactly as it did before, and the flag changes nothing. The screen calls the typed client, which the command does not regenerate: it prints the `rbs generate client` line to run next.
+| `--no-admin` | Drops the admin screens this command otherwise emits. On a project carrying `frontend-admin`, `generate crud` also writes `frontend/src/admin/vues/<Entity>.vue` — the table's filtered list, form and detail — and mounts it in the rail and the routing table through the space's two anchors. No flag asks for that, the same way none asks for the closed routes `auth` earns; this one is the way out, for a table nobody should administer from the interface. Without the fragment the command behaves exactly as it did before, and the flag changes nothing. The screen calls the typed client: on a project that already carries one, the command rewrites it from the contract right after the generation — one incremental rebuild, the price of the client having a single source — and on a project without one it prints the `rbs generate client` line to run next rather than inventing a directory.
 
 ## `rbs generate feature`
 
@@ -624,7 +624,7 @@ suggests and what the run above used.
 ## Anchors
 
 `rbs generate` never rewrites an AST. It inserts between comment markers the skeleton
-carries. `rbs generate crud` and `rbs generate feature` use six of the twenty — the two in
+carries. `rbs generate crud` and `rbs generate feature` use six of the twenty-two — the two in
 `src/state.rs`, `// <rbs:layers>` and `// <rbs:startup>` belong to the fragments
 [`rbs add`](./add.md) installs:
 
@@ -637,16 +637,20 @@ carries. `rbs generate crud` and `rbs generate feature` use six of the twenty �
 | `// <rbs:migrations>` | `migration/src/lib.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
 
-On a project carrying `frontend-admin`, `rbs generate crud` uses two more — the only ones it
-targets that the skeleton does not carry, and the only ones it *skips* rather than refuses on
-when the anchor is gone: the entity and its migration have nothing to do with it.
+On a project carrying the client, `rbs generate crud` uses up to three more — the only ones
+it targets that the skeleton does not carry, and the only ones it *skips* rather than refuses
+on when the anchor is gone: the entity and its migration have nothing to do with it.
 
-| Anchor | File |
-|---|---|
-| `// <rbs:admin_routes>` | `frontend/src/admin/montage.ts` |
-| `// <rbs:admin_rail>` | `frontend/src/admin/rail.ts` |
+| Anchor | File | Deposited by |
+|---|---|---|
+| `// <rbs:vite_proxy>` | `frontend/vite.config.ts` | `frontend` |
+| `// <rbs:admin_routes>` | `frontend/src/admin/montage.ts` | `frontend-admin` |
+| `// <rbs:admin_rail>` | `frontend/src/admin/rail.ts` | `frontend-admin` |
 
-[The frontend guide](../guides/frontend.md#the-generated-screens) has what they receive.
+The first receives the route prefix of the table — `'/articles',` — so that `npm run dev`
+relays it to the binary instead of answering with the application; it does not depend on the
+admin shell, and `--no-admin` does not take it away. [The frontend
+guide](../guides/frontend.md#the-generated-screens) has what the other two receive.
 
 `rbs generate job` uses three, none shared with the two commands above and none carried by
 the skeleton either — each lives in a file a fragment deposits, and `// <rbs:jobs>` also
@@ -677,9 +681,9 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) checks all twenty anchors — thirteen on a project carrying no
-queue, no calendar, no sign-in and no admin shell, nine of the twenty being optional — so a
-missing one can be found before a generation trips over it.
+[`rbs doctor`](./doctor.md) checks all twenty-two anchors — fourteen on a project carrying
+no queue, no calendar, no sign-in, no client and no admin shell, eleven of the twenty-two being
+optional — so a missing one can be found before a generation trips over it.
 
 ## Failures
 

@@ -85,6 +85,11 @@ erreur : RBS_ENV=production : les seeds sont des données de démonstration, et 
 Le refus vit dans la commande, non dans le code engendré. Un seed est fait pour être
 modifié, et un garde-fou qu'on peut retirer par mégarde en réécrivant le fichier autour
 n'est pas un garde-fou. `--force` est le passage, et il faut le taper.
+
+Un seed porte un second refus, le sien : `src/seeds/admin.rs`, que dépose
+[`rbs add auth`](./auth.md), crée un compte portant `admin`, et `cargo run --bin seed`
+l'atteint sans passer par la commande qui l'aurait arrêté. Ce qu'il écrit est une clé du
+service entier, ce qui vaut un garde-fou à deux endroits.
 :::
 
 ## Où ils tournent
@@ -100,7 +105,8 @@ validation, ni couche de service. Ce qu'ils insèrent est ce que la base accepte
 
 - **l'idempotence** — lancer `rbs seed` deux fois insère deux fois, et une contrainte
   d'unicité vous le dira la seconde. Faites vérifier le seed d'abord s'il doit être
-  rejouable ;
+  rejouable — le seed d'administration que dépose `auth` est écrit ainsi, et le dit plutôt
+  que d'échouer ;
 - **l'ordre entre entités** — celui de l'ancre est l'ordre de génération ; un seed qui
   dépend des lignes d'un autre doit venir après lui, et déplacer la ligne est la façon de
   le dire ;

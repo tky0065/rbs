@@ -101,14 +101,14 @@ attente de la base dans [`rbs dev`](./dev.md), et une URL sans hôte ni port.
 {/* rbs:transcript cmd="rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes" */}
 ```text
 $ rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes
-✓ blog créé — 22 fichiers
+✓ blog créé — 23 fichiers
 
   cd blog
   docker compose up -d   # la base du .env, montée
   cargo run              # ou `rbs dev`, qui enchaîne les deux
 ```
 
-Les vingt-deux fichiers :
+Les vingt-trois fichiers :
 
 ```text
 blog/.env
@@ -117,6 +117,7 @@ blog/.gitignore
 blog/AGENTS.md
 blog/CLAUDE.md
 blog/Cargo.toml
+blog/Makefile
 blog/config/default.toml
 blog/config/development.toml
 blog/config/production.toml
@@ -153,6 +154,49 @@ sur stderr au lieu d'échouer.
 Le manifeste dépend de `rbs-core` publié sur crates.io, dans la version du CLI qui l'a
 écrit. Il n'y a rien à construire ni à cloner d'abord.
 
+## Les raccourcis du projet
+
+Le squelette écrit un `Makefile`, et `make` seul dit ce qu'il porte. Chaque recette
+enveloppe `cargo`, `npm` ou `docker compose`, et aucune n'appelle `rbs` : le projet vous
+appartient dès qu'il est écrit, et le collègue qui clone le dépôt le lance sans installer
+d'abord le générateur.
+
+{/* rbs:transcript cmd="make help" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" */}
+```text
+$ make help
+Raccourcis de demo — make <cible>
+
+  help         affiche cette liste
+  dev          lance tout ce que le projet porte, jusqu'à Ctrl-C
+  back         lance l'API seule
+  build        compile en mode optimisé
+  test         lance les tests
+  lint         passe clippy, avertissements compris
+  fmt          reformate le code
+  migrate      applique les migrations en attente
+  seed         insère les données de démonstration
+  up           démarre les services de docker-compose.yml
+  down         arrête ces mêmes services
+  openapi      écrit le document OpenAPI sur la sortie standard
+  clean        efface les artefacts de compilation
+```
+
+Les noms de cibles sont les mêmes quoi que dise `--lang` — ce sont des raccourcis de
+`cargo`, de `npm` et de `docker compose`, qui n'ont qu'un jeu de noms chacun — et seules
+les descriptions suivent la langue du projet.
+
+`make dev` est la seule recette qui ne soit pas une commande unique. Elle lance d'un coup
+tout ce que le projet porte, dans un même groupe de processus, et un premier Ctrl-C
+emporte l'ensemble. Sur un projet nu, c'est le binaire seul ; [`rbs add
+frontend`](./add.md) ajoute le serveur de développement du client à la même liste, et
+`make dev` sert alors les deux.
+
+L'ancre `# <rbs:make>`, en pied de fichier, est là où un fragment pose un raccourci à lui
+— `front`, `front-build` et `typecheck` pour le client, `image` pour `docker`. Un fragment
+n'en pose un que s'il apporte un exécutable de plus à lancer : `jobs` tourne dans le
+binaire, `observability` en fait sortir des traces, et ni l'un ni l'autre n'a de commande
+à envelopper.
+
 ## Ce qui porte l'idempotence
 
 Le `Cargo.toml` généré porte une section rbs, et cette section est le seul endroit où rbs
@@ -183,7 +227,7 @@ dans laquelle il est écrit :
 
 ```text
 $ rbs new demo-api --database-url postgres://rbs:rbs@localhost:5432/demo_api --lang en --yes
-✓ demo-api créé — 22 fichiers
+✓ demo-api créé — 23 fichiers
 
 $ grep lang demo-api/Cargo.toml
 lang = "en"
@@ -234,7 +278,7 @@ crate :
 
 ```text
 $ rbs new blog --core-path /private/tmp/rbs-core --yes
-✓ blog créé — 22 fichiers
+✓ blog créé — 23 fichiers
 
   cd blog
   docker compose up -d   # la base du .env, montée
@@ -262,7 +306,7 @@ du squelette dont le `.env.jinja` porte une ligne de plus :
 
 ```text
 $ rbs new maison --template-dir /private/tmp/rbs-demo/mes-templates --yes
-✓ maison créé — 22 fichiers
+✓ maison créé — 23 fichiers
 
   cd maison
   docker compose up -d   # la base du .env, montée
@@ -280,19 +324,21 @@ connaît quinze — `api-keys`, `audit`, `auth`, `ci`, `cors`, `docker`, `fronte
 `mail`, `observability`, `rate-limit`, `redis`, `scheduler`, `storage` et `webhooks` — et
 installe chacune des nommées, dans la même passe qui écrit le projet :
 
-{/* rbs:transcript cmd="rbs new site --with auth --yes" */}
+{/* rbs:transcript cmd="rbs new site --with auth --lang fr --yes" */}
 ```text
-$ rbs new site --with auth --yes
-✓ site créé — 22 fichiers
+$ rbs new site --with auth --lang fr --yes
+✓ site créé — 23 fichiers
   + mail       6 fichiers
   + rate-limit 4 fichiers
-  + auth       36 fichiers, 1 migration
+  + auth       40 fichiers, 1 migration
 
   réglez [mail] dans config/default.toml — un SMTP local par défaut
 
   derrière un reverse proxy, passez rate_limit.trust_forwarded_for à true — sinon tous les clients partagent l'adresse du proxy
 
   rbs migrate up
+
+  rbs seed pose le compte d'administration dans la table des comptes : ADMIN_EMAIL (admin@site.test) et ADMIN_PASSWORD, tiré dans votre .env, sont les identifiants que l'écran de connexion demande
 
   cd site
   docker compose up -d   # la base du .env, montée
@@ -310,13 +356,13 @@ features s'installent en une seule passe, et chaque fragment voit celles posées
 `--with rate-limit,redis` compte dans Redis, où que `redis` figure dans la liste.
 
 ```text
-$ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes
-✓ with-demo créé — 22 fichiers
+$ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --lang fr --yes
+✓ with-demo créé — 23 fichiers
   + docker     2 fichiers
   + mail       6 fichiers
   + rate-limit 4 fichiers
-  + auth       36 fichiers, 1 migration
-  + storage    4 fichiers
+  + auth       40 fichiers, 1 migration
+  + storage    6 fichiers
 
   docker compose --profile app up --build
 
@@ -325,6 +371,8 @@ $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_dem
   derrière un reverse proxy, passez rate_limit.trust_forwarded_for à true — sinon tous les clients partagent l'adresse du proxy
 
   rbs migrate up
+
+  rbs seed pose le compte d'administration dans la table des comptes : ADMIN_EMAIL (admin@with-demo.test) et ADMIN_PASSWORD, tiré dans votre .env, sont les identifiants que l'écran de connexion demande
 
   les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example
 
@@ -416,10 +464,10 @@ volumes:
 ```
 
 `docker compose up -d` la démarre. L'ancre `# <rbs:services>` est là où [`rbs
-add`](./add.md) insère les services qu'apporte `docker`, et c'est l'une des vingt
-ancres que vérifie [`rbs doctor`](./doctor.md) — treize sur un projet qui ne porte ni file,
-ni calendrier, ni authentification, ni shell d'administration, neuf des vingt étant
-optionnelles.
+add`](./add.md) insère les services qu'apporte `docker`, et c'est l'une des vingt-deux
+ancres que vérifie [`rbs doctor`](./doctor.md) — quatorze sur un projet qui ne porte ni file,
+ni calendrier, ni authentification, ni client, ni shell d'administration, onze des
+vingt-deux étant optionnelles.
 
 Quatre cas n'écrivent rien :
 

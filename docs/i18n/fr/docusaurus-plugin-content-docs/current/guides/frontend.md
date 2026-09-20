@@ -8,9 +8,10 @@ title: Frontend
 Deux fragments posent une application Vue 3 dans un projet existant. `rbs add frontend`
 installe le **socle** : l'application, son routeur, un thème Tailwind v4, quatorze
 composants shadcn-vue vendorisés, et un accueil public. `rbs add frontend-admin` y ajoute le
-**shell d'administration** : un espace authentifié de quatre écrans de compte et de santé —
-et, dès lors, [`rbs generate crud`](../cli/generate.md) écrit les écrans d'administration de
-la table en même temps que son entité.
+**shell d'administration** : quatre écrans de compte et de santé derrière une garde de
+route, et les quatre pages publiques qui y mènent — et, dès lors,
+[`rbs generate crud`](../cli/generate.md) écrit les écrans d'administration de la table en
+même temps que son entité.
 
 Une seule application, deux régimes de route : une racine publique, et l'espace
 d'administration dans un morceau paresseux derrière une garde de route. Un build, un service
@@ -49,12 +50,13 @@ plan pour …/demo
   ~ src/lib.rs                                                              modifié
   ~ src/router.rs                                                           modifié
   ~ .gitignore                                                              modifié
+  ~ Makefile                                                                modifié
   ~ Cargo.toml                                                              modifié
   ~ config/default.toml                                                     modifié
   ~ AGENTS.md                                                               modifié
 
-  104 à créer, 6 à modifier
-✓ frontend installée — 104 créés, 6 modifiés
+  104 à créer, 7 à modifier
+✓ frontend installée — 104 créés, 7 modifiés
 
   cd frontend && npm install
 
@@ -146,7 +148,7 @@ connaissent que les rôles que ce bloc définit.
 
 ## Ce que le shell d'administration ajoute
 
-Quinze fichiers, dans l'arbre que le socle a posé — une application, deux régimes de route.
+Dix-neuf fichiers, dans l'arbre que le socle a posé — une application, deux régimes de route.
 Le shell exige [`auth`](./auth.md), qui tire à son tour `mail` et `rate-limit` : tous
 descendent d'un seul plan, nommés avant que rien ne soit écrit.
 
@@ -167,21 +169,27 @@ plan pour …/demo
   + frontend/src/admin/rail.ts                                              créé
   + frontend/src/admin/document.ts                                          créé
   + frontend/src/admin/textes.ts                                            créé
+  + frontend/src/admin/lien.ts                                              créé
   + frontend/src/admin/Shell.vue                                            créé
   + frontend/src/admin/vues/Connexion.vue                                   créé
+  + frontend/src/admin/vues/Inscription.vue                                 créé
+  + frontend/src/admin/vues/Reinitialisation.vue                            créé
+  + frontend/src/admin/vues/Verification.vue                                créé
   + frontend/src/admin/vues/TableauDeBord.vue                               créé
   + frontend/src/admin/vues/Sessions.vue                                    créé
   + frontend/src/admin/vues/Profil.vue                                      créé
   + frontend/src/admin/vues/Demonstration.vue                               créé
 
-  165 à créer, 12 à modifier
-✓ frontend-admin installée — 165 créés, 12 modifiés
+  173 à créer, 15 à modifier
+✓ frontend-admin installée — 173 créés, 15 modifiés
 
   cd frontend && npm install
 
   npm run build (ou npm run dev, qui sert le client sur son propre port)
 
   cargo run : le binaire sert le build, et jusque-là une page qui nomme ce qu'il reste à taper
+
+  rbs seed pose le compte d'administration dans la table des comptes : ADMIN_EMAIL (admin@demo.test) et ADMIN_PASSWORD, tiré dans votre .env, sont les identifiants que l'écran de connexion demande
 
   rbs generate client --lang ts --out frontend/src/api
 
@@ -201,13 +209,33 @@ Rien d'autre, dans le shell, ne parle HTTP :
 ```ts file=examples/admin-console/frontend/src/api/index.ts
 ```
 
-### Quatre écrans, chacun adossé à une vraie route
+### Huit écrans, chacun adossé à une vraie route
 
-La connexion avec sa demande de réinitialisation, un tableau de bord qui montre les sondes
-réelles, la version et le nombre de routes montées lu dans le document OpenAPI, les sessions
-ouvertes avec leur révocation unitaire et globale, et le profil avec son changement de mot de
-passe. Chacun est adossé à une route qu'`auth` expose réellement — aucun ne montre un chiffre
-que personne ne sert.
+Quatre vivent derrière la garde : un tableau de bord qui montre les sondes réelles, la
+version et le nombre de routes montées lu dans le document OpenAPI ; les sessions ouvertes
+avec leur révocation unitaire et globale ; et le profil, qui *écrit* désormais autant qu'il
+lit — `PATCH /auth/me` change l'adresse qu'il montre, retire la preuve qui portait sur
+l'ancienne, et envoie un lien de vérification neuf.
+
+Quatre sont publiques, parce qu'une garde sans autre page que la connexion enfermerait
+dehors qui n'a pas encore de compte, qui a perdu son mot de passe, ou dont l'adresse attend
+sa preuve : la connexion avec son dialogue de réinitialisation, l'inscription, l'écran du
+nouveau mot de passe, et l'écran de preuve d'adresse avec son renvoi. Les deux derniers
+lisent le jeton que porte le lien du courriel — dans le *fragment* de l'URL, qu'un
+navigateur n'envoie jamais au serveur — par un seul module qu'ils partagent.
+
+Elles vivent hors du shell, et hors du rail : le rail est la navigation d'un espace
+authentifié, et la connexion n'y a jamais figuré non plus. Les trois chemins qu'`auth` met
+dans ses courriels — `/forgot-password`, `/reset-password`, `/verify-email` — sont les alias
+de trois d'entre elles : le fragment les compose depuis `app_url` sans rien savoir d'un
+shell posé à côté, c'est donc au shell de les servir, et un alias les sert sans redirection,
+qui aurait perdu le jeton.
+
+L'inscription demande `GET /auth/registration` avant de montrer son formulaire, et affiche
+le refus à la place quand `registration_enabled` vaut `false` ; la connexion retire dans le
+même cas le lien qui y mène. Chaque écran est adossé à une route qu'`auth` expose réellement
+— aucun ne montre un chiffre que personne ne sert, et aucune route qu'`auth` expose ne reste
+sans appelant.
 
 ### Le transport des jetons, et ce qu'il coûte
 
@@ -320,6 +348,12 @@ et nomme `--no-admin`.
 
 ## Développement et production
 
+Le fragment écrit ses raccourcis dans le
+[`Makefile`](../cli/new.md#les-raccourcis-du-projet) en s'installant : `make front` pour le
+serveur de développement, `make front-build` pour le build que sert le binaire, `make
+typecheck` pour `vue-tsc`. Il y ajoute aussi sa moitié de `make dev`, qui mène dès lors le
+binaire et Vite de front, dans un même groupe de processus — un seul Ctrl-C arrête les deux.
+
 En production, le binaire sert le build lui-même : ni second serveur, ni reverse proxy. En
 développement, `npm run dev` sert le client sur le port de Vite avec son rechargement à
 chaud, et relaie au binaire ce qu'il ne sert pas lui-même :
@@ -327,10 +361,12 @@ chaud, et relaie au binaire ce qu'il ne sert pas lui-même :
 ```ts file=examples/admin-console/frontend/vite.config.ts region=relais
 ```
 
-Une route que votre projet ajoute — un CRUD engendré, par exemple — se déclare là aussi,
-faute de quoi elle ne répondra qu'une fois le build en place. Le relais est aussi la raison
-pour laquelle l'installation par défaut n'a pas besoin de CORS : le navigateur ne voit qu'une
-origine. [`rbs add cors`](../cli/add.md#les-seize-features) vise le cas où le client est
+Une route que votre projet ajoute se déclare là aussi, faute de quoi elle ne répondra qu'une
+fois le build en place. `rbs generate crud` y inscrit lui-même la sienne, dans l'ancre
+`// <rbs:vite_proxy>` — `'/articles',` pour une table nommée `articles` — si bien qu'un écran
+engendré fonctionne sous `npm run dev` sans une ligne à ajouter ; une route que vous écrivez
+vous-même se déclare à côté, à la main. Le relais est aussi la raison pour laquelle
+l'installation par défaut n'a pas besoin de CORS : le navigateur ne voit qu'une origine. [`rbs add cors`](../cli/add.md#les-seize-features) vise le cas où le client est
 servi depuis une *autre* origine, et `admin-console` le porte pour que la configuration soit
 sous les yeux.
 

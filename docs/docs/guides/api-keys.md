@@ -39,8 +39,8 @@ plan pour …/demo
   + migration/src/m20260918_144456_create_api_keys.rs      créé
   ~ AGENTS.md                                              modifié
 
-  57 à créer, 11 à modifier
-✓ api-keys installée — 57 créés, 11 modifiés
+  61 à créer, 13 à modifier
+✓ api-keys installée — 61 créés, 13 modifiés
 
   rbs migrate up, puis POST /api-keys pour tirer une clé — elle n'est rendue qu'à cet instant — et présentez-la en X-Api-Key
 ```

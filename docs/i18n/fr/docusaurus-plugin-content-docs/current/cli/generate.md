@@ -85,7 +85,7 @@ Options :
 | `--soft-delete` | Rend `DELETE` logique plutôt que de retirer la ligne. Le contrat HTTP ne change pas, et la contrainte d'un champ `unique` se restreint aux lignes vivantes — sur MySQL elle reste globale, si bien qu'une valeur supprimée y reste réservée. [Le guide des migrations](../guides/migrations.md#suppression-logique) a le reste. |
 | `--with-upload` | Monte trois routes sur `/<ressource>/{id}/content` — `PUT`, `GET`, `HEAD` — contre le trait du fragment `storage`. Exige la feature [`storage`](../guides/storage.md), et le fragment sous `src/modules/storage/`, là où `rbs add` le pose depuis la 1.3.0 — les deux sont vérifiés avant toute écriture, et un projet qui porte encore `src/storage/` est refusé tant que le répertoire n'est pas déplacé et ses `use` corrigés. Avec `--role`, le `PUT` rejoint les écritures dont le drapeau relève le seuil ; avec `--soft-delete`, le contenu survit à la ligne que le `DELETE` se contente d'estampiller. Il écrit aussi leurs tests dans `tests/content.rs` — le cycle, les 404, le 413, et le 401 sous `auth`. [Le guide du stockage](../guides/storage.md#les-routes-de-contenu-engendrées) a les deux. |
 | `--cursor` | Pagine `GET /<ressource>` par curseur plutôt que par numéro de page : la route prend `after` et `per_page`, et rend `data` avec `meta.next` — l'`id` à passer comme `after` suivant, `null` une fois la marche terminée — et aucun `total`. `POST /<ressource>/filter` garde ses pages, quel que soit son tri : un curseur sur l'`id` est faux dès que l'ordre suit une autre colonne. Se combine avec `--role`, avec `--soft-delete` — les lignes supprimées restent hors de la marche — et avec `--with-upload`. Pour une entité que ses tests peuvent créer — sans référence requise —, les tests engendrés parcourent chaque page jusqu'à l'extinction de `next`, et vérifient qu'aucune ligne ne revient deux fois. [Le guide du filtrage](../guides/filtering.md#pagination-par-curseur-pour-les-listes-qui-débordent-un-offset) a le reste. |
-| `--no-admin` | Supprime les écrans d'administration que la commande émet sinon. Sur un projet portant `frontend-admin`, `generate crud` écrit aussi `frontend/src/admin/vues/<Entité>.vue` — la liste filtrée, le formulaire et le détail de la table — et le monte dans le rail et la table de routage par les deux ancres de l'espace. Aucun drapeau ne le demande, pas plus qu'aucun ne demande les routes fermées que vaut `auth` ; celui-ci est la sortie de secours, pour une table que personne ne doit administrer depuis l'interface. Sans le fragment, la commande se comporte exactement comme avant et le drapeau ne change rien. L'écran appelle le client typé, que la commande ne régénère pas : elle affiche la ligne `rbs generate client` à relancer.
+| `--no-admin` | Supprime les écrans d'administration que la commande émet sinon. Sur un projet portant `frontend-admin`, `generate crud` écrit aussi `frontend/src/admin/vues/<Entité>.vue` — la liste filtrée, le formulaire et le détail de la table — et le monte dans le rail et la table de routage par les deux ancres de l'espace. Aucun drapeau ne le demande, pas plus qu'aucun ne demande les routes fermées que vaut `auth` ; celui-ci est la sortie de secours, pour une table que personne ne doit administrer depuis l'interface. Sans le fragment, la commande se comporte exactement comme avant et le drapeau ne change rien. L'écran appelle le client typé : sur un projet qui en porte déjà un, la commande le réécrit depuis le contrat juste après la génération — une recompilation incrémentale, prix d'un client à source unique — et sur un projet sans client elle affiche la ligne `rbs generate client` à relancer plutôt que d'inventer un répertoire.
 
 ## `rbs generate feature`
 
@@ -635,7 +635,7 @@ le message suggère et ce que l'exécution ci-dessus a utilisé.
 ## Les ancres
 
 `rbs generate` ne réécrit jamais d'AST. Il insère entre des marqueurs en commentaires que le
-squelette porte. `rbs generate crud` et `rbs generate feature` en emploient six sur vingt —
+squelette porte. `rbs generate crud` et `rbs generate feature` en emploient six sur vingt-deux —
 les deux de `src/state.rs`, `// <rbs:layers>` et `// <rbs:startup>` appartiennent aux
 fragments qu'installe [`rbs add`](./add.md) :
 
@@ -648,16 +648,20 @@ fragments qu'installe [`rbs add`](./add.md) :
 | `// <rbs:migrations>` | `migration/src/lib.rs` |
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
 
-Sur un projet qui porte `frontend-admin`, `rbs generate crud` en emploie deux de plus — les
-seules qu'il vise sans que le squelette les porte, et les seules qu'il *saute* plutôt que de
-refuser quand l'ancre a disparu : l'entité et sa migration n'y sont pour rien.
+Sur un projet qui porte le client, `rbs generate crud` en emploie jusqu'à trois de plus —
+les seules qu'il vise sans que le squelette les porte, et les seules qu'il *saute* plutôt que
+de refuser quand l'ancre a disparu : l'entité et sa migration n'y sont pour rien.
 
-| Ancre | Fichier |
-|---|---|
-| `// <rbs:admin_routes>` | `frontend/src/admin/montage.ts` |
-| `// <rbs:admin_rail>` | `frontend/src/admin/rail.ts` |
+| Ancre | Fichier | Déposée par |
+|---|---|---|
+| `// <rbs:vite_proxy>` | `frontend/vite.config.ts` | `frontend` |
+| `// <rbs:admin_routes>` | `frontend/src/admin/montage.ts` | `frontend-admin` |
+| `// <rbs:admin_rail>` | `frontend/src/admin/rail.ts` | `frontend-admin` |
 
-[Le guide du frontend](../guides/frontend.md#les-écrans-engendrés) dit ce qu'elles reçoivent.
+La première reçoit le préfixe de route de la table — `'/articles',` — pour que `npm run dev`
+le relaie au binaire au lieu de répondre l'application ; elle ne dépend pas du shell
+d'administration, et `--no-admin` ne la retire pas. [Le guide du
+frontend](../guides/frontend.md#les-écrans-engendrés) dit ce que reçoivent les deux autres.
 
 `rbs generate job` en emploie trois, sans en partager aucune avec les deux commandes
 ci-dessus ni avec le squelette : chacune vit dans un fichier qu'un fragment dépose, et
@@ -690,10 +694,10 @@ dans src/router.rs :
 // </rbs:routes>
 ```
 
-[`rbs doctor`](./doctor.md) contrôle les vingt ancres — treize sur un projet qui ne porte
-ni file, ni calendrier, ni authentification, ni shell d'administration, neuf des vingt
-étant optionnelles — si bien qu'une ancre disparue se trouve avant qu'une génération ne
-bute dessus.
+[`rbs doctor`](./doctor.md) contrôle les vingt-deux ancres — quatorze sur un projet qui ne
+porte ni file, ni calendrier, ni authentification, ni client, ni shell d'administration, onze
+des vingt-deux étant optionnelles — si bien qu'une ancre disparue se trouve avant qu'une
+génération ne bute dessus.
 
 ## Les échecs
 

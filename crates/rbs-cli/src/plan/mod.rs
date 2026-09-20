@@ -108,6 +108,19 @@ impl Plan {
         &self.sautees
     }
 
+    /// Ajoute à ce plan les actions d'un autre, calculé sur la même racine.
+    ///
+    /// `generate crud` refait le client engendré **après** avoir appliqué son plan : le
+    /// contrat n'existe qu'une fois le module écrit, et cette écriture-là ne pouvait donc
+    /// pas figurer dans le plan affiché. La vue JSON, elle, est lue par un agent qui n'a
+    /// que ce document pour savoir ce que la commande a touché — l'y taire en ferait un
+    /// inventaire faux.
+    pub(crate) fn absorber(&mut self, autre: Plan) {
+        self.actions.extend(autre.actions);
+        self.files.extend(autre.files);
+        self.sautees.extend(autre.sautees);
+    }
+
     /// Ce que l'application de ce plan écrit, par ce qui arrive aux fichiers.
     ///
     /// La règle est celle d'`application::apply` : un fichier inchangé n'est pas réécrit,

@@ -8,9 +8,10 @@ title: Frontend
 Two fragments put a Vue 3 application into an existing project. `rbs add frontend` installs
 the **base**: the application, its router, a Tailwind v4 theme, fourteen vendored
 shadcn-vue components, and a public home page. `rbs add frontend-admin` adds the
-**admin shell**: an authenticated space of four account-and-health screens — and, from then
-on, [`rbs generate crud`](../cli/generate.md) writes the table's admin screens along with
-its entity.
+**admin shell**: four account-and-health screens behind a route guard, and the four public
+pages that lead to them — and, from then on,
+[`rbs generate crud`](../cli/generate.md) writes the table's admin screens along with its
+entity.
 
 One application, two route regimes: a public root, and the admin space in a lazy chunk
 behind a route guard. One build, one static service, one fallback.
@@ -48,12 +49,13 @@ plan pour …/demo
   ~ src/lib.rs                                                              modifié
   ~ src/router.rs                                                           modifié
   ~ .gitignore                                                              modifié
+  ~ Makefile                                                                modifié
   ~ Cargo.toml                                                              modifié
   ~ config/default.toml                                                     modifié
   ~ AGENTS.md                                                               modifié
 
-  104 à créer, 6 à modifier
-✓ frontend installée — 104 créés, 6 modifiés
+  104 à créer, 7 à modifier
+✓ frontend installée — 104 créés, 7 modifiés
 
   cd frontend && npm install
 
@@ -141,7 +143,7 @@ block defines.
 
 ## What the admin shell adds
 
-Fifteen files, inside the tree the base laid down — one application, two route regimes. The
+Nineteen files, inside the tree the base laid down — one application, two route regimes. The
 shell requires [`auth`](./auth.md), which in turn pulls `mail` and `rate-limit`: all of them
 come down from a single plan, named before anything is written.
 
@@ -162,21 +164,27 @@ plan pour …/demo
   + frontend/src/admin/rail.ts                                              créé
   + frontend/src/admin/document.ts                                          créé
   + frontend/src/admin/textes.ts                                            créé
+  + frontend/src/admin/lien.ts                                              créé
   + frontend/src/admin/Shell.vue                                            créé
   + frontend/src/admin/vues/Connexion.vue                                   créé
+  + frontend/src/admin/vues/Inscription.vue                                 créé
+  + frontend/src/admin/vues/Reinitialisation.vue                            créé
+  + frontend/src/admin/vues/Verification.vue                                créé
   + frontend/src/admin/vues/TableauDeBord.vue                               créé
   + frontend/src/admin/vues/Sessions.vue                                    créé
   + frontend/src/admin/vues/Profil.vue                                      créé
   + frontend/src/admin/vues/Demonstration.vue                               créé
 
-  165 à créer, 12 à modifier
-✓ frontend-admin installée — 165 créés, 12 modifiés
+  173 à créer, 15 à modifier
+✓ frontend-admin installée — 173 créés, 15 modifiés
 
   cd frontend && npm install
 
   npm run build (ou npm run dev, qui sert le client sur son propre port)
 
   cargo run : le binaire sert le build, et jusque-là une page qui nomme ce qu'il reste à taper
+
+  rbs seed pose le compte d'administration dans la table des comptes : ADMIN_EMAIL (admin@demo.test) et ADMIN_PASSWORD, tiré dans votre .env, sont les identifiants que l'écran de connexion demande
 
   rbs generate client --lang ts --out frontend/src/api
 
@@ -196,12 +204,32 @@ Nothing else in the shell speaks HTTP:
 ```ts file=examples/admin-console/frontend/src/api/index.ts
 ```
 
-### Four screens, each backed by a real route
+### Eight screens, each backed by a real route
 
-Sign-in with its password-reset request, a dashboard showing the real probes, the version
-and the number of mounted routes read from the OpenAPI document, the open sessions with
-single and global revocation, and the profile with its password change. Each is backed by a
-route `auth` actually exposes — none of them shows a number nobody serves.
+Four sit behind the guard: a dashboard showing the real probes, the version and the number
+of mounted routes read from the OpenAPI document; the open sessions with single and global
+revocation; and the profile, which now *writes* as well as reads — `PATCH /auth/me` changes
+the address it shows, drops the proof that was about the old one, and sends a fresh
+verification link.
+
+Four are public, because a guard with nothing but a sign-in page would shut out whoever has
+no account yet, has lost the password, or whose address is still waiting for its proof:
+sign-in with its password-reset dialog, sign-up, the new-password screen, and the
+address-proof screen with its resend. The last two read the token the email link carries —
+in the URL's *fragment*, which a browser never sends to a server — through a single module
+both share.
+
+They live outside the shell, and outside the rail: the rail is the navigation of an
+authenticated space, and the sign-in page has never been in it either. The three paths
+`auth` puts in its emails — `/forgot-password`, `/reset-password`, `/verify-email` — are
+aliases of three of them: the fragment composes those from `app_url` without knowing a
+shell is installed, so it is the shell that serves them, and an alias serves them without a
+redirect, which would have dropped the token.
+
+Sign-up asks `GET /auth/registration` before showing its form, and shows the closed message
+instead when `registration_enabled` is `false`; the sign-in page drops the link to it in
+the same case. Each screen is backed by a route `auth` actually exposes — none of them
+shows a number nobody serves, and no route `auth` exposes is left without a caller.
 
 ### Token transport, and what it costs
 
@@ -307,6 +335,12 @@ names `--no-admin`.
 
 ## Development and production
 
+The fragment writes its shortcuts into the project's
+[`Makefile`](../cli/new.md#the-projects-shortcuts) as it installs: `make front` for the dev
+server, `make front-build` for the build the binary serves, `make typecheck` for `vue-tsc`.
+It also adds its half of `make dev`, which from then on runs the binary and Vite together
+in one process group — a single Ctrl-C stops both.
+
 In production the binary serves the build itself: no second server, no reverse proxy. In
 development, `npm run dev` serves the client on Vite's port with hot reload, and proxies to
 the binary what it does not serve itself:
@@ -314,9 +348,11 @@ the binary what it does not serve itself:
 ```ts file=examples/admin-console/frontend/vite.config.ts region=relais
 ```
 
-A route your project adds — a generated CRUD, for instance — is declared there too, failing
-which it will only answer once the build is in place. The proxy is also why the default
-setup needs no CORS: the browser sees a single origin. [`rbs add cors`](../cli/add.md#the-sixteen-features) is for the
+A route your project adds is declared there too, failing which it will only answer once the
+build is in place. `rbs generate crud` writes its own into the `// <rbs:vite_proxy>` anchor
+— `'/articles',` for a table named `articles` — so a generated screen works under `npm run
+dev` without a line to add by hand; a route you write yourself goes beside it, by hand. The
+proxy is also why the default setup needs no CORS: the browser sees a single origin. [`rbs add cors`](../cli/add.md#the-sixteen-features) is for the
 case where the client is served from *another* origin, which `admin-console` carries so the
 configuration is on show.
 

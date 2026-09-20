@@ -1,8 +1,11 @@
-//! Le document OpenAPI d'un projet, tel que son binaire `openapi` l'imprime.
+//! Le **contrat** d'un projet, tel que son binaire `openapi` l'imprime.
 //!
 //! `generate client`, `routes` et `openapi export` lisent tous trois ce que
 //! `ApiDoc::openapi()` rend, sans démarrer de serveur. L'obtenir — et refuser le projet qui
 //! ne le peut pas, en disant comment y remédier — ne s'écrit donc qu'ici.
+//!
+//! L'obtention est mémorisée par [`cache`] : les trois commandes se lancent souvent à la
+//! suite, et le binaire est une compilation complète du projet.
 
 use std::fs;
 use std::path::Path;
@@ -10,6 +13,8 @@ use std::process::Command;
 
 use crate::client::document;
 use crate::metadata;
+
+mod cache;
 
 /// Le binaire du projet qui imprime le document.
 pub(crate) const BINAIRE: &str = "src/bin/openapi.rs";
@@ -76,15 +81,14 @@ impl Obtention {
     }
 }
 
-/// Lance le binaire `openapi` du projet enraciné en `root` et rend ce qu'il a imprimé.
+/// Le contrat du projet enraciné en `root` : mémorisé, ou imprimé par son binaire.
 ///
-/// Les deux refus précèdent cargo, et dans cet ordre : sans bibliothèque, le binaire ne
-/// peut pas exister, et annoncer son absence enverrait le lecteur écrire un fichier qui ne
-/// compilerait pas.
-///
-/// `stderr` est hérité et non capturé : la compilation du projet passe par là, et
-/// l'escamoter laisserait la commande muette pendant une minute sur un projet froid. La
-/// sortie standard, elle, reste au seul document.
+/// Les deux refus précèdent le cache autant que cargo, et dans cet ordre : sans
+/// bibliothèque, le binaire ne peut pas exister, et annoncer son absence enverrait le
+/// lecteur écrire un fichier qui ne compilerait pas. Ils précèdent le cache parce qu'ils
+/// nomment un projet qui n'a aucun contrat à offrir, mémorisé ou non — et parce que les
+/// deux fichiers qu'ils exigent vivent sous `src/`, donc dans le condensat : un cache
+/// chaud ne peut pas leur survivre.
 pub(crate) fn imprimer(root: &Path) -> Result<String, Obtention> {
     if !root.join(BIBLIOTHEQUE).exists() {
         return Err(Obtention::SansBibliotheque);
@@ -94,6 +98,15 @@ pub(crate) fn imprimer(root: &Path) -> Result<String, Obtention> {
         return Err(Obtention::SansBinaire);
     }
 
+    cache::au_travers(root, || lancer(root))
+}
+
+/// Lance le binaire `openapi` du projet et rend ce qu'il a imprimé.
+///
+/// `stderr` est hérité et non capturé : la compilation du projet passe par là, et
+/// l'escamoter laisserait la commande muette pendant une minute sur un projet froid. La
+/// sortie standard, elle, reste au seul document.
+fn lancer(root: &Path) -> Result<String, Obtention> {
     let sortie = Command::new("cargo")
         .args(["run", "--quiet", "--bin", "openapi"])
         .current_dir(root)
@@ -152,6 +165,14 @@ pub(crate) fn document(directory: &Path) -> Result<String, Error> {
     let root = metadata::project_root(directory)?;
 
     Ok(imprimer(&root)?)
+}
+
+/// Le contrat tel qu'un export antérieur l'a figé, sans lancer cargo.
+///
+/// C'est ce que `--from` lit. Le texte n'est pas analysé ici : chaque appelant en fait
+/// aussitôt un [`document::Document`], et une seconde analyse ne dirait rien de plus.
+pub(crate) fn depuis(fichier: &Path) -> Result<String, crate::errors::Acces> {
+    fs::read_to_string(fichier).map_err(|source| crate::errors::Acces::new(fichier, source))
 }
 
 /// Écrit le document dans `out`, relatif à `directory`, ou le rend quand `out` manque.

@@ -47,7 +47,7 @@ Options :
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, and its `api`/`migrate` services inserted into the project's compose — a whole `docker-compose.yml` when there is none | `docker compose --profile app up --build` |
 | `ci` | `.github/workflows/ci.yml`, its actions pinned by SHA, and `.github/dependabot.yml`, which proposes their updates every week | `git push` |
-| `auth` | thirty-two files under `src/auth/`, three mail templates, one migration, edits to nine project files of its own — and `mail` and `rate-limit`, which it requires | `rbs migrate up` |
+| `auth` | thirty-five files under `src/auth/`, three mail templates, one migration, edits to nine project files of its own — and `mail` and `rate-limit`, which it requires | `rbs migrate up` |
 | `api-keys` | nine files under `src/modules/api_keys/`, one migration, four routes, and a method inserted into the `impl HasAuth` that `auth` deposits — and `auth`, which it requires | `rbs migrate up`, then `POST /api-keys` |
 | `jobs` | thirteen files under `src/modules/jobs/`, one migration, and a `[jobs]` config section | `rbs migrate up`, then register your jobs in `src/modules/jobs/mod.rs` |
 | `scheduler` | nine files under `src/modules/scheduler/`, one migration, a `[scheduler]` config section, a ticker in `// <rbs:startup>` — and `jobs`, which it requires | `rbs migrate up`, then declare your schedules in `src/modules/scheduler/mod.rs` |
@@ -56,7 +56,7 @@ Options :
 | `storage` | six files under `src/modules/storage/` | ignore `./storage`, or switch the backend to `s3` |
 | `cors` | three files under `src/modules/cors/`, a `[cors]` config section, and a layer in `// <rbs:layers>` | list your origins in `[cors]` — empty, so nothing cross-origin passes |
 | `frontend` | four files under `src/modules/frontend/`, a `[frontend]` config section, and a fallback in `// <rbs:routes>` that serves the client's build — or, until that build exists, a self-contained bootstrap page | `cargo run`: the root serves the bootstrap page, which names what is left to build |
-| `frontend-admin` | fifteen files inside the tree `frontend` laid down — the authenticated admin shell, its route guard, its two Pinia stores, four account-and-health screens and the pattern screen — and `frontend` and `auth`, which it requires, and through `auth`, `mail` and `rate-limit` | `rbs generate client --lang ts --out frontend/src/api` **before** `npm run build`: the shell imports the generated client. [The frontend guide](../guides/frontend.md) has the rest |
+| `frontend-admin` | nineteen files inside the tree `frontend` laid down — the authenticated admin shell, its route guard, its two Pinia stores, four account-and-health screens, the four public pages that lead to them and the pattern screen — and `frontend` and `auth`, which it requires, and through `auth`, `mail` and `rate-limit` | `rbs generate client --lang ts --out frontend/src/api` **before** `npm run build`: the shell imports the generated client. [The frontend guide](../guides/frontend.md) has the rest |
 | `rate-limit` | four files under `src/modules/rate_limit/`, a `[rate_limit]` config section, a field on `AppState`, and a layer in `// <rbs:layers>` | behind a reverse proxy, set `rate_limit.trust_forwarded_for` |
 | `observability` | four files under `src/modules/observability/`, an `[observability]` config section, a layer in `// <rbs:layers>`, and a second listener in `// <rbs:startup>` | name a collector in `OTEL_EXPORTER_OTLP_ENDPOINT` — without it nothing is exported |
 | `audit` | four files under `src/modules/audit/`, and one migration | `rbs migrate up`, then call `audit::record` in your services — the entry is written in the transaction of the change |
@@ -482,13 +482,15 @@ three use it.
 `migrate` services go into `# <rbs:services>`, the YAML anchor a compose carries — see
 [above](#the-sixteen-features). Beside it sits the other anchor under Git's `#` marker,
 `# <rbs:ignore>` in `.gitignore`, where a fragment excludes from the repository what it
-drops in it; it is optional too, a project whose `.gitignore` its owner deleted being no
-less complete for it. Two more sit outside Rust without leaving its comment syntax:
+drops in it, and `# <rbs:make>` in the `Makefile`, where a fragment that brings one more
+executable to run adds its shortcut; both are optional too, a project whose owner deleted
+the `.gitignore` or the `Makefile` being no less complete for it. Three more sit outside Rust without leaving its comment syntax:
+`// <rbs:vite_proxy>`, which `frontend` lays down in `vite.config.ts`, and
 `// <rbs:admin_routes>` and `// <rbs:admin_rail>`, which `frontend-admin` lays down in
-TypeScript and [`rbs generate crud`](./generate.md#anchors) fills — the
+TypeScript — all three filled by [`rbs generate crud`](./generate.md#anchors), and the
 [frontend guide](../guides/frontend.md#the-generated-screens) has them. The rule is the same everywhere: no AST is ever rewritten,
 and a missing anchor makes the command write nothing and print the block to paste back.
-[`rbs doctor`](./doctor.md) checks all twenty — thirteen on a project carrying no queue, no calendar, no sign-in and no admin shell, nine of the twenty being optional.
+[`rbs doctor`](./doctor.md) checks all twenty-two — fourteen on a project carrying no queue, no calendar, no sign-in, no client and no admin shell, eleven of the twenty-two being optional.
 
 A project generated before `// <rbs:layers>` existed does not have it, and `rbs upgrade`
 does not add it: that command aligns the manifest and the `AGENTS.md` zones, and touches

@@ -1,8 +1,8 @@
 //! La couche qui porte les règles, un fichier par parcours.
 //!
-//! `issue()`, `notify()` et `detach()` vivent ici plutôt que dans l'un des parcours :
-//! plusieurs s'en servent, et les descendre dans l'un d'eux ferait dépendre les autres de
-//! ce voisin-là.
+//! `issue()`, `notify()`, `detach()` et `warn_taken()` vivent ici plutôt que dans l'un
+//! des parcours : plusieurs s'en servent, et les descendre dans l'un d'eux ferait dépendre
+//! les autres de ce voisin-là.
 //! `profile()` et `session_view()` y sont aussi : ce sont les deux seuls passages du
 //! modèle vers la réponse, et les garder côte à côte tient cette règle en un endroit.
 
@@ -16,14 +16,17 @@ use sea_orm::ConnectionTrait;
 use sea_orm::prelude::Uuid;
 use serde::Serialize;
 
+use super::config::FlowConfig;
 use super::dto::{SessionResponse, TokenPair, UserResponse};
 use super::repository::{self, Model};
 use crate::modules::mail::Mailer;
 
+pub mod account;
 pub mod password;
 pub mod session;
 pub mod verification;
 
+pub use account::change_email;
 pub use session::{
     login, logout, me, refresh, register, revoke_session, revoke_sessions, sessions,
 };
@@ -142,6 +145,25 @@ fn notify(
             "préparation du courriel échouée"
         );
     }
+}
+
+/// Prévient le titulaire d'une adresse qu'on a tenté de la lui prendre.
+///
+/// Détaché comme le lien d'une adresse neuve : les deux branches de `register`, comme
+/// celles de `change_email`, répondent dans le même temps.
+pub(super) fn warn_taken(mail: &Mailer, flows: &FlowConfig, titulaire: Model) {
+    let (mail, flows) = (mail.clone(), flows.clone());
+    detach(titulaire.id, "inscription", async move {
+        notify(
+            &mail,
+            &titulaire,
+            "Tentative d'inscription avec votre adresse",
+            "inscription.html",
+            minijinja::context! { forgot_url => flows.page("forgot-password") },
+        );
+
+        Ok(())
+    });
 }
 
 /// Lance `travail` sans l'attendre ; son échec va au journal, avec le compte.

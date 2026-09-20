@@ -98,8 +98,8 @@ Chaque couche ne voit que la suivante. Un `service` n'accède jamais *directemen
 requête SeaORM ; un `controller` n'en construit jamais. Cette règle rend chaque fichier
 lisible isolément.
 
-**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires, vingt au
-total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est cette liste que
+**Le CLI ne réécrit jamais d'AST.** Il insère dans des ancres en commentaires, vingt-deux
+au total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est cette liste que
 `rbs doctor` parcourt, et non celle-ci :
 
 
@@ -118,37 +118,56 @@ total, énumérées par `ANCRES` dans `crates/rbs-cli/src/anchors.rs` — c'est 
 | `// <rbs:seeds>` | `src/seeds/main.rs` |
 | `# <rbs:services>` | `docker-compose.yml` — la seule en YAML, optionnelle |
 | `# <rbs:ignore>` | `.gitignore` — ce qu'un fragment exclut du dépôt, optionnelle |
+| `# <rbs:make>` | `Makefile` — le raccourci qu'ajoute un fragment, optionnelle |
 | `// <rbs:health_probes>` | `src/health/controller.rs` |
 | `// <rbs:jobs>` | `src/modules/jobs/mod.rs` — le registre que pose le fragment `jobs`, optionnelle |
 | `// <rbs:job_modules>` | `src/modules/jobs/mod.rs` — la déclaration du module qu'engendre `rbs generate job`, optionnelle |
 | `// <rbs:schedules>` | `src/modules/scheduler/mod.rs` — l'échéance qu'engendre `rbs generate job --every`, optionnelle |
 | `// <rbs:auth_impl>` | `src/auth/mod.rs` — la seule ancre *intérieure* à un bloc `impl`, posée par le fragment `auth`, optionnelle |
+| `// <rbs:vite_proxy>` | `frontend/vite.config.ts` — les préfixes que le serveur de développement relaie au binaire, posés par le fragment `frontend`, optionnelle |
 | `// <rbs:admin_routes>` | `frontend/src/admin/montage.ts` — la table de routage de l'espace d'administration, posée par le fragment `frontend-admin`, optionnelle |
 | `// <rbs:admin_rail>` | `frontend/src/admin/rail.ts` — les entrées du rail, posées par le même fragment, optionnelle |
 
-Neuf sont optionnelles. Huit le sont parce que leur fichier porteur peut manquer :
+Onze sont optionnelles. Neuf le sont parce que leur fichier porteur peut manquer :
 `modules`, sur un projet qui n'a encore reçu aucun fragment ; `services`, sur un projet
 sans compose ; `jobs` et `job_modules`, sans le fragment `jobs` ; `schedules`, sans le
-fragment `scheduler` ; `auth_impl`, sans le fragment `auth` ; `admin_routes` et
-`admin_rail`, sans le fragment `frontend-admin`. La neuvième, `ignore`, vit
-dans un fichier que le squelette écrit toujours : elle est optionnelle parce que ce
-fichier appartient au développeur, qui peut l'avoir supprimé.
+fragment `scheduler` ; `auth_impl`, sans le fragment `auth` ; `vite_proxy`, sans le
+fragment `frontend` ; `admin_routes` et `admin_rail`, sans le fragment `frontend-admin`.
+Les deux dernières, `ignore` et `make`, vivent dans des fichiers que le squelette écrit
+toujours : elles sont optionnelles parce que ces fichiers appartiennent au développeur, qui
+peut les avoir supprimés.
+
+`make` vise le `Makefile` que pose le squelette : des **raccourcis** — le mot du
+`CONTEXT.md` — qui n'appellent que `cargo`, `npm` et `docker compose`, jamais `rbs`. Un
+projet engendré appartient à son auteur et doit tourner sur une machine qui n'a pas le
+générateur. **Un fragment n'inscrit une cible que s'il apporte un exécutable de plus à
+lancer** : `frontend` en pose trois et sa moitié de `make dev`, `docker` en pose une,
+`jobs` et `observability` aucune — ce qu'ils apportent tourne déjà dans le binaire. Les
+noms de cibles sont invariants et en anglais quelle que soit `--lang` ; seules les
+descriptions qu'affiche `make help` sont traduites.
 
 `auth_impl` est la seule à vivre *dans* un bloc `impl` : ce qu'on y insère est une
 méthode, et une ancre mal placée y romprait la compilation plutôt que d'ajouter une ligne
 morte.
 
-`admin_routes` et `admin_rail` sont les deux seules du frontend, et les seules en
-TypeScript — `ignore`, elle, vit dans le fichier d'exclusions. Il n'y en a pas de troisième pour déclarer le module d'un écran : en
+`vite_proxy`, `admin_routes` et `admin_rail` sont les trois seules du frontend, et les
+seules en TypeScript — `services`, `ignore` et `make`, elles, sont les trois seules au
+marqueur `#`.
+Les trois prennent `//` : un `#` n'ouvre pas un commentaire en TypeScript, où il ne nomme
+qu'un membre privé de classe, et l'ancre y arrêterait la construction du client plutôt que
+de s'y taire. Il n'y en a pas de quatrième pour déclarer le module d'un écran : en
 TypeScript, l'import qui donne son composant à la route *est* la déclaration, là où Rust
 demande un `pub mod` distinct du montage. `admin_rail` vit dans un module `.ts` et non
 dans le `<template>` de la coquille — le mécanisme ne sait ouvrir une ancre que derrière
 `//` ou `#` — et le rail, servi deux fois, parcourt cette liste aux deux endroits.
 
-`generate crud` en emploie six, huit sur un projet portant le fragment `frontend-admin` :
-il y écrit aussi l'écran d'administration de la table, et le monte par `admin_routes` et
-`admin_rail` — les deux seules ancres que la commande vise sans qu'elles appartiennent au
-squelette, et les deux seules qu'elle saute plutôt que de refuser quand l'ancre manque.
+`generate crud` en emploie six, sept sur un projet portant le fragment `frontend` — il
+inscrit alors le préfixe de route de la table dans `vite_proxy`, faute de quoi `npm run dev`
+rendrait l'application en réponse à son appel — et neuf s'il porte aussi `frontend-admin` :
+il y écrit l'écran d'administration de la table, et le monte par `admin_routes` et
+`admin_rail`. Ces trois-là sont les seules ancres que la commande vise sans qu'elles
+appartiennent au squelette, et les seules qu'elle saute plutôt que de refuser quand l'ancre
+manque.
 `generate job` en emploie trois — `job_modules` et
 `schedules`, qui ne servent qu'à lui, et `jobs`, où le fragment `webhooks` inscrit aussi sa
 livraison ; les autres appartiennent aux fragments qu'installe `add`. Une ancre insérée dans `<rbs:layers>` est *intérieure* à `trace` et `request_id` :

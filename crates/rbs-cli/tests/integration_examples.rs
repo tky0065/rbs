@@ -422,25 +422,33 @@ fn mask_core_path(ligne: &str) -> String {
 
 /// Neutralise un secret tiré à l'installation, que deux générations ne partagent jamais.
 ///
+/// Une clé par `[[env]] secret = true` du catalogue : le fragment `auth` en déclare deux,
+/// le secret de signature et le mot de passe du compte d'administration, et les deux
+/// atterrissent dans le `.env` versionné de trois exemples.
+///
 /// Seule la forme tirée — soixante-quatre hexadécimaux — est masquée : le placeholder
 /// de `.env.example` reste comparé caractère par caractère, et une template qui cesserait
 /// d'y déclarer la variable serait toujours signalée.
 fn mask_secret(ligne: &str) -> String {
-    const CLE: &str = "RBS_AUTH__SECRET=";
+    const CLES: [&str; 2] = ["RBS_AUTH__SECRET=", "ADMIN_PASSWORD="];
 
-    let Some(valeur) = ligne.strip_prefix(CLE) else {
-        return ligne.to_string();
-    };
+    for cle in CLES {
+        let Some(valeur) = ligne.strip_prefix(cle) else {
+            continue;
+        };
 
-    if valeur.len() != 64
-        || !valeur
-            .chars()
-            .all(|lettre| lettre.is_ascii_hexdigit() && !lettre.is_uppercase())
-    {
-        return ligne.to_string();
+        if valeur.len() != 64
+            || !valeur
+                .chars()
+                .all(|lettre| lettre.is_ascii_hexdigit() && !lettre.is_uppercase())
+        {
+            return ligne.to_string();
+        }
+
+        return format!("{cle}<SECRET>");
     }
 
-    format!("{CLE}<SECRET>")
+    ligne.to_string()
 }
 
 /// Remplace `m20260826_205243` par `m<STAMP>` : le nom d'une migration porte la date et
@@ -692,6 +700,21 @@ fn a_drawn_secret_is_neutralised_but_the_published_placeholder_is_not() {
     assert_eq!(normalize(premier), normalize(second));
     assert_ne!(normalize(premier), normalize(exemple));
     assert_eq!(normalize(exemple), exemple);
+
+    // Le mot de passe du compte d'administration est tiré de la même façon, et atterrit
+    // dans le même fichier versionné : sans lui, la comparaison signalerait une dérive à
+    // chaque génération.
+    let mot_de_passe =
+        "ADMIN_PASSWORD=1f3c9a7e5b2d8064af1e3c5970b2d846e1c3a597f0b2d8461f3c9a7e5b2d8064";
+    let autre = "ADMIN_PASSWORD=0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0";
+    let repere = "ADMIN_PASSWORD=changez-moi-ce-mot-de-passe-est-publie-dans-git";
+
+    assert_eq!(normalize(mot_de_passe), normalize(autre));
+    assert_eq!(normalize(repere), repere);
+
+    // L'adresse, elle, se déduit du projet : elle doit rester comparée telle quelle.
+    let adresse = "ADMIN_EMAIL=admin@blog-auth.test";
+    assert_eq!(normalize(adresse), adresse);
 }
 
 /// Vérifie que la comparaison voit une dérive de contenu, et pas seulement de nom de

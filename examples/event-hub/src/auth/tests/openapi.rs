@@ -13,19 +13,21 @@ async fn openapi_document(api: &Router) -> Value {
     document
 }
 
-/// Douze chemins, treize points d'entrée : `/auth/sessions` porte à la fois la liste et
-/// la révocation globale. Un `#[utoipa::path]` qui disparaîtrait du document sans que
-/// cette suite rougisse laisserait le client TypeScript, déduit de ce même document, en
-/// silence sur la route perdue.
+/// Treize chemins, quinze points d'entrée : `/auth/sessions` porte à la fois la liste et
+/// la révocation globale, et `/auth/me` la lecture du profil et l'écriture de l'adresse.
+/// Un `#[utoipa::path]` qui disparaîtrait du document sans que cette suite rougisse
+/// laisserait le client TypeScript, déduit de ce même document, en silence sur la route
+/// perdue.
 #[tokio::test]
 #[ignore = "joint la base du projet"]
-async fn the_openapi_document_carries_the_thirteen_auth_operations() {
+async fn the_openapi_document_carries_the_fifteen_auth_operations() {
     let api = application().await;
 
     let document = openapi_document(&api).await;
 
     for chemin in [
         "/auth/register",
+        "/auth/registration",
         "/auth/login",
         "/auth/refresh",
         "/auth/logout",
@@ -44,11 +46,16 @@ async fn the_openapi_document_carries_the_thirteen_auth_operations() {
         );
     }
 
-    for methode in ["get", "delete"] {
-        assert!(
-            document["paths"]["/auth/sessions"][methode].is_object(),
-            "`{methode} /auth/sessions` ne figure pas dans le document"
-        );
+    for (chemin, methodes) in [
+        ("/auth/sessions", ["get", "delete"]),
+        ("/auth/me", ["get", "patch"]),
+    ] {
+        for methode in methodes {
+            assert!(
+                document["paths"][chemin][methode].is_object(),
+                "`{methode} {chemin}` ne figure pas dans le document"
+            );
+        }
     }
 }
 
@@ -66,15 +73,17 @@ async fn the_bearer_scheme_is_declared_and_me_carries_it() {
     assert_eq!(schema["scheme"], "bearer", "{schema}");
     assert_eq!(schema["bearerFormat"], "JWT", "{schema}");
 
-    let securite = &document["paths"]["/auth/me"]["get"]["security"];
-    assert!(
-        securite.is_array() && !securite.as_array().expect("tableau").is_empty(),
-        "`/auth/me` ne déclare pas exiger de jeton : {securite}"
-    );
-    assert!(
-        securite[0]["bearer"].is_array(),
-        "`/auth/me` n'exige pas le schéma `bearer` : {securite}"
-    );
+    for methode in ["get", "patch"] {
+        let securite = &document["paths"]["/auth/me"][methode]["security"];
+        assert!(
+            securite.is_array() && !securite.as_array().expect("tableau").is_empty(),
+            "`{methode} /auth/me` ne déclare pas exiger de jeton : {securite}"
+        );
+        assert!(
+            securite[0]["bearer"].is_array(),
+            "`{methode} /auth/me` n'exige pas le schéma `bearer` : {securite}"
+        );
+    }
 }
 
 /// `refresh` et `logout` s'authentifient par leur corps : leur apposer le schéma

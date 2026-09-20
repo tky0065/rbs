@@ -3,10 +3,10 @@ use serde::Deserialize;
 /// Ce que la connexion et les parcours de réinitialisation et de vérification lisent dans
 /// `[auth]`.
 ///
-/// Ces quatre clés vivent ici et non dans `rbs_core::config::AuthConfig`, qui les
+/// Ces cinq clés vivent ici et non dans `rbs_core::config::AuthConfig`, qui les
 /// ignorerait : le noyau porte ce qui ne varie pas d'un projet à l'autre, et l'adresse de
 /// votre application n'entre pas dans cette catégorie. C'est donc ce fichier que vous
-/// ouvrirez pour changer les durées ou l'URL des liens.
+/// ouvrirez pour changer les durées, l'URL des liens ou l'ouverture des inscriptions.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(default)]
 pub struct FlowConfig {
@@ -20,6 +20,10 @@ pub struct FlowConfig {
     /// passe. `false` connecte dès l'inscription, et rouvre l'écart que `register` suivi
     /// de `login` forme alors : la réponse dit si l'adresse était libre.
     pub login_requires_verification: bool,
+    /// Ouvre `POST /auth/register`. `false` la ferme pour tout le monde, navigateur ou
+    /// non : la route refuse avant de lire l'adresse, et le shell d'administration cesse
+    /// d'offrir son écran d'inscription.
+    pub registration_enabled: bool,
 }
 
 impl Default for FlowConfig {
@@ -27,14 +31,15 @@ impl Default for FlowConfig {
         Self {
             reset_ttl_secs: 3600,
             verification_ttl_secs: 86_400,
-            app_url: "http://localhost:3000".to_string(),
+            app_url: "http://localhost:8080".to_string(),
             login_requires_verification: true,
+            registration_enabled: true,
         }
     }
 }
 
 impl FlowConfig {
-    /// Lit la section `[auth]`, dont elle ne retient que ses quatre clés.
+    /// Lit la section `[auth]`, dont elle ne retient que ses cinq clés.
     pub fn from_config() -> anyhow::Result<Self> {
         Ok(rbs_core::config::section::<Self>("auth")?)
     }

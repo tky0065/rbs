@@ -12,6 +12,132 @@ between minor versions with no deprecation cycle.
 
 ## [Unreleased]
 
+### Added
+
+- **`rbs routes` and `rbs generate client` take `--from <FILE>`**, a contract already frozen
+  by `rbs openapi export --out openapi.json`, read instead of compiling the project. `rbs
+  routes --from` does not even ask for an rbs project around it. It is what a CI job that
+  commits its contract needs to review it or to build its client with no Rust toolchain, and
+  the way out when the memorised contract below is wrong. `rbs openapi export` deliberately
+  has none: it is the command that *produces* the contract, and reading one file to write
+  another would reduce it to a copy.
+
+- **A generated project now carries a `Makefile`, and no longer depends on its generator.**
+  Until now the only documented way to run anything was through the CLI — `rbs dev`, `rbs
+  migrate` — so a colleague who cloned the repository had to install `rbs-cli` before typing
+  a single command. The skeleton writes thirteen shortcuts instead: `dev`, `back`, `build`,
+  `test`, `lint`, `fmt`, `migrate`, `seed`, `up`, `down`, `openapi`, `clean`, and a `help`
+  that reads the file itself and is what a bare `make` runs. Every recipe wraps `cargo`,
+  `npm` or `docker compose`; none of them calls `rbs`. `make dev` runs everything the
+  project carries in one process group — a single Ctrl-C stops all of it — with no new
+  dependency: a `trap 'kill 0' INT TERM EXIT` and a `wait`. Target names are the same in
+  every language, only the descriptions `make help` prints follow `--lang`.
+
+- **A new `# <rbs:make>` anchor**, the twenty-second of the registry and the third carrying
+  Git's `#` marker, is where a fragment adds a shortcut of its own — `rbs add frontend`
+  writes `front`, `front-build`, `typecheck` and its half of `make dev`, `rbs add docker`
+  writes `image`. A fragment writes one only when it brings one more executable to run, so
+  `jobs` and `observability` write none. The anchor is optional, for the same reason
+  `# <rbs:ignore>` is: the skeleton writes the file, but the file belongs to the developer,
+  who may have deleted it. The registry goes from twenty-one anchors to twenty-two, eleven
+  of them optional.
+
+### Changed
+
+- **The contract is memorised, and the three commands that read it no longer recompile the
+  project each time.** `rbs routes`, `rbs openapi export` and `rbs generate client` all run
+  the project's `openapi` binary — a full debug build of an Axum + SeaORM + utoipa project,
+  around a minute on a cold target — and they are usually typed one after another. The
+  document now lands in `target/rbs/openapi.json`, keyed by the SHA-256 digest of the path
+  **and** the content of every file under `src/` and `migration/src/`, plus `Cargo.lock`: a
+  file edited, renamed or deleted invalidates it, and so does a dependency bump that moves
+  the contract without touching a line of the project. On a fresh project, a first `rbs
+  routes` takes 30.2 s and the next one 12 ms. `target/` is already ignored by git and
+  already erased by `cargo clean`, which is the reason for that location rather than a
+  directory of its own. The cache never fails a command: an unwritable `target/`, a
+  truncated document or an unreadable digest all end in a plain recompilation.
+
+- **`rbs generate crud` rewrites the generated client right after the entity**, on a project
+  that already carries one. The admin screen it emits imports `@/api/client`, so until now
+  `npm run typecheck` was broken by construction after every generation and the command
+  merely printed the line to run. The client is rewritten from the **contract**, never from
+  the entity spec the command has just produced: deducing it would give the client two
+  producers drawing on two sources, and nothing would say which one lies the day they
+  diverge. The generation therefore pays one incremental rebuild, by construction — the
+  module has just been added, so the memorised contract is stale at the moment the command
+  needs it. It stays conditional: a project with no client keeps the old behaviour, the
+  command printing the `rbs generate client` line rather than inventing a `frontend/src/api`
+  nobody asked for. A project that does not compile gets a warning and the line to rerun; the
+  entity and its migration are on disk either way.
+
+- **The `[auth]` section is now doubled in `config/development.toml`.**
+  `login_requires_verification` stays `true` in `config/default.toml`, which governs
+  production, and is `false` on a workstation: an account signed up through the API is
+  never verified, and no generated screen calls `/auth/verify-email`. `app_url` moves from
+  `http://localhost:3000`, a port where nothing listens, to `http://localhost:8080` by
+  default — the port the binary serves the built client on — and `http://localhost:5173`,
+  Vite's, in development.
+
+### Fixed
+
+- **A project generated with `auth` had no account able to reach its admin space.**
+  `register` sets no role and the `users.role` column defaults to `"user"`, so no path
+  through the API ever produced an administrator — while the admin sign-in screen told
+  the user the credentials were those of the accounts table the project carries, an empty
+  one. `rbs add auth` now lays down `src/seeds/admin.rs` and declares it in the project's
+  seed binary: `rbs seed` writes one account holding `Role::Admin`, its address already
+  marked verified. Its credentials are the new `ADMIN_EMAIL` and `ADMIN_PASSWORD` — the
+  address derived from the project's name, the password drawn at install — written into
+  the gitignored `.env`, with placeholders left in the versioned `.env.example`, and named
+  by the fragment's next steps. The seed writes nothing when the account exists, nothing
+  when either variable is missing or blank, and refuses to run under `RBS_ENV=production`;
+  that last refusal lives in the seed rather than in `rbs seed`, which
+  `cargo run --bin seed` never passes through.
+
+- **The dev server now relays the prefixes `rbs generate crud` adds.** `frontend/vite.config.ts`
+  relayed a fixed list — `/health`, `/docs`, `/api-docs`, plus `/auth` when the admin shell is
+  there — while every generated table adds a route prefix of its own: under `npm run dev`, the
+  admin screen the command had just written called `/articles` on Vite's port and got the
+  application back instead of a page of rows. A new `// <rbs:vite_proxy>` anchor sits in that
+  list, and `rbs generate crud` writes the table's prefix into it, idempotently, on any project
+  carrying `frontend` — `--no-admin` does not take it away, the relay being about the API rather
+  than the screen. The registry goes from twenty anchors to twenty-one, ten of them optional. A
+  project generated before this release has the fixed list and no anchor: `rbs doctor` names it
+  and prints the block, and `rbs doctor --fix` puts it back under `'/api-docs',`.
+
+- **Four of the thirteen routes `auth` exposes had no caller in the frontend.**
+  `authRegister`, `authResetPassword`, `authVerifyEmail` and `authResendVerification` were
+  in the generated client and nowhere else: whoever had no account yet, had lost the
+  password, or whose address was still waiting for its proof had nothing to open. The admin
+  shell now carries three more public pages beside its sign-in page — `/admin/inscription`,
+  `/admin/reinitialisation` and `/admin/verification`, the last with a resend button — the
+  route guard's exception covering the four rather than sign-in alone. They mount outside
+  the shell and outside the rail, which is the navigation of an authenticated space. The
+  three paths `auth` puts in its emails — `/forgot-password`, `/reset-password`,
+  `/verify-email` — are aliases of three of them: the fragment composes those from `app_url`
+  without knowing a shell is installed, and an alias serves them without the redirect that
+  would have dropped the token the link carries in the URL's fragment. The password-reset
+  request stays a dialogue of the sign-in screen: it works, and a page for one field adds
+  nothing.
+
+- **`PATCH /auth/me` gives the profile screen something to write.** `dto.rs` carried no
+  editable field and no write route existed, so "profile management" named a read-only
+  page. The new route takes an address and nothing else — the same `EmailRequest` body that
+  `forgot-password` and `resend-verification` read — writes it, drops `email_verified_at`
+  back to `NULL` since the proof was about the old address, and sends a fresh verification
+  link. Like `register` it answers the same 202 whether the address was free or already
+  taken, and warns the holder in the second case rather than telling the caller. No column
+  is added: the user model belongs to the user.
+
+- **`auth.registration_enabled` closes registration on the server, not on the screen.**
+  `POST /auth/register` was open on every project carrying `auth`. The new key, `true` by
+  default, makes the route refuse before it reads the address — a 403 whose problem
+  document carries the stable code `registration_closed` — and a new public
+  `GET /auth/registration` says so, which is how an application served as static files
+  learns a setting the server reads at startup. The shell's sign-up screen asks it and shows
+  the closed message instead of the form; the sign-in screen drops the link to it. `auth`
+  now mounts fifteen routes on thirteen paths.
+
 ## [1.7.0] — 2026-09-19
 
 ### Added

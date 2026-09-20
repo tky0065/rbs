@@ -235,6 +235,13 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
         "authRevokeSession(",
         "authRevokeSessions(",
         "authChangePassword(",
+        "authUpdateMe(",
+        "authRegister(",
+        "authRegistrationStatus(",
+        "authForgotPassword(",
+        "authResetPassword(",
+        "authVerifyEmail(",
+        "authResendVerification(",
         "health(",
         "bordereauxFilter(",
         "bordereauxFind(",
@@ -283,6 +290,9 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
     for ecran in [
         "Shell-",
         "Connexion-",
+        "Inscription-",
+        "Reinitialisation-",
+        "Verification-",
         "TableauDeBord-",
         "Sessions-",
         "Profil-",
@@ -300,8 +310,10 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
     // couche d'état, puis le client engendré — reviendrait à livrer toute l'administration
     // dans le morceau d'entrée sans qu'aucun nom de fichier ne le dise.
     //
-    // La route de réinitialisation est le témoin : le client l'expose, et seul
-    // l'espace d'administration l'appelle.
+    // Le témoin est le *nom de méthode* du client, et non le chemin `/forgot-password` :
+    // depuis que les liens des courriels sont portés en `alias` par les écrans publics, ce
+    // chemin est une chaîne de la table de routage, que le montage met de toute façon dans
+    // le morceau d'entrée. Seul le client engendré écrit `authResetPassword`.
     let entree = std::fs::read_dir(repertoire.join("dist/assets"))
         .expect("le build écrit ses assets")
         .filter_map(Result::ok)
@@ -312,7 +324,7 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
         .expect("le build écrit un morceau d'entrée");
     let entree = std::fs::read_to_string(entree.path()).expect("le morceau d'entrée se lit");
     assert!(
-        !entree.contains("forgot-password"),
+        !entree.contains("authResetPassword"),
         "le client engendré part dans le morceau d'entrée, que télécharge le visiteur de \
          l'accueil"
     );

@@ -72,10 +72,12 @@ export type DateTimeComparisonSchema = DateTimeSchema | DateTimeComparisonOperat
 export type DateTimeSchema = string
 
 /**
- * Ce que postent `forgot-password` et `resend-verification`.
+ * Ce que postent `forgot-password`, `resend-verification` et `PATCH /auth/me`.
  * 
- * Une seule structure pour les deux : elles prennent la même chose, et deux structures
- * identiques divergeraient un jour sans raison.
+ * Une seule structure pour les trois : elles prennent la même chose, et trois structures
+ * identiques divergeraient un jour sans raison. C'est aussi ce qui tient la règle que la
+ * dernière porte — `PATCH /auth/me` n'accepte *que* l'adresse : un champ ajouté ici
+ * serait aussitôt visible dans les deux autres, et ne passerait pas inaperçu.
  */
 export interface EmailRequest {
   email: string;
@@ -183,6 +185,17 @@ export interface RefreshRequest {
 export interface RegisterRequest {
   email: string;
   password: string;
+}
+
+/**
+ * Ce que rend `GET /auth/registration`.
+ * 
+ * Le seul moyen qu'a une application servie en fichiers statiques de connaître un
+ * réglage que le serveur lit à son démarrage : sans cette route, l'écran d'inscription
+ * ne saurait pas qu'il est fermé, et le visiteur ne l'apprendrait qu'en postant.
+ */
+export interface RegistrationStatus {
+  enabled: boolean;
 }
 
 export interface ResetPasswordRequest {
@@ -369,6 +382,16 @@ export class ApiClient {
     return this.request<UserResponse>("GET", "/auth/me");
   }
 
+  /**
+   * PATCH /auth/me
+   * requiert un jeton
+   */
+  authUpdateMe(body: EmailRequest): Promise<void> {
+    return this.request<void>("PATCH", "/auth/me", {
+      body,
+    });
+  }
+
   /** POST /auth/refresh */
   authRefresh(body: RefreshRequest): Promise<TokenPair> {
     return this.request<TokenPair>("POST", "/auth/refresh", {
@@ -381,6 +404,11 @@ export class ApiClient {
     return this.request<void>("POST", "/auth/register", {
       body,
     });
+  }
+
+  /** GET /auth/registration */
+  authRegistrationStatus(): Promise<RegistrationStatus> {
+    return this.request<RegistrationStatus>("GET", "/auth/registration");
   }
 
   /** POST /auth/resend-verification */

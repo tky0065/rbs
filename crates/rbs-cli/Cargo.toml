@@ -25,6 +25,9 @@ rand.workspace = true
 semver.workspace = true
 serde.workspace = true
 serde_json.workspace = true
+# Le condensat qui indexe le contrat mémorisé. La version est celle que le workspace
+# épingle déjà pour la feature `auth` de `rbs-core` : le verrou n'y gagne aucune ligne.
+sha2.workspace = true
 thiserror.workspace = true
 tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 toml_edit = { workspace = true, features = ["serde"] }

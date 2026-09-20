@@ -196,7 +196,9 @@ fn the_services_chaining_writes_open_one_transaction() {
     }
 }
 
-/// Les chemins sont montés dès l'installation, un de plus à chaque tâche jusqu'à treize.
+/// Les chemins sont montés dès l'installation : treize, pour quinze points d'entrée —
+/// `/auth/sessions` porte la liste et la révocation globale, `/auth/me` la lecture du
+/// profil et l'écriture de l'adresse.
 #[test]
 fn the_auth_paths_are_mounted() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
@@ -207,6 +209,7 @@ fn the_auth_paths_are_mounted() {
 
     for chemin in [
         "/auth/register",
+        "/auth/registration",
         "/auth/login",
         "/auth/refresh",
         "/auth/logout",
@@ -226,8 +229,9 @@ fn the_auth_paths_are_mounted() {
     }
 }
 
-/// La découpe par couche est ce qui rend le fragment lisible à treize routes : chaque
-/// couche est un répertoire, et le sens de la dépendance ne change pas.
+/// La découpe par couche est ce qui rend le fragment lisible à quinze routes : chaque
+/// couche est un répertoire, un fichier par parcours, et le sens de la dépendance ne
+/// change pas.
 #[test]
 fn each_layer_is_a_directory() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
@@ -239,10 +243,13 @@ fn each_layer_is_a_directory() {
         "src/auth/repository/refresh_token.rs",
         "src/auth/service/mod.rs",
         "src/auth/service/session.rs",
+        "src/auth/service/account.rs",
         "src/auth/controller/mod.rs",
         "src/auth/controller/session.rs",
+        "src/auth/controller/account.rs",
         "src/auth/tests/mod.rs",
         "src/auth/tests/registration.rs",
+        "src/auth/tests/account.rs",
     ] {
         assert!(
             racine.join(fichier).is_file(),
@@ -539,6 +546,8 @@ fn the_auth_tests_of_the_generated_project_pass() {
         "auth::tests::verification::a_verified_address_is_not_sent_a_new_token",
         "auth::tests::verification::verifying_again_keeps_the_first_date",
         "auth::tests::tokens::an_emission_purges_the_expired_tokens_of_every_account",
+        "auth::tests::account::a_taken_address_returns_the_same_202_and_changes_nothing",
+        "auth::tests::account::the_route_writes_nothing_but_the_address",
     ] {
         assert!(
             rendu.contains(&format!("test {test} ... ok")),
@@ -1036,9 +1045,16 @@ fn blog_auth_on(url: &str, parent: &TempDir) -> PathBuf {
     // Le `.env` est réécrit en entier : la base est celle du conteneur, et le secret que
     // l'installation a tiré est remplacé par une valeur connue, sans quoi les jetons que
     // le test forge lui-même ne seraient plus vérifiables.
+    //
+    // La preuve d'adresse est réimposée par l'environnement : le serveur tourne sous le
+    // profil `development`, que `config/development.toml` lève pour le poste de travail,
+    // et ce sont les règles de production que ces parcours éprouvent.
     fs::write(
         racine.join(".env"),
-        format!("RBS_ENV=development\nRBS_DATABASE__URL={url}\nRBS_AUTH__SECRET={SECRET}\n"),
+        format!(
+            "RBS_ENV=development\nRBS_DATABASE__URL={url}\nRBS_AUTH__SECRET={SECRET}\n\
+             RBS_AUTH__LOGIN_REQUIRES_VERIFICATION=true\n"
+        ),
     )
     .expect("le `.env` de la copie est inscriptible");
 
@@ -1133,9 +1149,15 @@ fn project_with_auth_on_engine(moteur: &str, url: &str, parent: &TempDir) -> Pat
         .assert()
         .success();
 
+    // Le secret tiré cède à une valeur connue, sans quoi les jetons que les tests forgent
+    // ne seraient plus vérifiables ; et la preuve d'adresse est réimposée, que le profil
+    // `development` du projet lève pour le poste de travail — c'est la règle de production
+    // que ces parcours éprouvent.
     let env = racine.join(".env");
     let mut contenu = fs::read_to_string(&env).expect(".env lisible");
-    contenu.push_str(&format!("\nRBS_AUTH__SECRET={SECRET}\n"));
+    contenu.push_str(&format!(
+        "\nRBS_AUTH__SECRET={SECRET}\nRBS_AUTH__LOGIN_REQUIRES_VERIFICATION=true\n"
+    ));
     fs::write(&env, contenu).expect(".env inscriptible");
 
     racine
