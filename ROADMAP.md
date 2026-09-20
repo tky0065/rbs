@@ -162,6 +162,29 @@ que `frontend-admin` est posé — sur le même principe qu'il écrit des routes
 routage et le rail, ce qui monte le registre à vingt. Un `--no-admin` reste la sortie de
 secours. Motif et renversement en `docs/adr/0003`.
 
+### v1.8 — Le projet engendré s'ouvre et se lance
+
+Un projet créé avec les seize fragments s'ouvrait sur une impasse : aucun chemin engendré ne
+produisait un compte capable d'entrer dans l'espace d'administration, quand l'écran de
+connexion affirmait que les identifiants étaient ceux de la table des comptes — une table
+vide. Le fragment `auth` dépose désormais un seed qui crée le premier compte à partir de
+deux variables tirées au hasard à l'installation et rendues par ses `next_steps` :
+administrateur, adresse déjà vérifiée, sans effet si le compte existe ou si les variables
+sont vides, et refusé sous `RBS_ENV=production`. Le shell d'administration gagne les trois
+pages publiques qui lui manquaient — inscription, réinitialisation, vérification d'adresse
+—, et le compte devient modifiable.
+
+Le squelette pose un `Makefile` dont les raccourcis n'appellent que `cargo`, `npm` et
+`docker compose`, jamais le générateur : un collègue qui clone le dépôt lance `make dev`
+sans installer le CLI. Deux ancres nouvelles portent ces insertions — `# <rbs:make>`, et
+`// <rbs:vite_proxy>` où `generate crud` inscrit le préfixe de route de la table, faute de
+quoi l'écran qu'il vient d'écrire ne chargerait rien en développement —, ce qui monte le
+registre à vingt-deux. Lire le contrat devient instantané : il est mémorisé sous la cible
+de build, invalidé par un condensat des sources, et `rbs routes` comme `rbs generate
+client` prennent un `--from <FICHIER>` pour une CI sans toolchain Rust. Enfin la couche de
+transport du frontend descend du shell vers le socle, dont elle est le prérequis et non le
+complément — `docs/adr/0004`.
+
 ---
 
 ## Hors périmètre
@@ -198,3 +221,4 @@ liste à laquelle on ne peut plus se fier.
 | v1.5 Robustesse | ✅ livré — publiée dans la 1.6.0, le numéro 1.5.0 n'ayant jamais été tagué |
 | v1.6 Retrait et clés d'API | ✅ livré — publiée le 2026-09-19 |
 | v1.7 Frontend | ✅ livré — publiée le 2026-09-20 |
+| v1.8 Le projet engendré s'ouvre | ✅ livré le 2026-09-20 — pas encore publié |
