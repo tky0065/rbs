@@ -13,6 +13,46 @@ dépréciation.
 
 ## [Non publié]
 
+### Ajouté
+
+- **`rbs routes` et `rbs generate client` prennent un `--from <FICHIER>`**, un contrat déjà
+  figé par `rbs openapi export --out openapi.json`, lu au lieu de compiler le projet. `rbs
+  routes --from` n'exige même pas un projet rbs autour de lui. C'est ce qu'il faut à une CI
+  qui commite son contrat pour le relire ou pour construire son client sans chaîne de
+  compilation Rust, et l'échappatoire quand le contrat mémorisé ci-dessous se trompe. `rbs
+  openapi export` n'en a délibérément pas : c'est la commande qui *produit* le contrat, et
+  lire un fichier pour en écrire un autre la réduirait à une copie.
+
+### Modifié
+
+- **Le contrat est mémorisé, et les trois commandes qui le lisent ne recompilent plus le
+  projet à chaque fois.** `rbs routes`, `rbs openapi export` et `rbs generate client` lancent
+  toutes le binaire `openapi` du projet — une compilation complète en profil dev d'un projet
+  Axum + SeaORM + utoipa, de l'ordre de la minute sur cible froide — et se tapent d'ordinaire
+  l'une après l'autre. Le document atterrit désormais dans `target/rbs/openapi.json`, indexé
+  par le condensat SHA-256 du chemin **et** du contenu de chaque fichier de `src/` et de
+  `migration/src/`, plus `Cargo.lock` : un fichier retouché, renommé ou supprimé l'invalide,
+  et une montée de dépendance aussi, qui déplace le contrat sans toucher une ligne du projet.
+  Sur un projet neuf, un premier `rbs routes` prend 30,2 s et le suivant 12 ms. `target/` est
+  déjà ignoré par git et déjà effacé par `cargo clean`, et c'est le motif de cet emplacement
+  plutôt qu'un répertoire à soi. Le cache ne fait jamais échouer une commande : un `target/`
+  non inscriptible, un document tronqué ou un condensat illisible se soldent tous par une
+  simple recompilation.
+
+- **`rbs generate crud` réécrit le client engendré à sa suite**, sur un projet qui en porte
+  déjà un. L'écran d'administration qu'il émet importe `@/api/client` : jusqu'ici `npm run
+  typecheck` était cassé par construction après chaque génération, et la commande se
+  contentait d'afficher le geste à faire. Le client est réécrit depuis le **contrat**, jamais
+  depuis la spec d'entité que la commande vient de produire : le déduire donnerait au client
+  deux producteurs tirant de deux sources, et rien ne dirait laquelle ment le jour où elles
+  divergent. La génération paie donc une recompilation incrémentale, par construction — le
+  module vient d'être ajouté, et le contrat mémorisé est invalide à l'instant où la commande
+  en a besoin. Cela reste conditionnel : un projet sans client garde l'ancien comportement,
+  la commande affichant la ligne `rbs generate client` plutôt que d'inventer un
+  `frontend/src/api` que personne n'a demandé. Un projet qui ne compile pas reçoit un
+  avertissement et le geste à relancer ; l'entité et sa migration sont sur le disque dans les
+  deux cas.
+
 ### Corrigé
 
 - **Un projet engendré avec `auth` n'avait aucun compte capable d'entrer dans son espace

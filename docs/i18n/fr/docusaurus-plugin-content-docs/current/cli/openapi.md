@@ -44,6 +44,29 @@ Le texte est analysé avant d'être écrit. Un binaire retouché pour imprimer a
 laisserait sinon un fichier nommé comme un contrat, que le premier outil à le lire
 refuserait.
 
+## Le contrat mémorisé
+
+Ce `cargo run` est une compilation complète en profil dev d'un projet Axum + SeaORM +
+utoipa — de l'ordre de la minute sur cible froide, et les trois commandes qui lisent le
+contrat se tapent d'ordinaire l'une après l'autre. Le document est donc mémorisé sous
+`target/rbs/openapi.json`, à côté du condensat SHA-256 des sources qui l'ont produit,
+`target/rbs/openapi.sha256`. Sources inchangées, réponse immédiate.
+
+Le condensat couvre le chemin **et** le contenu de chaque fichier de `src/` et de
+`migration/src/`, plus `Cargo.lock`. Un fichier retouché, renommé ou supprimé le change,
+et une montée de dépendance aussi — elle déplace le contrat sans toucher une ligne du
+projet. `target/` est déjà ignoré par git et déjà effacé par `cargo clean`, et c'est le
+motif de cet emplacement plutôt qu'un répertoire à soi : il n'y a rien de nouveau à
+apprendre à nettoyer.
+
+Le cache ne fait jamais échouer une commande : un `target/` non inscriptible, un document
+tronqué, une source illisible se soldent tous par une simple recompilation.
+
+`rbs openapi export` n'a délibérément pas de `--from` : c'est la commande qui *produit* le
+contrat, et lire un fichier pour en écrire un autre la réduirait à une copie. Quand il faut
+contourner le contrat mémorisé, ce qu'on veut est une recompilation — `rm -rf target/rbs`,
+ou `cargo clean` — et non un fichier à lire.
+
 ## Figer le contrat
 
 Le document est ce sur quoi s'appuient un client, une passerelle ou une autre équipe. Le
@@ -64,4 +87,6 @@ refusés avant que cargo ne soit lancé. Un projet qui ne compile pas s'arrête 
 `` `cargo run --bin openapi` a échoué (code …) : le projet ne compile pas ``, les erreurs du
 compilateur au-dessus.
 
-[`rbs routes`](./routes.md) lit le même document et en énumère les opérations.
+[`rbs routes`](./routes.md) lit le même document et en énumère les opérations ; elle
+comme [`rbs generate client`](./client.md) prennent un `--from <FICHIER>` qui relit un
+contrat que cette commande-ci a déjà figé.

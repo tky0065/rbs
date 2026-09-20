@@ -22,9 +22,10 @@ Liste les routes du projet : méthode, chemin, operation_id et garde
 Utilisation : rbs routes [OPTIONS]
 
 Options :
-      --json     Rend les routes en JSON sur la sortie standard, pour un script ou un agent
-  -h, --help     Affiche l'aide
-  -V, --version  Affiche la version
+      --json            Rend les routes en JSON sur la sortie standard, pour un script ou un agent
+      --from <FICHIER>  Lit un document OpenAPI déjà exporté, au lieu de compiler le projet
+  -h, --help            Affiche l'aide
+  -V, --version         Affiche la version
 ```
 
 ## The table
@@ -88,14 +89,30 @@ $ rbs routes --json
 
 The block is cut after two entries; the command prints them all.
 
+## `--from`
+
+Reads a contract already exported by
+[`rbs openapi export --out openapi.json`](./openapi.md) instead of compiling the project.
+The file is relative to the directory the command runs from, and with it `rbs routes` asks
+for nothing else — not even an rbs project around it:
+
+```bash
+rbs routes --from openapi.json
+```
+
+That is what a CI job that commits its contract needs in order to review it without a Rust
+toolchain, and the way out when the memorised contract is wrong.
+
 ## Where the routes come from
 
 From the OpenAPI document, not from the router: the document carries, for every operation,
 its `operation_id` and the token requirement its annotation declares — what the router does
 not say. The document is obtained the way [`rbs openapi export`](./openapi.md) and
-[`rbs generate client`](./client.md) obtain it, by running the project's `openapi` binary,
-so a route mounted without an `#[utoipa::path]` does not show up. It is missing from the
-document too, and from every client generated from it.
+[`rbs generate client`](./client.md) obtain it, by running the project's `openapi` binary
+— or by reading what [the memorised contract](./openapi.md#the-memorised-contract) holds
+when nothing has moved, which is what makes a second run instant. A route mounted without
+an `#[utoipa::path]` does not show up. It is missing from the document too, and from every
+client generated from it.
 
 The failures are those of `rbs openapi export`, word for word. Under `--json`, the error and
 its remedy both go to standard error. The exit code is 1 for each refusal listed there, a

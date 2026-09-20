@@ -72,11 +72,15 @@ pub(crate) struct Planned {
     pub required_reference: Option<String>,
     /// La zone de l'`AGENTS.md` que le projet ne porte pas, s'il en manque une.
     pub zone_manquante: Option<crate::agents::MissingZone>,
-    /// La commande à relancer après celle-ci, quand il y en a une.
+    /// La commande qui refait le client engendré, quand cette génération en appelle un.
     ///
-    /// L'écran engendré importe le corps de la ressource depuis le client typé, que le CLI
-    /// ne régénère pas de lui-même : sans cette ligne, un frontend qui se vérifiait cesse de
-    /// se vérifier après une génération, et rien ne dit pourquoi.
+    /// L'écran engendré importe le corps de la ressource depuis le client typé. Sur un
+    /// projet qui en porte déjà un, le CLI la joue lui-même à la suite de la génération
+    /// (ADR-0004) ; sinon il l'affiche, et cette ligne est alors tout ce qui dit pourquoi un
+    /// frontend qui se vérifiait cesse de se vérifier.
+    ///
+    /// Le plan ne la porte pas : le contrat dont le client sort n'existe qu'une fois le
+    /// module écrit, donc après l'application.
     pub geste_suivant: Option<String>,
 }
 
@@ -2816,11 +2820,12 @@ mod tests {
         run(&without_admin(&root, "demonstration")).expect("le drapeau doit lever le refus");
     }
 
-    /// La commande dit de régénérer le client typé, dont l'écran engendré dépend.
+    /// La commande nomme la régénération du client typé, dont l'écran engendré dépend.
     ///
-    /// Sans cette ligne, un frontend qui se vérifiait cesse de se vérifier après une
-    /// génération — l'écran importe le corps de la ressource, que le client ne connaît pas
-    /// encore — et rien ne dirait pourquoi.
+    /// C'est elle que le CLI joue à la suite de la génération sur un projet qui porte déjà
+    /// un client, et qu'il affiche sur un projet qui n'en porte pas — l'écran importe le
+    /// corps de la ressource, que le client ne connaît pas encore, et sans l'une ou l'autre
+    /// un frontend qui se vérifiait cesse de se vérifier sans que rien ne dise pourquoi.
     #[test]
     fn the_command_names_the_client_to_regenerate() {
         let (_parent, root) = project_with_admin();

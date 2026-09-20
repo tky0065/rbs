@@ -22,9 +22,10 @@ Liste les routes du projet : méthode, chemin, operation_id et garde
 Utilisation : rbs routes [OPTIONS]
 
 Options :
-      --json     Rend les routes en JSON sur la sortie standard, pour un script ou un agent
-  -h, --help     Affiche l'aide
-  -V, --version  Affiche la version
+      --json            Rend les routes en JSON sur la sortie standard, pour un script ou un agent
+      --from <FICHIER>  Lit un document OpenAPI déjà exporté, au lieu de compiler le projet
+  -h, --help            Affiche l'aide
+  -V, --version         Affiche la version
 ```
 
 ## Le tableau
@@ -89,14 +90,30 @@ $ rbs routes --json
 
 Le bloc est coupé après deux entrées ; la commande les imprime toutes.
 
+## `--from`
+
+Lit un contrat déjà exporté par
+[`rbs openapi export --out openapi.json`](./openapi.md) au lieu de compiler le projet. Le
+fichier est relatif au répertoire d'où la commande est lancée, et avec lui `rbs routes`
+n'exige rien d'autre — pas même un projet rbs autour d'elle :
+
+```bash
+rbs routes --from openapi.json
+```
+
+C'est ce qu'il faut à une CI qui commite son contrat pour le relire sans chaîne de
+compilation Rust, et l'échappatoire quand le contrat mémorisé se trompe.
+
 ## D'où viennent les routes
 
 Du document OpenAPI, non du router : le document porte, pour chaque opération, son
 `operation_id` et l'exigence de jeton que son annotation déclare — ce que le router ne dit
 pas. Le document s'obtient comme [`rbs openapi export`](./openapi.md) et
 [`rbs generate client`](./client.md) l'obtiennent, en lançant le binaire `openapi` du
-projet : une route montée sans `#[utoipa::path]` n'y figure donc pas. Elle manque aussi au
-document, et à tout client engendré depuis lui.
+projet — ou en relisant [le contrat mémorisé](./openapi.md#le-contrat-mémorisé) quand rien
+n'a bougé, ce qui rend la seconde exécution instantanée. Une route montée sans
+`#[utoipa::path]` n'y figure donc pas. Elle manque aussi au document, et à tout client
+engendré depuis lui.
 
 Les échecs sont ceux de `rbs openapi export`, mot pour mot. Sous `--json`, l'erreur et son
 remède partent tous deux sur la sortie d'erreur. Le code de sortie est 1 pour chaque refus

@@ -47,6 +47,8 @@ pub(crate) struct Options {
     pub directory: PathBuf,
     /// Écrit malgré un working tree Git sale.
     pub force: bool,
+    /// Contrat déjà exporté à lire, relatif à `directory`, au lieu de compiler le projet.
+    pub from: Option<PathBuf>,
 }
 
 /// Ce que la commande s'apprête à écrire.
@@ -163,7 +165,10 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         git::garde(&root)?;
     }
 
-    let json = openapi::imprimer(&root)?;
+    let json = match &options.from {
+        Some(fichier) => openapi::depuis(&options.directory.join(fichier))?,
+        None => openapi::imprimer(&root)?,
+    };
     let document = document::parse(&json)?;
 
     let projet = metadonnees.package_name(&root.join("Cargo.toml"))?;
@@ -190,6 +195,41 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
         fichier,
         operations,
     })
+}
+
+/// Le client engendré que le **shell d'administration** importe, quand le projet en
+/// porte un — son chemin, relatif à la racine.
+///
+/// `rbs generate crud` s'en sert pour décider s'il refait le client à sa suite : la
+/// commande n'invente pas un répertoire que l'utilisateur n'a pas demandé, comme elle
+/// saute plutôt qu'elle n'exige les ancres du frontend.
+pub(crate) fn engendre(root: &Path) -> Option<PathBuf> {
+    let fichier = sortie(Some(Path::new(crate::ecran::CLIENT)), Lang::Ts);
+
+    root.join(&fichier).exists().then_some(fichier)
+}
+
+/// Réécrit le client engendré du projet depuis son contrat, et rend ce qui a été écrit.
+///
+/// Depuis le contrat, jamais depuis la spec d'entité : ADR-0004 écarte la déduction, qui
+/// donnerait au client deux producteurs tirant de deux sources — et rien ne dirait laquelle
+/// ment le jour où elles divergent. La contrepartie est la recompilation, que le cache du
+/// contrat ne peut pas éviter ici, le module venant d'être écrit.
+///
+/// `force` est implicite : la génération qui précède vient de salir le working tree, et
+/// c'est elle qui l'a fait.
+pub(crate) fn rafraichir(root: &Path) -> Result<Planned, Error> {
+    let planned = plan_for(&Options {
+        lang: Lang::Ts,
+        out: Some(PathBuf::from(crate::ecran::CLIENT)),
+        directory: root.to_path_buf(),
+        force: true,
+        from: None,
+    })?;
+
+    plan::application::apply(&planned.plan, true)?;
+
+    Ok(planned)
 }
 
 impl crate::errors::Classee for Error {
@@ -224,6 +264,7 @@ mod tests {
             out: None,
             directory: root,
             force: true,
+            from: None,
         })
         .expect_err("le projet sans bibliothèque doit être refusé");
 
@@ -241,6 +282,7 @@ mod tests {
             out: None,
             directory: root,
             force: true,
+            from: None,
         })
         .expect_err("le projet sans binaire doit être refusé");
 
@@ -303,6 +345,53 @@ mod tests {
             );
             assert!(error.remede().is_some(), "{error:?}");
         }
+    }
+
+    /// La preuve que `--from` n'appelle pas cargo : sans le binaire, `imprimer` refuse le
+    /// projet, et la commande aboutit quand même.
+    #[test]
+    fn a_frozen_contract_spares_the_project_binary() {
+        let (_tmp, root) = fixtures::project();
+        std::fs::remove_file(root.join(BINAIRE)).expect("le binaire doit se supprimer");
+        std::fs::write(
+            root.join("openapi.json"),
+            r#"{"openapi":"3.1.0","paths":{"/health":{"get":{"operationId":"health","responses":{}}}}}"#,
+        )
+        .expect("le contrat figé s'écrit");
+
+        let planned = plan_for(&Options {
+            lang: Lang::Ts,
+            out: None,
+            directory: root,
+            force: true,
+            from: Some(PathBuf::from("openapi.json")),
+        })
+        .expect("le contrat figé se lit sans le binaire du projet");
+
+        assert_eq!(planned.operations, 1);
+    }
+
+    /// `generate crud` ne réécrit le client que si le projet en porte déjà un : un projet
+    /// neuf n'a pas de `frontend/src/api`, et la commande n'a pas à l'inventer.
+    #[test]
+    fn a_project_without_a_generated_client_reports_none() {
+        let (_tmp, root) = fixtures::project();
+
+        assert_eq!(engendre(&root), None);
+    }
+
+    #[test]
+    fn a_generated_client_is_found_where_the_admin_shell_imports_it() {
+        let (_tmp, root) = fixtures::project();
+        let fichier = root.join(crate::ecran::CLIENT).join("client.ts");
+        std::fs::create_dir_all(fichier.parent().expect("le répertoire du client"))
+            .expect("le répertoire du client se crée");
+        std::fs::write(&fichier, "// un client\n").expect("le client s'écrit");
+
+        assert_eq!(
+            engendre(&root),
+            Some(PathBuf::from(crate::ecran::CLIENT).join("client.ts"))
+        );
     }
 
     #[test]

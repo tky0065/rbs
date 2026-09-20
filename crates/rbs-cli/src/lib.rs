@@ -167,11 +167,12 @@ pub fn run() {
                 GenerateCommands::Client {
                     lang,
                     out,
+                    from,
                     force,
                     dry_run,
                     json,
                 } => {
-                    if let Err(error) = generate_client(lang, out, force, dry_run, json) {
+                    if let Err(error) = generate_client(lang, out, from, force, dry_run, json) {
                         echec(&error, error.remedy(), json);
                     }
 
@@ -288,7 +289,7 @@ pub fn run() {
             }
         }
 
-        Commands::Routes { json } => {
+        Commands::Routes { json, from } => {
             let resultat = std::env::current_dir()
                 .map_err(|source| {
                     openapi::Error::from(crate::errors::Acces::new(
@@ -296,7 +297,7 @@ pub fn run() {
                         source,
                     ))
                 })
-                .and_then(|directory| routes::run(&directory, json));
+                .and_then(|directory| routes::run(&directory, json, from.as_deref()));
 
             match resultat {
                 Ok(rendu) => ui::line(&rendu),
@@ -931,7 +932,7 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
     let repairing = !has_many.is_empty();
     let directory = std::env::current_dir()
         .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
-    let planned = generate::command::plan_for(&generate::command::Options {
+    let mut planned = generate::command::plan_for(&generate::command::Options {
         name,
         fields,
         complete,
@@ -975,6 +976,11 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
 
     let applique = appliquer(&planned.plan, force, dry_run, json)?;
 
+    // Avant l'absorption du plan du client : le bilan annoncé doit rendre compte du plan
+    // affiché, et pas d'un fichier écrit après lui.
+    let ecrits = planned.plan.bilan(force);
+    let client = applique.then(|| refaire_le_client(&mut planned)).flatten();
+
     // Ni annonce ni rappel de migration : la migration se lit dans le document, parmi les
     // fichiers qu'il crée.
     if json {
@@ -989,7 +995,6 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
     if repairing {
         ui::success(&format!("{feature} : côté inverse écrit"));
     } else {
-        let ecrits = planned.plan.bilan(force);
         ui::success(&format!(
             "{feature} générée — {}",
             ui::bilan(ecrits.crees, ecrits.modifies, ecrits.supprimes)
@@ -1002,23 +1007,83 @@ fn generate(args: GenerateArgs) -> Result<(), generate::command::Error> {
         ));
     }
 
-    // L'écran engendré importe le corps de la ressource depuis le client typé : celui-ci
-    // ne connaît pas encore la table, et la vérification des types du frontend s'arrête
-    // jusqu'à ce qu'il soit régénéré. Le CLI ne le fait pas de lui-même — la commande
-    // compile le projet, ce qu'une génération n'a jamais fait.
-    if let Some(geste) = &planned.geste_suivant {
-        ui::info(&format!(
+    match client {
+        Some(Client::Refait(ligne)) => ui::success(&ligne),
+        Some(Client::Echoue { erreur, geste }) => {
+            ui::warn(&erreur);
+            ui::info(&format!(
+                "\n  l'écran engendré appelle le client typé : relancez `{geste}` une fois \
+                 le projet compilable"
+            ));
+        }
+        Some(Client::AFaire(geste)) => ui::info(&format!(
             "\n  l'écran engendré appelle le client typé : relancez `{geste}`"
-        ));
+        )),
+        None => {}
     }
 
     Ok(())
+}
+
+/// Ce que la génération a fait du client engendré, à dire une fois le bilan annoncé.
+enum Client {
+    /// Le projet en portait un : il a été réécrit depuis le contrat.
+    Refait(String),
+    /// Le projet n'en porte pas : le geste reste à faire, s'il doit l'être.
+    AFaire(String),
+    /// Le projet en portait un, et le contrat n'a pas pu être obtenu.
+    Echoue {
+        /// Ce qui a empêché de lire le contrat.
+        erreur: String,
+        /// La commande à relancer une fois la cause levée.
+        geste: String,
+    },
+}
+
+/// Réécrit le client engendré après une génération, quand le projet en porte déjà un.
+///
+/// ADR-0004 : l'écran engendré importe le corps de la ressource depuis le client typé, que
+/// le contrat seul décrit. Le déduire de la spec d'entité que la commande vient d'écrire
+/// donnerait au client deux producteurs tirant de deux sources ; on relance donc le binaire
+/// `openapi`, et la génération paie une recompilation incrémentale — le module vient d'être
+/// ajouté, le contrat mémorisé est donc invalide par construction.
+///
+/// La réécriture reste conditionnelle : sans client déjà posé, la commande n'invente pas de
+/// répertoire et se contente du geste à faire, comme elle saute les ancres du frontend
+/// qu'un projet ne porte pas.
+///
+/// Un échec ne renverse pas la génération, déjà appliquée : le refus est rendu en
+/// avertissement, avec le geste à relancer. Sortir en erreur ici laisserait croire que rien
+/// n'a été écrit, alors que l'entité et sa migration sont sur le disque.
+fn refaire_le_client(planned: &mut generate::command::Planned) -> Option<Client> {
+    let geste = planned.geste_suivant.clone()?;
+    let root = planned.plan.root().to_path_buf();
+
+    if client::engendre(&root).is_none() {
+        return Some(Client::AFaire(geste));
+    }
+
+    match client::rafraichir(&root) {
+        Ok(refait) => {
+            let ligne = format!(
+                "client engendré — {} porte {} opérations",
+                refait.fichier, refait.operations
+            );
+            planned.plan.absorber(refait.plan);
+            Some(Client::Refait(ligne))
+        }
+        Err(erreur) => Some(Client::Echoue {
+            erreur: format!("le client typé n'a pas pu être refait : {erreur}"),
+            geste,
+        }),
+    }
 }
 
 /// Engendre le client typé du projet courant, plan affiché avant écriture.
 fn generate_client(
     lang: client::Lang,
     out: Option<PathBuf>,
+    from: Option<PathBuf>,
     force: bool,
     dry_run: bool,
     json: bool,
@@ -1031,6 +1096,7 @@ fn generate_client(
         out,
         directory,
         force,
+        from,
     })?;
 
     // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande
