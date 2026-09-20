@@ -174,14 +174,16 @@ plan pour …/demo
   + frontend/src/admin/vues/Profil.vue                                      créé
   + frontend/src/admin/vues/Demonstration.vue                               créé
 
-  165 à créer, 12 à modifier
-✓ frontend-admin installée — 165 créés, 12 modifiés
+  166 à créer, 14 à modifier
+✓ frontend-admin installée — 166 créés, 14 modifiés
 
   cd frontend && npm install
 
   npm run build (ou npm run dev, qui sert le client sur son propre port)
 
   cargo run : le binaire sert le build, et jusque-là une page qui nomme ce qu'il reste à taper
+
+  rbs seed pose le compte d'administration dans la table des comptes : ADMIN_EMAIL (admin@demo.test) et ADMIN_PASSWORD, tiré dans votre .env, sont les identifiants que l'écran de connexion demande
 
   rbs generate client --lang ts --out frontend/src/api
 

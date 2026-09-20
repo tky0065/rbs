@@ -1036,9 +1036,16 @@ fn blog_auth_on(url: &str, parent: &TempDir) -> PathBuf {
     // Le `.env` est réécrit en entier : la base est celle du conteneur, et le secret que
     // l'installation a tiré est remplacé par une valeur connue, sans quoi les jetons que
     // le test forge lui-même ne seraient plus vérifiables.
+    //
+    // La preuve d'adresse est réimposée par l'environnement : le serveur tourne sous le
+    // profil `development`, que `config/development.toml` lève pour le poste de travail,
+    // et ce sont les règles de production que ces parcours éprouvent.
     fs::write(
         racine.join(".env"),
-        format!("RBS_ENV=development\nRBS_DATABASE__URL={url}\nRBS_AUTH__SECRET={SECRET}\n"),
+        format!(
+            "RBS_ENV=development\nRBS_DATABASE__URL={url}\nRBS_AUTH__SECRET={SECRET}\n\
+             RBS_AUTH__LOGIN_REQUIRES_VERIFICATION=true\n"
+        ),
     )
     .expect("le `.env` de la copie est inscriptible");
 
@@ -1133,9 +1140,15 @@ fn project_with_auth_on_engine(moteur: &str, url: &str, parent: &TempDir) -> Pat
         .assert()
         .success();
 
+    // Le secret tiré cède à une valeur connue, sans quoi les jetons que les tests forgent
+    // ne seraient plus vérifiables ; et la preuve d'adresse est réimposée, que le profil
+    // `development` du projet lève pour le poste de travail — c'est la règle de production
+    // que ces parcours éprouvent.
     let env = racine.join(".env");
     let mut contenu = fs::read_to_string(&env).expect(".env lisible");
-    contenu.push_str(&format!("\nRBS_AUTH__SECRET={SECRET}\n"));
+    contenu.push_str(&format!(
+        "\nRBS_AUTH__SECRET={SECRET}\nRBS_AUTH__LOGIN_REQUIRES_VERIFICATION=true\n"
+    ));
     fs::write(&env, contenu).expect(".env inscriptible");
 
     racine

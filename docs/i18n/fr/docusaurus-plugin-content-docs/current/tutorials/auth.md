@@ -24,7 +24,7 @@ d'exécution, et `curl` de nouveau, pour trois requêtes au lieu de deux.
 rbs add auth
 ```
 
-{/* rbs:transcript cmd="rbs add auth" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add auth" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add auth
 auth : authentification JWT : Argon2, jetons d'accès et de rafraîchissement, rôles
@@ -70,6 +70,7 @@ plan pour …/demo
   + templates/mail/verification.html                       créé
   + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
+  + src/seeds/admin.rs                                     créé
   + src/auth/tests/mod.rs                                  créé
   + src/auth/tests/change.rs                               créé
   + src/auth/tests/guard.rs                                créé
@@ -85,16 +86,20 @@ plan pour …/demo
   + src/auth/tests/sessions.rs                             créé
   + src/auth/tests/tokens.rs                               créé
   + src/auth/tests/verification.rs                         créé
-  + migration/src/m20260909_093150_create_auth_tables.rs   créé
+  + migration/src/m20260920_112413_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
   ~ src/openapi.rs                                         modifié
+  ~ src/seeds/main.rs                                      modifié
+  ~ config/development.toml                                modifié
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  47 à créer, 11 à modifier
-✓ auth installée — 47 créés, 11 modifiés
+  48 à créer, 13 à modifier
+✓ auth installée — 48 créés, 13 modifiés
 
   rbs migrate up
+
+  rbs seed pose le compte d'administration dans la table des comptes : ADMIN_EMAIL (admin@demo.test) et ADMIN_PASSWORD, tiré dans votre .env, sont les identifiants que l'écran de connexion demande
 ```
 
 `add` refuse un arbre de travail sale, ce pour quoi la commande ci-dessus ne tourne que

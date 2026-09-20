@@ -280,19 +280,21 @@ MAISON=1
 `rate-limit`, `redis`, `scheduler`, `storage` and `webhooks` — and installs every one named, in the
 same pass that writes the project:
 
-{/* rbs:transcript cmd="rbs new site --with auth --yes" */}
+{/* rbs:transcript cmd="rbs new site --with auth --lang fr --yes" */}
 ```text
-$ rbs new site --with auth --yes
+$ rbs new site --with auth --lang fr --yes
 ✓ site créé — 22 fichiers
   + mail       6 fichiers
   + rate-limit 4 fichiers
-  + auth       36 fichiers, 1 migration
+  + auth       37 fichiers, 1 migration
 
   réglez [mail] dans config/default.toml — un SMTP local par défaut
 
   derrière un reverse proxy, passez rate_limit.trust_forwarded_for à true — sinon tous les clients partagent l'adresse du proxy
 
   rbs migrate up
+
+  rbs seed pose le compte d'administration dans la table des comptes : ADMIN_EMAIL (admin@site.test) et ADMIN_PASSWORD, tiré dans votre .env, sont les identifiants que l'écran de connexion demande
 
   cd site
   docker compose up -d   # la base du .env, montée
@@ -311,13 +313,13 @@ laid down with it: `--with rate-limit,redis` counts in Redis, wherever `redis` s
 the list.
 
 ```text
-$ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --yes
+$ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --lang fr --yes
 ✓ with-demo créé — 22 fichiers
   + docker     2 fichiers
   + mail       6 fichiers
   + rate-limit 4 fichiers
-  + auth       36 fichiers, 1 migration
-  + storage    4 fichiers
+  + auth       37 fichiers, 1 migration
+  + storage    6 fichiers
 
   docker compose --profile app up --build
 
@@ -326,6 +328,8 @@ $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_dem
   derrière un reverse proxy, passez rate_limit.trust_forwarded_for à true — sinon tous les clients partagent l'adresse du proxy
 
   rbs migrate up
+
+  rbs seed pose le compte d'administration dans la table des comptes : ADMIN_EMAIL (admin@with-demo.test) et ADMIN_PASSWORD, tiré dans votre .env, sont les identifiants que l'écran de connexion demande
 
   les objets vont sous ./storage : ajoutez-le à .gitignore, ou passez storage.backend à "s3" et recopiez les RBS_STORAGE__* de .env.example
 
