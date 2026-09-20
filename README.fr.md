@@ -9,7 +9,7 @@ modifier.
 
 ## Statut
 
-Version 1.8.0. Les huit jalons de la feuille de route sont livrés — le socle,
+Version 1.8.1. Les huit jalons de la feuille de route sont livrés — le socle,
 l'authentification, les intégrations, le confort, la stabilité, les agents — et
 [`CHANGELOG.fr.md`](CHANGELOG.fr.md) dit ce que chacun apporte.
 

@@ -1,6 +1,6 @@
 # newsletter-queue — mode d'emploi pour agents
 
-<!-- rbs:guide 1.8.0 -->
+<!-- rbs:guide 1.8.1 -->
 ## Le CLI d'abord
 
 Ce projet est engendré par rbs. **Toute fonctionnalité que rbs couvre passe par le CLI**,
@@ -128,7 +128,7 @@ et `cargo test` seul ne les lance pas. Ils demandent la base du `.env` démarré
 <!-- /rbs:guide -->
 
 <!-- rbs:inventory -->
-- rbs 1.8.0 · base postgres
+- rbs 1.8.1 · base postgres
 - Fragments installés : jobs, mail, observability
 - Entités engendrées : subscribers
 - Ancres du projet : features (src/lib.rs), modules (src/modules/mod.rs), routes (src/router.rs), layers (src/router.rs), openapi (src/openapi.rs), migration_modules (migration/src/lib.rs), migrations (migration/src/lib.rs), state_champs (src/state.rs), state_init (src/state.rs), startup (src/main.rs), seeds (src/seeds/main.rs), services (docker-compose.yml), ignore (.gitignore), make (Makefile), health_probes (src/health/controller.rs), jobs (src/modules/jobs/mod.rs), job_modules (src/modules/jobs/mod.rs)
