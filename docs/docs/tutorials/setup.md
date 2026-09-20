@@ -32,7 +32,7 @@ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 {/* rbs:transcript cmd="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" */}
 ```text
 $ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
-✓ demo créé — 22 fichiers
+✓ demo créé — 23 fichiers
 
   cd demo
   docker compose up -d   # la base du .env, montée
@@ -40,7 +40,7 @@ $ rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo
 ```
 
 That line is a success, not an error — [Getting started](../getting-started.md)
-explains why the CLI answers in French regardless of your locale. Twenty-one files,
+explains why the CLI answers in French regardless of your locale. Twenty-three files,
 one command: proof the project exists with a `health` feature already wired in, and
 nothing else, since `--yes` took every default. [Architecture](../architecture.md)
 maps what each of those files is for; this series won't repeat that map.

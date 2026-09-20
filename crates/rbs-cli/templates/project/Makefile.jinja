@@ -1,0 +1,62 @@
+# Les raccourcis de {@ project_name @}, et rien d'autre : ce fichier n'appelle que cargo,
+# npm et docker compose. Le projet se clone et se lance sur une machine qui n'a pas rbs.
+.DEFAULT_GOAL := help
+
+# Ce que `make dev` mène de front, chaque commande terminée par `&`. Le squelette n'en
+# lance qu'une ; un fragment qui apporte un exécutable de plus ajoute la sienne à la
+# suite, et la recette les attend toutes.
+DEV = cargo run &
+
+help: ## {% if lang == 'en' %}list these shortcuts{% else %}affiche cette liste{% endif %}
+	@awk 'BEGIN { FS = ":.*## "; print "{% if lang == 'en' %}Shortcuts for {@ project_name @} — make <target>{% else %}Raccourcis de {@ project_name @} — make <cible>{% endif %}\n" } /^[a-z][a-z0-9-]*:.*## / { printf "  %-12s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+
+# Les deux processus — le binaire, et ce qu'un fragment a ajouté à `DEV` — vivent dans un
+# même groupe : `kill 0` les emporte ensemble au premier Ctrl-C, et `wait` tient la
+# recette ouverte tant qu'il en reste un.
+dev: ## {% if lang == 'en' %}run everything this project carries, until Ctrl-C{% else %}lance tout ce que le projet porte, jusqu'à Ctrl-C{% endif %}
+	@trap 'kill 0' INT TERM EXIT; \
+	$(DEV) \
+	wait
+
+back: ## {% if lang == 'en' %}run the API alone{% else %}lance l'API seule{% endif %}
+	cargo run
+
+build: ## {% if lang == 'en' %}build with optimisations{% else %}compile en mode optimisé{% endif %}
+	cargo build --release
+
+# Les tests qui joignent la base sont `#[ignore]` : ajoutez `-- --include-ignored` une
+# fois `make up` passé, comme le fait la CI.
+test: ## {% if lang == 'en' %}run the tests{% else %}lance les tests{% endif %}
+	cargo test --workspace
+
+lint: ## {% if lang == 'en' %}run clippy, warnings included{% else %}passe clippy, avertissements compris{% endif %}
+	cargo clippy --workspace --all-targets -- -D warnings
+
+fmt: ## {% if lang == 'en' %}reformat the code{% else %}reformate le code{% endif %}
+	cargo fmt --all
+
+migrate: ## {% if lang == 'en' %}apply the pending migrations{% else %}applique les migrations en attente{% endif %}
+	cargo run -p migration -- up
+
+seed: ## {% if lang == 'en' %}insert the demonstration data{% else %}insère les données de démonstration{% endif %}
+	cargo run --bin seed
+
+up: ## {% if lang == 'en' %}start the services of docker-compose.yml{% else %}démarre les services de docker-compose.yml{% endif %}
+	docker compose up -d
+
+down: ## {% if lang == 'en' %}stop those same services{% else %}arrête ces mêmes services{% endif %}
+	docker compose down
+
+openapi: ## {% if lang == 'en' %}write the OpenAPI document on standard output{% else %}écrit le document OpenAPI sur la sortie standard{% endif %}
+	cargo run --bin openapi
+
+clean: ## {% if lang == 'en' %}delete the build artifacts{% else %}efface les artefacts de compilation{% endif %}
+	cargo clean
+
+# Les raccourcis qu'ajoutent les fragments s'écrivent entre les deux balises ci-dessous :
+# `rbs add frontend` y pose `front`, `rbs add docker` y pose `image`. Un `##` en fin de
+# ligne de cible la fait paraître dans `make help`, et chaque fragment déclare les
+# siennes en `.PHONY`.
+.PHONY: help dev back build test lint fmt migrate seed up down openapi clean
+# <rbs:make>
+# </rbs:make>

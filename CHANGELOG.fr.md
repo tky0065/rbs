@@ -23,6 +23,27 @@ dépréciation.
   openapi export` n'en a délibérément pas : c'est la commande qui *produit* le contrat, et
   lire un fichier pour en écrire un autre la réduirait à une copie.
 
+- **Un projet engendré porte désormais un `Makefile`, et ne dépend plus de son générateur.**
+  Jusqu'ici, les seuls gestes documentés passaient par le CLI — `rbs dev`, `rbs migrate` — si
+  bien que le collègue qui clonait le dépôt devait installer `rbs-cli` avant de taper quoi que
+  ce soit. Le squelette écrit à la place treize raccourcis : `dev`, `back`, `build`, `test`,
+  `lint`, `fmt`, `migrate`, `seed`, `up`, `down`, `openapi`, `clean`, et un `help` qui se lit
+  dans le fichier lui-même et que rend un `make` nu. Chaque recette enveloppe `cargo`, `npm`
+  ou `docker compose` ; aucune n'appelle `rbs`. `make dev` mène de front tout ce que le projet
+  porte, dans un même groupe de processus — un seul Ctrl-C arrête l'ensemble — sans aucune
+  dépendance nouvelle : un `trap 'kill 0' INT TERM EXIT` et un `wait`. Les noms de cibles sont
+  les mêmes dans toutes les langues ; seules les descriptions qu'affiche `make help` suivent
+  `--lang`.
+
+- **Une ancre `# <rbs:make>`**, la vingt-deuxième du registre et la troisième au marqueur `#`
+  de Git, est là où un fragment pose un raccourci à lui — `rbs add frontend` y écrit `front`,
+  `front-build`, `typecheck` et sa moitié de `make dev`, `rbs add docker` y écrit `image`. Un
+  fragment n'en pose un que s'il apporte un exécutable de plus à lancer : `jobs` et
+  `observability` n'en posent aucun. L'ancre est optionnelle, pour la même raison que
+  `# <rbs:ignore>` : le squelette écrit bien le fichier, mais celui-ci appartient au
+  développeur, qui peut l'avoir supprimé. Le registre passe de vingt-et-une ancres à
+  vingt-deux, dont onze optionnelles.
+
 ### Modifié
 
 - **Le contrat est mémorisé, et les trois commandes qui le lisent ne recompilent plus le
@@ -53,6 +74,14 @@ dépréciation.
   avertissement et le geste à relancer ; l'entité et sa migration sont sur le disque dans les
   deux cas.
 
+- **La section `[auth]` est désormais dédoublée dans `config/development.toml`.**
+  `login_requires_verification` reste à `true` dans `config/default.toml`, qui gouverne la
+  production, et vaut `false` sur un poste de travail : un compte inscrit par l'API n'est
+  jamais vérifié, et aucun écran engendré n'appelle `/auth/verify-email`. `app_url` passe
+  de `http://localhost:3000`, un port où rien n'écoute, à `http://localhost:8080` par
+  défaut — le port sur lequel le binaire sert le client construit — et
+  `http://localhost:5173`, celui de Vite, en développement.
+
 ### Corrigé
 
 - **Un projet engendré avec `auth` n'avait aucun compte capable d'entrer dans son espace
@@ -80,16 +109,6 @@ dépréciation.
   vingt ancres à vingt-et-une, dont dix optionnelles. Un projet engendré avant cette version
   porte la liste figée sans l'ancre : `rbs doctor` la nomme et affiche le bloc, et `rbs doctor
   --fix` la repose sous `'/api-docs',`.
-
-### Modifié
-
-- **La section `[auth]` est désormais dédoublée dans `config/development.toml`.**
-  `login_requires_verification` reste à `true` dans `config/default.toml`, qui gouverne la
-  production, et vaut `false` sur un poste de travail : un compte inscrit par l'API n'est
-  jamais vérifié, et aucun écran engendré n'appelle `/auth/verify-email`. `app_url` passe
-  de `http://localhost:3000`, un port où rien n'écoute, à `http://localhost:8080` par
-  défaut — le port sur lequel le binaire sert le client construit — et
-  `http://localhost:5173`, celui de Vite, en développement.
 
 ## [1.7.0] — 2026-09-19
 

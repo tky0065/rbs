@@ -1400,7 +1400,7 @@ mod tests {
         assert!(compose.contains("- \"5432:5432\""), "{compose}");
         assert!(compose.contains("# <rbs:services>"), "{compose}");
         assert!(compose.contains("# </rbs:services>"), "{compose}");
-        assert_eq!(project.files, 22);
+        assert_eq!(project.files, 23);
     }
 
     /// Le compose est versionné, le `.env` ne l'est pas : les identifiants vivent dans
@@ -1584,7 +1584,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 21);
+        assert_eq!(project.files, 22);
     }
 
     #[test]
@@ -1605,7 +1605,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 21);
+        assert_eq!(project.files, 22);
     }
 
     /// Une URL sans identifiants est valide et acceptée par `parse` : sans cette
@@ -1631,7 +1631,7 @@ mod tests {
         .expect("le projet doit se créer");
 
         assert!(!project.root.join("docker-compose.yml").exists());
-        assert_eq!(project.files, 21);
+        assert_eq!(project.files, 22);
     }
 
     /// L'expression est celle qu'`rbs add` porte aussi : les identifiants d'une URL que
@@ -1844,5 +1844,153 @@ mod tests {
             .expect("AGENTS.md est écrit même quand `--template-dir` ne porte pas les guides");
 
         assert!(agents.contains("<!-- rbs:guide"), "{agents}");
+    }
+
+    /// Les cibles d'un `Makefile`, dans l'ordre où le fichier les déclare.
+    fn cibles(makefile: &str) -> Vec<&str> {
+        makefile
+            .lines()
+            .filter(|ligne| !ligne.starts_with(['\t', '#', '.', ' ']))
+            .filter_map(|ligne| ligne.split_once(':'))
+            .map(|(nom, _)| nom)
+            .collect()
+    }
+
+    /// Le point de la tâche : un projet engendré appartient à son auteur, et le collègue
+    /// qui le clone doit pouvoir le lancer sans installer le générateur. Une cible qui
+    /// appellerait `rbs` rendrait le dépôt dépendant de lui.
+    #[test]
+    fn no_shortcut_of_the_task_file_calls_the_generator() {
+        let parent = parent();
+
+        let project = create(&options("demo"), parent.path()).expect("le projet doit se créer");
+
+        let makefile = read(&project.root.join("Makefile"));
+        let recettes: Vec<&str> = makefile
+            .lines()
+            .filter(|ligne| ligne.starts_with('\t'))
+            .collect();
+
+        assert!(!recettes.is_empty(), "aucune recette :\n{makefile}");
+        for recette in recettes {
+            let commande = recette.trim_start_matches(['\t', '@']);
+            assert!(
+                !commande.split_whitespace().any(|mot| mot == "rbs"),
+                "une recette appelle le générateur : {recette}"
+            );
+        }
+        assert!(
+            makefile.contains("cargo run -p migration -- up"),
+            "{makefile}"
+        );
+        assert!(makefile.contains("cargo run --bin seed"), "{makefile}");
+        assert!(makefile.contains("docker compose up -d"), "{makefile}");
+    }
+
+    /// Une recette make se reconnaît à sa tabulation initiale, et à rien d'autre : la
+    /// même ligne indentée de huit espaces n'est pas une commande mais une cible mal
+    /// formée, que make refuse.
+    #[test]
+    fn every_recipe_line_of_the_task_file_begins_with_a_tabulation() {
+        let parent = parent();
+
+        let project = create(&options("demo"), parent.path()).expect("le projet doit se créer");
+
+        let makefile = read(&project.root.join("Makefile"));
+        for ligne in makefile.lines() {
+            assert!(
+                !ligne.starts_with(' '),
+                "une ligne commence par un espace : {ligne:?}"
+            );
+        }
+    }
+
+    /// `make` seul doit rendre l'aide : sans ce but par défaut, il lancerait la première
+    /// cible du fichier, qui n'est pas celle qu'on attend d'un `make` nu.
+    #[test]
+    fn the_task_file_makes_help_its_default_goal() {
+        let parent = parent();
+
+        let project = create(&options("demo"), parent.path()).expect("le projet doit se créer");
+
+        let makefile = read(&project.root.join("Makefile"));
+        assert!(makefile.contains("\n.DEFAULT_GOAL := help\n"), "{makefile}");
+        assert!(
+            makefile.contains("$(MAKEFILE_LIST)"),
+            "l'aide doit se lire dans le fichier lui-même, et non dans une liste tenue à \
+             la main : {makefile}"
+        );
+    }
+
+    /// Les noms de cibles ne sont que des raccourcis de `cargo`, de `npm` et de `docker
+    /// compose`, qui n'en ont qu'un jeu : les traduire ferait deux projets là où il n'y en
+    /// a qu'un. Seules les descriptions que `make help` affiche suivent la langue.
+    #[test]
+    fn the_target_names_do_not_follow_the_language_but_their_descriptions_do() {
+        let parent = parent();
+        let mut anglais = options("demo-en");
+        anglais.lang = crate::lang::Lang::En;
+
+        let francais = create(&options("demo-fr"), parent.path()).expect("le projet fr se crée");
+        let anglais = create(&anglais, parent.path()).expect("le projet en se crée");
+
+        let fr = read(&francais.root.join("Makefile"));
+        let en = read(&anglais.root.join("Makefile"));
+
+        assert_eq!(cibles(&fr), cibles(&en), "les noms de cibles ont changé");
+        assert_eq!(
+            cibles(&fr),
+            [
+                "help", "dev", "back", "build", "test", "lint", "fmt", "migrate", "seed", "up",
+                "down", "openapi", "clean"
+            ]
+        );
+        assert!(fr.contains("## affiche cette liste"), "{fr}");
+        assert!(en.contains("## list these shortcuts"), "{en}");
+    }
+
+    /// Les deux processus de `make dev` vivent dans un même groupe, sans qu'aucune
+    /// dépendance nouvelle ne l'orchestre : `kill 0` les emporte ensemble, `wait` tient la
+    /// recette ouverte tant qu'il en reste un.
+    ///
+    /// Sur un projet nu, `DEV` n'en porte qu'un ; c'est le fragment `frontend` qui y ajoute
+    /// le second, et la recette ne change pas pour autant.
+    #[test]
+    fn the_dev_shortcut_traps_its_process_group_and_waits_for_it() {
+        let parent = parent();
+
+        let project = create(&options("demo"), parent.path()).expect("le projet doit se créer");
+
+        let makefile = read(&project.root.join("Makefile"));
+        assert!(
+            makefile.contains("\tDEV = cargo run &") || makefile.contains("\nDEV = cargo run &\n"),
+            "{makefile}"
+        );
+        assert!(
+            makefile.contains("\t@trap 'kill 0' INT TERM EXIT; \\\n\t$(DEV) \\\n\twait\n"),
+            "la recette de `dev` n'est pas celle attendue :\n{makefile}"
+        );
+    }
+
+    /// L'ancre vit en fin de fichier, sous la ligne qui déclare les cibles du squelette en
+    /// `.PHONY` : une cible qu'un fragment ajoute paraît ainsi en queue de `make help`.
+    #[test]
+    fn the_task_file_carries_the_make_anchor_under_its_phony_line() {
+        let parent = parent();
+
+        let project = create(&options("demo"), parent.path()).expect("le projet doit se créer");
+
+        let makefile = read(&project.root.join("Makefile"));
+        let attendu = format!(
+            "{}\n{}\n{}\n",
+            crate::anchors::MAKE.after,
+            crate::anchors::MAKE.opening(),
+            crate::anchors::MAKE.closing()
+        );
+
+        assert!(
+            makefile.ends_with(&attendu),
+            "le fichier doit se clore sur l'ancre :\n{makefile}"
+        );
     }
 }

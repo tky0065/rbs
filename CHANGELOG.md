@@ -22,6 +22,26 @@ between minor versions with no deprecation cycle.
   has none: it is the command that *produces* the contract, and reading one file to write
   another would reduce it to a copy.
 
+- **A generated project now carries a `Makefile`, and no longer depends on its generator.**
+  Until now the only documented way to run anything was through the CLI — `rbs dev`, `rbs
+  migrate` — so a colleague who cloned the repository had to install `rbs-cli` before typing
+  a single command. The skeleton writes thirteen shortcuts instead: `dev`, `back`, `build`,
+  `test`, `lint`, `fmt`, `migrate`, `seed`, `up`, `down`, `openapi`, `clean`, and a `help`
+  that reads the file itself and is what a bare `make` runs. Every recipe wraps `cargo`,
+  `npm` or `docker compose`; none of them calls `rbs`. `make dev` runs everything the
+  project carries in one process group — a single Ctrl-C stops all of it — with no new
+  dependency: a `trap 'kill 0' INT TERM EXIT` and a `wait`. Target names are the same in
+  every language, only the descriptions `make help` prints follow `--lang`.
+
+- **A new `# <rbs:make>` anchor**, the twenty-second of the registry and the third carrying
+  Git's `#` marker, is where a fragment adds a shortcut of its own — `rbs add frontend`
+  writes `front`, `front-build`, `typecheck` and its half of `make dev`, `rbs add docker`
+  writes `image`. A fragment writes one only when it brings one more executable to run, so
+  `jobs` and `observability` write none. The anchor is optional, for the same reason
+  `# <rbs:ignore>` is: the skeleton writes the file, but the file belongs to the developer,
+  who may have deleted it. The registry goes from twenty-one anchors to twenty-two, eleven
+  of them optional.
+
 ### Changed
 
 - **The contract is memorised, and the three commands that read it no longer recompile the
@@ -50,6 +70,14 @@ between minor versions with no deprecation cycle.
   nobody asked for. A project that does not compile gets a warning and the line to rerun; the
   entity and its migration are on disk either way.
 
+- **The `[auth]` section is now doubled in `config/development.toml`.**
+  `login_requires_verification` stays `true` in `config/default.toml`, which governs
+  production, and is `false` on a workstation: an account signed up through the API is
+  never verified, and no generated screen calls `/auth/verify-email`. `app_url` moves from
+  `http://localhost:3000`, a port where nothing listens, to `http://localhost:8080` by
+  default — the port the binary serves the built client on — and `http://localhost:5173`,
+  Vite's, in development.
+
 ### Fixed
 
 - **A project generated with `auth` had no account able to reach its admin space.**
@@ -76,16 +104,6 @@ between minor versions with no deprecation cycle.
   than the screen. The registry goes from twenty anchors to twenty-one, ten of them optional. A
   project generated before this release has the fixed list and no anchor: `rbs doctor` names it
   and prints the block, and `rbs doctor --fix` puts it back under `'/api-docs',`.
-
-### Changed
-
-- **The `[auth]` section is now doubled in `config/development.toml`.**
-  `login_requires_verification` stays `true` in `config/default.toml`, which governs
-  production, and is `false` on a workstation: an account signed up through the API is
-  never verified, and no generated screen calls `/auth/verify-email`. `app_url` moves from
-  `http://localhost:3000`, a port where nothing listens, to `http://localhost:8080` by
-  default — the port the binary serves the built client on — and `http://localhost:5173`,
-  Vite's, in development.
 
 ## [1.7.0] — 2026-09-19
 

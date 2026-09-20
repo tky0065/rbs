@@ -1917,6 +1917,77 @@ mod tests {
             .unwrap_or_else(|| panic!("{} ne porte pas {}", anchor.file, anchor.name))
     }
 
+    /// Le client apporte un exécutable de plus à lancer : il pose donc ses raccourcis, et
+    /// la moitié frontend de `make dev`.
+    ///
+    /// `DEV +=` est posé dans la même ancre que les cibles, en fin de fichier, et compte
+    /// pourtant pour la recette écrite plus haut : make développe une recette au moment de
+    /// l'exécuter, non à la lecture du fichier.
+    #[test]
+    fn the_client_fragment_adds_its_shortcuts_and_the_frontend_half_of_dev() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "frontend")).expect("le plan doit se calculer");
+
+        let corps = anchor_body(&planned, &crate::anchors::MAKE);
+        assert!(
+            corps.contains("DEV += cd frontend && npm run dev &"),
+            "la moitié frontend de `dev` manque :{corps}"
+        );
+        for cible in ["front:", "front-build:", "typecheck:"] {
+            assert!(corps.contains(cible), "`{cible}` manque :{corps}");
+        }
+        assert!(
+            corps.contains(".PHONY: front front-build typecheck"),
+            "les cibles du fragment ne sont pas déclarées :{corps}"
+        );
+        // Une recette se reconnaît à sa tabulation : un fragment qui poserait des espaces
+        // écrirait une cible mal formée, que make refuse au premier `make front`.
+        assert!(
+            corps.contains("\tcd frontend && npm run build\n"),
+            "une recette du fragment n'est pas indentée par une tabulation :{corps:?}"
+        );
+    }
+
+    /// `docker build` est un exécutable de plus à lancer, et le fragment pose son
+    /// raccourci. Le nom de l'image est celui du projet en minuscules : un registre
+    /// n'accepte rien d'autre.
+    #[test]
+    fn the_docker_fragment_adds_the_image_shortcut() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "docker")).expect("le plan doit se calculer");
+
+        let corps = anchor_body(&planned, &crate::anchors::MAKE);
+        assert!(corps.contains("image:"), "{corps}");
+        assert!(
+            corps.contains("\tdocker build -t demo-api .\n"),
+            "{corps:?}"
+        );
+    }
+
+    /// La règle qui borne l'ancre : un fragment n'inscrit un raccourci que s'il apporte un
+    /// exécutable de plus à lancer. La file tourne dans le binaire, les traces sortent du
+    /// binaire — ni l'une ni l'autre n'a de commande à envelopper, et le fichier de tâches
+    /// ne doit pas s'allonger d'une cible que personne ne taperait.
+    #[test]
+    fn a_fragment_that_brings_no_executable_writes_no_shortcut() {
+        for fragment in ["jobs", "observability", "redis", "cors"] {
+            let (_parent, root) = project();
+
+            let planned = plan_for(&options(&root, fragment)).expect("le plan doit se calculer");
+
+            assert!(
+                !planned
+                    .plan
+                    .files()
+                    .iter()
+                    .any(|file| file.path == crate::anchors::MAKE.file),
+                "`{fragment}` a touché au fichier de tâches"
+            );
+        }
+    }
+
     /// Une dépendance installée doit être contrôlée : sans sa sonde, `GET /health`
     /// répondrait `ok` sur un cache ou un bucket injoignable, et l'orchestrateur
     /// garderait le pod en rotation.
