@@ -158,6 +158,27 @@ function corps(formulaire: Formulaire) {
   }
 }
 
+/**
+ * L'instant du contrat, tel que le contrôle natif le prend.
+ *
+ * `datetime-local` ne porte pas de fuseau : ce qu'il affiche, il le lit comme une heure
+ * locale, et c'est ainsi que [`corps`] la relit. Un horodatage UTC simplement tronqué y
+ * entrerait donc décalé, et ressortirait décalé une seconde fois — ouvrir puis enregistrer
+ * une ligne sans toucher au champ aurait suffi à la déplacer.
+ */
+function pourControle(iso: string | null): string {
+  if (iso === null || iso === '') {
+    return ''
+  }
+
+  const instant = new Date(iso)
+  if (Number.isNaN(instant.getTime())) {
+    return ''
+  }
+
+  return new Date(instant.getTime() - instant.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+}
+
 /** Le formulaire prérempli d'une ligne existante. */
 function saisie(ligne: Ligne): Formulaire {
   return {
@@ -168,7 +189,7 @@ function saisie(ligne: Ligne): Formulaire {
     ouvert: ligne.ouvert,
     duree_minutes: ligne.duree_minutes === null ? '' : String(ligne.duree_minutes),
     echeance: ligne.echeance ?? '',
-    constate_le: ligne.constate_le.slice(0, 16),
+    constate_le: pourControle(ligne.constate_le),
   }
 }
 
@@ -234,38 +255,48 @@ function raison(cause: unknown, defaut: string): string {
 }
 // endregion: source
 
+/**
+ * Comment une valeur se lit : telle quelle, en jour, ou en date et heure.
+ *
+ * Le contrat porte ses horodatages en ISO 8601, que personne ne lit de l'œil. Le type de
+ * la propriété ne suffirait pas à les reconnaître — une date y est une chaîne comme une
+ * autre — et la table les rendrait bruts.
+ */
+type Rendu = 'texte' | 'date' | 'instant'
+
 /** Une colonne de la table : ce qu'elle lit d'une ligne, et si l'on peut trier dessus. */
 interface Colonne {
   cle: keyof Ligne
   libelle: string
+  rendu: Rendu
   triable: boolean
 }
 
 const COLONNES: readonly Colonne[] = [
-  { cle: 'reference', libelle: 'Reference', triable: true },
-  { cle: 'sujet', libelle: 'Sujet', triable: true },
-  { cle: 'detail', libelle: 'Detail', triable: true },
-  { cle: 'gravite', libelle: 'Gravite', triable: true },
-  { cle: 'ouvert', libelle: 'Ouvert', triable: true },
-  { cle: 'duree_minutes', libelle: 'Duree minutes', triable: true },
-  { cle: 'echeance', libelle: 'Echeance', triable: true },
-  { cle: 'constate_le', libelle: 'Constate le', triable: true },
-  { cle: 'updated_at', libelle: 'Mise à jour', triable: true },
+  { cle: 'reference', libelle: 'Reference', rendu: 'texte', triable: true },
+  { cle: 'sujet', libelle: 'Sujet', rendu: 'texte', triable: true },
+  { cle: 'detail', libelle: 'Detail', rendu: 'texte', triable: true },
+  { cle: 'gravite', libelle: 'Gravite', rendu: 'texte', triable: true },
+  { cle: 'ouvert', libelle: 'Ouvert', rendu: 'texte', triable: true },
+  { cle: 'duree_minutes', libelle: 'Duree minutes', rendu: 'texte', triable: true },
+  { cle: 'echeance', libelle: 'Echeance', rendu: 'date', triable: true },
+  { cle: 'constate_le', libelle: 'Constate le', rendu: 'instant', triable: true },
+  { cle: 'updated_at', libelle: 'Mise à jour', rendu: 'instant', triable: true },
 ]
 
 /** Les propriétés du détail : la ligne entière, et non le seul sous-ensemble affiché. */
-const PROPRIETES: readonly { cle: keyof Ligne; libelle: string }[] = [
-  { cle: 'id', libelle: 'Identifiant' },
-  { cle: 'reference', libelle: 'Reference' },
-  { cle: 'sujet', libelle: 'Sujet' },
-  { cle: 'detail', libelle: 'Detail' },
-  { cle: 'gravite', libelle: 'Gravite' },
-  { cle: 'ouvert', libelle: 'Ouvert' },
-  { cle: 'duree_minutes', libelle: 'Duree minutes' },
-  { cle: 'echeance', libelle: 'Echeance' },
-  { cle: 'constate_le', libelle: 'Constate le' },
-  { cle: 'created_at', libelle: 'Créé le' },
-  { cle: 'updated_at', libelle: 'Mise à jour' },
+const PROPRIETES: readonly { cle: keyof Ligne; libelle: string; rendu: Rendu }[] = [
+  { cle: 'id', libelle: 'Identifiant', rendu: 'texte' },
+  { cle: 'reference', libelle: 'Reference', rendu: 'texte' },
+  { cle: 'sujet', libelle: 'Sujet', rendu: 'texte' },
+  { cle: 'detail', libelle: 'Detail', rendu: 'texte' },
+  { cle: 'gravite', libelle: 'Gravite', rendu: 'texte' },
+  { cle: 'ouvert', libelle: 'Ouvert', rendu: 'texte' },
+  { cle: 'duree_minutes', libelle: 'Duree minutes', rendu: 'texte' },
+  { cle: 'echeance', libelle: 'Echeance', rendu: 'date' },
+  { cle: 'constate_le', libelle: 'Constate le', rendu: 'instant' },
+  { cle: 'created_at', libelle: 'Créé le', rendu: 'instant' },
+  { cle: 'updated_at', libelle: 'Mise à jour', rendu: 'instant' },
 ]
 
 const interfaces = useInterface()
@@ -422,13 +453,41 @@ async function confirmer(): Promise<void> {
   }
 }
 
+/**
+ * Le format des instants, construit une fois : un `Intl.DateTimeFormat` neuf par cellule
+ * coûterait sa table de locale à chaque rendu de page.
+ *
+ * Le fuseau est celui de l'opérateur — un horodatage se lit à l'heure où l'on est, pas à
+ * Greenwich — mais la locale est celle du projet, comme tous les libellés de cet écran.
+ */
+const INSTANT = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeStyle: 'short' })
+
+/**
+ * Le format des jours, à Greenwich et non au fuseau de l'opérateur : une date nue vaut
+ * minuit UTC, que tout fuseau à l'ouest ramènerait à la veille.
+ */
+const JOUR = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeZone: 'UTC' })
+
+/** L'horodatage rendu lisible, ou tel quel si rien ne sait le lire. */
+function horodate(brut: string, format: Intl.DateTimeFormat): string {
+  const instant = new Date(brut)
+
+  return Number.isNaN(instant.getTime()) ? brut : format.format(instant)
+}
+
 /** Ce que l'opérateur lit d'une valeur : un booléen se dit, une absence se marque. */
-function afficher(valeur: string | number | boolean | null): string {
+function afficher(valeur: string | number | boolean | null, rendu: Rendu): string {
   if (valeur === null) {
     return TEXTES.vide
   }
   if (typeof valeur === 'boolean') {
     return valeur ? TEXTES.oui : TEXTES.non
+  }
+  if (rendu === 'instant') {
+    return horodate(String(valeur), INSTANT)
+  }
+  if (rendu === 'date') {
+    return horodate(String(valeur), JOUR)
   }
 
   return String(valeur)
@@ -500,7 +559,7 @@ function afficher(valeur: string | number | boolean | null): string {
           <template v-else>
             <TableRow v-for="ligne in lignes" :key="ligne.id">
               <TableCell v-for="colonne in COLONNES" :key="colonne.cle">
-                {{ afficher(ligne[colonne.cle]) }}
+                {{ afficher(ligne[colonne.cle], colonne.rendu) }}
               </TableCell>
               <TableCell class="whitespace-nowrap text-right">
                 <Button variant="ghost" size="sm" @click="detailler(ligne.id)">
@@ -662,7 +721,7 @@ function afficher(valeur: string | number | boolean | null): string {
             <dt class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               {{ propriete.libelle }}
             </dt>
-            <dd class="break-all">{{ afficher(detaillee[propriete.cle]) }}</dd>
+            <dd class="break-all">{{ afficher(detaillee[propriete.cle], propriete.rendu) }}</dd>
           </div>
         </dl>
       </SheetContent>

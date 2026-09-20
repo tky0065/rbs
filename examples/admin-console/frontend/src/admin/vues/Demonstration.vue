@@ -218,26 +218,36 @@ function raison(cause: unknown, defaut: string): string {
   return cause instanceof Error ? cause.message : defaut
 }
 
+/**
+ * Comment une valeur se lit : telle quelle, en jour, ou en date et heure.
+ *
+ * Le contrat porte ses horodatages en ISO 8601, que personne ne lit de l'œil. Le type de
+ * la propriété ne suffirait pas à les reconnaître — une date y est une chaîne comme une
+ * autre — et la table les rendrait bruts.
+ */
+type Rendu = 'texte' | 'date' | 'instant'
+
 /** Une colonne de la table : ce qu'elle lit d'une ligne, et si l'on peut trier dessus. */
 interface Colonne {
   cle: keyof Ligne
   libelle: string
+  rendu: Rendu
   triable: boolean
 }
 
 const COLONNES: readonly Colonne[] = [
-  { cle: 'reference', libelle: 'Référence', triable: true },
-  { cle: 'libelle', libelle: 'Libellé', triable: true },
-  { cle: 'etat', libelle: 'État', triable: false },
-  { cle: 'maj', libelle: 'Mise à jour', triable: true },
+  { cle: 'reference', libelle: 'Référence', rendu: 'texte', triable: true },
+  { cle: 'libelle', libelle: 'Libellé', rendu: 'texte', triable: true },
+  { cle: 'etat', libelle: 'État', rendu: 'texte', triable: false },
+  { cle: 'maj', libelle: 'Mise à jour', rendu: 'date', triable: true },
 ]
 
 /** Les propriétés du détail : la ligne entière, et non le seul sous-ensemble affiché. */
-const PROPRIETES: readonly { cle: keyof Ligne; libelle: string }[] = [
-  { cle: 'reference', libelle: 'Référence' },
-  { cle: 'libelle', libelle: 'Libellé' },
-  { cle: 'etat', libelle: 'État' },
-  { cle: 'maj', libelle: 'Mise à jour' },
+const PROPRIETES: readonly { cle: keyof Ligne; libelle: string; rendu: Rendu }[] = [
+  { cle: 'reference', libelle: 'Référence', rendu: 'texte' },
+  { cle: 'libelle', libelle: 'Libellé', rendu: 'texte' },
+  { cle: 'etat', libelle: 'État', rendu: 'texte' },
+  { cle: 'maj', libelle: 'Mise à jour', rendu: 'date' },
 ]
 
 const interfaces = useInterface()
@@ -394,13 +404,29 @@ async function confirmer(): Promise<void> {
   }
 }
 
+/**
+ * Le format des jours, à Greenwich et non au fuseau de l'opérateur : une date nue vaut
+ * minuit UTC, que tout fuseau à l'ouest ramènerait à la veille.
+ */
+const JOUR = new Intl.DateTimeFormat('fr-FR', { dateStyle: 'short', timeZone: 'UTC' })
+
+/** L'horodatage rendu lisible, ou tel quel si rien ne sait le lire. */
+function horodate(brut: string, format: Intl.DateTimeFormat): string {
+  const instant = new Date(brut)
+
+  return Number.isNaN(instant.getTime()) ? brut : format.format(instant)
+}
+
 /** Ce que l'opérateur lit d'une valeur : un booléen se dit, une absence se marque. */
-function afficher(valeur: string | number | boolean | null): string {
+function afficher(valeur: string | number | boolean | null, rendu: Rendu): string {
   if (valeur === null) {
     return TEXTES.vide
   }
   if (typeof valeur === 'boolean') {
     return valeur ? TEXTES.oui : TEXTES.non
+  }
+  if (rendu === 'date') {
+    return horodate(String(valeur), JOUR)
   }
 
   return String(valeur)
@@ -472,7 +498,7 @@ function afficher(valeur: string | number | boolean | null): string {
           <template v-else>
             <TableRow v-for="ligne in lignes" :key="ligne.reference">
               <TableCell v-for="colonne in COLONNES" :key="colonne.cle">
-                {{ afficher(ligne[colonne.cle]) }}
+                {{ afficher(ligne[colonne.cle], colonne.rendu) }}
               </TableCell>
               <TableCell class="whitespace-nowrap text-right">
                 <Button variant="ghost" size="sm" @click="detailler(ligne.reference)">
@@ -598,7 +624,7 @@ function afficher(valeur: string | number | boolean | null): string {
             <dt class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               {{ propriete.libelle }}
             </dt>
-            <dd class="break-all">{{ afficher(detaillee[propriete.cle]) }}</dd>
+            <dd class="break-all">{{ afficher(detaillee[propriete.cle], propriete.rendu) }}</dd>
           </div>
         </dl>
       </SheetContent>

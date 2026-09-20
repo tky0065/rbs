@@ -154,6 +154,29 @@ function corps({% if ecran.champs %}formulaire{% else %}_formulaire{% endif %}: 
   }
 }
 
+{% if 'saisie' in ecran.formats -%}
+/**
+ * L'instant du contrat, tel que le contrôle natif le prend.
+ *
+ * `datetime-local` ne porte pas de fuseau : ce qu'il affiche, il le lit comme une heure
+ * locale, et c'est ainsi que [`corps`] la relit. Un horodatage UTC simplement tronqué y
+ * entrerait donc décalé, et ressortirait décalé une seconde fois — ouvrir puis enregistrer
+ * une ligne sans toucher au champ aurait suffi à la déplacer.
+ */
+function pourControle(iso: string | null): string {
+  if (iso === null || iso === '') {
+    return ''
+  }
+
+  const instant = new Date(iso)
+  if (Number.isNaN(instant.getTime())) {
+    return ''
+  }
+
+  return new Date(instant.getTime() - instant.getTimezoneOffset() * 60_000).toISOString().slice(0, 16)
+}
+
+{% endif -%}
 /** Le formulaire prérempli d'une ligne existante. */
 function saisie({% if ecran.champs %}ligne{% else %}_ligne{% endif %}: Ligne): Formulaire {
   return {
@@ -163,7 +186,7 @@ function saisie({% if ecran.champs %}ligne{% else %}_ligne{% endif %}: Ligne): F
 {%- elif champ.controle == 'nombre' %}
     {@ champ.cle @}: {% if champ.optionnel %}ligne.{@ champ.cle @} === null ? '' : String(ligne.{@ champ.cle @}){% else %}String(ligne.{@ champ.cle @}){% endif %},
 {%- elif champ.controle == 'instant' %}
-    {@ champ.cle @}: {% if champ.optionnel %}(ligne.{@ champ.cle @} ?? ''){% else %}ligne.{@ champ.cle @}{% endif %}.slice(0, 16),
+    {@ champ.cle @}: pourControle(ligne.{@ champ.cle @}),
 {%- else %}
     {@ champ.cle @}: {% if champ.optionnel %}ligne.{@ champ.cle @} ?? ''{% else %}ligne.{@ champ.cle @}{% endif %},
 {%- endif %}
@@ -289,21 +312,31 @@ function raison(cause: unknown, defaut: string): string {
 }
 {%- endif %}
 
+/**
+ * Comment une valeur se lit : telle quelle, en jour, ou en date et heure.
+ *
+ * Le contrat porte ses horodatages en ISO 8601, que personne ne lit de l'œil. Le type de
+ * la propriété ne suffirait pas à les reconnaître — une date y est une chaîne comme une
+ * autre — et la table les rendrait bruts.
+ */
+type Rendu = 'texte' | 'date' | 'instant'
+
 /** Une colonne de la table : ce qu'elle lit d'une ligne, et si l'on peut trier dessus. */
 interface Colonne {
   cle: keyof Ligne
   libelle: string
+  rendu: Rendu
   triable: boolean
 }
 
 const COLONNES: readonly Colonne[] = [{% for colonne in ecran.colonnes %}
-  { cle: '{@ colonne.cle @}', libelle: '{@ colonne.libelle @}', triable: {% if colonne.triable %}true{% else %}false{% endif %} },
+  { cle: '{@ colonne.cle @}', libelle: '{@ colonne.libelle @}', rendu: '{@ colonne.rendu @}', triable: {% if colonne.triable %}true{% else %}false{% endif %} },
 {%- endfor %}
 ]
 
 /** Les propriétés du détail : la ligne entière, et non le seul sous-ensemble affiché. */
-const PROPRIETES: readonly { cle: keyof Ligne; libelle: string }[] = [{% for propriete in ecran.proprietes %}
-  { cle: '{@ propriete.cle @}', libelle: '{@ propriete.libelle @}' },
+const PROPRIETES: readonly { cle: keyof Ligne; libelle: string; rendu: Rendu }[] = [{% for propriete in ecran.proprietes %}
+  { cle: '{@ propriete.cle @}', libelle: '{@ propriete.libelle @}', rendu: '{@ propriete.rendu @}' },
 {%- endfor %}
 ]
 
@@ -465,14 +498,53 @@ async function confirmer(): Promise<void> {
   }
 }
 
+{% set horodate = 'date' in ecran.formats or 'instant' in ecran.formats -%}
+{% if 'instant' in ecran.formats -%}
+/**
+ * Le format des instants, construit une fois : un `Intl.DateTimeFormat` neuf par cellule
+ * coûterait sa table de locale à chaque rendu de page.
+ *
+ * Le fuseau est celui de l'opérateur — un horodatage se lit à l'heure où l'on est, pas à
+ * Greenwich — mais la locale est celle du projet, comme tous les libellés de cet écran.
+ */
+const INSTANT = new Intl.DateTimeFormat('{@ ecran.locale @}', { dateStyle: 'short', timeStyle: 'short' })
+
+{% endif -%}
+{% if 'date' in ecran.formats -%}
+/**
+ * Le format des jours, à Greenwich et non au fuseau de l'opérateur : une date nue vaut
+ * minuit UTC, que tout fuseau à l'ouest ramènerait à la veille.
+ */
+const JOUR = new Intl.DateTimeFormat('{@ ecran.locale @}', { dateStyle: 'short', timeZone: 'UTC' })
+
+{% endif -%}
+{% if horodate -%}
+/** L'horodatage rendu lisible, ou tel quel si rien ne sait le lire. */
+function horodate(brut: string, format: Intl.DateTimeFormat): string {
+  const instant = new Date(brut)
+
+  return Number.isNaN(instant.getTime()) ? brut : format.format(instant)
+}
+
+{% endif -%}
 /** Ce que l'opérateur lit d'une valeur : un booléen se dit, une absence se marque. */
-function afficher(valeur: string | number | boolean | null): string {
+function afficher(valeur: string | number | boolean | null, {% if horodate %}rendu{% else %}_rendu{% endif %}: Rendu): string {
   if (valeur === null) {
     return TEXTES.vide
   }
   if (typeof valeur === 'boolean') {
     return valeur ? TEXTES.oui : TEXTES.non
   }
+{%- if 'instant' in ecran.formats %}
+  if (rendu === 'instant') {
+    return horodate(String(valeur), INSTANT)
+  }
+{%- endif %}
+{%- if 'date' in ecran.formats %}
+  if (rendu === 'date') {
+    return horodate(String(valeur), JOUR)
+  }
+{%- endif %}
 
   return String(valeur)
 }
@@ -545,7 +617,7 @@ function afficher(valeur: string | number | boolean | null): string {
           <template v-else>
             <TableRow v-for="ligne in lignes" :key="ligne.{@ ecran.cle @}">
               <TableCell v-for="colonne in COLONNES" :key="colonne.cle">
-                {{ afficher(ligne[colonne.cle]) }}
+                {{ afficher(ligne[colonne.cle], colonne.rendu) }}
               </TableCell>
               <TableCell class="whitespace-nowrap text-right">
                 <Button variant="ghost" size="sm" @click="detailler(ligne.{@ ecran.cle @})">
@@ -659,7 +731,7 @@ function afficher(valeur: string | number | boolean | null): string {
             <dt class="text-xs uppercase tracking-[0.2em] text-muted-foreground">
               {{ propriete.libelle }}
             </dt>
-            <dd class="break-all">{{ afficher(detaillee[propriete.cle]) }}</dd>
+            <dd class="break-all">{{ afficher(detaillee[propriete.cle], propriete.rendu) }}</dd>
           </div>
         </dl>
       </SheetContent>

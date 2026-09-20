@@ -2587,7 +2587,7 @@ mod tests {
             "api.articlesCreate(",
             "api.articlesUpdate(",
             "api.articlesDelete(",
-            "{ cle: 'title', libelle: 'Title', triable: true },",
+            "{ cle: 'title', libelle: 'Title', rendu: 'texte', triable: true },",
         ] {
             assert!(ecran.contains(temoin), "`{temoin}` manque :\n{ecran}");
         }
@@ -2777,7 +2777,7 @@ mod tests {
 
         let ecran = read(&root.join("frontend/src/admin/vues/Articles.vue"));
         assert!(
-            ecran.contains("{ cle: 'statut', libelle: 'Statut', triable: true },"),
+            ecran.contains("{ cle: 'statut', libelle: 'Statut', rendu: 'texte', triable: true },"),
             "{ecran}"
         );
         assert!(ecran.contains("'draft' | 'published'"), "{ecran}");
