@@ -120,9 +120,10 @@ no admin shell, eleven of the twenty-two being optional — before anything goes
 it. Nothing in it is marked "generated, do not edit", because [the whole
 design](./architecture.md) is that you read and change it. rbs cannot promise the shape of
 a file you have since rewritten, and it does not need to: no rbs release will ever rewrite
-it either. `rbs upgrade` edits `Cargo.toml` and nothing else. If a later version generates
-a different service layer, that is a difference between two new projects, not a change to
-yours.
+it either. [`rbs upgrade`](./cli/upgrade.md) edits `Cargo.toml`, the two reserved zones of
+`AGENTS.md`, and files your project does not have — never one it does. If a later version
+generates a different service layer, that is a difference between two new projects, not a
+change to yours.
 
 **The library target of `rbs-cli`.** The package exists to install the `rbs` binary. Its
 library is visible because that is how the crate is built and tested, not because it is

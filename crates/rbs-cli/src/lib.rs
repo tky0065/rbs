@@ -31,6 +31,7 @@ mod remove;
 mod routes;
 mod secret;
 mod seed;
+mod tasks;
 mod template;
 mod templates;
 mod test;

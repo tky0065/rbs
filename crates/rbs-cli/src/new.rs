@@ -1955,6 +1955,11 @@ mod tests {
     ///
     /// Sur un projet nu, `DEV` n'en porte qu'un ; c'est le fragment `frontend` qui y ajoute
     /// le second, et la recette ne change pas pour autant.
+    ///
+    /// Le piège ne porte pas `EXIT` : `wait` ne rend la main qu'une fois tout terminé, si
+    /// bien qu'un `kill 0` déclenché là n'aurait plus rien à arrêter et emporterait le
+    /// groupe — make compris — au moment même où la recette a réussi. C'est
+    /// `integration_new` qui le mesure ; ce test-ci tient la ligne à laquelle il tient.
     #[test]
     fn the_dev_shortcut_traps_its_process_group_and_waits_for_it() {
         let parent = parent();
@@ -1967,7 +1972,7 @@ mod tests {
             "{makefile}"
         );
         assert!(
-            makefile.contains("\t@trap 'kill 0' INT TERM EXIT; \\\n\t$(DEV) \\\n\twait\n"),
+            makefile.contains("\t@trap 'kill 0' INT TERM; \\\n\t$(DEV) \\\n\twait\n"),
             "la recette de `dev` n'est pas celle attendue :\n{makefile}"
         );
     }

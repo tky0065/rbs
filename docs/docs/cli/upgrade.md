@@ -10,8 +10,9 @@ dependency and the version recorded in `[package.metadata.rbs]`. It then prints 
 migration notes the jump crosses.
 
 It writes to `Cargo.toml`, and to the two reserved zones of [`AGENTS.md`](../guides/agents.md);
-it also creates the one-line `CLAUDE.md` that imports that guide when the project has none,
-and never rewrites one that exists — nothing else. The rest of the project — controllers, configuration, migrations, and
+it also creates the two files a project generated before them has none of — the one-line
+`CLAUDE.md` that imports that guide, and the [`Makefile`](./new.md#the-projects-shortcuts)
+of the project's shortcuts — and never rewrites one that exists. Nothing else. The rest of the project — controllers, configuration, migrations, and
 everything you write outside those two zones — is yours from the moment
 [`rbs new`](./new.md) put it there, and re-rendering it on a newer version would erase your
 work without you having asked for it by name. The guide is different: it is text rbs
@@ -159,6 +160,19 @@ own — is untouched, the same way the rest of the project is. [`rbs doctor`](./
 
 The write goes through the same journal as every other command that touches an existing
 project: should a write fail halfway, what was already written is undone.
+
+## The two files a project may be missing
+
+A `CLAUDE.md` and a `Makefile` arrived in the middle of the park's life. A project
+generated before them carries neither, so neither can conflict with anything, and the
+upgrade writes them. A project that carries one keeps it byte for byte — the `Makefile`
+holds the `# <rbs:make>` anchor precisely so that you and the fragments can add shortcuts
+to it, and an upgrade that overwrote them would be the one thing this command never does.
+
+What it writes is the skeleton's file, not the state a project carrying fragments would
+have: the client's `front` and the image's `image` are put there by
+[`rbs add`](./add.md), which an upgrade does not replay. Reinstalling the fragment over an
+existing project writes its shortcuts into the anchor it has just received.
 
 ## A jump that crosses no note
 

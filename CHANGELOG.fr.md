@@ -31,7 +31,7 @@ dépréciation.
   dans le fichier lui-même et que rend un `make` nu. Chaque recette enveloppe `cargo`, `npm`
   ou `docker compose` ; aucune n'appelle `rbs`. `make dev` mène de front tout ce que le projet
   porte, dans un même groupe de processus — un seul Ctrl-C arrête l'ensemble — sans aucune
-  dépendance nouvelle : un `trap 'kill 0' INT TERM EXIT` et un `wait`. Les noms de cibles sont
+  dépendance nouvelle : un `trap 'kill 0' INT TERM` et un `wait`. Les noms de cibles sont
   les mêmes dans toutes les langues ; seules les descriptions qu'affiche `make help` suivent
   `--lang`.
 
@@ -43,6 +43,14 @@ dépréciation.
   `# <rbs:ignore>` : le squelette écrit bien le fichier, mais celui-ci appartient au
   développeur, qui peut l'avoir supprimé. Le registre passe de vingt-et-une ancres à
   vingt-deux, dont onze optionnelles.
+
+- **`rbs upgrade` écrit le `Makefile` sur un projet engendré avant qu'il existe.** Le fichier
+  est neuf : aucun projet engendré par un rbs antérieur n'en porte, et rien de ce qui y est
+  écrit ne peut donc entrer en conflit avec quoi que ce soit — même raison et même règle que
+  le `CLAUDE.md` avant lui, un projet qui en porte déjà un le garde octet pour octet, ses
+  propres raccourcis compris. Ce qui est posé est le fichier du squelette, dans la langue du
+  projet ; `front` et `image` restent l'affaire de `rbs add`, que la mise à niveau ne rejoue
+  pas.
 
 ### Modifié
 
@@ -144,6 +152,15 @@ dépréciation.
   d'inscription du shell le demande et affiche le refus au lieu du formulaire ; l'écran de
   connexion retire le lien qui y mène. `auth` monte désormais quinze routes sur treize
   chemins.
+
+- **`make dev` ne tue plus celui qui l'a appelé quand ce qu'il mène s'arrête de soi-même.**
+  Son piège couvrait `EXIT`, et `wait` ne rend la main qu'une fois tous les processus lancés
+  terminés : le `kill 0` déclenché là n'avait plus rien à arrêter et emportait le groupe
+  entier — make, et le shell de tout script ayant appelé la recette. Mesuré sur un projet
+  nu : un `make dev` dont le binaire s'était simplement terminé mourait de son propre
+  SIGTERM au lieu de rendre zéro. Le piège ne couvre plus que `INT` et `TERM`, ce pour quoi
+  il était fait. Un Ctrl-C était déjà correct et le reste : les deux moitiés s'arrêtent, et
+  rien ne leur survit — ce qu'un test exécute désormais, au lieu de le déduire du fichier.
 
 ## [1.7.0] — 2026-09-19
 
