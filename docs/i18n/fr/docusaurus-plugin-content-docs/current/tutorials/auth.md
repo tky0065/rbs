@@ -415,7 +415,7 @@ même.
 
 ## Pour aller plus loin
 
-- [Authentification](../guides/auth.md) couvre les treize routes que `add auth` monte, la
+- [Authentification](../guides/auth.md) couvre les quinze routes que `add auth` monte, la
   paire de jetons, et l'enum `Role` que cette page n'a utilisée qu'à son défaut.
 - [`rbs add`](../cli/add.md) couvre les dix autres features que ce projet pourrait
   encore installer, et le `--force` dont cette page n'a jamais eu besoin.

@@ -4,6 +4,21 @@ import type { NavigationGuardWithThis } from 'vue-router'
 const ESPACE = '/admin'
 
 /**
+ * Les pages publiques de l'espace : ce qu'un visiteur doit atteindre sans jeton pour
+ * obtenir le sien.
+ *
+ * La connexion seule ne suffirait pas. Qui n'a pas encore de compte, qui a perdu son mot
+ * de passe, ou dont l'adresse attend sa preuve n'a rien à présenter à la garde — et le
+ * parcours qui lui donne de quoi entrer serait derrière elle.
+ */
+const PUBLIQUES = new Set([
+  'admin-connexion',
+  'admin-inscription',
+  'admin-reinitialisation',
+  'admin-verification',
+])
+
+/**
  * Renvoie à la connexion toute route d'administration atteinte sans session.
  *
  * L'attente est ici, et non dans l'écran visé : restaurer la session pendant que l'écran
@@ -12,7 +27,9 @@ const ESPACE = '/admin'
  * les deux.
  */
 export const garde: NavigationGuardWithThis<undefined> = async (vers) => {
-  if (!vers.path.startsWith(ESPACE) || vers.name === 'admin-connexion') {
+  const publique = typeof vers.name === 'string' && PUBLIQUES.has(vers.name)
+
+  if (!vers.path.startsWith(ESPACE) || publique) {
     return true
   }
 

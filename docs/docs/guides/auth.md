@@ -6,9 +6,10 @@ title: Authentication
 # Authentication
 
 `rbs add auth` installs a working authentication feature into an existing project:
-thirty-two files under `src/auth/`, three mail templates, one seed, one migration, and
-thirteen routes mounted on the router. What it lays down is ordinary code in your source tree —
-an entity, a service, a controller, a guard — and it is meant to be read and changed.
+thirty-five files under `src/auth/`, three mail templates, one seed, one migration, and
+fifteen routes — on thirteen paths — mounted on the router. What it lays down is ordinary
+code in your source tree — an entity, a service, a controller, a guard — and it is meant to
+be read and changed.
 
 Every snippet on this page is taken from
 [`examples/blog-auth`](https://github.com/tky0065/rbs/tree/main/examples/blog-auth), a
@@ -33,10 +34,12 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/repository/one_time_token.rs                  créé
   + src/auth/service/mod.rs                                créé
   + src/auth/service/session.rs                            créé
+  + src/auth/service/account.rs                            créé
   + src/auth/service/password.rs                           créé
   + src/auth/service/verification.rs                       créé
   + src/auth/controller/mod.rs                             créé
   + src/auth/controller/session.rs                         créé
+  + src/auth/controller/account.rs                         créé
   + src/auth/controller/password.rs                        créé
   + src/auth/controller/verification.rs                    créé
   + templates/mail/reinitialisation.html                   créé
@@ -45,6 +48,7 @@ plan pour /private/tmp/rbs-demo/blog
   + src/auth/guard.rs                                      créé
   + src/seeds/admin.rs                                     créé
   + src/auth/tests/mod.rs                                  créé
+  + src/auth/tests/account.rs                              créé
   + src/auth/tests/change.rs                               créé
   + src/auth/tests/guard.rs                                créé
   + src/auth/tests/http.rs                                 créé
@@ -73,13 +77,15 @@ plan pour /private/tmp/rbs-demo/blog
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  37 à créer, 12 à modifier
-✓ auth installée — 37 créés, 12 modifiés
+  40 à créer, 12 à modifier
+✓ auth installée — 40 créés, 12 modifiés
 
   rbs migrate up
 ```
 
-Thirteen routes come with it. Five open the core cycle:
+Fifteen routes come with it, on thirteen paths — `/auth/sessions` carries both the listing
+and the global revocation, `/auth/me` both the profile and the one write it accepts. Six
+open the core cycle:
 
 | Route | What it does |
 |---|---|
@@ -88,6 +94,7 @@ Thirteen routes come with it. Five open the core cycle:
 | `POST /auth/refresh` | Rotates the pair. The token presented is marked replaced. |
 | `POST /auth/logout` | Revokes one session. 204. |
 | `GET /auth/me` | The caller's profile. |
+| `PATCH /auth/me` | Changes the caller's address, and nothing else. Always 202, without a body. |
 
 `register` answers the same 202 whether the address is new or already carries an account,
 and hashes the password in both cases — a 409, a profile returned to the new address
@@ -107,14 +114,35 @@ apart, in two requests, at the pace the rate limit allows (`/auth/register` take
 hour per client). A project that makes that choice puts the routes that must not serve an
 unproven address behind `VerifiedIdentity`.
 
-A sixth, `POST /auth/change-password`, lets a caller already holding a token do the same
-without an email link — covered right below. The other seven act on a forgotten password,
-an unconfirmed address, or the caller's own sessions, each in its own section further down
+A seventh, `GET /auth/registration`, says whether `POST /auth/register` is open — the
+section below explains why a screen has to ask. An eighth,
+`POST /auth/change-password`, lets a caller already holding a token do the same without an
+email link — covered right below. The other seven act on a forgotten password, an
+unconfirmed address, or the caller's own sessions, each in its own section further down
 this page.
+
+`PATCH /auth/me` takes an address and nothing else: the body is the same `EmailRequest`
+that `forgot-password` and `resend-verification` read, so a field added to it would be
+visible in three places at once. It writes the new address, drops `email_verified_at` back
+to `NULL` — the proof was about the old address — and sends a fresh verification link, in
+the same detached task as a signup. The answer is the same 202 whether the address was free
+or already carried an account, and in the second case nothing is written and its holder
+gets the same warning email a signup would have sent: otherwise one account would be enough
+to find out which addresses the service knows.
 
 The migration creates `users`, `refresh_tokens` and `one_time_tokens`, with a unique
 constraint on the email address and a nullable `email_verified_at` on `users`.
 `rbs migrate down` takes all three away: the tables arrive and leave with the feature.
+
+### Closing registration
+
+`registration_enabled`, in `[auth]`, is `true` by default. Set it to `false` and
+`POST /auth/register` refuses before it reads the address — a 403 whose problem document
+carries the stable code `registration_closed` — rather than merely hiding a button: the
+route is open to whatever posts to it, and a switch that only reached browsers would have
+closed nothing. `GET /auth/registration` answers `{"enabled": false}`, which is how an
+application served as static files learns about a setting the server reads at startup; the
+admin shell's signup screen asks it and shows the closed message instead of the form.
 
 ## The secret, and where it lives
 
@@ -154,9 +182,11 @@ Two of its keys are doubled in `config/development.toml`, which the `development
 lays over the defaults. `app_url` is `http://localhost:8080` by default — the port the
 binary serves the built client on — and `http://localhost:5173` on a workstation, which is
 Vite's. `login_requires_verification` is `true` by default and `false` on a workstation:
-an account signed up through the API is not verified, no generated screen calls
-`/auth/verify-email`, and the gap that `false` reopens is one a workstation can carry while
-production cannot.
+an account signed up through the API is not verified, the link that proves it goes to the
+client rather than to this server, and the gap that `false` reopens is one a workstation can carry while
+production cannot. That gap narrows once the admin shell is installed: it carries the
+public screen that posts to `/auth/verify-email`, and an account signed up through the API
+can then prove its address on a workstation as in production.
 
 ## The token cycle
 
@@ -515,10 +545,11 @@ identified but whose role falls short, refused 403 by the guard inside the handl
 
 The feature's own routes are covered the same way, split by concern under
 `src/auth/tests/` — `registration.rs`, `login.rs`, `refresh.rs`, `replay.rs`, `logout.rs`,
-`sessions.rs`, `roles.rs`, `tokens.rs`, `change.rs`, `reset.rs`, `verification.rs`,
-`guard.rs` and `openapi.rs`, around the shared harness of `mod.rs` and the request helpers
-of `http.rs` — registration, the identical 401s, rotation, replay, revocation, the password
-and verification journeys above, the verified-address guard and the OpenAPI document.
+`sessions.rs`, `roles.rs`, `tokens.rs`, `change.rs`, `account.rs`, `reset.rs`,
+`verification.rs`, `guard.rs` and `openapi.rs`, around the shared harness of `mod.rs` and
+the request helpers of `http.rs` — registration and its switch, the identical 401s,
+rotation, replay, revocation, the address change, the password and verification journeys
+above, the verified-address guard and the OpenAPI document.
 All of these go through HTTP against a real database, so all of them are marked
 `#[ignore]`: `cargo test` on a fresh project passes with no server running, and
 `cargo test -- --ignored` runs them against the database your `.env` names, migrations

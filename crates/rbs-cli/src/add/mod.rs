@@ -3875,7 +3875,7 @@ mod tests {
     /// Il pose ses fichiers *dans* l'arbre du socle : une seule application, deux régimes
     /// de route. Un fichier du socle redéposé ici ferait un conflit de plan, et non une
     /// installation.
-    const SHELL: [&str; 15] = [
+    const SHELL: [&str; 19] = [
         "frontend/src/api/jetons.ts",
         "frontend/src/api/index.ts",
         "frontend/src/stores/authentification.ts",
@@ -3885,8 +3885,12 @@ mod tests {
         "frontend/src/admin/rail.ts",
         "frontend/src/admin/document.ts",
         "frontend/src/admin/textes.ts",
+        "frontend/src/admin/lien.ts",
         "frontend/src/admin/Shell.vue",
         "frontend/src/admin/vues/Connexion.vue",
+        "frontend/src/admin/vues/Inscription.vue",
+        "frontend/src/admin/vues/Reinitialisation.vue",
+        "frontend/src/admin/vues/Verification.vue",
         "frontend/src/admin/vues/TableauDeBord.vue",
         "frontend/src/admin/vues/Sessions.vue",
         "frontend/src/admin/vues/Profil.vue",
@@ -3898,6 +3902,29 @@ mod tests {
         ("frontend/src/admin/vues/TableauDeBord.vue", "admin-tableau"),
         ("frontend/src/admin/vues/Sessions.vue", "admin-sessions"),
         ("frontend/src/admin/vues/Profil.vue", "admin-profil"),
+    ];
+
+    /// Les pages publiques du shell : le fichier, le nom de la route, et l'appel du client
+    /// engendré qui n'avait, avant elles, aucun appelant dans le frontend.
+    ///
+    /// La connexion n'y est pas : elle est publique comme les trois autres, mais elle
+    /// existait déjà, et c'est son propre test qui la regarde.
+    const PUBLIQUES: [(&str, &str, &str); 3] = [
+        (
+            "frontend/src/admin/vues/Inscription.vue",
+            "admin-inscription",
+            "api.authRegister(",
+        ),
+        (
+            "frontend/src/admin/vues/Reinitialisation.vue",
+            "admin-reinitialisation",
+            "api.authResetPassword(",
+        ),
+        (
+            "frontend/src/admin/vues/Verification.vue",
+            "admin-verification",
+            "api.authVerifyEmail(",
+        ),
     ];
 
     /// Le shell exige le socle et l'authentification, et le plan nomme ce qu'il entraîne.
@@ -4268,13 +4295,227 @@ mod tests {
             "rien n'y renvoie depuis l'écran :\n{connexion}"
         );
 
-        // La demande reste sur l'écran de connexion, et n'ouvre aucune route de plus :
-        // l'espace n'en compte que deux, et la seconde est fermée.
+        // La demande reste un dialogue de l'écran de connexion : une page pour un champ
+        // n'apporte rien, et c'est le seul écran qu'un opérateur enfermé dehors ouvre
+        // encore. Aucune route ne lui est donc ouverte, quand les trois autres parcours
+        // publics en ont une.
+        assert!(
+            connexion.contains("<Dialog v-model:open=\"oubliOuvert\">"),
+            "la demande n'est plus un dialogue de l'écran :\n{connexion}"
+        );
         let montage = projected(&planned, "frontend/src/admin/montage.ts");
+        assert!(
+            !montage.contains("Oubli"),
+            "la demande de réinitialisation s'est donné un écran à elle :\n{montage}"
+        );
+    }
+
+    /// Les trois pages publiques se montent hors du shell, hors du rail, et devant la
+    /// garde.
+    ///
+    /// Hors du shell parce qu'il n'a ni rail ni compte à montrer à qui n'est pas entré ;
+    /// hors du rail parce que le rail est la navigation d'un espace authentifié, et que la
+    /// connexion n'y figure pas davantage ; devant la garde parce que ces parcours sont
+    /// précisément ce par quoi on obtient le jeton qu'elle réclame.
+    #[test]
+    fn the_public_screens_mount_outside_the_shell_the_rail_and_the_guard() {
+        let (_parent, root) = project();
+
+        let planned =
+            plan_for(&options(&root, "frontend-admin")).expect("le plan doit se calculer");
+
+        let montage = projected(&planned, "frontend/src/admin/montage.ts");
+        let rail = projected(&planned, "frontend/src/admin/rail.ts");
+        let garde = projected(&planned, "frontend/src/admin/garde.ts");
+
+        // Ce que le shell couvre, et rien d'autre : les quatre publiques et lui-même.
         assert_eq!(
             montage.matches("path: '/admin").count(),
-            2,
-            "l'espace déclare une route de plus que la connexion et le shell :\n{montage}"
+            5,
+            "l'espace ne déclare pas les quatre pages publiques et le shell :\n{montage}"
+        );
+
+        let enfants = montage
+            .split("children: [")
+            .nth(1)
+            .expect("le shell porte des enfants");
+
+        for (chemin, route, appel) in PUBLIQUES {
+            let fichier = chemin
+                .rsplit('/')
+                .next()
+                .expect("le chemin porte un nom de fichier");
+
+            assert!(
+                planned.files.iter().any(|pose| pose == chemin),
+                "{chemin} n'est pas déposé : {:?}",
+                planned.files
+            );
+            assert!(
+                montage.contains(&format!("name: '{route}'")),
+                "la route `{route}` n'est pas déclarée :\n{montage}"
+            );
+            assert!(
+                montage.contains(&format!("() => import('./vues/{fichier}')")),
+                "`{fichier}` n'est pas chargé paresseusement :\n{montage}"
+            );
+            assert!(
+                !enfants.contains(route),
+                "`{route}` est montée sous le shell, derrière la garde :\n{montage}"
+            );
+            assert!(
+                !rail.contains(route),
+                "`{route}` est entrée dans le rail d'un espace authentifié :\n{rail}"
+            );
+            assert!(
+                garde.contains(&format!("'{route}'")),
+                "la garde ne laisse pas passer `{route}` :\n{garde}"
+            );
+            assert!(
+                projected(&planned, chemin).contains(appel),
+                "{chemin} n'appelle pas `{appel}`"
+            );
+        }
+
+        // Et la connexion reste publique : la retirer de l'ensemble enfermerait dehors
+        // tout le monde, y compris ceux qui ont déjà un compte.
+        assert!(
+            garde.contains("'admin-connexion'"),
+            "la garde ne laisse plus passer la connexion :\n{garde}"
+        );
+    }
+
+    /// Les liens que le fragment `auth` met dans ses courriels tombent sur un écran.
+    ///
+    /// `auth` les compose depuis `app_url`, sans rien savoir du shell posé à côté : c'est
+    /// donc au shell de servir ces chemins-là. Un alias les sert sans redirection — le
+    /// jeton vit dans le fragment de l'URL, qu'une redirection perdrait.
+    #[test]
+    fn the_paths_the_auth_emails_carry_land_on_a_screen() {
+        let (_parent, root) = project();
+
+        let shell = plan_for(&options(&root, "frontend-admin")).expect("le plan se calcule");
+        let montage = projected(&shell, "frontend/src/admin/montage.ts");
+
+        for chemin in ["/forgot-password", "/reset-password", "/verify-email"] {
+            assert!(
+                montage.contains(&format!("alias: '{chemin}'")),
+                "`{chemin}` ne tombe sur aucun écran :\n{montage}"
+            );
+        }
+
+        // Et ce sont bien les chemins qu'`auth` compose : le fragment les écrit dans ses
+        // services, et les deux moitiés n'ont rien d'autre qui les tienne ensemble.
+        let (_autre, projet) = project();
+        let auth = plan_for(&options(&projet, "auth")).expect("le plan doit se calculer");
+        for (fichier, chemin) in [
+            ("src/auth/service/mod.rs", "\"forgot-password\""),
+            ("src/auth/service/password.rs", "\"reset-password\""),
+            ("src/auth/service/verification.rs", "\"verify-email\""),
+        ] {
+            let rendu = projected(&auth, fichier);
+            assert!(
+                rendu.contains(chemin),
+                "{fichier} ne compose plus {chemin} :\n{rendu}"
+            );
+        }
+
+        // Le jeton voyage dans le fragment, et c'est le fragment que les écrans lisent en
+        // premier : les deux écrans passent par le même module pour ne pas diverger.
+        let lien = projected(&shell, "frontend/src/admin/lien.ts");
+        assert!(
+            lien.contains("route.hash"),
+            "le jeton n'est pas cherché dans le fragment de l'URL :\n{lien}"
+        );
+        for chemin in [
+            "frontend/src/admin/vues/Reinitialisation.vue",
+            "frontend/src/admin/vues/Verification.vue",
+        ] {
+            let rendu = projected(&shell, chemin);
+            assert!(
+                rendu.contains("jetonDuLien(route)"),
+                "{chemin} relit le lien pour son compte :\n{rendu}"
+            );
+        }
+    }
+
+    /// `registration_enabled` ferme la route, et pas seulement l'écran.
+    ///
+    /// Un interrupteur qui n'aurait masqué qu'un bouton aurait laissé `POST /auth/register`
+    /// ouvert à tout ce qui n'est pas un navigateur. Le refus part donc du service, avant
+    /// même le hachage, et porte un code que l'écran sait lire.
+    #[test]
+    fn the_registration_switch_closes_the_route_and_not_only_the_screen() {
+        let (_parent, root) = project();
+
+        let auth = plan_for(&options(&root, "auth")).expect("le plan doit se calculer");
+
+        let config = projected(&auth, "config/default.toml");
+        assert!(
+            config.contains("registration_enabled = true"),
+            "le réglage n'arrive pas avec le fragment :\n{config}"
+        );
+
+        let service = projected(&auth, "src/auth/service/session.rs");
+        let ferme = service
+            .find("if !flows.registration_enabled {")
+            .expect("le service ne referme pas l'inscription");
+        assert!(
+            ferme
+                < service
+                    .find("hash::hash_password(&input.password)")
+                    .expect("l'inscription hache le mot de passe"),
+            "le refus paie un Argon2 qu'un service fermé n'a aucune raison de payer :\n{service}"
+        );
+        assert!(
+            service.contains("code: \"registration_closed\","),
+            "le refus ne se distingue pas d'un autre 403 :\n{service}"
+        );
+
+        // Et l'écran ne devine pas : il demande, et se range sur ce que le service dit.
+        let (_second, projet) = project();
+        let shell = plan_for(&options(&projet, "frontend-admin")).expect("le plan se calcule");
+        let inscription = projected(&shell, "frontend/src/admin/vues/Inscription.vue");
+        assert!(
+            inscription.contains("api.authRegistrationStatus()"),
+            "l'écran d'inscription devine l'état de l'interrupteur :\n{inscription}"
+        );
+        assert!(
+            inscription.contains("'registration_closed'"),
+            "l'écran ne lit pas le refus que la route rend :\n{inscription}"
+        );
+    }
+
+    /// La gestion de profil devient une écriture : l'adresse s'y change.
+    ///
+    /// Sans `PATCH /auth/me` et l'écran qui l'appelle, « gestion de profil » ne désignait
+    /// qu'une page en lecture seule.
+    #[test]
+    fn the_profile_screen_can_write_the_address_it_shows() {
+        let (_parent, root) = project();
+
+        let shell = plan_for(&options(&root, "frontend-admin")).expect("le plan se calcule");
+        let profil = projected(&shell, "frontend/src/admin/vues/Profil.vue");
+
+        assert!(
+            profil.contains("api.authUpdateMe({ email:"),
+            "le profil ne sait rien écrire :\n{profil}"
+        );
+
+        let (_second, projet) = project();
+        let auth = plan_for(&options(&projet, "auth")).expect("le plan doit se calculer");
+        let module = projected(&auth, "src/auth/mod.rs");
+        assert!(
+            module.contains("get(controller::me).patch(controller::account::update_me)"),
+            "les deux méthodes de `/auth/me` ne se déclarent pas en une fois :\n{module}"
+        );
+
+        // L'adresse et rien d'autre : le DTO est celui des routes qui ne prennent qu'elle,
+        // et un champ de plus y serait aussitôt visible ailleurs.
+        let controleur = projected(&auth, "src/auth/controller/account.rs");
+        assert!(
+            controleur.contains("ValidatedJson<EmailRequest>"),
+            "l'écriture du profil accepte autre chose que l'adresse :\n{controleur}"
         );
     }
 
@@ -4319,13 +4560,19 @@ mod tests {
             );
         }
 
-        // Sous le shell, et non à côté : un écran monté en dehors n'aurait ni rail, ni
-        // garde, et s'afficherait nu à qui n'est pas connecté.
-        assert_eq!(
-            montage.matches("path: '/admin").count(),
-            2,
-            "un écran s'est monté hors de l'espace :\n{montage}"
-        );
+        // Sous le shell, et non à côté : un écran de compte monté en dehors n'aurait ni
+        // rail, ni garde, et s'afficherait nu à qui n'est pas connecté. Les pages
+        // publiques font l'inverse, et c'est leur propre test qui les regarde.
+        let enfants_du_shell = montage
+            .split("children: [")
+            .nth(1)
+            .expect("le shell porte des enfants");
+        for (_, route) in ECRANS {
+            assert!(
+                enfants_du_shell.contains(route),
+                "`{route}` s'est montée hors de l'espace :\n{montage}"
+            );
+        }
 
         // Le commentaire que la commande de génération remplacera reste en dernier :
         // ce que le fragment monte et ce qu'elle montera ne se disputent pas la ligne.
