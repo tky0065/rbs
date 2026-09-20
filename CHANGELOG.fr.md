@@ -13,6 +13,32 @@ dépréciation.
 
 ## [Non publié]
 
+### Corrigé
+
+- **Un projet engendré avec `auth` n'avait aucun compte capable d'entrer dans son espace
+  d'administration.** `register` ne fixe aucun rôle et la colonne `users.role` défaut à
+  `"user"` : aucun chemin de l'API ne produisait d'administrateur — quand l'écran de
+  connexion affirmait à l'utilisateur que les identifiants étaient ceux de la table des
+  comptes que le projet porte, une table vide. `rbs add auth` dépose désormais
+  `src/seeds/admin.rs` et le déclare dans le binaire des seeds du projet : `rbs seed` écrit
+  un compte portant `Role::Admin`, son adresse déjà datée comme vérifiée. Ses identifiants
+  sont les nouvelles `ADMIN_EMAIL` et `ADMIN_PASSWORD` — l'adresse déduite du nom du projet,
+  le mot de passe tiré à l'installation — écrites dans le `.env` que git ignore, des repères
+  restant dans le `.env.example` versionné, et nommées par les gestes de suite du fragment.
+  Le seed n'écrit rien si le compte existe, rien si l'une des deux variables manque ou est
+  vide, et refuse de tourner sous `RBS_ENV=production` ; ce dernier refus vit dans le seed
+  et non dans `rbs seed`, par où `cargo run --bin seed` ne passe jamais.
+
+### Modifié
+
+- **La section `[auth]` est désormais dédoublée dans `config/development.toml`.**
+  `login_requires_verification` reste à `true` dans `config/default.toml`, qui gouverne la
+  production, et vaut `false` sur un poste de travail : un compte inscrit par l'API n'est
+  jamais vérifié, et aucun écran engendré n'appelle `/auth/verify-email`. `app_url` passe
+  de `http://localhost:3000`, un port où rien n'écoute, à `http://localhost:8080` par
+  défaut — le port sur lequel le binaire sert le client construit — et
+  `http://localhost:5173`, celui de Vite, en développement.
+
 ## [1.7.0] — 2026-09-19
 
 ### Ajouté

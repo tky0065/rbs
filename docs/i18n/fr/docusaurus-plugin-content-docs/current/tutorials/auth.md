@@ -220,15 +220,18 @@ compte. Le compte existe dès que le 202 arrive, et c'est toujours un `user` —
 de cette page ne distribue `admin` sur simple demande ; le compte obtenu ici peut lire
 `posts`, pas y écrire.
 
-Il ne peut pas encore se connecter : `login_requires_verification`, `true` dans `[auth]`,
-tient un compte à l'écart tant que son adresse n'est pas prouvée — une connexion avec le
-mot de passe tout juste envoyé distinguerait sinon une adresse neuve d'une prise, comme
-l'explique le guide auth. La preuve arrive par courriel. `auth` arrive avec `mail`, et le
+Sur ce poste de travail, il se connecte tout de suite : `config/development.toml`, que
+`RBS_ENV=development` pose par-dessus les défauts, met `login_requires_verification` à
+`false`. Le défaut versionné est `true`, et c'est lui qu'un déploiement porte — là, un
+compte reste à l'écart tant que son adresse n'est pas prouvée, parce qu'une connexion avec
+le mot de passe tout juste envoyé distinguerait sinon une adresse neuve d'une prise, comme
+l'explique le guide auth. La preuve arrive par courriel, et elle vaut d'être déroulée une
+fois ici. `auth` arrive avec `mail`, et le
 SMTP par défaut de `mail` est Mailpit — le service `mailpit` que `docker-compose.yml`
 porte déjà, qui attrape chaque message que le projet envoie sans qu'aucune vraie boîte
 n'existe de l'autre côté. Ouvrez [`http://localhost:8025`](http://localhost:8025) dans un
 navigateur et laissez-le ouvert : un message intitulé *Confirmez votre adresse* y attend,
-avec un lien de la forme `http://localhost:3000/verify-email#token=…`. Recopiez le jeton
+avec un lien de la forme `http://localhost:5173/verify-email#token=…`. Recopiez le jeton
 qu'il porte :
 
 ```bash
@@ -242,8 +245,8 @@ HTTP/1.1 204 No Content
 ```
 
 Un lien périme après `verification_ttl_secs` ; un client qui le trouve expiré en demande un
-neuf par `POST /auth/resend-verification`. L'adresse est prouvée, et le mot de passe ouvre
-désormais le compte :
+neuf par `POST /auth/resend-verification`. L'adresse est prouvée — ce qu'un déploiement
+aurait exigé — et le mot de passe ouvre le compte :
 
 ```bash
 TOKEN=$(curl -s -X POST http://127.0.0.1:8080/auth/login \
@@ -314,6 +317,12 @@ date: Wed, 09 Sep 2026 09:33:06 GMT
 La preuve que `--role admin` n'a jamais touché cette route : le même jeton `user`,
 refusé sur l'écriture, lit la liste vide sans se plaindre.
 
+Pour passer l'écriture, il faut un compte portant `admin`, et aucune route n'en distribue.
+`rbs seed` l'écrit : `auth` a déposé `src/seeds/admin.rs`, qui prend `ADMIN_EMAIL` et
+`ADMIN_PASSWORD` dans votre `.env` — `rbs add auth` les y a posées — et crée le compte,
+son adresse déjà vérifiée. Connectez-vous avec ces deux-là plutôt qu'avec celles d'Alice,
+et l'écriture répond 201.
+
 ## Changer, réinitialiser
 
 Gardez l'onglet Mailpit ouvert : les requêtes suivantes y déposent encore quelque chose.
@@ -351,7 +360,7 @@ content-length: 0
 
 202 que l'adresse existe ou non — regardez l'onglet Mailpit, un message y attend, intitulé
 *Réinitialisation de votre mot de passe*, avec un lien de la forme
-`http://localhost:3000/reset-password#token=…`. Recopiez le jeton qu'il porte :
+`http://localhost:5173/reset-password#token=…`. Recopiez le jeton qu'il porte :
 
 ```bash
 curl -i -X POST http://127.0.0.1:8080/auth/reset-password \

@@ -6,8 +6,8 @@ title: Authentication
 # Authentication
 
 `rbs add auth` installs a working authentication feature into an existing project:
-thirty-two files under `src/auth/`, three mail templates, one migration, and thirteen
-routes mounted on the router. What it lays down is ordinary code in your source tree —
+thirty-two files under `src/auth/`, three mail templates, one seed, one migration, and
+thirteen routes mounted on the router. What it lays down is ordinary code in your source tree —
 an entity, a service, a controller, a guard — and it is meant to be read and changed.
 
 Every snippet on this page is taken from
@@ -43,6 +43,7 @@ plan pour /private/tmp/rbs-demo/blog
   + templates/mail/verification.html                       créé
   + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
+  + src/seeds/admin.rs                                     créé
   + src/auth/tests/mod.rs                                  créé
   + src/auth/tests/change.rs                               créé
   + src/auth/tests/guard.rs                                créé
@@ -63,15 +64,17 @@ plan pour /private/tmp/rbs-demo/blog
   ~ src/lib.rs                                             modifié
   ~ src/router.rs                                          modifié
   ~ src/openapi.rs                                         modifié
+  ~ src/seeds/main.rs                                      modifié
   ~ src/state.rs                                           modifié
   ~ Cargo.toml                                             modifié
   ~ config/default.toml                                    modifié
+  ~ config/development.toml                                modifié
   ~ .env.example                                           modifié
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  36 à créer, 10 à modifier
-✓ auth installée — 36 créés, 10 modifiés
+  37 à créer, 12 à modifier
+✓ auth installée — 37 créés, 12 modifiés
 
   rbs migrate up
 ```
@@ -146,6 +149,14 @@ code:
 
 `access_ttl_secs` is fifteen minutes, `refresh_ttl_secs` thirty days. The `[auth]` section
 is appended by `rbs add auth`; everything above it was already there.
+
+Two of its keys are doubled in `config/development.toml`, which the `development` profile
+lays over the defaults. `app_url` is `http://localhost:8080` by default — the port the
+binary serves the built client on — and `http://localhost:5173` on a workstation, which is
+Vite's. `login_requires_verification` is `true` by default and `false` on a workstation:
+an account signed up through the API is not verified, no generated screen calls
+`/auth/verify-email`, and the gap that `false` reopens is one a workstation can carry while
+production cannot.
 
 ## The token cycle
 
@@ -472,6 +483,17 @@ promotion would carry the old role:
 
 ```rust file=examples/blog-auth/src/auth/tests/roles.rs region=jeton_admin
 ```
+
+**The first administrator comes from a seed.** `auth` lays down `src/seeds/admin.rs` and
+declares it in the project's seed binary, so `rbs seed` writes one account carrying
+`Role::Admin` with its address already marked verified — without that date,
+`login_requires_verification` would refuse it. Its credentials are `ADMIN_EMAIL` and
+`ADMIN_PASSWORD`: `rbs add auth` puts both into your gitignored `.env`, the address derived
+from the project's name, the password drawn at install time, and leaves placeholders in the
+versioned `.env.example`. The seed writes nothing when the account already exists, nothing
+when either variable is missing or blank, and nothing at all under `RBS_ENV=production` —
+that last refusal lives in the seed rather than in the command, because `cargo run --bin
+seed` never passes through the guard [`rbs seed`](../cli/seed.md) carries.
 
 ## Testing a protected route
 

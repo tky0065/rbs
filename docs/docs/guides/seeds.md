@@ -84,6 +84,12 @@ erreur : RBS_ENV=production : les seeds sont des données de démonstration, et 
 The refusal lives in the command, not in the generated code. A seed is meant to be edited,
 and a guard you can delete by accident while rewriting the file around it is not a guard.
 `--force` is the way through, and it has to be typed.
+
+One seed carries a second refusal of its own: `src/seeds/admin.rs`, which
+[`rbs add auth`](./auth.md) lays down, creates an account holding `admin`, and
+`cargo run --bin seed` reaches it without passing through the command that would have
+stopped it. What it writes is a key to the whole service, which is worth a guard in two
+places.
 :::
 
 ## Where they run
@@ -98,7 +104,8 @@ no service layer. What they insert is what the database will accept.
 ## What they leave to you
 
 - **idempotence** — running `rbs seed` twice inserts twice, and a unique constraint will
-  say so the second time. Make the seed check first if you need to re-run it;
+  say so the second time. Make the seed check first if you need to re-run it — the
+  administrator seed `auth` lays down is written that way, and says so rather than failing;
 - **ordering across entities** — the anchor's order is generation order; a seed that needs
   another's rows must come after it, and moving the line is how you say so;
 - **volume** — these are demonstration rows, inserted one at a time. A fixture set of

@@ -737,6 +737,10 @@ mod tests {
         context! {
             project_name => "mon-api",
             crate_name => "mon_api",
+            // Le projet de ce contexte porte une bibliothèque, comme tout projet créé
+            // depuis la 1.3.0 : la branche `crate` est celle des projets antérieurs, et
+            // `the_admin_seed_reaches_the_entity_without_a_library` l'exerce à part.
+            crate_path => "mon_api",
             rust_version => super::RUST_VERSION,
             rust_image => super::rust_image(),
             features => installees,
@@ -1459,6 +1463,47 @@ mod tests {
         for (relatif, path) in sources {
             conforme_a_rustfmt(&relatif, &path);
         }
+    }
+
+    /// Le binaire des seeds est une racine de crate distincte de celle de l'application :
+    /// sur un projet sans bibliothèque, il rejoint l'entité par son chemin.
+    ///
+    /// Cette branche-là n'est exercée par aucun autre test : `feature_context` décrit un
+    /// projet doté d'une bibliothèque, comme tout projet créé depuis la 1.3.0, et c'est
+    /// donc la branche des projets antérieurs qui casserait chez leur seul utilisateur.
+    #[test]
+    fn the_admin_seed_reaches_the_entity_without_a_library() {
+        let temp = tempfile::tempdir().expect("répertoire temporaire créable");
+        // L'arborescence que le `#[path]` traverse : rustfmt refuse de formater un fichier
+        // dont un `mod` ne se résout pas, et c'est précisément ce chemin qu'on vérifie.
+        let src = temp.path().join("src");
+        fs::create_dir_all(src.join("seeds")).expect("le répertoire est créable");
+        fs::create_dir_all(src.join("auth")).expect("le répertoire est créable");
+        fs::write(src.join("auth/model.rs"), "pub mod user {}\n").expect("l'entité est écrivable");
+        let path = src.join("seeds/admin.rs");
+
+        let source = read(
+            &PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join("templates/features/auth/seeds/admin.rs.jinja"),
+        );
+        let rendered = Renderer::new()
+            .render(
+                &source,
+                context! { crate_path => "crate", ..feature_context(&[]) },
+            )
+            .expect("le seed du compte d'administration doit se rendre");
+
+        assert!(
+            rendered.contains("#[path = \"../auth/model.rs\"]"),
+            "le seed passe par une bibliothèque que le projet n'a pas :\n{rendered}"
+        );
+        assert!(
+            !rendered.contains("use mon_api::"),
+            "les deux branches sont rendues à la fois :\n{rendered}"
+        );
+
+        fs::write(&path, rendered).expect("le rendu est écrivable");
+        conforme_a_rustfmt("auth/src/seeds/admin.rs sans bibliothèque", &path);
     }
 
     /// Le fragment du frontend ne pose ni table ni route nommée : un module, un repli, sa
