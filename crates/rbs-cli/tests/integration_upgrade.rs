@@ -201,6 +201,71 @@ fn an_up_to_date_project_missing_a_zone_is_shown_the_block_to_paste() {
     );
 }
 
+/// Un projet engendré avant le fichier de tâches en reçoit un, dans sa langue.
+///
+/// C'est l'argument de la tranche : ce fichier n'existe chez personne, il ne peut donc
+/// entrer en conflit avec rien. Le projet d'ici est un projet neuf dont on retire le
+/// `Makefile` — c'est exactement l'état d'un projet d'avant.
+#[test]
+fn a_project_generated_before_the_task_file_receives_one() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+    let makefile = projet.join("Makefile");
+
+    let ecrit = fs::read_to_string(&makefile).expect("le squelette écrit un Makefile");
+    fs::remove_file(&makefile).expect("le Makefile doit pouvoir être retiré");
+    dater(&projet, "0.0.1");
+    common::commiter(&projet, "initial");
+
+    let rendu = String::from_utf8(
+        rbs(&projet)
+            .arg("upgrade")
+            .assert()
+            .success()
+            .get_output()
+            .stdout
+            .clone(),
+    )
+    .expect("la sortie est de l'UTF-8");
+
+    assert!(
+        rendu.contains("Makefile"),
+        "le plan doit le nommer :\n{rendu}"
+    );
+    assert_eq!(
+        fs::read_to_string(&makefile).expect("le Makefile est reposé"),
+        ecrit,
+        "le fichier reposé doit être celui du squelette"
+    );
+}
+
+/// Un `Makefile` présent appartient au développeur : la mise à niveau ne le touche pas.
+///
+/// Le cas n'est pas théorique — l'ancre du fichier est faite pour qu'on y ajoute des
+/// raccourcis, et `rbs add frontend` en ajoute lui-même.
+#[test]
+fn an_existing_task_file_is_left_alone() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+    let makefile = projet.join("Makefile");
+
+    let mien = format!(
+        "{}\nmien: ## le raccourci du développeur\n\t@echo bonjour\n",
+        fs::read_to_string(&makefile).expect("le squelette écrit un Makefile")
+    );
+    fs::write(&makefile, &mien).expect("le Makefile est réécrivable");
+    dater(&projet, "0.0.1");
+    common::commiter(&projet, "initial");
+
+    rbs(&projet).arg("upgrade").assert().success();
+
+    assert_eq!(
+        fs::read_to_string(&makefile).expect("le Makefile est lisible"),
+        mien
+    );
+    assert_eq!(git(&projet, &["diff", "--name-only"]), "Cargo.toml\n");
+}
+
 /// Retire les deux marqueurs d'une zone de l'`AGENTS.md`, son corps laissé en place.
 fn amputer(projet: &Path, zone: &str) {
     let agents = projet.join("AGENTS.md");

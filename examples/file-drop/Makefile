@@ -13,8 +13,12 @@ help: ## affiche cette liste
 # Les deux processus — le binaire, et ce qu'un fragment a ajouté à `DEV` — vivent dans un
 # même groupe : `kill 0` les emporte ensemble au premier Ctrl-C, et `wait` tient la
 # recette ouverte tant qu'il en reste un.
+#
+# `INT TERM` et pas `EXIT` : `wait` ne rend la main qu'une fois tout terminé, si bien
+# qu'un piège sur `EXIT` n'aurait plus rien à arrêter et tuerait le groupe — donc make,
+# donc le script qui l'aurait appelé — au moment même où la recette a réussi.
 dev: ## lance tout ce que le projet porte, jusqu'à Ctrl-C
-	@trap 'kill 0' INT TERM EXIT; \
+	@trap 'kill 0' INT TERM; \
 	$(DEV) \
 	wait
 

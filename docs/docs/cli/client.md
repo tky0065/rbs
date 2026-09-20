@@ -12,9 +12,11 @@ operation, one interface per schema, and no dependency to install on the TypeScr
 rbs generate client --lang ts
 ```
 
-The client lands in `clients/ts/client.ts`. Regenerate it after every contract change
-rather than editing it: the command refuses to overwrite a file that has been touched, and
-`--force` lifts that refusal.
+The client lands in `clients/ts/client.ts` — or in `frontend/src/api/client.ts` on a
+project carrying the [`frontend`](./add.md) fragment, where the base imports it and where
+the dev server can reach it. Regenerate it after every contract change rather than editing
+it: the command refuses to overwrite a file that has been touched, and `--force` lifts that
+refusal.
 
 ## Where the document comes from
 
@@ -40,7 +42,7 @@ stay empty.
 | Flag | Effect |
 |---|---|
 | `--lang <LANGAGE>` | **Required.** `ts` is the only value today. No default: the day a second language arrives, no existing invocation changes meaning. |
-| `--out <DIR>` | Output directory, relative to the project root. The file name does not change — it is the name the client carries in an import. |
+| `--out <DIR>` | Output directory, relative to the project root, in place of the default the project dictates. The file name does not change — it is the name the client carries in an import. |
 | `--from <FILE>` | Reads a contract already exported by [`rbs openapi export`](./openapi.md), relative to the directory the command runs from, instead of compiling the project. The client is then written with no Rust toolchain involved — what a CI job that commits its `openapi.json` needs, and the way out when the memorised contract is wrong. |
 | `--force` | Writes even though the Git working tree is dirty, and overwrites a client reported as conflicting. |
 | `--dry-run` | Prints the plan and stops. rbs writes nothing — but the project is still compiled, since that is how the document is read, unless `--from` supplies it. |

@@ -90,13 +90,41 @@ fn the_fragment_compiles_and_serves_its_bootstrap_page() {
 ///
 /// Une seule suite pour les quatre gestes : l'installation seule coûte la moitié du temps
 /// du test, et la découper en autant de `#[test]` la paierait autant de fois.
+///
+/// Le socle porte le module qui instancie le client d'API : il importe donc le **client
+/// engendré**, et la vérification des types ne veut rien dire tant qu'il n'est pas là.
+/// C'est ce qui fait compiler le projet ici, sur un socle sans shell — et c'est aussi le
+/// seul endroit qui prouve que la commande écrit dans l'arbre du client sans qu'on le lui
+/// dise.
 #[test]
-#[ignore = "installe les dépendances du client depuis le registre npm : lent et en ligne"]
+#[ignore = "compile le projet engendré, puis installe les dépendances du client : lent et en ligne"]
 fn the_client_installs_typechecks_builds_and_proxies_the_api() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let projet = common::projet(parent.path());
 
     rbs(&projet).args(["add", "frontend"]).assert().success();
+
+    {
+        // La cible est partagée par tous les binaires de `tests/` : elle se prend avant le
+        // cargo qu'engendre la lecture du contrat, et se rend avant npm, qui n'en a que
+        // faire.
+        let _cible = common::verrou(&common::cible());
+
+        // Sans `--out` : le répertoire par défaut est celui où le socle importe son
+        // client dès que le fragment `frontend` est posé.
+        rbs(&projet)
+            .env("CARGO_TARGET_DIR", common::cible())
+            .args(["generate", "client", "--lang", "ts"])
+            .assert()
+            .success();
+    }
+
+    let engendre = projet.join("frontend/src/api/client.ts");
+    assert!(
+        engendre.exists(),
+        "le client n'est pas tombé dans l'arbre du socle : {}",
+        engendre.display()
+    );
 
     let client = projet.join("frontend");
     // `npm ci` demanderait un fichier de verrouillage, qu'un fragment ne peut pas livrer :
@@ -122,13 +150,18 @@ fn the_client_installs_typechecks_builds_and_proxies_the_api() {
 
     // Le nom du projet a traversé toute la chaîne — la génération, le moteur de template,
     // le compilateur Vue, l'empaqueteur — et se lit dans ce qui part au navigateur.
-    let bundles = std::fs::read_dir(client.join("dist/assets"))
-        .expect("le build écrit ses assets")
-        .filter_map(Result::ok)
-        .map(|entree| std::fs::read_to_string(entree.path()).unwrap_or_default())
-        .collect::<String>();
+    let lit = |suffixe: &str| {
+        std::fs::read_dir(client.join("dist/assets"))
+            .expect("le build écrit ses assets")
+            .filter_map(Result::ok)
+            .filter(|entree| entree.file_name().to_string_lossy().ends_with(suffixe))
+            .map(|entree| std::fs::read_to_string(entree.path()).unwrap_or_default())
+            .collect::<String>()
+    };
+    let scripts = lit(".js");
+    let feuilles = lit(".css");
     assert!(
-        bundles.contains("demo-api"),
+        scripts.contains("demo-api"),
         "le nom du projet n'a pas atteint le bundle"
     );
 
@@ -145,6 +178,33 @@ fn the_client_installs_typechecks_builds_and_proxies_the_api() {
         "la galerie n'est pas dans le build :\n{morceaux:?}"
     );
 
+    // La variante sombre s'allume ici aussi, sans le shell d'administration : c'est le
+    // socle qui lit la préférence du système et pose la classe, et le second jeu de
+    // valeurs part au navigateur avec le premier. Sans ces quatre témoins, la moitié de la
+    // charte serait du code mort partout où le shell n'est pas posé.
+    //
+    // Le sélecteur et la valeur sont cherchés dans la feuille construite, la lecture de la
+    // préférence et la pose de la classe dans les scripts : un témoin cherché dans tout le
+    // build passerait au vert sur la seule présence du CSS.
+    for temoin in [".sombre", "#16150f"] {
+        assert!(
+            feuilles.contains(temoin),
+            "`{temoin}` ne part pas au navigateur : le second jeu de valeurs n'existe pas"
+        );
+    }
+    // La chaîne du guillemet ne s'écrit pas : l'empaqueteur récrit les littéraux en
+    // gradins inverses, et un test qui figerait le guillemet figerait son minificateur.
+    for temoin in [
+        "(prefers-color-scheme: dark)",
+        "classList.toggle(",
+        "sombre",
+    ] {
+        assert!(
+            scripts.contains(temoin),
+            "`{temoin}` ne part pas au navigateur : rien n'allume la variante sombre"
+        );
+    }
+
     proxy_atteint_l_api(&client);
 }
 
@@ -155,8 +215,15 @@ fn the_client_installs_typechecks_builds_and_proxies_the_api() {
 /// et la vérification des types ne veut rien dire tant qu'il n'est pas là. Engendrer ce
 /// client demande de compiler le projet, ce qui est aussi la seule preuve que le contrat
 /// lu est celui que le binaire publie.
+///
+/// Le client n'est engendré à la main qu'une fois, et **avant** la table : c'est le
+/// terrain sans lequel `generate crud` n'a rien à refaire, comme elle saute les ancres du
+/// frontend plutôt que de les exiger. Aucune commande ne le retouche ensuite, et il porte
+/// pourtant les méthodes de la table — c'est la génération d'entité qui les y a écrites,
+/// depuis le contrat. Un `rbs generate client` de plus entre la table et la vérification
+/// des types rendrait la suite verte sans que rien ne l'ait prouvé.
 #[test]
-#[ignore = "compile le projet engendré, puis installe les dépendances du client : lent et en ligne"]
+#[ignore = "compile deux fois le projet engendré, puis installe les dépendances du client : lent et en ligne"]
 fn the_admin_shell_generates_its_client_typechecks_and_builds() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
     let projet = common::projet(parent.path());
@@ -172,58 +239,67 @@ fn the_admin_shell_generates_its_client_typechecks_and_builds() {
         "le fragment livre un client figé : il mentirait dès la première route ajoutée"
     );
 
-    // Une table réelle, et ses écrans engendrés : c'est le second producteur de l'écran
-    // patron, et le seul endroit du dépôt où son rendu passe par le compilateur. Les types
-    // couverts sont ceux dont chaque contrôle du formulaire dépend — chaîne, texte long,
-    // entier, décimal, booléen, date, instant, énumération, colonne facultative.
-    rbs(&projet)
-        .args([
-            "generate",
-            "crud",
-            "bordereaux",
-            "--fields",
-            "titre:string,corps:text,vues:int,prix:decimal,publie:bool,paru:date,vu:datetime,\
-             statut:enum(draft,published),note:string:optional",
-        ])
-        .assert()
-        .success();
-
-    // Et une table qui les refuse : le drapeau ne doit rien laisser derrière lui.
-    rbs(&projet)
-        .args([
-            "generate",
-            "crud",
-            "jetons",
-            "--fields",
-            "valeur:string",
-            "--no-admin",
-        ])
-        .assert()
-        .success();
-    assert!(
-        !projet.join("frontend/src/admin/vues/Jetons.vue").exists(),
-        "`--no-admin` a laissé un écran"
-    );
-
     {
-        // La cible est partagée par tous les binaires de `tests/`, et `rbs generate
-        // client` lance cargo : le verrou se prend avant, et se rend avant npm, qui n'en
-        // a que faire.
+        // La cible est partagée par tous les binaires de `tests/`, et tout ce bloc lance
+        // cargo — la génération de client comme celle de la table, qui relit le contrat :
+        // le verrou se prend avant le premier, et se rend avant npm, qui n'en a que faire.
         let _cible = common::verrou(&common::cible());
 
+        // Sans `--out` : le défaut de la commande est le répertoire où le socle importe
+        // son client, dès que le fragment `frontend` est posé.
+        rbs(&projet)
+            .env("CARGO_TARGET_DIR", common::cible())
+            .args(["generate", "client", "--lang", "ts"])
+            .assert()
+            .success();
+
+        // Ce client-là sort d'un contrat où la table n'existe pas encore. Le relire ici
+        // est ce qui donne son sens à tout ce qui suit : les méthodes de `bordereaux`
+        // n'ont, à cet instant, aucune raison d'y être.
+        let amorce = std::fs::read_to_string(&client).expect("le client doit être engendré");
+        assert!(
+            !amorce.contains("bordereauxFilter("),
+            "le client d'amorce porte déjà la table : la suite ne prouverait plus rien\n{amorce}"
+        );
+
+        // Une table réelle, et ses écrans engendrés : c'est le second producteur de l'écran
+        // patron, et le seul endroit du dépôt où son rendu passe par le compilateur. Les
+        // types couverts sont ceux dont chaque contrôle du formulaire dépend — chaîne,
+        // texte long, entier, décimal, booléen, date, instant, énumération, colonne
+        // facultative.
         rbs(&projet)
             .env("CARGO_TARGET_DIR", common::cible())
             .args([
                 "generate",
-                "client",
-                "--lang",
-                "ts",
-                "--out",
-                "frontend/src/api",
+                "crud",
+                "bordereaux",
+                "--fields",
+                "titre:string,corps:text,vues:int,prix:decimal,publie:bool,paru:date,vu:datetime,\
+                 statut:enum(draft,published),note:string:optional",
+            ])
+            .assert()
+            .success();
+
+        // Et une table qui les refuse : le drapeau ne doit rien laisser derrière lui. Sans
+        // écran, pas de client à refaire non plus — celui-ci ne compile rien.
+        rbs(&projet)
+            .env("CARGO_TARGET_DIR", common::cible())
+            .args([
+                "generate",
+                "crud",
+                "jetons",
+                "--fields",
+                "valeur:string",
+                "--no-admin",
             ])
             .assert()
             .success();
     }
+
+    assert!(
+        !projet.join("frontend/src/admin/vues/Jetons.vue").exists(),
+        "`--no-admin` a laissé un écran"
+    );
 
     let engendre = std::fs::read_to_string(&client).expect("le client doit être engendré");
     for methode in [

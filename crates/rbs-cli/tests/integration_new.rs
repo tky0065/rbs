@@ -641,6 +641,223 @@ fn the_liveness_route_outlives_the_database() {
     assert_eq!(code, 200, "la liveness a suivi la base :\n{corps}");
 }
 
+/// Ce que `make dev` lance à la place du binaire et de Vite : une boucle qui annonce son
+/// pid dans le fichier qu'on lui nomme, puis ne s'arrête plus d'elle-même.
+#[cfg(unix)]
+const FAUX_PROCESSUS: &str = "#!/bin/sh\necho $$ > \"$1\"\nwhile : ; do sleep 0.2 ; done\n";
+
+/// La recette `dev` du squelette, éprouvée pour de bon : deux processus lancés ensemble,
+/// un SIGINT au groupe, et plus rien qui survive.
+///
+/// `cargo run` et le serveur du client sont remplacés par deux boucles de shell, `DEV`
+/// étant surchargé sur la ligne de commande, où make donne le dernier mot. Ce test dit
+/// donc ce que fait la recette — son piège, son groupe, son `wait` — et non ce que font
+/// `cargo` et `npm` sous elle : les deux processus réels coûteraient une compilation et
+/// un `npm install` sans rien apprendre de plus sur le piège, qui ne les distingue pas.
+///
+/// Le groupe à part n'est pas un raffinement de test : `kill 0` emporte le groupe entier
+/// du shell qui a lancé make, donc celui de `cargo test` si on ne l'en sépare pas.
+#[cfg(unix)]
+#[test]
+fn a_ctrl_c_on_the_dev_shortcut_leaves_none_of_its_processes_behind() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+
+    let faux = projet.join("faux.sh");
+    fs::write(&faux, FAUX_PROCESSUS).expect("le faux processus doit s'écrire");
+    rendre_executable(&faux);
+
+    let mut dev = Dev::lancer(&projet, "./faux.sh back.pid & ./faux.sh front.pid &");
+
+    // Les deux doivent tourner avant le signal : un Ctrl-C reçu par une recette qui n'a
+    // encore rien lancé ne prouverait rien.
+    let pids = ["back.pid", "front.pid"].map(|nom| pid_annonce(&projet.join(nom)));
+
+    assert!(
+        signaler(dev.groupe(), "INT"),
+        "le SIGINT doit partir vers le groupe de la recette"
+    );
+
+    let statut = dev.attendre(Duration::from_secs(30));
+
+    let survivants: Vec<u32> = pids
+        .into_iter()
+        .filter(|pid| survit(*pid, Duration::from_secs(10)))
+        .collect();
+
+    // Abattus avant l'assertion : un test qui échoue ne doit pas laisser derrière lui ce
+    // dont il vient de constater la survie.
+    for pid in &survivants {
+        signaler(*pid, "KILL");
+    }
+
+    assert!(
+        survivants.is_empty(),
+        "un Ctrl-C sur `make dev` a laissé {survivants:?} derrière lui ; make est sorti \
+         sur {statut}"
+    );
+}
+
+/// Un `make dev` dont tout ce qu'il a lancé se termine de soi-même rend zéro.
+///
+/// C'est ce qu'un piège sur `EXIT` interdisait, et il en portait un : `wait` ne rend la
+/// main qu'une fois les processus finis, si bien que le `kill 0` d'`EXIT` n'avait plus
+/// rien à arrêter et emportait le groupe entier — make compris, et le shell d'un script
+/// qui aurait appelé la recette. Mesuré avant le correctif : make mourait de son propre
+/// SIGTERM, sur un projet où rien n'avait échoué.
+#[cfg(unix)]
+#[test]
+fn the_dev_shortcut_exits_zero_when_what_it_started_ends_on_its_own() {
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let projet = common::projet(parent.path());
+
+    let mut dev = Dev::lancer(&projet, "true &");
+    let statut = dev.attendre(Duration::from_secs(30));
+
+    assert!(
+        statut.success(),
+        "`make dev` doit rendre zéro quand ce qu'il mène s'arrête seul, il a rendu {statut}"
+    );
+}
+
+/// `make dev` lancé dans son propre groupe de processus, ce groupe abattu si le garde
+/// tombe avant que make se soit arrêté.
+#[cfg(unix)]
+struct Dev {
+    processus: Child,
+}
+
+#[cfg(unix)]
+impl Dev {
+    /// Lance la recette, `DEV` surchargé par `dev`.
+    fn lancer(projet: &Path, dev: &str) -> Self {
+        use std::os::unix::process::CommandExt;
+
+        let processus = std::process::Command::new("make")
+            .current_dir(projet)
+            .arg("dev")
+            .arg(format!("DEV={dev}"))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .process_group(0)
+            .spawn()
+            .expect("make doit être lançable");
+
+        Self { processus }
+    }
+
+    /// Le groupe de la recette : `process_group(0)` fait de make son chef, et le groupe
+    /// porte donc son pid.
+    fn groupe(&self) -> u32 {
+        self.processus.id()
+    }
+
+    /// Attend la fin de make, et échoue au bout de `limite`.
+    fn attendre(&mut self, limite: Duration) -> std::process::ExitStatus {
+        let fin = Instant::now() + limite;
+
+        loop {
+            match self
+                .processus
+                .try_wait()
+                .expect("l'état de make est lisible")
+            {
+                Some(statut) => return statut,
+                None => assert!(
+                    Instant::now() < fin,
+                    "`make dev` tourne encore {limite:?} après le signal"
+                ),
+            }
+
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    }
+}
+
+#[cfg(unix)]
+impl Drop for Dev {
+    fn drop(&mut self) {
+        if matches!(self.processus.try_wait(), Ok(None)) {
+            signaler(self.groupe(), "KILL");
+            let _ = self.processus.wait();
+        }
+    }
+}
+
+/// Le pid qu'un faux processus a écrit dans `fichier`, attendu jusqu'à trente secondes.
+///
+/// Le fichier est tronqué avant d'être écrit : une lecture peut le trouver vide, et c'est
+/// une relecture qu'il faut alors, non un échec.
+#[cfg(unix)]
+fn pid_annonce(fichier: &Path) -> u32 {
+    let fin = Instant::now() + Duration::from_secs(30);
+
+    loop {
+        if let Some(pid) = fs::read_to_string(fichier)
+            .ok()
+            .and_then(|lu| lu.trim().parse().ok())
+        {
+            return pid;
+        }
+
+        assert!(
+            Instant::now() < fin,
+            "{} n'annonce toujours aucun pid",
+            fichier.display()
+        );
+
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// Envoie `signal` au groupe `groupe`, par le `kill` du shell.
+///
+/// Celui-ci, et non un appel système : `libc` ne serait une dépendance que d'ici, et le
+/// pid négatif qui désigne un groupe est du POSIX que tout shell sait écrire.
+#[cfg(unix)]
+fn signaler(groupe: u32, signal: &str) -> bool {
+    std::process::Command::new("sh")
+        .arg("-c")
+        .arg(format!("kill -{signal} -{groupe}"))
+        .stderr(Stdio::null())
+        .status()
+        .is_ok_and(|statut| statut.success())
+}
+
+/// `pid` vit-il encore au bout de `limite` ? Le signal nul ne fait que poser la question.
+#[cfg(unix)]
+fn survit(pid: u32, limite: Duration) -> bool {
+    let fin = Instant::now() + limite;
+
+    loop {
+        let vivant = std::process::Command::new("sh")
+            .arg("-c")
+            .arg(format!("kill -0 {pid}"))
+            .stderr(Stdio::null())
+            .status()
+            .is_ok_and(|statut| statut.success());
+
+        if !vivant {
+            return false;
+        }
+
+        if Instant::now() >= fin {
+            return true;
+        }
+
+        std::thread::sleep(Duration::from_millis(50));
+    }
+}
+
+/// Rend `chemin` exécutable : un faux processus que la recette lance par son chemin.
+#[cfg(unix)]
+fn rendre_executable(chemin: &Path) {
+    use std::os::unix::fs::PermissionsExt;
+
+    fs::set_permissions(chemin, fs::Permissions::from_mode(0o755))
+        .expect("le faux processus doit être exécutable");
+}
+
 /// Le binaire d'un projet, lancé sur un port libre, arrêté quand ce garde tombe.
 ///
 /// `Drop` plutôt qu'un `kill` en fin de test : une assertion qui échoue déroule la pile

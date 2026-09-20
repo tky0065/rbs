@@ -14,6 +14,8 @@ use std::sync::{Mutex, MutexGuard, PoisonError};
 use std::time::{Duration, Instant};
 
 use assert_cmd::Command;
+use base64::Engine;
+use base64::engine::general_purpose::URL_SAFE_NO_PAD;
 use serde_json::Value;
 use tempfile::TempDir;
 use testcontainers::core::wait::LogWaitStrategy;
@@ -929,9 +931,351 @@ fn the_auth_journey_plays_end_to_end() {
     );
 }
 
+/// Le critère du fragment : le compte que `rbs seed` pose ouvre une session.
+///
+/// Rien d'autre ne le montrait. Les tests du projet engendré ne lancent pas le binaire
+/// des seeds, `integration_seed` s'arrête avant cargo par construction, et le seul
+/// `ADMIN_EMAIL` que portait `tests/` était le masque de non-dérive d'un exemple.
+///
+/// Les identifiants ne sont pas écrits ici mais relus dans le `.env` que l'installation
+/// vient d'écrire : le mot de passe y est tiré au hasard, et un test qui en poserait un
+/// connu ne prouverait rien de ce que le développeur reçoit.
+#[test]
+#[ignore = "démarre PostgreSQL et compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn the_seeded_administrator_signs_in_with_the_credentials_the_installation_drew() {
+    let postgres = start_postgres();
+    let _cible = own_target();
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_auth_on(&url_of(&postgres), &parent);
+
+    let adresse = env_value(&racine, "ADMIN_EMAIL");
+    let secret = env_value(&racine, "ADMIN_PASSWORD");
+
+    // L'exemple est versionné : le mot de passe tiré ne doit pas y être, faute de quoi
+    // tout projet créé depuis le dépôt partagerait l'administrateur de son auteur.
+    let exemple = fs::read_to_string(racine.join(".env.example")).expect(".env.example lisible");
+    assert!(
+        !exemple.contains(&secret),
+        "le mot de passe tiré est publié dans .env.example :\n{exemple}"
+    );
+
+    migrate(&racine);
+    seed(&racine);
+
+    // Relancé : l'idempotence du seed se lit sur la table, et non sur le seul code de
+    // sortie — une seconde insertion échouerait sur la contrainte d'unicité de l'adresse,
+    // mais un seed qui écrirait ailleurs passerait inaperçu.
+    seed(&racine);
+    assert_eq!(
+        psql(
+            &postgres,
+            &format!("SELECT count(*) FROM users WHERE email = '{adresse}'")
+        ),
+        "1",
+        "le second passage du seed a doublé le compte d'administration"
+    );
+
+    compile(&racine);
+
+    let serveur = Serveur::lancer(&racine, "demo-api", "info");
+    let port = serveur.port();
+
+    let (statut, paire) = request(
+        port,
+        "POST",
+        "/auth/login",
+        None,
+        Some(&sign_in(&adresse, &secret)),
+    );
+
+    // Le `.env` de ce banc réimpose `login_requires_verification` : un 200 dit donc aussi
+    // que le seed a daté l'adresse, sans quoi la connexion recevrait le 401 d'un mauvais
+    // mot de passe.
+    assert_eq!(
+        statut, 200,
+        "les identifiants que l'installation a tirés doivent ouvrir une session : {paire}"
+    );
+
+    // Le rôle est lu dans le jeton, et non dans le profil : c'est cette valeur-là, signée,
+    // que `require_role` compare.
+    assert_eq!(
+        role(&access(&paire)),
+        "admin",
+        "le jeton rendu ne porte pas le rôle administrateur"
+    );
+
+    let (statut, profil) = request(port, "GET", "/auth/me", Some(&access(&paire)), None);
+    assert_eq!(statut, 200, "le profil doit être lisible : {profil}");
+    assert_eq!(profil["email"], adresse, "le profil rendu : {profil}");
+    assert_eq!(profil["role"], "admin", "le profil rendu : {profil}");
+    assert!(
+        !profil["email_verified_at"].is_null(),
+        "le compte semé doit naître vérifié : {profil}"
+    );
+}
+
+/// Le critère du lot : les quatre gestes d'un mot de passe perdu, joués depuis le lien
+/// réellement reçu.
+///
+/// Les tests du fragment tiennent le jeton de la main du service qui l'émet ; ce banc-ci
+/// ne le connaît que par le courriel, relu dans la boîte où il est arrivé. C'est la seule
+/// façon de montrer que le lien écrit dans le gabarit est celui que `reset-password`
+/// accepte — un jeton repris en base sauterait précisément l'étape en cause.
+///
+/// Le compte part **non vérifié** : c'est l'état d'où revient celui qui a perdu son mot
+/// de passe avant d'avoir suivi son lien de vérification, et la connexion finale ne
+/// réussit que parce que la réinitialisation vaut preuve d'adresse.
+#[test]
+#[ignore = "démarre PostgreSQL et Mailpit, et compile un projet Axum + SeaORM complet : plusieurs minutes"]
+fn the_password_reset_journey_plays_from_the_link_the_email_carries() {
+    const EMAIL: &str = "oubli@exemple.test";
+    const NOUVEAU: &str = "un mot de passe tout neuf";
+
+    let postgres = start_postgres();
+    let mailpit = start_mailpit();
+    let _cible = own_target();
+    let parent = TempDir::new().expect("répertoire temporaire créable");
+    let racine = project_with_auth_on(&url_of(&postgres), &parent);
+
+    migrate(&racine);
+    compile(&racine);
+
+    // Les ports de Mailpit sont tirés à son démarrage : `config/default.toml` ne peut pas
+    // les connaître, et c'est la surcharge par l'environnement qui les lui apprend.
+    let smtp = mailpit
+        .get_host_port_ipv4(1025.tcp())
+        .expect("le port SMTP de Mailpit doit être publié");
+    let api = mailpit
+        .get_host_port_ipv4(8025.tcp())
+        .expect("le port HTTP de Mailpit doit être publié");
+
+    let serveur = Serveur::lancer_avec(
+        &racine,
+        "demo-api",
+        "info",
+        &[
+            ("RBS_MAIL__SMTP_HOST", "127.0.0.1".to_string()),
+            ("RBS_MAIL__SMTP_PORT", smtp.to_string()),
+        ],
+    );
+    let port = serveur.port();
+
+    let (statut, corps) = request(
+        port,
+        "POST",
+        "/auth/register",
+        None,
+        Some(&credentials(EMAIL)),
+    );
+    assert_eq!(statut, 202, "l'inscription doit aboutir : {corps}");
+
+    let (statut, corps) = request(
+        port,
+        "POST",
+        "/auth/forgot-password",
+        None,
+        Some(&format!(r#"{{"email":"{EMAIL}"}}"#)),
+    );
+    assert_eq!(statut, 202, "la demande doit être acceptée : {corps}");
+
+    let jeton = reset_token_in_the_mailbox(api);
+
+    let (statut, corps) = request(
+        port,
+        "POST",
+        "/auth/reset-password",
+        None,
+        Some(&format!(
+            r#"{{"token":"{jeton}","new_password":"{NOUVEAU}"}}"#
+        )),
+    );
+    assert_eq!(
+        statut, 204,
+        "le jeton du courriel doit être celui que la route accepte : {corps}"
+    );
+
+    let (statut, corps) = request(port, "POST", "/auth/login", None, Some(&credentials(EMAIL)));
+    assert_eq!(
+        statut, 401,
+        "l'ancien mot de passe ne doit plus ouvrir de session : {corps}"
+    );
+
+    let (statut, paire) = request(
+        port,
+        "POST",
+        "/auth/login",
+        None,
+        Some(&sign_in(EMAIL, NOUVEAU)),
+    );
+    assert_eq!(
+        statut, 200,
+        "le mot de passe choisi doit ouvrir une session : {paire}"
+    );
+
+    let (statut, corps) = request(port, "GET", "/auth/me", Some(&access(&paire)), None);
+    assert_eq!(
+        statut, 200,
+        "la paire rendue au bout du parcours doit être utilisable : {corps}"
+    );
+}
+
+/// Mailpit, qui accepte tout ce qu'on lui envoie et le rend relisible par son API HTTP.
+///
+/// Le même serveur qu'`integration_mail` : c'est la relecture du message reçu qui le fait
+/// préférer à un transport en mémoire, lequel ne montrerait pas le corps rendu.
+fn start_mailpit() -> Container<GenericImage> {
+    GenericImage::new("axllent/mailpit", "latest")
+        .with_wait_for(WaitFor::log(LogWaitStrategy::stdout_or_stderr(
+            "accessible via http",
+        )))
+        .start()
+        .expect("Mailpit doit démarrer — Docker est-il lancé ?")
+}
+
+/// Le jeton du lien de réinitialisation, lu dans le courriel arrivé à Mailpit.
+///
+/// L'ancre cherchée porte le `#` : le fragment `auth` met le jeton dans le fragment de
+/// l'URL, que le navigateur n'envoie jamais au serveur, et c'est cette décision-là que le
+/// courriel doit porter. Une ancre en `?` passerait ici sans que rien ne le dise.
+///
+/// Le corps est relu tel quel : l'autoéchappement de minijinja rend les `/` du lien en
+/// `&#x2f;`, mais ni le `#` ni l'alphabet base64url du jeton n'en souffrent.
+fn reset_token_in_the_mailbox(api: u16) -> String {
+    const OBJET: &str = "Réinitialisation de votre mot de passe";
+    const ANCRE: &str = "reset-password#token=";
+
+    // L'envoi part détaché : le 202 de la route précède le message, et l'attente est celle
+    // de la tâche, non du serveur.
+    let limite = Instant::now() + Duration::from_secs(60);
+
+    while Instant::now() < limite {
+        let Some(identifiant) = message_with_subject(api, OBJET) else {
+            std::thread::sleep(Duration::from_millis(200));
+            continue;
+        };
+
+        let message = mailpit(api, &format!("/api/v1/message/{identifiant}"));
+        let corps = message["HTML"]
+            .as_str()
+            .expect("le message est envoyé en HTML");
+
+        let debut = corps
+            .find(ANCRE)
+            .unwrap_or_else(|| panic!("le courriel ne porte pas `{ANCRE}` :\n{corps}"))
+            + ANCRE.len();
+
+        let jeton: String = corps[debut..]
+            .chars()
+            .take_while(|lettre| lettre.is_ascii_alphanumeric() || *lettre == '-' || *lettre == '_')
+            .collect();
+
+        assert!(
+            !jeton.is_empty(),
+            "le lien ne porte pas de jeton :\n{corps}"
+        );
+
+        return jeton;
+    }
+
+    panic!("aucun courriel intitulé « {OBJET} » n'est arrivé à Mailpit après 60 s");
+}
+
+/// L'identifiant du premier message de la boîte portant cet objet.
+///
+/// L'objet plutôt que le rang : `register` a déjà envoyé son lien de vérification, et la
+/// boîte porte donc deux messages dont un seul concerne ce parcours.
+fn message_with_subject(api: u16, objet: &str) -> Option<String> {
+    mailpit(api, "/api/v1/messages")["messages"]
+        .as_array()?
+        .iter()
+        .find(|message| message["Subject"] == objet)
+        .and_then(|message| message["ID"].as_str())
+        .map(str::to_owned)
+}
+
+/// Le corps JSON que l'API de Mailpit rend pour `chemin`.
+///
+/// La requête est en **HTTP/1.0** : le serveur Go de Mailpit répondrait sinon en
+/// *chunked*, qu'il faudrait décoder. En 1.0 il annonce la fin par la fermeture de la
+/// connexion, et la réponse se lit jusqu'au bout sans rien interpréter.
+fn mailpit(port: u16, chemin: &str) -> Value {
+    let mut flux = TcpStream::connect(("127.0.0.1", port)).expect("l'API de Mailpit doit répondre");
+
+    flux.write_all(format!("GET {chemin} HTTP/1.0\r\nHost: 127.0.0.1\r\n\r\n").as_bytes())
+        .expect("la requête doit partir");
+
+    let mut reponse = String::new();
+    flux.read_to_string(&mut reponse)
+        .expect("la réponse doit se lire");
+
+    let corps = reponse
+        .split_once("\r\n\r\n")
+        .map(|(_, corps)| corps)
+        .unwrap_or_else(|| panic!("réponse HTTP sans corps pour `{chemin}` :\n{reponse}"));
+
+    serde_json::from_str(corps)
+        .unwrap_or_else(|erreur| panic!("`{chemin}` n'a pas rendu du JSON : {erreur}\n{corps}"))
+}
+
+/// La valeur que le `.env` du projet donne à `cle`.
+///
+/// Le `.env` et non `.env.example` : c'est le premier qui porte ce que l'installation a
+/// tiré, et le second n'en garde qu'un repère.
+fn env_value(racine: &Path, cle: &str) -> String {
+    let env = fs::read_to_string(racine.join(".env")).expect(".env lisible");
+    let prefixe = format!("{cle}=");
+
+    env.lines()
+        .find_map(|ligne| ligne.strip_prefix(&prefixe))
+        .unwrap_or_else(|| panic!("`{cle}` est absente du .env :\n{env}"))
+        .trim()
+        .to_string()
+}
+
+/// Insère les seeds du projet, par la commande que le développeur lance.
+fn seed(racine: &Path) {
+    Command::cargo_bin("rbs")
+        .expect("le binaire rbs doit être compilé")
+        .current_dir(racine)
+        .env("CARGO_TARGET_DIR", common::cible())
+        .arg("seed")
+        .assert()
+        .success();
+}
+
+/// Le rôle que porte un jeton d'accès.
+///
+/// La charge d'un JWT n'est pas chiffrée : la relire ne demande que le décodage du
+/// segment médian, et la signature n'est pas en cause ici — le serveur l'a déjà acceptée
+/// sur la requête qui suit.
+fn role(token: &str) -> String {
+    let charge = token
+        .split('.')
+        .nth(1)
+        .unwrap_or_else(|| panic!("un JWT porte trois segments : {token}"));
+
+    let octets = URL_SAFE_NO_PAD
+        .decode(charge)
+        .unwrap_or_else(|erreur| panic!("la charge du jeton n'est pas du base64url : {erreur}"));
+
+    let claims: Value = serde_json::from_slice(&octets)
+        .unwrap_or_else(|erreur| panic!("la charge du jeton n'est pas du JSON : {erreur}"));
+
+    claims["role"]
+        .as_str()
+        .unwrap_or_else(|| panic!("le jeton ne porte pas de rôle : {claims}"))
+        .to_string()
+}
+
 /// Le corps d'inscription et de connexion d'un compte.
 fn credentials(email: &str) -> String {
-    format!(r#"{{"email":"{email}","password":"{MOT_DE_PASSE_DU_COMPTE}"}}"#)
+    sign_in(email, MOT_DE_PASSE_DU_COMPTE)
+}
+
+/// Le même corps, sous un mot de passe qui n'est pas celui des parcours : celui que
+/// l'installation a tiré, ou celui qu'une réinitialisation vient de poser.
+fn sign_in(email: &str, password: &str) -> String {
+    format!(r#"{{"email":"{email}","password":"{password}"}}"#)
 }
 
 /// Le corps qu'attendent `refresh` et `logout`.
@@ -1224,14 +1568,34 @@ struct Serveur {
 
 impl Serveur {
     fn lancer(racine: &Path, binaire: &str, journal: &str) -> Self {
+        Self::lancer_avec(racine, binaire, journal, &[])
+    }
+
+    /// Le même serveur, des variables de plus dans son environnement.
+    ///
+    /// Un conteneur reçoit ses ports au démarrage : `config/default.toml` ne peut pas les
+    /// connaître, et l'environnement du processus l'emporte sur le `.env` du projet.
+    fn lancer_avec(
+        racine: &Path,
+        binaire: &str,
+        journal: &str,
+        variables: &[(&str, String)],
+    ) -> Self {
         let port = free_port();
 
-        let processus = std::process::Command::new(common::cible().join("debug").join(binaire))
+        let mut commande = std::process::Command::new(common::cible().join("debug").join(binaire));
+        commande
             .current_dir(racine)
             .env("RBS_SERVER__PORT", port.to_string())
             .env("RUST_LOG", journal)
             .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::piped());
+
+        for (cle, valeur) in variables {
+            commande.env(cle, valeur);
+        }
+
+        let processus = commande
             .spawn()
             .expect("le binaire du projet doit être lançable");
 

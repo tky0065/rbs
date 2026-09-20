@@ -128,9 +128,10 @@ optionnelles — avant que rien n'aille mal.
 `rbs generate` l'écrit. Rien n'y porte la mention « engendré, ne pas modifier », parce que
 [toute la conception](./architecture.md) est que vous le lisiez et le modifiiez. rbs ne peut
 rien promettre sur la forme d'un fichier que vous avez depuis réécrit, et n'en a pas besoin :
-aucune version de rbs ne le réécrira non plus. `rbs upgrade` modifie `Cargo.toml` et rien
-d'autre. Si une version ultérieure engendre une couche service différente, c'est une
-différence entre deux projets neufs, pas un changement dans le vôtre.
+aucune version de rbs ne le réécrira non plus. [`rbs upgrade`](./cli/upgrade.md) modifie
+`Cargo.toml`, les deux zones réservées d'`AGENTS.md`, et les fichiers que votre projet n'a
+pas — jamais un de ceux qu'il a. Si une version ultérieure engendre une couche service
+différente, c'est une différence entre deux projets neufs, pas un changement dans le vôtre.
 
 **La bibliothèque de `rbs-cli`.** Le paquet existe pour installer le binaire `rbs`. Sa
 bibliothèque est visible parce que c'est ainsi que la crate se construit et se teste, non

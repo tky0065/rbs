@@ -12,7 +12,9 @@ par opération, une interface par schéma, et aucune dépendance à installer c�
 rbs generate client --lang ts
 ```
 
-Le client atterrit dans `clients/ts/client.ts`. Régénérez-le après chaque changement de
+Le client atterrit dans `clients/ts/client.ts` — ou dans `frontend/src/api/client.ts` sur
+un projet qui porte le fragment [`frontend`](./add.md), là où le socle l'importe et là où
+le serveur de développement peut l'atteindre. Régénérez-le après chaque changement de
 contrat plutôt que de le retoucher : la commande refuse d'écraser un fichier modifié, et
 `--force` lève ce refus.
 
@@ -40,7 +42,7 @@ rester vide.
 | Drapeau | Effet |
 |---|---|
 | `--lang <LANGAGE>` | **Requis.** `ts` en est aujourd'hui la seule valeur. Aucun défaut : le jour où un second langage arrive, aucune invocation existante ne change de sens. |
-| `--out <DIR>` | Répertoire de sortie, relatif à la racine du projet. Le nom du fichier ne change pas — c'est celui que le client porte dans un import. |
+| `--out <DIR>` | Répertoire de sortie, relatif à la racine du projet, à la place du défaut que le projet dicte. Le nom du fichier ne change pas — c'est celui que le client porte dans un import. |
 | `--from <FICHIER>` | Lit un contrat déjà exporté par [`rbs openapi export`](./openapi.md), relatif au répertoire d'où la commande est lancée, au lieu de compiler le projet. Le client s'écrit alors sans aucune chaîne de compilation Rust — ce qu'il faut à une CI qui commite son `openapi.json`, et l'échappatoire quand le contrat mémorisé se trompe. |
 | `--force` | Écrit même si le working tree Git est sale, et écrase un client signalé en conflit. |
 | `--dry-run` | Affiche le plan et s'arrête. rbs n'écrit rien — mais le projet est tout de même compilé, puisque c'est ainsi que le document se lit, à moins que `--from` ne le fournisse. |

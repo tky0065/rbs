@@ -26,7 +26,13 @@ const ORIGINE = window.location.origin
 
 const COMMANDE = `curl -s ${ORIGINE}/health`
 
-/** Ce que rend la sonde du squelette : un verdict, et le détail par dépendance. */
+/**
+ * Ce que rend la sonde du squelette : un verdict, et le détail par dépendance.
+ *
+ * Le contrat déclare la route mais pas son corps : le client engendré la rend donc
+ * `void`, alors que la réponse porte bien le verdict. La forme est affirmée ici, et ce
+ * type s'en ira le jour où le contrat la portera.
+ */
 type Sante = { status?: string; checks?: Record<string, string> }
 
 /** Une ligne du journal de la sonde. */
@@ -50,23 +56,40 @@ let imprimees = 0
 
 const CADENCE = 15_000
 
+// La sonde passe par le client engendré, comme tout appel de l'application : c'est ce qui
+// fait vérifier cet écran-ci contre le contrat à la compilation, là où un `fetch` écrit à
+// la main survivrait à la disparition de la route.
+//
+// Importé à l'usage et non en tête de fichier : le client porte une méthode par opération
+// du contrat, et un import statique depuis l'accueil — la seule route que le socle ne
+// charge pas paresseusement — le ferait descendre en entier chez le visiteur avant qu'il
+// n'ait rien demandé.
+//
+// Le statut ne se lit que sur une panne : le client ne rend que le corps d'une réponse
+// acceptée, et la sonde du squelette n'en rend qu'une.
 async function sonder() {
-  try {
-    const reponse = await fetch('/health')
-    const corps = (await reponse.json()) as Sante
-    const controles = Object.entries(corps.checks ?? {})
-      .map(([nom, verdict]) => `${nom}=${verdict}`)
-      .join('  ')
+  const { ApiError, api } = await import('@/api')
 
+  try {
+    imprime({ heure: maintenant(), statut: '200', detail: detaille(await api.health()), bon: true })
+  } catch (cause) {
     imprime({
       heure: maintenant(),
-      statut: String(reponse.status),
-      detail: [`status=${corps.status ?? '?'}`, controles].filter(Boolean).join('  '),
-      bon: reponse.ok,
+      statut: cause instanceof ApiError ? String(cause.status) : '---',
+      detail: cause instanceof ApiError ? detaille(cause.body) : TEXTES.injoignable,
+      bon: false,
     })
-  } catch {
-    imprime({ heure: maintenant(), statut: '---', detail: TEXTES.injoignable, bon: false })
   }
+}
+
+/** Le verdict et le détail par dépendance, tels que la ligne du journal les imprime. */
+function detaille(corps: unknown): string {
+  const sante = (typeof corps === 'object' && corps !== null ? corps : {}) as Sante
+  const controles = Object.entries(sante.checks ?? {})
+    .map(([nom, verdict]) => `${nom}=${verdict}`)
+    .join('  ')
+
+  return [`status=${sante.status ?? '?'}`, controles].filter(Boolean).join('  ')
 }
 
 // L'heure est celle de la réponse et non celle de la demande : deux interrogations

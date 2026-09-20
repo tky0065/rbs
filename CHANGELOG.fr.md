@@ -31,7 +31,7 @@ dépréciation.
   dans le fichier lui-même et que rend un `make` nu. Chaque recette enveloppe `cargo`, `npm`
   ou `docker compose` ; aucune n'appelle `rbs`. `make dev` mène de front tout ce que le projet
   porte, dans un même groupe de processus — un seul Ctrl-C arrête l'ensemble — sans aucune
-  dépendance nouvelle : un `trap 'kill 0' INT TERM EXIT` et un `wait`. Les noms de cibles sont
+  dépendance nouvelle : un `trap 'kill 0' INT TERM` et un `wait`. Les noms de cibles sont
   les mêmes dans toutes les langues ; seules les descriptions qu'affiche `make help` suivent
   `--lang`.
 
@@ -43,6 +43,14 @@ dépréciation.
   `# <rbs:ignore>` : le squelette écrit bien le fichier, mais celui-ci appartient au
   développeur, qui peut l'avoir supprimé. Le registre passe de vingt-et-une ancres à
   vingt-deux, dont onze optionnelles.
+
+- **`rbs upgrade` écrit le `Makefile` sur un projet engendré avant qu'il existe.** Le fichier
+  est neuf : aucun projet engendré par un rbs antérieur n'en porte, et rien de ce qui y est
+  écrit ne peut donc entrer en conflit avec quoi que ce soit — même raison et même règle que
+  le `CLAUDE.md` avant lui, un projet qui en porte déjà un le garde octet pour octet, ses
+  propres raccourcis compris. Ce qui est posé est le fichier du squelette, dans la langue du
+  projet ; `front` et `image` restent l'affaire de `rbs add`, que la mise à niveau ne rejoue
+  pas.
 
 ### Modifié
 
@@ -81,6 +89,32 @@ dépréciation.
   de `http://localhost:3000`, un port où rien n'écoute, à `http://localhost:8080` par
   défaut — le port sur lequel le binaire sert le client construit — et
   `http://localhost:5173`, celui de Vite, en développement.
+
+- **Le module qui instancie le client d'API descend du shell d'administration vers le
+  socle.** `frontend/src/api/index.ts` était déposé par `frontend-admin` ; il l'est
+  désormais par `frontend`. Un projet à socle seul ne savait pas appeler sa propre API — la
+  couche de transport vivait dans le fragment *au-dessus* de celui qui en a besoin — et son
+  accueil sondait `/health` par un `fetch` écrit à la main, qu'aucun contrat ne vérifiait.
+  Le socle instancie maintenant le client, et la sonde de l'accueil passe par lui ; le shell
+  n'ajoute qu'un en-tête `authorization`, dans un `frontend/src/api/entetes.ts` à lui que
+  `src/api/index.ts` découvre comme le routeur découvre un montage. Un projet portant les
+  deux fragments se comporte exactement comme avant. Les gestes du socle nomment donc `rbs
+  generate client` avant `npm run build`, et ceux du shell ne le répètent plus.
+
+- **`rbs generate client` écrit là où le frontend le lira.** Sans `--out`, la commande
+  écrivait toujours dans `clients/ts/client.ts` — hors de l'arbre du client, donc invisible
+  du serveur de développement, quand `frontend-admin` dictait lui-même `--out
+  frontend/src/api` dans ses gestes suivants. Sur un projet qui porte `frontend`, le défaut
+  est désormais `frontend/src/api/client.ts`. **Un projet sans frontend garde l'ancien
+  défaut**, et `--out` continue de les remplacer tous les deux.
+
+- **La variante sombre du thème existe, et s'allume sur un projet à socle seul.** Elle était
+  accrochée à une classe `sombre` que seul le store d'interface du shell posait, par-dessus
+  un bloc de thème qui n'avait qu'un jeu de valeurs : la moitié du monde était du code mort.
+  Un second bloc, `:root.sombre`, donne aux mêmes rôles leurs valeurs de papier carbone, et
+  un `frontend/src/lib/theme.ts` neuf — celui du socle — pose cette classe sur la racine du
+  document au démarrage, à partir du choix retenu ou, à défaut, de la préférence du système.
+  Le store du shell garde l'interrupteur et s'en remet à ce module.
 
 ### Corrigé
 
@@ -144,6 +178,15 @@ dépréciation.
   d'inscription du shell le demande et affiche le refus au lieu du formulaire ; l'écran de
   connexion retire le lien qui y mène. `auth` monte désormais quinze routes sur treize
   chemins.
+
+- **`make dev` ne tue plus celui qui l'a appelé quand ce qu'il mène s'arrête de soi-même.**
+  Son piège couvrait `EXIT`, et `wait` ne rend la main qu'une fois tous les processus lancés
+  terminés : le `kill 0` déclenché là n'avait plus rien à arrêter et emportait le groupe
+  entier — make, et le shell de tout script ayant appelé la recette. Mesuré sur un projet
+  nu : un `make dev` dont le binaire s'était simplement terminé mourait de son propre
+  SIGTERM au lieu de rendre zéro. Le piège ne couvre plus que `INT` et `TERM`, ce pour quoi
+  il était fait. Un Ctrl-C était déjà correct et le reste : les deux moitiés s'arrêtent, et
+  rien ne leur survit — ce qu'un test exécute désormais, au lieu de le déduire du fichier.
 
 ## [1.7.0] — 2026-09-19
 
