@@ -37,6 +37,9 @@ watchexec-signals.workspace = true
 
 [dev-dependencies]
 assert_cmd.workspace = true
+# La charge d'un JWT, que `integration_auth` relit pour y lire le rôle signé. La version
+# est celle que le workspace épingle déjà pour la feature `auth` de `rbs-core`.
+base64.workspace = true
 tempfile.workspace = true
 testcontainers.workspace = true
 
