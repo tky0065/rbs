@@ -196,7 +196,9 @@ fn the_services_chaining_writes_open_one_transaction() {
     }
 }
 
-/// Les chemins sont montés dès l'installation, un de plus à chaque tâche jusqu'à treize.
+/// Les chemins sont montés dès l'installation : treize, pour quinze points d'entrée —
+/// `/auth/sessions` porte la liste et la révocation globale, `/auth/me` la lecture du
+/// profil et l'écriture de l'adresse.
 #[test]
 fn the_auth_paths_are_mounted() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
@@ -207,6 +209,7 @@ fn the_auth_paths_are_mounted() {
 
     for chemin in [
         "/auth/register",
+        "/auth/registration",
         "/auth/login",
         "/auth/refresh",
         "/auth/logout",
@@ -226,8 +229,9 @@ fn the_auth_paths_are_mounted() {
     }
 }
 
-/// La découpe par couche est ce qui rend le fragment lisible à treize routes : chaque
-/// couche est un répertoire, et le sens de la dépendance ne change pas.
+/// La découpe par couche est ce qui rend le fragment lisible à quinze routes : chaque
+/// couche est un répertoire, un fichier par parcours, et le sens de la dépendance ne
+/// change pas.
 #[test]
 fn each_layer_is_a_directory() {
     let parent = TempDir::new().expect("répertoire temporaire créable");
@@ -239,10 +243,13 @@ fn each_layer_is_a_directory() {
         "src/auth/repository/refresh_token.rs",
         "src/auth/service/mod.rs",
         "src/auth/service/session.rs",
+        "src/auth/service/account.rs",
         "src/auth/controller/mod.rs",
         "src/auth/controller/session.rs",
+        "src/auth/controller/account.rs",
         "src/auth/tests/mod.rs",
         "src/auth/tests/registration.rs",
+        "src/auth/tests/account.rs",
     ] {
         assert!(
             racine.join(fichier).is_file(),

@@ -110,6 +110,41 @@ dépréciation.
   porte la liste figée sans l'ancre : `rbs doctor` la nomme et affiche le bloc, et `rbs doctor
   --fix` la repose sous `'/api-docs',`.
 
+- **Quatre des treize routes qu'`auth` expose n'avaient aucun appelant dans le frontend.**
+  `authRegister`, `authResetPassword`, `authVerifyEmail` et `authResendVerification`
+  vivaient dans le client engendré et nulle part ailleurs : qui n'avait pas encore de
+  compte, qui avait perdu son mot de passe, ou dont l'adresse attendait sa preuve n'avait
+  rien à ouvrir. Le shell d'administration porte désormais trois pages publiques de plus à
+  côté de sa connexion — `/admin/inscription`, `/admin/reinitialisation` et
+  `/admin/verification`, la dernière avec son bouton de renvoi — l'exception de la garde de
+  route couvrant les quatre et non la seule connexion. Elles se montent hors du shell et
+  hors du rail, qui est la navigation d'un espace authentifié. Les trois chemins qu'`auth`
+  met dans ses courriels — `/forgot-password`, `/reset-password`, `/verify-email` — en sont
+  les alias : le fragment les compose depuis `app_url` sans rien savoir d'un shell posé à
+  côté, et un alias les sert sans la redirection qui aurait perdu le jeton que le lien porte
+  dans le fragment de l'URL. La demande de réinitialisation reste un dialogue de l'écran de
+  connexion : elle fonctionne, et une page pour un champ n'apporte rien.
+
+- **`PATCH /auth/me` donne à l'écran de profil quelque chose à écrire.** `dto.rs` ne portait
+  aucun champ modifiable et aucune route d'écriture n'existait : « gestion de profil » ne
+  désignait qu'une page en lecture seule. La nouvelle route prend une adresse et rien
+  d'autre — le corps `EmailRequest` que lisent déjà `forgot-password` et
+  `resend-verification` — l'écrit, remet `email_verified_at` à `NULL` puisque la preuve
+  portait sur l'ancienne, et envoie un lien de vérification neuf. Comme `register`, elle
+  rend le même 202 que l'adresse ait été libre ou déjà prise, et prévient son titulaire dans
+  le second cas plutôt que de le dire à l'appelant. Aucune colonne n'est ajoutée : le modèle
+  de l'utilisateur appartient à l'utilisateur.
+
+- **`auth.registration_enabled` ferme l'inscription côté serveur, et non côté écran.**
+  `POST /auth/register` était ouverte sur tout projet portant `auth`. La nouvelle clé, `true`
+  par défaut, fait refuser la route avant même la lecture de l'adresse — un 403 dont le
+  document de problème porte le code stable `registration_closed` — et une nouvelle route
+  publique `GET /auth/registration` le dit, seul moyen pour une application servie en
+  fichiers statiques de connaître un réglage que le serveur lit à son démarrage. L'écran
+  d'inscription du shell le demande et affiche le refus au lieu du formulaire ; l'écran de
+  connexion retire le lien qui y mène. `auth` monte désormais quinze routes sur treize
+  chemins.
+
 ## [1.7.0] — 2026-09-19
 
 ### Ajouté

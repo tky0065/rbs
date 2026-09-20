@@ -58,6 +58,10 @@ source      = "service/session.rs.jinja"
 destination = "src/auth/service/session.rs"
 
 [[files]]
+source      = "service/account.rs.jinja"
+destination = "src/auth/service/account.rs"
+
+[[files]]
 source      = "service/password.rs.jinja"
 destination = "src/auth/service/password.rs"
 
@@ -72,6 +76,10 @@ destination = "src/auth/controller/mod.rs"
 [[files]]
 source      = "controller/session.rs.jinja"
 destination = "src/auth/controller/session.rs"
+
+[[files]]
+source      = "controller/account.rs.jinja"
+destination = "src/auth/controller/account.rs"
 
 [[files]]
 source      = "controller/password.rs.jinja"
@@ -109,6 +117,10 @@ destination = "src/seeds/admin.rs"
 [[files]]
 source      = "tests/mod.rs.jinja"
 destination = "src/auth/tests/mod.rs"
+
+[[files]]
+source      = "tests/account.rs.jinja"
+destination = "src/auth/tests/account.rs"
 
 [[files]]
 source      = "tests/change.rs.jinja"
@@ -178,10 +190,12 @@ content = ".merge(crate::auth::routes())"
 anchor  = "openapi"
 content = """
 crate::auth::controller::register,
+crate::auth::controller::registration_status,
 crate::auth::controller::login,
 crate::auth::controller::refresh,
 crate::auth::controller::logout,
 crate::auth::controller::me,
+crate::auth::controller::account::update_me,
 crate::auth::controller::password::change_password,
 crate::auth::controller::password::forgot_password,
 crate::auth::controller::password::reset_password,
@@ -236,6 +250,12 @@ verification_ttl_secs = 86400
 # le port du serveur ; en développement, Vite tient le sien, d'où la clé dédoublée dans
 # config/development.toml.
 app_url = "http://localhost:8080"
+
+# Ouvre `POST /auth/register`. `false` la ferme côté serveur — la route refuse avant de
+# lire l'adresse — et non côté écran seulement : un interrupteur qui ne masquerait qu'un
+# bouton laisserait l'inscription ouverte à qui poste directement. Le shell
+# d'administration, lui, cesse alors d'offrir son écran d'inscription.
+registration_enabled = true
 
 # Une adresse non vérifiée ne se connecte pas : sans cette règle, `register` suivi de
 # `login` avec le même mot de passe dirait si l'adresse était déjà inscrite. `false`

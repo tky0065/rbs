@@ -8,9 +8,10 @@ title: Frontend
 Deux fragments posent une application Vue 3 dans un projet existant. `rbs add frontend`
 installe le **socle** : l'application, son routeur, un thème Tailwind v4, quatorze
 composants shadcn-vue vendorisés, et un accueil public. `rbs add frontend-admin` y ajoute le
-**shell d'administration** : un espace authentifié de quatre écrans de compte et de santé —
-et, dès lors, [`rbs generate crud`](../cli/generate.md) écrit les écrans d'administration de
-la table en même temps que son entité.
+**shell d'administration** : quatre écrans de compte et de santé derrière une garde de
+route, et les quatre pages publiques qui y mènent — et, dès lors,
+[`rbs generate crud`](../cli/generate.md) écrit les écrans d'administration de la table en
+même temps que son entité.
 
 Une seule application, deux régimes de route : une racine publique, et l'espace
 d'administration dans un morceau paresseux derrière une garde de route. Un build, un service
@@ -147,7 +148,7 @@ connaissent que les rôles que ce bloc définit.
 
 ## Ce que le shell d'administration ajoute
 
-Quinze fichiers, dans l'arbre que le socle a posé — une application, deux régimes de route.
+Dix-neuf fichiers, dans l'arbre que le socle a posé — une application, deux régimes de route.
 Le shell exige [`auth`](./auth.md), qui tire à son tour `mail` et `rate-limit` : tous
 descendent d'un seul plan, nommés avant que rien ne soit écrit.
 
@@ -168,15 +169,19 @@ plan pour …/demo
   + frontend/src/admin/rail.ts                                              créé
   + frontend/src/admin/document.ts                                          créé
   + frontend/src/admin/textes.ts                                            créé
+  + frontend/src/admin/lien.ts                                              créé
   + frontend/src/admin/Shell.vue                                            créé
   + frontend/src/admin/vues/Connexion.vue                                   créé
+  + frontend/src/admin/vues/Inscription.vue                                 créé
+  + frontend/src/admin/vues/Reinitialisation.vue                            créé
+  + frontend/src/admin/vues/Verification.vue                                créé
   + frontend/src/admin/vues/TableauDeBord.vue                               créé
   + frontend/src/admin/vues/Sessions.vue                                    créé
   + frontend/src/admin/vues/Profil.vue                                      créé
   + frontend/src/admin/vues/Demonstration.vue                               créé
 
-  166 à créer, 15 à modifier
-✓ frontend-admin installée — 166 créés, 15 modifiés
+  173 à créer, 15 à modifier
+✓ frontend-admin installée — 173 créés, 15 modifiés
 
   cd frontend && npm install
 
@@ -204,13 +209,33 @@ Rien d'autre, dans le shell, ne parle HTTP :
 ```ts file=examples/admin-console/frontend/src/api/index.ts
 ```
 
-### Quatre écrans, chacun adossé à une vraie route
+### Huit écrans, chacun adossé à une vraie route
 
-La connexion avec sa demande de réinitialisation, un tableau de bord qui montre les sondes
-réelles, la version et le nombre de routes montées lu dans le document OpenAPI, les sessions
-ouvertes avec leur révocation unitaire et globale, et le profil avec son changement de mot de
-passe. Chacun est adossé à une route qu'`auth` expose réellement — aucun ne montre un chiffre
-que personne ne sert.
+Quatre vivent derrière la garde : un tableau de bord qui montre les sondes réelles, la
+version et le nombre de routes montées lu dans le document OpenAPI ; les sessions ouvertes
+avec leur révocation unitaire et globale ; et le profil, qui *écrit* désormais autant qu'il
+lit — `PATCH /auth/me` change l'adresse qu'il montre, retire la preuve qui portait sur
+l'ancienne, et envoie un lien de vérification neuf.
+
+Quatre sont publiques, parce qu'une garde sans autre page que la connexion enfermerait
+dehors qui n'a pas encore de compte, qui a perdu son mot de passe, ou dont l'adresse attend
+sa preuve : la connexion avec son dialogue de réinitialisation, l'inscription, l'écran du
+nouveau mot de passe, et l'écran de preuve d'adresse avec son renvoi. Les deux derniers
+lisent le jeton que porte le lien du courriel — dans le *fragment* de l'URL, qu'un
+navigateur n'envoie jamais au serveur — par un seul module qu'ils partagent.
+
+Elles vivent hors du shell, et hors du rail : le rail est la navigation d'un espace
+authentifié, et la connexion n'y a jamais figuré non plus. Les trois chemins qu'`auth` met
+dans ses courriels — `/forgot-password`, `/reset-password`, `/verify-email` — sont les alias
+de trois d'entre elles : le fragment les compose depuis `app_url` sans rien savoir d'un
+shell posé à côté, c'est donc au shell de les servir, et un alias les sert sans redirection,
+qui aurait perdu le jeton.
+
+L'inscription demande `GET /auth/registration` avant de montrer son formulaire, et affiche
+le refus à la place quand `registration_enabled` vaut `false` ; la connexion retire dans le
+même cas le lien qui y mène. Chaque écran est adossé à une route qu'`auth` expose réellement
+— aucun ne montre un chiffre que personne ne sert, et aucune route qu'`auth` expose ne reste
+sans appelant.
 
 ### Le transport des jetons, et ce qu'il coûte
 

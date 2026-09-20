@@ -105,6 +105,39 @@ between minor versions with no deprecation cycle.
   project generated before this release has the fixed list and no anchor: `rbs doctor` names it
   and prints the block, and `rbs doctor --fix` puts it back under `'/api-docs',`.
 
+- **Four of the thirteen routes `auth` exposes had no caller in the frontend.**
+  `authRegister`, `authResetPassword`, `authVerifyEmail` and `authResendVerification` were
+  in the generated client and nowhere else: whoever had no account yet, had lost the
+  password, or whose address was still waiting for its proof had nothing to open. The admin
+  shell now carries three more public pages beside its sign-in page — `/admin/inscription`,
+  `/admin/reinitialisation` and `/admin/verification`, the last with a resend button — the
+  route guard's exception covering the four rather than sign-in alone. They mount outside
+  the shell and outside the rail, which is the navigation of an authenticated space. The
+  three paths `auth` puts in its emails — `/forgot-password`, `/reset-password`,
+  `/verify-email` — are aliases of three of them: the fragment composes those from `app_url`
+  without knowing a shell is installed, and an alias serves them without the redirect that
+  would have dropped the token the link carries in the URL's fragment. The password-reset
+  request stays a dialogue of the sign-in screen: it works, and a page for one field adds
+  nothing.
+
+- **`PATCH /auth/me` gives the profile screen something to write.** `dto.rs` carried no
+  editable field and no write route existed, so "profile management" named a read-only
+  page. The new route takes an address and nothing else — the same `EmailRequest` body that
+  `forgot-password` and `resend-verification` read — writes it, drops `email_verified_at`
+  back to `NULL` since the proof was about the old address, and sends a fresh verification
+  link. Like `register` it answers the same 202 whether the address was free or already
+  taken, and warns the holder in the second case rather than telling the caller. No column
+  is added: the user model belongs to the user.
+
+- **`auth.registration_enabled` closes registration on the server, not on the screen.**
+  `POST /auth/register` was open on every project carrying `auth`. The new key, `true` by
+  default, makes the route refuse before it reads the address — a 403 whose problem
+  document carries the stable code `registration_closed` — and a new public
+  `GET /auth/registration` says so, which is how an application served as static files
+  learns a setting the server reads at startup. The shell's sign-up screen asks it and shows
+  the closed message instead of the form; the sign-in screen drops the link to it. `auth`
+  now mounts fifteen routes on thirteen paths.
+
 ## [1.7.0] — 2026-09-19
 
 ### Added

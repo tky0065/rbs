@@ -8,9 +8,10 @@ title: Frontend
 Two fragments put a Vue 3 application into an existing project. `rbs add frontend` installs
 the **base**: the application, its router, a Tailwind v4 theme, fourteen vendored
 shadcn-vue components, and a public home page. `rbs add frontend-admin` adds the
-**admin shell**: an authenticated space of four account-and-health screens — and, from then
-on, [`rbs generate crud`](../cli/generate.md) writes the table's admin screens along with
-its entity.
+**admin shell**: four account-and-health screens behind a route guard, and the four public
+pages that lead to them — and, from then on,
+[`rbs generate crud`](../cli/generate.md) writes the table's admin screens along with its
+entity.
 
 One application, two route regimes: a public root, and the admin space in a lazy chunk
 behind a route guard. One build, one static service, one fallback.
@@ -142,7 +143,7 @@ block defines.
 
 ## What the admin shell adds
 
-Fifteen files, inside the tree the base laid down — one application, two route regimes. The
+Nineteen files, inside the tree the base laid down — one application, two route regimes. The
 shell requires [`auth`](./auth.md), which in turn pulls `mail` and `rate-limit`: all of them
 come down from a single plan, named before anything is written.
 
@@ -163,15 +164,19 @@ plan pour …/demo
   + frontend/src/admin/rail.ts                                              créé
   + frontend/src/admin/document.ts                                          créé
   + frontend/src/admin/textes.ts                                            créé
+  + frontend/src/admin/lien.ts                                              créé
   + frontend/src/admin/Shell.vue                                            créé
   + frontend/src/admin/vues/Connexion.vue                                   créé
+  + frontend/src/admin/vues/Inscription.vue                                 créé
+  + frontend/src/admin/vues/Reinitialisation.vue                            créé
+  + frontend/src/admin/vues/Verification.vue                                créé
   + frontend/src/admin/vues/TableauDeBord.vue                               créé
   + frontend/src/admin/vues/Sessions.vue                                    créé
   + frontend/src/admin/vues/Profil.vue                                      créé
   + frontend/src/admin/vues/Demonstration.vue                               créé
 
-  166 à créer, 15 à modifier
-✓ frontend-admin installée — 166 créés, 15 modifiés
+  173 à créer, 15 à modifier
+✓ frontend-admin installée — 173 créés, 15 modifiés
 
   cd frontend && npm install
 
@@ -199,12 +204,32 @@ Nothing else in the shell speaks HTTP:
 ```ts file=examples/admin-console/frontend/src/api/index.ts
 ```
 
-### Four screens, each backed by a real route
+### Eight screens, each backed by a real route
 
-Sign-in with its password-reset request, a dashboard showing the real probes, the version
-and the number of mounted routes read from the OpenAPI document, the open sessions with
-single and global revocation, and the profile with its password change. Each is backed by a
-route `auth` actually exposes — none of them shows a number nobody serves.
+Four sit behind the guard: a dashboard showing the real probes, the version and the number
+of mounted routes read from the OpenAPI document; the open sessions with single and global
+revocation; and the profile, which now *writes* as well as reads — `PATCH /auth/me` changes
+the address it shows, drops the proof that was about the old one, and sends a fresh
+verification link.
+
+Four are public, because a guard with nothing but a sign-in page would shut out whoever has
+no account yet, has lost the password, or whose address is still waiting for its proof:
+sign-in with its password-reset dialog, sign-up, the new-password screen, and the
+address-proof screen with its resend. The last two read the token the email link carries —
+in the URL's *fragment*, which a browser never sends to a server — through a single module
+both share.
+
+They live outside the shell, and outside the rail: the rail is the navigation of an
+authenticated space, and the sign-in page has never been in it either. The three paths
+`auth` puts in its emails — `/forgot-password`, `/reset-password`, `/verify-email` — are
+aliases of three of them: the fragment composes those from `app_url` without knowing a
+shell is installed, so it is the shell that serves them, and an alias serves them without a
+redirect, which would have dropped the token.
+
+Sign-up asks `GET /auth/registration` before showing its form, and shows the closed message
+instead when `registration_enabled` is `false`; the sign-in page drops the link to it in
+the same case. Each screen is backed by a route `auth` actually exposes — none of them
+shows a number nobody serves, and no route `auth` exposes is left without a caller.
 
 ### Token transport, and what it costs
 

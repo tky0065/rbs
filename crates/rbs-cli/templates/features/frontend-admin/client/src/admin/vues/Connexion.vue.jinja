@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { onMounted, ref } from 'vue'
+import { RouterLink, useRoute, useRouter } from 'vue-router'
 
 import { ApiError, api, phrase } from '@/api'
 import Bande from '@/components/Bande.vue'
@@ -31,6 +31,10 @@ const adresse = ref('')
 const motDePasse = ref('')
 const faute = ref<string | null>(null)
 const enCours = ref(false)
+
+// Faux tant que le service n'a rien dit : l'écran n'offre pas un chemin dont il ignore
+// l'état, et une inscription fermée n'a pas de lien qui y mène.
+const inscriptionOuverte = ref(false)
 
 const oubliOuvert = ref(false)
 const oubliAdresse = ref('')
@@ -71,6 +75,21 @@ async function demander(): Promise<void> {
   }
 }
 
+/**
+ * Demande au service si l'inscription est ouverte.
+ *
+ * Le réglage est lu par le serveur à son démarrage, et une application servie en fichiers
+ * statiques n'a que cette route pour le connaître. Son échec n'a rien à annoncer : il
+ * laisse le lien absent, et la connexion, elle, marche toujours.
+ */
+async function lireInscription(): Promise<void> {
+  try {
+    inscriptionOuverte.value = (await api.authRegistrationStatus()).enabled
+  } catch {
+    inscriptionOuverte.value = false
+  }
+}
+
 /** La route à rejoindre une fois entré. */
 function suite(): string {
   const demandee = route.query.suite
@@ -93,6 +112,10 @@ function raison(cause: unknown): string {
 
   return phrase(cause, TEXTES.injoignable)
 }
+
+onMounted(() => {
+  void lireInscription()
+})
 </script>
 
 <template>
@@ -177,6 +200,15 @@ function raison(cause: unknown): string {
           </Dialog>
         </div>
       </form>
+    </Bande>
+
+    <Bande v-if="inscriptionOuverte">
+      <RouterLink
+        :to="{ name: 'admin-inscription' }"
+        class="underline underline-offset-4 hover:text-foreground"
+      >
+        {{ TEXTES.inscription_lien }}
+      </RouterLink>
     </Bande>
   </main>
 </template>
