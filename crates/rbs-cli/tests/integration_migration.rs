@@ -16,11 +16,14 @@
 //! d'essai partagent leur répertoire de compilation, où deux modules de migration de même
 //! nom se sont montrés capables d'échanger leur code compilé.
 
+use std::io::Read;
+use std::net::TcpStream;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use assert_cmd::Command;
 use tempfile::TempDir;
-use testcontainers::core::ExecCommand;
+use testcontainers::core::{ExecCommand, IntoContainerPort};
 use testcontainers::{Container, GenericImage};
 
 mod common;
@@ -230,6 +233,35 @@ fn an_added_column_migrates_and_its_check_bites_on_postgresql() {
         compte(&psql(&postgres, COLONNE)),
         "1",
         "la remontée ne repose pas la colonne"
+    );
+}
+
+/// Le démarreur rend-il la main sur un serveur qui parle ? `common::start_mysql` dit
+/// pourquoi la question se pose, et pourquoi compter les annonces du journal n'y répond
+/// pas.
+///
+/// Ce banc n'ajoute pas un oracle au démarreur, il en garde le contrat : depuis que
+/// `start_mysql` attend lui-même la poignée de main, une régression tombe dans sa propre
+/// assertion plutôt qu'ici. Ce qu'il apporte est le délai — cinq secondes pour dire ce que
+/// les bancs voisins mettent plusieurs minutes à faire voir, et qu'ils font voir sous la
+/// forme trompeuse d'un `migrate up` qui échoue.
+#[test]
+#[ignore = "démarre MySQL : quelques secondes"]
+fn the_mysql_starter_hands_back_a_server_that_speaks() {
+    let conteneur = common::start_mysql();
+    let port = conteneur
+        .get_host_port_ipv4(3306.tcp())
+        .expect("le port de MySQL doit être publié");
+
+    let mut flux =
+        TcpStream::connect(("127.0.0.1", port)).expect("le port publié accepte la connexion");
+    flux.set_read_timeout(Some(Duration::from_secs(10)))
+        .expect("un délai de lecture se pose sur le flux");
+
+    let mut entete = [0u8; 4];
+    flux.read_exact(&mut entete).expect(
+        "MySQL envoie son paquet de bienvenue dès la connexion : un EOF ici est le serveur \
+         qui raccroche, et le démarreur a rendu la main trop tôt",
     );
 }
 

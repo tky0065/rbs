@@ -14,7 +14,11 @@
 
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::Read;
+use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
+use std::thread;
+use std::time::{Duration, Instant};
 
 use testcontainers::core::wait::LogWaitStrategy;
 use testcontainers::core::{IntoContainerPort, WaitFor};
@@ -212,17 +216,85 @@ pub fn start_postgres() -> Container<GenericImage> {
 }
 
 /// MySQL 8, dont `FOR UPDATE SKIP LOCKED` est contemporain.
+///
+/// Contrairement à PostgreSQL, **compter les annonces ne dit rien ici**. `mysql:8` écrit
+/// « ready for connections » quatre fois : le plugin X et le serveur temporaire que
+/// l'entrypoint lance pour initialiser la base l'écrivent chacun — ce dernier sur
+/// `port: 0`, et il est arrêté une seconde plus tard —, puis les deux du vrai serveur
+/// suivent. Attendre la deuxième rendait donc la main sur un serveur qui n'écoutait nulle
+/// part et allait mourir ; le proxy de Docker acceptait alors la connexion sur le port
+/// publié avant de la refermer, et la ligne d'intégration lisait « expected to read 4
+/// bytes, got 0 bytes at EOF ».
+///
+/// La première annonce, elle, est la seule qu'aucune image ne peut ne pas écrire : elle
+/// sert de raccourci, pour ne pas sonder le port pendant les quinze secondes de
+/// l'initialisation. C'est la poignée de main qui fait preuve.
 pub fn start_mysql() -> Container<GenericImage> {
-    GenericImage::new("mysql", "8")
-        .with_wait_for(WaitFor::log(
-            // Comme PostgreSQL, MySQL annonce deux fois qu'il est prêt : la première fois
-            // pendant son initialisation, où il n'écoute que localement.
-            LogWaitStrategy::stdout_or_stderr("ready for connections").with_times(2),
-        ))
+    let conteneur = GenericImage::new("mysql", "8")
+        .with_wait_for(WaitFor::log(LogWaitStrategy::stdout_or_stderr(
+            "ready for connections",
+        )))
         .with_env_var("MYSQL_ROOT_PASSWORD", MOT_DE_PASSE)
         .with_env_var("MYSQL_DATABASE", BASE)
         .start()
-        .expect("MySQL doit démarrer — Docker est-il lancé ?")
+        .expect("MySQL doit démarrer — Docker est-il lancé ?");
+
+    attend_le_salut_de_mysql(&conteneur);
+    conteneur
+}
+
+/// Bloque tant que MySQL n'a pas envoyé son paquet de bienvenue sur le port publié.
+///
+/// Le serveur l'envoie de lui-même dès qu'il accepte une connexion : en lire l'en-tête
+/// prouve qu'un serveur parle, là où un `connect` réussi ne prouve que le proxy de Docker.
+/// Un test qui démarre la base n'a pas d'autre moyen de le savoir sans pilote MySQL, que
+/// ces tests n'embarquent pas.
+fn attend_le_salut_de_mysql(conteneur: &Container<GenericImage>) {
+    /// De quoi couvrir l'initialisation d'une image neuve sur une machine de CI chargée,
+    /// sans qu'un conteneur mort tienne la suite une demi-heure.
+    const PATIENCE: Duration = Duration::from_secs(60);
+    /// L'initialisation dure une quinzaine de secondes : sonder plus fin ne ferait que
+    /// remplir le journal de refus attendus.
+    const ENTRE_DEUX_ESSAIS: Duration = Duration::from_millis(200);
+
+    let port = conteneur
+        .get_host_port_ipv4(3306.tcp())
+        .expect("le port de MySQL doit être publié");
+
+    let echeance = Instant::now() + PATIENCE;
+    let mut derniere_raison = String::from("aucune tentative");
+
+    while Instant::now() < echeance {
+        match salut_de_mysql(port) {
+            Ok(()) => return,
+            Err(raison) => derniere_raison = raison,
+        }
+        thread::sleep(ENTRE_DEUX_ESSAIS);
+    }
+
+    panic!(
+        "MySQL n'a pas répondu sur 127.0.0.1:{port} en {} s — dernier essai : {derniere_raison}",
+        PATIENCE.as_secs()
+    );
+}
+
+/// Une tentative, à part de la boucle : un flux que le serveur a refermé ne se resonde
+/// pas, et chaque essai doit donc repartir d'une connexion neuve — que la fin de portée
+/// referme.
+fn salut_de_mysql(port: u16) -> Result<(), String> {
+    /// Le serveur répond en quelques millisecondes ou ne répond pas : ce délai n'est pas
+    /// une patience, il borne un essai pour que la boucle garde la main.
+    const DELAI: Duration = Duration::from_secs(5);
+
+    let mut flux = TcpStream::connect_timeout(&SocketAddr::from(([127, 0, 0, 1], port)), DELAI)
+        .map_err(|erreur| format!("connexion refusée : {erreur}"))?;
+
+    flux.set_read_timeout(Some(DELAI))
+        .map_err(|erreur| format!("délai de lecture non posable : {erreur}"))?;
+
+    let mut entete = [0u8; 4];
+    flux.read_exact(&mut entete)
+        .map_err(|erreur| format!("le serveur a raccroché : {erreur}"))
 }
 
 /// L'URL de connexion à `mysql`, vue depuis l'hôte.
