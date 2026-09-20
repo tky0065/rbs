@@ -60,10 +60,12 @@ plan pour …/demo
   + src/auth/repository/one_time_token.rs                  créé
   + src/auth/service/mod.rs                                créé
   + src/auth/service/session.rs                            créé
+  + src/auth/service/account.rs                            créé
   + src/auth/service/password.rs                           créé
   + src/auth/service/verification.rs                       créé
   + src/auth/controller/mod.rs                             créé
   + src/auth/controller/session.rs                         créé
+  + src/auth/controller/account.rs                         créé
   + src/auth/controller/password.rs                        créé
   + src/auth/controller/verification.rs                    créé
   + templates/mail/reinitialisation.html                   créé
@@ -72,6 +74,7 @@ plan pour …/demo
   + src/auth/guard.rs                                      créé
   + src/seeds/admin.rs                                     créé
   + src/auth/tests/mod.rs                                  créé
+  + src/auth/tests/account.rs                              créé
   + src/auth/tests/change.rs                               créé
   + src/auth/tests/guard.rs                                créé
   + src/auth/tests/http.rs                                 créé
@@ -94,8 +97,8 @@ plan pour …/demo
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  48 à créer, 13 à modifier
-✓ auth installée — 48 créés, 13 modifiés
+  51 à créer, 13 à modifier
+✓ auth installée — 51 créés, 13 modifiés
 
   rbs migrate up
 
