@@ -396,3 +396,4 @@ où il va. Un code partagé par plusieurs commandes a le même sens dans toutes.
 | `client_irrendable` | `generate client` | Le document ne se traduit pas en TypeScript. |
 | `cli_anterieur` | `upgrade` | Le projet a été engendré par un rbs plus récent que ce CLI. |
 | `agents_illisible` | `upgrade` | `AGENTS.md` n'a pas pu être rendu. |
+| `makefile_illisible` | `upgrade` | Le `Makefile` du squelette n'a pas pu être rendu. |

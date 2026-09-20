@@ -1,9 +1,10 @@
 //! `rbs upgrade` : le projet aligné sur la version du CLI, et rien d'autre.
 //!
 //! La commande n'écrit que dans `Cargo.toml` et dans les deux zones réservées de
-//! `AGENTS.md`, et crée le `CLAUDE.md` qui l'importe quand il manque. Le reste du projet
+//! `AGENTS.md`, et crée les deux fichiers que le parc engendré avant eux n'a pas — le
+//! `CLAUDE.md` qui importe le guide, et le `Makefile` des raccourcis. Le reste du projet
 //! — contrôleurs, configuration, migrations, tout ce que le développeur écrit hors de ces
-//! zones, et un `CLAUDE.md` existant — appartient au développeur dès que
+//! zones, un `CLAUDE.md` et un `Makefile` existants — appartient au développeur dès que
 //! `rbs new` l'a posé : le re-rendre sur une version plus récente effacerait son travail
 //! sans qu'il l'ait demandé nommément. Le guide, lui, est du texte que rbs produit et
 //! versionne : un projet mis à niveau doit recevoir le mode d'emploi de sa nouvelle
@@ -95,6 +96,10 @@ pub(crate) enum Error {
     /// Le guide n'a pas pu être rendu.
     #[error(transparent)]
     Agents(#[from] crate::agents::Error),
+
+    /// Le fichier de tâches n'a pas pu être rendu.
+    #[error(transparent)]
+    Tasks(#[from] crate::tasks::Error),
 }
 
 // Une faute du manifeste se nomme ; seule son absence vaut « pas un projet rbs ».
@@ -111,6 +116,7 @@ impl Codee for Error {
             Error::Plan(erreur) => erreur.code(),
             Error::Application(erreur) => erreur.code(),
             Error::Agents(_) => "agents_illisible",
+            Error::Tasks(_) => "makefile_illisible",
         }
     }
 
@@ -212,6 +218,20 @@ pub(crate) fn plan_for_with(options: &Options, cli: &str) -> Result<Planned, Err
         builder.create(crate::agents::CLAUDE, crate::agents::CLAUDE_CONTENU)?;
     }
 
+    // Le fichier de tâches, à la même condition et pour la même raison : un projet
+    // engendré avant lui n'en porte aucun, donc rien de ce qui est posé là n'entre en
+    // conflit avec quoi que ce soit. Présent, il est au développeur — il porte l'ancre où
+    // les fragments inscrivent leurs raccourcis, et sans doute les siens.
+    //
+    // Ce qui est posé est le fichier du squelette, et non l'état qu'aurait un projet
+    // portant déjà des fragments : les raccourcis du client et de l'image se réinscrivent
+    // par `rbs add`, que la mise à niveau ne rejoue pas.
+    if !builder.exists(crate::tasks::FICHIER)? {
+        let package = metadonnees.package_name(&root.join("Cargo.toml"))?;
+        let makefile = crate::tasks::render(&package, metadonnees.lang)?;
+        builder.create(crate::tasks::FICHIER, &makefile)?;
+    }
+
     let plan = builder.finir();
 
     let deja_a_jour = plan
@@ -269,7 +289,7 @@ impl crate::errors::Classee for Error {
             Self::PasUnProjet | Self::WorkingTreeSale(_) => Sortie::Usage,
             // Le projet n'est pas en cause : c'est le CLI lancé qui est trop ancien pour lui.
             Self::Acces(_) | Self::CliAnterieur { .. } => Sortie::Environnement,
-            Self::Agents(_) => Sortie::Faute,
+            Self::Agents(_) | Self::Tasks(_) => Sortie::Faute,
             Self::Metadata(cause) => cause.sortie(),
             Self::Plan(cause) => cause.sortie(),
             Self::Application(cause) => cause.sortie(),

@@ -10,9 +10,10 @@ version consignée dans `[package.metadata.rbs]`. Il affiche ensuite les notes d
 que le saut traverse.
 
 Il n'écrit que dans `Cargo.toml`, et dans les deux zones réservées d'
-[`AGENTS.md`](../guides/agents.md) ; il crée aussi le `CLAUDE.md` d'une ligne qui importe ce
-guide quand le projet n'en a pas, et ne réécrit jamais celui qui existe — nulle part
-ailleurs. Le reste du projet —
+[`AGENTS.md`](../guides/agents.md) ; il crée aussi les deux fichiers dont un projet engendré
+avant eux ne porte aucun — le `CLAUDE.md` d'une ligne qui importe ce guide, et le
+[`Makefile`](./new.md#les-raccourcis-du-projet) des raccourcis du projet — et ne réécrit
+jamais celui qui existe. Nulle part ailleurs. Le reste du projet —
 contrôleurs, configuration, migrations, et tout ce que vous écrivez hors de ces deux
 zones — vous appartient dès l'instant où [`rbs new`](./new.md) l'a posé, et le re-rendre
 sur une version plus récente effacerait votre travail sans que vous l'ayez demandé
@@ -165,6 +166,20 @@ niveau ne tourne.
 
 L'écriture passe par le même journal que toute commande touchant un projet existant : si
 une écriture échoue en cours de route, ce qui avait déjà été écrit est défait.
+
+## Les deux fichiers qu'un projet peut ne pas avoir
+
+Un `CLAUDE.md` et un `Makefile` sont arrivés en cours de vie du parc. Un projet engendré
+avant eux n'en porte aucun, aucun des deux ne peut donc entrer en conflit avec quoi que ce
+soit, et la mise à niveau les écrit. Un projet qui en porte un le garde octet pour octet —
+le `Makefile` porte l'ancre `# <rbs:make>` précisément pour qu'on y ajoute des raccourcis,
+vous comme les fragments, et une mise à niveau qui les écraserait ferait la seule chose que
+cette commande ne fait jamais.
+
+Ce qui est écrit est le fichier du squelette, et non l'état qu'aurait un projet portant des
+fragments : le `front` du client et l'`image` de l'image y sont posés par
+[`rbs add`](./add.md), que la mise à niveau ne rejoue pas. Réinstaller le fragment sur un
+projet existant inscrit ses raccourcis dans l'ancre qu'il vient de recevoir.
 
 ## Un saut qui ne traverse aucune note
 
