@@ -148,6 +148,10 @@ Un avertissement ne change ni le code de sortie ni le verdict final : un projet 
 porte qu'un avertissement continue de sortir en 0 et d'être rapporté comme sain dans
 l'ensemble — seul un échec véritable change cela.
 
+La sortie ci-dessous a été capturée sur un projet engendré en 1.2.0 : les douze ancres, les
+sept variables et la ligne des versions sont celles de ce projet-là. Ce qu'elle illustre —
+l'avertissement et la ligne qui en donne le remède — n'a pas changé.
+
 ```text
 $ rbs doctor
   ✓ ancres        les 12 points d'insertion sont en place

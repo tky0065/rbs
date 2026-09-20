@@ -303,6 +303,11 @@ Repairing comes before diagnosing, so the `ancres` check of the same report coun
 has just been put back rather than reporting red on a project the command has just set
 straight.
 
+The output below was captured on a project generated with rbs 1.2.0, and is kept as it
+was: the counts it shows — eleven anchors, four variables — are that project's, and no
+project of today gives them. What it illustrates is the order of the two steps, which has
+not moved since.
+
 Below, a project whose `// <rbs:openapi>` and `// <rbs:state_init>` were deleted:
 
 ```text
@@ -428,6 +433,10 @@ $ rbs doctor --fix --force --json
 standard output carries the document and nothing else.
 
 ## Reachable but unreadable
+
+The output below was captured on a project generated with rbs 1.2.0 — hence the fifteen
+anchors, the seven variables and the version line. Nothing it illustrates depends on the
+project's age: the two halves of the `base` check fail separately on any version.
 
 The two halves of the `base` check fail separately. Here the host answers on the port, but
 the version could not be read because the `migration` crate did not build — the remedy
