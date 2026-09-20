@@ -10,6 +10,12 @@ description = "authentification JWT : Argon2, jetons d'accès et de rafraîchiss
 # parcours n'a de sens sans destinataire. La dépendance est dure plutôt qu'optionnelle :
 # un point d'extension resté vide rendrait 202 sans que rien ne parte.
 requires = ["rate-limit", "mail"]
+# Le seul endroit où les identifiants du compte d'administration se disent : le mot de
+# passe est tiré à l'installation, et le `.env` qui le porte est gitignoré — personne ne
+# le lira s'il n'est pas nommé ici.
+next_steps = [
+  "{% if lang == 'en' %}rbs seed writes the admin account into the users table: ADMIN_EMAIL (admin@{@ project_name @}.test) and ADMIN_PASSWORD, drawn into your .env, are the credentials the sign-in screen asks for{% else %}rbs seed pose le compte d'administration dans la table des comptes : ADMIN_EMAIL (admin@{@ project_name @}.test) et ADMIN_PASSWORD, tiré dans votre .env, sont les identifiants que l'écran de connexion demande{% endif %}",
+]
 
 [[files]]
 source      = "mod.rs.jinja"
@@ -92,6 +98,13 @@ destination = "templates/mail/inscription.html"
 [[files]]
 source      = "guard.rs.jinja"
 destination = "src/auth/guard.rs"
+
+# Le seed du compte d'administration, déposé comme n'importe quel fichier et déclaré plus
+# bas dans l'ancre du binaire des seeds : le mécanisme des fragments n'a rien de
+# particulier à apprendre pour cela.
+[[files]]
+source      = "seeds/admin.rs.jinja"
+destination = "src/seeds/admin.rs"
 
 [[files]]
 source      = "tests/mod.rs.jinja"
@@ -187,6 +200,10 @@ content = "pub flows: crate::auth::config::FlowConfig,"
 anchor  = "state_init"
 content = "flows: crate::auth::config::FlowConfig::from_config()?,"
 
+[[anchors]]
+anchor  = "seeds"
+content = "admin,"
+
 [migration]
 source = "migration.rs.jinja"
 name   = "create_auth_tables"
@@ -215,13 +232,34 @@ reset_ttl_secs = 3600
 verification_ttl_secs = 86400
 
 # L'application du client, et non ce serveur : rbs engendre une API, et le lien du
-# courriel mène à l'écran qui postera le jeton.
-app_url = "http://localhost:3000"
+# courriel mène à l'écran qui postera le jeton. Le binaire sert le frontend construit sur
+# le port du serveur ; en développement, Vite tient le sien, d'où la clé dédoublée dans
+# config/development.toml.
+app_url = "http://localhost:8080"
 
 # Une adresse non vérifiée ne se connecte pas : sans cette règle, `register` suivi de
 # `login` avec le même mot de passe dirait si l'adresse était déjà inscrite. `false`
 # connecte dès l'inscription, et rouvre cet écart.
+#
+# Le profil de développement la met à `false` : le compte que `rbs seed` pose est vérifié
+# d'emblée, mais un compte inscrit par l'API ne l'est pas, et aucun écran n'appelle
+# `/auth/verify-email`. L'écart ne s'ouvre que sur un poste de travail ; ce défaut-ci,
+# qui gouverne la production, garde la preuve d'adresse.
 login_requires_verification = true
+"""
+
+# Les deux clés que le poste de travail contredit. Un profil ne remplace que ce qu'il
+# nomme : le reste de `[auth]` vient toujours du fichier ci-dessus.
+[[config]]
+file    = "config/development.toml"
+section = "auth"
+content = """
+# Le port de Vite, qui sert le client en développement.
+app_url = "http://localhost:5173"
+
+# Le poste de travail connecte dès l'inscription : sans cela, un compte créé par l'API ne
+# pourrait jamais entrer, faute d'écran appelant `/auth/verify-email`.
+login_requires_verification = false
 """
 
 [[env]]
@@ -229,3 +267,18 @@ key     = "RBS_AUTH__SECRET"
 value   = "changez-moi-par-un-secret-tire-au-hasard-de-32-octets-au-moins"
 secret  = true
 comment = "Secret de signature HS256. 32 octets au moins, sans quoi le démarrage échoue."
+
+# Déduite du projet et non tirée : un tirage rendrait soixante-quatre caractères
+# hexadécimaux sans `@`, que l'écran de connexion refuse avant même de partir. L'adresse
+# n'est pas un secret — le mot de passe ci-dessous l'est.
+[[env]]
+key           = "ADMIN_EMAIL"
+value         = "admin@example.com"
+project_value = "admin@{@ project_name @}.test"
+comment       = "Le compte d'administration que `rbs seed` pose dans la table des comptes"
+
+[[env]]
+key     = "ADMIN_PASSWORD"
+value   = "changez-moi-ce-mot-de-passe-est-publie-dans-git"
+secret  = true
+comment = "Son mot de passe, tiré au hasard dans le .env — l'exemple versionné n'en porte qu'un repère"

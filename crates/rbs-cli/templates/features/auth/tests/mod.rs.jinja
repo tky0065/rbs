@@ -37,7 +37,15 @@ async fn application() -> Router {
         .await
         .expect("base joignable — les migrations doivent avoir été appliquées");
 
-    router(AppState::new(db, config).expect("état partagé constructible"))
+    let mut state = AppState::new(db, config).expect("état partagé constructible");
+
+    // La règle que ces tests éprouvent est posée ici plutôt que lue : `cargo test` tourne
+    // sous le profil du `.env`, `config/development.toml` lève la preuve d'adresse, et un
+    // projet qui la lève aussi en production verrait sinon échouer des tests qui ne
+    // parlent pas de son choix.
+    state.flows.login_requires_verification = true;
+
+    router(state)
 }
 
 /// Ouvre une connexion à la même base que l'application.
@@ -171,8 +179,8 @@ async fn login(api: &Router, email: &str, mot_de_passe: &str) -> Value {
 
 /// Pose la preuve d'adresse que le lien du courriel aurait apportée.
 ///
-/// `login_requires_verification` vaut `true` par défaut : un compte qui doit se connecter
-/// passe d'abord par là.
+/// `application` pose `login_requires_verification` à `true` : un compte qui doit se
+/// connecter passe d'abord par là.
 async fn verified(email: &str) {
     crate::auth::repository::user::mark_verified(&connection().await, account(email).await.id)
         .await

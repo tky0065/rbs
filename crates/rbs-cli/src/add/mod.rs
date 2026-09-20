@@ -1518,6 +1518,194 @@ mod tests {
         );
     }
 
+    /// Le critère de la tâche : un projet fraîchement posé porte un compte capable
+    /// d'entrer dans l'espace d'administration.
+    ///
+    /// `register` ne fixe aucun rôle et la colonne défaut à `"user"` : sans ce seed, la
+    /// table des comptes dont l'écran de connexion parle reste vide de tout administrateur.
+    #[test]
+    fn adding_auth_lays_down_the_seed_of_an_administrator_account() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "auth")).expect("le plan doit se calculer");
+
+        assert!(
+            planned.files.iter().any(|f| f == "src/seeds/admin.rs"),
+            "le seed du compte d'administration n'est pas déposé : {:?}",
+            planned.files
+        );
+
+        let binaire = projected(&planned, "src/seeds/main.rs");
+        let declares = crate::anchors::body(binaire, crate::anchors::SEEDS)
+            .expect("le binaire des seeds porte son ancre");
+        assert!(
+            declares.contains("admin,"),
+            "le seed n'est pas déclaré dans le binaire :\n{binaire}"
+        );
+
+        let seed = projected(&planned, "src/seeds/admin.rs");
+        assert!(
+            seed.contains("Set(model::Role::Admin)"),
+            "le compte semé ne porte pas le rôle qui ouvre l'administration :\n{seed}"
+        );
+        assert!(
+            seed.contains("email_verified_at"),
+            "l'adresse n'est pas datée : `login_requires_verification` refuserait le \
+             compte :\n{seed}"
+        );
+        // La bibliothèque du projet, et non `crate::` : le binaire des seeds est une
+        // racine de crate distincte de celle de l'application.
+        assert!(
+            seed.contains("use demo_api::auth::model;"),
+            "le seed n'atteint pas l'entité par la bibliothèque du projet :\n{seed}"
+        );
+    }
+
+    /// `rbs seed` refuse la production, mais `cargo run --bin seed` ne passe pas par lui :
+    /// le compte que ce seed écrit a tous les droits, et sa garde vit donc dans le seed.
+    #[test]
+    fn the_administrator_seed_refuses_to_run_in_production() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "auth")).expect("le plan doit se calculer");
+        let seed = projected(&planned, "src/seeds/admin.rs");
+
+        assert!(
+            seed.contains("RBS_ENV") && seed.contains("production"),
+            "le seed n'a pas de garde de production :\n{seed}"
+        );
+
+        // Le binaire des seeds n'en reçoit aucune : une garde posée là changerait le sort
+        // des seeds déjà écrits, qui ne créent aucun compte. Il ne reçoit que la
+        // déclaration, et rien d'autre.
+        let binaire = projected(&planned, "src/seeds/main.rs");
+        let avant = fs::read_to_string(root.join("src/seeds/main.rs"))
+            .expect("le squelette porte le binaire des seeds");
+        assert_eq!(
+            binaire.replace("    admin,\n", ""),
+            avant,
+            "le binaire des seeds a reçu autre chose que la déclaration du seed"
+        );
+    }
+
+    /// Les identifiants du compte semé atteignent le `.env` sans être publiés.
+    ///
+    /// L'adresse se déduit du projet plutôt que d'être tirée : un tirage rendrait
+    /// soixante-quatre caractères hexadécimaux sans `@`, que l'écran de connexion refuse.
+    #[test]
+    fn the_administrator_credentials_reach_the_env_without_being_published() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "auth")).expect("le plan doit se calculer");
+
+        let env = projected(&planned, ".env");
+        let paires = crate::dotenv::parse(env);
+
+        assert_eq!(
+            crate::dotenv::value(&paires, "ADMIN_EMAIL"),
+            Some("admin@demo-api.test"),
+            "{env}"
+        );
+
+        let tire = crate::dotenv::value(&paires, "ADMIN_PASSWORD")
+            .expect("le .env doit porter le mot de passe du compte");
+        assert_eq!(tire.len(), 64, "{env}");
+
+        let exemple = projected(&planned, ".env.example");
+        assert!(
+            exemple.contains("ADMIN_EMAIL=") && exemple.contains("ADMIN_PASSWORD="),
+            "les deux variables ne sont pas documentées :\n{exemple}"
+        );
+        assert!(
+            !exemple.contains(tire),
+            "le mot de passe tiré est publié dans l'exemple versionné :\n{exemple}"
+        );
+    }
+
+    /// Les gestes du fragment nomment les deux variables, faute de quoi le développeur
+    /// ignore avec quoi se connecter — et ils le disent dans la langue du projet.
+    #[test]
+    fn the_auth_fragment_names_the_credentials_of_the_account_it_seeds() {
+        for (lang, traduit) in [
+            (crate::lang::Lang::Fr, "compte"),
+            (crate::lang::Lang::En, "account"),
+        ] {
+            let (_parent, root) = crate::fixtures::Project::new().lang(lang).create();
+
+            let planned = plan_for(&options(&root, "auth")).expect("le plan doit se calculer");
+            let pose = planned
+                .poses
+                .iter()
+                .find(|pose| pose.name == "auth")
+                .expect("le fragment est posé");
+            let etapes = pose.next_steps.join("\n");
+
+            for geste in [
+                "rbs seed",
+                "ADMIN_EMAIL",
+                "ADMIN_PASSWORD",
+                "admin@demo-api.test",
+                traduit,
+            ] {
+                assert!(
+                    etapes.contains(geste),
+                    "`{geste}` n'est pas dit en {} :\n{etapes}",
+                    lang.name()
+                );
+            }
+        }
+    }
+
+    /// Le compte semé ne se connecterait pas sous le défaut versionné : le poste de
+    /// travail lève la preuve d'adresse, la production la garde.
+    #[test]
+    fn the_development_profile_alone_lifts_the_verification_the_seeded_account_lacks() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "auth")).expect("le plan doit se calculer");
+
+        let defaut = projected(&planned, "config/default.toml");
+        assert!(
+            defaut.contains("login_requires_verification = true"),
+            "le défaut versionné a perdu la preuve d'adresse :\n{defaut}"
+        );
+
+        let developpement = projected(&planned, "config/development.toml");
+        assert!(
+            developpement.contains("login_requires_verification = false"),
+            "le profil de développement ne lève pas la preuve d'adresse :\n{developpement}"
+        );
+
+        // `cargo test` tourne sous ce profil-là : les tests engendrés poseraient sinon
+        // leur 401 d'adresse non vérifiée sur une règle que le fichier vient de lever.
+        let harnais = projected(&planned, "src/auth/tests/mod.rs");
+        assert!(
+            harnais.contains("state.flows.login_requires_verification = true;"),
+            "le harnais des tests engendrés lit la règle au lieu de la poser :\n{harnais}"
+        );
+    }
+
+    /// `app_url` est la racine des liens que les courriels portent : elle doit nommer un
+    /// port où quelque chose écoute, et ce port n'est pas le même dans les deux profils.
+    #[test]
+    fn the_application_url_names_the_port_that_serves_each_profile() {
+        let (_parent, root) = project();
+
+        let planned = plan_for(&options(&root, "auth")).expect("le plan doit se calculer");
+
+        let defaut = projected(&planned, "config/default.toml");
+        assert!(
+            defaut.contains("app_url = \"http://localhost:8080\""),
+            "le binaire sert le frontend construit sur 8080 :\n{defaut}"
+        );
+
+        let developpement = projected(&planned, "config/development.toml");
+        assert!(
+            developpement.contains("app_url = \"http://localhost:5173\""),
+            "Vite sert sur 5173 :\n{developpement}"
+        );
+    }
+
     /// Inscrit `feature` dans le manifeste comme le ferait `rbs generate crud`, sans
     /// engendrer de CRUD complet : `add::plan_for` ne lit que la liste, jamais le disque
     /// sous `src/`.

@@ -24,7 +24,7 @@ three requests instead of two.
 rbs add auth
 ```
 
-{/* rbs:transcript cmd="rbs add auth" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add auth" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add auth
 auth : authentification JWT : Argon2, jetons d'accès et de rafraîchissement, rôles
@@ -70,6 +70,7 @@ plan pour …/demo
   + templates/mail/verification.html                       créé
   + templates/mail/inscription.html                        créé
   + src/auth/guard.rs                                      créé
+  + src/seeds/admin.rs                                     créé
   + src/auth/tests/mod.rs                                  créé
   + src/auth/tests/change.rs                               créé
   + src/auth/tests/guard.rs                                créé
@@ -85,16 +86,20 @@ plan pour …/demo
   + src/auth/tests/sessions.rs                             créé
   + src/auth/tests/tokens.rs                               créé
   + src/auth/tests/verification.rs                         créé
-  + migration/src/m20260909_093150_create_auth_tables.rs   créé
+  + migration/src/m20260920_112413_create_auth_tables.rs   créé
   ~ migration/src/lib.rs                                   modifié
   ~ src/openapi.rs                                         modifié
+  ~ src/seeds/main.rs                                      modifié
+  ~ config/development.toml                                modifié
   ~ .env                                                   modifié
   ~ AGENTS.md                                              modifié
 
-  47 à créer, 11 à modifier
-✓ auth installée — 47 créés, 11 modifiés
+  48 à créer, 13 à modifier
+✓ auth installée — 48 créés, 13 modifiés
 
   rbs migrate up
+
+  rbs seed pose le compte d'administration dans la table des comptes : ADMIN_EMAIL (admin@demo.test) et ADMIN_PASSWORD, tiré dans votre .env, sont les identifiants que l'écran de connexion demande
 ```
 
 `add` refuses a dirty working tree, which is why the command above only runs on a
@@ -216,14 +221,16 @@ The account exists as soon as the 202 arrives, and it is always a `user` — no 
 this page hands out `admin` for the asking; the account you get here can read, but not
 write, `posts`.
 
-It cannot log in yet: `login_requires_verification`, `true` in `[auth]`, keeps an account
-out until its address is proven — a login with the password just sent would otherwise
-tell a new address from a taken one, as the auth guide explains. The proof comes by mail.
-`auth` ships with `mail`, and `mail`'s default SMTP is Mailpit — the `mailpit` service
+On this workstation it can log in right away: `config/development.toml`, which
+`RBS_ENV=development` lays over the defaults, sets `login_requires_verification` to
+`false`. The versioned default is `true`, and that is what a deployment holds — there an
+account stays out until its address is proven, because a login with the password just sent
+would otherwise tell a new address from a taken one, as the auth guide explains. The proof
+comes by mail, and it is worth walking through once here. `auth` ships with `mail`, and `mail`'s default SMTP is Mailpit — the `mailpit` service
 `docker-compose.yml` already carries, catching every message the project sends without a
 real inbox on the other end. Open [`http://localhost:8025`](http://localhost:8025) in a
 browser and leave it there: a message titled *Confirmez votre adresse* is waiting, with a
-link shaped like `http://localhost:3000/verify-email#token=…`. Copy the token out of it:
+link shaped like `http://localhost:5173/verify-email#token=…`. Copy the token out of it:
 
 ```bash
 curl -i -X POST http://127.0.0.1:8080/auth/verify-email \
@@ -236,8 +243,8 @@ HTTP/1.1 204 No Content
 ```
 
 A link goes stale after `verification_ttl_secs`; a client that finds it expired asks for a
-fresh one with `POST /auth/resend-verification`. The address is proven, and the password
-now opens the account:
+fresh one with `POST /auth/resend-verification`. The address is proven — which a deployment
+would have required — and the password opens the account:
 
 ```bash
 TOKEN=$(curl -s -X POST http://127.0.0.1:8080/auth/login \
@@ -307,6 +314,12 @@ date: Wed, 09 Sep 2026 09:33:06 GMT
 Proof that `--role admin` never touched this route: the same `user` token that was
 forbidden on the write reads the empty list without complaint.
 
+To get through the write, you need an account holding `admin`, and no route hands one out.
+`rbs seed` writes it: `auth` laid down `src/seeds/admin.rs`, which takes `ADMIN_EMAIL` and
+`ADMIN_PASSWORD` from your `.env` — `rbs add auth` put both there — and creates the account
+with its address already verified. Log in with those two instead of Alice's, and the write
+answers 201.
+
 ## Changing and resetting
 
 Keep the Mailpit tab open: the next requests drop more into it.
@@ -343,7 +356,7 @@ content-length: 0
 
 202 whether or not the address exists — check the Mailpit tab and there is a message
 titled *Réinitialisation de votre mot de passe*, with a link shaped like
-`http://localhost:3000/reset-password#token=…`. Copy the token out of it:
+`http://localhost:5173/reset-password#token=…`. Copy the token out of it:
 
 ```bash
 curl -i -X POST http://127.0.0.1:8080/auth/reset-password \

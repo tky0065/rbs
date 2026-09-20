@@ -14,6 +14,20 @@ between minor versions with no deprecation cycle.
 
 ### Fixed
 
+- **A project generated with `auth` had no account able to reach its admin space.**
+  `register` sets no role and the `users.role` column defaults to `"user"`, so no path
+  through the API ever produced an administrator — while the admin sign-in screen told
+  the user the credentials were those of the accounts table the project carries, an empty
+  one. `rbs add auth` now lays down `src/seeds/admin.rs` and declares it in the project's
+  seed binary: `rbs seed` writes one account holding `Role::Admin`, its address already
+  marked verified. Its credentials are the new `ADMIN_EMAIL` and `ADMIN_PASSWORD` — the
+  address derived from the project's name, the password drawn at install — written into
+  the gitignored `.env`, with placeholders left in the versioned `.env.example`, and named
+  by the fragment's next steps. The seed writes nothing when the account exists, nothing
+  when either variable is missing or blank, and refuses to run under `RBS_ENV=production`;
+  that last refusal lives in the seed rather than in `rbs seed`, which
+  `cargo run --bin seed` never passes through.
+
 - **The dev server now relays the prefixes `rbs generate crud` adds.** `frontend/vite.config.ts`
   relayed a fixed list — `/health`, `/docs`, `/api-docs`, plus `/auth` when the admin shell is
   there — while every generated table adds a route prefix of its own: under `npm run dev`, the
@@ -24,6 +38,16 @@ between minor versions with no deprecation cycle.
   than the screen. The registry goes from twenty anchors to twenty-one, ten of them optional. A
   project generated before this release has the fixed list and no anchor: `rbs doctor` names it
   and prints the block, and `rbs doctor --fix` puts it back under `'/api-docs',`.
+
+### Changed
+
+- **The `[auth]` section is now doubled in `config/development.toml`.**
+  `login_requires_verification` stays `true` in `config/default.toml`, which governs
+  production, and is `false` on a workstation: an account signed up through the API is
+  never verified, and no generated screen calls `/auth/verify-email`. `app_url` moves from
+  `http://localhost:3000`, a port where nothing listens, to `http://localhost:8080` by
+  default — the port the binary serves the built client on — and `http://localhost:5173`,
+  Vite's, in development.
 
 ## [1.7.0] — 2026-09-19
 
