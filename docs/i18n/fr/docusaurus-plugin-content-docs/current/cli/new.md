@@ -185,6 +185,10 @@ Les noms de cibles sont les mêmes quoi que dise `--lang` — ce sont des raccou
 `cargo`, de `npm` et de `docker compose`, qui n'ont qu'un jeu de noms chacun — et seules
 les descriptions suivent la langue du projet.
 
+Sous Windows, les raccourcis supposent un `make` installé — celui de Git Bash ou de scoop,
+par exemple. Sans lui, rien n'est perdu : les recettes sont de simples commandes `cargo`,
+`npm` et `docker compose`, que le `Makefile` montre et qui se lancent telles quelles.
+
 `make dev` est la seule recette qui ne soit pas une commande unique. Elle lance d'un coup
 tout ce que le projet porte, dans un même groupe de processus, et un premier Ctrl-C
 emporte l'ensemble. Sur un projet nu, c'est le binaire seul ; [`rbs add

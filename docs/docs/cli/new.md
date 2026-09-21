@@ -184,6 +184,10 @@ Target names are the same whatever `--lang` says — they are shortcuts for `car
 and `docker compose`, which have one set of names each — and only the descriptions follow
 the language of the project.
 
+On Windows the shortcuts assume a `make` is installed — the one Git Bash or scoop provides,
+for instance. Without one, nothing is lost: the recipes are plain `cargo`, `npm` and
+`docker compose` commands, which the `Makefile` shows and which run as they are.
+
 `make dev` is the one recipe that is not a single command. It runs everything the project
 carries at once, in one process group, and a first Ctrl-C takes all of it down. On a bare
 project that is the binary alone; [`rbs add frontend`](./add.md) adds the client's dev
