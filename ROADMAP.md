@@ -185,6 +185,44 @@ client` prennent un `--from <FICHIER>` pour une CI sans toolchain Rust. Enfin la
 transport du frontend descend du shell vers le socle, dont elle est le prérequis et non le
 complément — `docs/adr/0004`.
 
+### v1.9 — Solidité
+
+Le backlog s'est vidé parce que les défauts *connus* sont corrigés, non parce qu'il n'en
+reste pas : ce jalon s'attaque à ce qu'aucun test ne voit encore. Seize des vingt et un
+guides montrent des sorties de commande écrites à la main, qu'aucune transcription ne
+rejoue ; le README annonce huit jalons quand il y en a treize ; aucun projet engendré
+n'a jamais été compilé hors de Linux ; et le critère de sortie de la v1.1 n'a jamais été
+éprouvé sur un agent réel.
+
+Tout bloc de sortie de `docs/` et des README devient une transcription, ou se déclare
+libre avec sa raison — une garde le refuse sinon, pour que le prochain guide ne rouvre pas
+le trou. Les chiffres de la prose qui n'apportent rien disparaissent ; ceux qui portent du
+sens — le nombre d'ancres, de fragments, la version citée — sont comparés à leur source.
+Le job de portabilité compile un projet portant les seize fragments sous macOS et
+Windows ; `make` y reste toléré, non promis. Un scénario d'agent versionné, lancé à la
+main avant chaque version mineure, éprouve enfin la promesse d'`AGENTS.md`.
+
+Le jalon renoue avec les critères de sortie, que les versions 1.2 à 1.8 avaient laissés.
+
+**Critère de sortie** — aucune sortie de commande de `docs/` ni des README n'échappe à un
+test ; un projet portant les seize fragments compile sous Linux, macOS et Windows ; le
+scénario d'agent passe, et son résultat est consigné avec la version qui l'a passé.
+
+### v1.10 — Adoption
+
+Un développeur Rust qui découvre rbs sur crates.io doit comprendre en une minute ce que
+l'outil fait, et en quoi il diffère de Loco, qui occupe le même terrain sur la même pile.
+Le README s'ouvre sur un enregistrement : un script VHS versionné, de `rbs new` à l'écran
+d'administration, régénéré à chaque version mineure et qui échoue si une de ses commandes
+échoue. Une page « rbs et Loco », bilingue, compare des philosophies plutôt que des listes
+de fonctionnalités — une liste ment dès la version suivante de l'autre projet —, date et
+source chaque affirmation sur Loco, et dit quand le préférer. L'annonce vient en dernier,
+une fois les deux en place.
+
+**Critère de sortie** — le README s'ouvre sur un enregistrement régénéré par la version
+publiée ; la page « rbs et Loco » existe dans les deux langues, chaque affirmation sur
+Loco y étant datée et sourcée ; l'annonce est publiée après les deux, et son lien consigné.
+
 ---
 
 ## Hors périmètre
@@ -222,3 +260,5 @@ liste à laquelle on ne peut plus se fier.
 | v1.6 Retrait et clés d'API | ✅ livré — publiée le 2026-09-19 |
 | v1.7 Frontend | ✅ livré — publiée le 2026-09-20 |
 | v1.8 Le projet engendré s'ouvre | ✅ livré — publiée le 2026-09-20, corrigée par la 1.8.1 le 2026-09-20 |
+| v1.9 Solidité | ⏳ planifié |
+| v1.10 Adoption | ⏳ planifié |
