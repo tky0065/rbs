@@ -12,6 +12,15 @@ between minor versions with no deprecation cycle.
 
 ## [Unreleased]
 
+### Fixed
+
+- **`make help` no longer prints `â€”` on Windows.** The banner of a generated `Makefile`
+  carried an em dash inside the recipe itself, where its three bytes arrived read one by
+  one; the descriptions of the shortcuts, which `awk` reads from the file, never were. The
+  banner now uses an ASCII hyphen, and no recipe carries anything but ASCII. A project generated
+  before keeps its `Makefile`, which belongs to its author: replace `—` by `-` on the
+  `help` line to get the fix.
+
 ## [1.8.1] — 2026-09-20
 
 ### Fixed

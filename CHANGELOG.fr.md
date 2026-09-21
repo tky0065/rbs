@@ -13,6 +13,16 @@ dépréciation.
 
 ## [Non publié]
 
+### Corrigé
+
+- **`make help` n'affiche plus `â€”` sous Windows.** Le bandeau du `Makefile` engendré
+  portait un tiret cadratin dans la recette elle-même, où ses trois octets arrivaient relus
+  un à un ; les descriptions des raccourcis, qu'`awk` lit dans le fichier, ne l'ont jamais
+  été. Le bandeau prend un trait d'union ASCII, et aucune recette ne porte plus que de
+  l'ASCII.
+  Un projet engendré avant garde son `Makefile`, qui appartient à son auteur : remplacer
+  `—` par `-` sur la ligne de `help` suffit à recevoir le correctif.
+
 ## [1.8.1] — 2026-09-20
 
 ### Corrigé

@@ -163,7 +163,7 @@ without installing the generator first.
 {/* rbs:transcript cmd="make help" setup="rbs new demo --yes --lang en --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" */}
 ```text
 $ make help
-Shortcuts for demo — make <target>
+Shortcuts for demo - make <target>
 
   help         list these shortcuts
   dev          run everything this project carries, until Ctrl-C

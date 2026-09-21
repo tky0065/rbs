@@ -164,7 +164,7 @@ d'abord le générateur.
 {/* rbs:transcript cmd="make help" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" */}
 ```text
 $ make help
-Raccourcis de demo — make <cible>
+Raccourcis de demo - make <cible>
 
   help         affiche cette liste
   dev          lance tout ce que le projet porte, jusqu'à Ctrl-C
