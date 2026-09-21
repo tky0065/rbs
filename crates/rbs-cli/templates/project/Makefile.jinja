@@ -8,7 +8,7 @@
 DEV = cargo run &
 
 help: ## {% if lang == 'en' %}list these shortcuts{% else %}affiche cette liste{% endif %}
-	@awk 'BEGIN { FS = ":.*## "; print "{% if lang == 'en' %}Shortcuts for {@ project_name @} — make <target>{% else %}Raccourcis de {@ project_name @} — make <cible>{% endif %}\n" } /^[a-z][a-z0-9-]*:.*## / { printf "  %-12s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@awk 'BEGIN { FS = ":.*## "; print "{% if lang == 'en' %}Shortcuts for {@ project_name @} - make <target>{% else %}Raccourcis de {@ project_name @} - make <cible>{% endif %}\n" } /^[a-z][a-z0-9-]*:.*## / { printf "  %-12s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 # Les deux processus — le binaire, et ce qu'un fragment a ajouté à `DEV` — vivent dans un
 # même groupe : `kill 0` les emporte ensemble au premier Ctrl-C, et `wait` tient la

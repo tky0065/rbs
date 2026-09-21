@@ -1905,6 +1905,38 @@ mod tests {
         }
     }
 
+    /// Sous Windows, le cadratin du bandeau de `make help` s'affichait `â€”`, relu octet par
+    /// octet, quand les descriptions accentuées qu'`awk` lit dans le fichier restaient
+    /// intactes : c'est ce qu'une recette porte elle-même qui s'altère en chemin. D'où la
+    /// règle : une recette est en ASCII, dans les deux langues, fragments compris.
+    #[test]
+    fn every_recipe_line_of_the_task_file_is_ascii() {
+        for lang in [crate::lang::Lang::Fr, crate::lang::Lang::En] {
+            let parent = parent();
+            let project = create(
+                &Options {
+                    name: "demo".to_string(),
+                    database_url: "postgres://rbs:rbs@localhost:5432/demo".to_string(),
+                    database: Database::Postgres,
+                    features: crate::templates::feature_names(None),
+                    core_path: None,
+                    template_dir: None,
+                    lang,
+                },
+                parent.path(),
+            )
+            .expect("un projet portant tous les fragments doit se créer");
+
+            let makefile = read(&project.root.join("Makefile"));
+            for recette in makefile.lines().filter(|ligne| ligne.starts_with('\t')) {
+                assert!(
+                    recette.is_ascii(),
+                    "une recette porte un caractère non ASCII : {recette}"
+                );
+            }
+        }
+    }
+
     /// `make` seul doit rendre l'aide : sans ce but par défaut, il lancerait la première
     /// cible du fichier, qui n'est pas celle qu'on attend d'un `make` nu.
     #[test]

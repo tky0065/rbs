@@ -8,7 +8,7 @@
 DEV = cargo run &
 
 help: ## affiche cette liste
-	@awk 'BEGIN { FS = ":.*## "; print "Raccourcis de hello-crud — make <cible>\n" } /^[a-z][a-z0-9-]*:.*## / { printf "  %-12s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
+	@awk 'BEGIN { FS = ":.*## "; print "Raccourcis de hello-crud - make <cible>\n" } /^[a-z][a-z0-9-]*:.*## / { printf "  %-12s %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 # Les deux processus — le binaire, et ce qu'un fragment a ajouté à `DEV` — vivent dans un
 # même groupe : `kill 0` les emporte ensemble au premier Ctrl-C, et `wait` tient la

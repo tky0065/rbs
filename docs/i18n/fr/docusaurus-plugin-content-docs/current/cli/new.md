@@ -164,7 +164,7 @@ d'abord le générateur.
 {/* rbs:transcript cmd="make help" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" */}
 ```text
 $ make help
-Raccourcis de demo — make <cible>
+Raccourcis de demo - make <cible>
 
   help         affiche cette liste
   dev          lance tout ce que le projet porte, jusqu'à Ctrl-C
@@ -184,6 +184,10 @@ Raccourcis de demo — make <cible>
 Les noms de cibles sont les mêmes quoi que dise `--lang` — ce sont des raccourcis de
 `cargo`, de `npm` et de `docker compose`, qui n'ont qu'un jeu de noms chacun — et seules
 les descriptions suivent la langue du projet.
+
+Sous Windows, les raccourcis supposent un `make` installé — celui de Git Bash ou de scoop,
+par exemple. Sans lui, rien n'est perdu : les recettes sont de simples commandes `cargo`,
+`npm` et `docker compose`, que le `Makefile` montre et qui se lancent telles quelles.
 
 `make dev` est la seule recette qui ne soit pas une commande unique. Elle lance d'un coup
 tout ce que le projet porte, dans un même groupe de processus, et un premier Ctrl-C
