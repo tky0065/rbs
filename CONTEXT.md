@@ -114,3 +114,23 @@ compose` — jamais `rbs` : un projet engendré appartient à son auteur et doit
 une machine qui n'a pas le générateur. Un fragment n'en inscrit une que s'il apporte un
 exécutable de plus à lancer.
 _Avoid_: script, tâche, alias, commande make
+
+### La preuve
+
+**Transcription** :
+Un bloc de la documentation qui montre la sortie d'une commande, rejouée par un test et
+comparée caractère par caractère à ce que la commande affiche réellement. Un bloc de
+sortie qui n'est pas une transcription doit se déclarer **libre**, avec sa raison.
+_Avoid_: capture, exemple de sortie, snapshot
+
+**Scénario d'agent** :
+Une tâche versionnée, confiée à un agent de code sur un projet fraîchement engendré, dont
+le verdict ne vaut que si l'agent est passé par le CLI : `rbs doctor` vert sans aucun
+avertissement de code hors CLI, et les tests du projet verts contre une base réelle.
+_Avoid_: test agent, benchmark, éval
+
+**Enregistrement** :
+Une séquence de commandes du CLI, décrite par un script versionné, rejouée et capturée en
+animation pour montrer l'outil à l'œuvre. Il se régénère à chaque version mineure, et
+échoue si une de ses commandes échoue.
+_Avoid_: démo, screencast, GIF

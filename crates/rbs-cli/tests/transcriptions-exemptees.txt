@@ -1,0 +1,395 @@
+# Les blocs ```text nus que la garde des transcriptions tolère encore.
+#
+# Une ligne par bloc : le fichier, puis la première ligne non vide du bloc, séparés par
+# `|`. Cette liste ne fait que décroître : un bloc qu'on rejoue devient une transcription
+# (`rbs:transcript`), un bloc qu'on ne peut pas rejouer se déclare libre avec sa raison
+# (`rbs:libre raison="…"`), et son entrée disparaît. Elle n'accueille jamais un bloc neuf.
+# Une entrée vaut pour un bloc : deux blocs d'une page ouverts par la même ligne en
+# demandent deux. Une entrée qui ne correspond plus à aucun bloc fait échouer la garde.
+
+docs/docs/architecture.md | src/articles/
+docs/docs/architecture.md | controller ──> service ──> repository ──> model
+docs/docs/architecture.md | examples/hello-crud/src/articles/controller.rs
+docs/docs/architecture.md | examples/hello-crud/src/articles/repository.rs
+docs/docs/cli/add.md | $ rbs add --help
+docs/docs/cli/add.md | $ rbs add docker
+docs/docs/cli/add.md | $ rbs add docker
+docs/docs/cli/add.md | $ rbs add docker
+docs/docs/cli/add.md | $ rbs add ci
+docs/docs/cli/add.md | $ rbs add cors
+docs/docs/cli/add.md | $ rbs add rate-limit
+docs/docs/cli/add.md | $ rbs add auth
+docs/docs/cli/add.md | [package.metadata.rbs]
+docs/docs/cli/add.md | $ rbs add graphql
+docs/docs/cli/add.md | $ rbs add docker
+docs/docs/cli/add.md | $ rbs add docker
+docs/docs/cli/add.md | $ rbs add ci
+docs/docs/cli/add.md | $ rbs add docker --template-dir /private/tmp/rbs-demo/mes-features
+docs/docs/cli/add.md | $ rbs add docker --template-dir /private/tmp/rbs-demo/mes-features --force
+docs/docs/cli/add.md | $ rbs add docker --template-dir /nexistepas
+docs/docs/cli/add.md | $ rbs add docker
+docs/docs/cli/client.md | ! clients/ts/client.ts   conflit — relancer avec --force
+docs/docs/cli/completions.md | $ rbs completions --help
+docs/docs/cli/completions.md | $ rbs completions nushell
+docs/docs/cli/dev.md | $ rbs dev --help
+docs/docs/cli/dev.md | base        127.0.0.1:1
+docs/docs/cli/dev.md | $ rbs dev --no-compose --no-migrate -- --verbose
+docs/docs/cli/dev.md | compose     docker-compose.yml
+docs/docs/cli/dev.md | erreur : rien ne répond sur 127.0.0.1:1 : la base du projet n'est pas démarrée
+docs/docs/cli/doctor.md | $ rbs doctor --help
+docs/docs/cli/doctor.md | ✗ base        le manifeste compile `sqlx-postgres` et RBS_DATABASE__URL est une URL `mysql://`
+docs/docs/cli/doctor.md | ! agents      écrit hors du CLI : webhooks
+docs/docs/cli/doctor.md | ! gardes      écritures anonymes : articles, comments
+docs/docs/cli/doctor.md | ! disposition   hors de src/modules/ : src/mail
+docs/docs/cli/doctor.md | ✗ jobs        config/default.toml ne porte pas de section `[jobs]`
+docs/docs/cli/doctor.md | ✗ observability `observability.metrics_port` et `server.port` valent tous deux 8080
+docs/docs/cli/doctor.md | ! cors          `cors.origins` est vide : aucun front ne peut appeler l'API depuis un navigateur
+docs/docs/cli/doctor.md | $ rbs doctor --json
+docs/docs/cli/doctor.md | ✓ .env        les 7 variables de .env.example sont renseignées
+docs/docs/cli/doctor.md | $ rbs doctor
+docs/docs/cli/doctor.md | $ rbs doctor --fix --force
+docs/docs/cli/doctor.md | $ git diff --stat
+docs/docs/cli/doctor.md | $ rbs doctor --fix
+docs/docs/cli/doctor.md | $ rbs doctor --fix
+docs/docs/cli/doctor.md | $ rbs doctor --fix --force
+docs/docs/cli/doctor.md | $ rbs doctor --fix --force --json
+docs/docs/cli/doctor.md | $ rbs doctor
+docs/docs/cli/doctor.md | $ rbs doctor
+docs/docs/cli/generate.md | $ rbs generate job purge_sessions --every "0 3 * * *" --dry-run
+docs/docs/cli/generate.md | nom:type[:modificateur…][,nom:type[:modificateur…]…]
+docs/docs/cli/generate.md | author:references:users
+docs/docs/cli/generate.md | $ rbs generate crud tags --fields "Title:string,type:text,prix:money,slug:string:unique:index,email:string,email:int" --dry-run
+docs/docs/cli/generate.md | $ rbs generate crud tags --fields "id:string,table:string,bio:text:optional:optional" --dry-run
+docs/docs/cli/generate.md | $ rbs generate crud tags --fields "titre" --dry-run
+docs/docs/cli/generate.md | $ rbs generate crud articles --fields "title:string,body:text,slug:string:unique,published:bool,views:int:optional" --dry-run
+docs/docs/cli/generate.md | $ rbs generate crud articles --fields "title:string,body:text,slug:string:unique,published:bool,views:int:optional"
+docs/docs/cli/generate.md | [package.metadata.rbs]
+docs/docs/cli/generate.md | $ rbs generate feature comments --force
+docs/docs/cli/generate.md | $ rbs generate feature comments
+docs/docs/cli/generate.md | $ rbs generate feature notes --force
+docs/docs/cli/generate.md | $ rbs generate crud articles --fields "title:string"
+docs/docs/cli/generate.md | $ rbs generate crud users --dry-run
+docs/docs/cli/migrate.md | $ rbs migrate --help
+docs/docs/cli/migrate.md | $ rbs migrate up --help
+docs/docs/cli/migrate.md | $ rbs migrate new --help
+docs/docs/cli/migrate.md | $ rbs migrate status
+docs/docs/cli/migrate.md | $ rbs migrate up
+docs/docs/cli/migrate.md | $ rbs migrate status
+docs/docs/cli/migrate.md | $ rbs migrate new add_tags_index
+docs/docs/cli/migrate.md | $ cat migration/src/lib.rs
+docs/docs/cli/migrate.md | $ rbs migrate status
+docs/docs/cli/migrate.md | $ rbs migrate up
+docs/docs/cli/migrate.md | $ rbs migrate down
+docs/docs/cli/migrate.md | $ rbs migrate status
+docs/docs/cli/migrate.md | $ rbs migrate status
+docs/docs/cli/migrate.md | $ rbs migrate status
+docs/docs/cli/new.md | $ rbs new -h
+docs/docs/cli/new.md | $ rbs new blog --database sqlite --yes
+docs/docs/cli/new.md | $ rbs new blog --database oracle
+docs/docs/cli/new.md | blog/.env
+docs/docs/cli/new.md | [package.metadata.rbs]
+docs/docs/cli/new.md | $ rbs new demo-api --database-url postgres://rbs:rbs@localhost:5432/demo_api --lang en --yes
+docs/docs/cli/new.md | $ rbs new --yes
+docs/docs/cli/new.md | $ rbs new sans-tty < /dev/null
+docs/docs/cli/new.md | $ rbs new blog --core-path /private/tmp/rbs-core --yes
+docs/docs/cli/new.md | $ rbs new maison --template-dir /private/tmp/rbs-demo/mes-templates --yes
+docs/docs/cli/new.md | $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --lang fr --yes
+docs/docs/cli/new.md | $ rbs new sqlite-demo --database sqlite --yes
+docs/docs/cli/new.md | $ rbs new blog --yes
+docs/docs/cli/new.md | $ rbs new 4chan --yes
+docs/docs/cli/openapi.md | $ rbs openapi export --help
+docs/docs/cli/remove.md | $ rbs remove cors
+docs/docs/cli/remove.md | $ rbs remove cors
+docs/docs/cli/remove.md | $ rbs remove cors --force
+docs/docs/cli/remove.md | lancez `cargo build` : le compilateur nomme ce qui référençait encore la feature
+docs/docs/cli/remove.md | $ rbs remove cors
+docs/docs/cli/routes.md | $ rbs routes --help
+docs/docs/cli/routes.md | $ rbs routes
+docs/docs/cli/routes.md | $ rbs routes --json
+docs/docs/cli/seed.md | $ rbs seed --help
+docs/docs/cli/seed.md | $ rbs seed
+docs/docs/cli/seed.md | $ rbs seed
+docs/docs/cli/seed.md | $ RBS_ENV=production rbs seed
+docs/docs/cli/test.md | $ rbs test --help
+docs/docs/cli/test.md | base        127.0.0.1:1
+docs/docs/cli/test.md | erreur : `cargo test` a échoué (code 101)
+docs/docs/cli/test.md | en attente de la base (127.0.0.1:1) ...
+docs/docs/cli/upgrade.md | $ rbs upgrade --help
+docs/docs/cli/upgrade.md | $ rbs upgrade
+docs/docs/cli/upgrade.md | $ git diff --name-only
+docs/docs/cli/upgrade.md | $ git diff -U1 Cargo.toml
+docs/docs/cli/upgrade.md | $ git diff -U2 AGENTS.md
+docs/docs/cli/upgrade.md | $ rbs upgrade
+docs/docs/cli/upgrade.md | $ rbs upgrade
+docs/docs/cli/upgrade.md | $ rbs upgrade
+docs/docs/cli/upgrade.md | $ rbs upgrade
+docs/docs/getting-started.md | rbs 1.2.0
+docs/docs/getting-started.md | erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
+docs/docs/getting-started.md | RBS_ENV=development
+docs/docs/getting-started.md | Network demo_default  Creating
+docs/docs/getting-started.md | Compiling migration v0.1.0 (…/demo/migration)
+docs/docs/getting-started.md | Compiling migration v0.1.0 (…/demo/migration)
+docs/docs/getting-started.md | ✓ m20260829_100554_create_articles   appliquée
+docs/docs/getting-started.md | 10:06:25  INFO   demo                démarrage  adresse=127.0.0.1:8080
+docs/docs/getting-started.md | HTTP/1.1 200 OK
+docs/docs/getting-started.md | HTTP/1.1 201 Created
+docs/docs/getting-started.md | {"data":[{"id":"01a04cfc-2e37-78a1-bcb1-6599b0c362e2","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-08-29T10:06:30.457086Z","updated_at":"2026-08-29T10:06:30.457086Z"}],"meta":{"page":1,"per_page":20,"total":1,"total_pages":1}}
+docs/docs/getting-started.md | 10:06:30  INFO   rbs_core::trace     request  status=200 latency_ms=0.80275 request_id=01M16FRBHD0ZHWCN4EAEAW3TGK method=GET path=/health
+docs/docs/guides/agents.md | # <project> — agent handbook
+docs/docs/guides/agents.md | # blog — agent handbook
+docs/docs/guides/agents.md | $ rbs doctor
+docs/docs/guides/agents.md | $ rbs add redis
+docs/docs/guides/agents.md | $ rbs upgrade
+docs/docs/guides/agents.md | rbs add cors --dry-run --json
+docs/docs/guides/auth.md | $ rbs add auth
+docs/docs/guides/cache.md | $ rbs add redis
+docs/docs/guides/filtering.md | POST /articles/filter
+docs/docs/guides/filtering.md | POST /articles/filter?page=2&per_page=50
+docs/docs/guides/filtering.md | GET /articles?after=0199e0b1-9c4a-7c3e-9d21-6f2a1b0c4d5e&per_page=50
+docs/docs/guides/filtering.md | rbs g crud articles --fields "title:string:index, published:bool"
+docs/docs/guides/jobs.md | $ rbs add jobs
+docs/docs/guides/mail.md | $ rbs add mail
+docs/docs/guides/mail.md | ✗ .env          RBS_MAIL__SMTP_PASSWORD absente du .env
+docs/docs/guides/migrations.md | $ rbs generate crud comments --fields "body:text,deleted_at:datetime" --soft-delete --dry-run
+docs/docs/guides/relations.md | rbs g crud posts --fields "title:string, author:references:users"
+docs/docs/guides/relations.md | $ rbs g crud comments --fields "body:text, author:references:writers" --dry-run
+docs/docs/guides/relations.md | $ rbs g crud comments --fields "body:text, draft:references:drafts" --dry-run
+docs/docs/guides/relations.md | owner:references:users:unique:cascade
+docs/docs/guides/relations.md | $ rbs g crud comments --fields "body:text, author:references:users:index" --dry-run
+docs/docs/guides/relations.md | $ rbs g crud comments --fields "body:text, author:references:users:nullify" --dry-run
+docs/docs/guides/relations.md | $ rbs g crud users --has-many categories --dry-run
+docs/docs/guides/relations.md | aucun seed pour posts : la référence « author » est requise, et un seed ne peut pas deviner vers quelle ligne pointer
+docs/docs/guides/seeds.md | $ rbs seed
+docs/docs/guides/seeds.md | $ rbs seed
+docs/docs/guides/seeds.md | $ RBS_ENV=production rbs seed
+docs/docs/guides/storage.md | $ rbs add storage
+docs/docs/guides/storage.md | $ rbs generate crud uploads --fields "title:string" --with-upload
+docs/docs/guides/webhooks.md | HMAC-SHA256(secret, "<timestamp>.<raw body>")
+docs/docs/tutorials/auth.md | Compiling migration v0.1.0 (…/demo/migration)
+docs/docs/tutorials/auth.md | plan pour …/demo
+docs/docs/tutorials/auth.md | Compiling migration v0.1.0 (…/demo/migration)
+docs/docs/tutorials/auth.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
+docs/docs/tutorials/auth.md | HTTP/1.1 202 Accepted
+docs/docs/tutorials/auth.md | HTTP/1.1 204 No Content
+docs/docs/tutorials/auth.md | HTTP/1.1 401 Unauthorized
+docs/docs/tutorials/auth.md | HTTP/1.1 403 Forbidden
+docs/docs/tutorials/auth.md | HTTP/1.1 200 OK
+docs/docs/tutorials/auth.md | {"access_token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...","refresh_token":"MKySJ39zGPdyiC-eIjOT01s0xJTMI5Zvhn8JByDqwWI","token_type":"Bearer","expires_in":900}
+docs/docs/tutorials/auth.md | HTTP/1.1 202 Accepted
+docs/docs/tutorials/auth.md | HTTP/1.1 204 No Content
+docs/docs/tutorials/cache.md | running 7 tests
+docs/docs/tutorials/first-resource.md | Compiling migration v0.1.0 (…/demo/migration)
+docs/docs/tutorials/first-resource.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
+docs/docs/tutorials/first-resource.md | HTTP/1.1 201 Created
+docs/docs/tutorials/first-resource.md | {"data":[{"id":"01a0857e-2f85-7d03-a129-6defbf74c73c","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-09-09T09:27:14.569998Z","updated_at":"2026-09-09T09:27:14.569998Z"}],"meta":{"page":1,"per_page":20,"total":1,"total_pages":1}}
+docs/docs/tutorials/jobs.md | Compiling migration v0.1.0 (…/demo/migration)
+docs/docs/tutorials/jobs.md | running 4 tests
+docs/docs/tutorials/mail.md | running 7 tests
+docs/docs/tutorials/observability.md | INFO   demo::modules::observability  métriques  adresse=127.0.0.1:9090
+docs/docs/tutorials/observability.md | HTTP/1.1 404 Not Found
+docs/docs/tutorials/observability.md | HTTP/1.1 200 OK
+docs/docs/tutorials/setup.md | Container demo-db-1  Started
+docs/docs/tutorials/setup.md | ✓ migrations appliquées
+docs/docs/tutorials/setup.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
+docs/docs/tutorials/setup.md | HTTP/1.1 200 OK
+docs/docs/tutorials/storage.md | plan pour …/demo
+docs/docs/tutorials/storage.md | Compiling migration v0.1.0 (…/demo/migration)
+docs/docs/tutorials/storage.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
+docs/docs/tutorials/storage.md | HTTP/1.1 422 Unprocessable Entity
+docs/docs/tutorials/storage.md | HTTP/1.1 404 Not Found
+docs/docs/tutorials/storage.md | HTTP/1.1 204 No Content
+docs/docs/tutorials/storage.md | HTTP/1.1 204 No Content
+docs/docs/tutorials/storage.md | HTTP/1.1 200 OK
+docs/i18n/fr/docusaurus-plugin-content-docs/current/architecture.md | src/articles/
+docs/i18n/fr/docusaurus-plugin-content-docs/current/architecture.md | controller ──> service ──> repository ──> model
+docs/i18n/fr/docusaurus-plugin-content-docs/current/architecture.md | examples/hello-crud/src/articles/controller.rs
+docs/i18n/fr/docusaurus-plugin-content-docs/current/architecture.md | examples/hello-crud/src/articles/repository.rs
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add --help
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add docker
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add docker
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add docker
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add ci
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add cors
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add rate-limit
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add auth
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | [package.metadata.rbs]
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add graphql
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add docker
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add docker
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add ci
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add docker --template-dir /private/tmp/rbs-demo/mes-features
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add docker --template-dir /private/tmp/rbs-demo/mes-features --force
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add docker --template-dir /nexistepas
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add docker
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/client.md | ! clients/ts/client.ts   conflit — relancer avec --force
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/completions.md | $ rbs completions --help
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/completions.md | $ rbs completions nushell
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/dev.md | $ rbs dev --help
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/dev.md | base        127.0.0.1:1
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/dev.md | $ rbs dev --no-compose --no-migrate -- --verbose
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/dev.md | compose     docker-compose.yml
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/dev.md | erreur : rien ne répond sur 127.0.0.1:1 : la base du projet n'est pas démarrée
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | $ rbs doctor --help
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | ✗ base        le manifeste compile `sqlx-postgres` et RBS_DATABASE__URL est une URL `mysql://`
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | ! agents      écrit hors du CLI : webhooks
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | ! gardes      écritures anonymes : articles, comments
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | ! disposition   hors de src/modules/ : src/mail
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | ✗ jobs        config/default.toml ne porte pas de section `[jobs]`
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | ✗ observability `observability.metrics_port` et `server.port` valent tous deux 8080
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | ! cors          `cors.origins` est vide : aucun front ne peut appeler l'API depuis un navigateur
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | $ rbs doctor --json
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | ✓ .env        les 7 variables de .env.example sont renseignées
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | $ rbs doctor
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | $ rbs doctor --fix --force
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | $ git diff --stat
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | $ rbs doctor --fix
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | $ rbs doctor --fix
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | $ rbs doctor --fix --force
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | $ rbs doctor --fix --force --json
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | $ rbs doctor
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/doctor.md | $ rbs doctor
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/generate.md | $ rbs generate job purge_sessions --every "0 3 * * *" --dry-run
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/generate.md | nom:type[:modificateur…][,nom:type[:modificateur…]…]
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/generate.md | author:references:users
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/generate.md | $ rbs generate crud tags --fields "Title:string,type:text,prix:money,slug:string:unique:index,email:string,email:int" --dry-run
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/generate.md | $ rbs generate crud tags --fields "id:string,table:string,bio:text:optional:optional" --dry-run
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/generate.md | $ rbs generate crud tags --fields "titre" --dry-run
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/generate.md | $ rbs generate crud articles --fields "title:string,body:text,slug:string:unique,published:bool,views:int:optional" --dry-run
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/generate.md | $ rbs generate crud articles --fields "title:string,body:text,slug:string:unique,published:bool,views:int:optional"
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/generate.md | [package.metadata.rbs]
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/generate.md | $ rbs generate feature comments --force
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/generate.md | $ rbs generate feature comments
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/generate.md | $ rbs generate feature notes --force
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/generate.md | $ rbs generate crud articles --fields "title:string"
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/generate.md | $ rbs generate crud users --dry-run
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/migrate.md | $ rbs migrate --help
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/migrate.md | $ rbs migrate up --help
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/migrate.md | $ rbs migrate new --help
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/migrate.md | $ rbs migrate status
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/migrate.md | $ rbs migrate up
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/migrate.md | $ rbs migrate status
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/migrate.md | $ rbs migrate new add_tags_index
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/migrate.md | $ cat migration/src/lib.rs
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/migrate.md | $ rbs migrate status
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/migrate.md | $ rbs migrate up
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/migrate.md | $ rbs migrate down
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/migrate.md | $ rbs migrate status
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/migrate.md | $ rbs migrate status
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/migrate.md | $ rbs migrate status
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/new.md | $ rbs new -h
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/new.md | $ rbs new blog --database sqlite --yes
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/new.md | $ rbs new blog --database oracle
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/new.md | blog/.env
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/new.md | [package.metadata.rbs]
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/new.md | $ rbs new demo-api --database-url postgres://rbs:rbs@localhost:5432/demo_api --lang en --yes
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/new.md | $ rbs new --yes
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/new.md | $ rbs new sans-tty < /dev/null
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/new.md | $ rbs new blog --core-path /private/tmp/rbs-core --yes
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/new.md | $ rbs new maison --template-dir /private/tmp/rbs-demo/mes-templates --yes
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/new.md | $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --lang fr --yes
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/new.md | $ rbs new sqlite-demo --database sqlite --yes
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/new.md | $ rbs new blog --yes
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/new.md | $ rbs new 4chan --yes
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/openapi.md | $ rbs openapi export --help
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/remove.md | $ rbs remove cors
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/remove.md | $ rbs remove cors
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/remove.md | $ rbs remove cors --force
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/remove.md | lancez `cargo build` : le compilateur nomme ce qui référençait encore la feature
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/remove.md | $ rbs remove cors
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/routes.md | $ rbs routes --help
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/routes.md | $ rbs routes
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/routes.md | $ rbs routes --json
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/seed.md | $ rbs seed --help
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/seed.md | $ rbs seed
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/seed.md | $ rbs seed
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/seed.md | $ RBS_ENV=production rbs seed
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/test.md | $ rbs test --help
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/test.md | base        127.0.0.1:1
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/test.md | erreur : `cargo test` a échoué (code 101)
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/test.md | en attente de la base (127.0.0.1:1) ...
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/upgrade.md | $ rbs upgrade --help
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/upgrade.md | $ rbs upgrade
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/upgrade.md | $ git diff --name-only
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/upgrade.md | $ git diff -U1 Cargo.toml
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/upgrade.md | $ git diff -U2 AGENTS.md
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/upgrade.md | $ rbs upgrade
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/upgrade.md | $ rbs upgrade
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/upgrade.md | $ rbs upgrade
+docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/upgrade.md | $ rbs upgrade
+docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | rbs 1.2.0
+docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
+docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | RBS_ENV=development
+docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | Network demo_default  Creating
+docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | Compiling migration v0.1.0 (…/demo/migration)
+docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | Compiling migration v0.1.0 (…/demo/migration)
+docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | ✓ m20260829_100554_create_articles   appliquée
+docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | 10:06:25  INFO   demo                démarrage  adresse=127.0.0.1:8080
+docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | HTTP/1.1 200 OK
+docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | HTTP/1.1 201 Created
+docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | {"data":[{"id":"01a04cfc-2e37-78a1-bcb1-6599b0c362e2","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-08-29T10:06:30.457086Z","updated_at":"2026-08-29T10:06:30.457086Z"}],"meta":{"page":1,"per_page":20,"total":1,"total_pages":1}}
+docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | 10:06:30  INFO   rbs_core::trace     request  status=200 latency_ms=0.80275 request_id=01M16FRBHD0ZHWCN4EAEAW3TGK method=GET path=/health
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/agents.md | # <projet> — mode d'emploi pour agents
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/agents.md | # blog — mode d'emploi pour agents
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/agents.md | $ rbs doctor
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/agents.md | $ rbs add redis
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/agents.md | $ rbs upgrade
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/agents.md | rbs add cors --dry-run --json
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/auth.md | $ rbs add auth
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/cache.md | $ rbs add redis
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/filtering.md | POST /articles/filter
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/filtering.md | POST /articles/filter?page=2&per_page=50
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/filtering.md | GET /articles?after=0199e0b1-9c4a-7c3e-9d21-6f2a1b0c4d5e&per_page=50
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/filtering.md | rbs g crud articles --fields "title:string:index, published:bool"
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/jobs.md | $ rbs add jobs
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/mail.md | $ rbs add mail
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/mail.md | ✗ .env          RBS_MAIL__SMTP_PASSWORD absente du .env
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/migrations.md | $ rbs generate crud comments --fields "body:text,deleted_at:datetime" --soft-delete --dry-run
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | rbs g crud posts --fields "title:string, author:references:users"
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | $ rbs g crud comments --fields "body:text, author:references:writers" --dry-run
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | $ rbs g crud comments --fields "body:text, draft:references:drafts" --dry-run
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | owner:references:users:unique:cascade
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | $ rbs g crud comments --fields "body:text, author:references:users:index" --dry-run
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | $ rbs g crud comments --fields "body:text, author:references:users:nullify" --dry-run
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | $ rbs g crud users --has-many categories --dry-run
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | aucun seed pour posts : la référence « author » est requise, et un seed ne peut pas deviner vers quelle ligne pointer
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/seeds.md | $ rbs seed
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/seeds.md | $ rbs seed
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/seeds.md | $ RBS_ENV=production rbs seed
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/storage.md | $ rbs add storage
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/storage.md | $ rbs generate crud uploads --fields "title:string" --with-upload
+docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/webhooks.md | HMAC-SHA256(secret, "<horodatage>.<corps brut>")
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | Compiling migration v0.1.0 (…/demo/migration)
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | plan pour …/demo
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | Compiling migration v0.1.0 (…/demo/migration)
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | HTTP/1.1 202 Accepted
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | HTTP/1.1 204 No Content
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | HTTP/1.1 401 Unauthorized
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | HTTP/1.1 403 Forbidden
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | HTTP/1.1 200 OK
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | {"access_token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...","refresh_token":"MKySJ39zGPdyiC-eIjOT01s0xJTMI5Zvhn8JByDqwWI","token_type":"Bearer","expires_in":900}
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | HTTP/1.1 202 Accepted
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | HTTP/1.1 204 No Content
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/cache.md | running 7 tests
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/first-resource.md | Compiling migration v0.1.0 (…/demo/migration)
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/first-resource.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/first-resource.md | HTTP/1.1 201 Created
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/first-resource.md | {"data":[{"id":"01a0857e-2f85-7d03-a129-6defbf74c73c","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-09-09T09:27:14.569998Z","updated_at":"2026-09-09T09:27:14.569998Z"}],"meta":{"page":1,"per_page":20,"total":1,"total_pages":1}}
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/jobs.md | Compiling migration v0.1.0 (…/demo/migration)
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/jobs.md | running 4 tests
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/mail.md | running 7 tests
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/observability.md | INFO   demo::modules::observability  métriques  adresse=127.0.0.1:9090
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/observability.md | HTTP/1.1 404 Not Found
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/observability.md | HTTP/1.1 200 OK
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/setup.md | Container demo-db-1  Started
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/setup.md | ✓ migrations appliquées
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/setup.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/setup.md | HTTP/1.1 200 OK
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | plan pour …/demo
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | Compiling migration v0.1.0 (…/demo/migration)
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | HTTP/1.1 422 Unprocessable Entity
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | HTTP/1.1 404 Not Found
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | HTTP/1.1 204 No Content
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | HTTP/1.1 204 No Content
+docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | HTTP/1.1 200 OK

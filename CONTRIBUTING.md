@@ -85,6 +85,13 @@ Work on a dedicated branch, never on `main`.
 - A feature file past ~200 lines is a feature that wants splitting.
 - Documentation is bilingual: a page changed in English is changed in French in the same
   commit.
+- A ```` ```text ```` block that shows the output of a command is a *transcript*: marked
+  `{/* rbs:transcript cmd="…" */}`, it is replayed by `integration_docs` and compared to
+  what the command really prints. A block that cannot be replayed declares itself free,
+  with its reason — `{/* rbs:libre raison="…" */}` on the site, `<!-- rbs:libre raison="…" -->`
+  in a README. A bare block fails the tests: the exemption list in
+  `crates/rbs-cli/tests/transcriptions-exemptees.txt` only covers blocks older than the
+  guard, and never takes a new one.
 
 **Architecture:** features depend in one direction only —
 `controller → service → repository → model`. A service never touches

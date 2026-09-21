@@ -800,6 +800,417 @@ avant\n\
     }
 }
 
+// --- La garde des blocs de sortie --------------------------------------------------
+
+/// Un bloc ```text de sortie est une transcription ou se déclare libre, avec sa raison.
+///
+/// Rejouer les blocs marqués ne suffisait pas : un bloc qu'on oubliait de marquer n'était
+/// vu par personne, et seize guides sur vingt et un montraient ainsi des sorties écrites à
+/// la main — dont un compte de fichiers faux. La garde rend l'oubli impossible ; les
+/// blocs nus d'avant elle vivent dans `EXEMPTIONS`, que chaque migration vide.
+const EXEMPTIONS: &str = "crates/rbs-cli/tests/transcriptions-exemptees.txt";
+
+/// Les README qu'on lit sur GitHub et crates.io : ils montrent des sorties comme le site.
+const READMES: [&str; 8] = [
+    "README.md",
+    "README.fr.md",
+    "crates/rbs-cli/README.md",
+    "crates/rbs-cli/README.fr.md",
+    "crates/rbs-core/README.md",
+    "crates/rbs-core/README.fr.md",
+    "examples/README.md",
+    "examples/README.fr.md",
+];
+
+/// Le commentaire qu'un fichier sait taire.
+///
+/// Une page du site est du MDX, où un commentaire HTML ne compile pas ; un README est
+/// rendu par GitHub et crates.io, qui imprimeraient `{/* */}` en clair.
+#[derive(Clone, Copy)]
+enum Forme {
+    Mdx,
+    Html,
+}
+
+impl Forme {
+    fn libre(self) -> &'static str {
+        match self {
+            Forme::Mdx => "{/* rbs:libre",
+            Forme::Html => "<!-- rbs:libre",
+        }
+    }
+
+    fn fermeture(self) -> &'static str {
+        match self {
+            Forme::Mdx => "*/}",
+            Forme::Html => "-->",
+        }
+    }
+
+    /// Seul le site est rejoué : un marqueur de transcription dans un README ne garderait
+    /// rien, et le bloc qu'il annonce resterait nu.
+    fn marque_un_bloc(self, ligne: &str) -> bool {
+        (matches!(self, Forme::Mdx) && ligne.starts_with(MARQUEUR))
+            || self.marqueur_libre(ligne).is_some()
+    }
+
+    /// Les attributs d'un marqueur `libre`, ou `None` si la ligne n'en est pas un.
+    fn marqueur_libre(self, ligne: &str) -> Option<&str> {
+        let reste = ligne.trim().strip_prefix(self.libre())?;
+        if !reste.is_empty() && !reste.starts_with(char::is_whitespace) {
+            return None;
+        }
+        Some(reste.strip_suffix(self.fermeture()).unwrap_or(reste))
+    }
+}
+
+/// Un bloc ```text qui n'est ni une transcription ni libre.
+#[derive(Clone, Debug, PartialEq)]
+struct BlocNu {
+    /// Ligne de la clôture ouvrante, 1-based.
+    ligne: usize,
+    /// Sa première ligne non vide : elle l'identifie dans `EXEMPTIONS` sans dépendre de la
+    /// prose qui le précède, qu'une retouche décalerait.
+    premiere: String,
+}
+
+#[derive(Default)]
+struct Releve {
+    /// Tous les blocs ```text vus, marqués ou non.
+    vus: usize,
+    nus: Vec<BlocNu>,
+    fautes: Vec<String>,
+}
+
+/// Le langage d'une clôture ouvrante, ou `None` si la ligne n'en est pas une.
+fn cloture(ligne: &str) -> Option<&str> {
+    let reste = ligne.trim().strip_prefix("```")?;
+    Some(reste.split_whitespace().next().unwrap_or(""))
+}
+
+/// Les blocs ```text de `contenu` qui ne sont ni une transcription ni libres, et les
+/// marqueurs `libre` fautifs.
+fn releve(fichier: &str, contenu: &str, forme: Forme) -> Releve {
+    let lignes: Vec<&str> = contenu.lines().collect();
+    let mut releve = Releve::default();
+    let non_vide =
+        |depuis: usize| (depuis..lignes.len()).find(|&rang| !lignes[rang].trim().is_empty());
+    let mut rang = 0;
+
+    while rang < lignes.len() {
+        if let Some(attributs) = forme.marqueur_libre(lignes[rang]) {
+            let ligne = rang + 1;
+
+            // Une raison est ce qui distingue un bloc libre d'un bloc qu'on n'a pas voulu
+            // rejouer : sans elle, le marqueur n'est qu'une exemption déguisée.
+            if attribut(attributs, "raison").is_none_or(|raison| raison.trim().is_empty()) {
+                releve.fautes.push(format!(
+                    "{fichier}:{ligne} : un bloc libre dit pourquoi il n'est pas rejoué — `raison=\"…\"` manque ou est vide"
+                ));
+            }
+
+            let annonce = non_vide(rang + 1).and_then(|suivante| cloture(lignes[suivante]));
+            if annonce != Some("text") {
+                releve.fautes.push(format!(
+                    "{fichier}:{ligne} : le marqueur libre n'annonce aucun bloc ```text"
+                ));
+            }
+
+            rang += 1;
+            continue;
+        }
+
+        let Some(langage) = cloture(lignes[rang]) else {
+            rang += 1;
+            continue;
+        };
+
+        let ouverture = rang;
+        rang += 1;
+        while rang < lignes.len() && cloture(lignes[rang]).is_none() {
+            rang += 1;
+        }
+
+        if langage == "text" {
+            releve.vus += 1;
+
+            // Docusaurus tolère une ligne vide entre le marqueur et le bloc : la garde
+            // aussi, comme l'extracteur des transcriptions.
+            let marque = (0..ouverture)
+                .rev()
+                .find(|&avant| !lignes[avant].trim().is_empty())
+                .is_some_and(|avant| forme.marque_un_bloc(lignes[avant].trim()));
+
+            if !marque {
+                releve.nus.push(BlocNu {
+                    ligne: ouverture + 1,
+                    premiere: lignes[ouverture + 1..rang]
+                        .iter()
+                        .map(|ligne| ligne.trim())
+                        .find(|ligne| !ligne.is_empty())
+                        .unwrap_or("")
+                        .to_string(),
+                });
+            }
+        }
+
+        rang += 1;
+    }
+
+    releve
+}
+
+/// Compare les blocs nus à la liste d'exemptions, dans les deux sens.
+///
+/// Une entrée vaut pour un bloc : deux blocs nus d'une même page ouverts par la même ligne
+/// demandent deux entrées. Une entrée que plus aucun bloc ne consomme échoue aussi — sans
+/// quoi la liste ne ferait que croître, et un bloc nu ajouté plus tard sous la même
+/// première ligne s'y abriterait.
+fn confronte(nus: &[(String, BlocNu)], exemptions: &str) -> Vec<String> {
+    let mut fautes = Vec::new();
+    let mut entrees: Vec<(usize, String, String)> = Vec::new();
+
+    for (rang, ligne) in exemptions.lines().enumerate() {
+        let nette = ligne.trim();
+        if nette.is_empty() || nette.starts_with('#') {
+            continue;
+        }
+        match nette.split_once('|') {
+            Some((fichier, premiere)) => entrees.push((
+                rang + 1,
+                fichier.trim().to_string(),
+                premiere.trim().to_string(),
+            )),
+            None => fautes.push(format!(
+                "{EXEMPTIONS}:{} : entrée sans `|` entre le fichier et la première ligne du bloc",
+                rang + 1
+            )),
+        }
+    }
+
+    for (fichier, bloc) in nus {
+        let exemptee = entrees
+            .iter()
+            .position(|(_, exempte, premiere)| exempte == fichier && *premiere == bloc.premiere);
+
+        match exemptee {
+            Some(position) => {
+                entrees.remove(position);
+            }
+            None => fautes.push(format!(
+                "{fichier}:{} : bloc ```text nu — marquez-le `rbs:transcript` pour qu'il soit rejoué, ou `rbs:libre raison=\"…\"` s'il ne peut pas l'être",
+                bloc.ligne
+            )),
+        }
+    }
+
+    for (ligne, fichier, premiere) in entrees {
+        fautes.push(format!(
+            "{EXEMPTIONS}:{ligne} : `{fichier} | {premiere}` ne correspond plus à aucun bloc nu — retirez l'entrée"
+        ));
+    }
+
+    fautes
+}
+
+/// Les fichiers que la garde parcourt, chacun avec la forme de commentaire qu'il admet.
+fn fichiers_gardes() -> Vec<(PathBuf, Forme)> {
+    let depot = common::depot();
+    let mut fichiers: Vec<(PathBuf, Forme)> =
+        pages().into_iter().map(|page| (page, Forme::Mdx)).collect();
+    fichiers.extend(
+        READMES
+            .iter()
+            .map(|readme| (depot.join(readme), Forme::Html)),
+    );
+    fichiers
+}
+
+#[test]
+fn every_text_block_is_a_transcript_or_declared_free() {
+    let depot = common::depot();
+    let mut nus = Vec::new();
+    let mut fautes = Vec::new();
+    let mut vus = 0;
+
+    for (fichier, forme) in fichiers_gardes() {
+        let contenu = std::fs::read_to_string(&fichier)
+            .unwrap_or_else(|erreur| panic!("{} illisible : {erreur}", fichier.display()));
+        let relatif = fichier
+            .strip_prefix(&depot)
+            .expect("fichier gardé sous le dépôt")
+            .to_string_lossy()
+            .replace('\\', "/");
+
+        let trouve = releve(&relatif, &contenu, forme);
+        vus += trouve.vus;
+        fautes.extend(trouve.fautes);
+        nus.extend(trouve.nus.into_iter().map(|bloc| (relatif.clone(), bloc)));
+    }
+
+    // Même angle mort que pour le rejeu : un parcours cassé ne verrait aucun bloc, et la
+    // garde passerait au vert sans rien garder.
+    assert!(vus > 0, "aucun bloc ```text n'a été vu");
+
+    let exemptions = std::fs::read_to_string(depot.join(EXEMPTIONS))
+        .unwrap_or_else(|erreur| panic!("{EXEMPTIONS} illisible : {erreur}"));
+    fautes.extend(confronte(&nus, &exemptions));
+
+    assert!(fautes.is_empty(), "\n{}\n", fautes.join("\n"));
+}
+
+mod garde {
+    use super::*;
+
+    fn nus(contenu: &str, forme: Forme) -> Vec<BlocNu> {
+        let releve = releve("page.md", contenu, forme);
+        assert!(releve.fautes.is_empty(), "{:?}", releve.fautes);
+        releve.nus
+    }
+
+    #[test]
+    fn a_bare_text_block_is_named_by_its_fence_line_and_first_line() {
+        let page = "prose\n\n```text\n\n  ✓ demo créé\nsuite\n```\n";
+
+        assert_eq!(
+            nus(page, Forme::Mdx),
+            vec![BlocNu {
+                ligne: 3,
+                premiere: "✓ demo créé".to_string()
+            }]
+        );
+    }
+
+    #[test]
+    fn a_transcript_or_a_free_block_with_its_reason_is_not_bare() {
+        let page = "\
+{/* rbs:transcript cmd=\"rbs doctor\" */}\n\
+\n\
+```text\n\
+✓\n\
+```\n\
+{/* rbs:libre raison=\"la sortie dépend du réseau\" */}\n\
+```text\n\
+✓\n\
+```\n";
+
+        assert!(nus(page, Forme::Mdx).is_empty());
+    }
+
+    #[test]
+    fn only_text_blocks_are_guarded_and_their_content_is_not_read_as_markdown() {
+        let page = "```bash\nrbs new demo\n```\n```rust\nlet x = \"```text\";\n```\n";
+
+        assert!(nus(page, Forme::Mdx).is_empty());
+    }
+
+    #[test]
+    fn a_free_block_without_a_reason_is_refused() {
+        for marqueur in [
+            "{/* rbs:libre */}",
+            "{/* rbs:libre raison=\"\" */}",
+            "{/* rbs:libre raison=\"  \" */}",
+            "{/* rbs:libre reason=\"typo\" */}",
+        ] {
+            let page = format!("{marqueur}\n```text\n✓\n```\n");
+            let releve = releve("page.md", &page, Forme::Mdx);
+
+            assert_eq!(
+                releve.fautes.len(),
+                1,
+                "{marqueur} devait être refusé : {:?}",
+                releve.fautes
+            );
+            assert!(releve.fautes[0].starts_with("page.md:1 : "));
+        }
+    }
+
+    #[test]
+    fn a_free_marker_that_announces_no_text_block_is_refused() {
+        let releve = releve(
+            "page.md",
+            "{/* rbs:libre raison=\"x\" */}\nprose\n```text\n✓\n```\n",
+            Forme::Mdx,
+        );
+
+        assert!(
+            releve
+                .fautes
+                .iter()
+                .any(|faute| faute.starts_with("page.md:1 : ")),
+            "{:?}",
+            releve.fautes
+        );
+    }
+
+    /// Un README s'affiche sur GitHub et crates.io, où `{/* */}` s'imprimerait en clair ;
+    /// une page du site est du MDX, où un commentaire HTML ne compile pas.
+    #[test]
+    fn each_kind_of_file_takes_the_comment_it_can_hide() {
+        let html = "<!-- rbs:libre raison=\"x\" -->\n```text\n✓\n```\n";
+        let mdx = "{/* rbs:libre raison=\"x\" */}\n```text\n✓\n```\n";
+
+        assert!(nus(html, Forme::Html).is_empty());
+        assert!(nus(mdx, Forme::Mdx).is_empty());
+        assert_eq!(nus(mdx, Forme::Html).len(), 1);
+        assert_eq!(nus(html, Forme::Mdx).len(), 1);
+
+        let transcript = "{/* rbs:transcript cmd=\"rbs doctor\" */}\n```text\n✓\n```\n";
+        assert_eq!(
+            nus(transcript, Forme::Html).len(),
+            1,
+            "un README ne rejoue rien : un marqueur de transcription n'y garde aucun bloc"
+        );
+    }
+
+    fn nu(page: &str, ligne: usize, premiere: &str) -> (String, BlocNu) {
+        (
+            page.to_string(),
+            BlocNu {
+                ligne,
+                premiere: premiere.to_string(),
+            },
+        )
+    }
+
+    #[test]
+    fn a_bare_block_absent_from_the_exemptions_is_named_by_file_and_line() {
+        let fautes = confronte(&[nu("docs/a.md", 12, "✓ demo")], "# rien\n");
+
+        assert_eq!(fautes.len(), 1);
+        assert!(fautes[0].starts_with("docs/a.md:12 : "), "{fautes:?}");
+    }
+
+    #[test]
+    fn the_exemptions_list_exactly_the_bare_blocks() {
+        let liste = "# en-tête\n\ndocs/a.md | ✓ demo\ndocs/a.md | ✓ demo\ndocs/b.md |\n";
+        let blocs = [
+            nu("docs/a.md", 3, "✓ demo"),
+            nu("docs/a.md", 9, "✓ demo"),
+            nu("docs/b.md", 1, ""),
+        ];
+
+        assert!(confronte(&blocs, liste).is_empty());
+
+        // Un bloc de plus sous la même première ligne dépasse ce que la liste tolère.
+        let mut plus = blocs.to_vec();
+        plus.push(nu("docs/a.md", 20, "✓ demo"));
+        let fautes = confronte(&plus, liste);
+        assert_eq!(fautes.len(), 1);
+        assert!(fautes[0].starts_with("docs/a.md:20 : "), "{fautes:?}");
+
+        // Une entrée qui ne correspond plus à aucun bloc est une exemption fantôme.
+        let fautes = confronte(&blocs[..2], liste);
+        assert_eq!(fautes.len(), 1);
+        assert!(fautes[0].contains("docs/b.md"), "{fautes:?}");
+    }
+
+    #[test]
+    fn a_malformed_exemption_is_refused() {
+        assert_eq!(confronte(&[], "docs/a.md sans séparateur\n").len(), 1);
+    }
+}
+
 // --- Le tableau des codes d'erreur -------------------------------------------------
 
 /// Les fichiers `.rs` de `racine`, récursivement.
