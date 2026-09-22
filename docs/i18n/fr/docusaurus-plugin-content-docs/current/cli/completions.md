@@ -25,6 +25,7 @@ sortie de terminal ne se traduit pas.
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs completions --help" */}
 ```text
 $ rbs completions --help
 Écrit sur la sortie standard le script de complétion du shell donné
@@ -114,6 +115,7 @@ une limite du générateur, non de la déclaration.
 
 ## Un shell inconnu
 
+{/* rbs:transcript cmd="rbs completions nushell" */}
 ```text
 $ rbs completions nushell
 erreur : valeur « nushell » invalide pour « <SHELL> »

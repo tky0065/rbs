@@ -16,6 +16,7 @@ de cette page sont verbatim, capturés en lançant la commande.
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs dev --help" */}
 ```text
 $ rbs dev --help
 Démarre le projet : services, migrations, serveur relancé à chaque changement
@@ -45,6 +46,7 @@ Sans eux, ce qu'elle fait dépend entièrement de ce que le projet déclare.
 `rbs dev` montre ce qu'elle va faire avant de le faire, comme toute commande qui touche à
 un projet existant :
 
+{/* rbs:transcript cmd="rbs dev --no-compose" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo" dans="demo" extrait="oui" */}
 ```text
   base        127.0.0.1:1
   migrations  rbs migrate up
@@ -68,6 +70,7 @@ qu'on saute : le serveur a besoin de sa base de toute façon. Les arguments qui 
 aucun, son port venant de `[server] port` dans `config/` : ils servent un `main` à qui
 vous avez appris à les lire.
 
+{/* rbs:transcript cmd="rbs dev --no-compose --no-migrate -- --verbose" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo" dans="demo" extrait="oui" */}
 ```text
 $ rbs dev --no-compose --no-migrate -- --verbose
   base        127.0.0.1:1
@@ -77,6 +80,7 @@ $ rbs dev --no-compose --no-migrate -- --verbose
 Un projet avec un compose — le cas par défaut, pour la plupart — montre l'étape en plus,
 en tête :
 
+{/* rbs:libre raison="rbs dev lance alors docker compose up -d, que le rejeu ne peut pas exiger" */}
 ```text
   compose     docker-compose.yml
   base        localhost:15432
@@ -103,6 +107,7 @@ de secondes à accepter des connexions. Une base qui devait tourner et ne tourne
 montera jamais d'elle-même — et trente secondes de silence pour apprendre qu'on a oublié de
 démarrer PostgreSQL sont trente secondes perdues.
 
+{/* rbs:transcript cmd="rbs dev --no-compose" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo" dans="demo" extrait="oui" */}
 ```text
 erreur : rien ne répond sur 127.0.0.1:1 : la base du projet n'est pas démarrée
 

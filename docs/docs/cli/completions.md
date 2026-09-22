@@ -23,6 +23,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs completions --help" */}
 ```text
 $ rbs completions --help
 Écrit sur la sortie standard le script de complétion du shell donné
@@ -109,6 +110,7 @@ a limit of the generator, not of the declaration.
 
 ## An unknown shell
 
+{/* rbs:transcript cmd="rbs completions nushell" */}
 ```text
 $ rbs completions nushell
 erreur : valeur « nushell » invalide pour « <SHELL> »

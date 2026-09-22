@@ -30,6 +30,7 @@ sortie de terminal ne se traduit pas.
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs upgrade --help" */}
 ```text
 $ rbs upgrade --help
 Aligne le manifeste du projet sur la version du CLI : rbs-core et les métadonnées
@@ -57,6 +58,7 @@ donne le document et les codes d'erreur.
 
 Un projet engendré par rbs 0.4.0, mis à niveau par un CLI en 1.0.0 :
 
+{/* rbs:libre raison="exige un projet engendré par une version antérieure du CLI, que le binaire du dépôt ne sait pas produire" */}
 ```text
 $ rbs upgrade
 rbs 0.4.0 → 1.0.0
@@ -106,6 +108,7 @@ noyau.
 
 Juste après la mise à niveau ci-dessus, dans le même projet :
 
+{/* rbs:libre raison="exige un projet engendré par une version antérieure du CLI, que le binaire du dépôt ne sait pas produire" */}
 ```text
 $ git diff --name-only
 AGENTS.md
@@ -115,6 +118,7 @@ Cargo.toml
 Deux fichiers, et c'est ce qui rend la promesse de [la page de
 compatibilité](../compatibility.md) vérifiable à la main :
 
+{/* rbs:libre raison="exige un projet engendré par une version antérieure du CLI, que le binaire du dépôt ne sait pas produire" */}
 ```text
 $ git diff -U1 Cargo.toml
 diff --git a/Cargo.toml b/Cargo.toml
@@ -137,6 +141,7 @@ Deux lignes : la métadonnée et la dépendance. Un noyau pris d'un chemin local
 `rbs new --core-path` — le mode dans lequel rbs se développe — garde son chemin, une
 dépendance par chemin n'ayant pas de version à monter ; seule la version consignée bouge.
 
+{/* rbs:libre raison="exige un projet engendré par une version antérieure du CLI, que le binaire du dépôt ne sait pas produire" */}
 ```text
 $ git diff -U2 AGENTS.md
 diff --git a/AGENTS.md b/AGENTS.md
@@ -186,6 +191,7 @@ projet existant inscrit ses raccourcis dans l'ancre qu'il vient de recevoir.
 Toutes les versions ne rompent pas quelque chose. Un saut qui ne traverse aucune note le
 dit plutôt que de se taire — un blanc là où une note était attendue se lit comme un échec :
 
+{/* rbs:libre raison="exige un projet engendré par une version antérieure du CLI, que le binaire du dépôt ne sait pas produire" */}
 ```text
 $ rbs upgrade
 rbs 0.3.0 → 0.4.0
@@ -209,6 +215,7 @@ Code de sortie 0.
 
 Relancée une seconde fois sur le même projet, la commande s'arrête avant le plan :
 
+{/* rbs:transcript cmd="rbs upgrade" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" */}
 ```text
 $ rbs upgrade
 ✓ le projet est déjà en rbs 0.4.0 — rien à faire
@@ -223,6 +230,7 @@ tree plein de votre travail en cours.
 
 ## Un projet postérieur au CLI
 
+{/* rbs:libre raison="exige un projet engendré par une version du CLI plus récente que celle du dépôt" */}
 ```text
 $ rbs upgrade
 erreur : le projet est en rbs 1.0.0, le CLI en 0.4.0 : `rbs upgrade` ne redescend pas un projet — relancez-le avec un CLI en 1.0.0 ou plus récent
@@ -239,6 +247,7 @@ Mettre à niveau un manifeste qu'on ne sait pas lire est la moindre des deux err
 
 ## Un working tree sale
 
+{/* rbs:libre raison="exige un projet engendré par une version antérieure du CLI, que le binaire du dépôt ne sait pas produire : sur un projet à jour, la commande s'arrête avant de regarder le working tree" */}
 ```text
 $ rbs upgrade
 erreur : le working tree n'est pas propre : src/main.rs, src/router.rs — commitez, ou relancez avec --force

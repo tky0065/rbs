@@ -17,6 +17,7 @@ sortie de terminal ne se traduit pas.
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs migrate --help" */}
 ```text
 $ rbs migrate --help
 Pilote les migrations du projet
@@ -38,6 +39,7 @@ Options :
 Aucune sous-commande n'a de flag propre, et ni `--template-dir` ni `--yes` n'est accepté :
 chacun est déclaré sur les commandes qui le lisent.
 
+{/* rbs:transcript cmd="rbs migrate up --help" */}
 ```text
 $ rbs migrate up --help
 Applique les migrations en attente
@@ -51,6 +53,7 @@ Options :
 
 `down` et `status` sont déclarées de la même manière. Seule `new` prend un argument :
 
+{/* rbs:transcript cmd="rbs migrate new --help" */}
 ```text
 $ rbs migrate new --help
 Crée un fichier de migration vide
@@ -101,6 +104,7 @@ $ rbs migrate status
 Crée un fichier de migration vide, horodaté, et l'inscrit dans le `Migrator`. Elle ne touche
 ni à cargo ni à la base : elle fonctionne donc sans que rien ne tourne.
 
+{/* rbs:transcript cmd="rbs migrate new add_tags_index" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force" dans="demo" */}
 ```text
 $ rbs migrate new add_tags_index
 ✓ migration/src/m20260826_213622_add_tags_index.rs créée
@@ -112,6 +116,7 @@ L'inscription passe par deux ancres de `migration/src/lib.rs`, tenues distinctes
 Rust interdit un `mod` non-inline dans un bloc : la déclaration ne peut donc pas tenir dans
 le `vec!` du `Migrator`.
 
+{/* rbs:libre raison="deux migrations créées dans la même seconde partagent leur horodatage et se trient alors par nom : l'ordre des déclarations varie d'un rejeu à l'autre" */}
 ```text
 $ cat migration/src/lib.rs
 pub use sea_orm_migration::prelude::*;
@@ -176,6 +181,7 @@ Hors d'un projet — la recherche remonte depuis le répertoire courant jusqu'à
 portant `[package.metadata.rbs]`, ce qui empêche aussi une commande lancée depuis
 `migration/src` de viser la mauvaise racine :
 
+{/* rbs:transcript cmd="rbs migrate status" */}
 ```text
 $ rbs migrate status
 erreur : cette commande attend un projet rbs : aucun Cargo.toml portant [package.metadata.rbs] au-dessus d'ici
@@ -183,6 +189,7 @@ erreur : cette commande attend un projet rbs : aucun Cargo.toml portant [package
 
 Avec un `.env` qui ne dit pas quelle base viser :
 
+{/* rbs:libre raison="exige de retirer à la main RBS_DATABASE__URL du .env" */}
 ```text
 $ rbs migrate status
 erreur : RBS_DATABASE__URL est absente du .env : rbs ne sait pas quelle base migrer
@@ -191,6 +198,7 @@ erreur : RBS_DATABASE__URL est absente du .env : rbs ne sait pas quelle base mig
 Avec rien qui réponde à l'autre bout, le message vient du binaire de migration, dont rbs
 rapporte le code de sortie :
 
+{/* rbs:libre raison="compile la crate migration du projet pour n'essuyer qu'un délai de connexion : trop long pour la passe rapide du rejeu" */}
 ```text
 $ rbs migrate status
 Connection Error: pool timed out while waiting for an open connection
