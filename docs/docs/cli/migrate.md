@@ -79,6 +79,7 @@ which means the `migration` crate is compiled on the first run.
 Applied migrations carry `✓`, pending ones `·`. On a project whose migration has never
 run:
 
+{/* rbs:transcript cmd="rbs migrate status" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force" dans="demo" base="oui" */}
 ```text
 $ rbs migrate status
   · m20260826_213608_create_articles   en attente
@@ -86,6 +87,7 @@ $ rbs migrate status
 
 ## `up`
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force" dans="demo" base="oui" extrait="oui" */}
 ```text
 $ rbs migrate up
 ✓ migrations appliquées
@@ -93,6 +95,7 @@ $ rbs migrate up
 
 And the same project, once up to date:
 
+{/* rbs:transcript cmd="rbs migrate status" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate up" dans="demo" base="oui" */}
 ```text
 $ rbs migrate status
   ✓ m20260826_213608_create_articles   appliquée
@@ -142,6 +145,7 @@ impl MigratorTrait for Migrator {
 
 `status` now has one of each:
 
+{/* rbs:transcript cmd="rbs migrate status" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate up && rbs migrate new add_tags_index" dans="demo" base="oui" */}
 ```text
 $ rbs migrate status
   ✓ m20260826_213608_create_articles   appliquée
@@ -151,6 +155,7 @@ $ rbs migrate status
 The new file's body is a `todo!()` carrying the instruction, so running `up` before
 describing the schema change says exactly that instead of applying an empty migration:
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate up && rbs migrate new add_tags_index" dans="demo" base="oui" extrait="oui" */}
 ```text
 $ rbs migrate up
 
@@ -164,10 +169,16 @@ erreur : la crate migration a échoué (code 101)
 
 Rolls back the last applied migration — one, not all:
 
+{/* rbs:transcript cmd="rbs migrate down" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate up && rbs migrate new add_tags_index && rbs migrate up" dans="demo" base="oui" extrait="oui" */}
 ```text
 $ rbs migrate down
 ✓ dernière migration annulée
+```
 
+Both migrations are pending again:
+
+{/* rbs:transcript cmd="rbs migrate status" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate up && rbs migrate new add_tags_index && rbs migrate up && rbs migrate down" dans="demo" base="oui" */}
+```text
 $ rbs migrate status
   · m20260826_213608_create_articles   en attente
   · m20260826_213622_add_tags_index    en attente

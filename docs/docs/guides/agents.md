@@ -148,13 +148,13 @@ A warning does not change the exit status or the final verdict: a project with n
 but a warning still exits 0 and is still reported as healthy overall — only an actual
 failure does that.
 
-The output below was captured on a project generated with rbs 1.2.0: the twelve anchors,
-the seven variables and the version line are that project's. What it illustrates — the
-warning and the line that states its remedy — has not changed.
+The output below comes from a freshly created project into which a `src/webhooks/`
+directory was added by hand.
 
+{/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && mkdir src/webhooks" dans="demo" base="oui" */}
 ```text
 $ rbs doctor
-  ✓ ancres        les 12 points d'insertion sont en place
+  ✓ ancres        les 14 points d'insertion sont en place
   ! agents        écrit hors du CLI : webhooks
       légitime si rbs ne couvre pas ce code ; sinon, rbs generate le reprend
   ✓ relations     les modèles portent leurs ancres de relation

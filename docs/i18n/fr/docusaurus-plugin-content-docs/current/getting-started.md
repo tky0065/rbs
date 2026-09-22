@@ -222,6 +222,7 @@ rbs migrate up
 La première exécution compile la crate `migration`, ce qui prend une minute ; ce sont
 les dernières lignes qui comptent :
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 32.48s
@@ -289,6 +290,7 @@ rbs migrate up
 rbs migrate status
 ```
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && rbs migrate up && rbs generate crud articles --fields title:string,body:text,published:bool" dans="demo" base="oui" extrait="oui" */}
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.02s
@@ -296,6 +298,7 @@ rbs migrate status
 ✓ migrations appliquées
 ```
 
+{/* rbs:transcript cmd="rbs migrate status" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && rbs migrate up && rbs generate crud articles --fields title:string,body:text,published:bool && rbs migrate up" dans="demo" base="oui" */}
 ```text
   ✓ m20260829_100554_create_articles   appliquée
 ```

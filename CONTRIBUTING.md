@@ -111,9 +111,8 @@ Work on a dedicated branch, never on `main`.
   `{/* rbs:transcript cmd="…" */}`, it is replayed by `integration_docs` and compared to
   what the command really prints. A block that cannot be replayed declares itself free,
   with its reason — `{/* rbs:libre raison="…" */}` on the site, `<!-- rbs:libre raison="…" -->`
-  in a README. A bare block fails the tests: the exemption list in
-  `crates/rbs-cli/tests/transcriptions-exemptees.txt` only covers blocks older than the
-  guard, and never takes a new one.
+  in a README. A bare block fails the tests, which name its `file:line`; there is no
+  exemption list.
 
 **Architecture:** features depend in one direction only —
 `controller → service → repository → model`. A service never touches

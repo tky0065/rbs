@@ -113,9 +113,8 @@ Travaillez sur une branche dédiée, jamais sur `main`.
   marqué `{/* rbs:transcript cmd="…" */}`, il est rejoué par `integration_docs` et comparé
   à ce que la commande affiche réellement. Un bloc qui ne peut pas être rejoué se déclare
   libre, avec sa raison — `{/* rbs:libre raison="…" */}` sur le site,
-  `<!-- rbs:libre raison="…" -->` dans un README. Un bloc nu fait échouer les tests : la liste d'exemptions de
-  `crates/rbs-cli/tests/transcriptions-exemptees.txt` ne couvre que des blocs antérieurs
-  à la garde, et n'en accueille jamais un neuf.
+  `<!-- rbs:libre raison="…" -->` dans un README. Un bloc nu fait échouer les tests, qui
+  nomment son `fichier:ligne` ; aucune liste d'exemptions n'existe.
 
 **Architecture :** les features ont une dépendance unidirectionnelle stricte —
 `controller → service → repository → model`. Un service n'accède jamais à

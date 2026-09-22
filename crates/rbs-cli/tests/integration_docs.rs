@@ -12,6 +12,8 @@ use std::path::{Path, PathBuf};
 
 mod common;
 
+use testcontainers::core::ExecCommand;
+
 /// Un bloc de sortie gardé par son marqueur, et de quoi le rejouer.
 struct Transcript {
     page: PathBuf,
@@ -210,6 +212,7 @@ fn normalise(sortie: &str, tmp: &Path) -> String {
     texte = common::masque_horodatage(&texte);
     texte = masque_duree(&texte);
     texte = masque_adresse(&texte);
+    texte = masque_fil(&texte);
 
     let mut rendu = String::with_capacity(texte.len());
     for ligne in texte.lines() {
@@ -433,6 +436,35 @@ fn masque_adresse(texte: &str) -> String {
     rendu
 }
 
+/// `thread 'main' (7889417) panicked` → `thread 'main' (<fil>) panicked` : l'identifiant
+/// que Rust imprime est celui que le système a donné au fil, neuf à chaque lancement.
+fn masque_fil(texte: &str) -> String {
+    const PANIQUE: &str = ") panicked";
+    let mut rendu = String::with_capacity(texte.len());
+
+    for ligne in texte.split_inclusive('\n') {
+        let identifiant = ligne.find(PANIQUE).and_then(|fin| {
+            let debut = ligne[..fin].rfind(" (")? + 2;
+            let chiffres = &ligne[debut..fin];
+            (ligne.starts_with("thread '")
+                && !chiffres.is_empty()
+                && chiffres.bytes().all(|octet| octet.is_ascii_digit()))
+            .then_some((debut, fin))
+        });
+
+        match identifiant {
+            Some((debut, fin)) => {
+                rendu.push_str(&ligne[..debut]);
+                rendu.push_str("<fil>");
+                rendu.push_str(&ligne[fin..]);
+            }
+            None => rendu.push_str(ligne),
+        }
+    }
+
+    rendu
+}
+
 fn compte_chiffres(lettres: &[char], debut: usize) -> usize {
     lettres[debut..]
         .iter()
@@ -487,7 +519,7 @@ fn decoupe(commande: &str) -> Vec<String> {
 /// Les deux flux partagent un même fichier, et non deux tuyaux : `rbs doctor` écrit ses
 /// verdicts sur la sortie standard pendant que cargo compile sur l'erreur, et deux
 /// captures séparées rendraient un bloc que personne n'a jamais vu à l'écran.
-fn lance(commande: &str, repertoire: &Path, base: Option<&str>) -> (bool, String) {
+fn lance(commande: &str, repertoire: &Path, base: Option<&Base>) -> (bool, String) {
     let mut arguments = decoupe(commande);
     assert!(!arguments.is_empty(), "commande vide");
     let programme = arguments.remove(0);
@@ -497,7 +529,7 @@ fn lance(commande: &str, repertoire: &Path, base: Option<&str>) -> (bool, String
     if let Some(vivante) = base {
         for argument in &mut arguments {
             if argument.starts_with("postgres://") {
-                *argument = vivante.to_string();
+                *argument = vivante.url.clone();
             }
         }
     }
@@ -526,9 +558,19 @@ fn lance(commande: &str, repertoire: &Path, base: Option<&str>) -> (bool, String
     let sortie = std::fs::File::create(journal.path()).expect("capture ouvrable");
     let erreur = sortie.try_clone().expect("capture duplicable");
 
+    let mut processus = std::process::Command::new(&executable);
+
+    // Chaque transcription vit dans un tmpdir neuf : sans cible partagée, chacune
+    // recompilerait sea-orm et sqlx à froid, une minute ou plus par bloc. La crate
+    // `migration` du projet se recompile quand même — son chemin change à chaque rejeu —,
+    // si bien que la ligne `Compiling migration` que les pages montrent reste vraie.
+    if let Some(vivante) = base {
+        processus.env("CARGO_TARGET_DIR", &vivante.cible);
+    }
+
     // Sans terminal, comme une CI : lancé depuis un shell, `cargo test` léguerait le sien,
     // et `rbs new` sans `--yes` attendrait une réponse que personne ne donnera.
-    let statut = std::process::Command::new(&executable)
+    let statut = processus
         .current_dir(repertoire)
         .args(&arguments)
         .stdin(std::process::Stdio::null())
@@ -537,14 +579,28 @@ fn lance(commande: &str, repertoire: &Path, base: Option<&str>) -> (bool, String
         .status()
         .unwrap_or_else(|erreur| panic!("`{programme}` doit être lançable : {erreur}"));
 
-    let ecrit = String::from_utf8_lossy(&std::fs::read(journal.path()).expect("capture lisible"))
+    let rendu = String::from_utf8_lossy(&std::fs::read(journal.path()).expect("capture lisible"))
         .into_owned();
 
-    (statut.success(), ecrit)
+    // La cible partagée est une commodité du test : le lecteur compile dans le `target/`
+    // de son projet, et c'est ce chemin que cargo lui montre.
+    let rendu = match base {
+        Some(vivante) => rendu.replace(&format!("{}/", vivante.cible.display()), "target/"),
+        None => rendu,
+    };
+
+    (statut.success(), rendu)
+}
+
+/// Ce qu'une transcription `base="oui"` reçoit du test : le serveur, et la cible où
+/// les projets temporaires compilent.
+struct Base {
+    url: String,
+    cible: PathBuf,
 }
 
 /// Rejoue un transcript dans un répertoire neuf et compare sa sortie au bloc.
-fn compare_transcript(transcript: &Transcript, base: Option<&str>) {
+fn compare_transcript(transcript: &Transcript, base: Option<&Base>) {
     let situe = format!("{}:{}", transcript.page.display(), transcript.ligne);
 
     if let Some(invite) = &transcript.invite {
@@ -634,10 +690,29 @@ fn the_marked_transcripts_that_need_a_database_still_render_what_the_docs_show()
     );
 
     let postgres = common::start_postgres();
-    let url = common::url_of(&postgres);
+    let base = Base {
+        url: common::url_of(&postgres),
+        cible: common::depot().join("target/rbs-docs-transcripts"),
+    };
 
     for transcript in &gardes {
-        compare_transcript(transcript, Some(&url));
+        // Un serveur pour tous les blocs, mais un schéma vierge pour chacun : une
+        // migration qu'un bloc applique ferait mentir le `status` du suivant.
+        postgres
+            .exec(ExecCommand::new([
+                "psql",
+                "-U",
+                common::UTILISATEUR,
+                "-d",
+                common::BASE,
+                "-qc",
+                "drop schema public cascade; create schema public;",
+            ]))
+            .expect("psql doit pouvoir s'exécuter dans le conteneur")
+            .stdout_to_vec()
+            .expect("la sortie de psql se lit");
+
+        compare_transcript(transcript, Some(&base));
     }
 }
 
@@ -769,6 +844,23 @@ avant\n\
         compare_transcript(&transcript, None);
     }
 
+    /// Rust imprime l'identifiant système du fil qui panique, neuf à chaque lancement : la
+    /// migration vide de `rbs migrate new` le montre dès qu'on l'applique.
+    #[test]
+    fn the_id_of_a_panicking_thread_is_masked() {
+        let tmp = Path::new("/var/folders/x/T/.tmpAbC");
+
+        assert_eq!(
+            normalise("thread 'main' (7889417) panicked at src/a.rs:11:9:\n", tmp),
+            normalise("thread 'main' (42) panicked at src/a.rs:11:9:\n", tmp)
+        );
+        assert_eq!(
+            normalise("appel (7889417) panicked\n", tmp),
+            "appel (7889417) panicked\n",
+            "seule la ligne d'une panique porte un identifiant de fil"
+        );
+    }
+
     /// Cargo passe de `12.34s` à `1m 12s` dès qu'une compilation dépasse la minute, et
     /// celle de la crate `migration` la dépasse sur une machine froide. Une durée non
     /// masquée fait échouer le transcript de `doctor` sous les traits d'une dérive de la
@@ -873,14 +965,6 @@ avant\n\
 
 // --- La garde des blocs de sortie --------------------------------------------------
 
-/// Un bloc ```text de sortie est une transcription ou se déclare libre, avec sa raison.
-///
-/// Rejouer les blocs marqués ne suffisait pas : un bloc qu'on oubliait de marquer n'était
-/// vu par personne, et seize guides sur vingt et un montraient ainsi des sorties écrites à
-/// la main — dont un compte de fichiers faux. La garde rend l'oubli impossible ; les
-/// blocs nus d'avant elle vivent dans `EXEMPTIONS`, que chaque migration vide.
-const EXEMPTIONS: &str = "crates/rbs-cli/tests/transcriptions-exemptees.txt";
-
 /// Les README qu'on lit sur GitHub et crates.io : ils montrent des sorties comme le site.
 const READMES: [&str; 8] = [
     "README.md",
@@ -935,21 +1019,12 @@ impl Forme {
     }
 }
 
-/// Un bloc ```text qui n'est ni une transcription ni libre.
-#[derive(Clone, Debug, PartialEq)]
-struct BlocNu {
-    /// Ligne de la clôture ouvrante, 1-based.
-    ligne: usize,
-    /// Sa première ligne non vide : elle l'identifie dans `EXEMPTIONS` sans dépendre de la
-    /// prose qui le précède, qu'une retouche décalerait.
-    premiere: String,
-}
-
 #[derive(Default)]
 struct Releve {
     /// Tous les blocs ```text vus, marqués ou non.
     vus: usize,
-    nus: Vec<BlocNu>,
+    /// Ligne de la clôture ouvrante, 1-based, de chaque bloc ni rejoué ni libre.
+    nus: Vec<usize>,
     fautes: Vec<String>,
 }
 
@@ -961,6 +1036,9 @@ fn cloture(ligne: &str) -> Option<&str> {
 
 /// Les blocs ```text de `contenu` qui ne sont ni une transcription ni libres, et les
 /// marqueurs `libre` fautifs.
+///
+/// Un bloc nu est une faute au même titre qu'un marqueur fautif, nommée par son
+/// `fichier:ligne` : aucune liste ne l'excuse.
 fn releve(fichier: &str, contenu: &str, forme: Forme) -> Releve {
     let lignes: Vec<&str> = contenu.lines().collect();
     let mut releve = Releve::default();
@@ -1013,15 +1091,11 @@ fn releve(fichier: &str, contenu: &str, forme: Forme) -> Releve {
                 .is_some_and(|avant| forme.marque_un_bloc(lignes[avant].trim()));
 
             if !marque {
-                releve.nus.push(BlocNu {
-                    ligne: ouverture + 1,
-                    premiere: lignes[ouverture + 1..rang]
-                        .iter()
-                        .map(|ligne| ligne.trim())
-                        .find(|ligne| !ligne.is_empty())
-                        .unwrap_or("")
-                        .to_string(),
-                });
+                releve.nus.push(ouverture + 1);
+                releve.fautes.push(format!(
+                    "{fichier}:{} : bloc ```text nu — marquez-le `rbs:transcript` pour qu'il soit rejoué, ou `rbs:libre raison=\"…\"` s'il ne peut pas l'être",
+                    ouverture + 1
+                ));
             }
         }
 
@@ -1029,59 +1103,6 @@ fn releve(fichier: &str, contenu: &str, forme: Forme) -> Releve {
     }
 
     releve
-}
-
-/// Compare les blocs nus à la liste d'exemptions, dans les deux sens.
-///
-/// Une entrée vaut pour un bloc : deux blocs nus d'une même page ouverts par la même ligne
-/// demandent deux entrées. Une entrée que plus aucun bloc ne consomme échoue aussi — sans
-/// quoi la liste ne ferait que croître, et un bloc nu ajouté plus tard sous la même
-/// première ligne s'y abriterait.
-fn confronte(nus: &[(String, BlocNu)], exemptions: &str) -> Vec<String> {
-    let mut fautes = Vec::new();
-    let mut entrees: Vec<(usize, String, String)> = Vec::new();
-
-    for (rang, ligne) in exemptions.lines().enumerate() {
-        let nette = ligne.trim();
-        if nette.is_empty() || nette.starts_with('#') {
-            continue;
-        }
-        match nette.split_once('|') {
-            Some((fichier, premiere)) => entrees.push((
-                rang + 1,
-                fichier.trim().to_string(),
-                premiere.trim().to_string(),
-            )),
-            None => fautes.push(format!(
-                "{EXEMPTIONS}:{} : entrée sans `|` entre le fichier et la première ligne du bloc",
-                rang + 1
-            )),
-        }
-    }
-
-    for (fichier, bloc) in nus {
-        let exemptee = entrees
-            .iter()
-            .position(|(_, exempte, premiere)| exempte == fichier && *premiere == bloc.premiere);
-
-        match exemptee {
-            Some(position) => {
-                entrees.remove(position);
-            }
-            None => fautes.push(format!(
-                "{fichier}:{} : bloc ```text nu — marquez-le `rbs:transcript` pour qu'il soit rejoué, ou `rbs:libre raison=\"…\"` s'il ne peut pas l'être",
-                bloc.ligne
-            )),
-        }
-    }
-
-    for (ligne, fichier, premiere) in entrees {
-        fautes.push(format!(
-            "{EXEMPTIONS}:{ligne} : `{fichier} | {premiere}` ne correspond plus à aucun bloc nu — retirez l'entrée"
-        ));
-    }
-
-    fautes
 }
 
 /// Les fichiers que la garde parcourt, chacun avec la forme de commentaire qu'il admet.
@@ -1097,10 +1118,15 @@ fn fichiers_gardes() -> Vec<(PathBuf, Forme)> {
     fichiers
 }
 
+/// Un bloc ```text de sortie est une transcription ou se déclare libre, avec sa raison.
+///
+/// Rejouer les blocs marqués ne suffisait pas : un bloc qu'on oubliait de marquer n'était
+/// vu par personne, et seize guides sur vingt et un montraient ainsi des sorties écrites à
+/// la main — dont un compte de fichiers faux. La garde rend l'oubli impossible, et ne
+/// connaît pas d'exception : un bloc qu'on ne rejoue pas dit pourquoi, là où il est.
 #[test]
 fn every_text_block_is_a_transcript_or_declared_free() {
     let depot = common::depot();
-    let mut nus = Vec::new();
     let mut fautes = Vec::new();
     let mut vus = 0;
 
@@ -1116,16 +1142,11 @@ fn every_text_block_is_a_transcript_or_declared_free() {
         let trouve = releve(&relatif, &contenu, forme);
         vus += trouve.vus;
         fautes.extend(trouve.fautes);
-        nus.extend(trouve.nus.into_iter().map(|bloc| (relatif.clone(), bloc)));
     }
 
     // Même angle mort que pour le rejeu : un parcours cassé ne verrait aucun bloc, et la
     // garde passerait au vert sans rien garder.
     assert!(vus > 0, "aucun bloc ```text n'a été vu");
-
-    let exemptions = std::fs::read_to_string(depot.join(EXEMPTIONS))
-        .unwrap_or_else(|erreur| panic!("{EXEMPTIONS} illisible : {erreur}"));
-    fautes.extend(confronte(&nus, &exemptions));
 
     assert!(fautes.is_empty(), "\n{}\n", fautes.join("\n"));
 }
@@ -1133,23 +1154,35 @@ fn every_text_block_is_a_transcript_or_declared_free() {
 mod garde {
     use super::*;
 
-    fn nus(contenu: &str, forme: Forme) -> Vec<BlocNu> {
+    /// Les lignes des blocs nus de `contenu`, après avoir vérifié que chacun est aussi une
+    /// faute et qu'il n'y en a pas d'autre.
+    fn nus(contenu: &str, forme: Forme) -> Vec<usize> {
         let releve = releve("page.md", contenu, forme);
-        assert!(releve.fautes.is_empty(), "{:?}", releve.fautes);
+        assert_eq!(releve.fautes.len(), releve.nus.len(), "{:?}", releve.fautes);
         releve.nus
     }
 
     #[test]
-    fn a_bare_text_block_is_named_by_its_fence_line_and_first_line() {
+    fn a_bare_text_block_fails_and_is_named_by_file_and_fence_line() {
         let page = "prose\n\n```text\n\n  ✓ demo créé\nsuite\n```\n";
+        let releve = releve("docs/a.md", page, Forme::Mdx);
 
-        assert_eq!(
-            nus(page, Forme::Mdx),
-            vec![BlocNu {
-                ligne: 3,
-                premiere: "✓ demo créé".to_string()
-            }]
+        assert_eq!(releve.nus, vec![3]);
+        assert_eq!(releve.fautes.len(), 1);
+        assert!(
+            releve.fautes[0].starts_with("docs/a.md:3 : bloc ```text nu"),
+            "{:?}",
+            releve.fautes
         );
+    }
+
+    /// Plus aucune liste n'abrite un bloc : deux blocs nus ouverts par la même ligne sont
+    /// deux fautes, chacune à sa ligne.
+    #[test]
+    fn every_bare_block_is_a_fault_of_its_own() {
+        let page = "```text\n✓ demo\n```\n\n```text\n✓ demo\n```\n";
+
+        assert_eq!(nus(page, Forme::Mdx), vec![1, 5]);
     }
 
     #[test]
@@ -1232,53 +1265,6 @@ mod garde {
             1,
             "un README ne rejoue rien : un marqueur de transcription n'y garde aucun bloc"
         );
-    }
-
-    fn nu(page: &str, ligne: usize, premiere: &str) -> (String, BlocNu) {
-        (
-            page.to_string(),
-            BlocNu {
-                ligne,
-                premiere: premiere.to_string(),
-            },
-        )
-    }
-
-    #[test]
-    fn a_bare_block_absent_from_the_exemptions_is_named_by_file_and_line() {
-        let fautes = confronte(&[nu("docs/a.md", 12, "✓ demo")], "# rien\n");
-
-        assert_eq!(fautes.len(), 1);
-        assert!(fautes[0].starts_with("docs/a.md:12 : "), "{fautes:?}");
-    }
-
-    #[test]
-    fn the_exemptions_list_exactly_the_bare_blocks() {
-        let liste = "# en-tête\n\ndocs/a.md | ✓ demo\ndocs/a.md | ✓ demo\ndocs/b.md |\n";
-        let blocs = [
-            nu("docs/a.md", 3, "✓ demo"),
-            nu("docs/a.md", 9, "✓ demo"),
-            nu("docs/b.md", 1, ""),
-        ];
-
-        assert!(confronte(&blocs, liste).is_empty());
-
-        // Un bloc de plus sous la même première ligne dépasse ce que la liste tolère.
-        let mut plus = blocs.to_vec();
-        plus.push(nu("docs/a.md", 20, "✓ demo"));
-        let fautes = confronte(&plus, liste);
-        assert_eq!(fautes.len(), 1);
-        assert!(fautes[0].starts_with("docs/a.md:20 : "), "{fautes:?}");
-
-        // Une entrée qui ne correspond plus à aucun bloc est une exemption fantôme.
-        let fautes = confronte(&blocs[..2], liste);
-        assert_eq!(fautes.len(), 1);
-        assert!(fautes[0].contains("docs/b.md"), "{fautes:?}");
-    }
-
-    #[test]
-    fn a_malformed_exemption_is_refused() {
-        assert_eq!(confronte(&[], "docs/a.md sans séparateur\n").len(), 1);
     }
 }
 
