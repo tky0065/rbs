@@ -925,12 +925,13 @@ mod tests {
             }
             std::fs::write(&chemin, format!("{source}{ajout}")).expect("fichier inscriptible");
         };
-        // Ce que `add mail` dépose : sa section, et la clé dans l'exemple seul.
+        // La section de `add mail`, et la clé dans l'exemple seul — avec une valeur, sans
+        // quoi le contrôle `.env` tolère son absence.
         ajouter(
             CONFIG,
             "\n[mail]\nsmtp_host = \"localhost\"\nsmtp_port = 1025\nsmtp_user = \"\"\ntls = \"none\"\nfrom = \"no-reply@localhost\"\ntimeout_secs = 10\ntemplates = \"templates/mail\"\n",
         );
-        ajouter(".env.example", &format!("{CLE}=\n"));
+        ajouter(".env.example", &format!("{CLE}=changeme\n"));
 
         let report = run_with(&root, &mut Muet).expect("c'est un projet rbs");
 
@@ -941,6 +942,35 @@ mod tests {
             .map(|check| check.title)
             .collect();
         assert_eq!(nomment, vec![env::TITRE], "{nomment:?}");
+    }
+
+    /// Ce que dépose `add mail` : la clé vide dans l'exemple seul. Un projet neuf qui
+    /// échoue à `doctor` apprend à ignorer `doctor`.
+    #[test]
+    fn a_key_the_example_leaves_empty_fails_no_check() {
+        const CLE: &str = "RBS_MAIL__SMTP_PASSWORD";
+        let (_parent, root) = project(&["health", "mail"]);
+        for (fichier, ajout) in [
+            (
+                CONFIG,
+                "\n[mail]\nsmtp_host = \"localhost\"\nsmtp_port = 1025\nsmtp_user = \"\"\ntls = \"none\"\nfrom = \"no-reply@localhost\"\ntimeout_secs = 10\ntemplates = \"templates/mail\"\n".to_string(),
+            ),
+            (".env.example", format!("\n{CLE}=\n")),
+        ] {
+            let chemin = root.join(fichier);
+            let source = std::fs::read_to_string(&chemin).expect("fichier lisible");
+            std::fs::write(&chemin, format!("{source}{ajout}")).expect("fichier inscriptible");
+        }
+
+        let report = run_with(&root, &mut Muet).expect("c'est un projet rbs");
+
+        let echecs: Vec<(&str, &str)> = report
+            .checks
+            .iter()
+            .filter(|check| check.state == State::Echec && check.detail.contains(CLE))
+            .map(|check| (check.title, check.detail.as_str()))
+            .collect();
+        assert!(echecs.is_empty(), "{echecs:?}");
     }
 
     #[test]

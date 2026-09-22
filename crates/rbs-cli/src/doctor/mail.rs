@@ -33,7 +33,9 @@ pub(crate) fn check(root: &Path, config: &Config) -> Check {
 fn check_with(root: &Path, config: &Config, env: impl Fn(&str) -> Option<String>) -> Check {
     let du_fichier = dotenv::read(&root.join(FICHIER)).unwrap_or_default();
 
-    let mot_de_passe = env(CLE).or_else(|| dotenv::value(&du_fichier, CLE).map(str::to_owned));
+    let mot_de_passe = env(CLE)
+        .or_else(|| dotenv::value(&du_fichier, CLE).map(str::to_owned))
+        .or_else(|| super::env::laissee_vide(root, CLE).then(String::new));
     let compte = config.field(SECTION, UTILISATEUR).unwrap_or_default();
 
     let mut defauts = Vec::new();
@@ -136,11 +138,38 @@ mod tests {
     fn a_password_missing_from_env_is_left_to_the_env_check() {
         let (_parent, root) = project_with_mail();
         rewrite(&root, FICHIER, &format!("{CLE}=\n"), "");
+        rewrite(
+            &root,
+            ".env.example",
+            &format!("{CLE}=\n"),
+            &format!("{CLE}=changeme\n"),
+        );
 
         let check = check_with(&root, &Config::read(&root), bare);
 
         assert_eq!(check.state, State::Bon, "{}", check.detail);
         assert!(check.detail.contains(".env"), "{}", check.detail);
+    }
+
+    /// Ce que `rbs new --with mail` laisse : la clé vide dans l'exemple, absente du
+    /// `.env`. Le contrôle `.env` la tolère ; celui-ci la lit comme vide.
+    #[test]
+    fn a_password_the_example_leaves_empty_reads_as_empty_when_missing() {
+        let (_parent, root) = project_with_mail();
+        rewrite(&root, FICHIER, &format!("{CLE}=\n"), "");
+
+        let check = check_with(&root, &Config::read(&root), bare);
+        assert_eq!(check.state, State::Bon, "{}", check.detail);
+
+        rewrite(
+            &root,
+            CONFIG,
+            "smtp_user = \"\"",
+            "smtp_user = \"envoi@exemple.fr\"",
+        );
+        let check = check_with(&root, &Config::read(&root), bare);
+        assert_eq!(check.state, State::Echec, "{}", check.detail);
+        assert!(check.detail.contains(UTILISATEUR), "{}", check.detail);
     }
 
     /// Sans la clé dans l'exemple, le contrôle `.env` ne peut pas la nommer : c'est à
