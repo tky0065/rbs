@@ -17,7 +17,9 @@ dépréciation.
 
 - **`rbs new` sans `--yes` ne se bloque plus dans un script sous Windows.** Sans terminal
   où poser ses questions, il attendait indéfiniment une touche sur la console. Il refuse
-  désormais aussitôt, comme ailleurs, et dit de passer `--yes` ou les réponses en flags.
+  désormais aussitôt, comme ailleurs, et dit de passer `--yes` ou les réponses en flags. Sur
+  toutes les plateformes, un `rbs new` dont l'entrée standard est redirigée ne pose plus ses
+  questions non plus, même avec un terminal à portée.
 
 - **`rbs new --core-path` écrit un chemin ordinaire sous Windows.** Le manifeste portait
   la forme `\\?\D:\…` que `canonicalize` y rend ; il porte désormais `D:\…`, tel qu'on

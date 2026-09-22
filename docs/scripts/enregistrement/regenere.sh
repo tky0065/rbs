@@ -60,7 +60,11 @@ trap nettoie EXIT
 
 echo "→ rbs, compilé depuis le dépôt"
 cargo build --quiet --manifest-path "$DEPOT/Cargo.toml" -p rbs-cli --bin rbs
-BIN="$DEPOT/target/debug"
+# La cible est celle que cargo annonce, et non `target/` : un `CARGO_TARGET_DIR` posé
+# ferait filmer un `rbs` absent ou périmé.
+CIBLE="$(cargo metadata --manifest-path "$DEPOT/Cargo.toml" --format-version 1 --no-deps \
+  | sed -n 's/.*"target_directory":"\([^"]*\)".*/\1/p')"
+BIN="$CIBLE/debug"
 VERSION=$("$BIN/rbs" --version)
 
 echo "→ Playwright $PLAYWRIGHT et son Chromium"

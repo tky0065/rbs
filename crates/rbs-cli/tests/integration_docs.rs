@@ -519,7 +519,7 @@ fn decoupe(commande: &str) -> Vec<String> {
 /// Les deux flux partagent un même fichier, et non deux tuyaux : `rbs doctor` écrit ses
 /// verdicts sur la sortie standard pendant que cargo compile sur l'erreur, et deux
 /// captures séparées rendraient un bloc que personne n'a jamais vu à l'écran.
-fn lance(commande: &str, repertoire: &Path, base: Option<&Base>) -> (bool, String) {
+fn lance(commande: &str, repertoire: &Path, base: Option<&Base>) -> Sortie {
     let mut arguments = decoupe(commande);
     assert!(!arguments.is_empty(), "commande vide");
     let programme = arguments.remove(0);
@@ -589,7 +589,16 @@ fn lance(commande: &str, repertoire: &Path, base: Option<&Base>) -> (bool, Strin
         None => rendu,
     };
 
-    (statut.success(), rendu)
+    Sortie {
+        reussie: statut.success(),
+        ecrit: rendu,
+    }
+}
+
+/// Ce qu'une commande rejouée a rendu.
+struct Sortie {
+    reussie: bool,
+    ecrit: String,
 }
 
 /// Ce qu'une transcription `base="oui"` reçoit du test : le serveur, et la cible où
@@ -630,15 +639,16 @@ fn compare_transcript(transcript: &Transcript, base: Option<&Base>) {
         } else {
             tmp.path()
         };
-        let (reussi, ecrit) = lance(commande.trim(), ou, base);
+        let sortie = lance(commande.trim(), ou, base);
         assert!(
-            reussi,
-            "{situe} : le décor a échoué : `{}`\n\n{ecrit}",
-            commande.trim()
+            sortie.reussie,
+            "{situe} : le décor a échoué : `{}`\n\n{}",
+            commande.trim(),
+            sortie.ecrit
         );
     }
 
-    let obtenu = normalise(&lance(&transcript.cmd, &dans, base).1, tmp.path());
+    let obtenu = normalise(&lance(&transcript.cmd, &dans, base).ecrit, tmp.path());
     let attendu = normalise(&transcript.attendu, tmp.path());
 
     let conforme = if transcript.extrait {

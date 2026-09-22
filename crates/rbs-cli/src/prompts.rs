@@ -60,10 +60,11 @@ trait Questions {
     fn features(&self, disponibles: &[String]) -> Result<Vec<String>, PromptError>;
 }
 
-/// Les questions quand l'entrée n'est pas un terminal : chacune échoue avant d'être posée.
-struct SansConsole;
+/// Sans terminal où lire la réponse, une question posée resterait sans réponse : elle
+/// échoue donc avant de l'être, et seuls les flags peuvent encore répondre.
+struct SansTerminal;
 
-impl Questions for SansConsole {
+impl Questions for SansTerminal {
     fn name(&self, _defaut: &str) -> Result<String, PromptError> {
         Err(PromptError::SansTerminal)
     }
@@ -153,7 +154,7 @@ pub fn resolve(
     let questions: &dyn Questions = if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
         &Interactive
     } else {
-        &SansConsole
+        &SansTerminal
     };
 
     resolve_with(
@@ -442,12 +443,12 @@ mod tests {
     /// script. Sans terminal, une question échoue donc avant d'être posée — mais des
     /// réponses données en flags suffisent toujours.
     #[test]
-    fn without_a_console_a_question_fails_but_flags_still_answer() {
+    fn without_a_terminal_a_question_fails_but_flags_still_answer() {
         let disponibles = vec!["auth".to_string()];
 
         assert_eq!(
             resolve_with(
-                &SansConsole,
+                &SansTerminal,
                 None,
                 None,
                 Database::Postgres,
@@ -459,7 +460,7 @@ mod tests {
         );
 
         let complet = resolve_with(
-            &SansConsole,
+            &SansTerminal,
             Some("demo".to_string()),
             Some("postgres://rbs:rbs@localhost:5432/demo".to_string()),
             Database::Postgres,

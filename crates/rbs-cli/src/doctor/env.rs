@@ -244,7 +244,6 @@ mod tests {
         assert!(!signalee(&root, "RBS_LOG_FORMAT"));
     }
 
-    /// Ajoute `ligne` à `fichier`.
     fn append(root: &Path, fichier: &str, ligne: &str) {
         let path = root.join(fichier);
         let mut source = fs::read_to_string(&path).expect("le fichier est lisible");
