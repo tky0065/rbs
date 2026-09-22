@@ -21,7 +21,7 @@ mounted.
 rbs add redis
 ```
 
-{/* rbs:transcript cmd="rbs add redis" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add redis" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add redis
 redis : cache Redis : pool paresseux partagé par l'état, valeurs typées par serde

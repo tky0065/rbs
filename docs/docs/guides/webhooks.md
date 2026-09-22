@@ -23,7 +23,7 @@ let anyone have the project's events delivered to their own server, and `user.cr
 carries addresses. On a bare project all five go down in a single plan — here is an excerpt
 of it:
 
-{/* rbs:transcript cmd="rbs add webhooks" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
+{/* rbs:transcript cmd="rbs add webhooks" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
 ```text
 $ rbs add webhooks
 webhooks : webhooks sortants : abonnements, signature HMAC horodatée, livraison par la file

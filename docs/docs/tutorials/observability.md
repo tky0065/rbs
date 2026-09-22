@@ -19,7 +19,7 @@ Nothing beyond [Setting up](./setup.md): the same running `demo`, and `curl` aga
 rbs add observability
 ```
 
-{/* rbs:transcript cmd="rbs add observability" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add observability" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add observability
 observability : observabilité : traces OTLP vers un collecteur, et un /metrics Prometheus sur son propre port

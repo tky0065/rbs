@@ -16,7 +16,7 @@ It requires `auth`, which in turn pulls `mail` and `rate-limit`: a key belongs t
 account, carries a role, and both come from there. On a bare project all four come down in
 a single plan — here is an excerpt of it:
 
-{/* rbs:transcript cmd="rbs add api-keys" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
+{/* rbs:transcript cmd="rbs add api-keys" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
 ```text
 $ rbs add api-keys
 api-keys : clés d'API : authentification machine, rôle plafonné par le porteur, trace d'usage

@@ -151,7 +151,7 @@ nomme la commande qui installe ce qui manque. Un projet qui a reçu l'une ou l'a
 pas : la commande le refuse aussi, en nommant le déplacement à faire à la main. Sur un
 projet qui porte `jobs` :
 
-{/* rbs:transcript cmd="rbs generate job purge_sessions --dry-run" setup="rbs new demo --yes --with jobs --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs generate job purge_sessions --dry-run" setup="rbs new demo --yes --with jobs --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs generate job purge_sessions --dry-run
 plan pour …/demo
@@ -258,7 +258,7 @@ La migration apprend la colonne à la base ; l'entité et ses DTO ont encore à 
 `model.rs` et `dto.rs` ne portent pas d'ancre, et le CLI ne réécrit pas d'AST — la commande
 affiche donc les lignes à coller, et n'en écrit aucune :
 
-{/* rbs:transcript cmd="rbs generate migration ajoute_statut --add-column articles --fields statut:enum(draft,published):optional,prix:decimal:optional --dry-run" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate crud articles --fields titre:string && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m crud" dans="demo" extrait="oui" */}
+{/* rbs:transcript cmd="rbs generate migration ajoute_statut --add-column articles --fields statut:enum(draft,published):optional,prix:decimal:optional --dry-run" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate crud articles --fields titre:string && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m crud" dans="demo" extrait="oui" */}
 ```text
 $ rbs generate migration ajoute_statut --add-column articles --fields statut:enum(draft,published):optional,prix:decimal:optional --dry-run
 plan pour …/demo

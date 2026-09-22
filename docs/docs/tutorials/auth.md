@@ -24,7 +24,7 @@ three requests instead of two.
 rbs add auth
 ```
 
-{/* rbs:transcript cmd="rbs add auth" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add auth" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add auth
 auth : authentification JWT : Argon2, jetons d'accès et de rafraîchissement, rôles

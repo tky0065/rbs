@@ -22,7 +22,7 @@ n'importe qui de faire livrer chez lui les événements du projet, et `user.crea
 des adresses. Sur un projet nu, les cinq descendent dans un seul plan — en voici un
 extrait :
 
-{/* rbs:transcript cmd="rbs add webhooks" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
+{/* rbs:transcript cmd="rbs add webhooks" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" extrait="oui" */}
 ```text
 $ rbs add webhooks
 webhooks : webhooks sortants : abonnements, signature HMAC horodatée, livraison par la file

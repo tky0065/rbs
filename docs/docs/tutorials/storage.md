@@ -21,7 +21,7 @@ database, and `curl` again.
 rbs add storage
 ```
 
-{/* rbs:transcript cmd="rbs add storage" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add storage" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add storage
 storage : stockage d'objets : un trait à cinq méthodes, deux backends — fichiers et S3
