@@ -60,6 +60,23 @@ trait Questions {
     fn features(&self, disponibles: &[String]) -> Result<Vec<String>, PromptError>;
 }
 
+/// Les questions quand l'entrée n'est pas un terminal : chacune échoue avant d'être posée.
+struct SansConsole;
+
+impl Questions for SansConsole {
+    fn name(&self, _defaut: &str) -> Result<String, PromptError> {
+        Err(PromptError::SansTerminal)
+    }
+
+    fn database_url(&self, _database: Database, _defaut: &str) -> Result<String, PromptError> {
+        Err(PromptError::SansTerminal)
+    }
+
+    fn features(&self, _disponibles: &[String]) -> Result<Vec<String>, PromptError> {
+        Err(PromptError::SansTerminal)
+    }
+}
+
 /// Les questions telles que l'utilisateur les voit.
 struct Interactive;
 
@@ -131,8 +148,16 @@ pub fn resolve(
     disponibles: &[String],
     yes: bool,
 ) -> Result<ProjectOptions, PromptError> {
+    // `inquire` ne repère l'absence de terminal que par les codes d'erreur d'Unix : sous
+    // Windows, il ouvre la console et attend une touche qu'un script ne donnera jamais.
+    let questions: &dyn Questions = if std::io::IsTerminal::is_terminal(&std::io::stdin()) {
+        &Interactive
+    } else {
+        &SansConsole
+    };
+
     resolve_with(
-        &Interactive,
+        questions,
         name,
         database_url,
         database,
@@ -145,7 +170,7 @@ pub fn resolve(
 /// `yes` court-circuite avant toute question : la résolution devient purement
 /// calculatoire. Configurer `inquire` pour qu'il « prenne le défaut » ne marcherait pas —
 /// il échoue de lui-même sans TTY, et le CLI cesserait d'être utilisable en CI.
-fn resolve_with<Q: Questions>(
+fn resolve_with<Q: Questions + ?Sized>(
     questions: &Q,
     name: Option<String>,
     database_url: Option<String>,
@@ -410,6 +435,39 @@ mod tests {
         .unwrap();
 
         assert_eq!(espion.written(), ["database_url", "features"]);
+    }
+
+    /// Sous Windows, `inquire` ne sait pas qu'il n'a pas de terminal : il ouvre la
+    /// console et attend une touche, et `rbs new` sans `--yes` restait bloqué dans un
+    /// script. Sans terminal, une question échoue donc avant d'être posée — mais des
+    /// réponses données en flags suffisent toujours.
+    #[test]
+    fn without_a_console_a_question_fails_but_flags_still_answer() {
+        let disponibles = vec!["auth".to_string()];
+
+        assert_eq!(
+            resolve_with(
+                &SansConsole,
+                None,
+                None,
+                Database::Postgres,
+                None,
+                &disponibles,
+                false
+            ),
+            Err(PromptError::SansTerminal)
+        );
+
+        let complet = resolve_with(
+            &SansConsole,
+            Some("demo".to_string()),
+            Some("postgres://rbs:rbs@localhost:5432/demo".to_string()),
+            Database::Postgres,
+            Some(Vec::new()),
+            &disponibles,
+            false,
+        );
+        assert_eq!(complet.map(|options| options.name), Ok("demo".to_string()));
     }
 
     #[test]

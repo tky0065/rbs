@@ -14,6 +14,10 @@ between minor versions with no deprecation cycle.
 
 ### Fixed
 
+- **`rbs new` without `--yes` no longer hangs in a Windows script.** With no terminal to
+  ask in, it waited forever for a key on the console. It now refuses at once, as it already
+  did elsewhere, and says to pass `--yes` or the answers as flags.
+
 - **`rbs new --core-path` writes a plain path on Windows.** The manifest carried the
   `\\?\D:\…` form that `canonicalize` returns there; it now reads `D:\…`, as one would
   type it. A UNC path keeps its form.

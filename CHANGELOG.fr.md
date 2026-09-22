@@ -15,6 +15,10 @@ dépréciation.
 
 ### Corrigé
 
+- **`rbs new` sans `--yes` ne se bloque plus dans un script sous Windows.** Sans terminal
+  où poser ses questions, il attendait indéfiniment une touche sur la console. Il refuse
+  désormais aussitôt, comme ailleurs, et dit de passer `--yes` ou les réponses en flags.
+
 - **`rbs new --core-path` écrit un chemin ordinaire sous Windows.** Le manifeste portait
   la forme `\\?\D:\…` que `canonicalize` y rend ; il porte désormais `D:\…`, tel qu'on
   l'écrirait. Un chemin UNC garde sa forme.
