@@ -1,0 +1,8 @@
+# Les ports que l'enregistrement publie à la place de ceux du compose engendré.
+services:
+  db:
+    ports: !override
+      - "55471:5432"
+  mailpit:
+    ports: !override
+      - "55472:1025"

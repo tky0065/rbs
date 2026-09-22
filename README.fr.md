@@ -1,5 +1,15 @@
 # rbs
 
+![Un terminal : rbs --version, rbs new, rbs add frontend-admin, rbs generate crud, make dev, puis un curl qui crée un ticket et le rend](docs/static/img/enregistrement/terminal.gif)
+
+![L'écran des tickets que rbs generate crud a écrit dans l'espace d'administration du même projet](docs/static/img/enregistrement/admin.png)
+
+*Enregistré avec rbs 1.8.1 par
+[`docs/scripts/enregistrement/regenere.sh`](docs/scripts/enregistrement/regenere.sh), qui
+rejoue les deux parts et échoue dès qu'une commande échoue. Ce qui tourne entre les
+commandes — la base, les migrations et le seed, `npm install`, le client typé, la
+compilation, la connexion qui remplit `$TOKEN` — est coupé au montage, pas omis.*
+
 Un cadre de travail Rust pour les API web, bâti sur Axum et SeaORM. Il donne à un projet ce
 qui n'a aucune raison de varier d'une API à l'autre — erreurs, logs, configuration, accès à
 la base, OpenAPI — et génère le reste dans vos propres sources, où vous pouvez le lire et le
