@@ -7,10 +7,6 @@
 # Une entrée vaut pour un bloc : deux blocs d'une page ouverts par la même ligne en
 # demandent deux. Une entrée qui ne correspond plus à aucun bloc fait échouer la garde.
 
-docs/docs/architecture.md | src/articles/
-docs/docs/architecture.md | controller ──> service ──> repository ──> model
-docs/docs/architecture.md | examples/hello-crud/src/articles/controller.rs
-docs/docs/architecture.md | examples/hello-crud/src/articles/repository.rs
 docs/docs/cli/add.md | $ rbs add --help
 docs/docs/cli/add.md | $ rbs add docker
 docs/docs/cli/add.md | $ rbs add docker
@@ -123,87 +119,19 @@ docs/docs/cli/upgrade.md | $ rbs upgrade
 docs/docs/cli/upgrade.md | $ rbs upgrade
 docs/docs/cli/upgrade.md | $ rbs upgrade
 docs/docs/cli/upgrade.md | $ rbs upgrade
-docs/docs/getting-started.md | rbs 1.2.0
-docs/docs/getting-started.md | erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
-docs/docs/getting-started.md | RBS_ENV=development
-docs/docs/getting-started.md | Network demo_default  Creating
 docs/docs/getting-started.md | Compiling migration v0.1.0 (…/demo/migration)
 docs/docs/getting-started.md | Compiling migration v0.1.0 (…/demo/migration)
 docs/docs/getting-started.md | ✓ m20260829_100554_create_articles   appliquée
-docs/docs/getting-started.md | 10:06:25  INFO   demo                démarrage  adresse=127.0.0.1:8080
-docs/docs/getting-started.md | HTTP/1.1 200 OK
-docs/docs/getting-started.md | HTTP/1.1 201 Created
-docs/docs/getting-started.md | {"data":[{"id":"01a04cfc-2e37-78a1-bcb1-6599b0c362e2","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-08-29T10:06:30.457086Z","updated_at":"2026-08-29T10:06:30.457086Z"}],"meta":{"page":1,"per_page":20,"total":1,"total_pages":1}}
-docs/docs/getting-started.md | 10:06:30  INFO   rbs_core::trace     request  status=200 latency_ms=0.80275 request_id=01M16FRBHD0ZHWCN4EAEAW3TGK method=GET path=/health
-docs/docs/guides/agents.md | # <project> — agent handbook
-docs/docs/guides/agents.md | # blog — agent handbook
 docs/docs/guides/agents.md | $ rbs doctor
-docs/docs/guides/agents.md | $ rbs add redis
-docs/docs/guides/agents.md | $ rbs upgrade
-docs/docs/guides/agents.md | rbs add cors --dry-run --json
-docs/docs/guides/auth.md | $ rbs add auth
-docs/docs/guides/cache.md | $ rbs add redis
-docs/docs/guides/filtering.md | POST /articles/filter
-docs/docs/guides/filtering.md | POST /articles/filter?page=2&per_page=50
-docs/docs/guides/filtering.md | GET /articles?after=0199e0b1-9c4a-7c3e-9d21-6f2a1b0c4d5e&per_page=50
-docs/docs/guides/filtering.md | rbs g crud articles --fields "title:string:index, published:bool"
-docs/docs/guides/jobs.md | $ rbs add jobs
-docs/docs/guides/mail.md | $ rbs add mail
 docs/docs/guides/mail.md | ✗ .env          RBS_MAIL__SMTP_PASSWORD absente du .env
-docs/docs/guides/migrations.md | $ rbs generate crud comments --fields "body:text,deleted_at:datetime" --soft-delete --dry-run
-docs/docs/guides/relations.md | rbs g crud posts --fields "title:string, author:references:users"
-docs/docs/guides/relations.md | $ rbs g crud comments --fields "body:text, author:references:writers" --dry-run
-docs/docs/guides/relations.md | $ rbs g crud comments --fields "body:text, draft:references:drafts" --dry-run
-docs/docs/guides/relations.md | owner:references:users:unique:cascade
-docs/docs/guides/relations.md | $ rbs g crud comments --fields "body:text, author:references:users:index" --dry-run
-docs/docs/guides/relations.md | $ rbs g crud comments --fields "body:text, author:references:users:nullify" --dry-run
-docs/docs/guides/relations.md | $ rbs g crud users --has-many categories --dry-run
-docs/docs/guides/relations.md | aucun seed pour posts : la référence « author » est requise, et un seed ne peut pas deviner vers quelle ligne pointer
 docs/docs/guides/seeds.md | $ rbs seed
-docs/docs/guides/seeds.md | $ rbs seed
-docs/docs/guides/seeds.md | $ RBS_ENV=production rbs seed
-docs/docs/guides/storage.md | $ rbs add storage
-docs/docs/guides/storage.md | $ rbs generate crud uploads --fields "title:string" --with-upload
-docs/docs/guides/webhooks.md | HMAC-SHA256(secret, "<timestamp>.<raw body>")
 docs/docs/tutorials/auth.md | Compiling migration v0.1.0 (…/demo/migration)
-docs/docs/tutorials/auth.md | plan pour …/demo
 docs/docs/tutorials/auth.md | Compiling migration v0.1.0 (…/demo/migration)
-docs/docs/tutorials/auth.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
-docs/docs/tutorials/auth.md | HTTP/1.1 202 Accepted
-docs/docs/tutorials/auth.md | HTTP/1.1 204 No Content
-docs/docs/tutorials/auth.md | HTTP/1.1 401 Unauthorized
-docs/docs/tutorials/auth.md | HTTP/1.1 403 Forbidden
-docs/docs/tutorials/auth.md | HTTP/1.1 200 OK
-docs/docs/tutorials/auth.md | {"access_token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...","refresh_token":"MKySJ39zGPdyiC-eIjOT01s0xJTMI5Zvhn8JByDqwWI","token_type":"Bearer","expires_in":900}
-docs/docs/tutorials/auth.md | HTTP/1.1 202 Accepted
-docs/docs/tutorials/auth.md | HTTP/1.1 204 No Content
-docs/docs/tutorials/cache.md | running 7 tests
 docs/docs/tutorials/first-resource.md | Compiling migration v0.1.0 (…/demo/migration)
-docs/docs/tutorials/first-resource.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
-docs/docs/tutorials/first-resource.md | HTTP/1.1 201 Created
-docs/docs/tutorials/first-resource.md | {"data":[{"id":"01a0857e-2f85-7d03-a129-6defbf74c73c","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-09-09T09:27:14.569998Z","updated_at":"2026-09-09T09:27:14.569998Z"}],"meta":{"page":1,"per_page":20,"total":1,"total_pages":1}}
 docs/docs/tutorials/jobs.md | Compiling migration v0.1.0 (…/demo/migration)
 docs/docs/tutorials/jobs.md | running 4 tests
-docs/docs/tutorials/mail.md | running 7 tests
-docs/docs/tutorials/observability.md | INFO   demo::modules::observability  métriques  adresse=127.0.0.1:9090
-docs/docs/tutorials/observability.md | HTTP/1.1 404 Not Found
-docs/docs/tutorials/observability.md | HTTP/1.1 200 OK
-docs/docs/tutorials/setup.md | Container demo-db-1  Started
 docs/docs/tutorials/setup.md | ✓ migrations appliquées
-docs/docs/tutorials/setup.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
-docs/docs/tutorials/setup.md | HTTP/1.1 200 OK
-docs/docs/tutorials/storage.md | plan pour …/demo
 docs/docs/tutorials/storage.md | Compiling migration v0.1.0 (…/demo/migration)
-docs/docs/tutorials/storage.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
-docs/docs/tutorials/storage.md | HTTP/1.1 422 Unprocessable Entity
-docs/docs/tutorials/storage.md | HTTP/1.1 404 Not Found
-docs/docs/tutorials/storage.md | HTTP/1.1 204 No Content
-docs/docs/tutorials/storage.md | HTTP/1.1 204 No Content
-docs/docs/tutorials/storage.md | HTTP/1.1 200 OK
-docs/i18n/fr/docusaurus-plugin-content-docs/current/architecture.md | src/articles/
-docs/i18n/fr/docusaurus-plugin-content-docs/current/architecture.md | controller ──> service ──> repository ──> model
-docs/i18n/fr/docusaurus-plugin-content-docs/current/architecture.md | examples/hello-crud/src/articles/controller.rs
-docs/i18n/fr/docusaurus-plugin-content-docs/current/architecture.md | examples/hello-crud/src/articles/repository.rs
 docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add --help
 docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add docker
 docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/add.md | $ rbs add docker
@@ -316,80 +244,16 @@ docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/upgrade.md | $ rbs upgra
 docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/upgrade.md | $ rbs upgrade
 docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/upgrade.md | $ rbs upgrade
 docs/i18n/fr/docusaurus-plugin-content-docs/current/cli/upgrade.md | $ rbs upgrade
-docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | rbs 1.2.0
-docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
-docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | RBS_ENV=development
-docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | Network demo_default  Creating
 docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | Compiling migration v0.1.0 (…/demo/migration)
 docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | Compiling migration v0.1.0 (…/demo/migration)
 docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | ✓ m20260829_100554_create_articles   appliquée
-docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | 10:06:25  INFO   demo                démarrage  adresse=127.0.0.1:8080
-docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | HTTP/1.1 200 OK
-docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | HTTP/1.1 201 Created
-docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | {"data":[{"id":"01a04cfc-2e37-78a1-bcb1-6599b0c362e2","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-08-29T10:06:30.457086Z","updated_at":"2026-08-29T10:06:30.457086Z"}],"meta":{"page":1,"per_page":20,"total":1,"total_pages":1}}
-docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | 10:06:30  INFO   rbs_core::trace     request  status=200 latency_ms=0.80275 request_id=01M16FRBHD0ZHWCN4EAEAW3TGK method=GET path=/health
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/agents.md | # <projet> — mode d'emploi pour agents
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/agents.md | # blog — mode d'emploi pour agents
 docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/agents.md | $ rbs doctor
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/agents.md | $ rbs add redis
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/agents.md | $ rbs upgrade
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/agents.md | rbs add cors --dry-run --json
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/auth.md | $ rbs add auth
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/cache.md | $ rbs add redis
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/filtering.md | POST /articles/filter
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/filtering.md | POST /articles/filter?page=2&per_page=50
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/filtering.md | GET /articles?after=0199e0b1-9c4a-7c3e-9d21-6f2a1b0c4d5e&per_page=50
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/filtering.md | rbs g crud articles --fields "title:string:index, published:bool"
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/jobs.md | $ rbs add jobs
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/mail.md | $ rbs add mail
 docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/mail.md | ✗ .env          RBS_MAIL__SMTP_PASSWORD absente du .env
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/migrations.md | $ rbs generate crud comments --fields "body:text,deleted_at:datetime" --soft-delete --dry-run
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | rbs g crud posts --fields "title:string, author:references:users"
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | $ rbs g crud comments --fields "body:text, author:references:writers" --dry-run
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | $ rbs g crud comments --fields "body:text, draft:references:drafts" --dry-run
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | owner:references:users:unique:cascade
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | $ rbs g crud comments --fields "body:text, author:references:users:index" --dry-run
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | $ rbs g crud comments --fields "body:text, author:references:users:nullify" --dry-run
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | $ rbs g crud users --has-many categories --dry-run
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/relations.md | aucun seed pour posts : la référence « author » est requise, et un seed ne peut pas deviner vers quelle ligne pointer
 docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/seeds.md | $ rbs seed
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/seeds.md | $ rbs seed
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/seeds.md | $ RBS_ENV=production rbs seed
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/storage.md | $ rbs add storage
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/storage.md | $ rbs generate crud uploads --fields "title:string" --with-upload
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/webhooks.md | HMAC-SHA256(secret, "<horodatage>.<corps brut>")
 docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | Compiling migration v0.1.0 (…/demo/migration)
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | plan pour …/demo
 docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | Compiling migration v0.1.0 (…/demo/migration)
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | HTTP/1.1 202 Accepted
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | HTTP/1.1 204 No Content
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | HTTP/1.1 401 Unauthorized
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | HTTP/1.1 403 Forbidden
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | HTTP/1.1 200 OK
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | {"access_token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...","refresh_token":"MKySJ39zGPdyiC-eIjOT01s0xJTMI5Zvhn8JByDqwWI","token_type":"Bearer","expires_in":900}
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | HTTP/1.1 202 Accepted
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | HTTP/1.1 204 No Content
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/cache.md | running 7 tests
 docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/first-resource.md | Compiling migration v0.1.0 (…/demo/migration)
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/first-resource.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/first-resource.md | HTTP/1.1 201 Created
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/first-resource.md | {"data":[{"id":"01a0857e-2f85-7d03-a129-6defbf74c73c","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-09-09T09:27:14.569998Z","updated_at":"2026-09-09T09:27:14.569998Z"}],"meta":{"page":1,"per_page":20,"total":1,"total_pages":1}}
 docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/jobs.md | Compiling migration v0.1.0 (…/demo/migration)
 docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/jobs.md | running 4 tests
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/mail.md | running 7 tests
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/observability.md | INFO   demo::modules::observability  métriques  adresse=127.0.0.1:9090
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/observability.md | HTTP/1.1 404 Not Found
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/observability.md | HTTP/1.1 200 OK
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/setup.md | Container demo-db-1  Started
 docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/setup.md | ✓ migrations appliquées
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/setup.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/setup.md | HTTP/1.1 200 OK
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | plan pour …/demo
 docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | Compiling migration v0.1.0 (…/demo/migration)
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | INFO   demo                démarrage  adresse=127.0.0.1:8080
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | HTTP/1.1 422 Unprocessable Entity
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | HTTP/1.1 404 Not Found
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | HTTP/1.1 204 No Content
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | HTTP/1.1 204 No Content
-docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/storage.md | HTTP/1.1 200 OK

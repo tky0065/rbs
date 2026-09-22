@@ -12,6 +12,7 @@ writing the query by hand, in the one file the generator had just written for yo
 `rbs generate crud` now emits a seventh file, `filter.rs`, and mounts a route that reads
 it:
 
+{/* rbs:libre raison="requête HTTP citée, non la sortie d'une commande" */}
 ```text
 POST /articles/filter
 ```
@@ -62,6 +63,7 @@ stays the descending `id` — a UUIDv7, which is what makes pagination stable.
 
 ## Pagination stays in the query string
 
+{/* rbs:libre raison="requête HTTP citée, non la sortie d'une commande" */}
 ```text
 POST /articles/filter?page=2&per_page=50
 ```
@@ -75,6 +77,7 @@ the body as well would give one value two sources.
 between two requests shifts the window — page 2 repeats a row page 1 already showed. Past
 a few thousand rows, `Cursor` replaces it:
 
+{/* rbs:libre raison="requête HTTP citée, non la sortie d'une commande" */}
 ```text
 GET /articles?after=0199e0b1-9c4a-7c3e-9d21-6f2a1b0c4d5e&per_page=50
 ```
@@ -156,7 +159,7 @@ Including the ones that carry no index. `published:bool` is the very field you w
 filter on, and indexing it is rarely worth it — but a filter on an unindexed column scans
 the table. When one of them grows, add `index` to the field and regenerate the migration:
 
-```text
+```bash
 rbs g crud articles --fields "title:string:index, published:bool"
 ```
 

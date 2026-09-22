@@ -67,6 +67,7 @@ exactement les clés sous ce préfixe, et rien qui commence seulement de la mêm
 cargo test modules::cache::
 ```
 
+{/* rbs:libre raison="cargo test compile le projet entier, plusieurs minutes, et l'ordre de ses lignes suit l'ordonnanceur des threads" */}
 ```text
 running 7 tests
 test modules::cache::tests::a_missing_key_returns_none_and_not_an_error ... ok

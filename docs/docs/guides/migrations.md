@@ -90,8 +90,9 @@ column dated, and every read filters it out.
 The column is nullable, carries no default, and the flag injects it: it is not a field you
 declare. Naming it yourself under `--fields` is refused, by the flag that owns it:
 
+{/* rbs:transcript cmd="rbs generate crud comments --fields body:text,deleted_at:datetime --soft-delete --dry-run" setup="rbs new blog --yes --database-url postgres://rbs:secret@localhost:5432/blog" dans="blog" */}
 ```text
-$ rbs generate crud comments --fields "body:text,deleted_at:datetime" --soft-delete --dry-run
+$ rbs generate crud comments --fields body:text,deleted_at:datetime --soft-delete --dry-run
 erreur : `--soft-delete` pose lui-même la colonne `deleted_at` : retirez-la de `--fields`, ou renoncez au drapeau
 ```
 

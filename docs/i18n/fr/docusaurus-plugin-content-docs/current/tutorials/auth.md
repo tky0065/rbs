@@ -138,6 +138,7 @@ unique derrière les liens de mot de passe et de vérification plus bas.
 rbs generate crud posts --fields "title:string,body:text,published:bool" --role admin
 ```
 
+{/* rbs:transcript cmd="rbs generate crud posts --fields title:string,body:text,published:bool --role admin" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs add auth" dans="demo" */}
 ```text
 plan pour …/demo
 
@@ -154,7 +155,7 @@ plan pour …/demo
   + src/posts/tests/filter.rs                        créé
   + src/posts/tests/access.rs                        créé
   + src/seeds/posts.rs                               créé
-  + migration/src/m20260909_093231_create_posts.rs   créé
+  + migration/src/m20260922_082426_create_posts.rs   créé
   ~ src/lib.rs                                       modifié
   ~ src/router.rs                                    modifié
   ~ src/openapi.rs                                   modifié
@@ -166,7 +167,7 @@ plan pour …/demo
   14 à créer, 7 à modifier
 ✓ posts générée — 14 créés, 7 modifiés
 
-  la migration m20260909_093231_create_posts reste à appliquer avant de lancer le projet
+  la migration m20260922_082426_create_posts reste à appliquer avant de lancer le projet
 ```
 
 Voici le cœur de cette page : sur un projet portant `auth`, `generate crud` ferme
@@ -199,6 +200,7 @@ compilées :
 cargo run
 ```
 
+{/* rbs:libre raison="journal d'un serveur qui tourne : le rejeu ne lance aucun serveur, et l'heure change à chaque démarrage" */}
 ```text
 INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
@@ -217,6 +219,7 @@ curl -i -X POST http://127.0.0.1:8080/auth/register \
   -d '{"email":"alice@example.com","password":"un-mot-de-passe-long"}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 202 Accepted
 content-length: 0
@@ -248,6 +251,7 @@ curl -i -X POST http://127.0.0.1:8080/auth/verify-email \
   -d '{"token":"<le token du lien>"}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 204 No Content
 ```
@@ -272,6 +276,7 @@ curl -i -X POST http://127.0.0.1:8080/posts \
   -d '{"title":"Premier post","body":"Bonjour","published":true}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 401 Unauthorized
 content-type: application/problem+json
@@ -293,6 +298,7 @@ curl -i -X POST http://127.0.0.1:8080/posts \
   -d '{"title":"Premier post","body":"Bonjour","published":true}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 403 Forbidden
 content-type: application/problem+json
@@ -312,6 +318,7 @@ curl -i http://127.0.0.1:8080/posts \
   -H "Authorization: Bearer $TOKEN"
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 200 OK
 content-type: application/json
@@ -344,6 +351,7 @@ curl -s -X POST http://127.0.0.1:8080/auth/change-password \
   -d '{"current_password":"un-mot-de-passe-long","new_password":"un-second-mot-de-passe-long"}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 {"access_token":"eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9...","refresh_token":"MKySJ39zGPdyiC-eIjOT01s0xJTMI5Zvhn8JByDqwWI","token_type":"Bearer","expires_in":900}
 ```
@@ -361,6 +369,7 @@ curl -i -X POST http://127.0.0.1:8080/auth/forgot-password \
   -d '{"email":"alice@example.com"}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 202 Accepted
 content-length: 0
@@ -376,6 +385,7 @@ curl -i -X POST http://127.0.0.1:8080/auth/reset-password \
   -d '{"token":"<le token du lien>","new_password":"un-troisieme-mot-de-passe-long"}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 204 No Content
 ```

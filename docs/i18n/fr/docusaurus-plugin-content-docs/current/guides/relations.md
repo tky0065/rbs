@@ -11,7 +11,7 @@ variante `Relation`, l'`impl Related`, la contrainte de la migration, et l'index
 Le onzième type de [`--fields`](../cli/generate.md#les-onze-types), `references`, referme ce
 trou — entièrement depuis la ligne de commande, sans qu'aucune base ne tourne.
 
-```text
+```bash
 rbs g crud posts --fields "title:string, author:references:users"
 ```
 
@@ -61,18 +61,20 @@ deux extraits ci-dessus nomment `crate::auth::model::user::Entity` pour un champ
 écrit que `users`. Une cible absente de cet inventaire est refusée, nommément, aux côtés de
 celles que le CLI connaît :
 
+{/* rbs:transcript cmd="rbs g crud comments --fields body:text,author:references:writers --dry-run" setup="rbs new blog --yes --with auth --database-url postgres://rbs:secret@localhost:5432/blog && rbs g crud posts --fields title:string,author:references:users" dans="blog" */}
 ```text
-$ rbs g crud comments --fields "body:text, author:references:writers" --dry-run
+$ rbs g crud comments --fields body:text,author:references:writers --dry-run
 erreur : relation « author » — « writers » est introuvable dans ce projet
-        → entités connues : comments, posts, refresh_tokens, users
+        → entités connues : comments, one_time_tokens, posts, refresh_tokens, users
 ```
 
 Une cible que l'inventaire connaît, mais dont aucune migration ne crée encore la table, est
 refusée sur le même principe : une clé étrangère qui la viserait échouerait dès l'application
 des migrations, loin de la commande qui l'a posée :
 
+{/* rbs:transcript cmd="rbs g crud comments --fields body:text,draft:references:drafts --dry-run" setup="rbs new blog --yes --with auth --database-url postgres://rbs:secret@localhost:5432/blog && rbs g feature drafts" dans="blog" */}
 ```text
-$ rbs g crud comments --fields "body:text, draft:references:drafts" --dry-run
+$ rbs g crud comments --fields body:text,draft:references:drafts --dry-run
 erreur : relation « draft » — « drafts » n'a pas de migration dans ce projet
         → une clé étrangère la viserait avant qu'aucune migration ne crée sa table : écrivez sa migration avec `rbs migrate new`
 ```
@@ -84,6 +86,7 @@ auteur. `unique` ne coûte aucune grammaire supplémentaire pour la rendre un-à
 `belongs_to` dont la colonne se trouve unique, ce qui est exactement ce qu'est une relation
 un-à-un dans une base relationnelle :
 
+{/* rbs:libre raison="fragment de la grammaire de --fields, non une sortie" */}
 ```text
 owner:references:users:unique:cascade
 ```
@@ -118,8 +121,9 @@ contrainte, ce qui explique que `profiles` ne reçoive aucun `create_index` sép
 `unique:index` reçoit sur une colonne ordinaire, et la raison pour laquelle une référence ne
 prend jamais `index` explicitement :
 
+{/* rbs:transcript cmd="rbs g crud comments --fields body:text,author:references:users:index --dry-run" setup="rbs new blog --yes --with auth --database-url postgres://rbs:secret@localhost:5432/blog" dans="blog" */}
 ```text
-$ rbs g crud comments --fields "body:text, author:references:users:index" --dry-run
+$ rbs g crud comments --fields body:text,author:references:users:index --dry-run
 erreur : champ 2 « author » — « index » redondant : une clé étrangère est déjà indexée
         → retirez « index »
 ```
@@ -131,12 +135,16 @@ NULL`. `nullify` sur une colonne `NOT NULL` est refusé plutôt que d'exiger sil
 grammaire déduit d'une politique choisie trois mots plus loin — et demander les deux politiques
 à la fois est refusé comme la contradiction que c'est :
 
+{/* rbs:transcript cmd="rbs g crud comments --fields body:text,author:references:users:nullify --dry-run" setup="rbs new blog --yes --with auth --database-url postgres://rbs:secret@localhost:5432/blog" dans="blog" */}
 ```text
-$ rbs g crud comments --fields "body:text, author:references:users:nullify" --dry-run
+$ rbs g crud comments --fields body:text,author:references:users:nullify --dry-run
 erreur : champ 2 « author » — « nullify » sur une colonne non nullable
         → ajoutez « optional », ou choisissez « cascade »
+```
 
-$ rbs g crud comments --fields "body:text, author:references:users:optional:cascade:nullify" --dry-run
+{/* rbs:transcript cmd="rbs g crud comments --fields body:text,author:references:users:optional:cascade:nullify --dry-run" setup="rbs new blog --yes --with auth --database-url postgres://rbs:secret@localhost:5432/blog" dans="blog" */}
+```text
+$ rbs g crud comments --fields body:text,author:references:users:optional:cascade:nullify --dry-run
 erreur : champ 2 « author » — « cascade » et « nullify » se contredisent
         → gardez l'un des deux
 ```
@@ -182,6 +190,7 @@ introuvable et un enfant qui ne porte pas réellement la clé attendue — ce se
 existe pour que la variante écrite soit une que SeaORM accepterait, plutôt qu'une qui échouerait
 à compiler quarante secondes plus tard :
 
+{/* rbs:transcript cmd="rbs g crud users --has-many categories --dry-run" setup="rbs new blog --yes --with auth --database-url postgres://rbs:secret@localhost:5432/blog && rbs g crud categories --fields name:string" dans="blog" */}
 ```text
 $ rbs g crud users --has-many categories --dry-run
 erreur : categories ne porte aucune colonne référençant `users` : ajoutez-la avant de relancer `--has-many categories`
@@ -216,10 +225,12 @@ inchangées — seul le raccourci qu'un unique trait ambigu ne peut pas fournir 
 peut insérer sans rien demander à la base. Une référence requise casse cela : le seed aurait
 besoin d'un vrai `author_id` tiré de `users`, et n'a aucune ligne vers laquelle pointer qu'il
 puisse défendre comme correcte. Le silence n'aurait rien expliqué, la commande dit donc
-exactement pourquoi elle l'a écarté :
+exactement pourquoi elle l'a écarté — et pourquoi les tests qu'elle écrit s'arrêtent aux cas
+qui ne créent rien :
 
+{/* rbs:transcript cmd="rbs g crud posts --fields title:string,author:references:users" setup="rbs new blog --yes --with auth --database-url postgres://rbs:secret@localhost:5432/blog" dans="blog" extrait="oui" */}
 ```text
-aucun seed pour posts : la référence « author » est requise, et un seed ne peut pas deviner vers quelle ligne pointer
+  la référence « author » est requise : ni le seed de posts ni ses scénarios de création ne peuvent deviner vers quelle ligne pointer — le seed n'est pas engendré, et les tests s'arrêtent aux cas qui ne créent rien
 ```
 
 Rendre la référence `optional` contourne le problème directement — un `posts` sans seed se sème

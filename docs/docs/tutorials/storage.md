@@ -65,6 +65,7 @@ git add -A && git commit -q -m "storage installée"
 rbs generate crud uploads --fields "title:string,owner_email:string,content_type:string,size:int" --with-upload
 ```
 
+{/* rbs:transcript cmd="rbs generate crud uploads --fields title:string,owner_email:string,content_type:string,size:int --with-upload" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && rbs add storage" dans="demo" */}
 ```text
 plan pour …/demo
 
@@ -81,7 +82,7 @@ plan pour …/demo
   + src/uploads/tests/filter.rs                        créé
   + src/uploads/tests/content.rs                       créé
   + src/seeds/uploads.rs                               créé
-  + migration/src/m20260909_094423_create_uploads.rs   créé
+  + migration/src/m20260922_082426_create_uploads.rs   créé
   ~ src/lib.rs                                         modifié
   ~ src/router.rs                                      modifié
   ~ src/openapi.rs                                     modifié
@@ -93,7 +94,7 @@ plan pour …/demo
   14 à créer, 7 à modifier
 ✓ uploads générée — 14 créés, 7 modifiés
 
-  la migration m20260909_094423_create_uploads reste à appliquer avant de lancer le projet
+  la migration m20260922_082426_create_uploads reste à appliquer avant de lancer le projet
 ```
 
 Two things worth naming here. `--with-upload` is what wrote the three routes on
@@ -125,6 +126,7 @@ against it.
 cargo run
 ```
 
+{/* rbs:libre raison="journal d'un serveur qui tourne : le rejeu ne lance aucun serveur, et l'heure change à chaque démarrage" */}
 ```text
 INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
@@ -143,6 +145,7 @@ curl -i -X POST http://127.0.0.1:8080/uploads \
   -d '{"title":"Justificatif de domicile","owner_email":"pas-un-email","content_type":"application/pdf","size":48213}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 422 Unprocessable Entity
 content-type: application/problem+json
@@ -170,6 +173,7 @@ The row exists; its content does not yet:
 curl -i -I http://127.0.0.1:8080/uploads/$ID/content
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 404 Not Found
 content-type: application/problem+json
@@ -188,6 +192,7 @@ curl -i -X PUT http://127.0.0.1:8080/uploads/$ID/content \
   --data-binary 'Justificatif de domicile, PDF simulé pour la démo du tutoriel.'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 204 No Content
 x-request-id: 01M22SFC29MWP1REHVJBA2B7F3
@@ -201,6 +206,7 @@ without one:
 curl -i -I http://127.0.0.1:8080/uploads/$ID/content
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 204 No Content
 x-request-id: 01M22SFC2PJTX8YFDNPH9QYJY8
@@ -217,6 +223,7 @@ header, without ever fetching a body. And reading it back:
 curl -i http://127.0.0.1:8080/uploads/$ID/content
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 200 OK
 content-type: application/octet-stream

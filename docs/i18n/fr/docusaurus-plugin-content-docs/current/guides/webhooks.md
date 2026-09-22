@@ -177,6 +177,7 @@ dirait.
 
 Les octets signés sont l'horodatage, un point, puis le corps verbatim :
 
+{/* rbs:libre raison="formule de signature, non une sortie" */}
 ```text
 HMAC-SHA256(secret, "<horodatage>.<corps brut>")
 ```
