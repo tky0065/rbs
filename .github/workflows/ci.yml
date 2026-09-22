@@ -278,3 +278,25 @@ jobs:
       # d'`integration_docs` ont ainsi masqué tout ce qui les suivait sous Windows.
       - name: cargo test
         run: cargo test --workspace --all-features --no-fail-fast
+
+      # Les tests qui compilent un projet engendré ne tournent que sous Linux, derrière
+      # Docker : sans cette étape, aucun projet n'est jamais compilé ailleurs. `--preset
+      # full` prend les features dans les templates embarquées, si bien qu'un fragment
+      # ajouté y entre sans qu'on touche à cette ligne. Le projet dépend du noyau du dépôt,
+      # dont la version n'est pas forcément publiée. `shell: bash` sous Windows aussi : les
+      # chemins POSIX passés à `rbs`, binaire natif, y sont convertis par MSYS. Le
+      # TypeScript de `frontend` et `frontend-admin` n'est pas compilé ici, cargo ne le
+      # voit pas.
+      - name: projet engendré portant toutes les features
+        shell: bash
+        run: |
+          set -euo pipefail
+          depot="$PWD"
+          cargo build -p rbs-cli --bin rbs
+          parent="$(mktemp -d)"
+          cd "$parent"
+          "$depot/target/debug/rbs" new demo --preset full --lang fr --yes \
+            --database-url postgres://rbs:rbs@localhost:5432/demo \
+            --core-path "$depot/crates/rbs-core"
+          cd demo
+          cargo build --workspace
