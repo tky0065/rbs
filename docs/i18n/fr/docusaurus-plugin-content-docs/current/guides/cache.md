@@ -17,11 +17,12 @@ documentation.
 
 ## Ce qui est installé
 
+{/* rbs:transcript cmd="rbs add redis" setup="rbs new depot --yes --database-url postgres://rbs:secret@localhost:5432/depot" dans="depot" */}
 ```text
 $ rbs add redis
 redis : cache Redis : pool paresseux partagé par l'état, valeurs typées par serde
 
-plan pour /private/tmp/rbs-demo/depot
+plan pour …/depot
 
   + src/modules/cache/mod.rs      créé
   + src/modules/cache/config.rs   créé

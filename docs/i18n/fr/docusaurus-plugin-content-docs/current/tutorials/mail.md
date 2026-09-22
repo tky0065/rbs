@@ -87,17 +87,19 @@ détaché rend-il la main avant que le message ne soit parti ?
 cargo test modules::mail::
 ```
 
+{/* rbs:libre raison="cargo test compile le projet entier, plusieurs minutes, et l'ordre de ses lignes suit l'ordonnanceur des threads" */}
 ```text
-running 7 tests
+running 8 tests
 test modules::mail::tests::an_invalid_sender_stops_the_build_naming_it ... ok
 test modules::mail::tests::the_message_carries_the_configured_sender_and_its_recipient ... ok
 test modules::mail::tests::a_missing_template_names_the_file_without_panicking ... ok
+test modules::mail::tests::send_template_detached_fails_on_a_missing_template_before_sending_anything ... ok
 test modules::mail::tests::the_rendered_template_carries_the_variables_passed_to_it ... ok
 test modules::mail::tests::send_detached_returns_without_awaiting_the_send ... ok
 test modules::mail::tests::the_three_encryption_modes_build_a_transport ... ok
 test modules::mail::tests::a_templated_message_goes_out_to_the_smtp_server ... ignored, joint le serveur SMTP de la section [mail]
 
-test result: ok. 6 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 7 passed; 0 failed; 1 ignored; 0 measured; 0 filtered out; finished in 0.00s
 ```
 
 La preuve du compromis lui-même : `send_detached_returns_without_awaiting_the_send` ouvre

@@ -174,6 +174,7 @@ after the work was done is enough — and without that identifier nothing would 
 
 The signed bytes are the timestamp, a dot, then the body verbatim:
 
+{/* rbs:libre raison="formule de signature, non une sortie" */}
 ```text
 HMAC-SHA256(secret, "<timestamp>.<raw body>")
 ```

@@ -53,8 +53,9 @@ Either way, that drops an `rbs` executable in `~/.cargo/bin`, and a second copy 
 rbs --version
 ```
 
+{/* rbs:transcript cmd="rbs --version" */}
 ```text
-rbs 1.2.0
+rbs 1.8.1
 ```
 
 :::note
@@ -98,6 +99,7 @@ nothing else. Drop it and the CLI asks, in order, for the database URL if
 `--database-url` is missing and for the optional features to install. It also refuses to
 run without a terminal to ask in, so `--yes` is what a script or a CI job needs:
 
+{/* rbs:transcript cmd="rbs new demo" */}
 ```text
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
 ```
@@ -125,6 +127,7 @@ Twenty-three files, and none of them a black box:
 
 The `.env` the command wrote carries the URL you passed:
 
+{/* rbs:libre raison="contenu du .env qu'écrit rbs new, non la sortie d'une commande" */}
 ```text
 RBS_ENV=development
 RBS_DATABASE__URL=postgres://rbs:secret@localhost:5432/demo
@@ -182,6 +185,7 @@ volumes:
 docker compose up -d --wait
 ```
 
+{/* rbs:libre raison="sortie de docker compose, qui démarre un conteneur : hors de portée du rejeu" */}
 ```text
  Network demo_default  Creating
  Network demo_default  Created
@@ -315,6 +319,7 @@ cargo run
 The first build is long — it is the whole Axum, SeaORM and utoipa tree. When it is
 done:
 
+{/* rbs:libre raison="journal d'un serveur qui tourne : le rejeu ne lance aucun serveur, et l'heure change à chaque démarrage" */}
 ```text
 10:06:25  INFO   demo                démarrage  adresse=127.0.0.1:8080
 ```
@@ -330,6 +335,7 @@ Leave the server running and open a second terminal.
 curl -i http://127.0.0.1:8080/health
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 200 OK
 content-type: application/json
@@ -356,6 +362,7 @@ curl -i -X POST http://127.0.0.1:8080/articles \
   -d '{"title":"Premier article","body":"Bonjour","published":true}'
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 201 Created
 content-type: application/json
@@ -373,6 +380,7 @@ The identifier and the timestamps are the server's — `id`, `created_at` and
 curl http://127.0.0.1:8080/articles
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 {"data":[{"id":"01a04cfc-2e37-78a1-bcb1-6599b0c362e2","title":"Premier article","body":"Bonjour","published":true,"created_at":"2026-08-29T10:06:30.457086Z","updated_at":"2026-08-29T10:06:30.457086Z"}],"meta":{"page":1,"per_page":20,"total":1,"total_pages":1}}
 ```
@@ -383,6 +391,7 @@ move through them. The three remaining routes — `GET`, `PATCH` and `DELETE` on
 
 Meanwhile, the server's terminal has been printing one line per request:
 
+{/* rbs:libre raison="journal d'un serveur qui tourne : le rejeu ne lance aucun serveur, et l'heure change à chaque démarrage" */}
 ```text
 10:06:30  INFO   rbs_core::trace     request  status=200 latency_ms=0.80275 request_id=01M16FRBHD0ZHWCN4EAEAW3TGK method=GET path=/health
 10:06:30  INFO   rbs_core::trace     request  status=201 latency_ms=4.517125 request_id=01M16FRBHQDCDV859ADGK8ZMJG method=POST path=/articles

@@ -17,11 +17,12 @@ documentation.
 
 ## What gets installed
 
+{/* rbs:transcript cmd="rbs add mail" setup="rbs new depot --yes --database-url postgres://rbs:secret@localhost:5432/depot" dans="depot" */}
 ```text
 $ rbs add mail
 mail : envoi de courriels par SMTP : transport partagé, gabarits minijinja
 
-plan pour /private/tmp/rbs-demo/depot
+plan pour …/depot
 
   + src/modules/mail/mod.rs         créé
   + src/modules/mail/config.rs      créé

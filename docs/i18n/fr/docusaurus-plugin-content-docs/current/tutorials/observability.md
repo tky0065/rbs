@@ -71,6 +71,7 @@ listener à elles, et la règle qui les garde internes devient une règle de par
 cargo run
 ```
 
+{/* rbs:libre raison="journal d'un serveur qui tourne : le rejeu ne lance aucun serveur, et l'heure change à chaque démarrage" */}
 ```text
 INFO   demo::modules::observability  métriques  adresse=127.0.0.1:9090
 INFO   demo                démarrage  adresse=127.0.0.1:8080
@@ -89,6 +90,7 @@ Depuis le second terminal, le port de l'API d'abord :
 curl -i http://127.0.0.1:8080/metrics
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 404 Not Found
 x-request-id: 01M22V0E32T6TBZPBRYZNR0NRW
@@ -104,6 +106,7 @@ lui :
 curl -i http://127.0.0.1:9090/metrics
 ```
 
+{/* rbs:libre raison="réponse HTTP d'un serveur lancé sur une base vivante : le rejeu ne démarre ni l'un ni l'autre, et identifiants, dates et id changent à chaque appel" */}
 ```text
 HTTP/1.1 200 OK
 content-type: text/plain; charset=utf-8

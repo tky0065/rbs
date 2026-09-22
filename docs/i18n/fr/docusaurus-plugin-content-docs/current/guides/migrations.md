@@ -91,8 +91,9 @@ colonne `deleted_at` datée, et toute lecture l'écarte.
 La colonne est nullable, sans défaut, et le drapeau l'injecte : ce n'est pas un champ qu'on
 déclare. La nommer soi-même sous `--fields` est refusé, par le drapeau qui la possède :
 
+{/* rbs:transcript cmd="rbs generate crud comments --fields body:text,deleted_at:datetime --soft-delete --dry-run" setup="rbs new blog --yes --database-url postgres://rbs:secret@localhost:5432/blog" dans="blog" */}
 ```text
-$ rbs generate crud comments --fields "body:text,deleted_at:datetime" --soft-delete --dry-run
+$ rbs generate crud comments --fields body:text,deleted_at:datetime --soft-delete --dry-run
 erreur : `--soft-delete` pose lui-même la colonne `deleted_at` : retirez-la de `--fields`, ou renoncez au drapeau
 ```
 
