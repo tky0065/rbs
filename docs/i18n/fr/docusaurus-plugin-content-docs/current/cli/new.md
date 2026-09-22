@@ -344,9 +344,8 @@ MAISON=1
 
 ## `--with` installe
 
-`--with` nomme les features à installer à la création, séparées par des virgules. rbs en
-connaît quinze — `api-keys`, `audit`, `auth`, `ci`, `cors`, `docker`, `frontend`, `jobs`,
-`mail`, `observability`, `rate-limit`, `redis`, `scheduler`, `storage` et `webhooks` — et
+`--with` nomme les features à installer à la création, séparées par des virgules. Il admet
+celles qu'installe [`rbs add`](./add.md), et
 installe chacune des nommées, dans la même passe qui écrit le projet :
 
 {/* rbs:transcript cmd="rbs new site --with auth --lang fr --yes" */}
@@ -490,10 +489,8 @@ volumes:
 ```
 
 `docker compose up -d` la démarre. L'ancre `# <rbs:services>` est là où [`rbs
-add`](./add.md) insère les services qu'apporte `docker`, et c'est l'une des vingt-deux
-ancres que vérifie [`rbs doctor`](./doctor.md) — quatorze sur un projet qui ne porte ni file,
-ni calendrier, ni authentification, ni client, ni shell d'administration, onze des
-vingt-deux étant optionnelles.
+add`](./add.md) insère les services qu'apporte `docker`, et c'est l'une des
+ancres que vérifie [`rbs doctor`](./doctor.md).
 
 Quatre cas n'écrivent rien :
 

@@ -5,7 +5,7 @@ title: Audit log
 
 # Audit log
 
-`rbs add audit` installs a write log into an existing project: four files under
+`rbs add audit` installs a write log into an existing project: files under
 `src/modules/audit/`, and a migration for the `audit_log` table. Like the other bricks, it mounts
 no route — and unlike them, it does not even wire itself into the ones you already have.
 Calling it is your service's job, and the reason is [below](#what-the-fragment-does-not-do).

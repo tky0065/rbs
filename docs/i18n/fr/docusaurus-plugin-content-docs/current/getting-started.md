@@ -5,8 +5,8 @@ title: Démarrage rapide
 
 # Démarrage rapide
 
-Cette page mène d'un répertoire vide à une API CRUD qui répond sur `localhost:8080`, en
-huit commandes. Chaque bloc de sortie ci-dessous a été recopié d'une exécution réelle —
+Cette page mène d'un répertoire vide à une API CRUD qui répond sur `localhost:8080`.
+Chaque bloc de sortie ci-dessous a été recopié d'une exécution réelle —
 si votre terminal affiche la même chose, vous n'avez pas dévié — aux durées, aux
 identifiants et aux dates près, qui sont les vôtres. Une seule chose a été retirée des
 blocs : le chemin absolu du répertoire où l'exécution a eu lieu, noté `…/demo`.
@@ -442,8 +442,8 @@ rbs doctor
 ✓ le projet est sain
 ```
 
-Sept vérifications : les ancres sont toujours en place — douze ici, onze du squelette
-plus celle du compose, qui sort du compte pour un projet sans `docker-compose.yml`
+Les vérifications : les ancres sont toujours en place — celles du squelette plus celle
+du compose, qui sort du compte pour un projet sans `docker-compose.yml`
 (`modules`, `jobs`, `job_modules` et `schedules` en sortent aussi, sur un projet qui n'a
 jamais installé de fragment) — le guide et l'inventaire d'[`AGENTS.md`](./guides/agents.md) s'accordent toujours avec
 ce que porte le projet, aucun modèle ne porte de relation sans les deux ancres qu'il lui

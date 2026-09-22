@@ -7,7 +7,7 @@ title: Observabilité
 
 Les logs disent *ce qui s'est passé*. `rbs add observability` répond aux deux questions
 suivantes : *quelle route est lente, et depuis quand* — par les métriques — et *sur quel
-appel en aval* — par les traces. La feature installe quatre fichiers sous
+appel en aval* — par les traces. La feature installe des fichiers sous
 `src/modules/observability/`, une section `[observability]`, un middleware de comptage, et un
 second listener HTTP qui sert `/metrics`.
 

@@ -5,7 +5,7 @@ title: Taking a file
 
 # Taking a file
 
-This is the fourth of nine tutorials. It picks up `demo`; this page needs nothing beyond
+This is the fourth tutorial. It picks up `demo`; this page needs nothing beyond
 [Setting up](./setup.md). The case: a client deposits a justificatif — a receipt, a
 paper to keep on file — and by the end of this page, `PUT /uploads/{id}/content` stores
 it and answers `204`.
@@ -281,7 +281,7 @@ would be thrown away.
 - [Storage](../guides/storage.md) covers both backends, the key-escaping rule this page
   never triggered, and everything `--with-upload` leaves to you — size limits, MIME
   filtering, listing.
-- [`rbs add`](../cli/add.md) covers the twelve other features this project could still
+- [`rbs add`](../cli/add.md) covers the other features this project could still
   install.
 - [`rbs generate`](../cli/generate.md) has the full grammar of `--with-upload`, including
   how it combines with `--role` and `--soft-delete`.

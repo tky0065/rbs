@@ -5,7 +5,7 @@ title: Locking the API down
 
 # Locking the API down
 
-This is the third of nine tutorials. It picks up `demo` right after
+This is the third tutorial. It picks up `demo` right after
 [Your first resource](./first-resource.md) — running, with the `articles` CRUD from that
 page — and closes it to everyone it doesn't know. The case: a blog where every visitor
 may read a post, and only an administrator may write one. Rather than reopen `articles`,
@@ -418,9 +418,9 @@ down which is which — a `user` token forbidden on the write, and reading anywa
 
 ## Going further
 
-- [Authentication](../guides/auth.md) covers the fifteen routes `add auth` mounts, the
+- [Authentication](../guides/auth.md) covers the routes `add auth` mounts, the
   token pair, and the `Role` enum this page only used at its default.
-- [`rbs add`](../cli/add.md) covers the ten other features this project could still
+- [`rbs add`](../cli/add.md) covers the other features this project could still
   install, and the `--force` this page never needed.
 - [`rbs generate`](../cli/generate.md) has the full grammar of `--role`, including what
   it does under `--with-upload`, and [what to remove to reopen a

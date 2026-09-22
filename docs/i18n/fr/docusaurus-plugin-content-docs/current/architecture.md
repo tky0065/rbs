@@ -35,7 +35,7 @@ pour être modifié, et la frontière existe pour que le modifier suffise.
 
 ### Ce que porte le noyau
 
-Onze modules publics, tous du côté « personne ne veut relire ça » :
+Ses principaux modules publics, tous du côté « personne ne veut relire ça » :
 
 | Module | Ce qu'il fait | Pourquoi il ne varie jamais |
 |---|---|---|

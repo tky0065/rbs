@@ -5,7 +5,7 @@ title: Appeler l'API en TypeScript
 
 # Appeler l'API en TypeScript
 
-C'est le neuvième et dernier des neuf tutoriels. Il reprend `demo` juste après [Votre
+C'est le dernier tutoriel. Il reprend `demo` juste après [Votre
 première ressource](./first-resource.md) — en cours d'exécution, avec le CRUD `articles`
 de cette page et sa migration appliquée — et le lit dans un client typé plutôt que dans
 une réponse de serveur typée à la main côté front. Le cas : un navigateur ou un script

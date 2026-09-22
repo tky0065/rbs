@@ -5,7 +5,7 @@ title: Webhooks
 
 # Webhooks sortants
 
-`rbs add webhooks` donne au projet de quoi dire au dehors ce qui vient d'arriver : seize
+`rbs add webhooks` donne au projet de quoi dire au dehors ce qui vient d'arriver : des
 fichiers sous `src/modules/webhooks/` — `target.rs` compris —, une migration pour la table
 `webhook_subscriptions`, trois routes, et un POST HTTP signé vers chaque abonné qui écoute.
 

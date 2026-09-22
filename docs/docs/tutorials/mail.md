@@ -5,7 +5,7 @@ title: Sending mail
 
 # Sending mail
 
-This is the fifth of nine tutorials. It picks up `demo` right after [Taking a
+This is the fifth tutorial. It picks up `demo` right after [Taking a
 file](./storage.md) — running, with the `uploads` resource and its content routes from
 that page. The case: the moment `create` succeeds, whoever owns `owner_email` gets a mail
 telling them their file is on file — an accusé de réception for the deposit the previous
@@ -150,7 +150,7 @@ that has already answered `201`.
 
 - [Mail](../guides/mail.md) covers the transport, the templates, and moving a send into
   a queue when the trade-off above is the wrong one.
-- [`rbs add`](../cli/add.md) covers the eleven other features `demo` could still
+- [`rbs add`](../cli/add.md) covers the other features `demo` could still
   install, `storage` and `mail` now both on it.
 - [Testing](../guides/testing.md) is the harness the generated `mail/tests.rs` runs
   against, and what `-- --ignored` reaches that a plain `cargo test` does not.

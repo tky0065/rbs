@@ -55,8 +55,8 @@ modifier. Their shape is frozen more tightly than the rest, not less.
 
 This is the scope one forgets, and the one whose loss hurts most.
 
-Alongside your code, a generated project carries two things you never call: twenty-two
-comment anchors — sixteen Rust ones, `// <rbs:features>`, `// <rbs:modules>` for whatever
+Alongside your code, a generated project carries two things you never call: {/* rbs:chiffre ancres */}twenty-two
+comment anchors — in Rust, `// <rbs:features>`, `// <rbs:modules>` for whatever
 project has installed a fragment, `// <rbs:routes>`, `// <rbs:layers>`,
 `// <rbs:openapi>`, `// <rbs:migration_modules>`, `// <rbs:migrations>`,
 `// <rbs:state_champs>`, `// <rbs:state_init>`, `// <rbs:startup>`, `// <rbs:seeds>`,
@@ -85,8 +85,8 @@ generated under an earlier version: it is the promise holding, not an exception 
 
 A model can also carry two anchors of its own once it has a relation —
 `// <rbs:relations:table>`, inside its `Relation` enum, and `// <rbs:related:table>`
-beside it — the table's name standing in for the fixed name the twenty-two above have, since a
-file can hold more than one entity. They sit outside the count of twenty-two because which file
+beside it — the table's name standing in for the fixed name the anchors above have, since a
+file can hold more than one entity. They sit outside that count because which file
 carries them depends on the project's own features, not on the skeleton every project
 shares; their comment syntax and their naming convention are frozen exactly the same way.
 
@@ -102,7 +102,7 @@ hand — on every command, forever.
 
 So the format is covered exactly as the Rust API is. Inside 1.x:
 
-- the twenty-two anchor names and their comment syntax do not change, and neither does the rule
+- the anchor names and their comment syntax do not change, and neither does the rule
   that a command writes nothing when its anchor is missing;
 - the keys of `[package.metadata.rbs]` keep their name and their meaning. A key may be
   added; an absent key reads as a default, never as an error.
@@ -110,9 +110,8 @@ So the format is covered exactly as the Rust API is. Inside 1.x:
 What this does not promise is that a project generated in 0.4.0 already carries every
 anchor a later feature wants. It does not, and it never will — new features bring new
 anchors. That case is designed for rather than broken by: the command reports the anchor it
-could not find and prints the block, and [`rbs doctor`](./cli/doctor.md) checks all
-twenty-two — fourteen on a project carrying no queue, no calendar, no sign-in, no client and
-no admin shell, eleven of the twenty-two being optional — before anything goes wrong.
+could not find and prints the block, and [`rbs doctor`](./cli/doctor.md) checks them
+all before anything goes wrong.
 
 ## What the promise leaves out
 

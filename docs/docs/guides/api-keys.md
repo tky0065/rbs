@@ -171,7 +171,7 @@ it: a key revoked between the read and the check must not open the request in fl
 
 ## Testing
 
-Eleven tests ship with the fragment, under `src/modules/api_keys/tests/`. They join the
+The fragment's tests ship under `src/modules/api_keys/tests/`. They join the
 database your `.env` describes, so they carry `#[ignore]`: `cargo test -- --ignored` runs
 them once `rbs migrate up` has been applied.
 

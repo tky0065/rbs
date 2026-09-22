@@ -5,7 +5,7 @@ title: Votre première ressource
 
 # Votre première ressource
 
-C'est le deuxième des neuf tutoriels, et il reprend `demo` exactement là où
+C'est le deuxième tutoriel, et il reprend `demo` exactement là où
 [Préparer le terrain](./setup.md) l'a laissé : en cours d'exécution, sans rien de monté
 hormis un contrôle de santé. Celui-ci ajoute la forme dont la plupart des API sont
 faites — une table que vous créez, listez et modifiez — avec une seule commande qui

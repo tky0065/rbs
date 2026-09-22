@@ -5,7 +5,7 @@ title: Moving long work out of the request
 
 # Moving long work out of the request
 
-This is the seventh of nine tutorials. It picks up `demo`; this page needs nothing
+This is the seventh tutorial. It picks up `demo`; this page needs nothing
 beyond [Setting up](./setup.md). The case: a campaign of 5,000 letters, enqueued
 without making the caller wait for any of them to send.
 
@@ -161,7 +161,7 @@ wholesale.
 
 - [Jobs](../guides/jobs.md) covers the worker's polling and retry in full, and how to
   schedule a job for later with `enqueue_at`.
-- [`rbs add`](../cli/add.md) covers the twelve other features `demo` could still install,
+- [`rbs add`](../cli/add.md) covers the other features `demo` could still install,
   `jobs` now on it.
 - [Testing](../guides/testing.md) is the harness the generated `jobs/tests/` runs
   against, and what `-- --ignored` reaches that a plain `cargo test` does not.

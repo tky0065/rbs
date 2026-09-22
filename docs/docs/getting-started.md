@@ -5,8 +5,8 @@ title: Getting started
 
 # Getting started
 
-This page goes from an empty directory to a CRUD API answering on `localhost:8080`,
-in eight commands. Every block of output below was copied from a real run — if what
+This page goes from an empty directory to a CRUD API answering on `localhost:8080`.
+Every block of output below was copied from a real run — if what
 your terminal prints matches, you have not drifted — timings, identifiers and dates
 excepted, which are yours. Only one thing was edited out of the blocks: the absolute
 path of the directory the run happened in, written `…/demo` below.
@@ -433,9 +433,9 @@ rbs doctor
 ✓ le projet est sain
 ```
 
-Seven checks: the anchors are still in place — twelve of them here, eleven from the
-skeleton plus the compose's, which drops out of the count for a project with no
-`docker-compose.yml` (`modules`, `jobs`, `job_modules` and `schedules` drop out too, on a
+The checks: the anchors are still in place — the skeleton's plus the compose's, which
+drops out of the count for a project with no `docker-compose.yml`
+(`modules`, `jobs`, `job_modules` and `schedules` drop out too, on a
 project that never installed a fragment) — [`AGENTS.md`](./guides/agents.md)'s guide and inventory still
 match what the project carries, no model has a relation without the two anchors it would
 need to receive one, `.env` holds every key `.env.example` declares, the project and

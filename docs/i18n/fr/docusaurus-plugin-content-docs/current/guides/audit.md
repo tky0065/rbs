@@ -5,7 +5,7 @@ title: Journal des écritures
 
 # Journal des écritures
 
-`rbs add audit` installe un journal des écritures dans un projet existant : quatre fichiers
+`rbs add audit` installe un journal des écritures dans un projet existant : des fichiers
 sous `src/modules/audit/`, et une migration pour la table `audit_log`. Comme les autres briques, il
 ne monte aucune route — et, contrairement à elles, il ne se câble même pas sur celles que
 vous avez déjà. C'est à votre service de l'appeler, et la raison est

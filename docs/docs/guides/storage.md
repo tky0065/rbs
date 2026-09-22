@@ -5,7 +5,7 @@ title: Storage
 
 # Storage
 
-`rbs add storage` installs object storage into an existing project: four files under
+`rbs add storage` installs object storage into an existing project: files under
 `src/modules/storage/`, and an `Arc<dyn Storage>` on your `AppState`. Two backends come with it —
 the local filesystem and S3 — and the point of the feature is that your code cannot tell
 which one it is talking to.

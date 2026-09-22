@@ -183,7 +183,7 @@ quoted by the documentation and to stay free of drift.
 
 ## Edits the CLI does not produce
 
-Three apply to all five projects:
+Three apply to every project:
 
 - delete the `.git` that `rbs new` initialises — nested repositories do not belong here;
 - rewrite the `rbs-core` dependency to `{ path = "../../crates/rbs-core" }`, since
@@ -313,7 +313,7 @@ comparing it, since no two generations draw the same one.
 
 ## The drift test
 
-`cargo test -p rbs-cli --test integration_examples` regenerates all five projects and compares
+`cargo test -p rbs-cli --test integration_examples` regenerates every project and compares
 them to the versions committed here, ignoring exactly the differences listed above. It
 fails when a template changes without the example following — which is the point: a stale
 example makes the documentation lie, and nothing else would notice.

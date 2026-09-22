@@ -59,7 +59,7 @@ réponses OpenAPI. Leur forme est gelée plus étroitement que le reste, non moi
 C'est le périmètre qu'on oublie, et celui dont la perte fait le plus mal.
 
 À côté de votre code, un projet engendré porte deux choses que vous n'appelez jamais :
-vingt-deux ancres en commentaires — seize en Rust, `// <rbs:features>`,
+{/* rbs:chiffre ancres */}vingt-deux ancres en commentaires — en Rust, `// <rbs:features>`,
 `// <rbs:modules>` pour tout projet qui a installé un fragment, `// <rbs:routes>`,
 `// <rbs:layers>`, `// <rbs:openapi>`, `// <rbs:migration_modules>`, `// <rbs:migrations>`,
 `// <rbs:state_champs>`, `// <rbs:state_init>`, `// <rbs:startup>`, `// <rbs:seeds>`,
@@ -91,9 +91,9 @@ tient, non une exception à celle-ci.
 
 Un modèle peut aussi porter deux ancres qui lui sont propres dès qu'il a une relation —
 `// <rbs:relations:table>`, dans son énumération `Relation`, et `// <rbs:related:table>`
-juste à côté — le nom de la table tenant lieu du nom fixe que portent les vingt-deux
-ci-dessus, puisqu'un même fichier peut porter plusieurs entités. Elles sortent du compte
-des vingt-deux parce que le fichier qui les porte dépend des features du projet, non du
+juste à côté — le nom de la table tenant lieu du nom fixe que portent les ancres
+ci-dessus, puisqu'un même fichier peut porter plusieurs entités. Elles sortent de ce
+compte parce que le fichier qui les porte dépend des features du projet, non du
 squelette que tout projet partage ; leur syntaxe de commentaire et leur convention de
 nommage sont gelées de la même façon.
 
@@ -109,7 +109,7 @@ bloc à coller à la main — à chaque commande, indéfiniment.
 
 Le format est donc couvert exactement comme l'API Rust l'est. À l'intérieur de la 1.x :
 
-- les vingt-deux noms d'ancres et leur syntaxe de commentaire ne changent pas, non plus que la
+- les noms d'ancres et leur syntaxe de commentaire ne changent pas, non plus que la
   règle voulant qu'une commande n'écrive rien quand son ancre manque ;
 - les clés de `[package.metadata.rbs]` gardent leur nom et leur sens. Une clé peut
   s'ajouter ; une clé absente se lit comme un défaut, jamais comme une erreur.
@@ -118,9 +118,7 @@ Ce qui n'est pas promis, c'est qu'un projet engendré en 0.4.0 porte déjà tout
 qu'une feature ultérieure réclame. Il ne les porte pas, et ne les portera jamais — des
 features neuves apportent des ancres neuves. Ce cas est prévu plutôt que subi : la commande
 signale l'ancre introuvable et affiche le bloc, et [`rbs doctor`](./cli/doctor.md) les
-vérifie toutes les vingt-deux — quatorze sur un projet qui ne porte ni file, ni calendrier,
-ni authentification, ni client, ni shell d'administration, onze des vingt-deux étant
-optionnelles — avant que rien n'aille mal.
+vérifie toutes avant que rien n'aille mal.
 
 ## Ce que la promesse laisse dehors
 

@@ -2,6 +2,8 @@ mod add;
 mod agents;
 mod anchors;
 mod cargo;
+#[cfg(test)]
+mod chiffres;
 mod cli;
 mod client;
 mod completions;

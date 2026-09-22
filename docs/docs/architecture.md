@@ -35,7 +35,7 @@ exists so that editing it is enough.
 
 ### What the core carries
 
-Eleven public modules, all of them on the "nobody wants to read this" side of the test:
+Its main public modules, all of them on the "nobody wants to read this" side of the test:
 
 | Module | What it does | Why it never varies |
 |---|---|---|
