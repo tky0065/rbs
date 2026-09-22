@@ -5,7 +5,7 @@ title: Envoyer un mail
 
 # Envoyer un mail
 
-C'est le cinquième des neuf tutoriels. Il reprend `demo` juste après [Recevoir un
+C'est le cinquième tutoriel. Il reprend `demo` juste après [Recevoir un
 fichier](./storage.md) — en cours d'exécution, avec la ressource `uploads` et ses routes
 de contenu de cette page. Le cas : dès que `create` réussit, quiconque possède
 `owner_email` reçoit un mail lui disant que son fichier est enregistré — un accusé de
@@ -153,7 +153,7 @@ déjà repartie avec un `201`.
 
 - [Mail](../guides/mail.md) couvre le transport, les gabarits, et le déplacement d'un
   envoi vers une file quand le compromis ci-dessus n'est pas le bon.
-- [`rbs add`](../cli/add.md) couvre les onze autres features que `demo` pourrait encore
+- [`rbs add`](../cli/add.md) couvre les autres features que `demo` pourrait encore
   installer, `storage` et `mail` désormais sur lui.
 - [Tests](../guides/testing.md) est le harnais contre lequel `mail/tests.rs` engendré
   tourne, et ce que `-- --ignored` atteint qu'un simple `cargo test` n'atteint pas.

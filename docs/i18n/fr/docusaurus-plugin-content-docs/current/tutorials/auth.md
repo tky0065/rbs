@@ -5,7 +5,7 @@ title: Fermer l'API aux inconnus
 
 # Fermer l'API aux inconnus
 
-C'est le troisième des neuf tutoriels. Il reprend `demo` juste après [Votre première
+C'est le troisième tutoriel. Il reprend `demo` juste après [Votre première
 ressource](./first-resource.md) — en cours d'exécution, avec le CRUD `articles` de cette
 page — et le ferme à qui il ne connaît pas. Le cas : un blog où chaque visiteur peut lire
 un billet, et seul un administrateur peut en écrire un. Plutôt que de rouvrir
@@ -418,9 +418,9 @@ même.
 
 ## Pour aller plus loin
 
-- [Authentification](../guides/auth.md) couvre les quinze routes que `add auth` monte, la
+- [Authentification](../guides/auth.md) couvre les routes que `add auth` monte, la
   paire de jetons, et l'enum `Role` que cette page n'a utilisée qu'à son défaut.
-- [`rbs add`](../cli/add.md) couvre les dix autres features que ce projet pourrait
+- [`rbs add`](../cli/add.md) couvre les autres features que ce projet pourrait
   encore installer, et le `--force` dont cette page n'a jamais eu besoin.
 - [`rbs generate`](../cli/generate.md) a la grammaire complète de `--role`, y compris ce
   qu'il fait sous `--with-upload`, et [ce qu'il faut retirer pour rouvrir une

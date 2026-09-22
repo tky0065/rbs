@@ -5,7 +5,7 @@ title: Seeing what the API does
 
 # Seeing what the API does
 
-This is the eighth of nine tutorials. It picks up `demo`; this page needs nothing
+This is the eighth tutorial. It picks up `demo`; this page needs nothing
 beyond [Setting up](./setup.md). The case: one route has gone slow, and there is no way
 yet to say since when, or which one.
 
@@ -182,7 +182,7 @@ production traffic reaches it in hours, not months, once that discipline slips.
   installs.
 - [Logs](../guides/logs.md) covers the subscriber traces graft onto, and the `pretty`
   formatter behind every line this page's server printed.
-- [`rbs add`](../cli/add.md) covers the twelve other features `demo` could still
+- [`rbs add`](../cli/add.md) covers the other features `demo` could still
   install, `observability` now on it.
 - [Calling the API from TypeScript](./typescript-client.md) is the last tutorial: a
   front end that calls `articles` through a client read from the API's own OpenAPI

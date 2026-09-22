@@ -5,7 +5,7 @@ title: Recevoir un fichier
 
 # Recevoir un fichier
 
-C'est le quatrième des neuf tutoriels. Il reprend `demo` ; cette page n'a besoin de rien
+C'est le quatrième tutoriel. Il reprend `demo` ; cette page n'a besoin de rien
 au-delà de [Préparer le terrain](./setup.md). Le cas : un client dépose un justificatif —
 un reçu, un papier à garder — et à la fin de cette page, `PUT /uploads/{id}/content` le
 range et répond `204`.
@@ -276,7 +276,7 @@ qu'aucune ressource ne réclame — et `exists` répond à la requête `HEAD` pl
 - [Storage](../guides/storage.md) couvre les deux backends, la règle d'échappement des
   clés que cette page n'a jamais déclenchée, et tout ce qu'`--with-upload` vous laisse
   faire — les limites de taille, le filtrage MIME, le listage.
-- [`rbs add`](../cli/add.md) couvre les douze autres features que ce projet pourrait
+- [`rbs add`](../cli/add.md) couvre les autres features que ce projet pourrait
   encore installer.
 - [`rbs generate`](../cli/generate.md) a la grammaire complète d'`--with-upload`, y
   compris comment il se combine avec `--role` et `--soft-delete`.

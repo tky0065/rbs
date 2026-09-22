@@ -1,11 +1,12 @@
 ---
 sidebar_position: 3
 title: rbs add
+description: Installs a feature into an existing project.
 ---
 
 # `rbs add`
 
-Installs a feature into an existing project. Sixteen are shipped: `api-keys`, `audit`,
+Installs a feature into an existing project. {/* rbs:chiffre fragments */}Sixteen are shipped: `api-keys`, `audit`,
 `auth`, `ci`, `cors`, `docker`, `frontend`, `frontend-admin`, `jobs`, `mail`,
 `observability`, `rate-limit`, `redis`, `scheduler`, `storage` and `webhooks`.
 
@@ -41,26 +42,26 @@ Options :
 | `--json` | Prints the plan — or the error — as one JSON document on standard output instead of the coloured text: every action with its effect, the full content of created files, and `applique` to say whether anything was written. Independent of `--dry-run`. [The agents guide](../guides/agents.md#reading-a-plan-as-json) has the document and the error codes. |
 | `--template-dir <CHEMIN>` | Reads the fragments from a directory holding one subdirectory per feature, instead of the ones embedded in the binary. |
 
-## The sixteen features
+## The features
 
 | Feature | Files | Next step |
 |---|---|---|
 | `docker` | `.dockerignore`, `Dockerfile`, and its `api`/`migrate` services inserted into the project's compose — a whole `docker-compose.yml` when there is none | `docker compose --profile app up --build` |
 | `ci` | `.github/workflows/ci.yml`, its actions pinned by SHA, and `.github/dependabot.yml`, which proposes their updates every week | `git push` |
-| `auth` | thirty-five files under `src/auth/`, three mail templates, one migration, edits to nine project files of its own — and `mail` and `rate-limit`, which it requires | `rbs migrate up` |
-| `api-keys` | nine files under `src/modules/api_keys/`, one migration, four routes, and a method inserted into the `impl HasAuth` that `auth` deposits — and `auth`, which it requires | `rbs migrate up`, then `POST /api-keys` |
-| `jobs` | thirteen files under `src/modules/jobs/`, one migration, and a `[jobs]` config section | `rbs migrate up`, then register your jobs in `src/modules/jobs/mod.rs` |
-| `scheduler` | nine files under `src/modules/scheduler/`, one migration, a `[scheduler]` config section, a ticker in `// <rbs:startup>` — and `jobs`, which it requires | `rbs migrate up`, then declare your schedules in `src/modules/scheduler/mod.rs` |
-| `redis` | three files under `src/modules/cache/`, and a `redis` service inserted into the project's compose | the compose already carries it — `docker compose up -d` starts it |
-| `mail` | five files under `src/modules/mail/`, a sample template, and a `mailpit` service inserted into the project's compose | set `[mail]` in `config/default.toml` — a local SMTP by default |
-| `storage` | six files under `src/modules/storage/` | ignore `./storage`, or switch the backend to `s3` |
-| `cors` | three files under `src/modules/cors/`, a `[cors]` config section, and a layer in `// <rbs:layers>` | list your origins in `[cors]` — empty, so nothing cross-origin passes |
-| `frontend` | four files under `src/modules/frontend/`, a `[frontend]` config section, and a fallback in `// <rbs:routes>` that serves the client's build — or, until that build exists, a self-contained bootstrap page | `rbs generate client --lang ts` **before** `npm run build`: the base imports the generated client. Then `cargo run`: the root serves the bootstrap page, which names what is left to build |
-| `frontend-admin` | nineteen files inside the tree `frontend` laid down — the authenticated admin shell, its route guard, its two Pinia stores, the authorization header it lays over the base's API client, four account-and-health screens, the four public pages that lead to them and the pattern screen — and `frontend` and `auth`, which it requires, and through `auth`, `mail` and `rate-limit` | nothing of its own: the base's steps cover the client. [The frontend guide](../guides/frontend.md) has the rest |
-| `rate-limit` | four files under `src/modules/rate_limit/`, a `[rate_limit]` config section, a field on `AppState`, and a layer in `// <rbs:layers>` | behind a reverse proxy, set `rate_limit.trust_forwarded_for` |
-| `observability` | four files under `src/modules/observability/`, an `[observability]` config section, a layer in `// <rbs:layers>`, and a second listener in `// <rbs:startup>` | name a collector in `OTEL_EXPORTER_OTLP_ENDPOINT` — without it nothing is exported |
-| `audit` | four files under `src/modules/audit/`, and one migration | `rbs migrate up`, then call `audit::record` in your services — the entry is written in the transaction of the change |
-| `webhooks` | sixteen files under `src/modules/webhooks/`, one migration, a `[webhooks]` config section, three routes, a field on `AppState` — and `jobs` and `auth`, which it requires | `rbs migrate up`, then call `webhooks::emit` where your code writes |
+| `auth` | files under `src/auth/`, three mail templates, one migration, edits to project files of its own — and `mail` and `rate-limit`, which it requires | `rbs migrate up` |
+| `api-keys` | files under `src/modules/api_keys/`, one migration, four routes, and a method inserted into the `impl HasAuth` that `auth` deposits — and `auth`, which it requires | `rbs migrate up`, then `POST /api-keys` |
+| `jobs` | files under `src/modules/jobs/`, one migration, and a `[jobs]` config section | `rbs migrate up`, then register your jobs in `src/modules/jobs/mod.rs` |
+| `scheduler` | files under `src/modules/scheduler/`, one migration, a `[scheduler]` config section, a ticker in `// <rbs:startup>` — and `jobs`, which it requires | `rbs migrate up`, then declare your schedules in `src/modules/scheduler/mod.rs` |
+| `redis` | files under `src/modules/cache/`, and a `redis` service inserted into the project's compose | the compose already carries it — `docker compose up -d` starts it |
+| `mail` | files under `src/modules/mail/`, a sample template, and a `mailpit` service inserted into the project's compose | set `[mail]` in `config/default.toml` — a local SMTP by default |
+| `storage` | files under `src/modules/storage/` | ignore `./storage`, or switch the backend to `s3` |
+| `cors` | files under `src/modules/cors/`, a `[cors]` config section, and a layer in `// <rbs:layers>` | list your origins in `[cors]` — empty, so nothing cross-origin passes |
+| `frontend` | files under `src/modules/frontend/`, a `[frontend]` config section, and a fallback in `// <rbs:routes>` that serves the client's build — or, until that build exists, a self-contained bootstrap page | `rbs generate client --lang ts` **before** `npm run build`: the base imports the generated client. Then `cargo run`: the root serves the bootstrap page, which names what is left to build |
+| `frontend-admin` | files inside the tree `frontend` laid down — the authenticated admin shell, its route guard, its two Pinia stores, the authorization header it lays over the base's API client, four account-and-health screens, the four public pages that lead to them and the pattern screen — and `frontend` and `auth`, which it requires, and through `auth`, `mail` and `rate-limit` | nothing of its own: the base's steps cover the client. [The frontend guide](../guides/frontend.md) has the rest |
+| `rate-limit` | files under `src/modules/rate_limit/`, a `[rate_limit]` config section, a field on `AppState`, and a layer in `// <rbs:layers>` | behind a reverse proxy, set `rate_limit.trust_forwarded_for` |
+| `observability` | files under `src/modules/observability/`, an `[observability]` config section, a layer in `// <rbs:layers>`, and a second listener in `// <rbs:startup>` | name a collector in `OTEL_EXPORTER_OTLP_ENDPOINT` — without it nothing is exported |
+| `audit` | files under `src/modules/audit/`, and one migration | `rbs migrate up`, then call `audit::record` in your services — the entry is written in the transaction of the change |
+| `webhooks` | files under `src/modules/webhooks/`, one migration, a `[webhooks]` config section, three routes, a field on `AppState` — and `jobs` and `auth`, which it requires | `rbs migrate up`, then call `webhooks::emit` where your code writes |
 
 `cors`, `rate-limit` and `observability` are the three that stack a middleware rather
 than mount a route: their layer goes into `// <rbs:layers>`, inside `trace` and
@@ -459,7 +460,7 @@ otherwise produce an empty plan, and a command that succeeds without doing anyth
 ## Anchors
 
 `rbs add` mostly writes whole files and edits the manifest; it is [`rbs
-generate`](./generate.md#anchors) that inserts into the project's sixteen Rust comment
+generate`](./generate.md#anchors) that inserts into the project's Rust comment
 anchors — `// <rbs:features>` (in `src/lib.rs`, or in `src/main.rs` on a project with no
 library — see [below](./generate.md#anchors)), `// <rbs:modules>` (optional: only a
 project that has installed a fragment under `src/modules/` has it), `// <rbs:routes>`,
@@ -480,7 +481,7 @@ three use it.
 
 `docker` is the one fragment `rbs add` installs that is itself an exception: its `api` and
 `migrate` services go into `# <rbs:services>`, the YAML anchor a compose carries — see
-[above](#the-sixteen-features). Beside it sits the other anchor under Git's `#` marker,
+[above](#the-features). Beside it sits the other anchor under Git's `#` marker,
 `# <rbs:ignore>` in `.gitignore`, where a fragment excludes from the repository what it
 drops in it, and `# <rbs:make>` in the `Makefile`, where a fragment that brings one more
 executable to run adds its shortcut; both are optional too, a project whose owner deleted
@@ -490,7 +491,7 @@ the `.gitignore` or the `Makefile` being no less complete for it. Three more sit
 TypeScript — all three filled by [`rbs generate crud`](./generate.md#anchors), and the
 [frontend guide](../guides/frontend.md#the-generated-screens) has them. The rule is the same everywhere: no AST is ever rewritten,
 and a missing anchor makes the command write nothing and print the block to paste back.
-[`rbs doctor`](./doctor.md) checks all twenty-two — fourteen on a project carrying no queue, no calendar, no sign-in, no client and no admin shell, eleven of the twenty-two being optional.
+[`rbs doctor`](./doctor.md) checks them all.
 
 A project generated before `// <rbs:layers>` existed does not have it, and `rbs upgrade`
 does not add it: that command aligns the manifest and the `AGENTS.md` zones, and touches

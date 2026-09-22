@@ -5,7 +5,7 @@ title: Your first resource
 
 # Your first resource
 
-This is the second of nine tutorials, and it picks up `demo` exactly where
+This is the second tutorial, and it picks up `demo` exactly where
 [Setting up](./setup.md) left it: running, with nothing mounted but a health check. This
 one adds the shape most APIs are built from — a table you create, list, and edit — with
 one command that turns a `--fields` declaration into an entity, its migration, and every

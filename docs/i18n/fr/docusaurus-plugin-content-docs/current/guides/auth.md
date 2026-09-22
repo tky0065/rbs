@@ -6,8 +6,8 @@ title: Authentification
 # Authentification
 
 `rbs add auth` installe une authentification qui fonctionne dans un projet existant :
-trente-cinq fichiers sous `src/auth/`, trois gabarits de courriel, un seed, une migration,
-et quinze routes — sur treize chemins — montées sur le routeur. Ce qu'elle dépose est du code ordinaire dans votre
+des fichiers sous `src/auth/`, trois gabarits de courriel, un seed, une migration, et les
+routes [décrites plus bas](#ce-qui-sinstalle), montées sur le routeur. Ce qu'elle dépose est du code ordinaire dans votre
 arborescence — une entité, un service, un controller, une garde — et il est fait pour être
 lu et modifié.
 

@@ -5,7 +5,7 @@ title: Préparer le terrain
 
 # Préparer le terrain
 
-C'est le premier des neuf tutoriels, et celui que chaque page suivante suppose déjà
+C'est le premier tutoriel, et celui que chaque page suivante suppose déjà
 lu : il mène d'un répertoire vide à un projet nommé `demo`, en cours d'exécution, avec
 un contrôle de santé qui répond sur `localhost:8080`. Chaque tutoriel qui suit — CRUD,
 authentification, stockage, mail, cache, tâches de fond, observabilité, client

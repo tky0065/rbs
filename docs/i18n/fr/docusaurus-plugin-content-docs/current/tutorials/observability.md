@@ -5,7 +5,7 @@ title: Voir ce que fait l'API
 
 # Voir ce que fait l'API
 
-C'est le huitième des neuf tutoriels. Il reprend `demo` ; cette page n'a besoin de rien
+C'est le huitième tutoriel. Il reprend `demo` ; cette page n'a besoin de rien
 au-delà de [Préparer le terrain](./setup.md). Le cas : une route est devenue lente, et
 rien ne permet encore de dire depuis quand, ni laquelle.
 
@@ -190,7 +190,7 @@ quelques mois, dès que cette discipline se relâche.
   l'abonné que le noyau installe.
 - [Logs](../guides/logs.md) couvre l'abonné sur lequel les traces se greffent, et le
   formateur `pretty` derrière chaque ligne que le serveur de cette page a affichée.
-- [`rbs add`](../cli/add.md) couvre les douze autres features que `demo` pourrait
+- [`rbs add`](../cli/add.md) couvre les autres features que `demo` pourrait
   encore installer, `observability` désormais dessus.
 - [Appeler l'API en TypeScript](./typescript-client.md) est le dernier tutoriel : un
   front qui appelle `articles` à travers un client lu depuis le document OpenAPI de

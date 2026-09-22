@@ -5,7 +5,7 @@ title: Stockage
 
 # Stockage
 
-`rbs add storage` installe un stockage d'objets dans un projet existant : quatre fichiers
+`rbs add storage` installe un stockage d'objets dans un projet existant : des fichiers
 sous `src/modules/storage/`, et un `Arc<dyn Storage>` sur votre `AppState`. Deux backends
 l'accompagnent — le système de fichiers local et S3 — et tout l'intérêt de la feature est
 que votre code ne puisse pas dire auquel des deux il parle.

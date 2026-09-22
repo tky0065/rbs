@@ -5,7 +5,7 @@ title: Calling the API from TypeScript
 
 # Calling the API from TypeScript
 
-This is the ninth and last of nine tutorials. It picks up `demo` right after [Your first
+This is the last tutorial. It picks up `demo` right after [Your first
 resource](./first-resource.md) — running, with the `articles` CRUD from that page and its
 migration applied — and reads it into a typed client instead of a server response typed
 by hand on the front end. The case: a browser or a Node script that calls `articles`,

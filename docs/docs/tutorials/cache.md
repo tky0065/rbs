@@ -5,7 +5,7 @@ title: Not computing twice
 
 # Not computing twice
 
-This is the sixth of nine tutorials. It picks up `demo` right after [Taking a
+This is the sixth tutorial. It picks up `demo` right after [Taking a
 file](./storage.md) — running, with the `uploads` resource from that page. The case: a
 `COUNT(*)` read a thousand times a minute, that three writes make stale the moment it
 changes.
@@ -136,9 +136,9 @@ total never outlives the write that made it stale.
 
 - [Cache](../guides/cache.md) covers construction, why it stays synchronous, and what
   the feature leaves to you — stampede protection among it.
-- [`rbs add`](../cli/add.md) covers the eleven other features `demo` could still install,
+- [`rbs add`](../cli/add.md) covers the other features `demo` could still install,
   `storage` and `redis` now both on it.
 - [Testing](../guides/testing.md) is the harness the generated `cache/tests.rs` splits
-  against — four tests with no server, three that need one.
+  against — tests with no server, and tests that need one.
 - [Moving long work out of the request](./jobs.md) is the next tutorial: a campaign of
   5,000 letters, enqueued without making the caller wait for any of them to send.

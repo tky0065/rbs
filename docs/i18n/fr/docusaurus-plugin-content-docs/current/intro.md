@@ -18,10 +18,10 @@ modifié.
 
 ## État
 
-Version 0.4.0. Les quatre jalons de la feuille de route sont livrés — le socle,
-l'authentification, les intégrations, le confort. **rbs suit le versionnage sémantique à
-partir de la 1.0** : la [page de compatibilité](./compatibility.md) dit ce que la promesse
-couvre, et ce qu'elle laisse délibérément dehors.
+Le [journal des versions](https://github.com/tky0065/rbs/blob/main/CHANGELOG.fr.md) dit ce
+qu'apporte chacune. **rbs suit le versionnage sémantique à partir de la 1.0** : la
+[page de compatibilité](./compatibility.md) dit ce que la promesse couvre, et ce qu'elle
+laisse délibérément dehors.
 
 ## À quoi ressemble le code généré
 

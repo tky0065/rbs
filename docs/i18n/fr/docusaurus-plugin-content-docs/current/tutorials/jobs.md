@@ -5,7 +5,7 @@ title: Sortir le travail long de la requête
 
 # Sortir le travail long de la requête
 
-C'est le septième des neuf tutoriels. Il reprend `demo` ; cette page n'a besoin de rien
+C'est le septième tutoriel. Il reprend `demo` ; cette page n'a besoin de rien
 au-delà de [Préparer le terrain](./setup.md). Le cas : une campagne de 5 000 lettres,
 enfilées sans faire attendre l'appelant qu'une seule parte.
 
@@ -166,7 +166,7 @@ perdre ou dupliquer, en bloc.
 
 - [Jobs](../guides/jobs.md) couvre en entier le scrutage et le réessai du worker, et
   comment programmer un job pour plus tard avec `enqueue_at`.
-- [`rbs add`](../cli/add.md) couvre les douze autres features que `demo` pourrait
+- [`rbs add`](../cli/add.md) couvre les autres features que `demo` pourrait
   encore installer, `jobs` désormais dessus.
 - [Tests](../guides/testing.md) est le harnais contre lequel `jobs/tests/` engendré
   tourne, et ce que `-- --ignored` atteint qu'un simple `cargo test` n'atteint pas.

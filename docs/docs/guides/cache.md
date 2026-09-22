@@ -5,7 +5,7 @@ title: Cache
 
 # Cache
 
-`rbs add redis` installs a Redis-backed cache into an existing project: three files under
+`rbs add redis` installs a Redis-backed cache into an existing project: files under
 `src/modules/cache/`, a `[cache]` section in the configuration, and a field on your `AppState`.
 No route, no middleware — the feature is a brick, and what you cache is yours to decide.
 

@@ -5,7 +5,7 @@ title: Jobs
 
 # Background jobs
 
-`rbs add jobs` installs a work queue into an existing project: thirteen files under
+`rbs add jobs` installs a work queue into an existing project: files under
 `src/modules/jobs/`, a migration for the `jobs` table, and a worker started with the server. Like
 the other bricks, it mounts no route — when work leaves the request cycle is a decision
 only your domain can make.

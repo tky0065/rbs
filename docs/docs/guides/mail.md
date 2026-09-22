@@ -5,7 +5,7 @@ title: Mail
 
 # Mail
 
-`rbs add mail` installs SMTP sending into an existing project: five files under
+`rbs add mail` installs SMTP sending into an existing project: files under
 `src/modules/mail/`, a template directory, and a `Mailer` on your `AppState`. Like the other
 bricks, it mounts no route — when a message goes out is a decision only your domain can
 make.
@@ -177,7 +177,7 @@ database. Installing `jobs` is a decision, not a prerequisite.
 
 ## Testing
 
-The generated `src/modules/mail/tests.rs` needs no server for six of its seven tests: the three
+The generated `src/modules/mail/tests.rs` needs no server for most of its tests: the three
 encryption modes each build a transport, an invalid sender is rejected by name, a built
 message carries its sender and recipient, a template renders its variables, and a missing
 template names its file without panicking.

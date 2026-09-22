@@ -183,7 +183,7 @@ documentation et pour ne pas dériver.
 
 ## Les retouches que le CLI ne produit pas
 
-Trois s'appliquent aux cinq projets :
+Trois s'appliquent à tous les projets :
 
 - supprimer le `.git` que `rbs new` initialise — un dépôt imbriqué n'a rien à faire ici ;
 - réécrire la dépendance `rbs-core` en `{ path = "../../crates/rbs-core" }`, puisque
@@ -319,7 +319,7 @@ même.
 
 ## Le test de non-dérive
 
-`cargo test -p rbs-cli --test integration_examples` régénère les cinq projets et les
+`cargo test -p rbs-cli --test integration_examples` régénère tous les projets et les
 compare aux versions versionnées ici, en ignorant exactement les différences énumérées
 ci-dessus. Il échoue quand une template change sans que l'exemple ait suivi — et c'est tout
 son intérêt : un exemple périmé fait mentir la documentation, et rien d'autre ne s'en

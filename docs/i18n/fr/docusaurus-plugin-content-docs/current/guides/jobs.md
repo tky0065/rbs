@@ -5,7 +5,7 @@ title: Jobs
 
 # Jobs en arrière-plan
 
-`rbs add jobs` installe une file de travaux dans un projet existant : treize fichiers sous
+`rbs add jobs` installe une file de travaux dans un projet existant : des fichiers sous
 `src/modules/jobs/`, une migration pour la table `jobs`, et un worker démarré avec le serveur.
 Comme les autres briques, elle ne monte aucune route — le moment où un travail sort du
 cycle de la requête est une décision que seul votre métier peut prendre.

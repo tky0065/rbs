@@ -5,7 +5,7 @@ title: Setting up
 
 # Setting up
 
-This is the first of nine tutorials, and the one every page after it assumes you have
+This is the first tutorial, and the one every page after it assumes you have
 already been through: it takes an empty directory to a project named `demo`, running,
 with a health check answering on `localhost:8080`. Each tutorial that follows — CRUD,
 auth, storage, mail, cache, background jobs, observability, a generated TypeScript

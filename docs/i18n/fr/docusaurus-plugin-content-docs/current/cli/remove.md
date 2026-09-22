@@ -46,7 +46,7 @@ Options :
 | `--json` | Rend le plan — ou l'erreur — en un seul document JSON sur la sortie standard, au lieu du texte coloré. [Le guide des agents](../guides/agents.md#lire-un-plan-en-json) porte le document et les codes d'erreur. |
 | `--template-dir <CHEMIN>` | Lit le manifeste du fragment dans un répertoire portant un sous-répertoire par feature, au lieu de ceux embarqués dans le binaire — le même répertoire qu'`add` aurait utilisé pour l'installer. |
 
-Sans `--template-dir`, seuls les quinze noms qu'`add` installe sont acceptés par `remove`.
+Sans `--template-dir`, seuls les noms qu'`add` installe sont acceptés par `remove`.
 Un CRUD engendré par `rbs generate crud` n'en fait pas partie, même si son nom voisine les
 vrais fragments dans `[package.metadata.rbs] features` : `remove` le refuse exactement
 comme il refuse un nom qui n'a jamais désigné une feature.

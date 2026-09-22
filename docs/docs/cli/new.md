@@ -321,10 +321,9 @@ MAISON=1
 
 ## `--with` installs
 
-`--with` names features to install at creation, comma-separated. rbs knows fifteen —
-`api-keys`, `audit`, `auth`, `ci`, `cors`, `docker`, `frontend`, `jobs`, `mail`, `observability`,
-`rate-limit`, `redis`, `scheduler`, `storage` and `webhooks` — and installs every one named, in the
-same pass that writes the project:
+`--with` names features to install at creation, comma-separated. It takes the ones
+[`rbs add`](./add.md) installs, and installs every one named, in the same pass that writes
+the project:
 
 {/* rbs:transcript cmd="rbs new site --with auth --lang fr --yes" */}
 ```text
@@ -465,9 +464,8 @@ volumes:
 ```
 
 `docker compose up -d` starts it. The `# <rbs:services>` anchor is where [`rbs
-add`](./add.md) inserts the services `docker` brings, and it is one of the twenty-two
-anchors [`rbs doctor`](./doctor.md) checks — fourteen on a project carrying no queue, no
-calendar, no sign-in, no client and no admin shell, eleven of the twenty-two being optional.
+add`](./add.md) inserts the services `docker` brings, and it is one of the
+anchors [`rbs doctor`](./doctor.md) checks.
 
 Four cases write nothing:
 

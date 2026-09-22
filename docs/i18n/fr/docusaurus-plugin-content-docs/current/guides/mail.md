@@ -5,7 +5,7 @@ title: Courriel
 
 # Courriel
 
-`rbs add mail` installe l'envoi par SMTP dans un projet existant : cinq fichiers sous
+`rbs add mail` installe l'envoi par SMTP dans un projet existant : des fichiers sous
 `src/modules/mail/`, un répertoire de gabarits, et un `Mailer` sur votre `AppState`. Comme les
 autres briques, elle ne monte aucune route — le moment où un message part est une décision
 que seul votre domaine peut prendre.
@@ -178,7 +178,7 @@ d'une ligne en base. Installer `jobs` est une décision, non un prérequis.
 
 ## Les tests
 
-Le `src/modules/mail/tests.rs` engendré n'a besoin d'aucun serveur pour six de ses sept tests : les
+Le `src/modules/mail/tests.rs` engendré n'a besoin d'aucun serveur pour la plupart de ses tests : les
 trois modes de chiffrement bâtissent chacun un transport, un expéditeur invalide est refusé
 en le nommant, un message bâti porte son expéditeur et son destinataire, un gabarit rend
 ses variables, et un gabarit absent nomme son fichier sans panique.

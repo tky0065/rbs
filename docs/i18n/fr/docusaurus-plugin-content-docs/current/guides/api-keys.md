@@ -178,7 +178,7 @@ ouvrir la requête en cours.
 
 ## Les tests
 
-Onze tests accompagnent le fragment, sous `src/modules/api_keys/tests/`. Ils joignent la base
+Les tests du fragment l'accompagnent, sous `src/modules/api_keys/tests/`. Ils joignent la base
 que décrit votre `.env`, et portent donc `#[ignore]` : `cargo test -- --ignored` les lance
 une fois `rbs migrate up` appliquée.
 

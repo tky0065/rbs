@@ -6,8 +6,8 @@ title: Authentication
 # Authentication
 
 `rbs add auth` installs a working authentication feature into an existing project:
-thirty-five files under `src/auth/`, three mail templates, one seed, one migration, and
-fifteen routes — on thirteen paths — mounted on the router. What it lays down is ordinary
+files under `src/auth/`, three mail templates, one seed, one migration, and the routes
+[below](#what-gets-installed), mounted on the router. What it lays down is ordinary
 code in your source tree — an entity, a service, a controller, a guard — and it is meant to
 be read and changed.
 
