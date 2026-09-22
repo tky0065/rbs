@@ -11,7 +11,7 @@ pub mod state;
 use std::io;
 use std::path::Path;
 
-use crate::generate::migration::current_timestamp;
+use crate::generate::migration::next_timestamp;
 use crate::{cargo, dotenv, metadata};
 
 /// La variable qui porte l'URL de la base, telle que le projet la nomme.
@@ -100,7 +100,7 @@ pub(crate) fn run(action: Action, directory: &Path) -> Result<Output, Error> {
         return Ok(Output::Creee(fresh::run(
             &root,
             &name,
-            &current_timestamp(),
+            &next_timestamp(&root),
         )?));
     }
 

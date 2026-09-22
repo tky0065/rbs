@@ -26,6 +26,12 @@ dépréciation.
   `generate feature` en annonçait six quand la commande en écrit sept depuis `filter.rs` ;
   elle dit désormais ce qui manque à une feature vide — ses champs et sa migration — plutôt
   qu'un nombre que la prochaine couche démentirait.
+- **Deux migrations créées dans la même seconde ne s'ordonnent plus au hasard.** Leurs noms
+  portaient le même horodatage, et `migrations()` les triait alors par nom de table plutôt
+  que par ordre de création — une clé étrangère pouvait passer avant la table qu'elle vise.
+  `rbs generate crud`, `rbs generate migration`, `rbs migrate new` et `rbs add` datent
+  désormais une migration neuve de la seconde qui suit la plus récente de `migration/src/`,
+  tant que l'horloge ne l'a pas dépassée.
 
 ## [1.8.1] — 2026-09-20
 

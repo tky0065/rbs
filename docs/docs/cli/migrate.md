@@ -115,7 +115,7 @@ Registration goes through two anchors of `migration/src/lib.rs`, kept apart beca
 forbids a non-inline `mod` inside a block, so the declaration cannot live in the
 `Migrator`'s `vec!`:
 
-{/* rbs:libre raison="deux migrations créées dans la même seconde partagent leur horodatage et se trient alors par nom : l'ordre des déclarations varie d'un rejeu à l'autre" */}
+{/* rbs:transcript cmd="cat migration/src/lib.rs" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate new add_tags_index" dans="demo" */}
 ```text
 $ cat migration/src/lib.rs
 pub use sea_orm_migration::prelude::*;

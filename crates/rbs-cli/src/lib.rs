@@ -1235,6 +1235,11 @@ fn generate_migration(
 ) -> Result<(), generate::alter::Error> {
     let directory = std::env::current_dir()
         .map_err(|source| crate::errors::Acces::new(std::path::Path::new("."), source))?;
+    // Hors d'un projet, `plan_for` refusera avant d'employer l'horodatage : le repli sur
+    // le répertoire courant ne sert qu'à le calculer sans échouer ici.
+    let timestamp = generate::migration::next_timestamp(
+        &metadata::project_root(&directory).unwrap_or_else(|_| directory.clone()),
+    );
 
     let planned = generate::alter::plan_for(
         &generate::alter::Options {
@@ -1244,7 +1249,7 @@ fn generate_migration(
             directory,
             force,
         },
-        &generate::migration::current_timestamp(),
+        &timestamp,
     )?;
 
     // Le plan se montre avant toute écriture, `--dry-run` ou non : ce que la commande

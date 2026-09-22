@@ -1,6 +1,8 @@
 //! Rendu de la migration SeaORM correspondant aux champs d'une feature.
 
-use chrono::Utc;
+use std::path::Path;
+
+use chrono::{NaiveDateTime, Timelike, Utc};
 
 use crate::template::Renderer;
 
@@ -23,9 +25,47 @@ pub(crate) struct Migration {
     pub content: String,
 }
 
-/// Horodatage UTC au format qu'attend `DeriveMigrationName`.
-pub(crate) fn current_timestamp() -> String {
-    Utc::now().format("%Y%m%d_%H%M%S").to_string()
+const FORMAT: &str = "%Y%m%d_%H%M%S";
+/// Longueur de ce que `FORMAT` rend : `20260826_143000`.
+const FORMAT_LEN: usize = 15;
+
+/// Horodatage UTC de la prochaine migration du projet enraciné en `root`, au format
+/// qu'attend `DeriveMigrationName`.
+pub(crate) fn next_timestamp(root: &Path) -> String {
+    let existants = std::fs::read_dir(root.join("migration/src"))
+        .into_iter()
+        .flatten()
+        .flatten()
+        .filter_map(|entree| entree.file_name().into_string().ok());
+
+    strictly_after(Utc::now().naive_utc(), existants)
+}
+
+/// `now`, ou la seconde qui suit la plus récente des migrations de `fichiers`.
+///
+/// `migrations()` s'ordonne par nom : deux migrations de la même seconde s'y trieraient
+/// sur leur suffixe, non sur l'ordre de leur création, et une clé étrangère pourrait
+/// précéder la table qu'elle vise.
+fn strictly_after(now: NaiveDateTime, fichiers: impl IntoIterator<Item = String>) -> String {
+    let derniere = fichiers
+        .into_iter()
+        .filter_map(|fichier| {
+            let module = fichier.strip_suffix(".rs")?.strip_prefix('m')?;
+            let horodatage = module.get(..FORMAT_LEN)?;
+            module[FORMAT_LEN..].starts_with('_').then_some(())?;
+            NaiveDateTime::parse_from_str(horodatage, FORMAT).ok()
+        })
+        .max();
+    // L'horloge porte des nanosecondes que le nom perd : 14:30:00.5 dépasserait une
+    // migration de 14:30:00 et s'écrirait pourtant sous le même nom.
+    let now = now.with_nanosecond(0).unwrap_or(now);
+
+    let instant = match derniere {
+        Some(derniere) if derniere >= now => derniere + chrono::TimeDelta::seconds(1),
+        _ => now,
+    };
+
+    instant.format(FORMAT).to_string()
 }
 
 /// Rend la migration de `feature`, datée de `timestamp`.
@@ -164,9 +204,72 @@ mod tests {
         );
     }
 
+    fn instant(horodatage: &str) -> NaiveDateTime {
+        NaiveDateTime::parse_from_str(horodatage, FORMAT).expect("horodatage du test valide")
+    }
+
+    fn fichiers(noms: &[&str]) -> Vec<String> {
+        noms.iter().map(|nom| nom.to_string()).collect()
+    }
+
     #[test]
-    fn the_current_timestamp_has_the_shape_seaorm_expects() {
-        let timestamp = current_timestamp();
+    fn a_migration_created_in_the_same_second_as_the_last_one_takes_the_next_second() {
+        let existants = fichiers(&["lib.rs", "m20260826_143000_create_posts.rs"]);
+
+        assert_eq!(
+            strictly_after(instant("20260826_143000"), existants),
+            "20260826_143001"
+        );
+    }
+
+    #[test]
+    fn the_fraction_of_a_second_does_not_hide_a_collision() {
+        let existants = fichiers(&["m20260826_143000_create_posts.rs"]);
+        let plus_tard = instant("20260826_143000") + chrono::TimeDelta::milliseconds(500);
+
+        assert_eq!(strictly_after(plus_tard, existants), "20260826_143001");
+    }
+
+    // Une horloge en retard sur le dépôt — une machine désynchronisée, une migration
+    // écrite ailleurs — ne doit pas faire passer la nouvelle avant les anciennes.
+    #[test]
+    fn a_migration_never_goes_before_the_latest_one_even_when_the_clock_does() {
+        let existants = fichiers(&[
+            "m20260826_150000_create_posts.rs",
+            "m20260826_150059_create_comments.rs",
+            "m20260826_140000_create_users.rs",
+        ]);
+
+        assert_eq!(
+            strictly_after(instant("20260826_143000"), existants),
+            "20260826_150100"
+        );
+    }
+
+    #[test]
+    fn the_clock_is_kept_when_it_is_already_past_the_latest_migration() {
+        let existants = fichiers(&["m20260826_143000_create_posts.rs", "main.rs"]);
+
+        assert_eq!(
+            strictly_after(instant("20260826_143005"), existants),
+            "20260826_143005"
+        );
+    }
+
+    #[test]
+    fn a_file_that_is_not_a_timestamped_migration_is_ignored() {
+        let existants = fichiers(&["m9999_bizarre.rs", "m20991231_235959", "m20991231_2359.rs"]);
+
+        assert_eq!(
+            strictly_after(instant("20260826_143000"), existants),
+            "20260826_143000"
+        );
+    }
+
+    #[test]
+    fn the_next_timestamp_has_the_shape_seaorm_expects() {
+        let vide = tempfile::TempDir::new().expect("répertoire temporaire créable");
+        let timestamp = next_timestamp(vide.path());
 
         assert_eq!(timestamp.len(), 15, "« {timestamp} »");
         assert_eq!(&timestamp[8..9], "_", "« {timestamp} »");

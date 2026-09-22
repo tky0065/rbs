@@ -116,7 +116,7 @@ L'inscription passe par deux ancres de `migration/src/lib.rs`, tenues distinctes
 Rust interdit un `mod` non-inline dans un bloc : la déclaration ne peut donc pas tenir dans
 le `vec!` du `Migrator`.
 
-{/* rbs:libre raison="deux migrations créées dans la même seconde partagent leur horodatage et se trient alors par nom : l'ordre des déclarations varie d'un rejeu à l'autre" */}
+{/* rbs:transcript cmd="cat migration/src/lib.rs" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate new add_tags_index" dans="demo" */}
 ```text
 $ cat migration/src/lib.rs
 pub use sea_orm_migration::prelude::*;
