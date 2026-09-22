@@ -27,7 +27,7 @@ Utilisation : rbs generate <COMMANDE>
 
 Commandes :
   crud       Génère une feature CRUD complète, entité et migration comprises
-  feature    Génère une feature vide : six fichiers, aucun champ
+  feature    Génère une feature vide, sans champ ni migration
   client     Engendre un client typé depuis le document OpenAPI du projet
   job        Génère un job de la file, et son échéance sous --every ; exige la feature jobs
   migration  Écrit une migration d'évolution : des colonnes de plus sur une table existante
@@ -92,7 +92,7 @@ Options :
 {/* rbs:transcript cmd="rbs generate feature --help" */}
 ```text
 $ rbs generate feature --help
-Génère une feature vide : six fichiers, aucun champ
+Génère une feature vide, sans champ ni migration
 
 Utilisation : rbs generate feature [OPTIONS] <NAME>
 

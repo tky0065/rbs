@@ -20,6 +20,10 @@ between minor versions with no deprecation cycle.
   banner now uses an ASCII hyphen, and no recipe carries anything but ASCII. A project generated
   before keeps its `Makefile`, which belongs to its author: replace `—` by `-` on the
   `help` line to get the fix.
+- **`rbs generate --help` no longer counts the files of an empty feature.** The help of
+  `generate feature` announced six when the command has written seven since `filter.rs`;
+  it now says what an empty feature lacks — its fields and its migration — rather than a
+  number the next layer would contradict.
 
 ## [1.8.1] — 2026-09-20
 

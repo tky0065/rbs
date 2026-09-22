@@ -31,7 +31,7 @@ SQLite 3.35+.
 | `rbs new <name>` | Creates a project ready to start: database, migrations, `/health` route |
 | `rbs add <feature>` | Installs a feature: `api-keys`, `audit`, `auth`, `ci`, `cors`, `docker`, `jobs`, `mail`, `observability`, `rate-limit`, `redis`, `scheduler`, `storage`, `webhooks` |
 | `rbs generate crud <name>` | Generates a full CRUD feature — entity and migration included |
-| `rbs generate feature <name>` | Generates an empty feature: six files, no fields |
+| `rbs generate feature <name>` | Generates an empty feature, with no fields and no migration |
 | `rbs migrate up\|down\|status\|new` | Drives the project's migrations |
 | `rbs seed` | Inserts the project's demonstration data |
 | `rbs dev` | Starts services and migrations, and restarts the server on every change |

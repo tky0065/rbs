@@ -22,6 +22,10 @@ dépréciation.
   l'ASCII.
   Un projet engendré avant garde son `Makefile`, qui appartient à son auteur : remplacer
   `—` par `-` sur la ligne de `help` suffit à recevoir le correctif.
+- **`rbs generate --help` ne compte plus les fichiers d'une feature vide.** L'aide de
+  `generate feature` en annonçait six quand la commande en écrit sept depuis `filter.rs` ;
+  elle dit désormais ce qui manque à une feature vide — ses champs et sa migration — plutôt
+  qu'un nombre que la prochaine couche démentirait.
 
 ## [1.8.1] — 2026-09-20
 
