@@ -169,7 +169,7 @@ erreur : la crate migration a échoué (code 101)
 
 Rolls back the last applied migration — one, not all:
 
-{/* rbs:transcript cmd="rbs migrate down" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate up && rbs migrate new add_tags_index && rbs migrate up" dans="demo" base="oui" extrait="oui" */}
+{/* rbs:transcript cmd="rbs migrate down" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate up && rbs migrate new add_tags_index" dans="demo" base="oui" extrait="oui" */}
 ```text
 $ rbs migrate down
 ✓ dernière migration annulée
@@ -177,7 +177,7 @@ $ rbs migrate down
 
 Both migrations are pending again:
 
-{/* rbs:transcript cmd="rbs migrate status" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate up && rbs migrate new add_tags_index && rbs migrate up && rbs migrate down" dans="demo" base="oui" */}
+{/* rbs:transcript cmd="rbs migrate status" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields titre:string --force && rbs migrate up && rbs migrate new add_tags_index && rbs migrate down" dans="demo" base="oui" */}
 ```text
 $ rbs migrate status
   · m20260826_213608_create_articles   en attente
