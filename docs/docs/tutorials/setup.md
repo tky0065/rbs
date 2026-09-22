@@ -69,6 +69,7 @@ That is what makes the next command safe to run immediately.
 rbs migrate up
 ```
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
 ✓ migrations appliquées
 ```

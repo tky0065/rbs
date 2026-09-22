@@ -240,12 +240,12 @@ that line before it blocks rather than after, so a silent wait is never mistaken
 hang. Cargo's own progress stays out of the report: it is captured, and replayed only when
 the build fails, as the last example on this page shows.
 
+{/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo" dans="demo" base="oui" extrait="oui" */}
 ```text
-  ✓ .env        les 7 variables de .env.example sont renseignées
-  ✓ versions    projet et rbs-core alignés sur le CLI 1.2.0
-  … base        compilation de la crate migration, peut prendre
-                une minute au premier lancement…
-  ✓ base        postgres 18.6 répond sur 127.0.0.1:5432
+  ✓ .env          les 7 variables de .env.example sont renseignées
+  … base          compilation de la crate migration, peut prendre
+                  une minute au premier lancement…
+  ✓ base          postgres 18.6 répond sur 127.0.0.1:5432
 ✓ le projet est sain
 ```
 

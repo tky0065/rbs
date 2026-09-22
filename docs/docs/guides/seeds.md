@@ -57,6 +57,7 @@ markers.
 
 ## Running them
 
+{/* rbs:transcript cmd="rbs seed" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud subscribers --fields email:string:unique,name:string,confirmed:bool && rbs migrate up" dans="demo" base="oui" extrait="oui" */}
 ```text
 $ rbs seed
 subscribers : inséré

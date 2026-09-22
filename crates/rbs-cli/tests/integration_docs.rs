@@ -12,6 +12,8 @@ use std::path::{Path, PathBuf};
 
 mod common;
 
+use testcontainers::core::ExecCommand;
+
 /// Un bloc de sortie gardé par son marqueur, et de quoi le rejouer.
 struct Transcript {
     page: PathBuf,
@@ -210,6 +212,7 @@ fn normalise(sortie: &str, tmp: &Path) -> String {
     texte = common::masque_horodatage(&texte);
     texte = masque_duree(&texte);
     texte = masque_adresse(&texte);
+    texte = masque_fil(&texte);
 
     let mut rendu = String::with_capacity(texte.len());
     for ligne in texte.lines() {
@@ -433,6 +436,35 @@ fn masque_adresse(texte: &str) -> String {
     rendu
 }
 
+/// `thread 'main' (7889417) panicked` → `thread 'main' (<fil>) panicked` : l'identifiant
+/// que Rust imprime est celui que le système a donné au fil, neuf à chaque lancement.
+fn masque_fil(texte: &str) -> String {
+    const PANIQUE: &str = ") panicked";
+    let mut rendu = String::with_capacity(texte.len());
+
+    for ligne in texte.split_inclusive('\n') {
+        let identifiant = ligne.find(PANIQUE).and_then(|fin| {
+            let debut = ligne[..fin].rfind(" (")? + 2;
+            let chiffres = &ligne[debut..fin];
+            (ligne.starts_with("thread '")
+                && !chiffres.is_empty()
+                && chiffres.bytes().all(|octet| octet.is_ascii_digit()))
+            .then_some((debut, fin))
+        });
+
+        match identifiant {
+            Some((debut, fin)) => {
+                rendu.push_str(&ligne[..debut]);
+                rendu.push_str("<fil>");
+                rendu.push_str(&ligne[fin..]);
+            }
+            None => rendu.push_str(ligne),
+        }
+    }
+
+    rendu
+}
+
 fn compte_chiffres(lettres: &[char], debut: usize) -> usize {
     lettres[debut..]
         .iter()
@@ -487,7 +519,7 @@ fn decoupe(commande: &str) -> Vec<String> {
 /// Les deux flux partagent un même fichier, et non deux tuyaux : `rbs doctor` écrit ses
 /// verdicts sur la sortie standard pendant que cargo compile sur l'erreur, et deux
 /// captures séparées rendraient un bloc que personne n'a jamais vu à l'écran.
-fn lance(commande: &str, repertoire: &Path, base: Option<&str>) -> String {
+fn lance(commande: &str, repertoire: &Path, base: Option<&Base>) -> String {
     let mut arguments = decoupe(commande);
     assert!(!arguments.is_empty(), "commande vide");
     let programme = arguments.remove(0);
@@ -497,7 +529,7 @@ fn lance(commande: &str, repertoire: &Path, base: Option<&str>) -> String {
     if let Some(vivante) = base {
         for argument in &mut arguments {
             if argument.starts_with("postgres://") {
-                *argument = vivante.to_string();
+                *argument = vivante.url.clone();
             }
         }
     }
@@ -526,9 +558,19 @@ fn lance(commande: &str, repertoire: &Path, base: Option<&str>) -> String {
     let sortie = std::fs::File::create(journal.path()).expect("capture ouvrable");
     let erreur = sortie.try_clone().expect("capture duplicable");
 
+    let mut processus = std::process::Command::new(&executable);
+
+    // Chaque transcription vit dans un tmpdir neuf : sans cible partagée, chacune
+    // recompilerait sea-orm et sqlx à froid, une minute ou plus par bloc. La crate
+    // `migration` du projet se recompile quand même — son chemin change à chaque rejeu —,
+    // si bien que la ligne `Compiling migration` que les pages montrent reste vraie.
+    if let Some(vivante) = base {
+        processus.env("CARGO_TARGET_DIR", &vivante.cible);
+    }
+
     // Sans terminal, comme une CI : lancé depuis un shell, `cargo test` léguerait le sien,
     // et `rbs new` sans `--yes` attendrait une réponse que personne ne donnera.
-    std::process::Command::new(&executable)
+    processus
         .current_dir(repertoire)
         .args(&arguments)
         .stdin(std::process::Stdio::null())
@@ -537,11 +579,26 @@ fn lance(commande: &str, repertoire: &Path, base: Option<&str>) -> String {
         .status()
         .unwrap_or_else(|erreur| panic!("`{programme}` doit être lançable : {erreur}"));
 
-    String::from_utf8_lossy(&std::fs::read(journal.path()).expect("capture lisible")).into_owned()
+    let rendu = String::from_utf8_lossy(&std::fs::read(journal.path()).expect("capture lisible"))
+        .into_owned();
+
+    // La cible partagée est une commodité du test : le lecteur compile dans le `target/`
+    // de son projet, et c'est ce chemin que cargo lui montre.
+    match base {
+        Some(vivante) => rendu.replace(&format!("{}/", vivante.cible.display()), "target/"),
+        None => rendu,
+    }
+}
+
+/// Ce qu'une transcription `base="oui"` reçoit du test : le serveur, et la cible où
+/// les projets temporaires compilent.
+struct Base {
+    url: String,
+    cible: PathBuf,
 }
 
 /// Rejoue un transcript dans un répertoire neuf et compare sa sortie au bloc.
-fn compare_transcript(transcript: &Transcript, base: Option<&str>) {
+fn compare_transcript(transcript: &Transcript, base: Option<&Base>) {
     let situe = format!("{}:{}", transcript.page.display(), transcript.ligne);
 
     if let Some(invite) = &transcript.invite {
@@ -626,10 +683,29 @@ fn the_marked_transcripts_that_need_a_database_still_render_what_the_docs_show()
     );
 
     let postgres = common::start_postgres();
-    let url = common::url_of(&postgres);
+    let base = Base {
+        url: common::url_of(&postgres),
+        cible: common::depot().join("target/rbs-docs-transcripts"),
+    };
 
     for transcript in &gardes {
-        compare_transcript(transcript, Some(&url));
+        // Un serveur pour tous les blocs, mais un schéma vierge pour chacun : une
+        // migration qu'un bloc applique ferait mentir le `status` du suivant.
+        postgres
+            .exec(ExecCommand::new([
+                "psql",
+                "-U",
+                common::UTILISATEUR,
+                "-d",
+                common::BASE,
+                "-qc",
+                "drop schema public cascade; create schema public;",
+            ]))
+            .expect("psql doit pouvoir s'exécuter dans le conteneur")
+            .stdout_to_vec()
+            .expect("la sortie de psql se lit");
+
+        compare_transcript(transcript, Some(&base));
     }
 }
 
@@ -736,6 +812,23 @@ avant\n\
             normalise("une phrase qui finit.\nversion 1.\n", tmp),
             "une phrase qui finit.\nversion 1.\n",
             "un point qui clôt une phrase n'est pas une progression"
+        );
+    }
+
+    /// Rust imprime l'identifiant système du fil qui panique, neuf à chaque lancement : la
+    /// migration vide de `rbs migrate new` le montre dès qu'on l'applique.
+    #[test]
+    fn the_id_of_a_panicking_thread_is_masked() {
+        let tmp = Path::new("/var/folders/x/T/.tmpAbC");
+
+        assert_eq!(
+            normalise("thread 'main' (7889417) panicked at src/a.rs:11:9:\n", tmp),
+            normalise("thread 'main' (42) panicked at src/a.rs:11:9:\n", tmp)
+        );
+        assert_eq!(
+            normalise("appel (7889417) panicked\n", tmp),
+            "appel (7889417) panicked\n",
+            "seule la ligne d'une panique porte un identifiant de fil"
         );
     }
 

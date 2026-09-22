@@ -68,6 +68,7 @@ have inserted instead of touching the file.
 rbs migrate up
 ```
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && rbs generate crud articles --fields title:string,body:text,published:bool" dans="demo" base="oui" extrait="oui" */}
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 30.74s

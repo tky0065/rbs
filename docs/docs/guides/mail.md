@@ -66,12 +66,21 @@ committed, and a password committed alongside it is a password to rotate.
 [`rbs doctor`](../cli/doctor.md) names the missing line once, in its `.env` check, and the
 `mail` check leaves it there:
 
+{/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add mail" dans="demo" base="oui" */}
 ```text
+  ✓ ancres        les 15 points d'insertion sont en place
+  ✓ agents        guide et inventaire à jour
+  ✓ relations     les modèles portent leurs ancres de relation
   ✗ .env          RBS_MAIL__SMTP_PASSWORD absente du .env
       ajoutez au .env :
       RBS_MAIL__SMTP_PASSWORD=
-  …
+  ✓ versions      projet et rbs-core pris d'un chemin local alignés sur le CLI 1.8.1
+  … base          compilation de la crate migration, peut prendre
+                  une minute au premier lancement…
+  ✓ base          postgres 18.6 répond sur localhost:5432
+  ✓ disposition   aucun module ne mélange les deux dispositions
   ✓ mail          rien d'autre à signaler — RBS_MAIL__SMTP_PASSWORD relève du contrôle .env
+attention : le projet demande votre attention
 ```
 
 What the `mail` check diagnoses is the couple, not the variable alone: an empty password is

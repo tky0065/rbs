@@ -119,6 +119,7 @@ git add -A && git commit -q -m "auth installée"
 rbs migrate up
 ```
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add auth && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" base="oui" extrait="oui" */}
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 30.74s
@@ -185,6 +186,7 @@ fonctionnalité est protégée du tout.
 rbs migrate up
 ```
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add auth && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs migrate up && rbs generate crud posts --fields title:string,body:text,published:bool --role admin" dans="demo" base="oui" extrait="oui" */}
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 1.12s

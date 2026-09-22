@@ -113,6 +113,7 @@ que son nom finit par `_email` ; rien dans la commande ne le demandait.
 rbs migrate up
 ```
 
+{/* rbs:transcript cmd="rbs migrate up" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add storage && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs generate crud uploads --fields title:string,owner_email:string,content_type:string,size:int --with-upload" dans="demo" base="oui" extrait="oui" */}
 ```text
    Compiling migration v0.1.0 (…/demo/migration)
     Finished `dev` profile [unoptimized + debuginfo] target(s) in 35.44s
