@@ -255,6 +255,9 @@ jobs:
   portabilite:
     name: ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
+    # Sans plafond, une commande qui attend une saisie tient le job six heures avant que
+    # GitHub ne l'annule, sans dire laquelle : c'est arrivé au rejeu des transcriptions.
+    timeout-minutes: 90
     strategy:
       # Un échec sous Windows ne doit pas annuler macOS : les deux plateformes échouent
       # pour des raisons différentes, et masquer l'une oblige à deux allers-retours.
