@@ -213,15 +213,29 @@ fn normalise(sortie: &str, tmp: &Path) -> String {
 
     let mut rendu = String::with_capacity(texte.len());
     for ligne in texte.lines() {
-        let nette = ligne.trim_end();
+        let nette = masque_progression(ligne.trim_end());
         if nette.is_empty() {
             continue;
         }
-        rendu.push_str(nette);
+        rendu.push_str(&nette);
         rendu.push('\n');
     }
 
     rendu
+}
+
+/// `en attente de la base (…) ...` → `… …` : un point par tentative de connexion, dont le
+/// nombre suit la vitesse à laquelle la machine refuse un port fermé.
+///
+/// Seule une suite de points précédée d'une espace et close par la fin de ligne est une
+/// progression : un point collé au mot qui le précède clôt une phrase.
+fn masque_progression(ligne: &str) -> String {
+    let sans_points = ligne.trim_end_matches('.');
+    if sans_points.len() < ligne.len() && sans_points.ends_with(' ') {
+        format!("{sans_points}…")
+    } else {
+        ligne.to_string()
+    }
 }
 
 /// Les chemins situés sous `<tmp>` reçoivent la barre oblique : Windows imprime
@@ -698,6 +712,30 @@ avant\n\
         assert_eq!(
             normalise(sortie, tmp),
             "  ✓ base  <moteur> répond\n    Finished `dev` profile in <durée>\n  <tmp>/demo\n"
+        );
+    }
+
+    /// Un point par tentative de connexion : Windows refuse un port fermé plus lentement
+    /// que Linux, et `en attente de la base … ...` y rendait un seul point.
+    #[test]
+    fn the_progress_dots_of_a_wait_are_masked_whatever_their_count() {
+        let tmp = Path::new("/var/folders/x/T/.tmpAbC");
+
+        for sortie in [
+            "en attente de la base (127.0.0.1:1) .\n",
+            "en attente de la base (127.0.0.1:1) ...\n",
+        ] {
+            assert_eq!(
+                normalise(sortie, tmp),
+                "en attente de la base (127.0.0.1:1) …\n",
+                "progression non masquée : {sortie}"
+            );
+        }
+
+        assert_eq!(
+            normalise("une phrase qui finit.\nversion 1.\n", tmp),
+            "une phrase qui finit.\nversion 1.\n",
+            "un point qui clôt une phrase n'est pas une progression"
         );
     }
 
