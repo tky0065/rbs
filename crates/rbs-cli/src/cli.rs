@@ -296,7 +296,7 @@ pub enum GenerateCommands {
         no_admin: bool,
     },
 
-    /// Génère une feature vide : six fichiers, aucun champ.
+    /// Génère une feature vide, sans champ ni migration.
     Feature {
         /// Nom de la feature.
         name: String,

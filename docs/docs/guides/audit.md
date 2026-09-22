@@ -12,7 +12,7 @@ Calling it is your service's job, and the reason is [below](#what-the-fragment-d
 
 ## What gets installed
 
-{/* rbs:transcript cmd="rbs add audit" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add audit" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add audit
 audit : journal des écritures : qui a modifié quoi, quand, dans la transaction du changement

@@ -22,7 +22,7 @@ d'exécution, avec `uploads` et ses routes de contenu montées.
 rbs add mail
 ```
 
-{/* rbs:transcript cmd="rbs add mail" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add mail" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add mail
 mail : envoi de courriels par SMTP : transport partagé, gabarits minijinja

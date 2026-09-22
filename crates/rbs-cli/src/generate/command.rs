@@ -463,8 +463,13 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
             .to_string()
     });
 
-    let (mut files, migration) =
-        render(&feature, options.complete, seedable, crate_name.as_deref())?;
+    let (mut files, migration) = render(
+        &feature,
+        options.complete,
+        seedable,
+        crate_name.as_deref(),
+        &migration::next_timestamp(&root),
+    )?;
 
     // Après le rendu et avant le plan : le plan porte le contenu exact qui sera écrit,
     // et c'est lui que `--dry-run` montre.
@@ -788,6 +793,7 @@ fn render(
     complete: bool,
     seedable: bool,
     crate_name: Option<&str>,
+    timestamp: &str,
 ) -> Result<(Vec<File>, Option<String>), Error> {
     let module = feature.module();
 
@@ -811,11 +817,9 @@ fn render(
         return Ok((rendus, None));
     }
 
-    let rendue = migration::render(feature, &migration::current_timestamp()).map_err(|source| {
-        Error::Rendu {
-            file: format!("migration de {module}"),
-            source,
-        }
+    let rendue = migration::render(feature, timestamp).map_err(|source| Error::Rendu {
+        file: format!("migration de {module}"),
+        source,
     })?;
 
     rendus.push((
@@ -867,6 +871,8 @@ mod tests {
     use super::*;
     use crate::fixtures::{Project, project};
     use crate::generate::bench;
+
+    const HORODATAGE: &str = "20260826_143000";
 
     /// Empreinte récursive d'un répertoire : chemin relatif -> contenu.
     fn fingerprint(root: &Path) -> std::collections::BTreeMap<PathBuf, String> {
@@ -1400,8 +1406,9 @@ mod tests {
             let feature = Feature::fresh(name, fields);
             let seedable = seed::is_seedable(&feature);
 
-            let (files, _migration) = render(&feature, *complete, seedable, Some("demo_api"))
-                .expect("la génération doit aboutir");
+            let (files, _migration) =
+                render(&feature, *complete, seedable, Some("demo_api"), HORODATAGE)
+                    .expect("la génération doit aboutir");
 
             assert!(!files.is_empty(), "{name} n'a rien rendu");
 
@@ -1431,8 +1438,8 @@ mod tests {
             .uploading()
             .speaking(crate::lang::Lang::En);
 
-        let (files, _migration) =
-            render(&feature, true, true, Some("demo_api")).expect("la génération doit aboutir");
+        let (files, _migration) = render(&feature, true, true, Some("demo_api"), HORODATAGE)
+            .expect("la génération doit aboutir");
         let rendu: String = files.iter().map(|(_, contenu)| contenu.as_str()).collect();
 
         for francais in [
@@ -1463,8 +1470,8 @@ mod tests {
         let fields = fields::parse("title:string:unique").expect("champs valides");
         let feature = Feature::fresh("articles", fields).uploading();
 
-        let (files, _migration) =
-            render(&feature, true, true, Some("demo_api")).expect("la génération doit aboutir");
+        let (files, _migration) = render(&feature, true, true, Some("demo_api"), HORODATAGE)
+            .expect("la génération doit aboutir");
         let rendu: String = files.iter().map(|(_, contenu)| contenu.as_str()).collect();
 
         for francais in [

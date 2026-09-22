@@ -303,7 +303,7 @@ pub(crate) fn plan_for(options: &Options) -> Result<Planned, Error> {
     let context = crate::contexte::projet(&root, &nom_projet, database, features)?;
 
     let mut builder = plan::Builder::new(root.clone());
-    let timestamp = crate::generate::migration::current_timestamp();
+    let timestamp = crate::generate::migration::next_timestamp(&root);
     #[cfg(test)]
     let mut files = Vec::new();
     let mut poses = Vec::new();

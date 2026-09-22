@@ -21,7 +21,7 @@ rien ici n'exige que le serveur tourne.
 rbs add jobs
 ```
 
-{/* rbs:transcript cmd="rbs add jobs" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add jobs" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add jobs
 jobs : jobs en arrière-plan : une table, un enfilage transactionnel, un worker qui réessaie

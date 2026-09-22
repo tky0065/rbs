@@ -20,7 +20,7 @@ That is why the fragment requires `jobs`, and it is the only one in the
 besides `auth`. On a bare project, `rbs add scheduler` lays down `jobs` first and
 `scheduler` second, in a single plan:
 
-{/* rbs:transcript cmd="rbs add scheduler" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add scheduler" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add scheduler
 scheduler : déclenchement calendaire : une échéance due enfile un job, une seule fois entre réplicas

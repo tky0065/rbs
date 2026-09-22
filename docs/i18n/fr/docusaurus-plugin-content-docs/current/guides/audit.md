@@ -13,7 +13,7 @@ vous avez déjà. C'est à votre service de l'appeler, et la raison est
 
 ## Ce qui est installé
 
-{/* rbs:transcript cmd="rbs add audit" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
+{/* rbs:transcript cmd="rbs add audit" setup="rbs new demo --yes --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init" dans="demo" */}
 ```text
 $ rbs add audit
 audit : journal des écritures : qui a modifié quoi, quand, dans la transaction du changement

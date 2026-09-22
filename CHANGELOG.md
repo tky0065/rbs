@@ -24,6 +24,15 @@ between minor versions with no deprecation cycle.
   banner now uses an ASCII hyphen, and no recipe carries anything but ASCII. A project generated
   before keeps its `Makefile`, which belongs to its author: replace `—` by `-` on the
   `help` line to get the fix.
+- **`rbs generate --help` no longer counts the files of an empty feature.** The help of
+  `generate feature` announced six when the command has written seven since `filter.rs`;
+  it now says what an empty feature lacks — its fields and its migration — rather than a
+  number the next layer would contradict.
+- **Two migrations created within the same second no longer run in random order.** Their
+  names carried the same timestamp, so `migrations()` sorted them by table name rather than
+  by creation — a foreign key could run before the table it references. `rbs generate crud`,
+  `rbs generate migration`, `rbs migrate new` and `rbs add` now date a new migration one
+  second after the latest one in `migration/src/` whenever the clock has not moved past it.
 
 - **`rbs doctor` no longer fails a project fresh from `rbs new --with mail`.** The `.env`
   check required every key of `.env.example` in `.env`, including `RBS_MAIL__SMTP_PASSWORD`,

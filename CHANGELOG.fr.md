@@ -26,6 +26,16 @@ dépréciation.
   l'ASCII.
   Un projet engendré avant garde son `Makefile`, qui appartient à son auteur : remplacer
   `—` par `-` sur la ligne de `help` suffit à recevoir le correctif.
+- **`rbs generate --help` ne compte plus les fichiers d'une feature vide.** L'aide de
+  `generate feature` en annonçait six quand la commande en écrit sept depuis `filter.rs` ;
+  elle dit désormais ce qui manque à une feature vide — ses champs et sa migration — plutôt
+  qu'un nombre que la prochaine couche démentirait.
+- **Deux migrations créées dans la même seconde ne s'ordonnent plus au hasard.** Leurs noms
+  portaient le même horodatage, et `migrations()` les triait alors par nom de table plutôt
+  que par ordre de création — une clé étrangère pouvait passer avant la table qu'elle vise.
+  `rbs generate crud`, `rbs generate migration`, `rbs migrate new` et `rbs add` datent
+  désormais une migration neuve de la seconde qui suit la plus récente de `migration/src/`,
+  tant que l'horloge ne l'a pas dépassée.
 
 - **`rbs doctor` ne fait plus échouer un projet qui sort de `rbs new --with mail`.** Le
   contrôle `.env` exigeait dans `.env` chaque clé de `.env.example`, y compris
