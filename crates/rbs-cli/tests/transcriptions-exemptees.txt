@@ -1,9 +1,0 @@
-# Les blocs ```text nus que la garde des transcriptions tolère encore.
-#
-# Une ligne par bloc : le fichier, puis la première ligne non vide du bloc, séparés par
-# `|`. Cette liste ne fait que décroître : un bloc qu'on rejoue devient une transcription
-# (`rbs:transcript`), un bloc qu'on ne peut pas rejouer se déclare libre avec sa raison
-# (`rbs:libre raison="…"`), et son entrée disparaît. Elle n'accueille jamais un bloc neuf.
-# Une entrée vaut pour un bloc : deux blocs d'une page ouverts par la même ligne en
-# demandent deux. Une entrée qui ne correspond plus à aucun bloc fait échouer la garde.
-
