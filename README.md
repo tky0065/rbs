@@ -1,5 +1,15 @@
 # rbs
 
+![A terminal: rbs --version, rbs new, rbs add frontend-admin, rbs generate crud, make dev, then a curl that creates a ticket and prints it back](docs/static/img/enregistrement/terminal.gif)
+
+![The tickets screen that rbs generate crud wrote into the admin space of the same project](docs/static/img/enregistrement/admin.png)
+
+*Recorded with rbs 1.8.1 by
+[`docs/scripts/enregistrement/regenere.sh`](docs/scripts/enregistrement/regenere.sh), which
+replays both parts and fails as soon as one command does. What runs between the commands —
+the database, migrations and seed, `npm install`, the typed client, the compilation, the
+sign-in that fills `$TOKEN` — is cut out, not skipped.*
+
 A web API framework for Rust, built on Axum and SeaORM. It gives a project the parts that
 have no reason to differ from one API to the next — errors, logging, configuration,
 database access, OpenAPI — and generates the rest into your own source tree, where you can
