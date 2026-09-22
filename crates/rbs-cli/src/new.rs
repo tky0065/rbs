@@ -1028,7 +1028,13 @@ mod tests {
         let inscrit = manifest["dependencies"]["rbs-core"]["path"]
             .as_str()
             .unwrap_or_else(|| panic!("la dépendance au noyau doit porter un `path` :\n{brut}"));
-        assert_eq!(Path::new(inscrit), absolu);
+
+        // Sous Windows, la forme canonique porte le préfixe `\\?\` que le manifeste ne
+        // garde pas : c'est à la forme sans préfixe qu'on compare.
+        assert_eq!(
+            inscrit,
+            sans_prefixe_verbatim(&absolu.display().to_string())
+        );
     }
 
     /// Sous Windows, `canonicalize` rend `\\?\D:\…`. Le manifeste doit porter le chemin
