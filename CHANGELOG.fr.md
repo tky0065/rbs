@@ -27,6 +27,14 @@ dépréciation.
   Un projet engendré avant garde son `Makefile`, qui appartient à son auteur : remplacer
   `—` par `-` sur la ligne de `help` suffit à recevoir le correctif.
 
+- **`rbs doctor` ne fait plus échouer un projet qui sort de `rbs new --with mail`.** Le
+  contrôle `.env` exigeait dans `.env` chaque clé de `.env.example`, y compris
+  `RBS_MAIL__SMTP_PASSWORD`, que le fragment `mail` — et `auth`, qui l'installe — déclare
+  vide dans l'exemple seul. Une clé que `.env.example` laisse vide (`CLE=`, `CLE=""`, ou
+  `CLE=` suivi d'un commentaire) peut désormais manquer : le contrôle la nomme et la compte
+  à part, sans échouer, et le contrôle `mail` lit le mot de passe absent comme un mot de
+  passe vide. Une clé à laquelle l'exemple donne une valeur reste exigée.
+
 ## [1.8.1] — 2026-09-20
 
 ### Corrigé

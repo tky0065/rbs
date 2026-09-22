@@ -25,6 +25,14 @@ between minor versions with no deprecation cycle.
   before keeps its `Makefile`, which belongs to its author: replace `—` by `-` on the
   `help` line to get the fix.
 
+- **`rbs doctor` no longer fails a project fresh from `rbs new --with mail`.** The `.env`
+  check required every key of `.env.example` in `.env`, including `RBS_MAIL__SMTP_PASSWORD`,
+  which the `mail` fragment — and `auth`, which installs it — declares empty in the example
+  alone. A key `.env.example` leaves empty (`KEY=`, `KEY=""`, or `KEY=` followed by a
+  comment) may now be missing: the check names it and counts it apart, without failing, and
+  the `mail` check reads the missing password as an empty one. A key the example gives a
+  value is required as before.
+
 ## [1.8.1] — 2026-09-20
 
 ### Fixed

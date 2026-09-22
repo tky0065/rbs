@@ -19,7 +19,6 @@ docs/docs/getting-started.md | Compiling migration v0.1.0 (…/demo/migration)
 docs/docs/getting-started.md | Compiling migration v0.1.0 (…/demo/migration)
 docs/docs/getting-started.md | ✓ m20260829_100554_create_articles   appliquée
 docs/docs/guides/agents.md | $ rbs doctor
-docs/docs/guides/mail.md | ✗ .env          RBS_MAIL__SMTP_PASSWORD absente du .env
 docs/docs/guides/seeds.md | $ rbs seed
 docs/docs/tutorials/auth.md | Compiling migration v0.1.0 (…/demo/migration)
 docs/docs/tutorials/auth.md | Compiling migration v0.1.0 (…/demo/migration)
@@ -40,7 +39,6 @@ docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | Compili
 docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | Compiling migration v0.1.0 (…/demo/migration)
 docs/i18n/fr/docusaurus-plugin-content-docs/current/getting-started.md | ✓ m20260829_100554_create_articles   appliquée
 docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/agents.md | $ rbs doctor
-docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/mail.md | ✗ .env          RBS_MAIL__SMTP_PASSWORD absente du .env
 docs/i18n/fr/docusaurus-plugin-content-docs/current/guides/seeds.md | $ rbs seed
 docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | Compiling migration v0.1.0 (…/demo/migration)
 docs/i18n/fr/docusaurus-plugin-content-docs/current/tutorials/auth.md | Compiling migration v0.1.0 (…/demo/migration)
