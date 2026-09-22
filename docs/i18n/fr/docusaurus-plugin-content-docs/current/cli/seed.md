@@ -16,6 +16,7 @@ de cette page sont verbatim, capturés en lançant la commande.
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs seed --help" */}
 ```text
 $ rbs seed --help
 Insère les données de démonstration du projet
@@ -44,6 +45,7 @@ Une ligne par seed, dans l'ordre de l'ancre `<rbs:seeds>`, puis un résumé.
 
 ## Rien à insérer
 
+{/* rbs:transcript cmd="rbs seed" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo" dans="demo" */}
 ```text
 $ rbs seed
 ✓ aucun seed déclaré — rien à insérer
@@ -60,6 +62,7 @@ l'erreur de manifeste qu'aurait rendue cargo.
 
 ## Le refus en production
 
+{/* rbs:libre raison="la variable d'environnement posée devant la commande exige un shell, que le rejeu n'emploie pas" */}
 ```text
 $ RBS_ENV=production rbs seed
 erreur : RBS_ENV=production : les seeds sont des données de démonstration, et rbs refuse de les insérer en production — relancez avec --force si c'est bien ce que vous voulez

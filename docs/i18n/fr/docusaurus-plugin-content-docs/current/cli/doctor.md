@@ -20,6 +20,7 @@ sortie de terminal ne se traduit pas.
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs doctor --help" */}
 ```text
 $ rbs doctor --help
 Diagnostique le projet : ancres, .env, base joignable, versions
@@ -62,6 +63,7 @@ quand le pilote compilé dans votre binaire ne sait pas parler son protocole, et
 port d'abord ferait payer trois secondes à un diagnostic qui tient dans deux lectures de
 fichier :
 
+{/* rbs:libre raison="exige de modifier le projet à la main : une URL mysql dans le .env d'un projet compilé pour PostgreSQL" */}
 ```text
   ✗ base        le manifeste compile `sqlx-postgres` et RBS_DATABASE__URL est une URL `mysql://`
       alignez les deux : la feature `sqlx-mysql` de sea-orm au manifeste, ou une URL `postgres://` dans le .env
@@ -76,6 +78,7 @@ Tout autre verdict ci-dessus est un succès ou un échec. `agents` peut aussi av
 seule condition : un répertoire de `src/` qu'aucun fragment installé et qu'aucune feature
 déclarée dans `[package.metadata.rbs]` n'explique — du code que personne n'a engendré.
 
+{/* rbs:libre raison="exige de modifier le projet à la main : un répertoire sous src/ qu'aucune feature ne déclare" */}
 ```text
   ! agents      écrit hors du CLI : webhooks
       légitime si rbs ne couvre pas ce code ; sinon, rbs generate le reprend
@@ -95,8 +98,9 @@ Le second appartient à `gardes`, et n'existe que sur un projet portant
 [`auth`](../guides/auth.md) : une feature dont `create`, `update` ou `delete` n'appelle
 aucune `require_role`.
 
+{/* rbs:transcript cmd="rbs doctor" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo && rbs generate crud articles --fields titre:string --force && rbs generate feature comments --force && rbs add auth --force" dans="demo" extrait="oui" */}
 ```text
-  ! gardes      écritures anonymes : articles, comments
+  ! gardes        écritures anonymes : articles, comments
       fermez-les à la main : sur chaque handler, ajoutez le paramètre `identite: Identity`, l'appel `identite.require_role(Role::User)?`, l'entrée `security(("bearer" = []))` et les réponses 401 et 403 de son annotation — un CRUD engendré sous `auth` les reçoit désormais tout seul ; voir le guide de l'authentification
 ```
 
@@ -118,6 +122,7 @@ qu'un fragment peut prendre — un des dix répertoires que `rbs add` posait jad
 de `src/`, toujours là aux côtés d'un `src/modules/` que le projet a depuis commencé à
 recevoir :
 
+{/* rbs:libre raison="exige un projet dont une feature a été posée par une version antérieure, à la racine de src/" */}
 ```text
   ! disposition   hors de src/modules/ : src/mail
       posés par une version antérieure ; rbs ne les déplacera pas — déplacez-les et corrigez leurs `use` si vous voulez une disposition unique
@@ -136,6 +141,7 @@ Chaque feature qui porte de la configuration ajoute une ligne à elle, et cette 
 n'existe que sur un projet qui a déclaré la feature. `auth` en ajoute deux — son secret, et
 le contrôle `gardes` ci-dessus. `jobs` est celle que ce jalon a ajoutée :
 
+{/* rbs:libre raison="exige de modifier le projet à la main : la section [jobs] retirée de config/default.toml" */}
 ```text
   ✗ jobs        config/default.toml ne porte pas de section `[jobs]`
       ajoutez à config/default.toml :
@@ -157,6 +163,7 @@ une section.
 chercher sa section : le port sur lequel son second listener se pose ne peut pas être celui
 que l'API écoute.
 
+{/* rbs:libre raison="exige de modifier le projet à la main : metrics_port ramené au port du serveur" */}
 ```text
   ✗ observability `observability.metrics_port` et `server.port` valent tous deux 8080
       donnez aux métriques un port à elles dans config/default.toml :
@@ -186,6 +193,7 @@ qui se construit, puis se conduit mal.
 Un fichier posé par l'un de ces fragments et disparu depuis se restaure depuis Git, et le
 remède le dit : `rbs add` ne rejoue pas une feature que le manifeste déclare déjà.
 
+{/* rbs:libre raison="exige de modifier le projet à la main : l'inscription de la livraison des webhooks retirée du registre de la file" */}
 ```text
   ! cors          `cors.origins` est vide : aucun front ne peut appeler l'API depuis un navigateur
       énumérez les origines de votre front dans config/default.toml — ou dans le profil de l'environnement qui les sert :
@@ -204,6 +212,7 @@ n'y va, ni couleur ni glyphe — de sorte qu'une étape de CI peut nommer le con
 quand le projet est sain, 1 quand un contrôle a échoué — 2 ou 3 quand le diagnostic n'a pas
 pu tourner, voir les [codes de sortie](#codes-de-sortie).
 
+{/* rbs:transcript cmd="rbs doctor --json" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:5499/demo" dans="demo" extrait="oui" */}
 ```text
 $ rbs doctor --json
 {
@@ -212,7 +221,7 @@ $ rbs doctor --json
     {
       "name": "ancres",
       "status": "ok",
-      "detail": "les 17 points d'insertion sont en place"
+      "detail": "les 14 points d'insertion sont en place"
     },
     {
       "name": "base",
@@ -277,6 +286,7 @@ Code de sortie 0.
 Ci-dessous, le même projet privé de `// <rbs:openapi>` dans `src/openapi.rs`, de
 `RBS_LOG_FORMAT` dans `.env`, et avec PostgreSQL arrêté :
 
+{/* rbs:libre raison="exige de modifier le projet à la main : une ancre et une variable du .env retirées, la base arrêtée" */}
 ```text
 $ rbs doctor
   ✗ ancres        openapi manque dans src/openapi.rs
@@ -322,6 +332,7 @@ deux étapes, qui n'a pas bougé depuis.
 
 Ci-dessous, un projet dont `// <rbs:openapi>` et `// <rbs:state_init>` ont été supprimées :
 
+{/* rbs:libre raison="exige de modifier le projet à la main : deux ancres retirées d'un projet SQLite" */}
 ```text
 $ rbs doctor --fix --force
 plan pour /private/tmp/rbs-demo/demo
@@ -352,6 +363,7 @@ des deux fichiers échouait, l'autre serait remis dans l'état où il était.
 L'exactitude de la pose se lit directement dans Git, sur un projet dont les ancres ont été
 supprimées après le commit :
 
+{/* rbs:libre raison="exige de modifier le projet à la main : des ancres retirées après le commit" */}
 ```text
 $ git diff --stat
 ```
@@ -360,6 +372,7 @@ Rien. Les deux blocs sont revenus à l'octet où le squelette les avait posés.
 
 ## Un working tree sale
 
+{/* rbs:libre raison="exige de modifier le projet à la main : des ancres retirées, que --fix reposerait" */}
 ```text
 $ rbs doctor --fix
 erreur : le working tree n'est pas propre : src/openapi.rs, src/state.rs — commitez, ou relancez avec --force
@@ -374,6 +387,7 @@ La garde vient après le plan et non avant : un projet qui n'a aucune ancre à r
 rien à protéger, et `rbs doctor --fix` doit pouvoir y répondre depuis un working tree plein
 de travail en cours.
 
+{/* rbs:transcript cmd="rbs doctor --fix" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo" dans="demo" extrait="oui" */}
 ```text
 $ rbs doctor --fix
 ✓ aucune ancre à reposer
@@ -385,6 +399,7 @@ Une ligne d'accroche que le fichier ne porte pas — ou qu'il porte deux fois �
 où va le bloc. `--fix` laisse alors l'ancre où elle n'est pas, la nomme, et le contrôle qui
 suit affiche le bloc à coller, exactement comme avant :
 
+{/* rbs:libre raison="exige de modifier le projet à la main : deux ancres retirées, et la ligne d'accroche de l une d'elles" */}
 ```text
 $ rbs doctor --fix --force
 plan pour /private/tmp/rbs-demo/demo
@@ -419,6 +434,7 @@ reste ne dit pas où était l'autre — entre les deux, il y avait tout ce que l
 Sous `--json`, la réparation a son propre objet, pour qu'un script n'ait pas à déduire d'un
 verdict devenu vert que quelque chose a été écrit :
 
+{/* rbs:libre raison="exige de modifier le projet à la main : la ligne d'accroche de layers retirée" */}
 ```text
 $ rbs doctor --fix --force --json
 {
@@ -457,6 +473,7 @@ Les deux moitiés du contrôle `base` échouent séparément. Ici l'hôte répon
 la version n'a pas pu être lue, la crate `migration` n'ayant pas abouti — le remède nomme la
 commande à lancer à la main :
 
+{/* rbs:libre raison="exige de modifier le projet à la main : une erreur introduite dans la crate migration, et une base qui répond" */}
 ```text
 $ rbs doctor
   ✓ ancres        les 15 points d'insertion sont en place
@@ -484,6 +501,7 @@ attention : le projet demande votre attention
 
 ## Hors d'un projet
 
+{/* rbs:transcript cmd="rbs doctor" */}
 ```text
 $ rbs doctor
 erreur : cette commande attend un projet rbs : aucun Cargo.toml portant [package.metadata.rbs] au-dessus d'ici

@@ -218,9 +218,10 @@ qui se trouvent sur le disque.
 `remove` édite `Cargo.toml`, donc — comme `add` — elle refuse de s'exécuter sur des
 modifications non commitées :
 
+{/* rbs:transcript cmd="rbs remove cors" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add cors && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m cors && rbs add ci" dans="demo" */}
 ```text
 $ rbs remove cors
-erreur : le working tree n'est pas propre : src/main.rs — commitez, ou relancez avec --force
+erreur : le working tree n'est pas propre : AGENTS.md, Cargo.toml — commitez, ou relancez avec --force
 ```
 
 Les fichiers non suivis ne comptent pas : rien ici ne s'apprête à en créer un. `--force`
@@ -233,6 +234,7 @@ rendrait aujourd'hui le fragment n'est ni supprimé ni laissé silencieusement e
 plan le marque `!`, et la commande s'arrête, exactement comme le conflit d'`add` pour un
 fichier qu'elle écraserait :
 
+{/* rbs:libre raison="exige de modifier à la main src/modules/cors/config.rs, ce que le rejeu ne sait pas faire sans shell" */}
 ```text
 $ rbs remove cors
 cors : CORS : origines, méthodes et en-têtes autorisés, énumérés par la configuration
@@ -260,6 +262,7 @@ rien n'est écrit du tout — ni `config.rs`, ni les deux suppressions, ni les c
 modifications autour. `--force` écrit le plan tout entier quand même, `config.rs`
 compris, le même plan affiché d'abord :
 
+{/* rbs:libre raison="exige la même modification à la main de src/modules/cors/config.rs" */}
 ```text
 $ rbs remove cors --force
 cors : CORS : origines, méthodes et en-têtes autorisés, énumérés par la configuration
@@ -305,6 +308,7 @@ fichiers, ses lignes d'ancre, sa migration, ses dépendances. Tout ce que le dé
 écrit *contre* la feature lui est invisible, et c'est exactement à cela que sert
 `cargo build` — la ligne que tout retrait réussi affiche :
 
+{/* rbs:transcript cmd="rbs remove cors" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add cors && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m cors" dans="demo" extrait="oui" */}
 ```text
   lancez `cargo build` : le compilateur nomme ce qui référençait encore la feature
 ```
@@ -336,6 +340,7 @@ imprime : le document JSON de la sortie standard ne porte que le plan.
 
 Hors d'un projet :
 
+{/* rbs:transcript cmd="rbs remove cors" */}
 ```text
 $ rbs remove cors
 erreur : aucun projet rbs ici : `rbs remove` s'exécute dans un projet créé par `rbs new`

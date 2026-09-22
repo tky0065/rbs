@@ -207,9 +207,10 @@ absent from that list has nothing planned against it, whatever files happen to s
 
 `remove` edits `Cargo.toml`, so — like `add` — it refuses to run over uncommitted changes:
 
+{/* rbs:transcript cmd="rbs remove cors" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add cors && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m cors && rbs add ci" dans="demo" */}
 ```text
 $ rbs remove cors
-erreur : le working tree n'est pas propre : src/main.rs — commitez, ou relancez avec --force
+erreur : le working tree n'est pas propre : AGENTS.md, Cargo.toml — commitez, ou relancez avec --force
 ```
 
 Untracked files are not counted: nothing here is about to create one. `--force` runs
@@ -221,6 +222,7 @@ A file the fragment would remove but whose content no longer matches what a fres
 it produces is neither deleted nor silently left in place. The plan marks it `!`, and the
 command stops, exactly as `add`'s own conflict does for a file it would overwrite:
 
+{/* rbs:libre raison="exige de modifier à la main src/modules/cors/config.rs, ce que le rejeu ne sait pas faire sans shell" */}
 ```text
 $ rbs remove cors
 cors : CORS : origines, méthodes et en-têtes autorisés, énumérés par la configuration
@@ -247,6 +249,7 @@ one file `!`, but withholds the whole plan: without `--force`, nothing is writte
 all — not `config.rs`, not the two deletions, not the five edits around them.
 `--force` writes the whole plan anyway, `config.rs` included, the same plan shown first:
 
+{/* rbs:libre raison="exige la même modification à la main de src/modules/cors/config.rs" */}
 ```text
 $ rbs remove cors --force
 cors : CORS : origines, méthodes et en-têtes autorisés, énumérés par la configuration
@@ -292,6 +295,7 @@ lines, its migration, its dependencies. Everything the developer wrote *against*
 feature is invisible to it, and that is exactly what `cargo build` is for — the line every
 successful removal prints:
 
+{/* rbs:transcript cmd="rbs remove cors" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@localhost:5432/demo && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m init && rbs add cors && git add -A && git -c user.email=rbs@example.com -c user.name=rbs commit -q -m cors" dans="demo" extrait="oui" */}
 ```text
   lancez `cargo build` : le compilateur nomme ce qui référençait encore la feature
 ```
@@ -323,6 +327,7 @@ standard output carries the plan alone.
 
 Outside a project:
 
+{/* rbs:transcript cmd="rbs remove cors" */}
 ```text
 $ rbs remove cors
 erreur : aucun projet rbs ici : `rbs remove` s'exécute dans un projet créé par `rbs new`

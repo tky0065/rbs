@@ -15,6 +15,7 @@ de cette page sont verbatim, capturés en lançant la commande.
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs openapi export --help" */}
 ```text
 $ rbs openapi export --help
 Écrit le document OpenAPI du projet sur la sortie standard, ou dans un fichier

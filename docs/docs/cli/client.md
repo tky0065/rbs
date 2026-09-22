@@ -96,6 +96,7 @@ The client is projected as a creation, so a second run on an unchanged contract 
 `· clients/ts/client.ts inchangé` and writes nothing. A client you edited comes back as a
 conflict instead of being silently overwritten:
 
+{/* rbs:libre raison="exige un client engendré puis édité à la main, et l'engendrer compile le projet" */}
 ```text
   ! clients/ts/client.ts   conflit — relancer avec --force
 ```

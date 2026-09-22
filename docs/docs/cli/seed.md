@@ -16,6 +16,7 @@ is verbatim, captured by running the command; only the prose around it is transl
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs seed --help" */}
 ```text
 $ rbs seed --help
 Insère les données de démonstration du projet
@@ -44,6 +45,7 @@ One line per seed, in the order of the `<rbs:seeds>` anchor, then a summary.
 
 ## Nothing to insert
 
+{/* rbs:transcript cmd="rbs seed" setup="rbs new demo --yes --lang fr --database-url postgres://rbs:secret@127.0.0.1:1/demo" dans="demo" */}
 ```text
 $ rbs seed
 ✓ aucun seed déclaré — rien à insérer
@@ -60,6 +62,7 @@ than the manifest error cargo would have produced.
 
 ## The production refusal
 
+{/* rbs:libre raison="la variable d'environnement posée devant la commande exige un shell, que le rejeu n'emploie pas" */}
 ```text
 $ RBS_ENV=production rbs seed
 erreur : RBS_ENV=production : les seeds sont des données de démonstration, et rbs refuse de les insérer en production — relancez avec --force si c'est bien ce que vous voulez

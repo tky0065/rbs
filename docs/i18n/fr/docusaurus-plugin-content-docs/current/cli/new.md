@@ -17,6 +17,7 @@ sortie de terminal ne se traduit pas.
 
 ## Synopsis
 
+{/* rbs:transcript cmd="rbs new -h" */}
 ```text
 $ rbs new -h
 Crée un projet prêt à démarrer, avec sa base, ses migrations et sa route /health
@@ -62,8 +63,13 @@ première des [trois questions](#les-trois-questions).
 
 ## Choisir le moteur
 
+{/* rbs:transcript cmd="rbs new blog --database sqlite --yes" */}
 ```text
 $ rbs new blog --database sqlite --yes
+✓ blog créé — 22 fichiers
+
+  cd blog
+  cargo run          # la base visée est dans .env
 ```
 
 Manifestes, `.env.example`, compose et configuration suivent tous la valeur choisie.
@@ -72,6 +78,7 @@ n'a pas d'équivalent sur les deux autres.
 
 Une valeur inconnue est refusée avant que rien ne soit écrit :
 
+{/* rbs:transcript cmd="rbs new blog --database oracle" */}
 ```text
 $ rbs new blog --database oracle
 erreur : valeur « oracle » invalide pour « --database <MOTEUR> »
@@ -110,6 +117,7 @@ $ rbs new blog --database-url postgres://rbs:rbs@localhost:55432/blog --yes
 
 Les vingt-trois fichiers :
 
+{/* rbs:libre raison="la liste des fichiers que compte la transcription précédente, triée à la main : aucune commande ne la rend sous cette forme" */}
 ```text
 blog/.env
 blog/.env.example
@@ -206,6 +214,7 @@ binaire, `observability` en fait sortir des traces, et ni l'un ni l'autre n'a de
 Le `Cargo.toml` généré porte une section rbs, et cette section est le seul endroit où rbs
 garde un état sur le projet :
 
+{/* rbs:transcript cmd="grep -A4 package.metadata.rbs Cargo.toml" setup="rbs new blog --yes --lang fr --database-url postgres://rbs:rbs@localhost:55432/blog" dans="blog" */}
 ```text
 [package.metadata.rbs]
 version = "1.2.0"
@@ -229,10 +238,18 @@ aurait oublié de le committer ; le manifeste, lui, est déjà versionné.
 d'emploi de rbs, écrit pour un agent plutôt que pour un humain. `--lang` choisit la langue
 dans laquelle il est écrit :
 
+{/* rbs:transcript cmd="rbs new demo-api --database-url postgres://rbs:rbs@localhost:5432/demo_api --lang en --yes" */}
 ```text
 $ rbs new demo-api --database-url postgres://rbs:rbs@localhost:5432/demo_api --lang en --yes
 ✓ demo-api créé — 23 fichiers
 
+  cd demo-api
+  docker compose up -d   # la base du .env, montée
+  cargo run              # ou `rbs dev`, qui enchaîne les deux
+```
+
+{/* rbs:transcript cmd="grep lang demo-api/Cargo.toml" setup="rbs new demo-api --database-url postgres://rbs:rbs@localhost:5432/demo_api --lang en --yes" */}
+```text
 $ grep lang demo-api/Cargo.toml
 lang = "en"
 ```
@@ -262,6 +279,7 @@ les tirets devenant des soulignés — et les features à installer.
 utilisable en CI. Le nom est la seule réponse qu'il ne peut pas fournir : aucun défaut ne
 vaudrait un répertoire qu'il faudrait ensuite renommer.
 
+{/* rbs:transcript cmd="rbs new --yes" */}
 ```text
 $ rbs new --yes
 erreur : le nom du projet manque : `--yes` ne pose aucune question, et aucun nom par défaut ne vaudrait celui que vous n'avez pas donné — nommez le projet en argument, `rbs new mon-api --yes`
@@ -269,6 +287,7 @@ erreur : le nom du projet manque : `--yes` ne pose aucune question, et aucun nom
 
 Sans terminal et sans `--yes`, elle nomme les flags qui auraient remplacé les questions :
 
+{/* rbs:libre raison="l'entrée redirigée depuis /dev/null exige un shell, que le rejeu n'emploie pas" */}
 ```text
 $ rbs new sans-tty < /dev/null
 erreur : aucun terminal interactif pour poser les questions : relancez avec `--yes` pour prendre les défauts, ou donnez les réponses en flags — le nom en argument, `--database-url` et `--with`
@@ -280,6 +299,7 @@ Par défaut, le manifeste généré dépend de `rbs-core` pris au registre, ce q
 projet. `--core-path` remplace cette dépendance par un chemin vers une copie locale de la
 crate :
 
+{/* rbs:libre raison="le rejeu impose son propre --core-path, et le chemin canonisé dans le manifeste est celui de la machine" */}
 ```text
 $ rbs new blog --core-path /private/tmp/rbs-core --yes
 ✓ blog créé — 23 fichiers
@@ -308,6 +328,7 @@ noyau pris d'un chemin local au lieu d'en nommer la version, et
 template `.jinja` par fichier à écrire, le suffixe retiré en sortie. Ci-dessous, une copie
 du squelette dont le `.env.jinja` porte une ligne de plus :
 
+{/* rbs:libre raison="exige un répertoire de templates préparé à la main, copie modifiée du squelette" */}
 ```text
 $ rbs new maison --template-dir /private/tmp/rbs-demo/mes-templates --yes
 ✓ maison créé — 23 fichiers
@@ -359,6 +380,7 @@ tranche le reste, pour que deux `--with` équivalents rendent le même projet. T
 features s'installent en une seule passe, et chaque fragment voit celles posées avec lui :
 `--with rate-limit,redis` compte dans Redis, où que `redis` figure dans la liste.
 
+{/* rbs:transcript cmd="rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --lang fr --yes" */}
 ```text
 $ rbs new with-demo --database-url postgres://rbs:secret@localhost:5432/with_demo --with storage,auth,docker --lang fr --yes
 ✓ with-demo créé — 23 fichiers
@@ -489,15 +511,16 @@ Quatre cas n'écrivent rien :
   des choix lisibles dans l'URL, quand celui-ci ne se voit qu'à un fichier qui n'a jamais
   été écrit.
 
+{/* rbs:transcript cmd="rbs new sqlite-demo --database sqlite --yes" */}
 ```text
 $ rbs new sqlite-demo --database sqlite --yes
-✓ sqlite-demo créé — 21 fichiers
+✓ sqlite-demo créé — 22 fichiers
 
   cd sqlite-demo
   cargo run          # la base visée est dans .env
 ```
 
-Dix-neuf fichiers, et non vingt : c'est au compte que ça se voit, rien dans la sortie ne
+Vingt-deux fichiers, et non vingt-trois : c'est au compte que ça se voit, rien dans la sortie ne
 nommant le compose par son absence.
 
 Un projet créé avant rbs 1.1.0 n'a pas non plus de compose, et lancer [`rbs
@@ -513,13 +536,15 @@ qui ne se rend pas laissent le disque exactement dans l'état où ils l'ont trou
 
 Un répertoire déjà pris :
 
+{/* rbs:transcript cmd="rbs new blog --yes" setup="rbs new blog --yes" */}
 ```text
 $ rbs new blog --yes
-erreur : /private/tmp/rbs-demo/blog existe déjà : choisissez un autre nom, ou retirez ce répertoire
+erreur : …/blog existe déjà : choisissez un autre nom, ou retirez ce répertoire
 ```
 
 Un nom qui ne peut pas être un paquet Cargo :
 
+{/* rbs:transcript cmd="rbs new 4chan --yes" */}
 ```text
 $ rbs new 4chan --yes
 erreur : `4chan` n'est pas un nom de projet utilisable : lettres, chiffres, `-` et `_`, en commençant par une lettre

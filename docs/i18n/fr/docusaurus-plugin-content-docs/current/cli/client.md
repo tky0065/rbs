@@ -98,6 +98,7 @@ Le client est projeté comme une création : une seconde passe sur un contrat in
 `· clients/ts/client.ts inchangé` et n'écrit rien. Un client que vous avez modifié revient
 en conflit plutôt que d'être écrasé en silence :
 
+{/* rbs:libre raison="exige un client engendré puis édité à la main, et l'engendrer compile le projet" */}
 ```text
   ! clients/ts/client.ts   conflit — relancer avec --force
 ```
