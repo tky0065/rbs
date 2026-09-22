@@ -512,9 +512,12 @@ fn lance(commande: &str, repertoire: &Path, base: Option<&str>) -> String {
     let sortie = std::fs::File::create(journal.path()).expect("capture ouvrable");
     let erreur = sortie.try_clone().expect("capture duplicable");
 
+    // Sans terminal, comme une CI : lancé depuis un shell, `cargo test` léguerait le sien,
+    // et `rbs new` sans `--yes` attendrait une réponse que personne ne donnera.
     std::process::Command::new(&executable)
         .current_dir(repertoire)
         .args(&arguments)
+        .stdin(std::process::Stdio::null())
         .stdout(std::process::Stdio::from(sortie))
         .stderr(std::process::Stdio::from(erreur))
         .status()
