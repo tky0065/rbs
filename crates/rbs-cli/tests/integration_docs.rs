@@ -478,16 +478,16 @@ fn decoupe(commande: &str) -> Vec<String> {
     arguments
 }
 
-/// Lance `commande` dans `repertoire` et rend ce qu'elle a écrit, les deux sorties
-/// réunies dans l'ordre où le terminal les aurait vues.
+/// Lance `commande` dans `repertoire` et rend son succès et ce qu'elle a écrit, les deux
+/// sorties réunies dans l'ordre où le terminal les aurait vues.
 ///
-/// Le statut n'est pas exigé : une page montre aussi ce qu'un refus rend, et c'est
-/// précisément la sortie qu'il faut comparer.
+/// Le statut n'est exigé que du décor : une page montre aussi ce qu'un refus rend, et
+/// c'est précisément la sortie qu'il faut comparer.
 ///
 /// Les deux flux partagent un même fichier, et non deux tuyaux : `rbs doctor` écrit ses
 /// verdicts sur la sortie standard pendant que cargo compile sur l'erreur, et deux
 /// captures séparées rendraient un bloc que personne n'a jamais vu à l'écran.
-fn lance(commande: &str, repertoire: &Path, base: Option<&str>) -> String {
+fn lance(commande: &str, repertoire: &Path, base: Option<&str>) -> (bool, String) {
     let mut arguments = decoupe(commande);
     assert!(!arguments.is_empty(), "commande vide");
     let programme = arguments.remove(0);
@@ -528,7 +528,7 @@ fn lance(commande: &str, repertoire: &Path, base: Option<&str>) -> String {
 
     // Sans terminal, comme une CI : lancé depuis un shell, `cargo test` léguerait le sien,
     // et `rbs new` sans `--yes` attendrait une réponse que personne ne donnera.
-    std::process::Command::new(&executable)
+    let statut = std::process::Command::new(&executable)
         .current_dir(repertoire)
         .args(&arguments)
         .stdin(std::process::Stdio::null())
@@ -537,7 +537,10 @@ fn lance(commande: &str, repertoire: &Path, base: Option<&str>) -> String {
         .status()
         .unwrap_or_else(|erreur| panic!("`{programme}` doit être lançable : {erreur}"));
 
-    String::from_utf8_lossy(&std::fs::read(journal.path()).expect("capture lisible")).into_owned()
+    let ecrit = String::from_utf8_lossy(&std::fs::read(journal.path()).expect("capture lisible"))
+        .into_owned();
+
+    (statut.success(), ecrit)
 }
 
 /// Rejoue un transcript dans un répertoire neuf et compare sa sortie au bloc.
@@ -571,10 +574,15 @@ fn compare_transcript(transcript: &Transcript, base: Option<&str>) {
         } else {
             tmp.path()
         };
-        lance(commande.trim(), ou, base);
+        let (reussi, ecrit) = lance(commande.trim(), ou, base);
+        assert!(
+            reussi,
+            "{situe} : le décor a échoué : `{}`\n\n{ecrit}",
+            commande.trim()
+        );
     }
 
-    let obtenu = normalise(&lance(&transcript.cmd, &dans, base), tmp.path());
+    let obtenu = normalise(&lance(&transcript.cmd, &dans, base).1, tmp.path());
     let attendu = normalise(&transcript.attendu, tmp.path());
 
     let conforme = if transcript.extrait {
@@ -737,6 +745,28 @@ avant\n\
             "une phrase qui finit.\nversion 1.\n",
             "un point qui clôt une phrase n'est pas une progression"
         );
+    }
+
+    /// Un décor qui échoue laissait la commande citée tourner sur un projet incomplet, et
+    /// l'échec surgissait plus loin, dans une comparaison qui accusait la page : sous
+    /// charge, un `generate client` raté faisait lire « créé » là où la page montre
+    /// « inchangé ». Le décor échoue désormais là où il échoue.
+    #[test]
+    #[should_panic(expected = "le décor a échoué : `git commande-que-git-ne-connait-pas`")]
+    fn a_failing_setup_command_is_named_instead_of_blaming_the_page() {
+        let transcript = Transcript {
+            page: PathBuf::from("page.md"),
+            ligne: 1,
+            cmd: "git --version".to_string(),
+            setup: Some("git commande-que-git-ne-connait-pas".to_string()),
+            dans: None,
+            base: false,
+            extrait: true,
+            invite: None,
+            attendu: String::new(),
+        };
+
+        compare_transcript(&transcript, None);
     }
 
     /// Cargo passe de `12.34s` à `1m 12s` dès qu'une compilation dépasse la minute, et
