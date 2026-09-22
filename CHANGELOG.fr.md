@@ -15,6 +15,10 @@ dépréciation.
 
 ### Corrigé
 
+- **`rbs new --core-path` écrit un chemin ordinaire sous Windows.** Le manifeste portait
+  la forme `\\?\D:\…` que `canonicalize` y rend ; il porte désormais `D:\…`, tel qu'on
+  l'écrirait. Un chemin UNC garde sa forme.
+
 - **`make help` n'affiche plus `â€”` sous Windows.** Le bandeau du `Makefile` engendré
   portait un tiret cadratin dans la recette elle-même, où ses trois octets arrivaient relus
   un à un ; les descriptions des raccourcis, qu'`awk` lit dans le fichier, ne l'ont jamais

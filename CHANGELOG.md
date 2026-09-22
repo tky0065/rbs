@@ -14,6 +14,10 @@ between minor versions with no deprecation cycle.
 
 ### Fixed
 
+- **`rbs new --core-path` writes a plain path on Windows.** The manifest carried the
+  `\\?\D:\…` form that `canonicalize` returns there; it now reads `D:\…`, as one would
+  type it. A UNC path keeps its form.
+
 - **`make help` no longer prints `â€”` on Windows.** The banner of a generated `Makefile`
   carried an em dash inside the recipe itself, where its three bytes arrived read one by
   one; the descriptions of the shortcuts, which `awk` reads from the file, never were. The

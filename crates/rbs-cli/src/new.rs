@@ -374,7 +374,8 @@ pub(crate) fn core_dependency(
                     source,
                 })?;
 
-            let value = toml_edit::Value::from(absolu.display().to_string());
+            let value =
+                toml_edit::Value::from(sans_prefixe_verbatim(&absolu.display().to_string()));
 
             format!("path = {}", value.to_string().trim())
         }
@@ -383,6 +384,16 @@ pub(crate) fn core_dependency(
     Ok(format!(
         "{{ {provenance}, default-features = false, features = [\"{database}\"] }}"
     ))
+}
+
+/// `\\?\D:\…` → `D:\…`. Le préfixe verbatim que `canonicalize` pose sous Windows n'a
+/// rien à faire dans un manifeste que l'utilisateur relit, et tous les outils ne le lisent
+/// pas. Un chemin UNC n'a pas de forme courte sûre : il reste tel quel.
+fn sans_prefixe_verbatim(chemin: &str) -> &str {
+    match chemin.strip_prefix(r"\\?\") {
+        Some(reste) if reste.as_bytes().get(1) == Some(&b':') => reste,
+        _ => chemin,
+    }
 }
 
 /// Rend toutes les templates. Aucun fichier n'est écrit tant que la dernière n'a pas
@@ -1018,6 +1029,24 @@ mod tests {
             .as_str()
             .unwrap_or_else(|| panic!("la dépendance au noyau doit porter un `path` :\n{brut}"));
         assert_eq!(Path::new(inscrit), absolu);
+    }
+
+    /// Sous Windows, `canonicalize` rend `\\?\D:\…`. Le manifeste doit porter le chemin
+    /// qu'un lecteur écrirait ; un chemin UNC, lui, n'a pas d'autre forme sûre et reste.
+    #[test]
+    fn a_verbatim_disk_path_loses_its_prefix_in_the_manifest() {
+        assert_eq!(
+            sans_prefixe_verbatim(r"\\?\D:\a\rbs\crates\rbs-core"),
+            r"D:\a\rbs\crates\rbs-core"
+        );
+        assert_eq!(
+            sans_prefixe_verbatim(r"\\?\UNC\serveur\partage\rbs-core"),
+            r"\\?\UNC\serveur\partage\rbs-core"
+        );
+        assert_eq!(
+            sans_prefixe_verbatim("/Users/moi/rbs/crates/rbs-core"),
+            "/Users/moi/rbs/crates/rbs-core"
+        );
     }
 
     #[test]
