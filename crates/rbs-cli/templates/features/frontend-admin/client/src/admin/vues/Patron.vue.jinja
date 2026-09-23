@@ -283,7 +283,13 @@ const libelles = ref<Record<string, Map<string, string>>>({})
 async function nommer(montrees: readonly Ligne[]): Promise<void> {
   for (const [cle, reference] of Object.entries(REFERENCES)) {
     const ids = montrees.map((ligne) => ligne[cle as keyof Ligne] as string | null)
-    libelles.value = { ...libelles.value, [cle]: await resoudre(reference.lire, ids) }
+    const nouvelles = await resoudre(reference.lire, ids)
+    // Fusionnés et non remplacés : relire la seule ligne du détail ne doit pas faire
+    // oublier les libellés du reste de la page.
+    libelles.value = {
+      ...libelles.value,
+      [cle]: new Map([...(libelles.value[cle] ?? []), ...nouvelles]),
+    }
   }
 }
 

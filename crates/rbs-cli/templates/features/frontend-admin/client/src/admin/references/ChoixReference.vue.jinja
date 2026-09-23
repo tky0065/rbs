@@ -31,12 +31,23 @@ const TEXTES = {
 {%- endif %}
 } as const
 
+// La dernière entrée choisie. L'écran ne nomme que les lignes de sa page courante : une
+// entrée prise hors d'elle n'y a pas de libellé, et le repos retomberait sur l'identifiant
+// raccourci juste après le choix.
+let dernier: Entree | null = null
+
 /** Ce que le champ montre au repos : le libellé de la valeur, sinon son identifiant. */
 function repos(): string {
   if (props.modelValue === '') {
     return ''
   }
-  return props.libelle ?? courte(props.modelValue)
+  if (props.libelle !== undefined) {
+    return props.libelle
+  }
+  if (dernier !== null && dernier.cle === props.modelValue) {
+    return dernier.libelle
+  }
+  return courte(props.modelValue)
 }
 
 const saisie = ref(repos())
@@ -82,6 +93,7 @@ function taper(valeur: string | number): void {
 }
 
 function choisir(entree: Entree | null): void {
+  dernier = entree
   emit('update:modelValue', entree?.cle ?? '')
   choisi.value = entree?.libelle ?? ''
   saisie.value = choisi.value

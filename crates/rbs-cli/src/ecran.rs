@@ -1478,6 +1478,51 @@ mod tests {
         );
     }
 
+    /// Relire une seule ligne — le détail — ne doit pas faire oublier les libellés des
+    /// autres lignes de la page : `nommer` fusionne ce qu'il résout, il ne remplace pas.
+    #[test]
+    fn naming_rows_merges_the_labels_already_resolved() {
+        let rendu = rendu(&avec_ticket());
+
+        let nommer = rendu
+            .split("async function nommer(")
+            .nth(1)
+            .and_then(|suite| suite.split("\n}\n").next())
+            .expect("nommer est rendue");
+        assert!(
+            nommer.contains("new Map([...(libelles.value[cle] ?? []), ...nouvelles])"),
+            "{nommer}"
+        );
+    }
+
+    /// Le libellé qu'on vient de choisir reste affiché, même quand la page courante ne
+    /// nomme pas la ligne choisie : sinon l'identifiant raccourci l'écraserait aussitôt.
+    #[test]
+    fn the_selector_keeps_the_label_it_has_just_chosen() {
+        let (_, selecteur) = GENERIQUES[0];
+        let rendu = Renderer::new()
+            .render(selecteur, context! { lang => "fr" })
+            .expect("le sélecteur se rend");
+
+        let repos = rendu
+            .split("function repos(): string {")
+            .nth(1)
+            .and_then(|suite| suite.split("\n}\n").next())
+            .expect("repos est rendue");
+        assert!(
+            repos.contains("dernier !== null && dernier.cle === props.modelValue"),
+            "{repos}"
+        );
+        assert!(rendu.contains("dernier = entree"), "{rendu}");
+        // Déclaré avant le premier appel de `repos`, qui l'initialise : une zone morte
+        // temporelle ferait planter le composant à son montage.
+        let declaration = rendu.find("let dernier").expect("dernier est déclaré");
+        let premier_appel = rendu
+            .find("ref(repos())")
+            .expect("repos initialise la saisie");
+        assert!(declaration < premier_appel, "{rendu}");
+    }
+
     /// Sans colonne libellé, la recherche n'a rien où chercher le motif : le paramètre
     /// reste, mais nommé pour que `noUnusedParameters` ne l'arrête pas.
     #[test]
