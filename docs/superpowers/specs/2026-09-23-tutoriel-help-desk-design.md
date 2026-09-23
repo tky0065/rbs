@@ -153,10 +153,8 @@ Toutes exécutées, résultats consignés sous `Vérifications :` dans les commi
 
 ## Git
 
-Branche `docs/tutoriel-help-desk`. Commits conventionnels, dans l'ordre :
-
-1. `test(examples): …` — `crud`/`champs` deviennent `cruds`, les six exemples inchangés ;
-   `integration_examples` vert seul.
-2. `docs(examples): …` — `examples/help-desk`, son entrée dans le harnais, son test des
-   retouches, les deux README.
-3. `docs(tutorials): …` — la page fr+en et la correction de `typescript-client.md`.
+Branche `docs/tutoriel-help-desk`. Commits conventionnels, dans cet ordre : le harnais
+seul (`test(examples): …`, les six exemples inchangés), puis l'exemple en autant de commits
+`docs(examples): …` que d'étapes vérifiables — engendré, retouché côté Rust, retouché côté
+Vue, recette du README —, enfin la page fr+en et la correction de `typescript-client.md`
+(`docs(tutorials): …`).
